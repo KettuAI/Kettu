@@ -58,6 +58,7 @@ const onArtifactBlocked = subscribe('artifact:blocked')
 const onArtifactStopped = subscribe('artifact:stopped')
 const onSharingChanged = subscribe('sharing:changed')
 const onBrowserState = subscribe('browser:state')
+const onBrowserOpened = subscribe('browser:opened')
 
 const pathOf = (file: File) => webUtils.getPathForFile(file)
 
@@ -172,9 +173,12 @@ const api: OverbenchApi = {
     openExternal: (id) => invoke('browser:open-external', id),
     freeze: (id) => invoke('browser:freeze', id),
     thaw: (id) => invoke('browser:thaw', id),
+    handBack: (id) => invoke('browser:hand-back', id),
+    stopDriving: (id) => invoke('browser:stop-driving', id),
     clearData: () => invoke('browser:clear-data'),
     setSessions: (ids) => send('browser:sessions', ids),
     onState: onBrowserState,
+    onOpened: onBrowserOpened,
   },
   attachments: {
     pick: (kind, defaultPath) => invoke('dialog:add-attachments', kind, defaultPath),

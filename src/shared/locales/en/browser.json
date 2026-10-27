@@ -24,5 +24,11 @@
     "downloadBlocked": "Downloads are blocked in OverBench's browser",
     "evicted": "This page was closed to save memory",
     "loadFailed": "This page did not load: {{error}}"
+  },
+  "control": {
+    "using": "{{agent}} is using the browser",
+    "stop": "Stop",
+    "you": "You have control",
+    "handBack": "Hand back"
   }
 }

@@ -23,11 +23,13 @@ import { SHEET } from '@renderer/features/shell/sheet'
 import { SidebarToggle } from '@renderer/features/shell/top-bar'
 import { isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
+import { useSessionsStore } from '@renderer/stores/sessions'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { useOverlayOpen } from '@renderer/stores/overlays'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { toggleSidePane, useViewStore } from '@renderer/stores/view'
 import { AddressField } from './address-field'
+import { DrivingBar } from './driving-bar'
 
 /** The side panel's third pane: one page per session, drawn by main over the pane's page area. */
 export function BrowserPane({
@@ -41,11 +43,19 @@ export function BrowserPane({
   const sessionId = useViewStore((s) => (s.main.kind === 'session' ? s.main.sessionId : null))
   const state = useBrowserStore((s) => (sessionId ? s.bySession[sessionId] : undefined))
   const still = useBrowserStore((s) => (sessionId ? s.stills[sessionId] : undefined))
+  const hidden = useBrowserStore((s) => (sessionId ? !!s.unseen[sessionId] : false))
+  const agentId = useSessionsStore((s) => (sessionId ? s.byId[sessionId]?.agentId : null))
   const overlayOpen = useOverlayOpen()
   const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && isMac
   const zoom = useSettingsStore((s) => s.settings.appearance.zoom)
   const sheet = useRef<HTMLDivElement>(null)
+  // The area the page fills; the 2 px info frame around it sits outside this box.
   const page = useRef<HTMLDivElement>(null)
+
+  // The pane shows the page, so the toggle's dot has done its work.
+  useEffect(() => {
+    if (sessionId) useBrowserStore.getState().seen(sessionId)
+  }, [sessionId, hidden])
 
   const navigate = (url: string) => {
     if (sessionId) void window.overbench.browser.navigate(sessionId, url)
@@ -62,7 +72,8 @@ export function BrowserPane({
 
   // The page's area, in the window's own pixels: the renderer's zoom scales CSS pixels. The page
   // fills the sheet's lower corners, which the sheet cannot clip on a native view, so main rounds
-  // them on the page.
+  // them on the page. The 2 px info frame is outside this area, so it stays visible while an
+  // agent drives.
   const report = useCallback(() => {
     const element = page.current
     if (!element || !sheet.current || !sessionId) return
@@ -77,7 +88,7 @@ export function BrowserPane({
     })
   }, [sessionId, zoom])
 
-  // A notice or the progress bar moves the page's area without resizing it.
+  // A notice, the driving bar or the progress bar moves the page's area without resizing it.
   useLayoutEffect(report)
 
   useLayoutEffect(() => {
@@ -134,6 +145,8 @@ export function BrowserPane({
   }, [sessionId])
 
   const hasPage = !!state?.url
+  const driving = state?.control.kind === 'agent'
+  const userControl = state?.control.kind === 'user'
 
   return (
     <div
@@ -218,6 +231,14 @@ export function BrowserPane({
           </PanelButton>
         </div>
       </div>
+      {(driving || userControl) && (
+        <DrivingBar
+          agent={agentId ?? null}
+          user={userControl}
+          onStop={() => sessionId && void window.overbench.browser.stopDriving(sessionId)}
+          onHandBack={() => sessionId && void window.overbench.browser.handBack(sessionId)}
+        />
+      )}
       {state?.loading && (
         <div
           role="progressbar"
@@ -228,33 +249,39 @@ export function BrowserPane({
         </div>
       )}
       {state?.notice && <Notice notice={state.notice} sessionId={sessionId} />}
-      <div ref={page} className="relative min-h-0 flex-1 bg-background">
-        {!hasPage && (
-          <div className="flex h-full items-center justify-center px-6">
-            <Empty>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <GlobeIcon />
-                </EmptyMedia>
-                <EmptyTitle>{sessionId ? t('empty.title') : t('empty.noSession')}</EmptyTitle>
-                {!sessionId && <EmptyDescription>{t('empty.noSessionHint')}</EmptyDescription>}
-              </EmptyHeader>
-              {sessionId && (
-                <div className="w-full max-w-sm">
-                  <AddressField url={null} onNavigate={navigate} autoFocus />
-                </div>
-              )}
-            </Empty>
-          </div>
-        )}
-        {still && (
-          <img
-            src={still}
-            alt=""
-            aria-hidden
-            className="pointer-events-none absolute inset-0 h-full w-full object-fill"
-          />
-        )}
+      {/* The 2 px info frame sits around the page, not over it: a native view covers its own area. */}
+      <div
+        ref={page}
+        className={cn('relative min-h-0 flex-1', driving ? 'bg-info p-0.5' : 'bg-background')}
+      >
+        <div className="relative h-full w-full bg-background">
+          {!hasPage && (
+            <div className="flex h-full items-center justify-center px-6">
+              <Empty>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <GlobeIcon />
+                  </EmptyMedia>
+                  <EmptyTitle>{sessionId ? t('empty.title') : t('empty.noSession')}</EmptyTitle>
+                  {!sessionId && <EmptyDescription>{t('empty.noSessionHint')}</EmptyDescription>}
+                </EmptyHeader>
+                {sessionId && (
+                  <div className="w-full max-w-sm">
+                    <AddressField url={null} onNavigate={navigate} autoFocus />
+                  </div>
+                )}
+              </Empty>
+            </div>
+          )}
+          {still && (
+            <img
+              src={still}
+              alt=""
+              aria-hidden
+              className="pointer-events-none absolute inset-0 h-full w-full object-fill"
+            />
+          )}
+        </div>
       </div>
     </div>
   )

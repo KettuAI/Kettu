@@ -24,5 +24,11 @@
     "downloadBlocked": "OverBench 的浏览器会拦截下载",
     "evicted": "为节省内存，此页面已关闭",
     "loadFailed": "此页面未能加载：{{error}}"
+  },
+  "control": {
+    "using": "{{agent}} 正在使用浏览器",
+    "stop": "停止",
+    "you": "控制权在你手里",
+    "handBack": "交还"
   }
 }

@@ -9,6 +9,7 @@ import { artifactScheme } from './artifacts/protocol'
 import { AppStateStore } from './app-state'
 import { applyBadgeTo, setBadgeCount, setBadgeEnabled } from './badge'
 import { BrowserViews } from './browser/views'
+import { BrowserTools } from './browser/tools'
 import { broadcast } from './events'
 import { locale as currentLocale, setLocale } from './i18n'
 import { registerIpcHandlers } from './ipc'
@@ -141,9 +142,26 @@ async function start(): Promise<void> {
   setBadgeEnabled(settings.get().notifications.badge)
 
   const mediaGrants = new MediaGrants()
+  // The browser tools need the host to answer them, and the pages need the window, so each takes
+  // the other's work through this one late binding.
+  let browserTools: BrowserTools | null = null
   const browserViews = new BrowserViews({
     window: currentWindow,
     send: (state) => broadcast('browser:state', state),
+    dialogOpened: (sessionId, type, accepted) =>
+      browserTools?.dialogOpened(sessionId, type, accepted),
+    userInput: (sessionId) => browserTools?.userInput(sessionId),
+    handBack: (sessionId) => browserTools?.handBack(sessionId),
+    stopDriving: (sessionId) => browserTools?.stopDriving(sessionId),
+    control: (sessionId) => browserTools?.control.state(sessionId) ?? { kind: 'none' },
+    created: (sessionId, contents) => browserTools?.watch(sessionId, contents),
+    closed: (sessionId) => browserTools?.forget(sessionId),
+  })
+  browserTools = new BrowserTools({
+    views: browserViews,
+    controlChanged: (sessionId) => browserViews.controlChanged(sessionId),
+    opened: (sessionId) => broadcast('browser:opened', { sessionId }),
+    log: (level, message) => log[level](`browser: ${message}`),
   })
   const routinesAwake = new RoutinesAwake()
   const terminalHost = new TerminalHost({ settings: () => terminalSettings(settings.get()) })
@@ -160,6 +178,7 @@ async function start(): Promise<void> {
     onRoutinesWorking: (working) => routinesAwake.set(working),
     onReady: () => reconcileSharing?.(),
     onServicePort: (port) => browserViews.setServicePort(port),
+    browser: (request) => browserTools.call(request.sessionId, request.tool, request.args),
   })
   const artifacts = new Artifacts({
     content: (id, version) => agentHost.artifactContent(id, version),

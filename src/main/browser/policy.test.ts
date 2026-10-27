@@ -5,6 +5,9 @@ import {
   isAllowedNavigation,
   isForbiddenRequest,
   isHttp,
+  isLocalAddress,
+  isLocalHost,
+  isNeverOpened,
   navigateInPlace,
   stripElectronUserAgent,
 } from './policy'
@@ -161,5 +164,58 @@ describe('navigateInPlace', () => {
     navigateInPlace(contents, 'javascript:alert(1)')
     navigateInPlace(contents, 'file:///etc/passwd')
     expect(loadURL).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the addresses an agent may open', () => {
+  it('takes a dev server on this machine and the empty document', () => {
+    for (const url of [
+      'http://localhost:5173/',
+      'http://127.0.0.1:3000/app',
+      'http://[::1]:8080/',
+      'https://app.localhost/',
+      'http://myapp.test/login',
+      'about:blank',
+    ]) {
+      expect(isLocalAddress(new URL(url))).toBe(true)
+    }
+  })
+
+  it('leaves every other origin to the user', () => {
+    for (const url of [
+      'https://example.com/',
+      'http://localhost.example.com/',
+      'https://test.example.org/',
+      'ftp://127.0.0.1/',
+    ]) {
+      expect(isLocalAddress(new URL(url))).toBe(false)
+    }
+  })
+
+  it('names the hosts that count as local', () => {
+    expect(isLocalHost('localhost')).toBe(true)
+    expect(isLocalHost('LOCALHOST')).toBe(true)
+    expect(isLocalHost('127.0.0.1')).toBe(true)
+    expect(isLocalHost('[::1]')).toBe(true)
+    expect(isLocalHost('a.b.localhost')).toBe(true)
+    expect(isLocalHost('a.test')).toBe(true)
+    expect(isLocalHost('example.com')).toBe(false)
+    expect(isLocalHost('localhost.com')).toBe(false)
+  })
+
+  it('never opens a scheme that reaches this machine or another app', () => {
+    for (const url of [
+      'file:///etc/passwd',
+      'javascript:alert(1)',
+      'data:text/html,hi',
+      'blob:https://example.com/x',
+      'chrome://settings',
+      'devtools://devtools/bundled/inspector.html',
+      'view-source:https://example.com/',
+      'overbench-artifact://abc/',
+    ]) {
+      expect(isNeverOpened(new URL(url))).toBe(true)
+    }
+    expect(isNeverOpened(new URL('https://example.com/'))).toBe(false)
   })
 })

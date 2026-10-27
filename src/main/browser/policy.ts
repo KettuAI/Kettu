@@ -35,6 +35,39 @@ export function isHttp(url: string): boolean {
   }
 }
 
+/** Hosts an agent opens without asking: a dev server on this machine. */
+export function isLocalHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '::1' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.test')
+  )
+}
+
+/** Whether a parsed address is an http(s) page on a local dev host, or the empty document. */
+export function isLocalAddress(url: URL): boolean {
+  if (url.href === 'about:blank') return true
+  return (url.protocol === 'http:' || url.protocol === 'https:') && isLocalHost(url.hostname)
+}
+
+const NEVER_OPENED = new Set([
+  'file:',
+  'javascript:',
+  'data:',
+  'blob:',
+  'chrome:',
+  'devtools:',
+  'view-source:',
+])
+
+/** A scheme that never opens at the top level, whether an agent or the user asks. */
+export function isNeverOpened(url: URL): boolean {
+  return NEVER_OPENED.has(url.protocol) || url.protocol.startsWith('overbench-')
+}
+
 /** The user agent of the Chromium Electron ships, without the token that names Electron. */
 export function stripElectronUserAgent(userAgent: string): string {
   return userAgent.replace(/\sElectron\/[\d.]+/g, '')

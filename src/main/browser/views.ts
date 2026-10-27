@@ -2,10 +2,11 @@
 // contents; the renderer draws the pane's frame and tells main where the page sits.
 
 import { BrowserWindow, session as electronSession, shell, View, WebContentsView } from 'electron'
-import type { Input, Rectangle } from 'electron'
+import type { Input, Rectangle, WebContents } from 'electron'
 import {
   BROWSER_PARTITION,
   type BrowserBounds,
+  type BrowserControlState,
   type BrowserNotice,
   type BrowserState,
 } from '@shared/browser'
@@ -22,11 +23,18 @@ export const MAX_LIVE_PAGES = 4
 /** What a page gets before the pane reports its bounds. */
 export const DEFAULT_BOUNDS: BrowserBounds = { x: 0, y: 0, width: 1280, height: 800, radius: 0 }
 
+/** How long a navigation an agent asked for may take. */
+export const NAVIGATION_TIMEOUT_MS = 30_000
+
 // On macOS a page draws in its window's own compositor, so a view around it clips it: a frame
 // rounds the page's lower corners and leaves its upper ones square under the pane's header.
 // Elsewhere a page is a native window of its own that only its own radius clips, on all four
 // corners alike.
 const FRAMED = process.platform === 'darwin'
+
+/** A navigation that ended, or the Chromium error that stopped it. */
+export type NavigateResult =
+  { ok: true; url: string; title: string | null } | { ok: false; error: string }
 
 interface Page {
   sessionId: string
@@ -41,12 +49,35 @@ interface Page {
   shown: boolean
   frozen: boolean
   loading: boolean
+  /** The navigation that has not ended yet, by the page's promise handlers. */
+  pending: ((result: NavigateResult) => void) | null
+}
+
+/** Whether a mouse event is the user using the page: a click, a wheel or a touch, not a hover. */
+export function isUserMouse(type: string): boolean {
+  return type !== 'mouseMove' && type !== 'mouseEnter' && type !== 'mouseLeave'
 }
 
 export interface BrowserViewsDeps {
   /** The window the pages sit over; null while none exists. */
   window(): BrowserWindow | null
   send(state: BrowserState): void
+  /** A page opened a dialog, which was answered at once; the call in flight says so. */
+  dialogOpened?(sessionId: string, type: string, accepted: boolean): void
+  /** The user typed or used the mouse in a page, or used the pane's controls. */
+  userInput?(sessionId: string): void
+  /** The pane's Hand back was pressed. */
+  handBack?(sessionId: string): void
+  /** The driving bar's Stop was pressed. */
+  stopDriving?(sessionId: string): void
+  /** The control state to draw with a page's state. */
+  control?(sessionId: string): BrowserControlState
+  /** A page's web contents is ready, before its first navigation starts. */
+  created?(sessionId: string, contents: WebContents): void
+  /** A page's web contents is gone: its next one starts afresh. */
+  closed?(sessionId: string): void
+  /** An agent's call started or ended, so a hidden page keeps or gives up rendering. */
+  driving?(sessionId: string, driving: boolean): void
 }
 
 /**
@@ -133,6 +164,56 @@ export class BrowserViews {
     this.open(page, url)
   }
 
+  /** The web contents of a session's page, or null when it has none yet. */
+  contents(sessionId: string): WebContents | null {
+    const view = this.pages.get(sessionId)?.view
+    const contents = view?.webContents
+    return contents && !contents.isDestroyed() ? contents : null
+  }
+
+  /**
+   * A page an agent drives keeps rendering timers and animations while it is hidden or behind the
+   * pane; once idle it throttles as any background page does.
+   */
+  setDriving(sessionId: string, driving: boolean): void {
+    const contents = this.contents(sessionId)
+    if (!contents) return
+    contents.setBackgroundThrottling(!driving)
+  }
+
+  /**
+   * Opens `url` in the session's page, making one when it has none, and settles when the
+   * navigation has ended: the page's address and title, or Chromium's error.
+   */
+  load(sessionId: string, url: string): Promise<NavigateResult> {
+    const page = this.page(sessionId)
+    return this.navigateAndWait(page, url)
+  }
+
+  /** One step back in the session's history, settled as `load` is. */
+  backAndWait(sessionId: string): Promise<NavigateResult> {
+    const page = this.page(sessionId)
+    const history = page.view?.webContents.navigationHistory
+    if (!history?.canGoBack()) {
+      throw new Error('There is no page before this one.')
+    }
+    const wait = this.waitForNavigation(page)
+    history.goBack()
+    return wait
+  }
+
+  /** Reloads the session's page, settled as `load` is. */
+  reloadAndWait(sessionId: string): Promise<NavigateResult> {
+    const page = this.page(sessionId)
+    if (!page.view) {
+      if (!page.lastUrl) throw new Error('The page has no address to reload.')
+      return this.load(sessionId, page.lastUrl)
+    }
+    const wait = this.waitForNavigation(page)
+    page.view.webContents.reload()
+    return wait
+  }
+
   back(sessionId: string): void {
     const history = this.pages.get(sessionId)?.view?.webContents.navigationHistory
     if (history?.canGoBack()) history.goBack()
@@ -210,10 +291,58 @@ export class BrowserViews {
         shown: false,
         frozen: false,
         loading: false,
+        pending: null,
       }
       this.pages.set(sessionId, page)
     }
     return page
+  }
+
+  /** Loads `url` in the session's page, making one when there is none, and waits for its end. */
+  private navigateAndWait(page: Page, url: string): Promise<NavigateResult> {
+    const wait = this.waitForNavigation(page)
+    this.open(page, url)
+    return wait
+  }
+
+  /**
+   * Settles with what the page ends at, or the error that stopped it, whichever comes first:
+   * `did-stop-loading`, `did-fail-load`, or the time limit.
+   */
+  private waitForNavigation(page: Page): Promise<NavigateResult> {
+    page.pending?.({ ok: false, error: 'The navigation was replaced.' })
+    let done = false
+    let resolve!: (result: NavigateResult) => void
+    const promise = new Promise<NavigateResult>((settle) => (resolve = settle))
+    const finish = (result: NavigateResult): void => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      if (page.pending === finish) page.pending = null
+      resolve(result)
+    }
+    const timer = setTimeout(
+      () => finish({ ok: false, error: 'Navigation timed out' }),
+      NAVIGATION_TIMEOUT_MS,
+    )
+    page.pending = finish
+    return promise
+  }
+
+  private resultOf(page: Page, result: NavigateResult): NavigateResult {
+    if (!result.ok) return result
+    const contents = this.contents(page.sessionId)
+    return {
+      ok: true,
+      url: contents?.getURL() || page.lastUrl || result.url,
+      title: contents?.getTitle() || page.lastTitle || result.title,
+    }
+  }
+
+  /** The page settled after a navigation, successfully or not. */
+  private endNavigation(page: Page, result: NavigateResult): void {
+    page.pending?.(this.resultOf(page, result))
+    page.pending = null
   }
 
   /** Loads `url` in the session's page, making one when there is none. */
@@ -255,6 +384,8 @@ export class BrowserViews {
     this.place(page)
     this.setVisible(page, page.shown)
     this.wire(page, view)
+    this.deps.created?.(sessionId, view.webContents)
+    this.setDriving(sessionId, this.deps.control?.(sessionId)?.kind === 'agent')
     return view
   }
 
@@ -310,6 +441,7 @@ export class BrowserViews {
     const window = this.deps.window()
     if (window && !window.isDestroyed()) window.contentView.removeChildView(attached)
     if (!view.webContents.isDestroyed()) view.webContents.close()
+    this.deps.closed?.(page.sessionId)
   }
 
   private wire(page: Page, view: WebContentsView): void {
@@ -322,6 +454,7 @@ export class BrowserViews {
     contents.on('did-stop-loading', () => {
       page.loading = false
       emit()
+      this.endNavigation(page, { ok: true, url: contents.getURL(), title: contents.getTitle() })
     })
     contents.on('did-start-navigation', (details) => {
       if (!details.isMainFrame) return
@@ -347,6 +480,7 @@ export class BrowserViews {
       page.notice = { kind: 'load-failed', description }
       page.loading = false
       emit()
+      this.endNavigation(page, { ok: false, error: description })
     })
     contents.on('will-navigate', (event, url) => {
       if (!isAllowedNavigation(url)) event.preventDefault()
@@ -360,6 +494,8 @@ export class BrowserViews {
       return { action: 'deny' }
     })
     contents.on('before-input-event', (event, input) => {
+      // The user typed in the page: they drive from here on, whatever the key was.
+      this.deps.userInput?.(page.sessionId)
       if (this.shortcut(page, input)) {
         event.preventDefault()
         return
@@ -371,6 +507,10 @@ export class BrowserViews {
       const window = this.deps.window()
       if (window && !window.isDestroyed()) sendEvent(window.webContents, 'app:shortcut', key)
     })
+    contents.on('before-mouse-event', (_event, mouse) => {
+      if (!isUserMouse(mouse.type)) return
+      this.deps.userInput?.(page.sessionId)
+    })
     this.silenceDialogs(contents)
     contents.once('destroyed', () => {
       if (page.view?.webContents === contents) {
@@ -381,6 +521,8 @@ export class BrowserViews {
         page.view = null
         page.frame = null
         page.loading = false
+        this.endNavigation(page, { ok: false, error: 'The page closed.' })
+        this.deps.closed?.(page.sessionId)
       }
     })
   }
@@ -417,14 +559,35 @@ export class BrowserViews {
       log.warn(`Could not watch a page's dialogs: ${(error as Error).message}`)
       return
     }
+    let sessionId: string | null = null
     debuggerSession.on('message', (_event, method, params) => {
       if (method !== 'Page.javascriptDialogOpening') return
       const type = (params as { type?: string }).type
+      const accepted = type === 'alert'
       void debuggerSession
-        .sendCommand('Page.handleJavaScriptDialog', { accept: type === 'alert' })
+        .sendCommand('Page.handleJavaScriptDialog', { accept: accepted })
         .catch(() => {})
+      sessionId ??=
+        [...this.pages.values()].find((page) => page.view?.webContents === contents)?.sessionId ??
+        null
+      if (sessionId) this.deps.dialogOpened?.(sessionId, type ?? 'alert', accepted)
     })
     void debuggerSession.sendCommand('Page.enable').catch(() => {})
+  }
+
+  /** Typing in the address field or using the pane's own controls takes control, as a click does. */
+  userInput(sessionId: string): void {
+    this.deps.userInput?.(sessionId)
+  }
+
+  /** The pane's Hand back: the agent may drive the page again. */
+  handBack(sessionId: string): void {
+    this.deps.handBack?.(sessionId)
+  }
+
+  /** The driving bar's Stop: the user takes control, and the running call fails. */
+  stopDriving(sessionId: string): void {
+    this.deps.stopDriving?.(sessionId)
   }
 
   private downloadBlocked(contentsId: number): void {
@@ -448,6 +611,13 @@ export class BrowserViews {
       canGoBack: contents?.navigationHistory.canGoBack() ?? false,
       canGoForward: contents?.navigationHistory.canGoForward() ?? false,
       notice: page.notice,
+      control: this.deps.control?.(page.sessionId) ?? { kind: 'none' },
     })
+  }
+
+  /** The pane's control state changed; its page state goes out again with it. */
+  controlChanged(sessionId: string): void {
+    const page = this.pages.get(sessionId)
+    if (page) this.emit(page)
   }
 }

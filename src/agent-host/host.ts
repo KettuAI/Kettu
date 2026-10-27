@@ -6,6 +6,7 @@ import path from 'node:path'
 import type { DiagnosticsBundle, HostEvent, McpStatus } from '@shared/agent-host'
 import { type ArtifactImportResult, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
+import type { BrowserCallAnswer, BrowserCallRequest } from '@shared/browser'
 import type {
   AgentProcess,
   ArtifactContentResult,
@@ -70,6 +71,49 @@ import { createValidators } from './validate'
 
 // The agent menu reads a running agent's options again once they are older than this.
 const OPTIONS_FRESH_MS = 5 * 60_000
+
+const ERROR_CODES = new Set([
+  'user_has_control',
+  'not_allowed',
+  'stale_ref',
+  'timeout',
+  'navigation_failed',
+  'no_page',
+  'invalid',
+])
+
+/** What main answered a browser call: its result, or the error that refused it. */
+function answerOf(result: unknown, problem: unknown): BrowserCallAnswer {
+  const error = problem as { code?: unknown; message?: unknown } | undefined
+  if (error && typeof error === 'object') {
+    const code = typeof error.code === 'string' && ERROR_CODES.has(error.code) ? error.code : null
+    if (code) {
+      return {
+        error: {
+          code: code as Extract<BrowserCallAnswer, { error: unknown }>['error']['code'],
+          message: typeof error.message === 'string' ? error.message : 'The call failed.',
+        },
+      }
+    }
+  }
+  const value = result as { text?: unknown; value?: unknown; image?: unknown } | undefined
+  if (
+    value &&
+    typeof value === 'object' &&
+    typeof value.text === 'string' &&
+    typeof value.value === 'object' &&
+    value.value !== null
+  ) {
+    return {
+      result: {
+        text: value.text,
+        value: value.value as Record<string, unknown>,
+        ...(typeof value.image === 'string' ? { image: value.image } : {}),
+      },
+    }
+  }
+  return { error: { code: 'invalid', message: 'Main gave no answer to the call.' } }
+}
 
 export interface HostOptions {
   userDataPath: string
@@ -152,6 +196,9 @@ export class AgentHost {
   private gitUnsubscribe: (() => void)[] = []
   /** Ports keeping a project's git status live, by path key. */
   private readonly gitRetains = new Map<string, { path: string; ports: Set<string> }>()
+  /** Browser calls awaiting main's answer, by the id the call was given. */
+  private readonly browserCalls = new Map<number, (answer: BrowserCallAnswer) => void>()
+  private nextBrowserCallId = 1
   private lastProcesses = '[]'
   private sentFolders: string | null = null
   private stopping: Promise<void> | null = null
@@ -231,6 +278,8 @@ export class AgentHost {
       runningTurn: (sessionId) => this.sessions.runningTurn(sessionId),
       sessionOf: (process, id) => this.sessions.sessionOf(process, id),
       wrote: (sessionId, write) => this.sessions.artifactWritten(sessionId, write),
+      browserCall: (request) => this.browserCall(request),
+      browserSession: (sessionId) => this.sessions.browserSession(sessionId),
       sessions: {
         info: (sessionId) => this.sessions.sessionInfo(sessionId),
         list: (projectPath) => this.sessions.toolSessions(projectPath),
@@ -611,6 +660,39 @@ export class AgentHost {
     this.options.send({ type: 'host:artifact-import', requestId, result })
   }
 
+  /** Sends a browser call to main and settles with its answer, or a failure if the host stops. */
+  browserCall(request: BrowserCallRequest): Promise<BrowserCallAnswer> {
+    const callId = this.nextBrowserCallId++
+    return new Promise<BrowserCallAnswer>((resolve) => {
+      this.browserCalls.set(callId, resolve)
+      this.options.send({
+        type: 'host:browser-call',
+        callId,
+        sessionId: request.sessionId,
+        tool: request.tool,
+        args: request.args,
+      })
+    })
+  }
+
+  /** `browser-result`: the answer to a call this host forwarded. */
+  browserResult(callId: number, result: unknown, problem: unknown): void {
+    const resolve = this.browserCalls.get(callId)
+    if (!resolve) return
+    this.browserCalls.delete(callId)
+    resolve(answerOf(result, problem))
+  }
+
+  /** Main is gone: every call awaiting it fails with `timeout`, as its own limit would. */
+  private failBrowserCalls(): void {
+    for (const resolve of this.browserCalls.values()) {
+      resolve({
+        error: { code: 'timeout', message: 'Main stopped before the browser answered.' },
+      })
+    }
+    this.browserCalls.clear()
+  }
+
   /** Stops every agent with the documented sequence, flushes the state files, then reports. */
   shutdown(): Promise<void> {
     this.stopping ??= (async () => {
@@ -643,6 +725,7 @@ export class AgentHost {
         this.usage.close(),
       ])
       this.hub.closeAll()
+      this.failBrowserCalls()
       this.options.send({ type: 'host:stopped' })
     })()
     return this.stopping

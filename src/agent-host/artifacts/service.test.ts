@@ -15,10 +15,12 @@ import {
   firstSentence,
   SERVICE_TOOLS,
   type AgentProcess,
+  type ArtifactServiceDeps,
 } from './service'
 import { ArtifactStore } from './store'
 import { INSTRUCTIONS } from './tools'
 import { SESSION_INSTRUCTIONS } from '../session-tools'
+import { BROWSER_INSTRUCTIONS } from './browser-tools'
 
 const cleanups: (() => Promise<void>)[] = []
 
@@ -33,7 +35,13 @@ function agentProcess(): AgentProcess & { exit(): void } {
   return { closed, exit: () => exit() }
 }
 
-async function setup(sessionOf: (process: AgentProcess, id: string) => string | null = () => null) {
+async function setup(
+  sessionOf: (process: AgentProcess, id: string) => string | null = () => null,
+  browser: {
+    call?: ArtifactServiceDeps['browserCall']
+    session?: (sessionId: string) => string | null
+  } = {},
+) {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'overbench-artifact-service-'))
   const contentDir = path.join(dir, 'artifacts', 'content')
   const logs: string[] = []
@@ -72,6 +80,8 @@ async function setup(sessionOf: (process: AgentProcess, id: string) => string | 
       name: () => 'A session',
       agentName: () => 'Fake agent',
     },
+    ...(browser.call ? { browserCall: browser.call } : {}),
+    ...(browser.session ? { browserSession: browser.session } : {}),
     log,
     appVersion: '0.0.0-test',
   })
@@ -173,10 +183,12 @@ describe('the artifacts service', () => {
   it('tells agents what it is for and serves the seven tools', async () => {
     const { connect } = await setup()
     const { client } = await connect('s1', '/p')
-    expect(client.getInstructions()).toBe(`${INSTRUCTIONS} ${SESSION_INSTRUCTIONS}`)
+    expect(client.getInstructions()).toBe(
+      `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS}`,
+    )
     expect(client.getServerVersion()).toMatchObject({ name: 'overbench', version: '0.0.0-test' })
     const { tools } = await client.listTools()
-    expect(tools.map((tool) => tool.name)).toHaveLength(13)
+    expect(tools.map((tool) => tool.name)).toHaveLength(27)
     expect(tools.map((tool) => tool.name)).toEqual(SERVICE_TOOLS.map((tool) => tool.name))
     expect(tools.find((tool) => tool.name === 'delete_artifact')?.annotations).toMatchObject({
       destructiveHint: true,
@@ -247,6 +259,61 @@ describe('the artifacts service', () => {
     await expect(client.callTool({ name: 'no_such_tool', arguments: {} })).rejects.toThrow(
       /Unknown tool/,
     )
+  })
+
+  it('forwards the browser tools with the session whose page they drive', async () => {
+    const requests: { sessionId: string; tool: string; args: Record<string, unknown> }[] = []
+    const { service, connect } = await setup(() => null, {
+      session: (sessionId) => (sessionId === 'child' ? 'parent' : sessionId),
+      call: async (request) => {
+        requests.push({ sessionId: request.sessionId, tool: request.tool, args: request.args })
+        return request.tool === 'browser_take_screenshot'
+          ? {
+              result: {
+                text: 'Took a screenshot.',
+                value: { url: 'http://localhost/', title: 'Home' },
+                image: 'iVBORw0KGgo=',
+              },
+            }
+          : {
+              result: {
+                text: 'Clicked.',
+                value: { url: 'http://localhost/', title: 'Home', snapshot: '- page' },
+              },
+            }
+      },
+    })
+    const { client } = await connect('child', '/p')
+    const clicked = await client.callTool({
+      name: 'browser_click',
+      arguments: { ref: 'e3', element: 'Sign in button' },
+    })
+    expect(clicked).toMatchObject({
+      content: [{ type: 'text', text: 'Clicked.' }],
+      structuredContent: { snapshot: '- page' },
+    })
+    const shot = await client.callTool({ name: 'browser_take_screenshot', arguments: {} })
+    expect(shot.content).toContainEqual({
+      type: 'image',
+      data: 'iVBORw0KGgo=',
+      mimeType: 'image/png',
+    })
+    expect(requests).toEqual([
+      {
+        sessionId: 'parent',
+        tool: 'browser_click',
+        args: { ref: 'e3', element: 'Sign in button' },
+      },
+      { sessionId: 'parent', tool: 'browser_take_screenshot', args: {} },
+    ])
+    void service
+  })
+
+  it('answers a browser call main cannot run with a tool error', async () => {
+    const { connect } = await setup()
+    const { client } = await connect('s1', '/p')
+    const result = await client.callTool({ name: 'browser_snapshot', arguments: {} })
+    expect(result).toMatchObject({ isError: true, structuredContent: { code: 'no_page' } })
   })
 
   it('keeps each token to its own session and project', async () => {
@@ -431,7 +498,7 @@ describe('the artifacts service', () => {
     const servers = service.folderServers(agent, '/p', 's1')
     service.folderServers(agent, '/q', 's3')
     const { client } = await connect('s1', '/p', servers)
-    expect((await client.listTools()).tools).toHaveLength(13)
+    expect((await client.listTools()).tools).toHaveLength(27)
     const list = (meta?: Record<string, unknown>) =>
       client.callTool({ name: 'list_artifacts', arguments: {}, ...(meta ? { _meta: meta } : {}) })
     expect(await list({ 'ai.opencode/sessionID': 'acp-1' })).toMatchObject({

@@ -447,16 +447,29 @@ export function registerIpcHandlers({
   handle('browser:bounds', 2, (_, id, bounds) =>
     browserViews.setBounds(sessionId(id), browserBounds(bounds)),
   )
-  handle('browser:navigate', 2, (_, id, url) =>
-    browserViews.navigate(sessionId(id), browserUrl(url)),
-  )
-  handle('browser:back', 1, (_, id) => browserViews.back(sessionId(id)))
-  handle('browser:forward', 1, (_, id) => browserViews.forward(sessionId(id)))
-  handle('browser:reload', 1, (_, id) => browserViews.reload(sessionId(id)))
+  // The pane's own controls act for the user: each first takes control from an agent driving.
+  handle('browser:navigate', 2, (_, id, url) => {
+    browserViews.userInput(sessionId(id))
+    browserViews.navigate(sessionId(id), browserUrl(url))
+  })
+  handle('browser:back', 1, (_, id) => {
+    browserViews.userInput(sessionId(id))
+    browserViews.back(sessionId(id))
+  })
+  handle('browser:forward', 1, (_, id) => {
+    browserViews.userInput(sessionId(id))
+    browserViews.forward(sessionId(id))
+  })
+  handle('browser:reload', 1, (_, id) => {
+    browserViews.userInput(sessionId(id))
+    browserViews.reload(sessionId(id))
+  })
   handle('browser:stop', 1, (_, id) => browserViews.stop(sessionId(id)))
   handle('browser:open-external', 1, (_, id) => browserViews.openExternal(sessionId(id)))
   handle('browser:freeze', 1, (_, id) => browserViews.freeze(sessionId(id)))
   handle('browser:thaw', 1, (_, id) => browserViews.thaw(sessionId(id)))
+  handle('browser:hand-back', 1, (_, id) => browserViews.handBack(sessionId(id)))
+  handle('browser:stop-driving', 1, (_, id) => browserViews.stopDriving(sessionId(id)))
   handle('browser:clear-data', 0, () => browserViews.clearData())
 
   on('agent-host:connect', (event) => agentHost.connect(event.sender))

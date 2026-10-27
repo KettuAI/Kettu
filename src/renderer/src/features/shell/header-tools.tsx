@@ -5,7 +5,9 @@ import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { GitStatusCluster } from '@renderer/features/git/git-status'
 import { formatShortcut } from '@renderer/lib/platform'
+import { useBrowserStore } from '@renderer/stores/browser'
 import { useGitStore } from '@renderer/stores/git'
+import { useSessionsStore } from '@renderer/stores/sessions'
 import { toggleSidePane, useViewStore, type SidePane } from '@renderer/stores/view'
 import { NoDrag } from './top-bar'
 
@@ -17,6 +19,10 @@ import { NoDrag } from './top-bar'
 export function HeaderTools({ projectPath }: { projectPath: string }) {
   const { t } = useTranslation('shell')
   const isRepo = useGitStore((s) => !!s.status[projectPath]?.repo)
+  // An agent opened a session's page while another pane showed: a dot says to look.
+  const unseen = useBrowserStore((s) => s.unseen)
+  const sessions = useSessionsStore((s) => s.byId)
+  const dot = Object.keys(unseen).some((id) => sessions[id]?.projectPath === projectPath)
   return (
     <>
       {isRepo && (
@@ -36,7 +42,12 @@ export function HeaderTools({ projectPath }: { projectPath: string }) {
         >
           <SquareTerminalIcon />
         </PaneToggle>
-        <PaneToggle projectPath={projectPath} pane="browser" label={t('headerTools.browser')}>
+        <PaneToggle
+          projectPath={projectPath}
+          pane="browser"
+          label={t('headerTools.browser')}
+          dot={dot}
+        >
           <GlobeIcon />
         </PaneToggle>
       </NoDrag>
@@ -49,12 +60,15 @@ function PaneToggle({
   pane,
   label,
   shortcut,
+  dot,
   children,
 }: {
   projectPath: string
   pane: SidePane
   label: string
   shortcut?: string
+  /** A small `--foreground` dot: the pane has news while another one shows. */
+  dot?: boolean
   children: ReactNode
 }) {
   const open = useViewStore((s) => s.sidePane[projectPath] === pane)
@@ -68,11 +82,17 @@ function PaneToggle({
             aria-label={label}
             aria-pressed={open}
             onClick={() => toggleSidePane(projectPath, pane)}
-            className="text-secondary"
+            className="relative text-secondary"
           />
         }
       >
         {children}
+        {dot && !open && (
+          <span
+            aria-hidden
+            className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-foreground"
+          />
+        )}
       </TooltipTrigger>
       <TooltipContent>
         {label} {shortcut && <span className="opacity-60">{formatShortcut(shortcut)}</span>}
