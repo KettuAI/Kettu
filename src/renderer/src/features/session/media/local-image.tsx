@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { MediaGrant } from '@shared/media'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { cn } from '@renderer/lib/utils'
+import { imageSurface } from './surface'
 
 /** The tallest an image shows in a reply; the viewer shows it whole. */
 const MAX_HEIGHT = 288
@@ -27,6 +28,7 @@ export function LocalImage({
 }) {
   const { t } = useTranslation('session')
   const [loaded, setLoaded] = useState(false)
+  const surface = imageSurface({ path: name, mimeType: grant.mimeType })
   const box =
     grant.width && grant.height
       ? {
@@ -60,7 +62,11 @@ export function LocalImage({
         onLoad={() => setLoaded(true)}
         onError={onFailed}
         style={box ? undefined : { maxHeight }}
-        className={cn('block checkerboard', box ? 'size-full object-contain' : 'max-w-full')}
+        className={cn(
+          'block',
+          surface === 'canvas' ? 'bg-canvas' : 'bg-card checkerboard',
+          box ? 'size-full object-contain' : 'max-w-full',
+        )}
       />
       <span
         aria-hidden

@@ -413,7 +413,7 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
   )
   const stageShown: Shown =
     source.state === 'ready'
-      ? { state: 'ready', kind: source.kind, src: source.src }
+      ? { state: 'ready', kind: source.kind, src: source.src, mimeType: source.mimeType }
       : source.state === 'failed'
         ? source
         : source.state === 'gone'

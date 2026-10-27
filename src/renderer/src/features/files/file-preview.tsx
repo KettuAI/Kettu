@@ -28,6 +28,7 @@ import {
   type PictureControls,
 } from '@renderer/features/session/media/picture-zoom'
 import { playOneAtATime } from '@renderer/features/session/media/playback'
+import { imageSurface } from '@renderer/features/session/media/surface'
 import { ZoomControls, type ZoomLevel } from '@renderer/features/session/media/zoom-controls'
 import type { Size } from '@renderer/features/session/media/zoom'
 import {
@@ -548,7 +549,8 @@ function PictureStage({
             : { visibility: 'hidden' }
         }
         className={cn(
-          'absolute top-1/2 left-1/2 max-w-none bg-card checkerboard select-none',
+          'absolute top-1/2 left-1/2 max-w-none select-none',
+          imageSurface({ path }) === 'canvas' ? 'bg-canvas' : 'bg-card checkerboard',
           zoomed && (dragging ? 'cursor-grabbing' : 'cursor-grab'),
         )}
       />

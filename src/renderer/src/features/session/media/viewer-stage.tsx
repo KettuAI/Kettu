@@ -4,13 +4,14 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
 import { prefersReducedMotion } from '@renderer/stores/settings'
 import { DEFAULT_PICTURE_SIZE, usePictureZoom, type PictureControls } from './picture-zoom'
+import { imageSurface } from './surface'
 import { flight, inView, placeBox, placeOf, type Box } from './viewer-motion'
 import { FIT_MARGIN, type Size } from './zoom'
 
 /** What an item shows once its source is known. */
 export type Shown =
   | { state: 'loading' }
-  | { state: 'ready'; kind: 'image' | 'video'; src: string }
+  | { state: 'ready'; kind: 'image' | 'video'; src: string; mimeType: string }
   | { state: 'failed'; message: string }
 
 /** What the bar shows of the item: its pixels and, for a picture, its zoom and fit. */
@@ -278,7 +279,10 @@ export function StageItem({
                   : { visibility: 'hidden' }
               }
               className={cn(
-                'absolute top-1/2 left-1/2 max-w-none bg-card checkerboard select-none',
+                'absolute top-1/2 left-1/2 max-w-none select-none',
+                imageSurface({ mimeType: shown.mimeType }) === 'canvas'
+                  ? 'bg-canvas'
+                  : 'bg-card checkerboard',
                 zoomed && (dragging ? 'cursor-grabbing' : 'cursor-grab'),
               )}
             />
