@@ -115,7 +115,7 @@ export function LocalMedia({
         <span className="block size-full animate-in fade-in fill-mode-both delay-200 duration-(--duration-fast)">
           <Skeleton
             render={<span />}
-            className={cn('size-full', nominated === 'audio' ? 'rounded-full' : 'rounded-xl')}
+            className={cn('block size-full', nominated === 'audio' ? 'rounded-full' : 'rounded-xl')}
           />
         </span>
       </span>
