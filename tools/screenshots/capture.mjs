@@ -421,6 +421,15 @@ async function run() {
   await click(byText('button', 'Allow'), 'Allow')
   await waitFor(`!document.querySelector('[aria-label=Stop]')`, 'the turn to end', 120_000)
 
+  // xterm's WebGL canvas comes out blank in these captures, where its DOM renderer draws the same
+  // grid as text the capture includes; without a WebGL context the addon stays off.
+  await cdp.evaluate(`(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext
+    HTMLCanvasElement.prototype.getContext = function (type, ...rest) {
+      return /^webgl/i.test(type) ? null : getContext.call(this, type, ...rest)
+    }
+    return true
+  })()`)
   await click(`return document.querySelector('button[aria-label=Terminal]')`, 'the terminal toggle')
   await waitFor(`document.querySelector('[data-terminal-panel] .xterm')`, 'the terminal')
   // A window behind others may not composite its frames; asking for the front lets it draw.
@@ -442,7 +451,7 @@ async function run() {
   }
   await pumpFrames()
   log(
-    `terminal tabs ${await cdp.evaluate(`JSON.stringify([...document.querySelectorAll('[data-terminal-panel] [role=tab]')].map((t) => t.textContent))`)} ${await cdp.evaluate(`JSON.stringify({ visibility: document.visibilityState, focused: document.hasFocus(), canvas: !!document.querySelector('[data-terminal-panel] canvas'), rows: document.querySelector('[data-terminal-panel] .xterm-rows')?.textContent?.slice(0, 80) ?? null })`)}`,
+    `terminal tabs ${await cdp.evaluate(`JSON.stringify([...document.querySelectorAll('[data-terminal-panel] [role=tab]')].map((t) => t.textContent))`)}`,
   )
   await shoot('terminal')
   await click(`return document.querySelector('button[aria-label=Terminal]')`, 'the terminal toggle')
