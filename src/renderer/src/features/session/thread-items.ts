@@ -109,6 +109,8 @@ export type Item =
   | { key: string; type: 'run'; ids: string[]; signature: string }
   // The actions under a turn's reply, with its turn-end marker when it has one.
   | { key: string; type: 'reply'; agentIds: string[]; endId: string | null; latest: boolean }
+  // The running turn's status, where the reply will start: right after a message you sent.
+  | { key: string; type: 'status'; afterSent: boolean }
 
 /**
  * The thread's items. Work folds as it happens, so a running turn already reads as it will once it
@@ -169,7 +171,13 @@ export function buildItems(order: string[], shape: string, live = false, notes =
     const closing = after.get(i)
     if (closing) items.push(closing)
   }
+  if (live) items.push({ key: 'status', type: 'status', afterSent: sentItem(items.at(-1)) })
   return items
+}
+
+/** The item before the status: a message you sent, steered or not, sets its gap. */
+function sentItem(item: Item | undefined): boolean {
+  return item?.type === 'entry' && (item.char === 'u' || item.char === 's')
 }
 
 /** An item's height in px before it renders: its kind's shortest rendered height. */
@@ -182,7 +190,7 @@ export type Estimate = 16 | 18 | 20 | 24 | 28 | 69
  */
 export function estimateOf(item: Item): Estimate {
   if (item.type === 'run') return 28
-  if (item.type === 'group' || item.type === 'reply') return 24
+  if (item.type === 'group' || item.type === 'reply' || item.type === 'status') return 24
   switch (item.char) {
     // One line of bubble and the row under it.
     case 'u':

@@ -185,10 +185,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
               </p>
             )}
             <div className="flex flex-col">
-              {session && (
+              {session && summary.origin !== 'subagent' && (
                 <PlanBar
                   sessionId={sessionId}
-                  withPlan={summary.origin !== 'subagent'}
                   running={running}
                   hidden={queueOpen && session.queue.length > 0}
                 />

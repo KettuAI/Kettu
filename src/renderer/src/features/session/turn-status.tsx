@@ -28,8 +28,9 @@ function TurnClock({ since }: { since: number }) {
 }
 
 /**
- * The running turn's status, on the right of the row above the composer: how long it has run, its
- * tokens and its phase, with the attention dot in place of the spinner while it waits for you.
+ * The running turn's status, the thread's last line at the left, where the reply will start: how
+ * long it has run, its tokens and its phase, with the attention dot in place of the spinner while
+ * it waits for you. It is as tall as the reply's action row, which takes its place once it ends.
  */
 export const TurnStatus = memo(function TurnStatus({ sessionId }: { sessionId: string }) {
   const { t } = useTranslation('session')
@@ -48,7 +49,7 @@ export const TurnStatus = memo(function TurnStatus({ sessionId }: { sessionId: s
   return (
     <div
       role="status"
-      className="flex min-w-0 shrink-0 animate-in items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground animation-duration-(--duration-base) fade-in"
+      className="flex h-6 min-w-0 animate-in items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground animation-duration-(--duration-base) fade-in"
     >
       {phase === 'approval' ? (
         <span
