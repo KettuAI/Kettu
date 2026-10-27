@@ -518,13 +518,11 @@
   },
   "about": {
     "version": {
-      "description": "A desktop workbench for Claude Code, Codex, OpenCode and Pi.",
-      "keywords": "version electron chromium node",
-      "copy": "Copy versions"
+      "description": "A desktop workbench for Claude Code, Codex, OpenCode and Pi."
     },
     "updates": {
       "name": "Updates",
-      "keywords": "update check download restart",
+      "keywords": "update check download restart version",
       "upToDate": "You're up to date",
       "notChecked": "Not checked yet",
       "checkedAgo": "Checked {{ago}}",
@@ -569,13 +567,7 @@
     },
     "groups": {
       "updates": "Updates",
-      "runtime": "Runtime",
       "links": "Links"
-    },
-    "runtime": {
-      "system": "System",
-      "copy": "Copy versions",
-      "copied": "Copied"
     },
     "issues": {
       "name": "Report an issue"
@@ -590,7 +582,7 @@
     "terminal": "Which shell the side panel's terminal runs, and its font size.",
     "git": "The top bar's branch and changes, pull requests and their checks all come from these two tools.",
     "advanced": "Network proxy, diagnostics and the data OverBench keeps on this computer.",
-    "about": "OverBench and the versions it runs on.",
+    "about": "OverBench's version, updates and links.",
     "archived": "Sessions you archived, off the sidebar but kept. Restore one to put it back in its project.",
     "sharing": "Publish artifacts to links anyone can open, through your own Cloudflare account.",
     "browser": "The browser in the side panel keeps one profile for every session: sign-ins, site data and cache."

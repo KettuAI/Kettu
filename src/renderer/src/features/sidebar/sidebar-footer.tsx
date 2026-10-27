@@ -18,13 +18,14 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { AgentUpdateCard } from '@renderer/features/updates/agent-update-notice'
 import { NoticeCard, UpdateNoticeCard } from '@renderer/features/updates/update-notice'
+import { bugReportUrl } from '@renderer/lib/bug-report'
+import { useAppInfo } from '@renderer/lib/use-app-info'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { openSettings } from '@renderer/stores/view'
 import { NavRow } from './app-sidebar'
 import { signInLabel, useNotices } from './notices'
 
 const README_URL = 'https://github.com/overbench/overbench#readme'
-const REPORT_URL = 'https://github.com/overbench/overbench/issues/new?template=bug.yml'
 
 /**
  * The footer: the notices as cards, over the Settings row and, at its end, small buttons that
@@ -89,12 +90,6 @@ function FooterButton({
 
 function HelpMenu() {
   const { t } = useTranslation('sidebar')
-  const version = useUpdatesStore((s) => s.status?.current)
-  const links = [
-    { label: t('footer.documentation'), href: README_URL },
-    { label: t('footer.reportProblem'), href: REPORT_URL },
-    { label: t('footer.whatsNew'), href: version ? releaseUrl(version) : RELEASES_URL },
-  ]
   return (
     <DropdownMenu>
       <Tooltip>
@@ -117,17 +112,34 @@ function HelpMenu() {
         <TooltipContent>{t('footer.help')}</TooltipContent>
       </Tooltip>
       <DropdownMenuContent side="top" align="end">
-        {links.map((link) => (
-          <DropdownMenuItem
-            key={link.href}
-            render={<a href={link.href} target="_blank" rel="noreferrer" />}
-          >
-            <ExternalLinkIcon />
-            {link.label}
-          </DropdownMenuItem>
-        ))}
+        <HelpMenuItems />
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+/** Inside the menu's content, so the app's information is read when the menu opens. */
+function HelpMenuItems() {
+  const { t } = useTranslation('sidebar')
+  const info = useAppInfo()
+  const version = useUpdatesStore((s) => s.status?.current)
+  const links = [
+    { label: t('footer.documentation'), href: README_URL },
+    { label: t('footer.reportProblem'), href: bugReportUrl(info) },
+    { label: t('footer.whatsNew'), href: version ? releaseUrl(version) : RELEASES_URL },
+  ]
+  return (
+    <>
+      {links.map((link) => (
+        <DropdownMenuItem
+          key={link.href}
+          render={<a href={link.href} target="_blank" rel="noreferrer" />}
+        >
+          <ExternalLinkIcon />
+          {link.label}
+        </DropdownMenuItem>
+      ))}
+    </>
   )
 }
 

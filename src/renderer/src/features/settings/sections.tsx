@@ -45,12 +45,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { errorMessage, host } from '@renderer/lib/host'
 import { basename } from '@renderer/lib/format'
 import { fileManagerName, formatShortcut, isMac, isWindows } from '@renderer/lib/platform'
+import { useAppInfo } from '@renderer/lib/use-app-info'
 import { cn } from '@renderer/lib/utils'
 import { AGENT_NAMES, isInstalled, useAgentsStore } from '@renderer/stores/agents'
 import { loadGitTools, useGitStore } from '@renderer/stores/git'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { useAppInfo } from './use-app-info'
 import {
   CONFIRM,
   ControlError,

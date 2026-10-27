@@ -515,13 +515,11 @@
   },
   "about": {
     "version": {
-      "description": "面向 Claude Code、Codex、OpenCode 和 Pi 的桌面工作台。",
-      "keywords": "版本 version electron chromium node",
-      "copy": "复制版本信息"
+      "description": "面向 Claude Code、Codex、OpenCode 和 Pi 的桌面工作台。"
     },
     "updates": {
       "name": "更新",
-      "keywords": "更新 检查 下载 重启 update check download restart",
+      "keywords": "更新 检查 下载 重启 版本 update check download restart version",
       "upToDate": "已是最新版本",
       "notChecked": "还没有检查过",
       "checkedAgo": "上次检查：{{ago}}",
@@ -566,13 +564,7 @@
     },
     "groups": {
       "updates": "更新",
-      "runtime": "运行环境",
       "links": "链接"
-    },
-    "runtime": {
-      "system": "系统",
-      "copy": "复制版本信息",
-      "copied": "已复制"
     },
     "issues": {
       "name": "反馈问题"
@@ -587,7 +579,7 @@
     "terminal": "侧边面板里的终端用哪个 Shell，以及它的字号。",
     "git": "顶栏的分支与更改、Pull Request 和它的检查结果，都靠下面两个工具。",
     "advanced": "网络代理、诊断信息，以及 OverBench 保存在这台电脑上的数据。",
-    "about": "OverBench 和它所依赖的运行环境。",
+    "about": "OverBench 的版本、更新和链接。",
     "archived": "你归档的会话，不在侧边栏里但都保留着。恢复后会回到原来的项目里。",
     "sharing": "通过你自己的 Cloudflare 账号，把 artifact 发布为任何人都能打开的链接。",
     "browser": "侧边面板里的浏览器让所有会话共用一个配置：登录状态、网站数据和缓存都在这里。"

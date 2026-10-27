@@ -25,9 +25,11 @@ import {
   EmptyTitle,
 } from '@renderer/components/ui/empty'
 import { listedInstalled } from '@renderer/features/agents/readiness'
+import { bugReportUrl } from '@renderer/lib/bug-report'
 import { basename, longAgo } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { formatShortcut, isMac, isWindows, platform } from '@renderer/lib/platform'
+import { useAppInfo } from '@renderer/lib/use-app-info'
 import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useProjectsStore } from '@renderer/stores/projects'
@@ -37,20 +39,12 @@ import { useSharingStore } from '@renderer/stores/sharing'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { useUsageStore } from '@renderer/stores/usage'
 import { openAgentSettings } from '@renderer/stores/view'
-import {
-  AboutHero,
-  AutomaticUpdates,
-  CopyVersions,
-  LinkRow,
-  RuntimeFact,
-  UpdateRow,
-} from './about-section'
+import { AboutHero, AutomaticUpdates, LinkRow, UpdateRow } from './about-section'
 import { AgentListItem, AgentsGroupActions, EnvironmentFooter } from './agents-section'
 import { ArchivedRow } from './archived-section'
 import { GroupLabel } from './rows'
 import { PublishedRow, SharingAccount } from './sharing-section'
 import { BrowseThemes } from './theme-catalog'
-import { useAppInfo } from './use-app-info'
 import { useLoginItemStatus } from './use-login-item'
 import { environmentText } from './environment-text'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
@@ -90,7 +84,6 @@ import { ClearRecord, FromComputer, LogRow, SidebarEnd, SyncLogs } from './usage
 // the page draws.
 
 const SOURCE_URL = 'https://github.com/overbench/overbench'
-const ISSUES_URL = 'https://github.com/overbench/overbench/issues'
 const LICENSE_URL = 'https://github.com/overbench/overbench/blob/main/LICENSE'
 
 const SHORTCUTS = [
@@ -681,18 +674,7 @@ export function useAboutSection(): SectionDef {
   const status = useUpdatesStore((s) => s.status)
   const info = useAppInfo()
   const updates = group('updates', t('about.groups.updates'))
-  const runtime = group('runtime', t('about.groups.runtime'), {
-    actions: info && <CopyVersions info={info} />,
-  })
   const links = group('links', t('about.groups.links'))
-  const fact = (id: string, name: string, value: string | undefined): RowDef => ({
-    id,
-    name,
-    keywords: t('about.version.keywords'),
-    group: runtime,
-    compact: true,
-    render: () => <RuntimeFact value={value} />,
-  })
   return {
     id: 'about',
     title: t('sections.about'),
@@ -721,10 +703,6 @@ export function useAboutSection(): SectionDef {
               render: () => <AutomaticUpdates />,
             },
           ]),
-      fact('electron', 'Electron', info?.versions.electron),
-      fact('chromium', 'Chromium', info?.versions.chrome),
-      fact('node', 'Node.js', info?.versions.node),
-      fact('system', t('about.runtime.system'), info ? `${info.platform} ${info.arch}` : undefined),
       {
         id: 'source',
         name: t('about.source.name'),
@@ -765,7 +743,13 @@ export function useAboutSection(): SectionDef {
         english: en('about.issues.name'),
         group: links,
         layout: 'custom',
-        render: () => <LinkRow name={t('about.issues.name')} url={ISSUES_URL} />,
+        render: () => (
+          <LinkRow
+            name={t('about.issues.name')}
+            url={bugReportUrl(info)}
+            detail="github.com/overbench/overbench/issues/new"
+          />
+        ),
       },
     ],
   }

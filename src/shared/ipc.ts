@@ -16,9 +16,8 @@ import type { UpdateStatus } from './updates'
 export interface AppInfo {
   name: string
   version: string
-  platform: string
-  arch: string
-  versions: { electron: string; chrome: string; node: string }
+  /** The system and its version, then the architecture, as a bug report names them. */
+  system: string
   userDataPath: string
   isPackaged: boolean
 }
