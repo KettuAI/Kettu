@@ -102,15 +102,18 @@ const theme = EditorView.theme({
     minHeight: 'var(--box-min-height)',
     fontSize: 'var(--prose-size)',
     caretColor: 'var(--text-primary)',
+    // Otherwise the content grows to its longest line, and the placeholder's 100% would be its
+    // own text, which runs under the buttons beside the box.
+    width: '100%',
   },
   '.cm-line': { padding: '0' },
   // One line, cut with an ellipsis, so a long placeholder does not make the caret two lines tall.
   '.cm-placeholder': {
-    color: 'var(--text-placeholder)',
     maxWidth: '100%',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+    color: 'var(--text-placeholder)',
   },
   '.cm-hint': { color: 'var(--text-placeholder)' },
   // A shadow takes the tint 2 px past the text without moving it; it adds 2 px to the radius.
