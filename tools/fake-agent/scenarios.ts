@@ -24,6 +24,7 @@ import {
   CLOCK_TEST,
   COMMANDS,
   SVG_REPLY,
+  TABLES_REPLY,
   THINKING_ANSWER,
   THOUGHT_TEXT,
   chunkText,
@@ -1246,6 +1247,11 @@ const chinese: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+const tables: Scenario = async (turn) => {
+  if (!(await stream(turn, TABLES_REPLY, { messageId: turn.messageId() }))) return 'cancelled'
+  return 'end_turn'
+}
+
 const report: Scenario = async (turn) => {
   let n = 0
   const id = () => `report-${turn.session.turns}-${n++}`
@@ -1362,6 +1368,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   chinese,
   artifacts,
   report,
+  tables,
 }
 
 export const compact: Scenario = async (turn) => {

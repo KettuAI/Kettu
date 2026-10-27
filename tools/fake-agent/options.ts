@@ -30,6 +30,7 @@ export const SCENARIOS = [
   'chinese',
   'artifacts',
   'report',
+  'tables',
 ] as const
 
 export type ScenarioName = (typeof SCENARIOS)[number]
@@ -101,6 +102,9 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
     hint: '--read <artifact id> --until-cancel --child <id> --meta <session id|none> --execute',
   },
   report: { description: 'Short Chinese notes between runs of work, then a report' },
+  tables: {
+    description: 'Five tables: long, wide, long paths and a URL, many columns, and Chinese',
+  },
 }
 
 export interface ScenarioOptions {

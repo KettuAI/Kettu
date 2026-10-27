@@ -290,3 +290,49 @@ export const REPORT_ANSWER = `登录测试偶发失败的问题修好了，开�
 
 还没做的：\`src/session.ts\` 里还有一处直接读 \`Date.now()\`，和这次的问题无关，先不动，等你确认。
 `
+
+// The five tables tables checks: a long one, a wide one with a long note, one of long paths and a
+// URL, one with many columns, and one in Chinese. Together they cover a table taller than its
+// column, one wider than the whole words have room for, and one too wide for any fitting.
+export const TABLES_REPLY = `## Table fitting
+
+A long table, taller than any cap it used to be cut at:
+
+| # | File | Change | Risk |
+| --- | --- | --- | --- |
+${Array.from(
+  { length: 25 },
+  (_, i) =>
+    `| ${i + 1} | \`src/renderer/features/session/markdown/chunks-${i + 1}.ts\` | Read the clock once in step ${i + 1} | Low |`,
+).join('\n')}
+
+Seven columns of short values and a long note:
+
+| Area | Owner | State | Tests | Coverage | Since | Note |
+| --- | --- | --- | --- | --- | --- | --- |
+| Renderer | Mira | Done | 312 | 87% | 2026-10-01 | The table shares out its extra width by content, so the note takes the room the short columns leave. |
+| Agent host | Tomás | In review | 148 | 91% | 2026-09-18 | The session model keeps every page it loaded, and the host replays the rest. |
+| Terminal host | Priya | Done | 64 | 78% | 2026-08-22 | Each shell lives in its own process, so a crash takes one tab. |
+
+Long paths and a URL, which have no whole words to keep:
+
+| Module | Path | Link |
+| --- | --- | --- |
+| Chunks | \`src/renderer/src/features/session/markdown/chunks.ts\` | https://github.com/overbench/overbench/blob/main/src/renderer/src/features/session/markdown/chunks.ts |
+| Table fit | \`src/renderer/src/features/session/markdown/table-fit.ts\` | https://github.com/overbench/overbench/blob/main/src/renderer/src/features/session/markdown/table-fit.ts |
+
+Nine columns of numbers:
+
+| Day | Sessions | Turns | Tokens in | Tokens out | Cache read | Cache write | Cost | Errors |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Mon | 12 | 84 | 184,320 | 21,760 | 512,000 | 38,400 | $1.42 | 1 |
+| Tue | 15 | 96 | 201,984 | 24,512 | 594,432 | 41,216 | $1.61 | 0 |
+| Wed | 9 | 61 | 142,080 | 18,304 | 448,128 | 30,208 | $1.13 | 2 |
+
+Chinese headers, which never break between their characters:
+
+| 文件 | 改动 | 说明 | 风险 |
+| --- | --- | --- | --- |
+| \`src/auth/token.ts\` | 签发和校验都改为接收 \`now\` | 在请求入口只读一次时钟，把同一个时间传给两个函数 | 低 |
+| \`src/middleware/session.ts\` | 在入口处读取一次时钟 | 已经有七个调用方一并更新 | 低 |
+`
