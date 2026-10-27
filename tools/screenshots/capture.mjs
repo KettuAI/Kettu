@@ -24,6 +24,10 @@ const out = resolve(valueOf('--out') ?? 'screenshots')
 const port = Number(valueOf('--port') ?? 9230)
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 const log = (text) => process.stderr.write(`${text}\n`)
+// Cursor moves, colours and the like; what is left is what a person reads on the grid.
+// eslint-disable-next-line no-control-regex
+const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][0-9A-Za-z]/g
+const printedText = (replay) => replay.replace(ANSI, '').trim()
 
 mkdirSync(out, { recursive: true })
 const scratch = mkdtempSync(join(tmpdir(), 'overbench-shots-'))
@@ -182,6 +186,17 @@ async function run() {
     }
     await cdp.evaluate(`document.documentElement.dataset.theme = 'light'`)
     log(`captured ${name}`)
+  }
+  // A window hidden behind others never runs requestAnimationFrame, so what draws from one, such
+  // as xterm's grid, has not appeared; a tiny capture makes Chromium produce a frame.
+  const pumpFrames = async (count = 3) => {
+    for (let i = 0; i < count; i++) {
+      await cdp.send('Page.captureScreenshot', {
+        format: 'png',
+        clip: { x: 0, y: 0, width: 1, height: 1, scale: 1 },
+      })
+      await sleep(100)
+    }
   }
   const byText = (selector, text) =>
     `return [...document.querySelectorAll(${JSON.stringify(selector)})].find((el) => el.textContent.includes(${JSON.stringify(text)}))`
@@ -408,21 +423,22 @@ async function run() {
 
   await click(`return document.querySelector('button[aria-label=Terminal]')`, 'the terminal toggle')
   await waitFor(`document.querySelector('[data-terminal-panel] .xterm')`, 'the terminal')
-  // The shell prints its prompt a few seconds after it starts; the grid stays empty until it
-  // does, so the host's replay is what says it has printed.
-  await cdp.evaluate(`(async () => {
-    const deadline = Date.now() + 60_000
-    for (;;) {
-      const list = await window.overbench.terminals.request('terminals.list', { projectPath: ${JSON.stringify(project)} })
-      const terminal = list.sort((a, b) => b.createdAt - a.createdAt)[0]
-      if (terminal) {
-        const { replay } = await window.overbench.terminals.request('terminals.attach', { id: terminal.id })
-        if (replay.trim()) return true
-      }
-      if (Date.now() > deadline) throw new Error('the terminal printed nothing')
-      await new Promise((done) => setTimeout(done, 100))
-    }
-  })()`)
+  // The grid stays empty until the shell prints its prompt, a few seconds after it starts, so the
+  // host's replay says when there is something to see; the frames let the terminal draw it.
+  const terminalPrinted = async () => {
+    const replay =
+      await cdp.evaluate(`window.overbench.terminals.request('terminals.list', { projectPath: ${JSON.stringify(project)} }).then((list) => {
+        const terminal = list.sort((a, b) => b.createdAt - a.createdAt)[0]
+        return terminal ? window.overbench.terminals.request('terminals.attach', { id: terminal.id }).then((reply) => reply.replay) : ''
+      })`)
+    return printedText(replay).length > 0
+  }
+  const terminalDeadline = Date.now() + 60_000
+  while (!(await terminalPrinted())) {
+    if (Date.now() > terminalDeadline) throw new Error('The terminal printed nothing')
+    await pumpFrames(1)
+  }
+  await pumpFrames()
   log(
     `terminal tabs ${await cdp.evaluate(`JSON.stringify([...document.querySelectorAll('[data-terminal-panel] [role=tab]')].map((t) => t.textContent))`)}`,
   )
