@@ -61,7 +61,8 @@
     },
     "breakdown": {
       "loading": "Reading what fills the context",
-      "error": "Couldn't break the context down: {{error}}"
+      "error": "Couldn't break the context down: {{error}}",
+      "betweenTurns": "What fills the context shows between turns"
     },
     "limits": {
       "plan": "Plan",

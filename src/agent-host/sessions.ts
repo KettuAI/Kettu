@@ -3242,7 +3242,8 @@ export class SessionManager {
   /**
    * What fills the session's context, from the agent's `/context` report. It runs in a fork,
    * deleted afterwards, so the session's own thread and history stay as they were. Null for an
-   * agent without the report.
+   * agent without the report. A session no turn runs in is read without attaching it: the fork
+   * starts from its transcript on disk, and the agent's idle stop ends it again.
    */
   context(sessionId: string): Promise<ContextBreakdown | null> {
     const running = this.contextRuns.get(sessionId)
@@ -3261,9 +3262,14 @@ export class SessionManager {
     const record = live?.record ?? this.recordOf(sessionId)
     if (!hasContextReport(record.agentId) || record.origin === 'subagent') return null
     const status = live?.thread.session.status ?? 'closed'
-    if (status !== 'ready' || !live?.connection) throw busyError(status)
+    const running =
+      status === 'starting' || status === 'running' || status === 'awaiting_permission'
+    if (running) throw busyError(status)
     const runtime = await this.deps.agents.ensureReady(record.agentId)
-    if (!runtime.init.capabilities.forkSession) return null
+    const agent = this.deps.agents.name(record.agentId)
+    if (!runtime.init.capabilities.forkSession) {
+      throw new HostError('agent_unavailable', t('session.cannotFork', { agent }))
+    }
     const log = (message: string): void => this.deps.diagnostics.log('warn', message)
     let messages: string[]
     try {
@@ -3287,8 +3293,13 @@ export class SessionManager {
     const breakdown =
       messages.map((text) => parseContextReport(text, now)).findLast((report) => report !== null) ??
       null
-    if (!breakdown)
-      log(`${this.deps.agents.name(record.agentId)}: /context gave no report OverBench can read`)
+    if (!breakdown) {
+      log(`${agent}: /context gave no report OverBench can read`)
+      throw new HostError(
+        'agent_error',
+        t('agent.unreadableReport', { agent, command: CONTEXT_REPORT.command }),
+      )
+    }
     return breakdown
   }
 

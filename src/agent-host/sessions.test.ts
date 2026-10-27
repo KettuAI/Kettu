@@ -1890,6 +1890,65 @@ describe('reports', () => {
     expect(await listed()).toBe(sessionsBefore)
   })
 
+  it('breaks a closed session down without attaching it, resuming it or loading it', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, 'Fix the flaky login test')
+    await port.untilStatus(sessionId, 'ready')
+    await port.request('sessions.close', { sessionId })
+    expect(port.summary(sessionId)).toMatchObject({ status: 'closed' })
+    const before = port.entries(sessionId)
+    const sent = (method: string) =>
+      t.host.diagnostics
+        .agentRecords('fake-agent')
+        .traffic.filter((r) => r.direction === 'out' && r.method === method).length
+    const resumes = sent('session/resume')
+    const loads = sent('session/load')
+
+    const breakdown = await port.request('sessions.context', { sessionId })
+    expect(breakdown).toMatchObject({ model: 'fake-model', size: 200_000 })
+    expect(breakdown?.categories.map((category) => category.name)).toContain('Messages')
+    expect(sent('session/resume')).toBe(resumes)
+    expect(sent('session/load')).toBe(loads)
+    expect(port.summary(sessionId)?.status).toBe('closed')
+    expect(port.entries(sessionId)).toEqual(before)
+  })
+
+  it('refuses to break the context down while a turn runs', async () => {
+    const { t, port } = await setup({ agentEnv: { FAKE_AGENT_DELAY_SCALE: '0.05' } })
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, '/cancel')
+    await port.untilStatus(sessionId, 'running')
+    await expect(port.request('sessions.context', { sessionId })).rejects.toMatchObject({
+      code: 'busy',
+    })
+    await port.request('sessions.cancel', { sessionId })
+    await port.untilStatus(sessionId, 'ready')
+  })
+
+  it('says plainly that an adapter without session/fork cannot break the context down', async () => {
+    const { t, port } = await setup({ agentEnv: { FAKE_AGENT_WITHOUT: 'fork' } })
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, 'Fix the flaky login test')
+    await port.untilStatus(sessionId, 'ready')
+    await expect(port.request('sessions.context', { sessionId })).rejects.toMatchObject({
+      code: 'agent_unavailable',
+      message: 'Fake agent cannot fork sessions',
+    })
+  })
+
+  it('says plainly when the report holds nothing OverBench can read', async () => {
+    // Without `delete`, no hidden session can be removed, so /context runs nothing.
+    const { t, port } = await setup({ agentEnv: { FAKE_AGENT_WITHOUT: 'delete' } })
+    const sessionId = await newSession(t, port)
+    await turn(port, sessionId, 'Fix the flaky login test')
+    await port.untilStatus(sessionId, 'ready')
+    await expect(port.request('sessions.context', { sessionId })).rejects.toMatchObject({
+      code: 'agent_error',
+      message: "Fake agent's /context gave no report OverBench can read",
+    })
+  })
+
   it('reads every plan limit from /usage, at most once a minute', async () => {
     const { port } = await setup()
     const limits = () =>

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { ChevronRightIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentAccount, ContextList, PlanLimit } from '@shared/agent-host'
@@ -23,10 +24,10 @@ import { CacheDetails } from '@renderer/features/prompt-cache/cache-details'
 import { CacheHourglass } from '@renderer/features/prompt-cache/cache-hourglass'
 import { useCacheLeft, useCachePhase } from '@renderer/features/prompt-cache/cache-phase'
 import {
-  contextRows,
+  breakdownView,
   contextSegments,
+  partFill,
   type ContextRow,
-  type ContextSegment,
 } from '@renderer/features/session/composer/context-bar'
 import { PANEL } from '@renderer/features/session/entries/helpers'
 import { USAGE_TONE_TEXT, usageTone, type UsageTone } from '@renderer/features/sidebar/plan-usage'
@@ -42,12 +43,7 @@ import {
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import {
-  loadContext,
-  refreshLimits,
-  useUsageStore,
-  type ContextReport,
-} from '@renderer/stores/usage'
+import { loadContext, refreshLimits, useUsageStore } from '@renderer/stores/usage'
 
 /** From this share of the context the button shows the percentage, in the usage level's color. */
 const CONTEXT_WARNING = 0.8
@@ -143,6 +139,7 @@ export function UsageButton({
   sessionId,
   agentId,
   idle,
+  reports,
   running,
   usage,
   cache,
@@ -154,6 +151,8 @@ export function UsageButton({
   agentId: AgentId
   /** No turn runs, so the agent can break the context down. */
   idle: boolean
+  /** Whether the agent breaks its context down at all. */
+  reports: boolean
   /** A turn runs, which keeps the cache in use, so the ring leaves its state out. */
   running: boolean
   usage: SessionUsage | null
@@ -177,7 +176,7 @@ export function UsageButton({
     refreshLimits(agentId).catch((error: unknown) =>
       console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
     )
-    if (idle && usage) loadContext(sessionId, `${usage.used}/${usage.size}`)
+    if (reports && idle && usage) loadContext(sessionId, `${usage.used}/${usage.size}`)
   }
   return (
     <Popover onOpenChange={onOpenChange}>
@@ -238,6 +237,8 @@ export function UsageButton({
             cache={cache}
             share={share}
             full={full}
+            idle={idle}
+            reports={reports}
             onCompact={onCompact}
           />
         )}
@@ -254,6 +255,8 @@ function ContextPart({
   cache,
   share,
   full,
+  idle,
+  reports,
   onCompact,
 }: {
   sessionId: string
@@ -261,16 +264,28 @@ function ContextPart({
   cache: CacheExpiry | null
   share: number
   full: boolean
+  idle: boolean
+  reports: boolean
   onCompact: (() => void) | null
 }) {
   const { t } = useTranslation('composer')
   const report = useUsageStore((s) => s.context[sessionId])
   const totals = usage.tokens
   const tone = contextTone(share)
-  const breakdown = report?.breakdown ?? null
-  const rows = breakdown ? contextRows(breakdown.categories) : null
-  const busy = report?.loading === true
+  const key = `${usage.used}/${usage.size}`
+  const view = breakdownView(report, key, { reports, idle })
+  // A turn that ends under an open popover reads the context it can now break down, as opening
+  // the popover does.
+  const waiting = !report || (!report.loading && report.key !== key)
+  const readNow = reports && idle && waiting
+  useEffect(() => {
+    if (readNow) loadContext(sessionId, key)
+  }, [readNow, sessionId, key])
+  const rows = view.kind === 'rows' ? view.rows : null
+  const breakdown = view.kind === 'rows' ? report?.breakdown : null
+  const busy = view.kind === 'rows' && view.dimmed
   const more = Boolean(totals || cache || usage.cost || onCompact)
+  const retry = () => loadContext(sessionId, key)
   return (
     <div className="flex flex-col gap-3 p-3.5">
       <div className="flex flex-col gap-2.5">
@@ -288,13 +303,17 @@ function ContextPart({
           aria-busy={busy}
           className={cn(
             'flex flex-col gap-2.5 transition-opacity duration-(--duration-fast)',
-            busy && breakdown && 'opacity-60',
+            busy && 'opacity-60',
           )}
         >
           <ContextBar rows={rows} used={usage.used} size={usage.size} />
           {rows && <Sources rows={rows} />}
         </div>
-        {!breakdown && report && <BreakdownState report={report} />}
+        {view.kind === 'loading' && <BreakdownRows />}
+        {view.kind === 'error' && <BreakdownError error={view.error} onRetry={retry} />}
+        {view.kind === 'betweenTurns' && (
+          <p className="text-xs text-muted-foreground">{t('usage.breakdown.betweenTurns')}</p>
+        )}
         {breakdown && breakdown.lists.length > 0 && (
           <div className="flex flex-col">
             {breakdown.lists.map((list) => (
@@ -341,30 +360,6 @@ function Total({ label, value }: { label: string; value: number | null }) {
       <dd>{tokens(value)}</dd>
     </div>
   )
-}
-
-const SOURCE_COLOR = [
-  'bg-context-1',
-  'bg-context-2',
-  'bg-context-3',
-  'bg-context-4',
-  'bg-context-5',
-  'bg-context-6',
-  'bg-context-7',
-] as const
-
-/** A part's fill in the bar, and in its row's swatch (where the buffer and free space are outlined). */
-const partFill = (part: ContextSegment['part']): string => {
-  switch (part.kind) {
-    case 'source':
-      return SOURCE_COLOR[part.color - 1]!
-    case 'buffer':
-      return 'bg-(image:--context-hatch)'
-    case 'used':
-      return 'bg-text-tertiary'
-    case 'free':
-      return ''
-  }
 }
 
 /** The context stacked by source, its autocompact buffer hatched and free space the track. */
@@ -452,25 +447,30 @@ function CacheTime({ cache, phase }: { cache: KnownExpiry; phase: RingCache }) {
   )
 }
 
-/** The skeleton rows while the first breakdown is read, and the failure when it could not be. */
-function BreakdownState({ report }: { report: ContextReport }) {
+/** The skeleton rows while no breakdown is here, and the failure with its Retry at the end. */
+function BreakdownRows() {
   const { t } = useTranslation('composer')
-  if (report.loading) {
-    return (
-      <div aria-label={t('usage.breakdown.loading')} className="flex flex-col">
-        {[4 / 5, 3 / 5, 2 / 3].map((width) => (
-          <div key={width} className="flex h-6 items-center">
-            <Skeleton className="h-3" style={{ width: `${width * 100}%` }} />
-          </div>
-        ))}
-      </div>
-    )
-  }
-  return report.error ? (
-    <p className="text-xs text-muted-foreground">
-      {t('usage.breakdown.error', { error: report.error })}
-    </p>
-  ) : null
+  return (
+    <div aria-label={t('usage.breakdown.loading')} className="flex flex-col">
+      {[4 / 5, 3 / 5, 2 / 3].map((width) => (
+        <div key={width} className="flex h-6 items-center">
+          <Skeleton className="h-3" style={{ width: `${width * 100}%` }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function BreakdownError({ error, onRetry }: { error: string; onRetry: () => void }) {
+  const { t } = useTranslation(['composer', 'common'])
+  return (
+    <div className="flex items-start gap-2 text-xs text-muted-foreground">
+      <p className="min-w-0 flex-1">{t('usage.breakdown.error', { error })}</p>
+      <Button variant="outline" size="xs" onClick={onRetry} className="shrink-0">
+        {t('actions.retry', { ns: 'common' })}
+      </Button>
+    </div>
+  )
 }
 
 function ListPart({ list }: { list: ContextList }) {

@@ -194,6 +194,7 @@ export interface AgentStatus {
     forkAtMessage: boolean // `session/fork` up to a message, through the adapters' fork point
     steering: boolean // `_session/steering` into a running turn
     reports: boolean // plan limits from its own report (`/usage`, `/status`)
+    context: boolean // what fills the context from its own report (`/context`)
     account: boolean // names its account through `_auth/status_update` as it starts
     progressNotes: boolean // its messages that more work in a turn follows are progress notes
     prompt: PromptCapabilities | null // what a prompt may carry; null until the agent has started
