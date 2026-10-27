@@ -6,7 +6,6 @@
     "terminal": "终端",
     "git": "Git",
     "notifications": "通知",
-    "shortcuts": "键盘快捷键",
     "advanced": "高级",
     "about": "关于",
     "archived": "已归档会话",
@@ -270,30 +269,6 @@
     "previewTitle": "Claude Code 需要授权",
     "previewBody": "overbench · 运行 {{command}}",
     "previewTime": "现在"
-  },
-  "shortcuts": {
-    "openProject": "打开项目",
-    "newSession": "新建会话",
-    "toggleSidebar": "显示或隐藏侧边栏",
-    "focusComposer": "聚焦输入框",
-    "addFiles": "向输入框添加文件或照片",
-    "previousSession": "侧边栏中的上一个会话",
-    "nextSession": "侧边栏中的下一个会话",
-    "settings": "打开设置；按 Esc 返回",
-    "zoomIn": "放大",
-    "zoomOut": "缩小",
-    "resetZoom": "将缩放重置为 100%",
-    "toggleTerminal": "显示或隐藏终端",
-    "newTerminal": "新建终端",
-    "cancelTurn": "停止本轮对话",
-    "answerPermission": "回应待处理的授权请求",
-    "askSelection": "就选中的内容询问 Agent",
-    "askSelectionNote": "在终端中选中文本时",
-    "groups": {
-      "sessions": "会话",
-      "window": "窗口",
-      "terminal": "终端"
-    }
   },
   "browser": {
     "clearData": {
@@ -576,7 +551,6 @@
     "general": "界面语言、输入方式，以及新会话和启动时的行为。",
     "appearance": "主题、颜色模式、缩放和文字大小。改动立即生效。",
     "notifications": "只在 OverBench 的所有窗口都不在前台时提醒你，免得打断正在看的内容。",
-    "shortcuts": "会话、窗口和终端的快捷键。目前还不能修改。",
     "agents": "OverBench 通过 ACP 驱动这些编程 Agent。在这里查看账号、套餐用量和安装状态。",
     "terminal": "侧边面板里的终端用哪个 Shell，以及它的字号。",
     "git": "顶栏的分支与更改、Pull Request 和它的检查结果，都靠下面两个工具。",

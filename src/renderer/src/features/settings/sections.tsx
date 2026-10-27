@@ -36,7 +36,7 @@ import {
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/components/ui/input-group'
-import { Kbd, KbdGroup } from '@renderer/components/ui/kbd'
+import { Kbd } from '@renderer/components/ui/kbd'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
@@ -875,30 +875,6 @@ export function TestNotification() {
         {t('notifications.test')}
       </Button>
     </>
-  )
-}
-
-// ---- Keyboard shortcuts
-
-// "1-4" is a range of keys, not a chord.
-const KEY_RANGE = /^(\d)-(\d)$/
-
-export function ShortcutKeys({ keys }: { keys: string }) {
-  const range = KEY_RANGE.exec(keys)
-  return (
-    <KbdGroup className="shrink-0 gap-1.5">
-      {range ? (
-        <>
-          <Kbd>{range[1]}</Kbd>
-          <span aria-hidden className="text-xs text-tertiary">
-            {'–'}
-          </span>
-          <Kbd>{range[2]}</Kbd>
-        </>
-      ) : (
-        keys.split(/\+(?=.)/).map((key, i) => <Kbd key={i}>{formatShortcut(key)}</Kbd>)
-      )}
-    </KbdGroup>
   )
 }
 

@@ -621,6 +621,17 @@ async function run() {
   await sleep(600)
   await shoot('routines')
 
+  // The shortcuts dialog, over the screen, from the footer's button; Esc puts it away.
+  await click(
+    `return document.querySelector('[data-sidebar=footer] button[aria-label="Keyboard shortcuts"]')`,
+    'Keyboard shortcuts',
+  )
+  await waitFor(`document.querySelector('[role=dialog]')`, 'the shortcuts dialog')
+  await sleep(600)
+  await shoot('shortcuts')
+  await press('Escape', 27)
+  await sleep(300)
+
   await click(
     `return document.querySelector('[data-sidebar=footer] button[aria-label="Settings"]')`,
     'Settings',
@@ -633,7 +644,6 @@ async function run() {
     'General',
     'Appearance',
     'Notifications',
-    'Keyboard shortcuts',
     'Agents',
     'Usage',
     'Terminal',

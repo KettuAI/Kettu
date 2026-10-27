@@ -75,6 +75,8 @@ export function forwardedKey(input: Input, platform: NodeJS.Platform): Forwarded
   const lower = input.key.toLowerCase()
   if (lower === 'l' && !input.shift) return key
   if (input.shift && (input.code === 'BracketLeft' || input.code === 'BracketRight')) return key
+  // The shortcuts dialog's key has no menu item, so it passes on macOS too.
+  if (input.key === '/') return key
   // On macOS the app menu's accelerators take the rest.
   if (mac) return null
   if (['=', '+', '-', '_', '0'].includes(input.key)) return key

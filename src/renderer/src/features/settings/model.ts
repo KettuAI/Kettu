@@ -37,13 +37,9 @@ export interface RowDef {
    * first line and puts what it reveals underneath; `custom` renders only the control.
    */
   layout?: 'inline' | 'block' | 'custom'
-  /** A row of a name and a short control, such as a shortcut's keys, which sits lower. */
-  compact?: boolean
   render: (text: ReactNode) => ReactNode
   /** Where choosing the row in search results goes, when not to the row on its page. */
   open?: () => void
-  /** What a search result shows at its end in place of the description, such as a shortcut's keys. */
-  aside?: () => ReactNode
   /** Found by search but drawn by the page itself, as the environment line under the agents is. */
   searchOnly?: boolean
 }

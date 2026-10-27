@@ -39,7 +39,6 @@ import {
   useGitSection,
   useNotificationsSection,
   useSharingSection,
-  useShortcutsSection,
   useTerminalSection,
   useUsageSection,
 } from './section-defs'
@@ -56,7 +55,7 @@ export default function SettingsPage() {
   // The list in three clusters: how the app looks and behaves, the agents and their tools, then
   // the rest.
   const clusters: SectionDef[][] = [
-    [useGeneralSection(), useAppearanceSection(), useNotificationsSection(), useShortcutsSection()],
+    [useGeneralSection(), useAppearanceSection(), useNotificationsSection()],
     [useAgentsSection(), useUsageSection(), useTerminalSection(), useGitSection()],
     [
       useArchivedSection(),
@@ -389,13 +388,12 @@ function SearchResults({
                           <span className="text-ui font-medium">
                             <Marked text={row.name} query={query} />
                           </span>
-                          {row.description && !row.aside && (
+                          {row.description && (
                             <span className="mt-0.5 line-clamp-2 text-xs leading-4 text-secondary">
                               <Marked text={excerpt(row.description, query)} query={query} />
                             </span>
                           )}
                         </span>
-                        {row.aside?.()}
                         <ChevronRightIcon className="size-4 shrink-0 text-icon" />
                       </button>
                     ))}

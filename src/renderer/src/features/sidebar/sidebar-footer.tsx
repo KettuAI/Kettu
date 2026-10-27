@@ -19,9 +19,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { AgentUpdateCard } from '@renderer/features/updates/agent-update-notice'
 import { NoticeCard, UpdateNoticeCard } from '@renderer/features/updates/update-notice'
 import { bugReportUrl } from '@renderer/lib/bug-report'
+import { formatShortcut } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
 import { useUpdatesStore } from '@renderer/stores/updates'
-import { openSettings } from '@renderer/stores/view'
+import { openSettings, showShortcuts } from '@renderer/stores/view'
 import { NavRow } from './app-sidebar'
 import { signInLabel, useNotices } from './notices'
 
@@ -50,7 +51,11 @@ export function SidebarFooterContent() {
         <FooterButton label={t('footer.archived')} onClick={() => openSettings('archived')}>
           <ArchiveIcon className="size-4" />
         </FooterButton>
-        <FooterButton label={t('footer.shortcuts')} onClick={() => openSettings('shortcuts')}>
+        <FooterButton
+          label={t('footer.shortcuts')}
+          shortcut="Mod+/"
+          onClick={() => showShortcuts(true)}
+        >
           <KeyboardIcon className="size-4" />
         </FooterButton>
         <HelpMenu />
@@ -61,10 +66,12 @@ export function SidebarFooterContent() {
 
 function FooterButton({
   label,
+  shortcut,
   onClick,
   children,
 }: {
   label: string
+  shortcut?: string
   onClick: () => void
   children: ReactNode
 }) {
@@ -83,7 +90,9 @@ function FooterButton({
       >
         {children}
       </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
+      <TooltipContent>
+        {label} {shortcut && <span className="opacity-60">{formatShortcut(shortcut)}</span>}
+      </TooltipContent>
     </Tooltip>
   )
 }
