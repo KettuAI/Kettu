@@ -70,8 +70,9 @@ export function SessionHeader({
 
   return (
     <TopBar>
-      {/* The title gives way last: the git status shrinks first (see HeaderTools). */}
-      <NoDrag className="min-w-0 gap-0.5">
+      {/* The title gives way last: the git status shrinks first (see HeaderTools). What is left
+          once the title reaches its least width is cut at the group's edge, not under the tools. */}
+      <NoDrag className="min-w-0 gap-0.5 overflow-clip">
         {routine && summary.routine && (
           <>
             <Button
