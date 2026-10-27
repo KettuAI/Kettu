@@ -423,6 +423,8 @@ async function run() {
 
   await click(`return document.querySelector('button[aria-label=Terminal]')`, 'the terminal toggle')
   await waitFor(`document.querySelector('[data-terminal-panel] .xterm')`, 'the terminal')
+  // A window behind others may not composite its frames; asking for the front lets it draw.
+  await cdp.send('Page.bringToFront')
   // The grid stays empty until the shell prints its prompt, a few seconds after it starts, so the
   // host's replay says when there is something to see; the frames let the terminal draw it.
   const terminalPrinted = async () => {
@@ -440,7 +442,7 @@ async function run() {
   }
   await pumpFrames()
   log(
-    `terminal tabs ${await cdp.evaluate(`JSON.stringify([...document.querySelectorAll('[data-terminal-panel] [role=tab]')].map((t) => t.textContent))`)}`,
+    `terminal tabs ${await cdp.evaluate(`JSON.stringify([...document.querySelectorAll('[data-terminal-panel] [role=tab]')].map((t) => t.textContent))`)} ${await cdp.evaluate(`JSON.stringify({ visibility: document.visibilityState, focused: document.hasFocus(), canvas: !!document.querySelector('[data-terminal-panel] canvas'), rows: document.querySelector('[data-terminal-panel] .xterm-rows')?.textContent?.slice(0, 80) ?? null })`)}`,
   )
   await shoot('terminal')
   await click(`return document.querySelector('button[aria-label=Terminal]')`, 'the terminal toggle')
