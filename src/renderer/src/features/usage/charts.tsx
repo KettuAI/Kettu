@@ -18,8 +18,10 @@ import {
 } from './model'
 
 const HEAT_FILL = ['bg-heat-0', 'bg-heat-1', 'bg-heat-2', 'bg-heat-3', 'bg-heat-4'] as const
-/** The heatmap's rows, one line of its weekday labels each. */
-const HEAT_ROWS = 'grid-rows-[repeat(7,--spacing(4))]'
+/** The heatmap's cells: seven rows as tall as the squares they hold. */
+const HEAT_CELLS = 'grid-rows-[repeat(7,auto)]'
+/** The weekday labels: seven rows sharing the cells' height, adding none of their own. */
+const HEAT_LABELS = 'grid-rows-[repeat(7,minmax(0,1fr))] contain-size'
 
 /** Where the arrow keys, Home and End take an index; `vertical` is how far up and down go. */
 function moveIndex(
@@ -417,7 +419,7 @@ export function Heatmap({
           </span>
         ))}
       </div>
-      <div aria-hidden className={cn('grid gap-y-0.75 text-meta text-tertiary', HEAT_ROWS)}>
+      <div aria-hidden className={cn('grid gap-y-0.75 text-meta text-tertiary', HEAT_LABELS)}>
         {[0, 1, 2, 3, 4, 5, 6].map((row) => {
           const day = addDays(weekStart, row)
           return (
@@ -434,7 +436,7 @@ export function Heatmap({
         aria-label={label}
         className={cn(
           'relative grid grid-flow-col gap-0.75 rounded-xs outline-none focus-ring',
-          HEAT_ROWS,
+          HEAT_CELLS,
         )}
         style={template}
         onPointerOver={(event) => {
