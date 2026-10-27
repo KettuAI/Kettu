@@ -8,15 +8,11 @@ import {
   CopyIcon,
   FileDownIcon,
   FolderIcon,
-  MinusIcon,
-  PlusIcon,
   XIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { mediaKindOfName, type CarriedMedia } from '@shared/media'
-import { Button } from '@renderer/components/ui/button'
 import { Dialog, DialogPortal, DialogTitle } from '@renderer/components/ui/dialog'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { bytes as formatBytes, fileUrlPath, relativePath } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
@@ -33,11 +29,13 @@ import {
 import { openAttachmentPath } from '../attachments/open-attachment'
 import { base64Bytes } from './carried'
 import { openMedia } from './grants'
+import { handleZoomKeys, type PictureControls } from './picture-zoom'
 import { showFileAction } from './show-file'
 import { placeOf } from './viewer-motion'
 import { draftItems, threadItems, type ViewerItem } from './viewer-items'
-import { StageItem, type ItemView, type PictureControls, type Shown } from './viewer-stage'
-import { MAX_ZOOM, type Size } from './zoom'
+import { StageItem, type ItemView, type Shown } from './viewer-stage'
+import { ZoomControls } from './zoom-controls'
+import type { Size } from './zoom'
 
 /** What an item's source came to: shown, or left out of the viewer. */
 type Source =
@@ -251,7 +249,16 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
     if (handle) controls.current.set(key, handle)
     else controls.current.delete(key)
   }, [])
-  const picture = () => controls.current.get(item.key) ?? null
+  // The shown picture's own, looked up as a button or key is pressed.
+  const picture = useMemo<PictureControls>(
+    () => ({
+      zoomBy: (direction) => controls.current.get(item.key)?.zoomBy(direction),
+      fit: () => controls.current.get(item.key)?.fit(),
+      actual: () => controls.current.get(item.key)?.actual(),
+      toggle: () => controls.current.get(item.key)?.toggle(),
+    }),
+    [item.key],
+  )
 
   // A clip takes over its inline player's moment and state, and hands them back.
   const player = useRef<{ viewer: HTMLVideoElement; inline: HTMLVideoElement | null } | null>(null)
@@ -374,7 +381,6 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (event.defaultPrevented || event.nativeEvent.isComposing || closing) return
-    const zoom = isPicture ? picture() : null
     if (isMod(event) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'c') {
       if (!isPicture) return
       event.preventDefault()
@@ -395,10 +401,7 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
     else if (key === 'ArrowRight') stepTo(index + 1)
     else if (key === 'Home') stepTo(0)
     else if (key === 'End') stepTo(shown.length - 1)
-    else if (zoom && event.shiftKey && event.code === 'Digit1') zoom.fit()
-    else if (zoom && event.shiftKey && event.code === 'Digit0') zoom.actual()
-    else if (zoom && (key === '+' || key === '=')) zoom.zoomBy(1)
-    else if (zoom && key === '-') zoom.zoomBy(-1)
+    else if (handleZoomKeys(event, isPicture ? picture : null)) return
     else return
     event.preventDefault()
   }
@@ -431,7 +434,6 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
   }
 
   const zoom = isPicture ? view.zoom : null
-  const atFit = !!zoom && zoom.z <= zoom.fit
   const facts = [
     view.pixels ? `${view.pixels.width} × ${view.pixels.height}` : null,
     ready?.size != null ? formatBytes(ready.size) : null,
@@ -484,43 +486,7 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
           </span>
           {error && <span className="ml-1 min-w-0 truncate text-meta text-danger">{error}</span>}
           <span className="flex-1" />
-          {zoom && (
-            <>
-              <PanelButton
-                size="icon-sm"
-                label={t('viewer.zoomOut')}
-                shortcut="−"
-                disabled={atFit}
-                onClick={() => picture()?.zoomBy(-1)}
-              >
-                <MinusIcon />
-              </PanelButton>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      variant="quiet"
-                      size="sm"
-                      onClick={() => picture()?.toggle()}
-                      className="min-w-12 px-1.5 text-meta tabular app-region-no-drag"
-                    />
-                  }
-                >
-                  {Math.round(zoom.z * 100)}%
-                </TooltipTrigger>
-                <TooltipContent>{atFit ? t('viewer.actualSize') : t('viewer.fit')}</TooltipContent>
-              </Tooltip>
-              <PanelButton
-                size="icon-sm"
-                label={t('viewer.zoomIn')}
-                shortcut="+"
-                disabled={zoom.z >= MAX_ZOOM}
-                onClick={() => picture()?.zoomBy(1)}
-              >
-                <PlusIcon />
-              </PanelButton>
-            </>
-          )}
+          {zoom && <ZoomControls zoom={zoom} controls={picture} />}
           {isPicture && (
             <PanelButton
               size="icon-sm"

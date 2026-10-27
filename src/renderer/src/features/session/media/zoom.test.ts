@@ -11,6 +11,10 @@ describe('fitZoom', () => {
     expect(fitZoom({ width: 3000, height: 500 }, STAGE)).toBeCloseTo(1000 / 3000)
   })
 
+  it('fits a large picture inside a 24 px margin, as the Files pane does', () => {
+    expect(fitZoom(PICTURE, STAGE, 24)).toBeCloseTo(648 / 3000)
+  })
+
   it('never enlarges a picture past its own pixels', () => {
     expect(fitZoom({ width: 200, height: 100 }, STAGE)).toBe(1)
   })

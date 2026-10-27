@@ -1,36 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { animate, motion, useIsPresent, type AnimationPlaybackControls } from 'motion/react'
+import { animate, motion, useIsPresent } from 'motion/react'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { follow } from '@renderer/lib/motion'
 import { cn } from '@renderer/lib/utils'
 import { prefersReducedMotion } from '@renderer/stores/settings'
+import { DEFAULT_PICTURE_SIZE, usePictureZoom, type PictureControls } from './picture-zoom'
 import { flight, inView, placeBox, placeOf, type Box } from './viewer-motion'
-import {
-  bounded,
-  fitZoom,
-  isZoomed,
-  PIXELATED_FROM,
-  snapped,
-  stepZoom,
-  toggled,
-  zoomAt,
-  type Camera,
-  type Size,
-} from './zoom'
+import { FIT_MARGIN, type Size } from './zoom'
 
 /** What an item shows once its source is known. */
 export type Shown =
   | { state: 'loading' }
   | { state: 'ready'; kind: 'image' | 'video'; src: string }
   | { state: 'failed'; message: string }
-
-/** What the bar's zoom buttons and keys do to the picture on the stage. */
-export interface PictureControls {
-  zoomBy(direction: 1 | -1): void
-  fit(): void
-  actual(): void
-  toggle(): void
-}
 
 /** What the bar shows of the item: its pixels and, for a picture, its zoom and fit. */
 export interface ItemView {
@@ -43,20 +24,15 @@ const EASE = [0.165, 0.84, 0.44, 1] as const
 const SLOW = 0.3
 /** --duration-fast, a fade when the place is out of view. */
 const FAST = 0.12
-/** A press that moves less than this is a click. */
-const DRAG_SLOP = 4
-/** The picture keeps `will-change` this long after the camera stops, then draws crisp again. */
-const SETTLE_MS = 160
-/** A wheel or pinch zoom has ended once no event came for this long. */
-const GESTURE_END_MS = 150
-/** The size an image without one of its own, such as an SVG with only a viewBox, takes. */
-const DEFAULT_SIZE = { width: 300, height: 150 }
 
 const STEP = {
   enter: (direction: number) => ({ opacity: 0, x: prefersReducedMotion() ? 0 : 24 * direction }),
   center: { opacity: 1, x: 0 },
   exit: (direction: number) => ({ opacity: 0, x: prefersReducedMotion() ? 0 : -24 * direction }),
 }
+
+/** A press that moves less than this is a click on the scrim. */
+const CLICK_SLOP = 4
 
 const relative = (box: DOMRect | Box, to: DOMRect): Box => ({
   x: box.x - to.x,
@@ -106,16 +82,14 @@ export function StageItem({
   const present = useIsPresent()
   const root = useRef<HTMLDivElement>(null)
   const layer = useRef<HTMLDivElement>(null)
-  const picture = useRef<HTMLImageElement>(null)
   const clip = useRef<HTMLVideoElement>(null)
   const [natural, setNatural] = useState<Size | null>(null)
-  const [dragging, setDragging] = useState(false)
-  const [zoomed, setZoomed] = useState(false)
-  const camera = useRef<Camera>({ x: 0, y: 0, z: 1 })
-  const fit = useRef(1)
-  const glideTo = useRef<AnimationPlaybackControls | null>(null)
-  const settle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const gesture = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [stageElement, setStageElement] = useState<HTMLDivElement | null>(null)
+  // The stage's own element, which the picture's wheel, drag and double-click act on.
+  const stageRef = useCallback((el: HTMLDivElement | null) => {
+    root.current = el
+    setStageElement(el)
+  }, [])
   const flown = useRef(false)
   // A place hidden while its item flies to or from it, shown again however the flight ends.
   const hidden = useRef<HTMLElement | null>(null)
@@ -127,88 +101,26 @@ export function StageItem({
     if (place) place.style.visibility = 'hidden'
   }
 
-  const draw = useCallback(() => {
-    const el = picture.current
-    if (!el) return
-    const { x, y, z } = camera.current
-    el.style.transform = `translate(${x}px, ${y}px) scale(${z})`
-    el.style.imageRendering = z >= PIXELATED_FROM ? 'pixelated' : ''
-    el.style.willChange = 'transform'
-    clearTimeout(settle.current)
-    settle.current = setTimeout(() => {
-      if (picture.current) picture.current.style.willChange = ''
-    }, SETTLE_MS)
-    setZoomed(isZoomed(camera.current, fit.current))
-    onView(itemKey, { pixels: natural, zoom: { z, fit: fit.current } })
-  }, [natural, onView, itemKey])
-
-  const place = useCallback(
-    (next: Camera) => {
-      glideTo.current?.stop()
-      camera.current = next
-      draw()
-    },
-    [draw],
-  )
-
-  /** A move a button or key asks for: an ease over --duration-fast, or at once under reduce motion. */
-  const moveTo = useCallback(
-    (target: Camera) => {
-      glideTo.current?.stop()
-      if (prefersReducedMotion()) return place(target)
-      const start = camera.current
-      glideTo.current = animate(0, 1, {
-        ...follow,
-        onUpdate: (k) => {
-          // The zoom on a log scale, so a step feels the same at every level.
-          const z = Math.exp(Math.log(start.z) + (Math.log(target.z) - Math.log(start.z)) * k)
-          camera.current = {
-            z,
-            x: start.x + (target.x - start.x) * k,
-            y: start.y + (target.y - start.y) * k,
-          }
-          draw()
-        },
-      })
-    },
-    [place, draw],
-  )
-
-  const bounds = useCallback(
-    (next: Camera) => (natural ? bounded(next, natural, stage, fit.current) : next),
-    [natural, stage],
-  )
+  const { picture, controls, zoom, zoomed, dragging } = usePictureZoom({
+    natural: image ? natural : null,
+    stage,
+    element: stageElement,
+    margin: FIT_MARGIN,
+    disabled: leaving,
+  })
 
   useEffect(() => {
-    if (!image || !natural) return
-    const at = (z: number) => zoomAt(camera.current, z, 0, 0, natural, stage, fit.current)
-    onControls(itemKey, {
-      zoomBy: (direction) =>
-        moveTo(snapped(at(stepZoom(camera.current.z, direction, fit.current)), fit.current)),
-      fit: () => moveTo({ x: 0, y: 0, z: fit.current }),
-      actual: () => moveTo(at(1)),
-      toggle: () => moveTo(toggled(camera.current, 0, 0, natural, stage, fit.current)),
-    })
+    if (!controls) return
+    onControls(itemKey, controls)
     return () => onControls(itemKey, null)
-  }, [image, natural, stage, moveTo, onControls, itemKey])
+  }, [controls, onControls, itemKey])
 
-  // The fit follows the stage; a picture at its fit stays fitted, a zoomed one in its bounds.
-  useLayoutEffect(() => {
-    if (!image || !natural || stage.width === 0) return
-    const before = fit.current
-    fit.current = fitZoom(natural, stage)
-    const fitted = !isZoomed(camera.current, before) || !flown.current
-    camera.current = fitted
-      ? { x: 0, y: 0, z: fit.current }
-      : bounded(camera.current, natural, stage, fit.current)
-    draw()
-  }, [image, natural, stage, draw])
+  useEffect(() => {
+    if (zoom && image) onView(itemKey, { pixels: natural, zoom })
+  }, [zoom, image, natural, onView, itemKey])
 
   useEffect(
     () => () => {
-      glideTo.current?.stop()
-      clearTimeout(settle.current)
-      clearTimeout(gesture.current)
       if (hidden.current) hidden.current.style.visibility = ''
     },
     [],
@@ -259,7 +171,6 @@ export function StageItem({
     const stageBox = root.current?.getBoundingClientRect()
     const target = placeOf(itemKey)
     const shownBox = picture.current ?? clip.current
-    glideTo.current?.stop()
     if (!el || !stageBox) return onLeft()
     if (!flown.current || !target || !shownBox || !inView(target) || prefersReducedMotion()) {
       void animate(el, { opacity: 0 }, { duration: FAST }).then(onLeft)
@@ -290,66 +201,18 @@ export function StageItem({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leaving])
 
-  // The wheel pans a zoomed picture, and zooms around the pointer with Mod or a pinch, which
-  // Chromium sends as Ctrl and the wheel.
-  useEffect(() => {
-    const el = root.current
-    if (!el || !image || !natural) return
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault()
-      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? stage.height : 1
-      const current = camera.current
-      if (event.ctrlKey || event.metaKey) {
-        const rect = el.getBoundingClientRect()
-        const delta = Math.max(-50, Math.min(50, event.deltaY * unit))
-        place(
-          zoomAt(
-            current,
-            current.z * Math.exp(-delta * 0.01),
-            event.clientX - rect.left - rect.width / 2,
-            event.clientY - rect.top - rect.height / 2,
-            natural,
-            stage,
-            fit.current,
-          ),
-        )
-        clearTimeout(gesture.current)
-        gesture.current = setTimeout(() => {
-          const settled = snapped(camera.current, fit.current)
-          if (settled !== camera.current) moveTo(settled)
-        }, GESTURE_END_MS)
-      } else if (isZoomed(current, fit.current)) {
-        place(
-          bounds({
-            ...current,
-            x: current.x - event.deltaX * unit,
-            y: current.y - event.deltaY * unit,
-          }),
-        )
-      }
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [image, natural, stage, place, moveTo, bounds])
-
-  const press = useRef<{
-    x: number
-    y: number
-    camera: Camera
-    moved: boolean
-    onItem: boolean
-  } | null>(null)
-  // By the point, since a captured pointer's events all target the stage.
+  // A press released unmoved beside the picture or the clip, on the scrim, closes the viewer.
+  const press = useRef<{ x: number; y: number; moved: boolean; onItem: boolean } | null>(null)
   const overItem = (x: number, y: number) => {
     const el = picture.current ?? clip.current
-    if (!el || !natural) return false
+    if (!el) return false
     const box = el.getBoundingClientRect()
     return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom
   }
 
   return (
     <motion.div
-      ref={root}
+      ref={stageRef}
       custom={direction}
       variants={STEP}
       initial="enter"
@@ -359,54 +222,27 @@ export function StageItem({
       className={cn('absolute inset-0 overflow-hidden', !present && 'pointer-events-none')}
       onPointerDown={(event) => {
         if (event.button !== 0 || leaving) return
-        const onItem = overItem(event.clientX, event.clientY)
         press.current = {
           x: event.clientX,
           y: event.clientY,
-          camera: camera.current,
           moved: false,
-          onItem,
-        }
-        if (image && onItem && isZoomed(camera.current, fit.current)) {
-          event.currentTarget.setPointerCapture(event.pointerId)
+          onItem: overItem(event.clientX, event.clientY),
         }
       }}
       onPointerMove={(event) => {
         const held = press.current
-        if (!held || !image || !isZoomed(held.camera, fit.current)) return
-        const dx = event.clientX - held.x
-        const dy = event.clientY - held.y
-        if (!held.moved && Math.hypot(dx, dy) > DRAG_SLOP) {
+        if (!held) return
+        if (Math.hypot(event.clientX - held.x, event.clientY - held.y) > CLICK_SLOP)
           held.moved = true
-          setDragging(true)
-        }
-        if (held.moved)
-          place(bounds({ ...held.camera, x: held.camera.x + dx, y: held.camera.y + dy }))
       }}
       onPointerUp={() => {
         const held = press.current
         press.current = null
-        setDragging(false)
         if (!held || held.moved || leaving) return
         if (!held.onItem) onBackground()
       }}
       onPointerCancel={() => {
         press.current = null
-        setDragging(false)
-      }}
-      onDoubleClick={(event) => {
-        if (!image || !natural || !overItem(event.clientX, event.clientY)) return
-        const rect = event.currentTarget.getBoundingClientRect()
-        moveTo(
-          toggled(
-            camera.current,
-            event.clientX - rect.left - rect.width / 2,
-            event.clientY - rect.top - rect.height / 2,
-            natural,
-            stage,
-            fit.current,
-          ),
-        )
       }}
     >
       <div ref={layer} className="absolute inset-0 origin-top-left" style={{ opacity: 0 }}>
@@ -425,7 +261,7 @@ export function StageItem({
                     setNatural(
                       el.naturalWidth > 0 && el.naturalHeight > 0
                         ? { width: el.naturalWidth, height: el.naturalHeight }
-                        : DEFAULT_SIZE,
+                        : DEFAULT_PICTURE_SIZE,
                     ),
                   () => onFailed(null),
                 )
