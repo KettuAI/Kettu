@@ -617,6 +617,16 @@ export class SessionManager {
     return turn && !turn.ended ? turn : null
   }
 
+  /**
+   * The session whose page a browser call drives: its own, or for a subagent the top-level
+   * session it runs under, which has the page. Null for a session OverBench does not hold.
+   */
+  browserSession(sessionId: string): string | null {
+    const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
+    if (!record) return null
+    return sessionWithPage(record, (id) => this.live.get(id)?.record ?? this.records.get(id)).id
+  }
+
   private children(parentId: string): SessionRecord[] {
     const ids = new Set<string>()
     const out: SessionRecord[] = []
@@ -5527,4 +5537,23 @@ function unmetValues(
     })
   }
   return out
+}
+
+/**
+ * The record of the session whose page a browser call drives: a subagent's own record has no
+ * page, so the call uses the top-level session it runs under, which does.
+ */
+export function sessionWithPage<T extends Pick<SessionRecord, 'id' | 'origin' | 'parentId'>>(
+  record: T,
+  find: (id: string) => T | undefined,
+): T {
+  let current = record
+  const seen = new Set<string>()
+  while (current.origin === 'subagent' && current.parentId !== null && !seen.has(current.id)) {
+    seen.add(current.id)
+    const parent = find(current.parentId)
+    if (!parent) break
+    current = parent
+  }
+  return current
 }

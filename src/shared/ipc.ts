@@ -182,6 +182,10 @@ export interface IpcInvokeContract {
   // The page as it looks now, for the pane to show while an overlay would cover the view.
   'browser:freeze': { args: [sessionId: string]; result: string | null }
   'browser:thaw': { args: [sessionId: string]; result: void }
+  /** The user hands the page back to the agent, after taking control. */
+  'browser:hand-back': { args: [sessionId: string]; result: void }
+  /** The pane's Stop: the user takes control, and the call in flight fails. */
+  'browser:stop-driving': { args: [sessionId: string]; result: void }
   'browser:clear-data': { args: []; result: void }
 }
 
@@ -201,6 +205,8 @@ export interface IpcEventContract {
   'artifact:stopped': ArtifactStoppedEvent
   'sharing:changed': SharingStatus
   'browser:state': BrowserState
+  /** An agent's first navigation opened a session's page, so the pane may show it. */
+  'browser:opened': { sessionId: string }
 }
 
 export type IpcEventChannel = keyof IpcEventContract
@@ -378,11 +384,17 @@ export interface OverbenchApi {
     /** A still of the page for the pane to show, after which main hides the view. */
     freeze(sessionId: string): Promise<string | null>
     thaw(sessionId: string): Promise<void>
+    /** Takes the page back from the user, so the agent may drive it again. */
+    handBack(sessionId: string): Promise<void>
+    /** The driving bar's Stop: the user takes control, and the running call fails. */
+    stopDriving(sessionId: string): Promise<void>
     /** Clears the profile's cookies, site storage and cache. */
     clearData(): Promise<void>
     /** The sessions that still exist; a page whose session does not is closed. */
     setSessions(sessionIds: string[]): void
     onState(listener: (state: BrowserState) => void): () => void
+    /** An agent opened a session's page for the first time. */
+    onOpened(listener: (event: { sessionId: string }) => void): () => void
   }
   /** What the user chose to attach, granted to the agent host by main; never a path. */
   attachments: {

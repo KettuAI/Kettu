@@ -115,6 +115,11 @@ parentPort.on('message', ({ data, ports }) => {
     case 'host:artifact-import-request':
       withHost((h) => h.artifactImport(message.requestId, message.path, message.project))
       break
+    case 'browser-result':
+      if (Number.isSafeInteger(message.callId)) {
+        withHost((h) => h.browserResult(message.callId, message.result, message.error))
+      }
+      break
     case 'host:power':
       withHost((h) => h.power(message.state))
       break

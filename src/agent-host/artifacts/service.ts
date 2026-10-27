@@ -8,6 +8,7 @@ import type { AddressInfo } from 'node:net'
 import type { McpServer } from '@agentclientprotocol/sdk/unstable'
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
+import type { BrowserCallAnswer, BrowserCallRequest } from '@shared/browser'
 import type { LogFn } from '../storage'
 import {
   SessionTools,
@@ -16,6 +17,12 @@ import {
   SESSION_TOOLS,
   type SessionToolsDeps,
 } from '../session-tools'
+import {
+  BrowserTools,
+  BROWSER_INSTRUCTIONS,
+  BROWSER_TOOLS,
+  isBrowserToolName,
+} from './browser-tools'
 import { artifactWrite, type ArtifactWrite } from './entries'
 import {
   ArtifactTools,
@@ -35,11 +42,11 @@ const SUMMARY_CHARS = 200
 /** Where OpenCode names the calling session on each `tools/call`, a subagent's own included. */
 const SESSION_META = 'ai.opencode/sessionID'
 
-/** The tools `tools/list` answers: the artifact tools, the session tools, and the browser's later. */
-export const SERVICE_TOOLS: Tool[] = [...TOOLS, ...SESSION_TOOLS]
+/** The tools `tools/list` answers: the artifact tools, the session tools and the browser's. */
+export const SERVICE_TOOLS: Tool[] = [...TOOLS, ...SESSION_TOOLS, ...BROWSER_TOOLS]
 
-/** The service's `instructions`: the artifact tools' and the session tools', together. */
-const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS}`
+/** The service's `instructions`: the artifact tools', the session tools' and the browser's. */
+const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS}`
 
 // The SDK loads with the first request rather than with the host, which starts faster without it.
 function loadSdk() {
@@ -70,6 +77,10 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   sessionOf(process: AgentProcess, id: string): string | null
   /** A call of the session's, or of a subagent of it, wrote to an artifact. */
   wrote?(sessionId: string, write: ArtifactWrite): void
+  /** Runs a browser tool call on main; without it every `browser_*` call fails. */
+  browserCall?(request: BrowserCallRequest): Promise<BrowserCallAnswer>
+  /** The session whose browser a call drives: a subagent's use the session it runs under. */
+  browserSession?(sessionId: string): string | null
 }
 
 /** A token for one session. */
@@ -140,6 +151,7 @@ export class ArtifactService {
   private readonly folders = new Map<AgentProcess, Map<string, string>>()
   private readonly tools: ArtifactTools
   private readonly sessionTools: SessionTools
+  private readonly browserTools: BrowserTools
   private sdk: Promise<Sdk> | null = null
   /** Why the last `start()` could not listen; cleared once it does. */
   private startError: string | null = null
@@ -147,6 +159,19 @@ export class ArtifactService {
   constructor(private readonly deps: ArtifactServiceDeps) {
     this.tools = new ArtifactTools(deps)
     this.sessionTools = new SessionTools(deps.sessions)
+    const browserCall = deps.browserCall
+    this.browserTools = new BrowserTools({
+      call: (request) =>
+        browserCall
+          ? browserCall(request)
+          : Promise.resolve({
+              error: {
+                code: 'no_page',
+                message: 'This build drives no browser. Use the user’s own browser instead.',
+              },
+            }),
+      pageOf: (sessionId) => deps.browserSession?.(sessionId) ?? sessionId,
+    })
   }
 
   /** Listens on a port the system picks; without it, sessions attach with no service. */
@@ -412,6 +437,14 @@ export class ArtifactService {
       if (isSessionToolName(name)) {
         try {
           return await this.sessionTools.call(caller, name, input)
+        } catch (error) {
+          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+        }
+      }
+      if (isBrowserToolName(name)) {
+        try {
+          return await this.browserTools.call(caller, name, input)
         } catch (error) {
           this.deps.log('error', `${name} failed: ${(error as Error).message}`)
           throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)

@@ -51,6 +51,8 @@ export type MainToHost =
       project: string | null
     }
   | { type: 'host:power'; state: 'suspend' | 'resume' }
+  // The answer to a host:browser-call, its result or the error that refused it.
+  | { type: 'browser-result'; callId: number; result?: unknown; error?: unknown }
   | { type: 'host:shutdown' }
 
 /** The host's answer to `host:artifact-content-request`. */
@@ -99,6 +101,14 @@ export type HostToMain =
   | { type: 'host:artifact-import'; requestId: number; result: NonNullable<ArtifactImportResult> }
   | { type: 'host:media-grant'; grant: MediaGrantRecord }
   | { type: 'host:media-revoke'; sessionId: string | null } // null drops them all
+  // A browser tool call for main to run on the session's page; answered by browser-result.
+  | {
+      type: 'host:browser-call'
+      callId: number
+      sessionId: string
+      tool: string
+      args: Record<string, unknown>
+    }
   // The artifacts service's port, which the browser's pages must never reach; null when it is down.
   | { type: 'host:service-port'; port: number | null }
   | { type: 'host:log'; level: 'info' | 'warn' | 'error'; message: string }

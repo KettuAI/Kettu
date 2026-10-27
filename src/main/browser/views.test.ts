@@ -10,7 +10,7 @@ vi.mock('electron', () => ({
 
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 
-const { framePage, leastRecentlyUsed, MAX_LIVE_PAGES } = await import('./views')
+const { framePage, isUserMouse, leastRecentlyUsed, MAX_LIVE_PAGES } = await import('./views')
 
 describe('framePage', () => {
   it('reaches the radius above the page, which sits that far inside it', () => {
@@ -61,5 +61,16 @@ describe('leastRecentlyUsed', () => {
 
   it('keeps four pages at once', () => {
     expect(MAX_LIVE_PAGES).toBe(4)
+  })
+})
+
+describe('isUserMouse', () => {
+  it('is a click, a wheel or a touch, never the pointer passing over the page', () => {
+    for (const type of ['mouseDown', 'mouseUp', 'mouseWheel', 'contextMenu']) {
+      expect(isUserMouse(type)).toBe(true)
+    }
+    for (const type of ['mouseMove', 'mouseEnter', 'mouseLeave']) {
+      expect(isUserMouse(type)).toBe(false)
+    }
   })
 })

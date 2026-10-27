@@ -690,7 +690,8 @@ describe('artifacts', () => {
         tools: t.host.artifactService.toolSummaries(),
       },
     ])
-    expect(status.servers[0]!.tools.length).toBe(13)
+    // Seven artifact tools, six session tools and the fourteen browser tools.
+    expect(status.servers[0]!.tools.length).toBe(27)
     expect(status.places.map((place) => [place.agentId, place.project, place.listCommand])).toEqual(
       [
         ['claude-code', '.mcp.json', '/mcp'],
@@ -947,5 +948,84 @@ describe('artifacts', () => {
     expect(await port.request('artifacts.list', {})).toEqual([
       expect.objectContaining({ id, scratch: true }),
     ])
+  })
+})
+
+describe('browser calls', () => {
+  it('sends a call to main and answers it by its id', async () => {
+    const { t } = await setup()
+    const answered = t.host.browserCall({
+      callId: 0,
+      sessionId: 's1',
+      tool: 'browser_snapshot',
+      args: {},
+    })
+    const sent = t.sent.find((message) => message.type === 'host:browser-call')
+    expect(sent).toMatchObject({
+      type: 'host:browser-call',
+      sessionId: 's1',
+      tool: 'browser_snapshot',
+      args: {},
+    })
+    const callId = (sent as { callId: number }).callId
+    t.host.browserResult(
+      callId,
+      { text: 'Snapshotted the page.', value: { url: 'http://localhost/', snapshot: '- page' } },
+      undefined,
+    )
+    expect(await answered).toEqual({
+      result: {
+        text: 'Snapshotted the page.',
+        value: { url: 'http://localhost/', snapshot: '- page' },
+      },
+    })
+  })
+
+  it('answers a refusal by its code, and ignores an answer to no call', async () => {
+    const { t } = await setup()
+    const answered = t.host.browserCall({
+      callId: 0,
+      sessionId: 's1',
+      tool: 'browser_click',
+      args: { ref: 'e1' },
+    })
+    const callId = (
+      t.sent.find((message) => message.type === 'host:browser-call') as {
+        callId: number
+      }
+    ).callId
+    t.host.browserResult(callId + 99, { text: 'late', value: {} }, undefined)
+    t.host.browserResult(callId, undefined, {
+      code: 'stale_ref',
+      message: 'Ref e1 is no longer on the page. Take a new snapshot.',
+    })
+    expect(await answered).toEqual({
+      error: {
+        code: 'stale_ref',
+        message: 'Ref e1 is no longer on the page. Take a new snapshot.',
+      },
+    })
+  })
+
+  it('fails a call left waiting when the host stops', async () => {
+    const { t } = await setup()
+    const answered = t.host.browserCall({
+      callId: 0,
+      sessionId: 's1',
+      tool: 'browser_snapshot',
+      args: {},
+    })
+    await t.host.shutdown()
+    expect(await answered).toMatchObject({ error: { code: 'timeout' } })
+  })
+
+  it('names the session whose page a call drives, and none for one OverBench lost', async () => {
+    const { t, port } = await setup()
+    const session = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+    })
+    expect(t.host.sessions.browserSession(session.id)).toBe(session.id)
+    expect(t.host.sessions.browserSession('unknown')).toBeNull()
   })
 })

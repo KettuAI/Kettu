@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { app, type WebContents } from 'electron'
 import { ARTIFACT_ID, type ArtifactImportResult } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
+import type { BrowserCallAnswer, BrowserCallRequest } from '@shared/browser'
 import type {
   ArtifactContentResult,
   BusySession,
@@ -39,6 +40,11 @@ export interface AgentHostDeps {
   onReady?(): void
   /** The artifacts service's port, which the browser's pages must never reach. */
   onServicePort?(port: number | null): void
+  /**
+   * A browser tool call for main to run on the session's page. Set after construction, since the
+   * pages need the host to send their state.
+   */
+  browser?: (request: BrowserCallRequest) => Promise<BrowserCallAnswer>
 }
 
 const MAX_LIST = 10_000
@@ -315,6 +321,10 @@ export class AgentHost {
 
   private receive(message: HostToMain): void {
     switch (message.type) {
+      case 'host:browser-call': {
+        this.browserCall(message)
+        break
+      }
       case 'host:agent-processes':
         if (Array.isArray(message.processes)) {
           this.agentProcesses = message.processes.flatMap((entry) =>
@@ -397,6 +407,44 @@ export class AgentHost {
       default:
         log.warn(`Ignored unknown message "${(message as { type: string }).type}"`)
     }
+  }
+
+  /** Runs a call on the session's page and posts its answer; a page that fails says why. */
+  private browserCall(message: Extract<HostToMain, { type: 'host:browser-call' }>): void {
+    const { callId, sessionId, tool, args } = message
+    if (
+      !Number.isSafeInteger(callId) ||
+      typeof sessionId !== 'string' ||
+      typeof tool !== 'string' ||
+      typeof args !== 'object' ||
+      args === null
+    ) {
+      return
+    }
+    const run = this.deps.browser
+    const answer: Promise<BrowserCallAnswer> = run
+      ? run({ callId, sessionId, tool: tool as BrowserCallRequest['tool'], args })
+      : Promise.resolve({
+          error: { code: 'no_page', message: 'This build drives no browser.' },
+        })
+    void answer.then(
+      (result) => {
+        this.host.post(
+          'result' in result
+            ? { type: 'browser-result', callId, result: result.result }
+            : { type: 'browser-result', callId, error: result.error },
+        )
+        return undefined
+      },
+      (error: unknown) => {
+        log.warn(`Could not run browser call ${tool}: ${(error as Error).message}`)
+        this.host.post({
+          type: 'browser-result',
+          callId,
+          error: { code: 'invalid', message: (error as Error).message },
+        })
+      },
+    )
   }
 
   private exited(clean: boolean): void {
