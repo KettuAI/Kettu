@@ -184,6 +184,9 @@ export interface AgentStatus {
   // The configuration folder a start uses and the one the running process uses (null while none
   // runs); null for an agent whose folder cannot be chosen.
   configDir: { runs: string; active: string | null } | null
+  // Whether a start gets OverBench's MCP server, and whether the running process got it (null
+  // while none runs).
+  overbenchServer: { runs: boolean; active: boolean | null }
   capabilities: {
     loadSession: boolean
     listSessions: boolean
@@ -197,6 +200,7 @@ export interface AgentStatus {
     context: boolean // what fills the context from its own report (`/context`)
     account: boolean // names its account through `_auth/status_update` as it starts
     progressNotes: boolean // its messages that more work in a turn follows are progress notes
+    mcpHttp: boolean | null // MCP servers over HTTP: from `initialize` or the one remembered
     prompt: PromptCapabilities | null // what a prompt may carry; null until the agent has started
   }
 }
@@ -237,6 +241,27 @@ export interface AgentConfigItem {
   exists: boolean
   env: string | null // the variable that moved it, such as CLAUDE_CONFIG_DIR; null at the default
   chosen: boolean // the folder picked in Settings (agents.<id>.configDir), whose env is then null
+}
+
+/** For Settings › MCP servers: the servers OverBench gives agents, and where each agent keeps its own. */
+export interface McpStatus {
+  servers: {
+    name: string // as agents know it: overbench
+    title: string // OverBench
+    builtIn: boolean // OverBench's own; the only server today
+    running: boolean // it listens on 127.0.0.1
+    error: string | null // why it does not, from its last try
+    tools: { name: string; description: string }[] // as tools/list answers them, first sentence each
+  }[]
+  places: {
+    agentId: AgentId // each agent that keeps MCP servers of its own in a file, in catalog order
+    path: string // that file, found as the agent finds it
+    exists: boolean
+    env: string | null // the variable that moved it, such as CLAUDE_CONFIG_DIR; null at the default
+    chosen: boolean // in the folder picked in Settings (agents.<id>.configDir), whose env is then null
+    project: string // a project's own file, relative to its folder, such as .mcp.json
+    listCommand: string | null // what lists them with their status in a session, /mcp, or null
+  }[]
 }
 
 /** Where the agent environment came from, for Settings › Agents. */
@@ -394,6 +419,11 @@ export interface HostContract {
     result: { sessions: ImportableSession[]; nextCursor: string | null }
   }
   'agents.options': { params: void; result: AgentOptions[] }
+  // For Settings › MCP servers: the servers OverBench gives agents and each agent's own file.
+  // Neither starts an agent, and neither reads an agent's configuration file.
+  'mcp.status': { params: void; result: McpStatus }
+  // Listens again when OverBench's MCP server does not, then sends main its port.
+  'mcp.retry': { params: void; result: McpStatus }
   'projects.list': { params: void; result: Project[] }
   'projects.add': { params: { path: string }; result: Project }
   'projects.remove': { params: { path: string }; result: void }
@@ -631,6 +661,8 @@ export const HOST_METHODS = [
   'agents.refreshAccount',
   'agents.listSessions',
   'agents.options',
+  'mcp.status',
+  'mcp.retry',
   'projects.list',
   'projects.add',
   'projects.remove',

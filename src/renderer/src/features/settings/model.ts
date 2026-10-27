@@ -57,6 +57,8 @@ export interface SectionDef {
   footer?: ReactNode
   /** A dot after the section's name in the list, such as an agent update. */
   mark?: string
+  /** The page of one of the section's items, such as an agent's or a server's, by its id. */
+  itemPage?: (item: string) => ReactNode
 }
 
 function words(query: string): string[] {

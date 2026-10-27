@@ -489,6 +489,8 @@ export function createValidators(platform: Platform): Validators {
     'agents.details': agent,
     'agents.refreshAccount': agent,
     'agents.options': none,
+    'mcp.status': none,
+    'mcp.retry': none,
     'agents.listSessions': (params) => {
       const o = fields(params)
       const cursor = optionalString(o, 'cursor', TEXT_CHARS)

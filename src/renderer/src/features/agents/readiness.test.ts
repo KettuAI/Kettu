@@ -25,6 +25,7 @@ const status = (overrides: Partial<AgentStatus>): AgentStatus => ({
   installMethods: [],
   cli: null,
   configDir: null,
+  overbenchServer: { runs: true, active: true },
   capabilities: {
     loadSession: false,
     listSessions: false,
@@ -38,6 +39,7 @@ const status = (overrides: Partial<AgentStatus>): AgentStatus => ({
     context: false,
     account: false,
     progressNotes: false,
+    mcpHttp: true,
     prompt: null,
   },
   ...overrides,

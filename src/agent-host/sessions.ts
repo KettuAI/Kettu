@@ -1309,7 +1309,7 @@ export class SessionManager {
     record: SessionRecord,
     runtime: AgentRuntime | null | undefined,
   ): McpServer[] {
-    if (!this.deps.mcp || !runtime?.init.capabilities.mcpHttp) return []
+    if (!this.deps.mcp || !runtime?.init.capabilities.mcpHttp || !runtime.overbench) return []
     return this.deps.mcp.servers(sessionId, record, runtime.connection)
   }
 

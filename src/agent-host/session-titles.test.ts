@@ -55,6 +55,7 @@ function settings(sessionTitles: boolean): HostSettings {
     agents: DEFAULT_SETTINGS.agents,
     proxy: DEFAULT_SETTINGS.proxy,
     git: DEFAULT_SETTINGS.git,
+    mcp: DEFAULT_SETTINGS.mcp,
     usage: { fromComputer: false },
     sessionTitles,
   }

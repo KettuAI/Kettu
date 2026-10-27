@@ -6,10 +6,16 @@ import path from 'node:path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import type { McpServer } from '@agentclientprotocol/sdk/unstable'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { inThreadWorker } from '../testing/thread-worker'
 import { ThreadStore } from '../threads/store'
-import { ArtifactService, BODY_BYTES, type AgentProcess } from './service'
+import {
+  ArtifactService,
+  BODY_BYTES,
+  firstSentence,
+  SERVICE_TOOLS,
+  type AgentProcess,
+} from './service'
 import { ArtifactStore } from './store'
 import { INSTRUCTIONS } from './tools'
 import { SESSION_INSTRUCTIONS } from '../session-tools'
@@ -171,9 +177,47 @@ describe('the artifacts service', () => {
     expect(client.getServerVersion()).toMatchObject({ name: 'overbench', version: '0.0.0-test' })
     const { tools } = await client.listTools()
     expect(tools.map((tool) => tool.name)).toHaveLength(13)
+    expect(tools.map((tool) => tool.name)).toEqual(SERVICE_TOOLS.map((tool) => tool.name))
     expect(tools.find((tool) => tool.name === 'delete_artifact')?.annotations).toMatchObject({
       destructiveHint: true,
     })
+  })
+
+  it('summarizes each tool by its first sentence, cut at a word', async () => {
+    const { service } = await setup()
+    const summaries = service.toolSummaries()
+    expect(summaries.map((tool) => tool.name)).toEqual(SERVICE_TOOLS.map((tool) => tool.name))
+    const createTool = SERVICE_TOOLS.find((tool) => tool.name === 'create_artifact')!
+    expect(createTool.description).toContain('. ')
+    expect(summaries.find((tool) => tool.name === 'create_artifact')?.description).toBe(
+      'Makes a new artifact, an HTML page OverBench shows the user, at version 1.',
+    )
+    for (const summary of summaries) {
+      expect(summary.description.length).toBeLessThanOrEqual(200)
+      expect(summary.description.endsWith(' ')).toBe(false)
+    }
+    expect(firstSentence('One. Two. Three.')).toBe('One.')
+    expect(firstSentence('No sentence end here')).toBe('No sentence end here')
+    expect(firstSentence(`${'a '.repeat(150)}end.`)).toBe(`${'a '.repeat(99)}a`)
+  })
+
+  it('keeps the error of a listen that fails, and listens again when asked', async () => {
+    const { service } = await setup()
+    await service.stop()
+    const taken = http.createServer()
+    await new Promise<void>((resolve) => taken.listen(0, '127.0.0.1', resolve))
+    cleanups.push(() => new Promise<void>((resolve) => taken.close(() => resolve())))
+    const listen = vi.spyOn(http, 'createServer').mockImplementationOnce(() => taken)
+    try {
+      await service.start()
+    } finally {
+      listen.mockRestore()
+    }
+    expect(service.url).toBeNull()
+    expect(service.error).toMatch(/already running|listen/i)
+    await service.start()
+    expect(service.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/)
+    expect(service.error).toBeNull()
   })
 
   it('creates, updates and reads through the MCP client, errors included', async () => {

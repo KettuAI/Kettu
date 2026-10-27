@@ -42,6 +42,7 @@ export interface SettingsFile {
     fontSize: 12 | 13 | 14
   }
   git: { backgroundFetch: boolean }
+  mcp: { overbench: { off: AgentId[] } } // the agents whose sessions get no OverBench MCP server
   updates: { automatic: 'download' | 'restart' | 'notify' | 'off' }
   privacy: { hideAccount: boolean } // masks emails and account names on screen
   usage: {
@@ -95,6 +96,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   proxy: { mode: 'environment' },
   terminal: { fontSize: 13 },
   git: { backgroundFetch: false },
+  mcp: { overbench: { off: [] } },
   updates: { automatic: 'download' },
   privacy: { hideAccount: false },
   usage: { fromComputer: false, sidebar: 'today' },
@@ -121,6 +123,7 @@ export interface SettingsPatch {
   proxy?: ProxySettings
   terminal?: { shellPath?: null; fontSize?: SettingsFile['terminal']['fontSize'] }
   git?: Partial<SettingsFile['git']>
+  mcp?: { overbench: { off: AgentId[] } } // the list is replaced whole
   updates?: Partial<SettingsFile['updates']>
   privacy?: Partial<SettingsFile['privacy']>
   usage?: Partial<SettingsFile['usage']>
@@ -132,6 +135,7 @@ export interface HostSettings {
   agents: SettingsFile['agents']
   proxy: ProxySettings
   git: SettingsFile['git']
+  mcp: SettingsFile['mcp']
   usage: { fromComputer: boolean }
   sessionTitles: boolean // write a title for a session its agent leaves untitled
 }

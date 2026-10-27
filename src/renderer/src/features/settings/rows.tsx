@@ -1,4 +1,7 @@
 import { createContext, useContext, type ReactNode } from 'react'
+import { ArrowLeftIcon, ChevronRightIcon } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
+import { Button } from '@renderer/components/ui/button'
 import { cn } from '@renderer/lib/utils'
 import { FlashContext, type GroupDef, type RowDef, type SectionDef } from './model'
 
@@ -211,5 +214,130 @@ export function FlashMark({ id }: { id: string }) {
         flash === id && 'opacity-100',
       )}
     />
+  )
+}
+
+/**
+ * A row of an item that opens a page of its own, such as an agent's or a server's: its tile, the
+ * name with what follows it, the lines under it and what sits at its end. The whole row opens it.
+ */
+export function ItemRow({
+  item,
+  label,
+  tile,
+  name,
+  right,
+  children,
+  onOpen,
+}: {
+  item: string
+  label: string
+  tile: ReactNode
+  /** The name line's content, before the row's end. */
+  name: ReactNode
+  /** The state and the chevron at the row's end. */
+  right?: ReactNode
+  /** The lines under the name. */
+  children?: ReactNode
+  onOpen: () => void
+}) {
+  return (
+    <div className="relative -mx-3 flex items-start gap-3 rounded-[inherit] py-3 pr-3 pl-4">
+      {/* Buttons cannot nest, so the row opens through a button laid under its content. */}
+      <button
+        type="button"
+        data-item-row={item}
+        aria-label={label}
+        onClick={onOpen}
+        className="absolute inset-0 rounded-[inherit] outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-visible:shadow-[inset_0_0_0_2px_var(--focus)]"
+      />
+      <span className="pointer-events-none relative">{tile}</span>
+      <div className="pointer-events-none relative flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex min-h-5.5 min-w-0 items-center gap-2">
+          <span className="truncate text-ui font-medium">{name}</span>
+        </div>
+        {children}
+      </div>
+      <div className="pointer-events-none relative flex h-5.5 shrink-0 items-center gap-2">
+        {right}
+        <ChevronRightIcon className="size-4 text-icon" />
+      </div>
+    </div>
+  )
+}
+
+/** An item page's header: the way back to its list, a 40 px tile and the title with its line. */
+export function ItemPageHeader({
+  back,
+  onBack,
+  item,
+  icon,
+  title,
+  children,
+  actions,
+}: {
+  back: string
+  onBack: () => void
+  item: string
+  icon: ReactNode
+  title: ReactNode
+  /** The line under the title. */
+  children?: ReactNode
+  actions?: ReactNode
+}) {
+  return (
+    <>
+      <Button
+        variant="quiet"
+        size="sm"
+        className="-mt-1 mb-3.5 -ml-2 w-max gap-1.5 pr-2.5 pl-2 text-secondary"
+        onClick={onBack}
+      >
+        <ArrowLeftIcon data-icon="inline-start" />
+        {back}
+      </Button>
+      <header data-setting-row={item} className="relative mb-6 flex items-center gap-3.5">
+        <FlashMark id={item} />
+        <span className="relative grid size-10 shrink-0 place-items-center rounded-code bg-surface shadow-card">
+          {icon}
+        </span>
+        <div className="relative flex min-w-0 flex-1 flex-col gap-0.75">
+          <h2 className="flex min-w-0 font-heading text-title font-semibold">{title}</h2>
+          {children && <div className="flex min-w-0 items-center gap-1.75">{children}</div>}
+        </div>
+        {actions && <div className="relative flex shrink-0 items-center gap-1.5">{actions}</div>}
+      </header>
+    </>
+  )
+}
+
+/** A notice under an item's title: its icon and words, an action at its end, more under it. */
+export function Notice({
+  variant,
+  icon,
+  title,
+  action,
+  children,
+  more,
+}: {
+  variant: 'info' | 'success' | 'warning' | 'error'
+  icon: ReactNode
+  title: ReactNode
+  action?: ReactNode
+  children?: ReactNode
+  more?: ReactNode
+}) {
+  return (
+    <Alert variant={variant}>
+      {icon}
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <AlertTitle>{title}</AlertTitle>
+          {children && <AlertDescription>{children}</AlertDescription>}
+        </div>
+        {action && <div className="-my-1 flex shrink-0 items-center gap-1.5">{action}</div>}
+      </div>
+      {more && <div className="col-start-2 mt-2.5 flex flex-col gap-2.5">{more}</div>}
+    </Alert>
   )
 }

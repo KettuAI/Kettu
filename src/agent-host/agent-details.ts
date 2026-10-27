@@ -214,3 +214,82 @@ export async function readAgentDetails(
   for (const [, entries] of [...items, version]) for (const entry of entries) ctx.log(...entry)
   return { cliVersion: version[0], config: items.map(([item]) => item) }
 }
+
+/** Where the agent keeps MCP servers of its own, and what moved the file, if anything. */
+export interface McpLocation {
+  path: string
+  env: string | null
+  chosen: boolean
+  exists: boolean
+}
+
+/**
+ * The file in which the agent keeps MCP servers for every project. Claude Code keeps them in
+ * `.claude.json`, Codex in `config.toml` of its folder, and OpenCode in its settings file. Only the
+ * file's existence is checked; it is never read.
+ */
+export async function mcpLocation(
+  agentId: AgentId,
+  getEnv: (name: string) => string | undefined,
+  home: string,
+  platform: Platform,
+  chosen: string | null = null,
+  log: LogFn,
+): Promise<McpLocation | null> {
+  const p = platform === 'win32' ? path.win32 : path.posix
+  // A relative value is taken from the home directory, where agents are spawned.
+  const variable = (name: string): string | null => {
+    const value = getEnv(name)
+    return value && value.trim() !== '' ? p.resolve(home, value) : null
+  }
+  switch (agentId) {
+    case 'claude-code': {
+      const env = variable('CLAUDE_CONFIG_DIR')
+      const dir = chosen ?? env ?? home
+      return {
+        path: p.join(dir, '.claude.json'),
+        env: chosen ? null : env ? 'CLAUDE_CONFIG_DIR' : null,
+        chosen: chosen !== null,
+        exists: await exists(p.join(dir, '.claude.json'), 'file', log),
+      }
+    }
+    case 'codex': {
+      const env = variable('CODEX_HOME')
+      const dir = chosen ?? env ?? p.join(home, '.codex')
+      return {
+        path: p.join(dir, 'config.toml'),
+        env: chosen ? null : env ? 'CODEX_HOME' : null,
+        chosen: chosen !== null,
+        exists: await exists(p.join(dir, 'config.toml'), 'file', log),
+      }
+    }
+    case 'opencode': {
+      const file = variable('OPENCODE_CONFIG')
+      if (file) {
+        return {
+          path: file,
+          env: 'OPENCODE_CONFIG',
+          chosen: false,
+          exists: await exists(file, 'file', log),
+        }
+      }
+      const xdg = variable('XDG_CONFIG_HOME')
+      const dir = p.join(xdg ?? p.join(home, '.config'), 'opencode')
+      const candidates = [p.join(dir, 'opencode.json'), p.join(dir, 'opencode.jsonc')]
+      const found = await firstExisting(candidates, log)
+      return {
+        path: found ?? candidates[0]!,
+        env: xdg ? 'XDG_CONFIG_HOME' : null,
+        chosen: false,
+        exists: found !== null,
+      }
+    }
+    default:
+      return null
+  }
+}
+
+async function firstExisting(candidates: string[], log: LogFn): Promise<string | null> {
+  for (const candidate of candidates) if (await exists(candidate, 'file', log)) return candidate
+  return null
+}

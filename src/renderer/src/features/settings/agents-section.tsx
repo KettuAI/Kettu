@@ -1,6 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  ArrowLeftIcon,
   CheckIcon,
   ChevronRightIcon,
   CircleAlertIcon,
@@ -33,7 +32,6 @@ import { emitAppEvent } from '@renderer/app/events'
 import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
 import { useRefresh } from '@renderer/components/refresh'
 import { RefreshIcon } from '@renderer/components/refresh-icon'
-import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import {
@@ -81,11 +79,21 @@ import {
   IconAction,
   Masked,
   PathText,
-  RevealAction,
   Segmented,
   SettingSelect,
 } from './controls'
-import { FlashMark, GroupLabel, RowFrame, RowGroup, RowShell, RowText } from './rows'
+import { ConfigNote, ConfigPath, PathActions, PathLine } from './places'
+import {
+  FlashMark,
+  GroupLabel,
+  ItemPageHeader,
+  ItemRow,
+  Notice,
+  RowFrame,
+  RowGroup,
+  RowShell,
+  RowText,
+} from './rows'
 import { environmentText } from './environment-text'
 import { useApply } from './use-apply'
 
@@ -411,42 +419,35 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
     <span className="text-xs text-tertiary">{t('agents.noUsage')}</span>
   )
   return (
-    <div className="relative -mx-3 flex items-start gap-3 rounded-[inherit] py-3 pr-3 pl-4">
-      {/* Buttons cannot nest, so the row opens through a button laid under its content. */}
-      <button
-        type="button"
-        data-agent-row={status.id}
-        aria-label={status.name}
-        onClick={() => openAgentSettings(status.id)}
-        className="absolute inset-0 rounded-[inherit] outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-visible:shadow-[inset_0_0_0_2px_var(--focus)]"
-      />
-      <span className="pointer-events-none relative">
-        <AgentTile agent={status.id} mono={!installed} size={30} glyph={16} />
-      </span>
-      <div className="pointer-events-none relative flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex min-h-5.5 min-w-0 items-center gap-2">
+    <ItemRow
+      item={status.id}
+      label={status.name}
+      onOpen={() => openAgentSettings(status.id)}
+      tile={<AgentTile agent={status.id} mono={!installed} size={30} glyph={16} />}
+      name={
+        <>
           <span className="truncate text-ui font-medium">{status.name}</span>
           {version && <span className="shrink-0 font-mono text-xs text-tertiary">{version}</span>}
           <span className="pointer-events-auto flex shrink-0">
             <AgentPill status={status} />
           </span>
-        </div>
-        {summary && (
-          <span className="flex min-h-4.5 min-w-0 items-center text-command leading-4.5 text-secondary">
-            <span className="min-w-0 truncate">{summary}</span>
-          </span>
-        )}
-        {usage && <div className="mt-1.25 flex flex-wrap gap-x-5.5 gap-y-1">{usage}</div>}
-      </div>
-      <div className="pointer-events-none relative flex h-5.5 shrink-0 items-center gap-2">
-        {installed && (
+        </>
+      }
+      right={
+        installed && (
           <span className="pointer-events-auto flex">
             <AgentStateLine status={status} className="text-command" />
           </span>
-        )}
-        <ChevronRightIcon className="size-4 text-icon" />
-      </div>
-    </div>
+        )
+      }
+    >
+      {summary && (
+        <span className="flex min-h-4.5 min-w-0 items-center text-command leading-4.5 text-secondary">
+          <span className="min-w-0 truncate">{summary}</span>
+        </span>
+      )}
+      {usage && <div className="mt-1.25 flex flex-wrap gap-x-5.5 gap-y-1">{usage}</div>}
+    </ItemRow>
   )
 }
 
@@ -554,22 +555,44 @@ export function AgentsGroupActions() {
 /** An agent's own page: its version, account, usage, configuration and how it launches. */
 export function AgentPage({ agentId }: { agentId: AgentId }) {
   const status = useAgentsStore((s) => s.byId[agentId])
-  if (!status) return <BackToAgents />
+  if (!status) return <AgentPageHeader status={null} />
   return <AgentPageBody status={status} />
 }
 
-function BackToAgents() {
+/** The page's header, without an agent once it is gone from the list. */
+function AgentPageHeader({ status, actions }: { status: AgentStatus | null; actions?: ReactNode }) {
   const { t } = useTranslation('settings')
   return (
-    <Button
-      variant="quiet"
-      size="sm"
-      className="-mt-1 mb-3.5 -ml-2 w-max gap-1.5 pr-2.5 pl-2 text-secondary"
-      onClick={() => openAgentSettings(null)}
+    <ItemPageHeader
+      back={t('sections.agents')}
+      onBack={() => openAgentSettings(null)}
+      item={status?.id ?? 'agent'}
+      icon={status && <AgentMark agent={status.id} size={22} mono={!listedInstalled(status)} />}
+      title={status ? <AgentPicker status={status} /> : null}
+      actions={actions}
     >
-      <ArrowLeftIcon data-icon="inline-start" />
-      {t('sections.agents')}
-    </Button>
+      {status && <AgentPageLine status={status} />}
+    </ItemPageHeader>
+  )
+}
+
+/** The line under an agent's title: its state and the CLI or vendor it runs through. */
+function AgentPageLine({ status }: { status: AgentStatus }) {
+  const { t } = useTranslation('settings')
+  const installed = listedInstalled(status)
+  const adapter = status.package?.name.split('/').at(-1)
+  const vendor = VENDORS[status.id]
+  const connection = vendor
+    ? adapter
+      ? t('agents.via', { vendor, adapter })
+      : t('agents.direct', { vendor })
+    : null
+  return (
+    <p className="flex min-w-0 items-center gap-1.75 text-command leading-4.5 text-tertiary">
+      {installed && <PageState status={status} />}
+      {installed && connection && <span aria-hidden>·</span>}
+      {connection && <span className="truncate">{connection}</span>}
+    </p>
   )
 }
 
@@ -587,37 +610,6 @@ function PageState({ status }: { status: AgentStatus }) {
   )
 }
 
-/** A notice under an agent's title: its icon and words, an action at its end, more under it. */
-function Notice({
-  variant,
-  icon,
-  title,
-  action,
-  children,
-  more,
-}: {
-  variant: 'info' | 'success' | 'warning' | 'error'
-  icon: ReactNode
-  title: ReactNode
-  action?: ReactNode
-  children?: ReactNode
-  more?: ReactNode
-}) {
-  return (
-    <Alert variant={variant}>
-      {icon}
-      <div className="flex min-w-0 items-start gap-3">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <AlertTitle>{title}</AlertTitle>
-          {children && <AlertDescription>{children}</AlertDescription>}
-        </div>
-        {action && <div className="-my-1 flex shrink-0 items-center gap-1.5">{action}</div>}
-      </div>
-      {more && <div className="col-start-2 mt-2.5 flex flex-col gap-2.5">{more}</div>}
-    </Alert>
-  )
-}
-
 function AgentPageBody({ status }: { status: AgentStatus }) {
   const { t } = useTranslation(['settings', 'common'])
   const environment = useAgentsStore((s) => s.environment)
@@ -628,13 +620,6 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
   const version = useAgentVersion(status)
   const installed = listedInstalled(status)
   const running = status.state === 'ready'
-  const adapter = status.package?.name.split('/').at(-1)
-  const vendor = VENDORS[status.id]
-  const connection = vendor
-    ? adapter
-      ? t('agents.via', { vendor, adapter })
-      : t('agents.direct', { vendor })
-    : null
 
   const signInTerminal = (command: string) => {
     const view = useViewStore.getState()
@@ -645,63 +630,46 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
     emitAppEvent({ kind: 'sign-in-terminal', projectPath, command, agentId: status.id })
   }
 
+  const actions = (
+    <>
+      {r.kind === 'failed' && (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy}
+          onClick={() => act(() => host('agents.retry', { agentId: status.id }))}
+        >
+          {busy ? <Spinner data-icon="inline-start" /> : <RotateCwIcon data-icon="inline-start" />}
+          {t('common:actions.retry')}
+        </Button>
+      )}
+      {r.kind === 'missing' && !canInstall(status) && r.url && (
+        <a
+          href={r.url}
+          target="_blank"
+          rel="noreferrer"
+          className={buttonVariants({ variant: 'outline', size: 'sm' })}
+        >
+          {r.action}
+          <ExternalLinkIcon data-icon="inline-end" />
+        </a>
+      )}
+      {status.canLogout && status.signIn === 'signed-in' && (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy}
+          onClick={() => act(() => host('agents.logout', { agentId: status.id }))}
+        >
+          {t('agents.signOut')}
+        </Button>
+      )}
+    </>
+  )
+
   return (
     <div className="flex flex-col">
-      <BackToAgents />
-      <header data-setting-row={status.id} className="relative mb-6 flex items-center gap-3.5">
-        <FlashMark id={status.id} />
-        <span className="relative grid size-10 shrink-0 place-items-center rounded-code bg-surface shadow-card">
-          <AgentMark agent={status.id} size={22} mono={!installed} />
-        </span>
-        <div className="relative flex min-w-0 flex-1 flex-col gap-0.75">
-          <h2 className="flex min-w-0 font-heading text-title font-semibold">
-            <AgentPicker status={status} />
-          </h2>
-          <p className="flex min-w-0 items-center gap-1.75 text-command leading-4.5 text-tertiary">
-            {installed && <PageState status={status} />}
-            {installed && connection && <span aria-hidden>·</span>}
-            {connection && <span className="truncate">{connection}</span>}
-          </p>
-        </div>
-        <div className="relative flex shrink-0 items-center gap-1.5">
-          {r.kind === 'failed' && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() => act(() => host('agents.retry', { agentId: status.id }))}
-            >
-              {busy ? (
-                <Spinner data-icon="inline-start" />
-              ) : (
-                <RotateCwIcon data-icon="inline-start" />
-              )}
-              {t('common:actions.retry')}
-            </Button>
-          )}
-          {r.kind === 'missing' && !canInstall(status) && r.url && (
-            <a
-              href={r.url}
-              target="_blank"
-              rel="noreferrer"
-              className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            >
-              {r.action}
-              <ExternalLinkIcon data-icon="inline-end" />
-            </a>
-          )}
-          {status.canLogout && status.signIn === 'signed-in' && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() => act(() => host('agents.logout', { agentId: status.id }))}
-            >
-              {t('agents.signOut')}
-            </Button>
-          )}
-        </div>
-      </header>
+      <AgentPageHeader status={status} actions={actions} />
 
       <div className="flex flex-col gap-7">
         {r.kind !== 'failed' && r.kind !== 'missing' && status.detail && (
@@ -1425,36 +1393,6 @@ function Fact({ name, mono, children }: { name: string; mono?: boolean; children
   )
 }
 
-/** A path as a place on a line of its own, then what describes it, then its actions at the end. */
-function PathLine({
-  path,
-  missing,
-  children,
-  actions,
-}: {
-  path: string
-  missing?: boolean
-  children?: ReactNode
-  actions?: ReactNode
-}) {
-  return (
-    <div className="flex min-h-6.5 min-w-0 items-center gap-2">
-      <PathText path={path} missing={missing} />
-      {children}
-      {actions && <span className="ml-auto flex shrink-0 items-center gap-0.5">{actions}</span>}
-    </div>
-  )
-}
-
-/** A word on a path, such as that its file is not there yet. */
-function PathNote({ children }: { children: ReactNode }) {
-  return (
-    <span className="h-4.5 shrink-0 rounded-full bg-subtle px-1.5 text-xs leading-4.5 text-tertiary">
-      {children}
-    </span>
-  )
-}
-
 /** A row of the Configuration group: its name and line, then its place and notes under them. */
 function ConfigFrame({
   name,
@@ -1675,46 +1613,6 @@ function ConfigRow({ item, status }: { item: AgentConfigItem; status: AgentStatu
       <ConfigPath item={item} />
       <ConfigNote item={item} />
     </ConfigFrame>
-  )
-}
-
-/** A configuration place: its path, a word when it is not there yet, and copy and show. */
-function ConfigPath({ item, extra }: { item: AgentConfigItem; extra?: ReactNode }) {
-  const { t } = useTranslation('settings')
-  return (
-    <PathLine
-      path={item.path}
-      missing={!item.exists}
-      actions={
-        (extra || item.exists) && (
-          <>
-            {extra}
-            {item.exists && <PathActions path={item.path} />}
-          </>
-        )
-      }
-    >
-      {!item.exists && <PathNote>{t('agents.notCreated')}</PathNote>}
-    </PathLine>
-  )
-}
-
-/** What set the place: a folder picked in OverBench, or the variable that moved it. */
-function ConfigNote({ item }: { item: AgentConfigItem }) {
-  const { t } = useTranslation('settings')
-  const note = item.chosen
-    ? t('agents.configFolder.chosen')
-    : item.env && t('agents.setBy', { env: item.env })
-  return note ? <span className="text-xs text-tertiary">{note}</span> : null
-}
-
-function PathActions({ path }: { path: string }) {
-  const { t } = useTranslation('settings')
-  return (
-    <>
-      <CopyAction text={path} label={t('advanced.dataFolder.copy')} />
-      <RevealAction path={path} />
-    </>
   )
 }
 

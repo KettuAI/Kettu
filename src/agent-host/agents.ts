@@ -15,6 +15,7 @@ import type {
   AgentTask,
   AgentUpdate,
   InstalledCli,
+  McpStatus,
   PlanLimit,
 } from '@shared/agent-host'
 import type { AgentProcess } from '@shared/host-control'
@@ -45,6 +46,7 @@ import {
 import {
   CLI_VERSION_SOURCES,
   configLocations,
+  mcpLocation,
   readAgentDetails,
   readCliVersion,
 } from './agent-details'
@@ -164,6 +166,8 @@ export interface AgentRuntime {
   readonly agentId: AgentId
   readonly connection: AgentConnection
   readonly init: AgentInit
+  /** Whether OverBench's MCP server is on for this process, from the settings as it started. */
+  readonly overbench: boolean
 }
 
 /** What the session layer tells the agents, and hears back. */
@@ -604,6 +608,12 @@ export class AgentManager {
         folderChanged(slot),
     )
     await Promise.all(changed.map((slot) => this.detect(slot)))
+    // A switch for OverBench's server changes what a start gets, and waits for the next one.
+    const wasOff = new Set(previous.mcp.overbench.off)
+    const isOff = new Set(next.mcp.overbench.off)
+    for (const slot of this.slots.values()) {
+      if (wasOff.has(slot.def.id) !== isOff.has(slot.def.id)) this.emit(slot)
+    }
   }
 
   // Lifecycle.
@@ -749,7 +759,12 @@ export class AgentManager {
           `${slot.def.name} speaks an unsupported protocol version (${init.protocolVersion}).`,
         )
       }
-      const runtime: AgentRuntime = { agentId, connection, init }
+      const runtime: AgentRuntime = {
+        agentId,
+        connection,
+        init,
+        overbench: this.overbenchOn(agentId),
+      }
       slot.init = init
       // The state file keeps booleans; how an agent titles its sessions comes with `initialize`.
       const remembered: Partial<AgentInit['capabilities']> = { ...init.capabilities }
@@ -1894,6 +1909,35 @@ export class AgentManager {
     })
   }
 
+  /** The places, one per agent with an `mcpConfig`, where each keeps MCP servers of its own. */
+  async mcpPlaces(): Promise<McpStatus['places']> {
+    const { platform } = this.deps
+    const places: McpStatus['places'] = []
+    for (const slot of this.slots.values()) {
+      const config = slot.def.mcpConfig
+      if (!config) continue
+      const location = await mcpLocation(
+        slot.def.id,
+        (name) => this.deps.env.get(name, slot.def.id),
+        os.homedir(),
+        platform,
+        this.chosenFolder(slot),
+        (level, message) => this.deps.diagnostics.log(level, message),
+      )
+      if (!location) continue
+      places.push({
+        agentId: slot.def.id,
+        path: location.path,
+        exists: location.exists,
+        env: location.env,
+        chosen: location.chosen,
+        project: config.project,
+        listCommand: config.listCommand ?? null,
+      })
+    }
+    return places
+  }
+
   /** What the agents reported in an earlier run, shown until each reports again. */
   restore(file: AgentsFile): void {
     this.codexReportThreadsRemovedAt = file.codexReportThreadsRemovedAt ?? null
@@ -1998,6 +2042,11 @@ export class AgentManager {
   private chosenFolder(slot: Slot): string | null {
     const folder = this.deps.settings().agents[slot.def.id]?.configDir
     return slot.def.configVariable && folder ? folder : null
+  }
+
+  /** Whether OverBench's MCP server is on for this agent, from the settings. */
+  private overbenchOn(agentId: AgentId): boolean {
+    return !this.deps.settings().mcp.overbench.off.includes(agentId)
   }
 
   /** The configuration folder `env` gives the agent; null for an agent whose folder is fixed. */
@@ -2140,6 +2189,10 @@ export class AgentManager {
             }
           : null,
       configDir: config ? { runs: config.folder, active: active?.folder ?? null } : null,
+      overbenchServer: {
+        runs: this.overbenchOn(slot.def.id),
+        active: this.running(slot) ? (slot.runtime?.overbench ?? null) : null,
+      },
       capabilities: {
         loadSession: capabilities?.loadSession ?? false,
         listSessions: capabilities?.listSessions ?? false,
@@ -2155,6 +2208,7 @@ export class AgentManager {
         context: hasContextReport(slot.def.id),
         account: slot.def.reportsAccount ?? false,
         progressNotes: slot.def.progressNotes ?? false,
+        mcpHttp: capabilities?.mcpHttp ?? null,
         prompt: capabilities?.prompt ?? null,
       },
     }

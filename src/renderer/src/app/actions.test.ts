@@ -166,7 +166,7 @@ describe('a shown session that goes away', () => {
   })
 
   it('keeps Settings open when the session behind it goes', () => {
-    const settings = { open: true, section: 'advanced', agent: null } as const
+    const settings = { open: true, section: 'advanced', item: null } as const
     useViewStore.setState({
       main: { kind: 'session', sessionId: 's1' },
       projectPath: '/repo',
@@ -220,7 +220,7 @@ describe('newSession', () => {
   })
 
   it('closes Settings when asked for, and leaves it open in place of a session', () => {
-    const settings = { open: true, section: 'general', agent: null } as const
+    const settings = { open: true, section: 'general', item: null } as const
     useViewStore.setState({ main: { kind: 'launch' }, projectPath: '/repo', settings })
     newSessionInPlace()
     expect(useViewStore.getState()).toMatchObject({ main: { kind: 'new' }, settings })
@@ -715,7 +715,7 @@ describe('New sub-session', () => {
     useViewStore.setState({
       main: { kind: 'session', sessionId: 'p1' },
       projectPath: '/other',
-      settings: { open: true, section: 'general', agent: null },
+      settings: { open: true, section: 'general', item: null },
     })
   })
 

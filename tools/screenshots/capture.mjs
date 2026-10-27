@@ -648,6 +648,7 @@ async function run() {
     'Usage',
     'Terminal',
     'Git',
+    'MCP servers',
     'Browser',
     'Sharing',
     'Advanced',
@@ -677,6 +678,22 @@ async function run() {
   )
   await sleep(600)
   await shoot('settings-agent')
+
+  // OverBench's own MCP server, opened from its row in MCP servers.
+  await click(
+    `return [...document.querySelectorAll('nav button, aside button')].find((b) => b.textContent.trim() === 'MCP servers')`,
+    'Settings › MCP servers',
+  )
+  await waitFor(
+    `document.querySelector('button[aria-label="OverBench"]')`,
+    "OverBench's MCP server row",
+  )
+  await click(
+    `return document.querySelector('button[aria-label="OverBench"]')`,
+    "OverBench's MCP server row",
+  )
+  await sleep(600)
+  await shoot('settings-mcp-server')
 
   await click(`return document.querySelector('aside input')`, 'the Settings search')
   await cdp.send('Input.insertText', { text: 'proxy' })

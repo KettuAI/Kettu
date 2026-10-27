@@ -95,6 +95,11 @@ export interface AgentDefinition {
   cli?: AdapterCli
   /** The variable that moves its configuration folder, set to the folder picked in Settings. */
   configVariable?: string
+  /**
+   * The file in which it keeps MCP servers of its own, besides its settings file: `project` is a
+   * project's own, relative to its folder, and `listCommand` lists them in a session.
+   */
+  mcpConfig?: { project: string; listCommand?: string }
 }
 
 const NODE_INSTALL: AgentDefinition['install'] = {
@@ -112,6 +117,7 @@ export const CLAUDE_CODE: AgentDefinition = {
   reportsAccount: true,
   cli: CLAUDE_CLI,
   configVariable: CONFIG_VARIABLES['claude-code'],
+  mcpConfig: { project: '.mcp.json', listCommand: '/mcp' },
 }
 
 export const CODEX: AgentDefinition = {
@@ -127,6 +133,7 @@ export const CODEX: AgentDefinition = {
   launchEnv: codexLaunchEnv,
   cli: CODEX_CLI,
   configVariable: CONFIG_VARIABLES.codex,
+  mcpConfig: { project: '.codex/config.toml', listCommand: '/mcp' },
 }
 
 export const PI: AgentDefinition = {
@@ -159,6 +166,7 @@ export const OPENCODE: AgentDefinition = {
   // Seen in OpenCode 2.0.32: every attach adds its servers to the folder, replacing a same name,
   // and every tool call carries `_meta["ai.opencode/sessionID"]`.
   mcpServersByName: true,
+  mcpConfig: { project: 'opencode.json' },
   install: {
     hint: 'detect.hint.opencode',
     url: 'https://opencode.ai/docs/',

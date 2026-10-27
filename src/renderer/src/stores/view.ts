@@ -45,6 +45,7 @@ export type SettingsSection =
   | 'git'
   | 'notifications'
   | 'usage'
+  | 'mcp'
   | 'archived'
   | 'sharing'
   | 'browser'
@@ -56,9 +57,10 @@ interface ViewStore {
   main: MainView
   /**
    * `section` is the page shown while open and the one to return to; null until one is chosen.
-   * `agent` is the agent whose own page Agents shows instead of the list.
+   * `item` is the page of one item of the section, such as an agent's or a server's, instead of
+   * the list.
    */
-  settings: { open: boolean; section: SettingsSection | null; agent: AgentId | null }
+  settings: { open: boolean; section: SettingsSection | null; item: string | null }
   /** The shortcuts dialog, over whatever the window shows. Not persisted. */
   shortcutsOpen: boolean
   sidebarCollapsed: boolean
@@ -93,7 +95,7 @@ const saved = readJson<Partial<Persisted>>(KEY, {})
 export const useViewStore = create<ViewStore>()(() => ({
   projectPath: saved.projectPath ?? null,
   main: { kind: 'launch' },
-  settings: { open: false, section: null, agent: null },
+  settings: { open: false, section: null, item: null },
   shortcutsOpen: false,
   sidebarCollapsed: saved.sidebarCollapsed ?? false,
   collapsedProjects: saved.collapsedProjects ?? {},
@@ -278,19 +280,24 @@ export function chooseNewSessionProject(projectPath: string | null): void {
 /** Without a section, shows the one shown last; with one, switches to it even when already open. */
 export function openSettings(section: SettingsSection | null = null): void {
   useViewStore.setState((s) => ({
-    settings: section ? { open: true, section, agent: null } : { ...s.settings, open: true },
+    settings: section ? { open: true, section, item: null } : { ...s.settings, open: true },
   }))
+}
+
+/** Opens a section at one of its items' own pages, or at the list with null. */
+export function openSettingsItem(section: SettingsSection, item: string | null): void {
+  useViewStore.setState({ settings: { open: true, section, item } })
 }
 
 /** Opens Agents at one agent's page, or at the list with null. */
 export function openAgentSettings(agent: AgentId | null): void {
-  useViewStore.setState({ settings: { open: true, section: 'agents', agent } })
+  openSettingsItem('agents', agent)
 }
 
-/** What Esc does in Settings: from an agent's page to the list, else out of Settings. */
+/** What Esc does in Settings: from an item's page to its list, else out of Settings. */
 export function settingsBack(): void {
   const { settings } = useViewStore.getState()
-  if (settings.agent) openAgentSettings(null)
+  if (settings.item) openSettingsItem(settings.section ?? 'agents', null)
   else closeSettings()
 }
 
