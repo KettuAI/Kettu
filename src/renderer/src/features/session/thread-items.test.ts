@@ -196,7 +196,7 @@ describe('buildItems', () => {
     const entries = [user('u1'), tool('x1', 'execute'), tool('x2', 'execute', 'in_progress')]
     const s = state(entries)
     const live = buildItems(s.order, signatureOf(s), true)
-    expect(live.map((i) => i.key)).toEqual(['u1', 'run:x1'])
+    expect(live.map((i) => i.key)).toEqual(['u1', 'run:x1', 'status'])
     expect(live[1]).toMatchObject({ type: 'run', ids: ['x1', 'x2'] })
   })
 
@@ -206,6 +206,7 @@ describe('buildItems', () => {
       'u1',
       'a1',
       'run:x1',
+      'status',
     ])
   })
 
@@ -218,14 +219,22 @@ describe('buildItems', () => {
     expect(buildItems(waiting.order, signatureOf(waiting), true).map((i) => i.key)).toEqual([
       'u1',
       'x1',
+      'status',
     ])
   })
 
   it('shows nothing of a short thought while it streams', () => {
     const s = state([user('u1'), tool('x1', 'execute'), thought('q1', 'x', true)])
-    expect(buildItems(s.order, signatureOf(s), true).map((i) => i.key)).toEqual(['u1', 'run:x1'])
+    expect(buildItems(s.order, signatureOf(s), true).map((i) => i.key)).toEqual([
+      'u1',
+      'run:x1',
+      'status',
+    ])
     const alone = state([user('u1'), thought('q1', 'x', true)])
-    expect(buildItems(alone.order, signatureOf(alone), true).map((i) => i.key)).toEqual(['u1'])
+    expect(buildItems(alone.order, signatureOf(alone), true).map((i) => i.key)).toEqual([
+      'u1',
+      'status',
+    ])
   })
 
   it('folds a long thought into the run around it', () => {
@@ -250,7 +259,7 @@ describe('buildItems', () => {
   it('folds a long thought into its run while it streams', () => {
     const s = state([user('u1'), tool('x1', 'execute'), long('r1', true)])
     const result = buildItems(s.order, signatureOf(s), true)
-    expect(result.map((i) => i.key)).toEqual(['u1', 'run:x1'])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'run:x1', 'status'])
     expect(result[1]).toMatchObject({ ids: ['x1', 'r1'], signature: 'tr' })
   })
 
@@ -265,13 +274,61 @@ describe('buildItems', () => {
       tool('x3', 'execute', 'in_progress'),
     ])
     const result = buildItems(s.order, signatureOf(s), true)
-    expect(result.map((i) => i.key)).toEqual(['u1', 'run:x1', 'a1', 'run:r1'])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'run:x1', 'a1', 'run:r1', 'status'])
     expect(result[3]).toMatchObject({ signature: 'ggt' })
   })
 
   it('marks user entries as turn starts', () => {
     const result = items([user('u1'), agent('a1'), user('u2')]).filter((i) => i.type === 'entry')
     expect(result.map((i) => i.turnStart)).toEqual([true, false, true])
+  })
+})
+
+describe("the running turn's status", () => {
+  const live = (entries: ThreadEntry[]) => {
+    const s = state(entries)
+    return buildItems(s.order, signatureOf(s), true)
+  }
+  const steered = (id: string): ThreadEntry => ({
+    kind: 'user',
+    id,
+    content: [],
+    steered: true,
+  })
+
+  it('ends the items of a live turn, where the reply will start', () => {
+    const result = live([user('u1')])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'status'])
+    expect(result.at(-1)).toMatchObject({ type: 'status', afterSent: true })
+  })
+
+  it('follows a steered message the same way', () => {
+    const result = live([user('u1'), agent('a1'), steered('s1')])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'a1', 's1', 'status'])
+    expect(result.at(-1)).toMatchObject({ type: 'status', afterSent: true })
+  })
+
+  it("sits under the reply's latest entry or run otherwise", () => {
+    const message = live([user('u1'), agent('a1')])
+    expect(message.map((i) => i.key)).toEqual(['u1', 'a1', 'status'])
+    expect(message.at(-1)).toMatchObject({ type: 'status', afterSent: false })
+    const run = live([user('u1'), tool('x1', 'execute', 'in_progress')])
+    expect(run.map((i) => i.key)).toEqual(['u1', 'run:x1', 'status'])
+    expect(run.at(-1)).toMatchObject({ type: 'status', afterSent: false })
+  })
+
+  it("goes once the turn ends, and the reply's footer ends the thread", () => {
+    const s = state([user('u1'), agent('a1')])
+    expect(buildItems(s.order, signatureOf(s)).map((i) => i.key)).toEqual(['u1', 'a1', 'reply:u1'])
+  })
+
+  it('belongs to no reply', () => {
+    const result = live([user('u1'), agent('a1')])
+    expect(replyKeys(result)).toEqual([null, null, null])
+  })
+
+  it("is as tall as the reply's action row", () => {
+    expect(estimateOf(live([user('u1'), agent('a1')]).at(-1)!)).toBe(24)
   })
 })
 
@@ -332,7 +389,7 @@ describe('progress notes', () => {
     expect(result.map((i) => i.key)).toEqual(['u1', 'a1', 'run:r1', 'a2', 'reply:u1'])
     expect(result[1]).toMatchObject({ type: 'entry', id: 'a1', note: true })
     const streaming = notes([user('u1'), agent('a1'), thought('q1', 'x', true)], true)
-    expect(streaming.map((i) => i.key)).toEqual(['u1', 'a1'])
+    expect(streaming.map((i) => i.key)).toEqual(['u1', 'a1', 'status'])
     expect(streaming[1]).toMatchObject({ type: 'entry', id: 'a1', note: true })
   })
 
@@ -378,7 +435,7 @@ describe('progress notes', () => {
       ],
       true,
     )
-    expect(result.map((i) => i.key)).toEqual(['u1', 'run:x1', 'a1', 'run:x3', 'a2'])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'run:x1', 'a1', 'run:x3', 'a2', 'status'])
     expect(result[2]).toMatchObject({ type: 'entry', id: 'a1', note: true })
   })
 })
@@ -415,7 +472,7 @@ describe('reply footers', () => {
   })
 
   it('wait for the running turn to end', () => {
-    expect(keys([user('u1'), agent('a1')], true)).toEqual(['u1', 'a1'])
+    expect(keys([user('u1'), agent('a1')], true)).toEqual(['u1', 'a1', 'status'])
   })
 
   it('keep a steered message inside its turn', () => {
@@ -466,7 +523,7 @@ describe('replyKeys', () => {
   it('leaves a turn without a footer out', () => {
     const s = state([user('u1'), agent('a1'), user('u2'), agent('a2')])
     const result = buildItems(s.order, signatureOf(s), true)
-    expect(replyKeys(result)).toEqual([null, 'reply:u1', 'reply:u1', null, null])
+    expect(replyKeys(result)).toEqual([null, 'reply:u1', 'reply:u1', null, null, null])
   })
 })
 

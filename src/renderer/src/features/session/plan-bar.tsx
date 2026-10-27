@@ -11,29 +11,24 @@ import { cn } from '@renderer/lib/utils'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { PlanList } from './entries/basic'
 import { PANEL } from './entries/helpers'
-import { TurnStatus } from './turn-status'
 
 /**
- * The row above the composer: the latest plan on its left, as a segment per step, the count and
- * the current step, which opens to the whole list under it; the running turn's status on its
- * right. It steps aside while the queue fans out over it (`hidden`).
+ * The row above the composer: the latest plan, as a segment per step, the count and the current
+ * step, which opens to the whole list under it. It steps aside while the queue fans out over it
+ * (`hidden`).
  */
 export function PlanBar({
   sessionId,
-  withPlan,
   running,
   hidden,
 }: {
   sessionId: string
-  /** A subagent's row shows its status alone. */
-  withPlan: boolean
   running: boolean
   hidden: boolean
 }) {
   const { t } = useTranslation('session')
   const [open, setOpen] = useState(false)
   const plan = useThreadsStore((s) => {
-    if (!withPlan) return null
     const replica = s.replicas[sessionId]
     const state = replica?.state
     if (!state) return null
@@ -47,25 +42,13 @@ export function PlanBar({
   const items = plan && plan.items.length > 0 ? plan.items : null
   const done = items ? items.filter((i) => i.status === 'completed').length : 0
   const showsPlan = !!items && (running || done < items.length)
-  if (!showsPlan && !running) return null
+  if (!showsPlan) return null
 
   const shell = cn(
     'transition-[opacity,translate] duration-(--duration-fast) ease-out-quart',
     hidden && '-translate-y-1 opacity-0 motion-reduce:translate-y-0',
   )
   const row = 'flex min-h-7.5 min-w-0 items-center gap-2 px-1 pb-1'
-  const status = running && <TurnStatus sessionId={sessionId} />
-  if (!items || !showsPlan) {
-    return (
-      <div
-        inert={hidden}
-        aria-hidden={hidden || undefined}
-        className={cn(row, 'justify-end', shell)}
-      >
-        {status}
-      </div>
-    )
-  }
   const current = items.find((i) => i.status === 'in_progress')
 
   return (
@@ -104,8 +87,6 @@ export function PlanBar({
             </span>
           )}
         </CollapsibleTrigger>
-        <span className="flex-1" />
-        {status}
       </div>
       <CollapsibleContent className={PANEL}>
         <div className="max-h-42 scroll-fade-y overflow-y-auto overscroll-contain pt-1 pr-2 pb-2 pl-3.5">

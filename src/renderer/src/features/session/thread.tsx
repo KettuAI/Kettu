@@ -20,6 +20,7 @@ import { RunGroup } from './entries/run-group'
 import { ToolGroup } from './entries/tool-group'
 import { MessageOutline } from './outline/message-outline'
 import { hoverReply } from './reply-hover'
+import { TurnStatus } from './turn-status'
 import {
   buildItems,
   estimateOf,
@@ -113,9 +114,11 @@ function OlderLoading({ sessionId }: { sessionId: string }) {
 
 /**
  * 32 px between turns; within one, 4 px between steps, 8 px above the reply's actions and 16 px
- * between anything else.
+ * between anything else. The running turn's status starts 16 px under a message you sent, where
+ * the reply will, and 8 px under the reply's latest entry, the gap of the row that takes its place.
  */
 function spacing(item: Item, previous: Item, steps: Set<string>): string {
+  if (item.type === 'status') return item.afterSent ? 'pt-4' : 'pt-2'
   if (item.type === 'entry' && item.turnStart) return 'pt-8'
   if (item.type === 'reply') return 'pt-2'
   if (isStep(item, steps) && isStep(previous, steps)) return 'pt-1'
@@ -144,6 +147,7 @@ export const Thread = memo(function Thread({
     () => buildItems(order ?? [], signature, working, progressNotes),
     [order, signature, working, progressNotes],
   )
+  const statusLast = useMemo(() => items.at(-1)?.type === 'status', [items])
   const steps = useMemo(() => stepIds(order ?? [], signature), [order, signature])
   const replies = useMemo(() => replyKeys(items), [items])
   // Another session's footer may share a key, so a switch made from the keyboard starts clear.
@@ -213,11 +217,15 @@ export const Thread = memo(function Thread({
                     INTRINSIC_SIZE[estimateOf(item)],
                     index > 0 && spacing(item, items[index - 1]!, steps),
                     // The growing tail would flip between skipped and rendered on every chunk,
-                    // recalculating its whole subtree each time.
-                    index === items.length - 1 && '[content-visibility:visible]',
+                    // recalculating its whole subtree each time. With the status last, the entry
+                    // before it grows the same way.
+                    (index === items.length - 1 || (statusLast && index === items.length - 2)) &&
+                      '[content-visibility:visible]',
                   )}
                 >
-                  {item.type === 'reply' ? (
+                  {item.type === 'status' ? (
+                    <TurnStatus sessionId={sessionId} />
+                  ) : item.type === 'reply' ? (
                     <ReplyFooter
                       replyKey={item.key}
                       sessionId={sessionId}
