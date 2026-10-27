@@ -37,7 +37,7 @@ export function ZoomControls({
         size={viewer ? 'icon-sm' : 'icon-xs'}
         label={t('viewer.zoomOut')}
         shortcut="−"
-        disabled={fitted}
+        disabled={!controls || fitted}
         onClick={() => controls?.zoomBy(-1)}
       >
         <MinusIcon className={icon} />

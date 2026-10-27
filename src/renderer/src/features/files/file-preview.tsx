@@ -75,7 +75,10 @@ export function FilePreview({
   const [media, setMedia] = useState<{ path: string; picture: Picture } | null>(null)
   const picture = file && media?.path === file.path ? media.picture : null
   const onPicture = useCallback((path: string, next: Picture | null) => {
-    setMedia(next ? { path, picture: next } : null)
+    // A picture leaving clears only its own entry, never the next picture's.
+    setMedia((current) =>
+      next ? { path, picture: next } : current?.path === path ? null : current,
+    )
   }, [])
   if (!file) {
     return (
