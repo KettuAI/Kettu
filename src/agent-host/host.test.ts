@@ -711,7 +711,7 @@ describe('artifacts', () => {
       type: 'artifacts.activity',
       id,
       viewers: 2,
-      editing: [],
+      sessions: [],
     })
     await expect(
       port.request('artifacts.restoreVersion', { id, version: 1, baseVersion: 1 }),

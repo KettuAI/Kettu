@@ -1,6 +1,6 @@
 // The contract between the renderer and the agent host, over the agent host port.
 
-import type { ArtifactContent, ArtifactSummary, VersionSummary } from './artifacts'
+import type { ArtifactContent, ArtifactSession, ArtifactSummary, VersionSummary } from './artifacts'
 import type { FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { MediaOpenResult } from './media'
 import type {
@@ -736,7 +736,7 @@ export type HostEvent =
   | { type: 'usage.status'; status: UsageStatus }
   | { type: 'artifacts.changed' } // the list changed; a page showing it reads again
   | { type: 'artifacts.version'; id: string; version: number }
-  | { type: 'artifacts.activity'; id: string; viewers: number; editing: string[] }
+  | { type: 'artifacts.activity'; id: string; viewers: number; sessions: ArtifactSession[] }
   | { type: 'routine.changed'; routine: RoutineView } // a routine, its state or its next run
   | { type: 'routine.removed'; routineId: string }
   | { type: 'routine.run'; run: RoutineRun } // a run's status changed

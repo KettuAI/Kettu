@@ -129,8 +129,12 @@
     "daysLeft_other": " · 剩 {{count}} 天",
     "goneTitle": "这个 artifact 已被删除",
     "goneDescription": "它会在最近删除中保留 30 天。",
-    "editing": "{{session}} 正在编辑",
     "editingLabel": "{{session}} 正在编辑这个 artifact。打开会话",
+    "readingLabel": "{{session}} 正在读取这个 artifact。打开会话",
+    "stateEditing": "编辑中",
+    "stateReading": "读取中",
+    "using": "正在使用这个 artifact",
+    "moreSessions_other": "还有 {{count}} 个会话",
     "places_other": "在 {{count}} 处打开",
     "placesTip_other": "这个 artifact 在 OverBench 中的 {{count}} 处打开"
   },

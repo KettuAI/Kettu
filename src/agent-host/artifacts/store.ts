@@ -5,6 +5,7 @@
 import { readFile } from 'node:fs/promises'
 import {
   ARTIFACT_KEEP_DELETED_MS,
+  type ArtifactSession,
   type ArtifactState,
   type VersionSummary,
 } from '@shared/artifacts'
@@ -45,7 +46,7 @@ export class ArtifactError extends HostError {
 export interface ArtifactActivity {
   id: string
   viewers: number
-  editing: string[]
+  sessions: ArtifactSession[]
 }
 
 export interface ArtifactStoreDeps {
@@ -71,17 +72,22 @@ export interface Reach {
 }
 
 /**
- * The session whose running turn makes a change, which then counts as editing until the turn
- * ends. `current` says, once the change is written, whether that same turn still runs: one that
- * ended meanwhile already cleared what it edited.
+ * The session whose running turn makes a call, which then counts as using the artifact until the
+ * turn ends. `current` says, once the call has done its work, whether that same turn still runs:
+ * one that ended meanwhile already cleared what it used.
  */
-export interface Editor {
+export interface SessionTurn {
   session: string
   current(): boolean
 }
 
+/** The turn of a session that reads an artifact, which then counts as reading it. */
+export interface Reading {
+  reader?: SessionTurn
+}
+
 export interface Editing {
-  editor?: Editor
+  editor?: SessionTurn
 }
 
 export function versionSummary(record: VersionRecord): VersionSummary {
@@ -92,8 +98,8 @@ export function versionSummary(record: VersionRecord): VersionSummary {
 export class ArtifactStore {
   /** The watches of each artifact, counted per port, since one window can show it twice. */
   private readonly watches = new Map<string, Map<string, number>>()
-  /** The sessions editing each artifact: their running turn created, changed or restored it. */
-  private readonly editors = new Map<string, Set<string>>()
+  /** The sessions using each artifact, in the order they started, and whether each edits it. */
+  private readonly users = new Map<string, Map<string, boolean>>()
   private timer: ReturnType<typeof setInterval> | null = null
 
   constructor(private readonly deps: ArtifactStoreDeps) {}
@@ -173,9 +179,10 @@ export class ArtifactStore {
   /** A version, the latest by default, with its HTML. */
   async read(
     id: string,
-    reach: Reach & { version?: number } = {},
+    reach: Reach & { version?: number } & Reading = {},
   ): Promise<{ artifact: ArtifactRecord; version: VersionRecord; html: string }> {
-    const found = await this.get(id, reach)
+    const { reader, ...rest } = reach
+    const found = await this.get(id, rest)
     const file = contentPath(this.deps.contentDir, found.version.hash)
     let html: string
     try {
@@ -186,12 +193,15 @@ export class ArtifactStore {
         { cause: error },
       )
     }
+    this.used(id, reader, false)
     return { ...found, html }
   }
 
   /** Newest first. */
-  versions(id: string, { project }: Reach = {}): Promise<VersionRecord[]> {
-    return this.call('versions', { id, project: project ?? null })
+  async versions(id: string, { project, reader }: Reach & Reading = {}): Promise<VersionRecord[]> {
+    const records = await this.call('versions', { id, project: project ?? null })
+    this.used(id, reader, false)
+    return records
   }
 
   /** The file of a version, the latest by default, for main to serve; with the artifact's title. */
@@ -224,7 +234,7 @@ export class ArtifactStore {
     const at = this.now()
     const id = newArtifactId(at)
     const { version } = await this.call('create', { ...rest, id, at })
-    this.edited(id, editor)
+    this.used(id, editor, true)
     this.deps.changed()
     return { id, version }
   }
@@ -247,7 +257,7 @@ export class ArtifactStore {
       project: project ?? null,
       at: this.now(),
     })
-    this.edited(input.id, editor)
+    this.used(input.id, editor, true)
     this.versioned(input.id, version)
     return { version }
   }
@@ -270,7 +280,7 @@ export class ArtifactStore {
       note: note ?? null,
       at: this.now(),
     })
-    this.edited(input.id, editor)
+    this.used(input.id, editor, true)
     this.versioned(input.id, version)
     return { version }
   }
@@ -288,7 +298,7 @@ export class ArtifactStore {
     { project, editor }: Reach & Editing = {},
   ): Promise<void> {
     await this.call('rename', { id, title, project: project ?? null })
-    this.edited(id, editor)
+    this.used(id, editor, true)
     this.deps.changed()
   }
 
@@ -320,34 +330,49 @@ export class ArtifactStore {
 
   // Presence.
 
-  private editing(id: string): string[] {
-    return [...(this.editors.get(id) ?? [])]
+  /** The sessions using the artifact, in the order they started. */
+  private using(id: string): ArtifactSession[] {
+    const sessions = this.users.get(id)
+    return sessions ? [...sessions].map(([sessionId, editing]) => ({ sessionId, editing })) : []
   }
 
-  /** Counts the editor's change; called before the change is announced, so lists include it. */
-  private edited(id: string, editor: Editor | undefined): void {
-    if (!editor?.current()) return
-    let sessions = this.editors.get(id)
+  private editing(id: string): string[] {
+    return this.using(id)
+      .filter((session) => session.editing)
+      .map((session) => session.sessionId)
+  }
+
+  /**
+   * Counts the session's use once the call has done its work: it joins as reading, or as editing
+   * where it stands. Called before a change is announced, so lists include the editor.
+   */
+  private used(id: string, turn: SessionTurn | undefined, editing: boolean): void {
+    if (!turn?.current()) return
+    let sessions = this.users.get(id)
     if (!sessions) {
-      sessions = new Set()
-      this.editors.set(id, sessions)
+      sessions = new Map()
+      this.users.set(id, sessions)
     }
-    if (sessions.has(editor.session)) return
-    sessions.add(editor.session)
+    const was = sessions.get(turn.session)
+    // A session that read and then wrote is editing; one that only read stays reading.
+    if (was === true || was === editing) return
+    sessions.set(turn.session, editing)
     this.sendActivity(id)
   }
 
-  /** The session's turn ended, or the session went: it edits nothing now. */
-  stopEditing(sessionId: string): void {
-    let stopped = false
-    for (const [id, sessions] of [...this.editors]) {
-      if (!sessions.delete(sessionId)) continue
-      stopped = true
-      if (sessions.size === 0) this.editors.delete(id)
+  /** The session's turn ended, or the session went: it uses nothing now. */
+  stopUsing(sessionId: string): void {
+    let edited = false
+    for (const [id, sessions] of [...this.users]) {
+      const editing = sessions.get(sessionId)
+      if (editing === undefined) continue
+      edited ||= editing
+      sessions.delete(sessionId)
+      if (sessions.size === 0) this.users.delete(id)
       this.sendActivity(id)
     }
     // The page's cards show who edits from the list, which no new version refreshes now.
-    if (stopped) this.deps.changed()
+    if (edited) this.deps.changed()
   }
 
   private sendActivity(id: string): void {
@@ -355,7 +380,7 @@ export class ArtifactStore {
     if (!ports) return
     let viewers = 0
     for (const count of ports.values()) viewers += count
-    this.deps.activity(ports.keys(), { id, viewers, editing: this.editing(id) })
+    this.deps.activity(ports.keys(), { id, viewers, sessions: this.using(id) })
   }
 
   /** Counts a viewer of the artifact, which brings the port its new versions. */

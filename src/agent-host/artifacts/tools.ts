@@ -4,7 +4,7 @@
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer, NO_SESSION } from '@shared/artifacts'
 import { countPages } from './pages'
-import { ArtifactError, type ArtifactStore, type Editor } from './store'
+import { ArtifactError, type ArtifactStore, type SessionTurn } from './store'
 
 export const HTML_BYTES = 5 * 1024 * 1024
 export const NOTE_CHARS = 200
@@ -61,8 +61,8 @@ export interface ArtifactToolsDeps {
   /** A session's title, null for one without a title, or undefined for one OverBench forgot. */
   sessionTitle(sessionId: string): string | null | undefined
   /**
-   * The session's running turn, compared by identity, so that what it writes counts as editing
-   * only while that same turn runs. Null between turns.
+   * The session's running turn, compared by identity, so that what it reads or writes counts as
+   * using the artifact only while that same turn runs. Null between turns.
    */
   runningTurn(sessionId: string): object | null
   now?: () => number
@@ -534,8 +534,8 @@ export class ArtifactTools {
     this.writes.delete(sessionId)
   }
 
-  /** The session a change counts as editing for, while the turn it was made in runs. */
-  private editor(caller: Caller): Editor | undefined {
+  /** The session a call counts as using the artifact for, while the turn it was made in runs. */
+  private turn(caller: Caller): SessionTurn | undefined {
     const turn = this.deps.runningTurn(caller.sessionId)
     if (turn === null) return undefined
     return {
@@ -595,7 +595,7 @@ export class ArtifactTools {
     const input = { title: title(o), html: html(o), note: note(o) }
     return this.limited(caller, async () => {
       const pages = countPages(input.html)
-      const editor = this.editor(caller)
+      const editor = this.turn(caller)
       const { id, version } = await this.deps.store.create({
         ...input,
         project: caller.project,
@@ -614,9 +614,11 @@ export class ArtifactTools {
   private async read(caller: Caller, o: Args): Promise<CallToolResult> {
     const artifactId = id(o)
     const version = optionalNumber(o, 'version', 1)
+    const reader = this.turn(caller)
     const read = await this.deps.store.read(artifactId, {
       project: caller.project,
       ...(version === undefined ? {} : { version }),
+      ...(reader ? { reader } : {}),
     })
     const { artifact } = read
     const pages = read.version.pages
@@ -647,7 +649,7 @@ export class ArtifactTools {
     if (o.title !== undefined) {
       // A rename makes no version, so base_version and a note have nothing to apply to.
       const newTitle = title(o)
-      const editor = this.editor(caller)
+      const editor = this.turn(caller)
       await this.limited(caller, () =>
         store.rename(artifactId, newTitle, {
           project: caller.project,
@@ -686,7 +688,7 @@ export class ArtifactTools {
         if (bytes > HTML_BYTES) throw tooLarge(bytes)
       }
       const pages = countPages(next)
-      const editor = this.editor(caller)
+      const editor = this.turn(caller)
       const { version } = await store.write({
         id: artifactId,
         baseVersion,
@@ -745,7 +747,11 @@ export class ArtifactTools {
 
   private async versions(caller: Caller, o: Args): Promise<CallToolResult> {
     const artifactId = id(o)
-    const records = await this.deps.store.versions(artifactId, { project: caller.project })
+    const reader = this.turn(caller)
+    const records = await this.deps.store.versions(artifactId, {
+      project: caller.project,
+      ...(reader ? { reader } : {}),
+    })
     const versions = records.map((record) => ({
       version: record.version,
       created_at: iso(record.createdAt),
@@ -763,7 +769,7 @@ export class ArtifactTools {
     const artifactId = id(o)
     const version = wholeNumber(o, 'version', 1)
     const baseVersion = wholeNumber(o, 'base_version', 1)
-    const editor = this.editor(caller)
+    const editor = this.turn(caller)
     const restored = await this.limited(caller, () =>
       this.deps.store.restore({
         id: artifactId,
