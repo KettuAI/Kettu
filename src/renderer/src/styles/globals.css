@@ -899,11 +899,13 @@
   & [data-streamdown='table-wrapper']:is(:hover, :focus-within) > div:first-child:not(:last-child) {
     opacity: 1;
   }
+  /* A table never scrolls inside itself: every row and column shows, and one too wide for its
+     room is fitted by table-fit.ts. */
   & [data-streamdown='table-wrapper'] > div:last-child {
     border: 0;
     border-radius: 0;
     background: transparent;
-    overflow-x: auto;
+    overflow: visible;
   }
   & [data-streamdown='table'] {
     margin: 0;
@@ -925,12 +927,57 @@
     color: var(--muted-foreground);
     font-weight: var(--font-weight-medium);
     text-align: left;
+    /* Headers wrap between words, and Chinese and Japanese text never breaks between its
+       characters. */
+    white-space: normal;
+    word-break: keep-all;
   }
   & [data-streamdown='table-cell'] {
     border-bottom: 1px solid var(--border-subtle);
   }
   & [data-streamdown='table-body'] > tr:last-child > [data-streamdown='table-cell'] {
     border-bottom: 0;
+  }
+  /* A fitted table's cells break inside a word once the table no longer fits as it is. */
+  & [data-fit] :is(th, td) {
+    overflow-wrap: anywhere;
+  }
+  /* No room even for whole words: each row lists its cells under its first one, the header
+     hidden and each value after its column's name. */
+  & [data-fit='stack'] {
+    display: block;
+  }
+  & [data-fit='stack'] > tbody,
+  & [data-fit='stack'] > tbody > tr,
+  & [data-fit='stack'] > tbody > tr > td {
+    display: block;
+  }
+  & [data-fit='stack'] > thead {
+    display: none;
+  }
+  & [data-fit='stack'] > tbody > tr {
+    border-top: 0;
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 8px 12px;
+  }
+  & [data-fit='stack'] > tbody > tr:last-child {
+    border-bottom: 0;
+  }
+  & [data-fit='stack'] > tbody > tr > td {
+    border: 0;
+    padding: 0;
+  }
+  & [data-fit='stack'] > tbody > tr > td:first-child {
+    color: var(--foreground);
+    font-weight: var(--font-weight-semibold);
+  }
+  & [data-fit='stack'] > tbody > tr > td:empty {
+    display: none;
+  }
+  & [data-fit='stack'] > tbody > tr > td:not(:first-child)::before {
+    content: attr(data-label);
+    color: var(--muted-foreground);
+    font-weight: var(--font-weight-medium);
   }
 }
 

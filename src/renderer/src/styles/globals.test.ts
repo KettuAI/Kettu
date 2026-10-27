@@ -62,7 +62,7 @@ function declarationsAfter(header: string): Map<string, string> {
 // The declarations of a rule nested in the one block after `header`.
 function nestedDeclarationsAfter(header: string, selector: string): Map<string, string> {
   const block = blocksAfter(header)[0]
-  const at = block.indexOf(selector)
+  const at = block.indexOf(`& ${selector} {`)
   expect(at, `${selector} in ${header}`).toBeGreaterThanOrEqual(0)
   const open = block.indexOf('{', at)
   let depth = 0
@@ -178,5 +178,23 @@ describe('type in globals.css', () => {
     for (const stack of ['--font-sans', '--font-serif']) {
       expect(theme.get(stack)!.split(',')[1].trim()).toBe("'Platform Chinese'")
     }
+  })
+})
+
+describe('tables in globals.css', () => {
+  it('keeps a table from scrolling inside itself', () => {
+    const box = nestedDeclarationsAfter(
+      '.markdown {',
+      "[data-streamdown='table-wrapper'] > div:last-child",
+    )
+    expect(box.get('overflow')).toBe('visible')
+    expect(box.get('overflow-x')).toBeUndefined()
+    expect(box.get('overflow-y')).toBeUndefined()
+  })
+
+  it('wraps header cells between words and never between Han characters', () => {
+    const header = nestedDeclarationsAfter('.markdown {', "[data-streamdown='table-header-cell']")
+    expect(header.get('white-space')).toBe('normal')
+    expect(header.get('word-break')).toBe('keep-all')
   })
 })

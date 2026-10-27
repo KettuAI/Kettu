@@ -45,6 +45,7 @@ import { localImageTarget, spacedImages } from './local-images'
 import { localTarget } from './local-links'
 import { remarkPlugins } from './remark'
 import { SvgBlock } from './svg-block'
+import { useTableFit } from './table-fit'
 
 function createPlugins({ light, dark }: CodeThemes) {
   return {
@@ -188,9 +189,11 @@ function ListItem({ children, ...props }: ComponentProps<'li'> & ExtraProps) {
 }
 
 function Table(props: ComponentProps<'table'> & ExtraProps) {
+  const ref = useRef<HTMLTableElement>(null)
+  useTableFit(ref)
   return (
     <>
-      <DefaultTable {...props} />
+      <DefaultTable {...props} ref={ref} />
       <MediaUnder node={props.node} />
     </>
   )
@@ -295,6 +298,7 @@ const Chunk = memo(function Chunk({ markdown, live }: { markdown: string; live: 
       linkSafety={linkSafety}
       controls={controls}
       codeBlockMaxHeight={480}
+      tableMaxHeight={0}
       lineNumbers={false}
     >
       {source}
