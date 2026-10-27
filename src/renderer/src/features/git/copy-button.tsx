@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ComponentProps } from 'react'
 import { CheckIcon, CopyIcon } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -9,19 +9,23 @@ export function CopyButton({
   text,
   label,
   className,
+  size = 'icon-xs',
 }: {
   text: string | (() => string)
   label: string
   className?: string
+  size?: ComponentProps<typeof Button>['size']
 }) {
   const [copied, setCopied] = useState(false)
+  // A message's row takes the button's own 16 px icon; every other Copy keeps 14 px.
+  const iconSize = size === 'icon-message' ? undefined : 'size-3.5'
   return (
     <Tooltip>
       <TooltipTrigger
         render={
           <Button
             variant="quiet"
-            size="icon-xs"
+            size={size}
             aria-label={label}
             onClick={() => {
               void navigator.clipboard
@@ -36,9 +40,14 @@ export function CopyButton({
         }
       >
         {copied ? (
-          <CheckIcon className="size-3.5 animate-in text-icon animation-duration-(--duration-fast) fade-in zoom-in-75" />
+          <CheckIcon
+            className={cn(
+              iconSize,
+              'animate-in text-icon animation-duration-(--duration-fast) fade-in zoom-in-75',
+            )}
+          />
         ) : (
-          <CopyIcon className="size-3.5" />
+          <CopyIcon className={iconSize} />
         )}
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>

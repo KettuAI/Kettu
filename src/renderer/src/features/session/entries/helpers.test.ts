@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ToolEntry } from '@shared/thread'
 import {
   commandOutput,
+  forkBlocked,
   forkEntry,
   groupLabel,
   primaryOption,
@@ -342,6 +343,24 @@ describe('forkEntry', () => {
   it('offers nothing without session/fork', () => {
     expect(forkEntry(reply(true), { forkSession: false, forkAtMessage: false })).toBeNull()
     expect(forkEntry(reply(true), undefined)).toBeNull()
+  })
+})
+
+describe('forkBlocked', () => {
+  it('waits for the turn to end', () => {
+    expect(forkBlocked('running')).toBe('turn')
+    expect(forkBlocked('awaiting_permission')).toBe('turn')
+  })
+
+  it('waits until the session is ready', () => {
+    expect(forkBlocked('starting')).toBe('not-ready')
+    expect(forkBlocked('failed')).toBe('not-ready')
+    expect(forkBlocked('auth_required')).toBe('not-ready')
+  })
+
+  it('blocks nothing in a session between turns', () => {
+    expect(forkBlocked('ready')).toBeNull()
+    expect(forkBlocked('closed')).toBeNull()
   })
 })
 

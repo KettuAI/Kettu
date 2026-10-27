@@ -148,7 +148,9 @@
   "replyFooter": {
     "copyReply": "复制回复",
     "fork": "分叉为新会话",
-    "forking": "正在分叉…"
+    "forking": "正在分叉…",
+    "forkBetweenTurns": "仅在两轮对话之间可分叉",
+    "forkNotReady": "会话就绪后才能分叉"
   },
   "queue": {
     "label": "排队中的消息：{{count}} 条",

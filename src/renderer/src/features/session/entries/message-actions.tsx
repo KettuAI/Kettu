@@ -15,7 +15,7 @@ import { useAgentsStore } from '@renderer/stores/agents'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { useReplyHover } from '../reply-hover'
 import { useEntry, useEntryAnimation, useSessionView } from '../use-thread'
-import { forkEntry, stopReasonText } from './helpers'
+import { forkBlocked, forkEntry, stopReasonText } from './helpers'
 
 // Rows under messages: hidden until the message is hovered or focused.
 const REVEAL =
@@ -40,20 +40,34 @@ function ActionButton({
 }) {
   return (
     <Tooltip>
-      <TooltipTrigger
-        render={
+      {disabled ? (
+        // A disabled button takes no pointer, so its tooltip opens from around it.
+        <TooltipTrigger render={<span className="inline-flex" />}>
           <Button
             variant="quiet"
-            size="icon-xs"
+            size="icon-message"
             aria-label={label}
-            disabled={disabled}
-            onClick={onClick}
-            className="shrink-0 [&_svg]:size-3.5"
-          />
-        }
-      >
-        {children}
-      </TooltipTrigger>
+            disabled
+            className="shrink-0"
+          >
+            {children}
+          </Button>
+        </TooltipTrigger>
+      ) : (
+        <TooltipTrigger
+          render={
+            <Button
+              variant="quiet"
+              size="icon-message"
+              aria-label={label}
+              onClick={onClick}
+              className="shrink-0"
+            />
+          }
+        >
+          {children}
+        </TooltipTrigger>
+      )}
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   )
@@ -81,7 +95,7 @@ export function UserActions({
 }) {
   const { t } = useTranslation('session')
   return (
-    <div className="flex h-6 items-center gap-1 text-xs text-muted-foreground">
+    <div className="-mr-1 flex h-6 items-center gap-1 text-xs text-muted-foreground">
       {steered && (
         <span className="mr-1 inline-flex items-center gap-1">
           <CornerDownRightIcon className="size-3" />
@@ -90,7 +104,11 @@ export function UserActions({
       )}
       <span className={cn('flex items-center gap-1', REVEAL)}>
         {at !== undefined && <Ago at={at} />}
-        <CopyButton text={() => userText(content)} label={t('userActions.copyMessage')} />
+        <CopyButton
+          text={() => userText(content)}
+          label={t('userActions.copyMessage')}
+          size="icon-message"
+        />
       </span>
     </div>
   )
@@ -152,6 +170,14 @@ export const ReplyFooter = memo(
       }
     }
     const showFork = forkAt !== null && session?.origin === 'user'
+    const blocked = session ? forkBlocked(session.status) : null
+    const forkLabel = forking
+      ? t('replyFooter.forking')
+      : blocked === 'turn'
+        ? t('replyFooter.forkBetweenTurns')
+        : blocked === 'not-ready'
+          ? t('replyFooter.forkNotReady')
+          : t('replyFooter.fork')
 
     return (
       <div
@@ -167,18 +193,18 @@ export const ReplyFooter = memo(
             (hovered || forking) && 'opacity-100',
           )}
         >
-          <CopyButton text={text} label={t('replyFooter.copyReply')} />
+          <CopyButton text={text} label={t('replyFooter.copyReply')} size="icon-message" />
           {showFork && (
             <ActionButton
-              label={forking ? t('replyFooter.forking') : t('replyFooter.fork')}
-              disabled={forking || (session.status !== 'ready' && session.status !== 'closed')}
+              label={forkLabel}
+              disabled={forking || blocked !== null}
               onClick={() => void fork()}
             >
               {forking ? <Spinner /> : <GitForkIcon />}
             </ActionButton>
           )}
           {(end || at !== undefined) && (
-            <span className="ml-1.5 flex min-w-0 items-center gap-1.5 truncate tabular">
+            <span className="ml-1 flex min-w-0 items-center gap-1.5 truncate tabular">
               {end && <span>{stopReasonText(end.stopReason, end.durationMs)}</span>}
               {end && at !== undefined && <span aria-hidden>·</span>}
               {at !== undefined && <Ago at={at} />}
