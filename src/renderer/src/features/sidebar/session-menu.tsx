@@ -4,12 +4,12 @@ import {
   CircleDotIcon,
   CircleIcon,
   FolderIcon,
-  GitForkIcon,
   PencilIcon,
   PinIcon,
   PinOffIcon,
   PlusIcon,
   RotateCwIcon,
+  SplitIcon,
   SquareIcon,
   TrashIcon,
 } from 'lucide-react'
@@ -140,7 +140,7 @@ export function SessionMenuItems({
       case 'fork':
         return (
           <DropdownMenuItem {...props} onClick={() => void forkSession(id)}>
-            <GitForkIcon />
+            <SplitIcon />
             {t('row.fork')}
             {shortcut}
           </DropdownMenuItem>

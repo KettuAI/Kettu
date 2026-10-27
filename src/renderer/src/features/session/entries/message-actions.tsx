@@ -1,5 +1,5 @@
 import { memo, useState, type ReactNode } from 'react'
-import { CornerDownRightIcon, GitForkIcon } from 'lucide-react'
+import { CornerDownRightIcon, SplitIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { UserContent } from '@shared/thread'
 import { forkSession } from '@renderer/app/actions'
@@ -200,7 +200,7 @@ export const ReplyFooter = memo(
               disabled={forking || blocked !== null}
               onClick={() => void fork()}
             >
-              {forking ? <Spinner /> : <GitForkIcon />}
+              {forking ? <Spinner /> : <SplitIcon />}
             </ActionButton>
           )}
           {(end || at !== undefined) && (
