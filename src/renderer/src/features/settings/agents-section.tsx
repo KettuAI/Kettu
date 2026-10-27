@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowLeftIcon,
   CheckIcon,
@@ -73,6 +73,7 @@ import {
   toggleTerminal,
   useViewStore,
 } from '@renderer/stores/view'
+import { configFolderChoice, type ConfigFolderMode } from './config-folder'
 import {
   ControlError,
   CopyAction,
@@ -1734,10 +1735,22 @@ function FolderRow({
   const { t } = useTranslation('settings')
   const chosen = useSettingsStore((s) => s.settings.agents[status.id]?.configDir ?? null)
   const [apply, applyError] = useApply()
-  const [act, choosing, chooseError] = useAction()
-  const choose = () => act(() => window.overbench.dialogs.chooseAgentConfigFolder(status.id))
+  const [act, asking, chooseError] = useAction()
+  // Picking "A folder of its own" shows what it changes before any folder is chosen, as Proxy does.
+  const [open, setOpen] = useState(false)
+  const chooseButton = useRef<HTMLButtonElement>(null)
+  const explainId = useId()
   // The running agent keeps its folder until it stops, so another one waits for the next start.
   const pending = configDir.active !== null && configDir.active !== configDir.runs
+  const choose = () => {
+    // A press while the dialog is open does nothing, so the button keeps the focus.
+    if (asking) return
+    act(() =>
+      window.overbench.dialogs.chooseAgentConfigFolder(status.id).then((path) => {
+        if (path) setOpen(false)
+      }),
+    )
+  }
   return (
     <ConfigFrame
       name={t('agents.config.folder')}
@@ -1746,28 +1759,35 @@ function FolderRow({
       <div className="mt-1 mb-0.5 flex items-center gap-2">
         <Segmented
           label={t('agents.configFolder.label', { name: status.name })}
-          value={chosen ? 'custom' : 'environment'}
+          value={open || chosen ? 'custom' : 'environment'}
           options={[
             { value: 'environment', label: t('agents.configFolder.useEnvironment') },
             { value: 'custom', label: t('agents.configFolder.custom') },
           ]}
-          onChange={(mode) => {
-            if (mode === 'environment') {
-              if (chosen) apply({ agents: { [status.id]: { configDir: null } } })
-            } else if (!chosen) choose()
+          onChange={(mode: ConfigFolderMode) => {
+            const next = configFolderChoice(mode, { chosen: chosen !== null, choosing: open })
+            setOpen(next.open)
+            if (next.clear) apply({ agents: { [status.id]: { configDir: null } } })
+            if (next.open) requestAnimationFrame(() => chooseButton.current?.focus())
           }}
         />
         <ControlError error={applyError ?? chooseError} />
       </div>
+      {open && !chosen && (
+        <p id={explainId} className="text-xs text-secondary">
+          {t('agents.configFolder.explain', { name: status.name })}
+        </p>
+      )}
       <ConfigPath
         item={item}
         extra={
-          chosen && (
+          (open || chosen) && (
             <Button
+              ref={chooseButton}
               variant="outline"
               size="xs"
               className="mr-1.5"
-              disabled={choosing}
+              aria-describedby={open && !chosen ? explainId : undefined}
               onClick={choose}
             >
               {t('agents.configFolder.choose')}
@@ -1776,6 +1796,11 @@ function FolderRow({
         }
       />
       <ConfigNote item={item} />
+      {open && !chosen && (
+        <span className="text-xs text-muted-foreground">
+          {t('agents.configFolder.untilChosen', { name: status.name })}
+        </span>
+      )}
       {pending && (
         <span className="text-xs text-tertiary">{t('agents.configFolder.nextStart')}</span>
       )}
