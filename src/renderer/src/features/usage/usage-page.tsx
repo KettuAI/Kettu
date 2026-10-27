@@ -71,13 +71,11 @@ import {
   modelRows,
   namesYear,
   NO_SERIES,
-  oneDay,
   projectRows,
   RANGE_KINDS,
   seriesOf,
   shownSeries,
   shownTotals,
-  todayFigure,
   tokensPerRequest,
   trend,
   unpricedTokens,
@@ -528,10 +526,6 @@ function Dashboard({ page, notice }: { page: PageData; notice: ReactNode }) {
   const facts = useMemo(() => figures(days, range, metric, scope), [days, range, metric, scope])
   // The table by type and the cache share count tokens, whatever the metric.
   const tokenFacts = useMemo(() => figures(days, range), [days, range])
-  const todayValue = useMemo(
-    () => todayFigure(days, today, metric, scope),
-    [days, today, metric, scope],
-  )
   const heat = heatmapRange(today, firstDay)
   const heatDays = useMemo(
     () => days.filter((d) => d.day >= heat.from && d.day < heat.to),
@@ -555,8 +549,6 @@ function Dashboard({ page, notice }: { page: PageData; notice: ReactNode }) {
             kind={kind}
             metric={metric}
             scope={scope}
-            todayValue={todayValue}
-            single={oneDay(range)}
             rangeLabel={rangeText(range.from, range.to)}
           />
           {kind === 'cost' && (
@@ -754,8 +746,6 @@ function Figures({
   kind,
   metric,
   scope,
-  todayValue,
-  single,
   rangeLabel,
 }: {
   facts: ReturnType<typeof figures>
@@ -763,8 +753,6 @@ function Figures({
   kind: MetricKind
   metric: Metric
   scope: UsageScope
-  todayValue: number | null
-  single: boolean
   rangeLabel: string
 }) {
   const { t } = useTranslation('usage')
@@ -795,13 +783,6 @@ function Figures({
         : t(`metrics.${kind}`)
   const perRequest = tokensPerRequest(current)
   const cells: { label: string; value: ReactNode; note: string }[] = []
-  if (!single) {
-    cells.push({
-      label: t('figures.today'),
-      value: shown(todayValue),
-      note: t('figures.sinceMidnight'),
-    })
-  }
   cells.push({
     label: totalLabel,
     value: shown(facts.activeDays > 0 ? facts.total : null, facts.priced),
@@ -866,23 +847,19 @@ function Figures({
     <div
       role="group"
       aria-label={t('figures.label')}
-      className={cn(
-        'grid grid-cols-2 rounded-xl bg-card shadow-card',
-        cells.length === 5 ? '@min-[52rem]:grid-cols-5' : '@min-[52rem]:grid-cols-4',
-      )}
+      className="grid grid-cols-2 rounded-xl bg-card shadow-card @min-[52rem]:grid-cols-4"
     >
       {cells.map((cell, i) => {
-        const { span, top, left } = ledgerCell(i, cells.length)
+        const { top, left } = ledgerCell(i)
         return (
           <div
             key={cell.label}
             className={cn(
               'flex min-w-0 flex-col px-4.5 pt-3.5 pb-3.75',
-              span && 'col-span-2',
               LEDGER_LINES[top ? (left ? 'both' : 'top') : left ? 'left' : 'none'],
               i === 0
-                ? '@min-[52rem]:col-span-1 @min-[52rem]:shadow-none'
-                : '@min-[52rem]:col-span-1 @min-[52rem]:shadow-[inset_var(--hairline)_0_0_var(--border-subtle)]',
+                ? '@min-[52rem]:shadow-none'
+                : '@min-[52rem]:shadow-[inset_var(--hairline)_0_0_var(--border-subtle)]',
             )}
           >
             <span className="text-command font-medium text-secondary">{cell.label}</span>

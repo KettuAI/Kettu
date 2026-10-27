@@ -32,7 +32,6 @@ import {
   seriesOf,
   shownSeries,
   shownTotals,
-  todayFigure,
   tokensPerRequest,
   trend,
   typedDay,
@@ -212,26 +211,6 @@ describe('figures', () => {
         figures(dayTotals({ days: [] }, metricStarts, 'all'), metricRange, 'cost', 'computer'),
       ),
     ).toBeNull()
-  })
-
-  it('gives today’s figure in the metric, and only when it has usage', () => {
-    const today = day(2026, 10, 22)
-    const metricStarts = dayStarts({ from: day(2026, 10, 19), to: day(2026, 10, 23) })
-    const rows = {
-      days: [usage(3, 'codex', 70, { requests: 2, turns: 1, cost: 0.5 })],
-    }
-    const days = dayTotals(rows, metricStarts, 'all')
-    expect(todayFigure(days, today, 'tokens', 'computer')).toBe(70)
-    expect(todayFigure(days, today, 'requests', 'computer')).toBe(2)
-    expect(todayFigure(days, today, 'requests', 'overbench')).toBe(1)
-    expect(todayFigure(days, today, 'cost', 'computer')).toBe(0.5)
-    expect(todayFigure(days, day(2026, 10, 21), 'tokens', 'computer')).toBeNull()
-    const unpriced = dayTotals(
-      { days: [usage(3, 'codex', 10, { unpricedTokens: 10 })] },
-      metricStarts,
-      'all',
-    )
-    expect(todayFigure(unpriced, today, 'cost', 'computer')).toBeNull()
   })
 
   it('draws a bar per day, or per week beyond 92 days, stacked by agent', () => {
@@ -579,20 +558,12 @@ describe('heatLevels', () => {
 })
 
 describe('figure cells', () => {
-  it('gives an odd count a first row of its own, and lines between the rest', () => {
-    const cells = (count: number) => Array.from({ length: count }, (_, i) => ledgerCell(i, count))
-    expect(cells(5)).toEqual([
-      { span: true, top: false, left: false },
-      { span: false, top: true, left: false },
-      { span: false, top: true, left: true },
-      { span: false, top: true, left: false },
-      { span: false, top: true, left: true },
-    ])
-    expect(cells(4)).toEqual([
-      { span: false, top: false, left: false },
-      { span: false, top: false, left: true },
-      { span: false, top: true, left: false },
-      { span: false, top: true, left: true },
+  it('lines the four figures two to a row', () => {
+    expect(Array.from({ length: 4 }, (_, i) => ledgerCell(i))).toEqual([
+      { top: false, left: false },
+      { top: false, left: true },
+      { top: true, left: false },
+      { top: true, left: true },
     ])
   })
 })

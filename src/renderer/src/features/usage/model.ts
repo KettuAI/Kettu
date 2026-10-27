@@ -276,18 +276,6 @@ export function figures(
   }
 }
 
-/** The chosen day's figure in the metric; null without usage, or for a cost with no price. */
-export function todayFigure(
-  days: readonly DayTotal[],
-  today: number,
-  metric: Metric,
-  scope: UsageScope,
-): number | null {
-  const day = days.find((d) => d.day === today)
-  if (!day || day.total <= 0) return null
-  return metricValue(day.parts, metric, scope)
-}
-
 /** The range's tokens per request; null without requests. */
 export function tokensPerRequest(facts: Pick<Figures, 'tokens' | 'total'>): number | null {
   return facts.total > 0 ? facts.tokens / facts.total : null
@@ -569,18 +557,11 @@ export function heatLevels(totals: readonly number[]): number[] {
 }
 
 /**
- * Where the `index`th of `count` figures sits when the figures' card holds two to a row: with an
- * odd count the first takes a row of its own. A cell draws the hairline on its top when a row is
- * above it, and on its left when a cell is beside it.
+ * Where the `index`th figure sits when the figures' card holds two to a row. A cell draws the
+ * hairline on its top when a row is above it, and on its left when a cell is beside it.
  */
-export function ledgerCell(
-  index: number,
-  count: number,
-): { span: boolean; top: boolean; left: boolean } {
-  const lead = count % 2
-  if (index < lead) return { span: true, top: false, left: false }
-  const at = index - lead
-  return { span: false, top: lead + Math.floor(at / 2) > 0, left: at % 2 === 1 }
+export function ledgerCell(index: number): { top: boolean; left: boolean } {
+  return { top: index >= 2, left: index % 2 === 1 }
 }
 
 export interface BreakdownRow {
