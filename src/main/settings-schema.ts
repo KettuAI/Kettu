@@ -108,11 +108,34 @@ function checkProxy(value: unknown, path: string): string | null {
 
 const AGENT_KEYS: readonly string[] = ['binaryPath', 'cli', 'configDir']
 
+/** The agents OverBench's own MCP server is off for: each a catalog id, once. */
+function checkMcpOff(value: unknown, path: string): string | null {
+  if (!Array.isArray(value)) return `"${path}" must be an array`
+  const seen = new Set<unknown>()
+  for (const id of value) {
+    if (!AGENT_IDS.includes(id as AgentId)) return `"${path}" names an unknown agent`
+    if (seen.has(id)) return `"${path}" names an agent twice`
+    seen.add(id)
+  }
+  return null
+}
+
 function checkStoredPath(value: unknown, path: string): string | null {
   if (typeof value !== 'string' || value.length === 0 || value.length > MAX_PATH_LENGTH) {
     return `"${path}" must be a non-empty path`
   }
   return value.includes('\0') ? `"${path}" must not contain NUL characters` : null
+}
+
+function checkMcp(value: unknown, path: string): string | null {
+  if (!isRecord(value)) return `"${path}" must be an object`
+  const extra = Object.keys(value).find((key) => key !== 'overbench')
+  if (extra) return `Unknown setting "${path}.${extra}"`
+  const overbench = value.overbench
+  if (!isRecord(overbench)) return `"${path}.overbench" must be an object`
+  const unknown = Object.keys(overbench).find((key) => key !== 'off')
+  if (unknown) return `Unknown setting "${path}.overbench.${unknown}"`
+  return checkMcpOff(overbench.off, `${path}.overbench.off`)
 }
 
 function normalizeProxy(proxy: ProxySettings): ProxySettings {
@@ -175,6 +198,9 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
     } else if (section === 'proxy') {
       const problem = checkProxy(value, 'proxy')
       if (problem) problems.push(problem)
+    } else if (section === 'mcp') {
+      const problem = checkMcp(value, 'mcp')
+      if (problem) problems.push(problem)
     } else if (section === 'terminal') {
       if (!isRecord(value)) {
         problems.push('"terminal" must be an object')
@@ -210,6 +236,7 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
     if (changes) Object.assign(next[section], changes)
   }
   if (patch.proxy) next.proxy = normalizeProxy(patch.proxy)
+  if (patch.mcp) next.mcp = { overbench: { off: [...patch.mcp.overbench.off] } }
   if (patch.agents) {
     for (const agentId of Object.keys(patch.agents) as AgentId[]) {
       const change = patch.agents[agentId]
@@ -331,6 +358,10 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
     if (problem) problems.push(problem)
     else settings.proxy = normalizeProxy(raw.proxy as ProxySettings)
   }
+  if (raw.mcp !== undefined) {
+    if (!isRecord(raw.mcp)) problems.push('"mcp" must be an object')
+    else settings.mcp = readMcp(raw.mcp)
+  }
   if (raw.terminal !== undefined) {
     if (!isRecord(raw.terminal)) problems.push('"terminal" must be an object')
     else {
@@ -350,19 +381,37 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
   return { settings, problems, readOnly: version > SETTINGS_VERSION }
 }
 
+/** Reads the MCP section leniently: an unknown or repeated id is dropped and the rest kept. */
+function readMcp(raw: Record<string, unknown>): SettingsFile['mcp'] {
+  const overbench = isRecord(raw.overbench) ? raw.overbench : {}
+  const list = Array.isArray(overbench.off) ? overbench.off : []
+  const off: AgentId[] = []
+  for (const id of list) {
+    if (AGENT_IDS.includes(id as AgentId) && !off.includes(id as AgentId)) off.push(id as AgentId)
+  }
+  return { overbench: { off } }
+}
+
 export function hostSettings(settings: SettingsFile, systemLocale: Locale): HostSettings {
   return {
     locale: resolveLocale(settings.general.language, systemLocale),
     agents: structuredClone(settings.agents),
     proxy: structuredClone(settings.proxy),
     git: { ...settings.git },
+    mcp: structuredClone(settings.mcp),
     usage: { fromComputer: settings.usage.fromComputer },
     sessionTitles: settings.general.sessionTitles,
   }
 }
 
 // The sections `hostSettings` reads, besides the language.
-const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set(['agents', 'proxy', 'git', 'usage'])
+const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
+  'agents',
+  'proxy',
+  'git',
+  'mcp',
+  'usage',
+])
 
 /** Whether a change touches what the agent host is sent; a language change is checked apart. */
 export function reachesHost(changed: ReadonlySet<SettingsSection>): boolean {

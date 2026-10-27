@@ -3,7 +3,7 @@
 
 import os from 'node:os'
 import path from 'node:path'
-import type { DiagnosticsBundle, HostEvent } from '@shared/agent-host'
+import type { DiagnosticsBundle, HostEvent, McpStatus } from '@shared/agent-host'
 import { type ArtifactImportResult, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import type {
@@ -18,7 +18,7 @@ import { agentOptionsFile, AgentOptionsStore } from './agent-options'
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
 import { readImport } from './artifacts/import'
-import { ArtifactService } from './artifacts/service'
+import { ArtifactService, SERVICE_NAME } from './artifacts/service'
 import { ArtifactError, ArtifactStore, versionSummary } from './artifacts/store'
 import {
   AgentManager,
@@ -719,6 +719,24 @@ export class AgentHost {
     return run(canonical)
   }
 
+  /** For Settings › MCP servers: OverBench's own server and where each agent keeps its own. */
+  private async mcpStatus(): Promise<McpStatus> {
+    const service = this.artifactService
+    return {
+      servers: [
+        {
+          name: SERVICE_NAME,
+          title: 'OverBench',
+          builtIn: true,
+          running: service.listeningPort !== null,
+          error: service.error,
+          tools: service.toolSummaries(),
+        },
+      ],
+      places: await this.agents.mcpPlaces(),
+    }
+  }
+
   private handlers(): Handlers {
     const { agents, sessions, projects, artifacts, routines } = this
     return {
@@ -753,6 +771,12 @@ export class AgentHost {
       'agents.details': ({ agentId }) => agents.details(agentId),
       'agents.refreshAccount': ({ agentId }) => agents.refreshAccount(agentId),
       'agents.options': () => this.agentOptions.list(),
+      'mcp.status': () => this.mcpStatus(),
+      'mcp.retry': async () => {
+        await this.artifactService.start()
+        this.options.send({ type: 'host:service-port', port: this.artifactService.listeningPort })
+        return this.mcpStatus()
+      },
       'agents.listSessions': ({ agentId, projectPath, cursor }) =>
         sessions.listImportable(agentId, projectPath, cursor ?? null),
       'projects.list': () => {

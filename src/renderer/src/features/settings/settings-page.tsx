@@ -17,6 +17,7 @@ import { DESK, ON_DESK, SHEET } from '@renderer/features/shell/sheet'
 import { formatShortcut, isMac, isMod } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { loadMcpStatus } from '@renderer/stores/mcp'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import {
   closeSettings,
@@ -24,7 +25,6 @@ import {
   useViewStore,
   type SettingsSection,
 } from '@renderer/stores/view'
-import { AgentPage } from './agents-section'
 import { footerLabel } from './footer-label'
 import { excerpt, FlashContext, highlight, matches, type RowDef, type SectionDef } from './model'
 import { GroupLabel, RowGroup, SectionBody } from './rows'
@@ -37,6 +37,7 @@ import {
   useBrowserSection,
   useGeneralSection,
   useGitSection,
+  useMcpSection,
   useNotificationsSection,
   useSharingSection,
   useTerminalSection,
@@ -57,6 +58,7 @@ export default function SettingsPage() {
   const clusters: SectionDef[][] = [
     [useGeneralSection(), useAppearanceSection(), useNotificationsSection()],
     [useAgentsSection(), useUsageSection(), useTerminalSection(), useGitSection()],
+    [useMcpSection()],
     [
       useArchivedSection(),
       useBrowserSection(),
@@ -73,12 +75,19 @@ export default function SettingsPage() {
   const hitCount = hits.reduce((sum, s) => sum + s.rows.length, 0)
   const active = useViewStore((s) => s.settings.section) ?? 'general'
   const page = sections.find((s) => s.id === active) ?? sections[0]!
-  const agent = useViewStore((s) => (s.settings.section === 'agents' ? s.settings.agent : null))
+  const item = useViewStore((s) => (s.settings.section === active ? s.settings.item : null))
+  // Read when Settings opens, so search finds every row, and again when its section shows.
+  useEffect(() => {
+    loadMcpStatus()
+  }, [])
+  useEffect(() => {
+    if (active === 'mcp') loadMcpStatus()
+  }, [active, item])
   const scroller = useRef<HTMLDivElement>(null)
   const search = useRef<HTMLInputElement>(null)
   const [jump, setJump] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
-  const lastAgent = useRef(agent)
+  const lastItem = useRef(item)
 
   // Opening a section from elsewhere, such as the app menu, leaves the results behind.
   const [seen, setSeen] = useState(active)
@@ -100,28 +109,28 @@ export default function SettingsPage() {
   }
 
   // Every page, and the results, start at the top; a search result starts at its row, and the
-  // agent list, back from an agent's page, at that agent, which takes the focus.
+  // list, back from an item's page, at that item, which takes the focus.
   useLayoutEffect(() => {
     const view = scroller.current
-    const left = lastAgent.current
-    lastAgent.current = agent
+    const left = lastItem.current
+    lastItem.current = item
     if (!view) return
     const row = jump ? view.querySelector<HTMLElement>(`[data-setting-row="${jump}"]`) : null
-    const item =
-      left && !agent && !searching
-        ? view.querySelector<HTMLElement>(`[data-agent-row="${left}"]`)
+    const found =
+      left && !item && !searching
+        ? view.querySelector<HTMLElement>(`[data-item-row="${left}"]`)
         : null
     if (row) {
       row.scrollIntoView({ block: 'center' })
       setFlash(jump)
       setJump(null)
-    } else if (item) {
-      item.scrollIntoView({ block: 'center' })
-      item.focus({ preventScroll: true })
+    } else if (found) {
+      found.scrollIntoView({ block: 'center' })
+      found.focus({ preventScroll: true })
     } else {
       view.scrollTop = 0
     }
-  }, [active, agent, searching, jump])
+  }, [active, item, searching, jump])
 
   useEffect(() => {
     if (!flash) return
@@ -214,13 +223,13 @@ export default function SettingsPage() {
         >
           <FlashContext.Provider value={flash}>
             <div
-              key={searching ? 'results' : agent ? `agents/${agent}` : page.id}
+              key={searching ? 'results' : item ? `${page.id}/${item}` : page.id}
               className="mx-auto flex w-full max-w-[560px] animate-in flex-col pt-1 pb-24 fade-in slide-in-from-bottom-1 animation-duration-(--duration-base)"
             >
               {searching ? (
                 <SearchResults query={needle} hits={hits} count={hitCount} onGo={go} />
-              ) : agent ? (
-                <AgentPage agentId={agent} />
+              ) : item && page.itemPage ? (
+                page.itemPage(item)
               ) : (
                 <section aria-labelledby={`settings-${page.id}`} className="flex flex-col">
                   {page.hero ?? (

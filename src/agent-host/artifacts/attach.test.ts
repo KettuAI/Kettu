@@ -4,6 +4,7 @@
 import { mkdir, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import type { McpServer } from '@agentclientprotocol/sdk/unstable'
+import { DEFAULT_SETTINGS, type HostSettings } from '@shared/settings'
 import type { ArtifactEntry } from '@shared/thread'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -404,4 +405,78 @@ describe('the artifacts service in sessions', () => {
     expect(await run(port, sessionId, '/artifacts')).toBe('This session has no artifacts service.')
     expect(attached).toEqual([])
   })
+
+  describe("with OverBench's server off for the agent", () => {
+    const settingsWith = (off: HostSettings['mcp']['overbench']['off']) => ({
+      locale: 'en' as const,
+      agents: DEFAULT_SETTINGS.agents,
+      proxy: DEFAULT_SETTINGS.proxy,
+      git: DEFAULT_SETTINGS.git,
+      mcp: { overbench: { off } },
+      usage: { fromComputer: false },
+      sessionTitles: true,
+    })
+
+    it('passes no server from the agent’s next start, and says the change waits', async () => {
+      const { t, port, attached, create } = await setup({
+        settings: settingsWith(['fake-agent']),
+      })
+      const sessionId = await create()
+      expect(attached).toEqual([])
+      expect(await run(port, sessionId, '/artifacts')).toBe(
+        'This session has no artifacts service.',
+      )
+      expect(await statusOf(t)).toMatchObject({ overbenchServer: { runs: false, active: false } })
+
+      // Turned on while the agent runs: the next attach through this process still gets none.
+      await t.host.updateSettings(settingsWith([]))
+      expect(await statusOf(t)).toMatchObject({ overbenchServer: { runs: true, active: false } })
+      const fork = await port.request('sessions.fork', { sessionId })
+      await port.open(fork.id)
+      const resumed = await run(port, sessionId, '/artifacts')
+      expect(resumed).toBe('This session has no artifacts service.')
+      expect(attached).toEqual([])
+    })
+
+    it('passes it to a new and a forked session once the agent starts again', async () => {
+      const { t, port, attached, create } = await setup({
+        settings: settingsWith(['fake-agent']),
+      })
+      const sessionId = await create()
+      expect(attached).toEqual([])
+      ;(t.launcher as InProcessLauncher).crash()
+      await port.until(() => t.host.agents.runtime('fake-agent') === null)
+
+      await t.host.updateSettings(settingsWith([]))
+      expect(await run(port, sessionId, '/artifacts')).toMatch(/create_artifact: Created/)
+      expect(attached.length).toBeGreaterThan(0)
+      expect(attached.at(-1)!.servers).toEqual([expect.objectContaining({ name: 'overbench' })])
+      const fork = await port.request('sessions.fork', { sessionId })
+      expect(attached.at(-1)!.sessionId).toBe(fork.id)
+      expect(attached.at(-1)!.servers).toEqual([expect.objectContaining({ name: 'overbench' })])
+    })
+
+    it('never passes it to a hidden session, either way', async () => {
+      const { t, port, attached, create } = await setup({
+        settings: settingsWith(['fake-agent']),
+      })
+      const sessionId = await create()
+      await run(port, sessionId, '/artifacts')
+      await t.host.updateSettings(settingsWith([]))
+      ;(t.launcher as InProcessLauncher).crash()
+      await port.until(() => t.host.agents.runtime('fake-agent') === null)
+      // The next start reads its options in a hidden session, which passes no server.
+      const before = attached.length
+      await port.request('agents.readOptions', { agentId: 'fake-agent', projectPath: null })
+      expect(attached.length).toBe(before)
+      expect(await run(port, sessionId, '/artifacts')).toMatch(/create_artifact: Created/)
+      expect(attached.at(-1)!.sessionId).toBe(sessionId)
+      expect(attached.at(-1)!.servers).toEqual([expect.objectContaining({ name: 'overbench' })])
+    })
+  })
 })
+
+/** The fake agent's status, once the host has reported it. */
+async function statusOf(t: TestHost) {
+  return (await t.host.agents.list()).find((agent) => agent.id === 'fake-agent')!
+}

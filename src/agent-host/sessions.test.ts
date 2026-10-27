@@ -1045,6 +1045,7 @@ describe('prepared sessions', () => {
       agents: { 'claude-code': { configDir: path.join(t.dir, 'claude-config') } },
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
+      mcp: DEFAULT_SETTINGS.mcp,
       usage: { fromComputer: false },
       sessionTitles: true,
     }
@@ -2077,6 +2078,7 @@ describe('a prompt turn', () => {
         agents: DEFAULT_SETTINGS.agents,
         proxy: DEFAULT_SETTINGS.proxy,
         git: DEFAULT_SETTINGS.git,
+        mcp: DEFAULT_SETTINGS.mcp,
         usage: { fromComputer: true },
         sessionTitles: true,
       },

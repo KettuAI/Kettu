@@ -7,7 +7,7 @@ import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { McpServer } from '@agentclientprotocol/sdk/unstable'
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { LogFn } from '../storage'
 import {
   SessionTools,
@@ -30,8 +30,13 @@ export const SERVICE_NAME = 'overbench'
 export const SERVICE_PATH = '/mcp'
 export const BODY_BYTES = 6 * 1024 * 1024
 const TOKEN_BYTES = 32
+/** A tool's description in Settings: its first sentence, at most this many characters. */
+const SUMMARY_CHARS = 200
 /** Where OpenCode names the calling session on each `tools/call`, a subagent's own included. */
 const SESSION_META = 'ai.opencode/sessionID'
+
+/** The tools `tools/list` answers: the artifact tools, the session tools, and the browser's later. */
+export const SERVICE_TOOLS: Tool[] = [...TOOLS, ...SESSION_TOOLS]
 
 /** The service's `instructions`: the artifact tools' and the session tools', together. */
 const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS}`
@@ -104,6 +109,16 @@ function digest(token: string): string {
   return createHash('sha256').update(token).digest('hex')
 }
 
+/** A tool's description up to its first ". ", cut at a word past `SUMMARY_CHARS`. */
+export function firstSentence(text: string, limit = SUMMARY_CHARS): string {
+  const end = text.indexOf('. ')
+  const sentence = end === -1 ? text : text.slice(0, end + 1)
+  if (sentence.length <= limit) return sentence
+  const cut = sentence.slice(0, limit)
+  const space = cut.lastIndexOf(' ')
+  return space > 0 ? cut.slice(0, space) : cut
+}
+
 function refuse(
   res: http.ServerResponse,
   status: number,
@@ -126,6 +141,8 @@ export class ArtifactService {
   private readonly tools: ArtifactTools
   private readonly sessionTools: SessionTools
   private sdk: Promise<Sdk> | null = null
+  /** Why the last `start()` could not listen; cleared once it does. */
+  private startError: string | null = null
 
   constructor(private readonly deps: ArtifactServiceDeps) {
     this.tools = new ArtifactTools(deps)
@@ -151,9 +168,11 @@ export class ArtifactService {
         })
       })
     } catch (error) {
-      this.deps.log('error', `The artifacts service cannot listen: ${(error as Error).message}`)
+      this.startError = (error as Error).message
+      this.deps.log('error', `The artifacts service cannot listen: ${this.startError}`)
       return
     }
+    this.startError = null
     server.on('error', (error) => {
       this.deps.log('error', `The artifacts service: ${error.message}`)
     })
@@ -183,6 +202,19 @@ export class ArtifactService {
   /** The port it listens on, so main can refuse a page's requests to it. */
   get listeningPort(): number | null {
     return this.port
+  }
+
+  /** Why it does not listen, from its last try; null while it does. */
+  get error(): string | null {
+    return this.startError
+  }
+
+  /** Each tool's name and the first sentence of its description, for Settings › MCP servers. */
+  toolSummaries(): { name: string; description: string }[] {
+    return SERVICE_TOOLS.map((tool) => ({
+      name: tool.name,
+      description: firstSentence(tool.description ?? ''),
+    }))
   }
 
   /**
@@ -366,7 +398,7 @@ export class ArtifactService {
       { capabilities: { tools: {} }, instructions: SERVICE_INSTRUCTIONS },
     )
     server.setRequestHandler(ListToolsRequestSchema, () => ({
-      tools: [...TOOLS, ...SESSION_TOOLS],
+      tools: SERVICE_TOOLS,
     }))
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: input, _meta: meta } = request.params

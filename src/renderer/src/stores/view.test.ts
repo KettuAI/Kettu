@@ -11,6 +11,7 @@ const {
   openNewSession,
   openSession,
   openSettings,
+  openSettingsItem,
   settingsBack,
   showShortcuts,
   toggleShortcuts,
@@ -26,61 +27,70 @@ describe('settings view', () => {
     useViewStore.setState({
       main: { kind: 'launch' },
       projectPath: null,
-      settings: { open: false, section: null, agent: null },
+      settings: { open: false, section: null, item: null },
     })
   })
 
   it('opens without a section the first time, which the page shows as General', () => {
     openSettings()
-    expect(settings()).toEqual({ open: true, section: null, agent: null })
+    expect(settings()).toEqual({ open: true, section: null, item: null })
   })
 
   it('switches the page when opened at a section while already open', () => {
     openSettings('git')
     openSettings('agents')
-    expect(settings()).toEqual({ open: true, section: 'agents', agent: null })
+    expect(settings()).toEqual({ open: true, section: 'agents', item: null })
   })
 
   it('shows the section shown last when opened without one', () => {
     openSettings('about')
     closeSettings()
-    expect(settings()).toEqual({ open: false, section: 'about', agent: null })
+    expect(settings()).toEqual({ open: false, section: 'about', item: null })
     openSettings()
-    expect(settings()).toEqual({ open: true, section: 'about', agent: null })
+    expect(settings()).toEqual({ open: true, section: 'about', item: null })
   })
 
   it('keeps the section when a session or New session takes the window', () => {
     openSettings('terminal')
     openSession('s1', '/repo')
-    expect(settings()).toEqual({ open: false, section: 'terminal', agent: null })
+    expect(settings()).toEqual({ open: false, section: 'terminal', item: null })
     expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 's1' })
 
     openSettings()
     openNewSession('/repo', null)
-    expect(settings()).toEqual({ open: false, section: 'terminal', agent: null })
+    expect(settings()).toEqual({ open: false, section: 'terminal', item: null })
     expect(useViewStore.getState().main).toEqual({ kind: 'new', agentId: null, noProject: false })
   })
 
   it("opens an agent's page under Agents, and a section clears it", () => {
     openAgentSettings('codex')
-    expect(settings()).toEqual({ open: true, section: 'agents', agent: 'codex' })
+    expect(settings()).toEqual({ open: true, section: 'agents', item: 'codex' })
     openSettings('git')
-    expect(settings()).toEqual({ open: true, section: 'git', agent: null })
+    expect(settings()).toEqual({ open: true, section: 'git', item: null })
   })
 
   it("comes back to the agent's page when opened without a section", () => {
     openAgentSettings('claude-code')
     closeSettings()
     openSettings()
-    expect(settings()).toEqual({ open: true, section: 'agents', agent: 'claude-code' })
+    expect(settings()).toEqual({ open: true, section: 'agents', item: 'claude-code' })
   })
 
   it("goes back from an agent's page to the list, then out of Settings", () => {
     openAgentSettings('opencode')
     settingsBack()
-    expect(settings()).toEqual({ open: true, section: 'agents', agent: null })
+    expect(settings()).toEqual({ open: true, section: 'agents', item: null })
     settingsBack()
-    expect(settings()).toEqual({ open: false, section: 'agents', agent: null })
+    expect(settings()).toEqual({ open: false, section: 'agents', item: null })
+  })
+
+  it("opens the page of one item of any section, and back to that section's list", () => {
+    openSettingsItem('mcp', 'overbench')
+    expect(settings()).toEqual({ open: true, section: 'mcp', item: 'overbench' })
+    settingsBack()
+    expect(settings()).toEqual({ open: true, section: 'mcp', item: null })
+    settingsBack()
+    expect(settings()).toEqual({ open: false, section: 'mcp', item: null })
   })
 })
 
@@ -122,7 +132,7 @@ describe('artifacts view', () => {
     useArtifactsStore.setState({ filter: 'report', opened: 'art_1' })
     useViewStore.setState({
       main: { kind: 'usage' },
-      settings: { open: true, section: 'git', agent: null },
+      settings: { open: true, section: 'git', item: null },
     })
     openArtifacts()
     expect(useViewStore.getState().main).toEqual({ kind: 'artifacts' })

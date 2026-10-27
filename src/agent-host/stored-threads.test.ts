@@ -463,6 +463,7 @@ describe('attaching on use', () => {
       agents: configDir ? { 'claude-code': { configDir } } : {},
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
+      mcp: DEFAULT_SETTINGS.mcp,
       usage: { fromComputer: false },
       sessionTitles: true,
     })

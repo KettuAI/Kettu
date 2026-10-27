@@ -7,6 +7,7 @@ import {
   GitBranchIcon,
   GlobeIcon,
   InfoIcon,
+  PlugIcon,
   SettingsIcon,
   ShareIcon,
   SquareTerminalIcon,
@@ -16,6 +17,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus, SessionSummary } from '@shared/agent-host'
+import type { AgentId } from '@shared/thread'
 import {
   Empty,
   EmptyDescription,
@@ -34,12 +36,14 @@ import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts
 import { useProjectsStore } from '@renderer/stores/projects'
 import { archivedSessions, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { useMcpStore } from '@renderer/stores/mcp'
 import { useSharingStore } from '@renderer/stores/sharing'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { useUsageStore } from '@renderer/stores/usage'
-import { openAgentSettings } from '@renderer/stores/view'
+import { openAgentSettings, openSettingsItem } from '@renderer/stores/view'
 import { AboutHero, AutomaticUpdates, LinkRow, UpdateRow } from './about-section'
-import { AgentListItem, AgentsGroupActions, EnvironmentFooter } from './agents-section'
+import { AgentListItem, AgentPage, AgentsGroupActions, EnvironmentFooter } from './agents-section'
+import { AgentPlaceRow, FailedRead, McpServerPage, PendingList, ServerRow } from './mcp-section'
 import { ArchivedRow } from './archived-section'
 import { GroupLabel } from './rows'
 import { PublishedRow, SharingAccount } from './sharing-section'
@@ -468,6 +472,7 @@ export function useAgentsSection(): SectionDef {
       },
     ],
     footer: <EnvironmentFooter />,
+    itemPage: (agentId) => <AgentPage agentId={agentId as AgentId} />,
     mark:
       updates.length > 0
         ? t('agents.update.mark', { names: updates.map((a) => a.name).join(', ') })
@@ -704,6 +709,50 @@ export function useAboutSection(): SectionDef {
         ),
       },
     ],
+  }
+}
+
+export function useMcpSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
+  const status = useMcpStore((s) => s.status)
+  const error = useMcpStore((s) => s.error)
+  const servers = status?.servers ?? []
+  const places = status?.places ?? []
+  const rows: RowDef[] = servers.map((server) => ({
+    id: server.name,
+    name: server.title,
+    description: t('mcp.row.tools', { count: server.tools.length }),
+    keywords: t('mcp.keywords'),
+    english: en('sections.mcp'),
+    group: group('overbench', t('mcp.groups.overbench'), { count: servers.length }),
+    layout: 'custom',
+    render: () => <ServerRow server={server} />,
+    open: () => openSettingsItem('mcp', server.name),
+  }))
+  for (const place of places) {
+    const name = agentName(place.agentId)
+    rows.push({
+      id: place.agentId,
+      name,
+      description: t('mcp.place.connects', { name }),
+      keywords: `${t('mcp.place.keywords')} ${place.path} ${place.project}`,
+      english: en('sections.mcp'),
+      group: group('own', t('mcp.groups.own'), { count: places.length }),
+      // The row itself is drawn by the section, as its place carries copy and show.
+      layout: 'custom',
+      render: () => <AgentPlaceRow place={place} />,
+    })
+  }
+  return {
+    id: 'mcp',
+    title: t('sections.mcp'),
+    description: t('pages.mcp'),
+    icon: PlugIcon,
+    // A read that failed shows its notice in place of both groups.
+    rows: error ? [] : rows,
+    itemPage: (item) => <McpServerPage name={item} />,
+    footer: error ? <FailedRead error={error} /> : !status ? <PendingList /> : undefined,
   }
 }
 

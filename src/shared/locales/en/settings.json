@@ -10,7 +10,8 @@
     "about": "About",
     "archived": "Archived sessions",
     "sharing": "Sharing",
-    "browser": "Browser"
+    "browser": "Browser",
+    "mcp": "MCP servers"
   },
   "page": {
     "title": "Settings",
@@ -561,7 +562,8 @@
     "about": "OverBench's version, updates and links.",
     "archived": "Sessions you archived, off the sidebar but kept. Restore one to put it back in its project.",
     "sharing": "Publish artifacts to links anyone can open, through your own Cloudflare account.",
-    "browser": "The browser in the side panel keeps one profile for every session: sign-ins, site data and cache."
+    "browser": "The browser in the side panel keeps one profile for every session: sign-ins, site data and cache.",
+    "mcp": "Agents reach tools through these MCP servers. OverBench's own is here, and where each agent keeps its own."
   },
   "footer": {
     "about": "About OverBench",
@@ -621,5 +623,47 @@
   },
   "usage": {
     "cleared": "OverBench's record is cleared"
+  },
+  "mcp": {
+    "keywords": "MCP server tools artifacts sessions browser",
+    "groups": {
+      "overbench": "From OverBench",
+      "own": "In each agent's own configuration"
+    },
+    "state": {
+      "running": "Running",
+      "notRunning": "Not running"
+    },
+    "row": {
+      "tools_one": "{{count}} tool",
+      "tools_other": "{{count}} tools",
+      "off": "Off for {{names}}",
+      "offEvery": "Off for every agent"
+    },
+    "error": {
+      "title": "Couldn't read the MCP servers"
+    },
+    "server": {
+      "builtIn": "Built into OverBench",
+      "notRunning": {
+        "title": "OverBench's server isn't running",
+        "body": "Sessions start without its tools until it runs."
+      }
+    },
+    "place": {
+      "connects": "{{name}} also connects to the servers it keeps itself.",
+      "list": "Type {{command}} in a session to see them with their status.",
+      "project": "And {{file}} in a project's folder.",
+      "keywords": "configuration file MCP"
+    },
+    "agents": "Agents",
+    "tools": "Tools",
+    "agent": {
+      "switch": "OverBench's tools in {{name}}",
+      "on": "Adds these tools to its sessions.",
+      "off": "Its sessions start without these tools.",
+      "takesNone": "{{name}} takes no MCP servers over HTTP.",
+      "nextStart": "Takes effect from {{name}}'s next start."
+    }
   }
 }

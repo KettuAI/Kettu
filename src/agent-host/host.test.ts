@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ARTIFACT_ID, NO_SESSION } from '@shared/artifacts'
 import type { GitStatus, GitTools, PullRequest } from '@shared/git'
+import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { AgentLauncher } from './agents'
 import type { GitEventDraft, GitServiceApi } from './git/api'
 import { inProcessLauncher, loadFakeAgent, startTestHost, type TestHost } from './testing/harness'
@@ -200,6 +201,7 @@ describe('main messages', () => {
       agents: { opencode: { binaryPath: path.join(t.dir, 'no-opencode') } },
       proxy: { mode: 'custom', url: 'http://proxy.test:8080', noProxy: 'localhost' },
       git: { backgroundFetch: true },
+      mcp: DEFAULT_SETTINGS.mcp,
       usage: { fromComputer: false },
       sessionTitles: true,
     })
@@ -223,6 +225,7 @@ describe('main messages', () => {
       agents: {},
       proxy: { mode: 'environment' as const },
       git: { backgroundFetch: false },
+      mcp: DEFAULT_SETTINGS.mcp,
       usage: { fromComputer: false },
       sessionTitles: true,
     }
@@ -490,6 +493,7 @@ describe('git', () => {
       agents: {},
       proxy: { mode: 'environment' },
       git: { backgroundFetch: true },
+      mcp: DEFAULT_SETTINGS.mcp,
       usage: { fromComputer: false },
       sessionTitles: true,
     })
@@ -673,6 +677,49 @@ describe('sessions without a project', () => {
 })
 
 describe('artifacts', () => {
+  it("reports OverBench's server and where each agent keeps its own, in catalog order", async () => {
+    const { t, port } = await setup()
+    const status = await port.request('mcp.status', undefined)
+    expect(status.servers).toEqual([
+      {
+        name: 'overbench',
+        title: 'OverBench',
+        builtIn: true,
+        running: true,
+        error: null,
+        tools: t.host.artifactService.toolSummaries(),
+      },
+    ])
+    expect(status.servers[0]!.tools.length).toBe(13)
+    expect(status.places.map((place) => [place.agentId, place.project, place.listCommand])).toEqual(
+      [
+        ['claude-code', '.mcp.json', '/mcp'],
+        ['codex', '.codex/config.toml', '/mcp'],
+        ['opencode', 'opencode.json', null],
+      ],
+    )
+    for (const place of status.places) {
+      expect(path.isAbsolute(place.path)).toBe(true)
+      expect(place.chosen).toBe(false)
+    }
+  })
+
+  it('listens again, and sends main the new port', async () => {
+    const { t, port } = await setup()
+    await t.host.artifactService.stop()
+    expect((await port.request('mcp.status', undefined)).servers[0]).toMatchObject({
+      running: false,
+    })
+    port.events.length = 0
+    t.sent.length = 0
+    const status = await port.request('mcp.retry', undefined)
+    expect(status.servers[0]).toMatchObject({ running: true, error: null })
+    expect(t.sent.at(-1)).toEqual({
+      type: 'host:service-port',
+      port: t.host.artifactService.listeningPort,
+    })
+  })
+
   it('serves the interface over the port, with its events', async () => {
     const { t, port } = await setup()
     const other = t.connect()

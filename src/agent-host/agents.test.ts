@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentCliSource, AgentStatus, AgentUpdate } from '@shared/agent-host'
-import type { HostSettings } from '@shared/settings'
+import { DEFAULT_SETTINGS, type HostSettings } from '@shared/settings'
 import type { AgentId } from '@shared/thread'
 import {
   compareInstalls,
@@ -134,6 +134,7 @@ function manager(
       agents: {},
       proxy: { mode: 'environment' },
       git: { backgroundFetch: false },
+      mcp: DEFAULT_SETTINGS.mcp,
       usage: { fromComputer: false },
       sessionTitles: true,
     }),
@@ -331,6 +332,38 @@ describe('AgentManager', () => {
       expect.objectContaining({ window: 'five_hour', label: '5-hour', usedPercent: 19 }),
       expect.objectContaining({ window: 'seven_day', label: 'Weekly', usedPercent: 32 }),
     ])
+    await m.agents.stopAll()
+  })
+
+  it('reports MCP over HTTP as null before a start, then as the agent advertised it', async () => {
+    const m = manager(
+      {},
+      {},
+      {
+        catalog: [
+          fakeAgent(FAKE_AGENT_MAIN),
+          { ...fakeAgent(FAKE_AGENT_MAIN), id: 'codex', name: 'Codex' },
+        ],
+      },
+    )
+    expect(m.agents.status('fake-agent').capabilities.mcpHttp).toBeNull()
+    await m.agents.ensureReady('fake-agent')
+    expect(m.agents.status('fake-agent').capabilities.mcpHttp).toBe(true)
+    expect(m.agents.status('codex').capabilities.mcpHttp).toBeNull()
+    await m.agents.stopAll()
+  })
+
+  it('reports OverBench’s server as on by default, and off from the settings', async () => {
+    const m = manager({}, {}, { settings: () => withMcpOff(['fake-agent']) })
+    expect(m.agents.status('fake-agent').overbenchServer).toEqual({
+      runs: false,
+      active: null,
+    })
+    await m.agents.ensureReady('fake-agent')
+    expect(m.agents.status('fake-agent').overbenchServer).toEqual({
+      runs: false,
+      active: false,
+    })
     await m.agents.stopAll()
   })
 
@@ -1092,12 +1125,26 @@ function cliManager(
   return { ...m, installs, launches, status: () => m.agents.status('fake-agent') }
 }
 
+/** The host settings with OverBench's MCP server off for these agents. */
+function withMcpOff(off: AgentId[]): HostSettings {
+  return {
+    locale: 'en',
+    agents: {},
+    proxy: { mode: 'environment' },
+    git: { backgroundFetch: false },
+    mcp: { overbench: { off } },
+    usage: { fromComputer: false },
+    sessionTitles: true,
+  }
+}
+
 /** The host settings with the fake agent's choice of CLI. */
 const cliSettings = (cli: AgentCliSource): HostSettings => ({
   locale: 'en',
   agents: { 'fake-agent': { cli } },
   proxy: { mode: 'environment' },
   git: { backgroundFetch: false },
+  mcp: DEFAULT_SETTINGS.mcp,
   usage: { fromComputer: false },
   sessionTitles: true,
 })
@@ -1538,6 +1585,7 @@ describe('a configuration folder of its own', () => {
     agents: configDir ? { 'claude-code': { configDir } } : {},
     proxy: { mode: 'environment' },
     git: { backgroundFetch: false },
+    mcp: DEFAULT_SETTINGS.mcp,
     usage: { fromComputer: false },
     sessionTitles: true,
   })

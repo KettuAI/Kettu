@@ -4,7 +4,12 @@ import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Platform } from '@shared/platform'
 import type { AgentId } from '@shared/thread'
-import { configLocations, readAgentDetails, type ConfigLocation } from './agent-details'
+import {
+  configLocations,
+  mcpLocation,
+  readAgentDetails,
+  type ConfigLocation,
+} from './agent-details'
 
 type Vars = Record<string, string | undefined>
 
@@ -206,6 +211,103 @@ describe('configLocations', () => {
       candidates: ['/home/me/dotfiles/codex'],
       env: 'CODEX_HOME',
     })
+  })
+})
+
+describe('mcpLocation', () => {
+  const platform = process.platform as Platform
+  let home: string
+
+  beforeAll(async () => {
+    home = await realpath(await mkdtemp(path.join(os.tmpdir(), 'overbench-mcp-location-')))
+  })
+
+  afterAll(async () => {
+    await rm(home, { recursive: true, force: true })
+  })
+
+  const locate = (agentId: AgentId, vars: Vars, chosen: string | null = null) =>
+    mcpLocation(
+      agentId,
+      (name) => vars[name],
+      home,
+      platform,
+      chosen,
+      () => {},
+    )
+
+  it("finds Claude Code's .claude.json in the home folder, or where its variable says", async () => {
+    expect(await locate('claude-code', {})).toMatchObject({
+      path: path.join(home, '.claude.json'),
+      env: null,
+      chosen: false,
+      exists: false,
+    })
+    const moved = path.join(home, 'claude-config')
+    await mkdir(moved, { recursive: true })
+    await writeFile(path.join(moved, '.claude.json'), '{}')
+    expect(await locate('claude-code', { CLAUDE_CONFIG_DIR: moved })).toEqual({
+      path: path.join(moved, '.claude.json'),
+      env: 'CLAUDE_CONFIG_DIR',
+      chosen: false,
+      exists: true,
+    })
+  })
+
+  it('finds it in the folder picked in Settings, which wins over the variable', async () => {
+    const picked = path.join(home, 'picked')
+    await mkdir(picked, { recursive: true })
+    const location = await locate('claude-code', { CLAUDE_CONFIG_DIR: '/elsewhere' }, picked)
+    expect(location).toEqual({
+      path: path.join(picked, '.claude.json'),
+      env: null,
+      chosen: true,
+      exists: false,
+    })
+  })
+
+  it("finds Codex's config.toml in ~/.codex, or where CODEX_HOME says", async () => {
+    expect(await locate('codex', {})).toMatchObject({
+      path: path.join(home, '.codex', 'config.toml'),
+      env: null,
+      exists: false,
+    })
+    const moved = path.join(home, 'codex-home')
+    await mkdir(moved, { recursive: true })
+    await writeFile(path.join(moved, 'config.toml'), '')
+    expect(await locate('codex', { CODEX_HOME: moved })).toMatchObject({
+      path: path.join(moved, 'config.toml'),
+      env: 'CODEX_HOME',
+      exists: true,
+    })
+  })
+
+  it("finds OpenCode's settings file, its .jsonc included, or the one OPENCODE_CONFIG names", async () => {
+    const dir = path.join(home, '.config', 'opencode')
+    await mkdir(dir, { recursive: true })
+    expect(await locate('opencode', {})).toMatchObject({
+      path: path.join(dir, 'opencode.json'),
+      env: null,
+      exists: false,
+    })
+    await writeFile(path.join(dir, 'opencode.jsonc'), '{}')
+    expect(await locate('opencode', {})).toMatchObject({
+      path: path.join(dir, 'opencode.jsonc'),
+      exists: true,
+    })
+    const named = path.join(home, 'custom-opencode.json')
+    await writeFile(named, '{}')
+    expect(await locate('opencode', { OPENCODE_CONFIG: named })).toEqual({
+      path: named,
+      env: 'OPENCODE_CONFIG',
+      chosen: false,
+      exists: true,
+    })
+  })
+
+  it('has no place for an agent that keeps none', async () => {
+    expect(await locate('pi', {})).toBeNull()
+    expect(await locate('fake-agent', {})).toBeNull()
   })
 })
 
