@@ -59,6 +59,20 @@ function declarationsAfter(header: string): Map<string, string> {
   return declarations(blocks[0])
 }
 
+// The declarations of a rule nested in the one block after `header`.
+function nestedDeclarationsAfter(header: string, selector: string): Map<string, string> {
+  const block = blocksAfter(header)[0]
+  const at = block.indexOf(selector)
+  expect(at, `${selector} in ${header}`).toBeGreaterThanOrEqual(0)
+  const open = block.indexOf('{', at)
+  let depth = 0
+  for (let i = open; i < block.length; i++) {
+    if (block[i] === '{') depth++
+    else if (block[i] === '}' && --depth === 0) return declarations(block.slice(open + 1, i))
+  }
+  throw new Error(`unclosed rule for ${selector}`)
+}
+
 function declarations(block: string): Map<string, string> {
   const found = new Map<string, string>()
   let depth = 0
@@ -120,6 +134,19 @@ describe('type in globals.css', () => {
   it("sets thoughts, notes and summaries at 0.88 of the agent's prose", () => {
     const muted = declarationsAfter('.markdown-muted {').get('font-size')!
     expect(pixels(muted, textSizes.default)).toBeCloseTo(16.5 * 0.88)
+  })
+
+  it.each([
+    ["[data-streamdown='inline-code']", '0.84em'],
+    ['[data-file-ref]', '0.85em'],
+  ])('sets %s in a reply at %s of the prose', (selector, size) => {
+    expect(nestedDeclarationsAfter('.markdown {', selector).get('font-size')).toBe(size)
+  })
+
+  it('keeps a file chip at its own size in tool output', () => {
+    expect(nestedDeclarationsAfter('.markdown-compact {', '[data-file-ref]').get('font-size')).toBe(
+      '1em',
+    )
   })
 
   // Chinese goes through the alias family, so the dark theme's lighter weights keep its faces.

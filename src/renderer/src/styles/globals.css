@@ -752,7 +752,8 @@
     color: var(--text-primary);
     padding: 0.1em 0.35em;
     font-family: var(--font-mono);
-    font-size: 0.74em;
+    /* The mono face's x-height is larger, so this reaches about 95% of the serif's. */
+    font-size: 0.84em;
   }
 
   /* A file reference is a chip, not a link: its type's icon and its name, the path in its
@@ -771,7 +772,8 @@
     height: 22px;
     color: var(--text-primary);
     font-family: var(--font-sans);
-    font-size: var(--text-small);
+    /* Follows Text size; about 96% of the serif's x-height beside the prose. */
+    font-size: 0.85em;
     font-weight: var(--font-weight-medium);
     line-height: 1;
     white-space: nowrap;
@@ -951,6 +953,11 @@
   letter-spacing: normal;
   /* Inter's italic is not bundled. */
   font-synthesis-style: auto;
+
+  /* This text is already Inter's small step, so a chip stays at its own size. */
+  & [data-file-ref] {
+    font-size: 1em;
+  }
 }
 
 /* Diffs sit on the code block surface, not on the Shiki theme's own background. Outer
