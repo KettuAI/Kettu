@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { PanelButton } from '@renderer/features/shell/panel-button'
+import { cn } from '@renderer/lib/utils'
 import type { PictureControls } from './picture-zoom'
 import { MAX_ZOOM } from './zoom'
 
@@ -28,6 +29,8 @@ export function ZoomControls({
   const { t } = useTranslation('session')
   const fitted = zoom.z <= zoom.fit
   const viewer = size === 'sm'
+  // The pane's header draws its icons at 14 px, as Save and the rest of it does.
+  const icon = viewer ? undefined : 'size-3.5'
   return (
     <>
       <PanelButton
@@ -37,7 +40,7 @@ export function ZoomControls({
         disabled={fitted}
         onClick={() => controls?.zoomBy(-1)}
       >
-        <MinusIcon />
+        <MinusIcon className={icon} />
       </PanelButton>
       <Tooltip>
         <TooltipTrigger
@@ -46,11 +49,10 @@ export function ZoomControls({
               variant="quiet"
               size={viewer ? 'sm' : 'xs'}
               onClick={() => controls?.toggle()}
-              className={
-                viewer
-                  ? 'min-w-12 px-1.5 text-meta tabular app-region-no-drag'
-                  : 'min-w-10 px-1.5 text-meta tabular app-region-no-drag'
-              }
+              className={cn(
+                'tabular app-region-no-drag',
+                viewer ? 'min-w-12 px-1.5 text-meta' : 'min-w-10 px-1.5 text-xs',
+              )}
             />
           }
         >
@@ -65,7 +67,7 @@ export function ZoomControls({
         disabled={!controls || zoom.z >= MAX_ZOOM}
         onClick={() => controls?.zoomBy(1)}
       >
-        <PlusIcon />
+        <PlusIcon className={icon} />
       </PanelButton>
     </>
   )
