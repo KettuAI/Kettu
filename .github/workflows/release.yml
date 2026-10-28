@@ -208,7 +208,7 @@ jobs:
             else
               echo "::warning::Gatekeeper is off on this runner, so spctl could not assess $1"
             fi
-            xcrun stapler validate "$1"
+            node tools/workflow/mac-stapler.mjs "$1"
           }
           mount="$(mktemp -d)"
           hdiutil attach dist/*.dmg -nobrowse -readonly -mountpoint "$mount"

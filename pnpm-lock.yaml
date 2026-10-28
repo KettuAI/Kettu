@@ -5,6 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
+  '@electron/notarize@2.5.0':
+    hash: 75baf70d9bbc3a44306a85fc3feaa0d20f298ff073e41cc066494b4079e752ce
+    path: patches/@electron__notarize@2.5.0.patch
   '@pierre/theming@1.0.1':
     hash: b311480dbd527bb4ad20f67fd46c12f4d36bd08b85a763d6a3367362d3f226b0
     path: patches/@pierre__theming@1.0.1.patch
@@ -4871,7 +4874,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@electron/notarize@2.5.0':
+  '@electron/notarize@2.5.0(patch_hash=75baf70d9bbc3a44306a85fc3feaa0d20f298ff073e41cc066494b4079e752ce)':
     dependencies:
       debug: 4.4.3
       fs-extra: 9.1.0
@@ -5695,7 +5698,7 @@ snapshots:
       '@electron/asar': 3.4.1
       '@electron/fuses': 1.8.0
       '@electron/get': 3.1.0
-      '@electron/notarize': 2.5.0
+      '@electron/notarize': 2.5.0(patch_hash=75baf70d9bbc3a44306a85fc3feaa0d20f298ff073e41cc066494b4079e752ce)
       '@electron/osx-sign': 1.3.3
       '@electron/rebuild': 4.2.1
       '@electron/universal': 2.0.3

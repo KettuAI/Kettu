@@ -112,7 +112,8 @@
       "node-pty"
     ],
     "patchedDependencies": {
-      "@pierre/theming@1.0.1": "patches/@pierre__theming@1.0.1.patch"
+      "@pierre/theming@1.0.1": "patches/@pierre__theming@1.0.1.patch",
+      "@electron/notarize@2.5.0": "patches/@electron__notarize@2.5.0.patch"
     }
   }
 }
