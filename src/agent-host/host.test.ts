@@ -955,10 +955,11 @@ describe('browser calls', () => {
   it('sends a call to main and answers it by its id', async () => {
     const { t } = await setup()
     const answered = t.host.browserCall({
-      callId: 0,
+      callId: 1,
       sessionId: 's1',
       tool: 'browser_snapshot',
       args: {},
+      projectPath: '/tmp/project',
     })
     const sent = t.sent.find((message) => message.type === 'host:browser-call')
     expect(sent).toMatchObject({
@@ -984,10 +985,11 @@ describe('browser calls', () => {
   it('answers a refusal by its code, and ignores an answer to no call', async () => {
     const { t } = await setup()
     const answered = t.host.browserCall({
-      callId: 0,
+      callId: 1,
       sessionId: 's1',
       tool: 'browser_click',
       args: { ref: 'e1' },
+      projectPath: '/tmp/project',
     })
     const callId = (
       t.sent.find((message) => message.type === 'host:browser-call') as {
@@ -1010,10 +1012,11 @@ describe('browser calls', () => {
   it('fails a call left waiting when the host stops', async () => {
     const { t } = await setup()
     const answered = t.host.browserCall({
-      callId: 0,
+      callId: 1,
       sessionId: 's1',
       tool: 'browser_snapshot',
       args: {},
+      projectPath: '/tmp/project',
     })
     await t.host.shutdown()
     expect(await answered).toMatchObject({ error: { code: 'timeout' } })

@@ -6,7 +6,7 @@ import path from 'node:path'
 import type { DiagnosticsBundle, HostEvent, McpStatus } from '@shared/agent-host'
 import { type ArtifactImportResult, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
-import type { BrowserCallAnswer, BrowserCallRequest } from '@shared/browser'
+import type { BrowserCallAnswer, BrowserCallRequest, BrowserOriginAnswer } from '@shared/browser'
 import type {
   AgentProcess,
   ArtifactContentResult,
@@ -198,7 +198,6 @@ export class AgentHost {
   private readonly gitRetains = new Map<string, { path: string; ports: Set<string> }>()
   /** Browser calls awaiting main's answer, by the id the call was given. */
   private readonly browserCalls = new Map<number, (answer: BrowserCallAnswer) => void>()
-  private nextBrowserCallId = 1
   private lastProcesses = '[]'
   private sentFolders: string | null = null
   private stopping: Promise<void> | null = null
@@ -280,6 +279,7 @@ export class AgentHost {
       wrote: (sessionId, write) => this.sessions.artifactWritten(sessionId, write),
       browserCall: (request) => this.browserCall(request),
       browserSession: (sessionId) => this.sessions.browserSession(sessionId),
+      sessionProject: (sessionId) => this.sessions.sessionProject(sessionId),
       sessions: {
         info: (sessionId) => this.sessions.sessionInfo(sessionId),
         list: (projectPath) => this.sessions.toolSessions(projectPath),
@@ -662,7 +662,8 @@ export class AgentHost {
 
   /** Sends a browser call to main and settles with its answer, or a failure if the host stops. */
   browserCall(request: BrowserCallRequest): Promise<BrowserCallAnswer> {
-    const callId = this.nextBrowserCallId++
+    // The tools' id travels to main unchanged, so its report of a site wait names the same call.
+    const callId = request.callId
     return new Promise<BrowserCallAnswer>((resolve) => {
       this.browserCalls.set(callId, resolve)
       this.options.send({
@@ -671,8 +672,27 @@ export class AgentHost {
         sessionId: request.sessionId,
         tool: request.tool,
         args: request.args,
+        projectPath: request.projectPath,
       })
     })
+  }
+
+  /**
+   * `host:browser-waiting`: the call waits on a new origin, so its own time limit grows to that
+   * wait and the call fails `not_allowed` rather than timing out first.
+   */
+  browserWaiting(callId: number, waiting: boolean): void {
+    this.artifactService.browserWaiting(callId, waiting)
+  }
+
+  /** `host:browser-origin-ask`: main's page waits for a new origin, which the thread shows. */
+  browserOriginAsked(requestId: number, sessionId: string, origin: string): void {
+    this.sessions.browserOriginAsked(sessionId, requestId, origin)
+  }
+
+  /** `host:browser-origin-answer`: the wait ended, so the session's card takes the answer. */
+  browserOriginSettled(requestId: number, decision: BrowserOriginAnswer): void {
+    this.sessions.browserOriginSettled(requestId, decision)
   }
 
   /** `browser-result`: the answer to a call this host forwarded. */

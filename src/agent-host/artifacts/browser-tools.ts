@@ -8,7 +8,7 @@ import type {
   BrowserToolErrorCode,
   BrowserToolName,
 } from '@shared/browser'
-import { BROWSER_TOOL_NAMES } from '@shared/browser'
+import { BROWSER_TOOL_NAMES, ORIGIN_WAIT_MS } from '@shared/browser'
 import type { Caller } from './tools'
 
 /** A navigation and everything that waits on one. */
@@ -35,6 +35,8 @@ export type BrowserToolDeps = {
   call(request: BrowserCallRequest): Promise<BrowserCallAnswer>
   /** The session whose page a call drives: a subagent's calls use the session it runs under. */
   pageOf(sessionId: string): string | null
+  /** The project of the session whose page a call drives; '' when it has none to name. */
+  projectOf(sessionId: string): string
 }
 
 type Schema = Record<string, unknown>
@@ -554,6 +556,8 @@ function failure(error: { code: BrowserToolErrorCode; message: string }): CallTo
 
 export class BrowserTools {
   private nextId = 1
+  /** The waits the origin requests of `browser_waiting` start and end, by the call's id. */
+  private readonly waits = new Map<number, (waiting: boolean) => void>()
 
   constructor(private readonly deps: BrowserToolDeps) {}
 
@@ -585,32 +589,52 @@ export class BrowserTools {
       sessionId: page,
       tool,
       args: asked.args,
+      projectPath: this.deps.projectOf(page),
     }
     const answer = await this.forward(request, timeoutFor(tool, asked.args))
     if ('error' in answer) return failure(answer.error)
     return this.result(tool, answer.result)
   }
 
+  /** `host:browser-waiting`: the call waits on a new origin, or that wait ended. */
+  browserWaiting(callId: number, waiting: boolean): void {
+    this.waits.get(callId)?.(waiting)
+  }
+
   /** Forwards the call and settles with main's answer, or `timeout` after `ms`. */
   private forward(request: BrowserCallRequest, ms: number): Promise<BrowserCallAnswer> {
     let timer: ReturnType<typeof setTimeout> | undefined
-    const timeout = new Promise<BrowserCallAnswer>((resolve) => {
+    let limit = ms
+    const settle = (): void => {
+      if (timer) clearTimeout(timer)
       timer = setTimeout(
         () =>
           resolve({
             error: {
               code: 'timeout',
-              message: `The browser did not answer within ${Math.round(ms / 1000)} s. Check the page and try again.`,
+              message: `The browser did not answer within ${Math.round(limit / 1000)} s. Check the page and try again.`,
             },
           }),
-        ms,
+        limit,
       )
       timer.unref?.()
-    })
+    }
+    let resolve!: (answer: BrowserCallAnswer) => void
+    const timeout = new Promise<BrowserCallAnswer>((done) => (resolve = done))
+    settle()
+    const waiting = (on: boolean): void => {
+      limit = on ? Math.max(ms, ORIGIN_WAIT_MS + WAIT_EXTRA_MS) : ms
+      settle()
+    }
+    this.waits.set(request.callId, waiting)
     const forwarded = this.deps.call(request).catch((error: unknown): BrowserCallAnswer => ({
       error: { code: 'invalid', message: (error as Error)?.message ?? String(error) },
     }))
-    return Promise.race([forwarded, timeout]).finally(() => clearTimeout(timer))
+    const clear = (): void => {
+      if (timer) clearTimeout(timer)
+      this.waits.delete(request.callId)
+    }
+    return Promise.race([forwarded, timeout]).finally(clear)
   }
 
   private result(

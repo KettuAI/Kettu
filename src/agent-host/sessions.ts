@@ -20,6 +20,7 @@ import {
 } from '@shared/agent-host'
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { firstLine, outlineText } from '@shared/outline'
+import type { BrowserOriginAnswer } from '@shared/browser'
 import type { BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { PermissionScope } from '@shared/routines'
@@ -45,6 +46,7 @@ import {
   type SessionView,
   type StopReason,
   type Attachment,
+  type BrowserOriginEntry,
   type ThreadEntry,
   type ThreadState,
   type TokenTotals,
@@ -320,6 +322,8 @@ interface Live {
   childStartedAt: number | null
   mentioned: boolean
   permissions: Map<string, PendingRequest>
+  /** Each waiting new origin's entry, by the id main gave its request. */
+  origins: Map<number, string>
   failure: Failure | null
   unread: boolean
   /** The current error was in front of the user, so the row no longer marks it. */
@@ -503,6 +507,8 @@ export class SessionManager {
   private readonly watchers = new Map<string, Set<string>>()
   // Port id to the sessions it shows in front, every pane of a split view in view.
   private readonly shown = new Map<string, Set<string>>()
+  /** Each waiting new origin's session and entry, by the id main gave its request. */
+  private readonly originRequests = new Map<number, { sessionId: string; entryId: string }>()
   private readonly missing = new Set<string>()
   private readonly lastSummaries = new Map<string, string>()
   /** `/context` reports running, by session id. */
@@ -627,6 +633,12 @@ export class SessionManager {
     return sessionWithPage(record, (id) => this.live.get(id)?.record ?? this.records.get(id)).id
   }
 
+  /** The project of the session whose page a browser call drives, or null when it has none. */
+  sessionProject(sessionId: string): string | null {
+    const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
+    return record?.projectPath ?? null
+  }
+
   private children(parentId: string): SessionRecord[] {
     const ids = new Set<string>()
     const out: SessionRecord[] = []
@@ -675,7 +687,7 @@ export class SessionManager {
     const record = live?.record ?? this.recordOf(sessionId)
     const session = live?.thread.session
     const status: SessionStatus = session?.status ?? 'closed'
-    const permissionCount = live?.permissions.size ?? 0
+    const permissionCount = (live?.permissions.size ?? 0) + (live?.origins.size ?? 0)
     let attention: SessionAttention = 'none'
     if (permissionCount > 0) attention = 'permission'
     else if (status === 'failed' || (session?.error && status !== 'running' && !live?.errorSeen))
@@ -765,7 +777,7 @@ export class SessionManager {
 
   private updateBadge(): void {
     let count = 0
-    for (const live of this.live.values()) count += live.permissions.size
+    for (const live of this.live.values()) count += live.permissions.size + live.origins.size
     if (count === this.badgeCount) return
     this.badgeCount = count
     this.deps.events.badge(count)
@@ -810,6 +822,50 @@ export class SessionManager {
     const live = this.live.get(sessionId)
     if (!live) return
     this.emit(live, [writePatch(live.thread, write, () => this.nextId(live, 'a'))])
+  }
+
+  /**
+   * An agent's page wants to open a new origin, which waits for the user in the session's thread
+   * and marks the session as waiting, as a permission request does.
+   */
+  browserOriginAsked(sessionId: string, requestId: number, origin: string): void {
+    const live = this.live.get(sessionId)
+    if (!live) return
+    const entry: BrowserOriginEntry = {
+      kind: 'browser_origin',
+      id: this.nextId(live),
+      requestId,
+      origin,
+      decision: null,
+      after: agentEntryBefore(live.thread),
+    }
+    live.origins.set(requestId, entry.id)
+    this.originRequests.set(requestId, { sessionId, entryId: entry.id })
+    this.emit(live, [{ op: 'entry.add', entry }])
+    this.touch(live.id)
+    this.updateBadge()
+    this.deps.events.attention(
+      live.id,
+      'permission',
+      this.titleOf(live),
+      t('attention.browserOrigin', { origin }),
+    )
+  }
+
+  /** The wait ended, so the thread's card takes the answer and the session waits no longer. */
+  browserOriginSettled(requestId: number, decision: BrowserOriginAnswer): void {
+    const waiting = this.originRequests.get(requestId)
+    if (!waiting) return
+    this.originRequests.delete(requestId)
+    const live = this.live.get(waiting.sessionId)
+    if (!live) return
+    live.origins.delete(requestId)
+    const entry = live.thread.byId[waiting.entryId]
+    if (entry?.kind === 'browser_origin') {
+      this.emit(live, [{ op: 'entry.update', id: waiting.entryId, changes: { decision } }])
+    }
+    this.touch(live.id)
+    this.updateBadge()
   }
 
   /** A replay ended: the kept entries it never came back to go at its end. */
@@ -1262,6 +1318,7 @@ export class SessionManager {
       childStartedAt: null,
       mentioned: false,
       permissions: new Map(),
+      origins: new Map(),
       failure: null,
       unread: this.persistedUnread(record),
       errorSeen: false,
@@ -2836,7 +2893,8 @@ export class SessionManager {
     const { status } = live.thread.session
     if (status !== 'ready' && status !== 'closed') return true
     if (live.turn || live.opening || live.attaching || live.background) return true
-    if (live.permissions.size > 0 || this.contextRuns.has(live.id)) return true
+    if (live.permissions.size > 0 || live.origins.size > 0 || this.contextRuns.has(live.id))
+      return true
     return this.descendants(live.id, 'subagent').some((record) => {
       const child = this.live.get(record.id)
       if (!child) return false
@@ -4536,6 +4594,15 @@ export class SessionManager {
     for (const [requestId, pending] of [...live.permissions]) {
       this.settlePermission(live, requestId, result)
       pending.answer('cancelled')
+    }
+    // A new origin still waiting dies with the session's page: its card says it went unanswered.
+    for (const [requestId, entryId] of [...live.origins]) {
+      live.origins.delete(requestId)
+      this.originRequests.delete(requestId)
+      const entry = live.thread.byId[entryId]
+      if (entry?.kind === 'browser_origin' && entry.decision === null) {
+        this.emit(live, [{ op: 'entry.update', id: entryId, changes: { decision: 'timeout' } }])
+      }
     }
   }
 

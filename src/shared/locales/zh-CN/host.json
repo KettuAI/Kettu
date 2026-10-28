@@ -86,6 +86,7 @@
     }
   },
   "attention": {
+    "browserOrigin": "{{origin}} 正在等待你的答复",
     "permission": "Agent 请求授权",
     "turnEnd": {
       "end_turn": "已完成",

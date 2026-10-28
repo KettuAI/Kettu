@@ -285,6 +285,22 @@ describe('isThreadEntry', () => {
       writes: 1,
       after: null,
     },
+    {
+      kind: 'browser_origin',
+      id: 'e:9',
+      requestId: 1,
+      origin: 'https://example.com',
+      decision: null,
+      after: 't:1',
+    },
+    {
+      kind: 'browser_origin',
+      id: 'e:10',
+      requestId: 2,
+      origin: 'https://example.com',
+      decision: 'timeout',
+      after: null,
+    },
   ]
 
   it('accepts every kind of entry', () => {
@@ -311,6 +327,10 @@ describe('isThreadEntry', () => {
     expect(isThreadEntry({ ...artifact, action: 'read' })).toBe(false)
     expect(isThreadEntry({ ...artifact, writes: undefined })).toBe(false)
     expect(isThreadEntry({ ...artifact, after: 1 })).toBe(false)
+    const origin = valid.find((entry) => entry.kind === 'browser_origin')!
+    expect(isThreadEntry({ ...origin, requestId: 'one' })).toBe(false)
+    expect(isThreadEntry({ ...origin, decision: 'maybe' })).toBe(false)
+    expect(isThreadEntry({ ...origin, after: 1 })).toBe(false)
     expect(isThreadEntry({ kind: 'git', id: 'g', event: 'commit' })).toBe(false)
     expect(isThreadEntry({ kind: 'git', id: 'g', event: 'branch', branch: 'x', after: 1 })).toBe(
       false,

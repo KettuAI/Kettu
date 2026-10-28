@@ -2,6 +2,7 @@
 
 import type { ArtifactImportResult } from './artifacts'
 import type { AttachmentGrant } from './attachments'
+import type { BrowserOriginAnswer } from './browser'
 import type { MediaGrantRecord } from './media'
 import type { Platform } from './platform'
 import type { HostSettings, TerminalSettings } from './settings'
@@ -53,6 +54,12 @@ export type MainToHost =
   | { type: 'host:power'; state: 'suspend' | 'resume' }
   // The answer to a host:browser-call, its result or the error that refused it.
   | { type: 'browser-result'; callId: number; result?: unknown; error?: unknown }
+  // A browser call now waits for the user to answer a new origin, so its limit grows to that wait.
+  | { type: 'host:browser-waiting'; callId: number; waiting: boolean }
+  // A page waits for a new origin: the session's thread shows it, waiting for the user.
+  | { type: 'host:browser-origin-ask'; requestId: number; sessionId: string; origin: string }
+  // The wait ended, from the pane or the card, so the session's card takes the answer.
+  | { type: 'host:browser-origin-answer'; requestId: number; decision: BrowserOriginAnswer }
   | { type: 'host:shutdown' }
 
 /** The host's answer to `host:artifact-content-request`. */
@@ -108,6 +115,8 @@ export type HostToMain =
       sessionId: string
       tool: string
       args: Record<string, unknown>
+      /** The calling session's project, which its always-allowed sites are stored under. */
+      projectPath: string
     }
   // The artifacts service's port, which the browser's pages must never reach; null when it is down.
   | { type: 'host:service-port'; port: number | null }

@@ -7,7 +7,7 @@ import type { GitEventDraft } from '../git/api'
 
 type OwnEntry = Extract<
   ThreadEntry,
-  { kind: 'artifact' | 'session_started' | 'git' | 'turn_end' | 'notice' }
+  { kind: 'artifact' | 'session_started' | 'git' | 'turn_end' | 'notice' | 'browser_origin' }
 >
 
 const ACTIONS: Record<string, ArtifactAction> = {
@@ -125,6 +125,7 @@ export function writePatch(thread: ThreadState, write: ArtifactWrite, newId: () 
 function isOwn(entry: ThreadEntry): entry is OwnEntry {
   switch (entry.kind) {
     case 'artifact':
+    case 'browser_origin':
     case 'session_started':
     case 'git':
     case 'turn_end':
