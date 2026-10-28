@@ -4,7 +4,7 @@
 import type { AgentInstallMethod, HostMethod, HostParams } from '@shared/agent-host'
 import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
 import { FILE_READ_LIMIT } from '@shared/files'
-import { GITHUB_PULL_REQUEST_URL, isRepositoryName } from '@shared/git'
+import { GITHUB_LOGIN, GITHUB_PULL_REQUEST_URL, isRepositoryName } from '@shared/git'
 import type { Platform } from '@shared/platform'
 import {
   isPermissionScope,
@@ -747,6 +747,11 @@ export function createValidators(platform: Platform): Validators {
       if (!GITHUB_PULL_REQUEST_URL.test(url))
         throw invalidParams('url is not a GitHub pull request')
       return { url }
+    },
+    'git.avatarUrl': (params) => {
+      const login = string(fields(params), 'login', 128)
+      if (!GITHUB_LOGIN.test(login)) throw invalidParams('login is not a GitHub login')
+      return { login }
     },
     'git.currentPullRequest': project,
     'git.tools': none,

@@ -49,10 +49,15 @@
       "changesRequested": "请求更改",
       "reviewRequired": "需要审查"
     },
-    "summary": "{{state}} · <head/> → <base/>",
-    "updated": "{{when}}更新",
-    "reviewUpdated": "{{review}} · {{when}}更新",
     "openOnGitHub": "在 GitHub 上打开"
+  },
+  "prCard": {
+    "opened": "{{when}}打开",
+    "bot": "机器人",
+    "installGh": "安装 <cli>GitHub CLI</cli> 后即可查看这个 Pull Request 的状态、检查和作者。",
+    "signInGh": "登录 GitHub CLI 后即可查看这个 Pull Request：",
+    "failed": "无法加载这个 Pull Request。",
+    "retry": "重试"
   },
   "popover": {
     "copyBranch": "复制分支名",

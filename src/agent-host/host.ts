@@ -992,6 +992,7 @@ export class AgentHost {
       'git.fileDiff': ({ projectPath, path, oldPath, ref }) =>
         this.gitProjectCall(projectPath, (g, p) => g.fileDiff(p, path, oldPath, ref)),
       'git.pullRequest': ({ url }) => this.gitCall((g) => g.pullRequest(url)),
+      'git.avatarUrl': ({ login }) => this.gitCall((g) => g.avatarUrl(login)),
       'git.currentPullRequest': ({ projectPath }) =>
         this.gitProjectCall(projectPath, (g, p) => g.currentPullRequest(p)),
       'git.tools': () => this.gitCall((g) => g.tools()),

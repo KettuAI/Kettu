@@ -1,10 +1,11 @@
 import { create } from 'zustand'
-import type {
-  GitOperation,
-  GitStatus,
-  GitTools,
-  PullRequest,
-  RepositoryVisibility,
+import {
+  GITHUB_LOGIN,
+  type GitOperation,
+  type GitStatus,
+  type GitTools,
+  type PullRequest,
+  type RepositoryVisibility,
 } from '@shared/git'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
 
@@ -44,6 +45,10 @@ interface GitStore {
   status: Record<string, GitStatus>
   currentPr: Record<string, PullRequest | null>
   pullRequests: Record<string, PullRequest> // by URL, for chips
+  /** By URL, why a chip's details did not load, until they do. */
+  pullRequestErrors: Record<string, string>
+  /** By login, a chip author's picture as a data: URL, or null when GitHub has none. */
+  avatars: Record<string, string | null>
   tools: GitTools | null
   /** Why the last tools check failed; cleared while a new check runs. */
   toolsError: string | null
@@ -58,6 +63,8 @@ export const useGitStore = create<GitStore>()(() => ({
   status: {},
   currentPr: {},
   pullRequests: {},
+  pullRequestErrors: {},
+  avatars: {},
   tools: null,
   toolsError: null,
   running: {},
@@ -112,23 +119,72 @@ export function rewatchGit(): void {
   showProjects(paths)
 }
 
+const RETRY_MS = 60_000
 const prLoads = new Map<string, Promise<PullRequest | null>>()
 
+/** A chip's details; a failure is kept and asked again a minute later, or at once by a retry. */
 export function loadPullRequest(url: string): Promise<PullRequest | null> {
   const cached = useGitStore.getState().pullRequests[url]
   if (cached) return Promise.resolve(cached)
   let load = prLoads.get(url)
   if (!load) {
-    load = host('git.pullRequest', { url })
+    const started: Promise<PullRequest | null> = host('git.pullRequest', { url })
       .then((pr) => {
-        useGitStore.setState((s) => ({ pullRequests: { ...s.pullRequests, [url]: pr } }))
+        useGitStore.setState((s) => ({
+          pullRequests: { ...s.pullRequests, [url]: pr },
+          pullRequestErrors: without(s.pullRequestErrors, url),
+        }))
         return pr
       })
-      .catch(() => null)
-      .finally(() => setTimeout(() => prLoads.delete(url), 60_000))
+      .catch((error: unknown) => {
+        const message = errorMessage(error)
+        useGitStore.setState((s) => ({
+          pullRequestErrors: { ...s.pullRequestErrors, [url]: message },
+        }))
+        return null
+      })
+      .finally(() =>
+        setTimeout(() => {
+          if (prLoads.get(url) === started) prLoads.delete(url)
+        }, RETRY_MS),
+      )
+    load = started
     prLoads.set(url, load)
   }
   return load
+}
+
+export function retryPullRequest(url: string): Promise<PullRequest | null> {
+  prLoads.delete(url)
+  return loadPullRequest(url)
+}
+
+const avatarLoads = new Set<string>()
+const avatarFailures = new Map<string, number>()
+
+/** Looks up a chip author's avatar once, and again a minute after it failed to load. */
+export function loadAvatar(login: string): void {
+  if (!GITHUB_LOGIN.test(login) || login in useGitStore.getState().avatars) return
+  const failedAt = avatarFailures.get(login)
+  if (avatarLoads.has(login) || (failedAt !== undefined && Date.now() - failedAt < RETRY_MS)) return
+  avatarLoads.add(login)
+  void (async () => {
+    try {
+      const url = await host('git.avatarUrl', { login })
+      // No URL means GitHub has no picture; a URL whose picture did not load is asked again.
+      const picture = url === null ? null : await window.overbench.avatars.load(url)
+      if (url !== null && picture === null) {
+        avatarFailures.set(login, Date.now())
+      } else {
+        avatarFailures.delete(login)
+        useGitStore.setState((s) => ({ avatars: { ...s.avatars, [login]: picture } }))
+      }
+    } catch {
+      avatarFailures.set(login, Date.now())
+    } finally {
+      avatarLoads.delete(login)
+    }
+  })()
 }
 
 export async function loadGitTools(): Promise<void> {

@@ -71,6 +71,8 @@ export interface GitServiceApi {
   ): Promise<FileDiff>
   /** Details for a pull request chip; `url` matches GITHUB_PULL_REQUEST_URL. */
   pullRequest(url: string): Promise<PullRequest>
+  /** The avatar URL of a chip's author, null when GitHub's avatar host has none; `login` matches GITHUB_LOGIN. */
+  avatarUrl(login: string): Promise<string | null>
   /** The current branch's pull request, from the last `gh pr view`. */
   currentPullRequest(projectPath: string): Promise<PullRequest | null>
   /** Branch name to pull request for session rows; empty until gh has answered. */

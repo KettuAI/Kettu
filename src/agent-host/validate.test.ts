@@ -204,6 +204,18 @@ describe('createValidators', () => {
     rejects(() => v({ url: 'javascript:alert(1)' }))
   })
 
+  it("takes only a GitHub user's login or a bot's", () => {
+    const v = posix['git.avatarUrl']
+    for (const login of ['mirachen', 'octocat_acme', 'a-b-c', 'overbench-builder[bot]']) {
+      expect(v({ login })).toEqual({ login })
+    }
+    for (const login of ['', '-h', 'app/bot', '../x', 'users/x', 'a b', 'x[bot', 'a'.repeat(101)]) {
+      rejects(() => v({ login }))
+    }
+    rejects(() => v({}))
+    rejects(() => v({ login: 7 }))
+  })
+
   it('checks the git writes', () => {
     const push = posix['git.push']
     const target = { projectPath: '/p', remote: 'origin', branch: 'feat/login' }

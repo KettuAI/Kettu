@@ -49,10 +49,15 @@
       "changesRequested": "Changes requested",
       "reviewRequired": "Review required"
     },
-    "summary": "{{state}} · <head/> into <base/>",
-    "updated": "Updated {{when}}",
-    "reviewUpdated": "{{review}} · Updated {{when}}",
     "openOnGitHub": "Open on GitHub"
+  },
+  "prCard": {
+    "opened": "opened {{when}}",
+    "bot": "bot",
+    "installGh": "Install the <cli>GitHub CLI</cli> to see the pull request's state, checks and author.",
+    "signInGh": "Sign in to the GitHub CLI to see the pull request:",
+    "failed": "Couldn't load the pull request.",
+    "retry": "Retry"
   },
   "popover": {
     "copyBranch": "Copy branch name",
