@@ -754,11 +754,15 @@ export function resetForm(resetsAt: number, now: number): 'in' | 'at' {
   return left > 0 && left < 86_400_000 ? 'in' : 'at'
 }
 
-/** Each agent's series color, from its mark. */
-export const AGENT_FILL: Record<AgentId, string> = {
+/** The agents whose series color is their own, from their mark. */
+const AGENT_FILLS: Partial<Record<AgentId, string>> = {
   'claude-code': 'bg-agent-claude-code',
   codex: 'bg-agent-codex',
   opencode: 'bg-agent-opencode',
   pi: 'bg-agent-pi',
-  'fake-agent': 'bg-agent-other',
+}
+
+/** An agent's series color; one without a color of its own shares the neutral one. */
+export function agentFill(agentId: AgentId): string {
+  return AGENT_FILLS[agentId] ?? 'bg-agent-other'
 }

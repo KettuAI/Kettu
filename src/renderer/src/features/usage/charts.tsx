@@ -7,7 +7,7 @@ import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import {
   addDays,
-  AGENT_FILL,
+  agentFill,
   axisLabels,
   barGap,
   BAR_WIDTH,
@@ -125,7 +125,7 @@ export function TrendChart({
                       className={cn(
                         'min-h-px basis-0',
                         k > 0 && 'shadow-[inset_0_calc(-1*var(--hairline))_0_var(--bg-surface)]',
-                        AGENT_FILL[agentId],
+                        agentFill(agentId),
                       )}
                       style={{ flexGrow: bar.byAgent[agentId] }}
                     />
@@ -278,7 +278,7 @@ export const TrendLegend = memo(function TrendLegend({
                 aria-hidden
                 className={cn(
                   'size-2.25 rounded-xs',
-                  on ? AGENT_FILL[id] : 'shadow-[inset_0_0_0_1.5px_var(--border-strong)]',
+                  on ? agentFill(id) : 'shadow-[inset_0_0_0_1.5px_var(--border-strong)]',
                 )}
               />
               {agentName(id)}
