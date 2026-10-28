@@ -13,21 +13,27 @@ import { AMP } from './agents/amp'
 import { AUGGIE } from './agents/auggie'
 import { AUTOHAND } from './agents/autohand'
 import { CLAUDE_CODE } from './agents/claude-code'
+import { CLINE } from './agents/cline'
 import { CODEBUDDY } from './agents/codebuddy'
 import { CODEX } from './agents/codex'
+import { COPILOT } from './agents/copilot'
 import { CURSOR } from './agents/cursor'
 import { DEEPAGENTS } from './agents/deepagents'
 import { DIMCODE } from './agents/dimcode'
 import { DIRAC } from './agents/dirac'
+import { DROID } from './agents/droid'
 import { fakeAgent } from './agents/fake-agent'
+import { GEMINI } from './agents/gemini'
 import { GLM } from './agents/glm'
 import { GOOSE } from './agents/goose'
+import { GROK } from './agents/grok'
 import { KILO } from './agents/kilo'
 import { KIMI } from './agents/kimi'
 import { NOVA } from './agents/nova'
 import { OPENCODE } from './agents/opencode'
 import { PI } from './agents/pi'
 import { QODER } from './agents/qoder'
+import { QWEN } from './agents/qwen'
 import { SIGIT } from './agents/sigit'
 import { listArchiveInstalls, programPath, type InstalledArchive } from './archive-install'
 import type { BinaryInstalls } from './binary-install'
@@ -140,21 +146,27 @@ export {
   AUGGIE,
   AUTOHAND,
   CLAUDE_CODE,
+  CLINE,
   CODEBUDDY,
   CODEX,
+  COPILOT,
   CURSOR,
   DEEPAGENTS,
   DIMCODE,
   DIRAC,
+  DROID,
   fakeAgent,
+  GEMINI,
   GLM,
   GOOSE,
+  GROK,
   KILO,
   KIMI,
   NOVA,
   OPENCODE,
   PI,
   QODER,
+  QWEN,
   SIGIT,
 }
 
@@ -176,6 +188,12 @@ export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
     SIGIT,
     AGORAGENTIC,
     AUTOHAND,
+    GEMINI,
+    COPILOT,
+    QWEN,
+    GROK,
+    CLINE,
+    DROID,
     CURSOR,
     KIMI,
     AMP,

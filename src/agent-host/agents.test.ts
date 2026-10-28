@@ -1810,7 +1810,7 @@ describe('details', () => {
   it('has no CLI version or configuration to show for the fake agent, and refuses unknown agents', async () => {
     const m = manager()
     expect(await m.agents.details('fake-agent')).toEqual({ cliVersion: null, config: [] })
-    await expect(m.agents.details('gemini' as AgentId)).rejects.toMatchObject({
+    await expect(m.agents.details('unknown-agent' as AgentId)).rejects.toMatchObject({
       code: 'invalid_params',
     })
   })
