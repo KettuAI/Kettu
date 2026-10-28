@@ -72,14 +72,25 @@ OverBench 为这些工作提供了一个桌面上的家。你用的每个 Agent 
 
 请先安装下面至少一个 Agent，OverBench 会在你的系统里找到它。
 
-| Agent                                                    | OverBench 如何运行它                                               |
-| -------------------------------------------------------- | ------------------------------------------------------------------ |
-| [Claude Code](https://github.com/anthropics/claude-code) | ACP 适配器 `@agentclientprotocol/claude-agent-acp`，首次使用时安装 |
-| [Codex CLI](https://github.com/openai/codex)             | ACP 适配器 `@agentclientprotocol/codex-acp`，首次使用时安装        |
-| [opencode](https://opencode.ai)                          | 你自己安装的 `opencode`，以 `opencode acp` 运行                    |
-| [Pi](https://pi.dev)                                     | ACP 适配器 `pi-acp`，首次使用时安装，并运行你自己安装的 `pi`       |
+| Agent                                                                       | OverBench 如何运行它                                                        |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| [Claude Code](https://github.com/anthropics/claude-code)                    | ACP 适配器 `@agentclientprotocol/claude-agent-acp`，首次使用时安装          |
+| [Codex CLI](https://github.com/openai/codex)                                | ACP 适配器 `@agentclientprotocol/codex-acp`，首次使用时安装                 |
+| [opencode](https://opencode.ai)                                             | 你自己安装的 `opencode`，以 `opencode acp` 运行                             |
+| [Pi](https://pi.dev)                                                        | ACP 适配器 `pi-acp`，首次使用时安装，并运行你自己安装的 `pi`                |
+| [Auggie CLI](https://github.com/augmentcode/auggie)                         | ACP 包 `@augmentcode/auggie`，首次使用时安装，以 `--acp` 运行并关闭自动更新 |
+| [Codebuddy Code](https://www.codebuddy.cn/cli/)                             | ACP 包 `@tencent-ai/codebuddy-code`，首次使用时安装，以 `--acp` 运行        |
+| [DeepAgents](https://docs.langchain.com/oss/javascript/deepagents/overview) | ACP 包 `deepagents-acp`，首次使用时安装                                     |
+| [DimCode](https://dimagent.cn/)                                             | ACP 包 `dimcode`，首次使用时安装，以 `acp` 运行                             |
+| [Dirac](https://dirac.run)                                                  | ACP 包 `dirac-cli`，首次使用时安装，以 `--acp` 运行                         |
+| [GLM Agent](https://github.com/stefandevo/glm-acp-agent)                    | ACP 包 `glm-acp-agent`，首次使用时安装                                      |
+| [Nova](https://www.compassap.ai/portfolio/nova.html)                        | ACP 包 `@compass-ai/nova`，首次使用时安装，以 `acp` 运行                    |
+| [Qoder CLI](https://qoder.com)                                              | ACP 包 `@qoder-ai/qodercli`，首次使用时安装，以 `--acp` 运行                |
+| [siGit Code](https://github.com/getsigit/sigit)                             | ACP 包 `@smbcloud/sigit`，首次使用时安装                                    |
+| [Agoragentic](https://agoragentic.com)                                      | ACP 包 `agoragentic-mcp`，首次使用时安装，以 `--acp` 运行                   |
+| [Autohand Code](https://www.autohand.ai/cli/)                               | ACP 包 `@autohandai/autohand-acp`，首次使用时安装                           |
 
-这些适配器需要 Node.js 22 及以上版本和 npm，OverBench 会通过你的登录 shell 找到它们。
+这些适配器需要 Node.js 和 npm，OverBench 会通过你的登录 shell 找到它们。
 
 ## 为什么是 OverBench
 
