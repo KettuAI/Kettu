@@ -5,7 +5,7 @@
 import type { WebContents } from 'electron'
 import type { BrowserCallResult, BrowserToolName } from '@shared/browser'
 import type { BrowserControl } from './control'
-import { isLocalAddress, isNeverOpened } from './policy'
+import { isNeverOpened } from './policy'
 
 /** The outline an agent reads, before its "… N more lines" marker. */
 export const MAX_SNAPSHOT_LINES = 2_000
@@ -432,7 +432,10 @@ export function parseKey(input: string): KeyStroke {
   throw new ToolFailure('invalid', `Unknown key "${input}". Use a key name or a combination.`)
 }
 
-/** A navigation an agent asked for: a local dev host, `about:blank`, and nothing else yet. */
+/**
+ * A navigation an agent asked for: an http(s) address or the empty document. Whether its origin
+ * may open is main's to decide, which asks the user for one they have not allowed yet.
+ */
 export function checkAgentNavigation(url: string): string {
   let parsed: URL
   try {
@@ -444,11 +447,8 @@ export function checkAgentNavigation(url: string): string {
   if (isNeverOpened(parsed)) {
     throw new ToolFailure('not_allowed', `${parsed.protocol} pages never open in OverBench.`)
   }
-  if (!isLocalAddress(parsed)) {
-    throw new ToolFailure(
-      'not_allowed',
-      `${parsed.origin} is not a local dev server. The user can open it in the browser pane.`,
-    )
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new ToolFailure('not_allowed', `${parsed.protocol} pages never open in OverBench.`)
   }
   return parsed.href
 }
@@ -832,9 +832,9 @@ export class BrowserCdp {
       outcome = await this.deps.load(sessionId, url)
     } catch (error) {
       const failed = failure(error)
-      throw failed.code === 'navigation_failed'
-        ? failed
-        : new ToolFailure('navigation_failed', failed.message)
+      // A site the user refused keeps its own code; anything else is the page failing to load.
+      if (failed.code === 'navigation_failed' || failed.code === 'not_allowed') throw failed
+      throw new ToolFailure('navigation_failed', failed.message)
     }
     const page = this.pageOf(sessionId)
     const status = page.status

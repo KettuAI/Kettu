@@ -11,7 +11,7 @@ import type {
 import { BROWSER_TOOL_NAMES } from '@shared/browser'
 import { BrowserCdp, ToolFailure } from './cdp'
 import { BrowserControl } from './control'
-import type { BrowserViews } from './views'
+import type { BrowserViews, NavigateResult } from './views'
 
 export interface BrowserToolsDeps {
   views: BrowserViews
@@ -20,6 +20,8 @@ export interface BrowserToolsDeps {
   /** The first navigation of a session opened its page: the pane may show it. */
   opened(sessionId: string): void
   log(level: 'warn' | 'error', message: string): void
+  /** A call waits for the user to answer a new origin: its own time limit covers that wait. */
+  waiting?(callId: number, waiting: boolean): void
 }
 
 function isName(value: string): value is BrowserToolName {
@@ -44,18 +46,18 @@ export class BrowserTools {
       contents: (sessionId) => deps.views.contents(sessionId),
       load: async (sessionId, url) => {
         const result = await deps.views.load(sessionId, url)
-        if (!result.ok) throw new ToolFailure('navigation_failed', result.error)
+        if (!result.ok) throw refused(result)
         this.firstOpen(sessionId)
         return result
       },
       back: async (sessionId) => {
         const result = await deps.views.backAndWait(sessionId)
-        if (!result.ok) throw new ToolFailure('navigation_failed', result.error)
+        if (!result.ok) throw refused(result)
         return result
       },
       reload: async (sessionId) => {
         const result = await deps.views.reloadAndWait(sessionId)
-        if (!result.ok) throw new ToolFailure('navigation_failed', result.error)
+        if (!result.ok) throw refused(result)
         return result
       },
       control: this.control,
@@ -98,13 +100,20 @@ export class BrowserTools {
 
   /** Runs a call the agent host forwarded, and answers its result or error. */
   async call(
+    callId: number,
     sessionId: string,
     tool: string,
     args: Record<string, unknown>,
+    projectPath = '',
   ): Promise<BrowserCallAnswer> {
     if (!isName(tool)) {
       return error('invalid', `Unknown browser tool ${tool}.`)
     }
+    // The page's rules read the project its always-allowed sites are stored under.
+    this.deps.views.setProject(sessionId, projectPath)
+    this.deps.views.setOriginWait(sessionId, callId, (waiting) =>
+      this.deps.waiting?.(callId, waiting),
+    )
     try {
       const result = await this.cdp.call(sessionId, tool, args)
       return {
@@ -118,6 +127,8 @@ export class BrowserTools {
       if (caught instanceof ToolFailure) return error(caught.code, caught.message)
       this.deps.log('warn', `Browser call ${tool} failed: ${(caught as Error).message}`)
       return error('invalid', (caught as Error)?.message ?? String(caught))
+    } finally {
+      this.deps.views.setOriginWait(sessionId, callId, null)
     }
   }
 
@@ -130,4 +141,9 @@ export class BrowserTools {
 
 function error(code: BrowserToolError['code'], message: string): BrowserCallAnswer {
   return { error: { code, message } }
+}
+
+/** A navigation that did not end: the user refused its site, or the page failed. */
+function refused(result: Extract<NavigateResult, { ok: false }>): ToolFailure {
+  return new ToolFailure(result.code ?? 'navigation_failed', result.error)
 }

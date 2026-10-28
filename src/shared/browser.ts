@@ -25,6 +25,28 @@ export type BrowserControlState =
   // `bar` says whether the pane shows the bar: it leaves after 10 s without a call.
   | { kind: 'user'; bar: boolean }
 
+/** What the user answered a request to open a new origin. */
+export type BrowserOriginDecision = 'session' | 'project' | 'deny'
+
+/** The answer to a request to open a new origin; `timeout` when the user did not answer. */
+export type BrowserOriginAnswer = BrowserOriginDecision | 'timeout'
+
+/** How long a call waits for the user to answer a new origin before it fails. */
+export const ORIGIN_WAIT_MS = 120_000
+
+/** An origin an agent's page wanted to open, waiting for the user or answered. */
+export interface BrowserOriginRequest {
+  id: number
+  origin: string
+  /** null while it waits. */
+  decision: BrowserOriginAnswer | null
+}
+
+/** An origin without its scheme, as the pane and the thread name it to the user. */
+export function originLabel(origin: string): string {
+  return origin.replace(/^[a-z]+:\/\//, '') || origin
+}
+
 /** What the pane draws for one session's page. */
 export interface BrowserState {
   sessionId: string
@@ -35,6 +57,8 @@ export interface BrowserState {
   canGoForward: boolean
   notice: BrowserNotice | null
   control: BrowserControlState
+  /** A new site that waits for the user, or the answer just given, for the pane's bar. */
+  originRequest: BrowserOriginRequest | null
 }
 
 /** The browser tools the `overbench` MCP server offers, which main runs on the page. */
@@ -90,4 +114,6 @@ export interface BrowserCallRequest {
   sessionId: string
   tool: BrowserToolName
   args: Record<string, unknown>
+  /** The calling session's project, whose always-allowed sites the page reads. */
+  projectPath: string
 }
