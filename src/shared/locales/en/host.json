@@ -178,7 +178,7 @@
     "unreadableReport": "{{agent}}'s {{command}} gave no report OverBench can read"
   },
   "detect": {
-    "nodeMissing": "{{agent}} runs on Node.js 22 or later, and node was not found on PATH.",
+    "nodeMissing": "{{agent}} runs on Node.js, and node was not found on PATH.",
     "nodeOutdated": "{{agent}} needs Node.js {{required}} or later; {{installed}} is installed.",
     "npmMissing": "{{agent}} is installed with npm on first use, and npm was not found on PATH. {{hint}}",
     "programUnusable": "The program chosen for {{agent}} ({{path}}) cannot be run.",
@@ -188,7 +188,7 @@
     "requiresFailed": "{{agent}} could not read the version of {{command}}: {{reason}} {{hint}}",
     "scriptMissing": "{{script}} does not exist.",
     "hint": {
-      "node": "Install Node.js 22 or later from nodejs.org, then reload the environment in Settings.",
+      "node": "Install Node.js from nodejs.org, then reload the environment in Settings.",
       "opencode": "Install OpenCode, or choose its binary in Settings › Agents.",
       "pi": "Install pi with `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` or the installer at pi.dev.",
       "fakeAgent": "The fake agent runs tools/fake-agent/main.ts from the repository."

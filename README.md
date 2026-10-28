@@ -72,14 +72,25 @@ On Windows and Linux, new versions download in the background and install when O
 
 Install at least one of these agents first; OverBench finds it on your system.
 
-| Agent                                                    | How OverBench runs it                                                           |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [Claude Code](https://github.com/anthropics/claude-code) | The ACP adapter `@agentclientprotocol/claude-agent-acp`, installed on first use |
-| [Codex CLI](https://github.com/openai/codex)             | The ACP adapter `@agentclientprotocol/codex-acp`, installed on first use        |
-| [opencode](https://opencode.ai)                          | Your installed `opencode`, as `opencode acp`                                    |
-| [Pi](https://pi.dev)                                     | The ACP adapter `pi-acp`, installed on first use, with your installed `pi`      |
+| Agent                                                                       | How OverBench runs it                                                                           |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [Claude Code](https://github.com/anthropics/claude-code)                    | The ACP adapter `@agentclientprotocol/claude-agent-acp`, installed on first use                 |
+| [Codex CLI](https://github.com/openai/codex)                                | The ACP adapter `@agentclientprotocol/codex-acp`, installed on first use                        |
+| [opencode](https://opencode.ai)                                             | Your installed `opencode`, as `opencode acp`                                                    |
+| [Pi](https://pi.dev)                                                        | The ACP adapter `pi-acp`, installed on first use, with your installed `pi`                      |
+| [Auggie CLI](https://github.com/augmentcode/auggie)                         | The ACP package `@augmentcode/auggie`, installed on first use, with `--acp` and auto-update off |
+| [Codebuddy Code](https://www.codebuddy.cn/cli/)                             | The ACP package `@tencent-ai/codebuddy-code`, installed on first use, with `--acp`              |
+| [DeepAgents](https://docs.langchain.com/oss/javascript/deepagents/overview) | The ACP package `deepagents-acp`, installed on first use                                        |
+| [DimCode](https://dimagent.cn/)                                             | The ACP package `dimcode`, installed on first use, with `acp`                                   |
+| [Dirac](https://dirac.run)                                                  | The ACP package `dirac-cli`, installed on first use, with `--acp`                               |
+| [GLM Agent](https://github.com/stefandevo/glm-acp-agent)                    | The ACP package `glm-acp-agent`, installed on first use                                         |
+| [Nova](https://www.compassap.ai/portfolio/nova.html)                        | The ACP package `@compass-ai/nova`, installed on first use, with `acp`                          |
+| [Qoder CLI](https://qoder.com)                                              | The ACP package `@qoder-ai/qodercli`, installed on first use, with `--acp`                      |
+| [siGit Code](https://github.com/getsigit/sigit)                             | The ACP package `@smbcloud/sigit`, installed on first use                                       |
+| [Agoragentic](https://agoragentic.com)                                      | The ACP package `agoragentic-mcp`, installed on first use, with `--acp`                         |
+| [Autohand Code](https://www.autohand.ai/cli/)                               | The ACP package `@autohandai/autohand-acp`, installed on first use                              |
 
-The adapters need Node.js 22 or later with npm, which OverBench finds through your login shell.
+The adapters need Node.js with npm, which OverBench finds through your login shell.
 
 ## Why OverBench
 

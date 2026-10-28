@@ -177,7 +177,7 @@
     "unreadableReport": "{{agent}} 的 {{command}} 没有返回 OverBench 能读取的报告"
   },
   "detect": {
-    "nodeMissing": "{{agent}} 需要 Node.js 22 或更高版本，但在 PATH 中找不到 node。",
+    "nodeMissing": "{{agent}} 需要 Node.js，但在 PATH 中找不到 node。",
     "nodeOutdated": "{{agent}} 需要 Node.js {{required}} 或更高版本，当前安装的是 {{installed}}。",
     "npmMissing": "{{agent}} 会在首次使用时通过 npm 安装，但在 PATH 中找不到 npm。{{hint}}",
     "programUnusable": "为 {{agent}} 选择的程序（{{path}}）无法运行。",
@@ -187,7 +187,7 @@
     "requiresFailed": "{{agent}} 无法读取 {{command}} 的版本：{{reason}} {{hint}}",
     "scriptMissing": "{{script}} 不存在。",
     "hint": {
-      "node": "请从 nodejs.org 安装 Node.js 22 或更高版本，然后在设置中点击「重新加载环境」。",
+      "node": "请从 nodejs.org 安装 Node.js，然后在设置中点击「重新加载环境」。",
       "opencode": "请安装 OpenCode，或在「设置 › Agent」中选择它的程序。",
       "pi": "请用 `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` 或 pi.dev 上的安装程序安装 pi。",
       "fakeAgent": "Fake agent 运行仓库中的 tools/fake-agent/main.ts。"

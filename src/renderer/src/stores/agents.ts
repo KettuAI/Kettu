@@ -160,6 +160,17 @@ export const AGENT_NAMES: Record<AgentId, string> = {
   codex: 'Codex',
   opencode: 'OpenCode',
   pi: 'Pi',
+  auggie: 'Auggie CLI',
+  codebuddy: 'Codebuddy Code',
+  deepagents: 'DeepAgents',
+  dimcode: 'DimCode',
+  dirac: 'Dirac',
+  glm: 'GLM Agent',
+  nova: 'Nova',
+  qoder: 'Qoder CLI',
+  sigit: 'siGit Code',
+  agoragentic: 'Agoragentic',
+  autohand: 'Autohand Code',
   'fake-agent': 'Fake agent',
 }
 
