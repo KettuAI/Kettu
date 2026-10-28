@@ -211,6 +211,9 @@
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
+  /* A hidden account's dots read as one blurred word, and the blur stays inside an 18 px row. */
+  --blur-mask: 3px;
+
   --text-prose: var(--prose-size);
   /* The thread's column, 28 px gutters included: 48em of prose, 720 px at the default size. */
   --container-thread: calc(48 * var(--prose-size));

@@ -736,6 +736,30 @@ async function run() {
   await sleep(600)
   await shoot('settings-agent')
 
+  // Both again with Hide accounts on, each account behind its mask; then off for what follows.
+  const agents = `return [...document.querySelectorAll('nav button, aside button')].find((b) => b.textContent.trim() === 'Agents')`
+  const mainButton = (label) =>
+    `return [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`
+  await click(agents, 'Settings › Agents')
+  await click(mainButton('Hide accounts'), 'Hide accounts')
+  await waitFor(`document.querySelector('main [data-slot=masked]')`, 'the masked account')
+  await sleep(600)
+  await shoot('settings-agents-hidden')
+  await click(
+    `return document.querySelector('button[aria-label="Fake agent"]')`,
+    'the fake agent row',
+  )
+  await waitFor(
+    `[...document.querySelectorAll('main h2')].some((h) => h.textContent.includes('Fake agent'))`,
+    'the fake agent page',
+  )
+  await waitFor(`document.querySelector('main [data-slot=masked]')`, "the agent's masked email")
+  await sleep(600)
+  await shoot('settings-agent-hidden')
+  await click(agents, 'Settings › Agents')
+  await click(mainButton('Show accounts'), 'Show accounts')
+  await waitFor(`!document.querySelector('main [data-slot=masked]')`, 'the accounts shown again')
+
   // OverBench's own MCP server, opened from its row in MCP servers.
   await click(
     `return [...document.querySelectorAll('nav button, aside button')].find((b) => b.textContent.trim() === 'MCP servers')`,

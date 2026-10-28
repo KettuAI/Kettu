@@ -1383,7 +1383,11 @@ function Fact({ name, mono, children }: { name: string; mono?: boolean; children
   return (
     <RowFrame compact text={<RowText name={name} />}>
       {children ? (
-        <span className={cn('text-small', mono && 'font-mono text-code')} data-selectable="">
+        // A mask's box reaches past the column, so its blur ends where the text above does.
+        <span
+          className={cn('text-small has-data-[slot=masked]:-me-1.5', mono && 'font-mono text-code')}
+          data-selectable=""
+        >
           {children}
         </span>
       ) : (

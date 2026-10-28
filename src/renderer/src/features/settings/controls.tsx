@@ -243,11 +243,14 @@ export function PathText({ path, missing }: { path: string; missing?: boolean })
   )
 }
 
+// The padding holds the blur's soft edge, so nothing paints past the box; a shown value keeps it.
+const MASK_BOX = 'inline-block rounded-full px-1.5 whitespace-nowrap'
+
 /**
- * Account details behind a mask while Settings > Agents hides them: blurred on screen, and the
- * value itself withheld from the accessibility tree and from copying. Clicking the mask shows
- * that one value until it is clicked again; the setting itself stays on. `revealable` is false
- * where the show button cannot sit, as inside a menu item.
+ * Account details behind a mask while Settings > Agents hides them: eight dots behind a blur,
+ * the same width whatever the value, and the value itself withheld from the accessibility tree
+ * and from copying. Clicking the mask shows that one value until it is clicked again; the setting
+ * itself stays on. `revealable` is false where the show button cannot sit, as inside a menu item.
  */
 export function Masked({
   children,
@@ -267,25 +270,40 @@ export function Masked({
   }
   if (!hidden) return <span data-selectable="">{children}</span>
   const dots = (
-    <span aria-hidden className="inline-block blur-xs select-none">
-      {'•'.repeat(Math.min(Math.max(children.length, 6), 18))}
+    <span aria-hidden className="inline-block tracking-tighter blur-mask select-none">
+      {'•'.repeat(8)}
     </span>
   )
-  if (!revealable) return dots
+  if (!revealable)
+    return (
+      <span data-slot="masked" className={MASK_BOX}>
+        {dots}
+      </span>
+    )
   return (
     <Tooltip>
       <TooltipTrigger
         render={
           <button
             type="button"
+            data-slot="masked"
             aria-pressed={revealed}
             aria-label={revealed ? undefined : t('agents.hidden')}
             onClick={() => setRevealed((shown) => !shown)}
-            className="pointer-events-auto -mx-1 inline-block rounded-sm px-1 outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
+            className={cn(
+              MASK_BOX,
+              'pointer-events-auto outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-visible:shadow-[inset_0_0_0_2px_var(--focus)]',
+            )}
           />
         }
       >
-        {revealed ? children : dots}
+        {revealed ? (
+          <span className="inline-block animate-in blur-in-xs fade-in-50 ease-out-quart animation-duration-(--duration-base) motion-reduce:animate-none">
+            {children}
+          </span>
+        ) : (
+          dots
+        )}
       </TooltipTrigger>
       <TooltipContent>{t(revealed ? 'agents.maskAccount' : 'agents.revealAccount')}</TooltipContent>
     </Tooltip>
