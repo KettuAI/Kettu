@@ -117,6 +117,51 @@ describe('installArchive', () => {
     }
   })
 
+  it('extracts a command nested in bin/ with the tree beside it', async () => {
+    const root = await tempFolder('overbench-archive-')
+    const tar = archiveTar([
+      { name: 'bin/kimchi', data: CONTENT, mode: FILE_MODE },
+      { name: 'share/kimchi/models.txt', data: Buffer.from('models'), mode: 0o100644 },
+    ])
+    const url = (await serveArchives({ '/kimchi.tar.gz': gzipSync(tar) }))('/kimchi.tar.gz')
+    const installed = await installArchive(
+      options(root, url, {
+        agentId: 'kimchi',
+        version: '1.22.0',
+        cmd: './bin/kimchi',
+        args: ['--mode', 'acp'],
+      }),
+    )
+    const dir = path.join(root, 'kimchi', '1.22.0')
+    expect(await readFile(path.join(dir, 'bin', 'kimchi'))).toEqual(CONTENT)
+    expect(await readFile(path.join(dir, 'share', 'kimchi', 'models.txt'))).toEqual(
+      Buffer.from('models'),
+    )
+    expect(installed).toMatchObject({ cmd: './bin/kimchi', args: ['--mode', 'acp'] })
+    if (posix) expect((await stat(path.join(dir, 'bin', 'kimchi'))).mode & 0o777).toBe(0o755)
+  })
+
+  it('extracts a binary at the archive root with the arguments it needs', async () => {
+    const root = await tempFolder('overbench-archive-')
+    const tar = archiveTar([
+      { name: 'harn', data: CONTENT, mode: FILE_MODE },
+      { name: 'LICENSE-APACHE', data: Buffer.from('license'), mode: 0o100644 },
+    ])
+    const url = (await serveArchives({ '/harn.tar.gz': gzipSync(tar) }))('/harn.tar.gz')
+    const installed = await installArchive(
+      options(root, url, {
+        agentId: 'harn',
+        version: '0.10.180',
+        cmd: './harn',
+        args: ['serve', 'acp'],
+      }),
+    )
+    const file = path.join(root, 'harn', '0.10.180', 'harn')
+    expect(await readFile(file)).toEqual(CONTENT)
+    expect(installed).toMatchObject({ cmd: './harn', args: ['serve', 'acp'] })
+    if (posix) expect((await stat(file)).mode & 0o777).toBe(0o755)
+  })
+
   it('writes a bare executable and makes it runnable', async () => {
     const root = await tempFolder('overbench-archive-')
     const url = (await serveArchives({ '/sigit-linux-amd64': CONTENT }))('/sigit-linux-amd64')

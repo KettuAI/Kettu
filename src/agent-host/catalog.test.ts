@@ -6,6 +6,7 @@ import {
   AUGGIE,
   AUTOHAND,
   AMP,
+  BOB,
   buildCatalog,
   CLAUDE_CODE,
   CLINE,
@@ -25,9 +26,12 @@ import {
   GLM,
   GOOSE,
   GROK,
+  HARN,
   HERMES,
   KILO,
+  KIMCHI,
   KIMI,
+  MINIMAX,
   MUSE,
   NOVA,
   OMP,
@@ -85,6 +89,8 @@ describe('buildCatalog', () => {
       'grok',
       'cline',
       'droid',
+      'bob',
+      'minimax',
       'cursor',
       'kimi',
       'amp',
@@ -94,6 +100,8 @@ describe('buildCatalog', () => {
       'hermes',
       'muse',
       'codewhale',
+      'harn',
+      'kimchi',
     ])
     expect(buildCatalog('/repo/tools/fake-agent/main.ts').map((d) => d.id)).toContain('fake-agent')
   })
@@ -121,6 +129,8 @@ describe('buildCatalog', () => {
       'grok',
       'cline',
       'droid',
+      'bob',
+      'minimax',
       'cursor',
       'kimi',
       'amp',
@@ -130,6 +140,8 @@ describe('buildCatalog', () => {
       'hermes',
       'muse',
       'codewhale',
+      'harn',
+      'kimchi',
       'fake-agent',
     ])
   })
@@ -578,6 +590,8 @@ describe('the ACP Registry npm agents', () => {
       args: ['exec', '--output-format', 'acp-daemon'],
       env: { DROID_DISABLE_AUTO_UPDATE: 'true', FACTORY_DROID_AUTO_UPDATE_ENABLED: 'false' },
     },
+    { def: BOB, package: '@ibm/bob', version: '2.0.9', args: ['acp'], env: {} },
+    { def: MINIMAX, package: '@minimax-ai/code', version: '0.2.7', args: ['acp'], env: {} },
   ]
 
   for (const { def, package: name, version, args, env } of registry) {
@@ -626,7 +640,7 @@ describe('the ACP Registry npm agents', () => {
     ).resolves.toMatchObject({ state: 'available' })
   })
 
-  it('pins the seventeen packages the registry lists', () => {
+  it('pins the nineteen packages the registry lists', () => {
     expect(buildCatalog(null).slice(4, 4 + registry.length)).toEqual(registry.map(({ def }) => def))
   })
 })
@@ -1094,5 +1108,54 @@ describe('the registry archive agents', () => {
     expect(
       await detectAgent(KILO, context({ isExecutable: async (file) => file === '/usr/bin/kilo' })),
     ).toMatchObject({ state: 'available', spec: { command: '/usr/bin/kilo' } })
+  })
+
+  it('adds Harn with its archives, a binary at the root and its arguments', async () => {
+    expect(HARN.launch).toEqual({ kind: 'binary', command: 'harn', args: ['serve', 'acp'] })
+    const entries = HARN.installs!.archive!.entries
+    expect(Object.keys(entries).sort()).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-x86_64',
+    ])
+    for (const [key, entry] of Object.entries(entries)) {
+      // The registry puts the Windows executable at the root too, without a ./-prefix.
+      expect(entry.cmd).toBe(key.startsWith('windows') ? 'harn.exe' : './harn')
+      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/)
+      expect(entry.args).toEqual(['serve', 'acp'])
+    }
+    await runsFromArchive(HARN)
+    expect(
+      await detectAgent(
+        HARN,
+        context({ isExecutable: async (file) => file === '/usr/local/bin/harn' }),
+      ),
+    ).toMatchObject({ state: 'available', spec: { command: '/usr/local/bin/harn' } })
+  })
+
+  it('adds Kimchi with its archives, a command nested in bin/ and its arguments', async () => {
+    expect(KIMCHI.launch).toEqual({ kind: 'binary', command: 'kimchi', args: ['--mode', 'acp'] })
+    const entries = KIMCHI.installs!.archive!.entries
+    expect(Object.keys(entries).sort()).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-x86_64',
+    ])
+    for (const [key, entry] of Object.entries(entries)) {
+      expect(entry.cmd).toBe(key.startsWith('windows') ? './bin/kimchi.exe' : './bin/kimchi')
+      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/)
+      expect(entry.args).toEqual(['--mode', 'acp'])
+    }
+    await runsFromArchive(KIMCHI)
+    expect(
+      await detectAgent(
+        KIMCHI,
+        context({ isExecutable: async (file) => file === '/usr/local/bin/kimchi' }),
+      ),
+    ).toMatchObject({ state: 'available', spec: { command: '/usr/local/bin/kimchi' } })
   })
 })

@@ -104,6 +104,10 @@ OverBench 为这些工作提供了一个桌面上的家。你用的每个 Agent 
 | [Hermes Agent](https://hermes-agent.nousresearch.com)                       | 你自己安装的 `hermes`，以 `hermes acp` 运行                                                    |
 | [Muse Code](https://dev.meta.ai)                                            | 你自己安装的 `muse`，以 `muse acp` 运行，启用实验性的 ACP 模式                                 |
 | [CodeWhale](https://codewhale.net)                                          | 你自己安装的 `codewhale`，以 `codewhale serve --acp` 运行（部分支持的 ACP 适配器）             |
+| [Bob](https://bob.ibm.com)                                                  | ACP 包 `@ibm/bob`，首次使用时安装，以 `acp` 运行                                               |
+| [MiniMax Code](https://agent.minimax.io)                                    | ACP 包 `@minimax-ai/code`，首次使用时安装，以 `acp` 运行                                       |
+| [Harn](https://harnlang.com)                                                | 你自己安装的 `harn`，或首次使用时下载的压缩包                                                  |
+| [Kimchi](https://kimchi.dev)                                                | 你自己安装的 `kimchi`，或首次使用时下载的压缩包                                                |
 
 这些适配器需要 Node.js 和 npm，OverBench 会通过你的登录 shell 找到它们。
 

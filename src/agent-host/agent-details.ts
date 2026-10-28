@@ -218,6 +218,19 @@ export function configLocations(
         },
       ]
     }
+    case 'bob':
+    case 'harn':
+    case 'kimchi':
+      // Their docs name no configuration folder.
+      return []
+    case 'minimax': {
+      const moved = variable('MINIMAX_DATA_DIR')
+      const folder = moved ?? p.join(home, '.minimax')
+      return [
+        { id: 'folder', candidates: [folder], env: moved ? 'MINIMAX_DATA_DIR' : null },
+        { id: 'settings', candidates: [p.join(folder, 'config.yaml')], env: null },
+      ]
+    }
     case 'cursor': {
       const moved = variable('CURSOR_CONFIG_DIR')
       // Cursor's docs give XDG_CONFIG_HOME a folder of its own only on Linux and BSD.

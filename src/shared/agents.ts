@@ -22,6 +22,8 @@ export type AgentId =
   | 'grok'
   | 'cline'
   | 'droid'
+  | 'bob'
+  | 'minimax'
   | 'cursor'
   | 'kimi'
   | 'amp'
@@ -31,6 +33,8 @@ export type AgentId =
   | 'hermes'
   | 'muse'
   | 'codewhale'
+  | 'harn'
+  | 'kimchi'
   | 'fake-agent'
 
 export const AGENT_IDS: readonly AgentId[] = [
@@ -55,6 +59,8 @@ export const AGENT_IDS: readonly AgentId[] = [
   'grok',
   'cline',
   'droid',
+  'bob',
+  'minimax',
   'cursor',
   'kimi',
   'amp',
@@ -64,5 +70,7 @@ export const AGENT_IDS: readonly AgentId[] = [
   'hermes',
   'muse',
   'codewhale',
+  'harn',
+  'kimchi',
   'fake-agent',
 ]

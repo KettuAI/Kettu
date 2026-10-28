@@ -4,6 +4,7 @@ import * as agoragentic from './agoragentic'
 import * as amp from './amp'
 import * as auggie from './auggie'
 import * as autohand from './autohand'
+import * as bob from './bob'
 import * as claudeCode from './claude-code'
 import * as cline from './cline'
 import * as codebuddy from './codebuddy'
@@ -20,9 +21,12 @@ import * as gemini from './gemini'
 import * as glm from './glm'
 import * as goose from './goose'
 import * as grok from './grok'
+import * as harn from './harn'
 import * as hermes from './hermes'
 import * as kilo from './kilo'
+import * as kimchi from './kimchi'
 import * as kimi from './kimi'
+import * as minimax from './minimax'
 import * as muse from './muse'
 import * as nova from './nova'
 import * as omp from './omp'
@@ -62,12 +66,16 @@ export const AGENT_MARKS: Record<AgentId, AgentMarkModule> = {
   sigit,
   agoragentic,
   autohand,
+  bob,
+  minimax,
   cursor,
   kimi,
   amp,
   goose,
   grok,
   kilo,
+  harn,
+  kimchi,
   droid,
   gemini,
   omp,

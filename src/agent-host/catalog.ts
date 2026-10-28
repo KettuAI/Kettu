@@ -12,6 +12,7 @@ import { AGORAGENTIC } from './agents/agoragentic'
 import { AMP } from './agents/amp'
 import { AUGGIE } from './agents/auggie'
 import { AUTOHAND } from './agents/autohand'
+import { BOB } from './agents/bob'
 import { CLAUDE_CODE } from './agents/claude-code'
 import { CLINE } from './agents/cline'
 import { CODEBUDDY } from './agents/codebuddy'
@@ -28,9 +29,12 @@ import { GEMINI } from './agents/gemini'
 import { GLM } from './agents/glm'
 import { GOOSE } from './agents/goose'
 import { GROK } from './agents/grok'
+import { HARN } from './agents/harn'
 import { HERMES } from './agents/hermes'
 import { KILO } from './agents/kilo'
+import { KIMCHI } from './agents/kimchi'
 import { KIMI } from './agents/kimi'
+import { MINIMAX } from './agents/minimax'
 import { MUSE } from './agents/muse'
 import { NOVA } from './agents/nova'
 import { OMP } from './agents/omp'
@@ -149,6 +153,7 @@ export {
   AMP,
   AUGGIE,
   AUTOHAND,
+  BOB,
   CLAUDE_CODE,
   CLINE,
   CODEBUDDY,
@@ -165,9 +170,12 @@ export {
   GLM,
   GOOSE,
   GROK,
+  HARN,
   HERMES,
   KILO,
+  KIMCHI,
   KIMI,
+  MINIMAX,
   MUSE,
   NOVA,
   OMP,
@@ -202,6 +210,8 @@ export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
     GROK,
     CLINE,
     DROID,
+    BOB,
+    MINIMAX,
     CURSOR,
     KIMI,
     AMP,
@@ -211,6 +221,8 @@ export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
     HERMES,
     MUSE,
     CODEWHALE,
+    HARN,
+    KIMCHI,
   ]
   if (fakeAgentPath) catalog.push(fakeAgent(fakeAgentPath))
   return catalog
