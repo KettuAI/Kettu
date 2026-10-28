@@ -1717,7 +1717,7 @@ describe('a configuration folder of its own', () => {
     const command = m
       .status()
       .authMethods.find((method) => method.id === 'fake-meta-login')?.command
-    expect(command).toMatch(/main\.ts["']? --auth-type=fake$/)
+    expect(command).toMatch(/main\.ts["']? --auth-type=fake["']?$/)
     await m.agents.stopAll()
   })
 
