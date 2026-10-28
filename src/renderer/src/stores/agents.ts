@@ -182,6 +182,10 @@ export const AGENT_NAMES: Record<AgentId, string> = {
   grok: 'Grok',
   cline: 'Cline',
   droid: 'Factory Droid',
+  omp: 'OMP',
+  hermes: 'Hermes Agent',
+  muse: 'Muse Code',
+  codewhale: 'CodeWhale',
   'fake-agent': 'Fake agent',
 }
 

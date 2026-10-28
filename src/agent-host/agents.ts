@@ -2231,6 +2231,7 @@ export class AgentManager {
         slot.state === 'starting' || slot.state === 'installing' ? slot.progress.lastLines(5) : [],
       launchCommand: formatCommand(display, platform),
       binaryOverride: this.deps.settings().agents[slot.def.id]?.binaryPath ?? null,
+      binaryCommand: launch.kind === 'binary' ? launch.command : null,
       update,
       updateCheckedAt: launch.kind === 'package' ? slot.checkedAt : null,
       updateSkipped: sameUpdate(update, slot.skipped),

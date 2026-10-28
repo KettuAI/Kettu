@@ -7,6 +7,7 @@ import * as autohand from './autohand'
 import * as claudeCode from './claude-code'
 import * as cline from './cline'
 import * as codebuddy from './codebuddy'
+import * as codewhale from './codewhale'
 import * as codex from './codex'
 import * as copilot from './copilot'
 import * as cursor from './cursor'
@@ -19,9 +20,12 @@ import * as gemini from './gemini'
 import * as glm from './glm'
 import * as goose from './goose'
 import * as grok from './grok'
+import * as hermes from './hermes'
 import * as kilo from './kilo'
 import * as kimi from './kimi'
+import * as muse from './muse'
 import * as nova from './nova'
+import * as omp from './omp'
 import * as opencode from './opencode'
 import * as pi from './pi'
 import * as qoder from './qoder'
@@ -66,5 +70,9 @@ export const AGENT_MARKS: Record<AgentId, AgentMarkModule> = {
   kilo,
   droid,
   gemini,
+  omp,
+  hermes,
+  muse,
+  codewhale,
   'fake-agent': fakeAgent,
 }

@@ -355,7 +355,7 @@
     "usage": "Plan usage",
     "checkLimits": "Check plan limits",
     "program": "Program",
-    "programOnPath": "opencode on PATH",
+    "programOnPath": "{{command}} on PATH",
     "binaryDescription": "The {{command}} binary OverBench starts.",
     "reset": "Reset",
     "chooseBinary": "Choose binary…",

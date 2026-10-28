@@ -196,6 +196,10 @@
       "amp": "Install Amp, or choose its binary in Settings › Agents.",
       "goose": "Install goose, or choose its binary in Settings › Agents.",
       "kilo": "Install Kilo Code, or choose its binary in Settings › Agents.",
+      "omp": "Install OMP with `bun install -g @oh-my-pi/pi-coding-agent` or its installer at omp.sh.",
+      "hermes": "Install Hermes Agent with the installer at hermes-agent.nousresearch.com, with its `acp` extra.",
+      "muse": "Install Muse Code from dev.meta.ai, or choose its binary in Settings › Agents.",
+      "codewhale": "Install CodeWhale with the installer at codewhale.net, or choose its binary in Settings › Agents.",
       "fakeAgent": "The fake agent runs tools/fake-agent/main.ts from the repository."
     }
   },

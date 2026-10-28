@@ -27,6 +27,10 @@ export type AgentId =
   | 'amp'
   | 'goose'
   | 'kilo'
+  | 'omp'
+  | 'hermes'
+  | 'muse'
+  | 'codewhale'
   | 'fake-agent'
 
 export const AGENT_IDS: readonly AgentId[] = [
@@ -56,5 +60,9 @@ export const AGENT_IDS: readonly AgentId[] = [
   'amp',
   'goose',
   'kilo',
+  'omp',
+  'hermes',
+  'muse',
+  'codewhale',
   'fake-agent',
 ]

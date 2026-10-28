@@ -10,6 +10,7 @@ import {
   CLAUDE_CODE,
   CLINE,
   CODEBUDDY,
+  CODEWHALE,
   CODEX,
   COPILOT,
   DEEPAGENTS,
@@ -22,11 +23,14 @@ import {
   fakeAgent,
   GEMINI,
   GLM,
-  NOVA,
   GOOSE,
   GROK,
+  HERMES,
   KILO,
   KIMI,
+  MUSE,
+  NOVA,
+  OMP,
   OPENCODE,
   PI,
   QODER,
@@ -86,6 +90,10 @@ describe('buildCatalog', () => {
       'amp',
       'goose',
       'kilo',
+      'omp',
+      'hermes',
+      'muse',
+      'codewhale',
     ])
     expect(buildCatalog('/repo/tools/fake-agent/main.ts').map((d) => d.id)).toContain('fake-agent')
   })
@@ -118,6 +126,10 @@ describe('buildCatalog', () => {
       'amp',
       'goose',
       'kilo',
+      'omp',
+      'hermes',
+      'muse',
+      'codewhale',
       'fake-agent',
     ])
   })
@@ -294,6 +306,88 @@ describe('detectAgent', () => {
     expect(await detectAgent(OPENCODE, context({ binaryOverride: '/opt/gone' }))).toMatchObject({
       state: 'not-installed',
       detail: expect.stringContaining('/opt/gone'),
+    })
+  })
+
+  it('starts OMP with its own ACP mode, and says how to install it', async () => {
+    expect(await detectAgent(OMP, context())).toMatchObject({
+      state: 'not-installed',
+      detail: expect.stringContaining('omp.sh'),
+    })
+    expect(
+      await detectAgent(OMP, context({ isExecutable: async (file) => file === '/usr/bin/omp' })),
+    ).toMatchObject({
+      state: 'available',
+      spec: {
+        command: '/usr/bin/omp',
+        args: ['acp'],
+        env: {},
+        display: { command: 'omp', args: ['acp'], env: {} },
+      },
+    })
+  })
+
+  it('starts Hermes Agent with its own ACP mode, and says how to install it', async () => {
+    expect(await detectAgent(HERMES, context())).toMatchObject({
+      state: 'not-installed',
+      detail: expect.stringContaining('hermes-agent.nousresearch.com'),
+    })
+    expect(
+      await detectAgent(
+        HERMES,
+        context({ isExecutable: async (file) => file === '/usr/bin/hermes' }),
+      ),
+    ).toMatchObject({
+      state: 'available',
+      spec: {
+        command: '/usr/bin/hermes',
+        args: ['acp'],
+        env: {},
+        display: { command: 'hermes', args: ['acp'], env: {} },
+      },
+    })
+  })
+
+  it("starts Muse Code's experimental ACP mode with the variable that turns it on", async () => {
+    expect(await detectAgent(MUSE, context())).toMatchObject({
+      state: 'not-installed',
+      detail: expect.stringContaining('dev.meta.ai'),
+    })
+    expect(
+      await detectAgent(MUSE, context({ isExecutable: async (file) => file === '/usr/bin/muse' })),
+    ).toMatchObject({
+      state: 'available',
+      spec: {
+        command: '/usr/bin/muse',
+        args: ['acp'],
+        env: { MUSE_EXPERIMENTAL_ACP: 'on' },
+        display: {
+          command: 'muse',
+          args: ['acp'],
+          env: { MUSE_EXPERIMENTAL_ACP: 'on' },
+        },
+      },
+    })
+  })
+
+  it('starts CodeWhale with its partial ACP adapter, and says how to install it', async () => {
+    expect(await detectAgent(CODEWHALE, context())).toMatchObject({
+      state: 'not-installed',
+      detail: expect.stringContaining('codewhale.net'),
+    })
+    expect(
+      await detectAgent(
+        CODEWHALE,
+        context({ isExecutable: async (file) => file === '/usr/bin/codewhale' }),
+      ),
+    ).toMatchObject({
+      state: 'available',
+      spec: {
+        command: '/usr/bin/codewhale',
+        args: ['serve', '--acp'],
+        env: {},
+        display: { command: 'codewhale', args: ['serve', '--acp'], env: {} },
+      },
     })
   })
 

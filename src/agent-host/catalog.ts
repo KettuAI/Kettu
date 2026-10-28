@@ -15,6 +15,7 @@ import { AUTOHAND } from './agents/autohand'
 import { CLAUDE_CODE } from './agents/claude-code'
 import { CLINE } from './agents/cline'
 import { CODEBUDDY } from './agents/codebuddy'
+import { CODEWHALE } from './agents/codewhale'
 import { CODEX } from './agents/codex'
 import { COPILOT } from './agents/copilot'
 import { CURSOR } from './agents/cursor'
@@ -27,9 +28,12 @@ import { GEMINI } from './agents/gemini'
 import { GLM } from './agents/glm'
 import { GOOSE } from './agents/goose'
 import { GROK } from './agents/grok'
+import { HERMES } from './agents/hermes'
 import { KILO } from './agents/kilo'
 import { KIMI } from './agents/kimi'
+import { MUSE } from './agents/muse'
 import { NOVA } from './agents/nova'
+import { OMP } from './agents/omp'
 import { OPENCODE } from './agents/opencode'
 import { PI } from './agents/pi'
 import { QODER } from './agents/qoder'
@@ -148,6 +152,7 @@ export {
   CLAUDE_CODE,
   CLINE,
   CODEBUDDY,
+  CODEWHALE,
   CODEX,
   COPILOT,
   CURSOR,
@@ -160,9 +165,12 @@ export {
   GLM,
   GOOSE,
   GROK,
+  HERMES,
   KILO,
   KIMI,
+  MUSE,
   NOVA,
+  OMP,
   OPENCODE,
   PI,
   QODER,
@@ -199,6 +207,10 @@ export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
     AMP,
     GOOSE,
     KILO,
+    OMP,
+    HERMES,
+    MUSE,
+    CODEWHALE,
   ]
   if (fakeAgentPath) catalog.push(fakeAgent(fakeAgentPath))
   return catalog
@@ -262,7 +274,11 @@ export function displayCommand(
       return { command: 'node', args, env: { ...def.env, ...def.launch.env } }
     }
     case 'binary':
-      return { command: binaryOverride ?? def.launch.command, args: def.launch.args, env: {} }
+      return {
+        command: binaryOverride ?? def.launch.command,
+        args: def.launch.args,
+        env: { ...def.env },
+      }
     case 'uvx':
       return {
         command: 'uvx',
@@ -397,15 +413,16 @@ function binaryDetection(
   args: string[],
   platform: Platform,
   display: CommandWords,
+  env: Record<string, string>,
 ): Detection {
   return {
     state: 'available',
     spec: {
       command,
       args,
-      env: {},
+      env,
       shell: needsShell(command, platform),
-      display,
+      display: { ...display, env },
     },
     adapter: null,
   }
@@ -588,6 +605,7 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
       }
     }
     case 'binary': {
+      const env = { ...def.env }
       if (ctx.binaryOverride) {
         if (!(await ctx.isExecutable(ctx.binaryOverride))) {
           return {
@@ -595,10 +613,10 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
             detail: t('detect.programUnusable', { agent: def.name, path: ctx.binaryOverride }),
           }
         }
-        return binaryDetection(ctx.binaryOverride, launch.args, ctx.platform, display)
+        return binaryDetection(ctx.binaryOverride, launch.args, ctx.platform, display, env)
       }
       const program = await findCommand(launch.command, ctx)
-      if (program) return binaryDetection(program, launch.args, ctx.platform, display)
+      if (program) return binaryDetection(program, launch.args, ctx.platform, display, env)
       // The user's own copy wins, so their sign-in and configuration stay; without one,
       // OverBench's archive install runs.
       const archive = def.installs?.archive
@@ -612,11 +630,13 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
           try {
             const command = programPath(installed.dir, installed.cmd, ctx.platform)
             if (await ctx.isExecutable(command)) {
-              return binaryDetection(command, installed.args, ctx.platform, {
+              return binaryDetection(
                 command,
-                args: installed.args,
-                env: {},
-              })
+                installed.args,
+                ctx.platform,
+                { command, args: installed.args, env },
+                env,
+              )
             }
           } catch {
             // A record whose command leaves the install folder is no install.

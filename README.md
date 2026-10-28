@@ -100,6 +100,10 @@ Install at least one of these agents first; OverBench finds it on your system.
 | [Grok](https://x.ai/cli)                                                    | The ACP package `@xai-official/grok`, installed on first use, with `agent stdio`                             |
 | [Cline](https://cline.bot/cli)                                              | The ACP package `cline`, installed on first use, with `--acp`                                                |
 | [Factory Droid](https://factory.ai/product/cli)                             | The ACP package `droid`, installed on first use, with `exec --output-format acp-daemon` and self-updates off |
+| [OMP (Oh My Pi)](https://omp.sh)                                            | Your installed `omp`, as `omp acp`                                                                           |
+| [Hermes Agent](https://hermes-agent.nousresearch.com)                       | Your installed `hermes`, as `hermes acp`                                                                     |
+| [Muse Code](https://dev.meta.ai)                                            | Your installed `muse`, as `muse acp`, with its experimental ACP mode                                         |
+| [CodeWhale](https://codewhale.net)                                          | Your installed `codewhale`, as `codewhale serve --acp` (a partial ACP adapter)                               |
 
 The adapters need Node.js with npm, which OverBench finds through your login shell.
 
