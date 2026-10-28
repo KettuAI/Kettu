@@ -66,12 +66,20 @@ export function initBrowser(): void {
     const view = useViewStore.getState()
     const summary = useSessionsStore.getState().byId[sessionId]
     if (!summary) return
-    // In a split the panel belongs to it, and the session's page is the focused pane's.
-    const shown = isSplit(view.layout) ? view.splitSidePane : view.sidePane[summary.projectPath]
+    // In a split the panel serves the pane in focus, whose page alone it can show.
+    const split = isSplit(view.layout)
+    const shown = split ? view.splitSidePane : view.sidePane[summary.projectPath]
+    const focused = split && view.main.kind === 'session' && view.main.sessionId === sessionId
+    if (split && !focused) {
+      if (shown !== 'browser') {
+        useBrowserStore.setState((s) => ({ unseen: { ...s.unseen, [sessionId]: true } }))
+      }
+      return
+    }
     if (shown === undefined || shown === null) {
       // Nothing else in the panel: show the browser, without taking the focus.
       useViewStore.setState((s) =>
-        isSplit(s.layout)
+        split
           ? { splitSidePane: 'browser' }
           : { sidePane: { ...s.sidePane, [summary.projectPath]: 'browser' } },
       )
