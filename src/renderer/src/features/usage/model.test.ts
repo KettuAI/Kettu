@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DayUsage } from '@shared/usage'
 import {
   addDays,
+  agentFill,
   axisLabels,
   barCenters,
   barGap,
@@ -749,5 +750,12 @@ describe('typed dates', () => {
       range: none,
       error: null,
     })
+  })
+})
+
+describe('agentFill', () => {
+  it('gives an agent with no series color of its own the shared one', () => {
+    expect(agentFill('claude-code')).toBe('bg-agent-claude-code')
+    expect(agentFill('poolside')).toBe('bg-agent-other')
   })
 })
