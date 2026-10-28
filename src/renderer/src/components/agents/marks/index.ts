@@ -22,6 +22,7 @@ import * as dimcode from './dimcode'
 import * as dirac from './dirac'
 import * as droid from './droid'
 import * as fakeAgent from './fake-agent'
+import * as fastAgent from './fast-agent'
 import * as gemini from './gemini'
 import * as glm from './glm'
 import * as goose from './goose'
@@ -102,5 +103,6 @@ export const AGENT_MARKS: Record<AgentId, AgentMarkModule> = {
   poolside,
   stakpak,
   vtcode,
+  'fast-agent': fastAgent,
   'fake-agent': fakeAgent,
 }

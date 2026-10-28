@@ -200,6 +200,7 @@ export const AGENT_NAMES: Record<AgentId, string> = {
   poolside: 'Poolside',
   stakpak: 'Stakpak',
   vtcode: 'VT Code',
+  'fast-agent': 'fast-agent',
   'fake-agent': 'Fake agent',
 }
 
