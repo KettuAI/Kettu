@@ -6,10 +6,16 @@ import type { AgentId } from '@shared/thread'
 import { Switch } from '@renderer/components/ui/switch'
 
 const LEVELS: readonly PermissionScope['level'][] = ['read', 'edit', 'commands']
-const CAPTION_AGENTS = ['claude-code', 'codex', 'opencode', 'pi'] as const
 
-function hasCaption(agentId: AgentId): agentId is (typeof CAPTION_AGENTS)[number] {
-  return (CAPTION_AGENTS as readonly AgentId[]).includes(agentId)
+const CAPTIONS = {
+  'claude-code': true,
+  codex: true,
+  opencode: true,
+  pi: true,
+} satisfies Partial<Record<AgentId, true>>
+
+function hasCaption(agentId: AgentId): agentId is keyof typeof CAPTIONS {
+  return agentId in CAPTIONS
 }
 
 /** A choice's focus ring, drawn inside it, since its card clips what reaches past its corners. */
