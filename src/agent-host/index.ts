@@ -37,6 +37,10 @@ function isGrant(value: unknown): value is AttachmentGrant {
   )
 }
 
+function isHostDecision(value: unknown): value is 'session' | 'project' | 'deny' | 'timeout' {
+  return value === 'session' || value === 'project' || value === 'deny' || value === 'timeout'
+}
+
 function init(message: Extract<MainToHost, { type: 'host:init' }>): void {
   if (host) {
     send({ type: 'host:log', level: 'warn', message: 'host:init arrived twice; ignored' })
@@ -118,6 +122,21 @@ parentPort.on('message', ({ data, ports }) => {
     case 'browser-result':
       if (Number.isSafeInteger(message.callId)) {
         withHost((h) => h.browserResult(message.callId, message.result, message.error))
+      }
+      break
+    case 'host:browser-waiting':
+      if (Number.isSafeInteger(message.callId) && typeof message.waiting === 'boolean') {
+        withHost((h) => h.browserWaiting(message.callId, message.waiting))
+      }
+      break
+    case 'host:browser-origin-ask':
+      if (Number.isSafeInteger(message.requestId)) {
+        withHost((h) => h.browserOriginAsked(message.requestId, message.sessionId, message.origin))
+      }
+      break
+    case 'host:browser-origin-answer':
+      if (Number.isSafeInteger(message.requestId) && isHostDecision(message.decision)) {
+        withHost((h) => h.browserOriginSettled(message.requestId, message.decision))
       }
       break
     case 'host:power':

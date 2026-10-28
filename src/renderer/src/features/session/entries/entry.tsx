@@ -12,6 +12,7 @@ import {
   UserEntry,
 } from './basic'
 import { ArtifactEntry } from './artifact-entry'
+import { BrowserOriginEntry } from './browser-origin-entry'
 import { SessionStartedEntry } from './session-started-entry'
 import { SubagentCard } from './subagent-card'
 import { ToolCard } from './tool-card'
@@ -57,6 +58,8 @@ export const Entry = memo(function Entry({
       return <GitEventEntry {...props} />
     case 'artifact':
       return <ArtifactEntry {...props} projectPath={projectPath} />
+    case 'browser_origin':
+      return <BrowserOriginEntry {...props} agentName={agentName} />
     default:
       return null
   }

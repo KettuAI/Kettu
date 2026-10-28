@@ -175,6 +175,11 @@ const api: OverbenchApi = {
     thaw: (id) => invoke('browser:thaw', id),
     handBack: (id) => invoke('browser:hand-back', id),
     stopDriving: (id) => invoke('browser:stop-driving', id),
+    answerOrigin: (id, requestId, decision) =>
+      invoke('browser:answer-origin', id, requestId, decision),
+    allowedSites: () => invoke('browser:allowed-sites'),
+    removeAllowedSite: (projectPath, origin) =>
+      invoke('browser:remove-allowed-site', projectPath, origin),
     clearData: () => invoke('browser:clear-data'),
     setSessions: (ids) => send('browser:sessions', ids),
     onState: onBrowserState,

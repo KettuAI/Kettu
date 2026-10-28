@@ -1,6 +1,7 @@
 // OverBench's own session and thread model, shared by the agent host and the renderer.
 // It never imports ACP types; only the mapper in src/agent-host/acp/ does.
 
+import type { BrowserOriginAnswer } from './browser'
 import type { RoutineRef } from './routines'
 
 export type AgentId = 'claude-code' | 'codex' | 'opencode' | 'pi' | 'fake-agent'
@@ -163,6 +164,7 @@ export type ThreadEntry =
     }
   | GitEntry // OverBench's own observation of the repository, see the git design
   | ArtifactEntry // OverBench's own record of a write to the artifacts service
+  | BrowserOriginEntry // OverBench's own record of a new site's request and answer
 
 /** `after`: the agent's entry before it, to put it back after a replay; older entries lack it. */
 export type GitEntry =
@@ -206,6 +208,21 @@ export interface ArtifactEntry {
 }
 
 export type ArtifactAction = 'create' | 'update' | 'restore' | 'delete'
+
+/**
+ * An agent's page asked to open a new site. `decision` is null while it waits for the user, then
+ * the answer they gave, `timeout` when none came.
+ */
+export interface BrowserOriginEntry {
+  kind: 'browser_origin'
+  id: string
+  /** The id main gave the request, which both the pane's bar and this card answer. */
+  requestId: number
+  origin: string
+  decision: BrowserOriginAnswer | null
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
 
 export type ToolKind =
   | 'read'
@@ -640,6 +657,17 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         ARTIFACT_ACTIONS.has(value.action as string) &&
         (value.version === null || typeof value.version === 'number') &&
         typeof value.writes === 'number' &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'browser_origin':
+      return (
+        Number.isSafeInteger(value.requestId) &&
+        typeof value.origin === 'string' &&
+        (value.decision === null ||
+          value.decision === 'session' ||
+          value.decision === 'project' ||
+          value.decision === 'deny' ||
+          value.decision === 'timeout') &&
         (value.after === null || typeof value.after === 'string')
       )
     default:

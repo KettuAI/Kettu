@@ -59,6 +59,13 @@ beforeAll(async () => {
   dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-browser-tools-'))
   server = createServer((request, response) => {
     const url = request.url ?? '/'
+    if (url === '/redirect') {
+      // A redirect to the same server under a name that is no dev host: another origin.
+      const other = `http://example.org:${(server!.address() as AddressInfo).port}/two`
+      response.writeHead(302, { location: other })
+      response.end()
+      return
+    }
     const html = url.startsWith('/inner')
       ? INNER
       : url === '/form'
@@ -196,5 +203,25 @@ describe('the browser tools', () => {
     // A same-origin frame shows under its iframe node.
     expect(result.frame as string).toMatch(/iframe/)
     expect(result.frame as string).toMatch(/button "Inner button"/)
+
+    // A new origin asks, and refused the call fails not_allowed with the page where it was.
+    const other = `http://example.com:${new URL(fixture).port}`
+    const redirected = `http://example.org:${new URL(fixture).port}`
+    expect(result.originAsked).toBe(other)
+    expect(result.originDenied).toBe('not_allowed')
+    expect(result.originStayed).toBe(`${fixture}/frame`)
+    // Allowed for the session, it opens, and a later navigation to it asks no longer.
+    expect(result.originOpened).toBe(`${other}/two`)
+    expect(result.originOpenedAgain).toBe(`${other}/form`)
+    expect(result.originAskedAgain).toBe(false)
+    // A redirect during an agent's call asks too, and refused it fails the same way.
+    expect(result.redirectAsked).toBe(redirected)
+    expect(result.redirectDenied).toBe('not_allowed')
+    expect(result.redirectStayed).toBe(`${other}/form`)
+    // Unanswered, the site fails the call not_allowed once its wait ends.
+    expect(result.originTimedOut).toBe('not_allowed')
+    // The user's own navigation opens the site without asking.
+    expect(result.userAsked).toBe(false)
+    expect(result.userOpened).toBe(`${other}/two`)
   }, 120_000)
 })

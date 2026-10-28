@@ -239,12 +239,10 @@ describe('checkAgentNavigation', () => {
     expect(checkAgentNavigation('about:blank')).toBe('about:blank')
   })
 
-  it('refuses any other origin until the user allows it, naming it', () => {
-    expect(() => checkAgentNavigation('https://example.com/')).toThrow(
-      expect.objectContaining({
-        code: 'not_allowed',
-        message: expect.stringContaining('example.com'),
-      }),
+  it('leaves another origin to main, which asks the user for it', () => {
+    expect(checkAgentNavigation('https://example.com/x')).toBe('https://example.com/x')
+    expect(checkAgentNavigation('http://localhost.example.com/')).toBe(
+      'http://localhost.example.com/',
     )
   })
 

@@ -1,7 +1,7 @@
 import type { AgentsApi, DiagnosticsBundle } from './agent-host'
 import type { ArtifactImportResult, ThumbnailPage } from './artifacts'
 import type { GrantedAttachment } from './attachments'
-import type { BrowserBounds, BrowserState } from './browser'
+import type { BrowserBounds, BrowserOriginDecision, BrowserState } from './browser'
 import type { BusySession, BusyTerminal } from './host-control'
 import type { Locale } from './locale'
 import type { CarriedMedia } from './media'
@@ -45,6 +45,12 @@ export interface QuitRequest {
   sessions: BusySession[]
   terminals: BusyTerminal[]
   unsaved: UnsavedFile[]
+}
+
+/** A project and the origins it always lets agents open, as Settings › Browser lists them. */
+export interface AllowedSites {
+  projectPath: string
+  origins: string[]
 }
 
 /** What a perf run (--overbench-perf) reads from main. */
@@ -186,6 +192,14 @@ export interface IpcInvokeContract {
   'browser:hand-back': { args: [sessionId: string]; result: void }
   /** The pane's Stop: the user takes control, and the call in flight fails. */
   'browser:stop-driving': { args: [sessionId: string]; result: void }
+  /** The pane's bar or the thread's card: what the user answered a new site's request. */
+  'browser:answer-origin': {
+    args: [sessionId: string, requestId: number, decision: BrowserOriginDecision]
+    result: void
+  }
+  /** The sites each project always lets agents open. */
+  'browser:allowed-sites': { args: []; result: AllowedSites[] }
+  'browser:remove-allowed-site': { args: [projectPath: string, origin: string]; result: void }
   'browser:clear-data': { args: []; result: void }
 }
 
@@ -388,6 +402,15 @@ export interface OverbenchApi {
     handBack(sessionId: string): Promise<void>
     /** The driving bar's Stop: the user takes control, and the running call fails. */
     stopDriving(sessionId: string): Promise<void>
+    /** The pane's bar or the thread's card: what the user answered a new site's request. */
+    answerOrigin(
+      sessionId: string,
+      requestId: number,
+      decision: BrowserOriginDecision,
+    ): Promise<void>
+    /** The sites each project always lets agents open. */
+    allowedSites(): Promise<AllowedSites[]>
+    removeAllowedSite(projectPath: string, origin: string): Promise<void>
     /** Clears the profile's cookies, site storage and cache. */
     clearData(): Promise<void>
     /** The sessions that still exist; a page whose session does not is closed. */

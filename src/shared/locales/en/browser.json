@@ -30,5 +30,19 @@
     "stop": "Stop",
     "you": "You have control",
     "handBack": "Hand back"
+  },
+  "origin": {
+    "decision": {
+      "deny": "Deny",
+      "project": "Always for this project",
+      "session": "Allow for this session"
+    },
+    "answer": {
+      "session": "Allowed {{origin}} for this session",
+      "project": "Always allowed {{origin}} for this project",
+      "deny": "Denied {{origin}}",
+      "timeout": "Not answered in time"
+    },
+    "asks": "{{agent}} wants to open"
   }
 }

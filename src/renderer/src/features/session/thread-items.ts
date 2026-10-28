@@ -3,7 +3,8 @@ import type { ThreadEntry, ThreadState } from '@shared/thread'
 // One character per entry, so the thread re-renders only when its shape changes, not on every
 // streamed token: u user, s user message steered into a running turn, a agent, h thought shown in
 // place, r long thought, q short thought still streaming, g groupable lookup, t other tool, w tool
-// waiting for permission, p plan or compaction, c progress note, e turn end, o anything else.
+// waiting for permission, p plan or compaction, c progress note, e turn end, o anything else,
+// which a new site's request is: a card of its own, never folded into a run.
 export function signatureOf(state: ThreadState | null | undefined): string {
   if (!state) return ''
   let signature = ''

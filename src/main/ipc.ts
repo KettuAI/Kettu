@@ -10,7 +10,7 @@ import {
   shell,
 } from 'electron'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
-import type { BrowserBounds } from '@shared/browser'
+import type { BrowserBounds, BrowserOriginDecision } from '@shared/browser'
 import type {
   AppInfo,
   IpcInvokeChannel,
@@ -24,6 +24,7 @@ import type { AgentHost } from './agent-host'
 import { grantClipboardFiles, grantPaths } from './attachments'
 import type { Artifacts } from './artifacts'
 import type { BrowserViews } from './browser/views'
+import { originOf } from './browser/origins'
 import { mainDiagnostics, saveDiagnostics } from './diagnostics'
 import { isExecutableFile } from './executable'
 import { t } from './i18n'
@@ -183,6 +184,31 @@ function browserBounds(value: unknown): BrowserBounds {
 }
 
 const SHOW_ITEM_MAX_CHARS = 4_096
+
+/** An origin Settings lists: scheme, host and port, as it was stored. */
+function browserOrigin(value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > URL_MAX_CHARS) {
+    throw new Error(`An origin must be a string of 1 to ${URL_MAX_CHARS} characters`)
+  }
+  if (originOf(value) !== value) throw new Error('An origin is a scheme, a host and a port')
+  return value
+}
+
+/** A request id main handed out for a new origin. */
+function originRequestId(value: unknown): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 1) {
+    throw new Error('A browser origin request id must be a positive integer')
+  }
+  return value as number
+}
+
+/** The user's answer to a new origin, as the pane or the card gives it. */
+function originDecision(value: unknown): BrowserOriginDecision {
+  if (value !== 'session' && value !== 'project' && value !== 'deny') {
+    throw new Error('A browser origin answer must be session, project or deny')
+  }
+  return value
+}
 
 /** A path to reveal in the file manager: untrusted input from the renderer. */
 function absolutePath(value: unknown): string {
@@ -470,6 +496,14 @@ export function registerIpcHandlers({
   handle('browser:thaw', 1, (_, id) => browserViews.thaw(sessionId(id)))
   handle('browser:hand-back', 1, (_, id) => browserViews.handBack(sessionId(id)))
   handle('browser:stop-driving', 1, (_, id) => browserViews.stopDriving(sessionId(id)))
+  // The pane's bar and the thread's card both answer through main, so the page and the thread agree.
+  handle('browser:answer-origin', 3, (_, id, requestId, decision) => {
+    browserViews.answerOrigin(sessionId(id), originRequestId(requestId), originDecision(decision))
+  })
+  handle('browser:allowed-sites', 0, () => browserViews.allowedSites())
+  handle('browser:remove-allowed-site', 2, (_, projectPath, origin) => {
+    browserViews.removeAllowedSite(absolutePath(projectPath), browserOrigin(origin))
+  })
   handle('browser:clear-data', 0, () => browserViews.clearData())
 
   on('agent-host:connect', (event) => agentHost.connect(event.sender))

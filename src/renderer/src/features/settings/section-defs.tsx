@@ -52,6 +52,7 @@ import { useLoginItemStatus } from './use-login-item'
 import { environmentText } from './environment-text'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
 import {
+  AllowedSitesList,
   BackgroundFetch,
   ClearBrowsingData,
   ColorModeTiles,
@@ -569,6 +570,16 @@ export function useBrowserSection(): SectionDef {
         keywords: t('browser.clearData.keywords'),
         group: group('site-data', t('browser.groups.siteData')),
         render: () => <ClearBrowsingData />,
+      },
+      {
+        id: 'allowed-sites',
+        name: t('browser.allowedSites.name'),
+        english: en('browser.allowedSites.name'),
+        description: t('browser.allowedSites.description'),
+        keywords: t('browser.allowedSites.keywords'),
+        group: group('allowed-sites', t('browser.groups.allowedSites')),
+        layout: 'block',
+        render: () => <AllowedSitesList />,
       },
     ],
   }

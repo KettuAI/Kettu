@@ -8,11 +8,15 @@ import {
   type BrowserBounds,
   type BrowserControlState,
   type BrowserNotice,
+  type BrowserOriginAnswer,
+  type BrowserOriginDecision,
   type BrowserState,
 } from '@shared/browser'
 import { forwardedKey } from '../artifacts/guards'
 import { sendEvent } from '../events'
 import { createLogger } from '../log'
+import type { AllowedSites } from '@shared/ipc'
+import { originOf, BrowserOrigins, type BrowserOriginStore } from './origins'
 import { BrowserPolicy, isAllowedNavigation, isHttp, navigateInPlace } from './policy'
 
 const log = createLogger('browser')
@@ -34,7 +38,9 @@ const FRAMED = process.platform === 'darwin'
 
 /** A navigation that ended, or the Chromium error that stopped it. */
 export type NavigateResult =
-  { ok: true; url: string; title: string | null } | { ok: false; error: string }
+  | { ok: true; url: string; title: string | null }
+  // `not_allowed`: the user refused a new origin, or did not answer in time.
+  | { ok: false; error: string; code?: 'not_allowed' }
 
 interface Page {
   sessionId: string
@@ -51,6 +57,10 @@ interface Page {
   loading: boolean
   /** The navigation that has not ended yet, by the page's promise handlers. */
   pending: ((result: NavigateResult) => void) | null
+  /** A navigation waits for the user to answer a new origin. */
+  asking: boolean
+  /** Restarts the pending navigation's time limit, which a site's wait extends. */
+  restartWait: (() => void) | null
 }
 
 /** Whether a mouse event is the user using the page: a click, a wheel or a touch, not a hover. */
@@ -78,6 +88,14 @@ export interface BrowserViewsDeps {
   closed?(sessionId: string): void
   /** An agent's call started or ended, so a hidden page keeps or gives up rendering. */
   driving?(sessionId: string, driving: boolean): void
+  /** The projects' always-allowed origins, which the pages ask for before opening a site. */
+  origins: BrowserOriginStore
+  /** A page asked for a new origin, for the session's thread. */
+  originAsked?(request: { id: number; sessionId: string; origin: string }): void
+  /** The wait ended, so the session's card takes the answer too; from either place it is one. */
+  originAnswered?(request: { id: number; decision: BrowserOriginAnswer }): void
+  /** How long a new origin waits for the user; set only by tests, which cannot wait 2 minutes. */
+  originWaitMs?: number
 }
 
 /**
@@ -115,17 +133,69 @@ export class BrowserViews {
   private readonly pages = new Map<string, Page>()
   private readonly policy: BrowserPolicy
   private readonly browserSession = electronSession.fromPartition(BROWSER_PARTITION)
+  /** The running call of each session, which an origin wait holds up. */
+  private readonly originWaits = new Map<
+    string,
+    { callId: number; waiting: (on: boolean) => void }
+  >()
+  readonly origins: BrowserOrigins
 
   constructor(private readonly deps: BrowserViewsDeps) {
     this.policy = new BrowserPolicy(this.browserSession, {
       downloadBlocked: (contents) => this.downloadBlocked(contents.id),
     })
     this.policy.install()
+    this.origins = new BrowserOrigins(deps.origins, {
+      asked: (request) => deps.originAsked?.(request),
+      settled: (request) => deps.originAnswered?.(request),
+      changed: (sessionId) => {
+        const page = this.pages.get(sessionId)
+        if (page) this.emit(page)
+      },
+      ...(deps.originWaitMs !== undefined ? { waitMs: deps.originWaitMs } : {}),
+    })
   }
 
   /** The artifacts service's port; a page never reaches it. */
   setServicePort(port: number | null): void {
     this.policy.setServicePort(port)
+  }
+
+  /** The project a session's page belongs to, from the agent's call that drives it. */
+  setProject(sessionId: string, projectPath: string): void {
+    this.origins.setProject(sessionId, projectPath)
+  }
+
+  /**
+   * While an agent's call waits for a new origin, its own time limit grows to the wait's, so the
+   * call fails `not_allowed` when the user does not answer rather than timing out first.
+   */
+  setOriginWait(
+    sessionId: string,
+    callId: number,
+    waiting: ((waiting: boolean) => void) | null,
+  ): void {
+    if (!waiting) this.originWaits.delete(sessionId)
+    else this.originWaits.set(sessionId, { callId, waiting })
+  }
+
+  /** The pane's or the card's answer to a new origin; both show the one request. */
+  answerOrigin(sessionId: string, requestId: number, decision: BrowserOriginDecision): void {
+    this.origins.answer(sessionId, requestId, decision)
+  }
+
+  /** Settings' always-allowed sites, and what its Remove takes away. */
+  allowedSites(): AllowedSites[] {
+    return this.origins.allowedSites()
+  }
+
+  removeAllowedSite(projectPath: string, origin: string): void {
+    this.origins.removeAllowedSite(projectPath, origin)
+  }
+
+  /** Writes a pending allowed site before the app goes. */
+  flushOrigins(): Promise<void> {
+    return this.origins.flush()
   }
 
   show(sessionId: string): void {
@@ -183,19 +253,27 @@ export class BrowserViews {
 
   /**
    * Opens `url` in the session's page, making one when it has none, and settles when the
-   * navigation has ended: the page's address and title, or Chromium's error.
+   * navigation has ended: the page's address and title, or Chromium's error. An origin the page
+   * may not open yet is asked for first, and the call fails `not_allowed` without an answer.
    */
-  load(sessionId: string, url: string): Promise<NavigateResult> {
+  async load(sessionId: string, url: string): Promise<NavigateResult> {
     const page = this.page(sessionId)
+    const asked = await this.askFor(page, url)
+    if (asked) return asked
     return this.navigateAndWait(page, url)
   }
 
   /** One step back in the session's history, settled as `load` is. */
-  backAndWait(sessionId: string): Promise<NavigateResult> {
+  async backAndWait(sessionId: string): Promise<NavigateResult> {
     const page = this.page(sessionId)
     const history = page.view?.webContents.navigationHistory
     if (!history?.canGoBack()) {
       throw new Error('There is no page before this one.')
+    }
+    const target = history.getEntryAtIndex(history.getActiveIndex() - 1)?.url
+    if (target !== undefined) {
+      const asked = await this.askFor(page, target)
+      if (asked) return asked
     }
     const wait = this.waitForNavigation(page)
     history.goBack()
@@ -203,11 +281,16 @@ export class BrowserViews {
   }
 
   /** Reloads the session's page, settled as `load` is. */
-  reloadAndWait(sessionId: string): Promise<NavigateResult> {
+  async reloadAndWait(sessionId: string): Promise<NavigateResult> {
     const page = this.page(sessionId)
     if (!page.view) {
       if (!page.lastUrl) throw new Error('The page has no address to reload.')
       return this.load(sessionId, page.lastUrl)
+    }
+    const target = page.view.webContents.getURL()
+    if (target) {
+      const asked = await this.askFor(page, target)
+      if (asked) return asked
     }
     const wait = this.waitForNavigation(page)
     page.view.webContents.reload()
@@ -292,6 +375,8 @@ export class BrowserViews {
         frozen: false,
         loading: false,
         pending: null,
+        asking: false,
+        restartWait: null,
       }
       this.pages.set(sessionId, page)
     }
@@ -306,12 +391,84 @@ export class BrowserViews {
   }
 
   /**
+   * Asks for a new origin an agent's navigation wants, and settles with the refusal when the user
+   * denies it or does not answer; null when it may open, so the caller goes on.
+   */
+  private async askFor(page: Page, url: string): Promise<NavigateResult | null> {
+    if (!this.origins.needsAsking(page.sessionId, url)) return null
+    const origin = originOf(url)
+    if (origin === null) return null
+    this.originWaiters(page.sessionId, true)
+    const decision = await this.origins.ask(page.sessionId, origin)
+    this.originWaiters(page.sessionId, false)
+    if (decision === 'session' || decision === 'project') return null
+    return {
+      ok: false,
+      code: 'not_allowed',
+      error:
+        decision === 'deny'
+          ? `The user did not allow ${origin}.`
+          : `${origin} was not opened: the user did not answer in time.`,
+    }
+  }
+
+  /** Tells the call that drives the session's page that a site wait started or ended. */
+  private originWaiters(sessionId: string, waiting: boolean): void {
+    this.originWaits.get(sessionId)?.waiting(waiting)
+  }
+
+  /** Whether an agent's call drives the session's page, so its navigation is the agent's. */
+  private agentDrives(sessionId: string): boolean {
+    return this.deps.control?.(sessionId)?.kind === 'agent'
+  }
+
+  /**
+   * A link or a redirect in the page wants to open `url` while an agent drives: a new origin is
+   * asked for, and the navigation waits for the answer.
+   */
+  private navigationWanted(page: Page, url: string): void {
+    if (!this.agentDrives(page.sessionId) || !this.origins.needsAsking(page.sessionId, url)) return
+    if (page.asking) return
+    page.asking = true
+    // Chromium reports the held-up navigation as finished; it settles when the answer comes.
+    page.loading = false
+    this.originWaiters(page.sessionId, true)
+    const origin = originOf(url)
+    if (origin === null) return
+    void this.origins.ask(page.sessionId, origin).then((decision) => {
+      page.asking = false
+      page.restartWait?.()
+      this.originWaiters(page.sessionId, false)
+      const contents = this.contents(page.sessionId)
+      if (!contents) return
+      if (decision === 'session' || decision === 'project') {
+        page.loading = true
+        void contents.loadURL(url).catch((error: unknown) => {
+          log.warn(`Could not load ${url}: ${(error as Error).message}`)
+        })
+        this.emit(page)
+        return
+      }
+      this.endNavigation(page, {
+        ok: false,
+        code: 'not_allowed',
+        error:
+          decision === 'deny'
+            ? `The user did not allow ${origin}.`
+            : `${origin} was not opened: the user did not answer in time.`,
+      })
+      this.emit(page)
+    })
+  }
+
+  /**
    * Settles with what the page ends at, or the error that stopped it, whichever comes first:
    * `did-stop-loading`, `did-fail-load`, or the time limit.
    */
   private waitForNavigation(page: Page): Promise<NavigateResult> {
     page.pending?.({ ok: false, error: 'The navigation was replaced.' })
     let done = false
+    let timer: ReturnType<typeof setTimeout>
     let resolve!: (result: NavigateResult) => void
     const promise = new Promise<NavigateResult>((settle) => (resolve = settle))
     const finish = (result: NavigateResult): void => {
@@ -319,13 +476,22 @@ export class BrowserViews {
       done = true
       clearTimeout(timer)
       if (page.pending === finish) page.pending = null
+      if (page.restartWait === restart) page.restartWait = null
       resolve(result)
     }
-    const timer = setTimeout(
-      () => finish({ ok: false, error: 'Navigation timed out' }),
-      NAVIGATION_TIMEOUT_MS,
-    )
+    // A site that waits for the user takes longer than a page load, so the limit starts afresh
+    // when the answer comes.
+    const restart = (): void => {
+      if (done) return
+      clearTimeout(timer)
+      timer = setTimeout(
+        () => finish({ ok: false, error: 'Navigation timed out' }),
+        NAVIGATION_TIMEOUT_MS,
+      )
+    }
+    restart()
     page.pending = finish
+    page.restartWait = restart
     return promise
   }
 
@@ -437,6 +603,8 @@ export class BrowserViews {
     page.view = null
     page.frame = null
     page.loading = false
+    page.asking = false
+    this.origins.close(page.sessionId)
     if (!view || !attached) return
     const window = this.deps.window()
     if (window && !window.isDestroyed()) window.contentView.removeChildView(attached)
@@ -454,6 +622,8 @@ export class BrowserViews {
     contents.on('did-stop-loading', () => {
       page.loading = false
       emit()
+      // A navigation held for the user's answer settles when the answer comes.
+      if (page.asking) return
       this.endNavigation(page, { ok: true, url: contents.getURL(), title: contents.getTitle() })
     })
     contents.on('did-start-navigation', (details) => {
@@ -480,13 +650,28 @@ export class BrowserViews {
       page.notice = { kind: 'load-failed', description }
       page.loading = false
       emit()
+      if (page.asking) return
       this.endNavigation(page, { ok: false, error: description })
     })
     contents.on('will-navigate', (event, url) => {
-      if (!isAllowedNavigation(url)) event.preventDefault()
+      if (!isAllowedNavigation(url)) {
+        event.preventDefault()
+        return
+      }
+      if (!this.origins.needsAsking(page.sessionId, url) || !this.agentDrives(page.sessionId))
+        return
+      event.preventDefault()
+      this.navigationWanted(page, url)
     })
     contents.on('will-redirect', (event, url) => {
-      if (!isAllowedNavigation(url)) event.preventDefault()
+      if (!isAllowedNavigation(url)) {
+        event.preventDefault()
+        return
+      }
+      if (!this.origins.needsAsking(page.sessionId, url) || !this.agentDrives(page.sessionId))
+        return
+      event.preventDefault()
+      this.navigationWanted(page, url)
     })
     contents.on('will-prevent-unload', (event) => event.preventDefault())
     contents.setWindowOpenHandler(({ url }) => {
@@ -521,6 +706,8 @@ export class BrowserViews {
         page.view = null
         page.frame = null
         page.loading = false
+        page.asking = false
+        this.origins.close(page.sessionId)
         this.endNavigation(page, { ok: false, error: 'The page closed.' })
         this.deps.closed?.(page.sessionId)
       }
@@ -612,6 +799,7 @@ export class BrowserViews {
       canGoForward: contents?.navigationHistory.canGoForward() ?? false,
       notice: page.notice,
       control: this.deps.control?.(page.sessionId) ?? { kind: 'none' },
+      originRequest: this.origins.requestOf(page.sessionId),
     })
   }
 

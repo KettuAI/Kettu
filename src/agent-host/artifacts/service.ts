@@ -81,6 +81,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   browserCall?(request: BrowserCallRequest): Promise<BrowserCallAnswer>
   /** The session whose browser a call drives: a subagent's use the session it runs under. */
   browserSession?(sessionId: string): string | null
+  /** The project whose always-allowed sites the page reads. */
+  sessionProject?(sessionId: string): string | null
 }
 
 /** A token for one session. */
@@ -171,7 +173,13 @@ export class ArtifactService {
               },
             }),
       pageOf: (sessionId) => deps.browserSession?.(sessionId) ?? sessionId,
+      projectOf: (sessionId) => deps.sessionProject?.(sessionId) ?? '',
     })
+  }
+
+  /** `host:browser-waiting`: the call waits on a new origin, so its own limit grows to that wait. */
+  browserWaiting(callId: number, waiting: boolean): void {
+    this.browserTools.browserWaiting(callId, waiting)
   }
 
   /** Listens on a port the system picks; without it, sessions attach with no service. */

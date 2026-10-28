@@ -34,6 +34,7 @@ import {
   tokenChunks,
 } from './content.ts'
 import { artifacts } from './artifacts.ts'
+import { openSite } from './browser.ts'
 import type { ScenarioName } from './options.ts'
 import type { Scenario, Turn } from './turn.ts'
 
@@ -1369,6 +1370,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   artifacts,
   report,
   tables,
+  'open-site': openSite,
 }
 
 export const compact: Scenario = async (turn) => {

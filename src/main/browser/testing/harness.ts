@@ -2,9 +2,11 @@
 // with no renderer. The parent test builds this file and starts it.
 
 import { writeFile } from 'node:fs/promises'
+import path from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import type { Rectangle } from 'electron'
 import type { BrowserState } from '@shared/browser'
+import { BrowserOriginStore } from '../origins'
 import { BrowserViews } from '../views'
 
 const RESULT = process.env['OVERBENCH_BROWSER_RESULT']!
@@ -40,6 +42,7 @@ async function main(): Promise<Result> {
       states.set(state.sessionId, state)
       for (const check of [...waiting]) check(state)
     },
+    origins: await BrowserOriginStore.load(path.dirname(RESULT)),
   })
   const waitFor = (
     sessionId: string,

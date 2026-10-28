@@ -25,7 +25,7 @@ function tools(
   pageOf: (sessionId: string) => string | null = (sessionId) => sessionId,
 ) {
   const call = vi.fn(answer)
-  const browser = new BrowserTools({ call, pageOf })
+  const browser = new BrowserTools({ call, pageOf, projectOf: () => 'p' })
   return { browser, call }
 }
 
@@ -93,6 +93,7 @@ describe('the browser tools', () => {
       sessionId: 's1',
       tool: 'browser_navigate',
       args: { url: 'http://localhost:5173/' },
+      projectPath: 'p',
     })
     expect(result).toEqual({
       content: [{ type: 'text', text: 'Done.' }],
@@ -204,12 +205,41 @@ describe('the time a call may take', () => {
     expect(timeoutFor('browser_wait_for', {})).toBe(30_000 + WAIT_EXTRA_MS)
   })
 
+  it('grows its limit while the call waits on a new origin, so that wait is not a timeout', async () => {
+    vi.useFakeTimers()
+    try {
+      let callId = 0
+      let answer!: (value: BrowserCallAnswer) => void
+      const browser = new BrowserTools({
+        call: (request) => {
+          callId = request.callId
+          return new Promise<BrowserCallAnswer>((resolve) => (answer = resolve))
+        },
+        pageOf: (sessionId) => sessionId,
+        projectOf: () => 'p',
+      })
+      const pending = browser.call(CALLER, 'browser_navigate', { url: 'https://example.com/' })
+      // Main says the page waits on the user's answer for the site.
+      browser.browserWaiting(callId, true)
+      await vi.advanceTimersByTimeAsync(NAVIGATION_TIMEOUT_MS + 60_000)
+      // The wait ended without an answer in this test; the call is still the one main owes.
+      answer({ error: { code: 'not_allowed', message: 'The user did not allow example.com.' } })
+      expect(await pending).toMatchObject({
+        isError: true,
+        structuredContent: { code: 'not_allowed' },
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('fails a call main never answers with timeout', async () => {
     vi.useFakeTimers()
     try {
       const browser = new BrowserTools({
         call: () => new Promise<BrowserCallAnswer>(() => {}),
         pageOf: (sessionId) => sessionId,
+        projectOf: () => 'p',
       })
       const pending = browser.call(CALLER, 'browser_click', { ref: 'e1' })
       await vi.advanceTimersByTimeAsync(ACTION_TIMEOUT_MS)

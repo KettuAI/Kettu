@@ -86,6 +86,7 @@
     }
   },
   "attention": {
+    "browserOrigin": "{{origin}} waits for your answer",
     "permission": "The agent asks for permission",
     "turnEnd": {
       "end_turn": "Finished",

@@ -285,7 +285,16 @@
       "cleared": "Browsing data cleared"
     },
     "groups": {
-      "siteData": "Site data"
+      "siteData": "Site data",
+      "allowedSites": "Allowed sites"
+    },
+    "allowedSites": {
+      "name": "Always allowed sites",
+      "description": "Sites the projects let agents open without asking.",
+      "keywords": "browser sites origins allow always permissions",
+      "empty": "No site is always allowed yet.",
+      "remove": "Remove",
+      "removed": "Removed {{origin}}"
     }
   },
   "advanced": {
@@ -370,7 +379,7 @@
     },
     "environment": {
       "pending": "Reading your environment…",
-      "loginShell": "Read from your login shell ({{shell}}) {{ago}} in {{ms}}\u00a0ms.",
+      "loginShell": "Read from your login shell ({{shell}}) {{ago}} in {{ms}} ms.",
       "loginShellPlain": "Read from your login shell.",
       "inherited": "Inherited from how OverBench was started.",
       "fallback": "Using a fallback PATH.",

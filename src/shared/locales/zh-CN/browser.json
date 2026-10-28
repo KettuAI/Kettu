@@ -30,5 +30,19 @@
     "stop": "停止",
     "you": "控制权在你手里",
     "handBack": "交还"
+  },
+  "origin": {
+    "decision": {
+      "deny": "拒绝",
+      "project": "此项目始终允许",
+      "session": "本次会话允许"
+    },
+    "answer": {
+      "session": "本次会话已允许 {{origin}}",
+      "project": "此项目已始终允许 {{origin}}",
+      "deny": "已拒绝 {{origin}}",
+      "timeout": "未在限定时间内得到答复"
+    },
+    "asks": "{{agent}} 想要打开"
   }
 }
