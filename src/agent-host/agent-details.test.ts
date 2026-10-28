@@ -361,6 +361,22 @@ describe('configLocations', () => {
     ])
   })
 
+  it('puts MiniMax Code in ~/.minimax, or where MINIMAX_DATA_DIR says', () => {
+    expect(summary(locations('minimax', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.minimax'], env: null },
+      { id: 'settings', candidates: ['/home/me/.minimax/config.yaml'], env: null },
+    ])
+    expect(
+      summary(locations('minimax', { MINIMAX_DATA_DIR: '/srv/minimax' }, '/home/me', 'linux'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/srv/minimax'], env: 'MINIMAX_DATA_DIR' })
+  })
+
+  it('names no configuration folder for agents whose docs give none', () => {
+    for (const agent of ['bob', 'harn', 'kimchi'] as const) {
+      expect(locations(agent, {}, '/home/me', 'linux')).toEqual([])
+    }
+  })
+
   it('joins with backslashes on Windows', () => {
     expect(summary(locations('claude-code', {}, 'C:\\Users\\me', 'win32'))).toEqual([
       { id: 'folder', candidates: ['C:\\Users\\me\\.claude'], env: null },

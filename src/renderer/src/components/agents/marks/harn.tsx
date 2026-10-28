@@ -1,0 +1,10 @@
+// Harn mark: ACP Registry, https://github.com/agentclientprotocol/registry (Apache-2.0).
+const HARN =
+  'M11.2 1.4 14.6 4.8a1 1 0 0 1 0 1.4l-1.5 1.5-4.8-4.8 1.5-1.5a1 1 0 0 1 1.4 0ZM7.6 3.6l4.8 4.8-6.9 6.9a1 1 0 0 1-.5.27l-3.4.73a.6.6 0 0 1-.71-.71l.73-3.4a1 1 0 0 1 .27-.5l5.6-5.6Zm-4.5 8.1-.4 1.9 1.9-.4-1.5-1.5Z'
+
+export const viewBox = '0 0 16 16'
+
+/** The mark in `currentColor`, as the ACP Registry ships it. */
+export function Body() {
+  return <path fill="currentColor" d={HARN} />
+}

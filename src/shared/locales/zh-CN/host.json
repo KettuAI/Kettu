@@ -199,6 +199,8 @@
       "hermes": "请用 hermes-agent.nousresearch.com 上的安装程序安装 Hermes Agent，并带上它的 `acp` 扩展。",
       "muse": "请从 dev.meta.ai 安装 Muse Code，或在「设置 › Agent」中选择它的程序。",
       "codewhale": "请用 codewhale.net 上的安装程序安装 CodeWhale，或在「设置 › Agent」中选择它的程序。",
+      "harn": "请安装 Harn，或在「设置 › Agent」中选择它的程序。",
+      "kimchi": "请安装 Kimchi，或在「设置 › Agent」中选择它的程序。",
       "fakeAgent": "Fake agent 运行仓库中的 tools/fake-agent/main.ts。"
     }
   },

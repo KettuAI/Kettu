@@ -171,6 +171,8 @@ export const AGENT_NAMES: Record<AgentId, string> = {
   sigit: 'siGit Code',
   agoragentic: 'Agoragentic',
   autohand: 'Autohand Code',
+  bob: 'Bob',
+  minimax: 'MiniMax Code',
   cursor: 'Cursor',
   kimi: 'Kimi Code CLI',
   amp: 'Amp',
@@ -186,6 +188,8 @@ export const AGENT_NAMES: Record<AgentId, string> = {
   hermes: 'Hermes Agent',
   muse: 'Muse Code',
   codewhale: 'CodeWhale',
+  harn: 'Harn',
+  kimchi: 'Kimchi',
   'fake-agent': 'Fake agent',
 }
 

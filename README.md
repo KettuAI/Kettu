@@ -104,6 +104,10 @@ Install at least one of these agents first; OverBench finds it on your system.
 | [Hermes Agent](https://hermes-agent.nousresearch.com)                       | Your installed `hermes`, as `hermes acp`                                                                     |
 | [Muse Code](https://dev.meta.ai)                                            | Your installed `muse`, as `muse acp`, with its experimental ACP mode                                         |
 | [CodeWhale](https://codewhale.net)                                          | Your installed `codewhale`, as `codewhale serve --acp` (a partial ACP adapter)                               |
+| [Bob](https://bob.ibm.com)                                                  | The ACP package `@ibm/bob`, installed on first use, with `acp`                                               |
+| [MiniMax Code](https://agent.minimax.io)                                    | The ACP package `@minimax-ai/code`, installed on first use, with `acp`                                       |
+| [Harn](https://harnlang.com)                                                | Your installed `harn`, or its archive on first use                                                           |
+| [Kimchi](https://kimchi.dev)                                                | Your installed `kimchi`, or its archive on first use                                                         |
 
 The adapters need Node.js with npm, which OverBench finds through your login shell.
 
