@@ -195,7 +195,7 @@ export class TestPort implements PortChannel {
   /** Opens, watches and shows a session the way the renderer does, keeping a replica of it. */
   async open(sessionId: string): Promise<SessionSnapshot> {
     await this.request('sessions.watch', { sessionId })
-    await this.request('sessions.show', { sessionId })
+    await this.request('sessions.show', { sessionIds: [sessionId] })
     const snapshot = await this.request('sessions.open', { sessionId })
     this.track(snapshot)
     return snapshot

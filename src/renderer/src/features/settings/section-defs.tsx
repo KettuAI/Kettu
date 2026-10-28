@@ -143,6 +143,7 @@ export function useGeneralSection(): SectionDef {
         id: 'restore',
         name: t('general.restore.name'),
         english: en('general.restore.name'),
+        description: t('general.restore.description'),
         group: sessions,
         render: () => (
           <GeneralSwitch field="restoreLastSession" label={t('general.restore.name')} />

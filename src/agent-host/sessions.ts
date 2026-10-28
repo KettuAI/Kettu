@@ -501,8 +501,8 @@ export class SessionManager {
   private readonly records = new Map<string, SessionRecord>()
   private readonly live = new Map<string, Live>()
   private readonly watchers = new Map<string, Set<string>>()
-  // Port id to the session it shows in front.
-  private readonly shown = new Map<string, string>()
+  // Port id to the sessions it shows in front, every pane of a split view in view.
+  private readonly shown = new Map<string, Set<string>>()
   private readonly missing = new Set<string>()
   private readonly lastSummaries = new Map<string, string>()
   /** `/context` reports running, by session id. */
@@ -1637,7 +1637,7 @@ export class SessionManager {
   // instant; only the one it shows in front counts as seen.
 
   private inFront(sessionId: string): boolean {
-    for (const shown of this.shown.values()) if (shown === sessionId) return true
+    for (const shown of this.shown.values()) if (shown.has(sessionId)) return true
     return false
   }
 
@@ -1657,16 +1657,27 @@ export class SessionManager {
     if (ports.size === 0) this.watchers.delete(sessionId)
   }
 
-  /** The session a port shows in front, or null for none; the one it leaves was seen until now. */
-  show(sessionId: string | null, portId: string): void {
-    const previous = this.shown.get(portId) ?? null
-    if (sessionId === previous) return
-    if (sessionId === null) this.shown.delete(portId)
-    else this.shown.set(portId, this.recordOf(sessionId).id)
-    if (previous !== null && this.has(previous)) this.markViewed(previous, this.recordOf(previous))
-    if (sessionId !== null) this.markViewed(sessionId, this.recordOf(sessionId))
-    for (const id of [previous, sessionId]) {
-      const live = id === null ? undefined : this.live.get(id)
+  /**
+   * The sessions a port shows in front, one per pane in view: each one entering or leaving was
+   * seen until now. An id the host does not know is skipped, since a session can go between the
+   * renderer's call and this answer.
+   */
+  show(sessionIds: readonly string[], portId: string): void {
+    const previous = this.shown.get(portId)
+    const next = new Set<string>()
+    for (const id of sessionIds) {
+      if (this.records.has(id)) next.add(this.recordOf(id).id)
+    }
+    if (previous && previous.size === next.size && [...next].every((id) => previous.has(id))) return
+    if (next.size === 0) this.shown.delete(portId)
+    else this.shown.set(portId, next)
+    const changed = new Set([...(previous ?? []), ...next])
+    for (const id of changed) {
+      if (!this.has(id)) continue
+      const record = this.recordOf(id)
+      if (previous?.has(id) && next.has(id)) continue
+      this.markViewed(id, record)
+      const live = this.live.get(id)
       if (!live) continue
       live.hiddenSince = this.inFront(live.id) ? null : this.now()
       this.refreshRelease(live)

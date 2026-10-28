@@ -99,3 +99,26 @@ describe('older pages', () => {
     expect(order()).toEqual(['e:3', 'e:4'])
   })
 })
+
+describe('the sessions of the split', () => {
+  it('keeps nine of them watched beside the four recent others', async () => {
+    const { keepWatched } = await import('./threads')
+    const { useThreadsStore } = await import('./threads')
+    answer({ 'sessions.open': () => snapshot([user('e:1')], null) })
+    const layout = Array.from({ length: 9 }, (_, i) => `layout${i}`)
+    keepWatched(layout)
+    for (const id of layout) await focusSession(id)
+    // Four more sessions viewed besides them stay too.
+    const recent = ['r1', 'r2', 'r3', 'r4']
+    for (const id of recent) {
+      await focusSession(id)
+    }
+    const replicas = Object.keys(useThreadsStore.getState().replicas)
+    expect(replicas).toEqual(expect.arrayContaining([...layout, ...recent]))
+    // A fifth recent session drops the oldest recent one, not one the split shows.
+    await focusSession('r5')
+    const after = Object.keys(useThreadsStore.getState().replicas)
+    expect(after).toEqual(expect.arrayContaining([...layout, 'r2', 'r3', 'r4', 'r5']))
+    expect(after).not.toContain('r1')
+  })
+})

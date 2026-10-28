@@ -201,6 +201,7 @@
   --shadow-segment: var(--segment-ring);
   --shadow-thumb: var(--thumb-shadow);
   --shadow-sheet: var(--elevation-sheet);
+  --shadow-sheet-focused: var(--elevation-sheet-focused);
 
   --font-weight-normal: var(--weight-normal);
   --font-weight-medium: var(--weight-medium);

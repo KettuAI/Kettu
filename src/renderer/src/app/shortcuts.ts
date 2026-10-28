@@ -6,6 +6,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore, visibleOrder } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
+  focusPaneAt,
   settingsBack,
   openSession,
   openSettings,
@@ -14,6 +15,7 @@ import {
   toggleTerminal,
   useViewStore,
 } from '@renderer/stores/view'
+import { paneOrder } from '@renderer/features/split/layout'
 import { newSession, openProjectDialog } from './actions'
 import { emitAppEvent } from './events'
 
@@ -64,6 +66,16 @@ export function useKeyboardShortcuts(): void {
         return run(event, () => toggleShortcuts(layerOpen()))
       }
 
+      // Mod+1 to Mod+9 focus a pane of the split, unless Settings covers it or no pane is there.
+      const digit = /^[1-9]$/.test(event.key) ? Number(event.key) - 1 : null
+      if (digit !== null && !view.settings.open && !event.shiftKey) {
+        if (!paneAt(digit)) return
+        return run(event, () => {
+          focusPaneAt(digit)
+          focusComposerOfPane()
+        })
+      }
+
       const key = event.key.toLowerCase()
       if (!isMac && !event.shiftKey) {
         if (key === 'o') return run(event, () => void openProjectDialog())
@@ -99,6 +111,23 @@ function run(event: KeyboardEvent, action: () => void): void {
   event.preventDefault()
   event.stopPropagation()
   action()
+}
+
+/** Whether the split has a pane at that place; a key for one past it is left to the app. */
+function paneAt(index: number): boolean {
+  return !!paneOrder(useViewStore.getState().layout)[index]
+}
+
+/** Puts the keyboard focus in the focused pane's composer, or in the pane itself for a subagent. */
+function focusComposerOfPane(): void {
+  const { layout } = useViewStore.getState()
+  requestAnimationFrame(() => {
+    const pane = document.querySelector<HTMLElement>(
+      `[data-split-pane="${CSS.escape(layout.focus)}"]`,
+    )
+    const composer = pane?.querySelector<HTMLElement>('.cm-content, [contenteditable=true]')
+    ;(composer ?? pane)?.focus()
+  })
 }
 
 /** = or + zooms in, - or _ out and 0 resets, with Shift or without, as in Chrome. */

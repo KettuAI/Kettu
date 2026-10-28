@@ -11,6 +11,7 @@ const SHORTCUTS = [
   { group: 'sessions', keys: 'Mod+Shift+]', action: 'nextSession' },
   { group: 'sessions', keys: 'Mod+L', action: 'focusComposer' },
   { group: 'sessions', keys: 'Mod+U', action: 'addFiles' },
+  { group: 'sessions', keys: 'Mod+1-9', action: 'focusPane' },
   { group: 'sessions', keys: 'Esc', action: 'cancelTurn' },
   { group: 'sessions', keys: '1-4', action: 'answerPermission' },
   { group: 'window', keys: 'Mod+O', action: 'openProject' },
@@ -29,9 +30,15 @@ const SHORTCUTS = [
 const KEY_RANGE = /^(\d)-(\d)$/
 
 function ShortcutKeys({ keys }: { keys: string }) {
-  const range = KEY_RANGE.exec(keys)
+  // "1-4" and the last key of "Mod+1-9" are a range of keys, not a chord.
+  const parts = keys.split(/\+(?=.)/)
+  const last = parts.at(-1) ?? ''
+  const range = KEY_RANGE.exec(last)
   return (
     <KbdGroup className="shrink-0 gap-1.5">
+      {parts.slice(0, -1).map((key, i) => (
+        <Kbd key={i}>{formatShortcut(key)}</Kbd>
+      ))}
       {range ? (
         <>
           <Kbd>{range[1]}</Kbd>
@@ -41,7 +48,7 @@ function ShortcutKeys({ keys }: { keys: string }) {
           <Kbd>{range[2]}</Kbd>
         </>
       ) : (
-        keys.split(/\+(?=.)/).map((key, i) => <Kbd key={i}>{formatShortcut(key)}</Kbd>)
+        <Kbd>{formatShortcut(last)}</Kbd>
       )}
     </KbdGroup>
   )

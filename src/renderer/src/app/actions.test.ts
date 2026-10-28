@@ -814,3 +814,130 @@ describe('sessions the host removes', () => {
     expect(readDraft('s1')).toBe('')
   })
 })
+
+describe('the split view', () => {
+  const session = (id: string, projectPath = '/repo') => ({ id, projectPath }) as SessionSummary
+
+  const splitStore = async (
+    ...views: (
+      | { kind: 'session'; sessionId: string; projectPath: string }
+      | { kind: 'new'; agentId: 'codex'; projectPath: string | null; noProject: boolean }
+    )[]
+  ) => {
+    const { createLayout, splitAt, paneOrder, allPanes, findPane } =
+      await import('@renderer/features/split/layout')
+    let layout = createLayout(views[0]!)
+    for (const view of views.slice(1)) {
+      layout = splitAt(layout, paneOrder(layout).at(-1)!, 'right', view, {
+        width: 1920,
+        height: 1080,
+      })!
+    }
+    useViewStore.setState({ layout })
+    return { layout, paneOrder, allPanes, findPane }
+  }
+
+  beforeEach(() => {
+    request.mockReset()
+    request.mockResolvedValue(undefined)
+    setDefaultAgent('codex')
+    usePendingSession.setState({ pending: null })
+    useThreadsStore.setState({ replicas: {} })
+  })
+
+  it('closes the pane of an archived session in a split, and keeps the others', async () => {
+    const { allPanes } = await splitStore(
+      { kind: 'session', sessionId: 's1', projectPath: '/repo' },
+      { kind: 'session', sessionId: 's2', projectPath: '/repo' },
+    )
+    useSessionsStore.setState({ byId: { s1: session('s1'), s2: session('s2') } })
+    await archiveSession('s1')
+    expect(allPanes(useViewStore.getState().layout).map((pane) => pane.view)).toEqual([
+      { kind: 'session', sessionId: 's2', projectPath: '/repo' },
+    ])
+  })
+
+  it('closes the pane of a deleted session in a split', async () => {
+    const { allPanes } = await splitStore(
+      { kind: 'session', sessionId: 's1', projectPath: '/repo' },
+      { kind: 'session', sessionId: 's2', projectPath: '/repo' },
+    )
+    useSessionsStore.setState({ byId: { s1: session('s1'), s2: session('s2') } })
+    await deleteSession('s1')
+    expect(allPanes(useViewStore.getState().layout)).toHaveLength(1)
+    expect(useViewStore.getState().layout.columns[0]!.panes[0]!.view).toEqual({
+      kind: 'session',
+      sessionId: 's2',
+      projectPath: '/repo',
+    })
+  })
+
+  it('leaves the only pane for New session when its session is archived', async () => {
+    await splitStore({ kind: 'session', sessionId: 's1', projectPath: '/repo' })
+    useViewStore.setState({ main: { kind: 'session', sessionId: 's1' } })
+    useSessionsStore.setState({ byId: { s1: session('s1') } })
+    await archiveSession('s1')
+    expect(useViewStore.getState().main).toMatchObject({ kind: 'new' })
+  })
+
+  it('shows the created session in the pane that showed New session, wherever the focus went', async () => {
+    const { paneOrder, allPanes } = await splitStore(
+      { kind: 'session', sessionId: 's1', projectPath: '/repo' },
+      { kind: 'new', agentId: 'codex', projectPath: '/repo', noProject: false },
+    )
+    const createdPane = paneOrder(useViewStore.getState().layout)[1]!
+    useSessionsStore.setState({ byId: { s1: session('s1') } })
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create'
+        ? ({
+            id: 'n1',
+            projectPath: '/repo',
+            agentId: 'codex',
+            status: 'running',
+          } as SessionSummary)
+        : undefined,
+    )
+    const creating = createSession('codex', '/repo', null, fixTheBuild)
+    expect(usePendingSession.getState().pending).toMatchObject({ paneId: createdPane })
+    // The focus moves to the other pane while the session starts.
+    const { focusPane } = await import('@renderer/stores/view')
+    focusPane(paneOrder(useViewStore.getState().layout)[0]!)
+    await creating
+    const panes = allPanes(useViewStore.getState().layout)
+    expect(panes.find((pane) => pane.id === createdPane)?.view).toEqual({
+      kind: 'session',
+      sessionId: 'n1',
+      projectPath: '/repo',
+    })
+    // The focus stays where it went.
+    expect(useViewStore.getState().layout.focus).toBe(paneOrder(useViewStore.getState().layout)[0])
+  })
+
+  it('adds a created session whose pane closed meanwhile to the sidebar only', async () => {
+    const { paneOrder, allPanes } = await splitStore(
+      { kind: 'session', sessionId: 's1', projectPath: '/repo' },
+      { kind: 'new', agentId: 'codex', projectPath: '/repo', noProject: false },
+    )
+    const createdPane = paneOrder(useViewStore.getState().layout)[1]!
+    useSessionsStore.setState({ byId: { s1: session('s1') } })
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create'
+        ? ({
+            id: 'n1',
+            projectPath: '/repo',
+            agentId: 'codex',
+            status: 'running',
+          } as SessionSummary)
+        : undefined,
+    )
+    const creating = createSession('codex', '/repo', null, fixTheBuild)
+    expect(usePendingSession.getState().pending).toMatchObject({ paneId: createdPane })
+    const { closeSplitPane } = await import('@renderer/stores/view')
+    closeSplitPane(createdPane)
+    await creating
+    expect(allPanes(useViewStore.getState().layout).map((pane) => pane.view)).toEqual([
+      { kind: 'session', sessionId: 's1', projectPath: '/repo' },
+    ])
+    expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 's1' })
+  })
+})

@@ -10,6 +10,7 @@ export type SessionMenuItem =
   | 'rename'
   | 'fork'
   | 'newSubSession'
+  | 'openInSplit'
   | 'pullRequest'
   | 'showInFolder'
   | 'archive'
@@ -29,13 +30,19 @@ export const ACCELERATORS: Partial<Record<SessionMenuItem, string>> = {
   delete: 'D',
 }
 
-/** The groups a session's menu shows, by its state, with no empty group. */
+/**
+ * The groups a session's menu shows, by its state, with no empty group. A session a pane already
+ * shows has no **Open in split view**, which only opens one the split does not hold.
+ */
 export function sessionMenuGroups(
   summary: Pick<SessionSummary, 'status' | 'parentId' | 'origin' | 'pr'>,
   canFork: boolean,
+  shown = false,
 ): SessionMenuItem[][] {
   // Its parent stops, archives and deletes a subagent, and its own bar has Stop.
-  if (summary.origin === 'subagent') return [['unread', 'rename']]
+  if (summary.origin === 'subagent') {
+    return shown ? [['unread', 'rename']] : [['unread', 'rename', 'openInSplit']]
+  }
   const topLevel = summary.parentId === null
   const { status } = summary
   const groups: SessionMenuItem[][] = [
@@ -46,7 +53,10 @@ export function sessionMenuGroups(
         : [],
     topLevel ? ['pin', 'unread', 'rename'] : ['unread', 'rename'],
     topLevel && canFork ? ['fork', 'newSubSession'] : ['newSubSession'],
-    summary.pr ? ['pullRequest', 'showInFolder'] : ['showInFolder'],
+    [
+      ...(shown ? [] : (['openInSplit'] as const)),
+      ...(summary.pr ? (['pullRequest', 'showInFolder'] as const) : (['showInFolder'] as const)),
+    ],
     topLevel ? ['archive'] : [],
     ['delete'],
   ]

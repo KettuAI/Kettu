@@ -207,7 +207,7 @@ describe('removing sessions with no message, once', () => {
       optionId: 'mode',
       value: 'plan',
     })
-    await port.request('sessions.show', { sessionId: shown })
+    await port.request('sessions.show', { sessionIds: [shown] })
     await port.request('sessions.watch', { sessionId: watched })
     // Closed, so it is no longer live, with its empty thread stored.
     const fresh = await create(t, port)

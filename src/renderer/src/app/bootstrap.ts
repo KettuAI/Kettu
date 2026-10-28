@@ -1,7 +1,6 @@
 import type { HostEvent } from '@shared/agent-host'
 import {
   followShownSession,
-  newSessionInPlace,
   removeEmptySessions,
   sessionRemoved,
   takeReturnedMessages,
@@ -36,7 +35,7 @@ import { initSettings, useSettingsStore } from '@renderer/stores/settings'
 import { initSharing } from '@renderer/stores/sharing'
 import { initTerminals } from '@renderer/stores/terminals'
 import { initThemes } from '@renderer/stores/themes'
-import { receiveBatch, rewatchAll } from '@renderer/stores/threads'
+import { keepWatched, receiveBatch, rewatchAll } from '@renderer/stores/threads'
 import { initUpdates } from '@renderer/stores/updates'
 import {
   loadToday,
@@ -44,7 +43,16 @@ import {
   receiveUsageStatus,
   usageChanged,
 } from '@renderer/stores/usage'
-import { lastSessionId, openSession, useViewStore } from '@renderer/stores/view'
+import {
+  lastSessionId,
+  layoutSessions,
+  openSession,
+  resetLayout,
+  restoreLayout,
+  savedLayout,
+  shownLayoutSessions,
+  useViewStore,
+} from '@renderer/stores/view'
 import { installPerfCounters } from './perf'
 
 function onHostEvent(event: HostEvent): void {
@@ -132,23 +140,38 @@ function finishLaunch(): void {
   if (usePendingSession.getState().pending) return
   const target = launchTarget({
     enabled: useSettingsStore.getState().settings.general.restoreLastSession,
-    sessionId: lastSessionId,
+    layout: savedLayout,
+    lastSessionId,
     main: useViewStore.getState().main,
     byId: useSessionsStore.getState().byId,
   })
-  if (target?.kind === 'session') openSession(target.summary.id, target.summary.projectPath)
-  else if (target) newSessionInPlace()
+  if (target?.kind === 'layout') restoreLayout(target.layout)
+  else if (target?.kind === 'session') {
+    resetLayout(target.summary.projectPath, null)
+    openSession(target.summary.id, target.summary.projectPath)
+  } else if (target) {
+    // New session alone, with the default agent, in the selected project.
+    resetLayout(
+      useViewStore.getState().projectPath,
+      useSettingsStore.getState().settings.general.defaultAgent,
+    )
+  }
 }
 
-let shownSession: string | null = null
+let shownSessions = ''
 
-/** Tells the host which session is in front; a turn that ends anywhere else leaves it unread. */
+/**
+ * Tells the host the sessions the panes in view show; a turn that ends anywhere else leaves it
+ * unread. Every session of the split stays watched, folded panes included.
+ */
 function showFront(again = false): void {
-  const { main, settings } = useViewStore.getState()
-  const sessionId = main.kind === 'session' && !settings.open ? main.sessionId : null
-  if (sessionId === shownSession && !again) return
-  shownSession = sessionId
-  void host('sessions.show', { sessionId }).catch(() => {})
+  const state = useViewStore.getState()
+  const sessionIds = shownLayoutSessions(state)
+  keepWatched(layoutSessions(state.layout))
+  const key = sessionIds.join('\n')
+  if (key === shownSessions && !again) return
+  shownSessions = key
+  void host('sessions.show', { sessionIds }).catch(() => {})
 }
 
 let wasDisconnected = false

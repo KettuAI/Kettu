@@ -47,6 +47,8 @@ export const useThreadsStore = create<ThreadsStore>()(() => ({ replicas: {} }))
 const KEEP_WATCHED = 4
 
 const watched: string[] = [] // most recent last
+// The sessions the split shows, folded panes included; they stay watched however many there are.
+let pinned: string[] = []
 const pending = new Map<string, PatchBatch[]>() // batches that arrived before their snapshot
 const snapshotsInFlight = new Map<string, Promise<void>>()
 const pagesInFlight = new Map<string, Promise<boolean>>()
@@ -251,22 +253,40 @@ function receivePage(sessionId: string, before: number, page: OlderPage): void {
   })
 }
 
+/** The sessions the split holds, which stay watched besides the few recent others. */
+export function keepWatched(sessionIds: readonly string[]): void {
+  const next = [...sessionIds]
+  if (next.length === pinned.length && next.every((id, i) => id === pinned[i])) return
+  pinned = next
+  for (const sessionId of next) if (!watched.includes(sessionId)) void focusSession(sessionId)
+  dropUnwatched()
+}
+
+/** Drops the sessions watched only as recent ones past the last few; the layout's stay. */
+function dropUnwatched(): void {
+  const recent = watched.filter((sessionId) => !pinned.includes(sessionId))
+  const dropped = new Set(recent.slice(0, Math.max(0, recent.length - KEEP_WATCHED)))
+  for (let i = watched.length - 1; i >= 0; i--) {
+    const sessionId = watched[i]!
+    if (!dropped.has(sessionId)) continue
+    watched.splice(i, 1)
+    void host('sessions.unwatch', { sessionId }).catch(() => {})
+    pending.delete(sessionId)
+    fresh.delete(sessionId)
+    useThreadsStore.setState((s) => {
+      const replicas = { ...s.replicas }
+      delete replicas[sessionId]
+      return { replicas }
+    })
+  }
+}
+
 /** Shows a session: watches it, loads its replica if needed, and keeps a few recent ones live. */
 export function focusSession(sessionId: string): Promise<void> {
   const at = watched.indexOf(sessionId)
   if (at >= 0) watched.splice(at, 1)
   watched.push(sessionId)
-  while (watched.length > KEEP_WATCHED) {
-    const dropped = watched.shift()!
-    void host('sessions.unwatch', { sessionId: dropped }).catch(() => {})
-    pending.delete(dropped)
-    fresh.delete(dropped)
-    useThreadsStore.setState((s) => {
-      const replicas = { ...s.replicas }
-      delete replicas[dropped]
-      return { replicas }
-    })
-  }
+  dropUnwatched()
 
   const replica = useThreadsStore.getState().replicas[sessionId]
   if (replica?.status === 'ready') {

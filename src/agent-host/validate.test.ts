@@ -68,6 +68,20 @@ describe('createValidators', () => {
     rejects(() => posix['sessions.removeEmpty']({ keep: ids(10_001) }))
   })
 
+  it('takes the sessions a window shows in front, up to nine', () => {
+    expect(posix['sessions.show']({ sessionIds: [] })).toEqual({ sessionIds: [] })
+    expect(posix['sessions.show']({ sessionIds: ['a', 'b'], other: 1 })).toEqual({
+      sessionIds: ['a', 'b'],
+    })
+    const ids = Array.from({ length: 10 }, (_, i) => `s${i}`)
+    expect(posix['sessions.show']({ sessionIds: ids.slice(0, 9) }).sessionIds).toHaveLength(9)
+    rejects(() => posix['sessions.show']({ sessionIds: ids }))
+    rejects(() => posix['sessions.show']({}))
+    rejects(() => posix['sessions.show']({ sessionIds: 's1' }))
+    rejects(() => posix['sessions.show']({ sessionIds: [1] }))
+    rejects(() => posix['sessions.show']({ sessionIds: [''] }))
+  })
+
   it('takes a pin and an unread mark as booleans', () => {
     const sessionId = 's1'
     expect(posix['sessions.pin']({ sessionId, pinned: true })).toEqual({ sessionId, pinned: true })

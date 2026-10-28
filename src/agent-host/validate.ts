@@ -33,6 +33,8 @@ const URL_CHARS = 2_048
 const PROMPT_ITEMS = 1_000
 // Sessions with a draft, which the one-time removal keeps.
 const KEPT_SESSIONS = 10_000
+// The panes a split view shows at most, which a window reports as in front.
+const SHOWN_SESSIONS = 9
 // Attachments the drafts name, checked once at launch.
 const HELD_ATTACHMENTS = 100_000
 const INSTALL_METHODS: ReadonlySet<unknown> = new Set<AgentInstallMethod['id']>([
@@ -571,7 +573,13 @@ export function createValidators(platform: Platform): Validators {
     'sessions.unwatch': session,
     'sessions.show': (params) => {
       const o = fields(params)
-      return { sessionId: o.sessionId === null ? null : sessionId(o) }
+      if (!Array.isArray(o.sessionIds)) throw invalidParams('sessionIds must be a list')
+      if (o.sessionIds.length > SHOWN_SESSIONS) {
+        throw invalidParams(`sessionIds holds more than ${SHOWN_SESSIONS}`)
+      }
+      return {
+        sessionIds: o.sessionIds.map((value) => sessionId({ sessionId: value })),
+      }
     },
     'sessions.prompt': (params) => {
       const o = fields(params)

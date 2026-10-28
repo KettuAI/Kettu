@@ -29,13 +29,24 @@ import {
 import { useProjectsStore } from '@renderer/stores/projects'
 import { isScratchFolder, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { isSplit, paneWithSession } from '@renderer/features/split/layout'
 import { focusSession, forgetSession } from '@renderer/stores/threads'
-import { openNewSession, openSession, placeNewSession, useViewStore } from '@renderer/stores/view'
+import {
+  closeLayoutSession,
+  newSessionAt,
+  openNewSession,
+  openSession,
+  placeNewSession,
+  showCreatedSession,
+  useViewStore,
+} from '@renderer/stores/view'
 import { create } from 'zustand'
 import { emitAppEvent } from './events'
 
 /** A session being created: shown in place of the thread until `session/new` answers. */
 export interface PendingSession {
+  /** The pane that showed New session and shows the session, wherever the focus goes. */
+  paneId: string
   agentId: AgentId
   projectPath: string | null // null: No project, whose folder the host makes
   parentId: string | null
@@ -125,9 +136,10 @@ export async function createSession(
   prompt: UserContent[] | null = null,
   options: OptionValues | null = null,
   preparedId: string | null = null,
+  paneId: string = newSessionAt() ?? '',
 ): Promise<void> {
   usePendingSession.setState({
-    pending: { agentId, projectPath, parentId, prompt, options, error: null },
+    pending: { paneId, agentId, projectPath, parentId, prompt, options, error: null },
   })
   useViewStore.setState((s) => ({
     projectPath: projectPath ?? s.projectPath,
@@ -161,7 +173,10 @@ export async function createSession(
     const current = usePendingSession.getState().pending
     if (current?.agentId === agentId && current.projectPath === projectPath) {
       usePendingSession.setState({ pending: null })
-      openSession(summary.id, summary.projectPath)
+      // The pane that showed New session shows the session; the focus may have moved meanwhile.
+      if (!showCreatedSession(current.paneId, summary.id, summary.projectPath)) {
+        openSession(summary.id, summary.projectPath)
+      }
     }
   } catch (error) {
     // Back to New session's draft, unless something else was written there meanwhile, and stored
@@ -183,6 +198,7 @@ export async function createSession(
     }
     usePendingSession.setState({
       pending: {
+        paneId,
         agentId,
         projectPath,
         parentId,
@@ -270,6 +286,8 @@ export function retryPendingSession(): void {
       pending.parentId,
       pending.prompt,
       pending.options,
+      null,
+      pending.paneId,
     )
   }
 }
@@ -284,8 +302,12 @@ export async function archiveSession(sessionId: string): Promise<void> {
   const archived = [sessionId, ...descendantIds(sessionId)]
   await host('sessions.archive', { sessionId })
   for (const id of archived) forgetSession(id)
-  const { main } = useViewStore.getState()
-  if (main.kind === 'session' && archived.includes(main.sessionId)) leaveSession(summary)
+  const { main, layout } = useViewStore.getState()
+  // In a split every pane of an archived session closes; in the only pane, New session takes it.
+  if (!isSplit(layout) && main.kind === 'session' && archived.includes(main.sessionId)) {
+    leaveSession(summary)
+  }
+  for (const id of archived) closeSessionInSplit(id)
 }
 
 export async function unarchiveSession(sessionId: string): Promise<void> {
@@ -308,6 +330,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
   clearDraft(sessionId)
   dropAttachments(sessionId)
   useSessionsStore.getState().remove(sessionId)
+  closeSessionInSplit(sessionId)
 }
 
 /** A session the host removed: off the list, its replica dropped and its draft cleared. */
@@ -316,6 +339,16 @@ export function sessionRemoved(sessionId: string): void {
   forgetSession(sessionId)
   clearDraft(sessionId)
   dropAttachments(sessionId)
+  closeSessionInSplit(sessionId)
+}
+
+/**
+ * After a session left the list: its pane closes while the split holds others; in the only pane
+ * it stays for New session, which the main view leaves for as it did before a split.
+ */
+function closeSessionInSplit(sessionId: string): void {
+  const { layout } = useViewStore.getState()
+  if (isSplit(layout) && paneWithSession(layout, sessionId)) closeLayoutSession(sessionId)
 }
 
 /**
@@ -343,12 +376,18 @@ function leaveSession(summary: SessionSummary | undefined): void {
  */
 export function followShownSession(): () => void {
   return useSessionsStore.subscribe((state, previous) => {
-    const { main } = useViewStore.getState()
+    const { main, layout } = useViewStore.getState()
     const shownId =
       main.kind === 'session' ? main.sessionId : main.kind === 'new' ? main.parentId : undefined
     if (!shownId || state.byId[shownId]) return
     const gone = previous.byId[shownId]
-    if (gone) leaveSession(gone)
+    if (!gone) return
+    // In a split the pane closes; the main view follows the pane that takes the focus.
+    if (isSplit(layout) && paneWithSession(layout, shownId)) {
+      closeLayoutSession(shownId)
+      return
+    }
+    leaveSession(gone)
   })
 }
 

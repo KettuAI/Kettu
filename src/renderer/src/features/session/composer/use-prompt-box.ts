@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import { onAppEvent, type AppEvent } from '@renderer/app/events'
+import { usePane } from '@renderer/features/split/pane-context'
 import { errorMessage } from '@renderer/lib/host'
 import {
   selectDraft,
@@ -58,6 +59,12 @@ export function usePromptBox({
   // The caret, or null while a range is selected, for telling which `@` word it is in.
   const [caret, setCaret] = useState<number | null>(null)
   const editor = useRef<ComposerEditorHandle>(null)
+  // Only the focused pane's composer takes the events sent to no session in particular.
+  const paneFocused = usePane()?.focused ?? true
+  const focused = useRef(paneFocused)
+  useEffect(() => {
+    focused.current = paneFocused
+  }, [paneFocused])
   const attachments = useAttachmentsStore(selectDraft(draft))
 
   useEffect(() => () => flushDraft(draft), [draft])
@@ -82,7 +89,7 @@ export function usePromptBox({
       })
   }
   const onEvent = useEffectEvent((event: AppEvent) => {
-    if (event.kind === 'add-attachments') pick('files')
+    if (event.kind === 'add-attachments' && focused.current) pick('files')
     if (event.kind === 'drop-attachments' && event.draft === draft && !disabled) {
       onActivity?.()
       attachFiles(draft, event.files).then(limitError, (e: unknown) => setError(errorMessage(e)))
@@ -93,7 +100,7 @@ export function usePromptBox({
     () =>
       onAppEvent((event) => {
         onEvent(event)
-        if (event.kind === 'focus-composer') editor.current?.focus()
+        if (event.kind === 'focus-composer' && focused.current) editor.current?.focus()
         if (event.kind === 'draft-written' && event.draft === draft) {
           const next = readDraft(draft)
           setText(next)
@@ -102,7 +109,7 @@ export function usePromptBox({
         }
         if (
           event.kind === 'insert-into-composer' &&
-          (!event.sessionId || event.sessionId === sessionId)
+          (event.sessionId ? event.sessionId === sessionId : focused.current)
         ) {
           const current = editor.current?.text() ?? ''
           const next = current ? `${current.replace(/\s+$/, '')}\n\n${event.text}` : event.text

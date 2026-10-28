@@ -11,7 +11,7 @@ describe('sessionMenuGroups', () => {
     expect(sessionMenuGroups(summary(), true)).toEqual([
       ['pin', 'unread', 'rename'],
       ['fork', 'newSubSession'],
-      ['showInFolder'],
+      ['openInSplit', 'showInFolder'],
       ['archive'],
       ['delete'],
     ])
@@ -26,7 +26,7 @@ describe('sessionMenuGroups', () => {
 
   it('offers the pull request when the branch has one, and Fork only when the agent can', () => {
     const groups = sessionMenuGroups(summary({ pr }), false)
-    expect(groups).toContainEqual(['pullRequest', 'showInFolder'])
+    expect(groups).toContainEqual(['openInSplit', 'pullRequest', 'showInFolder'])
     expect(groups).toContainEqual(['newSubSession'])
   })
 
@@ -34,13 +34,20 @@ describe('sessionMenuGroups', () => {
     expect(sessionMenuGroups(summary({ parentId: 'p' }), true)).toEqual([
       ['unread', 'rename'],
       ['newSubSession'],
-      ['showInFolder'],
+      ['openInSplit', 'showInFolder'],
       ['delete'],
     ])
   })
 
-  it('gives a subagent only what its parent does not do for it', () => {
+  it('gives a subagent only what its parent does not do for it, and the split view', () => {
     const subagent = summary({ parentId: 'p', origin: 'subagent', status: 'running' })
-    expect(sessionMenuGroups(subagent, true)).toEqual([['unread', 'rename']])
+    expect(sessionMenuGroups(subagent, true)).toEqual([['unread', 'rename', 'openInSplit']])
+  })
+
+  it('leaves Open in split view out for a session a pane shows already', () => {
+    for (const state of [summary(), summary({ parentId: 'p' }), summary({ origin: 'subagent' })]) {
+      const groups = sessionMenuGroups(state, true, true)
+      expect(groups.flat()).not.toContain('openInSplit')
+    }
   })
 })

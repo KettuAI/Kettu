@@ -3,7 +3,10 @@ import {
   ArchiveIcon,
   CircleDotIcon,
   CircleIcon,
+  Columns2Icon,
   FolderIcon,
+  PanelBottomIcon,
+  PanelRightIcon,
   PencilIcon,
   PinIcon,
   PinOffIcon,
@@ -53,7 +56,15 @@ import { fileManagerName } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { sessionTitle } from '@renderer/stores/sessions'
-import { openNewSubSession, useViewStore } from '@renderer/stores/view'
+import {
+  allPanes,
+  canSplit,
+  focusedPane,
+  paneWithSession,
+  type SplitReason,
+} from '@renderer/features/split/layout'
+import { splitSize } from '@renderer/features/split/session-drag-model'
+import { openInSplit, openNewSubSession, useViewStore } from '@renderer/stores/view'
 import { ACCELERATORS, sessionMenuGroups, type SessionMenuItem } from './session-menu-model'
 
 /**
@@ -77,8 +88,17 @@ export function SessionMenuItems({
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   const canFork = useAgentsStore((s) => !!s.byId[summary.agentId]?.capabilities?.forkSession)
   const inFront = useViewStore(
-    (s) => s.main.kind === 'session' && s.main.sessionId === summary.id && !s.settings.open,
+    (s) =>
+      !s.settings.open &&
+      allPanes(s.layout).some(
+        (pane) =>
+          s.visiblePanes.includes(pane.id) &&
+          pane.view.kind === 'session' &&
+          pane.view.sessionId === summary.id,
+      ),
   )
+  // A session a pane shows already, in view or folded, has no Open in split view.
+  const inSplit = useViewStore((s) => !!paneWithSession(s.layout, summary.id))
   const unread = summary.attention === 'unread'
   const { id } = summary
 
@@ -169,6 +189,8 @@ export function SessionMenuItems({
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         )
+      case 'openInSplit':
+        return <OpenInSplit summary={summary} key={name} />
       case 'pullRequest':
         return (
           summary.pr && (
@@ -222,12 +244,78 @@ export function SessionMenuItems({
     }
   }
 
-  return sessionMenuGroups(summary, canFork).map((group, index) => (
+  return sessionMenuGroups(summary, canFork, inSplit).map((group, index) => (
     <DropdownMenuGroup key={group[0]}>
       {index > 0 && <DropdownMenuSeparator />}
       {group.map(item)}
     </DropdownMenuGroup>
   ))
+}
+
+/**
+ * **Open in split view** with its two sides, each disabled, saying why, when the split cannot take
+ * that side: a third column, a fourth pane, or no room in the window.
+ */
+function OpenInSplit({ summary }: { summary: SessionSummary }) {
+  const { t } = useTranslation('sidebar')
+  const layout = useViewStore((s) => s.layout)
+  const size = splitSize()
+  const beside = size ? canSplit(layout, focusedPane(layout).id, 'right', size) : null
+  const below = size ? canSplit(layout, focusedPane(layout).id, 'bottom', size) : null
+  const open = (side: 'right' | 'bottom') => {
+    if (!size) return
+    openInSplit(
+      { kind: 'session', sessionId: summary.id, projectPath: summary.projectPath },
+      side,
+      size,
+    )
+  }
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <Columns2Icon />
+        {t('row.openInSplit')}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <OpenInSplitItem
+          side="right"
+          label={t('row.splitRight')}
+          reason={beside?.ok ? null : (beside?.reason ?? 'room')}
+          onClick={() => open('right')}
+        />
+        <OpenInSplitItem
+          side="below"
+          label={t('row.splitBelow')}
+          reason={below?.ok ? null : (below?.reason ?? 'room')}
+          onClick={() => open('bottom')}
+        />
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  )
+}
+
+function OpenInSplitItem({
+  side,
+  label,
+  reason,
+  onClick,
+}: {
+  side: 'right' | 'below'
+  label: string
+  /** Why the split cannot take that side; null when it can. */
+  reason: SplitReason | null
+  onClick: () => void
+}) {
+  const { t } = useTranslation('sidebar')
+  return (
+    <DropdownMenuItem disabled={reason !== null} onClick={onClick}>
+      {side === 'right' ? <PanelRightIcon /> : <PanelBottomIcon />}
+      {label}
+      {reason && (
+        <span className="ml-auto pl-3 text-xs text-tertiary">{t(`row.noRoom.${reason}`)}</span>
+      )}
+    </DropdownMenuItem>
+  )
 }
 
 /**

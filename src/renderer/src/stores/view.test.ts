@@ -149,3 +149,122 @@ describe('artifacts view', () => {
     expect(useViewStore.getState().main).toEqual({ kind: 'artifacts' })
   })
 })
+
+describe('the split view', () => {
+  const sessions = async () => {
+    const view = await import('./view')
+    const layout = await import('@renderer/features/split/layout')
+    return { ...view, ...layout }
+  }
+
+  it('focuses the pane that holds a session, and otherwise replaces the pane in focus', async () => {
+    const { useViewStore, openSession, splitAt, paneOrder, createLayout, focusedPane, findPane } =
+      await sessions()
+    let layout = createLayout({
+      kind: 'session',
+      sessionId: 's1',
+      projectPath: '/repo',
+    })
+    layout = splitAt(
+      layout,
+      layout.focus,
+      'right',
+      {
+        kind: 'session',
+        sessionId: 's2',
+        projectPath: '/repo',
+      },
+      { width: 1920, height: 1080 },
+    )!
+    useViewStore.setState({ layout, main: { kind: 'session', sessionId: 's2' } })
+    const [first] = paneOrder(layout)
+
+    openSession('s1', '/repo')
+    const next = useViewStore.getState()
+    expect(next.layout.focus).toBe(first)
+    expect(next.main).toEqual({ kind: 'session', sessionId: 's1' })
+
+    openSession('s3', '/repo')
+    expect(findPane(useViewStore.getState().layout, focusedPane(next.layout).id)?.view).toEqual({
+      kind: 'session',
+      sessionId: 's3',
+      projectPath: '/repo',
+    })
+    expect(useViewStore.getState().layout.columns).toHaveLength(2)
+  })
+
+  it('shows New session in one pane at most', async () => {
+    const { useViewStore, openNewSession, splitAt, createLayout, allPanes } = await sessions()
+    let layout = createLayout({ kind: 'session', sessionId: 's1', projectPath: '/repo' })
+    layout = splitAt(
+      layout,
+      layout.focus,
+      'right',
+      {
+        kind: 'session',
+        sessionId: 's2',
+        projectPath: '/repo',
+      },
+      { width: 1920, height: 1080 },
+    )!
+    useViewStore.setState({ layout, main: { kind: 'session', sessionId: 's2' } })
+
+    openNewSession('/repo', 'codex')
+    openNewSession('/other', null)
+    expect(
+      allPanes(useViewStore.getState().layout).filter((p) => p.view.kind === 'new'),
+    ).toHaveLength(1)
+    // The shown New session keeps the agent it had.
+    expect(useViewStore.getState().main).toMatchObject({ kind: 'new', agentId: 'codex' })
+  })
+
+  it('leaves the layout as it was when a page shows', async () => {
+    const { useViewStore, openUsage, createLayout } = await sessions()
+    const layout = createLayout({ kind: 'session', sessionId: 's1', projectPath: '/repo' })
+    useViewStore.setState({ layout, main: { kind: 'session', sessionId: 's1' } })
+    openUsage()
+    expect(useViewStore.getState().layout).toEqual(layout)
+    expect(useViewStore.getState().main).toEqual({ kind: 'usage' })
+  })
+
+  it('keeps the split’s side pane as the focus moves, and hands it to the last pane’s project', async () => {
+    const {
+      useViewStore,
+      toggleSidePane,
+      splitAt,
+      createLayout,
+      focusPane: focusIn,
+      paneOrder,
+    } = await sessions()
+    let layout = createLayout({ kind: 'session', sessionId: 's1', projectPath: '/one' })
+    layout = splitAt(
+      layout,
+      layout.focus,
+      'right',
+      {
+        kind: 'session',
+        sessionId: 's2',
+        projectPath: '/two',
+      },
+      { width: 1920, height: 1080 },
+    )!
+    useViewStore.setState({
+      layout,
+      main: { kind: 'session', sessionId: 's2' },
+      projectPath: '/two',
+      sidePane: {},
+    })
+    toggleSidePane('/two', 'files')
+    expect(useViewStore.getState().splitSidePane).toBe('files')
+    // The focus moves, and the panel stays on its pane.
+    useViewStore.setState((s) => ({ layout: focusIn(s.layout, paneOrder(s.layout)[0]!) }))
+    expect(useViewStore.getState().splitSidePane).toBe('files')
+    // Back to one pane, the panel belongs to that pane's project.
+    const single = paneOrder(useViewStore.getState().layout)[0]!
+    const { closeSplitPane } = await import('./view')
+    closeSplitPane(paneOrder(useViewStore.getState().layout)[1]!)
+    expect(useViewStore.getState().layout.focus).toBe(single)
+    expect(useViewStore.getState().splitSidePane).toBeNull()
+    expect(useViewStore.getState().sidePane['/one']).toBe('files')
+  })
+})

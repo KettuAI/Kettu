@@ -488,8 +488,8 @@ export interface HostContract {
   'sessions.outlineTitles': { params: { sessionId: string }; result: { titles: OutlineTitle[] } }
   'sessions.watch': { params: { sessionId: string }; result: void }
   'sessions.unwatch': { params: { sessionId: string }; result: void }
-  // The session a port shows in front, or null; a turn that ends out of view is unread.
-  'sessions.show': { params: { sessionId: string | null }; result: void }
+  // The sessions a port shows in front, none for a page; a turn that ends out of view is unread.
+  'sessions.show': { params: { sessionIds: string[] }; result: void }
   'sessions.prompt': { params: { sessionId: string; content: UserContent[] }; result: void }
   'sessions.cancel': { params: { sessionId: string }; result: void }
   'sessions.retry': { params: { sessionId: string }; result: void }

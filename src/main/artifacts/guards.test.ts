@@ -148,6 +148,17 @@ describe('forwardedKey', () => {
     }
   })
 
+  it('passes the split view’s pane keys on every platform', () => {
+    for (const platform of ['darwin', 'win32', 'linux'] as const) {
+      const modifier = platform === 'darwin' ? { meta: true } : { control: true }
+      for (let n = 1; n <= 9; n++) {
+        expect(forwardedKey(input(String(n), `Digit${n}`, modifier), platform)).toMatchObject({
+          key: String(n),
+        })
+      }
+    }
+  })
+
   it("keeps the page's own keys in the page", () => {
     expect(forwardedKey(input('c', 'KeyC', { control: true }), 'win32')).toBeNull()
     expect(forwardedKey(input('b', 'KeyB'), 'win32')).toBeNull()

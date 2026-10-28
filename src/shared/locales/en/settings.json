@@ -44,7 +44,8 @@
       "keywords": "enter newline composer"
     },
     "restore": {
-      "name": "Restore the last session on launch"
+      "name": "Restore the last session on launch",
+      "description": "A split view comes back with its panes."
     },
     "confirmQuit": {
       "name": "Ask before quitting while agents or terminal commands are running",

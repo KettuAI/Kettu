@@ -2,7 +2,8 @@
   "headerTools": {
     "files": "文件",
     "terminal": "终端",
-    "browser": "浏览器"
+    "browser": "浏览器",
+    "closePane": "关闭窗格"
   },
   "hostBanner": {
     "restarting": "正在重启 Agent 后台进程，会话会自动恢复。",
@@ -19,6 +20,7 @@
     "openProject": "打开项目",
     "newSession": "新建会话",
     "showShortcuts": "显示键盘快捷键",
+    "focusPane": "聚焦分屏中的第 1 到 9 个窗格",
     "toggleSidebar": "显示或隐藏侧边栏",
     "focusComposer": "聚焦输入框",
     "addFiles": "向输入框添加文件或照片",

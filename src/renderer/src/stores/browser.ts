@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { BrowserState } from '@shared/browser'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { isSplit } from '@renderer/features/split/layout'
 import { useViewStore } from '@renderer/stores/view'
 
 interface BrowserStore {
@@ -65,12 +66,15 @@ export function initBrowser(): void {
     const view = useViewStore.getState()
     const summary = useSessionsStore.getState().byId[sessionId]
     if (!summary) return
-    const shown = view.sidePane[summary.projectPath]
-    if (shown === undefined) {
+    // In a split the panel belongs to it, and the session's page is the focused pane's.
+    const shown = isSplit(view.layout) ? view.splitSidePane : view.sidePane[summary.projectPath]
+    if (shown === undefined || shown === null) {
       // Nothing else in the panel: show the browser, without taking the focus.
-      useViewStore.setState((s) => ({
-        sidePane: { ...s.sidePane, [summary.projectPath]: 'browser' },
-      }))
+      useViewStore.setState((s) =>
+        isSplit(s.layout)
+          ? { splitSidePane: 'browser' }
+          : { sidePane: { ...s.sidePane, [summary.projectPath]: 'browser' } },
+      )
       return
     }
     if (shown !== 'browser') {
