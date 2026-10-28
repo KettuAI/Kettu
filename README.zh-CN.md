@@ -89,6 +89,15 @@ OverBench 为这些工作提供了一个桌面上的家。你用的每个 Agent 
 | [siGit Code](https://github.com/getsigit/sigit)                             | ACP 包 `@smbcloud/sigit`，首次使用时安装                                    |
 | [Agoragentic](https://agoragentic.com)                                      | ACP 包 `agoragentic-mcp`，首次使用时安装，以 `--acp` 运行                   |
 | [Autohand Code](https://www.autohand.ai/cli/)                               | ACP 包 `@autohandai/autohand-acp`，首次使用时安装                           |
+| [Claude Code](https://github.com/anthropics/claude-code)                    | ACP 适配器 `@agentclientprotocol/claude-agent-acp`，首次使用时安装          |
+| [Codex CLI](https://github.com/openai/codex)                                | ACP 适配器 `@agentclientprotocol/codex-acp`，首次使用时安装                 |
+| [opencode](https://opencode.ai)                                             | 你自己安装的 `opencode`，以 `opencode acp` 运行                             |
+| [Pi](https://pi.dev)                                                        | ACP 适配器 `pi-acp`，首次使用时安装，并运行你自己安装的 `pi`                |
+| [Cursor](https://cursor.com/docs/cli/acp)                                   | 你自己安装的 `cursor-agent`，或首次使用时下载的 Cursor 压缩包               |
+| [Kimi Code CLI](https://moonshotai.github.io/kimi-cli/)                     | 你自己安装的 `kimi`，或首次使用时下载的压缩包                               |
+| [Amp](https://ampcode.com)                                                  | ACP 适配器 `amp-acp`，首次使用时下载                                        |
+| [goose](https://block.github.io/goose/)                                     | 你自己安装的 `goose`，或首次使用时下载的压缩包                              |
+| [Kilo Code](https://kilo.ai)                                                | 你自己安装的 `kilo`，或首次使用时下载的压缩包                               |
 
 这些适配器需要 Node.js 和 npm，OverBench 会通过你的登录 shell 找到它们。
 

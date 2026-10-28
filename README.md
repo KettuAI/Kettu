@@ -89,6 +89,15 @@ Install at least one of these agents first; OverBench finds it on your system.
 | [siGit Code](https://github.com/getsigit/sigit)                             | The ACP package `@smbcloud/sigit`, installed on first use                                       |
 | [Agoragentic](https://agoragentic.com)                                      | The ACP package `agoragentic-mcp`, installed on first use, with `--acp`                         |
 | [Autohand Code](https://www.autohand.ai/cli/)                               | The ACP package `@autohandai/autohand-acp`, installed on first use                              |
+| [Claude Code](https://github.com/anthropics/claude-code)                    | The ACP adapter `@agentclientprotocol/claude-agent-acp`, installed on first use                 |
+| [Codex CLI](https://github.com/openai/codex)                                | The ACP adapter `@agentclientprotocol/codex-acp`, installed on first use                        |
+| [opencode](https://opencode.ai)                                             | Your installed `opencode`, as `opencode acp`                                                    |
+| [Pi](https://pi.dev)                                                        | The ACP adapter `pi-acp`, installed on first use, with your installed `pi`                      |
+| [Cursor](https://cursor.com/docs/cli/acp)                                   | Your installed `cursor-agent`, or Cursor's archive on first use                                 |
+| [Kimi Code CLI](https://moonshotai.github.io/kimi-cli/)                     | Your installed `kimi`, or its archive on first use                                              |
+| [Amp](https://ampcode.com)                                                  | The ACP adapter `amp-acp`, downloaded on first use                                              |
+| [goose](https://block.github.io/goose/)                                     | Your installed `goose`, or its archive on first use                                             |
+| [Kilo Code](https://kilo.ai)                                                | Your installed `kilo`, or its archive on first use                                              |
 
 The adapters need Node.js with npm, which OverBench finds through your login shell.
 

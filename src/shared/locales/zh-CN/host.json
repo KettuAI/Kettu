@@ -190,6 +190,11 @@
       "node": "请从 nodejs.org 安装 Node.js，然后在设置中点击「重新加载环境」。",
       "opencode": "请安装 OpenCode，或在「设置 › Agent」中选择它的程序。",
       "pi": "请用 `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` 或 pi.dev 上的安装程序安装 pi。",
+      "cursor": "请安装 Cursor，或在「设置 › Agent」中选择它的程序。",
+      "kimi": "请用「安装」按钮安装 Kimi Code CLI；若当前平台没有对应的压缩包，请从它的网站安装。",
+      "amp": "请安装 Amp，或在「设置 › Agent」中选择它的程序。",
+      "goose": "请安装 goose，或在「设置 › Agent」中选择它的程序。",
+      "kilo": "请安装 Kilo Code，或在「设置 › Agent」中选择它的程序。",
       "fakeAgent": "Fake agent 运行仓库中的 tools/fake-agent/main.ts。"
     }
   },

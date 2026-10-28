@@ -9,16 +9,21 @@ import type { HostSettings } from '@shared/settings'
 import type { AgentId } from '@shared/thread'
 import { compareInstalls, listInstalled, type InstalledAdapter } from './adapter-install'
 import { AGORAGENTIC } from './agents/agoragentic'
+import { AMP } from './agents/amp'
 import { AUGGIE } from './agents/auggie'
 import { AUTOHAND } from './agents/autohand'
 import { CLAUDE_CODE } from './agents/claude-code'
 import { CODEBUDDY } from './agents/codebuddy'
 import { CODEX } from './agents/codex'
+import { CURSOR } from './agents/cursor'
 import { DEEPAGENTS } from './agents/deepagents'
 import { DIMCODE } from './agents/dimcode'
 import { DIRAC } from './agents/dirac'
 import { fakeAgent } from './agents/fake-agent'
 import { GLM } from './agents/glm'
+import { GOOSE } from './agents/goose'
+import { KILO } from './agents/kilo'
+import { KIMI } from './agents/kimi'
 import { NOVA } from './agents/nova'
 import { OPENCODE } from './agents/opencode'
 import { PI } from './agents/pi'
@@ -131,16 +136,21 @@ export interface AgentDefinition {
 // Re-exported so a definition is still read from the catalog that lists it.
 export {
   AGORAGENTIC,
+  AMP,
   AUGGIE,
   AUTOHAND,
   CLAUDE_CODE,
   CODEBUDDY,
   CODEX,
+  CURSOR,
   DEEPAGENTS,
   DIMCODE,
   DIRAC,
   fakeAgent,
   GLM,
+  GOOSE,
+  KILO,
+  KIMI,
   NOVA,
   OPENCODE,
   PI,
@@ -166,6 +176,11 @@ export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
     SIGIT,
     AGORAGENTIC,
     AUTOHAND,
+    CURSOR,
+    KIMI,
+    AMP,
+    GOOSE,
+    KILO,
   ]
   if (fakeAgentPath) catalog.push(fakeAgent(fakeAgentPath))
   return catalog
