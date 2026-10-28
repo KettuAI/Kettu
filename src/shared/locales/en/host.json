@@ -191,6 +191,11 @@
       "node": "Install Node.js from nodejs.org, then reload the environment in Settings.",
       "opencode": "Install OpenCode, or choose its binary in Settings › Agents.",
       "pi": "Install pi with `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` or the installer at pi.dev.",
+      "cursor": "Install Cursor, or choose its binary in Settings › Agents.",
+      "kimi": "Install Kimi Code CLI with Install, or from its site on a platform the registry has no archive for.",
+      "amp": "Install Amp, or choose its binary in Settings › Agents.",
+      "goose": "Install goose, or choose its binary in Settings › Agents.",
+      "kilo": "Install Kilo Code, or choose its binary in Settings › Agents.",
       "fakeAgent": "The fake agent runs tools/fake-agent/main.ts from the repository."
     }
   },

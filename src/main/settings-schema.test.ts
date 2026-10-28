@@ -89,7 +89,7 @@ describe('validateSettingsPatch', () => {
     [{ appearance: { zoom: 2 } }, '"appearance.zoom" must be one of'],
     [{ appearance: { zoom: '1.1' } }, '"appearance.zoom" must be one of'],
     [{ notifications: { badge: 'yes' } }, '"notifications.badge" must be a boolean'],
-    [{ agents: { cursor: { binaryPath: null } } }, 'Unknown agent "agents.cursor"'],
+    [{ agents: { unknown: { binaryPath: null } } }, 'Unknown agent "agents.unknown"'],
     [{ agents: { codex: { binaryPath: '/bin/sh' } } }, 'can only be cleared with null'],
     [{ agents: { codex: { args: [] } } }, 'accepts only "binaryPath", "cli" and "configDir"'],
     [{ agents: { codex: { configDir: '/srv/codex' } } }, 'choose a folder in the dialog'],

@@ -5,11 +5,13 @@ import {
   AGORAGENTIC,
   AUGGIE,
   AUTOHAND,
+  AMP,
   buildCatalog,
   CLAUDE_CODE,
   CODEBUDDY,
   CODEX,
   DEEPAGENTS,
+  CURSOR,
   detectAgent,
   DIMCODE,
   DIRAC,
@@ -17,6 +19,9 @@ import {
   fakeAgent,
   GLM,
   NOVA,
+  GOOSE,
+  KILO,
+  KIMI,
   OPENCODE,
   PI,
   QODER,
@@ -24,6 +29,8 @@ import {
   type AgentDefinition,
   type DetectContext,
 } from './catalog'
+import { archiveEntry, type BinaryInstalls } from './binary-install'
+import { programPath, type InstalledArchive } from './archive-install'
 
 function context(overrides: Partial<DetectContext> = {}): DetectContext {
   return {
@@ -62,6 +69,11 @@ describe('buildCatalog', () => {
       'sigit',
       'agoragentic',
       'autohand',
+      'cursor',
+      'kimi',
+      'amp',
+      'goose',
+      'kilo',
     ])
     expect(buildCatalog('/repo/tools/fake-agent/main.ts').map((d) => d.id)).toContain('fake-agent')
   })
@@ -83,6 +95,11 @@ describe('buildCatalog', () => {
       'sigit',
       'agoragentic',
       'autohand',
+      'cursor',
+      'kimi',
+      'amp',
+      'goose',
+      'kilo',
       'fake-agent',
     ])
   })
@@ -457,7 +474,7 @@ describe('the ACP Registry npm agents', () => {
   }
 
   it('pins the eleven packages the registry lists', () => {
-    expect(buildCatalog(null).slice(4)).toEqual(registry.map(({ def }) => def))
+    expect(buildCatalog(null).slice(4, 4 + registry.length)).toEqual(registry.map(({ def }) => def))
   })
 })
 
@@ -751,5 +768,178 @@ describe('displayCommand', () => {
       args: ['fast-agent-acp==0.10.1', '-x'],
       env: {},
     })
+  })
+})
+
+describe('the registry archive agents', () => {
+  function archived(
+    def: AgentDefinition,
+    platform: 'darwin' | 'linux' | 'win32' = 'darwin',
+    arch = 'arm64',
+  ): {
+    entry: NonNullable<ReturnType<typeof archiveEntry>>
+    install: InstalledArchive
+    command: string
+  } {
+    const release = (def.installs as BinaryInstalls).archive!
+    const entry = archiveEntry(release, platform, arch)!
+    const dir = `/data/agents/${def.id}/${release.version}`
+    return {
+      entry,
+      command: programPath(dir, entry.cmd, platform),
+      install: {
+        version: release.version,
+        dir,
+        url: entry.url,
+        sha256: entry.sha256 ?? 'a'.repeat(64),
+        cmd: entry.cmd,
+        args: entry.args ?? [],
+        installedAt: 1,
+      },
+    }
+  }
+
+  async function runsFromArchive(def: AgentDefinition): Promise<void> {
+    const { entry, install, command } = archived(def)
+    expect(await detectAgent(def, context())).toMatchObject({ state: 'not-installed' })
+    expect(
+      await detectAgent(
+        def,
+        context({
+          installedArchives: async () => [install],
+          isExecutable: async (file) => file === command,
+        }),
+      ),
+    ).toMatchObject({
+      state: 'available',
+      spec: { command, args: entry.args ?? [], shell: false },
+    })
+  }
+
+  it('adds Cursor with its platform archives and its own CLI', async () => {
+    expect(CURSOR.launch).toEqual({ kind: 'binary', command: 'cursor-agent', args: ['acp'] })
+    const entries = CURSOR.installs!.archive!.entries
+    expect(Object.keys(entries).sort()).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-aarch64',
+      'windows-x86_64',
+    ])
+    for (const [key, entry] of Object.entries(entries)) {
+      expect(entry.url).toMatch(/^https:\/\/downloads\.cursor\.com\/lab\/2026\.10\.22-27dcf5f\//)
+      expect(entry.cmd).toBe(
+        key.startsWith('windows')
+          ? './dist-package\\cursor-agent.cmd'
+          : './dist-package/cursor-agent',
+      )
+      expect(entry.args).toEqual(['acp'])
+      // The registry publishes no hash for Cursor, so the install records the one it measured.
+      expect(entry.sha256).toBeUndefined()
+    }
+    await runsFromArchive(CURSOR)
+    expect(
+      await detectAgent(
+        CURSOR,
+        context({ isExecutable: async (file) => file === '/usr/local/bin/cursor-agent' }),
+      ),
+    ).toMatchObject({
+      state: 'available',
+      spec: { command: '/usr/local/bin/cursor-agent', args: ['acp'] },
+    })
+  })
+
+  it('adds Kimi Code CLI where the registry ships an archive, hashes included', async () => {
+    expect(KIMI.launch).toEqual({ kind: 'binary', command: 'kimi', args: ['acp'] })
+    const entries = KIMI.installs!.archive!.entries
+    expect(Object.keys(entries).sort()).toEqual([
+      'darwin-aarch64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-aarch64',
+      'windows-x86_64',
+    ])
+    expect(archiveEntry(KIMI.installs!.archive, 'darwin', 'x64')).toBeNull()
+    for (const [key, entry] of Object.entries(entries)) {
+      expect(entry.cmd).toBe(key.startsWith('windows') ? './kimi.exe' : './kimi')
+      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/)
+      expect(entry.args).toEqual(['acp'])
+    }
+    await runsFromArchive(KIMI)
+    expect(
+      await detectAgent(KIMI, context({ isExecutable: async (file) => file === '/usr/bin/kimi' })),
+    ).toMatchObject({ state: 'available', spec: { command: '/usr/bin/kimi' } })
+  })
+
+  it('adds Amp as the adapter archive alone', async () => {
+    expect(AMP.launch).toEqual({ kind: 'binary', command: 'amp-acp', args: [] })
+    const entries = AMP.installs!.archive!.entries
+    expect(Object.keys(entries).sort()).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-x86_64',
+    ])
+    for (const [key, entry] of Object.entries(entries)) {
+      expect(entry.cmd).toBe(key.startsWith('windows') ? 'amp-acp.exe' : './amp-acp')
+      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/)
+      // The archive is the adapter itself, so it needs no arguments of its own.
+      expect(entry.args).toBeUndefined()
+    }
+    await runsFromArchive(AMP)
+    expect(
+      await detectAgent(
+        AMP,
+        context({ isExecutable: async (file) => file === '/usr/local/bin/amp-acp' }),
+      ),
+    ).toMatchObject({ state: 'available', spec: { command: '/usr/local/bin/amp-acp' } })
+  })
+
+  it('adds goose with its archives, commands and hashes', async () => {
+    expect(GOOSE.launch).toEqual({ kind: 'binary', command: 'goose', args: ['acp'] })
+    const entries = GOOSE.installs!.archive!.entries
+    expect(Object.keys(entries).sort()).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-x86_64',
+    ])
+    for (const [key, entry] of Object.entries(entries)) {
+      expect(entry.cmd).toBe(key.startsWith('windows') ? './goose-package\\goose.exe' : './goose')
+      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/)
+      expect(entry.args).toEqual(['acp'])
+    }
+    await runsFromArchive(GOOSE)
+    expect(
+      await detectAgent(
+        GOOSE,
+        context({ isExecutable: async (file) => file === '/usr/bin/goose' }),
+      ),
+    ).toMatchObject({ state: 'available', spec: { command: '/usr/bin/goose' } })
+  })
+
+  it('adds Kilo Code with its archive and its npm package', async () => {
+    expect(KILO.launch).toEqual({ kind: 'binary', command: 'kilo', args: ['acp'] })
+    expect(KILO.installs!.npm).toBe('@kilocode/cli')
+    const entries = KILO.installs!.archive!.entries
+    expect(Object.keys(entries).sort()).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-x86_64',
+    ])
+    for (const [key, entry] of Object.entries(entries)) {
+      expect(entry.cmd).toBe(key.startsWith('windows') ? './kilo.exe' : './kilo')
+      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/)
+      expect(entry.args).toEqual(['acp'])
+    }
+    await runsFromArchive(KILO)
+    expect(
+      await detectAgent(KILO, context({ isExecutable: async (file) => file === '/usr/bin/kilo' })),
+    ).toMatchObject({ state: 'available', spec: { command: '/usr/bin/kilo' } })
   })
 })

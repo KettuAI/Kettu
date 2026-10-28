@@ -82,6 +82,11 @@ describe('the port envelope', () => {
       ['sigit', 'not-installed'],
       ['agoragentic', 'not-installed'],
       ['autohand', 'not-installed'],
+      ['cursor', 'not-installed'],
+      ['kimi', 'not-installed'],
+      ['amp', 'not-installed'],
+      ['goose', 'not-installed'],
+      ['kilo', 'not-installed'],
       ['fake-agent', 'available'],
     ])
     const fake = agents.find((a) => a.id === 'fake-agent')!
@@ -90,7 +95,7 @@ describe('the port envelope', () => {
     const environment = await port.request('agents.environment', undefined)
     expect(environment).toMatchObject({ source: 'inherited' })
     const reloaded = await port.request('agents.reloadEnvironment', undefined)
-    expect(reloaded).toHaveLength(16)
+    expect(reloaded).toHaveLength(21)
   })
 
   it('starts an agent to prepare a session, and refuses one that cannot run', async () => {

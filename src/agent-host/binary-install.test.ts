@@ -6,7 +6,7 @@ import {
   type BinaryInstalls,
   type PlanContext,
 } from './binary-install'
-import { OPENCODE } from './catalog'
+import { KILO, KIMI, OPENCODE } from './catalog'
 
 const installs = OPENCODE.installs!
 
@@ -210,5 +210,46 @@ describe('installedFolder', () => {
         npmPrefix: async () => null,
       }),
     ).toBe('/data/agents/opencode/2026.10.22/dist-package')
+  })
+})
+
+describe("the registry agents' own routes", () => {
+  const contextFor = (agentId: PlanContext['agentId'], platform: Platform, arch: string) =>
+    ({
+      platform,
+      arch,
+      env: {},
+      npm: '/opt/bin/npm',
+      root: '/data/agents',
+      agentId,
+      isExecutable: async () => false,
+    }) satisfies PlanContext
+
+  it('offers Kilo Code its archive first, then npm, both available', async () => {
+    const plans = await installPlans(KILO.installs!, contextFor('kilo', 'darwin', 'arm64'))
+    expect(plans.map(({ id, command, available }) => ({ id, command, available }))).toEqual([
+      {
+        id: 'archive',
+        command:
+          'https://github.com/Kilo-Org/kilocode/releases/download/v7.8.18/kilo-darwin-arm64.zip',
+        available: true,
+      },
+      { id: 'npm', command: 'npm install -g @kilocode/cli', available: true },
+    ])
+    expect(plans[0]!.archive).toMatchObject({
+      version: '7.8.18',
+      cmd: './kilo',
+      args: ['acp'],
+      sha256: '1ea2285a2f45ec27b7fa3b644f92700adf4a91fd671aaf18ba0cb8f26c795df5',
+    })
+  })
+
+  it('offers Kimi no archive on a platform the registry leaves out', async () => {
+    expect(await installPlans(KIMI.installs!, contextFor('kimi', 'darwin', 'x64'))).toEqual([])
+    expect(
+      (await installPlans(KIMI.installs!, contextFor('kimi', 'darwin', 'arm64'))).map(
+        (plan) => plan.id,
+      ),
+    ).toEqual(['archive'])
   })
 })

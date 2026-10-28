@@ -218,6 +218,97 @@ export function configLocations(
         },
       ]
     }
+    case 'cursor': {
+      const moved = variable('CURSOR_CONFIG_DIR')
+      // Cursor's docs give XDG_CONFIG_HOME a folder of its own only on Linux and BSD.
+      const xdg = platform === 'darwin' || platform === 'win32' ? null : variable('XDG_CONFIG_HOME')
+      const folder = moved ?? (xdg ? p.join(xdg, 'cursor') : p.join(home, '.cursor'))
+      // The CLI documents only project rules and AGENTS.md, so no global instructions file shows.
+      return [
+        {
+          id: 'folder',
+          candidates: [folder],
+          env: moved ? 'CURSOR_CONFIG_DIR' : xdg ? 'XDG_CONFIG_HOME' : null,
+        },
+        { id: 'settings', candidates: [p.join(folder, 'cli-config.json')], env: null },
+      ]
+    }
+    case 'kimi': {
+      const moved = variable('KIMI_SHARE_DIR')
+      const folder = moved ?? p.join(home, '.kimi')
+      // Its docs name no global instructions file, so the folder and config.toml are all it shows.
+      return [
+        { id: 'folder', candidates: [folder], env: moved ? 'KIMI_SHARE_DIR' : null },
+        { id: 'settings', candidates: [p.join(folder, 'config.toml')], env: null },
+      ]
+    }
+    case 'amp': {
+      const xdg = variable('XDG_CONFIG_HOME')
+      const folder = p.join(xdg ?? p.join(home, '.config'), 'amp')
+      return [
+        { id: 'folder', candidates: [folder], env: xdg ? 'XDG_CONFIG_HOME' : null },
+        {
+          id: 'settings',
+          candidates: [p.join(folder, 'settings.json'), p.join(folder, 'settings.jsonc')],
+          env: null,
+        },
+        {
+          id: 'instructions',
+          candidates: [p.join(folder, 'AGENTS.md'), p.join(p.dirname(folder), 'AGENTS.md')],
+          env: null,
+          fallback: p.join(folder, 'AGENTS.md'),
+        },
+      ]
+    }
+    case 'goose': {
+      const rootValue = getEnv('GOOSE_PATH_ROOT')
+      const root =
+        rootValue && rootValue.trim() !== '' && p.isAbsolute(rootValue) ? rootValue : null
+      const xdg = platform === 'win32' ? null : variable('XDG_CONFIG_HOME')
+      const appData = platform === 'win32' ? variable('APPDATA') : null
+      let folder: string
+      let env: string | null
+      if (root) {
+        folder = p.join(root, 'config')
+        env = 'GOOSE_PATH_ROOT'
+      } else if (platform === 'darwin') {
+        folder = p.join(home, 'Library', 'Application Support', 'Block', 'goose')
+        env = null
+      } else if (platform === 'win32') {
+        folder = p.join(appData ?? p.join(home, 'AppData', 'Roaming'), 'Block', 'goose', 'config')
+        env = appData ? 'APPDATA' : null
+      } else {
+        folder = p.join(xdg ?? p.join(home, '.config'), 'goose')
+        env = xdg ? 'XDG_CONFIG_HOME' : null
+      }
+      return [
+        { id: 'folder', candidates: [folder], env },
+        { id: 'settings', candidates: [p.join(folder, 'config.yaml')], env: null },
+        {
+          id: 'instructions',
+          candidates: [p.join(folder, 'AGENTS.md'), p.join(folder, '.goosehints')],
+          env: null,
+          fallback: p.join(folder, 'AGENTS.md'),
+        },
+      ]
+    }
+    case 'kilo': {
+      const file = variable('KILO_CONFIG')
+      const xdg = variable('XDG_CONFIG_HOME')
+      const folder = p.join(xdg ?? p.join(home, '.config'), 'kilo')
+      const settings: ConfigLocation = file
+        ? { id: 'settings', candidates: [file], env: 'KILO_CONFIG' }
+        : {
+            id: 'settings',
+            candidates: [p.join(folder, 'kilo.jsonc'), p.join(folder, 'kilo.json')],
+            env: null,
+          }
+      return [
+        { id: 'folder', candidates: [folder], env: xdg ? 'XDG_CONFIG_HOME' : null },
+        settings,
+        { id: 'instructions', candidates: [p.join(folder, 'AGENTS.md')], env: null },
+      ]
+    }
     case 'fake-agent':
       return []
   }
