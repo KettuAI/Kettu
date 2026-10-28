@@ -45,6 +45,7 @@ export type AgentId =
   | 'poolside'
   | 'stakpak'
   | 'vtcode'
+  | 'fast-agent'
   | 'fake-agent'
 
 export const AGENT_IDS: readonly AgentId[] = [
@@ -92,5 +93,6 @@ export const AGENT_IDS: readonly AgentId[] = [
   'poolside',
   'stakpak',
   'vtcode',
+  'fast-agent',
   'fake-agent',
 ]

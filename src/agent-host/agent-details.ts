@@ -519,6 +519,9 @@ export function configLocations(
         },
       ]
     }
+    case 'fast-agent':
+      // It reads the project's .fast-agent folder or FAST_AGENT_HOME, not a folder of its own.
+      return []
     case 'fake-agent':
       return []
   }

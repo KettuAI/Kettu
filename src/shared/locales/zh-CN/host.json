@@ -188,6 +188,7 @@
     "scriptMissing": "{{script}} 不存在。",
     "hint": {
       "node": "请从 nodejs.org 安装 Node.js，然后在设置中点击「重新加载环境」。",
+      "uv": "请从 docs.astral.sh/uv 安装 uv，然后在设置中点击「重新加载环境」。",
       "opencode": "请安装 OpenCode，或在「设置 › Agent」中选择它的程序。",
       "pi": "请用 `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` 或 pi.dev 上的安装程序安装 pi。",
       "cursor": "请安装 Cursor，或在「设置 › Agent」中选择它的程序。",

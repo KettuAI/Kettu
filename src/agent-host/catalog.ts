@@ -30,6 +30,7 @@ import { DIMCODE } from './agents/dimcode'
 import { DIRAC } from './agents/dirac'
 import { DROID } from './agents/droid'
 import { fakeAgent } from './agents/fake-agent'
+import { FAST_AGENT } from './agents/fast-agent'
 import { GEMINI } from './agents/gemini'
 import { GLM } from './agents/glm'
 import { GOOSE } from './agents/goose'
@@ -181,6 +182,7 @@ export {
   DIRAC,
   DROID,
   fakeAgent,
+  FAST_AGENT,
   GEMINI,
   GLM,
   GOOSE,
@@ -253,6 +255,7 @@ export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
     POOLSIDE,
     STAKPAK,
     VTCODE,
+    FAST_AGENT,
   ]
   if (fakeAgentPath) catalog.push(fakeAgent(fakeAgentPath))
   return catalog
