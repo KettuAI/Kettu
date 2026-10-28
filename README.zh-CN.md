@@ -89,10 +89,6 @@ OverBench 为这些工作提供了一个桌面上的家。你用的每个 Agent 
 | [siGit Code](https://github.com/getsigit/sigit)                             | ACP 包 `@smbcloud/sigit`，首次使用时安装                                                       |
 | [Agoragentic](https://agoragentic.com)                                      | ACP 包 `agoragentic-mcp`，首次使用时安装，以 `--acp` 运行                                      |
 | [Autohand Code](https://www.autohand.ai/cli/)                               | ACP 包 `@autohandai/autohand-acp`，首次使用时安装                                              |
-| [Claude Code](https://github.com/anthropics/claude-code)                    | ACP 适配器 `@agentclientprotocol/claude-agent-acp`，首次使用时安装                             |
-| [Codex CLI](https://github.com/openai/codex)                                | ACP 适配器 `@agentclientprotocol/codex-acp`，首次使用时安装                                    |
-| [opencode](https://opencode.ai)                                             | 你自己安装的 `opencode`，以 `opencode acp` 运行                                                |
-| [Pi](https://pi.dev)                                                        | ACP 适配器 `pi-acp`，首次使用时安装，并运行你自己安装的 `pi`                                   |
 | [Cursor](https://cursor.com/docs/cli/acp)                                   | 你自己安装的 `cursor-agent`，或首次使用时下载的 Cursor 压缩包                                  |
 | [Kimi Code CLI](https://moonshotai.github.io/kimi-cli/)                     | 你自己安装的 `kimi`，或首次使用时下载的压缩包                                                  |
 | [Amp](https://ampcode.com)                                                  | ACP 适配器 `amp-acp`，首次使用时下载                                                           |
@@ -104,6 +100,10 @@ OverBench 为这些工作提供了一个桌面上的家。你用的每个 Agent 
 | [Grok](https://x.ai/cli)                                                    | `@xai-official/grok` 这个 ACP 包，首次使用时安装，以 `agent stdio` 运行                        |
 | [Cline](https://cline.bot/cli)                                              | `cline` 这个 ACP 包，首次使用时安装，以 `--acp` 运行                                           |
 | [Factory Droid](https://factory.ai/product/cli)                             | `droid` 这个 ACP 包，首次使用时安装，以 `exec --output-format acp-daemon` 运行，并关闭自动更新 |
+| [OMP (Oh My Pi)](https://omp.sh)                                            | 你自己安装的 `omp`，以 `omp acp` 运行                                                          |
+| [Hermes Agent](https://hermes-agent.nousresearch.com)                       | 你自己安装的 `hermes`，以 `hermes acp` 运行                                                    |
+| [Muse Code](https://dev.meta.ai)                                            | 你自己安装的 `muse`，以 `muse acp` 运行，启用实验性的 ACP 模式                                 |
+| [CodeWhale](https://codewhale.net)                                          | 你自己安装的 `codewhale`，以 `codewhale serve --acp` 运行（部分支持的 ACP 适配器）             |
 
 这些适配器需要 Node.js 和 npm，OverBench 会通过你的登录 shell 找到它们。
 
