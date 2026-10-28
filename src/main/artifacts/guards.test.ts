@@ -159,6 +159,29 @@ describe('forwardedKey', () => {
     }
   })
 
+  it('passes back and forward: Cmd and a bracket on macOS, Alt and an arrow elsewhere', () => {
+    expect(forwardedKey(input('[', 'BracketLeft', { meta: true }), 'darwin')).toMatchObject({
+      code: 'BracketLeft',
+      metaKey: true,
+      altKey: false,
+    })
+    expect(forwardedKey(input(']', 'BracketRight', { meta: true }), 'darwin')).not.toBeNull()
+    for (const platform of ['win32', 'linux'] as const) {
+      for (const code of ['ArrowLeft', 'ArrowRight']) {
+        expect(forwardedKey(input(code, code, { alt: true }), platform)).toMatchObject({
+          code,
+          altKey: true,
+          ctrlKey: false,
+        })
+        for (const other of [{ shift: true }, { control: true }, { meta: true }]) {
+          expect(forwardedKey(input(code, code, { alt: true, ...other }), platform)).toBeNull()
+        }
+      }
+      expect(forwardedKey(input('[', 'BracketLeft', { control: true }), platform)).toBeNull()
+    }
+    expect(forwardedKey(input('ArrowLeft', 'ArrowLeft', { alt: true }), 'darwin')).toBeNull()
+  })
+
   it("keeps the page's own keys in the page", () => {
     expect(forwardedKey(input('c', 'KeyC', { control: true }), 'win32')).toBeNull()
     expect(forwardedKey(input('b', 'KeyB'), 'win32')).toBeNull()
@@ -243,7 +266,7 @@ describe('guardArtifactFrames', () => {
     expect(press('b', 'KeyB', { control: true })).toHaveBeenCalled()
     expect(press('c', 'KeyC', { control: true })).not.toHaveBeenCalled()
     expect(keys).toEqual([
-      { key: 'b', code: 'KeyB', shiftKey: false, ctrlKey: true, metaKey: false },
+      { key: 'b', code: 'KeyB', shiftKey: false, ctrlKey: true, metaKey: false, altKey: false },
     ])
   })
 

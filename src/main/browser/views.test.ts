@@ -1,3 +1,4 @@
+import type { Input } from 'electron'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({
@@ -10,7 +11,8 @@ vi.mock('electron', () => ({
 
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 
-const { framePage, isUserMouse, leastRecentlyUsed, MAX_LIVE_PAGES } = await import('./views')
+const { framePage, isUserMouse, leastRecentlyUsed, MAX_LIVE_PAGES, pageKey } =
+  await import('./views')
 
 describe('framePage', () => {
   it('reaches the radius above the page, which sits that far inside it', () => {
@@ -72,5 +74,58 @@ describe('isUserMouse', () => {
     for (const type of ['mouseMove', 'mouseEnter', 'mouseLeave']) {
       expect(isUserMouse(type)).toBe(false)
     }
+  })
+})
+
+describe('pageKey', () => {
+  const key = (key: string, code: string, modifiers: Partial<Input> = {}): Input =>
+    ({
+      type: 'keyDown',
+      key,
+      code,
+      isAutoRepeat: false,
+      isComposing: false,
+      shift: false,
+      control: false,
+      alt: false,
+      meta: false,
+      location: 0,
+      modifiers: [],
+      ...modifiers,
+    }) as Input
+
+  it('goes back, forward and reloads with the platform’s modifier', () => {
+    for (const [platform, modifier] of [
+      ['darwin', { meta: true }],
+      ['win32', { control: true }],
+      ['linux', { control: true }],
+    ] as const) {
+      expect(pageKey(key('[', 'BracketLeft', modifier), platform)).toBe('back')
+      expect(pageKey(key(']', 'BracketRight', modifier), platform)).toBe('forward')
+      expect(pageKey(key('r', 'KeyR', modifier), platform)).toBe('reload')
+      expect(pageKey(key('[', 'BracketLeft'), platform)).toBeNull()
+    }
+  })
+
+  it('goes back and forward with Alt and an arrow outside macOS', () => {
+    for (const platform of ['win32', 'linux'] as const) {
+      expect(pageKey(key('ArrowLeft', 'ArrowLeft', { alt: true }), platform)).toBe('back')
+      expect(pageKey(key('ArrowRight', 'ArrowRight', { alt: true }), platform)).toBe('forward')
+      expect(
+        pageKey(key('ArrowLeft', 'ArrowLeft', { alt: true, shift: true }), platform),
+      ).toBeNull()
+      expect(
+        pageKey(key('ArrowLeft', 'ArrowLeft', { alt: true, control: true }), platform),
+      ).toBeNull()
+      expect(pageKey(key('[', 'BracketLeft', { alt: true, control: true }), platform)).toBeNull()
+    }
+    expect(pageKey(key('ArrowLeft', 'ArrowLeft', { alt: true }), 'darwin')).toBeNull()
+  })
+
+  it('takes neither a key going up nor one held down', () => {
+    expect(pageKey(key('[', 'BracketLeft', { meta: true, type: 'keyUp' }), 'darwin')).toBeNull()
+    expect(
+      pageKey(key('[', 'BracketLeft', { meta: true, isAutoRepeat: true }), 'darwin'),
+    ).toBeNull()
   })
 })

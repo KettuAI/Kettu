@@ -40,6 +40,7 @@ import {
 } from '@renderer/components/ui/sidebar'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { BackForward } from '@renderer/features/shell/back-forward'
 import { SidebarToggle } from '@renderer/features/shell/top-bar'
 import { strongestSignal, signalText } from '@renderer/features/routines/model'
 import { RunningDot } from '@renderer/features/routines/run-mark'
@@ -116,11 +117,13 @@ export function AppSidebar() {
       {/* On macOS level with the top bar, under the gap above the sheets; elsewhere in the band. */}
       <div
         className={cn(
-          'app-region-drag flex shrink-0 items-center gap-2 pr-2 pl-4',
+          'app-region-drag flex shrink-0 items-center pr-2 pl-4',
           isMac ? 'h-[calc(var(--sheet-gap)+var(--top-bar))] pt-(--sheet-gap)' : 'h-(--title-bar)',
         )}
       >
         {isMac && <span aria-hidden className="w-(--traffic-lights)" />}
+        <BackForward className={cn(isMac && 'ml-2')} />
+        {/* The window's drag region, 18 px of it at the sidebar's narrowest. */}
         <span className="flex-1" />
         <SidebarToggle />
       </div>

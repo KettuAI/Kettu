@@ -34,6 +34,7 @@ import {
 } from '@shared/routines'
 import type { ScheduleProblem } from '@shared/schedule'
 import type { AgentId } from '@shared/thread'
+import { backTo } from '@renderer/app/history'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
@@ -112,7 +113,7 @@ function ExistingRoutine({ routineId }: { routineId: string }) {
             <p className="text-small text-secondary">
               {loadError ? t('page.loadFailed') : t('routine.deleted')}
             </p>
-            <Button variant="outline" size="sm" onClick={openRoutines}>
+            <Button variant="outline" size="sm" onClick={leaveRoutine}>
               {t('routine.backToRoutines')}
             </Button>
           </div>
@@ -472,7 +473,7 @@ function NewRoutine() {
         scope,
         timeLimitMinutes: timeLimit,
       })
-      openRoutine(routine.id)
+      openRoutine(routine.id, { replace: true })
     } catch (failure) {
       setError(errorMessage(failure))
     } finally {
@@ -564,7 +565,7 @@ function RoutineShell({ children }: { children: ReactNode }) {
         {/* Block flow, so a section's margin and the header's meet as one gap. */}
         <div className="@container/routine mx-auto w-full max-w-210 px-10 pb-20">
           <div className="mb-3.5 flex">
-            <Button variant="quiet" size="sm" className="-ml-2 gap-1.5 px-2" onClick={openRoutines}>
+            <Button variant="quiet" size="sm" className="-ml-2 gap-1.5 px-2" onClick={leaveRoutine}>
               <ArrowLeftIcon />
               {t('routine.back')}
             </Button>
@@ -731,6 +732,11 @@ function RoutineTile({ agent }: { agent: AgentId | null }) {
   )
 }
 
+/** The page's Back: to the Routines list. */
+function leaveRoutine(): void {
+  backTo({ kind: 'routines' }, openRoutines)
+}
+
 /** Esc leaves the page for the Routines list, as the back link does. */
 function useBackOnEscape(): void {
   useEffect(() => {
@@ -740,7 +746,7 @@ function useBackOnEscape(): void {
       if (document.querySelector('[data-open][data-slot$="-content"]')) return
       if (useViewStore.getState().settings.open) return
       event.preventDefault()
-      openRoutines()
+      leaveRoutine()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)

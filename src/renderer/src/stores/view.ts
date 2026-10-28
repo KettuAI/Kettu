@@ -53,6 +53,22 @@ type PageView =
 export type MainView =
   PageView | { kind: 'artifact'; id: string; back: PageView; history?: boolean }
 
+/** A page that shows alone in the main area while the split waits. */
+type Page = Exclude<MainView, { kind: 'launch' | 'session' | 'new' }>
+
+/** What a step of the history shows. */
+export type HistoryView = MainView | PaneView
+
+/**
+ * A step of the history: what the main area showed before a change, as much as the change
+ * replaced: the page shown alone, the views of the panes it changed, and the pane in focus.
+ */
+export interface Step {
+  page: Page | null
+  panes: { id: string; view: PaneView }[]
+  focus: string
+}
+
 // The No project and Pinned groups' keys in `collapsedProjects`, which no folder's path can take.
 export const NO_PROJECT_GROUP = 'no-project'
 export const PINNED_GROUP = 'pinned'
@@ -93,6 +109,8 @@ interface ViewStore {
   settings: { open: boolean; section: SettingsSection | null; item: string | null }
   /** The shortcuts dialog, over whatever the window shows. Not persisted. */
   shortcutsOpen: boolean
+  /** Back and Forward through what the main area showed, nearest last. Not persisted. */
+  history: { back: Step[]; forward: Step[] }
   sidebarCollapsed: boolean
   /** Groups the user collapsed, by path, `NO_PROJECT_GROUP` or `PINNED_GROUP`; open by default. */
   collapsedProjects: Record<string, true>
@@ -139,6 +157,7 @@ export const useViewStore = create<ViewStore>()(() => ({
   splitSideArtifact: null,
   settings: { open: false, section: null, item: null },
   shortcutsOpen: false,
+  history: { back: [], forward: [] },
   sidebarCollapsed: saved.sidebarCollapsed ?? false,
   collapsedProjects: saved.collapsedProjects ?? {},
   expandedParents: saved.expandedParents ?? {},
@@ -445,11 +464,13 @@ export function showCreatedSession(
   const { layout } = useViewStore.getState()
   const pane = findPane(layout, paneId)
   if (!pane || pane.view.kind !== 'new') return false
-  useViewStore.setState((s) =>
-    withLayout(
-      s,
-      setPaneViewInLayout(s.layout, paneId, { kind: 'session', sessionId, projectPath }),
-      true,
+  inPlace(() =>
+    useViewStore.setState((s) =>
+      withLayout(
+        s,
+        setPaneViewInLayout(s.layout, paneId, { kind: 'session', sessionId, projectPath }),
+        true,
+      ),
     ),
   )
   return true
@@ -470,12 +491,18 @@ export function openRoutines(): void {
   }))
 }
 
-/** A routine's page, or New routine with a null id. */
-export function openRoutine(routineId: string | null): void {
-  useViewStore.setState((s) => ({
-    main: { kind: 'routine', routineId },
-    settings: { ...s.settings, open: false },
-  }))
+/**
+ * A routine's page, or New routine with a null id; with `replace`, in place of the page shown, as
+ * New routine is by the routine it saved.
+ */
+export function openRoutine(routineId: string | null, { replace = false } = {}): void {
+  const open = () =>
+    useViewStore.setState((s) => ({
+      main: { kind: 'routine', routineId },
+      settings: { ...s.settings, open: false },
+    }))
+  if (replace) inPlace(open)
+  else open()
 }
 
 /** The Artifacts page from the sidebar, with its whole list. */
@@ -720,4 +747,156 @@ export function restoreLayout(layout: Layout): void {
     ...withLayout(s, layout, true),
     settings: { ...s.settings, open: false },
   }))
+}
+
+const HISTORY_LIMIT = 50
+
+/** Whether a view of the history can still show, or went with what it showed. */
+export type CanShow = (view: HistoryView) => boolean
+
+// Off while a change must not record a step: a step itself, or a view shown in place of another.
+let recording = true
+
+/** A view's identity in the history: what it shows, not how. */
+export function viewKey(view: HistoryView): string {
+  switch (view.kind) {
+    case 'session':
+      return `session:${view.sessionId}`
+    case 'new':
+      return `new:${view.parentId ?? ''}`
+    case 'routine':
+      return `routine:${view.routineId ?? ''}`
+    case 'artifacts':
+      return view.deleted ? 'artifacts:deleted' : 'artifacts'
+    case 'artifact':
+      return `artifact:${view.id}`
+    default:
+      return view.kind
+  }
+}
+
+function pageOf(main: MainView): Page | null {
+  return main.kind === 'launch' || main.kind === 'session' || main.kind === 'new' ? null : main
+}
+
+const pageKey = (page: Page | null): string | null => (page ? viewKey(page) : null)
+
+/** Shows a view in place of the one it replaces, which stays the same step. */
+function inPlace(change: () => void): void {
+  recording = false
+  try {
+    change()
+  } finally {
+    recording = true
+  }
+}
+
+/**
+ * The step back from `after` to `before`: the page and the views of the panes there both times
+ * that changed. Null when nothing that shows changed, as when only the focus moved.
+ */
+function stepBetween(before: ViewStore, after: ViewStore): Step | null {
+  const page = pageOf(before.main)
+  const panes = allPanes(before.layout).flatMap((pane) => {
+    const now = findPane(after.layout, pane.id)
+    return now && viewKey(now.view) !== viewKey(pane.view) ? [{ id: pane.id, view: pane.view }] : []
+  })
+  if (!panes.length && pageKey(page) === pageKey(pageOf(after.main))) return null
+  return { page, panes, focus: before.layout.focus }
+}
+
+useViewStore.subscribe((state, previous) => {
+  if (!recording || (state.main === previous.main && state.layout === previous.layout)) return
+  if (state.main.kind === 'launch' || previous.main.kind === 'launch') return
+  const step = stepBetween(previous, state)
+  if (!step) return
+  useViewStore.setState({
+    history: { back: [...state.history.back, step].slice(-HISTORY_LIMIT), forward: [] },
+  })
+})
+
+/**
+ * What showing a step again changes: each pane it changed gets its view back and the focus, unless
+ * the view shows in another pane by now, which takes the focus instead, or the pane has closed,
+ * when the view goes to the pane in focus. A step that changed no pane gives back the focus.
+ */
+function applyStep(s: ViewStore, step: Step): Partial<ViewStore> {
+  let layout = s.layout
+  let focus = findPane(layout, step.focus) ? step.focus : layout.focus
+  for (const { id, view } of step.panes) {
+    // A session shows in one pane at most, and so does New session, whatever its parent.
+    const shown = allPanes(layout).find(
+      (pane) =>
+        pane.id !== id &&
+        (view.kind === 'new' ? pane.view.kind === 'new' : viewKey(pane.view) === viewKey(view)),
+    )
+    if (shown) {
+      focus = shown.id
+      continue
+    }
+    focus = findPane(layout, id) ? id : layout.focus
+    layout = setPaneViewInLayout(layout, focus, view)
+  }
+  layout = focusPaneInLayout(layout, focus)
+  return step.page ? { layout, main: step.page } : withLayout(s, layout, true)
+}
+
+function stepShows(step: Step, canShow: CanShow): boolean {
+  return (!step.page || canShow(step.page)) && step.panes.every((pane) => canShow(pane.view))
+}
+
+/** Shows the nearest step that can still show and moves it to the other list, inverted. */
+function move(direction: 'back' | 'forward', canShow: CanShow): void {
+  const s = useViewStore.getState()
+  const from = [...s.history[direction]]
+  let step = from.pop()
+  while (step && !stepShows(step, canShow)) step = from.pop()
+  const other = s.history[direction === 'back' ? 'forward' : 'back']
+  const history = (rest: Step[], others: Step[]) =>
+    direction === 'back' ? { back: rest, forward: others } : { back: others, forward: rest }
+  if (!step) {
+    if (from.length < s.history[direction].length) {
+      useViewStore.setState({ history: history(from, other) })
+    }
+    return
+  }
+  const changes = applyStep(s, step)
+  const undo = stepBetween(s, { ...s, ...changes }) ?? {
+    page: pageOf(s.main),
+    panes: [],
+    focus: s.layout.focus,
+  }
+  inPlace(() =>
+    useViewStore.setState({
+      ...changes,
+      history: history(from, [...other, undo].slice(-HISTORY_LIMIT)),
+    }),
+  )
+}
+
+/**
+ * Back to what the main area showed before; while Settings shows, Settings' own back. Steps whose
+ * view can no longer show are skipped.
+ */
+export function goBack(canShow: CanShow): void {
+  if (useViewStore.getState().settings.open) settingsBack()
+  else move('back', canShow)
+}
+
+/** Forward again after going back; nothing while Settings shows. */
+export function goForward(canShow: CanShow): void {
+  if (!useViewStore.getState().settings.open) move('forward', canShow)
+}
+
+/**
+ * A page's own Back to `view`: a step back when the step before shows that view, so Forward
+ * returns. False otherwise, for the page to open the view itself.
+ */
+export function stepBackTo(view: HistoryView, canShow: CanShow): boolean {
+  const s = useViewStore.getState()
+  const step = s.history.back.at(-1)
+  if (s.settings.open || !step || !stepShows(step, canShow)) return false
+  if (viewKey(applyStep(s, step).main ?? s.main) !== viewKey(view)) return false
+  move('back', canShow)
+  return true
 }

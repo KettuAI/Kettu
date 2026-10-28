@@ -31,7 +31,7 @@ import {
 import { Spinner } from '@renderer/components/ui/spinner'
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { SHEET } from '@renderer/features/shell/sheet'
-import { SidebarToggle } from '@renderer/features/shell/top-bar'
+import { CornerControls } from '@renderer/features/shell/top-bar'
 import { isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import {
@@ -125,7 +125,7 @@ export function TerminalPanel({
           cornered && 'pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]',
         )}
       >
-        {cornered && <SidebarToggle className="mr-1" />}
+        {cornered && <CornerControls className="mr-1" />}
         <DragDropProvider sensors={sensors} onDragEnd={dragEnded}>
           <div
             role="tablist"

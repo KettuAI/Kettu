@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeftIcon, CircleAlertIcon, EllipsisIcon, TrashIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { backTo } from '@renderer/app/history'
 import { Button } from '@renderer/components/ui/button'
 import {
   DropdownMenu,
@@ -18,7 +19,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { restoreArtifact, restoreVersion } from '@renderer/stores/artifacts'
-import { closeArtifact } from '@renderer/stores/view'
+import { closeArtifact, useViewStore } from '@renderer/stores/view'
 import { ArtifactMenuItems } from './artifact-menu'
 import { ShareButton } from './share-popover'
 import { CanvasControls } from './canvas-controls'
@@ -41,6 +42,12 @@ import {
 
 /** The bar over the page, for an earlier version or one in Recently deleted, and a gap under it. */
 const BAR_ROOM = 64
+
+/** The viewer's Back: to what the main area showed before the artifact. */
+function leaveArtifact(): void {
+  const { main } = useViewStore.getState()
+  if (main.kind === 'artifact') backTo(main.back, closeArtifact)
+}
 
 /**
  * An artifact in the main area, live, away from the app and the machine: a single page at the
@@ -66,7 +73,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
       // Keys typed in the page stay there; Esc goes back only from the app's own page.
       if (event.key !== 'Escape' || event.defaultPrevented || isEditable(event.target)) return
       event.preventDefault()
-      closeArtifact()
+      leaveArtifact()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -132,7 +139,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
           >
             {t('menu.restore')}
           </Button>
-          <Button variant="outline" size="compact" onClick={closeArtifact}>
+          <Button variant="outline" size="compact" onClick={leaveArtifact}>
             <ArrowLeftIcon data-icon="inline-start" />
             {t('viewer.back')}
           </Button>
@@ -164,7 +171,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
           since={since}
           controls={controls}
           top={bar ? BAR_ROOM : 0}
-          onEscape={closeArtifact}
+          onEscape={leaveArtifact}
         />
         {bar}
       </>
@@ -186,7 +193,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
     <div className="flex h-full min-h-0 flex-col">
       <TopBar>
         <NoDrag className="-ml-2.5 min-w-0 gap-0.5">
-          <BarButton label={t('viewer.back')} shortcut="Esc" onClick={closeArtifact}>
+          <BarButton label={t('viewer.back')} shortcut="Esc" onClick={leaveArtifact}>
             <ArrowLeftIcon />
           </BarButton>
           <ViewerTitle

@@ -268,3 +268,190 @@ describe('the split view', () => {
     expect(useViewStore.getState().sidePane['/one']).toBe('files')
   })
 })
+
+describe('history', async () => {
+  const view = await import('./view')
+  const { allPanes, createLayout, findPane, paneOrder, splitAt } =
+    await import('@renderer/features/split/layout')
+  const { goBack, goForward, stepBackTo, useViewStore } = view
+  const any = () => true
+  const state = () => useViewStore.getState()
+  const session = (sessionId: string) => ({
+    kind: 'session' as const,
+    sessionId,
+    projectPath: '/repo',
+  })
+  const shown = (sessionId: string) => ({ kind: 'session', sessionId })
+  // Two panes side by side, s1 and s2.
+  const split = () => {
+    const one = createLayout(session('s1'))
+    return splitAt(one, one.focus, 'right', session('s2'), { width: 1920, height: 1080 })!
+  }
+  // What a launch leaves: the layout shown and no history.
+  const start = (layout = createLayout(session('s1'))) => {
+    useViewStore.setState({ main: { kind: 'launch' } })
+    view.restoreLayout(layout)
+    useViewStore.setState({ history: { back: [], forward: [] } })
+    return paneOrder(layout)
+  }
+
+  it('records a step for each change of what shows, and none for what already shows', () => {
+    start()
+    view.openSession('s2', '/repo')
+    view.openSession('s2', '/repo')
+    expect(state().history.back).toHaveLength(1)
+    view.openUsage()
+    expect(state().history.back).toHaveLength(2)
+  })
+
+  it('records nothing for the first view after launch', () => {
+    useViewStore.setState({ main: { kind: 'launch' }, history: { back: [], forward: [] } })
+    view.restoreLayout(createLayout(session('s1')))
+    expect(state().history.back).toEqual([])
+  })
+
+  it('goes back and forward, and something new drops the steps ahead', () => {
+    start()
+    view.openSession('s2', '/repo')
+    view.openUsage()
+    goBack(any)
+    expect(state().main).toEqual(shown('s2'))
+    goBack(any)
+    expect(state().main).toEqual(shown('s1'))
+    expect(state().history.back).toEqual([])
+    expect(state().history.forward).toHaveLength(2)
+    goForward(any)
+    expect(state().main).toEqual(shown('s2'))
+    goForward(any)
+    expect(state().main).toEqual({ kind: 'usage' })
+    goBack(any)
+    view.openRoutines()
+    expect(state().history.forward).toEqual([])
+    expect(state().history.back).toHaveLength(2)
+  })
+
+  it('keeps at most 50 steps each way', () => {
+    start(createLayout(session('s0')))
+    for (let i = 1; i <= 60; i++) view.openSession(`s${i}`, '/repo')
+    expect(state().history.back).toHaveLength(50)
+    for (let i = 0; i < 60; i++) goBack(any)
+    expect(state().main).toEqual(shown('s10'))
+    expect(state().history.forward).toHaveLength(50)
+  })
+
+  it('skips a step whose view can no longer show', () => {
+    start()
+    view.openSession('s2', '/repo')
+    view.openSession('s3', '/repo')
+    goBack((v) => !(v.kind === 'session' && v.sessionId === 's2'))
+    expect(state().main).toEqual(shown('s1'))
+    expect(state().history.back).toEqual([])
+    expect(state().history.forward).toHaveLength(1)
+  })
+
+  it('records no step when only the focus moves between panes', () => {
+    const [first, second] = start(split())
+    view.focusPane(first!)
+    view.openSession('s2', '/repo')
+    view.focusPane(first!)
+    expect(state().layout.focus).toBe(first)
+    expect(second).toBeDefined()
+    expect(state().history.back).toEqual([])
+  })
+
+  it('puts a view back in its pane and gives that pane the focus', () => {
+    const [first, second] = start(split())
+    view.focusPane(second!)
+    view.openSession('s3', '/repo')
+    view.focusPane(first!)
+    goBack(any)
+    expect(findPane(state().layout, second!)?.view).toMatchObject({ sessionId: 's2' })
+    expect(findPane(state().layout, first!)?.view).toMatchObject({ sessionId: 's1' })
+    expect(state().layout.focus).toBe(second)
+    expect(state().main).toEqual(shown('s2'))
+    goForward(any)
+    expect(findPane(state().layout, second!)?.view).toMatchObject({ sessionId: 's3' })
+    expect(state().main).toEqual(shown('s3'))
+  })
+
+  it('shows the view in the pane in focus when its pane has closed', () => {
+    const [, second] = start(split())
+    view.focusPane(second!)
+    view.openSession('s3', '/repo')
+    view.closeSplitPane(second!)
+    goBack(any)
+    expect(allPanes(state().layout)).toHaveLength(1)
+    expect(state().main).toEqual(shown('s2'))
+  })
+
+  it('focuses the pane that shows the session by now', () => {
+    const [first, second] = start(split())
+    view.focusPane(first!)
+    view.openSession('s3', '/repo')
+    view.openInSplit(session('s1'), 'right', { width: 1920, height: 1080 })
+    const third = state().layout.focus
+    view.focusPane(second!)
+    goBack(any)
+    expect(state().layout.focus).toBe(third)
+    expect(state().main).toEqual(shown('s1'))
+    expect(findPane(state().layout, first!)?.view).toMatchObject({ sessionId: 's3' })
+  })
+
+  it('leaves the split as it was under a page and back', () => {
+    const [first] = start(split())
+    view.focusPane(first!)
+    const layout = state().layout
+    view.openUsage()
+    goBack(any)
+    expect(state().layout).toEqual(layout)
+    expect(state().main).toEqual(shown('s1'))
+  })
+
+  it('counts New session turned into its session as the same step', () => {
+    start()
+    view.openNewSession('/repo', null)
+    view.showCreatedSession(state().layout.focus, 's9', '/repo')
+    expect(state().main).toEqual(shown('s9'))
+    expect(state().history.back).toHaveLength(1)
+    goBack(any)
+    expect(state().main).toEqual(shown('s1'))
+  })
+
+  it('counts New routine turned into its routine as the same step', () => {
+    start()
+    view.openRoutines()
+    view.openRoutine(null)
+    view.openRoutine('r1', { replace: true })
+    expect(state().history.back).toHaveLength(2)
+    goBack(any)
+    expect(state().main).toEqual({ kind: 'routines' })
+  })
+
+  it("goes back as Settings' own back while Settings shows, and not forward", () => {
+    start()
+    view.openSession('s2', '/repo')
+    goBack(any)
+    view.openSettingsItem('agents', 'codex')
+    goBack(any)
+    expect(state().settings).toEqual({ open: true, section: 'agents', item: null })
+    goForward(any)
+    expect(state().settings.open).toBe(true)
+    expect(state().main).toEqual(shown('s1'))
+    goBack(any)
+    expect(state().settings.open).toBe(false)
+    expect(state().main).toEqual(shown('s1'))
+    expect(state().history.forward).toHaveLength(1)
+  })
+
+  it("steps back for a page's own Back only when the step before leads there", () => {
+    start()
+    view.openArtifacts()
+    view.openArtifact('a1')
+    expect(stepBackTo({ kind: 'usage' }, any)).toBe(false)
+    expect(state().main).toMatchObject({ kind: 'artifact', id: 'a1' })
+    expect(stepBackTo({ kind: 'artifacts' }, any)).toBe(true)
+    expect(state().main).toEqual({ kind: 'artifacts' })
+    goForward(any)
+    expect(state().main).toMatchObject({ kind: 'artifact', id: 'a1' })
+  })
+})

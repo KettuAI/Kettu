@@ -61,20 +61,29 @@ export function mayNavigate(host: string, url: string, branch: boolean): boolean
 
 /** Whether a key in a page's frame is an app shortcut main passes on to the app's page. */
 export function forwardedKey(input: Input, platform: NodeJS.Platform): ForwardedKey | null {
-  if (input.type !== 'keyDown' || input.alt || input.isComposing) return null
+  if (input.type !== 'keyDown' || input.isComposing) return null
   const key: ForwardedKey = {
     key: input.key,
     code: input.code,
     shiftKey: input.shift,
     ctrlKey: input.control,
     metaKey: input.meta,
+    altKey: input.alt,
+  }
+  const mac = platform === 'darwin'
+  // Back and forward outside macOS, Alt and an arrow; Alt with anything else stays the page's.
+  if (input.alt) {
+    const arrow = input.code === 'ArrowLeft' || input.code === 'ArrowRight'
+    return !mac && arrow && !input.control && !input.meta && !input.shift ? key : null
   }
   if (input.code === 'Backquote' && input.control && !input.meta) return key
-  const mac = platform === 'darwin'
   if (mac ? !input.meta || input.control : !input.control || input.meta) return null
   const lower = input.key.toLowerCase()
   if (lower === 'l' && !input.shift) return key
-  if (input.shift && (input.code === 'BracketLeft' || input.code === 'BracketRight')) return key
+  // The previous and next session with Shift; back and forward on macOS without it.
+  if (input.code === 'BracketLeft' || input.code === 'BracketRight') {
+    return input.shift || mac ? key : null
+  }
   // The shortcuts dialog's key has no menu item, so it passes on macOS too.
   if (input.key === '/') return key
   // Focus a pane of the split view, which has no menu item either.

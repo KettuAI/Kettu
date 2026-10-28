@@ -95,6 +95,7 @@ export interface ForwardedKey {
   shiftKey: boolean
   ctrlKey: boolean
   metaKey: boolean
+  altKey: boolean
 }
 
 /** Request/response contract of every `ipcRenderer.invoke` channel, keyed by channel name. */

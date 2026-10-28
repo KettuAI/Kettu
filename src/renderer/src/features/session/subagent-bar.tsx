@@ -3,6 +3,7 @@ import { ArrowLeftIcon, BotIcon, SquareIcon } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import type { SessionView } from '@shared/thread'
+import { backTo } from '@renderer/app/history'
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage, host } from '@renderer/lib/host'
@@ -78,7 +79,11 @@ export function SubagentBar({
           variant="outline"
           size="sm"
           aria-label={t('subagentBar.back', { title: parentTitle })}
-          onClick={() => openSession(parent.id, parent.projectPath)}
+          onClick={() =>
+            backTo({ kind: 'session', sessionId: parent.id }, () =>
+              openSession(parent.id, parent.projectPath),
+            )
+          }
         >
           <ArrowLeftIcon data-icon="inline-start" />
           {t('subagentBar.backShort')}
