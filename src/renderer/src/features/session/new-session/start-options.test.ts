@@ -211,6 +211,7 @@ const status = (overrides: Partial<AgentStatus>): AgentStatus => ({
   progress: [],
   launchCommand: 'codex-acp',
   binaryOverride: null,
+  binaryCommand: null,
   update: null,
   updateCheckedAt: null,
   updateSkipped: false,
