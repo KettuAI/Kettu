@@ -638,7 +638,8 @@ export function GhTool() {
     <Badge
       variant="success"
       title={gh.version ? `gh ${gh.version}` : undefined}
-      className="overflow-visible"
+      // A mask that ends the pill brings its own padding, so its hover fill is concentric.
+      className={cn(!after && 'has-data-[slot=masked]:pr-0.5')}
     >
       <CheckIcon data-icon="inline-start" />
       {before}
