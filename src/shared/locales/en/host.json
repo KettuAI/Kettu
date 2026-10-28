@@ -202,6 +202,7 @@
       "codewhale": "Install CodeWhale with the installer at codewhale.net, or choose its binary in Settings › Agents.",
       "harn": "Install Harn, or choose its binary in Settings › Agents.",
       "kimchi": "Install Kimchi, or choose its binary in Settings › Agents.",
+      "archive": "Install it in Settings › Agents.",
       "fakeAgent": "The fake agent runs tools/fake-agent/main.ts from the repository."
     }
   },

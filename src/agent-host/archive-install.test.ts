@@ -162,6 +162,25 @@ describe('installArchive', () => {
     if (posix) expect((await stat(file)).mode & 0o777).toBe(0o755)
   })
 
+  it('extracts a program that sits in a folder named by the build', async () => {
+    const root = await tempFolder('overbench-archive-')
+    const folder = 'coco-1.0.73+180523.e6179a031de9-darwin-arm64'
+    const tar = gzipSync(archiveTar([{ name: `${folder}/cortex`, data: CONTENT, mode: FILE_MODE }]))
+    const url = (await serveArchives({ '/cortex.tar.gz': tar }))('/cortex.tar.gz')
+    const installed = await installArchive(
+      options(root, url, {
+        agentId: 'cortex-code',
+        version: '1.0.73',
+        cmd: `./${folder}/cortex`,
+        args: ['acp', 'serve'],
+      }),
+    )
+    const program = programPath(installed.dir, installed.cmd, platform)
+    expect(program).toBe(path.join(root, 'cortex-code', '1.0.73', folder, 'cortex'))
+    expect(await readFile(program)).toEqual(CONTENT)
+    expect(installed.args).toEqual(['acp', 'serve'])
+  })
+
   it('writes a bare executable and makes it runnable', async () => {
     const root = await tempFolder('overbench-archive-')
     const url = (await serveArchives({ '/sigit-linux-amd64': CONTENT }))('/sigit-linux-amd64')
@@ -220,6 +239,10 @@ describe('programPath', () => {
   it('resolves the catalog command inside the install folder', () => {
     expect(programPath('/data/agent', './bin/tool', 'darwin')).toBe('/data/agent/bin/tool')
     expect(programPath('C:\\agent', '.\\bin\\tool.exe', 'win32')).toBe('C:\\agent\\bin\\tool.exe')
+  })
+
+  it('resolves a Windows command written without ./', () => {
+    expect(programPath('C:\\agent', 'vtcode.exe', 'win32')).toBe('C:\\agent\\vtcode.exe')
   })
 
   it('refuses an absolute or escaping command', () => {

@@ -2,6 +2,7 @@ import type { ComponentType } from 'react'
 import type { AgentId } from '@shared/thread'
 import * as agoragentic from './agoragentic'
 import * as amp from './amp'
+import * as antigravity from './antigravity'
 import * as auggie from './auggie'
 import * as autohand from './autohand'
 import * as bob from './bob'
@@ -12,7 +13,11 @@ import * as codewhale from './codewhale'
 import * as codex from './codex'
 import * as copilot from './copilot'
 import * as cursor from './cursor'
+import * as cortexCode from './cortex-code'
+import * as corustAgent from './corust-agent'
+import * as crowCli from './crow-cli'
 import * as deepagents from './deepagents'
+import * as devin from './devin'
 import * as dimcode from './dimcode'
 import * as dirac from './dirac'
 import * as droid from './droid'
@@ -28,13 +33,18 @@ import * as kimchi from './kimchi'
 import * as kimi from './kimi'
 import * as minimax from './minimax'
 import * as muse from './muse'
+import * as junie from './junie'
+import * as mistralVibe from './mistral-vibe'
 import * as nova from './nova'
 import * as omp from './omp'
 import * as opencode from './opencode'
 import * as pi from './pi'
+import * as poolside from './poolside'
 import * as qoder from './qoder'
 import * as qwen from './qwen'
 import * as sigit from './sigit'
+import * as stakpak from './stakpak'
+import * as vtcode from './vtcode'
 
 export interface MarkBodyProps {
   mono: boolean
@@ -82,5 +92,15 @@ export const AGENT_MARKS: Record<AgentId, AgentMarkModule> = {
   hermes,
   muse,
   codewhale,
+  antigravity,
+  devin,
+  'cortex-code': cortexCode,
+  'corust-agent': corustAgent,
+  'crow-cli': crowCli,
+  junie,
+  'mistral-vibe': mistralVibe,
+  poolside,
+  stakpak,
+  vtcode,
   'fake-agent': fakeAgent,
 }

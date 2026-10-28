@@ -1,0 +1,26 @@
+// Mistral Vibe mark: ACP Registry, https://github.com/agentclientprotocol/registry (Apache-2.0).
+const PARTS = [
+  'M8.8147 5.35803H5.35791V8.46914H8.8147V5.35803Z',
+  'M22.6419 5.35803H19.1851V8.46914H22.6419V5.35803Z',
+  'M15.7283 15.7284H12.2715V18.8395H15.7283V15.7284Z',
+  'M8.8147 15.7284H5.35791V18.8395H8.8147V15.7284Z',
+  'M22.6419 15.7284H19.1851V18.8395H22.6419V15.7284Z',
+  'M12.2715 8.81482H5.35791V11.9259H12.2715V8.81482Z',
+  'M12.2718 19.1852H1.90137V22.2963H12.2718V19.1852Z',
+  'M26.0989 19.1852H15.7285V22.2963H26.0989V19.1852Z',
+  'M22.6419 12.2716H5.35791V15.3827H22.6419V12.2716Z',
+  'M22.6421 8.81482H15.7285V11.9259H22.6421V8.81482Z',
+]
+
+export const viewBox = '0 0 28 28'
+
+/** The mark in `currentColor`, at every size. */
+export function Body() {
+  return (
+    <g fill="currentColor">
+      {PARTS.map((d) => (
+        <path key={d} d={d} />
+      ))}
+    </g>
+  )
+}

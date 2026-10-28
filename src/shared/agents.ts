@@ -35,6 +35,16 @@ export type AgentId =
   | 'codewhale'
   | 'harn'
   | 'kimchi'
+  | 'antigravity'
+  | 'devin'
+  | 'cortex-code'
+  | 'corust-agent'
+  | 'crow-cli'
+  | 'junie'
+  | 'mistral-vibe'
+  | 'poolside'
+  | 'stakpak'
+  | 'vtcode'
   | 'fake-agent'
 
 export const AGENT_IDS: readonly AgentId[] = [
@@ -72,5 +82,15 @@ export const AGENT_IDS: readonly AgentId[] = [
   'codewhale',
   'harn',
   'kimchi',
+  'antigravity',
+  'devin',
+  'cortex-code',
+  'corust-agent',
+  'crow-cli',
+  'junie',
+  'mistral-vibe',
+  'poolside',
+  'stakpak',
+  'vtcode',
   'fake-agent',
 ]
