@@ -60,7 +60,7 @@ export function GroupLabel({ group }: { group: GroupDef }) {
   return (
     <div
       className={cn(
-        'flex h-7.5 items-center gap-2 px-1 text-xs font-medium',
+        'flex min-h-7.5 items-center gap-2 px-1 text-xs font-medium',
         group.tone === 'danger' ? 'text-danger' : 'text-tertiary',
       )}
     >

@@ -21,7 +21,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 /** The width of Settings' confirmations, whose sentences run longer than most. */
 export const CONFIRM = 'data-[size=default]:sm:max-w-105'
 
-/** A quiet button at a group label's end, such as Browse themes. */
+/** A quiet button at a group label's end, such as Send a test notification. */
 export const GROUP_ACTION = 'px-2.25 text-xs text-secondary'
 
 /** A field's label above it, as the Cloudflare account and a custom proxy take them. */

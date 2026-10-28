@@ -92,7 +92,8 @@
       "exported": "Saved {{file}} to {{folder}}",
       "remove": "Remove…",
       "install": "Install from file…",
-      "installHint": ".json theme file",
+      "moreThemes": "More themes",
+      "moreDescription": "Browse the OverBench catalog, or install a .json theme file.",
       "lowContrast": "Low contrast",
       "contrastPair": "{{mode}}: {{fg}} on {{bg}}, {{ratio}}:1",
       "contrastMore": "and {{count}} more",
@@ -174,7 +175,6 @@
     },
     "groups": {
       "theme": "Theme",
-      "colorMode": "Color mode",
       "scale": "Zoom and text",
       "motion": "Motion"
     },

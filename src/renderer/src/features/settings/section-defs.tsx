@@ -47,7 +47,6 @@ import { AgentPlaceRow, FailedRead, McpServerPage, PendingList, ServerRow } from
 import { ArchivedRow } from './archived-section'
 import { GroupLabel } from './rows'
 import { PublishedRow, SharingAccount } from './sharing-section'
-import { BrowseThemes } from './theme-catalog'
 import { useLoginItemStatus } from './use-login-item'
 import { environmentText } from './environment-text'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
@@ -55,7 +54,7 @@ import {
   AllowedSitesList,
   BackgroundFetch,
   ClearBrowsingData,
-  ColorModeTiles,
+  ColorMode,
   ConfirmLinks,
   DataFolderActions,
   DataFolderText,
@@ -225,7 +224,7 @@ export function useAppearanceSection(): SectionDef {
         english: en('appearance.theme.name'),
         keywords: t('appearance.theme.keywords'),
         group: group('theme', t('appearance.groups.theme'), {
-          actions: <BrowseThemes />,
+          actions: <ColorMode />,
           plain: true,
         }),
         layout: 'block',
@@ -236,9 +235,8 @@ export function useAppearanceSection(): SectionDef {
         name: t('appearance.colorMode.name'),
         english: en('appearance.colorMode.name'),
         keywords: t('appearance.colorMode.keywords'),
-        group: group('color-mode', t('appearance.groups.colorMode'), { plain: true }),
-        layout: 'block',
-        render: () => <ColorModeTiles />,
+        searchOnly: true,
+        render: () => null,
       },
       {
         id: 'zoom',
