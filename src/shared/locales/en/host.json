@@ -162,7 +162,17 @@
       "noMethod": "No way to install {{agent}} was found: Homebrew, curl and bash, and npm are all missing from PATH.",
       "unavailable": "{{command}} needs a program that was not found on PATH.",
       "notOnPath": "{{agent}} was installed in {{folder}}, but {{command}} is still not found on PATH. Add that folder to PATH and reload the environment, or choose the program in Settings › Agents.",
-      "notFound": "{{agent}} was installed, but {{command}} is still not found on PATH. Reload the environment, or choose the program in Settings › Agents."
+      "notFound": "{{agent}} was installed, but {{command}} is still not found on PATH. Reload the environment, or choose the program in Settings › Agents.",
+      "incomplete": "{{agent}} was installed, but its program cannot be run.",
+      "programOutside": "The archive names a program outside its folder: {{command}}.",
+      "programMissing": "The archive does not hold {{command}}.",
+      "downloadStart": "Downloading {{name}}",
+      "downloading": "Downloaded {{size}}",
+      "downloadFailed": "The download of {{url}} answered HTTP {{status}}.",
+      "downloadError": "{{name}} could not be downloaded: {{reason}}",
+      "downloadTimedOut": "{{name}} did not finish downloading within {{seconds}} s.",
+      "hashMismatch": "The downloaded file does not match its SHA-256: expected {{expected}}, got {{actual}}.",
+      "extracting": "Extracting the archive…"
     },
     "reportTimeout": "{{command}} did not finish in {{seconds}} s",
     "unreadableReport": "{{agent}}'s {{command}} gave no report OverBench can read"

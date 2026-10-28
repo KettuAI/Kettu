@@ -490,6 +490,7 @@
       "adapterBodyCli": "OverBench 会把 {{package}} 装进自己的数据目录，用你的 Node.js 运行；适配器接受你的 {{command}} {{version}} 时就用它，否则还会下载一份 {{name}}。",
       "method": "安装方式",
       "methods": {
+        "archive": "下载",
         "brew": "Homebrew",
         "npm": "npm",
         "script": "官方脚本"

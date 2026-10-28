@@ -10,6 +10,7 @@ import {
   fakeAgent,
   OPENCODE,
   PI,
+  type AgentDefinition,
   type DetectContext,
 } from './catalog'
 
@@ -236,6 +237,122 @@ describe('detectAgent', () => {
     expect(await detectAgent(def, context({ isFile: async () => false }))).toMatchObject({
       state: 'not-installed',
     })
+  })
+
+  it('runs a package agent with the arguments and variables its ACP mode needs', async () => {
+    const def: AgentDefinition = {
+      ...CLAUDE_CODE,
+      launch: {
+        kind: 'package',
+        package: CLAUDE,
+        version: '0.94.0',
+        args: ['--acp'],
+        env: { COPILOT_ACP: '1' },
+      },
+    }
+    const claudeEntry = entry('claude-code', CLAUDE, '0.94.0')
+    expect(await detectAgent(def, context({ installed: installed('0.94.0') }))).toMatchObject({
+      state: 'available',
+      spec: {
+        args: [claudeEntry, '--acp'],
+        env: { COPILOT_ACP: '1' },
+        display: {
+          command: '/usr/local/bin/node',
+          args: [claudeEntry, '--acp'],
+          env: { COPILOT_ACP: '1' },
+        },
+      },
+    })
+  })
+
+  it('runs a uvx agent through uvx, and says so when uvx is missing', async () => {
+    const def: AgentDefinition = {
+      id: 'opencode',
+      name: 'Minion Code',
+      registryId: 'minion-code',
+      launch: { kind: 'uvx', package: 'minion-code', version: '0.1.44', args: ['acp'] },
+      install: { hint: 'detect.hint.node', url: 'https://docs.astral.sh/uv/' },
+    }
+    expect(await detectAgent(def, context())).toMatchObject({
+      state: 'not-installed',
+      detail: expect.stringContaining('uvx was not found on PATH'),
+    })
+    expect(
+      await detectAgent(
+        def,
+        context({ isExecutable: async (file) => file === '/usr/local/bin/uvx' }),
+      ),
+    ).toMatchObject({
+      state: 'available',
+      spec: {
+        command: '/usr/local/bin/uvx',
+        args: ['minion-code==0.1.44', 'acp'],
+        display: { command: 'uvx', args: ['minion-code==0.1.44', 'acp'] },
+      },
+    })
+  })
+
+  it('runs the archive OverBench installed only when no copy is on PATH', async () => {
+    const command = '/data/agents/opencode/2026.10.22/dist-package/cursor-agent'
+    const def: AgentDefinition = {
+      ...OPENCODE,
+      launch: { kind: 'binary', command: 'cursor-agent', args: ['acp'] },
+      installs: {
+        archive: {
+          version: '2026.10.22',
+          entries: {
+            'darwin-aarch64': {
+              url: 'https://example.com/cursor-agent.tar.gz',
+              sha256: 'a'.repeat(64),
+              cmd: './dist-package/cursor-agent',
+              args: ['acp'],
+            },
+          },
+        },
+      },
+    }
+    const installedArchive = {
+      installedArchives: async () => [
+        {
+          version: '2026.10.22',
+          dir: '/data/agents/opencode/2026.10.22',
+          url: 'https://example.com/cursor-agent.tar.gz',
+          sha256: 'a'.repeat(64),
+          cmd: './dist-package/cursor-agent',
+          args: ['acp'],
+          installedAt: 1,
+        },
+      ],
+    }
+    expect(
+      await detectAgent(
+        def,
+        context({ ...installedArchive, isExecutable: async (file) => file === command }),
+      ),
+    ).toMatchObject({
+      state: 'available',
+      spec: { command, args: ['acp'], display: { command, args: ['acp'] } },
+    })
+    expect(
+      await detectAgent(
+        def,
+        context({
+          ...installedArchive,
+          isExecutable: async (file) => file === command || file === '/usr/bin/cursor-agent',
+        }),
+      ),
+    ).toMatchObject({ state: 'available', spec: { command: '/usr/bin/cursor-agent' } })
+    expect(
+      await detectAgent(
+        def,
+        context({
+          ...installedArchive,
+          binaryOverride: '/opt/cursor',
+          isExecutable: async (file) =>
+            file === command || file === '/usr/bin/cursor-agent' || file === '/opt/cursor',
+        }),
+      ),
+    ).toMatchObject({ state: 'available', spec: { command: '/opt/cursor' } })
   })
 })
 
@@ -488,6 +605,45 @@ describe('displayCommand', () => {
           '@agentclientprotocol/codex-acp',
         ),
       ],
+      env: {},
+    })
+  })
+
+  it('shows a package agent with its arguments and variables', () => {
+    const def: AgentDefinition = {
+      ...CODEX,
+      launch: {
+        kind: 'package',
+        package: '@agentclientprotocol/codex-acp',
+        version: '2.2.2',
+        args: ['--acp'],
+        env: { COPILOT_ACP: '1' },
+      },
+    }
+    expect(displayCommand(def, '/e', null, '/data/agents')).toEqual({
+      command: 'node',
+      args: [
+        path.join(
+          '/data/agents',
+          'codex',
+          '2.2.2',
+          'node_modules',
+          '@agentclientprotocol/codex-acp',
+        ),
+        '--acp',
+      ],
+      env: { COPILOT_ACP: '1' },
+    })
+  })
+
+  it('shows a uvx agent as uvx with its pinned package', () => {
+    const def: AgentDefinition = {
+      ...OPENCODE,
+      launch: { kind: 'uvx', package: 'fast-agent-acp', version: '0.10.1', args: ['-x'] },
+    }
+    expect(displayCommand(def, '/e', null, '/data/agents')).toEqual({
+      command: 'uvx',
+      args: ['fast-agent-acp==0.10.1', '-x'],
       env: {},
     })
   })

@@ -38,6 +38,7 @@ const SHOWN_SESSIONS = 9
 // Attachments the drafts name, checked once at launch.
 const HELD_ATTACHMENTS = 100_000
 const INSTALL_METHODS: ReadonlySet<unknown> = new Set<AgentInstallMethod['id']>([
+  'archive',
   'brew',
   'script',
   'npm',
@@ -472,7 +473,7 @@ export function createValidators(platform: Platform): Validators {
       const o = fields(params)
       const method = o.method
       if (method !== undefined && !INSTALL_METHODS.has(method)) {
-        throw invalidParams('method must be brew, script or npm')
+        throw invalidParams('method must be archive, brew, script or npm')
       }
       return {
         agentId: agentId(o),

@@ -493,6 +493,7 @@
       "adapterBodyCli": "OverBench installs {{package}} into its own data folder and runs it on your Node.js, with your {{command}} {{version}} if the adapter accepts that version; otherwise it downloads {{name}} too.",
       "method": "Install with",
       "methods": {
+        "archive": "Download",
         "brew": "Homebrew",
         "npm": "npm",
         "script": "Official script"

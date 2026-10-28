@@ -161,7 +161,17 @@
       "noMethod": "找不到安装 {{agent}} 的方式：PATH 中没有 Homebrew、curl 和 bash，也没有 npm。",
       "unavailable": "{{command}} 需要的程序在 PATH 中找不到。",
       "notOnPath": "{{agent}} 已安装到 {{folder}}，但在 PATH 中仍然找不到 {{command}}。请把该文件夹加入 PATH 后重新加载环境，或在「设置 › Agent」中选择它的程序。",
-      "notFound": "{{agent}} 已安装，但在 PATH 中仍然找不到 {{command}}。请重新加载环境，或在「设置 › Agent」中选择它的程序。"
+      "notFound": "{{agent}} 已安装，但在 PATH 中仍然找不到 {{command}}。请重新加载环境，或在「设置 › Agent」中选择它的程序。",
+      "incomplete": "{{agent}} 已安装，但它的程序无法运行。",
+      "programOutside": "压缩包中的程序路径指向了它自己的文件夹之外：{{command}}。",
+      "programMissing": "压缩包里没有 {{command}}。",
+      "downloadStart": "正在下载 {{name}}",
+      "downloading": "已下载 {{size}}",
+      "downloadFailed": "下载 {{url}} 时返回了 HTTP {{status}}。",
+      "downloadError": "无法下载 {{name}}：{{reason}}",
+      "downloadTimedOut": "{{name}} 没有在 {{seconds}} 秒内下载完成。",
+      "hashMismatch": "下载的文件与其 SHA-256 不符：应为 {{expected}}，实际为 {{actual}}。",
+      "extracting": "正在解压…"
     },
     "reportTimeout": "{{command}} 没有在 {{seconds}} 秒内完成",
     "unreadableReport": "{{agent}} 的 {{command}} 没有返回 OverBench 能读取的报告"
