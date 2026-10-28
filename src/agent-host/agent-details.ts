@@ -522,6 +522,9 @@ export function configLocations(
     case 'fast-agent':
       // It reads the project's .fast-agent folder or FAST_AGENT_HOME, not a folder of its own.
       return []
+    case 'minion':
+      // It keeps its data under MINION_ROOT, else ~/.minion, which Settings does not show.
+      return []
     case 'fake-agent':
       return []
   }

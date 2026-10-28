@@ -41,6 +41,7 @@ import { KILO } from './agents/kilo'
 import { KIMCHI } from './agents/kimchi'
 import { KIMI } from './agents/kimi'
 import { MINIMAX } from './agents/minimax'
+import { MINION } from './agents/minion'
 import { MUSE } from './agents/muse'
 import { JUNIE } from './agents/junie'
 import { MISTRAL_VIBE } from './agents/mistral-vibe'
@@ -193,6 +194,7 @@ export {
   KIMCHI,
   KIMI,
   MINIMAX,
+  MINION,
   MUSE,
   JUNIE,
   MISTRAL_VIBE,
@@ -256,6 +258,7 @@ export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
     STAKPAK,
     VTCODE,
     FAST_AGENT,
+    MINION,
   ]
   if (fakeAgentPath) catalog.push(fakeAgent(fakeAgentPath))
   return catalog
