@@ -37,8 +37,11 @@ function Author({ author, createdAt }: { author: PullRequestAuthor; createdAt: n
           {initial}
         </AvatarFallback>
       </Avatar>
-      <span className="min-w-0 truncate text-small font-medium">{name}</span>
-      {login && <span className="min-w-0 truncate text-xs text-tertiary">{login}</span>}
+      {/* One run, so a long pair cuts the login before the name. */}
+      <span className="min-w-0 truncate text-small">
+        <span className="font-medium">{name}</span>
+        {login && <span className="ml-2 text-xs text-tertiary">{login}</span>}
+      </span>
       {author.bot && (
         <Badge variant="outline" className="h-4 rounded-sm px-1.25 py-0 text-tertiary">
           {t('prCard.bot')}
@@ -97,8 +100,11 @@ function Details({ pr }: { pr: PullRequest }) {
       </a>
       <div className="-mt-1.5 pl-6 text-xs text-tertiary">
         {pr.owner}/{pr.repo} #{pr.number} ·{' '}
-        <span className="font-mono text-meta wrap-anywhere">{pr.head}</span> →{' '}
-        <span className="font-mono text-meta wrap-anywhere">{pr.base}</span>
+        {/* The branches move to a line of their own together, and break only when longer. */}
+        <span className="inline-block max-w-full wrap-anywhere">
+          <span className="font-mono text-meta">{pr.head}</span> →{' '}
+          <span className="font-mono text-meta">{pr.base}</span>
+        </span>
       </div>
       <Facts pr={pr} />
     </>
@@ -115,12 +121,12 @@ function Loading() {
       <div className="flex items-start gap-2">
         <Skeleton className="mt-0.75 size-4 rounded-full" />
         <div className="flex flex-1 flex-col gap-1.75 pt-1">
-          <Skeleton className="h-3.25 w-[94%]" />
-          <Skeleton className="h-3.25 w-[56%]" />
+          <Skeleton className="h-3.25 w-11/12" />
+          <Skeleton className="h-3.25 w-7/12" />
         </div>
       </div>
-      <Skeleton className="-mt-0.5 ml-6 h-2.5 w-[70%]" />
-      <Skeleton className="ml-6 h-2.5 w-[52%]" />
+      <Skeleton className="-mt-0.5 ml-6 h-2.5 w-2/3" />
+      <Skeleton className="ml-6 h-2.5 w-1/2" />
     </>
   )
 }
