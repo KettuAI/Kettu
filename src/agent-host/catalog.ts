@@ -8,11 +8,22 @@ import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
 import type { AgentId } from '@shared/thread'
 import { compareInstalls, listInstalled, type InstalledAdapter } from './adapter-install'
+import { AGORAGENTIC } from './agents/agoragentic'
+import { AUGGIE } from './agents/auggie'
+import { AUTOHAND } from './agents/autohand'
 import { CLAUDE_CODE } from './agents/claude-code'
+import { CODEBUDDY } from './agents/codebuddy'
 import { CODEX } from './agents/codex'
+import { DEEPAGENTS } from './agents/deepagents'
+import { DIMCODE } from './agents/dimcode'
+import { DIRAC } from './agents/dirac'
 import { fakeAgent } from './agents/fake-agent'
+import { GLM } from './agents/glm'
+import { NOVA } from './agents/nova'
 import { OPENCODE } from './agents/opencode'
 import { PI } from './agents/pi'
+import { QODER } from './agents/qoder'
+import { SIGIT } from './agents/sigit'
 import { listArchiveInstalls, programPath, type InstalledArchive } from './archive-install'
 import type { BinaryInstalls } from './binary-install'
 import type { AdapterLookup } from './codex-binary'
@@ -118,11 +129,44 @@ export interface AgentDefinition {
 }
 
 // Re-exported so a definition is still read from the catalog that lists it.
-export { CLAUDE_CODE, CODEX, fakeAgent, OPENCODE, PI }
+export {
+  AGORAGENTIC,
+  AUGGIE,
+  AUTOHAND,
+  CLAUDE_CODE,
+  CODEBUDDY,
+  CODEX,
+  DEEPAGENTS,
+  DIMCODE,
+  DIRAC,
+  fakeAgent,
+  GLM,
+  NOVA,
+  OPENCODE,
+  PI,
+  QODER,
+  SIGIT,
+}
 
 /** The catalog; the fake agent exists only when main passes its path. */
 export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
-  const catalog = [CLAUDE_CODE, CODEX, OPENCODE, PI]
+  const catalog = [
+    CLAUDE_CODE,
+    CODEX,
+    OPENCODE,
+    PI,
+    AUGGIE,
+    CODEBUDDY,
+    DEEPAGENTS,
+    DIMCODE,
+    DIRAC,
+    GLM,
+    NOVA,
+    QODER,
+    SIGIT,
+    AGORAGENTIC,
+    AUTOHAND,
+  ]
   if (fakeAgentPath) catalog.push(fakeAgent(fakeAgentPath))
   return catalog
 }

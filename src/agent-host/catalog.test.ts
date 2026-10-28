@@ -2,14 +2,25 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { InstalledAdapter } from './adapter-install'
 import {
+  AGORAGENTIC,
+  AUGGIE,
+  AUTOHAND,
   buildCatalog,
   CLAUDE_CODE,
+  CODEBUDDY,
   CODEX,
+  DEEPAGENTS,
   detectAgent,
+  DIMCODE,
+  DIRAC,
   displayCommand,
   fakeAgent,
+  GLM,
+  NOVA,
   OPENCODE,
   PI,
+  QODER,
+  SIGIT,
   type AgentDefinition,
   type DetectContext,
 } from './catalog'
@@ -35,7 +46,23 @@ function context(overrides: Partial<DetectContext> = {}): DetectContext {
 
 describe('buildCatalog', () => {
   it('lists the fake agent only when main passes its path', () => {
-    expect(buildCatalog(null).map((d) => d.id)).toEqual(['claude-code', 'codex', 'opencode', 'pi'])
+    expect(buildCatalog(null).map((d) => d.id)).toEqual([
+      'claude-code',
+      'codex',
+      'opencode',
+      'pi',
+      'auggie',
+      'codebuddy',
+      'deepagents',
+      'dimcode',
+      'dirac',
+      'glm',
+      'nova',
+      'qoder',
+      'sigit',
+      'agoragentic',
+      'autohand',
+    ])
     expect(buildCatalog('/repo/tools/fake-agent/main.ts').map((d) => d.id)).toContain('fake-agent')
   })
 
@@ -45,6 +72,17 @@ describe('buildCatalog', () => {
       'codex',
       'opencode',
       'pi',
+      'auggie',
+      'codebuddy',
+      'deepagents',
+      'dimcode',
+      'dirac',
+      'glm',
+      'nova',
+      'qoder',
+      'sigit',
+      'agoragentic',
+      'autohand',
       'fake-agent',
     ])
   })
@@ -353,6 +391,73 @@ describe('detectAgent', () => {
         }),
       ),
     ).toMatchObject({ state: 'available', spec: { command: '/opt/cursor' } })
+  })
+})
+
+describe('the ACP Registry npm agents', () => {
+  const registry = [
+    {
+      def: AUGGIE,
+      package: '@augmentcode/auggie',
+      version: '0.36.0',
+      args: ['--acp'],
+      env: { AUGMENT_DISABLE_AUTO_UPDATE: '1' },
+    },
+    {
+      def: CODEBUDDY,
+      package: '@tencent-ai/codebuddy-code',
+      version: '2.177.1',
+      args: ['--acp'],
+      env: {},
+    },
+    { def: DEEPAGENTS, package: 'deepagents-acp', version: '0.1.7', args: [], env: {} },
+    { def: DIMCODE, package: 'dimcode', version: '0.5.22', args: ['acp'], env: {} },
+    { def: DIRAC, package: 'dirac-cli', version: '0.5.24', args: ['--acp'], env: {} },
+    { def: GLM, package: 'glm-acp-agent', version: '1.16.0', args: [], env: {} },
+    { def: NOVA, package: '@compass-ai/nova', version: '1.1.60', args: ['acp'], env: {} },
+    { def: QODER, package: '@qoder-ai/qodercli', version: '0.2.14', args: ['--acp'], env: {} },
+    { def: SIGIT, package: '@smbcloud/sigit', version: '1.7.5', args: [], env: {} },
+    {
+      def: AGORAGENTIC,
+      package: 'agoragentic-mcp',
+      version: '1.3.0',
+      args: ['--acp'],
+      env: {},
+    },
+    {
+      def: AUTOHAND,
+      package: '@autohandai/autohand-acp',
+      version: '0.2.1',
+      args: [],
+      env: {},
+    },
+  ]
+
+  for (const { def, package: name, version, args, env } of registry) {
+    it(`detects ${def.id} before and after its install`, async () => {
+      expect(await detectAgent(def, context())).toMatchObject({
+        state: 'available',
+        spec: null,
+        adapter: { package: name, version, installed: false },
+      })
+      const install = `/data/agents/${def.id}/${version}`
+      const entry = `${install}/node_modules/${name}/dist/index.js`
+      const detection = await detectAgent(
+        def,
+        context({
+          installed: async () => [{ version, dir: install, entry, installedAt: 1 }],
+        }),
+      )
+      expect(detection).toMatchObject({
+        state: 'available',
+        spec: { command: '/usr/local/bin/node', args: [entry, ...args], env },
+        adapter: { package: name, version, installed: true },
+      })
+    })
+  }
+
+  it('pins the eleven packages the registry lists', () => {
+    expect(buildCatalog(null).slice(4)).toEqual(registry.map(({ def }) => def))
   })
 })
 

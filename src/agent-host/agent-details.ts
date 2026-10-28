@@ -106,6 +106,118 @@ export function configLocations(
         ),
       ]
     }
+    case 'auggie': {
+      // The CLI keeps user settings and prompt additions in its own folder.
+      const folder = p.join(home, '.augment')
+      return layout(
+        folder,
+        null,
+        { id: 'settings', candidates: [p.join(folder, 'settings.json')], env: null },
+        'APPEND_SYSTEM.md',
+      )
+    }
+    case 'codebuddy': {
+      const moved = variable('CODEBUDDY_CONFIG_DIR')
+      const folder = moved ?? p.join(home, '.codebuddy')
+      return layout(
+        folder,
+        moved ? 'CODEBUDDY_CONFIG_DIR' : null,
+        { id: 'settings', candidates: [p.join(folder, 'settings.json')], env: null },
+        'CODEBUDDY.md',
+      )
+    }
+    case 'deepagents':
+      // The adapter names neither a folder of its own nor a user instructions file.
+      return []
+    case 'dimcode': {
+      // V2 keeps its data in its own folder; its docs name no instructions file.
+      const moved = variable('DIMCODE_HOME')
+      return [
+        {
+          id: 'folder',
+          candidates: [moved ?? p.join(home, '.dimcode', 'v2')],
+          env: moved ? 'DIMCODE_HOME' : null,
+        },
+      ]
+    }
+    case 'dirac': {
+      const moved = variable('DIRAC_DIR')
+      return [
+        {
+          id: 'folder',
+          candidates: [moved ?? p.join(home, '.dirac', 'data')],
+          env: moved ? 'DIRAC_DIR' : null,
+        },
+      ]
+    }
+    case 'glm': {
+      const xdg = variable('XDG_CONFIG_HOME')
+      const folder = p.join(xdg ?? p.join(home, '.config'), 'glm-acp-agent')
+      return [
+        { id: 'folder', candidates: [folder], env: xdg ? 'XDG_CONFIG_HOME' : null },
+        // `glm-acp-agent --setup` writes its key here, with Z_AI_API_KEY overriding it.
+        { id: 'settings', candidates: [p.join(folder, 'credentials.json')], env: null },
+      ]
+    }
+    case 'nova': {
+      // New installs use ~/.nova; older ones keep their ~/.compass folder.
+      const folder = p.join(home, '.nova')
+      const legacy = p.join(home, '.compass')
+      return [
+        { id: 'folder', candidates: [folder, legacy], env: null },
+        {
+          id: 'settings',
+          candidates: [p.join(folder, 'config.json'), p.join(legacy, 'config.json')],
+          env: null,
+        },
+        {
+          id: 'instructions',
+          candidates: [
+            p.join(folder, 'AGENTS.md'),
+            p.join(folder, 'NOVA.md'),
+            p.join(legacy, 'AGENTS.md'),
+            p.join(legacy, 'NOVA.md'),
+          ],
+          env: null,
+          fallback: p.join(folder, 'AGENTS.md'),
+        },
+      ]
+    }
+    case 'qoder': {
+      const moved = variable('QODER_CONFIG_DIR')
+      const folder = moved ?? p.join(home, '.qoder')
+      return layout(
+        folder,
+        moved ? 'QODER_CONFIG_DIR' : null,
+        { id: 'settings', candidates: [p.join(folder, 'settings.json')], env: null },
+        'AGENTS.md',
+      )
+    }
+    case 'sigit': {
+      const moved = variable('SIGIT_CONFIG_DIR')
+      const folder = moved ?? p.join(home, '.config', 'sigit')
+      return [
+        { id: 'folder', candidates: [folder], env: moved ? 'SIGIT_CONFIG_DIR' : null },
+        { id: 'settings', candidates: [p.join(folder, 'settings.toml')], env: null },
+      ]
+    }
+    case 'agoragentic':
+      // It names no folder and no instructions file; its key comes from the environment.
+      return []
+    case 'autohand': {
+      const moved = variable('AUTOHAND_HOME')
+      const folder = moved ?? p.join(home, '.autohand')
+      return [
+        { id: 'folder', candidates: [folder], env: moved ? 'AUTOHAND_HOME' : null },
+        {
+          id: 'settings',
+          candidates: ['config.toml', 'config.yaml', 'config.yml', 'config.json'].map((name) =>
+            p.join(folder, name),
+          ),
+          env: null,
+        },
+      ]
+    }
     case 'fake-agent':
       return []
   }

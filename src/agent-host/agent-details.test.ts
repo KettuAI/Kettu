@@ -172,8 +172,123 @@ describe('configLocations', () => {
     return config.find((item) => item.id === 'instructions')!
   }
 
-  it('has nothing to show for the fake agent', () => {
+  it('has nothing to show for the fake agent, DeepAgents or Agoragentic', () => {
     expect(locations('fake-agent', { CLAUDE_CONFIG_DIR: '/x' }, '/home/me', 'linux')).toEqual([])
+    expect(locations('deepagents', {}, '/home/me', 'linux')).toEqual([])
+    expect(locations('agoragentic', {}, '/home/me', 'linux')).toEqual([])
+  })
+
+  it('puts Auggie in ~/.augment, with its settings and prompt additions', () => {
+    expect(summary(locations('auggie', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.augment'], env: null },
+      { id: 'settings', candidates: ['/home/me/.augment/settings.json'], env: null },
+      { id: 'instructions', candidates: ['/home/me/.augment/APPEND_SYSTEM.md'], env: null },
+    ])
+  })
+
+  it('puts Codebuddy in ~/.codebuddy, or where CODEBUDDY_CONFIG_DIR says', () => {
+    expect(summary(locations('codebuddy', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.codebuddy'], env: null },
+      { id: 'settings', candidates: ['/home/me/.codebuddy/settings.json'], env: null },
+      { id: 'instructions', candidates: ['/home/me/.codebuddy/CODEBUDDY.md'], env: null },
+    ])
+    expect(
+      summary(locations('codebuddy', { CODEBUDDY_CONFIG_DIR: '/srv/cb' }, '/home/me', 'linux'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/srv/cb'], env: 'CODEBUDDY_CONFIG_DIR' })
+  })
+
+  it('puts DimCode in its v2 folder, or where DIMCODE_HOME says', () => {
+    expect(summary(locations('dimcode', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.dimcode/v2'], env: null },
+    ])
+    expect(
+      summary(locations('dimcode', { DIMCODE_HOME: '/srv/dim' }, '/home/me', 'linux'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/srv/dim'], env: 'DIMCODE_HOME' })
+  })
+
+  it('puts Dirac in ~/.dirac/data, or where DIRAC_DIR says', () => {
+    expect(summary(locations('dirac', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.dirac/data'], env: null },
+    ])
+    expect(
+      summary(locations('dirac', { DIRAC_DIR: '/srv/dirac' }, '/home/me', 'linux'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/srv/dirac'], env: 'DIRAC_DIR' })
+  })
+
+  it('puts GLM Agent in the XDG config folder, with its credentials', () => {
+    expect(summary(locations('glm', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.config/glm-acp-agent'], env: null },
+      {
+        id: 'settings',
+        candidates: ['/home/me/.config/glm-acp-agent/credentials.json'],
+        env: null,
+      },
+    ])
+    expect(summary(locations('glm', { XDG_CONFIG_HOME: '/xdg' }, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/xdg/glm-acp-agent'], env: 'XDG_CONFIG_HOME' },
+      { id: 'settings', candidates: ['/xdg/glm-acp-agent/credentials.json'], env: null },
+    ])
+  })
+
+  it('puts Nova in ~/.nova, with its legacy ~/.compass folder after it', () => {
+    expect(summary(locations('nova', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.nova', '/home/me/.compass'], env: null },
+      {
+        id: 'settings',
+        candidates: ['/home/me/.nova/config.json', '/home/me/.compass/config.json'],
+        env: null,
+      },
+      {
+        id: 'instructions',
+        candidates: [
+          '/home/me/.nova/AGENTS.md',
+          '/home/me/.nova/NOVA.md',
+          '/home/me/.compass/AGENTS.md',
+          '/home/me/.compass/NOVA.md',
+        ],
+        env: null,
+      },
+    ])
+  })
+
+  it('puts Qoder CLI in ~/.qoder, or where QODER_CONFIG_DIR says', () => {
+    expect(summary(locations('qoder', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.qoder'], env: null },
+      { id: 'settings', candidates: ['/home/me/.qoder/settings.json'], env: null },
+      { id: 'instructions', candidates: ['/home/me/.qoder/AGENTS.md'], env: null },
+    ])
+    expect(
+      summary(locations('qoder', { QODER_CONFIG_DIR: '/srv/qoder' }, '/home/me', 'linux'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/srv/qoder'], env: 'QODER_CONFIG_DIR' })
+  })
+
+  it('puts siGit in ~/.config/sigit, or where SIGIT_CONFIG_DIR says', () => {
+    expect(summary(locations('sigit', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.config/sigit'], env: null },
+      { id: 'settings', candidates: ['/home/me/.config/sigit/settings.toml'], env: null },
+    ])
+    expect(
+      summary(locations('sigit', { SIGIT_CONFIG_DIR: '/srv/sigit' }, '/home/me', 'linux'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/srv/sigit'], env: 'SIGIT_CONFIG_DIR' })
+  })
+
+  it('puts Autohand Code in ~/.autohand, with any config format it accepts', () => {
+    expect(summary(locations('autohand', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.autohand'], env: null },
+      {
+        id: 'settings',
+        candidates: [
+          '/home/me/.autohand/config.toml',
+          '/home/me/.autohand/config.yaml',
+          '/home/me/.autohand/config.yml',
+          '/home/me/.autohand/config.json',
+        ],
+        env: null,
+      },
+    ])
+    expect(
+      summary(locations('autohand', { AUTOHAND_HOME: '/srv/ah' }, '/home/me', 'linux'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/srv/ah'], env: 'AUTOHAND_HOME' })
   })
 
   it('joins with backslashes on Windows', () => {

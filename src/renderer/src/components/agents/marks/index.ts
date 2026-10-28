@@ -1,10 +1,21 @@
 import type { ComponentType } from 'react'
 import type { AgentId } from '@shared/thread'
+import * as agoragentic from './agoragentic'
+import * as auggie from './auggie'
+import * as autohand from './autohand'
 import * as claudeCode from './claude-code'
+import * as codebuddy from './codebuddy'
 import * as codex from './codex'
+import * as deepagents from './deepagents'
+import * as dimcode from './dimcode'
+import * as dirac from './dirac'
 import * as fakeAgent from './fake-agent'
+import * as glm from './glm'
+import * as nova from './nova'
 import * as opencode from './opencode'
 import * as pi from './pi'
+import * as qoder from './qoder'
+import * as sigit from './sigit'
 
 export interface MarkBodyProps {
   mono: boolean
@@ -22,5 +33,16 @@ export const AGENT_MARKS: Record<AgentId, AgentMarkModule> = {
   codex,
   opencode,
   pi,
+  auggie,
+  codebuddy,
+  deepagents,
+  dimcode,
+  dirac,
+  glm,
+  nova,
+  qoder,
+  sigit,
+  agoragentic,
+  autohand,
   'fake-agent': fakeAgent,
 }
