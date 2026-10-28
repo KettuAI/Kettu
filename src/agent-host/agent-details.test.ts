@@ -695,3 +695,134 @@ describe('readAgentDetails', () => {
     })
   })
 })
+
+describe("the registry archive agents' config locations", () => {
+  it('puts Cursor in ~/.cursor, or where CURSOR_CONFIG_DIR or XDG_CONFIG_HOME says', () => {
+    expect(summary(locations('cursor', {}, '/home/me', 'darwin'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.cursor'], env: null },
+      { id: 'settings', candidates: ['/home/me/.cursor/cli-config.json'], env: null },
+    ])
+    expect(summary(locations('cursor', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.cursor'], env: null },
+      { id: 'settings', candidates: ['/home/me/.cursor/cli-config.json'], env: null },
+    ])
+    expect(
+      summary(locations('cursor', { CURSOR_CONFIG_DIR: '/srv/cursor' }, '/home/me', 'darwin'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/srv/cursor'], env: 'CURSOR_CONFIG_DIR' })
+    expect(
+      summary(locations('cursor', { XDG_CONFIG_HOME: '/xdg' }, '/home/me', 'linux'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/xdg/cursor'], env: 'XDG_CONFIG_HOME' })
+    // Cursor's docs give XDG_CONFIG_HOME a folder of its own on Linux and BSD alone.
+    expect(
+      summary(locations('cursor', { XDG_CONFIG_HOME: '/xdg' }, '/home/me', 'darwin'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/home/me/.cursor'], env: null })
+  })
+
+  it('puts Kimi in ~/.kimi, or where KIMI_SHARE_DIR says', () => {
+    expect(summary(locations('kimi', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.kimi'], env: null },
+      { id: 'settings', candidates: ['/home/me/.kimi/config.toml'], env: null },
+    ])
+    expect(
+      summary(locations('kimi', { KIMI_SHARE_DIR: '/srv/kimi' }, '/home/me', 'linux')),
+    ).toEqual([
+      { id: 'folder', candidates: ['/srv/kimi'], env: 'KIMI_SHARE_DIR' },
+      { id: 'settings', candidates: ['/srv/kimi/config.toml'], env: null },
+    ])
+  })
+
+  it('puts Amp in ~/.config/amp, at either settings file, with its global AGENTS.md', () => {
+    expect(summary(locations('amp', {}, '/home/me', 'darwin'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.config/amp'], env: null },
+      {
+        id: 'settings',
+        candidates: ['/home/me/.config/amp/settings.json', '/home/me/.config/amp/settings.jsonc'],
+        env: null,
+      },
+      {
+        id: 'instructions',
+        candidates: ['/home/me/.config/amp/AGENTS.md', '/home/me/.config/AGENTS.md'],
+        env: null,
+      },
+    ])
+    expect(summary(locations('amp', { XDG_CONFIG_HOME: '/xdg' }, '/home/me', 'linux'))[0]).toEqual({
+      id: 'folder',
+      candidates: ['/xdg/amp'],
+      env: 'XDG_CONFIG_HOME',
+    })
+  })
+
+  it('puts goose in its config folder of the platform, or under GOOSE_PATH_ROOT', () => {
+    const mac = '/home/me/Library/Application Support/Block/goose'
+    expect(summary(locations('goose', {}, '/home/me', 'darwin'))).toEqual([
+      { id: 'folder', candidates: [mac], env: null },
+      { id: 'settings', candidates: [`${mac}/config.yaml`], env: null },
+      {
+        id: 'instructions',
+        candidates: [`${mac}/AGENTS.md`, `${mac}/.goosehints`],
+        env: null,
+      },
+    ])
+    expect(summary(locations('goose', {}, '/home/me', 'linux'))[0]).toEqual({
+      id: 'folder',
+      candidates: ['/home/me/.config/goose'],
+      env: null,
+    })
+    expect(
+      summary(locations('goose', { XDG_CONFIG_HOME: '/xdg' }, '/home/me', 'linux'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/xdg/goose'], env: 'XDG_CONFIG_HOME' })
+    expect(
+      summary(locations('goose', { GOOSE_PATH_ROOT: '/srv/goose' }, '/home/me', 'linux')),
+    ).toEqual([
+      { id: 'folder', candidates: ['/srv/goose/config'], env: 'GOOSE_PATH_ROOT' },
+      { id: 'settings', candidates: ['/srv/goose/config/config.yaml'], env: null },
+      {
+        id: 'instructions',
+        candidates: ['/srv/goose/config/AGENTS.md', '/srv/goose/config/.goosehints'],
+        env: null,
+      },
+    ])
+    // A relative root is ignored, as goose ignores one.
+    expect(
+      summary(locations('goose', { GOOSE_PATH_ROOT: 'goose' }, '/home/me', 'linux'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/home/me/.config/goose'], env: null })
+    expect(
+      summary(
+        locations(
+          'goose',
+          { APPDATA: 'C:\\Users\\me\\AppData\\Roaming' },
+          'C:\\Users\\me',
+          'win32',
+        ),
+      )[0],
+    ).toEqual({
+      id: 'folder',
+      candidates: ['C:\\Users\\me\\AppData\\Roaming\\Block\\goose\\config'],
+      env: 'APPDATA',
+    })
+  })
+
+  it('puts Kilo in ~/.config/kilo, with KILO_CONFIG naming its settings file', () => {
+    expect(summary(locations('kilo', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.config/kilo'], env: null },
+      {
+        id: 'settings',
+        candidates: ['/home/me/.config/kilo/kilo.jsonc', '/home/me/.config/kilo/kilo.json'],
+        env: null,
+      },
+      { id: 'instructions', candidates: ['/home/me/.config/kilo/AGENTS.md'], env: null },
+    ])
+    expect(summary(locations('kilo', { XDG_CONFIG_HOME: '/xdg' }, '/home/me', 'linux'))[0]).toEqual(
+      { id: 'folder', candidates: ['/xdg/kilo'], env: 'XDG_CONFIG_HOME' },
+    )
+    const custom = summary(
+      locations('kilo', { KILO_CONFIG: '/etc/kilo/kilo.jsonc' }, '/home/me', 'linux'),
+    )
+    expect(custom[1]).toEqual({
+      id: 'settings',
+      candidates: ['/etc/kilo/kilo.jsonc'],
+      env: 'KILO_CONFIG',
+    })
+    expect(custom[0]).toMatchObject({ candidates: ['/home/me/.config/kilo'], env: null })
+  })
+})
