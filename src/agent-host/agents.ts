@@ -53,6 +53,11 @@ import {
 import { spawnAgent, type ExitInfo, type StopTimings } from './agent-process'
 import type { AgentTrees } from './agent-trees'
 import { decideUpdate, fetchLatest, type LatestOptions } from './agent-updates'
+import {
+  installArchive,
+  type ArchiveInstallOptions,
+  type InstalledArchive,
+} from './archive-install'
 import { installedFolder, installPlans, type InstallPlan } from './binary-install'
 import {
   detectAgent,
@@ -206,6 +211,8 @@ export interface AgentManagerDeps {
   sessionRouterPath?: string | null
   detect?(def: AgentDefinition, ctx: DetectContext): Promise<Detection>
   install?(options: InstallOptions): Promise<InstalledAdapter>
+  /** Downloads and extracts a binary agent's release archive. */
+  installArchive?(options: ArchiveInstallOptions): Promise<InstalledArchive>
   /** Asks npm for an adapter's newest version and the CLI it carries. */
   fetchLatest?(options: LatestOptions): Promise<AgentUpdate>
   /** Runs a binary agent's install route, and `npm prefix -g` after one. */
@@ -453,7 +460,15 @@ export class AgentManager {
     const [installedCli, plans] = await Promise.all([
       running ? readCliVersion(slot.def.id, running.dir, log) : null,
       slot.def.installs
-        ? installPlans(slot.def.installs, { platform, env, npm: node.npmPath, isExecutable })
+        ? installPlans(slot.def.installs, {
+            platform,
+            arch: process.arch,
+            env,
+            npm: node.npmPath,
+            root: this.deps.adaptersDir,
+            agentId: slot.def.id,
+            isExecutable,
+          })
         : [],
     ])
     slot.detection = detection
@@ -1357,8 +1372,12 @@ export class AgentManager {
           : t('agent.binaryInstall.noMethod', { agent }),
       )
     }
+    if (!plan.available) {
+      throw invalidParams(t('agent.binaryInstall.unavailable', { command: plan.command }))
+    }
+    if (plan.id === 'archive') return this.installArchive(slot, plan)
     const run = plan.run
-    if (!plan.available || !run) {
+    if (!run) {
       throw invalidParams(t('agent.binaryInstall.unavailable', { command: plan.command }))
     }
     this.assertNoInstall(slot)
@@ -1399,6 +1418,50 @@ export class AgentManager {
             ? t('agent.binaryInstall.notOnPath', { agent, command, folder })
             : t('agent.binaryInstall.notFound', { agent, command }),
         )
+      },
+      (message) => t('agent.installFailed', { agent, message }),
+      plan.id,
+    )
+  }
+
+  /** Downloads the registry's archive for the agent, then detects again so it turns available. */
+  private async installArchive(slot: Slot, plan: InstallPlan): Promise<void> {
+    const archive = plan.archive
+    if (!archive) throw invalidParams(`${slot.def.name} has no archive to download`)
+    this.assertNoInstall(slot)
+    const { platform, diagnostics } = this.deps
+    const agent = slot.def.name
+    const timeoutMs = this.timings.installMs
+    await this.runTask(
+      slot,
+      'install',
+      plan.command,
+      async (signal, onOutput) => {
+        diagnostics.event(slot.def.id, 'install', plan.command)
+        const installed = await (this.deps.installArchive ?? installArchive)({
+          root: this.deps.adaptersDir,
+          agentId: slot.def.id,
+          version: archive.version,
+          url: archive.url,
+          ...(archive.sha256 ? { sha256: archive.sha256 } : {}),
+          cmd: archive.cmd,
+          ...(archive.args ? { args: archive.args } : {}),
+          ...(archive.bare ? { bare: true as const } : {}),
+          platform,
+          timeoutMs,
+          signal,
+          onOutput,
+        })
+        // A vendor file with no hash from the registry is installed, and the measured hash logged.
+        if (!archive.sha256) {
+          diagnostics.log(
+            'warn',
+            `${archive.url} has no SHA-256 in the registry; installed the file with ${installed.sha256}.`,
+          )
+        }
+        await this.detect(slot)
+        if (slot.detection?.state === 'available') return
+        throw new Error(t('agent.binaryInstall.incomplete', { agent }))
       },
       (message) => t('agent.installFailed', { agent, message }),
       plan.id,
@@ -2172,8 +2235,9 @@ export class AgentManager {
       updateCheckedAt: launch.kind === 'package' ? slot.checkedAt : null,
       updateSkipped: sameUpdate(update, slot.skipped),
       task: slot.task ? { ...slot.task, progress: slot.taskOutput.lastLines(5) } : null,
-      installMethods: slot.installPlans.map(({ id, command, available }) => ({
+      installMethods: slot.installPlans.map(({ id, label, command, available }) => ({
         id,
+        label,
         command,
         available,
       })),

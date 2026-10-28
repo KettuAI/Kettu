@@ -13,6 +13,7 @@ import { CODEX } from './agents/codex'
 import { fakeAgent } from './agents/fake-agent'
 import { OPENCODE } from './agents/opencode'
 import { PI } from './agents/pi'
+import { listArchiveInstalls, programPath, type InstalledArchive } from './archive-install'
 import type { BinaryInstalls } from './binary-install'
 import type { AdapterLookup } from './codex-binary'
 import { findCommand, needsShell, type Env } from './find-command'
@@ -295,6 +296,8 @@ export interface DetectContext {
   isFile?(file: string): Promise<boolean>
   realpath?(file: string): Promise<string>
   installed?(agentId: AgentId, packageName: string): Promise<InstalledAdapter[]>
+  /** The release archives OverBench has installed; read from disk when not given. */
+  installedArchives?(agentId: AgentId): Promise<InstalledArchive[]>
   /** Asks a CLI its version; without it, no installed CLI is looked for. */
   probeCli?: CliProbe
   cliFiles?: CliFiles
@@ -519,6 +522,30 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
       }
       const program = await findCommand(launch.command, ctx)
       if (program) return binaryDetection(program, launch.args, ctx.platform, display)
+      // The user's own copy wins, so their sign-in and configuration stay; without one,
+      // OverBench's archive install runs.
+      const archive = def.installs?.archive
+      if (archive) {
+        const installed = (
+          await (ctx.installedArchives ?? ((id) => listArchiveInstalls(ctx.adaptersDir, id)))(
+            def.id,
+          )
+        ).find((install) => install.version === archive.version)
+        if (installed) {
+          try {
+            const command = programPath(installed.dir, installed.cmd, ctx.platform)
+            if (await ctx.isExecutable(command)) {
+              return binaryDetection(command, installed.args, ctx.platform, {
+                command,
+                args: installed.args,
+                env: {},
+              })
+            }
+          } catch {
+            // A record whose command leaves the install folder is no install.
+          }
+        }
+      }
       return {
         state: 'not-installed',
         detail: t('detect.commandMissing', { command: launch.command, hint: t(def.install.hint) }),

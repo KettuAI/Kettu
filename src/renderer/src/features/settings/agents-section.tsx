@@ -1170,7 +1170,7 @@ function InstallNotice({ status }: { status: AgentStatus }) {
                 data-selectable=""
                 title={method.command}
               >
-                {method.command}
+                {method.label || method.command}
               </code>
             )}
             {!status.package && (

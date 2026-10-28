@@ -1,10 +1,12 @@
 // The agent lifecycle with the fake agent in-process: start, timeouts, restarts, idle stop.
 
-import { chmod, mkdir, readdir, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { gzipSync } from 'node:zlib'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentCliSource, AgentStatus, AgentUpdate } from '@shared/agent-host'
+import type { Platform } from '@shared/platform'
 import { DEFAULT_SETTINGS, type HostSettings } from '@shared/settings'
 import type { AgentId } from '@shared/thread'
 import {
@@ -20,6 +22,7 @@ import {
   type AgentManagerDeps,
   type AgentTimings,
 } from './agents'
+import { archiveKey } from './binary-install'
 import {
   CLAUDE_CODE,
   configFolders,
@@ -38,6 +41,7 @@ import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { EnvironmentService } from './shell-env'
 import { TextRing } from './ring'
 import { parseAgentUpdatesFile, type AgentsFile, type AgentUpdatesFile } from './storage'
+import { archiveTar, serveArchives, sha256 } from './testing/archives'
 import {
   FAKE_AGENT_MAIN,
   inProcessLauncher,
@@ -2798,5 +2802,132 @@ describe('installing a binary agent', () => {
     await hanging.agents.cancelTask('opencode')
     await expect(install).resolves.toBeUndefined()
     expect(hanging.status()).toMatchObject({ state: 'not-installed', task: null })
+  })
+})
+
+describe('installing a binary agent from its archive', () => {
+  const posix = process.platform !== 'win32'
+  const CONTENT = Buffer.from('#!/bin/sh\necho fake\n')
+
+  /** OpenCode as `fake-archive-agent`, which only OverBench's own archive install provides. */
+  async function archiveManager(options: { withoutHash?: boolean } = {}) {
+    const bin = await tempFolder('overbench-bin-')
+    const adaptersDir = await tempFolder('overbench-archives-')
+    const archive = gzipSync(archiveTar([{ name: 'agent', data: CONTENT, mode: 0o100755 }]))
+    const link = await serveArchives({ '/agent.tar.gz': archive })
+    const def: AgentDefinition = {
+      ...OPENCODE,
+      launch: { kind: 'binary', command: 'fake-archive-agent', args: ['acp'] },
+      installs: {
+        archive: {
+          version: '1.0.0',
+          entries: {
+            [archiveKey(process.platform as Platform, process.arch)]: {
+              url: link('/agent.tar.gz'),
+              ...(options.withoutHash ? {} : { sha256: sha256(archive) }),
+              cmd: './agent',
+            },
+          },
+        },
+      },
+    }
+    const env = new EnvironmentService({
+      platform: process.platform,
+      electronPath: process.execPath,
+      baseEnv: {},
+      resolve: async () => ({
+        env: { PATH: bin, PATHEXT: '.EXE;.CMD' },
+        source: 'inherited',
+        shell: null,
+        durationMs: 0,
+        warning: null,
+      }),
+      probe: async () => ({ nodeVersion: null, npmPath: null, nodePath: null }),
+    })
+    let agentSettings: HostSettings['agents'] = {}
+    const m = manager(
+      {},
+      { progressMs: 1 },
+      {
+        catalog: [def],
+        adaptersDir,
+        env,
+        settings: () => ({
+          locale: 'en',
+          agents: agentSettings,
+          proxy: { mode: 'environment' },
+          git: { backgroundFetch: false },
+          mcp: DEFAULT_SETTINGS.mcp,
+          usage: { fromComputer: false },
+          sessionTitles: true,
+        }),
+      },
+    )
+    return {
+      ...m,
+      bin,
+      adaptersDir,
+      setAgentSettings: (next: HostSettings['agents']): void => {
+        agentSettings = next
+      },
+      status: () => m.agents.status('opencode'),
+      program: path.join(adaptersDir, 'opencode', '1.0.0', 'agent'),
+    }
+  }
+
+  it('installs from the archive, turns available and starts', async () => {
+    const m = await archiveManager()
+    const [status] = await m.agents.list()
+    expect(status).toMatchObject({ state: 'not-installed', task: null })
+    expect(status?.installMethods).toEqual([
+      {
+        id: 'archive',
+        label: 'agent.tar.gz',
+        command: expect.stringContaining('http://127.0.0.1:'),
+        available: true,
+      },
+    ])
+    await m.agents.install('opencode')
+    expect(m.status()).toMatchObject({ state: 'available', task: null })
+    expect(await readFile(m.program)).toEqual(CONTENT)
+    expect(m.status().launchCommand).toContain(m.program)
+    const runtime = await m.agents.ensureReady('opencode')
+    expect(runtime.agentId).toBe('opencode')
+    await m.agents.stopAll()
+  })
+
+  it("runs the user's own copy on PATH instead of the archive", async () => {
+    const m = await archiveManager()
+    const file = path.join(m.bin, 'fake-archive-agent')
+    await writeFile(file, posix ? '#!/bin/sh\n' : '')
+    if (posix) await chmod(file, 0o755)
+    await m.agents.list()
+    expect(m.status()).toMatchObject({ state: 'available' })
+    expect(m.status().launchCommand).toBe('fake-archive-agent acp')
+    await expect(m.agents.install('opencode')).rejects.toMatchObject({ code: 'invalid_params' })
+  })
+
+  it('runs the chosen binary instead of the archive', async () => {
+    const m = await archiveManager()
+    const chosen = path.join(m.bin, 'chosen-agent')
+    await writeFile(chosen, posix ? '#!/bin/sh\n' : '')
+    if (posix) await chmod(chosen, 0o755)
+    m.setAgentSettings({ opencode: { binaryPath: chosen } })
+    await m.agents.check('opencode')
+    expect(m.status()).toMatchObject({ state: 'available', binaryOverride: chosen })
+    expect(m.status().launchCommand).toContain(chosen)
+  })
+
+  it('installs without a registry hash, and warns in the host log', async () => {
+    const m = await archiveManager({ withoutHash: true })
+    await m.agents.list()
+    await m.agents.install('opencode')
+    expect(m.status()).toMatchObject({ state: 'available' })
+    expect(m.diagnostics.logEntries()).toContainEqual(
+      expect.objectContaining({
+        level: 'warn',
+        message: expect.stringContaining('has no SHA-256 in the registry'),
+      }),
+    )
   })
 })

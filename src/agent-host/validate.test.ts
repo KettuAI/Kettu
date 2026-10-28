@@ -182,6 +182,10 @@ describe('createValidators', () => {
       agentId: 'opencode',
       method: 'script',
     })
+    expect(posix['agents.install']({ agentId: 'opencode', method: 'archive' })).toEqual({
+      agentId: 'opencode',
+      method: 'archive',
+    })
     rejects(() => posix['agents.install']({ agentId: 'opencode', method: 'choco' }))
     rejects(() => posix['agents.install']({ agentId: 'opencode', method: null }))
     rejects(() => posix['agents.install']({ method: 'brew' }))

@@ -153,7 +153,8 @@ export type InstalledCliProblem =
 
 /** A way OverBench can install a binary agent such as OpenCode, in the order it prefers them. */
 export interface AgentInstallMethod {
-  id: 'brew' | 'npm' | 'script'
+  id: 'brew' | 'npm' | 'script' | 'archive'
+  label: string // what the page shows for the route: its command, or the archive's file name
   command: string // quoted for the platform, as the page shows it
   available: boolean // the tool it needs was found on the agent environment's PATH
 }

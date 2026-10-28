@@ -291,6 +291,69 @@ describe('detectAgent', () => {
       },
     })
   })
+
+  it('runs the archive OverBench installed only when no copy is on PATH', async () => {
+    const command = '/data/agents/opencode/2026.10.22/dist-package/cursor-agent'
+    const def: AgentDefinition = {
+      ...OPENCODE,
+      launch: { kind: 'binary', command: 'cursor-agent', args: ['acp'] },
+      installs: {
+        archive: {
+          version: '2026.10.22',
+          entries: {
+            'darwin-aarch64': {
+              url: 'https://example.com/cursor-agent.tar.gz',
+              sha256: 'a'.repeat(64),
+              cmd: './dist-package/cursor-agent',
+              args: ['acp'],
+            },
+          },
+        },
+      },
+    }
+    const installedArchive = {
+      installedArchives: async () => [
+        {
+          version: '2026.10.22',
+          dir: '/data/agents/opencode/2026.10.22',
+          url: 'https://example.com/cursor-agent.tar.gz',
+          sha256: 'a'.repeat(64),
+          cmd: './dist-package/cursor-agent',
+          args: ['acp'],
+          installedAt: 1,
+        },
+      ],
+    }
+    expect(
+      await detectAgent(
+        def,
+        context({ ...installedArchive, isExecutable: async (file) => file === command }),
+      ),
+    ).toMatchObject({
+      state: 'available',
+      spec: { command, args: ['acp'], display: { command, args: ['acp'] } },
+    })
+    expect(
+      await detectAgent(
+        def,
+        context({
+          ...installedArchive,
+          isExecutable: async (file) => file === command || file === '/usr/bin/cursor-agent',
+        }),
+      ),
+    ).toMatchObject({ state: 'available', spec: { command: '/usr/bin/cursor-agent' } })
+    expect(
+      await detectAgent(
+        def,
+        context({
+          ...installedArchive,
+          binaryOverride: '/opt/cursor',
+          isExecutable: async (file) =>
+            file === command || file === '/usr/bin/cursor-agent' || file === '/opt/cursor',
+        }),
+      ),
+    ).toMatchObject({ state: 'available', spec: { command: '/opt/cursor' } })
+  })
 })
 
 describe('detectAgent with the CLI the user installed', () => {

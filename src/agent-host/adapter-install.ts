@@ -14,7 +14,7 @@ import { TextRing } from './ring'
 import { compareVersions } from './versions'
 
 export const INSTALLED_FILE = 'installed.json'
-const PARTIAL_PREFIX = '.partial-'
+export const PARTIAL_PREFIX = '.partial-'
 
 /** Every word is a constant, so an `npm.cmd` may run through cmd.exe. */
 export const NPM_INSTALL_ARGS = [
@@ -332,7 +332,7 @@ export function programFailure(name: string, run: ProgramRun, timeoutMs: number)
 const RETRYABLE = new Set(['EPERM', 'EACCES', 'EBUSY'])
 
 /** Windows may hold a fresh file open for a moment, for a virus scan; npm retries the same way. */
-async function renameWithRetry(from: string, to: string, platform: Platform): Promise<void> {
+export async function renameWithRetry(from: string, to: string, platform: Platform): Promise<void> {
   for (let attempt = 1; ; attempt++) {
     try {
       await rename(from, to)
@@ -346,7 +346,7 @@ async function renameWithRetry(from: string, to: string, platform: Platform): Pr
 }
 
 /** Partial directories older than this belong to no install still running. */
-async function removeStalePartials(dir: string, olderThanMs: number): Promise<void> {
+export async function removeStalePartials(dir: string, olderThanMs: number): Promise<void> {
   const names = await readdir(dir).catch(() => [] as string[])
   await Promise.all(
     names
