@@ -22,7 +22,7 @@ import { Progress } from '@renderer/components/ui/progress'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { NoDrag, SidebarToggle } from '@renderer/features/shell/top-bar'
+import { CornerControls, NoDrag } from '@renderer/features/shell/top-bar'
 import {
   basename,
   bytes,
@@ -180,7 +180,7 @@ function PageBar() {
         cornered ? 'h-top-bar pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]' : 'h-9',
       )}
     >
-      {cornered && <SidebarToggle className="-ml-1" />}
+      {cornered && <CornerControls className="-ml-1" />}
     </div>
   )
 }

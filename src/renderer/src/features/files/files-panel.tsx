@@ -30,7 +30,7 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { SHEET } from '@renderer/features/shell/sheet'
-import { SidebarToggle } from '@renderer/features/shell/top-bar'
+import { CornerControls } from '@renderer/features/shell/top-bar'
 import { errorMessage, host } from '@renderer/lib/host'
 import { isMac } from '@renderer/lib/platform'
 import { layoutStorage } from '@renderer/lib/storage'
@@ -113,7 +113,7 @@ export default function FilesPanel({
           cornered && 'pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]',
         )}
       >
-        {cornered && <SidebarToggle className="mr-1" />}
+        {cornered && <CornerControls className="mr-1" />}
         {!bare && (
           <PanelButton
             label={listHidden ? t('panel.showFiles') : t('panel.hideFiles')}

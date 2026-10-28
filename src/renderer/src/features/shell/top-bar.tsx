@@ -3,6 +3,7 @@ import { PanelLeftIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { BackForward } from '@renderer/features/shell/back-forward'
 import { useNotices } from '@renderer/features/sidebar/notices'
 import { formatShortcut, isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -10,8 +11,8 @@ import { toggleSidebar, useViewStore } from '@renderer/stores/view'
 
 /**
  * The top bar of the main area, at the top of its sheet: the window's drag region. On macOS with
- * the sidebar collapsed it leaves room for the traffic lights and carries the sidebar toggle, which
- * on Windows and Linux sits in the band above the sheets instead.
+ * the sidebar collapsed it leaves room for the traffic lights and carries the sidebar toggle with
+ * Back and Forward, which on Windows and Linux sit in the band above the sheets instead.
  */
 export function TopBar({
   children,
@@ -33,7 +34,7 @@ export function TopBar({
         className,
       )}
     >
-      {cornered && <SidebarToggle className="-ml-1" />}
+      {cornered && <CornerControls className="-ml-1" />}
       {children}
     </header>
   )
@@ -41,14 +42,25 @@ export function TopBar({
 
 /**
  * Windows and Linux: the band of desk across the top of the main area, beside the window controls.
- * It drags the window and, while the sidebar is collapsed, holds the sidebar toggle.
+ * It drags the window and, while the sidebar is collapsed, holds the sidebar toggle with Back and
+ * Forward.
  */
 export function TitleBand() {
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
   if (isMac) return null
   return (
     <div className="app-region-drag absolute inset-x-0 top-0 flex h-(--title-bar) items-center pl-(--sheet-gap)">
-      {collapsed && <SidebarToggle />}
+      {collapsed && <CornerControls />}
+    </div>
+  )
+}
+
+/** Where the collapsed sidebar's toggle shows: the toggle, then Back and Forward. */
+export function CornerControls({ className }: { className?: string }) {
+  return (
+    <div className={cn('flex items-center gap-0.5', className)}>
+      <SidebarToggle />
+      <BackForward />
     </div>
   )
 }

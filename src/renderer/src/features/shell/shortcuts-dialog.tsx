@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { HISTORY_SHORTCUTS } from '@renderer/app/history'
 import { Dialog, DialogContent, DialogTitle } from '@renderer/components/ui/dialog'
 import { Kbd, KbdGroup } from '@renderer/components/ui/kbd'
 import { formatShortcut } from '@renderer/lib/platform'
@@ -16,6 +17,8 @@ const SHORTCUTS = [
   { group: 'sessions', keys: '1-4', action: 'answerPermission' },
   { group: 'window', keys: 'Mod+O', action: 'openProject' },
   { group: 'window', keys: 'Mod+B', action: 'toggleSidebar' },
+  { group: 'window', keys: HISTORY_SHORTCUTS.back, action: 'back' },
+  { group: 'window', keys: HISTORY_SHORTCUTS.forward, action: 'forward' },
   { group: 'window', keys: 'Mod+,', action: 'settings' },
   { group: 'window', keys: 'Mod+=', action: 'zoomIn' },
   { group: 'window', keys: 'Mod+-', action: 'zoomOut' },

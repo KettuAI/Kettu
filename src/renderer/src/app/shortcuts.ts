@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { stepZoom, type ZoomStep } from '@shared/settings'
 import { errorMessage } from '@renderer/lib/host'
-import { isMac, isMod } from '@renderer/lib/platform'
+import { isMac, isMod, platform } from '@renderer/lib/platform'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore, visibleOrder } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -18,6 +18,7 @@ import {
 import { paneOrder } from '@renderer/features/split/layout'
 import { newSession, openProjectDialog } from './actions'
 import { emitAppEvent } from './events'
+import { back, forward } from './history'
 
 /**
  * App-wide shortcuts. On macOS, Cmd+O, Cmd+N, Cmd+, and Cmd+B are menu accelerators that arrive as
@@ -51,6 +52,12 @@ export function useKeyboardShortcuts(): void {
         event.preventDefault()
         settingsBack()
         return
+      }
+
+      const step = historyStep(event, platform)
+      if (step) {
+        if (layerOpen()) return
+        return run(event, step === 'back' ? back : forward)
       }
 
       if (!isMod(event) || event.altKey) return
@@ -95,16 +102,49 @@ export function useKeyboardShortcuts(): void {
         return run(event, () => stepSession(event.code === 'BracketLeft' ? -1 : 1))
       }
     }
+    // The mouse's back and forward buttons.
+    const onMouseUp = (event: MouseEvent) => {
+      if ((event.button !== 3 && event.button !== 4) || layerOpen()) return
+      event.preventDefault()
+      if (event.button === 3) back()
+      else forward()
+    }
     window.addEventListener('keydown', onKeyDown, true)
+    window.addEventListener('mouseup', onMouseUp)
     // An artifact's page keeps the keys typed in it; main passes on the app's own shortcuts.
     const offForwarded = window.overbench.app.onShortcut((key) =>
       onKeyDown(new KeyboardEvent('keydown', { ...key, cancelable: true })),
     )
     return () => {
       window.removeEventListener('keydown', onKeyDown, true)
+      window.removeEventListener('mouseup', onMouseUp)
       offForwarded()
     }
   }, [])
+}
+
+const BRACKETS: Record<string, 'back' | 'forward'> = {
+  BracketLeft: 'back',
+  BracketRight: 'forward',
+}
+const ARROWS: Record<string, 'back' | 'forward'> = { ArrowLeft: 'back', ArrowRight: 'forward' }
+
+/**
+ * Back or forward from a key: Cmd+[ and Cmd+] on macOS, Alt+Left and Alt+Right elsewhere. The
+ * Files pane's editor keeps them, where they indent or move by syntax, and outside macOS so does
+ * a terminal, where they move by a word.
+ */
+export function historyStep(
+  event: Pick<KeyboardEvent, 'code' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey' | 'target'>,
+  platform: string,
+): 'back' | 'forward' | null {
+  const mac = platform === 'darwin'
+  const held = mac ? event.metaKey && !event.altKey : event.altKey && !event.metaKey
+  if (!held || event.ctrlKey || event.shiftKey) return null
+  const step = (mac ? BRACKETS : ARROWS)[event.code]
+  if (!step || inCodeEditor(event.target)) return null
+  if (!mac && (event.target as HTMLElement | null)?.closest('[data-terminal]')) return null
+  return step
 }
 
 function run(event: KeyboardEvent, action: () => void): void {

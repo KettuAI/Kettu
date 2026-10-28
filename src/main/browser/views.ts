@@ -68,6 +68,25 @@ export function isUserMouse(type: string): boolean {
   return type !== 'mouseMove' && type !== 'mouseEnter' && type !== 'mouseLeave'
 }
 
+/**
+ * The page's own keys: `Mod+[`, `Mod+]` and `Mod+R`, and outside macOS `Alt+Left` and `Alt+Right`
+ * as well, the platform's back and forward in a browser.
+ */
+export function pageKey(
+  input: Input,
+  platform: NodeJS.Platform,
+): 'back' | 'forward' | 'reload' | null {
+  if (input.type !== 'keyDown' || input.isAutoRepeat) return null
+  if (input.alt) {
+    if (platform === 'darwin' || input.control || input.meta || input.shift) return null
+    return input.code === 'ArrowLeft' ? 'back' : input.code === 'ArrowRight' ? 'forward' : null
+  }
+  if (!(platform === 'darwin' ? input.meta : input.control)) return null
+  if (input.key === '[') return 'back'
+  if (input.key === ']') return 'forward'
+  return input.key.toLowerCase() === 'r' ? 'reload' : null
+}
+
 export interface BrowserViewsDeps {
   /** The window the pages sit over; null while none exists. */
   window(): BrowserWindow | null
@@ -716,22 +735,11 @@ export class BrowserViews {
 
   /** Back, forward and reload while the page has focus; the app keeps the rest. */
   private shortcut(page: Page, input: Input): boolean {
-    if (input.type !== 'keyDown' || input.alt || input.isAutoRepeat) return false
-    const mod = process.platform === 'darwin' ? input.meta : input.control
-    if (!mod) return false
-    if (input.key === '[') {
-      this.back(page.sessionId)
-      return true
-    }
-    if (input.key === ']') {
-      this.forward(page.sessionId)
-      return true
-    }
-    if (input.key.toLowerCase() === 'r') {
-      this.reload(page.sessionId)
-      return true
-    }
-    return false
+    const key = pageKey(input, process.platform)
+    if (key === 'back') this.back(page.sessionId)
+    else if (key === 'forward') this.forward(page.sessionId)
+    else if (key === 'reload') this.reload(page.sessionId)
+    return key !== null
   }
 
   /**

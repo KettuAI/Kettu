@@ -26,7 +26,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { SHEET } from '@renderer/features/shell/sheet'
-import { SidebarToggle } from '@renderer/features/shell/top-bar'
+import { CornerControls } from '@renderer/features/shell/top-bar'
 import { isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { restoreArtifact } from '@renderer/stores/artifacts'
@@ -147,7 +147,7 @@ export default function ArtifactPane({
           cornered && 'pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]',
         )}
       >
-        {cornered && <SidebarToggle className="mr-1" />}
+        {cornered && <CornerControls className="mr-1" />}
         <span className="min-w-0 truncate pr-1.5 text-ui font-medium">{title}</span>
         {shown && (
           <span className="shrink-0 text-xs text-secondary tabular-nums">

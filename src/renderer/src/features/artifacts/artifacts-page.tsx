@@ -12,6 +12,7 @@ import {
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { NO_SESSION, type ArtifactSummary } from '@shared/artifacts'
+import { backTo } from '@renderer/app/history'
 import { SearchField } from '@renderer/components/search-field'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
@@ -36,7 +37,7 @@ import {
 } from '@renderer/components/ui/empty'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { SidebarToggle } from '@renderer/features/shell/top-bar'
+import { CornerControls } from '@renderer/features/shell/top-bar'
 import { basename, longAgo } from '@renderer/lib/format'
 import { isMac, isMod } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
@@ -84,6 +85,11 @@ interface SessionInfo {
 /** Where the list was scrolled when the viewer opened, for Back. */
 let scrolledTo = 0
 
+/** Recently deleted's Back: to the whole list. */
+function leaveRecentlyDeleted(): void {
+  backTo({ kind: 'artifacts' }, () => openRecentlyDeleted(false))
+}
+
 /**
  * Every artifact as a card, grouped by project and session or as the user chooses; with
  * `deleted`, the page's Recently deleted view.
@@ -117,7 +123,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
       if (deleted) {
         if (event.key === 'Escape' && onPage && !isEditable(event.target)) {
           event.preventDefault()
-          openRecentlyDeleted(false)
+          leaveRecentlyDeleted()
         }
       } else if (
         isMod(event) &&
@@ -297,7 +303,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                     <Button
                       variant="quiet"
                       size="sm"
-                      onClick={() => openRecentlyDeleted(false)}
+                      onClick={leaveRecentlyDeleted}
                       className="mb-2 -ml-2.25 self-start"
                     />
                   }
@@ -426,7 +432,7 @@ function DragStrip() {
         cornered && 'pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]',
       )}
     >
-      {cornered && <SidebarToggle className="-ml-1" />}
+      {cornered && <CornerControls className="-ml-1" />}
     </div>
   )
 }

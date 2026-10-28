@@ -20,7 +20,7 @@ import {
 } from '@renderer/components/ui/empty'
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { SHEET } from '@renderer/features/shell/sheet'
-import { SidebarToggle } from '@renderer/features/shell/top-bar'
+import { CornerControls } from '@renderer/features/shell/top-bar'
 import { isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
@@ -166,7 +166,7 @@ export function BrowserPane({
           cornered && 'pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]',
         )}
       >
-        {cornered && <SidebarToggle className="mr-1" />}
+        {cornered && <CornerControls className="mr-1" />}
         <div className="app-region-no-drag flex min-w-0 items-center gap-0.5">
           <PanelButton
             label={t('actions.back')}

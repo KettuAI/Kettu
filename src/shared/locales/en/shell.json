@@ -22,6 +22,8 @@
     "showShortcuts": "Show the keyboard shortcuts",
     "focusPane": "Focus pane 1 to 9 of the split view",
     "toggleSidebar": "Toggle the sidebar",
+    "back": "Back",
+    "forward": "Forward",
     "focusComposer": "Focus the composer",
     "addFiles": "Add files or photos to the composer",
     "previousSession": "Previous session in the sidebar",
@@ -44,6 +46,8 @@
   },
   "topBar": {
     "showSidebar": "Show sidebar",
-    "hideSidebar": "Hide sidebar"
+    "hideSidebar": "Hide sidebar",
+    "back": "Back",
+    "forward": "Forward"
   }
 }
