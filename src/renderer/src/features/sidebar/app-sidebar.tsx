@@ -27,6 +27,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
+import { Kbd } from '@renderer/components/ui/kbd'
 import {
   Sidebar,
   SidebarContent,
@@ -248,7 +249,8 @@ export function NavRow({
     <Tooltip>
       <TooltipTrigger render={row} delay={700} />
       <TooltipContent side="right">
-        {label} <span className="opacity-60">{formatShortcut(shortcut)}</span>
+        {label}
+        <Kbd>{formatShortcut(shortcut)}</Kbd>
       </TooltipContent>
     </Tooltip>
   )

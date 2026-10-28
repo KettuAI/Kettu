@@ -15,6 +15,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
+import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { AgentUpdateCard } from '@renderer/features/updates/agent-update-notice'
 import { NoticeCard, UpdateNoticeCard } from '@renderer/features/updates/update-notice'
@@ -91,7 +92,8 @@ function FooterButton({
         {children}
       </TooltipTrigger>
       <TooltipContent>
-        {label} {shortcut && <span className="opacity-60">{formatShortcut(shortcut)}</span>}
+        {label}
+        {shortcut && <Kbd>{formatShortcut(shortcut)}</Kbd>}
       </TooltipContent>
     </Tooltip>
   )

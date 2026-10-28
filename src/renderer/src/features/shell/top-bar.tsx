@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { PanelLeftIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
+import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { BackForward } from '@renderer/features/shell/back-forward'
 import { useNotices } from '@renderer/features/sidebar/notices'
@@ -120,9 +121,13 @@ export function SidebarToggle({ className }: { className?: string }) {
           />
         )}
       </TooltipTrigger>
-      <TooltipContent className={notices ? 'flex-col items-start gap-0.5' : undefined}>
-        <span>
-          {label} <span className="opacity-60">{formatShortcut('Mod+B')}</span>
+      {/* Notice lines end in text, not the keycap, so they keep the full end padding. */}
+      <TooltipContent
+        className={notices ? 'flex-col items-start gap-0.5 has-data-[slot=kbd]:pr-3' : undefined}
+      >
+        <span className="inline-flex items-center gap-1.5">
+          {label}
+          <Kbd>{formatShortcut('Mod+B')}</Kbd>
         </span>
         {notices?.labels.map((notice) => (
           <span key={notice} className="opacity-60">

@@ -23,6 +23,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
+import { Kbd } from '@renderer/components/ui/kbd'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { longAgo } from '@renderer/lib/format'
@@ -79,7 +80,8 @@ export function BarButton({
         {children}
       </TooltipTrigger>
       <TooltipContent>
-        {label} {shortcut && <span className="opacity-60">{shortcut}</span>}
+        {label}
+        {shortcut && <Kbd>{shortcut}</Kbd>}
       </TooltipContent>
     </Tooltip>
   )
