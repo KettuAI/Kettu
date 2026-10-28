@@ -1,12 +1,13 @@
-import type { CSSProperties } from 'react'
 import {
   contrastIssues,
   parseColor,
+  PREVIEW_TOKENS,
   THEME_FORMAT,
   THEME_MODES,
   THEME_TOKENS,
   type ContrastIssue,
   type Theme,
+  type ThemeColors,
   type ThemeMode,
   type ThemeToken,
 } from '@shared/themes'
@@ -79,10 +80,19 @@ export function themeColors(theme: Theme | null, mode: ThemeMode): Colors {
   return { ...BUILTIN_COLORS[mode], ...theme?.[mode].colors }
 }
 
-/** Draws a theme's variant on a subtree, whatever theme the page shows. */
-export function previewStyle(theme: Theme | null, mode: ThemeMode): CSSProperties {
-  const colors = Object.entries(themeColors(theme, mode))
-  return Object.fromEntries(colors.map(([token, color]) => [`--${token}`, color]))
+export type PreviewToken = (typeof PREVIEW_TOKENS)[number]
+
+/**
+ * What a theme's picture draws for a mode: only the tokens a catalog entry's preview carries, so
+ * an installed theme and its entry in the catalog look the same.
+ */
+export function previewColors(
+  colors: ThemeColors | undefined,
+  mode: ThemeMode,
+): Record<PreviewToken, string> {
+  return Object.fromEntries(
+    PREVIEW_TOKENS.map((token) => [token, colors?.[token] ?? BUILTIN_COLORS[mode][token]]),
+  ) as Record<PreviewToken, string>
 }
 
 export function themeContrast(theme: Theme | null): ContrastIssue[] {

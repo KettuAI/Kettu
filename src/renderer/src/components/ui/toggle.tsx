@@ -12,8 +12,8 @@ const toggleVariants = cva(
         // A segment of a segmented control; the control's thumb raises the one marked active.
         segmented:
           'min-w-0 rounded-md text-secondary transition-colors duration-(--duration-fast) hover:bg-transparent hover:text-foreground aria-pressed:bg-transparent data-[state=on]:bg-transparent data-active:text-foreground',
-        // A preview tile with its label under it; the chosen tile takes a strong ring.
-        tile: 'h-auto flex-col gap-1.5 bg-transparent p-0 font-normal text-muted-foreground hover:bg-transparent hover:text-foreground aria-pressed:bg-transparent aria-pressed:text-foreground [&>[data-tile]]:ring-1 [&>[data-tile]]:ring-border [&>[data-tile]]:transition-shadow aria-pressed:[&>[data-tile]]:ring-2 aria-pressed:[&>[data-tile]]:ring-foreground',
+        // A theme's card: its picture over its label, raised; the chosen card takes an ink ring.
+        tile: 'flex-col items-stretch gap-0 rounded-xl bg-surface font-normal text-foreground shadow-card transition-shadow duration-(--duration-fast) hover:bg-surface hover:text-foreground hover:shadow-outline-hover aria-pressed:bg-surface aria-pressed:shadow-[inset_0_0_0_2px_var(--text-primary),var(--elevation-card),var(--highlight)]',
         // A chart's legend key that shows or hides its series; shown, its name is in full.
         legend:
           'font-normal text-muted-foreground transition-colors duration-(--duration-fast) hover:bg-accent hover:text-foreground aria-pressed:bg-transparent aria-pressed:text-foreground aria-pressed:hover:bg-accent',
@@ -26,7 +26,7 @@ const toggleVariants = cva(
         sm: "h-7 min-w-7 px-2.5 text-small has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
         lg: 'h-9 min-w-9 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2',
         compact: "h-control-sm min-w-0 px-2.5 text-control [&_svg:not([class*='size-'])]:size-3.5",
-        tile: 'h-auto min-w-0 p-0 text-xs',
+        tile: 'h-auto min-w-0 p-1.5 pb-0 text-ui',
         legend: 'h-control-sm min-w-0 gap-1.5 px-1.5 text-xs',
       },
     },

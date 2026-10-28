@@ -1,12 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  EllipsisIcon,
-  FileDownIcon,
-  FolderIcon,
-  PlusIcon,
-  TrashIcon,
-  TriangleAlertIcon,
-} from 'lucide-react'
+import { EllipsisIcon, FileDownIcon, FolderIcon, TrashIcon, TriangleAlertIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   BUILTIN_THEME_ID,
@@ -47,8 +40,10 @@ import { fileManagerName } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { receiveThemes, useThemesStore } from '@renderer/stores/themes'
 import { CONFIRM, ControlError } from './controls'
-import { MiniWindow, TILE, TileLabel } from './sections'
-import { previewStyle, themeContrast, themeFile } from './theme-colors'
+import { RadioDot } from './sections'
+import { BrowseThemes } from './theme-catalog'
+import { themeContrast, themeFile } from './theme-colors'
+import { ThemePreview } from './theme-preview'
 import { useReason } from './theme-reason'
 import { useApply } from './use-apply'
 
@@ -66,7 +61,7 @@ const CONTRAST_SHOWN = 10
 /** Truncates, never rounds up, as the contrast check does, so 4.49 never shows as 4.50. */
 const formatRatio = (ratio: number) => (Math.floor(ratio * 100) / 100).toFixed(2)
 
-/** The Theme group: OverBench, the installed themes by name, and Install from file. */
+/** The Theme group: OverBench, the installed themes by name, and the ways to add one. */
 export function ThemeTiles() {
   const { t } = useTranslation(['settings', 'common'])
   const { installed, chosen, failed } = useThemesStore((s) => s.state)
@@ -133,7 +128,7 @@ export function ThemeTiles() {
   )
 
   return (
-    <div className="flex flex-col gap-3.5">
+    <div className="@container flex flex-col gap-3.5 pt-1">
       {failed && (
         <LoadFailure
           id={failed.id}
@@ -152,11 +147,11 @@ export function ThemeTiles() {
           const picked = next[0] as string | undefined
           if (picked && picked !== chosen) apply({ appearance: { colorTheme: picked } })
         }}
-        className="grid w-full grid-cols-3 items-start"
+        className="grid w-full grid-cols-1 items-stretch @min-[440px]:grid-cols-2"
       >
         {tile(BUILTIN_THEME_ID, null)}
         {installed.map((item) => tile(item.id, item.theme, item))}
-        <InstallTile onClick={install} />
+        <MoreThemes bar={installed.length % 2 === 1} onInstall={install} />
       </ToggleGroup>
       <ControlError error={applyError} />
       {notice && (
@@ -205,7 +200,7 @@ export function ThemeTiles() {
   )
 }
 
-/** A theme's tile: its two variants split on a diagonal, its name, and its menu in the corner. */
+/** A theme's card: its picture in the chosen color mode, its name, and its menu at the end. */
 function ThemeTile({
   id,
   theme,
@@ -226,39 +221,33 @@ function ThemeTile({
   const { t } = useTranslation('settings')
   const name = theme?.name ?? 'OverBench'
   const issues = useMemo(() => themeContrast(theme), [theme])
-  const light = useMemo(() => previewStyle(theme, 'light'), [theme])
-  const dark = useMemo(() => previewStyle(theme, 'dark'), [theme])
   const more = useRef<HTMLButtonElement>(null)
   return (
     <div className="group/tile relative min-w-0">
       <ToggleGroupItem
         value={id}
-        className={cn(TILE, 'group-hover/tile:[&>[data-tile]]:ring-border-strong')}
+        className="w-full group-hover/tile:not-aria-pressed:shadow-outline-hover"
       >
-        <span
-          data-tile=""
-          aria-hidden
-          className="relative block h-21.5 w-full overflow-hidden rounded-code"
-        >
-          <MiniWindow dark={false} style={light} />
-          <MiniWindow dark cut style={dark} />
-        </span>
-        <TileLabel name={name}>
+        <ThemePreview light={theme?.light.colors} dark={theme?.dark.colors} />
+        {/* The end keeps the More button's slot, so nothing moves when it shows. */}
+        <span className="flex h-10 min-w-0 items-center gap-1.75 pr-8.5 pl-1.5">
+          <RadioDot />
+          <span className="truncate font-medium text-primary">{name}</span>
           {issues.length > 0 && <ContrastWarning issues={issues} />}
           <span className="ml-auto shrink-0 pl-2 text-xs text-tertiary">
             {t(`appearance.theme.${source}`)}
           </span>
-        </TileLabel>
+        </span>
       </ToggleGroupItem>
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
             <Button
               ref={more}
-              variant="outline"
+              variant="quiet"
               size="icon-xs"
               aria-label={t('appearance.theme.more', { name })}
-              className="absolute top-1.5 right-1.5 size-6.5 opacity-0 transition-opacity duration-(--duration-fast) group-hover/tile:opacity-100 group-has-focus-visible/tile:opacity-100 data-popup-open:opacity-100"
+              className="absolute right-2 bottom-2 opacity-0 transition-opacity duration-(--duration-fast) group-hover/tile:opacity-100 group-has-focus-visible/tile:opacity-100 data-popup-open:opacity-100"
             />
           }
         >
@@ -364,22 +353,31 @@ function ContrastWarning({ issues }: { issues: ContrastIssue[] }) {
   )
 }
 
-function InstallTile({ onClick }: { onClick: () => void }) {
+/**
+ * After the themes, the ways to add one: in the cell beside the last theme, or across the row as a
+ * bar when the themes fill theirs, so a lone theme never leaves half a row empty.
+ */
+function MoreThemes({ bar, onInstall }: { bar: boolean; onInstall: () => void }) {
   const { t } = useTranslation('settings')
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group/install flex min-w-0 flex-col items-stretch gap-2 rounded-xl text-left outline-none focus-ring"
+    <div
+      className={cn(
+        'flex min-w-0 flex-col justify-center gap-3 rounded-xl bg-subtle p-3.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
+        bar &&
+          'col-span-full flex-row flex-wrap items-center justify-between gap-x-4 py-3 pr-3 pl-4',
+      )}
     >
-      <span className="grid h-21.5 w-full place-items-center rounded-code border border-dashed border-strong text-tertiary transition-colors duration-(--duration-fast) group-hover/install:bg-hover group-hover/install:text-primary">
-        <PlusIcon className="size-4" />
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-ui font-medium text-primary">{t('appearance.theme.moreThemes')}</span>
+        <span className="text-small text-secondary">{t('appearance.theme.moreDescription')}</span>
       </span>
-      <span className="flex flex-col gap-0.5 px-0.5">
-        <span className="text-ui font-medium text-primary">{t('appearance.theme.install')}</span>
-        <span className="text-xs text-tertiary">{t('appearance.theme.installHint')}</span>
+      <span className="flex flex-wrap gap-1.5">
+        <BrowseThemes />
+        <Button variant="outline" size="sm" onClick={onInstall}>
+          {t('appearance.theme.install')}
+        </Button>
       </span>
-    </button>
+    </div>
   )
 }
 

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CheckIcon, CircleAlertIcon, SearchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { CatalogInstallError, CatalogInstallResult, CatalogTheme, Theme } from '@shared/themes'
+import type { CatalogInstallError, CatalogInstallResult, CatalogTheme } from '@shared/themes'
 import { SearchField } from '@renderer/components/search-field'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -17,15 +17,13 @@ import { errorMessage } from '@renderer/lib/host'
 import { isMod } from '@renderer/lib/platform'
 import { useThemesStore } from '@renderer/stores/themes'
 import { catalogView, type CatalogAnswer } from './catalog-view'
-import { GROUP_ACTION } from './controls'
-import { MiniWindow } from './sections'
-import { previewStyle } from './theme-colors'
 import { useReason } from './theme-reason'
+import { ThemePreview } from './theme-preview'
 import { ReplaceDialog, type Conflict } from './theme-section'
 
 type Failure = { name: string; error: CatalogInstallError } | { message: string }
 
-/** Browse themes, in the Theme group's header: the online catalog in a dialog. */
+/** Browse themes, in the More themes card: the online catalog in a dialog. */
 export function BrowseThemes() {
   const { t } = useTranslation('settings')
   const [open, setOpen] = useState(false)
@@ -34,13 +32,12 @@ export function BrowseThemes() {
   return (
     <>
       <Button
-        variant="quiet"
+        variant="outline"
         size="sm"
         onClick={() => {
           setOpened((count) => count + 1)
           setOpen(true)
         }}
-        className={GROUP_ACTION}
       >
         {t('appearance.catalog.browse')}
       </Button>
@@ -222,7 +219,7 @@ function CatalogDialog({
   )
 }
 
-/** A catalog theme: its variants from the index's colors, its name, author and license, and its button. */
+/** A catalog theme: its picture from the index's colors, its name, author and license, and its button. */
 function CatalogTile({
   theme,
   busy,
@@ -235,25 +232,9 @@ function CatalogTile({
   onInstall: () => void
 }) {
   const { t } = useTranslation('settings')
-  const preview = useMemo<Theme>(
-    () => ({
-      name: theme.name,
-      light: { colors: theme.preview.light },
-      dark: { colors: theme.preview.dark },
-    }),
-    [theme],
-  )
-  const light = useMemo(() => previewStyle(preview, 'light'), [preview])
-  const dark = useMemo(() => previewStyle(preview, 'dark'), [preview])
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <span
-        aria-hidden
-        className="relative block h-26 w-full overflow-hidden rounded-xl ring-1 ring-border"
-      >
-        <MiniWindow dark={false} style={light} />
-        <MiniWindow dark cut style={dark} />
-      </span>
+      <ThemePreview light={theme.preview.light} dark={theme.preview.dark} />
       <div className="flex min-w-0 items-center gap-2 pl-0.5">
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-small text-primary">{theme.name}</span>

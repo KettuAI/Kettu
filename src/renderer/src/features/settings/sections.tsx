@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import {
   BellIcon,
   CheckIcon,
@@ -42,7 +42,6 @@ import { Kbd } from '@renderer/components/ui/kbd'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
-import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage, host } from '@renderer/lib/host'
 import { basename } from '@renderer/lib/format'
@@ -67,6 +66,7 @@ import {
   SettingSelect,
   SettingSwitch,
 } from './controls'
+import { FlashMark } from './rows'
 import { useApply } from './use-apply'
 
 const useSettings = () => useSettingsStore((s) => s.settings)
@@ -76,13 +76,6 @@ const PREVIEW_BOX = 'rounded-code bg-app shadow-[inset_0_0_0_var(--hairline)_var
 
 // A block row's first line: the row's text on the left, its control on the right.
 const BLOCK_LINE = 'flex min-h-10 items-center gap-4'
-
-/**
- * A picture tile in a tile ToggleGroup: its picture rests on a ring, which turns into the chosen
- * one two pixels clear of it.
- */
-export const TILE =
-  'w-full items-stretch gap-2 [&>[data-tile]]:shadow-(--elevation-card) hover:[&>[data-tile]]:ring-border-strong aria-pressed:[&>[data-tile]]:ring-offset-2 aria-pressed:[&>[data-tile]]:ring-offset-[color:var(--bg-app)]'
 
 // ---- General
 
@@ -245,33 +238,25 @@ type ColorMode = SettingsFile['appearance']['theme']
 
 const COLOR_MODES: readonly ColorMode[] = ['system', 'light', 'dark']
 
-export function ColorModeTiles() {
+/** The color mode, at the end of the Theme group's label, where search finds it as its own row. */
+export function ColorMode() {
   const { t } = useTranslation('settings')
   const value = useSettings().appearance.theme
   const [apply, error] = useApply()
   return (
-    <>
-      <ToggleGroup
-        aria-label={t('appearance.colorMode.name')}
-        variant="tile"
-        size="tile"
-        spacing={3}
-        value={[value]}
-        onValueChange={(next) => {
-          const picked = next[0] as ColorMode | undefined
-          if (picked && picked !== value) apply({ appearance: { theme: picked } })
-        }}
-        className="grid w-full grid-cols-3 items-start"
-      >
-        {COLOR_MODES.map((mode) => (
-          <ToggleGroupItem key={mode} value={mode} className={TILE}>
-            <ColorModePreview kind={mode} />
-            <TileLabel name={t(`appearance.colorMode.${mode}`)} />
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
+    <span data-setting-row="color-mode" className="relative mr-0.5 flex items-center gap-2">
+      <FlashMark id="color-mode" />
       <ControlError error={error} />
-    </>
+      <Segmented
+        label={t('appearance.colorMode.name')}
+        value={value}
+        options={COLOR_MODES.map((mode) => ({
+          value: mode,
+          label: t(`appearance.colorMode.${mode}`),
+        }))}
+        onChange={(v) => apply({ appearance: { theme: v } })}
+      />
+    </span>
   )
 }
 
@@ -283,77 +268,6 @@ export function RadioDot() {
       className="grid size-3.5 shrink-0 place-items-center rounded-full bg-surface ring-1 ring-border-strong transition-colors duration-(--duration-fast) ring-inset group-aria-pressed/toggle:bg-primary group-aria-pressed/toggle:ring-0"
     >
       <span className="size-1.25 scale-0 rounded-full bg-surface transition-transform duration-(--duration-fast) group-aria-pressed/toggle:scale-100" />
-    </span>
-  )
-}
-
-/** A tile's line under its picture: the radio, the name, and what follows it. */
-export function TileLabel({ name, children }: { name: string; children?: ReactNode }) {
-  return (
-    <span className="flex min-w-0 items-center gap-1.75 px-0.5 text-ui">
-      <RadioDot />
-      <span className="truncate font-medium text-primary">{name}</span>
-      {children}
-    </span>
-  )
-}
-
-/**
- * A miniature window in the chosen theme's surfaces for the mode; System shows both, split on a
- * diagonal.
- */
-function ColorModePreview({ kind }: { kind: ColorMode }) {
-  return (
-    <span
-      data-tile=""
-      aria-hidden
-      className="relative block h-21.5 w-full overflow-hidden rounded-code"
-    >
-      {kind !== 'dark' && <MiniWindow dark={false} />}
-      {kind !== 'light' && <MiniWindow dark cut={kind === 'system'} />}
-    </span>
-  )
-}
-
-function MiniLine({ className }: { className?: string }) {
-  return <span className={cn('block h-0.75 rounded-full bg-(--text-tertiary)', className)} />
-}
-
-/**
- * A window in miniature: the sidebar's lines on the desk and a sheet with a title, text and a
- * button. The wrapper's mode makes the tokens inside resolve for it, whatever the app shows;
- * `style` can set the tokens themselves, for a theme that is not the chosen one. `cut` keeps the
- * half under the diagonal, for the dark side of a pair.
- */
-export function MiniWindow({
-  dark,
-  cut,
-  style,
-}: {
-  dark: boolean
-  cut?: boolean
-  style?: CSSProperties
-}) {
-  return (
-    <span
-      data-theme={dark ? 'dark' : 'light'}
-      style={style}
-      className={cn(
-        'absolute inset-0 block bg-sidebar',
-        cut && '[clip-path:polygon(100%_0,100%_100%,0_100%)]',
-      )}
-    >
-      <span className="absolute top-3.5 left-1.75 flex w-5.5 flex-col gap-1.25 opacity-55">
-        <MiniLine className="w-[70%]" />
-        <MiniLine />
-        <MiniLine />
-      </span>
-      <span className="absolute top-2 right-0 bottom-0 left-9 flex flex-col gap-1.25 rounded-tl-md bg-app p-2.5 shadow-[0_0_0_var(--hairline)_var(--border-subtle)]">
-        <span className="block h-1 w-[46%] rounded-full bg-primary opacity-90" />
-        <MiniLine className="w-[84%] opacity-50" />
-        <MiniLine className="w-[60%] opacity-50" />
-        <span className="mt-0.75 block h-2.25 w-6.5 rounded-[5px] bg-(image:--primary-gradient)" />
-      </span>
     </span>
   )
 }

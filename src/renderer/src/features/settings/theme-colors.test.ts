@@ -1,7 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { isThemeToken, parseThemeFile, THEME_TOKENS, type Theme } from '@shared/themes'
+import {
+  isThemeToken,
+  parseThemeFile,
+  PREVIEW_TOKENS,
+  THEME_TOKENS,
+  type Theme,
+  type ThemeColors,
+} from '@shared/themes'
 import tokensCss from '@renderer/styles/tokens.css?raw'
-import { BUILTIN_COLORS, themeColors, themeContrast, themeFile } from './theme-colors'
+import {
+  BUILTIN_COLORS,
+  previewColors,
+  themeColors,
+  themeContrast,
+  themeFile,
+} from './theme-colors'
 
 // What tokens.css holds that a theme never changes: the white page under an SVG, the shadows and
 // the brand marks.
@@ -67,6 +80,35 @@ describe('themeFile', () => {
       light: { colors: { ...BUILTIN_COLORS.light, 'bg-app': '#eceff4' } },
       dark: { code: 'nord', colors: themeColors(nord, 'dark') },
     })
+  })
+})
+
+describe('previewColors', () => {
+  const colors: ThemeColors = {
+    'bg-app': '#2e3440',
+    'bg-surface': '#353b49',
+    'text-primary': '#eceff4',
+    link: '#88c0d0',
+  }
+
+  it('keeps only the tokens a catalog entry previews', () => {
+    expect(Object.keys(previewColors(colors, 'dark'))).toEqual([...PREVIEW_TOKENS])
+  })
+
+  it("takes the theme's values, and the built-in value for a token it leaves out", () => {
+    const preview = previewColors(colors, 'dark')
+    expect(preview['bg-app']).toBe('#2e3440')
+    expect(preview['bg-sidebar']).toBe(BUILTIN_COLORS.dark['bg-sidebar'])
+    expect(previewColors(undefined, 'light')['bg-app']).toBe(BUILTIN_COLORS.light['bg-app'])
+  })
+
+  it('draws a catalog entry as the theme file it was built from', () => {
+    // The index carries only these tokens of a theme's file.
+    const previewed: readonly string[] = PREVIEW_TOKENS
+    const entry = Object.fromEntries(
+      Object.entries(colors).filter(([token]) => previewed.includes(token)),
+    )
+    expect(previewColors(entry, 'dark')).toEqual(previewColors(colors, 'dark'))
   })
 })
 

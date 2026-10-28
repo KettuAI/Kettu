@@ -91,7 +91,8 @@
       "exported": "已将 {{file}} 保存到 {{folder}}",
       "remove": "移除…",
       "install": "从文件安装…",
-      "installHint": ".json 主题文件",
+      "moreThemes": "更多主题",
+      "moreDescription": "浏览 OverBench 主题库，或安装 .json 主题文件。",
       "lowContrast": "对比度不足",
       "contrastPair": "{{mode}}：{{fg}} 在 {{bg}} 上，{{ratio}}:1",
       "contrastMore": "另有 {{count}} 处",
@@ -173,7 +174,6 @@
     },
     "groups": {
       "theme": "主题",
-      "colorMode": "颜色模式",
       "scale": "缩放与文字",
       "motion": "动态效果"
     },
