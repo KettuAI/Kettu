@@ -158,5 +158,9 @@ export function createdPullRequest(
     review: null,
     mergeable: 'unknown',
     updatedAt: at,
+    author: null,
+    createdAt: at,
+    mergedAt: null,
+    closedAt: null,
   }
 }

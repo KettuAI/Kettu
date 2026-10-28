@@ -560,6 +560,8 @@ export interface HostContract {
     result: FileDiff
   }
   'git.pullRequest': { params: { url: string }; result: PullRequest }
+  // A chip's author; null when GitHub's avatar host has no picture for the login.
+  'git.avatarUrl': { params: { login: string }; result: string | null }
   'git.currentPullRequest': { params: { projectPath: string }; result: PullRequest | null }
   'git.tools': { params: void; result: GitTools }
   // A draft's attachment, kept until it is sent or removed; see attachments in the session model.
@@ -724,6 +726,7 @@ export const HOST_METHODS = [
   'git.incoming',
   'git.fileDiff',
   'git.pullRequest',
+  'git.avatarUrl',
   'git.currentPullRequest',
   'git.tools',
   'attachments.add',

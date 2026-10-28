@@ -6,9 +6,6 @@ import {
   ExternalLinkIcon,
   GitPullRequestIcon,
   LockIcon,
-  UserRoundCheckIcon,
-  UserRoundIcon,
-  UserRoundXIcon,
 } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { CheckRun, GitStatus, PullRequest } from '@shared/git'
@@ -19,21 +16,11 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { openGitDialog, useGitStore } from '@renderer/stores/git'
 import { CopyButton } from './copy-button'
-import { ChecksIcon, PrIcon } from './pr-icon'
-import { prStateText } from './pr-text'
+import { ChecksIcon, PrIcon, ReviewIcon } from './pr-icon'
+import { checkCountText, prStateText, REVIEW_KEY } from './pr-text'
 import { pullRequestHead, pushTargetOf } from './sync'
 import { disclosureKeys, kidKeys } from './popover-keys'
 import { Chevron, KID, Kids, Part, ROW } from './timeline'
-
-const REVIEW = {
-  approved: { Icon: UserRoundCheckIcon, color: 'text-success', key: 'pr.review.approved' },
-  changes_requested: {
-    Icon: UserRoundXIcon,
-    color: 'text-danger',
-    key: 'pr.review.changesRequested',
-  },
-  review_required: { Icon: UserRoundIcon, color: 'text-icon', key: 'pr.review.reviewRequired' },
-} as const
 
 /** The leading column of the part's rows, where a row's icon sits on the lane's line. */
 function Lead({ children }: { children: ReactNode }) {
@@ -210,15 +197,7 @@ function PullRequestDetails({ pr, onOpen }: { pr: PullRequest; onOpen: () => voi
             <Lead>
               <ChecksIcon state={checks.state} size={14} />
             </Lead>
-            <span className="min-w-0 flex-1 truncate tabular">
-              {[
-                checks.passed > 0 && t('pr.checkCount.passed', { count: checks.passed }),
-                checks.pending > 0 && t('pr.checkCount.pending', { count: checks.pending }),
-                checks.failed > 0 && t('pr.checkCount.failed', { count: checks.failed }),
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </span>
+            <span className="min-w-0 flex-1 truncate tabular">{checkCountText(checks)}</span>
             <Chevron open={checksOpen} />
           </button>
           {checksOpen && (
@@ -322,13 +301,12 @@ function CheckRow({ run, now }: { run: CheckRun; now: number }) {
 
 function ReviewRow({ review }: { review: NonNullable<PullRequest['review']> }) {
   const { t } = useTranslation('git')
-  const { Icon, color, key } = REVIEW[review]
   return (
     <div className="flex h-row items-center gap-2 px-2 text-small">
       <Lead>
-        <Icon aria-hidden className={cn('size-3.5', color)} />
+        <ReviewIcon review={review} size={14} />
       </Lead>
-      <span className="min-w-0 flex-1 truncate">{t(key)}</span>
+      <span className="min-w-0 flex-1 truncate">{t(REVIEW_KEY[review])}</span>
     </div>
   )
 }

@@ -135,6 +135,9 @@ const api: OverbenchApi = {
     installCatalog: (id) => invoke('themes:install-catalog', id),
     onChanged: onThemesChanged,
   },
+  avatars: {
+    load: (url) => invoke('avatars:load', url),
+  },
   loginItem: {
     getStatus: () => invoke('login-item:status'),
   },

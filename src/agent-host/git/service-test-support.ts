@@ -30,6 +30,8 @@ export interface FakeGh {
   view: object | null
   list: object[]
   byUrl: Record<string, object>
+  /** What `gh api users/<login>` answers, by login; a missing login is a 404. */
+  users: Record<string, object>
   /** When set, `gh pr view` and `gh pr list` fail with this message. */
   error: string | null
   /** Does what `gh repo create` would in the folder; null: the command fails. */
@@ -70,6 +72,7 @@ export function createFakeGh(real: Exec): { gh: FakeGh; exec: Exec; gitCalls: st
     view: null,
     list: [],
     byUrl: {},
+    users: {},
     error: null,
     onRepoCreate: null,
     created: null,
@@ -107,6 +110,12 @@ export function createFakeGh(real: Exec): { gh: FakeGh; exec: Exec; gitCalls: st
         : result({ code: 1, stderr: 'no pull requests found for branch "x"\n' })
     }
     if (args[0] === 'pr' && args[1] === 'list') return result({ stdout: JSON.stringify(gh.list) })
+    if (args[0] === 'api') {
+      const user = gh.users[args.at(-1)?.replace(/^users\//, '') ?? '']
+      return user
+        ? result({ stdout: JSON.stringify(user) })
+        : result({ code: 1, stderr: 'gh: Not Found (HTTP 404)' })
+    }
     if (args[0] === 'repo' && args[1] === 'create') {
       if (!gh.onRepoCreate) return result({ code: 1, stderr: 'GraphQL: Name already exists' })
       await gh.onRepoCreate(options.cwd ?? '')

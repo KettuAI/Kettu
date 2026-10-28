@@ -87,6 +87,16 @@ export interface PullRequest {
   review: 'approved' | 'changes_requested' | 'review_required' | null
   mergeable: 'clean' | 'conflicting' | 'blocked' | 'unknown'
   updatedAt: number
+  author: PullRequestAuthor | null // null for a deleted account
+  createdAt: number
+  mergedAt: number | null
+  closedAt: number | null
+}
+
+export interface PullRequestAuthor {
+  login: string // a bot's as `<slug>[bot]`, its user name on GitHub
+  name: string | null
+  bot: boolean
 }
 
 export type ChangeStatus =
@@ -146,6 +156,9 @@ export interface GitTools {
 }
 
 export const GITHUB_PULL_REQUEST_URL = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)$/
+
+/** A GitHub user's login, an enterprise one with its `_shortcode`, or a bot's `<slug>[bot]`. */
+export const GITHUB_LOGIN = /^[A-Za-z0-9][\w-]{0,99}(?:\[bot\])?$/
 
 const REPOSITORY_NAME = /^[A-Za-z0-9_.][A-Za-z0-9_.-]{0,99}$/
 

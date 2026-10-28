@@ -117,6 +117,8 @@ export interface IpcInvokeContract {
   // `refresh`: read the index from GitHub again rather than the copy main kept.
   'themes:catalog': { args: [refresh: boolean]; result: CatalogState }
   'themes:install-catalog': { args: [id: string]; result: CatalogInstallResult }
+  // `url`: an avatar URL `git.avatarUrl` gave; null when it is none or the picture did not load.
+  'avatars:load': { args: [url: string]; result: string | null }
   'dialog:open-project': { args: []; result: string | null }
   'dialog:choose-agent-binary': { args: [agentId: AgentId]; result: string | null }
   'dialog:choose-agent-config-folder': { args: [agentId: AgentId]; result: string | null }
@@ -333,6 +335,11 @@ export interface OverbenchApi {
     /** Downloads a catalog theme and installs it, or names the file theme it would replace. */
     installCatalog(id: string): Promise<CatalogInstallResult>
     onChanged(listener: (state: ThemesState) => void): () => void
+  }
+  /** Pull request authors' avatars, which main fetches from GitHub's avatar host. */
+  avatars: {
+    /** The picture as a data: URL, or null when it is none or did not load. */
+    load(url: string): Promise<string | null>
   }
   loginItem: {
     getStatus(): Promise<LoginItemStatus>

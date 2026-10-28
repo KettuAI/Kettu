@@ -3,6 +3,7 @@
 import { homedir } from 'node:os'
 import { posix, win32 } from 'node:path'
 import {
+  GITHUB_LOGIN,
   GITHUB_PULL_REQUEST_URL,
   type GitOperation,
   type GitStatus,
@@ -21,6 +22,7 @@ import { CommandError, createExec, describeFailure, FETCH_TIMEOUT_MS, type Exec 
 import {
   listBranchPullRequests,
   probeTools,
+  viewAvatarUrl,
   viewCurrentPullRequest,
   viewPullRequestByUrl,
 } from './gh'
@@ -47,6 +49,7 @@ export interface GitServiceOptions {
 const PULL_REQUEST_MIN_INTERVAL_MS = 60_000
 const PULL_REQUEST_CACHE_MS = 60_000
 const PULL_REQUEST_CACHE_SIZE = 200
+const AVATAR_URL_CACHE_SIZE = 200
 const BACKGROUND_FETCH_INTERVAL_MS = 5 * 60_000
 // A tool call that never ended, such as one of a crashed agent, stops blocking attribution.
 const STALE_CALL_MS = 30 * 60_000
@@ -154,6 +157,9 @@ export function createGitService(
   const pending = new Set<Promise<unknown>>()
   const pullRequestCache = new Map<string, { at: number; value: PullRequest }>()
   const pullRequestLoads = new Map<string, Promise<PullRequest>>()
+  // Kept for the run: an avatar URL changes only when its user uploads a new picture.
+  const avatarUrls = new Map<string, string | null>()
+  const avatarUrlLoads = new Map<string, Promise<string | null>>()
   let disposed = false
   let backgroundFetch: ReturnType<typeof setInterval> | null = null
   let backgroundFetching = false
@@ -502,6 +508,21 @@ export function createGitService(
     return outcome.value
   }
 
+  async function loadAvatarUrl(login: string): Promise<string | null> {
+    const tools = await getTools()
+    if (tools.gh.state === 'not-installed') throw new Error(t('git.ghMissing'))
+    if (tools.gh.state === 'signed-out') throw new Error(t('git.ghSignedOut'))
+    const outcome = await viewAvatarUrl(exec, login, homedir())
+    if (!outcome.ok) throw new Error(outcome.message)
+    avatarUrls.set(login, outcome.value)
+    while (avatarUrls.size > AVATAR_URL_CACHE_SIZE) {
+      const oldest = avatarUrls.keys().next().value
+      if (oldest === undefined) break
+      avatarUrls.delete(oldest)
+    }
+    return outcome.value
+  }
+
   // Fetch
 
   function fetchProject(state: ProjectState): Promise<GitOperation> {
@@ -842,6 +863,18 @@ export function createGitService(
       if (!load) {
         load = track(loadPullRequest(url)).finally(() => pullRequestLoads.delete(url))
         pullRequestLoads.set(url, load)
+      }
+      return load
+    },
+
+    async avatarUrl(login) {
+      if (disposed) throw new Error('The git service is disposed')
+      if (!GITHUB_LOGIN.test(login)) throw new Error('Not a GitHub login')
+      if (avatarUrls.has(login)) return avatarUrls.get(login) ?? null
+      let load = avatarUrlLoads.get(login)
+      if (!load) {
+        load = track(loadAvatarUrl(login)).finally(() => avatarUrlLoads.delete(login))
+        avatarUrlLoads.set(login, load)
       }
       return load
     },

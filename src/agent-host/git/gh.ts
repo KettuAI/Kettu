@@ -6,8 +6,10 @@ import { describeFailure, GH_TIMEOUT_MS, GIT_TIMEOUT_MS, type Exec, type ExecRes
 import {
   AUTH_STATUS_ARGS,
   LIST_ARGS,
+  mapAvatarUrl,
   mapBranchPullRequests,
   mapPullRequest,
+  userArgs,
   viewArgs,
 } from './github'
 import { isNoPullRequestMessage, parseGhAccount, parseGhVersion, parseGitVersion } from './parse'
@@ -77,6 +79,17 @@ export async function viewPullRequestByUrl(
   const result = await exec('gh', viewArgs(url), { cwd, timeoutMs: GH_TIMEOUT_MS })
   if (result.failure !== null || result.code !== 0) return failure(result)
   return mapped(result, mapPullRequest)
+}
+
+/** The avatar URL of the user `login`, which the caller has matched against GITHUB_LOGIN. */
+export async function viewAvatarUrl(
+  exec: Exec,
+  login: string,
+  cwd: string,
+): Promise<GhOutcome<string | null>> {
+  const result = await exec('gh', userArgs(login), { cwd, timeoutMs: GH_TIMEOUT_MS })
+  if (result.failure !== null || result.code !== 0) return failure(result)
+  return mapped(result, mapAvatarUrl)
 }
 
 /** Whether git and gh can be used, and which account gh is signed in as. */

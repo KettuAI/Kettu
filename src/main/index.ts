@@ -7,6 +7,7 @@ import { AgentHost } from './agent-host'
 import { Artifacts, disableDnsPrefetching } from './artifacts'
 import { artifactScheme } from './artifacts/protocol'
 import { AppStateStore } from './app-state'
+import { Avatars } from './avatars'
 import { applyBadgeTo, setBadgeCount, setBadgeEnabled } from './badge'
 import { BrowserViews } from './browser/views'
 import { BrowserTools } from './browser/tools'
@@ -126,6 +127,13 @@ async function start(): Promise<void> {
   const catalog = new ThemeCatalog(async (url, init) => {
     await themesProxy
     return themesSession.fetch(url, init) as unknown as Promise<Response>
+  })
+  // Pull request authors' avatars, on a session of their own for the same reasons.
+  const avatarsSession = session.fromPartition('overbench-avatars')
+  let avatarsProxy = avatarsSession.setProxy(sessionProxy(settings.get().proxy))
+  const avatars = new Avatars(async (url, init) => {
+    await avatarsProxy
+    return avatarsSession.fetch(url, init) as unknown as Promise<Response>
   })
   const themes = new ThemeStore(themeFolder, themeSources, settings.get().appearance.colorTheme, {
     dir: themesDir,
@@ -281,6 +289,7 @@ async function start(): Promise<void> {
     if (changed.has('proxy')) {
       void sharingSession.setProxy(sessionProxy(next.proxy))
       themesProxy = themesSession.setProxy(sessionProxy(next.proxy))
+      avatarsProxy = avatarsSession.setProxy(sessionProxy(next.proxy))
     }
     updater.settingsChanged(next, changed)
   })
@@ -288,6 +297,7 @@ async function start(): Promise<void> {
   registerIpcHandlers({
     settings,
     themes,
+    avatars,
     agentHost,
     terminalHost,
     artifacts,

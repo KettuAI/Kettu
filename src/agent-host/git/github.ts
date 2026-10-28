@@ -4,12 +4,13 @@ import {
   GITHUB_PULL_REQUEST_URL,
   type CheckRun,
   type PullRequest,
+  type PullRequestAuthor,
   type PullRequestState,
 } from '@shared/git'
 import type { BranchPullRequest } from './api'
 
 const PULL_REQUEST_FIELDS =
-  'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision,mergeStateStatus,statusCheckRollup,updatedAt'
+  'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision,mergeStateStatus,statusCheckRollup,updatedAt,author,createdAt,mergedAt,closedAt'
 
 /** Arguments of `gh pr view` for the current branch, or for one pull request URL. */
 export function viewArgs(url?: string): string[] {
@@ -28,6 +29,11 @@ export const LIST_ARGS = [
 ]
 
 export const AUTH_STATUS_ARGS = ['auth', 'status', '--hostname', 'github.com']
+
+/** Arguments of `gh api` for a user, whose `avatar_url` the pull request card shows. */
+export function userArgs(login: string): string[] {
+  return ['api', '--hostname', 'github.com', `users/${login}`]
+}
 
 type Json = Record<string, unknown>
 
@@ -167,6 +173,15 @@ function mergeableOf(value: unknown): PullRequest['mergeable'] {
   }
 }
 
+// gh names a GitHub App's bot `app/<slug>`; its user on GitHub is `<slug>[bot]`.
+function authorOf(value: unknown): PullRequestAuthor | null {
+  if (!isObject(value)) return null
+  const app = /^app\/(.+)$/.exec(text(value.login))
+  const login = app ? `${app[1]}[bot]` : text(value.login)
+  if (!login) return null
+  return { login, name: text(value.name) || null, bot: app !== null || value.is_bot === true }
+}
+
 /** Maps the JSON of `gh pr view --json ...`; throws when it is not a pull request on github.com. */
 export function mapPullRequest(raw: unknown): PullRequest {
   if (!isObject(raw)) throw new Error('Unexpected gh output: not a pull request object')
@@ -187,7 +202,17 @@ export function mapPullRequest(raw: unknown): PullRequest {
     review: reviewOf(raw.reviewDecision),
     mergeable: mergeableOf(raw.mergeStateStatus),
     updatedAt: Number.isNaN(updatedAt) ? 0 : updatedAt,
+    author: authorOf(raw.author),
+    createdAt: timeOf(raw.createdAt) ?? 0,
+    mergedAt: timeOf(raw.mergedAt),
+    closedAt: timeOf(raw.closedAt),
   }
+}
+
+/** The `avatar_url` of `gh api users/<login>`, only when GitHub's avatar host serves it. */
+export function mapAvatarUrl(raw: unknown): string | null {
+  const url = isObject(raw) ? text(raw.avatar_url) : ''
+  return url.startsWith('https://avatars.githubusercontent.com/') ? url : null
 }
 
 /**

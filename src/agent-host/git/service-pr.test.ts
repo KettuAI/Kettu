@@ -376,6 +376,64 @@ describe('pull request chips', () => {
   })
 })
 
+describe("chip authors' avatars", () => {
+  const login = 'overbench-builder[bot]'
+  const avatar = 'https://avatars.githubusercontent.com/in/5463070?v=4'
+  const apiCalls = (gh: { calls: string[][] }): string[][] =>
+    gh.calls.filter((call) => call[0] === 'api')
+
+  it('looks a login up once and keeps its avatar URL for the run', async () => {
+    let clock = 5_000_000
+    const { svc, gh } = createTestService(s, services, { now: () => clock })
+    gh.users[login] = { login, avatar_url: avatar }
+    expect(await svc.avatarUrl(login)).toBe(avatar)
+    clock += 24 * 60 * 60_000
+    expect(await svc.avatarUrl(login)).toBe(avatar)
+    expect(apiCalls(gh)).toEqual([['api', '--hostname', 'github.com', `users/${login}`]])
+  })
+
+  it('shares one lookup between simultaneous requests', async () => {
+    const { svc, gh } = createTestService(s, services)
+    gh.users[login] = { login, avatar_url: avatar }
+    await Promise.all([svc.avatarUrl(login), svc.avatarUrl(login), svc.avatarUrl(login)])
+    expect(apiCalls(gh)).toHaveLength(1)
+  })
+
+  it("keeps null for a URL off GitHub's avatar host", async () => {
+    const { svc, gh } = createTestService(s, services)
+    gh.users.mirachen = { login: 'mirachen', avatar_url: 'https://example.com/a.png' }
+    expect(await svc.avatarUrl('mirachen')).toBeNull()
+    expect(await svc.avatarUrl('mirachen')).toBeNull()
+    expect(apiCalls(gh)).toHaveLength(1)
+  })
+
+  it.each(['app/overbench-builder', '../user', 'users/x', '-h', 'a b', ''])(
+    'rejects %j without running gh',
+    async (bad) => {
+      const { svc, gh } = createTestService(s, services)
+      await expect(svc.avatarUrl(bad)).rejects.toThrow(/GitHub login/)
+      expect(gh.calls).toEqual([])
+    },
+  )
+
+  it('explains a missing or signed-out gh', async () => {
+    const missing = createTestService(s, services)
+    missing.gh.installed = false
+    await expect(missing.svc.avatarUrl(login)).rejects.toThrow(/not installed/)
+    const signedOut = createTestService(s, services)
+    signedOut.gh.signedIn = false
+    await expect(signedOut.svc.avatarUrl(login)).rejects.toThrow(/not signed in/)
+    expect(apiCalls(signedOut.gh)).toEqual([])
+  })
+
+  it('does not keep a failure', async () => {
+    const { svc, gh } = createTestService(s, services)
+    await expect(svc.avatarUrl(login)).rejects.toThrow(/Not Found/)
+    gh.users[login] = { login, avatar_url: avatar }
+    expect(await svc.avatarUrl(login)).toBe(avatar)
+  })
+})
+
 describe('background fetch', () => {
   it('fetches live projects with a remote every five minutes while enabled', async () => {
     const origin = await s.initBare(name('origin') + '.git')

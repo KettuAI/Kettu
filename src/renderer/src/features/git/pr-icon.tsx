@@ -5,6 +5,9 @@ import {
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
   GitPullRequestIcon,
+  UserRoundCheckIcon,
+  UserRoundIcon,
+  UserRoundXIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { PullRequest, PullRequestState } from '@shared/git'
@@ -51,6 +54,24 @@ export function PrIcon({
       className={cn('shrink-0', ICON_SIZE[size], color, className)}
     />
   )
+}
+
+const REVIEW = {
+  approved: { Icon: UserRoundCheckIcon, color: 'text-success' },
+  changes_requested: { Icon: UserRoundXIcon, color: 'text-danger' },
+  review_required: { Icon: UserRoundIcon, color: 'text-icon' },
+} as const
+
+/** A review decision's icon in its color, beside the words that name it. */
+export function ReviewIcon({
+  review,
+  size = 12,
+}: {
+  review: NonNullable<PullRequest['review']>
+  size?: IconSize
+}) {
+  const { Icon, color } = REVIEW[review]
+  return <Icon aria-hidden className={cn('shrink-0', ICON_SIZE[size], color)} />
 }
 
 const CHECKS = {

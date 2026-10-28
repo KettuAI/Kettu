@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  mapAvatarUrl,
   mapBranchPullRequests,
   mapPullRequest,
   nextPollDelayMs,
   summarizeChecks,
+  userArgs,
   viewArgs,
 } from './github'
 
@@ -126,6 +128,10 @@ const view = {
   mergeStateStatus: 'CLEAN',
   statusCheckRollup: [checkRun('COMPLETED', 'SUCCESS')],
   updatedAt: '2026-10-20T08:30:00Z',
+  author: { id: 'U_kgDOAAAAAA', is_bot: false, login: 'mirachen', name: 'Mira Chen' },
+  createdAt: '2026-10-19T16:05:00Z',
+  mergedAt: null,
+  closedAt: null,
 }
 
 describe('mapPullRequest', () => {
@@ -149,7 +155,51 @@ describe('mapPullRequest', () => {
       review: 'approved',
       mergeable: 'clean',
       updatedAt: Date.parse('2026-10-20T08:30:00Z'),
+      author: { login: 'mirachen', name: 'Mira Chen', bot: false },
+      createdAt: Date.parse('2026-10-19T16:05:00Z'),
+      mergedAt: null,
+      closedAt: null,
     })
+  })
+
+  it('maps an author without a profile name', () => {
+    const author = { id: 'U_kgDOAAAAAB', is_bot: false, login: 'jweber', name: '' }
+    expect(mapPullRequest({ ...view, author }).author).toEqual({
+      login: 'jweber',
+      name: null,
+      bot: false,
+    })
+  })
+
+  it("maps a GitHub App's bot to its user name on GitHub", () => {
+    const author = { is_bot: true, login: 'app/overbench-builder' }
+    expect(mapPullRequest({ ...view, author }).author).toEqual({
+      login: 'overbench-builder[bot]',
+      name: null,
+      bot: true,
+    })
+  })
+
+  it.each([null, undefined, {}, { login: '' }, 'ghost'])(
+    'has no author for %j, as for a deleted account',
+    (author) => {
+      expect(mapPullRequest({ ...view, author }).author).toBeNull()
+    },
+  )
+
+  it('maps when it was merged or closed', () => {
+    const merged = mapPullRequest({
+      ...view,
+      state: 'MERGED',
+      mergedAt: '2026-10-21T09:00:00Z',
+      closedAt: '2026-10-21T09:00:00Z',
+    })
+    expect(merged.mergedAt).toBe(Date.parse('2026-10-21T09:00:00Z'))
+    expect(merged.closedAt).toBe(Date.parse('2026-10-21T09:00:00Z'))
+    const closed = mapPullRequest({ ...view, state: 'CLOSED', closedAt: '2026-10-22T10:00:00Z' })
+    expect(closed.mergedAt).toBeNull()
+    expect(closed.closedAt).toBe(Date.parse('2026-10-22T10:00:00Z'))
+    expect(mapPullRequest({ ...view, mergedAt: '0001-01-01T00:00:00Z' }).mergedAt).toBeNull()
   })
 
   it.each([
@@ -196,6 +246,10 @@ describe('mapPullRequest', () => {
       review: null,
       mergeable: 'unknown',
       updatedAt: 0,
+      author: null,
+      createdAt: 0,
+      mergedAt: null,
+      closedAt: null,
     })
   })
 
@@ -266,7 +320,7 @@ describe('gh arguments and schedule', () => {
       'pr',
       'view',
       '--json',
-      'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision,mergeStateStatus,statusCheckRollup,updatedAt',
+      'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision,mergeStateStatus,statusCheckRollup,updatedAt,author,createdAt,mergedAt,closedAt',
     ])
     expect(viewArgs('https://github.com/a/b/pull/1').slice(0, 3)).toEqual([
       'pr',
@@ -275,10 +329,41 @@ describe('gh arguments and schedule', () => {
     ])
   })
 
+  it('looks a user up on github.com', () => {
+    expect(userArgs('overbench-builder[bot]')).toEqual([
+      'api',
+      '--hostname',
+      'github.com',
+      'users/overbench-builder[bot]',
+    ])
+  })
+
   it('polls every minute while checks are pending and every five otherwise', () => {
     const base = mapPullRequest(view)
     expect(nextPollDelayMs(null)).toBe(300_000)
     expect(nextPollDelayMs(base)).toBe(300_000)
     expect(nextPollDelayMs({ ...base, checks: { ...base.checks, state: 'pending' } })).toBe(60_000)
+  })
+})
+
+describe('mapAvatarUrl', () => {
+  it("takes the avatar URL that GitHub's avatar host serves", () => {
+    const url = 'https://avatars.githubusercontent.com/in/5463070?v=4'
+    expect(mapAvatarUrl({ login: 'overbench-builder[bot]', avatar_url: url })).toBe(url)
+  })
+
+  it.each([
+    'http://avatars.githubusercontent.com/u/1?v=4',
+    'https://avatars.githubusercontent.com.example.com/u/1',
+    'https://example.com/avatars.githubusercontent.com/u/1',
+    '',
+    42,
+  ])('refuses %j', (avatar_url) => {
+    expect(mapAvatarUrl({ avatar_url })).toBeNull()
+  })
+
+  it('refuses output that is not a user', () => {
+    expect(mapAvatarUrl(null)).toBeNull()
+    expect(mapAvatarUrl(['https://avatars.githubusercontent.com/u/1'])).toBeNull()
   })
 })

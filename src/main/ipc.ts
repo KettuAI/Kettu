@@ -23,6 +23,7 @@ import { AGENT_IDS, type AgentId } from '@shared/thread'
 import type { AgentHost } from './agent-host'
 import { grantClipboardFiles, grantPaths } from './attachments'
 import type { Artifacts } from './artifacts'
+import type { Avatars } from './avatars'
 import type { BrowserViews } from './browser/views'
 import { originOf } from './browser/origins'
 import { mainDiagnostics, saveDiagnostics } from './diagnostics'
@@ -48,6 +49,7 @@ const log = createLogger('ipc')
 export interface IpcDeps {
   settings: SettingsStore
   themes: ThemeStore
+  avatars: Avatars
   agentHost: AgentHost
   terminalHost: TerminalHost
   artifacts: Artifacts
@@ -288,6 +290,7 @@ let launchToInteractiveMs: number | null = null
 export function registerIpcHandlers({
   settings,
   themes,
+  avatars,
   agentHost,
   terminalHost,
   artifacts,
@@ -325,6 +328,12 @@ export function registerIpcHandlers({
   handle('themes:reveal', 1, (_, id) => themes.reveal(id))
   handle('themes:catalog', 1, (_, refresh) => themes.catalog(refresh))
   handle('themes:install-catalog', 1, (_, id) => themes.installCatalog(id))
+  handle('avatars:load', 1, (_, url) => {
+    if (typeof url !== 'string' || url.length > URL_MAX_CHARS) {
+      throw new Error(`An avatar URL must be a string of at most ${URL_MAX_CHARS} characters`)
+    }
+    return avatars.load(url)
+  })
 
   handle('dialog:open-project', 0, async ({ window }) => {
     const options: Electron.OpenDialogOptions = {
