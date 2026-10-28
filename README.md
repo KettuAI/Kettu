@@ -79,6 +79,7 @@ Install at least one of these agents first; OverBench finds it on your system.
 | [opencode](https://opencode.ai)                                                 | Your installed `opencode`, as `opencode acp`                                                                 |
 | [Pi](https://pi.dev)                                                            | The ACP adapter `pi-acp`, installed on first use, with your installed `pi`                                   |
 | [fast-agent](https://fast-agent.ai)                                             | The ACP package `fast-agent-acp`, run with `uvx` from your installed `uv`                                    |
+| [Minion Code](https://github.com/femto/minion-code)                             | The ACP package `minion-code`, run with `uvx` from your installed `uv`                                       |
 | [Auggie CLI](https://github.com/augmentcode/auggie)                             | The ACP package `@augmentcode/auggie`, installed on first use, with `--acp` and auto-update off              |
 | [Codebuddy Code](https://www.codebuddy.cn/cli/)                                 | The ACP package `@tencent-ai/codebuddy-code`, installed on first use, with `--acp`                           |
 | [DeepAgents](https://docs.langchain.com/oss/javascript/deepagents/overview)     | The ACP package `deepagents-acp`, installed on first use                                                     |
@@ -120,7 +121,7 @@ Install at least one of these agents first; OverBench finds it on your system.
 | [Stakpak](https://stakpak.dev)                                                  | Your installed `stakpak`, as `stakpak acp`, else the ACP Registry's archive                                  |
 | [VT Code](https://github.com/vinhnx/VTCode)                                     | Your installed `vtcode`, as `vtcode acp`, else the ACP Registry's archive                                    |
 
-The ACP packages and adapters need Node.js with npm, which OverBench finds through your login shell. The archive agents run the program itself: OverBench uses your copy when it finds one on `PATH`, and **Install** in Settings › Agents downloads its archive from the ACP Registry otherwise. fast-agent needs [uv](https://docs.astral.sh/uv/) instead of Node.js.
+The ACP packages and adapters need Node.js with npm, which OverBench finds through your login shell. The archive agents run the program itself: OverBench uses your copy when it finds one on `PATH`, and **Install** in Settings › Agents downloads its archive from the ACP Registry otherwise. fast-agent and Minion Code need [uv](https://docs.astral.sh/uv/) instead of Node.js.
 
 ## Why OverBench
 
