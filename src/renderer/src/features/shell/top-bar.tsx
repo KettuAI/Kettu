@@ -20,11 +20,11 @@ export function TopBar({
 }: {
   children: ReactNode
   className?: string
-  /** Whether it draws the sidebar toggle and leaves room for the traffic lights. */
+  /** Whether it may take the window's top left corner; with the sidebar shown, none does. */
   cornered?: boolean
 }) {
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
-  const cornered = given ?? (collapsed && isMac)
+  const cornered = (given ?? true) && collapsed && isMac
   return (
     <header
       className={cn(
