@@ -1711,16 +1711,18 @@ describe('a configuration folder of its own', () => {
     await m.agents.stopAll()
   })
 
-  it('keeps the launch command when the metadata names no command', async () => {
-    const m = folderManager({ FAKE_AGENT_META_TERMINAL: '1' })
-    await m.agents.ensureReady('claude-code')
-    const command = m
-      .status()
-      .authMethods.find((method) => method.id === 'fake-meta-login')?.command
-    // Windows quotes the argument in the command it shows, so the quotes come off first.
-    expect(command.replace(/"/g, '')).toMatch(/main\.ts --auth-type=fake$/)
-    await m.agents.stopAll()
-  })
+  it.each(['darwin', 'linux', 'win32'] as const)(
+    'keeps the launch command when the metadata names no command on %s',
+    async (platform) => {
+      const m = folderManager({ FAKE_AGENT_META_TERMINAL: '1' }, platform)
+      await m.agents.ensureReady('claude-code')
+      const command = m
+        .status()
+        .authMethods.find((method) => method.id === 'fake-meta-login')?.command
+      expect(command).toMatch(/main\.ts["']? ["']?--auth-type=fake["']?$/)
+      await m.agents.stopAll()
+    },
+  )
 
   it('shows the picked folder on the page, in place of the variable', async () => {
     const m = folderManager()
