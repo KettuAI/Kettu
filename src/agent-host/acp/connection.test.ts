@@ -10,6 +10,7 @@ import {
   AgentConnection,
   inProcessTransport,
   type AcpTransport,
+  type AuthMethodInfo,
   type SessionTarget,
 } from './connection'
 import { newTurnScope } from './mapper'
@@ -159,6 +160,27 @@ function piAgent(messages: AnyMessage[] = []): AcpTransport {
         return [{ jsonrpc: '2.0', id: message.id!, result: {} }]
     }
   })
+}
+
+/** An agent whose `initialize` answers with `authMethods`, and the request it answered. */
+async function authAgent(authMethods: unknown[]): Promise<{
+  methods: AuthMethodInfo[]
+  request: Record<string, unknown>
+}> {
+  let request: Record<string, unknown> | null = null
+  const connection = AgentConnection.connect(
+    scripted((message) => {
+      if (message.method === 'initialize') {
+        request = message.params as Record<string, unknown>
+        return [{ jsonrpc: '2.0', id: message.id!, result: { protocolVersion: 1, authMethods } }]
+      }
+      return [{ jsonrpc: '2.0', id: message.id!, result: {} }]
+    }),
+    { traffic: () => {}, account: () => {}, ignored: () => {}, log: () => {} },
+  )
+  const init = await connection.initialize('0.0.0-test')
+  connection.close()
+  return { methods: init.authMethods, request: request! }
 }
 
 function chunk(sessionId: string, text: string): AnyMessage {
@@ -324,5 +346,77 @@ describe('AgentConnection', () => {
       },
     ])
     connection.close()
+  })
+
+  it('advertises the terminal-auth metadata agents gate their command on', async () => {
+    const { request } = await authAgent([])
+    expect(request).toMatchObject({
+      clientCapabilities: { auth: { terminal: true }, _meta: { 'terminal-auth': true } },
+    })
+  })
+
+  it('maps a command named in the metadata to a terminal sign-in running it as given', async () => {
+    const { methods } = await authAgent([
+      {
+        id: 'copilot-login',
+        name: 'Copilot Login',
+        description: 'Run `copilot login` in the terminal',
+        _meta: {
+          'terminal-auth': {
+            command: '/opt/copilot/bin/copilot',
+            args: ['login'],
+            label: 'Copilot Login',
+          },
+        },
+      },
+    ])
+    expect(methods).toEqual([
+      {
+        id: 'copilot-login',
+        name: 'Copilot Login',
+        description: 'Run `copilot login` in the terminal',
+        type: 'terminal',
+        command: '/opt/copilot/bin/copilot',
+        args: ['login'],
+        env: {},
+      },
+    ])
+  })
+
+  it('maps the older terminal metadata for its arguments, appended to the launch command', async () => {
+    const { methods } = await authAgent([
+      {
+        id: 'openai',
+        name: 'Use an API key',
+        description: 'Requires setting the `OPENAI_API_KEY` environment variable',
+        _meta: { type: 'terminal', args: ['--auth-type=openai'] },
+      },
+    ])
+    expect(methods).toEqual([
+      {
+        id: 'openai',
+        name: 'Use an API key',
+        description: 'Requires setting the `OPENAI_API_KEY` environment variable',
+        type: 'terminal',
+        args: ['--auth-type=openai'],
+        env: {},
+      },
+    ])
+  })
+
+  it('leaves a plain agent method calling authenticate', async () => {
+    const { methods } = await authAgent([
+      { id: 'api-key', name: 'API key', description: 'Uses an API key' },
+    ])
+    expect(methods).toEqual([
+      {
+        id: 'api-key',
+        name: 'API key',
+        description: 'Uses an API key',
+        type: 'agent',
+        args: [],
+        env: {},
+      },
+    ])
   })
 })
