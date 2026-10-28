@@ -176,6 +176,12 @@ export const AGENT_NAMES: Record<AgentId, string> = {
   amp: 'Amp',
   goose: 'goose',
   kilo: 'Kilo Code',
+  gemini: 'Gemini CLI',
+  copilot: 'GitHub Copilot',
+  qwen: 'Qwen Code',
+  grok: 'Grok',
+  cline: 'Cline',
+  droid: 'Factory Droid',
   'fake-agent': 'Fake agent',
 }
 
