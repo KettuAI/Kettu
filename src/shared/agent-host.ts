@@ -176,6 +176,7 @@ export interface AgentStatus {
   progress: string[] // latest npm output or stderr lines while installing or starting
   launchCommand: string // as shown in Settings › Agents, quoted for the platform
   binaryOverride: string | null // the program picked in Settings, if any
+  binaryCommand: string | null // the command a binary agent's launch runs; null for the others
   update: AgentUpdate | null // from the last update check; null when up to date or unchecked
   updateCheckedAt: number | null // when that check finished; always null for binary agents
   updateSkipped: boolean // the user dismissed this update in the sidebar's notice

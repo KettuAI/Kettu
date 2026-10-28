@@ -195,6 +195,10 @@
       "amp": "请安装 Amp，或在「设置 › Agent」中选择它的程序。",
       "goose": "请安装 goose，或在「设置 › Agent」中选择它的程序。",
       "kilo": "请安装 Kilo Code，或在「设置 › Agent」中选择它的程序。",
+      "omp": "请用 `bun install -g @oh-my-pi/pi-coding-agent` 或 omp.sh 上的安装程序安装 OMP。",
+      "hermes": "请用 hermes-agent.nousresearch.com 上的安装程序安装 Hermes Agent，并带上它的 `acp` 扩展。",
+      "muse": "请从 dev.meta.ai 安装 Muse Code，或在「设置 › Agent」中选择它的程序。",
+      "codewhale": "请用 codewhale.net 上的安装程序安装 CodeWhale，或在「设置 › Agent」中选择它的程序。",
       "fakeAgent": "Fake agent 运行仓库中的 tools/fake-agent/main.ts。"
     }
   },

@@ -760,6 +760,9 @@ const AGENT_FILLS: Partial<Record<AgentId, string>> = {
   codex: 'bg-agent-codex',
   opencode: 'bg-agent-opencode',
   pi: 'bg-agent-pi',
+  omp: 'bg-agent-omp',
+  muse: 'bg-agent-muse',
+  codewhale: 'bg-agent-codewhale',
 }
 
 /** An agent's series color; one without a color of its own shares the neutral one. */

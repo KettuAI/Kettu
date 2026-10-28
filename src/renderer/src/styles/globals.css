@@ -158,6 +158,9 @@
   --color-agent-codex: var(--agent-codex);
   --color-agent-opencode: var(--agent-opencode);
   --color-agent-pi: var(--agent-pi);
+  --color-agent-omp: var(--agent-omp);
+  --color-agent-muse: var(--agent-muse);
+  --color-agent-codewhale: var(--agent-codewhale);
   --color-agent-other: var(--agent-other);
   --color-context-1: var(--context-1);
   --color-context-2: var(--context-2);

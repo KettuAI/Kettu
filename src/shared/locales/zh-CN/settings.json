@@ -353,7 +353,7 @@
     "usage": "套餐用量",
     "checkLimits": "查看套餐限额",
     "program": "程序",
-    "programOnPath": "PATH 中的 opencode",
+    "programOnPath": "PATH 中的 {{command}}",
     "binaryDescription": "OverBench 启动的 {{command}} 程序。",
     "reset": "重置",
     "chooseBinary": "选择可执行文件…",

@@ -109,6 +109,13 @@
   --brand-pi-coral: #f09082;
   --brand-pi-blue: #4d9abf;
   --brand-pi-yellow: #f1be58;
+  /* OMP, Muse Code, Hermes Agent and CodeWhale keep theirs in both variants too. */
+  --brand-omp-1: #ed4abf;
+  --brand-omp-2: #9b4dff;
+  --brand-omp-3: #5ad8e6;
+  --brand-muse: #5b45e0;
+  --brand-codewhale-1: #1e8fd8;
+  --brand-codewhale-2: #0b48bb;
 
   /* Usage charts: each agent's series, and the empty day the heatmap deepens from. */
   --agent-opencode: oklch(0.6 0.008 85);
@@ -464,6 +471,9 @@
   /* A chart's series: the brand colors, a shade toward the card they are drawn on. */
   --agent-claude-code: color-mix(in oklch, var(--brand-claude) 86%, var(--bg-surface));
   --agent-codex: color-mix(in oklch, var(--brand-codex-2) 86%, var(--bg-surface));
+  --agent-omp: color-mix(in oklch, var(--brand-omp-2) 86%, var(--bg-surface));
+  --agent-muse: color-mix(in oklch, var(--brand-muse) 86%, var(--bg-surface));
+  --agent-codewhale: color-mix(in oklch, var(--brand-codewhale-1) 86%, var(--bg-surface));
   /* The heatmap deepens in the secondary text color, which the page already draws amounts in. */
   --heat-hue: var(--text-secondary);
   --heat-1: color-mix(in oklch, var(--heat-hue) 26%, transparent);

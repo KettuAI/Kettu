@@ -372,6 +372,38 @@ export function configLocations(
         'AGENTS.md',
       )
     }
+    case 'omp': {
+      const folder = p.join(home, '.omp')
+      return [
+        { id: 'folder', candidates: [folder], env: null },
+        {
+          id: 'settings',
+          candidates: [p.join(folder, 'config.yml'), p.join(folder, 'agent', 'config.yml')],
+          env: null,
+        },
+      ]
+    }
+    case 'hermes': {
+      const folder = p.join(home, '.hermes')
+      return [
+        { id: 'folder', candidates: [folder], env: null },
+        { id: 'settings', candidates: [p.join(folder, 'config.yaml')], env: null },
+      ]
+    }
+    case 'muse': {
+      const folder = p.join(home, '.config', 'muse')
+      return [
+        { id: 'folder', candidates: [folder], env: null },
+        { id: 'settings', candidates: [p.join(folder, 'settings.json')], env: null },
+      ]
+    }
+    case 'codewhale': {
+      const folder = p.join(home, '.codewhale')
+      return [
+        { id: 'folder', candidates: [folder], env: null },
+        { id: 'settings', candidates: [p.join(folder, 'config.toml')], env: null },
+      ]
+    }
     case 'fake-agent':
       return []
   }

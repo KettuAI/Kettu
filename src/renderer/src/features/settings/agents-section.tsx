@@ -102,6 +102,10 @@ const VENDORS: Partial<Record<AgentId, string>> = {
   codex: 'OpenAI',
   opencode: 'SST',
   pi: 'Earendil',
+  omp: 'Oh My Pi',
+  hermes: 'Nous Research',
+  muse: 'Meta',
+  codewhale: 'Codewhale',
 }
 
 /** A check the user started counts as just done for this long, then it reads as "checked ago". */
@@ -1426,6 +1430,7 @@ function ConfigRows({ status, override }: { status: AgentStatus; override: strin
   const { t } = useTranslation('settings')
   const details = useAgentsStore((s) => s.details[status.id])
   const [act, , error] = useAction()
+  const command = status.binaryCommand
   return (
     <>
       {details?.config.map((item) =>
@@ -1436,10 +1441,10 @@ function ConfigRows({ status, override }: { status: AgentStatus; override: strin
         ),
       )}
       {status.cli && <CliRow status={status} cli={status.cli} />}
-      {status.id === 'opencode' && (
+      {command && (
         <ConfigFrame
           name={t('agents.program')}
-          description={t('agents.binaryDescription', { command: 'opencode' })}
+          description={t('agents.binaryDescription', { command })}
           control={
             <>
               <ControlError error={error} />
@@ -1452,7 +1457,7 @@ function ConfigRows({ status, override }: { status: AgentStatus; override: strin
                     act(() =>
                       useSettingsStore
                         .getState()
-                        .update({ agents: { opencode: { binaryPath: null } } }),
+                        .update({ agents: { [status.id]: { binaryPath: null } } }),
                     )
                   }
                 >
@@ -1462,7 +1467,7 @@ function ConfigRows({ status, override }: { status: AgentStatus; override: strin
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => act(() => window.overbench.dialogs.chooseAgentBinary('opencode'))}
+                onClick={() => act(() => window.overbench.dialogs.chooseAgentBinary(status.id))}
               >
                 {t('agents.chooseBinary')}
               </Button>
@@ -1473,12 +1478,12 @@ function ConfigRows({ status, override }: { status: AgentStatus; override: strin
             <PathLine path={override} actions={<PathActions path={override} />} />
           ) : (
             <span className="flex min-h-6.5 items-center text-xs text-tertiary">
-              {t('agents.programOnPath')}
+              {t('agents.programOnPath', { command })}
             </span>
           )}
         </ConfigFrame>
       )}
-      {details && details.config.length === 0 && status.id !== 'opencode' && (
+      {details && details.config.length === 0 && !command && (
         <RowShell>
           <p className="py-3 text-xs text-secondary">{t('agents.noConfig')}</p>
         </RowShell>
