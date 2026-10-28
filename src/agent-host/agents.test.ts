@@ -2898,8 +2898,9 @@ describe('installing a binary agent from its archive', () => {
 
   it("runs the user's own copy on PATH instead of the archive", async () => {
     const m = await archiveManager()
-    const file = path.join(m.bin, 'fake-archive-agent')
-    await writeFile(file, posix ? '#!/bin/sh\n' : '')
+    // Windows looks the command up through PATHEXT, so the copy needs a known extension there.
+    const file = path.join(m.bin, posix ? 'fake-archive-agent' : 'fake-archive-agent.cmd')
+    await writeFile(file, posix ? '#!/bin/sh\n' : '@exit /b 0\r\n')
     if (posix) await chmod(file, 0o755)
     await m.agents.list()
     expect(m.status()).toMatchObject({ state: 'available' })
@@ -2909,8 +2910,8 @@ describe('installing a binary agent from its archive', () => {
 
   it('runs the chosen binary instead of the archive', async () => {
     const m = await archiveManager()
-    const chosen = path.join(m.bin, 'chosen-agent')
-    await writeFile(chosen, posix ? '#!/bin/sh\n' : '')
+    const chosen = path.join(m.bin, posix ? 'chosen-agent' : 'chosen-agent.cmd')
+    await writeFile(chosen, posix ? '#!/bin/sh\n' : '@exit /b 0\r\n')
     if (posix) await chmod(chosen, 0o755)
     m.setAgentSettings({ opencode: { binaryPath: chosen } })
     await m.agents.check('opencode')
