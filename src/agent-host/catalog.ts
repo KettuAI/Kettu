@@ -1,20 +1,24 @@
-// The built-in agents: the only place that knows how to launch one.
+// What every built-in agent shares: the types, the launch and detection helpers, and the list of
+// one module per agent in agents/.
 
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { AgentCliSource } from '@shared/agent-host'
 import type { Platform } from '@shared/platform'
-import { CONFIG_VARIABLES, type HostSettings } from '@shared/settings'
+import type { HostSettings } from '@shared/settings'
 import type { AgentId } from '@shared/thread'
 import { compareInstalls, listInstalled, type InstalledAdapter } from './adapter-install'
+import { CLAUDE_CODE } from './agents/claude-code'
+import { CODEX } from './agents/codex'
+import { fakeAgent } from './agents/fake-agent'
+import { OPENCODE } from './agents/opencode'
+import { PI } from './agents/pi'
 import type { BinaryInstalls } from './binary-install'
-import { codexLaunchEnv, type AdapterLookup } from './codex-binary'
+import type { AdapterLookup } from './codex-binary'
 import { findCommand, needsShell, type Env } from './find-command'
 import { t, type HostKey } from './i18n'
 import {
-  CLAUDE_CLI,
   CLI_FILES,
-  CODEX_CLI,
   decideCli,
   findInstalledCli,
   type AdapterCli,
@@ -102,97 +106,8 @@ export interface AgentDefinition {
   mcpConfig?: { project: string; listCommand?: string }
 }
 
-const NODE_INSTALL: AgentDefinition['install'] = {
-  hint: 'detect.hint.node',
-  url: 'https://nodejs.org/en/download',
-}
-
-export const CLAUDE_CODE: AgentDefinition = {
-  id: 'claude-code',
-  name: 'Claude Code',
-  registryId: 'claude-acp',
-  launch: { kind: 'package', package: '@agentclientprotocol/claude-agent-acp', version: '0.94.0' },
-  requiresNode: '>=22',
-  install: NODE_INSTALL,
-  reportsAccount: true,
-  cli: CLAUDE_CLI,
-  configVariable: CONFIG_VARIABLES['claude-code'],
-  mcpConfig: { project: '.mcp.json', listCommand: '/mcp' },
-}
-
-export const CODEX: AgentDefinition = {
-  id: 'codex',
-  name: 'Codex',
-  registryId: 'codex-acp',
-  launch: { kind: 'package', package: '@agentclientprotocol/codex-acp', version: '2.2.2' },
-  requiresNode: '>=22',
-  install: NODE_INSTALL,
-  reportsAccount: true,
-  progressNotes: true,
-  replaysThoughtParts: true,
-  launchEnv: codexLaunchEnv,
-  cli: CODEX_CLI,
-  configVariable: CONFIG_VARIABLES.codex,
-  mcpConfig: { project: '.codex/config.toml', listCommand: '/mcp' },
-}
-
-export const PI: AgentDefinition = {
-  id: 'pi',
-  name: 'Pi',
-  registryId: 'pi-acp',
-  // pi-acp keeps one live session per process, so every session gets an adapter process of its own.
-  launch: { kind: 'package', package: 'pi-acp', version: '0.0.34', perSession: true },
-  requiresNode: '>=22',
-  requires: { command: 'pi', minimum: '0.81.0', variable: 'PI_ACP_PI_COMMAND' },
-  // pi-acp 0.0.34 advertises embedded context only with this set, so attached files keep their text.
-  env: { PI_ACP_ENABLE_EMBEDDED_CONTEXT: 'true' },
-  // pi-acp 0.0.34's one auth method just runs `pi`, so the sign-in command is `pi` alone.
-  signInWithCli: true,
-  // pi-acp 0.0.34 sends its thought levels again as legacy modes.
-  levelsAsModes: true,
-  // pi-acp 0.0.34 sends pi's startup note as the session's first agent message.
-  startupNote: true,
-  install: {
-    hint: 'detect.hint.pi',
-    url: 'https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/quickstart.md',
-  },
-}
-
-export const OPENCODE: AgentDefinition = {
-  id: 'opencode',
-  name: 'OpenCode',
-  registryId: 'opencode',
-  launch: { kind: 'binary', command: 'opencode', args: ['acp'] },
-  // Seen in OpenCode 2.0.32: every attach adds its servers to the folder, replacing a same name,
-  // and every tool call carries `_meta["ai.opencode/sessionID"]`.
-  mcpServersByName: true,
-  mcpConfig: { project: 'opencode.json' },
-  install: {
-    hint: 'detect.hint.opencode',
-    url: 'https://opencode.ai/docs/',
-  },
-  // The routes https://opencode.ai/docs lists for OpenCode 1, checked on 2026-10-22.
-  installs: {
-    brew: 'anomalyco/tap/opencode',
-    script: 'https://opencode.ai/install',
-    scriptBin: ['.opencode', 'bin'],
-    npm: 'opencode-ai',
-  },
-}
-
-export function fakeAgent(script: string): AgentDefinition {
-  return {
-    id: 'fake-agent',
-    name: 'Fake agent',
-    registryId: 'fake-agent',
-    launch: { kind: 'node-script', script },
-    install: {
-      hint: 'detect.hint.fakeAgent',
-      url: 'https://agentclientprotocol.com',
-    },
-    reportsAccount: true,
-  }
-}
+// Re-exported so a definition is still read from the catalog that lists it.
+export { CLAUDE_CODE, CODEX, fakeAgent, OPENCODE, PI }
 
 /** The catalog; the fake agent exists only when main passes its path. */
 export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {

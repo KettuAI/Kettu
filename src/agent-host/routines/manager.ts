@@ -1110,21 +1110,17 @@ function resetTime(at: number, now: number): string {
   return new Intl.DateTimeFormat(currentLocale(), options).format(at)
 }
 
+// Pi has no mode to set; its caption says it does not ask before it acts.
+const ASKING_MODES: Partial<Record<AgentId, Record<PermissionScope['level'], string>>> = {
+  'claude-code': { read: 'default', edit: 'default', commands: 'default' },
+  codex: { read: 'read-only', edit: 'workspace-write', commands: 'workspace-write' },
+  opencode: { read: 'plan', edit: 'build', commands: 'build' },
+  'fake-agent': { read: 'ask', edit: 'ask', commands: 'ask' },
+}
+
 /** The mode each level names for the agent, from the observed table. */
 function askingMode(agentId: AgentId, level: PermissionScope['level']): string | null {
-  switch (agentId) {
-    case 'claude-code':
-      return 'default'
-    case 'codex':
-      return level === 'read' ? 'read-only' : 'workspace-write'
-    case 'opencode':
-      return level === 'read' ? 'plan' : 'build'
-    // Pi has no mode to set; its caption says it does not ask before it acts.
-    case 'pi':
-      return null
-    case 'fake-agent':
-      return 'ask'
-  }
+  return ASKING_MODES[agentId]?.[level] ?? null
 }
 
 function isWorking(run: RoutineRun): boolean {

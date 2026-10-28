@@ -37,6 +37,16 @@ describe('buildCatalog', () => {
     expect(buildCatalog(null).map((d) => d.id)).toEqual(['claude-code', 'codex', 'opencode', 'pi'])
     expect(buildCatalog('/repo/tools/fake-agent/main.ts').map((d) => d.id)).toContain('fake-agent')
   })
+
+  it('keeps the agents in order', () => {
+    expect(buildCatalog('/repo/tools/fake-agent/main.ts').map((d) => d.id)).toEqual([
+      'claude-code',
+      'codex',
+      'opencode',
+      'pi',
+      'fake-agent',
+    ])
+  })
 })
 
 describe('detectAgent', () => {

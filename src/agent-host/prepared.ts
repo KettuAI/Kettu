@@ -4,7 +4,7 @@
 import { watch, type FSWatcher } from 'node:fs'
 import path from 'node:path'
 import type { Platform } from '@shared/platform'
-import type { AgentId } from '@shared/thread'
+import { AGENT_IDS, type AgentId } from '@shared/thread'
 import { configLocations } from './agent-details'
 import { pathKey } from './paths'
 import { JsonFile, type LogFn } from './storage'
@@ -20,8 +20,6 @@ export interface PreparedFile {
   version: 1
   sessions: PreparedRecord[]
 }
-
-const AGENT_IDS: readonly AgentId[] = ['claude-code', 'codex', 'opencode', 'pi', 'fake-agent']
 
 export function parsePreparedFile(data: Record<string, unknown>): PreparedFile | string {
   if (!Array.isArray(data.sessions)) return 'sessions is not an array'

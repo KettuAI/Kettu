@@ -1,18 +1,11 @@
 // OverBench's own session and thread model, shared by the agent host and the renderer.
 // It never imports ACP types; only the mapper in src/agent-host/acp/ does.
 
+import type { AgentId } from './agents'
 import type { BrowserOriginAnswer } from './browser'
 import type { RoutineRef } from './routines'
 
-export type AgentId = 'claude-code' | 'codex' | 'opencode' | 'pi' | 'fake-agent'
-
-export const AGENT_IDS: readonly AgentId[] = [
-  'claude-code',
-  'codex',
-  'opencode',
-  'pi',
-  'fake-agent',
-]
+export { AGENT_IDS, type AgentId } from './agents'
 
 export type SessionStatus =
   | 'starting' // agent starting, or session/new, load or resume in flight

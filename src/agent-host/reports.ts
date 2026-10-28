@@ -54,6 +54,12 @@ export function hiddenRemoval(agentId: AgentId, init: AgentInit): Removal | null
   return (removal === 'close' ? closeSession : deleteSession) ? removal : null
 }
 
+// Claude Code's hidden-session details, which the fake agent stands in for.
+const CLAUDE_AGENTS: Partial<Record<AgentId, true>> = {
+  'claude-code': true,
+  'fake-agent': true,
+}
+
 /**
  * `_meta` for opening a hidden session, added to `meta`. Claude Code's adapter passes
  * `claudeCode.options` to its SDK: `disableAllHooks` keeps the user's, the project's and plugins'
@@ -64,7 +70,7 @@ export function hiddenSessionMeta(
   agentId: AgentId,
   meta?: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
-  if (agentId !== 'claude-code' && agentId !== 'fake-agent') return meta
+  if (!CLAUDE_AGENTS[agentId]) return meta
   const claudeCode = (meta?.claudeCode ?? {}) as { options?: { settings?: object } }
   const options = claudeCode.options ?? {}
   return {
@@ -107,7 +113,7 @@ export function limitsReport(agentId: AgentId): LimitsReport | null {
 
 /** Agents with `/context`: Claude Code, and the fake agent that stands in for it. */
 export function hasContextReport(agentId: AgentId): boolean {
-  return agentId === 'claude-code' || agentId === 'fake-agent'
+  return CLAUDE_AGENTS[agentId] === true
 }
 
 /**
