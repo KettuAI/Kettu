@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { FolderIcon, GlobeIcon, SquareTerminalIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
+import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { GitStatusCluster } from '@renderer/features/git/git-status'
 import { usePane } from '@renderer/features/split/pane-context'
@@ -123,7 +124,8 @@ function PaneToggle({
         )}
       </TooltipTrigger>
       <TooltipContent>
-        {label} {shortcut && <span className="opacity-60">{formatShortcut(shortcut)}</span>}
+        {label}
+        {shortcut && <Kbd>{formatShortcut(shortcut)}</Kbd>}
       </TooltipContent>
     </Tooltip>
   )

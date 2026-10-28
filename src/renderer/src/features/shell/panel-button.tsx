@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Button } from '@renderer/components/ui/button'
+import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 
 /** An icon button in a side pane's header, which is a window drag region. */
@@ -38,7 +39,8 @@ export function PanelButton({
         {children}
       </TooltipTrigger>
       <TooltipContent>
-        {label} {shortcut && <span className="opacity-60">{shortcut}</span>}
+        {label}
+        {shortcut && <Kbd>{shortcut}</Kbd>}
       </TooltipContent>
     </Tooltip>
   )

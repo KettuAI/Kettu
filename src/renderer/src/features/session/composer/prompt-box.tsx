@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import { InputGroup, InputGroupAddon, InputGroupButton } from '@renderer/components/ui/input-group'
+import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -477,7 +478,8 @@ function AddMenu({
           <PlusIcon className="size-5" />
         </TooltipTrigger>
         <TooltipContent>
-          {t('attachments.add')} <span className="opacity-60">{shortcut}</span>
+          {t('attachments.add')}
+          <Kbd>{shortcut}</Kbd>
         </TooltipContent>
       </Tooltip>
       <DropdownMenuContent

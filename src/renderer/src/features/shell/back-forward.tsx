@@ -3,6 +3,7 @@ import { ArrowLeftIcon, ArrowRightIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { back, forward, HISTORY_SHORTCUTS } from '@renderer/app/history'
 import { Button } from '@renderer/components/ui/button'
+import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -66,7 +67,8 @@ function HistoryButton({
         {children}
       </TooltipTrigger>
       <TooltipContent>
-        {label} <span className="opacity-60">{formatShortcut(shortcut)}</span>
+        {label}
+        <Kbd>{formatShortcut(shortcut)}</Kbd>
       </TooltipContent>
     </Tooltip>
   )
