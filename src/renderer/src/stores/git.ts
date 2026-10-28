@@ -73,36 +73,43 @@ export function receiveCurrentPr(projectPath: string, pr: PullRequest | null): v
   useGitStore.setState((s) => ({ currentPr: { ...s.currentPr, [projectPath]: pr } }))
 }
 
-let livePath: string | null = null
+// The projects a pane in view shows, which keep their repository live.
+let livePaths: string[] = []
 
-/** Keeps the shown project's repository live; only one project is shown per window. */
-export function showProject(projectPath: string | null): void {
-  if (projectPath === livePath) return
-  const previous = livePath
-  livePath = projectPath
-  if (previous) void host('git.unwatch', { projectPath: previous }).catch(() => {})
-  if (!projectPath) return
-  void host('git.status', { projectPath })
-    .then(receiveGitStatus)
-    .catch(() => {})
-  void host('git.currentPullRequest', { projectPath })
-    .then((pr) => receiveCurrentPr(projectPath, pr))
-    .catch(() => {})
-}
-
-/** Refreshes the shown project, for window focus; the host coalesces repeated calls. */
-export function refreshShownProject(): void {
-  if (livePath)
-    void host('git.status', { projectPath: livePath })
+/** Keeps each shown project's repository live, and lets go of one no pane shows. */
+export function showProjects(paths: readonly string[]): void {
+  const next = [...new Set(paths)]
+  if (next.length === livePaths.length && next.every((path, i) => path === livePaths[i])) return
+  const previous = livePaths
+  livePaths = next
+  for (const path of previous) {
+    if (!next.includes(path)) void host('git.unwatch', { projectPath: path }).catch(() => {})
+  }
+  for (const projectPath of next) {
+    if (previous.includes(projectPath)) continue
+    void host('git.status', { projectPath })
       .then(receiveGitStatus)
       .catch(() => {})
+    void host('git.currentPullRequest', { projectPath })
+      .then((pr) => receiveCurrentPr(projectPath, pr))
+      .catch(() => {})
+  }
+}
+
+/** Refreshes the shown projects, for window focus; the host coalesces repeated calls. */
+export function refreshShownProject(): void {
+  for (const projectPath of livePaths) {
+    void host('git.status', { projectPath })
+      .then(receiveGitStatus)
+      .catch(() => {})
+  }
 }
 
 /** Re-subscribes after the agent host restarts. */
 export function rewatchGit(): void {
-  const path = livePath
-  livePath = null
-  showProject(path)
+  const paths = livePaths
+  livePaths = []
+  showProjects(paths)
 }
 
 const prLoads = new Map<string, Promise<PullRequest | null>>()

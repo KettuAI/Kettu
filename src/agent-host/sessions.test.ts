@@ -3463,11 +3463,11 @@ describe('unread and viewing', () => {
   it('marks a turn that ends out of view as unread, and showing clears it', async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)
-    await port.request('sessions.show', { sessionId: null })
+    await port.request('sessions.show', { sessionIds: [] })
     await turn(port, sessionId, 'hello')
     await port.untilStatus(sessionId, 'ready')
     expect(port.summary(sessionId)?.attention).toBe('unread')
-    await port.request('sessions.show', { sessionId })
+    await port.request('sessions.show', { sessionIds: [sessionId] })
     expect(port.summary(sessionId)?.attention).toBe('none')
   })
 
@@ -3480,6 +3480,56 @@ describe('unread and viewing', () => {
     expect(port.entries(first).at(-1)).toMatchObject({ stopReason: 'end_turn' })
     expect(port.summary(first)?.attention).toBe('unread')
     expect(port.summary(second)?.attention).toBe('none')
+  })
+
+  it('shows two sessions of one port at once, and a turn ending in either is read', async () => {
+    const { t, port } = await setup()
+    const first = await newSession(t, port)
+    const second = await newSession(t, port)
+    await port.request('sessions.show', { sessionIds: [first, second] })
+    await turn(port, first, 'hello')
+    await port.untilStatus(first, 'ready')
+    await turn(port, second, 'and you')
+    await port.untilStatus(second, 'ready')
+    expect(port.summary(first)?.attention).toBe('none')
+    expect(port.summary(second)?.attention).toBe('none')
+  })
+
+  it('marks one leaving the set viewed, and lets it go after its idle time out of view', async () => {
+    const quick = {
+      checkpointMs: 10,
+      releaseHiddenMs: 60,
+      releaseShownMs: 800,
+      releaseUnusedMs: 600,
+    }
+    const { t, port } = await setup({ sessionTimings: quick })
+    const kept = await newSession(t, port)
+    const left = await newSession(t, port)
+    await port.request('sessions.show', { sessionIds: [kept, left] })
+    await port.request('sessions.show', { sessionIds: [kept] })
+    // Leaving the front was seen until now; the one that stays keeps its agent for longer.
+    expect(port.summary(left)?.attention).toBe('none')
+    await port.untilStatus(left, 'closed')
+    expect(port.summary(kept)?.status).toBe('ready')
+  })
+
+  it('skips an id it does not know, which a window may name before the session goes', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await expect(
+      port.request('sessions.show', { sessionIds: ['gone-session', sessionId] }),
+    ).resolves.toBeUndefined()
+    await turn(port, sessionId, 'hello')
+    await port.untilStatus(sessionId, 'ready')
+    expect(port.summary(sessionId)?.attention).toBe('none')
+  })
+
+  it('refuses more than nine sessions in front at once', async () => {
+    const { port } = await setup()
+    const ids = Array.from({ length: 10 }, (_, i) => `s${i}`)
+    await expect(port.request('sessions.show', { sessionIds: ids })).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
   })
 
   it('forgets what a port that closes shows', async () => {
@@ -3571,7 +3621,7 @@ describe('pinning, archiving and marking unread', () => {
     const first = await startTestHost()
     let port = first.connect()
     const sessionId = await newSession(first, port)
-    await port.request('sessions.show', { sessionId: null })
+    await port.request('sessions.show', { sessionIds: [] })
     await port.request('sessions.markUnread', { sessionId, unread: true })
     expect(port.summary(sessionId)?.attention).toBe('unread')
     await first.host.shutdown()

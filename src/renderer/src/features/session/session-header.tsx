@@ -5,6 +5,8 @@ import type { SessionSummary } from '@shared/agent-host'
 import type { SessionView } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
+import { usePane } from '@renderer/features/split/pane-context'
+import { usePaneDragSource } from '@renderer/features/split/session-drag-model'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +24,7 @@ import {
 import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-menu-model'
 import { useRenaming } from '@renderer/features/sidebar/use-renaming'
 import { agentName } from '@renderer/stores/agents'
+import { cn } from '@renderer/lib/utils'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openRoutine, openSession } from '@renderer/stores/view'
@@ -44,8 +47,8 @@ export function ParentLink({ parent }: { parent: SessionSummary }) {
 }
 
 /**
- * The session's top bar: its title, which a click renames, its menu, the prompt cache's time left,
- * and the project's git status.
+ * The session's top bar: its title, which a click renames and which drags its pane, its menu, the
+ * prompt cache's time left, and the project's git status.
  */
 export function SessionHeader({
   summary,
@@ -61,15 +64,16 @@ export function SessionHeader({
     summary.routine ? s.byId[summary.routine.routineId] : undefined,
   )
   const [deleting, setDeleting] = useState(false)
-  const titleButton = useRef<HTMLButtonElement>(null)
-  const rename = useRenaming(() => titleButton.current)
+  const titleButtonRef = useRef<HTMLButtonElement>(null)
+  const rename = useRenaming(() => titleButtonRef.current)
   // The field starts at the button's width, so a short title does not jump wider.
   const [titleWidth, setTitleWidth] = useState(0)
-  const measureTitle = () => setTitleWidth(titleButton.current?.offsetWidth ?? 0)
+  const measureTitle = () => setTitleWidth(titleButtonRef.current?.offsetWidth ?? 0)
   const title = sessionTitle(summary)
+  const pane = usePane()
 
   return (
-    <TopBar>
+    <TopBar cornered={pane?.cornered}>
       {/* The title gives way last: the git status shrinks first (see HeaderTools). What is left
           once the title reaches its least width is cut at the group's edge, not under the tools. */}
       <NoDrag className="min-w-0 gap-0.5 overflow-clip">
@@ -105,18 +109,18 @@ export function SessionHeader({
             className="mx-[5.5px] field-sizing-content h-[25px] rounded-sm bg-transparent px-[1.5px] py-0 font-heading text-subheading font-semibold outline-[1.5px] outline-offset-1 outline-edit-ring outline-solid selection:bg-edit-selection aria-invalid:outline-danger"
           />
         ) : (
-          <Button
-            ref={titleButton}
-            variant="ghost"
-            title={`${title} · ${agentName(summary.agentId)}`}
-            className="mx-[3px] h-7.5 min-w-16 shrink-10 rounded-md px-[3px] font-heading text-subheading font-semibold focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0"
-            onClick={() => {
+          <TitleButton
+            buttonRef={titleButtonRef}
+            paneId={pane?.paneId ?? null}
+            sessionId={summary.id}
+            title={title}
+            description={agentName(summary.agentId)}
+            focused={pane?.focused ?? true}
+            onRename={() => {
               measureTitle()
               rename.start()
             }}
-          >
-            <span className="truncate">{title}</span>
-          </Button>
+          />
         )}
         <DropdownMenu onOpenChangeComplete={rename.menu.onOpenChangeComplete}>
           <Tooltip>
@@ -164,5 +168,46 @@ export function SessionHeader({
         onOpenChange={setDeleting}
       />
     </TopBar>
+  )
+}
+
+/**
+ * The title: a click renames it, and a press drags its pane to another place. Out of focus its text
+ * is `--text-secondary`, `--text-primary` under the pointer.
+ */
+function TitleButton({
+  buttonRef,
+  paneId,
+  sessionId,
+  title,
+  description,
+  focused,
+  onRename,
+}: {
+  buttonRef: React.RefObject<HTMLButtonElement | null>
+  paneId: string | null
+  sessionId: string
+  title: string
+  description: string
+  focused: boolean
+  onRename: () => void
+}) {
+  const drag = usePaneDragSource(paneId ?? '', sessionId, !paneId)
+  return (
+    <Button
+      ref={(element) => {
+        buttonRef.current = element
+        drag.ref(element)
+      }}
+      variant="ghost"
+      title={`${title} · ${description}`}
+      className={cn(
+        'mx-[3px] h-7.5 min-w-16 shrink-10 rounded-md px-[3px] font-heading text-subheading font-semibold focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0',
+        !focused && 'text-secondary hover:text-primary',
+      )}
+      onClick={onRename}
+    >
+      <span className="truncate">{title}</span>
+    </Button>
   )
 }

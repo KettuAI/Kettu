@@ -24,6 +24,8 @@ import { PrIcon } from '@renderer/features/git/pr-icon'
 import { prStateText } from '@renderer/features/git/pr-text'
 import { cn } from '@renderer/lib/utils'
 import { sessionTitle, type SessionNode } from '@renderer/stores/sessions'
+import { useSessionDragSource } from '@renderer/features/split/session-drag-model'
+import { allPanes, paneWithSession } from '@renderer/features/split/layout'
 import { openSession, useViewStore } from '@renderer/stores/view'
 import { CacheTip } from './cache-status'
 import { cacheGone, useGoneLabel, useSessionCache } from './session-cache'
@@ -53,6 +55,20 @@ export const SessionRow = memo(function SessionRow({
   const current = useViewStore(
     (s) => s.main.kind === 'session' && s.main.sessionId === summary.id && !s.settings.open,
   )
+  // The rows of the other panes in view take the current row's fill as well.
+  const inSplit = useViewStore(
+    (s) =>
+      !s.settings.open &&
+      s.main.kind === 'session' &&
+      s.main.sessionId !== summary.id &&
+      !!paneWithSession(s.layout, summary.id) &&
+      allPanes(s.layout).some(
+        (pane) =>
+          s.visiblePanes.includes(pane.id) &&
+          pane.view.kind === 'session' &&
+          pane.view.sessionId === summary.id,
+      ),
+  )
   const tabStop = tabStopId === summary.id
   const userExpanded = useViewStore((s) => s.expandedParents[summary.id])
   const hasChildren = children.length > 0
@@ -77,6 +93,7 @@ export const SessionRow = memo(function SessionRow({
   const [moreOpen, setMoreOpen] = useState(false)
   const row = useRef<HTMLDivElement>(null)
   const rename = useRenaming(() => row.current?.querySelector<HTMLElement>('[data-sidebar-row]'))
+  const drag = useSessionDragSource(summary.id, rename.renaming)
   const pad = ROW_PAD + Math.min(depth, MAX_DEPTH) * INDENT
   const subagent = summary.origin === 'subagent'
   const cache = useSessionCache(summary)
@@ -117,8 +134,12 @@ export const SessionRow = memo(function SessionRow({
 
   const button = (
     <SidebarMenuButton
+      ref={drag.ref}
       size="row"
       isActive={current}
+      aria-description={inSplit ? t('row.inSplitView') : undefined}
+      // The other panes' rows take the current row's fill, without its surface or its edge.
+      className={cn('gap-[9px] data-active:font-medium', inSplit && 'bg-selected font-medium')}
       data-sidebar-row=""
       data-session-id={summary.id}
       tabIndex={tabStop ? 0 : -1}
@@ -143,7 +164,6 @@ export const SessionRow = memo(function SessionRow({
         }
       }}
       style={{ paddingLeft: pad }}
-      className="gap-[9px] data-active:font-medium"
     >
       {lead}
       <span className="min-w-0 flex-1 truncate">

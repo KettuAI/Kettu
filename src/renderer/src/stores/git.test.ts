@@ -4,7 +4,7 @@ import type { GitTools } from '@shared/git'
 const request = vi.fn()
 vi.stubGlobal('window', { overbench: { agents: { request } } })
 
-const { loadGitTools, useGitStore } = await import('./git')
+const { loadGitTools, showProjects, useGitStore } = await import('./git')
 
 const tools: GitTools = {
   git: { found: true, version: '2.50.0' },
@@ -32,5 +32,27 @@ describe('loadGitTools', () => {
     resolve(tools)
     await load
     expect(useGitStore.getState()).toMatchObject({ tools, toolsError: null })
+  })
+})
+
+describe('showProjects', () => {
+  beforeEach(() => {
+    request.mockReset()
+    request.mockResolvedValue(undefined)
+  })
+
+  it('keeps the projects in view live, and releases one no pane shows', async () => {
+    showProjects(['/one', '/two'])
+    expect(request).toHaveBeenCalledWith('git.status', { projectPath: '/one' })
+    expect(request).toHaveBeenCalledWith('git.status', { projectPath: '/two' })
+    request.mockClear()
+    // A project shown already needs nothing further.
+    showProjects(['/one', '/two'])
+    expect(request).not.toHaveBeenCalled()
+    // One no pane shows is let go, and the one that joins takes its status.
+    showProjects(['/two', '/three'])
+    expect(request).toHaveBeenCalledWith('git.unwatch', { projectPath: '/one' })
+    expect(request).toHaveBeenCalledWith('git.status', { projectPath: '/three' })
+    expect(request).not.toHaveBeenCalledWith('git.unwatch', { projectPath: '/two' })
   })
 })

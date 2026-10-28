@@ -148,6 +148,10 @@
   --elevation-sheet:
     0 0 0 1px rgb(28 27 24 / 7%), 0 1px 2px rgb(28 27 24 / 4%),
     0 10px 30px -14px rgb(28 27 24 / 14%);
+  /* The sheet of a pane in focus in a split view: the sheet tier with its edge stronger. */
+  --elevation-sheet-focused:
+    0 0 0 1px var(--border-strong), 0 1px 2px rgb(28 27 24 / 4%),
+    0 10px 30px -14px rgb(28 27 24 / 14%);
   /* A page lying on the desk, at rest and lifted: an artifact in its tray and on its canvas. */
   --elevation-page:
     0 0 0 1px rgb(28 27 24 / 7.5%), 0 1px 2px rgb(28 27 24 / 6%),
@@ -268,6 +272,8 @@
     --elevation-sheet:
       0 0 0 1px rgb(244 243 238 / 6.5%), 0 1px 2px rgb(0 0 0 / 30%),
       0 10px 30px -12px rgb(0 0 0 / 60%);
+    --elevation-sheet-focused:
+      0 0 0 1px var(--border-strong), 0 1px 2px rgb(0 0 0 / 30%), 0 10px 30px -12px rgb(0 0 0 / 60%);
     --elevation-page:
       0 0 0 1px rgb(244 243 238 / 10%), 0 1px 2px rgb(0 0 0 / 40%),
       0 8px 18px -10px rgb(0 0 0 / 85%);
@@ -387,6 +393,8 @@
   --elevation-sheet:
     0 0 0 1px rgb(244 243 238 / 6.5%), 0 1px 2px rgb(0 0 0 / 30%),
     0 10px 30px -12px rgb(0 0 0 / 60%);
+  --elevation-sheet-focused:
+    0 0 0 1px var(--border-strong), 0 1px 2px rgb(0 0 0 / 30%), 0 10px 30px -12px rgb(0 0 0 / 60%);
   --elevation-page:
     0 0 0 1px rgb(244 243 238 / 10%), 0 1px 2px rgb(0 0 0 / 40%), 0 8px 18px -10px rgb(0 0 0 / 85%);
   --elevation-page-lift:

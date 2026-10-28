@@ -11,6 +11,7 @@ import { TooltipProvider } from '@renderer/components/ui/tooltip'
 import { ArtifactDialogs } from '@renderer/features/artifacts/artifact-dialogs'
 import { MediaViewer } from '@renderer/features/session/media/media-viewer'
 import { HostBanner } from '@renderer/features/shell/host-banner'
+import { SplitDragProvider } from '@renderer/features/split/session-drag'
 import { MainArea } from '@renderer/features/shell/main-area'
 import { ShortcutsDialog } from '@renderer/features/shell/shortcuts-dialog'
 import { DESK, SHEET_PANEL } from '@renderer/features/shell/sheet'
@@ -44,7 +45,11 @@ export function App() {
               inert={settingsOpen}
               className={cn('absolute inset-0', settingsOpen && '[content-visibility:hidden]')}
             >
-              <Workbench />
+              {/* One drag scope for the sidebar and the main area: a session's row drags into
+                  the split. */}
+              <SplitDragProvider>
+                <Workbench />
+              </SplitDragProvider>
             </div>
             {settingsOpen && (
               <div className="absolute inset-0">

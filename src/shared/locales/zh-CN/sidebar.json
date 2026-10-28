@@ -40,7 +40,16 @@
     "showIn": "在{{name}}中显示",
     "archive": "归档",
     "archived": "已归档“{{title}}”",
-    "undo": "撤销"
+    "undo": "撤销",
+    "openInSplit": "在分屏中打开",
+    "splitRight": "放在右侧",
+    "splitBelow": "放在下方",
+    "noRoom": {
+      "columns": "最多三列",
+      "panes": "每列最多三个窗格",
+      "room": "窗口空间不足"
+    },
+    "inSplitView": "在分屏中"
   },
   "import": {
     "title": "导入会话",

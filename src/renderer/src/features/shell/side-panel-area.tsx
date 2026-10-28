@@ -15,7 +15,7 @@ import {
   terminalsOf,
   useTerminalsStore,
 } from '@renderer/stores/terminals'
-import { toggleTerminal, useViewStore } from '@renderer/stores/view'
+import { shownSidePane, toggleTerminal, useViewStore } from '@renderer/stores/view'
 import { SHEET, SHEET_PANEL } from './sheet'
 
 const FilesPanel = lazy(() => import('@renderer/features/files/files-panel'))
@@ -37,10 +37,8 @@ const PANES = {
 
 /**
  * The main area with the project's side panel on its right, holding the terminal, the files or,
- * opened from the thread, an artifact.
- * Opening or closing it changes the content's width at once. Maximized, the panel covers the
- * whole area while the layout underneath keeps its sizes, so restoring returns to exactly the
- * widths before.
+ * opened from the thread, an artifact. Opening or closing it changes the content's width at once.
+ * Maximized, the panel covers the whole area while the layout underneath keeps its sizes.
  */
 export function SidePanelArea({
   projectPath,
@@ -49,10 +47,12 @@ export function SidePanelArea({
   projectPath: string
   children: ReactNode
 }) {
-  const pane = useViewStore((s) => s.sidePane[projectPath])
+  const pane = useViewStore(shownSidePane)
   const artifact = useViewStore((s) => s.sideArtifact[projectPath])
+  const splitArtifact = useViewStore((s) => s.splitSideArtifact)
   const maximized = useViewStore((s) => s.sidePaneMaximized) && !!pane
   const open = pane === 'terminal'
+  const artifactId = splitArtifact ?? artifact
   const layout = useDefaultLayout({
     id: 'side-panel',
     panelIds: pane ? ['content', PANES[pane].id] : ['content'],
@@ -106,10 +106,7 @@ export function SidePanelArea({
       <ResizablePanel id="content" minSize="360px" className="min-w-0" style={SHEET_PANEL}>
         {/* Under the maximized panel the content keeps its state but is not rendered, and its
             sheet's edge gives way to the panel's. */}
-        <div
-          inert={maximized}
-          className={cn('h-full', SHEET, maximized && 'shadow-none [content-visibility:hidden]')}
-        >
+        <div inert={maximized} className={cn('h-full', maximized && '[content-visibility:hidden]')}>
           {children}
         </div>
       </ResizablePanel>
@@ -136,11 +133,11 @@ export function SidePanelArea({
                 ) : pane === 'browser' ? (
                   <BrowserPane projectPath={projectPath} maximized={maximized} />
                 ) : (
-                  artifact && (
+                  artifactId && (
                     <ArtifactPane
-                      key={artifact}
+                      key={artifactId}
                       projectPath={projectPath}
-                      id={artifact}
+                      id={artifactId}
                       maximized={maximized}
                     />
                   )

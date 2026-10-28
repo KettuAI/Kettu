@@ -2,7 +2,8 @@
   "headerTools": {
     "files": "Files",
     "terminal": "Terminal",
-    "browser": "Browser"
+    "browser": "Browser",
+    "closePane": "Close pane"
   },
   "hostBanner": {
     "restarting": "Restarting the agent host. Your sessions come back by themselves.",
@@ -19,6 +20,7 @@
     "openProject": "Open project",
     "newSession": "New session",
     "showShortcuts": "Show the keyboard shortcuts",
+    "focusPane": "Focus pane 1 to 9 of the split view",
     "toggleSidebar": "Toggle the sidebar",
     "focusComposer": "Focus the composer",
     "addFiles": "Add files or photos to the composer",

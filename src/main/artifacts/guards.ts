@@ -77,6 +77,8 @@ export function forwardedKey(input: Input, platform: NodeJS.Platform): Forwarded
   if (input.shift && (input.code === 'BracketLeft' || input.code === 'BracketRight')) return key
   // The shortcuts dialog's key has no menu item, so it passes on macOS too.
   if (input.key === '/') return key
+  // Focus a pane of the split view, which has no menu item either.
+  if (/^[1-9]$/.test(input.key)) return key
   // On macOS the app menu's accelerators take the rest.
   if (mac) return null
   if (['=', '+', '-', '_', '0'].includes(input.key)) return key

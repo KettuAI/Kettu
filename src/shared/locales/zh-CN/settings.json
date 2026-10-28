@@ -43,7 +43,8 @@
       "keywords": "回车 换行 输入框 enter newline composer"
     },
     "restore": {
-      "name": "启动时恢复上次的会话"
+      "name": "启动时恢复上次的会话",
+      "description": "分屏会连同其中的窗格一起恢复。"
     },
     "confirmQuit": {
       "name": "Agent 或终端命令正在运行时，退出前先询问",

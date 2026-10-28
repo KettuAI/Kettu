@@ -15,6 +15,7 @@ import type { SelectOption } from '@renderer/features/session/composer/levels'
 import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
+import { usePane } from '@renderer/features/split/pane-context'
 import { basename, limitLabel, resetTime } from '@renderer/lib/format'
 import { isMod } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
@@ -26,7 +27,13 @@ import { useGitStore } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { openAgentSettings, openArtifacts, useViewStore } from '@renderer/stores/view'
+import {
+  choosePaneAgent,
+  openAgentSettings,
+  openArtifacts,
+  paneAgent,
+  useViewStore,
+} from '@renderer/stores/view'
 import { DropOverlay } from './attachments/drop-overlay'
 import { useFileDrop } from './attachments/use-file-drop'
 import { attachmentContent, attachmentsBlock } from './composer/attachments'
@@ -56,20 +63,25 @@ import { ColumnScroller } from './session-states'
  * parent's project.
  */
 export function NewSessionView({
+  paneId,
   project,
   noProject = false,
+  parentId = null,
 }: {
+  /** The pane that shows it; New session's own controls change that pane's view. */
+  paneId: string | null
   project: Project | null
   noProject?: boolean
+  /** A sub-session of that session, in its project. */
+  parentId?: string | null
 }) {
   const { t } = useTranslation('session')
-  const chosenId = useViewStore((s) => (s.main.kind === 'new' ? s.main.agentId : null))
+  const chosenId = useViewStore((s) => (paneId ? paneAgent(s.layout, paneId) : null))
   const installed = useAgentsStore((s) => {
     const status = chosenId ? s.byId[chosenId] : undefined
     return !!status && canStart(status)
   })
   const agentId = installed ? chosenId : null
-  const parentId = useViewStore((s) => (s.main.kind === 'new' ? (s.main.parentId ?? null) : null))
   const parent = useSessionsStore((s) => (parentId ? s.byId[parentId] : undefined))
   const toolsPath = project?.path ?? (parent?.scratch ? parent.projectPath : null)
   // From the kept draft, so a draft left on an earlier visit hides Recent artifacts from the start.
@@ -78,6 +90,7 @@ export function NewSessionView({
   )
 
   const drop = useFileDrop(NEW_SESSION_DRAFT, false)
+  const cornered = usePane()?.cornered
 
   useEffect(() => {
     enterNewSession()
@@ -88,7 +101,7 @@ export function NewSessionView({
     <div className="relative flex h-full min-h-0 flex-col" {...drop.handlers}>
       {/* As in the reference, the screen's own bar names nothing and draws no line: the heading
           below says where you are. A sub-session still leads with its parent. */}
-      <TopBar className="shadow-none">
+      <TopBar className="shadow-none" cornered={cornered}>
         {parent && (
           <NoDrag className="min-w-0 gap-0.5">
             <ParentLink parent={parent} />
@@ -107,6 +120,7 @@ export function NewSessionView({
           </h1>
         </div>
         <DraftComposer
+          paneId={paneId}
           agentId={agentId}
           project={project}
           noProject={noProject}
@@ -124,6 +138,7 @@ export function NewSessionView({
 const NO_COMMANDS: SlashCommand[] = []
 
 function DraftComposer({
+  paneId,
   agentId,
   project,
   noProject,
@@ -131,6 +146,7 @@ function DraftComposer({
   onInput,
   children,
 }: {
+  paneId: string | null
   agentId: AgentId | null
   project: Project | null
   noProject: boolean
@@ -216,7 +232,7 @@ function DraftComposer({
   }
 
   const choose = (id: AgentId, model: string | null) => {
-    useViewStore.setState((s) => (s.main.kind === 'new' ? { main: { ...s.main, agentId: id } } : s))
+    if (paneId) choosePaneAgent(paneId, id)
     const { byId, prepared } = useAgentOptionsStore.getState()
     const config =
       prepared?.agentId === id && prepared.summary?.prepared

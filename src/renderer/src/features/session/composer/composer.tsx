@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { limitLabel, resetTime } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { formatShortcut, isMod } from '@renderer/lib/platform'
+import { usePane } from '@renderer/features/split/pane-context'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useThreadsStore } from '@renderer/stores/threads'
@@ -55,10 +56,12 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   // Claude Code turns on ultracode for a message that says the word; no config option sets it.
   const ultracode = session.agentId === 'claude-code' && /\bultracode\b/i.test(text)
 
-  // Starting a session focuses the composer, as the reference does.
+  // Starting a session focuses its composer, in the pane in focus only.
+  const focused = usePane()?.focused ?? true
   useEffect(() => {
+    if (!focused) return
     if (status === 'ready' && document.activeElement === document.body) box.editor.current?.focus()
-  }, [status, box.editor])
+  }, [status, focused, box.editor])
 
   // Both go through the host's queue, which sends at once when the session is free.
   const send = () => {

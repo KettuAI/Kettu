@@ -6,6 +6,7 @@ import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/comp
 import { Button } from '@renderer/components/ui/button'
 import { markThreadShown } from '@renderer/app/perf'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
+import { usePane } from '@renderer/features/split/pane-context'
 import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { errorMessage, host } from '@renderer/lib/host'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
@@ -74,8 +75,10 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
     host('sessions.retry', { sessionId }).catch(fail)
   }
 
-  usePermissionKeys(sessionId)
-  useEscapeToCancel(sessionId, !!session && running, fail)
+  const pane = usePane()
+  const focused = pane?.focused ?? true
+  usePermissionKeys(sessionId, focused)
+  useEscapeToCancel(sessionId, !!session && running, focused, fail)
   const drop = useFileDrop(
     session && summary.origin !== 'subagent' ? sessionId : null,
     status === 'starting',
@@ -261,8 +264,9 @@ const handlesEnter = (target: EventTarget | null) =>
  * Number keys 1 to 4 answer the first pending permission request while the composer is empty,
  * and Enter answers it with its highlighted option, unless the focus is on a control of its own.
  */
-function usePermissionKeys(sessionId: string): void {
+function usePermissionKeys(sessionId: string, focused: boolean): void {
   useEffect(() => {
+    if (!focused) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.repeat) return
       const enter = event.key === 'Enter'
@@ -289,17 +293,18 @@ function usePermissionKeys(sessionId: string): void {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [sessionId])
+  }, [sessionId, focused])
 }
 
 /** Esc cancels the running turn from anywhere in the session, unless something else takes it. */
 function useEscapeToCancel(
   sessionId: string,
   running: boolean,
+  focused: boolean,
   onError: (error: unknown) => void,
 ): void {
   useEffect(() => {
-    if (!running) return
+    if (!running || !focused) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return
       if (overlayOpen()) return
@@ -310,5 +315,5 @@ function useEscapeToCancel(
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [sessionId, running, onError])
+  }, [sessionId, running, focused, onError])
 }

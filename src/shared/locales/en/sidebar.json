@@ -42,7 +42,16 @@
     "showIn": "Show in {{name}}",
     "archive": "Archive",
     "archived": "Archived “{{title}}”",
-    "undo": "Undo"
+    "undo": "Undo",
+    "openInSplit": "Open in split view",
+    "splitRight": "To the right",
+    "splitBelow": "Below",
+    "noRoom": {
+      "columns": "Three columns at most",
+      "panes": "Three panes in a column at most",
+      "room": "No room in the window"
+    },
+    "inSplitView": "In split view"
   },
   "import": {
     "title": "Import sessions",

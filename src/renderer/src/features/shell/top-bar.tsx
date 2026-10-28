@@ -13,8 +13,18 @@ import { toggleSidebar, useViewStore } from '@renderer/stores/view'
  * the sidebar collapsed it leaves room for the traffic lights and carries the sidebar toggle, which
  * on Windows and Linux sits in the band above the sheets instead.
  */
-export function TopBar({ children, className }: { children: ReactNode; className?: string }) {
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && isMac
+export function TopBar({
+  children,
+  className,
+  cornered: given,
+}: {
+  children: ReactNode
+  className?: string
+  /** Whether it may take the window's top left corner; with the sidebar shown, none does. */
+  cornered?: boolean
+}) {
+  const collapsed = useViewStore((s) => s.sidebarCollapsed)
+  const cornered = (given ?? true) && collapsed && isMac
   return (
     <header
       className={cn(

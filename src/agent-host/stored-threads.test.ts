@@ -714,7 +714,7 @@ describe('releasing', () => {
     const { t, port } = await setup({ sessionTimings: quick })
     const sessionId = await newSession(t, port)
     await finishTurn(port, sessionId, 'hello')
-    await port.request('sessions.show', { sessionId: null })
+    await port.request('sessions.show', { sessionIds: [] })
     await port.untilStatus(sessionId, 'closed')
     await port.until(() => port.thread(sessionId).session.status === 'closed')
     expect(events(t)).toContain(`session released ${sessionId}`)
@@ -753,7 +753,7 @@ describe('releasing', () => {
     const waiting = await newSession(t, port)
     await port.request('sessions.prompt', { sessionId: waiting, content: text('/permission') })
     await port.until(() => port.summary(waiting)?.permissionCount === 1)
-    await port.request('sessions.show', { sessionId: null })
+    await port.request('sessions.show', { sessionIds: [] })
     await pause(300)
     expect(port.summary(background)?.status).toBe('ready')
     expect(port.summary(waiting)?.status).toBe('awaiting_permission')
@@ -764,7 +764,7 @@ describe('releasing', () => {
     const { t, port } = await setup({ sessionTimings: quick, agentTimings: { idleMs: 50 } })
     const sessionId = await newSession(t, port)
     await finishTurn(port, sessionId, 'hello')
-    await port.request('sessions.show', { sessionId: null })
+    await port.request('sessions.show', { sessionIds: [] })
     await port.untilStatus(sessionId, 'closed')
     await vi.waitFor(() => expect(events(t)).toContain('idle stop '))
   })
@@ -816,7 +816,7 @@ describe('keeping the config across an attach', () => {
   }
 
   async function release(port: TestPort, sessionId: string) {
-    await port.request('sessions.show', { sessionId: null })
+    await port.request('sessions.show', { sessionIds: [] })
     await port.untilStatus(sessionId, 'closed')
     await port.until(() => port.thread(sessionId).session.status === 'closed')
   }

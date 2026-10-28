@@ -11,6 +11,7 @@ import { Button } from '@renderer/components/ui/button'
 import { InputGroup, InputGroupTextarea } from '@renderer/components/ui/input-group'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
+import { usePane } from '@renderer/features/split/pane-context'
 import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
@@ -65,7 +66,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <TopBar>
+      <TopBar cornered={usePane()?.cornered}>
         <NoDrag className="min-w-0 gap-1.5">
           {error && (
             <Button
