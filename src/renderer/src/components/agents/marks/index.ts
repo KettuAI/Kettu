@@ -5,21 +5,27 @@ import * as amp from './amp'
 import * as auggie from './auggie'
 import * as autohand from './autohand'
 import * as claudeCode from './claude-code'
+import * as cline from './cline'
 import * as codebuddy from './codebuddy'
 import * as codex from './codex'
+import * as copilot from './copilot'
 import * as cursor from './cursor'
 import * as deepagents from './deepagents'
 import * as dimcode from './dimcode'
 import * as dirac from './dirac'
+import * as droid from './droid'
 import * as fakeAgent from './fake-agent'
+import * as gemini from './gemini'
 import * as glm from './glm'
 import * as goose from './goose'
+import * as grok from './grok'
 import * as kilo from './kilo'
 import * as kimi from './kimi'
 import * as nova from './nova'
 import * as opencode from './opencode'
 import * as pi from './pi'
 import * as qoder from './qoder'
+import * as qwen from './qwen'
 import * as sigit from './sigit'
 
 export interface MarkBodyProps {
@@ -35,7 +41,9 @@ export interface AgentMarkModule {
 /** One line per agent; the agent's own colors stay in its module. */
 export const AGENT_MARKS: Record<AgentId, AgentMarkModule> = {
   'claude-code': claudeCode,
+  cline,
   codex,
+  copilot,
   opencode,
   pi,
   auggie,
@@ -46,6 +54,7 @@ export const AGENT_MARKS: Record<AgentId, AgentMarkModule> = {
   glm,
   nova,
   qoder,
+  qwen,
   sigit,
   agoragentic,
   autohand,
@@ -53,6 +62,9 @@ export const AGENT_MARKS: Record<AgentId, AgentMarkModule> = {
   kimi,
   amp,
   goose,
+  grok,
   kilo,
+  droid,
+  gemini,
   'fake-agent': fakeAgent,
 }

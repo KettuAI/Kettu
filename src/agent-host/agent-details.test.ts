@@ -291,6 +291,76 @@ describe('configLocations', () => {
     ).toEqual({ id: 'folder', candidates: ['/srv/ah'], env: 'AUTOHAND_HOME' })
   })
 
+  it('puts Gemini in .gemini under GEMINI_CLI_HOME, or in ~/.gemini', () => {
+    expect(summary(locations('gemini', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.gemini'], env: null },
+      { id: 'settings', candidates: ['/home/me/.gemini/settings.json'], env: null },
+      { id: 'instructions', candidates: ['/home/me/.gemini/GEMINI.md'], env: null },
+    ])
+    expect(
+      summary(locations('gemini', { GEMINI_CLI_HOME: '/srv/home' }, '/home/me', 'linux')),
+    ).toEqual([
+      { id: 'folder', candidates: ['/srv/home/.gemini'], env: 'GEMINI_CLI_HOME' },
+      { id: 'settings', candidates: ['/srv/home/.gemini/settings.json'], env: null },
+      { id: 'instructions', candidates: ['/srv/home/.gemini/GEMINI.md'], env: null },
+    ])
+  })
+
+  it('puts GitHub Copilot in ~/.copilot, or where COPILOT_HOME says', () => {
+    expect(summary(locations('copilot', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.copilot'], env: null },
+      { id: 'settings', candidates: ['/home/me/.copilot/config.json'], env: null },
+      { id: 'instructions', candidates: ['/home/me/.copilot/copilot-instructions.md'], env: null },
+    ])
+    expect(
+      summary(locations('copilot', { COPILOT_HOME: '/srv/copilot' }, '/home/me', 'linux'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/srv/copilot'], env: 'COPILOT_HOME' })
+  })
+
+  it('puts Qwen Code in ~/.qwen with its settings and QWEN.md', () => {
+    expect(summary(locations('qwen', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.qwen'], env: null },
+      { id: 'settings', candidates: ['/home/me/.qwen/settings.json'], env: null },
+      { id: 'instructions', candidates: ['/home/me/.qwen/QWEN.md'], env: null },
+    ])
+  })
+
+  it('puts Grok in ~/.grok, or where GROK_HOME says', () => {
+    expect(summary(locations('grok', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.grok'], env: null },
+      { id: 'settings', candidates: ['/home/me/.grok/config.toml'], env: null },
+      { id: 'instructions', candidates: ['/home/me/.grok/AGENTS.md'], env: null },
+    ])
+    expect(summary(locations('grok', { GROK_HOME: '/srv/grok' }, '/home/me', 'linux'))[0]).toEqual({
+      id: 'folder',
+      candidates: ['/srv/grok'],
+      env: 'GROK_HOME',
+    })
+  })
+
+  it('puts Cline in ~/.cline, or where CLINE_DIR says, with its global rules', () => {
+    expect(summary(locations('cline', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.cline'], env: null },
+      {
+        id: 'settings',
+        candidates: ['/home/me/.cline/data/settings/global-settings.json'],
+        env: null,
+      },
+      { id: 'instructions', candidates: ['/home/me/.agents/AGENTS.md'], env: null },
+    ])
+    expect(
+      summary(locations('cline', { CLINE_DIR: '/srv/cline' }, '/home/me', 'linux'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/srv/cline'], env: 'CLINE_DIR' })
+  })
+
+  it('puts Factory Droid in ~/.factory with its settings and AGENTS.md', () => {
+    expect(summary(locations('droid', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.factory'], env: null },
+      { id: 'settings', candidates: ['/home/me/.factory/settings.json'], env: null },
+      { id: 'instructions', candidates: ['/home/me/.factory/AGENTS.md'], env: null },
+    ])
+  })
+
   it('joins with backslashes on Windows', () => {
     expect(summary(locations('claude-code', {}, 'C:\\Users\\me', 'win32'))).toEqual([
       { id: 'folder', candidates: ['C:\\Users\\me\\.claude'], env: null },

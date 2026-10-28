@@ -351,7 +351,7 @@ describe('the host files', () => {
       { ...routine, id: 'routine-1' },
       { ...routine, name: 'x'.repeat(121) },
       { ...routine, prompt: '' },
-      { ...routine, agentId: 'gemini' },
+      { ...routine, agentId: 'unknown-agent' },
       { ...routine, projectPath: 7 },
       { ...routine, options: [{ id: '', value: true }] },
       { ...routine, options: [{ id: 'model', value: 'x'.repeat(201) }] },
@@ -424,7 +424,7 @@ describe('the host files', () => {
           'claude-code': { account, limits: [limit, { ...limit, state: 'odd' }] },
           codex: { account: { kind: 'none', label: 'Not signed in', email: null }, limits: [] },
           opencode: 'nothing',
-          gemini: { account, limits: [] },
+          'unknown-agent': { account, limits: [] },
         },
       }),
     ).toEqual({ version: 1, agents: { 'claude-code': { account, limits: [limit] } } })
@@ -498,7 +498,7 @@ describe('the host files', () => {
             checkedAt: 1_000,
             latest: { adapterVersion: '../../x', cliVersion: null },
           },
-          gemini: { checkedAt: 1_000, latest },
+          'unknown-agent': { checkedAt: 1_000, latest },
         },
       }),
     ).toEqual({ version: 1, agents: { codex: { checkedAt: 1_000, attemptedAt: 1_000, latest } } })

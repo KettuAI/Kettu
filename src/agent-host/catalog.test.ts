@@ -8,23 +8,29 @@ import {
   AMP,
   buildCatalog,
   CLAUDE_CODE,
+  CLINE,
   CODEBUDDY,
   CODEX,
+  COPILOT,
   DEEPAGENTS,
   CURSOR,
   detectAgent,
   DIMCODE,
   DIRAC,
+  DROID,
   displayCommand,
   fakeAgent,
+  GEMINI,
   GLM,
   NOVA,
   GOOSE,
+  GROK,
   KILO,
   KIMI,
   OPENCODE,
   PI,
   QODER,
+  QWEN,
   SIGIT,
   type AgentDefinition,
   type DetectContext,
@@ -69,6 +75,12 @@ describe('buildCatalog', () => {
       'sigit',
       'agoragentic',
       'autohand',
+      'gemini',
+      'copilot',
+      'qwen',
+      'grok',
+      'cline',
+      'droid',
       'cursor',
       'kimi',
       'amp',
@@ -95,6 +107,12 @@ describe('buildCatalog', () => {
       'sigit',
       'agoragentic',
       'autohand',
+      'gemini',
+      'copilot',
+      'qwen',
+      'grok',
+      'cline',
+      'droid',
       'cursor',
       'kimi',
       'amp',
@@ -448,10 +466,30 @@ describe('the ACP Registry npm agents', () => {
       args: [],
       env: {},
     },
+    { def: GEMINI, package: '@google/gemini-cli', version: '0.66.0', args: ['--acp'], env: {} },
+    { def: COPILOT, package: '@github/copilot', version: '1.0.105', args: ['--acp'], env: {} },
+    { def: QWEN, package: '@qwen-code/qwen-code', version: '0.26.2', args: ['--acp'], env: {} },
+    {
+      def: GROK,
+      package: '@xai-official/grok',
+      version: '1.0.72',
+      args: ['agent', 'stdio'],
+      env: {},
+    },
+    { def: CLINE, package: 'cline', version: '3.0.74', args: ['--acp'], env: {} },
+    {
+      def: DROID,
+      package: 'droid',
+      version: '0.251.0',
+      args: ['exec', '--output-format', 'acp-daemon'],
+      env: { DROID_DISABLE_AUTO_UPDATE: 'true', FACTORY_DROID_AUTO_UPDATE_ENABLED: 'false' },
+    },
   ]
 
   for (const { def, package: name, version, args, env } of registry) {
     it(`detects ${def.id} before and after its install`, async () => {
+      // None of them names a CLI of its own, so an install keeps the optional platform package.
+      expect(def.cli).toBeUndefined()
       expect(await detectAgent(def, context())).toMatchObject({
         state: 'available',
         spec: null,
@@ -473,7 +511,28 @@ describe('the ACP Registry npm agents', () => {
     })
   }
 
-  it('pins the eleven packages the registry lists', () => {
+  for (const { def } of registry) {
+    it(`does not offer ${def.id} without Node.js`, async () => {
+      expect(
+        await detectAgent(
+          def,
+          context({ node: { nodeVersion: null, npmPath: null, nodePath: null } }),
+        ),
+      ).toMatchObject({ state: 'node-missing' })
+    })
+  }
+
+  it('holds Grok to the Node.js its package asks for, not 22', async () => {
+    expect(GROK.requiresNode).toBe('>=20')
+    await expect(
+      detectAgent(
+        GROK,
+        context({ node: { nodeVersion: 'v20.18.0', npmPath: '/x/npm', nodePath: '/x/node' } }),
+      ),
+    ).resolves.toMatchObject({ state: 'available' })
+  })
+
+  it('pins the seventeen packages the registry lists', () => {
     expect(buildCatalog(null).slice(4, 4 + registry.length)).toEqual(registry.map(({ def }) => def))
   })
 })

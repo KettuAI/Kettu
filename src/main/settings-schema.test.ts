@@ -106,7 +106,10 @@ describe('validateSettingsPatch', () => {
     [{ updates: { automatic: 'always' } }, '"updates.automatic" must be one of'],
     [{ privacy: { hideAccount: 'yes' } }, '"privacy.hideAccount" must be a boolean'],
     [{ privacy: { hideEmail: true } }, 'Unknown setting "privacy.hideEmail"'],
-    [{ mcp: { overbench: { off: ['gemini'] } } }, '"mcp.overbench.off" names an unknown agent'],
+    [
+      { mcp: { overbench: { off: ['unknown-agent'] } } },
+      '"mcp.overbench.off" names an unknown agent',
+    ],
     [
       { mcp: { overbench: { off: ['codex', 'codex'] } } },
       '"mcp.overbench.off" names an agent twice',
@@ -284,7 +287,7 @@ describe('parseSettingsFile', () => {
   it('reads the agents the server is off for, dropping unknown and repeated ids', () => {
     const loaded = parseSettingsFile({
       version: 1,
-      mcp: { overbench: { off: ['codex', 'codex', 'gemini', 'pi'] } },
+      mcp: { overbench: { off: ['codex', 'codex', 'unknown-agent', 'pi'] } },
     })
     expect(loaded.settings.mcp).toEqual({ overbench: { off: ['codex', 'pi'] } })
     expect(loaded.problems).toEqual([])

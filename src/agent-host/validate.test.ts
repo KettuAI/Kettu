@@ -34,7 +34,7 @@ describe('createValidators', () => {
     rejects(() => posix['sessions.open']({ sessionId: 'x'.repeat(257) }))
     rejects(() => posix['sessions.open']('s'))
     rejects(() => posix['sessions.open']([]))
-    rejects(() => posix['agents.logout']({ agentId: 'gemini' }))
+    rejects(() => posix['agents.logout']({ agentId: 'unknown-agent' }))
   })
 
   it('takes positions as whole numbers from 0', () => {
@@ -192,8 +192,8 @@ describe('createValidators', () => {
     expect(posix['agents.update']({ agentId: 'codex' })).toEqual({ agentId: 'codex' })
     expect(posix['agents.skipUpdate']({ agentId: 'codex' })).toEqual({ agentId: 'codex' })
     expect(posix['agents.cancelTask']({ agentId: 'codex' })).toEqual({ agentId: 'codex' })
-    rejects(() => posix['agents.update']({ agentId: 'gemini' }))
-    rejects(() => posix['agents.skipUpdate']({ agentId: 'gemini' }))
+    rejects(() => posix['agents.update']({ agentId: 'unknown-agent' }))
+    rejects(() => posix['agents.skipUpdate']({ agentId: 'unknown-agent' }))
     rejects(() => posix['agents.skipUpdate']({}))
     expect(posix['agents.checkUpdates'](undefined)).toBeUndefined()
     rejects(() => posix['agents.checkUpdates']({ agentId: 'codex' }))
@@ -528,7 +528,7 @@ describe('attachments', () => {
       { ...draft, name: 7 },
       { ...draft, prompt: '   ' },
       { ...draft, prompt: 'x'.repeat(100_001) },
-      { ...draft, agentId: 'gemini' },
+      { ...draft, agentId: 'unknown-agent' },
       { ...draft, projectPath: 'app' },
       { ...draft, projectPath: undefined },
       { ...draft, options: Array.from({ length: 21 }, () => ({ id: 'x', value: true })) },

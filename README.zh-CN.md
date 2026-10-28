@@ -72,32 +72,38 @@ OverBench 为这些工作提供了一个桌面上的家。你用的每个 Agent 
 
 请先安装下面至少一个 Agent，OverBench 会在你的系统里找到它。
 
-| Agent                                                                       | OverBench 如何运行它                                                        |
-| --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| [Claude Code](https://github.com/anthropics/claude-code)                    | ACP 适配器 `@agentclientprotocol/claude-agent-acp`，首次使用时安装          |
-| [Codex CLI](https://github.com/openai/codex)                                | ACP 适配器 `@agentclientprotocol/codex-acp`，首次使用时安装                 |
-| [opencode](https://opencode.ai)                                             | 你自己安装的 `opencode`，以 `opencode acp` 运行                             |
-| [Pi](https://pi.dev)                                                        | ACP 适配器 `pi-acp`，首次使用时安装，并运行你自己安装的 `pi`                |
-| [Auggie CLI](https://github.com/augmentcode/auggie)                         | ACP 包 `@augmentcode/auggie`，首次使用时安装，以 `--acp` 运行并关闭自动更新 |
-| [Codebuddy Code](https://www.codebuddy.cn/cli/)                             | ACP 包 `@tencent-ai/codebuddy-code`，首次使用时安装，以 `--acp` 运行        |
-| [DeepAgents](https://docs.langchain.com/oss/javascript/deepagents/overview) | ACP 包 `deepagents-acp`，首次使用时安装                                     |
-| [DimCode](https://dimagent.cn/)                                             | ACP 包 `dimcode`，首次使用时安装，以 `acp` 运行                             |
-| [Dirac](https://dirac.run)                                                  | ACP 包 `dirac-cli`，首次使用时安装，以 `--acp` 运行                         |
-| [GLM Agent](https://github.com/stefandevo/glm-acp-agent)                    | ACP 包 `glm-acp-agent`，首次使用时安装                                      |
-| [Nova](https://www.compassap.ai/portfolio/nova.html)                        | ACP 包 `@compass-ai/nova`，首次使用时安装，以 `acp` 运行                    |
-| [Qoder CLI](https://qoder.com)                                              | ACP 包 `@qoder-ai/qodercli`，首次使用时安装，以 `--acp` 运行                |
-| [siGit Code](https://github.com/getsigit/sigit)                             | ACP 包 `@smbcloud/sigit`，首次使用时安装                                    |
-| [Agoragentic](https://agoragentic.com)                                      | ACP 包 `agoragentic-mcp`，首次使用时安装，以 `--acp` 运行                   |
-| [Autohand Code](https://www.autohand.ai/cli/)                               | ACP 包 `@autohandai/autohand-acp`，首次使用时安装                           |
-| [Claude Code](https://github.com/anthropics/claude-code)                    | ACP 适配器 `@agentclientprotocol/claude-agent-acp`，首次使用时安装          |
-| [Codex CLI](https://github.com/openai/codex)                                | ACP 适配器 `@agentclientprotocol/codex-acp`，首次使用时安装                 |
-| [opencode](https://opencode.ai)                                             | 你自己安装的 `opencode`，以 `opencode acp` 运行                             |
-| [Pi](https://pi.dev)                                                        | ACP 适配器 `pi-acp`，首次使用时安装，并运行你自己安装的 `pi`                |
-| [Cursor](https://cursor.com/docs/cli/acp)                                   | 你自己安装的 `cursor-agent`，或首次使用时下载的 Cursor 压缩包               |
-| [Kimi Code CLI](https://moonshotai.github.io/kimi-cli/)                     | 你自己安装的 `kimi`，或首次使用时下载的压缩包                               |
-| [Amp](https://ampcode.com)                                                  | ACP 适配器 `amp-acp`，首次使用时下载                                        |
-| [goose](https://block.github.io/goose/)                                     | 你自己安装的 `goose`，或首次使用时下载的压缩包                              |
-| [Kilo Code](https://kilo.ai)                                                | 你自己安装的 `kilo`，或首次使用时下载的压缩包                               |
+| Agent                                                                       | OverBench 如何运行它                                                                           |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [Claude Code](https://github.com/anthropics/claude-code)                    | ACP 适配器 `@agentclientprotocol/claude-agent-acp`，首次使用时安装                             |
+| [Codex CLI](https://github.com/openai/codex)                                | ACP 适配器 `@agentclientprotocol/codex-acp`，首次使用时安装                                    |
+| [opencode](https://opencode.ai)                                             | 你自己安装的 `opencode`，以 `opencode acp` 运行                                                |
+| [Pi](https://pi.dev)                                                        | ACP 适配器 `pi-acp`，首次使用时安装，并运行你自己安装的 `pi`                                   |
+| [Auggie CLI](https://github.com/augmentcode/auggie)                         | ACP 包 `@augmentcode/auggie`，首次使用时安装，以 `--acp` 运行并关闭自动更新                    |
+| [Codebuddy Code](https://www.codebuddy.cn/cli/)                             | ACP 包 `@tencent-ai/codebuddy-code`，首次使用时安装，以 `--acp` 运行                           |
+| [DeepAgents](https://docs.langchain.com/oss/javascript/deepagents/overview) | ACP 包 `deepagents-acp`，首次使用时安装                                                        |
+| [DimCode](https://dimagent.cn/)                                             | ACP 包 `dimcode`，首次使用时安装，以 `acp` 运行                                                |
+| [Dirac](https://dirac.run)                                                  | ACP 包 `dirac-cli`，首次使用时安装，以 `--acp` 运行                                            |
+| [GLM Agent](https://github.com/stefandevo/glm-acp-agent)                    | ACP 包 `glm-acp-agent`，首次使用时安装                                                         |
+| [Nova](https://www.compassap.ai/portfolio/nova.html)                        | ACP 包 `@compass-ai/nova`，首次使用时安装，以 `acp` 运行                                       |
+| [Qoder CLI](https://qoder.com)                                              | ACP 包 `@qoder-ai/qodercli`，首次使用时安装，以 `--acp` 运行                                   |
+| [siGit Code](https://github.com/getsigit/sigit)                             | ACP 包 `@smbcloud/sigit`，首次使用时安装                                                       |
+| [Agoragentic](https://agoragentic.com)                                      | ACP 包 `agoragentic-mcp`，首次使用时安装，以 `--acp` 运行                                      |
+| [Autohand Code](https://www.autohand.ai/cli/)                               | ACP 包 `@autohandai/autohand-acp`，首次使用时安装                                              |
+| [Claude Code](https://github.com/anthropics/claude-code)                    | ACP 适配器 `@agentclientprotocol/claude-agent-acp`，首次使用时安装                             |
+| [Codex CLI](https://github.com/openai/codex)                                | ACP 适配器 `@agentclientprotocol/codex-acp`，首次使用时安装                                    |
+| [opencode](https://opencode.ai)                                             | 你自己安装的 `opencode`，以 `opencode acp` 运行                                                |
+| [Pi](https://pi.dev)                                                        | ACP 适配器 `pi-acp`，首次使用时安装，并运行你自己安装的 `pi`                                   |
+| [Cursor](https://cursor.com/docs/cli/acp)                                   | 你自己安装的 `cursor-agent`，或首次使用时下载的 Cursor 压缩包                                  |
+| [Kimi Code CLI](https://moonshotai.github.io/kimi-cli/)                     | 你自己安装的 `kimi`，或首次使用时下载的压缩包                                                  |
+| [Amp](https://ampcode.com)                                                  | ACP 适配器 `amp-acp`，首次使用时下载                                                           |
+| [goose](https://block.github.io/goose/)                                     | 你自己安装的 `goose`，或首次使用时下载的压缩包                                                 |
+| [Kilo Code](https://kilo.ai)                                                | 你自己安装的 `kilo`，或首次使用时下载的压缩包                                                  |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli)                   | `@google/gemini-cli` 这个 ACP 包，首次使用时安装，以 `--acp` 运行                              |
+| [GitHub Copilot](https://github.com/github/copilot-cli)                     | `@github/copilot` 这个 ACP 包，首次使用时安装，以 `--acp` 运行                                 |
+| [Qwen Code](https://github.com/QwenLM/qwen-code)                            | `@qwen-code/qwen-code` 这个 ACP 包，首次使用时安装，以 `--acp` 运行                            |
+| [Grok](https://x.ai/cli)                                                    | `@xai-official/grok` 这个 ACP 包，首次使用时安装，以 `agent stdio` 运行                        |
+| [Cline](https://cline.bot/cli)                                              | `cline` 这个 ACP 包，首次使用时安装，以 `--acp` 运行                                           |
+| [Factory Droid](https://factory.ai/product/cli)                             | `droid` 这个 ACP 包，首次使用时安装，以 `exec --output-format acp-daemon` 运行，并关闭自动更新 |
 
 这些适配器需要 Node.js 和 npm，OverBench 会通过你的登录 shell 找到它们。
 

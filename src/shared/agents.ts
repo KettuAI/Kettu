@@ -16,6 +16,12 @@ export type AgentId =
   | 'sigit'
   | 'agoragentic'
   | 'autohand'
+  | 'gemini'
+  | 'copilot'
+  | 'qwen'
+  | 'grok'
+  | 'cline'
+  | 'droid'
   | 'cursor'
   | 'kimi'
   | 'amp'
@@ -39,6 +45,12 @@ export const AGENT_IDS: readonly AgentId[] = [
   'sigit',
   'agoragentic',
   'autohand',
+  'gemini',
+  'copilot',
+  'qwen',
+  'grok',
+  'cline',
+  'droid',
   'cursor',
   'kimi',
   'amp',

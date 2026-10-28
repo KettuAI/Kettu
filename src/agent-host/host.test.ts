@@ -82,6 +82,12 @@ describe('the port envelope', () => {
       ['sigit', 'not-installed'],
       ['agoragentic', 'not-installed'],
       ['autohand', 'not-installed'],
+      ['gemini', 'not-installed'],
+      ['copilot', 'not-installed'],
+      ['qwen', 'not-installed'],
+      ['grok', 'not-installed'],
+      ['cline', 'not-installed'],
+      ['droid', 'not-installed'],
       ['cursor', 'not-installed'],
       ['kimi', 'not-installed'],
       ['amp', 'not-installed'],
@@ -95,7 +101,7 @@ describe('the port envelope', () => {
     const environment = await port.request('agents.environment', undefined)
     expect(environment).toMatchObject({ source: 'inherited' })
     const reloaded = await port.request('agents.reloadEnvironment', undefined)
-    expect(reloaded).toHaveLength(21)
+    expect(reloaded).toHaveLength(27)
   })
 
   it('starts an agent to prepare a session, and refuses one that cannot run', async () => {
@@ -117,7 +123,7 @@ describe('the port envelope', () => {
     const codex = await port.request('agents.details', { agentId: 'codex' })
     expect(codex.config.map((item) => item.id)).toEqual(['folder', 'settings', 'instructions'])
     await expect(
-      port.request('agents.details', { agentId: 'gemini' as 'codex' }),
+      port.request('agents.details', { agentId: 'unknown-agent' as 'codex' }),
     ).rejects.toMatchObject({ code: 'invalid_params' })
   })
 })

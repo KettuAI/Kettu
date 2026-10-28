@@ -72,32 +72,38 @@ On Windows and Linux, new versions download in the background and install when O
 
 Install at least one of these agents first; OverBench finds it on your system.
 
-| Agent                                                                       | How OverBench runs it                                                                           |
-| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [Claude Code](https://github.com/anthropics/claude-code)                    | The ACP adapter `@agentclientprotocol/claude-agent-acp`, installed on first use                 |
-| [Codex CLI](https://github.com/openai/codex)                                | The ACP adapter `@agentclientprotocol/codex-acp`, installed on first use                        |
-| [opencode](https://opencode.ai)                                             | Your installed `opencode`, as `opencode acp`                                                    |
-| [Pi](https://pi.dev)                                                        | The ACP adapter `pi-acp`, installed on first use, with your installed `pi`                      |
-| [Auggie CLI](https://github.com/augmentcode/auggie)                         | The ACP package `@augmentcode/auggie`, installed on first use, with `--acp` and auto-update off |
-| [Codebuddy Code](https://www.codebuddy.cn/cli/)                             | The ACP package `@tencent-ai/codebuddy-code`, installed on first use, with `--acp`              |
-| [DeepAgents](https://docs.langchain.com/oss/javascript/deepagents/overview) | The ACP package `deepagents-acp`, installed on first use                                        |
-| [DimCode](https://dimagent.cn/)                                             | The ACP package `dimcode`, installed on first use, with `acp`                                   |
-| [Dirac](https://dirac.run)                                                  | The ACP package `dirac-cli`, installed on first use, with `--acp`                               |
-| [GLM Agent](https://github.com/stefandevo/glm-acp-agent)                    | The ACP package `glm-acp-agent`, installed on first use                                         |
-| [Nova](https://www.compassap.ai/portfolio/nova.html)                        | The ACP package `@compass-ai/nova`, installed on first use, with `acp`                          |
-| [Qoder CLI](https://qoder.com)                                              | The ACP package `@qoder-ai/qodercli`, installed on first use, with `--acp`                      |
-| [siGit Code](https://github.com/getsigit/sigit)                             | The ACP package `@smbcloud/sigit`, installed on first use                                       |
-| [Agoragentic](https://agoragentic.com)                                      | The ACP package `agoragentic-mcp`, installed on first use, with `--acp`                         |
-| [Autohand Code](https://www.autohand.ai/cli/)                               | The ACP package `@autohandai/autohand-acp`, installed on first use                              |
-| [Claude Code](https://github.com/anthropics/claude-code)                    | The ACP adapter `@agentclientprotocol/claude-agent-acp`, installed on first use                 |
-| [Codex CLI](https://github.com/openai/codex)                                | The ACP adapter `@agentclientprotocol/codex-acp`, installed on first use                        |
-| [opencode](https://opencode.ai)                                             | Your installed `opencode`, as `opencode acp`                                                    |
-| [Pi](https://pi.dev)                                                        | The ACP adapter `pi-acp`, installed on first use, with your installed `pi`                      |
-| [Cursor](https://cursor.com/docs/cli/acp)                                   | Your installed `cursor-agent`, or Cursor's archive on first use                                 |
-| [Kimi Code CLI](https://moonshotai.github.io/kimi-cli/)                     | Your installed `kimi`, or its archive on first use                                              |
-| [Amp](https://ampcode.com)                                                  | The ACP adapter `amp-acp`, downloaded on first use                                              |
-| [goose](https://block.github.io/goose/)                                     | Your installed `goose`, or its archive on first use                                             |
-| [Kilo Code](https://kilo.ai)                                                | Your installed `kilo`, or its archive on first use                                              |
+| Agent                                                                       | How OverBench runs it                                                                                        |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| [Claude Code](https://github.com/anthropics/claude-code)                    | The ACP adapter `@agentclientprotocol/claude-agent-acp`, installed on first use                              |
+| [Codex CLI](https://github.com/openai/codex)                                | The ACP adapter `@agentclientprotocol/codex-acp`, installed on first use                                     |
+| [opencode](https://opencode.ai)                                             | Your installed `opencode`, as `opencode acp`                                                                 |
+| [Pi](https://pi.dev)                                                        | The ACP adapter `pi-acp`, installed on first use, with your installed `pi`                                   |
+| [Auggie CLI](https://github.com/augmentcode/auggie)                         | The ACP package `@augmentcode/auggie`, installed on first use, with `--acp` and auto-update off              |
+| [Codebuddy Code](https://www.codebuddy.cn/cli/)                             | The ACP package `@tencent-ai/codebuddy-code`, installed on first use, with `--acp`                           |
+| [DeepAgents](https://docs.langchain.com/oss/javascript/deepagents/overview) | The ACP package `deepagents-acp`, installed on first use                                                     |
+| [DimCode](https://dimagent.cn/)                                             | The ACP package `dimcode`, installed on first use, with `acp`                                                |
+| [Dirac](https://dirac.run)                                                  | The ACP package `dirac-cli`, installed on first use, with `--acp`                                            |
+| [GLM Agent](https://github.com/stefandevo/glm-acp-agent)                    | The ACP package `glm-acp-agent`, installed on first use                                                      |
+| [Nova](https://www.compassap.ai/portfolio/nova.html)                        | The ACP package `@compass-ai/nova`, installed on first use, with `acp`                                       |
+| [Qoder CLI](https://qoder.com)                                              | The ACP package `@qoder-ai/qodercli`, installed on first use, with `--acp`                                   |
+| [siGit Code](https://github.com/getsigit/sigit)                             | The ACP package `@smbcloud/sigit`, installed on first use                                                    |
+| [Agoragentic](https://agoragentic.com)                                      | The ACP package `agoragentic-mcp`, installed on first use, with `--acp`                                      |
+| [Autohand Code](https://www.autohand.ai/cli/)                               | The ACP package `@autohandai/autohand-acp`, installed on first use                                           |
+| [Claude Code](https://github.com/anthropics/claude-code)                    | The ACP adapter `@agentclientprotocol/claude-agent-acp`, installed on first use                              |
+| [Codex CLI](https://github.com/openai/codex)                                | The ACP adapter `@agentclientprotocol/codex-acp`, installed on first use                                     |
+| [opencode](https://opencode.ai)                                             | Your installed `opencode`, as `opencode acp`                                                                 |
+| [Pi](https://pi.dev)                                                        | The ACP adapter `pi-acp`, installed on first use, with your installed `pi`                                   |
+| [Cursor](https://cursor.com/docs/cli/acp)                                   | Your installed `cursor-agent`, or Cursor's archive on first use                                              |
+| [Kimi Code CLI](https://moonshotai.github.io/kimi-cli/)                     | Your installed `kimi`, or its archive on first use                                                           |
+| [Amp](https://ampcode.com)                                                  | The ACP adapter `amp-acp`, downloaded on first use                                                           |
+| [goose](https://block.github.io/goose/)                                     | Your installed `goose`, or its archive on first use                                                          |
+| [Kilo Code](https://kilo.ai)                                                | Your installed `kilo`, or its archive on first use                                                           |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli)                   | The ACP package `@google/gemini-cli`, installed on first use, with `--acp`                                   |
+| [GitHub Copilot](https://github.com/github/copilot-cli)                     | The ACP package `@github/copilot`, installed on first use, with `--acp`                                      |
+| [Qwen Code](https://github.com/QwenLM/qwen-code)                            | The ACP package `@qwen-code/qwen-code`, installed on first use, with `--acp`                                 |
+| [Grok](https://x.ai/cli)                                                    | The ACP package `@xai-official/grok`, installed on first use, with `agent stdio`                             |
+| [Cline](https://cline.bot/cli)                                              | The ACP package `cline`, installed on first use, with `--acp`                                                |
+| [Factory Droid](https://factory.ai/product/cli)                             | The ACP package `droid`, installed on first use, with `exec --output-format acp-daemon` and self-updates off |
 
 The adapters need Node.js with npm, which OverBench finds through your login shell.
 

@@ -309,6 +309,69 @@ export function configLocations(
         { id: 'instructions', candidates: [p.join(folder, 'AGENTS.md')], env: null },
       ]
     }
+    case 'gemini': {
+      // GEMINI_CLI_HOME replaces the home directory, so .gemini sits under it.
+      const envHome = variable('GEMINI_CLI_HOME')
+      const folder = p.join(envHome ?? home, '.gemini')
+      return layout(
+        folder,
+        envHome ? 'GEMINI_CLI_HOME' : null,
+        { id: 'settings', candidates: [p.join(folder, 'settings.json')], env: null },
+        'GEMINI.md',
+      )
+    }
+    case 'copilot': {
+      const moved = variable('COPILOT_HOME')
+      const folder = moved ?? p.join(home, '.copilot')
+      return layout(
+        folder,
+        moved ? 'COPILOT_HOME' : null,
+        { id: 'settings', candidates: [p.join(folder, 'config.json')], env: null },
+        'copilot-instructions.md',
+      )
+    }
+    case 'qwen': {
+      const folder = p.join(home, '.qwen')
+      return layout(
+        folder,
+        null,
+        { id: 'settings', candidates: [p.join(folder, 'settings.json')], env: null },
+        'QWEN.md',
+      )
+    }
+    case 'grok': {
+      const moved = variable('GROK_HOME')
+      const folder = moved ?? p.join(home, '.grok')
+      return layout(
+        folder,
+        moved ? 'GROK_HOME' : null,
+        { id: 'settings', candidates: [p.join(folder, 'config.toml')], env: null },
+        'AGENTS.md',
+      )
+    }
+    case 'cline': {
+      const moved = variable('CLINE_DIR')
+      const folder = moved ?? p.join(home, '.cline')
+      return [
+        { id: 'folder', candidates: [folder], env: moved ? 'CLINE_DIR' : null },
+        {
+          id: 'settings',
+          candidates: [p.join(folder, 'data', 'settings', 'global-settings.json')],
+          env: null,
+        },
+        // Cline reads its global rules from the cross-tool folder, not its own.
+        { id: 'instructions', candidates: [p.join(home, '.agents', 'AGENTS.md')], env: null },
+      ]
+    }
+    case 'droid': {
+      const folder = p.join(home, '.factory')
+      return layout(
+        folder,
+        null,
+        { id: 'settings', candidates: [p.join(folder, 'settings.json')], env: null },
+        'AGENTS.md',
+      )
+    }
     case 'fake-agent':
       return []
   }
