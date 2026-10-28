@@ -190,6 +190,16 @@ export const AGENT_NAMES: Record<AgentId, string> = {
   codewhale: 'CodeWhale',
   harn: 'Harn',
   kimchi: 'Kimchi',
+  antigravity: 'Google Antigravity',
+  devin: 'Devin',
+  'cortex-code': 'Cortex Code',
+  'corust-agent': 'Corust Agent',
+  'crow-cli': 'crow-cli',
+  junie: 'Junie',
+  'mistral-vibe': 'Mistral Vibe',
+  poolside: 'Poolside',
+  stakpak: 'Stakpak',
+  vtcode: 'VT Code',
   'fake-agent': 'Fake agent',
 }
 

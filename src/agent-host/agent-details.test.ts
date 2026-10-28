@@ -172,6 +172,118 @@ describe('configLocations', () => {
     return config.find((item) => item.id === 'instructions')!
   }
 
+  it('shows the configuration the registry archive agents name', () => {
+    expect(summary(locations('antigravity', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.gemini/antigravity-acp'], env: null },
+      {
+        id: 'settings',
+        candidates: ['/home/me/.gemini/antigravity-acp/settings.json'],
+        env: null,
+      },
+      {
+        id: 'instructions',
+        candidates: ['/home/me/.gemini/AGENTS.md', '/home/me/.gemini/config/AGENTS.md'],
+        env: null,
+      },
+    ])
+    expect(
+      summary(locations('antigravity', { GEMINI_HOME: '/srv/gemini' }, '/home/me', 'linux')),
+    ).toEqual([
+      { id: 'folder', candidates: ['/srv/gemini/antigravity-acp'], env: 'GEMINI_HOME' },
+      { id: 'settings', candidates: ['/srv/gemini/antigravity-acp/settings.json'], env: null },
+      {
+        id: 'instructions',
+        candidates: ['/srv/gemini/AGENTS.md', '/srv/gemini/config/AGENTS.md'],
+        env: null,
+      },
+    ])
+    expect(summary(locations('devin', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.config/devin'], env: null },
+      { id: 'settings', candidates: ['/home/me/.config/devin/config.json'], env: null },
+    ])
+    expect(summary(locations('cortex-code', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.snowflake/cortex'], env: null },
+      { id: 'settings', candidates: ['/home/me/.snowflake/cortex/settings.json'], env: null },
+      { id: 'instructions', candidates: ['/home/me/.snowflake/cortex/AGENTS.md'], env: null },
+    ])
+    expect(
+      summary(locations('cortex-code', { SNOWFLAKE_HOME: '/srv/snow' }, '/home/me', 'linux'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/srv/snow/cortex'], env: 'SNOWFLAKE_HOME' })
+    expect(locations('corust-agent', {}, '/home/me', 'linux')).toEqual([])
+    expect(summary(locations('crow-cli', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.agents/crow'], env: null },
+      { id: 'settings', candidates: ['/home/me/.agents/crow/config.yaml'], env: null },
+      {
+        id: 'instructions',
+        candidates: ['/home/me/.agents/crow/prompts/system_prompt.jinja2'],
+        env: null,
+      },
+    ])
+    expect(summary(locations('junie', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.junie'], env: null },
+      { id: 'settings', candidates: ['/home/me/.junie/config.json'], env: null },
+      { id: 'instructions', candidates: ['/home/me/.junie/AGENTS.md'], env: null },
+    ])
+    expect(
+      summary(locations('junie', { JUNIE_HOME: '/srv/junie' }, '/home/me', 'linux'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/srv/junie'], env: 'JUNIE_HOME' })
+    expect(summary(locations('mistral-vibe', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.vibe'], env: null },
+      { id: 'settings', candidates: ['/home/me/.vibe/config.toml'], env: null },
+      { id: 'instructions', candidates: ['/home/me/.vibe/AGENTS.md'], env: null },
+    ])
+    expect(summary(locations('poolside', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.config/poolside'], env: null },
+      { id: 'settings', candidates: ['/home/me/.config/poolside/settings.yaml'], env: null },
+      { id: 'instructions', candidates: ['/home/me/.config/poolside/AGENTS.md'], env: null },
+    ])
+    expect(
+      summary(locations('poolside', { XDG_CONFIG_HOME: '/xdg' }, '/home/me', 'linux')),
+    ).toEqual([
+      { id: 'folder', candidates: ['/xdg/poolside'], env: 'XDG_CONFIG_HOME' },
+      { id: 'settings', candidates: ['/xdg/poolside/settings.yaml'], env: null },
+      { id: 'instructions', candidates: ['/xdg/poolside/AGENTS.md'], env: null },
+    ])
+    expect(summary(locations('stakpak', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.stakpak'], env: null },
+      { id: 'settings', candidates: ['/home/me/.stakpak/config.toml'], env: null },
+    ])
+    expect(summary(locations('vtcode', {}, '/home/me', 'linux'))).toEqual([
+      { id: 'folder', candidates: ['/home/me/.config/vtcode'], env: null },
+      { id: 'settings', candidates: ['/home/me/.config/vtcode/vtcode.toml'], env: null },
+      {
+        id: 'instructions',
+        candidates: [
+          '/home/me/.config/vtcode/AGENTS.override.md',
+          '/home/me/.config/vtcode/AGENTS.md',
+        ],
+        env: null,
+      },
+    ])
+    expect(
+      summary(locations('vtcode', { VTCODE_CONFIG: '/srv/vtcode' }, '/home/me', 'linux'))[0],
+    ).toEqual({ id: 'folder', candidates: ['/srv/vtcode'], env: 'VTCODE_CONFIG' })
+    expect(summary(locations('vtcode', {}, '/Users/me', 'darwin'))[0]).toEqual({
+      id: 'folder',
+      candidates: ['/Users/me/Library/Application Support/com.vinhnx.vtcode'],
+      env: null,
+    })
+    expect(
+      summary(
+        locations(
+          'vtcode',
+          { APPDATA: 'C:\\Users\\me\\AppData\\Roaming' },
+          'C:\\Users\\me',
+          'win32',
+        ),
+      )[0],
+    ).toEqual({
+      id: 'folder',
+      candidates: ['C:\\Users\\me\\AppData\\Roaming\\vinhnx\\vtcode\\config'],
+      env: null,
+    })
+  })
+
   it('has nothing to show for the fake agent, DeepAgents or Agoragentic', () => {
     expect(locations('fake-agent', { CLAUDE_CONFIG_DIR: '/x' }, '/home/me', 'linux')).toEqual([])
     expect(locations('deepagents', {}, '/home/me', 'linux')).toEqual([])

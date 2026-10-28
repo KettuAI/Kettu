@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { InstalledAdapter } from './adapter-install'
 import {
   AGORAGENTIC,
+  ANTIGRAVITY,
   AUGGIE,
   AUTOHAND,
   AMP,
@@ -12,11 +13,15 @@ import {
   CLINE,
   CODEBUDDY,
   CODEWHALE,
+  CORTEX_CODE,
+  CORUST_AGENT,
+  CROW_CLI,
   CODEX,
   COPILOT,
   DEEPAGENTS,
   CURSOR,
   detectAgent,
+  DEVIN,
   DIMCODE,
   DIRAC,
   DROID,
@@ -27,6 +32,8 @@ import {
   GOOSE,
   GROK,
   HARN,
+  JUNIE,
+  MISTRAL_VIBE,
   HERMES,
   KILO,
   KIMCHI,
@@ -37,9 +44,12 @@ import {
   OMP,
   OPENCODE,
   PI,
+  POOLSIDE,
   QODER,
   QWEN,
   SIGIT,
+  STAKPAK,
+  VTCODE,
   type AgentDefinition,
   type DetectContext,
 } from './catalog'
@@ -102,6 +112,16 @@ describe('buildCatalog', () => {
       'codewhale',
       'harn',
       'kimchi',
+      'antigravity',
+      'devin',
+      'cortex-code',
+      'corust-agent',
+      'crow-cli',
+      'junie',
+      'mistral-vibe',
+      'poolside',
+      'stakpak',
+      'vtcode',
     ])
     expect(buildCatalog('/repo/tools/fake-agent/main.ts').map((d) => d.id)).toContain('fake-agent')
   })
@@ -142,6 +162,16 @@ describe('buildCatalog', () => {
       'codewhale',
       'harn',
       'kimchi',
+      'antigravity',
+      'devin',
+      'cortex-code',
+      'corust-agent',
+      'crow-cli',
+      'junie',
+      'mistral-vibe',
+      'poolside',
+      'stakpak',
+      'vtcode',
       'fake-agent',
     ])
   })
@@ -1157,5 +1187,510 @@ describe('the registry archive agents', () => {
         context({ isExecutable: async (file) => file === '/usr/local/bin/kimchi' }),
       ),
     ).toMatchObject({ state: 'available', spec: { command: '/usr/local/bin/kimchi' } })
+  })
+})
+
+describe('the registry archive agents', () => {
+  function archived(
+    def: AgentDefinition,
+    platform: 'darwin' | 'linux' | 'win32' = 'darwin',
+    arch = 'arm64',
+  ): {
+    entry: NonNullable<ReturnType<typeof archiveEntry>>
+    install: InstalledArchive
+    command: string
+  } {
+    const release = (def.installs as BinaryInstalls).archive!
+    const entry = archiveEntry(release, platform, arch)!
+    const dir = `/data/agents/${def.id}/${release.version}`
+    return {
+      entry,
+      command: programPath(dir, entry.cmd, platform),
+      install: {
+        version: release.version,
+        dir,
+        url: entry.url,
+        sha256: entry.sha256 ?? 'a'.repeat(64),
+        cmd: entry.cmd,
+        args: entry.args ?? [],
+        installedAt: 1,
+      },
+    }
+  }
+
+  async function runsFromArchive(def: AgentDefinition): Promise<void> {
+    const { entry, install, command } = archived(def)
+    expect(await detectAgent(def, context())).toMatchObject({ state: 'not-installed' })
+    expect(
+      await detectAgent(
+        def,
+        context({
+          installedArchives: async () => [install],
+          isExecutable: async (file) => file === command,
+        }),
+      ),
+    ).toMatchObject({
+      state: 'available',
+      spec: { command, args: entry.args ?? [], shell: false },
+    })
+  }
+
+  it('adds Cursor with its platform archives and its own CLI', async () => {
+    expect(CURSOR.launch).toEqual({ kind: 'binary', command: 'cursor-agent', args: ['acp'] })
+    const entries = CURSOR.installs!.archive!.entries
+    expect(Object.keys(entries).sort()).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-aarch64',
+      'windows-x86_64',
+    ])
+    for (const [key, entry] of Object.entries(entries)) {
+      expect(entry.url).toMatch(/^https:\/\/downloads\.cursor\.com\/lab\/2026\.10\.22-27dcf5f\//)
+      expect(entry.cmd).toBe(
+        key.startsWith('windows')
+          ? './dist-package\\cursor-agent.cmd'
+          : './dist-package/cursor-agent',
+      )
+      expect(entry.args).toEqual(['acp'])
+      // The registry publishes no hash for Cursor, so the install records the one it measured.
+      expect(entry.sha256).toBeUndefined()
+    }
+    await runsFromArchive(CURSOR)
+    expect(
+      await detectAgent(
+        CURSOR,
+        context({ isExecutable: async (file) => file === '/usr/local/bin/cursor-agent' }),
+      ),
+    ).toMatchObject({
+      state: 'available',
+      spec: { command: '/usr/local/bin/cursor-agent', args: ['acp'] },
+    })
+  })
+
+  it('adds Kimi Code CLI where the registry ships an archive, hashes included', async () => {
+    expect(KIMI.launch).toEqual({ kind: 'binary', command: 'kimi', args: ['acp'] })
+    const entries = KIMI.installs!.archive!.entries
+    expect(Object.keys(entries).sort()).toEqual([
+      'darwin-aarch64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-aarch64',
+      'windows-x86_64',
+    ])
+    expect(archiveEntry(KIMI.installs!.archive, 'darwin', 'x64')).toBeNull()
+    for (const [key, entry] of Object.entries(entries)) {
+      expect(entry.cmd).toBe(key.startsWith('windows') ? './kimi.exe' : './kimi')
+      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/)
+      expect(entry.args).toEqual(['acp'])
+    }
+    await runsFromArchive(KIMI)
+    expect(
+      await detectAgent(KIMI, context({ isExecutable: async (file) => file === '/usr/bin/kimi' })),
+    ).toMatchObject({ state: 'available', spec: { command: '/usr/bin/kimi' } })
+  })
+
+  it('adds Amp as the adapter archive alone', async () => {
+    expect(AMP.launch).toEqual({ kind: 'binary', command: 'amp-acp', args: [] })
+    const entries = AMP.installs!.archive!.entries
+    expect(Object.keys(entries).sort()).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-x86_64',
+    ])
+    for (const [key, entry] of Object.entries(entries)) {
+      expect(entry.cmd).toBe(key.startsWith('windows') ? 'amp-acp.exe' : './amp-acp')
+      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/)
+      // The archive is the adapter itself, so it needs no arguments of its own.
+      expect(entry.args).toBeUndefined()
+    }
+    await runsFromArchive(AMP)
+    expect(
+      await detectAgent(
+        AMP,
+        context({ isExecutable: async (file) => file === '/usr/local/bin/amp-acp' }),
+      ),
+    ).toMatchObject({ state: 'available', spec: { command: '/usr/local/bin/amp-acp' } })
+  })
+
+  it('adds goose with its archives, commands and hashes', async () => {
+    expect(GOOSE.launch).toEqual({ kind: 'binary', command: 'goose', args: ['acp'] })
+    const entries = GOOSE.installs!.archive!.entries
+    expect(Object.keys(entries).sort()).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-x86_64',
+    ])
+    for (const [key, entry] of Object.entries(entries)) {
+      expect(entry.cmd).toBe(key.startsWith('windows') ? './goose-package\\goose.exe' : './goose')
+      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/)
+      expect(entry.args).toEqual(['acp'])
+    }
+    await runsFromArchive(GOOSE)
+    expect(
+      await detectAgent(
+        GOOSE,
+        context({ isExecutable: async (file) => file === '/usr/bin/goose' }),
+      ),
+    ).toMatchObject({ state: 'available', spec: { command: '/usr/bin/goose' } })
+  })
+
+  it('adds Kilo Code with its archive and its npm package', async () => {
+    expect(KILO.launch).toEqual({ kind: 'binary', command: 'kilo', args: ['acp'] })
+    expect(KILO.installs!.npm).toBe('@kilocode/cli')
+    const entries = KILO.installs!.archive!.entries
+    expect(Object.keys(entries).sort()).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-x86_64',
+    ])
+    for (const [key, entry] of Object.entries(entries)) {
+      expect(entry.cmd).toBe(key.startsWith('windows') ? './kilo.exe' : './kilo')
+      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/)
+      expect(entry.args).toEqual(['acp'])
+    }
+    await runsFromArchive(KILO)
+    expect(
+      await detectAgent(KILO, context({ isExecutable: async (file) => file === '/usr/bin/kilo' })),
+    ).toMatchObject({ state: 'available', spec: { command: '/usr/bin/kilo' } })
+  })
+  const archiveOf = (def: AgentDefinition) => {
+    const archive = def.installs?.archive
+    expect(archive).toBeDefined()
+    return archive!
+  }
+  const platforms = (def: AgentDefinition) => Object.keys(archiveOf(def).entries).sort()
+  const entry = (def: AgentDefinition, platform: string) => {
+    const found = archiveOf(def).entries[platform]
+    expect(found, platform).toBeDefined()
+    return found!
+  }
+  const SHA256 = /^[0-9a-f]{64}$/
+
+  it('describes Google Antigravity', () => {
+    expect(ANTIGRAVITY).toMatchObject({
+      id: 'antigravity',
+      name: 'Google Antigravity',
+      registryId: 'antigravity-acp',
+      launch: { kind: 'binary', command: 'agy_acp_server', args: [] },
+    })
+    expect(archiveOf(ANTIGRAVITY).version).toBe('1.4.3')
+    expect(platforms(ANTIGRAVITY)).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-aarch64',
+      'windows-x86_64',
+    ])
+    for (const platform of platforms(ANTIGRAVITY))
+      expect(entry(ANTIGRAVITY, platform).sha256).toMatch(SHA256)
+    expect(entry(ANTIGRAVITY, 'darwin-aarch64')).toMatchObject({ cmd: './agy_acp_server.par' })
+    expect(entry(ANTIGRAVITY, 'linux-x86_64')).toMatchObject({
+      cmd: './agy_acp_server.par',
+      args: ['--uid='],
+    })
+    expect(entry(ANTIGRAVITY, 'linux-aarch64')).toMatchObject({
+      cmd: './agy_acp_server.par',
+      args: ['--uid='],
+    })
+    expect(entry(ANTIGRAVITY, 'windows-x86_64')).toMatchObject({ cmd: './agy_acp_server.exe' })
+  })
+
+  it('describes Devin, whose archives carry no sha256', () => {
+    expect(DEVIN).toMatchObject({
+      id: 'devin',
+      name: 'Devin',
+      registryId: 'devin',
+      launch: { kind: 'binary', command: 'devin', args: ['acp'] },
+    })
+    expect(archiveOf(DEVIN).version).toBe('3000.11.228')
+    expect(platforms(DEVIN)).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-aarch64',
+      'windows-x86_64',
+    ])
+    for (const platform of platforms(DEVIN)) {
+      expect(entry(DEVIN, platform).sha256, platform).toBeUndefined()
+      expect(entry(DEVIN, platform).args, platform).toEqual(['acp'])
+    }
+    expect(entry(DEVIN, 'darwin-aarch64')).toMatchObject({ cmd: './bin/devin' })
+    expect(entry(DEVIN, 'windows-x86_64')).toMatchObject({ cmd: './bin\\devin.exe' })
+  })
+
+  it('describes Cortex Code, whose command sits in its build folder', () => {
+    expect(CORTEX_CODE).toMatchObject({
+      id: 'cortex-code',
+      name: 'Cortex Code',
+      registryId: 'cortex-code',
+      launch: { kind: 'binary', command: 'cortex', args: ['acp', 'serve'] },
+    })
+    expect(archiveOf(CORTEX_CODE).version).toBe('1.0.73')
+    expect(platforms(CORTEX_CODE)).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-aarch64',
+      'windows-x86_64',
+    ])
+    for (const platform of platforms(CORTEX_CODE)) {
+      const found = entry(CORTEX_CODE, platform)
+      expect(found.sha256, platform).toBeUndefined()
+      expect(found.args, platform).toEqual(['acp', 'serve'])
+      expect(found.cmd, platform).toMatch(/^\.\/coco-1\.0\.73\+[^/]+\/cortex(\.exe)?$/)
+    }
+    expect(entry(CORTEX_CODE, 'darwin-aarch64').cmd).toBe(
+      './coco-1.0.73+180523.e6179a031de9-darwin-arm64/cortex',
+    )
+    expect(entry(CORTEX_CODE, 'windows-x86_64').cmd).toBe(
+      './coco-1.0.73+180523.e6179a031de9-windows-amd64/cortex.exe',
+    )
+  })
+
+  it('describes Corust Agent', () => {
+    expect(CORUST_AGENT).toMatchObject({
+      id: 'corust-agent',
+      name: 'Corust Agent',
+      registryId: 'corust-agent',
+      launch: { kind: 'binary', command: 'corust-agent-acp', args: [] },
+    })
+    expect(platforms(CORUST_AGENT)).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-x86_64',
+      'windows-x86_64',
+    ])
+    for (const platform of platforms(CORUST_AGENT)) {
+      expect(entry(CORUST_AGENT, platform).sha256, platform).toBeUndefined()
+      expect(entry(CORUST_AGENT, platform).args, platform).toBeUndefined()
+    }
+    expect(entry(CORUST_AGENT, 'linux-x86_64')).toMatchObject({ cmd: './corust-agent-acp' })
+    expect(entry(CORUST_AGENT, 'windows-x86_64')).toMatchObject({ cmd: './corust-agent-acp.exe' })
+  })
+
+  it('describes crow-cli', () => {
+    expect(CROW_CLI).toMatchObject({
+      id: 'crow-cli',
+      name: 'crow-cli',
+      registryId: 'crow-cli',
+      launch: { kind: 'binary', command: 'crow-cli', args: ['acp'] },
+    })
+    expect(platforms(CROW_CLI)).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-x86_64',
+    ])
+    for (const platform of platforms(CROW_CLI)) {
+      expect(entry(CROW_CLI, platform).sha256, platform).toBeUndefined()
+      expect(entry(CROW_CLI, platform).args, platform).toEqual(['acp'])
+    }
+    expect(entry(CROW_CLI, 'windows-x86_64')).toMatchObject({ cmd: './crow-cli.exe' })
+  })
+
+  it('describes Junie, whose macOS archive is an app bundle', () => {
+    expect(JUNIE).toMatchObject({
+      id: 'junie',
+      name: 'Junie',
+      registryId: 'junie',
+      launch: { kind: 'binary', command: 'junie', args: ['--acp=true'] },
+    })
+    expect(platforms(JUNIE)).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-aarch64',
+      'windows-x86_64',
+    ])
+    for (const platform of platforms(JUNIE)) {
+      const found = entry(JUNIE, platform)
+      expect(found.sha256, platform).toBeUndefined()
+      expect(found.args, platform).toEqual(['--acp=true'])
+      expect(found.url, platform).toMatch(/\.zip$/)
+    }
+    expect(entry(JUNIE, 'darwin-aarch64')).toMatchObject({
+      cmd: './Applications/junie.app/Contents/MacOS/junie',
+    })
+    expect(entry(JUNIE, 'linux-x86_64')).toMatchObject({ cmd: './junie-app/bin/junie' })
+    expect(entry(JUNIE, 'windows-x86_64')).toMatchObject({ cmd: './junie/junie.exe' })
+  })
+
+  it('describes Mistral Vibe, with a sha256 for every platform', () => {
+    expect(MISTRAL_VIBE).toMatchObject({
+      id: 'mistral-vibe',
+      name: 'Mistral Vibe',
+      registryId: 'mistral-vibe',
+      launch: { kind: 'binary', command: 'vibe-acp', args: [] },
+    })
+    expect(platforms(MISTRAL_VIBE)).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-x86_64',
+    ])
+    for (const platform of platforms(MISTRAL_VIBE)) {
+      expect(entry(MISTRAL_VIBE, platform).sha256, platform).toMatch(SHA256)
+      expect(entry(MISTRAL_VIBE, platform).cmd, platform).toMatch(/^\.\/vibe-acp(\.exe)?$/)
+    }
+    expect(entry(MISTRAL_VIBE, 'windows-x86_64')).toMatchObject({ cmd: './vibe-acp.exe' })
+  })
+
+  it('describes Poolside, whose programs are named after the platform', () => {
+    expect(POOLSIDE).toMatchObject({
+      id: 'poolside',
+      name: 'Poolside',
+      registryId: 'poolside',
+      launch: { kind: 'binary', command: 'pool', args: ['acp'] },
+    })
+    expect(platforms(POOLSIDE)).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-aarch64',
+      'windows-x86_64',
+    ])
+    for (const platform of platforms(POOLSIDE)) {
+      const found = entry(POOLSIDE, platform)
+      expect(found.sha256, platform).toMatch(SHA256)
+      expect(found.args, platform).toEqual(['acp'])
+      expect(found.url, platform).toMatch(/\.tar\.gz$/)
+    }
+    expect(entry(POOLSIDE, 'darwin-aarch64')).toMatchObject({ cmd: './pool-darwin-arm64' })
+    expect(entry(POOLSIDE, 'windows-x86_64')).toMatchObject({ cmd: './pool-windows-amd64.exe' })
+  })
+
+  it('describes Stakpak', () => {
+    expect(STAKPAK).toMatchObject({
+      id: 'stakpak',
+      name: 'Stakpak',
+      registryId: 'stakpak',
+      launch: { kind: 'binary', command: 'stakpak', args: ['acp'] },
+    })
+    expect(platforms(STAKPAK)).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-aarch64',
+      'linux-x86_64',
+      'windows-x86_64',
+    ])
+    for (const platform of platforms(STAKPAK)) {
+      expect(entry(STAKPAK, platform).sha256, platform).toBeUndefined()
+      expect(entry(STAKPAK, platform).args, platform).toEqual(['acp'])
+    }
+    expect(entry(STAKPAK, 'windows-x86_64')).toMatchObject({ cmd: './stakpak.exe' })
+  })
+
+  it('describes VT Code, whose Windows command has no ./', () => {
+    expect(VTCODE).toMatchObject({
+      id: 'vtcode',
+      name: 'VT Code',
+      registryId: 'vtcode',
+      launch: { kind: 'binary', command: 'vtcode', args: ['acp'] },
+      env: { VT_ACP_ENABLED: '1' },
+    })
+    expect(platforms(VTCODE)).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+      'linux-x86_64',
+      'windows-x86_64',
+    ])
+    for (const platform of platforms(VTCODE)) {
+      expect(entry(VTCODE, platform).sha256, platform).toBeUndefined()
+      expect(entry(VTCODE, platform).args, platform).toEqual(['acp'])
+    }
+    expect(entry(VTCODE, 'windows-x86_64')).toMatchObject({ cmd: 'vtcode.exe' })
+  })
+
+  it('runs Antigravity from its install only after Install, and a copy on PATH before that', async () => {
+    expect(await detectAgent(ANTIGRAVITY, context())).toMatchObject({
+      state: 'not-installed',
+      detail: expect.stringContaining('agy_acp_server'),
+    })
+    const dir = '/data/agents/antigravity/1.4.3'
+    const installed: InstalledArchive[] = [
+      {
+        version: '1.4.3',
+        dir,
+        url: 'https://example.com/agy.zip',
+        sha256: 'a'.repeat(64),
+        cmd: './agy_acp_server.par',
+        args: [],
+        installedAt: 1,
+      },
+    ]
+    const fromArchive = context({
+      installedArchives: async () => installed,
+      isExecutable: async (file) => file === `${dir}/agy_acp_server.par`,
+    })
+    expect(await detectAgent(ANTIGRAVITY, fromArchive)).toMatchObject({
+      state: 'available',
+      spec: { command: `${dir}/agy_acp_server.par`, args: [], env: {} },
+    })
+    expect(
+      await detectAgent(
+        ANTIGRAVITY,
+        context({
+          installedArchives: async () => installed,
+          isExecutable: async (file) =>
+            file === '/usr/bin/agy_acp_server' || file === `${dir}/agy_acp_server.par`,
+        }),
+      ),
+    ).toMatchObject({ state: 'available', spec: { command: '/usr/bin/agy_acp_server' } })
+  })
+
+  it('runs Devin from its archive with the arguments the record carries', async () => {
+    expect(await detectAgent(DEVIN, context())).toMatchObject({ state: 'not-installed' })
+    const dir = '/data/agents/devin/3000.11.228'
+    expect(
+      await detectAgent(
+        DEVIN,
+        context({
+          installedArchives: async () => [
+            {
+              version: '3000.11.228',
+              dir,
+              url: 'https://example.com/devin.tar.gz',
+              sha256: 'b'.repeat(64),
+              cmd: './bin/devin',
+              args: ['acp'],
+              installedAt: 1,
+            },
+          ],
+          isExecutable: async (file) => file === `${dir}/bin/devin`,
+        }),
+      ),
+    ).toMatchObject({ state: 'available', spec: { command: `${dir}/bin/devin`, args: ['acp'] } })
+  })
+
+  it('sets the variables a binary agent needs', async () => {
+    expect(
+      await detectAgent(
+        VTCODE,
+        context({ isExecutable: async (file) => file === '/usr/local/bin/vtcode' }),
+      ),
+    ).toMatchObject({
+      state: 'available',
+      spec: {
+        command: '/usr/local/bin/vtcode',
+        args: ['acp'],
+        env: { VT_ACP_ENABLED: '1' },
+        display: { command: 'vtcode', args: ['acp'], env: { VT_ACP_ENABLED: '1' } },
+      },
+    })
   })
 })

@@ -10,6 +10,7 @@ import type { AgentId } from '@shared/thread'
 import { compareInstalls, listInstalled, type InstalledAdapter } from './adapter-install'
 import { AGORAGENTIC } from './agents/agoragentic'
 import { AMP } from './agents/amp'
+import { ANTIGRAVITY } from './agents/antigravity'
 import { AUGGIE } from './agents/auggie'
 import { AUTOHAND } from './agents/autohand'
 import { BOB } from './agents/bob'
@@ -20,7 +21,11 @@ import { CODEWHALE } from './agents/codewhale'
 import { CODEX } from './agents/codex'
 import { COPILOT } from './agents/copilot'
 import { CURSOR } from './agents/cursor'
+import { CORTEX_CODE } from './agents/cortex-code'
+import { CORUST_AGENT } from './agents/corust-agent'
+import { CROW_CLI } from './agents/crow-cli'
 import { DEEPAGENTS } from './agents/deepagents'
+import { DEVIN } from './agents/devin'
 import { DIMCODE } from './agents/dimcode'
 import { DIRAC } from './agents/dirac'
 import { DROID } from './agents/droid'
@@ -36,13 +41,18 @@ import { KIMCHI } from './agents/kimchi'
 import { KIMI } from './agents/kimi'
 import { MINIMAX } from './agents/minimax'
 import { MUSE } from './agents/muse'
+import { JUNIE } from './agents/junie'
+import { MISTRAL_VIBE } from './agents/mistral-vibe'
 import { NOVA } from './agents/nova'
 import { OMP } from './agents/omp'
 import { OPENCODE } from './agents/opencode'
 import { PI } from './agents/pi'
+import { POOLSIDE } from './agents/poolside'
 import { QODER } from './agents/qoder'
 import { QWEN } from './agents/qwen'
 import { SIGIT } from './agents/sigit'
+import { STAKPAK } from './agents/stakpak'
+import { VTCODE } from './agents/vtcode'
 import { listArchiveInstalls, programPath, type InstalledArchive } from './archive-install'
 import type { BinaryInstalls } from './binary-install'
 import type { AdapterLookup } from './codex-binary'
@@ -151,6 +161,7 @@ export interface AgentDefinition {
 export {
   AGORAGENTIC,
   AMP,
+  ANTIGRAVITY,
   AUGGIE,
   AUTOHAND,
   BOB,
@@ -161,7 +172,11 @@ export {
   CODEX,
   COPILOT,
   CURSOR,
+  CORTEX_CODE,
+  CORUST_AGENT,
+  CROW_CLI,
   DEEPAGENTS,
+  DEVIN,
   DIMCODE,
   DIRAC,
   DROID,
@@ -177,13 +192,18 @@ export {
   KIMI,
   MINIMAX,
   MUSE,
+  JUNIE,
+  MISTRAL_VIBE,
   NOVA,
   OMP,
   OPENCODE,
   PI,
+  POOLSIDE,
   QODER,
   QWEN,
   SIGIT,
+  STAKPAK,
+  VTCODE,
 }
 
 /** The catalog; the fake agent exists only when main passes its path. */
@@ -223,6 +243,16 @@ export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
     CODEWHALE,
     HARN,
     KIMCHI,
+    ANTIGRAVITY,
+    DEVIN,
+    CORTEX_CODE,
+    CORUST_AGENT,
+    CROW_CLI,
+    JUNIE,
+    MISTRAL_VIBE,
+    POOLSIDE,
+    STAKPAK,
+    VTCODE,
   ]
   if (fakeAgentPath) catalog.push(fakeAgent(fakeAgentPath))
   return catalog
@@ -646,7 +676,11 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
                 command,
                 installed.args,
                 ctx.platform,
-                { command, args: installed.args, env },
+                {
+                  command,
+                  args: installed.args,
+                  env,
+                },
                 env,
               )
             }

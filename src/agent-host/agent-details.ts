@@ -417,6 +417,108 @@ export function configLocations(
         { id: 'settings', candidates: [p.join(folder, 'config.toml')], env: null },
       ]
     }
+    case 'antigravity': {
+      // The ACP server's folder, from Google's gateway docs; GEMINI_HOME moves the whole tree.
+      const moved = variable('GEMINI_HOME')
+      const base = moved ?? p.join(home, '.gemini')
+      const folder = p.join(base, 'antigravity-acp')
+      return [
+        { id: 'folder', candidates: [folder], env: moved ? 'GEMINI_HOME' : null },
+        { id: 'settings', candidates: [p.join(folder, 'settings.json')], env: null },
+        {
+          id: 'instructions',
+          candidates: [p.join(base, 'AGENTS.md'), p.join(base, 'config', 'AGENTS.md')],
+          env: null,
+          fallback: p.join(base, 'AGENTS.md'),
+        },
+      ]
+    }
+    case 'devin':
+      return [
+        { id: 'folder', candidates: [p.join(home, '.config', 'devin')], env: null },
+        {
+          id: 'settings',
+          candidates: [p.join(home, '.config', 'devin', 'config.json')],
+          env: null,
+        },
+      ]
+    case 'cortex-code': {
+      const moved = variable('SNOWFLAKE_HOME')
+      const folder = p.join(moved ?? p.join(home, '.snowflake'), 'cortex')
+      return [
+        { id: 'folder', candidates: [folder], env: moved ? 'SNOWFLAKE_HOME' : null },
+        { id: 'settings', candidates: [p.join(folder, 'settings.json')], env: null },
+        { id: 'instructions', candidates: [p.join(folder, 'AGENTS.md')], env: null },
+      ]
+    }
+    case 'corust-agent':
+      return []
+    case 'crow-cli': {
+      const folder = p.join(home, '.agents', 'crow')
+      return [
+        { id: 'folder', candidates: [folder], env: null },
+        { id: 'settings', candidates: [p.join(folder, 'config.yaml')], env: null },
+        {
+          id: 'instructions',
+          candidates: [p.join(folder, 'prompts', 'system_prompt.jinja2')],
+          env: null,
+        },
+      ]
+    }
+    case 'junie': {
+      const moved = variable('JUNIE_HOME')
+      const folder = moved ?? p.join(home, '.junie')
+      return [
+        { id: 'folder', candidates: [folder], env: moved ? 'JUNIE_HOME' : null },
+        { id: 'settings', candidates: [p.join(folder, 'config.json')], env: null },
+        { id: 'instructions', candidates: [p.join(folder, 'AGENTS.md')], env: null },
+      ]
+    }
+    case 'mistral-vibe': {
+      const folder = p.join(home, '.vibe')
+      return [
+        { id: 'folder', candidates: [folder], env: null },
+        { id: 'settings', candidates: [p.join(folder, 'config.toml')], env: null },
+        { id: 'instructions', candidates: [p.join(folder, 'AGENTS.md')], env: null },
+      ]
+    }
+    case 'poolside': {
+      const xdg = variable('XDG_CONFIG_HOME')
+      const folder = p.join(xdg ?? p.join(home, '.config'), 'poolside')
+      return [
+        { id: 'folder', candidates: [folder], env: xdg ? 'XDG_CONFIG_HOME' : null },
+        { id: 'settings', candidates: [p.join(folder, 'settings.yaml')], env: null },
+        { id: 'instructions', candidates: [p.join(folder, 'AGENTS.md')], env: null },
+      ]
+    }
+    case 'stakpak': {
+      const folder = p.join(home, '.stakpak')
+      return [
+        { id: 'folder', candidates: [folder], env: null },
+        { id: 'settings', candidates: [p.join(folder, 'config.toml')], env: null },
+      ]
+    }
+    case 'vtcode': {
+      const moved = variable('VTCODE_CONFIG')
+      const appData = variable('APPDATA')
+      const folder =
+        moved ??
+        (platform === 'win32'
+          ? p.join(appData ?? p.join(home, 'AppData', 'Roaming'), 'vinhnx', 'vtcode', 'config')
+          : platform === 'darwin'
+            ? p.join(home, 'Library', 'Application Support', 'com.vinhnx.vtcode')
+            : p.join(home, '.config', 'vtcode'))
+      return [
+        { id: 'folder', candidates: [folder], env: moved ? 'VTCODE_CONFIG' : null },
+        { id: 'settings', candidates: [p.join(folder, 'vtcode.toml')], env: null },
+        {
+          id: 'instructions',
+          candidates: [p.join(folder, 'AGENTS.override.md'), p.join(folder, 'AGENTS.md')],
+          env: null,
+          fallback: p.join(folder, 'AGENTS.md'),
+        },
+      ]
+    }
     case 'fake-agent':
       return []
   }

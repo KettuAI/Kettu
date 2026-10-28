@@ -201,6 +201,7 @@
       "codewhale": "请用 codewhale.net 上的安装程序安装 CodeWhale，或在「设置 › Agent」中选择它的程序。",
       "harn": "请安装 Harn，或在「设置 › Agent」中选择它的程序。",
       "kimchi": "请安装 Kimchi，或在「设置 › Agent」中选择它的程序。",
+      "archive": "请在「设置 › Agent」中安装。",
       "fakeAgent": "Fake agent 运行仓库中的 tools/fake-agent/main.ts。"
     }
   },
