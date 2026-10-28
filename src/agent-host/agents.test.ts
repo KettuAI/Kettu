@@ -102,6 +102,7 @@ function manager(
       | 'runProgram'
       | 'rememberUpdates'
       | 'launcher'
+      | 'platform'
       | 'probeCli'
       | 'cliVersions'
       | 'settings'
@@ -1594,7 +1595,7 @@ describe('a configuration folder of its own', () => {
     sessionTitles: true,
   })
 
-  function folderManager() {
+  function folderManager(agentEnv: Env = {}, platform: Platform = process.platform) {
     let current = settingsWith()
     const env = new EnvironmentService({
       platform: process.platform,
@@ -1610,14 +1611,14 @@ describe('a configuration folder of its own', () => {
       probe: async () => ({ nodeVersion: null, npmPath: null, nodePath: null }),
     })
     const launches: Env[] = []
-    const inner = inProcessLauncher(module)
+    const inner = inProcessLauncher(module, agentEnv)
     const launcher: AgentLauncher = {
       launch: (agent, spec, launchEnv, output) => {
         launches.push(launchEnv)
         return inner.launch(agent, spec, launchEnv, output)
       },
     }
-    const m = manager({}, {}, { catalog: [def], env, launcher, settings: () => current })
+    const m = manager({}, {}, { catalog: [def], env, launcher, settings: () => current, platform })
     const changed: AgentId[] = []
     m.agents.hooks.configChanged = (agentId) => changed.push(agentId)
     const pick = async (folder?: string) => {
@@ -1675,6 +1676,48 @@ describe('a configuration folder of its own', () => {
     expect(command()).not.toContain('CLAUDE_CONFIG_DIR')
     await m.restart()
     expect(command()).toContain(`CLAUDE_CONFIG_DIR=${picked}`)
+    await m.agents.stopAll()
+  })
+
+  it('signs in with the command the agent names, quoted for each platform', async () => {
+    const program = '/opt/Over Bench/copilot'
+    const named = (status: AgentStatus) =>
+      status.authMethods.find((method) => method.id === 'fake-named-login')
+
+    const posix = folderManager({ FAKE_AGENT_NAMED_LOGIN: program }, 'darwin')
+    await posix.agents.ensureReady('claude-code')
+    expect(named(posix.status())?.command).toBe(`ELECTRON_RUN_AS_NODE=1 '${program}' login`)
+    await posix.agents.stopAll()
+
+    const windows = folderManager({ FAKE_AGENT_NAMED_LOGIN: program }, 'win32')
+    await windows.agents.ensureReady('claude-code')
+    expect(named(windows.status())?.command).toBe(
+      `set "ELECTRON_RUN_AS_NODE=1" && "${program}" login`,
+    )
+    await windows.agents.stopAll()
+  })
+
+  it('runs the named command with the picked folder in its environment', async () => {
+    const m = folderManager({ FAKE_AGENT_NAMED_LOGIN: '/opt/copilot' })
+    await m.agents.ensureReady('claude-code')
+    await m.pick(picked)
+    await m.restart()
+    const command = m
+      .status()
+      .authMethods.find((method) => method.id === 'fake-named-login')?.command
+    expect(command).toContain('CLAUDE_CONFIG_DIR=')
+    expect(command).toContain(picked)
+    expect(command).toContain('/opt/copilot login')
+    await m.agents.stopAll()
+  })
+
+  it('keeps the launch command when the metadata names no command', async () => {
+    const m = folderManager({ FAKE_AGENT_META_TERMINAL: '1' })
+    await m.agents.ensureReady('claude-code')
+    const command = m
+      .status()
+      .authMethods.find((method) => method.id === 'fake-meta-login')?.command
+    expect(command).toMatch(/main\.ts["']? --auth-type=fake$/)
     await m.agents.stopAll()
   })
 

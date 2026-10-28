@@ -16,6 +16,7 @@ import {
   RequestError,
   type AgentApp,
   type AnyMessage,
+  type AuthMethod,
   type ClientConnection,
   type InitializeResponse,
   type McpServer,
@@ -105,6 +106,8 @@ export interface AuthMethodInfo {
   name: string
   description?: string
   type: 'agent' | 'terminal'
+  /** The program a terminal sign-in runs, when the agent names it instead of deriving it. */
+  command?: string
   args: string[]
   env: Record<string, string>
 }
@@ -170,6 +173,63 @@ const CLIENT_CAPABILITIES = {
   auth: { terminal: true },
   session: { notices: {}, compaction: {}, configOptions: { boolean: {} } },
   subagents: {},
+  // Kilo publishes its terminal sign-in command only to a client that advertises this.
+  _meta: { 'terminal-auth': true },
+}
+
+type AuthMethodMeta = {
+  type?: unknown
+  args?: unknown
+  env?: unknown
+  'terminal-auth'?: { command?: unknown; args?: unknown } | null
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : []
+}
+
+function stringMap(value: unknown): Record<string, string> {
+  if (typeof value !== 'object' || value === null) return {}
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string',
+    ),
+  )
+}
+
+/** `_meta["terminal-auth"]`'s command, which runs as given rather than after the launch command. */
+function namedCommand(meta: AuthMethodMeta | null | undefined): {
+  command: string
+  args: string[]
+} | null {
+  const named = meta?.['terminal-auth']
+  if (typeof named !== 'object' || named === null) return null
+  if (typeof named.command !== 'string' || named.command === '') return null
+  return { command: named.command, args: stringList(named.args) }
+}
+
+/** One of `init.authMethods`, reading the metadata forms agents publish a terminal sign-in in. */
+function authMethod(method: AuthMethod): AuthMethodInfo {
+  const meta = method._meta as AuthMethodMeta | null | undefined
+  const named = namedCommand(meta)
+  const declared = 'type' in method && method.type === 'terminal'
+  const terminal = declared || named !== null || meta?.type === 'terminal'
+  const declaredArgs = (method as { args?: string[] }).args ?? []
+  const args = named?.args ?? (declared ? declaredArgs : stringList(meta?.args))
+  const env = declared
+    ? { ...((method as { env?: Record<string, string> }).env ?? {}) }
+    : stringMap(meta?.env)
+  return {
+    id: method.id,
+    name: method.name,
+    ...(method.description ? { description: method.description } : {}),
+    type: terminal ? 'terminal' : 'agent',
+    ...(named ? { command: named.command } : {}),
+    args: terminal ? args : [],
+    env: terminal ? env : {},
+  }
 }
 
 // Updates for a session id nobody registered yet, such as the commands an agent sends right
@@ -460,17 +520,7 @@ export class AgentConnection {
           embeddedContext: caps.promptCapabilities?.embeddedContext === true,
         },
       },
-      authMethods: (init.authMethods ?? []).map((method) => {
-        const terminal = 'type' in method && method.type === 'terminal'
-        return {
-          id: method.id,
-          name: method.name,
-          ...(method.description ? { description: method.description } : {}),
-          type: terminal ? 'terminal' : 'agent',
-          args: terminal ? [...((method as { args?: string[] }).args ?? [])] : [],
-          env: terminal ? { ...((method as { env?: Record<string, string> }).env ?? {}) } : {},
-        }
-      }),
+      authMethods: (init.authMethods ?? []).map(authMethod),
       raw: init.agentCapabilities ?? null,
     }
   }

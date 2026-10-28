@@ -27,6 +27,7 @@ import {
   AgentRequestError,
   type AcpTransport,
   type AgentInit,
+  type AuthMethodInfo,
   type ConnectionHooks,
 } from './acp/connection'
 import {
@@ -2162,6 +2163,26 @@ export class AgentManager {
     return spec.cli !== undefined || installed?.variable ? 'installed' : 'bundled'
   }
 
+  /** What a terminal sign-in runs: the command the agent names, or its launch command. */
+  private signInCommand(
+    slot: Slot,
+    display: CommandWords,
+    method: AuthMethodInfo,
+    folderEnv: Record<string, string>,
+  ): string {
+    const env = { ...display.env, ...method.env, ...folderEnv }
+    if (method.command) {
+      return formatCommand({ command: method.command, args: method.args, env }, this.deps.platform)
+    }
+    return formatCommand(
+      // pi-acp 0.0.34's only method just runs the `requires` program, so it runs alone.
+      slot.def.signInWithCli && slot.requiresProgram
+        ? { command: slot.requiresProgram, args: [], env: {} }
+        : { command: display.command, args: [...display.args, ...method.args], env },
+      this.deps.platform,
+    )
+  }
+
   status(agentId: AgentId): AgentStatus {
     const slot = this.slot(agentId)
     const platform = this.deps.platform
@@ -2179,19 +2200,7 @@ export class AgentManager {
       ...(method.description ? { description: method.description } : {}),
       type: method.type,
       ...(method.type === 'terminal'
-        ? {
-            command: formatCommand(
-              // pi-acp 0.0.34's only method just runs the `requires` program, so it runs alone.
-              slot.def.signInWithCli && slot.requiresProgram
-                ? { command: slot.requiresProgram, args: [], env: {} }
-                : {
-                    command: display.command,
-                    args: [...display.args, ...method.args],
-                    env: { ...display.env, ...method.env, ...folderEnv },
-                  },
-              platform,
-            ),
-          }
+        ? { command: this.signInCommand(slot, display, method, folderEnv) }
         : {}),
     }))
     const capabilities = init?.capabilities ?? rememberedCapabilities(slot)

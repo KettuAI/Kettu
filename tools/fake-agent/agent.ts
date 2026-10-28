@@ -505,6 +505,30 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
           args: ['--login'],
         })
       }
+      // Like Kimi, Amp and Kilo, a command published only in the metadata the client advertises.
+      if (clientCapabilities._meta?.['terminal-auth'] === true && env.FAKE_AGENT_NAMED_LOGIN) {
+        authMethods.push({
+          id: 'fake-named-login',
+          name: 'Named sign-in',
+          description: 'Runs the command its metadata names',
+          _meta: {
+            'terminal-auth': {
+              command: env.FAKE_AGENT_NAMED_LOGIN,
+              args: ['login'],
+              label: 'Named sign-in',
+            },
+          },
+        })
+      }
+      // Like Qwen's older form, arguments appended to the launch command.
+      if (clientCapabilities._meta?.['terminal-auth'] === true && env.FAKE_AGENT_META_TERMINAL) {
+        authMethods.push({
+          id: 'fake-meta-login',
+          name: 'Metadata sign-in',
+          description: 'Appends its arguments to the launch command',
+          _meta: { type: 'terminal', args: ['--auth-type=fake'] },
+        })
+      }
       const response: InitializeResponse = {
         protocolVersion: 1,
         agentCapabilities: {

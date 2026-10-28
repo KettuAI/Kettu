@@ -106,7 +106,7 @@ export interface AgentAuthMethod {
   name: string
   description?: string
   type: 'agent' | 'terminal'
-  command?: string // for terminal methods: the full command, quoted for the platform
+  command?: string // for terminal methods: the agent's named command or its launch, quoted
 }
 
 /** A newer adapter or CLI than the installed one, found by `agents.checkUpdates`. */
