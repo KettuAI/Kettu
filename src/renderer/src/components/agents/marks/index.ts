@@ -33,6 +33,7 @@ import * as kilo from './kilo'
 import * as kimchi from './kimchi'
 import * as kimi from './kimi'
 import * as minimax from './minimax'
+import * as minion from './minion'
 import * as muse from './muse'
 import * as junie from './junie'
 import * as mistralVibe from './mistral-vibe'
@@ -104,5 +105,6 @@ export const AGENT_MARKS: Record<AgentId, AgentMarkModule> = {
   stakpak,
   vtcode,
   'fast-agent': fastAgent,
+  minion,
   'fake-agent': fakeAgent,
 }

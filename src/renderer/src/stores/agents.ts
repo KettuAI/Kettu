@@ -201,6 +201,7 @@ export const AGENT_NAMES: Record<AgentId, string> = {
   stakpak: 'Stakpak',
   vtcode: 'VT Code',
   'fast-agent': 'fast-agent',
+  minion: 'Minion Code',
   'fake-agent': 'Fake agent',
 }
 
