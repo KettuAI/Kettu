@@ -27,6 +27,7 @@ import {
   DROID,
   displayCommand,
   fakeAgent,
+  FAST_AGENT,
   GEMINI,
   GLM,
   GOOSE,
@@ -39,6 +40,7 @@ import {
   KIMCHI,
   KIMI,
   MINIMAX,
+  MINION,
   MUSE,
   NOVA,
   OMP,
@@ -122,6 +124,8 @@ describe('buildCatalog', () => {
       'poolside',
       'stakpak',
       'vtcode',
+      'fast-agent',
+      'minion',
     ])
     expect(buildCatalog('/repo/tools/fake-agent/main.ts').map((d) => d.id)).toContain('fake-agent')
   })
@@ -172,6 +176,8 @@ describe('buildCatalog', () => {
       'poolside',
       'stakpak',
       'vtcode',
+      'fast-agent',
+      'minion',
       'fake-agent',
     ])
   })
@@ -672,6 +678,82 @@ describe('the ACP Registry npm agents', () => {
 
   it('pins the nineteen packages the registry lists', () => {
     expect(buildCatalog(null).slice(4, 4 + registry.length)).toEqual(registry.map(({ def }) => def))
+  })
+})
+
+describe('fast-agent', () => {
+  const display = {
+    command: 'uvx',
+    args: ['fast-agent-acp==0.10.1', '-x'],
+    env: { FAST_AGENT_MODEL: 'codexplan' },
+  }
+
+  it('is not-installed without uvx, saying where to get it', async () => {
+    expect(await detectAgent(FAST_AGENT, context())).toEqual({
+      state: 'not-installed',
+      detail: expect.stringMatching(/uvx was not found on PATH.*docs\.astral\.sh\/uv/),
+    })
+  })
+
+  it('runs through uvx with the registry arguments and model variable', async () => {
+    expect(
+      await detectAgent(
+        FAST_AGENT,
+        context({ isExecutable: async (file) => file === '/usr/local/bin/uvx' }),
+      ),
+    ).toEqual({
+      state: 'available',
+      spec: {
+        command: '/usr/local/bin/uvx',
+        args: ['fast-agent-acp==0.10.1', '-x'],
+        env: { FAST_AGENT_MODEL: 'codexplan' },
+        shell: false,
+        display,
+      },
+      adapter: null,
+    })
+  })
+
+  it('shows the uvx line the user would type', () => {
+    expect(displayCommand(FAST_AGENT, '/e', null, '/data/agents')).toEqual(display)
+  })
+})
+
+describe('Minion Code', () => {
+  const display = {
+    command: 'uvx',
+    args: ['minion-code==0.1.45', 'acp'],
+    env: {},
+  }
+
+  it('is not-installed without uvx, saying where to get it', async () => {
+    expect(await detectAgent(MINION, context())).toEqual({
+      state: 'not-installed',
+      detail: expect.stringMatching(/uvx was not found on PATH.*docs\.astral\.sh\/uv/),
+    })
+  })
+
+  it('runs through uvx at the pinned version, ahead of the registry', async () => {
+    expect(
+      await detectAgent(
+        MINION,
+        context({ isExecutable: async (file) => file === '/usr/local/bin/uvx' }),
+      ),
+    ).toEqual({
+      state: 'available',
+      spec: {
+        command: '/usr/local/bin/uvx',
+        args: ['minion-code==0.1.45', 'acp'],
+        env: {},
+        shell: false,
+        display,
+      },
+      adapter: null,
+    })
+  })
+
+  it('shows the uvx line the user would type', () => {
+    expect(displayCommand(MINION, '/e', null, '/data/agents')).toEqual(display)
   })
 })
 

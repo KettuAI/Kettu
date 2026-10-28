@@ -78,6 +78,8 @@ OverBench 为这些工作提供了一个桌面上的家。你用的每个 Agent 
 | [Codex CLI](https://github.com/openai/codex)                                    | ACP 适配器 `@agentclientprotocol/codex-acp`，首次使用时安装                                    |
 | [opencode](https://opencode.ai)                                                 | 你自己安装的 `opencode`，以 `opencode acp` 运行                                                |
 | [Pi](https://pi.dev)                                                            | ACP 适配器 `pi-acp`，首次使用时安装，并运行你自己安装的 `pi`                                   |
+| [fast-agent](https://fast-agent.ai)                                             | ACP 包 `fast-agent-acp`，通过你安装的 `uv` 以 `uvx` 运行                                       |
+| [Minion Code](https://github.com/femto/minion-code)                             | ACP 包 `minion-code`，通过你安装的 `uv` 以 `uvx` 运行                                          |
 | [Auggie CLI](https://github.com/augmentcode/auggie)                             | ACP 包 `@augmentcode/auggie`，首次使用时安装，以 `--acp` 运行并关闭自动更新                    |
 | [Codebuddy Code](https://www.codebuddy.cn/cli/)                                 | ACP 包 `@tencent-ai/codebuddy-code`，首次使用时安装，以 `--acp` 运行                           |
 | [DeepAgents](https://docs.langchain.com/oss/javascript/deepagents/overview)     | ACP 包 `deepagents-acp`，首次使用时安装                                                        |
@@ -119,7 +121,7 @@ OverBench 为这些工作提供了一个桌面上的家。你用的每个 Agent 
 | [Stakpak](https://stakpak.dev)                                                  | 你自己安装的 `stakpak`，以 `stakpak acp` 运行；否则用 ACP Registry 的压缩包                    |
 | [VT Code](https://github.com/vinhnx/VTCode)                                     | 你自己安装的 `vtcode`，以 `vtcode acp` 运行；否则用 ACP Registry 的压缩包                      |
 
-ACP 包和适配器需要 Node.js 和 npm，OverBench 会通过你的登录 shell 找到它们。其余 Agent 直接运行程序本身：OverBench 在 `PATH` 中找到你的副本时就用它，否则在「设置 › Agent」中点击 **Install** 从 ACP Registry 下载它的压缩包。
+ACP 包和适配器需要 Node.js 和 npm，OverBench 会通过你的登录 shell 找到它们。其余 Agent 直接运行程序本身：OverBench 在 `PATH` 中找到你的副本时就用它，否则在「设置 › Agent」中点击 **Install** 从 ACP Registry 下载它的压缩包。fast-agent 和 Minion Code 需要的是 [uv](https://docs.astral.sh/uv/)。
 
 ## 为什么是 OverBench
 

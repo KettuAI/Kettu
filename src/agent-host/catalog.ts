@@ -30,6 +30,7 @@ import { DIMCODE } from './agents/dimcode'
 import { DIRAC } from './agents/dirac'
 import { DROID } from './agents/droid'
 import { fakeAgent } from './agents/fake-agent'
+import { FAST_AGENT } from './agents/fast-agent'
 import { GEMINI } from './agents/gemini'
 import { GLM } from './agents/glm'
 import { GOOSE } from './agents/goose'
@@ -40,6 +41,7 @@ import { KILO } from './agents/kilo'
 import { KIMCHI } from './agents/kimchi'
 import { KIMI } from './agents/kimi'
 import { MINIMAX } from './agents/minimax'
+import { MINION } from './agents/minion'
 import { MUSE } from './agents/muse'
 import { JUNIE } from './agents/junie'
 import { MISTRAL_VIBE } from './agents/mistral-vibe'
@@ -181,6 +183,7 @@ export {
   DIRAC,
   DROID,
   fakeAgent,
+  FAST_AGENT,
   GEMINI,
   GLM,
   GOOSE,
@@ -191,6 +194,7 @@ export {
   KIMCHI,
   KIMI,
   MINIMAX,
+  MINION,
   MUSE,
   JUNIE,
   MISTRAL_VIBE,
@@ -253,6 +257,8 @@ export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
     POOLSIDE,
     STAKPAK,
     VTCODE,
+    FAST_AGENT,
+    MINION,
   ]
   if (fakeAgentPath) catalog.push(fakeAgent(fakeAgentPath))
   return catalog

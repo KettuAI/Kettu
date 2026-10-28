@@ -22,6 +22,7 @@ import * as dimcode from './dimcode'
 import * as dirac from './dirac'
 import * as droid from './droid'
 import * as fakeAgent from './fake-agent'
+import * as fastAgent from './fast-agent'
 import * as gemini from './gemini'
 import * as glm from './glm'
 import * as goose from './goose'
@@ -32,6 +33,7 @@ import * as kilo from './kilo'
 import * as kimchi from './kimchi'
 import * as kimi from './kimi'
 import * as minimax from './minimax'
+import * as minion from './minion'
 import * as muse from './muse'
 import * as junie from './junie'
 import * as mistralVibe from './mistral-vibe'
@@ -102,5 +104,7 @@ export const AGENT_MARKS: Record<AgentId, AgentMarkModule> = {
   poolside,
   stakpak,
   vtcode,
+  'fast-agent': fastAgent,
+  minion,
   'fake-agent': fakeAgent,
 }
