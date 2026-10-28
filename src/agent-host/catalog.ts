@@ -31,9 +31,19 @@ import { compareVersions } from './versions'
 
 export type LaunchKind =
   // Installed from npm into the data directory and run on the user's Node.js. With `perSession`,
-  // through the session router, which gives each session an adapter process of its own.
-  | { kind: 'package'; package: string; version: string; perSession?: true }
+  // through the session router, which gives each session an adapter process of its own. `args`
+  // turns on its ACP mode, and `env` keeps its variables to its own launches.
+  | {
+      kind: 'package'
+      package: string
+      version: string
+      perSession?: true
+      args?: string[]
+      env?: Record<string, string>
+    }
   | { kind: 'binary'; command: string; args: string[] }
+  // Run as `uvx <package>==<version> <args>`, which installs the package on first use.
+  | { kind: 'uvx'; package: string; version: string; args: string[] }
   // A script run with Electron's own Node.js, so it needs no Node.js on the machine.
   | { kind: 'node-script'; script: string }
 
@@ -169,12 +179,18 @@ export function displayCommand(
     case 'package': {
       const entry = packageDir(adaptersDir, def) ?? ''
       // A per-session agent reads as the router's own command line.
-      const args =
-        def.launch.perSession && sessionRouterPath ? [sessionRouterPath, 'node', entry] : [entry]
-      return { command: 'node', args, env: { ...def.env } }
+      const prefix = def.launch.perSession && sessionRouterPath ? [sessionRouterPath, 'node'] : []
+      const args = [...prefix, entry, ...(def.launch.args ?? [])]
+      return { command: 'node', args, env: { ...def.env, ...def.launch.env } }
     }
     case 'binary':
       return { command: binaryOverride ?? def.launch.command, args: def.launch.args, env: {} }
+    case 'uvx':
+      return {
+        command: 'uvx',
+        args: [`${def.launch.package}==${def.launch.version}`, ...def.launch.args],
+        env: { ...def.env },
+      }
     case 'node-script':
       return {
         command: electronPath,
@@ -223,14 +239,15 @@ export function packageSpec(
   platform: Platform,
   env: Record<string, string> = {},
   prefix: string[] = [],
+  args: string[] = [],
 ): LaunchSpec {
-  const args = [...prefix, entry]
+  const words = [...prefix, entry, ...args]
   return {
     command: node,
-    args,
+    args: words,
     env,
     shell: needsShell(node, platform),
-    display: { command: node, args, env },
+    display: { command: node, args: words, env },
   }
 }
 
@@ -243,16 +260,25 @@ export async function installedSpec(
   extraEnv: Record<string, string> = {},
   sessionRouterPath: string | null = null,
 ): Promise<LaunchSpec> {
+  const launch = def.launch
   const env = {
     ...def.env,
+    ...(launch.kind === 'package' ? launch.env : {}),
     ...extraEnv,
     ...(await def.launchEnv?.({ ...lookup, dir: installed.dir, entry: installed.entry })),
   }
   const prefix =
-    def.launch.kind === 'package' && def.launch.perSession && sessionRouterPath
+    launch.kind === 'package' && launch.perSession && sessionRouterPath
       ? [sessionRouterPath, node]
       : []
-  return packageSpec(node, installed.entry, lookup.platform, env, prefix)
+  return packageSpec(
+    node,
+    installed.entry,
+    lookup.platform,
+    env,
+    prefix,
+    launch.kind === 'package' ? (launch.args ?? []) : [],
+  )
 }
 
 export interface DetectContext {
@@ -261,7 +287,7 @@ export interface DetectContext {
   electronPath: string
   binaryOverride: string | null
   node: NodeProbe
-  /** `<userData>/agents`, where package agents are installed. */
+  /** `<userData>/agents`, where package agents and release archives are installed. */
   adaptersDir: string
   /** The session router every per-session agent launches through; null in a test without one. */
   sessionRouterPath?: string | null
@@ -282,6 +308,26 @@ async function isFile(file: string): Promise<boolean> {
     return (await stat(file)).isFile()
   } catch {
     return false
+  }
+}
+
+/** A binary agent whose program was found, from PATH, the chosen binary or OverBench's install. */
+function binaryDetection(
+  command: string,
+  args: string[],
+  platform: Platform,
+  display: CommandWords,
+): Detection {
+  return {
+    state: 'available',
+    spec: {
+      command,
+      args,
+      env: {},
+      shell: needsShell(command, platform),
+      display,
+    },
+    adapter: null,
   }
 }
 
@@ -412,12 +458,20 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
         if (passed && def.cli) {
           const env = {
             ...def.env,
+            ...(launch.kind === 'package' ? launch.env : {}),
             ...requiresEnv,
             ...passed.env,
             [def.cli.variable]: passed.installed.path,
           }
           return {
-            ...packageSpec(nodePath, install.entry, ctx.platform, env, prefix),
+            ...packageSpec(
+              nodePath,
+              install.entry,
+              ctx.platform,
+              env,
+              prefix,
+              launch.kind === 'package' ? (launch.args ?? []) : [],
+            ),
             cli: passed.installed.path,
           }
         }
@@ -454,25 +508,36 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
       }
     }
     case 'binary': {
-      const program = ctx.binaryOverride
-        ? (await ctx.isExecutable(ctx.binaryOverride))
-          ? ctx.binaryOverride
-          : null
-        : await findCommand(launch.command, ctx)
+      if (ctx.binaryOverride) {
+        if (!(await ctx.isExecutable(ctx.binaryOverride))) {
+          return {
+            state: 'not-installed',
+            detail: t('detect.programUnusable', { agent: def.name, path: ctx.binaryOverride }),
+          }
+        }
+        return binaryDetection(ctx.binaryOverride, launch.args, ctx.platform, display)
+      }
+      const program = await findCommand(launch.command, ctx)
+      if (program) return binaryDetection(program, launch.args, ctx.platform, display)
+      return {
+        state: 'not-installed',
+        detail: t('detect.commandMissing', { command: launch.command, hint: t(def.install.hint) }),
+      }
+    }
+    case 'uvx': {
+      const program = await findCommand('uvx', ctx)
       if (!program) {
         return {
           state: 'not-installed',
-          detail: ctx.binaryOverride
-            ? t('detect.programUnusable', { agent: def.name, path: ctx.binaryOverride })
-            : t('detect.commandMissing', { command: launch.command, hint: t(def.install.hint) }),
+          detail: t('detect.commandMissing', { command: 'uvx', hint: t(def.install.hint) }),
         }
       }
       return {
         state: 'available',
         spec: {
           command: program,
-          args: [...launch.args],
-          env: {},
+          args: [`${launch.package}==${launch.version}`, ...launch.args],
+          env: { ...def.env },
           shell: needsShell(program, ctx.platform),
           display,
         },

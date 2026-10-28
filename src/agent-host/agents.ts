@@ -1276,6 +1276,7 @@ export class AgentManager {
         return this.installNow(slot)
       case 'binary':
         return this.installBinary(slot, method)
+      case 'uvx':
       case 'node-script':
         throw invalidParams(`${slot.def.name} is not installed by OverBench`)
     }
