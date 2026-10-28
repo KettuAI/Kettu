@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { app, type WebContents } from 'electron'
 import { ARTIFACT_ID, type ArtifactImportResult } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
-import type { BrowserCallAnswer, BrowserCallRequest } from '@shared/browser'
+import type { BrowserCallAnswer, BrowserCallRequest, BrowserOriginAnswer } from '@shared/browser'
 import type {
   ArtifactContentResult,
   BusySession,
@@ -294,6 +294,33 @@ export class AgentHost {
     })
   }
 
+  /** `host:browser-waiting`: the call waits on a new origin, so its own limit covers that wait. */
+  browserWaiting(callId: number, waiting: boolean): void {
+    this.host.post({ type: 'host:browser-waiting', callId, waiting })
+  }
+
+  /** `host:browser-origin-ask`: the session's thread shows the page's new origin, waiting. */
+  originAsked(request: { sessionId: string; id: number; origin: string }): void {
+    this.host.post({
+      type: 'host:browser-origin-ask',
+      requestId: request.id,
+      sessionId: request.sessionId,
+      origin: request.origin,
+    })
+  }
+
+  /**
+   * `host:browser-origin-answer`: how the page's wait ended, from either place, so the session's
+   * card takes it; a host that is gone has nothing to show it.
+   */
+  originAnswered(request: { id: number; decision: BrowserOriginAnswer }): void {
+    this.host.post({
+      type: 'host:browser-origin-answer',
+      requestId: request.id,
+      decision: request.decision,
+    })
+  }
+
   /** Has the host make an artifact of a file the user chose; `unavailable` without a host. */
   artifactImport(path: string, project: string | null): Promise<ImportAnswer> {
     if (this.host.state !== 'ready') return Promise.resolve(UNAVAILABLE)
@@ -325,6 +352,7 @@ export class AgentHost {
         this.browserCall(message)
         break
       }
+
       case 'host:agent-processes':
         if (Array.isArray(message.processes)) {
           this.agentProcesses = message.processes.flatMap((entry) =>
@@ -411,7 +439,7 @@ export class AgentHost {
 
   /** Runs a call on the session's page and posts its answer; a page that fails says why. */
   private browserCall(message: Extract<HostToMain, { type: 'host:browser-call' }>): void {
-    const { callId, sessionId, tool, args } = message
+    const { callId, sessionId, tool, args, projectPath } = message
     if (
       !Number.isSafeInteger(callId) ||
       typeof sessionId !== 'string' ||
@@ -423,7 +451,13 @@ export class AgentHost {
     }
     const run = this.deps.browser
     const answer: Promise<BrowserCallAnswer> = run
-      ? run({ callId, sessionId, tool: tool as BrowserCallRequest['tool'], args })
+      ? run({
+          callId,
+          sessionId,
+          tool: tool as BrowserCallRequest['tool'],
+          args,
+          projectPath: typeof projectPath === 'string' ? projectPath : '',
+        })
       : Promise.resolve({
           error: { code: 'no_page', message: 'This build drives no browser.' },
         })

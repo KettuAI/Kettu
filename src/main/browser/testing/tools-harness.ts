@@ -2,9 +2,11 @@
 // page, against a local fixture server, with no renderer. The parent test builds this file and
 // starts it.
 
-import { writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
+import path from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import type { BrowserCallAnswer, BrowserControlState } from '@shared/browser'
+import { BrowserOriginStore } from '../origins'
 import { BrowserTools } from '../tools'
 import { BrowserViews } from '../views'
 
@@ -42,6 +44,18 @@ interface Result {
   drivingDuringCall?: BrowserControlState
   drivingAfterCall?: BrowserControlState
   quitDialog?: string
+  originAsked?: string | null
+  originDenied?: string
+  originStayed?: string
+  originOpened?: string
+  originOpenedAgain?: string
+  originAskedAgain?: boolean
+  redirectAsked?: string | null
+  redirectDenied?: string
+  redirectStayed?: string
+  originTimedOut?: string
+  userAsked?: boolean
+  userOpened?: string
 }
 
 function unwrap(answer: BrowserCallAnswer): Answer {
@@ -55,6 +69,12 @@ function unwrap(answer: BrowserCallAnswer): Answer {
 }
 
 async function main(): Promise<Result> {
+  // A site that is no dev host, served by the fixture server: the origin a new site test opens.
+  const fixturePort = new URL(FIXTURE).port
+  app.commandLine.appendSwitch(
+    'host-resolver-rules',
+    'MAP example.com 127.0.0.1, MAP example.org 127.0.0.1',
+  )
   await app.whenReady()
   // Shown, so Chromium renders frames and the accessibility tree and captures do not stall; not
   // activated, so the pointer over it sends nothing the page takes as the user's.
@@ -65,6 +85,12 @@ async function main(): Promise<Result> {
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
   })
   window.showInactive()
+  const originsDir = path.join(path.dirname(RESULT), 'origins')
+  await mkdir(originsDir, { recursive: true })
+  const origins = await BrowserOriginStore.load(originsDir)
+  const asked: { id: number; origin: string; sessionId: string }[] = []
+  /** The latest ask, which the test answers from the pane or leaves for the timeout. */
+  const latest = () => asked.at(-1)
   let browserTools: BrowserTools | null = null
   const views = new BrowserViews({
     window: () => window,
@@ -77,6 +103,11 @@ async function main(): Promise<Result> {
     control: (sessionId) => browserTools?.control.state(sessionId) ?? { kind: 'none' },
     created: (sessionId, contents) => browserTools?.watch(sessionId, contents),
     closed: (sessionId) => browserTools?.forget(sessionId),
+    origins,
+    originAsked: ({ id, origin, sessionId }) => asked.push({ id, origin, sessionId }),
+    originAnswered: () => {},
+    // The test answers from here: a session allow for both sites, and a deny for the third.
+    originWaitMs: 1_500,
   })
   browserTools = new BrowserTools({
     views,
@@ -92,11 +123,14 @@ async function main(): Promise<Result> {
       timer = setTimeout(() => fail(new Error(`${tool} did not settle within 20 s`)), 20_000)
     })
     try {
-      return unwrap(await Promise.race([tools.call(sessionId, tool, args), guard]))
+      return unwrap(await Promise.race([tools.call(0, sessionId, tool, args), guard]))
     } finally {
       clearTimeout(timer)
     }
   }
+  // The fixture server reached by names that are no dev host: other origins, and not local.
+  const other = `http://example.com:${fixturePort}`
+  const answeredNowhere = `http://example.net:${fixturePort}`
   const session = 's1'
   views.show(session)
   views.setBounds(session, { x: 0, y: 48, width: 800, height: 600, radius: 12 })
@@ -199,6 +233,52 @@ async function main(): Promise<Result> {
   await call(session, 'browser_navigate', { url: `${FIXTURE}/frame` })
   const framed = await call(session, 'browser_snapshot', {})
   result.frame = framed.value?.snapshot as string
+
+  // A new origin waits for the user. Refused, the call fails not_allowed and the page stays.
+  const askedBefore = asked.length
+  const denying = call(session, 'browser_navigate', { url: `${other}/two` })
+  await new Promise((done) => setTimeout(done, 300))
+  result.originAsked = asked.length > askedBefore ? latest()?.origin : null
+  views.answerOrigin(session, latest()!.id, 'deny')
+  const denied = await denying
+  result.originDenied = denied.error?.code
+  result.originStayed = views.contents(session)?.getURL()
+
+  // Allowed for the session, it opens; a later navigation to it asks no longer.
+  const allowing = call(session, 'browser_navigate', { url: `${other}/two` })
+  await new Promise((done) => setTimeout(done, 300))
+  views.answerOrigin(session, latest()!.id, 'session')
+  const opened = await allowing
+  result.originOpened = opened.error?.code ?? String(opened.value?.url ?? '')
+  const asksBeforeAgain = asked.length
+  const again = await call(session, 'browser_navigate', { url: `${other}/form` })
+  result.originOpenedAgain = String(again.value?.url ?? '')
+  result.originAskedAgain = asked.length > asksBeforeAgain
+
+  // A redirect during an agent's call to an origin it may not open asks, and refused it fails
+  // not_allowed rather than opening the site.
+  const asksBeforeRedirect = asked.length
+  const redirecting = call(session, 'browser_navigate', { url: `${FIXTURE}/redirect` })
+  await new Promise((done) => setTimeout(done, 600))
+  result.redirectAsked = asked.length > asksBeforeRedirect ? asked.at(-1)!.origin : null
+  if (asked.length > asksBeforeRedirect) views.answerOrigin(session, latest()!.id, 'deny')
+  result.redirectDenied = (await redirecting).error?.code
+  result.redirectStayed = String(views.contents(session)?.getURL() ?? '')
+
+  // Unanswered, a site fails the call not_allowed after its wait, rather than timing out.
+  const unanswered = call(session, 'browser_navigate', { url: `${answeredNowhere}/two` })
+  result.originTimedOut = (await unanswered).error?.code
+
+  // The user's own navigation opens a site without asking, whatever the agent may open.
+  const asksBeforeUser = asked.length
+  const moved = new Promise<string>((resolve) => {
+    const page = views.contents(session)!
+    page.once('did-navigate', (_event, url) => resolve(url))
+    views.navigate(session, `${other}/two`)
+  })
+  await moved
+  result.userAsked = asked.length > asksBeforeUser
+  result.userOpened = String(views.contents(session)?.getURL() ?? '')
 
   return result
 }

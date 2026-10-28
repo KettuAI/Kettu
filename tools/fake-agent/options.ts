@@ -31,6 +31,7 @@ export const SCENARIOS = [
   'artifacts',
   'report',
   'tables',
+  'open-site',
 ] as const
 
 export type ScenarioName = (typeof SCENARIOS)[number]
@@ -100,6 +101,10 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   artifacts: {
     description: "Makes or changes a canvas through OverBench's artifacts service, then reads it",
     hint: '--read <artifact id> --until-cancel --child <id> --meta <session id|none> --execute',
+  },
+  'open-site': {
+    description: 'Opens a site through the browser tools, which asks the user for a new one',
+    hint: '<url>',
   },
   report: { description: 'Short Chinese notes between runs of work, then a report' },
   tables: {
