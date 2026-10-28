@@ -11,6 +11,8 @@ import {
 } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
+import { originLabel } from '@shared/browser'
+import type { AllowedSites } from '@shared/ipc'
 import { LOCALES, LOCALE_NAMES, type LanguageSetting } from '@shared/locale'
 import {
   DEFAULT_SETTINGS,
@@ -49,6 +51,7 @@ import { useAppInfo } from '@renderer/lib/use-app-info'
 import { cn } from '@renderer/lib/utils'
 import { AGENT_NAMES, isInstalled, useAgentsStore } from '@renderer/stores/agents'
 import { loadGitTools, useGitStore } from '@renderer/stores/git'
+import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
@@ -1142,6 +1145,102 @@ export function ClearBrowsingData() {
       </AlertDialog>
     </>
   )
+}
+
+export function AllowedSitesList() {
+  const { t } = useTranslation(['settings', 'common'])
+  const projects = useProjectsStore((s) => s.projects)
+  const [sites, setSites] = useState<AllowedSites[] | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void window.overbench.browser
+      .allowedSites()
+      .then((list) => {
+        if (!cancelled) setSites(list)
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(errorMessage(e))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const remove = async (projectPath: string, origin: string) => {
+    const key = `${projectPath}\n${origin}`
+    setBusy(key)
+    setError(null)
+    try {
+      await window.overbench.browser.removeAllowedSite(projectPath, origin)
+      setSites(
+        (list) =>
+          list
+            ?.map((site) =>
+              site.projectPath === projectPath
+                ? { ...site, origins: site.origins.filter((known) => known !== origin) }
+                : site,
+            )
+            .filter((site) => site.origins.length > 0) ?? null,
+      )
+      toast(t('browser.allowedSites.removed', { origin: labelOf(origin) }))
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  if (sites === null && error === null) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-5 w-32" />
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      <ControlError error={error} />
+      {sites && sites.length === 0 && (
+        <p className="text-ui text-tertiary">{t('browser.allowedSites.empty')}</p>
+      )}
+      {sites?.map((site) => (
+        <div key={site.projectPath} className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-tertiary">
+            {projects.find((project) => project.path === site.projectPath)?.name ??
+              basename(site.projectPath)}
+          </span>
+          {site.origins.map((origin) => {
+            const key = `${site.projectPath}\n${origin}`
+            return (
+              <div key={origin} className="flex items-center gap-2 py-0.5">
+                <span className="min-w-0 flex-1 truncate text-ui text-primary">
+                  {labelOf(origin)}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy !== null}
+                  onClick={() => void remove(site.projectPath, origin)}
+                >
+                  {busy === key && <Spinner data-icon="inline-start" className="size-3.5" />}
+                  {t('browser.allowedSites.remove')}
+                </Button>
+              </div>
+            )
+          })}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** An origin as the list shows it: its host and port, without the scheme. */
+function labelOf(origin: string): string {
+  return originLabel(origin)
 }
 
 export function RemoveAll() {

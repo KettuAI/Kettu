@@ -284,7 +284,16 @@
       "cleared": "浏览数据已清除"
     },
     "groups": {
-      "siteData": "站点数据"
+      "siteData": "站点数据",
+      "allowedSites": "允许的站点"
+    },
+    "allowedSites": {
+      "name": "始终允许的站点",
+      "description": "各项目允许 Agent 无需询问即可打开的站点。",
+      "keywords": "浏览器 站点 来源 允许 始终 权限 browser sites origins allow always permissions",
+      "empty": "尚未有始终允许的站点。",
+      "remove": "移除",
+      "removed": "已移除 {{origin}}"
     }
   },
   "advanced": {
@@ -368,7 +377,7 @@
     },
     "environment": {
       "pending": "正在读取你的环境…",
-      "loginShell": "{{ago}}从登录 Shell（{{shell}}）读取，耗时 {{ms}}\u00a0ms。",
+      "loginShell": "{{ago}}从登录 Shell（{{shell}}）读取，耗时 {{ms}} ms。",
       "loginShellPlain": "已从登录 Shell 读取。",
       "inherited": "继承自 OverBench 的启动方式。",
       "fallback": "正在使用备用 PATH。",

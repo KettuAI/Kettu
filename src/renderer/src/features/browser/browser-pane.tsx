@@ -23,6 +23,7 @@ import { SHEET } from '@renderer/features/shell/sheet'
 import { SidebarToggle } from '@renderer/features/shell/top-bar'
 import { isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
+import { agentName } from '@renderer/stores/agents'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { useOverlayOpen } from '@renderer/stores/overlays'
@@ -30,6 +31,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { toggleSidePane, useViewStore } from '@renderer/stores/view'
 import { AddressField } from './address-field'
 import { DrivingBar } from './driving-bar'
+import { OriginBar } from './origin-bar'
 
 /** The side panel's third pane: one page per session, drawn by main over the pane's page area. */
 export function BrowserPane({
@@ -237,6 +239,15 @@ export function BrowserPane({
           user={userControl}
           onStop={() => sessionId && void window.overbench.browser.stopDriving(sessionId)}
           onHandBack={() => sessionId && void window.overbench.browser.handBack(sessionId)}
+        />
+      )}
+      {sessionId && state?.originRequest && (
+        <OriginBar
+          request={state.originRequest}
+          agentName={agentId ? agentName(agentId) : ''}
+          onAnswer={(decision) =>
+            void window.overbench.browser.answerOrigin(sessionId, state.originRequest!.id, decision)
+          }
         />
       )}
       {state?.loading && (

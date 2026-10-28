@@ -84,6 +84,23 @@
     },
     "label": "权限请求"
   },
+  "browserOrigin": {
+    "label": "新站点",
+    "ask": "{{agent}} 想要在浏览器中打开此站点。",
+    "answerGroup": "答复",
+    "waiting": "等待批准",
+    "decision": {
+      "session": "本次会话允许",
+      "project": "此项目始终允许",
+      "deny": "拒绝"
+    },
+    "answer": {
+      "session": "本次会话已允许",
+      "project": "此项目已始终允许",
+      "deny": "已拒绝",
+      "timeout": "未在限定时间内得到答复"
+    }
+  },
   "subagent": {
     "fallbackTitle": "子 Agent"
   },

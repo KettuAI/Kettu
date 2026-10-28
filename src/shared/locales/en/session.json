@@ -93,6 +93,23 @@
     },
     "label": "Permission request"
   },
+  "browserOrigin": {
+    "label": "New site",
+    "ask": "{{agent}} wants to open this site in the browser.",
+    "answerGroup": "Answer",
+    "waiting": "Needs approval",
+    "decision": {
+      "session": "Allow for this session",
+      "project": "Always for this project",
+      "deny": "Deny"
+    },
+    "answer": {
+      "session": "Allowed for this session",
+      "project": "Always allowed for this project",
+      "deny": "Denied",
+      "timeout": "Not answered in time"
+    }
+  },
   "subagent": {
     "fallbackTitle": "Subagent"
   },
