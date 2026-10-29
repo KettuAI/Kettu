@@ -30,7 +30,7 @@ export class TerminalHost {
       label: 'terminal-host',
       channel: 'terminal-host',
       modulePath: terminalHostPath,
-      serviceName: 'OverBench Terminal Host',
+      serviceName: 'Kettu Terminal Host',
       initMessage: () => ({
         type: 'terminal-host:init',
         platform: process.platform,

@@ -46,7 +46,7 @@ const user = (text: string): string =>
 let dir: string
 
 beforeEach(async () => {
-  dir = await realpath(await mkdtemp(path.join(os.tmpdir(), 'overbench-cache-')))
+  dir = await realpath(await mkdtemp(path.join(os.tmpdir(), 'kettu-cache-')))
 })
 
 afterEach(async () => {
@@ -149,9 +149,7 @@ describe('readCacheTtl', () => {
 
 describe('claudeProjectFolder', () => {
   it("names a project's folder as Claude Code does", () => {
-    expect(claudeProjectFolder('/Users/me/DevProjects/overbench')).toBe(
-      '-Users-me-DevProjects-overbench',
-    )
+    expect(claudeProjectFolder('/Users/me/DevProjects/kettu')).toBe('-Users-me-DevProjects-kettu')
     expect(claudeProjectFolder('/Users/me/项目 one')).toBe('-Users-me----one')
     expect(claudeProjectFolder('C:\\Users\\me\\proj')).toBe('C--Users-me-proj')
   })

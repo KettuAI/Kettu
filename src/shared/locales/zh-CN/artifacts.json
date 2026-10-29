@@ -119,7 +119,7 @@
     "retry": "重试",
     "more": "更多",
     "error": {
-      "notFound": "它已不在 OverBench 中。",
+      "notFound": "它已不在 Kettu 中。",
       "unavailable": "Agent host 暂时无法显示它，请稍后再试。",
       "failed": "出了点问题，请重试。"
     },
@@ -136,7 +136,7 @@
     "using": "正在使用这个 artifact",
     "moreSessions_other": "还有 {{count}} 个会话",
     "places_other": "在 {{count}} 处打开",
-    "placesTip_other": "这个 artifact 在 OverBench 中的 {{count}} 处打开"
+    "placesTip_other": "这个 artifact 在 Kettu 中的 {{count}} 处打开"
   },
   "canvas": {
     "role": "画布",

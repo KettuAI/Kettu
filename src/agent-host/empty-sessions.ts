@@ -21,7 +21,7 @@ export function mayBeEmpty(record: SessionRecord): boolean {
 /**
  * A stored thread with no entries at all: the latest page of one with any holds at least one.
  * Even a notice keeps the session, since the agent sends notices of its own and one from
- * `session/resume` says the agent holds history OverBench did not store.
+ * `session/resume` says the agent holds history Kettu did not store.
  */
 export function holdsNothing(page: ThreadPage): boolean {
   return page.entries.length === 0

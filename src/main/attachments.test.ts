@@ -9,7 +9,7 @@ import { grantClipboardFiles, grantPaths, uriListPaths } from './attachments'
 let dir: string
 
 beforeEach(async () => {
-  dir = await mkdtemp(path.join(tmpdir(), 'overbench-grants-'))
+  dir = await mkdtemp(path.join(tmpdir(), 'kettu-grants-'))
 })
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true })

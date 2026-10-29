@@ -197,7 +197,7 @@ describe('resolving the program the adapter runs', () => {
   })
 
   it('reads at most the start of a file when asked to', async () => {
-    const dir = await tempFolder('overbench-cli-files-')
+    const dir = await tempFolder('kettu-cli-files-')
     const file = path.join(dir, 'big.cmd')
     await writeFile(file, 'x'.repeat(100_000))
     expect(await CLI_FILES.readText(file, 64 * 1024)).toHaveLength(64 * 1024)

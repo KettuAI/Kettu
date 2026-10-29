@@ -10,7 +10,7 @@ import { SettingsStore } from './settings'
 let dir: string
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'overbench-settings-'))
+  dir = await mkdtemp(join(tmpdir(), 'kettu-settings-'))
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
 

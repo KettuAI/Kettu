@@ -1,4 +1,4 @@
-// The `overbench-artifact` protocol: each artifact on an origin of its own, its HTML from the
+// The `kettu-artifact` protocol: each artifact on an origin of its own, its HTML from the
 // store and nothing else.
 
 import { open, readFile } from 'node:fs/promises'
@@ -151,7 +151,7 @@ export async function respond(request: Request, source: ArtifactSource): Promise
   }
 }
 
-/** Serves artifacts through the session's `overbench-artifact` protocol. */
+/** Serves artifacts through the session's `kettu-artifact` protocol. */
 export function serveArtifacts(session: Session, source: ArtifactSource): void {
   session.protocol.handle(ARTIFACT_SCHEME, (request) => respond(request, source))
 }

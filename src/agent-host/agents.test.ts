@@ -143,8 +143,8 @@ function manager(
       usage: { fromComputer: false },
       sessionTitles: true,
     }),
-    reportsDir: path.join(os.tmpdir(), 'overbench-agent-reports'),
-    adaptersDir: path.join(os.tmpdir(), 'overbench-no-adapters'),
+    reportsDir: path.join(os.tmpdir(), 'kettu-agent-reports'),
+    adaptersDir: path.join(os.tmpdir(), 'kettu-no-adapters'),
     detect: detectAgent,
     // The tests never ask the machine's own claude or codex.
     ...(extra.cliVersions ? {} : { probeCli: async () => ({ error: 'not asked in tests' }) }),
@@ -358,14 +358,14 @@ describe('AgentManager', () => {
     await m.agents.stopAll()
   })
 
-  it('reports OverBench’s server as on by default, and off from the settings', async () => {
+  it('reports Kettu’s server as on by default, and off from the settings', async () => {
     const m = manager({}, {}, { settings: () => withMcpOff(['fake-agent']) })
-    expect(m.agents.status('fake-agent').overbenchServer).toEqual({
+    expect(m.agents.status('fake-agent').kettuServer).toEqual({
       runs: false,
       active: null,
     })
     await m.agents.ensureReady('fake-agent')
-    expect(m.agents.status('fake-agent').overbenchServer).toEqual({
+    expect(m.agents.status('fake-agent').kettuServer).toEqual({
       runs: false,
       active: false,
     })
@@ -412,7 +412,7 @@ describe('AgentManager', () => {
     expect(seen).toEqual([])
     expect(sent).not.toContain('session/new')
     const listed = await runtime.connection.listSessions(
-      path.join(os.tmpdir(), 'overbench-agent-reports'),
+      path.join(os.tmpdir(), 'kettu-agent-reports'),
       null,
     )
     expect(listed.sessions.filter((s) => s.acpSessionId.startsWith('fake-'))).toEqual([])
@@ -474,7 +474,7 @@ describe('AgentManager', () => {
   /** A package agent whose install is on disk, with a first process that ignores its stop. */
   async function reinstallable() {
     const given = stopFails()
-    const root = await tempFolder('overbench-adapters-')
+    const root = await tempFolder('kettu-adapters-')
     const def: AgentDefinition = {
       ...fakeAgent(FAKE_AGENT_MAIN),
       launch: { kind: 'package', package: 'fake-adapter', version: '2.0.0' },
@@ -837,7 +837,7 @@ describe('AgentManager with an installed adapter', () => {
   })
 
   it('deletes the versions the pinned one replaced once it runs', async () => {
-    const dir = await tempFolder('overbench-adapters-')
+    const dir = await tempFolder('kettu-adapters-')
     await mkdir(path.join(dir, 'fake-agent', '1.0.0'), { recursive: true })
     await mkdir(path.join(dir, 'fake-agent', '2.0.0'))
     const m = packageManager(['1.0.0', '2.0.0'], dir)
@@ -854,7 +854,7 @@ describe('AgentManager with an installed adapter', () => {
   })
 
   it('reinstalls only while no session uses the agent', async () => {
-    const dir = await tempFolder('overbench-adapters-')
+    const dir = await tempFolder('kettu-adapters-')
     await mkdir(path.join(dir, 'fake-agent', '2.0.0'), { recursive: true })
     const m = packageManager(['2.0.0'], dir)
     m.setLive(1)
@@ -869,7 +869,7 @@ describe('AgentManager with an installed adapter', () => {
   })
 
   it('holds a start that comes during a reinstall until the new install runs', async () => {
-    const dir = await tempFolder('overbench-adapters-')
+    const dir = await tempFolder('kettu-adapters-')
     await mkdir(path.join(dir, 'fake-agent', '2.0.0'), { recursive: true })
     const m = packageManager(['2.0.0'], dir)
     const before = await m.agents.ensureReady('fake-agent')
@@ -1130,14 +1130,14 @@ function cliManager(
   return { ...m, installs, launches, status: () => m.agents.status('fake-agent') }
 }
 
-/** The host settings with OverBench's MCP server off for these agents. */
+/** The host settings with Kettu's MCP server off for these agents. */
 function withMcpOff(off: AgentId[]): HostSettings {
   return {
     locale: 'en',
     agents: {},
     proxy: { mode: 'environment' },
     git: { backgroundFetch: false },
-    mcp: { overbench: { off } },
+    mcp: { kettu: { off } },
     usage: { fromComputer: false },
     sessionTitles: true,
   }
@@ -1509,7 +1509,7 @@ describe("a binary agent's version", () => {
 
   /** OpenCode as `fake-opencode`, on a PATH of its own, its version answered by `probe`. */
   async function opencodeManager(probe: CliProbe) {
-    const bin = await tempFolder('overbench-bin-')
+    const bin = await tempFolder('kettu-bin-')
     const program = path.join(bin, windows ? 'fake-opencode.cmd' : 'fake-opencode')
     await writeFile(program, windows ? '@exit /b 0\r\n' : '#!/bin/sh\n')
     if (!windows) await chmod(program, 0o755)
@@ -1577,8 +1577,8 @@ describe("a binary agent's version", () => {
 })
 
 describe('a configuration folder of its own', () => {
-  const shellFolder = path.join(os.tmpdir(), 'overbench-shell-claude')
-  const picked = path.join(os.tmpdir(), 'overbench-picked-claude')
+  const shellFolder = path.join(os.tmpdir(), 'kettu-shell-claude')
+  const picked = path.join(os.tmpdir(), 'kettu-picked-claude')
   // The fake agent under Claude Code's id, whose folder can be picked.
   const def: AgentDefinition = {
     ...fakeAgent(FAKE_AGENT_MAIN),
@@ -1755,7 +1755,7 @@ describe('a configuration folder of its own', () => {
 
 describe('details', () => {
   it('reads the pinned adapter and the environment the agents see', async () => {
-    const dir = await tempFolder('overbench-adapters-')
+    const dir = await tempFolder('kettu-adapters-')
     const sdk = path.join(
       dir,
       'claude-code',
@@ -1811,7 +1811,7 @@ describe('details', () => {
   })
 
   it('reads the CLI of the fallback adapter while the pinned one is not installed', async () => {
-    const dir = await tempFolder('overbench-adapters-')
+    const dir = await tempFolder('kettu-adapters-')
     const sdk = path.join(
       dir,
       'claude-code',
@@ -2096,7 +2096,7 @@ async function updateManager(
     launcher?: AgentLauncher
   } = {},
 ) {
-  const root = await tempFolder('overbench-updates-')
+  const root = await tempFolder('kettu-updates-')
   const def: AgentDefinition = {
     ...fakeAgent(FAKE_AGENT_MAIN),
     id: 'codex',
@@ -2703,7 +2703,7 @@ describe('installing a binary agent', () => {
   async function binaryManager(
     run: (options: ProgramOptions, bin: string) => Promise<Partial<ProgramRun>>,
   ) {
-    const bin = await tempFolder('overbench-bin-')
+    const bin = await tempFolder('kettu-bin-')
     const executable = async (name: string): Promise<string> => {
       const file = path.join(bin, windows ? `${name}.cmd` : name)
       await writeFile(file, windows ? '@exit /b 0\r\n' : '#!/bin/sh\n')
@@ -2855,10 +2855,10 @@ describe('installing a binary agent from its archive', () => {
   const posix = process.platform !== 'win32'
   const CONTENT = Buffer.from('#!/bin/sh\necho fake\n')
 
-  /** OpenCode as `fake-archive-agent`, which only OverBench's own archive install provides. */
+  /** OpenCode as `fake-archive-agent`, which only Kettu's own archive install provides. */
   async function archiveManager(options: { withoutHash?: boolean } = {}) {
-    const bin = await tempFolder('overbench-bin-')
-    const adaptersDir = await tempFolder('overbench-archives-')
+    const bin = await tempFolder('kettu-bin-')
+    const adaptersDir = await tempFolder('kettu-archives-')
     const archive = gzipSync(archiveTar([{ name: 'agent', data: CONTENT, mode: 0o100755 }]))
     const link = await serveArchives({ '/agent.tar.gz': archive })
     const def: AgentDefinition = {

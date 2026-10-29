@@ -26,9 +26,9 @@ function failure(error: unknown): SharingResult {
 
 /** Reads the status and follows main's changes; called once at bootstrap. */
 export async function initSharing(): Promise<void> {
-  window.overbench.sharing.onChanged((status) => useSharingStore.setState({ status }))
+  window.kettu.sharing.onChanged((status) => useSharingStore.setState({ status }))
   try {
-    useSharingStore.setState({ status: await window.overbench.sharing.status() })
+    useSharingStore.setState({ status: await window.kettu.sharing.status() })
   } catch (error) {
     console.error('Could not read the sharing status', error)
   }
@@ -39,7 +39,7 @@ export async function connectSharing(
   accountId: string | null,
 ): Promise<SharingConnectResult> {
   try {
-    const result = await window.overbench.sharing.connect(token, accountId)
+    const result = await window.kettu.sharing.connect(token, accountId)
     return 'status' in result ? take(result) : result
   } catch (error) {
     return failure(error)
@@ -48,7 +48,7 @@ export async function connectSharing(
 
 export async function removeSharing(): Promise<SharingResult> {
   try {
-    const status = await window.overbench.sharing.remove()
+    const status = await window.kettu.sharing.remove()
     useSharingStore.setState({ status })
     return { status }
   } catch (error) {
@@ -58,7 +58,7 @@ export async function removeSharing(): Promise<SharingResult> {
 
 export async function publishArtifact(id: string, version: number): Promise<SharingResult> {
   try {
-    return take(await window.overbench.sharing.publish(id, version))
+    return take(await window.kettu.sharing.publish(id, version))
   } catch (error) {
     return failure(error)
   }
@@ -66,7 +66,7 @@ export async function publishArtifact(id: string, version: number): Promise<Shar
 
 export async function updateSharedArtifact(id: string, version: number): Promise<SharingResult> {
   try {
-    return take(await window.overbench.sharing.update(id, version))
+    return take(await window.kettu.sharing.update(id, version))
   } catch (error) {
     return failure(error)
   }
@@ -74,7 +74,7 @@ export async function updateSharedArtifact(id: string, version: number): Promise
 
 export async function unpublishArtifact(id: string): Promise<SharingResult> {
   try {
-    return take(await window.overbench.sharing.unpublish(id))
+    return take(await window.kettu.sharing.unpublish(id))
   } catch (error) {
     return failure(error)
   }

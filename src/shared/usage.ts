@@ -2,16 +2,16 @@
 
 import type { AgentId } from './thread'
 
-export type UsageSource = 'overbench' | 'log'
+export type UsageSource = 'kettu' | 'log'
 
-/** Which numbers the page counts: the logs where they are on, or OverBench's record alone. */
-export type UsageScope = 'computer' | 'overbench'
+/** Which numbers the page counts: the logs where they are on, or Kettu's record alone. */
+export type UsageScope = 'computer' | 'kettu'
 
 /** What a token sum carries beside the tokens: how many rows, turns, and what they cost. */
 export interface UsageFigures {
-  /** The rows summed: one per request in an agent's log, or OverBench's rows. */
+  /** The rows summed: one per request in an agent's log, or Kettu's rows. */
   requests: number
-  /** OverBench's turns, one per turn whatever its models; 0 for imported logs. */
+  /** Kettu's turns, one per turn whatever its models; 0 for imported logs. */
   turns: number
   /** Dollars over the models with a price; null when none of them is priced. */
   cost: number | null
@@ -45,7 +45,7 @@ export interface ProjectUsage extends TokenParts {
   agentId: AgentId
   /** The working folder, or null when the agent recorded none. */
   project: string | null
-  /** The folder is one of OverBench's No project folders. */
+  /** The folder is one of Kettu's No project folders. */
   scratch: boolean
 }
 
@@ -94,7 +94,7 @@ export interface UsageStatus {
   fromComputer: boolean
   /** The scan running now, or null. */
   scanning: ScanProgress | null
-  /** When OverBench's own record starts, or null while it is empty. */
+  /** When Kettu's own record starts, or null while it is empty. */
   recordSince: number | null
   logs: UsageLogStatus[]
   /** The database could not be opened, or a newer app wrote it. */

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ContentRef } from '@shared/thread'
 
 vi.mock('@renderer/features/files/file-type-icon', () => ({ FileTypeIcon: () => null }))
-vi.stubGlobal('window', { overbench: { platform: 'darwin' } })
+vi.stubGlobal('window', { kettu: { platform: 'darwin' } })
 
 const { CarriedMedia } = await import('./carried-media')
 const { saveCarried } = await import('./carried')
@@ -52,7 +52,7 @@ describe('CarriedMedia', () => {
 describe('saveCarried', () => {
   it('saves the bytes themselves, under the name the caption shows', async () => {
     const saveAs = vi.fn(async () => true)
-    vi.stubGlobal('window', { overbench: { platform: 'darwin', media: { saveAs } } })
+    vi.stubGlobal('window', { kettu: { platform: 'darwin', media: { saveAs } } })
     expect(await saveCarried('audio/wav', 'AAEC/w==', 'Sound')).toBe(true)
     expect(saveAs).toHaveBeenCalledWith({
       bytes: new Uint8Array([0, 1, 2, 255]),

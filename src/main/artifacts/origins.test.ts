@@ -10,7 +10,7 @@ describe('originId', () => {
   it("is the first 26 hex characters of the SHA-256 of the artifact's id", () => {
     const hash = createHash('sha256').update(ID).digest('hex')
     expect(originId(ID)).toBe(hash.slice(0, 26))
-    expect(artifactUrl(ID)).toBe(`overbench-artifact://${hash.slice(0, 26)}/`)
+    expect(artifactUrl(ID)).toBe(`kettu-artifact://${hash.slice(0, 26)}/`)
   })
 
   it('gives two artifacts two origins', () => {
@@ -22,8 +22,8 @@ describe('artifactHost', () => {
   const host = originId(ID)
 
   it('reads the origin id of an artifact URL or origin', () => {
-    expect(artifactHost(`overbench-artifact://${host}/?v=2`)).toBe(host)
-    expect(artifactHost(`overbench-artifact://${host}`)).toBe(host)
+    expect(artifactHost(`kettu-artifact://${host}/?v=2`)).toBe(host)
+    expect(artifactHost(`kettu-artifact://${host}`)).toBe(host)
   })
 
   it.each([
@@ -33,9 +33,9 @@ describe('artifactHost', () => {
     'null',
     'file://',
     `https://${host}/`,
-    'overbench-artifact://not-an-origin/',
-    `overbench-artifact://${host.toUpperCase()}/`,
-    `overbench-artifact://${host}x/`,
+    'kettu-artifact://not-an-origin/',
+    `kettu-artifact://${host.toUpperCase()}/`,
+    `kettu-artifact://${host}x/`,
   ])('is null for %s', (value) => {
     expect(artifactHost(value)).toBeNull()
   })

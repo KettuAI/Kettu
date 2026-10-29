@@ -21,7 +21,7 @@
     "restore": "Restore"
   },
   "notice": {
-    "downloadBlocked": "Downloads are blocked in OverBench's browser",
+    "downloadBlocked": "Downloads are blocked in Kettu's browser",
     "evicted": "This page was closed to save memory",
     "loadFailed": "This page did not load: {{error}}"
   },

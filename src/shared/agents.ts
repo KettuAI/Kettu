@@ -1,4 +1,4 @@
-// The agents OverBench knows, so every list of them names the ids in one place.
+// The agents Kettu knows, so every list of them names the ids in one place.
 
 export type AgentId =
   | 'claude-code'

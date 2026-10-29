@@ -431,7 +431,7 @@ export class FilesService {
   private async replace(real: string, bytes: Buffer, mode: number): Promise<void> {
     const temp = this.paths.join(
       this.paths.dirname(real),
-      `.${this.paths.basename(real)}.${randomBytes(4).toString('hex')}.overbench-tmp`,
+      `.${this.paths.basename(real)}.${randomBytes(4).toString('hex')}.kettu-tmp`,
     )
     const handle = await open(temp, 'wx', mode & 0o7777)
     try {

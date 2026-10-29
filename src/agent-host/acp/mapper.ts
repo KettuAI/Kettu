@@ -1,4 +1,4 @@
-// The ACP v1 mapper: turns ACP messages into patches against OverBench's session model.
+// The ACP v1 mapper: turns ACP messages into patches against Kettu's session model.
 // Together with connection.ts, the only code that knows ACP types. A v2 mapper would sit
 // next to it and produce the same patches.
 
@@ -52,7 +52,7 @@ export interface MapperContext {
   readonly now: number
   /** The next `e:<n>` id of this session. */
   nextId(): string
-  /** The OverBench id of a session of the same agent, by its ACP id. */
+  /** The Kettu id of a session of the same agent, by its ACP id. */
   sessionIdFor(acpSessionId: string): string | null
 }
 
@@ -921,7 +921,7 @@ function mapConfigOption(option: acp.SessionConfigOption): ConfigOption | null {
 }
 
 /**
- * Config options as OverBench shows them. Legacy `modes` become a synthetic `__mode`
+ * Config options as Kettu shows them. Legacy `modes` become a synthetic `__mode`
  * select, unless a real option already covers the mode category.
  */
 export function mapConfig(
@@ -1388,7 +1388,7 @@ export function mapSessionUpdate(update: acp.SessionUpdate, ctx: MapperContext):
       out.effects.push({
         kind: 'ignored',
         variant: (update as { sessionUpdate: string }).sessionUpdate,
-        detail: 'not shown by OverBench',
+        detail: 'not shown by Kettu',
       })
   }
   return out

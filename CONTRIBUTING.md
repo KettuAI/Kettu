@@ -1,12 +1,12 @@
-# Contributing to OverBench
+# Contributing to Kettu
 
-Thanks for helping shape OverBench.
+Thanks for helping shape Kettu.
 
 ## How to contribute
 
-OverBench takes issues from outside, not code: fixes and features are written by the project, and pull requests are opened by collaborators only.
+Kettu takes issues from outside, not code: fixes and features are written by the project, and pull requests are opened by collaborators only.
 
-- **Bugs and ideas**: open an issue through the [issue forms](https://github.com/overbench/overbench/issues/new/choose), in any language. A screenshot helps.
+- **Bugs and ideas**: open an issue through the [issue forms](https://github.com/KettuAI/Kettu/issues/new/choose), in any language. A screenshot helps.
 - **Security problems**: follow [SECURITY.md](./SECURITY.md); never post them in a public issue.
 
 ## Run from source
@@ -18,7 +18,7 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` keeps its data in its own folder, `OverBench Dev`, so it never touches the sessions of an installed OverBench. To run several worktrees at once, give each one a folder of its own with `OVERBENCH_USER_DATA`, such as `OVERBENCH_USER_DATA=/tmp/overbench-feature-x pnpm dev`; a second run on the same folder quits.
+`pnpm dev` keeps its data in its own folder, `Kettu Dev`, so it never touches the sessions of an installed Kettu. To run several worktrees at once, give each one a folder of its own with `KETTU_USER_DATA`, such as `KETTU_USER_DATA=/tmp/kettu-feature-x pnpm dev`; a second run on the same folder quits.
 
 Development builds also list a **Fake agent**, which needs no account or network and plays scripted scenarios such as a long answer, a burst of tool calls or three approvals at once. Type `/` in its composer to see them; they are written in [`tools/fake-agent/scenarios.ts`](./tools/fake-agent/scenarios.ts).
 

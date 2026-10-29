@@ -449,5 +449,5 @@ useFilesStore.subscribe(() => {
   const key = JSON.stringify(files)
   if (key === reported) return
   reported = key
-  window.overbench.app?.setUnsaved(files)
+  window.kettu.app?.setUnsaved(files)
 })

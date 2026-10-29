@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentStatus, EnvironmentInfo } from '@shared/agent-host'
 
 const request = vi.fn()
-vi.stubGlobal('window', { overbench: { agents: { request } } })
+vi.stubGlobal('window', { kettu: { agents: { request } } })
 
 const { useAgentsStore } = await import('./agents')
 

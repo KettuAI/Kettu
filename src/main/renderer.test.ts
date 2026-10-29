@@ -61,8 +61,8 @@ describe('matchesRendererEntry with the dev server', () => {
 })
 
 describe.each([
-  ['darwin', '/Applications/OverBench.app/Contents/Resources/app.asar/out/renderer/index.html'],
-  ['linux', '/opt/OverBench/resources/app.asar/out/renderer/index.html'],
+  ['darwin', '/Applications/Kettu.app/Contents/Resources/app.asar/out/renderer/index.html'],
+  ['linux', '/opt/Kettu/resources/app.asar/out/renderer/index.html'],
 ] as const)('matchesRendererEntry with a built file on %s', (platform, path) => {
   const entry = { kind: 'file', path } as const
   const href = pathToFileURL(path, { windows: false }).href
@@ -119,8 +119,8 @@ describe.each([
   // loadFile leaves a '%' as it is, and Chromium keeps one that starts no escape.
   it.each([
     [
-      '/Users/ada/Apps 100%/OverBench.app/Contents/Resources/app.asar/out/renderer/index.html',
-      'file:///Users/ada/Apps%20100%/OverBench.app/Contents/Resources/app.asar/out/renderer/index.html',
+      '/Users/ada/Apps 100%/Kettu.app/Contents/Resources/app.asar/out/renderer/index.html',
+      'file:///Users/ada/Apps%20100%/Kettu.app/Contents/Resources/app.asar/out/renderer/index.html',
     ],
     [
       '/tmp/pct%zz/.mount_OverBe1/resources/app.asar/out/renderer/index.html',
@@ -140,14 +140,14 @@ describe.each([
 
 describe('matchesRendererEntry with a built file on win32', () => {
   const path =
-    'C:\\Users\\Ada\\AppData\\Local\\Programs\\OverBench\\resources\\app.asar\\out\\renderer\\index.html'
+    'C:\\Users\\Ada\\AppData\\Local\\Programs\\Kettu\\resources\\app.asar\\out\\renderer\\index.html'
   const entry = { kind: 'file', path } as const
   const href = pathToFileURL(path, { windows: true }).href
   const matches = (url: string | undefined): boolean => matchesRendererEntry(url, entry, 'win32')
 
   it('accepts the entry however Chromium spells the drive, separators and case', () => {
     expect(href).toBe(
-      'file:///C:/Users/Ada/AppData/Local/Programs/OverBench/resources/app.asar/out/renderer/index.html',
+      'file:///C:/Users/Ada/AppData/Local/Programs/Kettu/resources/app.asar/out/renderer/index.html',
     )
     expect(matches(href)).toBe(true)
     expect(matches(`${href}#/settings`)).toBe(true)
@@ -166,8 +166,8 @@ describe('matchesRendererEntry with a built file on win32', () => {
     href.replace('/renderer/index.html', '/renderer%5Cindex.html'),
     href.replace('/renderer/index.html', '/renderer%2Findex.html'),
     href.replace('file:///C:', 'file://evil.example.com/C:'),
-    'file://server/share/OverBench/resources/app.asar/out/renderer/index.html',
-    'file:///Users/Ada/AppData/Local/Programs/OverBench/resources/app.asar/out/renderer/index.html',
+    'file://server/share/Kettu/resources/app.asar/out/renderer/index.html',
+    'file:///Users/Ada/AppData/Local/Programs/Kettu/resources/app.asar/out/renderer/index.html',
     'file:///C:/Windows/System32/index.html',
     `${href}.bak`,
     ...garbage,
@@ -177,12 +177,12 @@ describe('matchesRendererEntry with a built file on win32', () => {
 
   it.each([
     [
-      'C:\\Users\\Ada 100%\\AppData\\Local\\Programs\\OverBench\\resources\\app.asar\\out\\renderer\\index.html',
-      'file:///C:/Users/Ada%20100%/AppData/Local/Programs/OverBench/resources/app.asar/out/renderer/index.html',
+      'C:\\Users\\Ada 100%\\AppData\\Local\\Programs\\Kettu\\resources\\app.asar\\out\\renderer\\index.html',
+      'file:///C:/Users/Ada%20100%/AppData/Local/Programs/Kettu/resources/app.asar/out/renderer/index.html',
     ],
     [
-      'D:\\pct%zz\\OverBench\\resources\\app.asar\\out\\renderer\\index.html',
-      'file:///D:/pct%zz/OverBench/resources/app.asar/out/renderer/index.html',
+      'D:\\pct%zz\\Kettu\\resources\\app.asar\\out\\renderer\\index.html',
+      'file:///D:/pct%zz/Kettu/resources/app.asar/out/renderer/index.html',
     ],
   ])('accepts an install path with a literal percent sign: %s', (entryPath, url) => {
     const pct = { kind: 'file', path: entryPath } as const
@@ -197,10 +197,10 @@ describe('matchesRendererEntry with a built file on win32', () => {
   it('folds the case of ASCII letters only', () => {
     const kim = {
       kind: 'file',
-      path: 'C:\\Users\\kim\\AppData\\Local\\Programs\\OverBench\\resources\\app.asar\\out\\renderer\\index.html',
+      path: 'C:\\Users\\kim\\AppData\\Local\\Programs\\Kettu\\resources\\app.asar\\out\\renderer\\index.html',
     } as const
     const url =
-      'file:///C:/Users/kim/AppData/Local/Programs/OverBench/resources/app.asar/out/renderer/index.html'
+      'file:///C:/Users/kim/AppData/Local/Programs/Kettu/resources/app.asar/out/renderer/index.html'
     // U+212A KELVIN SIGN lowercases to "k", but NTFS keeps it a different name.
     const kelvinUrl = url.replace('/kim/', '/\u212Aim/')
     expect(matchesRendererEntry(url.replace('/kim/', '/KIM/'), kim, 'win32')).toBe(true)
@@ -213,9 +213,9 @@ describe('matchesRendererEntry with a built file on win32', () => {
   it('accepts an entry on a network share only from that share', () => {
     const unc = {
       kind: 'file',
-      path: '\\\\server\\share\\OverBench\\resources\\app.asar\\out\\renderer\\index.html',
+      path: '\\\\server\\share\\Kettu\\resources\\app.asar\\out\\renderer\\index.html',
     } as const
-    const url = 'file://server/share/OverBench/resources/app.asar/out/renderer/index.html'
+    const url = 'file://server/share/Kettu/resources/app.asar/out/renderer/index.html'
     expect(matchesRendererEntry(url, unc, 'win32')).toBe(true)
     expect(matchesRendererEntry(`${url}#/x`, unc, 'win32')).toBe(true)
     expect(matchesRendererEntry(url.replace('//server/', '//other/'), unc, 'win32')).toBe(false)

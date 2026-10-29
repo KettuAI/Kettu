@@ -12,7 +12,7 @@ afterEach(() => {
 })
 
 function write(name: string, content: string | Uint8Array): string {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'overbench-import-'))
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'kettu-import-'))
   dirs.push(dir)
   const file = path.join(dir, name)
   writeFileSync(file, content)

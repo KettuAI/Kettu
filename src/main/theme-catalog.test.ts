@@ -23,7 +23,7 @@ const entry = (fields: Record<string, unknown> = {}) => ({
 })
 
 const index = (themes: unknown, format: unknown = 1) =>
-  JSON.stringify({ overbenchCatalog: format, themes })
+  JSON.stringify({ kettuCatalog: format, themes })
 
 describe('parseCatalogIndex', () => {
   it('reads each entry with its preview', () => {
@@ -33,7 +33,7 @@ describe('parseCatalogIndex', () => {
   it('skips entries that fail their checks, and an id seen before', () => {
     const skipped = [
       entry({ id: 'Nord' }),
-      entry({ id: 'overbench', file: 'themes/overbench.json' }),
+      entry({ id: 'kettu', file: 'themes/kettu.json' }),
       entry({ file: 'themes/../settings.json' }),
       entry({ file: 'https://example.com/themes/nord.json' }),
       entry({ sha256: 'A'.repeat(64) }),
@@ -83,7 +83,7 @@ describe('readBody', () => {
 })
 
 describe('ThemeCatalog', () => {
-  const file = '{"overbenchTheme":1}'
+  const file = '{"kettuTheme":1}'
 
   /** A catalog whose fetch answers from `served`: a body, a status, or an error to throw. */
   function catalog(served: Record<string, string | Buffer | number | Error>) {

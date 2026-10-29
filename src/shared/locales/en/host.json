@@ -24,8 +24,8 @@
     "promptTooLarge": "The message is over 10 MB with its attachments. Remove some to send.",
     "attachmentGone": "{{name}} is no longer available. Remove it and add it again.",
     "attachmentMissing": "An attachment is no longer available. Remove it and add it again.",
-    "attachmentUnreadable": "OverBench can't read {{name}}.",
-    "attachmentDenied": "OverBench isn't allowed to read {{name}}.",
+    "attachmentUnreadable": "Kettu can't read {{name}}.",
+    "attachmentDenied": "Kettu isn't allowed to read {{name}}.",
     "otherConfigFolder": "This session was started with the configuration folder {{path}}. Switch back to it in Settings › Agents to continue it.",
     "topLevelOnly": "Only a top-level session can be pinned or archived",
     "untitled": "Untitled session",
@@ -60,7 +60,7 @@
     },
     "cancelUnconfirmed": {
       "title": "{{agent}} did not confirm the cancellation",
-      "description": "OverBench ended the turn after {{seconds}} seconds. The agent may still be finishing work in the background."
+      "description": "Kettu ended the turn after {{seconds}} seconds. The agent may still be finishing work in the background."
     },
     "lostValues": {
       "fork": {
@@ -98,7 +98,7 @@
   },
   "routines": {
     "busy": "This routine already has a run working",
-    "stopping": "OverBench is stopping",
+    "stopping": "Kettu is stopping",
     "noRun": "No such run",
     "notFound": "No such routine",
     "unnamed": "Routine",
@@ -141,8 +141,8 @@
     },
     "exited": "{{exit}}.",
     "exitedBeforeReady": "{{exit}} before it was ready.",
-    "stoppedTooOften_one": "{{detail}} It stopped {{count}} time in five minutes, so OverBench does not start it again until you retry.",
-    "stoppedTooOften_other": "{{detail}} It stopped {{count}} times in five minutes, so OverBench does not start it again until you retry.",
+    "stoppedTooOften_one": "{{detail}} It stopped {{count}} time in five minutes, so Kettu does not start it again until you retry.",
+    "stoppedTooOften_other": "{{detail}} It stopped {{count}} times in five minutes, so Kettu does not start it again until you retry.",
     "installFailed": "{{agent}} could not be installed. {{message}}",
     "runningFallback": "Running {{fallback}}: {{version}} could not be installed. {{message}}",
     "installStopped": "The install was stopped.",
@@ -175,7 +175,7 @@
       "extracting": "Extracting the archive…"
     },
     "reportTimeout": "{{command}} did not finish in {{seconds}} s",
-    "unreadableReport": "{{agent}}'s {{command}} gave no report OverBench can read"
+    "unreadableReport": "{{agent}}'s {{command}} gave no report Kettu can read"
   },
   "detect": {
     "nodeMissing": "{{agent}} runs on Node.js, and node was not found on PATH.",
@@ -208,8 +208,8 @@
     }
   },
   "environment": {
-    "inherited": "Changes to PATH made after OverBench started take effect after a restart.",
-    "fallback": "Could not read the environment of {{shell}} ({{error}}). Agents use the environment OverBench started with."
+    "inherited": "Changes to PATH made after Kettu started take effect after a restart.",
+    "fallback": "Could not read the environment of {{shell}} ({{error}}). Agents use the environment Kettu started with."
   },
   "git": {
     "notReady": "Git is not available yet",

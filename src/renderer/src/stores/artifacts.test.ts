@@ -3,7 +3,7 @@ import type { ArtifactImportResult, ArtifactSummary } from '@shared/artifacts'
 
 const request = vi.fn()
 const importFile = vi.fn<(project: string | null) => Promise<ArtifactImportResult>>()
-vi.stubGlobal('window', { overbench: { agents: { request }, artifacts: { import: importFile } } })
+vi.stubGlobal('window', { kettu: { agents: { request }, artifacts: { import: importFile } } })
 
 const { artifactsChanged, artifactListShown, importArtifact, retryArtifacts, useArtifactsStore } =
   await import('./artifacts')

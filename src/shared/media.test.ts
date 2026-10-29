@@ -24,9 +24,9 @@ describe('mediaKindOfName', () => {
 describe('mediaUrlToken', () => {
   it('reads the token of a media URL only', () => {
     const token = 'a'.repeat(26)
-    expect(mediaUrlToken(`overbench-media://${token}/demo.mp4?v=1`)).toBe(token)
+    expect(mediaUrlToken(`kettu-media://${token}/demo.mp4?v=1`)).toBe(token)
     expect(mediaUrlToken(`https://${token}/demo.mp4`)).toBeNull()
-    expect(mediaUrlToken('overbench-media://short/demo.mp4')).toBeNull()
+    expect(mediaUrlToken('kettu-media://short/demo.mp4')).toBeNull()
     expect(mediaUrlToken('/tmp/demo.mp4')).toBeNull()
   })
 })

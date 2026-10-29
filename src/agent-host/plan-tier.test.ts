@@ -49,7 +49,7 @@ describe('readPlanTier', () => {
   const log = vi.fn()
 
   beforeAll(async () => {
-    root = await mkdtemp(path.join(os.tmpdir(), 'overbench-tier-'))
+    root = await mkdtemp(path.join(os.tmpdir(), 'kettu-tier-'))
   })
 
   afterAll(async () => {

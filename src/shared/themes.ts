@@ -3,9 +3,9 @@
 
 import contrastPairs from './contrast-pairs.json'
 
-/** The format this version reads; a file with a higher number needs a newer OverBench. */
+/** The format this version reads; a file with a higher number needs a newer Kettu. */
 export const THEME_FORMAT = 1
-export const BUILTIN_THEME_ID = 'overbench'
+export const BUILTIN_THEME_ID = 'kettu'
 export const THEME_MAX_BYTES = 256 * 1024
 export const THEME_MODES = ['light', 'dark'] as const
 export type ThemeMode = (typeof THEME_MODES)[number]
@@ -256,7 +256,7 @@ export function parseThemeFile(source: string): ThemeFileResult {
     return fail({ code: 'not-json' })
   }
   if (!isRecord(raw)) return fail({ code: 'not-json' })
-  const format = raw['overbenchTheme']
+  const format = raw['kettuTheme']
   if (typeof format !== 'number' || !Number.isInteger(format) || format < 1) {
     return fail({ code: 'not-theme' })
   }

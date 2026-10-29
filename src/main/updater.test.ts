@@ -125,7 +125,7 @@ beforeEach(() => {
   electronApp.moveToApplicationsFolder.mockReset().mockReturnValue(true)
   vi.stubEnv('MAIN_VITE_UPDATE_MODE', 'install')
   // Linux builds update only as an AppImage.
-  vi.stubEnv('APPIMAGE', '/opt/OverBench.AppImage')
+  vi.stubEnv('APPIMAGE', '/opt/Kettu.AppImage')
   vi.spyOn(console, 'log').mockImplementation(() => {})
 })
 

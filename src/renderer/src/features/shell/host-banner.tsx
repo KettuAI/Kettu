@@ -26,7 +26,7 @@ export function HostBanner() {
     setBusy(true)
     setError(null)
     try {
-      await window.overbench.agents.restart()
+      await window.kettu.agents.restart()
     } catch (e) {
       setError(errorMessage(e))
     } finally {

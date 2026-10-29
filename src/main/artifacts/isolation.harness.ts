@@ -50,7 +50,7 @@ export interface ProbeConfig {
   media: { token: string; path: string; url: string }
 }
 
-const config = JSON.parse(readFileSync(process.env.OVERBENCH_PROBE ?? '', 'utf8')) as ProbeConfig
+const config = JSON.parse(readFileSync(process.env.KETTU_PROBE ?? '', 'utf8')) as ProbeConfig
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 // Before the app is ready, and in one call, as main registers its schemes.
@@ -82,7 +82,7 @@ function report(result: unknown): void {
 // The probe never outlives its test: it reports before the test's own timeout, and it ends when
 // the test's process does, which a killed run would otherwise leave it running without.
 setTimeout(() => report({ error: `The probe did not finish within 100 s, at ${stage}` }), 100_000)
-const parent = Number(process.env.OVERBENCH_PROBE_PARENT)
+const parent = Number(process.env.KETTU_PROBE_PARENT)
 setInterval(() => {
   try {
     process.kill(parent, 0)
@@ -223,7 +223,7 @@ async function run(): Promise<unknown> {
       document.body.append(frame)
       const calls = Array.from({ length: 5 }, () => {
         const start = performance.now()
-        return overbench.ping().then(() => performance.now() - start, (error) => 'refused: ' + error.message)
+        return kettu.ping().then(() => performance.now() - start, (error) => 'refused: ' + error.message)
       })
       return { waits: await Promise.all(calls) }
     })()`)
@@ -246,7 +246,7 @@ async function run(): Promise<unknown> {
 
   // The probe: its frame, and the calls made while it was pending.
   stage = 'the attempts'
-  const { url } = await page<{ url: string }>(`overbench.open(${JSON.stringify(config.probe)})`)
+  const { url } = await page<{ url: string }>(`kettu.open(${JSON.stringify(config.probe)})`)
   const held = await frameWithCalls(url)
   const probeFrame = await until(() => frameOf(config.probe) ?? null, 10_000)
   const attempts = await until(async () => {
@@ -285,7 +285,7 @@ async function run(): Promise<unknown> {
   const target = JSON.stringify(`${config.server}/navigate`)
   await probeFrame.executeJavaScript(`setTimeout(() => (location.href = ${target})); 1`)
   await until(async () => {
-    const events = await page<{ channel: string }[]>('overbench.events()')
+    const events = await page<{ channel: string }[]>('kettu.events()')
     return events.some((e) => e.channel === 'artifact:blocked') || null
   }, 5_000).catch(() => false)
   await page(`(() => { const f = document.querySelector('iframe'); f.src = f.src })()`)
@@ -345,7 +345,7 @@ async function run(): Promise<unknown> {
   nativeTheme.themeSource = 'dark'
   process.kill(frameOf(config.probe)!.osProcessId, 'SIGKILL')
   const stopped = await until(async () => {
-    const events = await page<{ channel: string }[]>('overbench.events()')
+    const events = await page<{ channel: string }[]>('kettu.events()')
     return events.some((e) => e.channel === 'artifact:stopped') || null
   }, 5_000).catch(() => false)
   // A new frame, as the viewer makes: a page loaded into the old one would be light.
@@ -354,7 +354,7 @@ async function run(): Promise<unknown> {
   )
   const reloaded = { shown: await ready(config.probe), theme: await themeSeen(true) }
   nativeTheme.themeSource = 'system'
-  const events = await page<unknown[]>('overbench.events()')
+  const events = await page<unknown[]>('kettu.events()')
   const trustedAfterProbe = !isRevoked(contents) && revocations === 0
 
   // Frames the guard must refuse, each made while calls are in flight.
@@ -369,7 +369,7 @@ async function run(): Promise<unknown> {
     await reload()
     const before = revocations
     const target =
-      src ?? (await page<{ url: string }>(`overbench.open(${JSON.stringify(config.hang)})`)).url
+      src ?? (await page<{ url: string }>(`kettu.open(${JSON.stringify(config.hang)})`)).url
     const result = await frameWithCalls(target)
     refused[name] = { ...result, revoked: isRevoked(contents), revocations: revocations - before }
   }
@@ -379,12 +379,12 @@ async function run(): Promise<unknown> {
   calls.length = 0
   await reload()
   const canvas = await page<{ waits: number[]; loaded: number }>(`(async () => {
-    const { url } = await overbench.open(${JSON.stringify(config.canvas)})
+    const { url } = await kettu.open(${JSON.stringify(config.canvas)})
     const waits = []
     const calls = []
     const call = () => {
       const start = performance.now()
-      calls.push(overbench.ping().then(() => waits.push(performance.now() - start)))
+      calls.push(kettu.ping().then(() => waits.push(performance.now() - start)))
     }
     const pinging = setInterval(call, 4)
     call()

@@ -63,7 +63,7 @@ export const usePendingSession = create<{ pending: PendingSession | null }>()(()
 
 /** Asks for a folder and adds it as a project; null when cancelled. */
 export async function addProjectFromDialog(): Promise<string | null> {
-  const path = await window.overbench.dialogs.openProject()
+  const path = await window.kettu.dialogs.openProject()
   if (!path) return null
   const project = await useProjectsStore.getState().add(path)
   return project.path
@@ -414,5 +414,5 @@ function descendantIds(sessionId: string): string[] {
 /** Collects the diagnostics bundle and asks main where to save it; null when cancelled. */
 export async function exportDiagnostics(): Promise<string | null> {
   const bundle = await host('diagnostics.collect', undefined)
-  return window.overbench.diagnostics.save(bundle)
+  return window.kettu.diagnostics.save(bundle)
 }

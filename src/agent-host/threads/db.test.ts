@@ -19,7 +19,7 @@ const dirs: string[] = []
 const logs: { level: string; message: string }[] = []
 
 function tempFile(): string {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'overbench-threads-'))
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'kettu-threads-'))
   dirs.push(dir)
   return path.join(dir, 'state', 'threads.db')
 }

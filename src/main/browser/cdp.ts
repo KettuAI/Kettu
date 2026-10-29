@@ -445,10 +445,10 @@ export function checkAgentNavigation(url: string): string {
   }
   if (parsed.href === 'about:blank') return parsed.href
   if (isNeverOpened(parsed)) {
-    throw new ToolFailure('not_allowed', `${parsed.protocol} pages never open in OverBench.`)
+    throw new ToolFailure('not_allowed', `${parsed.protocol} pages never open in Kettu.`)
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new ToolFailure('not_allowed', `${parsed.protocol} pages never open in OverBench.`)
+    throw new ToolFailure('not_allowed', `${parsed.protocol} pages never open in Kettu.`)
   }
   return parsed.href
 }

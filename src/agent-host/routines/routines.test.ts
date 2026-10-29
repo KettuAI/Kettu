@@ -322,7 +322,7 @@ describe('routines', () => {
   })
 
   it('marks a working run interrupted when the host stops', async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-routines-'))
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-routines-'))
     try {
       const { t, port } = await setup({ userDataPath: dir })
       const routine = await create(port, { prompt: '/cancel' })

@@ -42,7 +42,7 @@ export class ArtifactFiles {
   private readonly tempDir: string
 
   constructor(private readonly deps: ArtifactFilesDeps) {
-    this.tempDir = deps.tempDir ?? path.join(os.tmpdir(), 'overbench-artifacts')
+    this.tempDir = deps.tempDir ?? path.join(os.tmpdir(), 'kettu-artifacts')
   }
 
   /** `artifact:open-external`: a copy of the version in the system's temporary folder, opened. */

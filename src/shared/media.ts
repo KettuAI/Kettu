@@ -1,6 +1,6 @@
 // Media an agent names by path, served to the renderer on a scheme of its own.
 
-export const MEDIA_SCHEME = 'overbench-media'
+export const MEDIA_SCHEME = 'kettu-media'
 
 /** A grant's token, 128 random bits in base32: the host of its URL, so lowercase. */
 export const MEDIA_TOKEN = /^[a-z2-7]{26}$/
@@ -69,7 +69,7 @@ export function mediaKindOfName(name: string): MediaKind | null {
 }
 
 export interface MediaGrant {
-  url: string // overbench-media://<token>/<file name>?v=<mtime>
+  url: string // kettu-media://<token>/<file name>?v=<mtime>
   kind: MediaKind
   mimeType: MediaType // from the first bytes, never the name
   size: number // bytes

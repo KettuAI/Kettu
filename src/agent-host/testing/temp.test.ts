@@ -17,9 +17,9 @@ describe('tempFolder', () => {
   })
 
   it('makes a folder in the system temp folder', async () => {
-    made = await tempFolder('overbench-temp-')
+    made = await tempFolder('kettu-temp-')
     writes = true
-    expect(path.basename(made)).toMatch(/^overbench-temp-/)
+    expect(path.basename(made)).toMatch(/^kettu-temp-/)
     expect(existsSync(made)).toBe(true)
   })
 

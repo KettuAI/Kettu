@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Measures the performance budgets against a running OverBench.
+// Measures the performance budgets against a running Kettu.
 //
 // Start a production build with the fake agent, a debugging port and the perf flag, and open a
 // project in it, then run this script.
 //
 //   pnpm build && pnpm exec electron-vite preview --skipBuild -- \
-//     --overbench-perf --remote-debugging-port=9222
+//     --kettu-perf --remote-debugging-port=9222
 //   node tools/perf/measure.mjs [--port 9222] [--json]
 //
 // It drives the real UI with real input events, so leave the window alone while it runs.
@@ -27,11 +27,11 @@ async function connect() {
     targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
   } catch {
     throw new Error(
-      `Nothing answers on port ${port}. Start OverBench with --remote-debugging-port=${port}.`,
+      `Nothing answers on port ${port}. Start Kettu with --remote-debugging-port=${port}.`,
     )
   }
   const page = targets.find((t) => t.type === 'page' && !t.url.startsWith('devtools'))
-  if (!page) throw new Error('OverBench has no window open')
+  if (!page) throw new Error('Kettu has no window open')
   const ws = new WebSocket(page.webSocketDebuggerUrl)
   await new Promise((resolve, reject) => {
     ws.onopen = resolve
@@ -114,10 +114,10 @@ async function key(keyName, { code = keyName, text, modifiers = 0, keyCode } = {
   })
 }
 
-const platform = await evaluate('window.overbench.platform')
+const platform = await evaluate('window.kettu.platform')
 const commandKey = platform === 'darwin' ? 4 : 2
-if (!(await evaluate('Boolean(window.overbench.perf && window.__overbenchPerf)'))) {
-  throw new Error('Start OverBench with --overbench-perf')
+if (!(await evaluate('Boolean(window.kettu.perf && window.__kettuPerf)'))) {
+  throw new Error('Start Kettu with --kettu-perf')
 }
 
 const shownSession = () =>
@@ -146,7 +146,7 @@ async function newFakeSession() {
   )
   // A project with no sessions has no sidebar row, so the first one is chosen here.
   const projectName = await evaluate(`(async () => {
-    const [project] = await window.overbench.agents.request('projects.list', undefined)
+    const [project] = await window.kettu.agents.request('projects.list', undefined)
     return project.name
   })()`)
   const showsProject = `(${projectButton}?.textContent ?? '').includes(${JSON.stringify(projectName)})`
@@ -161,7 +161,7 @@ async function newFakeSession() {
     await click(`return ${agentButton}`, 'the agent menu')
     // Right after launch the menu can open before the agents are listed.
     await waitFor(`Boolean(${fakeAgentTab})`, {
-      what: 'the fake agent in the agent menu (packaged builds need OVERBENCH_FAKE_AGENT)',
+      what: 'the fake agent in the agent menu (packaged builds need KETTU_FAKE_AGENT)',
     })
     await click(`return ${fakeAgentTab}`, 'the fake agent in the agent menu')
     await waitFor(`Boolean(${fakeAgentChoice})`, { what: "the fake agent's pane" })
@@ -230,7 +230,7 @@ async function startObserving() {
     let last = performance.now()
     const tick = (t) => { run.frames.push(t - last); last = t; if (!run.stop) requestAnimationFrame(tick) }
     requestAnimationFrame(tick)
-    window.__overbenchPerf.reset()
+    window.__kettuPerf.reset()
     return true
   })()`)
 }
@@ -261,7 +261,7 @@ async function stopObserving() {
       deliveryP95: delivery.length ? delivery[Math.min(delivery.length - 1, Math.floor(delivery.length * 0.95))] : null,
       deliveryMax: delivery.at(-1) ?? null,
       toInputP95: toInput.length ? toInput[Math.min(toInput.length - 1, Math.floor(toInput.length * 0.95))] : null,
-      updates: window.__overbenchPerf.frames(),
+      updates: window.__kettuPerf.frames(),
     }
   })()`)
 }
@@ -284,7 +284,7 @@ async function clearComposer() {
 const results = {}
 const log = (text) => !asJson && process.stderr.write(`${text}\n`)
 
-const metrics = await evaluate('window.overbench.app.perfMetrics()')
+const metrics = await evaluate('window.kettu.app.perfMetrics()')
 results.launch = metrics.launchToInteractiveMs
 
 log('long-stream: 200 KB at 200 updates per second, typing in the composer…')
@@ -301,8 +301,8 @@ await startObserving()
 await runTurn('/tool-storm')
 results.storm = await stopObserving()
 const stormSession = await shownSession()
-const after = await evaluate('window.overbench.app.perfMetrics()')
-const agentHost = after.processes.find((p) => p.name === 'OverBench Agent Host')
+const after = await evaluate('window.kettu.app.perfMetrics()')
+const agentHost = after.processes.find((p) => p.name === 'Kettu Agent Host')
 results.agentHostMB = agentHost ? agentHost.workingSetKB / 1024 : null
 
 /**
@@ -321,7 +321,7 @@ async function archiveAndRestore(sessionId) {
     what: 'New session after Archive',
   })
   await evaluate(
-    `window.overbench.agents.request('sessions.unarchive', { sessionId: ${JSON.stringify(sessionId)} })`,
+    `window.kettu.agents.request('sessions.unarchive', { sessionId: ${JSON.stringify(sessionId)} })`,
   )
   await waitFor(
     `Boolean(document.querySelector('[data-session-id=${JSON.stringify(sessionId)}]'))`,
@@ -338,21 +338,21 @@ async function switchTo(sessionId, what) {
     const probe = (window.__switchProbe = { t0: performance.now(), loaf: [] })
     probe.observer = new PerformanceObserver((list) => probe.loaf.push(...list.getEntries()))
     probe.observer.observe({ type: 'long-animation-frame' })
-    window.__overbenchPerf.reset()
+    window.__kettuPerf.reset()
     return true
   })()`)
   await click(sessionRow(sessionId), what)
-  await waitFor('window.__overbenchPerf.switches().length > 0', { timeout: 60_000, what })
+  await waitFor('window.__kettuPerf.switches().length > 0', { timeout: 60_000, what })
   const quiet = `(() => {
     const { loaf, t0 } = window.__switchProbe
-    const last = Math.max(t0 + window.__overbenchPerf.switches()[0].ms, ...loaf.map((f) => f.startTime + f.duration))
+    const last = Math.max(t0 + window.__kettuPerf.switches()[0].ms, ...loaf.map((f) => f.startTime + f.duration))
     return performance.now() - last > 1000
   })()`
   await waitFor(quiet, { timeout: 60_000, what: `${what} to settle` })
   return evaluate(`(() => {
     const { loaf, t0, observer } = window.__switchProbe
     observer.disconnect()
-    const paint = window.__overbenchPerf.switches()[0].ms
+    const paint = window.__kettuPerf.switches()[0].ms
     return {
       paint,
       settled: Math.max(paint, ...loaf.map((f) => f.startTime + f.duration - t0)),
@@ -369,7 +369,7 @@ async function switchTo(sessionId, what) {
  */
 async function storedHistory(entries) {
   const sessionId = await evaluate(`(async () => {
-    const { request } = window.overbench.agents
+    const { request } = window.kettu.agents
     const [project] = await request('projects.list', undefined)
     const summary = await request('sessions.import', {
       agentId: 'fake-agent',

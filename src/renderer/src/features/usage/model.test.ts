@@ -156,7 +156,7 @@ describe('figures', () => {
     })
   })
 
-  it('counts each metric, requests standing in for turns under OverBench only', () => {
+  it('counts each metric, requests standing in for turns under Kettu only', () => {
     const metricStarts = dayStarts({ from: day(2026, 10, 19), to: day(2026, 10, 23) })
     const rows = {
       days: [
@@ -177,7 +177,7 @@ describe('figures', () => {
     const requests = figures(days, metricRange, 'requests', 'computer')
     expect(requests).toMatchObject({ total: 9, tokens: 550, average: 3, priced: true })
     expect(requests.peak).toEqual({ day: day(2026, 10, 21), total: 4 })
-    expect(figures(days, metricRange, 'requests', 'overbench')).toMatchObject({
+    expect(figures(days, metricRange, 'requests', 'kettu')).toMatchObject({
       total: 4,
       average: 4 / 3,
     })

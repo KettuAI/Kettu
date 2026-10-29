@@ -8,7 +8,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 
 /**
  * The main area until launch knows what to show. A launch that takes longer than 1 s shows the mark
- * over "Starting OverBench…", so a slow start never looks frozen; a normal start shows nothing.
+ * over "Starting Kettu…", so a slow start never looks frozen; a normal start shows nothing.
  */
 export function LaunchState() {
   const { t } = useTranslation('shell')

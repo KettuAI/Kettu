@@ -77,7 +77,7 @@ describe('ArtifactFiles', () => {
     new ArtifactFiles({ content, contentDir, importFile, tempDir: path.join(dir, 'tmp') })
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-artifact-files-'))
+    dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-artifact-files-'))
     contentDir = path.join(dir, 'content')
     await mkdir(path.join(contentDir, 'ab'), { recursive: true })
     stored = path.join(contentDir, 'ab', 'ab01.html')

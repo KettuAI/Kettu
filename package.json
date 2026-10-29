@@ -1,15 +1,15 @@
 {
-  "name": "overbench",
-  "productName": "OverBench",
+  "name": "kettu",
+  "productName": "Kettu",
   "version": "0.0.0",
   "private": true,
   "description": "A beautifully crafted desktop workbench for terminal coding agents.",
   "author": "Amigoer",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/overbench/overbench",
+  "homepage": "https://github.com/KettuAI/Kettu",
   "repository": {
     "type": "git",
-    "url": "https://github.com/overbench/overbench.git"
+    "url": "https://github.com/KettuAI/Kettu.git"
   },
   "main": "./out/main/index.js",
   "packageManager": "pnpm@10.11.1",

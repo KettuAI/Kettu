@@ -1,6 +1,6 @@
 // Reports from an agent's own commands, which ACP has no request for: Claude Code's `/usage`
 // and Codex's `/status` for the current use of the plan limits, and Claude Code's `/context` for
-// what fills a session's context. Each runs in a hidden session that OverBench makes for it and
+// what fills a session's context. Each runs in a hidden session that Kettu makes for it and
 // removes afterwards, so it shows in no thread and stays in none of the agent's history. All
 // three run in the agent itself, without a model call of their own.
 
@@ -28,7 +28,7 @@ export interface HiddenRuntime {
 export type Removal = 'delete' | 'delete-again' | 'close'
 
 // Each agent's removal, as checked against its own history. An agent not listed opens no hidden
-// session, so OverBench leaves nothing in a history nobody checked.
+// session, so Kettu leaves nothing in a history nobody checked.
 const REMOVALS: Partial<Record<AgentId, Removal>> = {
   'claude-code': 'delete-again',
   // codex-acp 2.2.2 answers `session/delete` with Codex's `thread/archive`, which writes the thread
@@ -159,7 +159,7 @@ export async function runReport(
 }
 
 /**
- * Removes a session OverBench made for itself by `removal`, from `hiddenRemoval`, and drops its
+ * Removes a session Kettu made for itself by `removal`, from `hiddenRemoval`, and drops its
  * late updates. Failures go to `log` while the agent still runs.
  */
 export async function removeHiddenSession(

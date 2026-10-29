@@ -96,7 +96,7 @@ export function shellEnvironment(
   }
   env.TERM = 'xterm-256color'
   env.COLORTERM = 'truecolor'
-  env.TERM_PROGRAM = 'OverBench'
+  env.TERM_PROGRAM = 'Kettu'
   env.TERM_PROGRAM_VERSION = appVersion
   if (platform === 'darwin' && !env.LANG) env.LANG = 'en_US.UTF-8'
   return env

@@ -179,11 +179,11 @@ export class AgentHost {
   readonly attachments: Attachments
   /** Every session's thread, read a page at a time, in a worker of its own. */
   readonly threads: ThreadStore | null
-  /** OverBench's record and the agents' logs, in a worker of its own. */
+  /** Kettu's record and the agents' logs, in a worker of its own. */
   readonly usage: UsageManager
   /** Every project's artifacts, kept in the thread database and the data folder. */
   readonly artifacts: ArtifactStore
-  /** The `overbench` MCP server, through which the sessions' agents reach the artifacts. */
+  /** The `kettu` MCP server, through which the sessions' agents reach the artifacts. */
   readonly artifactService: ArtifactService
   readonly hub: PortHub
   private settings: HostSettings
@@ -822,14 +822,14 @@ export class AgentHost {
     return run(canonical)
   }
 
-  /** For Settings › MCP servers: OverBench's own server and where each agent keeps its own. */
+  /** For Settings › MCP servers: Kettu's own server and where each agent keeps its own. */
   private async mcpStatus(): Promise<McpStatus> {
     const service = this.artifactService
     return {
       servers: [
         {
           name: SERVICE_NAME,
-          title: 'OverBench',
+          title: 'Kettu',
           builtIn: true,
           running: service.listeningPort !== null,
           error: service.error,

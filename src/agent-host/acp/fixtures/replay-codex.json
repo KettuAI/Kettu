@@ -17,7 +17,7 @@
   },
   {
     "content": {
-      "text": "[@notes.txt](file:///tmp/overbench-140-proj/notes.txt)\n<context ref=\"file:///tmp/overbench-140-proj/notes.txt\">\nProject notes\nline two\n\n</context>",
+      "text": "[@notes.txt](file:///tmp/kettu-140-proj/notes.txt)\n<context ref=\"file:///tmp/kettu-140-proj/notes.txt\">\nProject notes\nline two\n\n</context>",
       "type": "text"
     },
     "messageId": "01a17499-423f-78e1-88d2-9fc13c5ce299",

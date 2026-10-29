@@ -1,6 +1,6 @@
 import { i18n } from './i18n'
 
-export const platform = window.overbench.platform
+export const platform = window.kettu.platform
 export const isMac = platform === 'darwin'
 export const isWindows = platform === 'win32'
 

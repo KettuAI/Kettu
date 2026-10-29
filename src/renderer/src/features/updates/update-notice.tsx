@@ -126,16 +126,16 @@ export function UpdateNoticeCard({ notice }: { notice: AppUpdateNotice }) {
 
   const dismiss = () => {
     if (notice.kind === 'updated') useUpdatesStore.setState({ updatedDismissed: true })
-    else void window.overbench.updates.dismiss()
+    else void window.kettu.updates.dismiss()
   }
 
   const run = () => {
     switch (row.action) {
       case 'restart':
-        void window.overbench.updates.restart()
+        void window.kettu.updates.restart()
         break
       case 'update':
-        void window.overbench.updates
+        void window.kettu.updates
           .download()
           .catch((error: unknown) =>
             console.warn(`Could not download the update: ${errorMessage(error)}`),
@@ -205,7 +205,7 @@ export function UpdateNoticeCard({ notice }: { notice: AppUpdateNotice }) {
       onOpen={() => openSettings('about')}
       action={action}
       onDismiss={row.dismissible ? dismiss : undefined}
-      onCancel={row.action === 'cancel' ? () => void window.overbench.updates.cancel() : undefined}
+      onCancel={row.action === 'cancel' ? () => void window.kettu.updates.cancel() : undefined}
     />
   )
 }

@@ -6,14 +6,14 @@ export function host<M extends HostMethod>(
   method: M,
   params: HostParams<M>,
 ): Promise<HostResult<M>> {
-  return window.overbench.agents.request(method, params)
+  return window.kettu.agents.request(method, params)
 }
 
 export function terminals<M extends TerminalMethod>(
   method: M,
   params: TerminalParams<M>,
 ): Promise<TerminalResult<M>> {
-  return window.overbench.terminals.request(method, params)
+  return window.kettu.terminals.request(method, params)
 }
 
 /** The code of a host or port error, if it has one. */

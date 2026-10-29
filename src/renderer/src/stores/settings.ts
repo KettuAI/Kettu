@@ -12,7 +12,7 @@ export const useSettingsStore = create<SettingsStore>()(() => ({
   settings: DEFAULT_SETTINGS,
   loaded: false,
   async update(patch) {
-    const settings = await window.overbench.settings.update(patch)
+    const settings = await window.kettu.settings.update(patch)
     useSettingsStore.setState({ settings })
   },
 }))
@@ -42,8 +42,8 @@ export async function initSettings(): Promise<void> {
       applyLanguage(state.settings.general.language)
     }
   })
-  window.overbench.settings.onChanged((settings) => useSettingsStore.setState({ settings }))
-  const settings = await window.overbench.settings.get()
+  window.kettu.settings.onChanged((settings) => useSettingsStore.setState({ settings }))
+  const settings = await window.kettu.settings.get()
   useSettingsStore.setState({ settings, loaded: true })
   applyAppearance(settings)
   applyLanguage(settings.general.language)

@@ -27,7 +27,7 @@ import { openSettings, showShortcuts } from '@renderer/stores/view'
 import { NavRow } from './app-sidebar'
 import { signInLabel, useNotices } from './notices'
 
-const README_URL = 'https://github.com/overbench/overbench#readme'
+const README_URL = 'https://github.com/KettuAI/Kettu#readme'
 
 /**
  * The footer: the notices as cards, over the Settings row and, at its end, small buttons that

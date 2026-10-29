@@ -1,4 +1,4 @@
-// A title OverBench writes for a session whose agent writes none: its first message goes to a
+// A title Kettu writes for a session whose agent writes none: its first message goes to a
 // small model of its agent in a hidden session, removed afterwards as the reports' are.
 
 import type { UserContent } from '@shared/thread'

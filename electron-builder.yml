@@ -1,5 +1,5 @@
-appId: com.overbench.app
-productName: OverBench
+appId: sh.kettu.app
+productName: Kettu
 directories:
   buildResources: build
   output: dist
@@ -17,8 +17,8 @@ asarUnpack:
 npmRebuild: false
 publish:
   provider: github
-  owner: overbench
-  repo: overbench
+  owner: KettuAI
+  repo: Kettu
   releaseType: draft
 
 mac:
@@ -26,7 +26,7 @@ mac:
   # Compiled by Xcode 26's actool into Assets.car and an .icns for older macOS.
   icon: build/icon.icon
   # The text macOS shows when a command an agent or the terminal runs asks for Apple Events, the
-  # camera or the microphone, since it counts those requests as OverBench's.
+  # camera or the microphone, since it counts those requests as Kettu's.
   extendInfo:
     NSAppleEventsUsageDescription: A command that an agent or the terminal runs wants to use AppleScript.
     NSCameraUsageDescription: A command that an agent or the terminal runs wants to use the camera.

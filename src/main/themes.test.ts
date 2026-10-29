@@ -24,7 +24,7 @@ const { CATALOG_URL, ThemeCatalog } = await import('./theme-catalog')
 const WINDOW = {} as Electron.BrowserWindow
 
 const theme = (name: string, dark: Record<string, string> = { 'bg-app': '#2e3440' }) =>
-  JSON.stringify({ overbenchTheme: 1, name, light: {}, dark: { colors: dark } })
+  JSON.stringify({ kettuTheme: 1, name, light: {}, dark: { colors: dark } })
 
 let dir: string
 let themesDir: string
@@ -33,7 +33,7 @@ let sourcesFile: string
 let served: Record<string, string>
 
 beforeEach(async () => {
-  dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-themes-'))
+  dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-themes-'))
   themesDir = path.join(dir, 'themes')
   sourcesFile = path.join(dir, 'theme-sources.json')
   served = {}
@@ -74,7 +74,7 @@ describe('readThemeFolder', () => {
     await put('themes/latin1.json', Buffer.from([0x7b, 0xe9, 0x7d]))
     // Not theme ids, so never read.
     await put('themes/Nord Copy.json', theme('Nord Copy'))
-    await put('themes/overbench.json', theme('Over'))
+    await put('themes/kettu.json', theme('Over'))
     await put('themes/notes.txt', 'x')
     await put('themes/nord.json.tmp', 'x')
 
@@ -100,7 +100,7 @@ describe('readThemeFolder', () => {
 describe('ThemeStore', () => {
   const changed = vi.fn<(state: ThemesState, chosen: unknown) => void>()
 
-  async function store(chosen = 'overbench') {
+  async function store(chosen = 'kettu') {
     const themes: InstanceType<typeof ThemeStore> = new ThemeStore(
       await readThemeFolder(themesDir),
       await readThemeSources(sourcesFile),
@@ -129,7 +129,7 @@ describe('ThemeStore', () => {
       sha256: createHash('sha256').update(text).digest('hex'),
       preview: { light: {}, dark: { 'bg-app': '#2e3440' } },
     }))
-    served = { 'index.json': JSON.stringify({ overbenchCatalog: 1, themes }) }
+    served = { 'index.json': JSON.stringify({ kettuCatalog: 1, themes }) }
     for (const [id, text] of Object.entries(files)) served[`themes/${id}.json`] = text
   }
 
@@ -227,7 +227,7 @@ describe('ThemeStore', () => {
     await themes.remove('ayu')
     expect(themes.state()).toMatchObject({ chosen: 'nord', failed: null })
     await themes.remove('nord')
-    expect(themes.state()).toEqual({ installed: [], chosen: 'overbench', failed: null })
+    expect(themes.state()).toEqual({ installed: [], chosen: 'kettu', failed: null })
     expect(changed).toHaveBeenCalledTimes(2)
     expect(changed.mock.calls[1]![1]).toBeNull()
     expect(await readdir(themesDir)).toEqual([])
@@ -236,7 +236,7 @@ describe('ThemeStore', () => {
   it('refuses ids it does not hold', async () => {
     await put('settings.json', '{}')
     const themes = await store()
-    for (const id of ['../settings', 'nord', 'overbench', 7]) {
+    for (const id of ['../settings', 'nord', 'kettu', 7]) {
       await expect(themes.remove(id)).rejects.toThrow('Not an installed theme')
       expect(() => themes.reveal(id)).toThrow('Not an installed theme')
     }
@@ -318,7 +318,7 @@ describe('ThemeStore', () => {
 
     it('says why the catalog cannot be read', async () => {
       expect(await (await store()).catalog(true)).toEqual({ status: 'unreachable' })
-      served = { 'index.json': '{"overbenchCatalog": 2, "themes": []}' }
+      served = { 'index.json': '{"kettuCatalog": 2, "themes": []}' }
       expect(await (await store()).catalog(true)).toEqual({ status: 'newer-format' })
     })
 

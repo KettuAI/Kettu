@@ -58,7 +58,7 @@ export interface IpcDeps {
   sharing: Sharing
   updater: Updater
   quit: QuitFlow
-  /** Started with --overbench-perf. */
+  /** Started with --kettu-perf. */
   perf: boolean
 }
 
@@ -449,7 +449,7 @@ export function registerIpcHandlers({
   })
 
   handle('perf:metrics', 0, () => {
-    if (!perf) throw new Error('"perf:metrics" needs --overbench-perf')
+    if (!perf) throw new Error('"perf:metrics" needs --kettu-perf')
     return {
       launchToInteractiveMs,
       processes: app.getAppMetrics().map((metric) => ({

@@ -11,7 +11,7 @@ import {
 } from './guards'
 
 const HOST = '0123456789abcdef0123456789'
-const ORIGIN = `overbench-artifact://${HOST}`
+const ORIGIN = `kettu-artifact://${HOST}`
 
 interface FakeFrame {
   parent: FakeFrame | null
@@ -71,7 +71,7 @@ describe('mayNavigate', () => {
   it('keeps a frame on its own origin', () => {
     expect(mayNavigate(HOST, `${ORIGIN}/?v=2`, true)).toBe(true)
     expect(mayNavigate(HOST, 'https://example.com/', true)).toBe(false)
-    expect(mayNavigate(HOST, 'overbench-artifact://ffffffffffffffffffffffffff/', false)).toBe(false)
+    expect(mayNavigate(HOST, 'kettu-artifact://ffffffffffffffffffffffffff/', false)).toBe(false)
     expect(mayNavigate(HOST, 'data:text/html,x', false)).toBe(false)
   })
 
@@ -235,7 +235,7 @@ describe('guardArtifactFrames', () => {
     expect(navigate(contents, child, `${ORIGIN}/?v=2`)).not.toHaveBeenCalled()
     expect(navigate(contents, child, 'https://example.com/a')).toHaveBeenCalled()
     expect(
-      navigate(contents, child, 'overbench-artifact://ffffffffffffffffffffffffff/'),
+      navigate(contents, child, 'kettu-artifact://ffffffffffffffffffffffffff/'),
     ).toHaveBeenCalled()
     expect(navigate(contents, child, 'data:text/html,x')).toHaveBeenCalled()
     const own = frame(child, 'null', 6)

@@ -77,7 +77,7 @@ function figuresOf(rows: UsageRow[]): UsageFigures {
 }
 
 const day = (i: number) => T0 + i * DAY
-const all = { 'claude-code': 'log', codex: 'log', opencode: 'overbench' } as const
+const all = { 'claude-code': 'log', codex: 'log', opencode: 'kettu' } as const
 
 describe('UsageDb', () => {
   it('creates the schema and reports it', () => {
@@ -171,8 +171,8 @@ describe('UsageDb', () => {
     db.write([
       row('a', { at: day(0) + 1_000 }),
       row('b', { at: day(1) + 1_000, model: 'claude-fable-5-1', project: '/p/b' }),
-      row('c', { at: day(1) + 2_000, source: 'overbench' }),
-      row('d', { at: day(2) + 1_000, agentId: 'opencode', source: 'overbench', reasoning: 7 }),
+      row('c', { at: day(1) + 2_000, source: 'kettu' }),
+      row('d', { at: day(2) + 1_000, agentId: 'opencode', source: 'kettu', reasoning: 7 }),
       row('e', { at: day(5) }),
     ])
     const summary = db.summary([day(0), day(1), day(2), day(3)], day(1), day(3), all)
@@ -189,7 +189,7 @@ describe('UsageDb', () => {
       ['claude-code', '/p/b'],
       ['opencode', '/p/a'],
     ])
-    expect(db.totals(day(0), day(3), { 'claude-code': 'overbench' })).toEqual([
+    expect(db.totals(day(0), day(3), { 'claude-code': 'kettu' })).toEqual([
       {
         agentId: 'claude-code',
         input: 10,
@@ -197,7 +197,7 @@ describe('UsageDb', () => {
         reasoning: 0,
         cacheRead: 100,
         cacheWrite: 5,
-        ...figuresOf([row('c', { at: day(1) + 2_000, source: 'overbench' })]),
+        ...figuresOf([row('c', { at: day(1) + 2_000, source: 'kettu' })]),
       },
     ])
   })
@@ -281,11 +281,11 @@ describe('UsageDb', () => {
           .map((s) => [s.agentId, s.source, s.rows])
           .sort(),
       ).toEqual([
-        ['claude-code', 'overbench', 3],
+        ['claude-code', 'kettu', 3],
         ['codex', 'log', 1],
       ])
       const summary = upgraded.summary([day(0), day(1)], T0, day(1), {
-        'claude-code': 'overbench',
+        'claude-code': 'kettu',
         codex: 'log',
       })
       // Two turns: the first row by key carries each, whatever its model.
@@ -318,7 +318,7 @@ describe('UsageDb', () => {
   })
 
   it("forgets an agent's logs and keeps the rest", () => {
-    db.write([row('a'), row('b', { source: 'overbench' })], {
+    db.write([row('a'), row('b', { source: 'kettu' })], {
       id: 'x',
       agentId: 'claude-code',
       size: 1,
@@ -329,7 +329,7 @@ describe('UsageDb', () => {
     })
     db.removeLogs('claude-code')
     expect(db.cursor('x')).toBeNull()
-    expect(db.stats().map((s) => s.source)).toEqual(['overbench'])
+    expect(db.stats().map((s) => s.source)).toEqual(['kettu'])
     db.clearRecord()
     expect(db.stats()).toEqual([])
   })
@@ -358,7 +358,7 @@ describe('UsageDb', () => {
   })
 })
 
-/** A schema 1 file: OverBench's two turns over two models, and rows and buckets from both logs. */
+/** A schema 1 file: Kettu's two turns over two models, and rows and buckets from both logs. */
 function upgradeFromV1(file: string): void {
   const raw = new DatabaseSync(file)
   raw.exec(`
@@ -398,30 +398,9 @@ function upgradeFromV1(file: string): void {
   ): void => {
     insert.run(key, source, agentId, 's1', '/p', model, at, 1, output, null, 0, 0)
   }
-  usage(
-    'ob:s1:e:9:claude-opus-5-5',
-    'overbench',
-    'claude-code',
-    'claude-opus-5-5',
-    T0 + 3_600_000,
-    1,
-  )
-  usage(
-    'ob:s1:e:9:claude-fable-5-1',
-    'overbench',
-    'claude-code',
-    'claude-fable-5-1',
-    T0 + 3_600_000,
-    1,
-  )
-  usage(
-    'ob:s1:e:10:claude-opus-5-5',
-    'overbench',
-    'claude-code',
-    'claude-opus-5-5',
-    T0 + 7_200_000,
-    1,
-  )
+  usage('ob:s1:e:9:claude-opus-5-5', 'kettu', 'claude-code', 'claude-opus-5-5', T0 + 3_600_000, 1)
+  usage('ob:s1:e:9:claude-fable-5-1', 'kettu', 'claude-code', 'claude-fable-5-1', T0 + 3_600_000, 1)
+  usage('ob:s1:e:10:claude-opus-5-5', 'kettu', 'claude-code', 'claude-opus-5-5', T0 + 7_200_000, 1)
   usage('claude:msg_1', 'log', 'claude-code', 'claude-opus-4-8', T0 + 3_600_000, 5)
   usage('codex:x:1', 'log', 'codex', 'gpt-5.6-sol', T0 + 3_600_000, 42)
   const bucket = raw.prepare(`

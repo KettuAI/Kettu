@@ -71,7 +71,7 @@ export function ConfigPath({ item, extra }: { item: PlaceItem; extra?: ReactNode
   )
 }
 
-/** What set the place: a folder picked in OverBench, or the variable that moved it. */
+/** What set the place: a folder picked in Kettu, or the variable that moved it. */
 export function ConfigNote({ item }: { item: PlaceItem }) {
   const { t } = useTranslation('settings')
   const note = item.chosen

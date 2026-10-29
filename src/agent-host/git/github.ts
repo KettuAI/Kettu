@@ -1,4 +1,4 @@
-// What the GitHub CLI is asked for, and how its JSON maps to OverBench's pull request model.
+// What the GitHub CLI is asked for, and how its JSON maps to Kettu's pull request model.
 
 import {
   GITHUB_PULL_REQUEST_URL,

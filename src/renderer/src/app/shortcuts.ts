@@ -112,7 +112,7 @@ export function useKeyboardShortcuts(): void {
     window.addEventListener('keydown', onKeyDown, true)
     window.addEventListener('mouseup', onMouseUp)
     // An artifact's page keeps the keys typed in it; main passes on the app's own shortcuts.
-    const offForwarded = window.overbench.app.onShortcut((key) =>
+    const offForwarded = window.kettu.app.onShortcut((key) =>
       onKeyDown(new KeyboardEvent('keydown', { ...key, cancelable: true })),
     )
     return () => {

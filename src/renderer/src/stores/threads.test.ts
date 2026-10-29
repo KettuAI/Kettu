@@ -4,7 +4,7 @@ import type { SessionSnapshot, SessionView, ThreadEntry } from '@shared/thread'
 
 const request = vi.fn()
 let frames: FrameRequestCallback[] = []
-vi.stubGlobal('window', { overbench: { agents: { request } } })
+vi.stubGlobal('window', { kettu: { agents: { request } } })
 vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
   frames.push(callback)
   return frames.length

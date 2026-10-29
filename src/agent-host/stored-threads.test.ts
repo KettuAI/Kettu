@@ -202,7 +202,7 @@ describe('a first message the app stops before it goes', () => {
   })
 
   it('keeps the message when session/new answers as the quit stops the agent', async () => {
-    const gates = await mkdtemp(path.join(os.tmpdir(), 'overbench-gate-'))
+    const gates = await mkdtemp(path.join(os.tmpdir(), 'kettu-gate-'))
     onTestFinished(() => rm(gates, { recursive: true, force: true }))
     const gate = path.join(gates, 'session-new')
     const traffic = () => first.host.diagnostics.agentRecords('fake-agent').traffic
@@ -457,7 +457,7 @@ describe('attaching on use', () => {
   })
 
   describe('started under another configuration folder', () => {
-    const shellFolder = path.join(os.tmpdir(), 'overbench-shell-claude')
+    const shellFolder = path.join(os.tmpdir(), 'kettu-shell-claude')
     const settings = (configDir?: string): HostSettings => ({
       locale: 'en',
       agents: configDir ? { 'claude-code': { configDir } } : {},
@@ -500,12 +500,12 @@ describe('attaching on use', () => {
     }
 
     it('names the picked folder once the agent runs with the environment again', async () => {
-      const picked = path.join(os.tmpdir(), 'overbench-picked-claude')
+      const picked = path.join(os.tmpdir(), 'kettu-picked-claude')
       expect(await failedAttach(picked, undefined)).toBe(message(picked))
     })
 
     it("names the environment's folder once the agent runs with a picked one", async () => {
-      const picked = path.join(os.tmpdir(), 'overbench-picked-claude')
+      const picked = path.join(os.tmpdir(), 'kettu-picked-claude')
       expect(await failedAttach(undefined, picked)).toBe(message(shellFolder))
     })
 

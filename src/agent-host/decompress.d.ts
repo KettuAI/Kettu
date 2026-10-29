@@ -1,4 +1,4 @@
-// The part of decompress's API OverBench uses; the package ships no types of its own.
+// The part of decompress's API Kettu uses; the package ships no types of its own.
 declare module 'decompress' {
   interface DecompressFile {
     path: string

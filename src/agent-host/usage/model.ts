@@ -1,5 +1,5 @@
 // What the usage database stores and what the log readers hand it: one row per request (a log
-// message) or per turn and model (OverBench's record), and a cursor per log file read.
+// message) or per turn and model (Kettu's record), and a cursor per log file read.
 
 import type { Platform } from '@shared/platform'
 import type { AgentId } from '@shared/thread'
@@ -30,7 +30,7 @@ export interface UsageRow {
   /** All cache writes; the hour's part is also counted in `cacheWrite1h`. */
   cacheWrite: number
   cacheWrite1h: number
-  /** 1 on one row of each of OverBench's turns, else 0. */
+  /** 1 on one row of each of Kettu's turns, else 0. */
   turn: number
 }
 

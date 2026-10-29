@@ -12,7 +12,7 @@ const { COMMIT_TIMEOUT_MS } = await import('../subframes')
 
 const HOST = '0123456789abcdef0123456789'
 const ID = 'art_01JB2QZ8X4K7M9N3P5R6S8T0VW'
-const ORIGIN = `overbench-artifact://${HOST}`
+const ORIGIN = `kettu-artifact://${HOST}`
 const artifactOf = (host: string): string | undefined => (host === HOST ? ID : undefined)
 
 describe('parseRequest', () => {
@@ -49,7 +49,7 @@ describe('parseRequest', () => {
   })
 
   it('refuses an origin that was not opened, and every other scheme', () => {
-    expect(parseRequest('overbench-artifact://ffffffffffffffffffffffffff/', artifactOf)).toBeNull()
+    expect(parseRequest('kettu-artifact://ffffffffffffffffffffffffff/', artifactOf)).toBeNull()
     expect(parseRequest(`https://${HOST}/`, artifactOf)).toBeNull()
   })
 })
@@ -91,7 +91,7 @@ describe('respond', () => {
   const asked: [string, number | null][] = []
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-protocol-'))
+    dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-protocol-'))
     contentDir = path.join(dir, 'artifacts', 'content')
     await mkdir(path.join(contentDir, 'ab'), { recursive: true })
     const file = path.join(contentDir, 'ab', `ab${'0'.repeat(62)}.html`)

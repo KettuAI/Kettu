@@ -1,4 +1,4 @@
-// Usage in the host: writes OverBench's record, schedules the log scans while Usage on this
+// Usage in the host: writes Kettu's record, schedules the log scans while Usage on this
 // computer is on, picks the source each agent counts from, and answers the page.
 
 import type { Platform } from '@shared/platform'
@@ -36,7 +36,7 @@ export interface UsageManagerDeps {
   home: string
   /** The agent's own resolved environment, once it is ready. */
   env(agentId: AgentId): Promise<Record<string, string | undefined>>
-  /** Whether a folder is one of OverBench's No project folders. */
+  /** Whether a folder is one of Kettu's No project folders. */
   isScratch(path: string): boolean
   log: LogFn
   changed(): void
@@ -125,7 +125,7 @@ export class UsageManager {
     this.deps.changed()
   }
 
-  /** Adds OverBench's rows for a turn; a failure is logged and the turn goes on. */
+  /** Adds Kettu's rows for a turn; a failure is logged and the turn goes on. */
   record(rows: UsageRow[]): void {
     if (rows.length === 0 || !this.deps.store) return
     this.deps.store
@@ -256,7 +256,7 @@ export class UsageManager {
   sources(scope: UsageScope): SourceMap {
     const map: SourceMap = {}
     for (const agentId of AGENT_IDS) {
-      map[agentId] = scope === 'computer' && this.countsLogs(agentId) ? 'log' : 'overbench'
+      map[agentId] = scope === 'computer' && this.countsLogs(agentId) ? 'log' : 'kettu'
     }
     return map
   }
@@ -304,7 +304,7 @@ export class UsageManager {
   }
 
   private agentsWithUsage(): AgentId[] {
-    const scopes = [this.sources('computer'), this.sources('overbench')]
+    const scopes = [this.sources('computer'), this.sources('kettu')]
     return AGENT_IDS.filter((agentId) =>
       this.stats.some(
         (s) => s.agentId === agentId && scopes.some((sources) => sources[agentId] === s.source),
@@ -351,7 +351,7 @@ export class UsageManager {
   }
 
   status(): UsageStatus {
-    const record = this.stats.filter((s) => s.source === 'overbench')
+    const record = this.stats.filter((s) => s.source === 'kettu')
     const logs: UsageLogStatus[] = this.deps.readers.map((reader) => {
       const state = this.logs.get(reader.agentId)
       const stats = this.stats.find((s) => s.agentId === reader.agentId && s.source === 'log')

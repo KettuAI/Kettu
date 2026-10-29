@@ -18,7 +18,7 @@ function makeProjects(): Projects {
 }
 
 beforeEach(async () => {
-  dir = await realpath(await mkdtemp(path.join(tmpdir(), 'overbench-projects-')))
+  dir = await realpath(await mkdtemp(path.join(tmpdir(), 'kettu-projects-')))
   clock = 1000
   await mkdir(path.join(dir, 'repo-a'))
   await mkdir(path.join(dir, 'repo-b'))

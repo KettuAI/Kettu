@@ -377,7 +377,7 @@ describe('pull request chips', () => {
 })
 
 describe("chip authors' avatars", () => {
-  const login = 'overbench-builder[bot]'
+  const login = 'kettu-builder[bot]'
   const avatar = 'https://avatars.githubusercontent.com/in/5463070?v=4'
   const apiCalls = (gh: { calls: string[][] }): string[][] =>
     gh.calls.filter((call) => call[0] === 'api')
@@ -407,7 +407,7 @@ describe("chip authors' avatars", () => {
     expect(apiCalls(gh)).toHaveLength(1)
   })
 
-  it.each(['app/overbench-builder', '../user', 'users/x', '-h', 'a b', ''])(
+  it.each(['app/kettu-builder', '../user', 'users/x', '-h', 'a b', ''])(
     'rejects %j without running gh',
     async (bad) => {
       const { svc, gh } = createTestService(s, services)

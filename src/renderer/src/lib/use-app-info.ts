@@ -5,7 +5,7 @@ import type { AppInfo } from '@shared/ipc'
 export function useAppInfo(): AppInfo | null {
   const [info, setInfo] = useState<AppInfo | null>(null)
   useEffect(() => {
-    void window.overbench.app.getInfo().then(setInfo)
+    void window.kettu.app.getInfo().then(setInfo)
   }, [])
   return info
 }

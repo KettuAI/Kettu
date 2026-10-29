@@ -1,4 +1,4 @@
-// Routines: prompts that OverBench sends, each run a session of its own. See the routines design.
+// Routines: prompts that Kettu sends, each run a session of its own. See the routines design.
 
 import type { SessionSummary } from './agent-host'
 import type { AgentId, StopReason, TokenTotals } from './thread'
