@@ -11,7 +11,7 @@ export function showFileAction(path: string, projectPath: string | null, url: st
         openFile(projectPath, ref.path)
         return Promise.resolve()
       }
-      return window.overbench.media.reveal(url)
+      return window.kettu.media.reveal(url)
     },
   }
 }

@@ -172,9 +172,9 @@ describe('mapPullRequest', () => {
   })
 
   it("maps a GitHub App's bot to its user name on GitHub", () => {
-    const author = { is_bot: true, login: 'app/overbench-builder' }
+    const author = { is_bot: true, login: 'app/kettu-builder' }
     expect(mapPullRequest({ ...view, author }).author).toEqual({
-      login: 'overbench-builder[bot]',
+      login: 'kettu-builder[bot]',
       name: null,
       bot: true,
     })
@@ -330,11 +330,11 @@ describe('gh arguments and schedule', () => {
   })
 
   it('looks a user up on github.com', () => {
-    expect(userArgs('overbench-builder[bot]')).toEqual([
+    expect(userArgs('kettu-builder[bot]')).toEqual([
       'api',
       '--hostname',
       'github.com',
-      'users/overbench-builder[bot]',
+      'users/kettu-builder[bot]',
     ])
   })
 
@@ -349,7 +349,7 @@ describe('gh arguments and schedule', () => {
 describe('mapAvatarUrl', () => {
   it("takes the avatar URL that GitHub's avatar host serves", () => {
     const url = 'https://avatars.githubusercontent.com/in/5463070?v=4'
-    expect(mapAvatarUrl({ login: 'overbench-builder[bot]', avatar_url: url })).toBe(url)
+    expect(mapAvatarUrl({ login: 'kettu-builder[bot]', avatar_url: url })).toBe(url)
   })
 
   it.each([

@@ -208,7 +208,7 @@ export function SessionMenuItems({
         return (
           <DropdownMenuItem
             {...props}
-            onClick={() => void window.overbench.shell.showItem(summary.projectPath)}
+            onClick={() => void window.kettu.shell.showItem(summary.projectPath)}
           >
             <FolderIcon />
             {t('row.showIn', { name: fileManagerName() })}

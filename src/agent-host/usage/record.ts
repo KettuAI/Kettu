@@ -1,4 +1,4 @@
-// OverBench's own record: a turn's rows, one per model, from what its agent reported.
+// Kettu's own record: a turn's rows, one per model, from what its agent reported.
 
 import type { AgentId, TokenTotals } from '@shared/thread'
 import type { ModelTokens } from '../acp/mapper'
@@ -8,7 +8,7 @@ import { normalizeModel, type UsageRow } from './model'
 const REASONING_APART: ReadonlySet<AgentId> = new Set(['opencode'])
 
 export interface RecordedTurn {
-  /** OverBench's session id. */
+  /** Kettu's session id. */
   sessionId: string
   acpSessionId: string
   agentId: AgentId
@@ -37,7 +37,7 @@ export function recordRows(turn: RecordedTurn): UsageRow[] {
     const key = `ob:${turn.sessionId}:${turn.turnEntryId}:${model}`
     const row = rows.get(key) ?? {
       key,
-      source: 'overbench' as const,
+      source: 'kettu' as const,
       agentId: turn.agentId,
       sessionId: turn.acpSessionId,
       project: turn.project,

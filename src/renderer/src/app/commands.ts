@@ -14,7 +14,7 @@ import { newSession, openProjectDialog } from './actions'
 export function useAppCommands(): void {
   useEffect(
     () =>
-      window.overbench.app.onCommand((command) => {
+      window.kettu.app.onCommand((command) => {
         switch (command.kind) {
           case 'open-project':
             void openProjectDialog()

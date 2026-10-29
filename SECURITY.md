@@ -1,6 +1,6 @@
 # Security policy
 
-OverBench runs coding agents that run shell commands, so a security problem can be serious. Report it privately through GitHub's [private vulnerability reporting](https://github.com/overbench/overbench/security/advisories/new), never in a public issue, pull request or discussion.
+Kettu runs coding agents that run shell commands, so a security problem can be serious. Report it privately through GitHub's [private vulnerability reporting](https://github.com/KettuAI/Kettu/security/advisories/new), never in a public issue, pull request or discussion.
 
 ## Supported versions
 

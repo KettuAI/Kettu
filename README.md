@@ -3,41 +3,41 @@
 <h1>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="./assets/lockup-horizontal-dark.svg">
-    <img src="./assets/lockup-horizontal.svg" alt="OverBench" width="300">
+    <img src="./assets/lockup-horizontal.svg" alt="Kettu" width="300">
   </picture>
 </h1>
 
-[![Release](https://img.shields.io/github/v/release/overbench/overbench?include_prereleases&label=release&style=flat-square&labelColor=555555&color=2563eb)](https://github.com/overbench/overbench/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/overbench/overbench/total?label=downloads&style=flat-square&labelColor=555555&color=15803d)](https://github.com/overbench/overbench/releases)
-[![CI](https://img.shields.io/github/actions/workflow/status/overbench/overbench/release.yml?branch=main&label=CI&style=flat-square&labelColor=555555)](https://github.com/overbench/overbench/actions/workflows/release.yml)
-[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-6d28d9?style=flat-square&labelColor=555555)](https://github.com/overbench/overbench/releases/latest)
+[![Release](https://img.shields.io/github/v/release/KettuAI/Kettu?include_prereleases&label=release&style=flat-square&labelColor=555555&color=2563eb)](https://github.com/KettuAI/Kettu/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/KettuAI/Kettu/total?label=downloads&style=flat-square&labelColor=555555&color=15803d)](https://github.com/KettuAI/Kettu/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/KettuAI/Kettu/release.yml?branch=main&label=CI&style=flat-square&labelColor=555555)](https://github.com/KettuAI/Kettu/actions/workflows/release.yml)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-6d28d9?style=flat-square&labelColor=555555)](https://github.com/KettuAI/Kettu/releases/latest)
 [![Agent Client Protocol](https://img.shields.io/badge/protocol-ACP-c2410c?style=flat-square&labelColor=555555)](https://agentclientprotocol.com)
-[![License](https://img.shields.io/github/license/overbench/overbench?style=flat-square&labelColor=555555&color=b45309)](./LICENSE)
+[![License](https://img.shields.io/github/license/KettuAI/Kettu?style=flat-square&labelColor=555555&color=b45309)](./LICENSE)
 
 **A calm desktop workbench for terminal coding agents.**
 
 Claude Code, Codex CLI and opencode side by side in one window,<br>
 with readable threads, clear approvals, git and a terminal beside every session.
 
-[**Download**](https://github.com/overbench/overbench/releases/latest) · [Roadmap](./ROADMAP.md) · [Feedback](https://github.com/overbench/overbench/issues/new/choose) · [简体中文](./README.zh-CN.md)
+[**Download**](https://github.com/KettuAI/Kettu/releases/latest) · [Roadmap](./ROADMAP.md) · [Feedback](https://github.com/KettuAI/Kettu/issues/new/choose) · [简体中文](./README.zh-CN.md)
 
 </div>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshot-dark.webp">
-  <img src="./assets/screenshot-light.webp" alt="OverBench showing a Claude Code session that fixed a bug and asks to run the tests, with Codex and opencode sessions in the sidebar">
+  <img src="./assets/screenshot-light.webp" alt="Kettu showing a Claude Code session that fixed a bug and asks to run the tests, with Codex and opencode sessions in the sidebar">
 </picture>
 
 > [!NOTE]
-> OverBench is a preview. It is built from the first milestone, M0, which is still in acceptance, so expect rough edges and please [report them](https://github.com/overbench/overbench/issues).
+> Kettu is a preview. It is built from the first milestone, M0, which is still in acceptance, so expect rough edges and please [report them](https://github.com/KettuAI/Kettu/issues).
 
-## What is OverBench
+## What is Kettu
 
 Coding agents like Claude Code, Codex and opencode can now plan a change, edit the code and run the tests on their own. Working with them in a terminal still means walls of scrolling text, approvals that are easy to miss, and sessions scattered across tabs and windows.
 
-OverBench is a desktop home for that work. Every agent you use opens side by side in one window, each session sits under its project, and you can see at a glance which agent is working, which one is waiting for you and which one is done. Answers read like documents instead of logs, what the agent changed is shown as a diff, and a question from an agent comes to you as a card you answer with one key.
+Kettu is a desktop home for that work. Every agent you use opens side by side in one window, each session sits under its project, and you can see at a glance which agent is working, which one is waiting for you and which one is done. Answers read like documents instead of logs, what the agent changed is shown as a diff, and a question from an agent comes to you as a card you answer with one key.
 
-It drives the agents you already have, with your own installation, account and settings, so nothing about how they work changes: OverBench only gives them a better place to work in.
+It drives the agents you already have, with your own installation, account and settings, so nothing about how they work changes: Kettu only gives them a better place to work in.
 
 ## Features
 
@@ -45,34 +45,34 @@ It drives the agents you already have, with your own installation, account and s
 - **Threads that read well** — answers stream as Markdown with highlighted code, edits show as inline diffs, images the agent names show in place, and a run of steps folds into one line. Queue your next message while the agent works, or steer it mid-turn.
 - **Approvals at a glance** — permission requests are cards you answer with a click or a number key, and a system notification tells you when a session needs you.
 - **Attach anything** — paste images, attach files and folders, or mention a project file with `@`, from the first message on.
-- **Artifacts** — agents publish HTML pages and multi-page canvases through OverBench's built-in artifacts service. Each one keeps its versions, opens in a viewer isolated from the app, and is collected on the Artifacts page and on New session.
+- **Artifacts** — agents publish HTML pages and multi-page canvases through Kettu's built-in artifacts service. Each one keeps its versions, opens in a viewer isolated from the app, and is collected on the Artifacts page and on New session.
 - **Each agent's own controls** — mode, model and reasoning, slash commands, context usage, when the prompt cache expires and, where the agent reports them, your plan limits.
-- **Usage at a glance** — tokens across every agent by day, model and project, with each plan's limits, from OverBench's own record and, if you choose, the agents' local logs.
+- **Usage at a glance** — tokens across every agent by day, model and project, with each plan's limits, from Kettu's own record and, if you choose, the agents' local logs.
 - **Sessions that last** — every session is kept with its project, reopens with its full history, survives an agent crash, and can be imported from the agent.
 - **Git, files and a terminal** — the branch, sync state and changes in the top bar, pull requests with their checks through the GitHub CLI, a files pane to read, preview and edit files, and a terminal for each project.
 - **Crafted details** — light and dark themes, English and Simplified Chinese, restrained motion that honors reduce motion, and shortcuts for the common actions.
 
 ## Your agents, your data
 
-- **Bring your own agents.** OverBench implements no agent of its own. It talks to each one over the open [Agent Client Protocol](https://agentclientprotocol.com) (ACP), so your models, settings, rules and tools stay exactly as you set them up.
-- **Sign in where you always do.** Each agent signs in with its own flow, and OverBench never sees your credentials.
-- **Local by default.** OverBench has no account and no server of its own and collects no telemetry. Your sessions stay on your computer, and each agent talks only to its own provider, as it does in your terminal.
+- **Bring your own agents.** Kettu implements no agent of its own. It talks to each one over the open [Agent Client Protocol](https://agentclientprotocol.com) (ACP), so your models, settings, rules and tools stay exactly as you set them up.
+- **Sign in where you always do.** Each agent signs in with its own flow, and Kettu never sees your credentials.
+- **Local by default.** Kettu has no account and no server of its own and collects no telemetry. Your sessions stay on your computer, and each agent talks only to its own provider, as it does in your terminal.
 
 ## Install
 
-Download the installer for your system from [Releases](https://github.com/overbench/overbench/releases/latest). Preview builds are not signed by Apple or Microsoft yet, so your system asks once before the first launch.
+Download the installer for your system from [Releases](https://github.com/KettuAI/Kettu/releases/latest). Preview builds are not signed by Apple or Microsoft yet, so your system asks once before the first launch.
 
-- **macOS**: open `OverBench-<version>-arm64.dmg` on Apple silicon or `OverBench-<version>-x64.dmg` on an Intel Mac, and drag OverBench to Applications. When macOS says it cannot verify the app, open System Settings › Privacy & Security and choose **Open Anyway**.
-- **Windows**: run `OverBench-<version>-x64-setup.exe`, or `OverBench-<version>-arm64-setup.exe` on Arm. When SmartScreen says it protected your PC, choose **More info**, then **Run anyway**.
-- **Linux**: make `OverBench-x86_64.AppImage`, or `OverBench-arm64.AppImage` on Arm, executable with `chmod +x`, then run it. AppImages need FUSE 2: `libfuse2`, or `libfuse2t64` on Ubuntu 24.04 and later.
+- **macOS**: open `Kettu-<version>-arm64.dmg` on Apple silicon or `Kettu-<version>-x64.dmg` on an Intel Mac, and drag Kettu to Applications. When macOS says it cannot verify the app, open System Settings › Privacy & Security and choose **Open Anyway**.
+- **Windows**: run `Kettu-<version>-x64-setup.exe`, or `Kettu-<version>-arm64-setup.exe` on Arm. When SmartScreen says it protected your PC, choose **More info**, then **Run anyway**.
+- **Linux**: make `Kettu-x86_64.AppImage`, or `Kettu-arm64.AppImage` on Arm, executable with `chmod +x`, then run it. AppImages need FUSE 2: `libfuse2`, or `libfuse2t64` on Ubuntu 24.04 and later.
 
-On Windows and Linux, new versions download in the background and install when OverBench restarts; on macOS, OverBench links to the download until its builds are signed. v0.0.1 cannot find updates, so install the latest version over it once by hand.
+On Windows and Linux, new versions download in the background and install when Kettu restarts; on macOS, Kettu links to the download until its builds are signed. v0.0.1 cannot find updates, so install the latest version over it once by hand.
 
 ### Agents
 
-Install at least one of these agents first; OverBench finds it on your system.
+Install at least one of these agents first; Kettu finds it on your system.
 
-| Agent                                                                           | How OverBench runs it                                                                                        |
+| Agent                                                                           | How Kettu runs it                                                                                            |
 | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | [Claude Code](https://github.com/anthropics/claude-code)                        | The ACP adapter `@agentclientprotocol/claude-agent-acp`, installed on first use                              |
 | [Codex CLI](https://github.com/openai/codex)                                    | The ACP adapter `@agentclientprotocol/codex-acp`, installed on first use                                     |
@@ -121,9 +121,9 @@ Install at least one of these agents first; OverBench finds it on your system.
 | [Stakpak](https://stakpak.dev)                                                  | Your installed `stakpak`, as `stakpak acp`, else the ACP Registry's archive                                  |
 | [VT Code](https://github.com/vinhnx/VTCode)                                     | Your installed `vtcode`, as `vtcode acp`, else the ACP Registry's archive                                    |
 
-The ACP packages and adapters need Node.js with npm, which OverBench finds through your login shell. The archive agents run the program itself: OverBench uses your copy when it finds one on `PATH`, and **Install** in Settings › Agents downloads its archive from the ACP Registry otherwise. fast-agent and Minion Code need [uv](https://docs.astral.sh/uv/) instead of Node.js.
+The ACP packages and adapters need Node.js with npm, which Kettu finds through your login shell. The archive agents run the program itself: Kettu uses your copy when it finds one on `PATH`, and **Install** in Settings › Agents downloads its archive from the ACP Registry otherwise. fast-agent and Minion Code need [uv](https://docs.astral.sh/uv/) instead of Node.js.
 
-## Why OverBench
+## Why Kettu
 
 It rests on one belief, **beauty is productivity**: a tool you spend whole days in should be a pleasure to look at, and that pleasure is what lets you work faster.
 
@@ -133,14 +133,14 @@ It rests on one belief, **beauty is productivity**: a tool you spend whole days 
 
 ## Feedback
 
-Early feedback shapes OverBench the most, and ideas about design and workflow are especially welcome. Open an [issue](https://github.com/overbench/overbench/issues/new/choose) to report a bug or start a conversation, in any language; a screenshot helps. Security problems go through [SECURITY.md](./SECURITY.md), never a public issue.
+Early feedback shapes Kettu the most, and ideas about design and workflow are especially welcome. Open an [issue](https://github.com/KettuAI/Kettu/issues/new/choose) to report a bug or start a conversation, in any language; a screenshot helps. Security problems go through [SECURITY.md](./SECURITY.md), never a public issue.
 
-Want to build OverBench yourself? [CONTRIBUTING.md](./CONTRIBUTING.md) has the setup.
+Want to build Kettu yourself? [CONTRIBUTING.md](./CONTRIBUTING.md) has the setup.
 
 ## License
 
-OverBench is released under the [Apache-2.0 license](./LICENSE).
+Kettu is released under the [Apache-2.0 license](./LICENSE).
 
 ---
 
-<sub>OverBench is an independent project and is not affiliated with or endorsed by the makers of the agents it supports. All product names are trademarks of their respective owners.</sub>
+<sub>Kettu is an independent project and is not affiliated with or endorsed by the makers of the agents it supports. All product names are trademarks of their respective owners.</sub>

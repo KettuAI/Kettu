@@ -23,11 +23,11 @@ import { useApply } from './use-apply'
 const SKELETON_AFTER_MS = 200
 
 /** The saved state of a switch: the settings the renderer holds, out of reach of the page. */
-function useOverbenchOff(): AgentId[] {
-  return useSettingsStore((s) => s.settings.mcp.overbench.off)
+function useKettuOff(): AgentId[] {
+  return useSettingsStore((s) => s.settings.mcp.kettu.off)
 }
 
-/** The shell's tile for OverBench's own server, at the size a row or a page header uses. */
+/** The shell's tile for Kettu's own server, at the size a row or a page header uses. */
 function ServerTile({ size, glyph }: { size: number; glyph: number }) {
   return (
     <span
@@ -78,7 +78,7 @@ function RunningDot({ running, words }: { running: boolean; words: boolean }) {
 /** "3 tools", and then who the server is off for. */
 function ServerSummary({ server }: { server: McpStatus['servers'][number] }) {
   const { t } = useTranslation('settings')
-  const off = useOverbenchOff()
+  const off = useKettuOff()
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   const names = off.map((id) => agents.find((a) => a.id === id)?.name ?? id)
   const every = agents.length > 0 && agents.every((a) => off.includes(a.id))
@@ -97,7 +97,7 @@ function ServerSummary({ server }: { server: McpStatus['servers'][number] }) {
   )
 }
 
-/** OverBench's own server in the list: its tile, its tool count and its state. */
+/** Kettu's own server in the list: its tile, its tool count and its state. */
 export function ServerRow({ server }: { server: McpStatus['servers'][number] }) {
   return (
     <ItemRow
@@ -200,7 +200,7 @@ export function PendingList() {
   return (
     <div className="flex flex-col gap-7">
       {[
-        { id: 'overbench', label: t('mcp.groups.overbench'), rows: 1 },
+        { id: 'kettu', label: t('mcp.groups.kettu'), rows: 1 },
         { id: 'own', label: t('mcp.groups.own'), rows: 3 },
       ].map((group) => (
         <section key={group.id} className="flex flex-col" aria-label={group.label}>
@@ -214,7 +214,7 @@ export function PendingList() {
   )
 }
 
-/** OverBench's own server's page: its state, the agents it is for and its tools. */
+/** Kettu's own server's page: its state, the agents it is for and its tools. */
 export function McpServerPage({ name }: { name: string }) {
   const { t } = useTranslation('settings')
   const status = useMcpStore((s) => s.status)
@@ -292,15 +292,15 @@ function NotRunning({ server }: { server: McpStatus['servers'][number] }) {
   )
 }
 
-/** A switch per agent in catalog order: whether its sessions get OverBench's tools. */
+/** A switch per agent in catalog order: whether its sessions get Kettu's tools. */
 function AgentsGroup() {
   const { t } = useTranslation('settings')
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
-  const off = useOverbenchOff()
+  const off = useKettuOff()
   const [apply, error] = useApply()
   const set = (agentId: AgentId, on: boolean) => {
     const next = on ? off.filter((id) => id !== agentId) : [...off, agentId]
-    apply({ mcp: { overbench: { off: next } } })
+    apply({ mcp: { kettu: { off: next } } })
   }
   return (
     <section className="flex flex-col" aria-label={t('mcp.agents')}>
@@ -332,8 +332,8 @@ function AgentSwitchRow({
   const { t } = useTranslation('settings')
   const status = useAgentsStore((s) => s.byId[agentId])
   const name = status?.name ?? agentId
-  const active = status?.overbenchServer.active ?? null
-  const runs = status?.overbenchServer.runs ?? !off
+  const active = status?.kettuServer.active ?? null
+  const runs = status?.kettuServer.runs ?? !off
   const takesNone = status?.capabilities.mcpHttp === false
   return (
     <RowShell>

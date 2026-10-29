@@ -99,14 +99,14 @@ describe('the artifacts service in sessions', () => {
       .filter((entry) => entry.kind === 'tool' || entry.kind === 'artifact')
       .map((entry) => (entry.kind === 'tool' ? entry.title : `${entry.action} v${entry.version}`))
     expect(order).toEqual([
-      'mcp__overbench__list_artifacts',
-      'mcp__overbench__create_artifact',
+      'mcp__kettu__list_artifacts',
+      'mcp__kettu__create_artifact',
       'create v1',
-      'mcp__overbench__read_artifact',
-      'mcp__overbench__list_artifacts',
-      'mcp__overbench__update_artifact',
+      'mcp__kettu__read_artifact',
+      'mcp__kettu__list_artifacts',
+      'mcp__kettu__update_artifact',
       'update v2',
-      'mcp__overbench__read_artifact',
+      'mcp__kettu__read_artifact',
     ])
     expect(cards(port, sessionId)[0]).toEqual({
       kind: 'artifact',
@@ -116,7 +116,7 @@ describe('the artifacts service in sessions', () => {
       action: 'create',
       version: 1,
       writes: 1,
-      after: 't:overbench-1-2',
+      after: 't:kettu-1-2',
     })
   })
 
@@ -174,7 +174,7 @@ describe('the artifacts service in sessions', () => {
         servers: [
           {
             type: 'http',
-            name: 'overbench',
+            name: 'kettu',
             url: t.host.artifactService.url,
             headers: [{ name: 'Authorization', value: expect.stringMatching(/^Bearer /) }],
           },
@@ -197,7 +197,7 @@ describe('the artifacts service in sessions', () => {
     const tool = port
       .entries(sessionId)
       .find((entry) => entry.kind === 'tool' && entry.title.includes('create_artifact'))
-    expect(tool).toMatchObject({ title: 'mcp__overbench__create_artifact', status: 'completed' })
+    expect(tool).toMatchObject({ title: 'mcp__kettu__create_artifact', status: 'completed' })
 
     // A closed session's token ends; attaching again makes a new one.
     const first = tokenOf(attached[0]!.servers)
@@ -351,7 +351,7 @@ describe('the artifacts service in sessions', () => {
       const c = await start(other)
       const [first, second, third] = attached.map((x) => x.servers)
       expect(first).toEqual(second)
-      expect(first).toEqual([expect.objectContaining({ name: 'overbench' })])
+      expect(first).toEqual([expect.objectContaining({ name: 'kettu' })])
       expect(tokenOf(third!)).not.toBe(tokenOf(first!))
 
       expect(await run(port, a.id, '/artifacts')).toMatch(/create_artifact: Created/)
@@ -367,7 +367,7 @@ describe('the artifacts service in sessions', () => {
       expect(cards(port, b.id).map((e) => e.version)).toEqual([2, 3])
       expect(port.replicas.has('sub-1') ? cards(port, 'sub-1') : []).toEqual([])
 
-      // No session id, one OverBench does not know, and one of another folder.
+      // No session id, one Kettu does not know, and one of another folder.
       const foreign = port.thread(c.id).session.acpSessionId
       expect(foreign).toMatch(/^fake-/)
       for (const meta of ['none', 'unknown-session', foreign]) {
@@ -406,13 +406,13 @@ describe('the artifacts service in sessions', () => {
     expect(attached).toEqual([])
   })
 
-  describe("with OverBench's server off for the agent", () => {
-    const settingsWith = (off: HostSettings['mcp']['overbench']['off']) => ({
+  describe("with Kettu's server off for the agent", () => {
+    const settingsWith = (off: HostSettings['mcp']['kettu']['off']) => ({
       locale: 'en' as const,
       agents: DEFAULT_SETTINGS.agents,
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
-      mcp: { overbench: { off } },
+      mcp: { kettu: { off } },
       usage: { fromComputer: false },
       sessionTitles: true,
     })
@@ -426,11 +426,11 @@ describe('the artifacts service in sessions', () => {
       expect(await run(port, sessionId, '/artifacts')).toBe(
         'This session has no artifacts service.',
       )
-      expect(await statusOf(t)).toMatchObject({ overbenchServer: { runs: false, active: false } })
+      expect(await statusOf(t)).toMatchObject({ kettuServer: { runs: false, active: false } })
 
       // Turned on while the agent runs: the next attach through this process still gets none.
       await t.host.updateSettings(settingsWith([]))
-      expect(await statusOf(t)).toMatchObject({ overbenchServer: { runs: true, active: false } })
+      expect(await statusOf(t)).toMatchObject({ kettuServer: { runs: true, active: false } })
       const fork = await port.request('sessions.fork', { sessionId })
       await port.open(fork.id)
       const resumed = await run(port, sessionId, '/artifacts')
@@ -450,10 +450,10 @@ describe('the artifacts service in sessions', () => {
       await t.host.updateSettings(settingsWith([]))
       expect(await run(port, sessionId, '/artifacts')).toMatch(/create_artifact: Created/)
       expect(attached.length).toBeGreaterThan(0)
-      expect(attached.at(-1)!.servers).toEqual([expect.objectContaining({ name: 'overbench' })])
+      expect(attached.at(-1)!.servers).toEqual([expect.objectContaining({ name: 'kettu' })])
       const fork = await port.request('sessions.fork', { sessionId })
       expect(attached.at(-1)!.sessionId).toBe(fork.id)
-      expect(attached.at(-1)!.servers).toEqual([expect.objectContaining({ name: 'overbench' })])
+      expect(attached.at(-1)!.servers).toEqual([expect.objectContaining({ name: 'kettu' })])
     })
 
     it('never passes it to a hidden session, either way', async () => {
@@ -471,7 +471,7 @@ describe('the artifacts service in sessions', () => {
       expect(attached.length).toBe(before)
       expect(await run(port, sessionId, '/artifacts')).toMatch(/create_artifact: Created/)
       expect(attached.at(-1)!.sessionId).toBe(sessionId)
-      expect(attached.at(-1)!.servers).toEqual([expect.objectContaining({ name: 'overbench' })])
+      expect(attached.at(-1)!.servers).toEqual([expect.objectContaining({ name: 'kettu' })])
     })
   })
 })

@@ -124,7 +124,7 @@
     "retry": "Retry",
     "more": "More",
     "error": {
-      "notFound": "It is no longer in OverBench.",
+      "notFound": "It is no longer in Kettu.",
       "unavailable": "The agent host can't show it right now. Try again in a moment.",
       "failed": "Something went wrong. Try again."
     },
@@ -142,7 +142,7 @@
     "using": "Using this artifact",
     "moreSessions_other": "{{count}} more sessions",
     "places_other": "Open in {{count}} places",
-    "placesTip_other": "This artifact is open in {{count}} places in OverBench"
+    "placesTip_other": "This artifact is open in {{count}} places in Kettu"
   },
   "canvas": {
     "role": "Canvas",

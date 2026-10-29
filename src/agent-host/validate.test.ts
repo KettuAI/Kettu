@@ -210,7 +210,7 @@ describe('createValidators', () => {
 
   it("takes only a GitHub user's login or a bot's", () => {
     const v = posix['git.avatarUrl']
-    for (const login of ['mirachen', 'octocat_acme', 'a-b-c', 'overbench-builder[bot]']) {
+    for (const login of ['mirachen', 'octocat_acme', 'a-b-c', 'kettu-builder[bot]']) {
       expect(v({ login })).toEqual({ login })
     }
     for (const login of ['', '-h', 'app/bot', '../x', 'users/x', 'a b', 'x[bot', 'a'.repeat(101)]) {

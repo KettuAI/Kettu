@@ -135,7 +135,7 @@ describe('configLocations', () => {
   })
 
   it('shows the first instructions file Pi finds, and AGENTS.md when none does', async () => {
-    const home = await realpath(await mkdtemp(path.join(os.tmpdir(), 'overbench-pi-details-')))
+    const home = await realpath(await mkdtemp(path.join(os.tmpdir(), 'kettu-pi-details-')))
     try {
       const folder = path.join(home, '.pi', 'agent')
       await mkdir(folder, { recursive: true })
@@ -532,7 +532,7 @@ describe('mcpLocation', () => {
   let home: string
 
   beforeAll(async () => {
-    home = await realpath(await mkdtemp(path.join(os.tmpdir(), 'overbench-mcp-location-')))
+    home = await realpath(await mkdtemp(path.join(os.tmpdir(), 'kettu-mcp-location-')))
   })
 
   afterAll(async () => {
@@ -631,7 +631,7 @@ describe('readAgentDetails', () => {
   let counter = 0
 
   beforeAll(async () => {
-    tmp = await realpath(await mkdtemp(path.join(os.tmpdir(), 'overbench-details-')))
+    tmp = await realpath(await mkdtemp(path.join(os.tmpdir(), 'kettu-details-')))
     adaptersDir = path.join(tmp, 'agents')
   })
 

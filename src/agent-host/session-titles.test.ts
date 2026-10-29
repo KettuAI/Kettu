@@ -1,4 +1,4 @@
-// Integration tests: the titles OverBench writes for a session whose agent writes none, and the
+// Integration tests: the titles Kettu writes for a session whose agent writes none, and the
 // titles OpenCode lists, through the host with the fake agent.
 
 import { existsSync } from 'node:fs'

@@ -38,7 +38,7 @@ const page = (over: Partial<PublishedPage> = {}): PublishedPage => ({
 let dirs: string[] = []
 
 async function temp(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'overbench-sharing-'))
+  const dir = await mkdtemp(join(tmpdir(), 'kettu-sharing-'))
   dirs.push(dir)
   return dir
 }

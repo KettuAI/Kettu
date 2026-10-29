@@ -287,7 +287,7 @@ export interface TestHost {
 
 /** A whole agent host on a temp data directory, with the fake agent and no other agent found. */
 export async function startTestHost(options: TestHostOptions = {}): Promise<TestHost> {
-  const dir = options.userDataPath ?? (await tempFolder('overbench-host-'))
+  const dir = options.userDataPath ?? (await tempFolder('kettu-host-'))
   const project = options.projectDir ?? path.join(dir, 'project')
   await mkdir(project, { recursive: true })
   const module = await loadFakeAgent()

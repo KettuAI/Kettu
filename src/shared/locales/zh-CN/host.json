@@ -24,8 +24,8 @@
     "promptTooLarge": "这条消息连同附件超过 10 MB，请移除一些再发送。",
     "attachmentGone": "{{name}} 已不可用，请移除后重新添加。",
     "attachmentMissing": "有一个附件已不可用，请移除后重新添加。",
-    "attachmentUnreadable": "OverBench 无法读取 {{name}}。",
-    "attachmentDenied": "OverBench 没有读取 {{name}} 的权限。",
+    "attachmentUnreadable": "Kettu 无法读取 {{name}}。",
+    "attachmentDenied": "Kettu 没有读取 {{name}} 的权限。",
     "otherConfigFolder": "这个会话是在配置目录 {{path}} 下开始的。请在「设置 › Agent」中切换回该目录以继续这个会话。",
     "topLevelOnly": "只有顶层会话可以置顶或归档",
     "untitled": "未命名会话",
@@ -60,7 +60,7 @@
     },
     "cancelUnconfirmed": {
       "title": "{{agent}} 没有确认取消",
-      "description": "OverBench 已在 {{seconds}} 秒后结束本轮对话，Agent 可能仍在后台完成工作。"
+      "description": "Kettu 已在 {{seconds}} 秒后结束本轮对话，Agent 可能仍在后台完成工作。"
     },
     "lostValues": {
       "fork": {
@@ -98,7 +98,7 @@
   },
   "routines": {
     "busy": "此例程已经有一个运行正在工作",
-    "stopping": "OverBench 正在退出",
+    "stopping": "Kettu 正在退出",
     "noRun": "没有这个运行",
     "notFound": "没有这个例程",
     "unnamed": "例程",
@@ -141,7 +141,7 @@
     },
     "exited": "{{exit}}。",
     "exitedBeforeReady": "{{exit}}，未能就绪。",
-    "stoppedTooOften_other": "{{detail}} 它在五分钟内停止了 {{count}} 次，在你重试之前 OverBench 不会再启动它。",
+    "stoppedTooOften_other": "{{detail}} 它在五分钟内停止了 {{count}} 次，在你重试之前 Kettu 不会再启动它。",
     "installFailed": "无法安装 {{agent}}。{{message}}",
     "runningFallback": "正在使用 {{fallback}}：{{version}} 安装失败。{{message}}",
     "installStopped": "安装已停止。",
@@ -174,7 +174,7 @@
       "extracting": "正在解压…"
     },
     "reportTimeout": "{{command}} 没有在 {{seconds}} 秒内完成",
-    "unreadableReport": "{{agent}} 的 {{command}} 没有返回 OverBench 能读取的报告"
+    "unreadableReport": "{{agent}} 的 {{command}} 没有返回 Kettu 能读取的报告"
   },
   "detect": {
     "nodeMissing": "{{agent}} 需要 Node.js，但在 PATH 中找不到 node。",
@@ -207,8 +207,8 @@
     }
   },
   "environment": {
-    "inherited": "OverBench 启动后对 PATH 的修改要在重启后才生效。",
-    "fallback": "无法读取 {{shell}} 的环境（{{error}}），Agent 将使用 OverBench 启动时的环境。"
+    "inherited": "Kettu 启动后对 PATH 的修改要在重启后才生效。",
+    "fallback": "无法读取 {{shell}} 的环境（{{error}}），Agent 将使用 Kettu 启动时的环境。"
   },
   "git": {
     "notReady": "Git 暂不可用",

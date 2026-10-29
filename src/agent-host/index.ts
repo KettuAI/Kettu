@@ -57,7 +57,7 @@ function init(message: Extract<MainToHost, { type: 'host:init' }>): void {
     baseEnv: process.env,
     send,
     git: (deps) => createGitService(deps),
-    mirrorTraffic: !message.isPackaged && process.env.OVERBENCH_ACP_LOG === '1',
+    mirrorTraffic: !message.isPackaged && process.env.KETTU_ACP_LOG === '1',
     threadWorker: (data) =>
       nodeThreadWorker(new Worker(message.threadWorkerPath, { workerData: data })),
     usageWorker: (file) =>

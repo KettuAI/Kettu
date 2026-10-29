@@ -1,4 +1,4 @@
-// The artifacts scenario: calls OverBench's artifacts service through the MCP servers the session
+// The artifacts scenario: calls Kettu's artifacts service through the MCP servers the session
 // was attached with, as a real agent's MCP client would, and reports each call in the thread.
 
 import type { McpServer } from '@agentclientprotocol/sdk/unstable'
@@ -25,9 +25,9 @@ interface CallResult {
 
 type Call = (name: string, args: Record<string, unknown>) => Promise<CallResult>
 
-function overbench(servers: readonly McpServer[]): Extract<McpServer, { type: 'http' }> | null {
+function kettu(servers: readonly McpServer[]): Extract<McpServer, { type: 'http' }> | null {
   for (const server of servers) {
-    if ('type' in server && server.type === 'http' && server.name.startsWith('overbench')) {
+    if ('type' in server && server.type === 'http' && server.name.startsWith('kettu')) {
       return server
     }
   }
@@ -55,7 +55,7 @@ async function say(turn: Turn, text: string): Promise<void> {
  * writes the canvas once more after making or changing it.
  */
 export const artifacts: Scenario = async (turn) => {
-  const server = overbench(turn.session.mcpServers)
+  const server = kettu(turn.session.mcpServers)
   if (!server) {
     await say(turn, 'This session has no artifacts service.')
     return 'end_turn'
@@ -87,7 +87,7 @@ export const artifacts: Scenario = async (turn) => {
       title: 'execute',
       kind: 'other',
       status: 'in_progress',
-      rawInput: { code: 'await tools.overbench.create_artifact({ ... })' },
+      rawInput: { code: 'await tools.kettu.create_artifact({ ... })' },
     })
   }
   const call: Call = async (name, args) => {

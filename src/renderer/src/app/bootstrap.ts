@@ -184,7 +184,7 @@ export function bootstrap(): Promise<unknown> {
   // Platform styles, such as the Windows scrollbars, key off this.
   document.documentElement.dataset.platform = platform
   installPerfCounters()
-  const agents = window.overbench.agents
+  const agents = window.kettu.agents
   agents.onEvent(onHostEvent)
   agents.onConnection((state) => {
     useConnectionStore.setState({ agentHost: state })

@@ -172,7 +172,7 @@ export class JsonFile<T> {
     this.backupPath = backup
     log(
       'error',
-      `${path.basename(file)} could not be read (${reason}); it was moved to ${path.basename(backup)} and OverBench started from an empty state`,
+      `${path.basename(file)} could not be read (${reason}); it was moved to ${path.basename(backup)} and Kettu started from an empty state`,
     )
     return this.options.empty()
   }
@@ -252,7 +252,7 @@ export interface SessionRecord {
   description: string | null
   branch: string | null
   queue?: QueuedPrompt[] // prompts that were waiting when it was saved
-  ultracode?: boolean // Claude Code's ultracode, once set from OverBench
+  ultracode?: boolean // Claude Code's ultracode, once set from Kettu
   customTitle?: string // the user's own title, which wins over the agent's
   cache?: PromptCache // the main thread's prompt cache as its last turn left it, for the sidebar
   model?: string // the model option as its last turn left it, which an estimate of the cache needs

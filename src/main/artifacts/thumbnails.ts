@@ -22,7 +22,7 @@ import { serveArtifacts, type ArtifactSource } from './protocol'
 const log = createLogger('artifacts')
 
 /** In memory: nothing a page stores while it renders outlives the run. */
-export const THUMBNAIL_PARTITION = 'overbench-artifact-thumbnails'
+export const THUMBNAIL_PARTITION = 'kettu-artifact-thumbnails'
 /**
  * How long a page may take to load before the capture. Each page of a canvas is a frame that loads
  * the whole page, so a canvas waits a second more for each page after the first, up to a limit.
@@ -107,7 +107,7 @@ export function thumbnailDocument(
   return (
     '<!doctype html><html><head><meta charset="utf-8">' +
     '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; ' +
-    "style-src 'unsafe-inline'; frame-src overbench-artifact:\">" +
+    "style-src 'unsafe-inline'; frame-src kettu-artifact:\">" +
     '<style>html,body{margin:0;overflow:hidden;background:transparent}' +
     'iframe{position:absolute;left:0;top:0;border:0;background:white;transform-origin:0 0}</style>' +
     `</head><body>${frames}</body></html>`

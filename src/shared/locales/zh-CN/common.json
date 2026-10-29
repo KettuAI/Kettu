@@ -24,7 +24,7 @@
     "hoursMinutes": "{{h}} 小时 {{m}} 分"
   },
   "errors": {
-    "hostRestarted": "OverBench 的后台进程已重启，请重试。"
+    "hostRestarted": "Kettu 的后台进程已重启，请重试。"
   },
   "planWindow": {
     "five_hour": "5 小时",

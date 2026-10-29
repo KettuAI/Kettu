@@ -26,8 +26,8 @@ export function receiveThemes(state: ThemesState): void {
 
 /** Loads the themes and follows every change; the first render waits for it. */
 export async function initThemes(): Promise<void> {
-  window.overbench.themes.onChanged(receiveThemes)
-  receiveThemes(await window.overbench.themes.get())
+  window.kettu.themes.onChanged(receiveThemes)
+  receiveThemes(await window.kettu.themes.get())
 }
 
 /**

@@ -13,7 +13,7 @@ import { TYPES, parseTitle } from './commit-title.mjs'
 const MAX_TITLE = 50
 const SCOPE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const ISSUE_LINK =
-  /\b(?:closes|fixes|resolves|refs)[ \t]+(?:#|https:\/\/github\.com\/overbench\/overbench\/issues\/)\d+\b/i
+  /\b(?:closes|fixes|resolves|refs)[ \t]+(?:#|https:\/\/github\.com\/KettuAI\/Kettu\/issues\/)\d+\b/i
 // GitHub links nothing in comments or code, and the pull request template's example sits in one.
 const UNLINKED = /<!--[\s\S]*?(?:-->|$)|```[\s\S]*?(?:```|$)|`[^`\n]*`/g
 

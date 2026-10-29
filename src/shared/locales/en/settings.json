@@ -29,7 +29,7 @@
   "general": {
     "language": {
       "name": "Language",
-      "description": "The language of menus, settings and OverBench's own messages. What agents write is not translated.",
+      "description": "The language of menus, settings and Kettu's own messages. What agents write is not translated.",
       "keywords": "language locale chinese english translation",
       "system": "System"
     },
@@ -58,8 +58,8 @@
     },
     "openAtLogin": {
       "name": "Open at login",
-      "description": "Routines run only while OverBench is open.",
-      "approval": "Allow OverBench in System Settings › General › Login Items.",
+      "description": "Routines run only while Kettu is open.",
+      "approval": "Allow Kettu in System Settings › General › Login Items.",
       "unavailable": "Available in the installed app.",
       "keywords": "login startup launch start routine"
     },
@@ -93,7 +93,7 @@
       "remove": "Remove…",
       "install": "Install from file…",
       "moreThemes": "More themes",
-      "moreDescription": "Browse the OverBench catalog, or install a .json theme file.",
+      "moreDescription": "Browse the Kettu catalog, or install a .json theme file.",
       "lowContrast": "Low contrast",
       "contrastPair": "{{mode}}: {{fg}} on {{bg}}, {{ratio}}:1",
       "contrastMore": "and {{count}} more",
@@ -106,17 +106,17 @@
       "replaceDescription": "“{{name}}” takes the place of the installed file.",
       "replace": "Replace",
       "removeTitle": "Remove the theme “{{name}}”?",
-      "removeDescription": "Its installed file is deleted. If you're using it, OverBench's theme takes its place.",
+      "removeDescription": "Its installed file is deleted. If you're using it, Kettu's theme takes its place.",
       "removeConfirm": "Remove",
       "removed": "{{name}} is removed",
       "loadFailed": "The theme “{{id}}” couldn't load",
-      "loadFailedDescription": "OverBench's theme shows instead: {{reason}}.",
-      "useBuiltIn": "Use OverBench",
+      "loadFailedDescription": "Kettu's theme shows instead: {{reason}}.",
+      "useBuiltIn": "Use Kettu",
       "errors": {
         "too-large": "it's larger than 256 KB",
         "not-json": "it isn't a JSON file",
-        "not-theme": "it isn't an OverBench theme",
-        "newer-format": "it needs a newer version of OverBench",
+        "not-theme": "it isn't a Kettu theme",
+        "newer-format": "it needs a newer version of Kettu",
         "reserved-name": "its name is the built-in theme's",
         "missing-variant": "it has no {{variant}} variant",
         "invalid-field": "{{path}} isn't valid",
@@ -130,7 +130,7 @@
     "catalog": {
       "browse": "Browse themes",
       "title": "Browse themes",
-      "description": "Themes from the OverBench catalog on GitHub. Installing one applies it.",
+      "description": "Themes from the Kettu catalog on GitHub. Installing one applies it.",
       "search": "Search themes",
       "byline": "{{author}} · {{license}}",
       "install": "Install",
@@ -146,7 +146,7 @@
       "errors": {
         "unreachable": "Couldn't reach the theme catalog. Check your connection or proxy, then try again.",
         "invalid": "The theme catalog couldn't be read.",
-        "newer-format": "The theme catalog needs a newer version of OverBench."
+        "newer-format": "The theme catalog needs a newer version of Kettu."
       }
     },
     "colorMode": {
@@ -260,7 +260,7 @@
       "description": "How many sessions wait for your approval.",
       "keywords": "badge"
     },
-    "footer": "Shown only while no OverBench window is focused.",
+    "footer": "Shown only while no Kettu window is focused.",
     "groups": {
       "preview": "Preview",
       "when": "Notify me",
@@ -270,7 +270,7 @@
     "testUnsupported": "This system does not show notifications",
     "sent": "Sent",
     "previewTitle": "Claude Code needs your approval",
-    "previewBody": "overbench · run {{command}}",
+    "previewBody": "kettu · run {{command}}",
     "previewTime": "now"
   },
   "browser": {
@@ -325,15 +325,15 @@
       "copy": "Copy path"
     },
     "removeSessions": {
-      "name": "Remove all sessions from OverBench",
-      "description": "Clears OverBench's session list. The agents' transcripts stay.",
+      "name": "Remove all sessions from Kettu",
+      "description": "Clears Kettu's session list. The agents' transcripts stay.",
       "keywords": "delete clear",
       "button": "Remove all sessions…",
-      "dialogTitle_one": "Remove the only session from OverBench?",
-      "dialogTitle_other": "Remove all {{count}} sessions from OverBench?",
+      "dialogTitle_one": "Remove the only session from Kettu?",
+      "dialogTitle_other": "Remove all {{count}} sessions from Kettu?",
       "dialogDescription": "The sidebar starts empty. The agents keep their transcripts, so you can import the sessions again from each project's menu in the sidebar.",
       "confirm": "Remove all",
-      "removed": "Every session is removed from OverBench"
+      "removed": "Every session is removed from Kettu"
     },
     "groups": {
       "network": "Network",
@@ -356,7 +356,7 @@
     "checkLimits": "Check plan limits",
     "program": "Program",
     "programOnPath": "{{command}} on PATH",
-    "binaryDescription": "The {{command}} binary OverBench starts.",
+    "binaryDescription": "The {{command}} binary Kettu starts.",
     "reset": "Reset",
     "chooseBinary": "Choose binary…",
     "cli": {
@@ -381,7 +381,7 @@
       "pending": "Reading your environment…",
       "loginShell": "Read from your login shell ({{shell}}) {{ago}} in {{ms}} ms.",
       "loginShellPlain": "Read from your login shell.",
-      "inherited": "Inherited from how OverBench was started.",
+      "inherited": "Inherited from how Kettu was started.",
       "fallback": "Using a fallback PATH.",
       "reload": "Reload environment",
       "keywords": "PATH shell node npm environment variables"
@@ -412,7 +412,7 @@
       "useEnvironment": "Use the environment",
       "custom": "A folder of its own",
       "explain": "The folder you choose keeps {{name}}'s sign-in, settings and history apart from the {{name}} you run in a terminal. Nothing is copied into it: a new folder needs you to sign in again, and sessions started with the current folder continue only after you switch back.",
-      "chosen": "Chosen in OverBench",
+      "chosen": "Chosen in Kettu",
       "untilChosen": "{{name}} uses this folder until you choose one.",
       "nextStart": "Takes effect from the agent's next start."
     },
@@ -439,7 +439,7 @@
     "resetsAt": "Resets {{time}}",
     "versionGroup": "Version",
     "currentVersion": "Current version",
-    "ownInstaller": "Updated by its own installer, not by OverBench.",
+    "ownInstaller": "Updated by its own installer, not by Kettu.",
     "update": {
       "mark": "Update available: {{names}}",
       "check": "Check for updates",
@@ -486,11 +486,11 @@
       "cancel": "Cancel install",
       "failed": "Install failed, retry",
       "missingLine": "Not installed. Install sets it up through {{method}}.",
-      "missingLineAdapter": "Not installed yet. Install puts its adapter in OverBench's data folder.",
+      "missingLineAdapter": "Not installed yet. Install puts its adapter in Kettu's data folder.",
       "title": "Install {{name}}",
-      "body": "OverBench installs it in the background; when it is done, this page shows it as installed.",
-      "adapterBody": "OverBench installs {{package}} into its own data folder and runs it on your Node.js.",
-      "adapterBodyCli": "OverBench installs {{package}} into its own data folder and runs it on your Node.js, with your {{command}} {{version}} if the adapter accepts that version; otherwise it downloads {{name}} too.",
+      "body": "Kettu installs it in the background; when it is done, this page shows it as installed.",
+      "adapterBody": "Kettu installs {{package}} into its own data folder and runs it on your Node.js.",
+      "adapterBodyCli": "Kettu installs {{package}} into its own data folder and runs it on your Node.js, with your {{command}} {{version}} if the adapter accepts that version; otherwise it downloads {{name}} too.",
       "method": "Install with",
       "methods": {
         "archive": "Download",
@@ -520,10 +520,10 @@
       "downloadProgress": "Download progress",
       "ready": "{{version}} is ready to install",
       "available": "{{version}} is out",
-      "movesFirst": "OverBench can't update where it is, so Update moves it to Applications first.",
-      "moving": "Moving OverBench to Applications…",
+      "movesFirst": "Kettu can't update where it is, so Update moves it to Applications first.",
+      "moving": "Moving Kettu to Applications…",
       "failed": "Couldn't check for updates",
-      "moveFailed": "Couldn't move OverBench to Applications",
+      "moveFailed": "Couldn't move Kettu to Applications",
       "offDevelopment": "Updates are off in development builds",
       "offPackageManager": "Updates are installed by your package manager",
       "check": "Check for updates",
@@ -565,19 +565,19 @@
   "pages": {
     "general": "The interface language, how you type, and what new sessions and launches do.",
     "appearance": "Theme, color mode, zoom and text size. Changes apply at once.",
-    "notifications": "They show only while no OverBench window is in front, so they never interrupt what you are reading.",
-    "agents": "OverBench drives these coding agents over ACP. Their accounts, plan usage and installs are here.",
+    "notifications": "They show only while no Kettu window is in front, so they never interrupt what you are reading.",
+    "agents": "Kettu drives these coding agents over ACP. Their accounts, plan usage and installs are here.",
     "terminal": "Which shell the side panel's terminal runs, and its font size.",
     "git": "The top bar's branch and changes, pull requests and their checks all come from these two tools.",
-    "advanced": "Network proxy, diagnostics and the data OverBench keeps on this computer.",
-    "about": "OverBench's version, updates and links.",
+    "advanced": "Network proxy, diagnostics and the data Kettu keeps on this computer.",
+    "about": "Kettu's version, updates and links.",
     "archived": "Sessions you archived, off the sidebar but kept. Restore one to put it back in its project.",
     "sharing": "Publish artifacts to links anyone can open, through your own Cloudflare account.",
     "browser": "The browser in the side panel keeps one profile for every session: sign-ins, site data and cache.",
-    "mcp": "Agents reach tools through these MCP servers. OverBench's own is here, and where each agent keeps its own."
+    "mcp": "Agents reach tools through these MCP servers. Kettu's own is here, and where each agent keeps its own."
   },
   "footer": {
-    "about": "About OverBench",
+    "about": "About Kettu",
     "upToDate": "Up to date",
     "ready": "{{version}} ready",
     "available": "{{version}} is out",
@@ -601,7 +601,7 @@
     },
     "account": {
       "name": "Cloudflare account",
-      "description": "Publish artifacts through your own Cloudflare account. Paste an API token and OverBench finds the account it reaches.",
+      "description": "Publish artifacts through your own Cloudflare account. Paste an API token and Kettu finds the account it reaches.",
       "keywords": "share publish link cloudflare workers token account",
       "token": "API token",
       "tokenPlaceholder": "Paste the token",
@@ -617,7 +617,7 @@
       "connected": "Connected",
       "remove": "Remove",
       "removeTitle": "Remove the Cloudflare account?",
-      "removeBody": "OverBench forgets the token. Published pages stay online; unpublishing them needs the account again.",
+      "removeBody": "Kettu forgets the token. Published pages stay online; unpublishing them needs the account again.",
       "removed": "The Cloudflare account is removed",
       "plainText": "This system has no keyring, so the token is stored without the system's encryption.",
       "dashboard": "Choose a subdomain in Cloudflare"
@@ -633,12 +633,12 @@
     }
   },
   "usage": {
-    "cleared": "OverBench's record is cleared"
+    "cleared": "Kettu's record is cleared"
   },
   "mcp": {
     "keywords": "MCP server tools artifacts sessions browser",
     "groups": {
-      "overbench": "From OverBench",
+      "kettu": "From Kettu",
       "own": "In each agent's own configuration"
     },
     "state": {
@@ -655,9 +655,9 @@
       "title": "Couldn't read the MCP servers"
     },
     "server": {
-      "builtIn": "Built into OverBench",
+      "builtIn": "Built into Kettu",
       "notRunning": {
-        "title": "OverBench's server isn't running",
+        "title": "Kettu's server isn't running",
         "body": "Sessions start without its tools until it runs."
       }
     },
@@ -670,7 +670,7 @@
     "agents": "Agents",
     "tools": "Tools",
     "agent": {
-      "switch": "OverBench's tools in {{name}}",
+      "switch": "Kettu's tools in {{name}}",
       "on": "Adds these tools to its sessions.",
       "off": "Its sessions start without these tools.",
       "takesNone": "{{name}} takes no MCP servers over HTTP.",

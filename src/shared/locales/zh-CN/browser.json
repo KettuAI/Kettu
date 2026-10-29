@@ -21,7 +21,7 @@
     "restore": "还原"
   },
   "notice": {
-    "downloadBlocked": "OverBench 的浏览器会拦截下载",
+    "downloadBlocked": "Kettu 的浏览器会拦截下载",
     "evicted": "为节省内存，此页面已关闭",
     "loadFailed": "此页面未能加载：{{error}}"
   },

@@ -522,7 +522,7 @@ const largeHistory: Scenario = async (turn) => {
   turn.session.largeHistory = entries
   await stream(
     turn,
-    `This session now has a **${entries.toLocaleString('en')}-entry** history for \`session/load\` to replay. OverBench replays only a session it has stored no thread of, such as an imported one: import \`history-<n>\` for one with n entries.`,
+    `This session now has a **${entries.toLocaleString('en')}-entry** history for \`session/load\` to replay. Kettu replays only a session it has stored no thread of, such as an imported one: import \`history-<n>\` for one with n entries.`,
   )
   return 'end_turn'
 }
@@ -530,7 +530,7 @@ const largeHistory: Scenario = async (turn) => {
 const slowStart: Scenario = async (turn) => {
   await stream(
     turn,
-    'Slow start happens before any prompt, so it is chosen at launch: set `FAKE_AGENT_SCENARIO=slow-start` (or `FAKE_AGENT_SLOW_START_MS`) before starting OverBench, then start a session. `initialize` then takes 20 s and prints progress to stderr.',
+    'Slow start happens before any prompt, so it is chosen at launch: set `FAKE_AGENT_SCENARIO=slow-start` (or `FAKE_AGENT_SLOW_START_MS`) before starting Kettu, then start a session. `initialize` then takes 20 s and prints progress to stderr.',
   )
   return 'end_turn'
 }

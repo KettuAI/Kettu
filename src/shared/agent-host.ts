@@ -115,7 +115,7 @@ export interface AgentUpdate {
   cliVersion: string | null // the CLI that install carries, such as Claude Code or Codex
 }
 
-/** An install or update OverBench runs for an agent at the user's request. */
+/** An install or update Kettu runs for an agent at the user's request. */
 export interface AgentTask {
   kind: 'install' | 'update'
   state: 'running' | 'failed'
@@ -151,7 +151,7 @@ export type InstalledCliProblem =
   | { kind: 'too-old'; minimum: string }
   | { kind: 'no-minimum' } // the adapter names no version it needs
 
-/** A way OverBench can install a binary agent such as OpenCode, in the order it prefers them. */
+/** A way Kettu can install a binary agent such as OpenCode, in the order it prefers them. */
 export interface AgentInstallMethod {
   id: 'brew' | 'npm' | 'script' | 'archive'
   label: string // what the page shows for the route: its command, or the archive's file name
@@ -186,9 +186,9 @@ export interface AgentStatus {
   // The configuration folder a start uses and the one the running process uses (null while none
   // runs); null for an agent whose folder cannot be chosen.
   configDir: { runs: string; active: string | null } | null
-  // Whether a start gets OverBench's MCP server, and whether the running process got it (null
+  // Whether a start gets Kettu's MCP server, and whether the running process got it (null
   // while none runs).
-  overbenchServer: { runs: boolean; active: boolean | null }
+  kettuServer: { runs: boolean; active: boolean | null }
   capabilities: {
     loadSession: boolean
     listSessions: boolean
@@ -245,12 +245,12 @@ export interface AgentConfigItem {
   chosen: boolean // the folder picked in Settings (agents.<id>.configDir), whose env is then null
 }
 
-/** For Settings › MCP servers: the servers OverBench gives agents, and where each agent keeps its own. */
+/** For Settings › MCP servers: the servers Kettu gives agents, and where each agent keeps its own. */
 export interface McpStatus {
   servers: {
-    name: string // as agents know it: overbench
-    title: string // OverBench
-    builtIn: boolean // OverBench's own; the only server today
+    name: string // as agents know it: kettu
+    title: string // Kettu
+    builtIn: boolean // Kettu's own; the only server today
     running: boolean // it listens on 127.0.0.1
     error: string | null // why it does not, from its last try
     tools: { name: string; description: string }[] // as tools/list answers them, first sentence each
@@ -325,7 +325,7 @@ export interface SessionSummary {
 
 /**
  * Why a prepared session starts with another value than the one chosen: the agent does not offer
- * it, refused it, or a change outside OverBench replaced a remembered one. Names, not values.
+ * it, refused it, or a change outside Kettu replaced a remembered one. Names, not values.
  */
 export interface StartNotice {
   reason: 'not_offered' | 'refused' | 'replaced'
@@ -421,10 +421,10 @@ export interface HostContract {
     result: { sessions: ImportableSession[]; nextCursor: string | null }
   }
   'agents.options': { params: void; result: AgentOptions[] }
-  // For Settings › MCP servers: the servers OverBench gives agents and each agent's own file.
+  // For Settings › MCP servers: the servers Kettu gives agents and each agent's own file.
   // Neither starts an agent, and neither reads an agent's configuration file.
   'mcp.status': { params: void; result: McpStatus }
-  // Listens again when OverBench's MCP server does not, then sends main its port.
+  // Listens again when Kettu's MCP server does not, then sends main its port.
   'mcp.retry': { params: void; result: McpStatus }
   'projects.list': { params: void; result: Project[] }
   'projects.add': { params: { path: string }; result: Project }

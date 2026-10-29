@@ -70,7 +70,7 @@ function CatalogDialog({
   // Opening reads the index from GitHub, and so does Try again.
   useEffect(() => {
     let live = true
-    window.overbench.themes.catalog(true).then(
+    window.kettu.themes.catalog(true).then(
       (next) => live && setAnswer(next),
       (e: unknown) => live && setAnswer({ status: 'error', message: errorMessage(e) }),
     )
@@ -83,7 +83,7 @@ function CatalogDialog({
   useEffect(() => {
     if (!listed) return
     let live = true
-    window.overbench.themes.catalog(false).then(
+    window.kettu.themes.catalog(false).then(
       (next) => live && setAnswer(next),
       (e: unknown) => live && setAnswer({ status: 'error', message: errorMessage(e) }),
     )
@@ -107,7 +107,7 @@ function CatalogDialog({
   const install = (theme: CatalogTheme) => {
     setBusy(theme.id)
     setFailure(null)
-    window.overbench.themes
+    window.kettu.themes
       .installCatalog(theme.id)
       .then(
         (result) => answered(theme.name, result),
@@ -210,7 +210,7 @@ function CatalogDialog({
         onOpenChange={setReplaceOpen}
         onReplace={(token) => {
           setFailure(null)
-          window.overbench.themes
+          window.kettu.themes
             .replace(token)
             .catch((e: unknown) => setFailure({ message: errorMessage(e) }))
         }}

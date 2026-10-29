@@ -4,7 +4,7 @@
 import { createHash } from 'node:crypto'
 import type { WebContents } from 'electron'
 
-export const ARTIFACT_SCHEME = 'overbench-artifact'
+export const ARTIFACT_SCHEME = 'kettu-artifact'
 
 const ORIGIN_ID = /^[0-9a-f]{26}$/
 

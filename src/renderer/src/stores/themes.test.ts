@@ -37,7 +37,7 @@ const state = (chosen: string, installed = [ayu, nord]): ThemesState => ({
   failed: null,
 })
 
-beforeEach(() => receiveThemes(state('overbench')))
+beforeEach(() => receiveThemes(state('kettu')))
 
 describe('receiveThemes', () => {
   it('writes the chosen theme before it tells anyone', () => {
@@ -73,7 +73,7 @@ describe('onColorsChange', () => {
 
     callback()
     expect(listener).toHaveBeenCalledTimes(1)
-    receiveThemes(state('overbench', [nord]))
+    receiveThemes(state('kettu', [nord]))
     expect(listener).toHaveBeenCalledTimes(1)
     receiveThemes(state('ayu'))
     expect(listener).toHaveBeenCalledTimes(2)

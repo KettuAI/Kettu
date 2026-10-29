@@ -26,7 +26,7 @@
     "hoursMinutes": "{{h}} h {{m}} m"
   },
   "errors": {
-    "hostRestarted": "A background process of OverBench restarted. Try again."
+    "hostRestarted": "A background process of Kettu restarted. Try again."
   },
   "planWindow": {
     "five_hour": "5-hour",

@@ -48,7 +48,7 @@ import {
 } from './window'
 
 // Must match appId in electron-builder.yml so Windows groups taskbar entries correctly.
-const APP_USER_MODEL_ID = 'com.overbench.app'
+const APP_USER_MODEL_ID = 'sh.kettu.app'
 
 const log = createLogger('main')
 
@@ -65,7 +65,7 @@ const devUserData = devUserDataPath({
   isPackaged: app.isPackaged,
   switchValue: app.commandLine.getSwitchValue('user-data-dir'),
   appData: app.getPath('appData'),
-  override: process.env['OVERBENCH_USER_DATA'],
+  override: process.env['KETTU_USER_DATA'],
   cwd: process.cwd(),
 })
 if (devUserData) {
@@ -78,7 +78,7 @@ protocol.registerSchemesAsPrivileged([artifactScheme, mediaScheme])
 disableDnsPrefetching()
 
 async function start(): Promise<void> {
-  const perf = process.argv.includes('--overbench-perf')
+  const perf = process.argv.includes('--kettu-perf')
   const userDataPath = app.getPath('userData')
   const themesDir = join(userDataPath, 'themes')
   const themeSourcesFile = join(userDataPath, 'theme-sources.json')
@@ -122,14 +122,14 @@ async function start(): Promise<void> {
   applyZoom(settings.get().appearance.zoom)
   // The catalog's own session, so its requests follow the proxy setting and keep no cookies or
   // storage. Only its dialog reads it, so startup does not wait for the proxy.
-  const themesSession = session.fromPartition('overbench-themes')
+  const themesSession = session.fromPartition('kettu-themes')
   let themesProxy = themesSession.setProxy(sessionProxy(settings.get().proxy))
   const catalog = new ThemeCatalog(async (url, init) => {
     await themesProxy
     return themesSession.fetch(url, init) as unknown as Promise<Response>
   })
   // Pull request authors' avatars, on a session of their own for the same reasons.
-  const avatarsSession = session.fromPartition('overbench-avatars')
+  const avatarsSession = session.fromPartition('kettu-avatars')
   let avatarsProxy = avatarsSession.setProxy(sessionProxy(settings.get().proxy))
   const avatars = new Avatars(async (url, init) => {
     await avatarsProxy
@@ -214,7 +214,7 @@ async function start(): Promise<void> {
   serveMedia(session.defaultSession, mediaGrants, isRendererUrl)
   // A session of its own, so publishing follows the proxy setting rather than the artifacts'
   // window proxy, and keeps no cookies or storage of its own.
-  const sharingSession = session.fromPartition('overbench-sharing')
+  const sharingSession = session.fromPartition('kettu-sharing')
   await sharingSession.setProxy(sessionProxy(settings.get().proxy))
   const sharing = await Sharing.load({
     userDataPath,

@@ -146,7 +146,7 @@ export interface AgentDefinition {
   mcpServersByName?: boolean
   /** Variables a package agent's launch adds, from what its install holds. */
   launchEnv?(lookup: AdapterLookup): Promise<Record<string, string>>
-  /** How OverBench can install a binary agent for the user. */
+  /** How Kettu can install a binary agent for the user. */
   installs?: BinaryInstalls
   /** The CLI a package agent's adapter runs, which the user may have installed themselves. */
   cli?: AdapterCli
@@ -437,7 +437,7 @@ export interface DetectContext {
   isFile?(file: string): Promise<boolean>
   realpath?(file: string): Promise<string>
   installed?(agentId: AgentId, packageName: string): Promise<InstalledAdapter[]>
-  /** The release archives OverBench has installed; read from disk when not given. */
+  /** The release archives Kettu has installed; read from disk when not given. */
   installedArchives?(agentId: AgentId): Promise<InstalledArchive[]>
   /** Asks a CLI its version; without it, no installed CLI is looked for. */
   probeCli?: CliProbe
@@ -455,7 +455,7 @@ async function isFile(file: string): Promise<boolean> {
   }
 }
 
-/** A binary agent whose program was found, from PATH, the chosen binary or OverBench's install. */
+/** A binary agent whose program was found, from PATH, the chosen binary or Kettu's install. */
 function binaryDetection(
   command: string,
   args: string[],
@@ -666,7 +666,7 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
       const program = await findCommand(launch.command, ctx)
       if (program) return binaryDetection(program, launch.args, ctx.platform, display, env)
       // The user's own copy wins, so their sign-in and configuration stay; without one,
-      // OverBench's archive install runs.
+      // Kettu's archive install runs.
       const archive = def.installs?.archive
       if (archive) {
         const installed = (

@@ -201,7 +201,7 @@ describe('installedFolder', () => {
     )
   })
 
-  it("names OverBench's own archive folder", async () => {
+  it("names Kettu's own archive folder", async () => {
     const [archive] = await installPlans(ARCHIVE, context('darwin', [], null))
     expect(
       await installedFolder(archive!, ARCHIVE, {

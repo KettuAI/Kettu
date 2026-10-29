@@ -18,7 +18,7 @@
   },
   {
     "content": {
-      "text": "[@notes.txt](file:///tmp/overbench-140-proj/notes.txt)",
+      "text": "[@notes.txt](file:///tmp/kettu-140-proj/notes.txt)",
       "type": "text"
     },
     "messageId": "cc46fa2d-2f8a-4e34-ba18-e9260da4fa49",
@@ -26,7 +26,7 @@
   },
   {
     "content": {
-      "text": "\n<context ref=\"file:///tmp/overbench-140-proj/notes.txt\">\nProject notes\nline two\n\n</context>",
+      "text": "\n<context ref=\"file:///tmp/kettu-140-proj/notes.txt\">\nProject notes\nline two\n\n</context>",
       "type": "text"
     },
     "messageId": "cc46fa2d-2f8a-4e34-ba18-e9260da4fa49",

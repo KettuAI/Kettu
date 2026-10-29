@@ -212,11 +212,11 @@ jobs:
           }
           mount="$(mktemp -d)"
           hdiutil attach dist/*.dmg -nobrowse -readonly -mountpoint "$mount"
-          check "$mount/OverBench.app"
+          check "$mount/Kettu.app"
           hdiutil detach "$mount"
           unzipped="$(mktemp -d)"
           ditto -x -k dist/*.zip "$unzipped"
-          check "$unzipped/OverBench.app"
+          check "$unzipped/Kettu.app"
       # Only the installers and the update file leave the runner. A signed macOS build adds the zip
       # that Squirrel.Mac installs from and its blockmap, from which electron-updater downloads only
       # the changed blocks; other blockmaps and unpacked apps stay behind.
@@ -287,7 +287,7 @@ jobs:
           draft="$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null || true)"
           if [ -z "$draft" ]; then
             gh release create "$tag" release/* --draft --target "$GITHUB_SHA" \
-              --title "OverBench $VERSION" --notes "$NOTES"
+              --title "Kettu $VERSION" --notes "$NOTES"
           elif [ "$draft" = true ]; then
             gh release edit "$tag" --target "$GITHUB_SHA" --notes "$NOTES"
             gh release upload "$tag" release/* --clobber

@@ -90,7 +90,7 @@ export function UserContentView({
   )
 }
 
-/** A link, an attachment or content OverBench cannot show, as a labelled chip. */
+/** A link, an attachment or content Kettu cannot show, as a labelled chip. */
 export function RefChip({
   contentRef,
 }: {

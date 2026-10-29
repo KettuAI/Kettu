@@ -170,8 +170,8 @@ export function createMainWindow(start: StartMode = 'window'): BrowserWindow {
       // The page resolves Settings › General › Language itself; only the system's choice is
       // main's to know.
       additionalArguments: [
-        `--overbench-system-locale=${options.systemLocale}`,
-        ...(options.perf ? ['--overbench-perf'] : []),
+        `--kettu-system-locale=${options.systemLocale}`,
+        ...(options.perf ? ['--kettu-perf'] : []),
       ],
       // A perf run measures frames and timers, which Chromium throttles for a window behind others.
       backgroundThrottling: !options.perf,

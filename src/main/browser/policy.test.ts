@@ -63,8 +63,8 @@ describe('scheme rules', () => {
       'chrome://settings',
       'devtools://devtools/bundled/inspector.html',
       'view-source:https://example.com',
-      'overbench-artifact://abc/index.html',
-      'overbench-media://token/photo.png',
+      'kettu-artifact://abc/index.html',
+      'kettu-media://token/photo.png',
       'not a url',
     ]) {
       expect(isAllowedNavigation(url), url).toBe(false)
@@ -80,10 +80,10 @@ describe('scheme rules', () => {
 })
 
 describe('requests', () => {
-  it('cancels local files, OverBench schemes and the artifacts service', () => {
+  it('cancels local files, Kettu schemes and the artifacts service', () => {
     expect(isForbiddenRequest('file:///etc/passwd', null)).toBe(true)
-    expect(isForbiddenRequest('overbench-artifact://abc/index.html', null)).toBe(true)
-    expect(isForbiddenRequest('overbench-media://token/photo.png', null)).toBe(true)
+    expect(isForbiddenRequest('kettu-artifact://abc/index.html', null)).toBe(true)
+    expect(isForbiddenRequest('kettu-media://token/photo.png', null)).toBe(true)
     expect(isForbiddenRequest('http://127.0.0.1:41234/mcp', 41234)).toBe(true)
     expect(isForbiddenRequest('http://localhost:41234/mcp', 41234)).toBe(true)
     expect(isForbiddenRequest('https://example.com/x', 41234)).toBe(false)
@@ -149,7 +149,7 @@ describe('BrowserPolicy', () => {
       return answer!.cancel
     }
     expect(cancel('file:///etc/passwd')).toBe(true)
-    expect(cancel('overbench-media://token/x')).toBe(true)
+    expect(cancel('kettu-media://token/x')).toBe(true)
     expect(cancel('http://127.0.0.1:41234/mcp')).toBe(true)
     expect(cancel('https://example.com/app.js')).toBe(false)
   })
@@ -212,7 +212,7 @@ describe('the addresses an agent may open', () => {
       'chrome://settings',
       'devtools://devtools/bundled/inspector.html',
       'view-source:https://example.com/',
-      'overbench-artifact://abc/',
+      'kettu-artifact://abc/',
     ]) {
       expect(isNeverOpened(new URL(url))).toBe(true)
     }

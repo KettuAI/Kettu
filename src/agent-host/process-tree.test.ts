@@ -256,7 +256,7 @@ function alive(pid: number): boolean {
 
 describe('runTool', () => {
   it('kills a tool that runs past its limit, and what came with it', async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-tool-'))
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-tool-'))
     const pidFile = path.join(dir, 'pid')
     // On Windows the tool is PowerShell, which the listing runs.
     const windows = process.platform === 'win32'

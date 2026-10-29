@@ -249,7 +249,7 @@
       "windowResets": "{{limit}} {{used}} · {{left}}后重置",
       "notInstalledLong": "{{agent}} 还没有安装。",
       "installsOnFirstUse": "{{agent}} 尚未安装，首次使用时会自动安装。",
-      "setsUpLong": "{{agent}} 会在首次使用时自动配置：OverBench 会为它安装适配器；适配器不接受你的 {{command}} 版本时，还会下载一份 {{agent}}。",
+      "setsUpLong": "{{agent}} 会在首次使用时自动配置：Kettu 会为它安装适配器；适配器不接受你的 {{command}} 版本时，还会下载一份 {{agent}}。",
       "install": "安装…",
       "failedLong": "{{agent}} 启动失败。",
       "retry": "重试",
@@ -265,12 +265,12 @@
       "model": {
         "not_offered": "{{agent}} 已不再提供 {{wanted}}，将使用 {{actual}} 启动。",
         "refused": "{{agent}} 没有接受 {{wanted}}，将使用 {{actual}} 启动。",
-        "replaced": "{{agent}} 的默认模型已在 OverBench 之外改为 {{actual}}，将使用它启动，而不是 {{wanted}}。"
+        "replaced": "{{agent}} 的默认模型已在 Kettu 之外改为 {{actual}}，将使用它启动，而不是 {{wanted}}。"
       },
       "option": {
         "not_offered": "{{agent}} 已不再提供 {{option}} {{wanted}}，将使用 {{actual}} 启动。",
         "refused": "{{agent}} 没有接受 {{option}} {{wanted}}，将使用 {{actual}} 启动。",
-        "replaced": "{{agent}} 的默认 {{option}} 已在 OverBench 之外改为 {{actual}}，将使用它启动，而不是 {{wanted}}。"
+        "replaced": "{{agent}} 的默认 {{option}} 已在 Kettu 之外改为 {{actual}}，将使用它启动，而不是 {{wanted}}。"
       },
       "noOption": "{{agent}} 现在没有 {{option}} 选项，不会使用 {{wanted}}。",
       "noSwitch": "{{agent}} 现在没有 {{option}} 选项，无法开启。",
@@ -280,7 +280,7 @@
   },
   "signIn": {
     "title": "登录 {{agent}}",
-    "description": "{{agent}} 需要先登录才能启动。OverBench 不会获取你的凭据。",
+    "description": "{{agent}} 需要先登录才能启动。Kettu 不会获取你的凭据。",
     "noMethods": "{{agent}} 没有说明登录方式。请在它自己的命令行中登录，然后重试。",
     "copyCommand": "复制命令",
     "inTerminal": "在终端中登录",

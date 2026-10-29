@@ -39,7 +39,7 @@ describe('the installed notarizer', () => {
       .mockRejectedValueOnce(new Error('Failed to staple your application with code: 68'))
       .mockRejectedValueOnce(new Error('NSURLErrorDomain Code=-1005'))
       .mockResolvedValue()
-    const result = notarize({ appPath: '/unused/OverBench.app' }).then(
+    const result = notarize({ appPath: '/unused/Kettu.app' }).then(
       () => null,
       (error: unknown) => error,
     )
@@ -53,7 +53,7 @@ describe('the installed notarizer', () => {
   it('still fails with the last error when every stapling attempt fails', async () => {
     const failure = new Error('Failed to staple your application with code: 68')
     const staple = vi.spyOn(stapler, 'stapleApp').mockRejectedValue(failure)
-    const result = notarize({ appPath: '/unused/OverBench.app' }).catch((error: unknown) => error)
+    const result = notarize({ appPath: '/unused/Kettu.app' }).catch((error: unknown) => error)
     await vi.runAllTimersAsync()
     expect(await result).toBe(failure)
     expect(staple).toHaveBeenCalledTimes(4)
@@ -64,7 +64,7 @@ describe('the installed notarizer', () => {
     const failure = new Error('Invalid signature')
     vi.mocked(signatures.checkSignatures).mockRejectedValue(failure)
     const staple = vi.spyOn(stapler, 'stapleApp')
-    await expect(notarize({ appPath: '/unused/OverBench.app' })).rejects.toBe(failure)
+    await expect(notarize({ appPath: '/unused/Kettu.app' })).rejects.toBe(failure)
     expect(staple).not.toHaveBeenCalled()
     expect(notarytool.notarizeAndWaitForNotaryTool).not.toHaveBeenCalled()
   })

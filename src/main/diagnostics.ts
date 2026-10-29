@@ -54,10 +54,7 @@ export async function saveDiagnostics(
   if (text.length > MAX_BUNDLE_CHARS) throw new Error('The diagnostics bundle is too large')
   const options: Electron.SaveDialogOptions = {
     title: t('dialogs.exportDiagnostics'),
-    defaultPath: join(
-      app.getPath('downloads'),
-      `overbench-diagnostics-${timestamp(new Date())}.json`,
-    ),
+    defaultPath: join(app.getPath('downloads'), `kettu-diagnostics-${timestamp(new Date())}.json`),
     filters: [{ name: 'JSON', extensions: ['json'] }],
   }
   const result = window

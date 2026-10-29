@@ -27,7 +27,7 @@ afterEach(() => {
 })
 
 function setup(): { db: ThreadDb; file: string; content: string } {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'overbench-artifacts-'))
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'kettu-artifacts-'))
   dirs.push(dir)
   const file = path.join(dir, 'state', 'threads.db')
   const content = path.join(dir, 'artifacts', 'content')
@@ -428,7 +428,7 @@ describe('artifacts in the thread database', () => {
   })
 
   it('writes no artifact without a content folder, and touches nothing in a newer database', () => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), 'overbench-artifacts-'))
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'kettu-artifacts-'))
     dirs.push(dir)
     const file = path.join(dir, 'threads.db')
     const bare = ThreadDb.open(file, () => {})
@@ -524,7 +524,7 @@ describe('the thread database schema', () => {
   })
 
   it('migrates a version 1 database, keeping its threads, to empty artifact tables', () => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), 'overbench-artifacts-'))
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'kettu-artifacts-'))
     dirs.push(dir)
     mkdirSync(path.join(dir, 'state'))
     const file = path.join(dir, 'state', 'threads.db')

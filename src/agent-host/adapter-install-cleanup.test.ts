@@ -14,7 +14,7 @@ const { removeTree } = await import('./adapter-install')
 
 describe('removeTree', () => {
   it('retries a file held open, as Windows does after npm writes', async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-remove-'))
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-remove-'))
     await writeFile(path.join(dir, 'index.js'), '')
     await removeTree(dir)
     expect(rm).toHaveBeenCalledWith(

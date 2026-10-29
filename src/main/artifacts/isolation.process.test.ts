@@ -99,11 +99,11 @@ const fromWorker = (code, shared) => new Promise((resolve) => {
   worker.onerror = () => resolve(true)
 })
 const attempts = {
-  "the app's API": () => typeof window.overbench === 'undefined',
+  "the app's API": () => typeof window.kettu === 'undefined',
   'require': () => typeof require === 'undefined',
   'process': () => typeof process === 'undefined',
   "the app's DOM": () => { try { parent.document.body; return false } catch { return true } },
-  "the app's API through its frame": () => { try { return parent.overbench === undefined } catch { return true } },
+  "the app's API through its frame": () => { try { return parent.kettu === undefined } catch { return true } },
   "the app's frame's location": async () => {
     try { top.location.href = SERVER + '/top' } catch {}
     await sleep(300)
@@ -255,7 +255,7 @@ const events = []
 for (const channel of ['artifact:blocked', 'artifact:stopped', 'app:shortcut']) {
   ipcRenderer.on(channel, (_, payload) => events.push({ channel, payload }))
 }
-contextBridge.exposeInMainWorld('overbench', {
+contextBridge.exposeInMainWorld('kettu', {
   ping: () => ipcRenderer.invoke('app:get-info'),
   open: (id) => ipcRenderer.invoke('artifact:open', id),
   events: () => events.slice(),
@@ -339,7 +339,7 @@ async function hashFile(contentDir: string, html: string): Promise<string> {
 }
 
 beforeAll(async () => {
-  dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-isolation-'))
+  dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-isolation-'))
   server = createServer((request, response) => {
     reached.push(`${request.method} ${request.url}`)
     response.end('ok')
@@ -443,7 +443,7 @@ async function probe(policy: boolean): Promise<ProbeResult> {
   const media = {
     token: mediaToken,
     path: await realpath(image),
-    url: `overbench-media://${mediaToken}/secret.png?v=1`,
+    url: `kettu-media://${mediaToken}/secret.png?v=1`,
   }
   const page = probePage(
     origin,
@@ -481,8 +481,8 @@ async function probe(policy: boolean): Promise<ProbeResult> {
       ([name]) => name !== 'ELECTRON_RUN_AS_NODE' && name !== 'ELECTRON_RENDERER_URL',
     ),
   )
-  env.OVERBENCH_PROBE = path.join(run, 'config.json')
-  env.OVERBENCH_PROBE_PARENT = String(process.pid)
+  env.KETTU_PROBE = path.join(run, 'config.json')
+  env.KETTU_PROBE_PARENT = String(process.pid)
   const args = [
     path.join(dir, 'harness', 'main.cjs'),
     `--user-data-dir=${path.join(run, 'data')}`,

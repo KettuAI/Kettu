@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { recentLogRecords } from './log'
 import { framesSettled, hasPendingFrame, isRevoked, watchSubframes } from './subframes'
 
-const ARTIFACT = 'overbench-artifact://0123456789abcdef0123456789/'
-const OTHER = 'overbench-artifact://ffffffffffffffffffffffffff/'
+const ARTIFACT = 'kettu-artifact://0123456789abcdef0123456789/'
+const OTHER = 'kettu-artifact://ffffffffffffffffffffffffff/'
 
 let nextId = 1
 
@@ -61,7 +61,7 @@ class FakeContents extends EventEmitter {
 }
 
 function originFor(url: string): string {
-  if (url.startsWith('overbench-artifact://')) return url.slice(0, url.indexOf('/', 21))
+  if (url.startsWith('kettu-artifact://')) return url.slice(0, url.indexOf('/', 21))
   if (url.startsWith('file:') || url.startsWith('about:')) return 'file://'
   return URL.parse(url)?.origin ?? 'null'
 }

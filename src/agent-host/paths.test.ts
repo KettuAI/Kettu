@@ -43,7 +43,7 @@ describe('canonicalizePath', () => {
   describe('on this machine', () => {
     let root: string
     beforeAll(async () => {
-      root = await realpath(await mkdtemp(path.join(tmpdir(), 'overbench-paths-')))
+      root = await realpath(await mkdtemp(path.join(tmpdir(), 'kettu-paths-')))
       await mkdir(path.join(root, 'Real'))
       await symlink(path.join(root, 'Real'), path.join(root, 'link'), 'junction')
     })
@@ -89,8 +89,8 @@ describe('isAbsolutePath and folderName', () => {
     expect(isAbsolutePath('/x', 'win32')).toBe(false)
     expect(isAbsolutePath('C:x', 'win32')).toBe(false)
     expect(isAbsolutePath('x', 'darwin')).toBe(false)
-    expect(folderName('/Users/me/overbench', 'darwin')).toBe('overbench')
-    expect(folderName('C:\\Users\\me\\overbench', 'win32')).toBe('overbench')
+    expect(folderName('/Users/me/kettu', 'darwin')).toBe('kettu')
+    expect(folderName('C:\\Users\\me\\kettu', 'win32')).toBe('kettu')
     expect(folderName('C:\\', 'win32')).toBe('C:')
     expect(folderName('/', 'linux')).toBe('/')
   })

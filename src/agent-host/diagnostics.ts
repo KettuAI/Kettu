@@ -70,7 +70,7 @@ function redacted(message: unknown): unknown {
 }
 
 export interface DiagnosticsOptions {
-  /** Mirrors ACP traffic to stdout, for `OVERBENCH_ACP_LOG=1` in development. */
+  /** Mirrors ACP traffic to stdout, for `KETTU_ACP_LOG=1` in development. */
   mirrorTraffic?: boolean
   write?: (line: string) => void
   now?: () => number

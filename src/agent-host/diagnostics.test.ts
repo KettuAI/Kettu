@@ -38,7 +38,7 @@ describe('Diagnostics', () => {
     const diagnostics = new Diagnostics({ mirrorTraffic: true, write: (line) => lines.push(line) })
     const server = {
       type: 'http',
-      name: 'overbench',
+      name: 'kettu',
       url: 'http://127.0.0.1:4100/mcp',
       headers: [
         { name: 'Authorization', value: 'Bearer secret-token' },
@@ -62,7 +62,7 @@ describe('Diagnostics', () => {
           cwd: '/p',
           mcpServers: [
             {
-              name: 'overbench',
+              name: 'kettu',
               url: 'http://127.0.0.1:4100/mcp',
               headers: [
                 { name: 'Authorization', value: '<redacted>' },

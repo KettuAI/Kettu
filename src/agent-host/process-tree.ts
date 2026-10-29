@@ -90,7 +90,7 @@ export interface ToolOptions {
 }
 
 /** What a quit aborts a tool's run with, so that the run's stop gets the quit's limits too. */
-export const QUIT_REASON = new Error('OverBench is quitting')
+export const QUIT_REASON = new Error('Kettu is quitting')
 
 export interface ProcessControl {
   platform: Platform

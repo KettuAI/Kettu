@@ -31,7 +31,7 @@ export function QuitConfirm() {
   const [saveFailed, setSaveFailed] = useState(false)
   useEffect(
     () =>
-      window.overbench.app.onConfirmQuit((next) => {
+      window.kettu.app.onConfirmQuit((next) => {
         setSaveFailed(false)
         setRequest(next)
       }),
@@ -40,7 +40,7 @@ export function QuitConfirm() {
 
   const answer = (confirmed: boolean) => {
     if (!request) return
-    void window.overbench.app.respondQuit(request.id, confirmed)
+    void window.kettu.app.respondQuit(request.id, confirmed)
     setRequest(null)
   }
 

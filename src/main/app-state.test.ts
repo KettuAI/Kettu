@@ -7,7 +7,7 @@ import { AppStateStore } from './app-state'
 let dir: string
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), 'overbench-app-state-'))
+  dir = await mkdtemp(join(tmpdir(), 'kettu-app-state-'))
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
 

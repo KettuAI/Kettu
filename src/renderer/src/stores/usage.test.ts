@@ -3,7 +3,7 @@ import type { UsageSummary } from '@shared/usage'
 import type { LegendChoice } from '@renderer/features/usage/model'
 
 const request = vi.fn()
-vi.stubGlobal('window', { overbench: { agents: { request } } })
+vi.stubGlobal('window', { kettu: { agents: { request } } })
 
 const {
   DEFAULT_FILTERS,
@@ -87,14 +87,14 @@ describe('usage store', () => {
 
   it('reads all time again from the new first day when the scope changes', async () => {
     const today = dayOf(Date.now())
-    const firsts = { computer: addDays(today, -10), overbench: addDays(today, -2) }
-    request.mockImplementation((method: string, params: { scope: 'computer' | 'overbench' }) =>
+    const firsts = { computer: addDays(today, -10), kettu: addDays(today, -2) }
+    request.mockImplementation((method: string, params: { scope: 'computer' | 'kettu' }) =>
       Promise.resolve(
         method === 'usage.summary' ? { ...empty, first: firsts[params.scope] } : undefined,
       ),
     )
-    setUsageFilters({ scope: 'overbench' })
-    await vi.waitFor(() => expect(useUsageStore.getState().page?.range.from).toBe(firsts.overbench))
+    setUsageFilters({ scope: 'kettu' })
+    await vi.waitFor(() => expect(useUsageStore.getState().page?.range.from).toBe(firsts.kettu))
     setUsageFilters({ scope: 'computer' })
     await vi.waitFor(() => expect(useUsageStore.getState().page?.range.from).toBe(firsts.computer))
   })
@@ -178,7 +178,7 @@ describe('usage store', () => {
 
     // The chart still drawn keeps its series until the figures for the new source arrive.
     legend = hideCodex()
-    setUsageFilters({ scope: 'overbench' })
+    setUsageFilters({ scope: 'kettu' })
     expect(legendHides(legend, drawn())).toEqual(['codex'])
     await arrive()
     setUsageFilters({ scope: 'computer' })
@@ -187,7 +187,7 @@ describe('usage store', () => {
 
     // Back again before the other source's figures arrive is still a change.
     legend = hideCodex()
-    setUsageFilters({ scope: 'overbench' })
+    setUsageFilters({ scope: 'kettu' })
     setUsageFilters({ scope: 'computer' })
     expect(legendHides(legend, drawn())).toEqual(['codex'])
     await arrive()

@@ -48,7 +48,7 @@ export const BrowserOriginEntry = memo(function BrowserOriginEntry({
     setAnswering(decision)
     setError(null)
     try {
-      await window.overbench.browser.answerOrigin(sessionId, entry.requestId, decision)
+      await window.kettu.browser.answerOrigin(sessionId, entry.requestId, decision)
     } catch (caught) {
       setError(errorMessage(caught))
     } finally {

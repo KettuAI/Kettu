@@ -60,15 +60,15 @@ export function BrowserPane({
   }, [sessionId, hidden])
 
   const navigate = (url: string) => {
-    if (sessionId) void window.overbench.browser.navigate(sessionId, url)
+    if (sessionId) void window.kettu.browser.navigate(sessionId, url)
   }
 
   // Main shows the session's page while the pane is open, and keeps it while the pane is hidden.
   useEffect(() => {
     if (!sessionId) return
-    void window.overbench.browser.show(sessionId)
+    void window.kettu.browser.show(sessionId)
     return () => {
-      void window.overbench.browser.hide(sessionId)
+      void window.kettu.browser.hide(sessionId)
     }
   }, [sessionId])
 
@@ -81,7 +81,7 @@ export function BrowserPane({
     if (!element || !sheet.current || !sessionId) return
     const rect = element.getBoundingClientRect()
     const radius = parseFloat(getComputedStyle(sheet.current).borderBottomLeftRadius) || 0
-    void window.overbench.browser.setBounds(sessionId, {
+    void window.kettu.browser.setBounds(sessionId, {
       x: Math.round(rect.left * zoom),
       y: Math.round(rect.top * zoom),
       width: Math.round(rect.width * zoom),
@@ -111,7 +111,7 @@ export function BrowserPane({
     if (!sessionId) return
     if (!overlayOpen) {
       if (!useBrowserStore.getState().stills[sessionId]) return
-      void window.overbench.browser.thaw(sessionId).finally(() => {
+      void window.kettu.browser.thaw(sessionId).finally(() => {
         useBrowserStore.getState().setStill(sessionId, null)
       })
       return
@@ -120,12 +120,12 @@ export function BrowserPane({
     const frame = requestAnimationFrame(() => {
       const area = page.current
       if (!area || !covers(area)) return
-      void window.overbench.browser
+      void window.kettu.browser
         .freeze(sessionId)
         .then((image) => {
           // The overlay may have closed while the page was captured; then nothing is shown.
           if (!image) return
-          if (cancelled) void window.overbench.browser.thaw(sessionId)
+          if (cancelled) void window.kettu.browser.thaw(sessionId)
           else useBrowserStore.getState().setStill(sessionId, image)
         })
         .catch(() => {})
@@ -141,7 +141,7 @@ export function BrowserPane({
     if (!sessionId) return
     return () => {
       if (!useBrowserStore.getState().stills[sessionId]) return
-      void window.overbench.browser.thaw(sessionId)
+      void window.kettu.browser.thaw(sessionId)
       useBrowserStore.getState().setStill(sessionId, null)
     }
   }, [sessionId])
@@ -172,7 +172,7 @@ export function BrowserPane({
             label={t('actions.back')}
             shortcut={isMac ? '⌘[' : 'Ctrl+['}
             disabled={!state?.canGoBack}
-            onClick={() => sessionId && void window.overbench.browser.back(sessionId)}
+            onClick={() => sessionId && void window.kettu.browser.back(sessionId)}
           >
             <ArrowLeftIcon className="size-3.5" />
           </PanelButton>
@@ -180,14 +180,14 @@ export function BrowserPane({
             label={t('actions.forward')}
             shortcut={isMac ? '⌘]' : 'Ctrl+]'}
             disabled={!state?.canGoForward}
-            onClick={() => sessionId && void window.overbench.browser.forward(sessionId)}
+            onClick={() => sessionId && void window.kettu.browser.forward(sessionId)}
           >
             <ArrowRightIcon className="size-3.5" />
           </PanelButton>
           {state?.loading ? (
             <PanelButton
               label={t('actions.stop')}
-              onClick={() => sessionId && void window.overbench.browser.stop(sessionId)}
+              onClick={() => sessionId && void window.kettu.browser.stop(sessionId)}
             >
               <XIcon className="size-3.5" />
             </PanelButton>
@@ -196,7 +196,7 @@ export function BrowserPane({
               label={t('actions.reload')}
               shortcut={isMac ? '⌘R' : 'Ctrl+R'}
               disabled={!hasPage}
-              onClick={() => sessionId && void window.overbench.browser.reload(sessionId)}
+              onClick={() => sessionId && void window.kettu.browser.reload(sessionId)}
             >
               <RotateCwIcon className="size-3.5" />
             </PanelButton>
@@ -211,7 +211,7 @@ export function BrowserPane({
           <PanelButton
             label={t('actions.openExternal')}
             disabled={!hasPage}
-            onClick={() => sessionId && void window.overbench.browser.openExternal(sessionId)}
+            onClick={() => sessionId && void window.kettu.browser.openExternal(sessionId)}
           >
             <ExternalLinkIcon className="size-3.5" />
           </PanelButton>
@@ -237,8 +237,8 @@ export function BrowserPane({
         <DrivingBar
           agent={agentId ?? null}
           user={userControl}
-          onStop={() => sessionId && void window.overbench.browser.stopDriving(sessionId)}
-          onHandBack={() => sessionId && void window.overbench.browser.handBack(sessionId)}
+          onStop={() => sessionId && void window.kettu.browser.stopDriving(sessionId)}
+          onHandBack={() => sessionId && void window.kettu.browser.handBack(sessionId)}
         />
       )}
       {sessionId && state?.originRequest && (
@@ -246,7 +246,7 @@ export function BrowserPane({
           request={state.originRequest}
           agentName={agentId ? agentName(agentId) : ''}
           onAnswer={(decision) =>
-            void window.overbench.browser.answerOrigin(sessionId, state.originRequest!.id, decision)
+            void window.kettu.browser.answerOrigin(sessionId, state.originRequest!.id, decision)
           }
         />
       )}
@@ -302,7 +302,7 @@ export function BrowserPane({
 function Notice({ notice, sessionId }: { notice: BrowserNotice; sessionId: string | null }) {
   const { t } = useTranslation('browser')
   const open = () => {
-    if (sessionId) void window.overbench.browser.openExternal(sessionId)
+    if (sessionId) void window.kettu.browser.openExternal(sessionId)
   }
   return (
     <div className="flex min-h-8 shrink-0 items-center gap-2 bg-subtle px-3 text-small text-secondary">
@@ -323,7 +323,7 @@ function Notice({ notice, sessionId }: { notice: BrowserNotice; sessionId: strin
       {notice.kind !== 'download-blocked' && sessionId && (
         <button
           type="button"
-          onClick={() => void window.overbench.browser.reload(sessionId)}
+          onClick={() => void window.kettu.browser.reload(sessionId)}
           className="shrink-0 text-small text-link hover:underline focus-ring"
         >
           {notice.kind === 'evicted' ? t('actions.reload') : t('actions.tryAgain')}

@@ -49,7 +49,7 @@ export function useArtifact(id: string, version: number | null) {
   useEffect(() => {
     let live = true
     let opened: string | null = null
-    window.overbench.artifacts.open(id).then(
+    window.kettu.artifacts.open(id).then(
       (result) => {
         if ('failed' in result) {
           if (live) setOpenError(result.failed === 'not_found' ? 'notFound' : 'unavailable')
@@ -57,7 +57,7 @@ export function useArtifact(id: string, version: number | null) {
         }
         opened = result.url
         if (live) setUrl(result.url)
-        else void window.overbench.artifacts.close(result.url).catch(() => {})
+        else void window.kettu.artifacts.close(result.url).catch(() => {})
       },
       (reason: unknown) => {
         console.error(`Could not open ${id}`, reason)
@@ -66,7 +66,7 @@ export function useArtifact(id: string, version: number | null) {
     )
     return () => {
       live = false
-      if (opened) void window.overbench.artifacts.close(opened).catch(() => {})
+      if (opened) void window.kettu.artifacts.close(opened).catch(() => {})
     }
   }, [id, attempt])
 
@@ -105,7 +105,7 @@ export function useArtifact(id: string, version: number | null) {
   useEffect(() => {
     if (!connected) return
     void host('artifacts.watch', { id }).catch(() => {})
-    const off = window.overbench.agents.onEvent((event) => {
+    const off = window.kettu.agents.onEvent((event) => {
       if (event.type === 'artifacts.activity' && event.id === id) {
         setPresence({ viewers: event.viewers, sessions: event.sessions })
       } else if (event.type === 'artifacts.version' && event.id === id) {
@@ -122,7 +122,7 @@ export function useArtifact(id: string, version: number | null) {
   useEffect(() => {
     if (!url) return
     const origin = url.slice(0, -1)
-    return window.overbench.artifacts.onStopped((event) => {
+    return window.kettu.artifacts.onStopped((event) => {
       if (event.origin === origin) setStopped(true)
     })
   }, [url])

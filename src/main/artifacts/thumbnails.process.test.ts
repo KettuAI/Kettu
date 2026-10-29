@@ -47,7 +47,7 @@ const layout: ThumbnailPage[] = Array.from({ length: PAGES }, (_, i) => ({
 let dir = ''
 
 beforeAll(async () => {
-  dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-thumbnails-'))
+  dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-thumbnails-'))
   // Main's own modules, as the app bundles them.
   await build({
     configFile: false,
@@ -92,8 +92,8 @@ async function render(html: string): Promise<ThumbnailRunResult> {
       ([name]) => name !== 'ELECTRON_RUN_AS_NODE' && name !== 'ELECTRON_RENDERER_URL',
     ),
   )
-  env.OVERBENCH_THUMBNAILS = path.join(dir, 'config.json')
-  env.OVERBENCH_THUMBNAILS_PARENT = String(process.pid)
+  env.KETTU_THUMBNAILS = path.join(dir, 'config.json')
+  env.KETTU_THUMBNAILS_PARENT = String(process.pid)
   const args = [
     path.join(dir, 'harness', 'main.cjs'),
     `--user-data-dir=${path.join(dir, 'data')}`,

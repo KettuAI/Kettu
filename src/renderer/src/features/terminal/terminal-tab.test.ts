@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { TerminalState } from '@renderer/stores/terminals'
 
 vi.mock('./terminal-view', () => ({ TerminalView: () => null }))
-vi.stubGlobal('window', { overbench: { platform: 'darwin' } })
+vi.stubGlobal('window', { kettu: { platform: 'darwin' } })
 
 const { TerminalTab } = await import('./terminal-panel')
 

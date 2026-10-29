@@ -172,8 +172,8 @@ export interface AgentRuntime {
   readonly agentId: AgentId
   readonly connection: AgentConnection
   readonly init: AgentInit
-  /** Whether OverBench's MCP server is on for this process, from the settings as it started. */
-  readonly overbench: boolean
+  /** Whether Kettu's MCP server is on for this process, from the settings as it started. */
+  readonly kettu: boolean
 }
 
 /** What the session layer tells the agents, and hears back. */
@@ -624,9 +624,9 @@ export class AgentManager {
         folderChanged(slot),
     )
     await Promise.all(changed.map((slot) => this.detect(slot)))
-    // A switch for OverBench's server changes what a start gets, and waits for the next one.
-    const wasOff = new Set(previous.mcp.overbench.off)
-    const isOff = new Set(next.mcp.overbench.off)
+    // A switch for Kettu's server changes what a start gets, and waits for the next one.
+    const wasOff = new Set(previous.mcp.kettu.off)
+    const isOff = new Set(next.mcp.kettu.off)
     for (const slot of this.slots.values()) {
       if (wasOff.has(slot.def.id) !== isOff.has(slot.def.id)) this.emit(slot)
     }
@@ -779,7 +779,7 @@ export class AgentManager {
         agentId,
         connection,
         init,
-        overbench: this.overbenchOn(agentId),
+        kettu: this.kettuOn(agentId),
       }
       slot.init = init
       // The state file keeps booleans; how an agent titles its sessions comes with `initialize`.
@@ -983,7 +983,7 @@ export class AgentManager {
     const slot = this.slot(agentId)
     const { launch } = slot.def
     if (launch.kind !== 'package') {
-      throw invalidParams(`${slot.def.name} is not installed by OverBench`)
+      throw invalidParams(`${slot.def.name} is not installed by Kettu`)
     }
     if (slot.installing || slot.starting) {
       throw new HostError('busy', t('agent.busyInstalling', { agent: slot.def.name }))
@@ -1210,7 +1210,7 @@ export class AgentManager {
     const slot = this.slot(agentId)
     const { launch } = slot.def
     if (launch.kind !== 'package') {
-      throw invalidParams(`${slot.def.name} is not installed by OverBench`)
+      throw invalidParams(`${slot.def.name} is not installed by Kettu`)
     }
     await this.detectAll()
     const update = this.updateOf(slot)
@@ -1294,7 +1294,7 @@ export class AgentManager {
         return this.installBinary(slot, method)
       case 'uvx':
       case 'node-script':
-        throw invalidParams(`${slot.def.name} is not installed by OverBench`)
+        throw invalidParams(`${slot.def.name} is not installed by Kettu`)
     }
   }
 
@@ -1359,7 +1359,7 @@ export class AgentManager {
   ): Promise<void> {
     const installs = slot.def.installs
     const agent = slot.def.name
-    if (!installs) throw invalidParams(`${agent} is not installed by OverBench`)
+    if (!installs) throw invalidParams(`${agent} is not installed by Kettu`)
     if (slot.detection?.state === 'available') {
       throw invalidParams(t('agent.alreadyInstalled', { agent }))
     }
@@ -1857,7 +1857,7 @@ export class AgentManager {
       .map((text) => report.parse(text, now))
       .findLast((parsed) => parsed !== null)
     if (!limits) {
-      log(`${slot.def.name}: ${report.command} gave no report OverBench can read`)
+      log(`${slot.def.name}: ${report.command} gave no report Kettu can read`)
       return
     }
     for (const limit of limits) {
@@ -2109,9 +2109,9 @@ export class AgentManager {
     return slot.def.configVariable && folder ? folder : null
   }
 
-  /** Whether OverBench's MCP server is on for this agent, from the settings. */
-  private overbenchOn(agentId: AgentId): boolean {
-    return !this.deps.settings().mcp.overbench.off.includes(agentId)
+  /** Whether Kettu's MCP server is on for this agent, from the settings. */
+  private kettuOn(agentId: AgentId): boolean {
+    return !this.deps.settings().mcp.kettu.off.includes(agentId)
   }
 
   /** The configuration folder `env` gives the agent; null for an agent whose folder is fixed. */
@@ -2159,7 +2159,7 @@ export class AgentManager {
   private activeCli(slot: Slot, installed: InstalledCli | null): AgentCliSource | null {
     const spec = slot.state === 'ready' || slot.state === 'starting' ? slot.launchSpec : null
     if (!spec) return null
-    // A program the environment names runs whatever OverBench passes.
+    // A program the environment names runs whatever Kettu passes.
     return spec.cli !== undefined || installed?.variable ? 'installed' : 'bundled'
   }
 
@@ -2264,9 +2264,9 @@ export class AgentManager {
             }
           : null,
       configDir: config ? { runs: config.folder, active: active?.folder ?? null } : null,
-      overbenchServer: {
-        runs: this.overbenchOn(slot.def.id),
-        active: this.running(slot) ? (slot.runtime?.overbench ?? null) : null,
+      kettuServer: {
+        runs: this.kettuOn(slot.def.id),
+        active: this.running(slot) ? (slot.runtime?.kettu ?? null) : null,
       },
       capabilities: {
         loadSession: capabilities?.loadSession ?? false,
@@ -2277,7 +2277,7 @@ export class AgentManager {
         forkSession: capabilities?.forkSession ?? false,
         forkAtMessage: capabilities?.forkAtMessage ?? false,
         // codex-acp 2.2.2 ignores `idleBehavior` and starts a turn of its own when none is
-        // running (its PR #593 would fix it), which OverBench would not know about.
+        // running (its PR #593 would fix it), which Kettu would not know about.
         steering: (capabilities?.steering ?? false) && slot.def.id !== 'codex',
         reports: limitsReport(slot.def.id) !== null,
         context: hasContextReport(slot.def.id),

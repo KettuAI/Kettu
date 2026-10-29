@@ -7,7 +7,7 @@ import { isExecutableFile } from './executable'
 describe('isExecutableFile', () => {
   let dir: string
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'overbench-exec-'))
+    dir = await mkdtemp(join(tmpdir(), 'kettu-exec-'))
   })
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true })

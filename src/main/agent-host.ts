@@ -159,7 +159,7 @@ export class AgentHost {
       label: 'agent-host',
       channel: 'agent-host',
       modulePath: agentHostPath,
-      serviceName: 'OverBench Agent Host',
+      serviceName: 'Kettu Agent Host',
       initMessage: () => ({
         type: 'host:init',
         userDataPath: app.getPath('userData'),
@@ -168,7 +168,7 @@ export class AgentHost {
         isPackaged: app.isPackaged,
         electronPath: process.execPath,
         fakeAgentPath: app.isPackaged
-          ? (process.env.OVERBENCH_FAKE_AGENT ?? null)
+          ? (process.env.KETTU_FAKE_AGENT ?? null)
           : join(app.getAppPath(), 'tools/fake-agent/main.ts'),
         threadWorkerPath,
         usageWorkerPath,

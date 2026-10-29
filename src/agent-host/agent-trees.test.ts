@@ -28,7 +28,7 @@ async function setup(
   rows: ProcessRow[][],
   { closeWaitMs }: { closeWaitMs?: number } = {},
 ) {
-  dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-trees-'))
+  dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-trees-'))
   const calls: string[] = []
   const logs: string[] = []
   let listed = 0

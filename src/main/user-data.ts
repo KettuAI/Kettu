@@ -1,7 +1,7 @@
 import { join, resolve } from 'node:path'
 
 /** The folder beside the installed app's own that unpackaged runs use. */
-export const DEV_DATA_FOLDER = 'OverBench Dev'
+export const DEV_DATA_FOLDER = 'Kettu Dev'
 
 export interface UserDataInput {
   isPackaged: boolean
@@ -9,7 +9,7 @@ export interface UserDataInput {
   switchValue: string
   /** `app.getPath('appData')`. */
   appData: string
-  /** The value of `OVERBENCH_USER_DATA`, if set. */
+  /** The value of `KETTU_USER_DATA`, if set. */
   override: string | undefined
   /** Where a relative `override` is resolved from. */
   cwd: string

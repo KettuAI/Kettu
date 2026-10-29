@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.stubGlobal('window', { overbench: { perf: false } })
+vi.stubGlobal('window', { kettu: { perf: false } })
 
 const {
   closeArtifact,
@@ -85,8 +85,8 @@ describe('settings view', () => {
   })
 
   it("opens the page of one item of any section, and back to that section's list", () => {
-    openSettingsItem('mcp', 'overbench')
-    expect(settings()).toEqual({ open: true, section: 'mcp', item: 'overbench' })
+    openSettingsItem('mcp', 'kettu')
+    expect(settings()).toEqual({ open: true, section: 'mcp', item: 'kettu' })
     settingsBack()
     expect(settings()).toEqual({ open: true, section: 'mcp', item: null })
     settingsBack()

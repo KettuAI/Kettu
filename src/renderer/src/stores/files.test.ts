@@ -4,7 +4,7 @@ import type { FileContent } from '@shared/files'
 
 const request = vi.fn()
 const setUnsaved = vi.fn()
-vi.stubGlobal('window', { overbench: { agents: { request }, app: { setUnsaved } } })
+vi.stubGlobal('window', { kettu: { agents: { request }, app: { setUnsaved } } })
 
 const files = await import('./files')
 const { buffers, useFilesStore } = files
@@ -167,7 +167,7 @@ describe('an SVG', () => {
     kind: 'media',
     path,
     grant: {
-      url: `overbench-media://${'a'.repeat(26)}/${path}?v=${v}`,
+      url: `kettu-media://${'a'.repeat(26)}/${path}?v=${v}`,
       kind: 'image',
       mimeType: 'image/svg+xml',
       size: svg.length,

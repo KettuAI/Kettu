@@ -53,7 +53,7 @@ async function render(artifact: ThumbnailOf): Promise<Thumbnail> {
     })
     if (version === artifact.version) layout = thumbnailLayout(parseCanvas(html))
   }
-  const src = await window.overbench.artifacts.thumbnail(artifact.id, artifact.version, layout)
+  const src = await window.kettu.artifacts.thumbnail(artifact.id, artifact.version, layout)
   if (!src) return { state: 'failed' }
   if (!layout) return { state: 'ready', src, pages: null }
   const fit = fitThumbnail(layout)

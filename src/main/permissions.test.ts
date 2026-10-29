@@ -77,7 +77,7 @@ describe('isPermissionAllowed', () => {
   })
 
   it('denies every permission to an artifact, in its frame or alone', () => {
-    const artifact = 'overbench-artifact://0123456789abcdef0123456789/'
+    const artifact = 'kettu-artifact://0123456789abcdef0123456789/'
     for (const permission of [...DENIED, 'clipboard-read', 'clipboard-sanitized-write']) {
       for (const isMainFrame of [false, true]) {
         const context = { url: artifact, isMainFrame }
@@ -145,7 +145,7 @@ describe('restrictPermissions', () => {
 
   it("denies every request and check from an artifact's frame", () => {
     const { request, check } = installed()
-    const artifact = 'overbench-artifact://0123456789abcdef0123456789/'
+    const artifact = 'kettu-artifact://0123456789abcdef0123456789/'
     const details = { isMainFrame: false, requestingUrl: artifact }
     const answers: boolean[] = []
     for (const permission of [...DENIED, 'clipboard-read', 'clipboard-sanitized-write']) {

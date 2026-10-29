@@ -47,7 +47,7 @@ export function PageFrame({
 
   useEffect(
     () =>
-      window.overbench.artifacts.onBlocked((event) => {
+      window.kettu.artifacts.onBlocked((event) => {
         if (event.origin !== origin) return
         setBlocked(event.url)
         // The page's own frame left for an error page; it comes back, though its state is gone.

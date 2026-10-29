@@ -25,7 +25,7 @@ function page(title: string, body = ''): string {
 }
 
 beforeAll(async () => {
-  dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-browser-'))
+  dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-browser-'))
   server = createServer((request, response) => {
     const url = request.url ?? '/'
     if (url === '/download') {
@@ -83,8 +83,8 @@ async function run(): Promise<Record<string, unknown>> {
   const env = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => name !== 'ELECTRON_RUN_AS_NODE'),
   )
-  env.OVERBENCH_BROWSER_RESULT = result
-  env.OVERBENCH_BROWSER_FIXTURE = fixture
+  env.KETTU_BROWSER_RESULT = result
+  env.KETTU_BROWSER_FIXTURE = fixture
   const args = [
     path.join(dir!, 'harness', 'main.cjs'),
     `--user-data-dir=${data}`,

@@ -84,7 +84,7 @@ describe('shellEnvironment', () => {
       HOME: '/h',
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
-      TERM_PROGRAM: 'OverBench',
+      TERM_PROGRAM: 'Kettu',
       TERM_PROGRAM_VERSION: '0.3.0',
     })
   })
@@ -104,7 +104,7 @@ describe('pathLookup', () => {
   })
 
   it('finds the first matching program on PATH', async () => {
-    dir = await mkdtemp(join(tmpdir(), 'overbench-path-'))
+    dir = await mkdtemp(join(tmpdir(), 'kettu-path-'))
     const first = join(dir, 'a')
     const second = join(dir, 'b')
     await mkdir(first)

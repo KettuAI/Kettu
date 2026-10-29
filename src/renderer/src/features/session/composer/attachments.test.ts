@@ -321,7 +321,7 @@ describe('picked and dropped files', () => {
     }) satisfies Attachment
 
   beforeEach(() => {
-    vi.stubGlobal('window', { overbench: { attachments: { pick, fromFiles, fromClipboard } } })
+    vi.stubGlobal('window', { kettu: { attachments: { pick, fromFiles, fromClipboard } } })
     request.mockImplementation((async (method: string, params: Record<string, unknown>) => {
       const source = params.source as
         { grantId?: string; name?: string; projectPath?: string; path?: string } | undefined

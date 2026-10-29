@@ -1084,7 +1084,7 @@ function pauseView({ agentId, limit }: LimitPause): NonNullable<RoutineView['pau
   }
 }
 
-/** A plan-limit window's name: OverBench's for the windows it knows, else the agent's own. */
+/** A plan-limit window's name: Kettu's for the windows it knows, else the agent's own. */
 function windowName(limit: PlanLimit): string {
   const key = `planWindow.${limit.window}`
   if (hasMessage(key)) return (t as (key: string) => string)(key)

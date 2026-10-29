@@ -128,7 +128,7 @@ describe('removing sessions with no message, once', () => {
     const keptParent = await create(first, before)
     const usedChild = await create(first, before, keptParent)
     await talk(before, usedChild)
-    // OverBench stored no thread of an imported session it has not opened yet.
+    // Kettu stored no thread of an imported session it has not opened yet.
     const imported = (
       await before.request('sessions.import', {
         agentId: 'fake-agent',
@@ -181,7 +181,7 @@ describe('removing sessions with no message, once', () => {
         }
       }
     })
-    // The agent's own notice, or one that says the agent holds history OverBench did not store.
+    // The agent's own notice, or one that says the agent holds history Kettu did not store.
     const head = (await stored(t, noticed))!.head
     await t.host.threads!.write(noticed, {
       head,

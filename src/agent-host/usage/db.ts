@@ -1,4 +1,4 @@
-// The usage database: OverBench's record and the imported log rows, summed per quarter hour.
+// The usage database: Kettu's record and the imported log rows, summed per quarter hour.
 // node:sqlite is synchronous, so this runs in the usage worker, never on the host's event loop.
 
 import { existsSync, mkdirSync, renameSync } from 'node:fs'
@@ -62,7 +62,7 @@ const SCHEMA = `
 `
 
 // Version 1 kept no split of the cache writes and no turns. Claude Code's rows are dropped, since
-// its reader is the one that fills the hour's cache writes, and OverBench's buckets are rebuilt
+// its reader is the one that fills the hour's cache writes, and Kettu's buckets are rebuilt
 // from its rows so their turns match.
 const UPGRADE_1 = `
   ALTER TABLE usage ADD COLUMN cache_write_1h INTEGER NOT NULL DEFAULT 0;
@@ -73,16 +73,16 @@ const UPGRADE_1 = `
   DELETE FROM buckets WHERE source = 'log' AND agent_id = 'claude-code';
   DELETE FROM cursors WHERE agent_id = 'claude-code';
   UPDATE usage SET turn = 1 WHERE key IN (
-    SELECT MIN(key) FROM usage WHERE source = 'overbench'
+    SELECT MIN(key) FROM usage WHERE source = 'kettu'
     GROUP BY substr(key, 1, length(key) - length(model))
   );
-  DELETE FROM buckets WHERE source = 'overbench';
+  DELETE FROM buckets WHERE source = 'kettu';
   INSERT INTO buckets (quarter, source, agent_id, model, project, rows, input, output, reasoning,
     cache_read, cache_write, cache_write_1h, turns)
   SELECT CAST(at / ${QUARTER_MS} AS INTEGER), source, agent_id, model, COALESCE(project, ''),
     COUNT(*), SUM(input), SUM(output), COALESCE(SUM(reasoning), 0), SUM(cache_read),
     SUM(cache_write), SUM(cache_write_1h), SUM(turn)
-  FROM usage WHERE source = 'overbench'
+  FROM usage WHERE source = 'kettu'
   GROUP BY CAST(at / ${QUARTER_MS} AS INTEGER), source, agent_id, model, COALESCE(project, '');
 `
 
@@ -595,12 +595,12 @@ export class UsageDb {
     }, undefined)
   }
 
-  /** Deletes OverBench's own record; the imported logs stay. */
+  /** Deletes Kettu's own record; the imported logs stay. */
   clearRecord(): void {
     this.guard((sql, db) => {
       this.transaction(db, () => {
-        sql.deleteSourceRows.run('overbench')
-        sql.deleteSourceBuckets.run('overbench')
+        sql.deleteSourceRows.run('kettu')
+        sql.deleteSourceBuckets.run('kettu')
       })
     }, undefined)
   }

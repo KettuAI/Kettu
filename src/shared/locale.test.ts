@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { matchLocale, resolveLocale } from './locale'
 
 describe('matchLocale', () => {
-  it('takes the first preferred language OverBench speaks', () => {
+  it('takes the first preferred language Kettu speaks', () => {
     expect(matchLocale(['zh-Hans-CN', 'en-US'])).toBe('zh-CN')
     expect(matchLocale(['en-GB', 'zh-CN'])).toBe('en')
     expect(matchLocale(['fr-FR', 'zh-CN'])).toBe('zh-CN')

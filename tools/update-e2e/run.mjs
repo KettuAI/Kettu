@@ -38,7 +38,7 @@ const root = resolve(import.meta.dirname, '..', '..')
 const OLD_VERSION = '0.0.900'
 const NEW_VERSION = '0.0.901'
 const UPDATE_TIMEOUT_MS = 3 * 60 * 1000
-const MAC_APP = '/Applications/OverBench.app'
+const MAC_APP = '/Applications/Kettu.app'
 /** @param {number} ms @returns {Promise<void>} */
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 /** @param {string} text */
@@ -93,12 +93,12 @@ export function readAppState(text) {
  */
 export function defaultDataFolder({ platform, home, appData, xdgConfigHome }) {
   if (platform === 'darwin') {
-    return join(home, 'Library', 'Application Support', 'OverBench')
+    return join(home, 'Library', 'Application Support', 'Kettu')
   }
   if (platform === 'win32') {
-    return join(appData ?? join(home, 'AppData', 'Roaming'), 'OverBench')
+    return join(appData ?? join(home, 'AppData', 'Roaming'), 'Kettu')
   }
-  return join(xdgConfigHome || join(home, '.config'), 'OverBench')
+  return join(xdgConfigHome || join(home, '.config'), 'Kettu')
 }
 
 /**
@@ -109,7 +109,7 @@ export function defaultDataFolder({ platform, home, appData, xdgConfigHome }) {
  * @returns {string}
  */
 export function windowsInstallFolder({ home, localAppData }) {
-  return join(localAppData ?? join(home, 'AppData', 'Local'), 'Programs', 'overbench')
+  return join(localAppData ?? join(home, 'AppData', 'Local'), 'Programs', 'kettu')
 }
 
 /**
@@ -122,7 +122,7 @@ export function windowsInstallFolder({ home, localAppData }) {
 export function namesDmg(href, { version, arch }) {
   if (!href) return false
   const name = safeDecode(href.slice(href.lastIndexOf('/') + 1))
-  return href.includes(`/download/v${version}/`) && name === `OverBench-${version}-${arch}.dmg`
+  return href.includes(`/download/v${version}/`) && name === `Kettu-${version}-${arch}.dmg`
 }
 
 /** @param {string} text */
@@ -266,7 +266,7 @@ function installFromDmg(dmg, mount) {
   mkdirSync(mount, { recursive: true })
   runTool('hdiutil', ['attach', dmg, '-nobrowse', '-readonly', '-mountpoint', mount])
   try {
-    runTool('ditto', [join(mount, 'OverBench.app'), MAC_APP])
+    runTool('ditto', [join(mount, 'Kettu.app'), MAC_APP])
   } finally {
     spawnSync('hdiutil', ['detach', mount, '-force'], { stdio: 'inherit' })
   }
@@ -282,10 +282,10 @@ function runTool(command, args) {
 /** @param {string} out */
 function macExecutable(out) {
   const folder = readdirSync(out).find(
-    (name) => name.startsWith('mac') && existsSync(join(out, name, 'OverBench.app')),
+    (name) => name.startsWith('mac') && existsSync(join(out, name, 'Kettu.app')),
   )
-  if (!folder) throw new Error(`No OverBench.app in ${out}`)
-  return join(out, folder, 'OverBench.app', 'Contents', 'MacOS', 'OverBench')
+  if (!folder) throw new Error(`No Kettu.app in ${out}`)
+  return join(out, folder, 'Kettu.app', 'Contents', 'MacOS', 'Kettu')
 }
 
 /**
@@ -522,7 +522,7 @@ async function main() {
     throw new Error('out/main/index.js is missing; run pnpm build first')
   }
 
-  const scratch = mkdtempSync(join(tmpdir(), 'overbench-update-'))
+  const scratch = mkdtempSync(join(tmpdir(), 'kettu-update-'))
   const userData = join(scratch, 'user-data')
   const oldLog = join(scratch, '0.0.900.log')
   const newLog = join(scratch, '0.0.901.log')
@@ -585,17 +585,17 @@ async function main() {
         timeout: 5 * 60 * 1000,
       })
       if (install.status !== 0 || !installDir) throw new Error(`Installing ${OLD_VERSION} failed`)
-      executable = join(installDir, 'OverBench.exe')
+      executable = join(installDir, 'Kettu.exe')
       if (!existsSync(executable)) throw new Error(`${executable} is missing after installing`)
     } else if (platform === 'linux') {
-      appImage = join(scratch, 'OverBench.AppImage')
+      appImage = join(scratch, 'Kettu.AppImage')
       copyFileSync(join(oldOutput, installer), appImage)
       chmodSync(appImage, 0o755)
       executable = appImage
     } else if (signed) {
       log(`Installing ${OLD_VERSION} into ${MAC_APP}`)
       installFromDmg(join(oldOutput, installer), join(scratch, 'dmg'))
-      executable = join(MAC_APP, 'Contents', 'MacOS', 'OverBench')
+      executable = join(MAC_APP, 'Contents', 'MacOS', 'Kettu')
     } else {
       executable = macExecutable(oldOutput)
     }
@@ -613,7 +613,7 @@ async function main() {
     })
     cdp = await connect(port)
     log(`Window answered on port ${port}`)
-    await waitFor(cdp, 'window.overbench', 'the preload', 60_000)
+    await waitFor(cdp, 'window.kettu', 'the preload', 60_000)
     await waitFor(
       cdp,
       "[...document.querySelectorAll('h1')].some((h) => h.textContent.startsWith('What should'))",
@@ -621,7 +621,7 @@ async function main() {
     )
     log(`Checking for ${NEW_VERSION}`)
     const status = await withTimeout(
-      cdp.evaluate('window.overbench.updates.check()'),
+      cdp.evaluate('window.kettu.updates.check()'),
       60_000,
       'the update check',
     )
@@ -698,7 +698,7 @@ async function main() {
       if (signed) {
         // ShipIt starts 0.0.901 without the Chromium log file; its own logs, in a folder named
         // after the appId, say how far the install got.
-        const shipIt = join(home, 'Library', 'Caches', 'com.overbench.app.ShipIt')
+        const shipIt = join(home, 'Library', 'Caches', 'sh.kettu.app.ShipIt')
         log('ShipIt logs:')
         printLog(join(shipIt, 'ShipIt_stderr.log'))
         printLog(join(shipIt, 'ShipIt_stdout.log'))

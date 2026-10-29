@@ -7,7 +7,7 @@ const electron = vi.hoisted(() => ({
 }))
 
 vi.mock('electron', () => ({
-  app: { name: 'OverBench', isPackaged: true },
+  app: { name: 'Kettu', isPackaged: true },
   Menu: {
     buildFromTemplate: (template: MenuItemConstructorOptions[]) => {
       electron.template = template
@@ -48,12 +48,12 @@ describe('the macOS menu', () => {
   it('labels every item, roles included, in the interface language', () => {
     installMenu(deps())
     const english = labels()
-    expect(english).toEqual(expect.arrayContaining(['About OverBench', 'Settings…', 'Copy']))
+    expect(english).toEqual(expect.arrayContaining(['About Kettu', 'Settings…', 'Copy']))
 
     setLocale('zh-CN')
     installMenu(deps())
     expect(labels()).toEqual(
-      expect.arrayContaining(['关于 OverBench', '设置…', '拷贝', '退出 OverBench', '显示']),
+      expect.arrayContaining(['关于 Kettu', '设置…', '拷贝', '退出 Kettu', '显示']),
     )
     expect(labels()).toHaveLength(english.length)
 

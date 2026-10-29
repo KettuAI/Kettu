@@ -1,12 +1,12 @@
 // What keeps the side panel's browser to plain web pages: one partition for every session, with
-// every permission refused, downloads stopped, and requests to OverBench's own surfaces cancelled.
+// every permission refused, downloads stopped, and requests to Kettu's own surfaces cancelled.
 
 import type { Session, WebContents } from 'electron'
 import { refuseRequests } from '../request-filter'
 
-/** A request that never leaves the partition: a local file or one of OverBench's own schemes. */
+/** A request that never leaves the partition: a local file or one of Kettu's own schemes. */
 export function isForbiddenRequest(url: string, servicePort: number | null): boolean {
-  if (url.startsWith('file:') || url.startsWith('overbench-')) return true
+  if (url.startsWith('file:') || url.startsWith('kettu-')) return true
   if (servicePort === null) return false
   let parsed: URL
   try {
@@ -65,7 +65,7 @@ const NEVER_OPENED = new Set([
 
 /** A scheme that never opens at the top level, whether an agent or the user asks. */
 export function isNeverOpened(url: URL): boolean {
-  return NEVER_OPENED.has(url.protocol) || url.protocol.startsWith('overbench-')
+  return NEVER_OPENED.has(url.protocol) || url.protocol.startsWith('kettu-')
 }
 
 /** The user agent of the Chromium Electron ships, without the token that names Electron. */

@@ -318,8 +318,8 @@ Long paths and a URL, which have no whole words to keep:
 
 | Module | Path | Link |
 | --- | --- | --- |
-| Chunks | \`src/renderer/src/features/session/markdown/chunks.ts\` | https://github.com/overbench/overbench/blob/main/src/renderer/src/features/session/markdown/chunks.ts |
-| Table fit | \`src/renderer/src/features/session/markdown/table-fit.ts\` | https://github.com/overbench/overbench/blob/main/src/renderer/src/features/session/markdown/table-fit.ts |
+| Chunks | \`src/renderer/src/features/session/markdown/chunks.ts\` | https://github.com/KettuAI/Kettu/blob/main/src/renderer/src/features/session/markdown/chunks.ts |
+| Table fit | \`src/renderer/src/features/session/markdown/table-fit.ts\` | https://github.com/KettuAI/Kettu/blob/main/src/renderer/src/features/session/markdown/table-fit.ts |
 
 Nine columns of numbers:
 

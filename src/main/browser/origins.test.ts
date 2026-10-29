@@ -14,7 +14,7 @@ afterEach(async () => {
 })
 
 async function tempFolder(): Promise<string> {
-  const folder = await mkdtemp(path.join(os.tmpdir(), 'overbench-origins-'))
+  const folder = await mkdtemp(path.join(os.tmpdir(), 'kettu-origins-'))
   folders.push(folder)
   return folder
 }

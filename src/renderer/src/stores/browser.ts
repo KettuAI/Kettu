@@ -61,8 +61,8 @@ export const useBrowserStore = create<BrowserStore>()((set) => ({
  * gets a dot.
  */
 export function initBrowser(): void {
-  window.overbench.browser.onState((state) => useBrowserStore.getState().receive(state))
-  window.overbench.browser.onOpened(({ sessionId }) => {
+  window.kettu.browser.onState((state) => useBrowserStore.getState().receive(state))
+  window.kettu.browser.onOpened(({ sessionId }) => {
     const view = useViewStore.getState()
     const summary = useSessionsStore.getState().byId[sessionId]
     if (!summary) return
@@ -94,7 +94,7 @@ export function initBrowser(): void {
     const ids = Object.keys(state.byId)
     for (const id of known) if (!(id in state.byId)) useBrowserStore.getState().forget(id)
     known = new Set(ids)
-    window.overbench.browser.setSessions(ids)
+    window.kettu.browser.setSessions(ids)
   })
-  window.overbench.browser.setSessions([...known])
+  window.kettu.browser.setSessions([...known])
 }

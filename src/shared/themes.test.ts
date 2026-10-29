@@ -12,7 +12,7 @@ import {
 
 const file = (fields: Record<string, unknown> = {}) =>
   JSON.stringify({
-    overbenchTheme: 1,
+    kettuTheme: 1,
     name: 'Nord',
     light: { colors: { 'bg-app': '#eceff4' } },
     dark: { code: 'nord', colors: { 'bg-app': '#2e3440', 'text-primary': '#eceff4' } },
@@ -65,9 +65,9 @@ describe('parseThemeFile', () => {
     expect(errorOf(parseThemeFile('{'))).toEqual({ code: 'not-json' })
     expect(errorOf(parseThemeFile('[]'))).toEqual({ code: 'not-json' })
     expect(errorOf(parseThemeFile('{"name": "x"}'))).toEqual({ code: 'not-theme' })
-    expect(errorOf(parseThemeFile(file({ overbenchTheme: '1' })))).toEqual({ code: 'not-theme' })
-    expect(errorOf(parseThemeFile(file({ overbenchTheme: 0 })))).toEqual({ code: 'not-theme' })
-    expect(errorOf(parseThemeFile(file({ overbenchTheme: 2 })))).toEqual({ code: 'newer-format' })
+    expect(errorOf(parseThemeFile(file({ kettuTheme: '1' })))).toEqual({ code: 'not-theme' })
+    expect(errorOf(parseThemeFile(file({ kettuTheme: 0 })))).toEqual({ code: 'not-theme' })
+    expect(errorOf(parseThemeFile(file({ kettuTheme: 2 })))).toEqual({ code: 'newer-format' })
     expect(errorOf(parseThemeFile(' '.repeat(THEME_MAX_BYTES + 1)))).toEqual({ code: 'too-large' })
   })
 
@@ -92,7 +92,7 @@ describe('parseThemeFile', () => {
   })
 
   it("refuses a name that takes the built-in theme's id", () => {
-    expect(errorOf(parseThemeFile(file({ name: 'OverBench' })))).toEqual({ code: 'reserved-name' })
+    expect(errorOf(parseThemeFile(file({ name: 'Kettu' })))).toEqual({ code: 'reserved-name' })
     expect(errorOf(parseThemeFile(file({ name: ' over bench ' })))).not.toEqual({
       code: 'reserved-name',
     })

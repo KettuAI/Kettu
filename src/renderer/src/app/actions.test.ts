@@ -5,7 +5,7 @@ import type { UserContent } from '@shared/thread'
 const request = vi.fn()
 const openProject = vi.fn()
 vi.stubGlobal('window', {
-  overbench: { agents: { request }, dialogs: { openProject }, perf: false },
+  kettu: { agents: { request }, dialogs: { openProject }, perf: false },
   matchMedia: () => ({ matches: false, addEventListener: () => {} }),
 })
 

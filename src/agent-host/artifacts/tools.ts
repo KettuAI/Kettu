@@ -31,7 +31,7 @@ const FORMAT =
 
 /** The service's `instructions`, which an agent reads when it connects. */
 export const INSTRUCTIONS =
-  'OverBench shows artifacts to the user: HTML pages for them to look at, such as reports, slide ' +
+  'Kettu shows artifacts to the user: HTML pages for them to look at, such as reports, slide ' +
   'decks, design options and prototypes. Use create_artifact for a page the user should see, not ' +
   `for files of the project you are working on. ${FORMAT} To change an artifact, read it, then ` +
   'call update_artifact with the version you read; if it changed since, read it again.'
@@ -58,7 +58,7 @@ export interface Caller {
 
 export interface ArtifactToolsDeps {
   store: ArtifactStore
-  /** A session's title, null for one without a title, or undefined for one OverBench forgot. */
+  /** A session's title, null for one without a title, or undefined for one Kettu forgot. */
   sessionTitle(sessionId: string): string | null | undefined
   /**
    * The session's running turn, compared by identity, so that what it reads or writes counts as
@@ -139,7 +139,7 @@ export const TOOLS: Tool[] = [
     name: 'create_artifact',
     title: 'Create artifact',
     description:
-      'Makes a new artifact, an HTML page OverBench shows the user, at version 1. ' +
+      'Makes a new artifact, an HTML page Kettu shows the user, at version 1. ' +
       `${FORMAT} Returns its id, which update_artifact and read_artifact take.`,
     inputSchema: object({ title: TITLE, html: HTML, note: NOTE }, ['title', 'html']),
     outputSchema: output({ id: ID, version: VERSION, pages: PAGES }),
@@ -559,7 +559,7 @@ export class ArtifactTools {
       case 'deleted':
         return new ToolError(
           'deleted',
-          `${artifact} was deleted. The user can restore it in OverBench.`,
+          `${artifact} was deleted. The user can restore it in Kettu.`,
         )
       case 'conflict': {
         const head = error.state?.version

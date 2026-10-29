@@ -267,11 +267,11 @@ export function PlayElsewhere({
   }
   return (
     <>
-      <Button variant="outline" size="xs" onClick={act(window.overbench.media.openExternal)}>
+      <Button variant="outline" size="xs" onClick={act(window.kettu.media.openExternal)}>
         <ExternalLinkIcon />
         {t('media.openWithDefault')}
       </Button>
-      <Button variant="outline" size="xs" onClick={act(window.overbench.media.reveal)}>
+      <Button variant="outline" size="xs" onClick={act(window.kettu.media.reveal)}>
         <FolderIcon />
         {t('media.showIn', { name: fileManagerName() })}
       </Button>

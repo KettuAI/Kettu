@@ -108,7 +108,7 @@ function checkProxy(value: unknown, path: string): string | null {
 
 const AGENT_KEYS: readonly string[] = ['binaryPath', 'cli', 'configDir']
 
-/** The agents OverBench's own MCP server is off for: each a catalog id, once. */
+/** The agents Kettu's own MCP server is off for: each a catalog id, once. */
 function checkMcpOff(value: unknown, path: string): string | null {
   if (!Array.isArray(value)) return `"${path}" must be an array`
   const seen = new Set<unknown>()
@@ -129,13 +129,13 @@ function checkStoredPath(value: unknown, path: string): string | null {
 
 function checkMcp(value: unknown, path: string): string | null {
   if (!isRecord(value)) return `"${path}" must be an object`
-  const extra = Object.keys(value).find((key) => key !== 'overbench')
+  const extra = Object.keys(value).find((key) => key !== 'kettu')
   if (extra) return `Unknown setting "${path}.${extra}"`
-  const overbench = value.overbench
-  if (!isRecord(overbench)) return `"${path}.overbench" must be an object`
-  const unknown = Object.keys(overbench).find((key) => key !== 'off')
-  if (unknown) return `Unknown setting "${path}.overbench.${unknown}"`
-  return checkMcpOff(overbench.off, `${path}.overbench.off`)
+  const kettu = value.kettu
+  if (!isRecord(kettu)) return `"${path}.kettu" must be an object`
+  const unknown = Object.keys(kettu).find((key) => key !== 'off')
+  if (unknown) return `Unknown setting "${path}.kettu.${unknown}"`
+  return checkMcpOff(kettu.off, `${path}.kettu.off`)
 }
 
 function normalizeProxy(proxy: ProxySettings): ProxySettings {
@@ -236,7 +236,7 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
     if (changes) Object.assign(next[section], changes)
   }
   if (patch.proxy) next.proxy = normalizeProxy(patch.proxy)
-  if (patch.mcp) next.mcp = { overbench: { off: [...patch.mcp.overbench.off] } }
+  if (patch.mcp) next.mcp = { kettu: { off: [...patch.mcp.kettu.off] } }
   if (patch.agents) {
     for (const agentId of Object.keys(patch.agents) as AgentId[]) {
       const change = patch.agents[agentId]
@@ -383,13 +383,13 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
 
 /** Reads the MCP section leniently: an unknown or repeated id is dropped and the rest kept. */
 function readMcp(raw: Record<string, unknown>): SettingsFile['mcp'] {
-  const overbench = isRecord(raw.overbench) ? raw.overbench : {}
-  const list = Array.isArray(overbench.off) ? overbench.off : []
+  const kettu = isRecord(raw.kettu) ? raw.kettu : {}
+  const list = Array.isArray(kettu.off) ? kettu.off : []
   const off: AgentId[] = []
   for (const id of list) {
     if (AGENT_IDS.includes(id as AgentId) && !off.includes(id as AgentId)) off.push(id as AgentId)
   }
-  return { overbench: { off } }
+  return { kettu: { off } }
 }
 
 export function hostSettings(settings: SettingsFile, systemLocale: Locale): HostSettings {

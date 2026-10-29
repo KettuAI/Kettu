@@ -53,7 +53,7 @@ export interface AllowedSites {
   origins: string[]
 }
 
-/** What a perf run (--overbench-perf) reads from main. */
+/** What a perf run (--kettu-perf) reads from main. */
 export interface PerfMetrics {
   launchToInteractiveMs: number | null
   /** From `app.getAppMetrics()`; a utility process is named by the serviceName it was forked with. */
@@ -255,10 +255,10 @@ export interface PreloadEventContract {
   'terminal-host:reset': HostResetEvent
 }
 
-/** API the preload script exposes to the renderer as `window.overbench`. */
-export interface OverbenchApi {
+/** API the preload script exposes to the renderer as `window.kettu`. */
+export interface KettuApi {
   platform: Platform
-  /** Whether the app runs with --overbench-perf, which turns on the renderer's frame counters. */
+  /** Whether the app runs with --kettu-perf, which turns on the renderer's frame counters. */
   perf: boolean
   /** The interface language the system's preferred languages pick, for Language › System. */
   systemLocale: Locale

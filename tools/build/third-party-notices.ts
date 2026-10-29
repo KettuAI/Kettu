@@ -161,7 +161,7 @@ export function collectNotices(root: string, bundled: Iterable<string>): Notice[
   if (!electron) throw new Error('electron is not installed')
   const notice = readNotice(electron)
   notice.lines.push(
-    'Chromium and the libraries it uses: see LICENSES.chromium.html, installed with OverBench.',
+    'Chromium and the libraries it uses: see LICENSES.chromium.html, installed with Kettu.',
   )
   notices.push(notice)
   return notices
@@ -174,8 +174,8 @@ export function renderNotices(notices: Notice[]): string {
     (a, b) => compare(a.name, b.name) || compare(a.version, b.version),
   )
   const parts = [
-    'Third-party notices for OverBench\n\n' +
-      'OverBench ships the packages below. Each is listed with its version, its license and the ' +
+    'Third-party notices for Kettu\n\n' +
+      'Kettu ships the packages below. Each is listed with its version, its license and the ' +
       'license and notice files it ships.\n',
   ]
   for (const notice of sorted) {
@@ -202,7 +202,7 @@ export function thirdPartyNotices(root: string): () => Plugin {
   return () => {
     let write = false
     return {
-      name: 'overbench:third-party-notices',
+      name: 'kettu:third-party-notices',
       apply: 'build',
       configResolved(config) {
         write = config.mode === 'production' && !config.build.watch

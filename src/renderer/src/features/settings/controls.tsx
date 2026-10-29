@@ -197,7 +197,7 @@ export function RevealAction({ path }: { path: string }) {
         label={t('agents.showIn', { name: fileManagerName() })}
         onClick={() => {
           setError(null)
-          window.overbench.shell.showItem(path).catch((e: unknown) => setError(errorMessage(e)))
+          window.kettu.shell.showItem(path).catch((e: unknown) => setError(errorMessage(e)))
         }}
       >
         <FolderIcon />

@@ -134,7 +134,7 @@ async function checkForAgentUpdates(): Promise<void> {
   if (error) throw new Error(error)
 }
 
-/** The way OverBench would install it now, or null when it cannot. */
+/** The way Kettu would install it now, or null when it cannot. */
 function installMethod(status: AgentStatus, picked?: string): AgentInstallMethod | null {
   const available = status.installMethods.filter((m) => m.available)
   return available.find((m) => m.id === picked) ?? available[0] ?? null
@@ -1184,7 +1184,7 @@ function InstallNotice({ status }: { status: AgentStatus }) {
                   size="sm"
                   className="-ml-2 text-secondary"
                   onClick={() =>
-                    void window.overbench.dialogs
+                    void window.kettu.dialogs
                       .chooseAgentBinary(status.id)
                       .catch((e: unknown) => console.warn(errorMessage(e)))
                   }
@@ -1467,7 +1467,7 @@ function ConfigRows({ status, override }: { status: AgentStatus; override: strin
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => act(() => window.overbench.dialogs.chooseAgentBinary(status.id))}
+                onClick={() => act(() => window.kettu.dialogs.chooseAgentBinary(status.id))}
               >
                 {t('agents.chooseBinary')}
               </Button>
@@ -1653,7 +1653,7 @@ function FolderRow({
     // A press while the dialog is open does nothing, so the button keeps the focus.
     if (asking) return
     act(() =>
-      window.overbench.dialogs.chooseAgentConfigFolder(status.id).then((path) => {
+      window.kettu.dialogs.chooseAgentConfigFolder(status.id).then((path) => {
         if (path) setOpen(false)
       }),
     )

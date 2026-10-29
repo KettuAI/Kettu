@@ -374,7 +374,7 @@ describe('replayed attachments', () => {
       {
         type: 'file',
         name: 'notes.txt',
-        uri: 'file:///tmp/overbench-140-proj/notes.txt',
+        uri: 'file:///tmp/kettu-140-proj/notes.txt',
         sent: 'embedded',
         thumb: null,
         blob: null,
@@ -410,11 +410,11 @@ describe('replayed attachments', () => {
     const { entries } = run(fixture(opencodeReplay), { replaying: true })
     expect(entries.map((entry) => entry.kind)).toEqual(['user'])
     expect(attachments(entries)).toMatchObject([
-      { type: 'image', name: 'Image 1', uri: 'file:///private/tmp/overbench-140-proj/image' },
+      { type: 'image', name: 'Image 1', uri: 'file:///private/tmp/kettu-140-proj/image' },
       {
         type: 'file',
         name: 'notes.txt',
-        uri: 'file:///private/tmp/overbench-140-proj/notes.txt',
+        uri: 'file:///private/tmp/kettu-140-proj/notes.txt',
         mimeType: 'text/plain',
         size: 23,
         sent: 'embedded',
@@ -422,7 +422,7 @@ describe('replayed attachments', () => {
       {
         type: 'file',
         name: 'notes.txt',
-        uri: 'file:///tmp/overbench-140-proj/notes.txt',
+        uri: 'file:///tmp/kettu-140-proj/notes.txt',
         mimeType: 'text/plain',
         sent: 'linked',
       },

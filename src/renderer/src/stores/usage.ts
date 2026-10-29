@@ -30,7 +30,7 @@ export interface ContextReport {
 
 /** What the usage page shows; kept while the app runs, back to the defaults on launch. */
 export interface UsageFilters {
-  /** What the figures count: tokens, requests (turns under OverBench only), or cost. */
+  /** What the figures count: tokens, requests (turns under Kettu only), or cost. */
   metric: Metric
   agent: AgentFilter
   range: RangeChoice

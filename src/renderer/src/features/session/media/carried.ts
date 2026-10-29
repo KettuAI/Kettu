@@ -19,5 +19,5 @@ export function base64Bytes(data: string): Uint8Array {
 
 /** Save as… for carried bytes; false when the dialog was cancelled. */
 export function saveCarried(mimeType: string, data: string, name: string): Promise<boolean> {
-  return window.overbench.media.saveAs({ bytes: base64Bytes(data), mimeType, name })
+  return window.kettu.media.saveAs({ bytes: base64Bytes(data), mimeType, name })
 }

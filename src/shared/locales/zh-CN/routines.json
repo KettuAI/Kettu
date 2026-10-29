@@ -1,22 +1,22 @@
 {
   "page": {
     "title": "例程",
-    "description": "在 OverBench 打开时按计划运行提示词，每次运行都在一个可以之后打开的会话里。",
+    "description": "在 Kettu 打开时按计划运行提示词，每次运行都在一个可以之后打开的会话里。",
     "new": "新建例程",
     "on": "开启",
     "off": "关闭",
     "emptyTitle": "还没有例程",
-    "emptyDescription": "例程在 OverBench 打开时按计划把提示词发给 Agent，每次运行都在一个单独的会话里。",
+    "emptyDescription": "例程在 Kettu 打开时按计划把提示词发给 Agent，每次运行都在一个单独的会话里。",
     "unreadableTitle": "无法读取你的例程",
     "unreadable": "routines.json 已另存为 {{backup}}，没有丢失任何内容。新建例程不受影响。",
-    "unreadableGone": "OverBench 以空列表开始。",
+    "unreadableGone": "Kettu 以空列表开始。",
     "loadFailed": "无法加载例程。",
     "retry": "重试",
     "open": "打开 {{name}}",
     "switchOn": "开启 {{name}}",
     "switchOff": "关闭 {{name}}",
     "lastFailed": "它上次运行失败",
-    "openAtLogin": "例程只在 OverBench 打开时运行。",
+    "openAtLogin": "例程只在 Kettu 打开时运行。",
     "openAtLoginAction": "登录时打开"
   },
   "row": {
@@ -221,10 +221,10 @@
       "description": "在任意级别下获取网页和搜索网络。"
     },
     "caption": {
-      "claude-code": "Claude Code 在编辑和大多数命令前会询问，因此 OverBench 会逐条回应。",
+      "claude-code": "Claude Code 在编辑和大多数命令前会询问，因此 Kettu 会逐条回应。",
       "codex": "Codex 有自己的沙箱：选择“编辑项目”时，它也会在项目内不经询问地运行命令；离开项目或访问网络时会询问。",
-      "opencode": "OpenCode 只对它自己的权限设置标为“ask”的操作询问；默认什么都不问，所以 OverBench 无法把它限制在这个权限范围内。",
-      "pi": "Pi 执行任何操作前都不会询问，所以 OverBench 无法把它限制在这个权限范围内。"
+      "opencode": "OpenCode 只对它自己的权限设置标为“ask”的操作询问；默认什么都不问，所以 Kettu 无法把它限制在这个权限范围内。",
+      "pi": "Pi 执行任何操作前都不会询问，所以 Kettu 无法把它限制在这个权限范围内。"
     }
   },
   "limit": {

@@ -54,7 +54,7 @@ export interface FakeAgentOptions {
 
 /** The file `main.ts --login` creates, which signs a signed-out agent back in. */
 export function loginMarkerPath(env: Env): string {
-  return env.FAKE_AGENT_LOGIN_MARKER ?? join(tmpdir(), 'overbench-fake-agent-login')
+  return env.FAKE_AGENT_LOGIN_MARKER ?? join(tmpdir(), 'kettu-fake-agent-login')
 }
 
 interface Recorded {

@@ -61,7 +61,7 @@ const CONTRAST_SHOWN = 10
 /** Truncates, never rounds up, as the contrast check does, so 4.49 never shows as 4.50. */
 const formatRatio = (ratio: number) => (Math.floor(ratio * 100) / 100).toFixed(2)
 
-/** The Theme group: OverBench, the installed themes by name, and the ways to add one. */
+/** The Theme group: Kettu, the installed themes by name, and the ways to add one. */
 export function ThemeTiles() {
   const { t } = useTranslation(['settings', 'common'])
   const { installed, chosen, failed } = useThemesStore((s) => s.state)
@@ -77,7 +77,7 @@ export function ThemeTiles() {
 
   // The folder is read again each time the page shows, so a file changed by hand shows here.
   useEffect(() => {
-    window.overbench.themes
+    window.kettu.themes
       .get()
       .then(receiveThemes, (e: unknown) => setNotice({ kind: 'error', message: errorMessage(e) }))
   }, [])
@@ -96,7 +96,7 @@ export function ThemeTiles() {
       setNotice({ kind: 'installed', id: result.id, ignored: result.ignored })
     }
   }
-  const install = () => run(async () => answered(await window.overbench.themes.install()))
+  const install = () => run(async () => answered(await window.kettu.themes.install()))
   const tile = (id: string, theme: Theme | null, item?: InstalledTheme) => (
     <ThemeTile
       key={id}
@@ -105,7 +105,7 @@ export function ThemeTiles() {
       source={item?.catalog ? 'catalog' : item ? 'file' : 'builtIn'}
       onExport={() =>
         run(async () => {
-          const saved = await window.overbench.themes.export(themeFile(theme))
+          const saved = await window.kettu.themes.export(themeFile(theme))
           if (saved) {
             toast(
               t('appearance.theme.exported', {
@@ -117,7 +117,7 @@ export function ThemeTiles() {
         })
       }
       {...(item && {
-        onReveal: () => run(() => window.overbench.themes.reveal(item.id)),
+        onReveal: () => run(() => window.kettu.themes.reveal(item.id)),
         onRemove: (from: HTMLElement | null) => {
           asker.current = from
           setRemoving(item)
@@ -162,9 +162,7 @@ export function ThemeTiles() {
         conflict={conflict}
         open={replaceOpen}
         onOpenChange={setReplaceOpen}
-        onReplace={(token) =>
-          run(async () => answered(await window.overbench.themes.replace(token)))
-        }
+        onReplace={(token) => run(async () => answered(await window.kettu.themes.replace(token)))}
       />
 
       <AlertDialog open={removeOpen} onOpenChange={setRemoveOpen}>
@@ -186,7 +184,7 @@ export function ThemeTiles() {
                 if (!removing) return
                 const { id, theme } = removing
                 run(async () => {
-                  await window.overbench.themes.remove(id)
+                  await window.kettu.themes.remove(id)
                   toast(t('appearance.theme.removed', { name: theme.name }))
                 })
               }}
@@ -219,7 +217,7 @@ function ThemeTile({
   onRemove?: (from: HTMLElement | null) => void
 }) {
   const { t } = useTranslation('settings')
-  const name = theme?.name ?? 'OverBench'
+  const name = theme?.name ?? 'Kettu'
   const issues = useMemo(() => themeContrast(theme), [theme])
   const more = useRef<HTMLButtonElement>(null)
   return (

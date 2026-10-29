@@ -5,10 +5,10 @@ const HOST = '0123456789abcdef0123456789'
 
 describe('mayRequest', () => {
   it.each([
-    `overbench-artifact://${HOST}/`,
-    `overbench-artifact://${HOST}/index.html?v=2`,
+    `kettu-artifact://${HOST}/`,
+    `kettu-artifact://${HOST}/index.html?v=2`,
     'data:image/png;base64,AAAA',
-    `blob:overbench-artifact://${HOST}/0b1c`,
+    `blob:kettu-artifact://${HOST}/0b1c`,
     ...ARTIFACT_CDNS.map((origin) => `${origin}/lib.js`),
     'https://cdn.jsdelivr.net:443/npm/chart.js',
   ])('lets a page load %s', (url) => {
@@ -16,7 +16,7 @@ describe('mayRequest', () => {
   })
 
   it.each([
-    'overbench-artifact://ffffffffffffffffffffffffff/',
+    'kettu-artifact://ffffffffffffffffffffffffff/',
     'https://example.com/collect?d=secret',
     'http://cdn.jsdelivr.net/npm/x',
     'https://cdn.jsdelivr.net:8443/npm/x',

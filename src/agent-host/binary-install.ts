@@ -67,7 +67,7 @@ export function archiveEntry(
   return release?.entries[archiveKey(platform, arch)] ?? null
 }
 
-/** The archive route's own fields, for the install OverBench downloads and extracts itself. */
+/** The archive route's own fields, for the install Kettu downloads and extracts itself. */
 export interface ArchivePlan {
   version: string
   url: string
@@ -114,7 +114,7 @@ const platformPath = (platform: Platform): typeof path.posix =>
   platform === 'win32' ? path.win32 : path.posix
 
 /**
- * The routes in the order OverBench prefers; the archive comes first when the registry ships one
+ * The routes in the order Kettu prefers; the archive comes first when the registry ships one
  * for this platform, then Homebrew and the script on macOS and Linux, then npm.
  */
 export async function installPlans(

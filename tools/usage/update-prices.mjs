@@ -1,5 +1,5 @@
 // Takes a fresh LiteLLM price snapshot for the usage page, cut to the chat models and the prices
-// OverBench counts with. The Release workflow runs it before the build, so every release carries
+// Kettu counts with. The Release workflow runs it before the build, so every release carries
 // its day's prices; the app never fetches anything. `--if-changed` leaves the file alone when no
 // price changed. A failed fetch keeps the committed snapshot and warns in the run.
 

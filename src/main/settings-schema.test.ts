@@ -61,12 +61,12 @@ describe('validateSettingsPatch', () => {
     })
   })
 
-  it('takes the agents OverBench’s server is off for, each once', () => {
-    expect(
-      validateSettingsPatch({ mcp: { overbench: { off: ['codex', 'claude-code'] } } }),
-    ).toEqual({ mcp: { overbench: { off: ['codex', 'claude-code'] } } })
-    expect(validateSettingsPatch({ mcp: { overbench: { off: [] } } })).toEqual({
-      mcp: { overbench: { off: [] } },
+  it('takes the agents Kettu’s server is off for, each once', () => {
+    expect(validateSettingsPatch({ mcp: { kettu: { off: ['codex', 'claude-code'] } } })).toEqual({
+      mcp: { kettu: { off: ['codex', 'claude-code'] } },
+    })
+    expect(validateSettingsPatch({ mcp: { kettu: { off: [] } } })).toEqual({
+      mcp: { kettu: { off: [] } },
     })
   })
 
@@ -106,16 +106,10 @@ describe('validateSettingsPatch', () => {
     [{ updates: { automatic: 'always' } }, '"updates.automatic" must be one of'],
     [{ privacy: { hideAccount: 'yes' } }, '"privacy.hideAccount" must be a boolean'],
     [{ privacy: { hideEmail: true } }, 'Unknown setting "privacy.hideEmail"'],
-    [
-      { mcp: { overbench: { off: ['unknown-agent'] } } },
-      '"mcp.overbench.off" names an unknown agent',
-    ],
-    [
-      { mcp: { overbench: { off: ['codex', 'codex'] } } },
-      '"mcp.overbench.off" names an agent twice',
-    ],
-    [{ mcp: { overbench: { off: 'codex' } } }, '"mcp.overbench.off" must be an array'],
-    [{ mcp: { overbench: { on: [] } } }, 'Unknown setting "mcp.overbench.on"'],
+    [{ mcp: { kettu: { off: ['unknown-agent'] } } }, '"mcp.kettu.off" names an unknown agent'],
+    [{ mcp: { kettu: { off: ['codex', 'codex'] } } }, '"mcp.kettu.off" names an agent twice'],
+    [{ mcp: { kettu: { off: 'codex' } } }, '"mcp.kettu.off" must be an array'],
+    [{ mcp: { kettu: { on: [] } } }, 'Unknown setting "mcp.kettu.on"'],
     [{ mcp: { off: [] } }, 'Unknown setting "mcp.off"'],
     [{ mcp: [] }, '"mcp" must be an object'],
   ])('rejects %j', (patch, message) => {
@@ -194,10 +188,10 @@ describe('mergeSettings', () => {
   })
 
   it('replaces the list of agents the server is off for whole', () => {
-    const off = mergeSettings(defaults(), { mcp: { overbench: { off: ['codex', 'pi'] } } })
-    expect(off.mcp).toEqual({ overbench: { off: ['codex', 'pi'] } })
-    expect(mergeSettings(off, { mcp: { overbench: { off: [] } } }).mcp).toEqual({
-      overbench: { off: [] },
+    const off = mergeSettings(defaults(), { mcp: { kettu: { off: ['codex', 'pi'] } } })
+    expect(off.mcp).toEqual({ kettu: { off: ['codex', 'pi'] } })
+    expect(mergeSettings(off, { mcp: { kettu: { off: [] } } }).mcp).toEqual({
+      kettu: { off: [] },
     })
   })
 })
@@ -211,7 +205,7 @@ describe('parseSettingsFile', () => {
       ...DEFAULT_SETTINGS,
       appearance: { ...DEFAULT_SETTINGS.appearance, theme: 'light' },
     })
-    expect(loaded.settings.appearance.colorTheme).toBe('overbench')
+    expect(loaded.settings.appearance.colorTheme).toBe('kettu')
   })
 
   it('reads a stored thread setting without the link one as asking', () => {
@@ -224,7 +218,7 @@ describe('parseSettingsFile', () => {
     const read = (colorTheme: unknown) =>
       parseSettingsFile({ version: 1, appearance: { colorTheme } })
     expect(read('rose-pine').settings.appearance.colorTheme).toBe('rose-pine')
-    expect(read('../x').settings.appearance.colorTheme).toBe('overbench')
+    expect(read('../x').settings.appearance.colorTheme).toBe('kettu')
     expect(read('../x').problems).toEqual(['"appearance.colorTheme" must be a theme id'])
   })
 
@@ -287,9 +281,9 @@ describe('parseSettingsFile', () => {
   it('reads the agents the server is off for, dropping unknown and repeated ids', () => {
     const loaded = parseSettingsFile({
       version: 1,
-      mcp: { overbench: { off: ['codex', 'codex', 'unknown-agent', 'pi'] } },
+      mcp: { kettu: { off: ['codex', 'codex', 'unknown-agent', 'pi'] } },
     })
-    expect(loaded.settings.mcp).toEqual({ overbench: { off: ['codex', 'pi'] } })
+    expect(loaded.settings.mcp).toEqual({ kettu: { off: ['codex', 'pi'] } })
     expect(loaded.problems).toEqual([])
     expect(loaded.settings.general).toEqual(DEFAULT_SETTINGS.general)
   })
@@ -315,7 +309,7 @@ describe('derived settings', () => {
       agents: { opencode: { binaryPath: '/opt/oc' } },
       proxy: { mode: 'environment' },
       git: { backgroundFetch: false },
-      mcp: { overbench: { off: [] } },
+      mcp: { kettu: { off: [] } },
       usage: { fromComputer: false },
       sessionTitles: true,
     })
@@ -357,7 +351,7 @@ describe('derived settings', () => {
     expect(changed({ usage: { fromComputer: true } })).toBe(true)
     expect(changed({ git: { backgroundFetch: true } })).toBe(true)
     expect(changed({ usage: { sidebar: 'off' } })).toBe(true)
-    expect(changed({ mcp: { overbench: { off: ['codex'] } } })).toBe(true)
+    expect(changed({ mcp: { kettu: { off: ['codex'] } } })).toBe(true)
     expect(changed({ appearance: { theme: 'dark' } })).toBe(false)
   })
 })

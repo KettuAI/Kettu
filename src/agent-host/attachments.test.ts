@@ -40,7 +40,7 @@ const image = (data = PNG, name = 'Image 1') => ({
 })
 
 beforeEach(async () => {
-  dir = await mkdtemp(path.join(tmpdir(), 'overbench-attachments-'))
+  dir = await mkdtemp(path.join(tmpdir(), 'kettu-attachments-'))
   logs = []
   now = 1_000 * DAY
 })
@@ -219,7 +219,7 @@ describe('granted files and folders', () => {
   let files: string
 
   beforeEach(async () => {
-    files = await mkdtemp(path.join(tmpdir(), 'overbench-granted-'))
+    files = await mkdtemp(path.join(tmpdir(), 'kettu-granted-'))
   })
   afterEach(async () => {
     await rm(files, { recursive: true, force: true })

@@ -17,7 +17,7 @@ const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 export function makeProject(dir) {
   mkdirSync(join(dir, 'src'), { recursive: true })
   // Without the caller's GIT_DIR and the like, which git sets for hooks and `git bisect run`;
-  // inherited, they would point these commands at the OverBench repository itself.
+  // inherited, they would point these commands at the Kettu repository itself.
   const env = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')),
   )
@@ -38,7 +38,7 @@ export function launchApp({ port, userData, env = {}, onOutput }) {
     electron,
     [
       '.',
-      '--overbench-perf',
+      '--kettu-perf',
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${userData}`,
       // CI's Ubuntu restricts the user namespaces Chromium's sandbox needs; these runs only read.
@@ -48,7 +48,7 @@ export function launchApp({ port, userData, env = {}, onOutput }) {
       cwd: root,
       env: {
         ...process.env,
-        OVERBENCH_FAKE_AGENT: join(root, 'tools', 'fake-agent', 'main.ts'),
+        KETTU_FAKE_AGENT: join(root, 'tools', 'fake-agent', 'main.ts'),
         ...env,
       },
       stdio: ['ignore', onOutput ? 'pipe' : 'inherit', onOutput ? 'pipe' : 'inherit'],
@@ -140,7 +140,7 @@ async function open(url) {
 /** Adds a project and reloads the window, which picks it up on load; returns a new connection. */
 export async function openProject(port, cdp, path) {
   await cdp.evaluate(
-    `window.overbench.agents.request('projects.add', { path: ${JSON.stringify(path)} })`,
+    `window.kettu.agents.request('projects.add', { path: ${JSON.stringify(path)} })`,
   )
   await cdp.send('Page.reload')
   cdp.close()

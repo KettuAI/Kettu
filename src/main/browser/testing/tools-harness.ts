@@ -10,8 +10,8 @@ import { BrowserOriginStore } from '../origins'
 import { BrowserTools } from '../tools'
 import { BrowserViews } from '../views'
 
-const RESULT = process.env['OVERBENCH_BROWSER_RESULT']!
-const FIXTURE = process.env['OVERBENCH_BROWSER_FIXTURE']!
+const RESULT = process.env['KETTU_BROWSER_RESULT']!
+const FIXTURE = process.env['KETTU_BROWSER_FIXTURE']!
 
 interface Answer {
   ok?: boolean

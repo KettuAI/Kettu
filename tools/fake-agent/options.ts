@@ -99,7 +99,7 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   attachments: { description: 'Lists the images, files and links the prompt carried' },
   chinese: { description: 'A long answer in Chinese, with every Markdown block' },
   artifacts: {
-    description: "Makes or changes a canvas through OverBench's artifacts service, then reads it",
+    description: "Makes or changes a canvas through Kettu's artifacts service, then reads it",
     hint: '--read <artifact id> --until-cancel --child <id> --meta <session id|none> --execute',
   },
   'open-site': {

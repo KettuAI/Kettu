@@ -20,7 +20,7 @@ export function isLocale(value: unknown): value is Locale {
 }
 
 /**
- * The first of the system's preferred languages that OverBench speaks, else English. Only
+ * The first of the system's preferred languages that Kettu speaks, else English. Only
  * Simplified Chinese matches `zh-CN`; Traditional Chinese moves on down the list.
  */
 export function matchLocale(preferred: readonly string[]): Locale {

@@ -123,7 +123,7 @@ afterEach(() => {
 async function initialize(router: RouterProcess): Promise<Record<string, unknown>> {
   return router.result('initialize', {
     protocolVersion: 1,
-    clientInfo: { name: 'OverBench', version: '0.0.0-test' },
+    clientInfo: { name: 'Kettu', version: '0.0.0-test' },
     clientCapabilities: { auth: { terminal: true } },
   })
 }

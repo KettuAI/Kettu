@@ -11,7 +11,7 @@
     "title": "Usage",
     "synced": "Logs synced {{ago}}",
     "syncing": "Reading the logs…",
-    "record": "OverBench's record",
+    "record": "Kettu's record",
     "sync": "Sync now",
     "syncFailed": "Could not sync",
     "agent": "Agent",
@@ -29,7 +29,7 @@
     "scope": "Count from",
     "scopes": {
       "computer": "This computer",
-      "overbench": "OverBench only"
+      "kettu": "Kettu only"
     },
     "importing": "Reading the agents' logs: {{done}} of {{total}}",
     "importingFrom": "{{agents}}, since {{date}}. The page fills in when the logs are read.",
@@ -146,15 +146,15 @@
   "noPrice": "No price",
   "empty": {
     "title": "No usage yet",
-    "description": "OverBench counts the tokens of every turn it runs from now on. To include what the agents used before, and in a terminal, count from their logs on this computer.",
+    "description": "Kettu counts the tokens of every turn it runs from now on. To include what the agents used before, and in a terminal, count from their logs on this computer.",
     "fromComputer": "Count usage on this computer",
-    "waiting": "OverBench counts the tokens of every turn it runs from now on."
+    "waiting": "Kettu counts the tokens of every turn it runs from now on."
   },
   "error": {
     "title": "The usage could not be read",
     "retry": "Retry",
     "kept": "The figures below are the last ones read.",
-    "unavailable": "The usage database cannot be read. Restart OverBench; if it still cannot, export diagnostics.",
+    "unavailable": "The usage database cannot be read. Restart Kettu; if it still cannot, export diagnostics.",
     "export": "Export diagnostics",
     "savedTo": "Saved to {{path}}"
   },
@@ -194,7 +194,7 @@
     },
     "fromComputer": {
       "name": "Usage on this computer",
-      "description": "Also count what Claude Code, Codex and OpenCode recorded in their own logs on this computer, before OverBench and in a terminal. Only token counts, models and times are read, never what was said, and nothing leaves this computer. Either way, OverBench reads the end of the transcript of each Claude Code session it runs, to show when its prompt cache expires.",
+      "description": "Also count what Claude Code, Codex and OpenCode recorded in their own logs on this computer, before Kettu and in a terminal. Only token counts, models and times are read, never what was said, and nothing leaves this computer. Either way, Kettu reads the end of the transcript of each Claude Code session it runs, to show when its prompt cache expires.",
       "keywords": "logs history import tokens statistics"
     },
     "notFound": "No logs found",
@@ -206,7 +206,7 @@
     "reimport": {
       "button": "Re-import…",
       "title": "Re-import {{agent}}'s logs?",
-      "description": "OverBench forgets what it imported from {{agent}} and reads its logs again. History the agent has since deleted from its logs cannot come back.",
+      "description": "Kettu forgets what it imported from {{agent}} and reads its logs again. History the agent has since deleted from its logs cannot come back.",
       "confirm": "Re-import"
     },
     "sidebar": {
@@ -218,10 +218,10 @@
       "off": "Nothing"
     },
     "clear": {
-      "name": "Clear OverBench's record",
-      "description": "Deletes the tokens OverBench recorded for each turn. The agents' logs, and what was imported from them, stay.",
+      "name": "Clear Kettu's record",
+      "description": "Deletes the tokens Kettu recorded for each turn. The agents' logs, and what was imported from them, stay.",
       "button": "Clear…",
-      "title": "Clear OverBench's usage record?",
+      "title": "Clear Kettu's usage record?",
       "confirm": "Clear record"
     }
   }

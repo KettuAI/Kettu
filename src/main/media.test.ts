@@ -122,7 +122,7 @@ describe('respondMedia', () => {
   const bytes = Buffer.from('\x89PNG\r\n\x1a\nrest', 'latin1')
 
   beforeAll(async () => {
-    dir = await realpath(await mkdtemp(join(os.tmpdir(), 'overbench-media-main-')))
+    dir = await realpath(await mkdtemp(join(os.tmpdir(), 'kettu-media-main-')))
     file = join(dir, 'shot.png')
     await writeFile(file, bytes)
   })
@@ -131,7 +131,7 @@ describe('respondMedia', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
-  const url = (n: number) => `overbench-media://${token(n)}/shot.png?v=1`
+  const url = (n: number) => `kettu-media://${token(n)}/shot.png?v=1`
 
   function grants(): MediaGrants {
     const kept = new MediaGrants(0)
@@ -157,7 +157,7 @@ describe('respondMedia', () => {
     expect(head.headers.get('content-length')).toBe(String(bytes.length))
     expect((await respondMedia(new Request(url(0), { method: 'POST' }), grants())).status).toBe(405)
     expect((await respondMedia(new Request(url(1)), grants())).status).toBe(404)
-    const bad = 'overbench-media://not-a-token/shot.png'
+    const bad = 'kettu-media://not-a-token/shot.png'
     expect((await respondMedia(new Request(bad), grants())).status).toBe(404)
   })
 
@@ -226,14 +226,14 @@ describe('respondMedia', () => {
 
 describe('grantedPath', () => {
   it('resolves a granted URL to its file, and nothing else', async () => {
-    const dir = await realpath(await mkdtemp(join(os.tmpdir(), 'overbench-media-path-')))
+    const dir = await realpath(await mkdtemp(join(os.tmpdir(), 'kettu-media-path-')))
     try {
       const file = join(dir, 'demo.mp4')
       await writeFile(file, 'x')
       const grants = new MediaGrants(0)
       grants.add(grant(0, file))
-      expect(await grantedPath(`overbench-media://${token(0)}/demo.mp4?v=1`, grants)).toBe(file)
-      await expect(grantedPath(`overbench-media://${token(1)}/demo.mp4`, grants)).rejects.toThrow()
+      expect(await grantedPath(`kettu-media://${token(0)}/demo.mp4?v=1`, grants)).toBe(file)
+      await expect(grantedPath(`kettu-media://${token(1)}/demo.mp4`, grants)).rejects.toThrow()
       await expect(grantedPath(file, grants)).rejects.toThrow()
       await expect(grantedPath(42, grants)).rejects.toThrow()
     } finally {
@@ -246,8 +246,8 @@ describe('mayRequestMedia', () => {
   it('lets only the main frame of the app page through', () => {
     expect(mayRequestMedia(frame(APP), isRenderer)).toBe(true)
     expect(mayRequestMedia(frame(APP, frame(APP)), isRenderer)).toBe(false)
-    expect(mayRequestMedia(frame('overbench-artifact://x/', frame(APP)), isRenderer)).toBe(false)
-    expect(mayRequestMedia(frame('overbench-artifact://x/'), isRenderer)).toBe(false)
+    expect(mayRequestMedia(frame('kettu-artifact://x/', frame(APP)), isRenderer)).toBe(false)
+    expect(mayRequestMedia(frame('kettu-artifact://x/'), isRenderer)).toBe(false)
     expect(mayRequestMedia(null, isRenderer)).toBe(false)
   })
 })
@@ -278,16 +278,14 @@ describe('serveMedia', () => {
     const app = fakeSession()
     const other = fakeSession()
     serveMedia(app.session, new MediaGrants(0), isRenderer)
-    expect(app.handle).toHaveBeenCalledWith('overbench-media', expect.any(Function))
+    expect(app.handle).toHaveBeenCalledWith('kettu-media', expect.any(Function))
     expect(other.handle).not.toHaveBeenCalled()
     expect(other.listeners).toEqual([])
-    const media = `overbench-media://${token(0)}/shot.png?v=1`
+    const media = `kettu-media://${token(0)}/shot.png?v=1`
     expect(await app.cancels(media, frame(APP))).toBe(false)
     expect(await app.cancels(media, frame(APP, frame(APP)))).toBe(true)
-    expect(await app.cancels(media, frame('overbench-artifact://x/', frame(APP)))).toBe(true)
+    expect(await app.cancels(media, frame('kettu-artifact://x/', frame(APP)))).toBe(true)
     expect(await app.cancels(media, null)).toBe(true)
-    expect(await app.cancels('https://example.com/a.png', frame('overbench-artifact://x/'))).toBe(
-      false,
-    )
+    expect(await app.cancels('https://example.com/a.png', frame('kettu-artifact://x/'))).toBe(false)
   })
 })

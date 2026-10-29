@@ -203,7 +203,7 @@ export async function pickAttachments(
   kind: 'files' | 'folder',
   folder: string | null,
 ): Promise<number> {
-  return addAllGranted(draft, await window.overbench.attachments.pick(kind, folder))
+  return addAllGranted(draft, await window.kettu.attachments.pick(kind, folder))
 }
 
 /**
@@ -215,7 +215,7 @@ export async function pickAttachments(
 export function attachPastedFiles(draft: string, data: DataTransfer): Promise<number> | null {
   const files = [...data.files]
   if (files.length === 0) return null
-  const pending = window.overbench.attachments.fromClipboard(files.slice(0, ATTACHMENT_LIMIT))
+  const pending = window.kettu.attachments.fromClipboard(files.slice(0, ATTACHMENT_LIMIT))
   if (!pending) return null
   return pending.then((granted) =>
     // More than fit in a message were copied, whichever of them main could grant.
@@ -247,7 +247,7 @@ export async function attachFiles(draft: string, files: readonly File[]): Promis
   setDraftAttachments(draft, [...draftAttachments(draft), ...added])
   let granted: (GrantedAttachment | null)[]
   try {
-    granted = await window.overbench.attachments.fromFiles([...taken])
+    granted = await window.kettu.attachments.fromFiles([...taken])
   } catch (error) {
     for (const item of added) {
       patchDraftAttachment(draft, item.key, { status: 'failed', error: errorMessage(error) })

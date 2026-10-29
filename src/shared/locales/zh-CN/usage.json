@@ -11,7 +11,7 @@
     "title": "用量",
     "synced": "日志 {{ago}}同步",
     "syncing": "正在读取日志…",
-    "record": "OverBench 的记录",
+    "record": "Kettu 的记录",
     "sync": "立即同步",
     "syncFailed": "同步失败",
     "agent": "Agent",
@@ -29,7 +29,7 @@
     "scope": "统计来源",
     "scopes": {
       "computer": "本机",
-      "overbench": "仅 OverBench"
+      "kettu": "仅 Kettu"
     },
     "importing": "正在读取 Agent 的日志：{{done}} / {{total}}",
     "importingFrom": "{{agents}}，{{date}} 以来的日志。读完后页面就会填满。",
@@ -143,15 +143,15 @@
   "noPrice": "无价格",
   "empty": {
     "title": "还没有用量",
-    "description": "从现在起，OverBench 会记下它运行的每一轮对话的 token。要算上安装前和在终端里的使用，可以从本机的 Agent 日志统计。",
+    "description": "从现在起，Kettu 会记下它运行的每一轮对话的 token。要算上安装前和在终端里的使用，可以从本机的 Agent 日志统计。",
     "fromComputer": "统计本机用量",
-    "waiting": "从现在起，OverBench 会记下它运行的每一轮对话的 token。"
+    "waiting": "从现在起，Kettu 会记下它运行的每一轮对话的 token。"
   },
   "error": {
     "title": "无法读取用量",
     "retry": "重试",
     "kept": "下面是上次读取到的数据。",
-    "unavailable": "无法读取用量数据库。请重启 OverBench；如果仍然无法读取，请导出诊断信息。",
+    "unavailable": "无法读取用量数据库。请重启 Kettu；如果仍然无法读取，请导出诊断信息。",
     "export": "导出诊断信息",
     "savedTo": "已保存到 {{path}}"
   },
@@ -190,7 +190,7 @@
     },
     "fromComputer": {
       "name": "统计本机用量",
-      "description": "同时统计 Claude Code、Codex 和 OpenCode 在这台电脑上自己记录的日志，包括安装 OverBench 之前和在终端里的使用。只读取 token 数、模型和时间，不读对话内容，数据不离开这台电脑。无论是否开启，OverBench 都会读取它运行的每个 Claude Code 会话记录的末尾，以显示提示缓存何时过期。",
+      "description": "同时统计 Claude Code、Codex 和 OpenCode 在这台电脑上自己记录的日志，包括安装 Kettu 之前和在终端里的使用。只读取 token 数、模型和时间，不读对话内容，数据不离开这台电脑。无论是否开启，Kettu 都会读取它运行的每个 Claude Code 会话记录的末尾，以显示提示缓存何时过期。",
       "keywords": "日志 历史 导入 token 统计"
     },
     "notFound": "没有找到日志",
@@ -201,7 +201,7 @@
     "reimport": {
       "button": "重新导入…",
       "title": "重新导入 {{agent}} 的日志？",
-      "description": "OverBench 会清除从 {{agent}} 导入的数据，然后重新读取它的日志。Agent 已经从日志中删除的历史无法恢复。",
+      "description": "Kettu 会清除从 {{agent}} 导入的数据，然后重新读取它的日志。Agent 已经从日志中删除的历史无法恢复。",
       "confirm": "重新导入"
     },
     "sidebar": {
@@ -213,10 +213,10 @@
       "off": "不显示"
     },
     "clear": {
-      "name": "清除 OverBench 的记录",
-      "description": "删除 OverBench 自己记下的每轮 token。Agent 的日志以及从中导入的数据不受影响。",
+      "name": "清除 Kettu 的记录",
+      "description": "删除 Kettu 自己记下的每轮 token。Agent 的日志以及从中导入的数据不受影响。",
       "button": "清除…",
-      "title": "清除 OverBench 的用量记录？",
+      "title": "清除 Kettu 的用量记录？",
       "confirm": "清除记录"
     }
   }

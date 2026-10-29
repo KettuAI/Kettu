@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { validateTicket } from './mac-stapler.mjs'
 
-const appPath = '/Volumes/Over Bench/OverBench.app'
+const appPath = '/Volumes/Over Bench/Kettu.app'
 const failure = (code: number | string) => Object.assign(new Error('stapler failed'), { code })
 
 beforeEach(() => {

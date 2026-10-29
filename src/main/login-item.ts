@@ -29,7 +29,7 @@ export function isOpenedAtLogin(
 
 /** The autostart file's path, always in Linux's own form, whichever platform writes it. */
 export function autostartPath(home: string): string {
-  return posix.join(home.replaceAll('\\', '/'), '.config', 'autostart', 'overbench.desktop')
+  return posix.join(home.replaceAll('\\', '/'), '.config', 'autostart', 'kettu.desktop')
 }
 
 /** The AppImage's own path when running from one: the desktop entry must start that file. */
@@ -47,7 +47,7 @@ export function autostartEntry(execPath: string): string {
   return [
     '[Desktop Entry]',
     'Type=Application',
-    'Name=OverBench',
+    'Name=Kettu',
     `Exec=${execArgument(execPath)} ${OPENED_AT_LOGIN_FLAG}`,
     'Terminal=false',
     'X-GNOME-Autostart-enabled=true',

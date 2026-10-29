@@ -70,7 +70,7 @@ function options(root: string, version: string, extra: Partial<InstallOptions> =
 }
 
 beforeAll(async () => {
-  tmp = await mkdtemp(path.join(os.tmpdir(), 'overbench-install-'))
+  tmp = await mkdtemp(path.join(os.tmpdir(), 'kettu-install-'))
   const found = await findCommand('npm', {
     platform,
     env: process.env,

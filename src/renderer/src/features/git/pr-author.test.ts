@@ -28,10 +28,10 @@ describe('authorLabel', () => {
   })
 
   it("names a bot by its app's name", () => {
-    expect(authorLabel({ login: 'overbench-builder[bot]', name: null, bot: true })).toEqual({
-      name: 'overbench-builder',
+    expect(authorLabel({ login: 'kettu-builder[bot]', name: null, bot: true })).toEqual({
+      name: 'kettu-builder',
       login: null,
-      initial: 'O',
+      initial: 'K',
     })
   })
 

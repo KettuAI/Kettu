@@ -21,7 +21,7 @@ describe('the titles an agent writes itself', () => {
     expect(at('OpenCode', '2.0.31')).toBeNull()
   })
 
-  it('leaves an agent it does not know, and one that does not name itself, to OverBench', () => {
+  it('leaves an agent it does not know, and one that does not name itself, to Kettu', () => {
     expect(at('pi-acp', '0.0.34')).toBeNull()
     expect(ownTitles(null)).toBeNull()
     expect(ownTitles(undefined)).toBeNull()

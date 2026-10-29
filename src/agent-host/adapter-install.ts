@@ -416,7 +416,7 @@ export async function installAdapter(options: InstallOptions): Promise<Installed
       path.join(partial, 'package.json'),
       `${JSON.stringify(
         {
-          name: `overbench-${agentId}`,
+          name: `kettu-${agentId}`,
           private: true,
           dependencies: { [options.package]: options.spec ?? options.version },
         },

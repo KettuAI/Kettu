@@ -160,7 +160,7 @@ describe('spawnAgent', () => {
 
   it('reports a program that cannot be started', async () => {
     const agent = spawnAgent(
-      { ...spec(), command: path.resolve('does-not-exist-overbench') },
+      { ...spec(), command: path.resolve('does-not-exist-kettu') },
       { platform: process.platform, env: process.env, cwd: process.cwd(), onStderr: () => {} },
     )
     const exit = await agent.exited
@@ -507,7 +507,7 @@ describe('what an agent leaves behind', () => {
 
 describe('leftovers of the last run', () => {
   it('stops the agent trees a host left running, and not a process that took a pid', async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-leftovers-'))
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-leftovers-'))
     const keep = (script: string) =>
       spawn(process.execPath, ['-e', script], {
         detached: true,

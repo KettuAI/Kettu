@@ -41,7 +41,7 @@ describe('TerminalManager with node-pty', () => {
   })
 
   it('runs a shell in the project folder, streams its output and reports its exit', async () => {
-    dir = await realpath(await mkdtemp(join(tmpdir(), 'overbench-pty-')))
+    dir = await realpath(await mkdtemp(join(tmpdir(), 'kettu-pty-')))
     const projects = new ProjectRegistry(process.platform)
     projects.set([dir])
     let output = ''
@@ -73,7 +73,7 @@ describe('TerminalManager with node-pty', () => {
     terminals.input(id, `${command}\r`)
     const cwd = isWindows ? dir.toLowerCase() : dir
     const seen = (): string => (isWindows ? output.toLowerCase() : output)
-    await waitFor(() => seen().includes('overbench') && seen().includes(cwd))
+    await waitFor(() => seen().includes('kettu') && seen().includes(cwd))
 
     terminals.input(id, 'exit 7\r')
     await waitFor(() => info?.exitCode !== null && info?.exitCode !== undefined)

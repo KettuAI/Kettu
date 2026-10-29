@@ -1,5 +1,5 @@
 /** The partition every page in the side panel's browser uses, shared by all sessions. */
-export const BROWSER_PARTITION = 'persist:overbench-browser'
+export const BROWSER_PARTITION = 'persist:kettu-browser'
 
 /** Where the page sits in the window, in device-independent pixels. */
 export interface BrowserBounds {
@@ -61,7 +61,7 @@ export interface BrowserState {
   originRequest: BrowserOriginRequest | null
 }
 
-/** The browser tools the `overbench` MCP server offers, which main runs on the page. */
+/** The browser tools the `kettu` MCP server offers, which main runs on the page. */
 export const BROWSER_TOOL_NAMES = [
   'browser_navigate',
   'browser_navigate_back',

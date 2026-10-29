@@ -120,7 +120,7 @@ export async function removeReportThreads(options: ReportThreadsOptions): Promis
   }
 
   try {
-    await request('initialize', { clientInfo: { name: 'overbench', version } })
+    await request('initialize', { clientInfo: { name: 'kettu', version } })
     send({ jsonrpc: '2.0', method: 'initialized' })
     const threads: { id: string; cwd: string }[] = []
     const cursors = new Set<string>()

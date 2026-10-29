@@ -56,7 +56,7 @@ const FRAME = page('Frame', `<iframe src="/inner" style="width:400px;height:120p
 const INNER = page('Inner', `<button onclick="document.title='clicked'">Inner button</button>`)
 
 beforeAll(async () => {
-  dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-browser-tools-'))
+  dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-browser-tools-'))
   server = createServer((request, response) => {
     const url = request.url ?? '/'
     if (url === '/redirect') {
@@ -114,8 +114,8 @@ async function run(): Promise<Record<string, unknown>> {
   const env = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => name !== 'ELECTRON_RUN_AS_NODE'),
   )
-  env.OVERBENCH_BROWSER_RESULT = result
-  env.OVERBENCH_BROWSER_FIXTURE = fixture
+  env.KETTU_BROWSER_RESULT = result
+  env.KETTU_BROWSER_FIXTURE = fixture
   const args = [
     path.join(dir!, 'harness', 'main.cjs'),
     `--user-data-dir=${data}`,

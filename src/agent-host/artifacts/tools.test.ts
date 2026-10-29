@@ -32,7 +32,7 @@ const CANVAS =
   '<section data-page="Two">2</section></body>'
 
 function setup() {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'overbench-artifact-tools-'))
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'kettu-artifact-tools-'))
   const contentDir = path.join(dir, 'artifacts', 'content')
   const log = (): void => {}
   const threads = new ThreadStore({
@@ -405,7 +405,7 @@ describe('the artifacts tools', () => {
     expect((more.value.artifacts as unknown[]).length).toBe(51)
   })
 
-  it('name the session or the user, and a session OverBench no longer has', async () => {
+  it('name the session or the user, and a session Kettu no longer has', async () => {
     const { call, create, store, titles } = setup()
     const id = await create(B)
     await store.write({ id, baseVersion: 1, html: '<p>u</p>', pages: 0, author: null, note: 'Me' })
@@ -454,7 +454,7 @@ describe('the artifacts tools', () => {
     )
     clock.now += 5000
     expect((await call(A, 'delete_artifact', { id })).value).toEqual({ id, purge_at: purgeAt })
-    const text = `${id} was deleted. The user can restore it in OverBench.`
+    const text = `${id} was deleted. The user can restore it in Kettu.`
     for (const [name, args] of [
       ['read_artifact', { id }],
       ['update_artifact', { id, base_version: 1, html: '<p></p>' }],

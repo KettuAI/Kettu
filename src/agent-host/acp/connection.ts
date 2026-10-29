@@ -81,7 +81,7 @@ export interface PermissionRequest {
 
 export type PermissionAnswer = { optionId: string } | 'cancelled'
 
-/** What a live session gives the connection; OverBench types only. */
+/** What a live session gives the connection; Kettu types only. */
 export interface SessionTarget {
   context(): MapperContext
   apply(output: MapperOutput): void
@@ -92,7 +92,7 @@ export interface SessionTarget {
 export interface ConnectionHooks {
   traffic(direction: 'in' | 'out', message: unknown): void
   account(account: AgentAccount): void
-  /** Something the agent sent that OverBench does not use. */
+  /** Something the agent sent that Kettu does not use. */
   ignored(acpSessionId: string | null, what: string): void
   log(level: 'info' | 'warn' | 'error', message: string): void
   /** The agent sends its thought levels again as legacy `modes`, which are ignored. */
@@ -125,7 +125,7 @@ export interface AgentInit {
     forkSession: boolean
     /** `session/fork` up to a message, which only some adapters take, outside ACP. */
     forkAtMessage: boolean
-    /** How its own session titles arrive, or null when OverBench writes one. */
+    /** How its own session titles arrive, or null when Kettu writes one. */
     ownTitles: OwnTitles | null
     logout: boolean
     /** `_session/steering`, an extension advertised in the response's own `_meta`. */
@@ -152,7 +152,7 @@ export interface ListedSession {
 
 export type AgentErrorKind = 'auth_required' | 'agent_error' | 'closed'
 
-/** An ACP request that failed, in OverBench's terms. */
+/** An ACP request that failed, in Kettu's terms. */
 export class AgentRequestError extends Error {
   constructor(
     readonly kind: AgentErrorKind,
@@ -240,7 +240,7 @@ const PENDING_TTL_MS = 60_000
 // OpenCode marks a subagent's updates, which it sends on the session the subagent runs under.
 const CHILD_SESSION_META = 'opencode/child-session'
 const CHILD_SESSIONS = 1_000
-// Sessions OverBench closed: their late updates are dropped, not kept for a later register.
+// Sessions Kettu closed: their late updates are dropped, not kept for a later register.
 const CLOSED_SESSIONS = 256
 
 export class AgentConnection {
@@ -248,7 +248,7 @@ export class AgentConnection {
   private readonly targets = new Map<string, SessionTarget>()
   private readonly pending = new Map<string, { at: number; updates: SessionUpdate[] }>()
   private readonly unregistered = new Set<string>()
-  /** Sessions OverBench runs a report in, which no thread shows. */
+  /** Sessions Kettu runs a report in, which no thread shows. */
   private readonly collectors = new Map<string, (update: SessionUpdate) => void>()
   /** OpenCode's subagent sessions, to the session each runs under. */
   private readonly children = new Map<string, string>()
@@ -259,7 +259,7 @@ export class AgentConnection {
     private readonly transport: AcpTransport,
     private readonly hooks: ConnectionHooks,
   ) {
-    const app = client({ name: 'OverBench' })
+    const app = client({ name: 'Kettu' })
       .onNotification(methods.client.session.update, (ctx) => {
         this.deliver(ctx.params.sessionId, ctx.params.update)
       })
@@ -350,17 +350,14 @@ export class AgentConnection {
       return
     }
     if (this.unregistered.has(acpSessionId)) {
-      this.hooks.ignored(acpSessionId, 'update for a session OverBench closed')
+      this.hooks.ignored(acpSessionId, 'update for a session Kettu closed')
       return
     }
     const now = Date.now()
     for (const [id, entry] of this.pending) {
       if (now - entry.at > PENDING_TTL_MS) {
         this.pending.delete(id)
-        this.hooks.ignored(
-          id,
-          `${entry.updates.length} updates for a session OverBench does not have`,
-        )
+        this.hooks.ignored(id, `${entry.updates.length} updates for a session Kettu does not have`)
       }
     }
     let entry = this.pending.get(acpSessionId)
@@ -404,7 +401,7 @@ export class AgentConnection {
     }
   }
 
-  /** The session `id` runs under: its own if OverBench has it, else as OpenCode reported it. */
+  /** The session `id` runs under: its own if Kettu has it, else as OpenCode reported it. */
   rootOf(id: string): string {
     return this.targets.has(id) ? id : (this.children.get(id) ?? id)
   }
@@ -434,7 +431,7 @@ export class AgentConnection {
     }
   }
 
-  /** Updates for a session OverBench closed wait for its next register again, like early ones. */
+  /** Updates for a session Kettu closed wait for its next register again, like early ones. */
   reopen(acpSessionId: string): void {
     this.unregistered.delete(acpSessionId)
   }
@@ -488,7 +485,7 @@ export class AgentConnection {
         methods.agent.initialize,
         {
           protocolVersion: PROTOCOL_VERSION,
-          clientInfo: { name: 'OverBench', title: 'OverBench', version: appVersion },
+          clientInfo: { name: 'Kettu', title: 'Kettu', version: appVersion },
           clientCapabilities: CLIENT_CAPABILITIES,
         },
         signal ? { cancellationSignal: signal } : undefined,
@@ -686,7 +683,7 @@ export class AgentConnection {
 
   /**
    * `_session/steering`: sends a message into the running turn. With `promptRequired`, an agent
-   * with no turn running answers so instead of starting one, and the message stays OverBench's.
+   * with no turn running answers so instead of starting one, and the message stays Kettu's.
    */
   async steer(
     acpSessionId: string,

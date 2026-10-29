@@ -13,15 +13,15 @@ function lint(code: string, filename = 'src/renderer/src/x.tsx') {
           parser: tseslint.parser,
           parserOptions: { ecmaFeatures: { jsx: true } },
         },
-        plugins: { overbench: plugin },
-        rules: { 'overbench/no-color-literals': 'error' },
+        plugins: { kettu: plugin },
+        rules: { 'kettu/no-color-literals': 'error' },
       },
     ],
     filename,
   )
 }
 
-describe('overbench/no-color-literals', () => {
+describe('kettu/no-color-literals', () => {
   it('is exported by name and as the default plugin', () => {
     expect(Object.keys(rules)).toEqual(['no-color-literals'])
     expect(plugin.rules).toBe(rules)

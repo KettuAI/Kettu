@@ -15,7 +15,7 @@ afterEach(async () => {
 })
 
 function setup(purgeEveryMs?: number) {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'overbench-artifact-store-'))
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'kettu-artifact-store-'))
   const contentDir = path.join(dir, 'artifacts', 'content')
   const logs: { level: string; message: string }[] = []
   const log = (level: 'info' | 'warn' | 'error', message: string): void => {

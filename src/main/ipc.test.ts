@@ -20,7 +20,7 @@ const { isTrusted, openNotices, whenSettled } = await import('./ipc')
 const electron = await import('electron')
 const { watchSubframes } = await import('./subframes')
 
-const ARTIFACT = 'overbench-artifact://0123456789abcdef0123456789/'
+const ARTIFACT = 'kettu-artifact://0123456789abcdef0123456789/'
 
 interface FakeFrame {
   parent: FakeFrame | null

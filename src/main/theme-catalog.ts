@@ -1,4 +1,4 @@
-// The online theme catalog, the public repository overbench/themes: its index, read and checked,
+// The online theme catalog, the public repository KettuAI/themes: its index, read and checked,
 // and the theme files it lists, downloaded and checked against the index's SHA-256.
 
 import { createHash } from 'node:crypto'
@@ -19,7 +19,7 @@ import { createLogger, describeError } from './log'
 
 const log = createLogger('themes')
 
-export const CATALOG_URL = 'https://raw.githubusercontent.com/overbench/themes/main/'
+export const CATALOG_URL = 'https://raw.githubusercontent.com/KettuAI/themes/main/'
 const CATALOG_FORMAT = 1
 const INDEX_MAX_BYTES = 1024 * 1024
 const TIMEOUT_MS = 15_000
@@ -89,7 +89,7 @@ export function parseCatalogIndex(text: string): CatalogIndex {
     return { ok: false, error: 'invalid' }
   }
   if (!isRecord(raw) || !Array.isArray(raw['themes'])) return { ok: false, error: 'invalid' }
-  const format = raw['overbenchCatalog']
+  const format = raw['kettuCatalog']
   if (typeof format !== 'number' || !Number.isInteger(format) || format < 1) {
     return { ok: false, error: 'invalid' }
   }

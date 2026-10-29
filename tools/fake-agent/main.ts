@@ -16,7 +16,7 @@ function log(line: string): void {
 
 if (process.argv.includes('--login')) {
   writeFileSync(loginMarkerPath(env), new Date().toISOString())
-  process.stdout.write('Signed in to the fake agent. You can go back to OverBench.\n')
+  process.stdout.write('Signed in to the fake agent. You can go back to Kettu.\n')
   process.exit(0)
 }
 

@@ -69,7 +69,7 @@ let program: string
 let reportsDir: string
 
 beforeAll(async () => {
-  tmp = await mkdtemp(path.join(os.tmpdir(), 'overbench-codex-threads-'))
+  tmp = await mkdtemp(path.join(os.tmpdir(), 'kettu-codex-threads-'))
   reportsDir = path.join(tmp, 'agent-reports')
   const script = path.join(tmp, 'fake-app-server.mjs')
   await writeFile(script, SERVER)
@@ -154,7 +154,7 @@ describe('removeReportThreads', () => {
     expect(sent[0]).toMatchObject({
       jsonrpc: '2.0',
       method: 'initialize',
-      params: { clientInfo: { name: 'overbench', version: '0.0.0-test' } },
+      params: { clientInfo: { name: 'kettu', version: '0.0.0-test' } },
     })
     expect(sent[1]).toEqual({ jsonrpc: '2.0', method: 'initialized' })
     const lists = sent.filter((message) => message.method === 'thread/list')

@@ -1,4 +1,4 @@
-// Answers OverBench's request for the message outline's titles as a model would: a JSON object of
+// Answers Kettu's request for the message outline's titles as a model would: a JSON object of
 // each message's first words. A message holding `/permission` asks for a permission first and is
 // titled with the answer, `/slow` holds the answer back a while, and `/garbage` answers in prose.
 
