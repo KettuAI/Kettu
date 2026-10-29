@@ -10,11 +10,11 @@ export async function openAttachmentPath(
   attachment: Pick<Attachment, 'type' | 'uri'>,
   projectPath: string | null,
 ): Promise<void> {
-  const path = attachment.uri ? fileUrlPath(attachment.uri, window.overbench.platform) : null
+  const path = attachment.uri ? fileUrlPath(attachment.uri, window.kettu.platform) : null
   if (!path) return
   if (attachment.type === 'file' && projectPath) {
     const inside = relativePath(path, projectPath)
     if (inside !== path) return openFile(projectPath, inside.replace(/\\/g, '/'))
   }
-  await window.overbench.shell.showItem(path)
+  await window.kettu.shell.showItem(path)
 }

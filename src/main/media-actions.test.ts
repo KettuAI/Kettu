@@ -29,14 +29,14 @@ const { MediaGrants } = await import('./media')
 const WINDOW = {} as Electron.BrowserWindow
 const PNG = Buffer.from('\x89PNG\r\n\x1a\nrest', 'latin1')
 const token = (n: number) => String.fromCharCode(97 + n).repeat(26)
-const url = (n: number, name = 'shot.png') => `overbench-media://${token(n)}/${name}?v=1`
+const url = (n: number, name = 'shot.png') => `kettu-media://${token(n)}/${name}?v=1`
 
 let dir: string
 let shot: string
 let clip: string
 
 beforeAll(async () => {
-  dir = await realpath(await mkdtemp(join(os.tmpdir(), 'overbench-media-actions-')))
+  dir = await realpath(await mkdtemp(join(os.tmpdir(), 'kettu-media-actions-')))
   shot = join(dir, 'shot.png')
   clip = join(dir, 'clip.mp4')
   await writeFile(shot, PNG)

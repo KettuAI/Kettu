@@ -14,7 +14,7 @@ const stores: ThreadStore[] = []
 const logs: { level: string; message: string }[] = []
 
 function store(createWorker = inThreadWorker, closeTimeoutMs?: number): ThreadStore {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'overbench-store-'))
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'kettu-store-'))
   dirs.push(dir)
   const created = new ThreadStore({
     file: path.join(dir, 'threads.db'),

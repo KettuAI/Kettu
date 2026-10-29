@@ -129,7 +129,7 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
       action = (
         <>
           {whatsNew(state.version)}
-          <Button size="sm" onClick={() => run(window.overbench.updates.restart)}>
+          <Button size="sm" onClick={() => run(window.kettu.updates.restart)}>
             {t('about.updates.restart')}
           </Button>
         </>
@@ -152,7 +152,7 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
               <ExternalLinkIcon data-icon="inline-end" />
             </a>
           ) : (
-            <Button size="sm" onClick={() => run(window.overbench.updates.download)}>
+            <Button size="sm" onClick={() => run(window.kettu.updates.download)}>
               {t('about.updates.update')}
             </Button>
           )}

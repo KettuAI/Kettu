@@ -13,7 +13,7 @@
   },
   "launch": {
     "loadFailed": "Couldn't load your projects",
-    "starting": "Starting OverBench…"
+    "starting": "Starting Kettu…"
   },
   "shortcuts": {
     "title": "Keyboard shortcuts",

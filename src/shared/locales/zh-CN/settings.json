@@ -28,7 +28,7 @@
   "general": {
     "language": {
       "name": "语言",
-      "description": "菜单、设置和 OverBench 自身提示所用的语言。Agent 的回复不会被翻译。",
+      "description": "菜单、设置和 Kettu 自身提示所用的语言。Agent 的回复不会被翻译。",
       "keywords": "语言 中文 英文 翻译 language locale chinese english",
       "system": "跟随系统"
     },
@@ -57,8 +57,8 @@
     },
     "openAtLogin": {
       "name": "登录时打开",
-      "description": "例程只在 OverBench 打开时运行。",
-      "approval": "请在“系统设置”>“通用”>“登录项”中允许 OverBench。",
+      "description": "例程只在 Kettu 打开时运行。",
+      "approval": "请在“系统设置”>“通用”>“登录项”中允许 Kettu。",
       "unavailable": "仅在已安装的应用中可用。",
       "keywords": "登录 启动 开机 例程 login startup launch routine"
     },
@@ -92,7 +92,7 @@
       "remove": "移除…",
       "install": "从文件安装…",
       "moreThemes": "更多主题",
-      "moreDescription": "浏览 OverBench 主题库，或安装 .json 主题文件。",
+      "moreDescription": "浏览 Kettu 主题库，或安装 .json 主题文件。",
       "lowContrast": "对比度不足",
       "contrastPair": "{{mode}}：{{fg}} 在 {{bg}} 上，{{ratio}}:1",
       "contrastMore": "另有 {{count}} 处",
@@ -105,17 +105,17 @@
       "replaceDescription": "已安装的文件会被“{{name}}”替换。",
       "replace": "替换",
       "removeTitle": "移除主题“{{name}}”？",
-      "removeDescription": "已安装的文件会被删除。如果正在使用它，将改用 OverBench 主题。",
+      "removeDescription": "已安装的文件会被删除。如果正在使用它，将改用 Kettu 主题。",
       "removeConfirm": "移除",
       "removed": "已移除主题“{{name}}”",
       "loadFailed": "主题“{{id}}”无法加载",
-      "loadFailedDescription": "已改用 OverBench 主题：{{reason}}。",
-      "useBuiltIn": "使用 OverBench",
+      "loadFailedDescription": "已改用 Kettu 主题：{{reason}}。",
+      "useBuiltIn": "使用 Kettu",
       "errors": {
         "too-large": "文件超过 256 KB",
         "not-json": "不是 JSON 文件",
-        "not-theme": "不是 OverBench 主题",
-        "newer-format": "需要更新版本的 OverBench",
+        "not-theme": "不是 Kettu 主题",
+        "newer-format": "需要更新版本的 Kettu",
         "reserved-name": "名称与内置主题相同",
         "missing-variant": "缺少 {{variant}} 变体",
         "invalid-field": "{{path}} 无效",
@@ -129,7 +129,7 @@
     "catalog": {
       "browse": "浏览主题",
       "title": "浏览主题",
-      "description": "来自 GitHub 上的 OverBench 主题库。安装后立即应用。",
+      "description": "来自 GitHub 上的 Kettu 主题库。安装后立即应用。",
       "search": "搜索主题",
       "byline": "{{author}} · {{license}}",
       "install": "安装",
@@ -145,7 +145,7 @@
       "errors": {
         "unreachable": "无法连接主题库。请检查网络或代理后重试。",
         "invalid": "无法读取主题库。",
-        "newer-format": "主题库需要更新版本的 OverBench。"
+        "newer-format": "主题库需要更新版本的 Kettu。"
       }
     },
     "colorMode": {
@@ -259,7 +259,7 @@
       "description": "有多少个会话在等待你授权。",
       "keywords": "角标 数字 badge"
     },
-    "footer": "仅在 OverBench 的所有窗口都不在前台时显示。",
+    "footer": "仅在 Kettu 的所有窗口都不在前台时显示。",
     "groups": {
       "preview": "预览",
       "when": "提醒我",
@@ -269,7 +269,7 @@
     "testUnsupported": "这个系统不显示通知",
     "sent": "已发送",
     "previewTitle": "Claude Code 需要授权",
-    "previewBody": "overbench · 运行 {{command}}",
+    "previewBody": "kettu · 运行 {{command}}",
     "previewTime": "现在"
   },
   "browser": {
@@ -324,14 +324,14 @@
       "copy": "复制路径"
     },
     "removeSessions": {
-      "name": "从 OverBench 中移除所有会话",
-      "description": "清空 OverBench 的会话列表。Agent 的对话记录会保留。",
+      "name": "从 Kettu 中移除所有会话",
+      "description": "清空 Kettu 的会话列表。Agent 的对话记录会保留。",
       "keywords": "删除 清除 清空 delete clear",
       "button": "移除所有会话…",
-      "dialogTitle_other": "从 OverBench 中移除全部 {{count}} 个会话？",
+      "dialogTitle_other": "从 Kettu 中移除全部 {{count}} 个会话？",
       "dialogDescription": "侧边栏将变为空白。Agent 会保留各自的对话记录，之后可以在侧边栏中项目的菜单里重新导入这些会话。",
       "confirm": "全部移除",
-      "removed": "已从 OverBench 中移除所有会话"
+      "removed": "已从 Kettu 中移除所有会话"
     },
     "groups": {
       "network": "网络",
@@ -354,7 +354,7 @@
     "checkLimits": "查看套餐限额",
     "program": "程序",
     "programOnPath": "PATH 中的 {{command}}",
-    "binaryDescription": "OverBench 启动的 {{command}} 程序。",
+    "binaryDescription": "Kettu 启动的 {{command}} 程序。",
     "reset": "重置",
     "chooseBinary": "选择可执行文件…",
     "cli": {
@@ -379,7 +379,7 @@
       "pending": "正在读取你的环境…",
       "loginShell": "{{ago}}从登录 Shell（{{shell}}）读取，耗时 {{ms}} ms。",
       "loginShellPlain": "已从登录 Shell 读取。",
-      "inherited": "继承自 OverBench 的启动方式。",
+      "inherited": "继承自 Kettu 的启动方式。",
       "fallback": "正在使用备用 PATH。",
       "reload": "重新加载环境",
       "keywords": "环境 环境变量 PATH shell node npm"
@@ -410,7 +410,7 @@
       "useEnvironment": "使用环境变量",
       "custom": "单独的目录",
       "explain": "你选择的目录会单独存放 {{name}} 的登录信息、设置和历史记录，与你在终端中运行的 {{name}} 互不影响。原目录中的内容不会复制过去：新目录需要重新登录，用原目录开始的会话要切换回来才能继续。",
-      "chosen": "在 OverBench 中选定",
+      "chosen": "在 Kettu 中选定",
       "untilChosen": "选择目录前，{{name}} 仍使用这个目录。",
       "nextStart": "将在 Agent 下次启动时生效。"
     },
@@ -437,7 +437,7 @@
     "resetsAt": "{{time}} 重置",
     "versionGroup": "版本",
     "currentVersion": "当前版本",
-    "ownInstaller": "由它自己的安装程序更新，不经过 OverBench。",
+    "ownInstaller": "由它自己的安装程序更新，不经过 Kettu。",
     "update": {
       "mark": "{{names}} 有可用更新",
       "check": "检查更新",
@@ -482,12 +482,12 @@
       "installing": "正在安装…",
       "cancel": "取消安装",
       "failed": "安装失败，重试",
-      "missingLine": "未安装。点“安装”，OverBench 会通过 {{method}} 装好它。",
-      "missingLineAdapter": "尚未安装。点“安装”，OverBench 会把它的适配器装进自己的数据目录。",
+      "missingLine": "未安装。点“安装”，Kettu 会通过 {{method}} 装好它。",
+      "missingLineAdapter": "尚未安装。点“安装”，Kettu 会把它的适配器装进自己的数据目录。",
       "title": "安装 {{name}}",
-      "body": "OverBench 在后台装好它，装完这一页会直接变成已安装的状态。",
-      "adapterBody": "OverBench 会把 {{package}} 装进自己的数据目录，用你的 Node.js 运行。",
-      "adapterBodyCli": "OverBench 会把 {{package}} 装进自己的数据目录，用你的 Node.js 运行；适配器接受你的 {{command}} {{version}} 时就用它，否则还会下载一份 {{name}}。",
+      "body": "Kettu 在后台装好它，装完这一页会直接变成已安装的状态。",
+      "adapterBody": "Kettu 会把 {{package}} 装进自己的数据目录，用你的 Node.js 运行。",
+      "adapterBodyCli": "Kettu 会把 {{package}} 装进自己的数据目录，用你的 Node.js 运行；适配器接受你的 {{command}} {{version}} 时就用它，否则还会下载一份 {{name}}。",
       "method": "安装方式",
       "methods": {
         "archive": "下载",
@@ -517,10 +517,10 @@
       "downloadProgress": "下载进度",
       "ready": "{{version}} 已下载，可以安装",
       "available": "{{version}} 已发布",
-      "movesFirst": "OverBench 无法在当前位置更新，「更新」会先把它移到“应用程序”文件夹。",
-      "moving": "正在把 OverBench 移到“应用程序”…",
+      "movesFirst": "Kettu 无法在当前位置更新，「更新」会先把它移到“应用程序”文件夹。",
+      "moving": "正在把 Kettu 移到“应用程序”…",
       "failed": "无法检查更新",
-      "moveFailed": "无法把 OverBench 移到“应用程序”",
+      "moveFailed": "无法把 Kettu 移到“应用程序”",
       "offDevelopment": "开发版本中不提供更新",
       "offPackageManager": "更新由你的包管理器安装",
       "check": "检查更新",
@@ -562,19 +562,19 @@
   "pages": {
     "general": "界面语言、输入方式，以及新会话和启动时的行为。",
     "appearance": "主题、颜色模式、缩放和文字大小。改动立即生效。",
-    "notifications": "只在 OverBench 的所有窗口都不在前台时提醒你，免得打断正在看的内容。",
-    "agents": "OverBench 通过 ACP 驱动这些编程 Agent。在这里查看账号、套餐用量和安装状态。",
+    "notifications": "只在 Kettu 的所有窗口都不在前台时提醒你，免得打断正在看的内容。",
+    "agents": "Kettu 通过 ACP 驱动这些编程 Agent。在这里查看账号、套餐用量和安装状态。",
     "terminal": "侧边面板里的终端用哪个 Shell，以及它的字号。",
     "git": "顶栏的分支与更改、Pull Request 和它的检查结果，都靠下面两个工具。",
-    "advanced": "网络代理、诊断信息，以及 OverBench 保存在这台电脑上的数据。",
-    "about": "OverBench 的版本、更新和链接。",
+    "advanced": "网络代理、诊断信息，以及 Kettu 保存在这台电脑上的数据。",
+    "about": "Kettu 的版本、更新和链接。",
     "archived": "你归档的会话，不在侧边栏里但都保留着。恢复后会回到原来的项目里。",
     "sharing": "通过你自己的 Cloudflare 账号，把 artifact 发布为任何人都能打开的链接。",
     "browser": "侧边面板里的浏览器让所有会话共用一个配置：登录状态、网站数据和缓存都在这里。",
-    "mcp": "Agent 通过这些 MCP 服务器使用工具。这里有 OverBench 自带的服务器，以及各 Agent 自己的服务器所在的位置。"
+    "mcp": "Agent 通过这些 MCP 服务器使用工具。这里有 Kettu 自带的服务器，以及各 Agent 自己的服务器所在的位置。"
   },
   "footer": {
-    "about": "关于 OverBench",
+    "about": "关于 Kettu",
     "upToDate": "已是最新",
     "ready": "{{version}} 已就绪",
     "available": "{{version}} 已发布",
@@ -598,7 +598,7 @@
     },
     "account": {
       "name": "Cloudflare 账号",
-      "description": "通过你自己的 Cloudflare 账号发布 artifact。粘贴 API token 后，OverBench 会找到它能访问的账号。",
+      "description": "通过你自己的 Cloudflare 账号发布 artifact。粘贴 API token 后，Kettu 会找到它能访问的账号。",
       "keywords": "分享 发布 链接 cloudflare workers token 账号",
       "token": "API token",
       "tokenPlaceholder": "粘贴 token",
@@ -614,7 +614,7 @@
       "connected": "已连接",
       "remove": "移除",
       "removeTitle": "要移除 Cloudflare 账号吗？",
-      "removeBody": "OverBench 会删除保存的 token。已发布的页面仍然在线；之后要取消发布，需要重新连接这个账号。",
+      "removeBody": "Kettu 会删除保存的 token。已发布的页面仍然在线；之后要取消发布，需要重新连接这个账号。",
       "removed": "已移除 Cloudflare 账号",
       "plainText": "此系统没有钥匙串，token 会以不加密的方式保存。",
       "dashboard": "在 Cloudflare 中选择子域名"
@@ -630,12 +630,12 @@
     }
   },
   "usage": {
-    "cleared": "已清除 OverBench 的记录"
+    "cleared": "已清除 Kettu 的记录"
   },
   "mcp": {
     "keywords": "MCP 服务器 工具 artifact 会话 浏览器",
     "groups": {
-      "overbench": "来自 OverBench",
+      "kettu": "来自 Kettu",
       "own": "各 Agent 自己的配置"
     },
     "state": {
@@ -652,9 +652,9 @@
       "title": "无法读取 MCP 服务器"
     },
     "server": {
-      "builtIn": "OverBench 内置",
+      "builtIn": "Kettu 内置",
       "notRunning": {
-        "title": "OverBench 的服务器没有运行",
+        "title": "Kettu 的服务器没有运行",
         "body": "在它运行之前，会话启动时不带它的工具。"
       }
     },
@@ -667,7 +667,7 @@
     "agents": "Agent",
     "tools": "工具",
     "agent": {
-      "switch": "在 {{name}} 中使用 OverBench 的工具",
+      "switch": "在 {{name}} 中使用 Kettu 的工具",
       "on": "在它的会话中加入这些工具。",
       "off": "它的会话启动时不带这些工具。",
       "takesNone": "{{name}} 不支持通过 HTTP 连接的 MCP 服务器。",

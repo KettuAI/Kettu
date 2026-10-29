@@ -19,7 +19,7 @@ vi.mock('electron', () => ({
 const { loadWait, outdated, parseLayout, thumbnailDocument, Thumbnails } =
   await import('./thumbnails')
 
-const ORIGIN = 'overbench-artifact://0123456789abcdef0123456789/'
+const ORIGIN = 'kettu-artifact://0123456789abcdef0123456789/'
 const PAGE: ThumbnailPage = { group: 1, index: 2, x: 0, y: 0, width: 390, height: 844 }
 
 describe('parseLayout', () => {
@@ -56,7 +56,7 @@ describe('thumbnailDocument', () => {
     expect(frames[0]).toContain(`src="${ORIGIN}?v=3"`)
     expect(frames[0]).toContain('sandbox="allow-scripts allow-same-origin"')
     expect(frames[0]).toContain('width:1280px;height:800px')
-    expect(html).toContain('frame-src overbench-artifact:')
+    expect(html).toContain('frame-src kettu-artifact:')
   })
 
   it('frames each page of a canvas at its own size, scaled to fit', () => {
@@ -98,7 +98,7 @@ describe('Thumbnails', () => {
   let dir: string
 
   beforeEach(async () => {
-    dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-thumbnails-'))
+    dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-thumbnails-'))
     opened.mockReset()
   })
   afterEach(() => rm(dir, { recursive: true, force: true }))

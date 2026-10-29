@@ -4,7 +4,7 @@ import type { TerminalEvent, TerminalInfo } from '@shared/terminal-host'
 const request = vi.fn()
 let emit!: (event: TerminalEvent) => void
 vi.stubGlobal('window', {
-  overbench: {
+  kettu: {
     terminals: {
       request,
       onEvent: (handler: (event: TerminalEvent) => void) => {

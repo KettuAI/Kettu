@@ -112,7 +112,7 @@ export async function importArtifact(project: string | null): Promise<string | n
   useArtifactsStore.setState({ importFailed: null })
   let result: ArtifactImportResult
   try {
-    result = await window.overbench.artifacts.import(project)
+    result = await window.kettu.artifacts.import(project)
   } catch (error) {
     console.error('Could not import an artifact', error)
     useArtifactsStore.setState({ importFailed: 'failed' })

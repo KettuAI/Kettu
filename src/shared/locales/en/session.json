@@ -263,7 +263,7 @@
       "windowResets": "{{limit}} {{used}} · resets in {{left}}",
       "notInstalledLong": "{{agent}} is not installed.",
       "installsOnFirstUse": "{{agent}} is not installed yet. It installs on first use.",
-      "setsUpLong": "{{agent}} sets up on first use: OverBench installs its adapter, and downloads {{agent}} too if the adapter does not accept the version of your {{command}}.",
+      "setsUpLong": "{{agent}} sets up on first use: Kettu installs its adapter, and downloads {{agent}} too if the adapter does not accept the version of your {{command}}.",
       "install": "Install…",
       "failedLong": "{{agent}} failed to start.",
       "retry": "Retry",
@@ -279,12 +279,12 @@
       "model": {
         "not_offered": "{{agent}} no longer offers {{wanted}}, so it starts with {{actual}}.",
         "refused": "{{agent}} did not accept {{wanted}}, so it starts with {{actual}}.",
-        "replaced": "{{agent}}'s default changed to {{actual}} outside OverBench, so it starts with that instead of {{wanted}}."
+        "replaced": "{{agent}}'s default changed to {{actual}} outside Kettu, so it starts with that instead of {{wanted}}."
       },
       "option": {
         "not_offered": "{{agent}} no longer offers {{option}} {{wanted}}, so it starts with {{actual}}.",
         "refused": "{{agent}} did not accept {{option}} {{wanted}}, so it starts with {{actual}}.",
-        "replaced": "{{agent}}'s default {{option}} changed to {{actual}} outside OverBench, so it starts with that instead of {{wanted}}."
+        "replaced": "{{agent}}'s default {{option}} changed to {{actual}} outside Kettu, so it starts with that instead of {{wanted}}."
       },
       "noOption": "{{agent}} has no {{option}} option now, so {{wanted}} is not used.",
       "noSwitch": "{{agent}} has no {{option}} option now, so it cannot be turned on.",
@@ -294,7 +294,7 @@
   },
   "signIn": {
     "title": "Sign in to {{agent}}",
-    "description": "{{agent}} needs you to sign in before it can start. OverBench never sees your credentials.",
+    "description": "{{agent}} needs you to sign in before it can start. Kettu never sees your credentials.",
     "noMethods": "{{agent}} did not say how to sign in. Sign in with its own command line, then retry.",
     "copyCommand": "Copy command",
     "inTerminal": "Sign in in terminal",

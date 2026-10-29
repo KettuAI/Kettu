@@ -19,7 +19,7 @@ export function BrandMark({ width, className }: { width: number; className?: str
       width={width}
       height={(width * MARK_BOX.height) / MARK_BOX.width}
       fill="currentColor"
-      className={cn('shrink-0 text-brand-overbench', className)}
+      className={cn('shrink-0 text-brand-kettu', className)}
     >
       <path d={MARK_PATHS[markVersionFor(width)]} />
     </svg>
@@ -42,12 +42,12 @@ export function BrandLockup({
   return (
     <svg
       role="img"
-      aria-label="OverBench"
+      aria-label="Kettu"
       viewBox={`0 0 ${g.width} ${g.height}`}
       width={g.width * scale}
       height={g.height * scale}
       fill="currentColor"
-      className={cn('shrink-0 text-brand-overbench', className)}
+      className={cn('shrink-0 text-brand-kettu', className)}
     >
       <svg x={mark.x} y={mark.y} width={mark.width} height={mark.height} viewBox={MARK_VIEW_BOX}>
         <path d={MARK_PATHS[markVersionFor(mark.width * scale)]} />

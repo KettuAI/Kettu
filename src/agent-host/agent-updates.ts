@@ -47,7 +47,7 @@ function parseJson(text: string): unknown {
   }
 }
 
-/** Why `npm view` failed, in the user's terms where OverBench knows them. */
+/** Why `npm view` failed, in the user's terms where Kettu knows them. */
 function viewFailure(run: NpmRun, parsed: unknown): string {
   const error = isObject(parsed) && isObject(parsed.error) ? parsed.error : null
   const code = typeof error?.code === 'string' ? error.code : ''

@@ -30,7 +30,7 @@ const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[(
 const printedText = (replay) => replay.replace(ANSI, '').trim()
 
 mkdirSync(out, { recursive: true })
-const scratch = mkdtempSync(join(tmpdir(), 'overbench-shots-'))
+const scratch = mkdtempSync(join(tmpdir(), 'kettu-shots-'))
 const project = join(scratch, 'demo-project')
 makeProject(project)
 makeHistory(project, join(scratch, 'origin.git'))
@@ -168,7 +168,7 @@ async function run() {
       deviceScaleFactor: 2,
       mobile: false,
     })
-    await waitFor('window.overbench', 'the preload')
+    await waitFor('window.kettu', 'the preload')
   }
   const platform =
     process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'windows' : 'linux'
@@ -438,9 +438,9 @@ async function run() {
   // host's replay says when there is something to see; the frames let the terminal draw it.
   const terminalPrinted = async () => {
     const replay =
-      await cdp.evaluate(`window.overbench.terminals.request('terminals.list', { projectPath: ${JSON.stringify(project)} }).then((list) => {
+      await cdp.evaluate(`window.kettu.terminals.request('terminals.list', { projectPath: ${JSON.stringify(project)} }).then((list) => {
         const terminal = list.sort((a, b) => b.createdAt - a.createdAt)[0]
-        return terminal ? window.overbench.terminals.request('terminals.attach', { id: terminal.id }).then((reply) => reply.replay) : ''
+        return terminal ? window.kettu.terminals.request('terminals.attach', { id: terminal.id }).then((reply) => reply.replay) : ''
       })`)
     return printedText(replay).length > 0
   }
@@ -539,7 +539,7 @@ async function run() {
   await press('Escape', 27)
   await sleep(300)
 
-  // The turns above are OverBench's own record, so the usage page has figures to show.
+  // The turns above are Kettu's own record, so the usage page has figures to show.
   await click(
     `return [...document.querySelectorAll('[data-sidebar=menu-button]')].find((b) => b.textContent.startsWith('Usage'))`,
     'the Usage row',
@@ -550,7 +550,7 @@ async function run() {
   )
   await sleep(600)
   const recorded = await cdp.evaluate(
-    `window.overbench.agents.request('usage.total', { from: 0, to: Date.now() + 86400000 })`,
+    `window.kettu.agents.request('usage.total', { from: 0, to: Date.now() + 86400000 })`,
   )
   log(`usage recorded ${JSON.stringify(recorded)}`)
   await shoot('usage')
@@ -760,18 +760,15 @@ async function run() {
   await click(mainButton('Show accounts'), 'Show accounts')
   await waitFor(`!document.querySelector('main [data-slot=masked]')`, 'the accounts shown again')
 
-  // OverBench's own MCP server, opened from its row in MCP servers.
+  // Kettu's own MCP server, opened from its row in MCP servers.
   await click(
     `return [...document.querySelectorAll('nav button, aside button')].find((b) => b.textContent.trim() === 'MCP servers')`,
     'Settings › MCP servers',
   )
-  await waitFor(
-    `document.querySelector('button[aria-label="OverBench"]')`,
-    "OverBench's MCP server row",
-  )
+  await waitFor(`document.querySelector('button[aria-label="Kettu"]')`, "Kettu's MCP server row")
   await click(
-    `return document.querySelector('button[aria-label="OverBench"]')`,
-    "OverBench's MCP server row",
+    `return document.querySelector('button[aria-label="Kettu"]')`,
+    "Kettu's MCP server row",
   )
   await sleep(600)
   await shoot('settings-mcp-server')
@@ -840,11 +837,11 @@ async function run() {
   await waitFor(`document.querySelector('[data-sidebar=footer]')`, 'the sidebar footer')
   const fake = (method, params = '') =>
     cdp.evaluate(
-      `window.overbench.agents.request('agents.${method}', { agentId: 'fake-agent'${params} })`,
+      `window.kettu.agents.request('agents.${method}', { agentId: 'fake-agent'${params} })`,
     )
   await fake('logout')
   await footerScreens({ suffix: '', dismiss: 'Dismiss', agents: 'Agents' })
-  await cdp.evaluate(`window.overbench.settings.update({ general: { language: 'zh-CN' } })`)
+  await cdp.evaluate(`window.kettu.settings.update({ general: { language: 'zh-CN' } })`)
   // A reload brings back the dismissed "Updated to" notice, which is dismissed for the page only.
   await cdp.send('Page.reload')
   cdp.close()

@@ -85,8 +85,8 @@ import { ClearRecord, FromComputer, LogRow, SidebarEnd, SyncLogs } from './usage
 // The sections of the Settings page as data, so search and the match counts read the same rows
 // the page draws.
 
-const SOURCE_URL = 'https://github.com/overbench/overbench'
-const LICENSE_URL = 'https://github.com/overbench/overbench/blob/main/LICENSE'
+const SOURCE_URL = 'https://github.com/KettuAI/Kettu'
+const LICENSE_URL = 'https://github.com/KettuAI/Kettu/blob/main/LICENSE'
 
 function group(id: string, label: string, extra?: Omit<GroupDef, 'id' | 'label'>): GroupDef {
   return { id, label, ...extra }
@@ -699,7 +699,7 @@ export function useAboutSection(): SectionDef {
         render: () => (
           <LinkRow
             name={t('about.notices.name')}
-            onOpen={() => window.overbench.shell.openNotices()}
+            onOpen={() => window.kettu.shell.openNotices()}
             detail="third-party-notices.txt"
           />
         ),
@@ -714,7 +714,7 @@ export function useAboutSection(): SectionDef {
           <LinkRow
             name={t('about.issues.name')}
             url={bugReportUrl(info)}
-            detail="github.com/overbench/overbench/issues/new"
+            detail="github.com/KettuAI/Kettu/issues/new"
           />
         ),
       },
@@ -735,7 +735,7 @@ export function useMcpSection(): SectionDef {
     description: t('mcp.row.tools', { count: server.tools.length }),
     keywords: t('mcp.keywords'),
     english: en('sections.mcp'),
-    group: group('overbench', t('mcp.groups.overbench'), { count: servers.length }),
+    group: group('kettu', t('mcp.groups.kettu'), { count: servers.length }),
     layout: 'custom',
     render: () => <ServerRow server={server} />,
     open: () => openSettingsItem('mcp', server.name),

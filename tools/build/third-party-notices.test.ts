@@ -71,7 +71,7 @@ describe('the notices', () => {
   }
 
   beforeEach(async () => {
-    root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'overbench-notices-')))
+    root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'kettu-notices-')))
     const store = path.join(root, 'node_modules', '.pnpm')
     const inStore = (id: string, name: string) => path.join(store, id, 'node_modules', name)
     await pkg(root, { dependencies: { a: '1', '@s/b': '2', 'node-pty': '1' } })

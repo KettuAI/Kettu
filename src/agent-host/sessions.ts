@@ -441,7 +441,7 @@ function entryHolds(entry: ThreadEntry, text: string): boolean {
   return false
 }
 
-/** Agents with OverBench's ultracode switch: Claude Code, and the fake agent that stands in for it. */
+/** Agents with Kettu's ultracode switch: Claude Code, and the fake agent that stands in for it. */
 function hasUltracode(agentId: AgentId): boolean {
   return agentId === 'claude-code' || agentId === 'fake-agent'
 }
@@ -625,7 +625,7 @@ export class SessionManager {
 
   /**
    * The session whose page a browser call drives: its own, or for a subagent the top-level
-   * session it runs under, which has the page. Null for a session OverBench does not hold.
+   * session it runs under, which has the page. Null for a session Kettu does not hold.
    */
   browserSession(sessionId: string): string | null {
     const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
@@ -1376,7 +1376,7 @@ export class SessionManager {
     record: SessionRecord,
     runtime: AgentRuntime | null | undefined,
   ): McpServer[] {
-    if (!this.deps.mcp || !runtime?.init.capabilities.mcpHttp || !runtime.overbench) return []
+    if (!this.deps.mcp || !runtime?.init.capabilities.mcpHttp || !runtime.kettu) return []
     return this.deps.mcp.servers(sessionId, record, runtime.connection)
   }
 
@@ -2298,7 +2298,7 @@ export class SessionManager {
         own,
         pathKey(live.record.projectPath, this.deps.platform),
       ) ?? []
-    // A remembered value that a later change outside OverBench replaced is not set again.
+    // A remembered value that a later change outside Kettu replaced is not set again.
     for (const { option, wanted } of replaced) {
       if (live.startValues[option.id] === wanted) delete live.startValues[option.id]
     }
@@ -3373,7 +3373,7 @@ export class SessionManager {
       messages.map((text) => parseContextReport(text, now)).findLast((report) => report !== null) ??
       null
     if (!breakdown) {
-      log(`${agent}: /context gave no report OverBench can read`)
+      log(`${agent}: /context gave no report Kettu can read`)
       throw new HostError(
         'agent_error',
         t('agent.unreadableReport', { agent, command: CONTEXT_REPORT.command }),
@@ -3587,7 +3587,7 @@ export class SessionManager {
     return (await this.deps.threads?.blob(sessionId, hash)) ?? null
   }
 
-  // The queue: OverBench's own, for every agent, since ACP has none. One turn runs at a time,
+  // The queue: Kettu's own, for every agent, since ACP has none. One turn runs at a time,
   // and the oldest waiting prompt goes when a turn ends normally.
 
   /**
@@ -3789,7 +3789,7 @@ export class SessionManager {
     const name = this.deps.agents.name(agentId)
     try {
       const runtime = await this.deps.agents.ensureReady(agentId)
-      // Only an agent that titles none has OverBench pay for one.
+      // Only an agent that titles none has Kettu pay for one.
       if (runtime.init.capabilities.ownTitles !== null) {
         live.titlePrompt = null
         return
@@ -5226,7 +5226,7 @@ export class SessionManager {
    * Removes from the index, with their stored threads, the sessions that were in it at launch and
    * hold no message (`mayBeEmpty`, with a stored thread that `holdsNothing`), unless one is in
    * `keep`, in use, or has a sub-session that stays. One whose thread cannot be read stays. The
-   * agents' own histories are left alone: the index does not say which sessions OverBench
+   * agents' own histories are left alone: the index does not say which sessions Kettu
    * created and which it imported.
    */
   private async removeEmpty(keep: ReadonlySet<string>): Promise<void> {

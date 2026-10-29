@@ -276,7 +276,7 @@ describe('read', () => {
       kind: 'media',
       path: 'cover.PNG',
       grant: {
-        url: expect.stringMatching(new RegExp(`^overbench-media://${token}/cover\\.PNG\\?v=\\d+$`)),
+        url: expect.stringMatching(new RegExp(`^kettu-media://${token}/cover\\.PNG\\?v=\\d+$`)),
         kind: 'image',
         mimeType: 'image/png',
         size: png.length,

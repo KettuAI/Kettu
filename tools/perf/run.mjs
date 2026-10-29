@@ -17,7 +17,7 @@ const args = process.argv.slice(2)
 const index = args.indexOf('--port')
 const port = Number(index === -1 ? 9250 : args[index + 1])
 
-const scratch = mkdtempSync(join(tmpdir(), 'overbench-perf-'))
+const scratch = mkdtempSync(join(tmpdir(), 'kettu-perf-'))
 const project = join(scratch, 'demo-project')
 makeProject(project)
 const app = launchApp({ port, userData: join(scratch, 'user-data') })

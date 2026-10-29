@@ -10,7 +10,7 @@ const electron = vi.hoisted(() => {
     windows: [] as unknown[],
     focused: null as unknown,
     app: {
-      name: 'OverBench',
+      name: 'Kettu',
       isPackaged: false,
       on: (name: string, listener: (event: { preventDefault(): void }) => void) => {
         appEvents.set(name, listener)
@@ -194,7 +194,7 @@ describe('QuitFlow', () => {
     await settle()
     expect(electron.dialog.showMessageBox).toHaveBeenCalledOnce()
     expect(electron.dialog.showMessageBox.mock.calls[0][0]).toMatchObject({
-      message: 'Quit OverBench?',
+      message: 'Quit Kettu?',
       buttons: ['Cancel', 'Quit'],
     })
     expect(calls).toEqual(['shutDown'])

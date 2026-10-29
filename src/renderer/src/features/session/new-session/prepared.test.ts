@@ -4,7 +4,7 @@ import type { ConfigOption } from '@shared/thread'
 
 const request = vi.fn()
 vi.stubGlobal('window', {
-  overbench: { agents: { request }, perf: false },
+  kettu: { agents: { request }, perf: false },
   matchMedia: () => ({ matches: false, addEventListener: () => {} }),
 })
 

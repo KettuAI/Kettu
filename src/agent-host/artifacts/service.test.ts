@@ -42,7 +42,7 @@ async function setup(
     session?: (sessionId: string) => string | null
   } = {},
 ) {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'overbench-artifact-service-'))
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'kettu-artifact-service-'))
   const contentDir = path.join(dir, 'artifacts', 'content')
   const logs: string[] = []
   const log = (_level: string, message: string): void => void logs.push(message)
@@ -163,7 +163,7 @@ describe('the artifacts service', () => {
     expect(service.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/)
     const [one] = service.servers('s1', '/p')
     const [two] = service.servers('s2', '/p')
-    expect(one).toMatchObject({ type: 'http', name: 'overbench', url: service.url })
+    expect(one).toMatchObject({ type: 'http', name: 'kettu', url: service.url })
     const token = (server: typeof one) =>
       (server as { headers: { value: string }[] }).headers[0]!.value
     expect(token(one)).toMatch(/^Bearer [A-Za-z0-9_-]{43}$/)
@@ -186,7 +186,7 @@ describe('the artifacts service', () => {
     expect(client.getInstructions()).toBe(
       `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS}`,
     )
-    expect(client.getServerVersion()).toMatchObject({ name: 'overbench', version: '0.0.0-test' })
+    expect(client.getServerVersion()).toMatchObject({ name: 'kettu', version: '0.0.0-test' })
     const { tools } = await client.listTools()
     expect(tools.map((tool) => tool.name)).toHaveLength(27)
     expect(tools.map((tool) => tool.name)).toEqual(SERVICE_TOOLS.map((tool) => tool.name))
@@ -202,7 +202,7 @@ describe('the artifacts service', () => {
     const createTool = SERVICE_TOOLS.find((tool) => tool.name === 'create_artifact')!
     expect(createTool.description).toContain('. ')
     expect(summaries.find((tool) => tool.name === 'create_artifact')?.description).toBe(
-      'Makes a new artifact, an HTML page OverBench shows the user, at version 1.',
+      'Makes a new artifact, an HTML page Kettu shows the user, at version 1.',
     )
     for (const summary of summaries) {
       expect(summary.description.length).toBeLessThanOrEqual(200)
@@ -463,7 +463,7 @@ describe('the artifacts service', () => {
     const one = service.folderServers(agent, '/p', 's1')
     expect(service.folderServers(agent, '/p', 's2')).toEqual(one)
     expect(one).toEqual([
-      expect.objectContaining({ type: 'http', name: 'overbench', url: service.url }),
+      expect.objectContaining({ type: 'http', name: 'kettu', url: service.url }),
     ])
     const token = (servers: McpServer[]) =>
       (servers[0] as { headers: { value: string }[] }).headers[0]!.value
@@ -504,7 +504,7 @@ describe('the artifacts service', () => {
     expect(await list({ 'ai.opencode/sessionID': 'acp-1' })).toMatchObject({
       structuredContent: { artifacts: [] },
     })
-    // No id, an id OverBench does not know, one of another folder, and one that is not text.
+    // No id, an id Kettu does not know, one of another folder, and one that is not text.
     for (const meta of [
       undefined,
       { 'ai.opencode/sessionID': 'acp-9' },

@@ -78,7 +78,7 @@ describe('checkBody', () => {
       'Fixes #6',
       'resolves #6',
       'REFS #6',
-      'Adds the check.\n\nCloses https://github.com/overbench/overbench/issues/6\n\nRan the tests.',
+      'Adds the check.\n\nCloses https://github.com/KettuAI/Kettu/issues/6\n\nRan the tests.',
       'Closes #6, and refs #7.',
     ]) {
       expect(checkBody(body), body).toEqual([])
@@ -96,7 +96,7 @@ describe('checkBody', () => {
       'Closes #6a',
       'Encloses #6',
       'Closes https://github.com/someone/else/issues/6',
-      'Closes https://github.com/overbench/overbench/pull/6',
+      'Closes https://github.com/KettuAI/Kettu/pull/6',
     ]) {
       expect(checkBody(body), body).toEqual([problem])
     }

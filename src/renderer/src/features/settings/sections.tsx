@@ -436,7 +436,7 @@ export function ShellPicker() {
   const choose = async () => {
     setPickError(null)
     try {
-      await window.overbench.dialogs.chooseShell()
+      await window.kettu.dialogs.chooseShell()
     } catch (e) {
       setPickError(errorMessage(e))
     }
@@ -492,7 +492,7 @@ function Ansi({ color, children }: { color: keyof typeof ANSI_COLOR; children: R
 function PromptLine({ children }: { children?: ReactNode }) {
   return (
     <div className="whitespace-pre">
-      <Ansi color="blue">~/projects/overbench</Ansi> <Ansi color="magenta">main</Ansi>{' '}
+      <Ansi color="blue">~/projects/kettu</Ansi> <Ansi color="magenta">main</Ansi>{' '}
       <Ansi color="green">{'\u276F'}</Ansi> {children}
     </div>
   )
@@ -751,7 +751,7 @@ export function TestNotification() {
     setUnsupported(false)
     setError(null)
     try {
-      const shown = await window.overbench.notifications.test()
+      const shown = await window.kettu.notifications.test()
       setUnsupported(!shown)
       if (shown) {
         setSent(true)
@@ -977,7 +977,7 @@ function SavedTo({ path }: { path: string }) {
         className="rounded-sm font-medium text-primary underline decoration-border-strong underline-offset-2 outline-none hover:decoration-current focus-ring"
         onClick={() => {
           setError(null)
-          window.overbench.shell.showItem(path).catch((e: unknown) => setError(errorMessage(e)))
+          window.kettu.shell.showItem(path).catch((e: unknown) => setError(errorMessage(e)))
         }}
       >
         {t('agents.showIn', { name: fileManagerName() })}
@@ -1021,7 +1021,7 @@ export function ClearBrowsingData() {
     setBusy(true)
     setError(null)
     try {
-      await window.overbench.browser.clearData()
+      await window.kettu.browser.clearData()
       toast(t('browser.clearData.cleared'))
     } catch (e) {
       setError(errorMessage(e))
@@ -1071,7 +1071,7 @@ export function AllowedSitesList() {
 
   useEffect(() => {
     let cancelled = false
-    void window.overbench.browser
+    void window.kettu.browser
       .allowedSites()
       .then((list) => {
         if (!cancelled) setSites(list)
@@ -1089,7 +1089,7 @@ export function AllowedSitesList() {
     setBusy(key)
     setError(null)
     try {
-      await window.overbench.browser.removeAllowedSite(projectPath, origin)
+      await window.kettu.browser.removeAllowedSite(projectPath, origin)
       setSites(
         (list) =>
           list

@@ -12,7 +12,7 @@ describe('ProjectRegistry', () => {
   })
 
   it('matches a project through a symlink and a trailing slash', async () => {
-    dir = await realpath(await mkdtemp(join(tmpdir(), 'overbench-projects-')))
+    dir = await realpath(await mkdtemp(join(tmpdir(), 'kettu-projects-')))
     const project = join(dir, 'app')
     await mkdir(project)
     // Creating a symlink needs extra privileges on Windows.

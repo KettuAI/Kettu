@@ -166,7 +166,7 @@ const AVATAR =
 
 /**
  * Who is at the artifact: every session using it now, the editing ones first, as avatars that
- * open their session with the artifact beside it, and how many places in OverBench show it.
+ * open their session with the artifact beside it, and how many places in Kettu show it.
  */
 export function Presence({
   id,

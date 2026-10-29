@@ -8,10 +8,10 @@ export const CLOUDFLARE_TOKEN = /^[\x21-\x7e]{1,256}$/
 
 /**
  * Where to create the API token: Cloudflare's form for a new one, with Workers Scripts Edit on every
- * account and the name OverBench filled in, so the user only creates it and copies it.
+ * account and the name Kettu filled in, so the user only creates it and copies it.
  */
 export const CLOUDFLARE_TOKENS_URL =
-  'https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&zoneId=all&name=OverBench'
+  'https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=%2A&zoneId=all&name=Kettu'
 
 /** Where an account picks its `workers.dev` subdomain. */
 export const CLOUDFLARE_DASHBOARD_URL = 'https://dash.cloudflare.com/'

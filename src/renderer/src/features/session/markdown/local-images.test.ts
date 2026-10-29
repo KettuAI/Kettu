@@ -24,7 +24,7 @@ function images(html: string): (string | null)[] {
 
 // What OpenCode wrote for a screenshot in a No project session, 2026-10-24.
 const SCREENSHOT =
-  '/Users/amigoer/Library/Application Support/OverBench Dev/scratch/scratch-2026-10-23-59534e/desktop-shot.png'
+  '/Users/amigoer/Library/Application Support/Kettu Dev/scratch/scratch-2026-10-23-59534e/desktop-shot.png'
 
 describe('localImages', () => {
   it('shows an image whose absolute path has spaces', () => {

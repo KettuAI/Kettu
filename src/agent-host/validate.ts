@@ -768,8 +768,8 @@ export function createValidators(platform: Platform): Validators {
     },
     'usage.summary': (params) => {
       const o = fields(params)
-      if (o.scope !== 'computer' && o.scope !== 'overbench') {
-        throw invalidParams('scope must be computer or overbench')
+      if (o.scope !== 'computer' && o.scope !== 'kettu') {
+        throw invalidParams('scope must be computer or kettu')
       }
       return { dayStarts: dayStarts(o), ...range(o), scope: o.scope }
     },

@@ -19,7 +19,7 @@ function resources(): Resource {
 }
 
 // Tests run without the preload.
-const systemLocale: Locale = globalThis.window?.overbench?.systemLocale ?? 'en'
+const systemLocale: Locale = globalThis.window?.kettu?.systemLocale ?? 'en'
 
 void i18next.use(initReactI18next).init(i18nOptions(systemLocale, resources(), 'common'))
 

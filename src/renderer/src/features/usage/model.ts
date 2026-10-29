@@ -11,11 +11,11 @@ export type AgentFilter = AgentId | 'all'
 
 /** What the figures, the trend and the breakdowns count. */
 export type Metric = 'tokens' | 'requests' | 'cost'
-/** What the metric counts under the chosen scope: OverBench's turns stand in for requests there. */
+/** What the metric counts under the chosen scope: Kettu's turns stand in for requests there. */
 export type MetricKind = 'tokens' | 'requests' | 'turns' | 'cost'
 
 export function metricKind(metric: Metric, scope: UsageScope): MetricKind {
-  return metric === 'requests' && scope === 'overbench' ? 'turns' : metric
+  return metric === 'requests' && scope === 'kettu' ? 'turns' : metric
 }
 
 /** A sum in the metric; cost is null when nothing in it had a price. */

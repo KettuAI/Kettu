@@ -1201,7 +1201,7 @@ describe('prepared sessions', () => {
     ])
   })
 
-  it('drops a remembered model once the project chose another outside OverBench', async () => {
+  it('drops a remembered model once the project chose another outside Kettu', async () => {
     const { t, port } = await setup()
     const first = await prepare(t, port)
     await port.request('sessions.setConfigOption', {
@@ -1938,7 +1938,7 @@ describe('reports', () => {
     })
   })
 
-  it('says plainly when the report holds nothing OverBench can read', async () => {
+  it('says plainly when the report holds nothing Kettu can read', async () => {
     // Without `delete`, no hidden session can be removed, so /context runs nothing.
     const { t, port } = await setup({ agentEnv: { FAKE_AGENT_WITHOUT: 'delete' } })
     const sessionId = await newSession(t, port)
@@ -1946,7 +1946,7 @@ describe('reports', () => {
     await port.untilStatus(sessionId, 'ready')
     await expect(port.request('sessions.context', { sessionId })).rejects.toMatchObject({
       code: 'agent_error',
-      message: "Fake agent's /context gave no report OverBench can read",
+      message: "Fake agent's /context gave no report Kettu can read",
     })
   })
 
@@ -2030,7 +2030,7 @@ describe('a prompt turn', () => {
       dayStarts: [today, today + 86_400_000],
       from: today,
       to: today + 86_400_000,
-      scope: 'overbench',
+      scope: 'kettu',
     })
     expect(summary.days).toEqual([
       {
@@ -2051,7 +2051,7 @@ describe('a prompt turn', () => {
     expect(summary.projects).toEqual([
       expect.objectContaining({ agentId: 'fake-agent', project: t.project, output: 420 }),
     ])
-    expect(summary.sources['fake-agent']).toBe('overbench')
+    expect(summary.sources['fake-agent']).toBe('kettu')
     expect(summary.first).toBeGreaterThanOrEqual(today)
     expect(summary.agents).toEqual(['fake-agent'])
     expect(turnEnd.id).toMatch(/^e:/)

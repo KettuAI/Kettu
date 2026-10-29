@@ -15,12 +15,12 @@ describe('pickInstaller', () => {
   it('finds the NSIS setup for the version and architecture', () => {
     const files = [
       'builder-effective-config.yaml',
-      'OverBench-0.0.900-x64-setup.exe',
-      'OverBench-0.0.900-x64-setup.exe.blockmap',
+      'Kettu-0.0.900-x64-setup.exe',
+      'Kettu-0.0.900-x64-setup.exe.blockmap',
       'latest.yml',
     ]
     expect(pickInstaller(files, { platform: 'win32', version: '0.0.900', arch: 'x64' })).toBe(
-      'OverBench-0.0.900-x64-setup.exe',
+      'Kettu-0.0.900-x64-setup.exe',
     )
     expect(
       pickInstaller(files, { platform: 'win32', version: '0.0.900', arch: 'arm64' }),
@@ -28,16 +28,16 @@ describe('pickInstaller', () => {
   })
 
   it('finds the dmg for the architecture', () => {
-    const files = ['OverBench-0.0.900-arm64.dmg', 'OverBench-0.0.900-x64.dmg', 'latest-mac.yml']
+    const files = ['Kettu-0.0.900-arm64.dmg', 'Kettu-0.0.900-x64.dmg', 'latest-mac.yml']
     expect(pickInstaller(files, { platform: 'darwin', version: '0.0.900', arch: 'arm64' })).toBe(
-      'OverBench-0.0.900-arm64.dmg',
+      'Kettu-0.0.900-arm64.dmg',
     )
   })
 
   it('finds the AppImage, whose name carries no version', () => {
-    const files = ['OverBench-x86_64.AppImage', 'latest-linux.yml']
+    const files = ['Kettu-x86_64.AppImage', 'latest-linux.yml']
     expect(pickInstaller(files, { platform: 'linux', version: '0.0.900', arch: 'x64' })).toBe(
-      'OverBench-x86_64.AppImage',
+      'Kettu-x86_64.AppImage',
     )
   })
 })
@@ -60,7 +60,7 @@ describe('defaultDataFolder', () => {
   it('follows each platform', () => {
     expect(
       defaultDataFolder({ platform: 'darwin', home: '/Users/a', appData: '', xdgConfigHome: '' }),
-    ).toBe(join('/Users/a', 'Library', 'Application Support', 'OverBench'))
+    ).toBe(join('/Users/a', 'Library', 'Application Support', 'Kettu'))
     expect(
       defaultDataFolder({
         platform: 'win32',
@@ -68,7 +68,7 @@ describe('defaultDataFolder', () => {
         appData: 'C:\\Users\\a\\AppData\\Roaming',
         xdgConfigHome: undefined,
       }),
-    ).toBe(join('C:\\Users\\a\\AppData\\Roaming', 'OverBench'))
+    ).toBe(join('C:\\Users\\a\\AppData\\Roaming', 'Kettu'))
     expect(
       defaultDataFolder({
         platform: 'linux',
@@ -76,7 +76,7 @@ describe('defaultDataFolder', () => {
         appData: undefined,
         xdgConfigHome: '',
       }),
-    ).toBe(join('/home/a', '.config', 'OverBench'))
+    ).toBe(join('/home/a', '.config', 'Kettu'))
     expect(
       defaultDataFolder({
         platform: 'linux',
@@ -84,7 +84,7 @@ describe('defaultDataFolder', () => {
         appData: undefined,
         xdgConfigHome: '/home/a/.config-xdg',
       }),
-    ).toBe(join('/home/a/.config-xdg', 'OverBench'))
+    ).toBe(join('/home/a/.config-xdg', 'Kettu'))
   })
 })
 
@@ -95,7 +95,7 @@ describe('windowsInstallFolder', () => {
         home: 'C:\\Users\\a',
         localAppData: 'C:\\Users\\a\\AppData\\Local',
       }),
-    ).toBe(join('C:\\Users\\a\\AppData\\Local', 'Programs', 'overbench'))
+    ).toBe(join('C:\\Users\\a\\AppData\\Local', 'Programs', 'kettu'))
   })
 })
 
@@ -103,7 +103,7 @@ describe('namesDmg', () => {
   it('accepts the release link to the dmg for the architecture', () => {
     expect(
       namesDmg(
-        'https://github.com/overbench/overbench/releases/download/v0.0.901/OverBench-0.0.901-arm64.dmg',
+        'https://github.com/KettuAI/Kettu/releases/download/v0.0.901/Kettu-0.0.901-arm64.dmg',
         { version: '0.0.901', arch: 'arm64' },
       ),
     ).toBe(true)
@@ -111,11 +111,11 @@ describe('namesDmg', () => {
 
   it('rejects another architecture, version or link', () => {
     const href =
-      'https://github.com/overbench/overbench/releases/download/v0.0.901/OverBench-0.0.901-arm64.dmg'
+      'https://github.com/KettuAI/Kettu/releases/download/v0.0.901/Kettu-0.0.901-arm64.dmg'
     expect(namesDmg(href, { version: '0.0.901', arch: 'x64' })).toBe(false)
     expect(namesDmg(href, { version: '0.0.902', arch: 'arm64' })).toBe(false)
     expect(
-      namesDmg('https://github.com/overbench/overbench/releases/tag/v0.0.901', {
+      namesDmg('https://github.com/KettuAI/Kettu/releases/tag/v0.0.901', {
         version: '0.0.901',
         arch: 'arm64',
       }),
@@ -173,18 +173,18 @@ describe('processesUnder', () => {
   it('finds every process running from inside the app, ShipIt included', () => {
     const output = [
       '  1 /sbin/launchd',
-      '412 /Applications/OverBench.app/Contents/MacOS/OverBench',
-      '415 /Applications/OverBench.app/Contents/Frameworks/OverBench Helper (Renderer).app/Contents/MacOS/OverBench Helper (Renderer)',
-      '520 /Applications/OverBench.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt',
-      '611 /Applications/OverBench Beta.app/Contents/MacOS/OverBench Beta',
-      '700 /Applications/OverBench.app.old/Contents/MacOS/OverBench',
+      '412 /Applications/Kettu.app/Contents/MacOS/Kettu',
+      '415 /Applications/Kettu.app/Contents/Frameworks/Kettu Helper (Renderer).app/Contents/MacOS/Kettu Helper (Renderer)',
+      '520 /Applications/Kettu.app/Contents/Frameworks/Squirrel.framework/Resources/ShipIt',
+      '611 /Applications/Kettu Beta.app/Contents/MacOS/Kettu Beta',
+      '700 /Applications/Kettu.app.old/Contents/MacOS/Kettu',
       '',
     ].join('\n')
-    expect(processesUnder(output, '/Applications/OverBench.app')).toEqual([412, 415, 520])
+    expect(processesUnder(output, '/Applications/Kettu.app')).toEqual([412, 415, 520])
   })
 
   it('finds nothing when no process runs from it', () => {
-    expect(processesUnder('  1 /sbin/launchd\n', '/Applications/OverBench.app')).toEqual([])
-    expect(processesUnder('', '/Applications/OverBench.app')).toEqual([])
+    expect(processesUnder('  1 /sbin/launchd\n', '/Applications/Kettu.app')).toEqual([])
+    expect(processesUnder('', '/Applications/Kettu.app')).toEqual([])
   })
 })

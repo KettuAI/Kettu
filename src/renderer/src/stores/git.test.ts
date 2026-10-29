@@ -3,7 +3,7 @@ import type { GitTools, PullRequest } from '@shared/git'
 
 const request = vi.fn()
 const loadPicture = vi.fn()
-vi.stubGlobal('window', { overbench: { agents: { request }, avatars: { load: loadPicture } } })
+vi.stubGlobal('window', { kettu: { agents: { request }, avatars: { load: loadPicture } } })
 
 const { loadAvatar, loadGitTools, loadPullRequest, retryPullRequest, showProjects, useGitStore } =
   await import('./git')
@@ -85,7 +85,7 @@ describe('loadPullRequest', () => {
 })
 
 describe('loadAvatar', () => {
-  const login = 'overbench-builder[bot]'
+  const login = 'kettu-builder[bot]'
   const url = 'https://avatars.githubusercontent.com/in/5463070?v=4'
   const picture = 'data:image/png;base64,iVBORw0KGgo='
   let clock = 1_000_000
@@ -152,7 +152,7 @@ describe('loadAvatar', () => {
   })
 
   it('asks nothing for what is not a GitHub login', () => {
-    loadAvatar('app/overbench-builder')
+    loadAvatar('app/kettu-builder')
     loadAvatar('')
     expect(request).not.toHaveBeenCalled()
   })

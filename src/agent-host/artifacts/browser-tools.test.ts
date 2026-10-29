@@ -114,7 +114,7 @@ describe('the browser tools', () => {
     )
   })
 
-  it('refuses a session OverBench no longer holds', async () => {
+  it('refuses a session Kettu no longer holds', async () => {
     const { browser, call } = tools(
       async () => ({
         result: { text: 'Done.', value: {} },

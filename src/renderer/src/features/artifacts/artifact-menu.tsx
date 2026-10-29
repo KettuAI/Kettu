@@ -106,7 +106,7 @@ export function ArtifactMenuItems({
         )}
         <DropdownMenuItem
           onClick={() =>
-            void window.overbench.artifacts
+            void window.kettu.artifacts
               .openExternal(target.id, target.version)
               .catch(failed('open in the browser'))
           }
@@ -116,9 +116,7 @@ export function ArtifactMenuItems({
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() =>
-            void window.overbench.artifacts
-              .export(target.id, target.version)
-              .catch(failed('export'))
+            void window.kettu.artifacts.export(target.id, target.version).catch(failed('export'))
           }
         >
           <FileDownIcon />

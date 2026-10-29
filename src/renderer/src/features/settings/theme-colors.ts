@@ -109,7 +109,7 @@ export function themeFile(theme: Theme | null): string {
     return { ...(code ? { code } : {}), colors: themeColors(theme, mode) }
   }
   const file = {
-    overbenchTheme: THEME_FORMAT,
+    kettuTheme: THEME_FORMAT,
     name: theme?.name ?? 'My Theme',
     ...(theme?.author ? { author: theme.author } : {}),
     ...(theme?.version ? { version: theme.version } : {}),

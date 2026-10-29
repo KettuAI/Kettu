@@ -4,9 +4,9 @@ Guidance for coding agents working in this repository. `CLAUDE.md` imports this 
 
 ## Project
 
-OverBench is an Electron desktop GUI for terminal coding agents: Claude Code, Codex CLI, opencode and Pi. It is in early development; [README.md](./README.md) has the product vision and features, and [ROADMAP.md](./ROADMAP.md) the plans.
+Kettu is an Electron desktop GUI for terminal coding agents: Claude Code, Codex CLI, opencode and Pi. It is in early development; [README.md](./README.md) has the product vision and features, and [ROADMAP.md](./ROADMAP.md) the plans.
 
-OverBench is only a GUI: it implements no agent and talks to every agent over the Agent Client Protocol (ACP).
+Kettu is only a GUI: it implements no agent and talks to every agent over the Agent Client Protocol (ACP).
 
 ## Engineering rules
 
@@ -29,7 +29,7 @@ OverBench is only a GUI: it implements no agent and talks to every agent over th
 ### Reusing code from other projects
 
 - Check the license first. Code under MIT, BSD, ISC or Apache-2.0 may be adapted: keep its copyright and license notice, and add a one-line comment with the source URL.
-- OverBench is licensed under Apache-2.0, so code under GPL or AGPL cannot be reused. Ask the maintainer before reusing LGPL or MPL code, or code without a license.
+- Kettu is licensed under Apache-2.0, so code under GPL or AGPL cannot be reused. Ask the maintainer before reusing LGPL or MPL code, or code without a license.
 - When a maintained package already does the job, prefer depending on it over copying it, subject to the dependency rules below.
 
 ## Tech stack
@@ -64,7 +64,7 @@ The top of the tree:
 ```text
 src/
 ├── main/              Main process: lifecycle, windows, menus, IPC, settings, updates
-├── preload/           Sandboxed bridge exposed as window.overbench
+├── preload/           Sandboxed bridge exposed as window.kettu
 ├── agent-host/        Utility process: agents over ACP, sessions, projects, git
 ├── terminal-host/     Utility process: the terminal's shells through node-pty
 ├── renderer/src/      React UI
@@ -85,13 +85,13 @@ tools/
 
 ### Adding an IPC call
 
-1. Declare the channel in `IpcInvokeContract` and the method in `OverbenchApi`, both in `src/shared/ipc.ts`. Channel names are `domain:action` in kebab-case, e.g. `app:get-info`.
+1. Declare the channel in `IpcInvokeContract` and the method in `KettuApi`, both in `src/shared/ipc.ts`. Channel names are `domain:action` in kebab-case, e.g. `app:get-info`.
 2. Register the handler in `src/main/ipc.ts` with `handle()`, which rejects senders outside the app.
 3. Expose the method in `src/preload/index.ts` through `invoke()`.
 
 ### Security rules
 
-OverBench drives agents that run shell commands, so these are not negotiable:
+Kettu drives agents that run shell commands, so these are not negotiable:
 
 - Keep `sandbox: true`, `contextIsolation: true` and `nodeIntegration: false`.
 - Never expose `ipcRenderer` or Node APIs to the renderer; expose narrow, typed methods only.
@@ -113,7 +113,7 @@ OverBench drives agents that run shell commands, so these are not negotiable:
 | `pnpm package`      | Build an unpacked app into `dist/`        |
 | `pnpm shadcn add x` | Add a shadcn/ui component                 |
 
-`pnpm dev` keeps its data in a folder of its own, `OverBench Dev`, so it never touches the installed app's sessions and can run beside it. To run several worktrees at once, give each its own folder and debugging port, such as `OVERBENCH_USER_DATA=/tmp/overbench-feature-x REMOTE_DEBUGGING_PORT=9223 pnpm dev` (set the variables as your shell does on Windows). Electron's `--user-data-dir` is not needed.
+`pnpm dev` keeps its data in a folder of its own, `Kettu Dev`, so it never touches the installed app's sessions and can run beside it. To run several worktrees at once, give each its own folder and debugging port, such as `KETTU_USER_DATA=/tmp/kettu-feature-x REMOTE_DEBUGGING_PORT=9223 pnpm dev` (set the variables as your shell does on Windows). Electron's `--user-data-dir` is not needed.
 
 ## Definition of done
 

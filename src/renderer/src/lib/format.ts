@@ -105,7 +105,7 @@ export function timeLeft(ms: number): string {
     : countdown(ms)
 }
 
-/** A plan-limit window's name: OverBench's for the windows it knows, else the agent's own. */
+/** A plan-limit window's name: Kettu's for the windows it knows, else the agent's own. */
 export function limitLabel(limit: Pick<PlanLimit, 'window' | 'label'>): string {
   const key = `planWindow.${limit.window}`
   if (i18n.exists(key)) return i18n.t(key as 'planWindow.five_hour')

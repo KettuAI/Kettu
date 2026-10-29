@@ -56,7 +56,7 @@ function run(args: string[]): Promise<{ code: number | null; stderr: string }> {
 }
 
 it('gets usable electron-updater exports in the packaged app', { timeout: 60_000 }, async () => {
-  dir = await mkdtemp(path.join(os.tmpdir(), 'overbench-updater-'))
+  dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-updater-'))
   const result = path.join(dir, 'result.json')
   const main = path.join(dir, 'main.cjs')
   await writeFile(main, harness(new URL('./auto-updater.ts', import.meta.url).href, result))

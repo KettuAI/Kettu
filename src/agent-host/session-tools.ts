@@ -33,7 +33,7 @@ export interface ToolSession {
 }
 
 export interface SessionToolsDeps {
-  /** The session, or null for one OverBench does not list: a subagent, prepared or unknown. */
+  /** The session, or null for one Kettu does not list: a subagent, prepared or unknown. */
   info(sessionId: string): ToolSession | null
   /** The project's top-level sessions and their sub-sessions, newest first. */
   list(projectPath: string): ToolSession[]
@@ -143,7 +143,7 @@ export class SessionToolError extends Error {
 
 /** The service's `instructions` gain this paragraph, after the artifact tools'. */
 export const SESSION_INSTRUCTIONS =
-  "You can manage OverBench sessions in your project: list them, read another session's latest " +
+  "You can manage Kettu sessions in your project: list them, read another session's latest " +
   'reply, rename or archive your own session or one you started, start a session for a separate ' +
   'task with its first prompt, and send a session you started a follow-up. Archive your own ' +
   'session only when the user asked you to or your work is clearly done. A session you start ' +

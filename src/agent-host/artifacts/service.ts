@@ -1,4 +1,4 @@
-// The artifacts service: the `overbench` MCP server on 127.0.0.1, which each attached session
+// The artifacts service: the `kettu` MCP server on 127.0.0.1, which each attached session
 // reaches with a token of its own, or for OpenCode with its process and folder's token. Streamable
 // HTTP in plain JSON, one stateless transport per request.
 
@@ -33,7 +33,7 @@ import {
   type Caller,
 } from './tools'
 
-export const SERVICE_NAME = 'overbench'
+export const SERVICE_NAME = 'kettu'
 export const SERVICE_PATH = '/mcp'
 export const BODY_BYTES = 6 * 1024 * 1024
 const TOKEN_BYTES = 32
@@ -72,7 +72,7 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   sessions: SessionToolsDeps
   /**
    * The session in memory that a call of `process` names, a subagent's counting as the session
-   * it runs under; null for an id OverBench does not have.
+   * it runs under; null for an id Kettu does not have.
    */
   sessionOf(process: AgentProcess, id: string): string | null
   /** A call of the session's, or of a subagent of it, wrote to an artifact. */
@@ -427,7 +427,7 @@ export class ArtifactService {
   private mcpServer(sdk: Sdk, grant: Grant): Server {
     const { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } = sdk
     const server = new sdk.Server(
-      { name: SERVICE_NAME, title: 'OverBench', version: this.deps.appVersion },
+      { name: SERVICE_NAME, title: 'Kettu', version: this.deps.appVersion },
       { capabilities: { tools: {} }, instructions: SERVICE_INSTRUCTIONS },
     )
     server.setRequestHandler(ListToolsRequestSchema, () => ({

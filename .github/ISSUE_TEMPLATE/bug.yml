@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in OverBench does not work
+description: Something in Kettu does not work
 type: Bug
 labels:
   - state:needs-triage
@@ -14,7 +14,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: OverBench version
+      label: Kettu version
       description: Find it in Settings > About.
       placeholder: 0.0.1
     validations:

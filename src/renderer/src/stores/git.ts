@@ -172,7 +172,7 @@ export function loadAvatar(login: string): void {
     try {
       const url = await host('git.avatarUrl', { login })
       // No URL means GitHub has no picture; a URL whose picture did not load is asked again.
-      const picture = url === null ? null : await window.overbench.avatars.load(url)
+      const picture = url === null ? null : await window.kettu.avatars.load(url)
       if (url !== null && picture === null) {
         avatarFailures.set(login, Date.now())
       } else {

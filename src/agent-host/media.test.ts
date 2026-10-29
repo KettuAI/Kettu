@@ -169,7 +169,7 @@ describe('MediaService', () => {
   const sessionId = 's1'
 
   beforeAll(async () => {
-    base = await realpath(await mkdtemp(join(os.tmpdir(), 'overbench-media-')))
+    base = await realpath(await mkdtemp(join(os.tmpdir(), 'kettu-media-')))
     root = join(base, 'scratch', 'scratch-1')
     home = join(base, 'home')
     outside = join(base, 'elsewhere')
@@ -217,7 +217,7 @@ describe('MediaService', () => {
     })
     if (result.kind !== 'granted') return
     expect(result.grant.url).toMatch(
-      new RegExp(`^overbench-media://${token}/desktop%20shot\\.png\\?v=\\d+$`),
+      new RegExp(`^kettu-media://${token}/desktop%20shot\\.png\\?v=\\d+$`),
     )
     expect(grants).toEqual([
       {

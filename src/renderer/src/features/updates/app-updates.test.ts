@@ -97,7 +97,7 @@ describe('appUpdateRow', () => {
   it('says that Update moves the app first from a read-only volume, and shows the move', () => {
     expect(appUpdateRow({ kind: 'available', version: '0.3.0', moves: true })).toMatchObject({
       label: '0.3.0 is out',
-      detail: 'Update moves OverBench to Applications, then restarts; your sessions come back.',
+      detail: 'Update moves Kettu to Applications, then restarts; your sessions come back.',
       action: 'update',
     })
     expect(appUpdateRow({ kind: 'moving', version: '0.3.0' })).toEqual({
@@ -124,7 +124,7 @@ describe('appUpdateRow', () => {
       dismissible: true,
     })
     expect(appUpdateRow({ kind: 'link', version: '0.3.0', downloadUrl: null }).href).toBe(
-      'https://github.com/overbench/overbench/releases/tag/v0.3.0',
+      'https://github.com/KettuAI/Kettu/releases/tag/v0.3.0',
     )
   })
 
@@ -144,7 +144,7 @@ describe('appUpdateRow', () => {
       detail: 'Updated from 0.2.0.',
       action: 'whats-new',
       actionLabel: 'What’s new',
-      href: 'https://github.com/overbench/overbench/releases/tag/v0.3.0',
+      href: 'https://github.com/KettuAI/Kettu/releases/tag/v0.3.0',
       dismissible: true,
     })
   })
@@ -156,7 +156,7 @@ describe('appUpdateRow', () => {
       detail: '「更新」会下载并重启，会话会自动恢复。',
     })
     expect(appUpdateRow({ kind: 'available', version: '0.3.0', moves: true }).detail).toBe(
-      '「更新」会把 OverBench 移到“应用程序”文件夹并重启，会话会自动恢复。',
+      '「更新」会把 Kettu 移到“应用程序”文件夹并重启，会话会自动恢复。',
     )
     expect(appUpdateRow({ kind: 'moving', version: '0.3.0' }).label).toBe('正在移到“应用程序”…')
     expect(appUpdateRow({ kind: 'updated', version: '0.3.0', from: '0.2.0' }).detail).toBe(

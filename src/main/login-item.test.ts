@@ -35,7 +35,7 @@ afterEach(async () => {
 })
 
 async function temporaryHome(): Promise<string> {
-  home = await mkdtemp(join(os.tmpdir(), 'overbench-login-'))
+  home = await mkdtemp(join(os.tmpdir(), 'kettu-login-'))
   return home
 }
 
@@ -43,7 +43,7 @@ function context(platform: NodeJS.Platform, overrides = {}) {
   return {
     platform,
     packaged: true,
-    execPath: '/opt/overbench',
+    execPath: '/opt/kettu',
     home: '/home/test',
     appImage: undefined,
     ...overrides,
@@ -65,8 +65,8 @@ describe('startMode', () => {
 
 describe('isOpenedAtLogin', () => {
   it('reads the flag on Windows and Linux', () => {
-    expect(isOpenedAtLogin('win32', ['overbench.exe', OPENED_AT_LOGIN_FLAG], false)).toBe(true)
-    expect(isOpenedAtLogin('linux', ['overbench'], false)).toBe(false)
+    expect(isOpenedAtLogin('win32', ['kettu.exe', OPENED_AT_LOGIN_FLAG], false)).toBe(true)
+    expect(isOpenedAtLogin('linux', ['kettu'], false)).toBe(false)
   })
 
   it('asks macOS how it was opened', () => {
@@ -77,16 +77,16 @@ describe('isOpenedAtLogin', () => {
 
 describe('the Linux desktop entry', () => {
   it('lives in the autostart folder of the home directory', () => {
-    expect(autostartPath('/home/ana')).toBe('/home/ana/.config/autostart/overbench.desktop')
+    expect(autostartPath('/home/ana')).toBe('/home/ana/.config/autostart/kettu.desktop')
   })
 
   it('starts the app with the flag that marks a login start', () => {
-    expect(autostartEntry('/opt/OverBench/overbench')).toBe(
+    expect(autostartEntry('/opt/Kettu/kettu')).toBe(
       [
         '[Desktop Entry]',
         'Type=Application',
-        'Name=OverBench',
-        'Exec="/opt/OverBench/overbench" --opened-at-login',
+        'Name=Kettu',
+        'Exec="/opt/Kettu/kettu" --opened-at-login',
         'Terminal=false',
         'X-GNOME-Autostart-enabled=true',
         '',
@@ -101,20 +101,20 @@ describe('the Linux desktop entry', () => {
   })
 
   it('runs the AppImage itself when the app was started from one', () => {
-    expect(linuxExecPath('/tmp/.mount_OverBench/overbench', '/home/ana/OverBench.AppImage')).toBe(
-      '/home/ana/OverBench.AppImage',
+    expect(linuxExecPath('/tmp/.mount_Kettu/kettu', '/home/ana/Kettu.AppImage')).toBe(
+      '/home/ana/Kettu.AppImage',
     )
-    expect(linuxExecPath('/opt/overbench', '')).toBe('/opt/overbench')
+    expect(linuxExecPath('/opt/kettu', '')).toBe('/opt/kettu')
   })
 
   it('writes and deletes the entry', async () => {
     const dir = await temporaryHome()
     await applyLoginItem(
       true,
-      context('linux', { home: dir, appImage: '/home/ana/OverBench.AppImage' }),
+      context('linux', { home: dir, appImage: '/home/ana/Kettu.AppImage' }),
     )
     expect(await readFile(autostartPath(dir), 'utf8')).toBe(
-      autostartEntry('/home/ana/OverBench.AppImage'),
+      autostartEntry('/home/ana/Kettu.AppImage'),
     )
     await applyLoginItem(false, context('linux', { home: dir }))
     await expect(readFile(autostartPath(dir), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })

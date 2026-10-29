@@ -11,6 +11,6 @@ describe('CLOUDFLARE_TOKENS_URL', () => {
     ])
     expect(url.searchParams.get('accountId')).toBe('*')
     expect(url.searchParams.get('zoneId')).toBe('all')
-    expect(url.searchParams.get('name')).toBe('OverBench')
+    expect(url.searchParams.get('name')).toBe('Kettu')
   })
 })

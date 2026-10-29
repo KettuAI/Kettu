@@ -26,7 +26,7 @@ const status = (overrides: Partial<AgentStatus>): AgentStatus => ({
   installMethods: [],
   cli: null,
   configDir: null,
-  overbenchServer: { runs: true, active: true },
+  kettuServer: { runs: true, active: true },
   capabilities: {
     loadSession: false,
     listSessions: false,

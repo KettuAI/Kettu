@@ -191,8 +191,8 @@ describe('the page', () => {
     const stats: SourceStats[] = [
       { agentId: 'claude-code', source: 'log', rows: 9, first: 0, last: 1 },
       { agentId: 'codex', source: 'log', rows: 4, first: 0, last: 1 },
-      { agentId: 'codex', source: 'overbench', rows: 2, first: 0, last: 1 },
-      { agentId: 'fake-agent', source: 'overbench', rows: 1, first: 0, last: 1 },
+      { agentId: 'codex', source: 'kettu', rows: 2, first: 0, last: 1 },
+      { agentId: 'fake-agent', source: 'kettu', rows: 1, first: 0, last: 1 },
     ]
     Object.assign(store, {
       stats: async () => stats,
@@ -204,7 +204,7 @@ describe('the page', () => {
     await vi.waitFor(() => expect(changed).toBe(1))
     const agents = async (scope: UsageScope) => (await usage.summary([], 0, 1, scope)).agents
     expect(await agents('computer')).toEqual(['claude-code', 'codex', 'fake-agent'])
-    expect(await agents('overbench')).toEqual(['claude-code', 'codex', 'fake-agent'])
+    expect(await agents('kettu')).toEqual(['claude-code', 'codex', 'fake-agent'])
 
     usage.setFromComputer(false)
     expect(await agents('computer')).toEqual(['codex', 'fake-agent'])

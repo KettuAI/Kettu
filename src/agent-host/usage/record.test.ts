@@ -41,7 +41,7 @@ describe('recordRows', () => {
     expect(rows.map((r) => r.turn)).toEqual([1, 0])
     expect(rows.map((r) => r.cacheWrite1h)).toEqual([0, 0])
     expect(rows[0]).toMatchObject({
-      source: 'overbench',
+      source: 'kettu',
       sessionId: 'acp1',
       project: '/p',
       at: 1_000,

@@ -27,7 +27,7 @@ export interface ThumbnailRunResult {
 }
 
 const config = JSON.parse(
-  readFileSync(process.env.OVERBENCH_THUMBNAILS ?? '', 'utf8'),
+  readFileSync(process.env.KETTU_THUMBNAILS ?? '', 'utf8'),
 ) as ThumbnailRunConfig
 
 // Before the app is ready, as main registers its schemes.
@@ -49,7 +49,7 @@ function report(result: ThumbnailRunResult): void {
 
 // It reports before the test's own timeout, and ends when the test's process does.
 setTimeout(() => report({ error: 'The thumbnail did not finish within 50 s' }), 50_000)
-const parent = Number(process.env.OVERBENCH_THUMBNAILS_PARENT)
+const parent = Number(process.env.KETTU_THUMBNAILS_PARENT)
 setInterval(() => {
   try {
     process.kill(parent, 0)

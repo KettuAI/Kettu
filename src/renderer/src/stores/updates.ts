@@ -18,7 +18,7 @@ export const useUpdatesStore = create<UpdatesStore>()(() => ({
 let justCheckedTimer: ReturnType<typeof setTimeout> | undefined
 
 export async function checkForUpdates(): Promise<void> {
-  const status = await window.overbench.updates.check()
+  const status = await window.kettu.updates.check()
   useUpdatesStore.setState({ status })
   if (status.state.kind === 'idle') {
     clearTimeout(justCheckedTimer)
@@ -28,6 +28,6 @@ export async function checkForUpdates(): Promise<void> {
 }
 
 export async function initUpdates(): Promise<void> {
-  window.overbench.updates.onChanged((status) => useUpdatesStore.setState({ status }))
-  useUpdatesStore.setState({ status: await window.overbench.updates.getStatus() })
+  window.kettu.updates.onChanged((status) => useUpdatesStore.setState({ status }))
+  useUpdatesStore.setState({ status: await window.kettu.updates.getStatus() })
 }

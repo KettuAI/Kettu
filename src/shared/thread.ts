@@ -1,4 +1,4 @@
-// OverBench's own session and thread model, shared by the agent host and the renderer.
+// Kettu's own session and thread model, shared by the agent host and the renderer.
 // It never imports ACP types; only the mapper in src/agent-host/acp/ does.
 
 import type { AgentId } from './agents'
@@ -17,7 +17,7 @@ export type SessionStatus =
   | 'closed'
 
 export interface SessionView {
-  id: string // OverBench id; ACP ids are only unique per agent
+  id: string // Kettu id; ACP ids are only unique per agent
   agentId: AgentId
   projectPath: string // canonical absolute path
   acpSessionId: string | null
@@ -62,7 +62,7 @@ export interface SessionUsage {
 }
 
 export interface PromptCache {
-  lastRequestAt: number // when OverBench saw the main thread's latest request
+  lastRequestAt: number // when Kettu saw the main thread's latest request
   ttl: number | null // ms the cache lasts, when the agent's own transcript says
 }
 
@@ -93,7 +93,7 @@ export interface ConfigOption {
   idleOnly?: boolean // can change only while no turn runs
 }
 
-/** Claude Code's ultracode, an option OverBench adds since the adapter offers none. */
+/** Claude Code's ultracode, an option Kettu adds since the adapter offers none. */
 export const ULTRACODE_OPTION_ID = '__ultracode'
 
 export interface SlashCommand {
@@ -138,7 +138,7 @@ export type ThreadEntry =
       // The notice ends the turn: the agent exited mid-turn, or its model provider is out of credit.
       cause?: 'agent_stopped' | 'out_of_credit'
       model?: string // out_of_credit: the session's model when the turn failed
-      // The agent's entry before it, to put it back after a replay: set on the notices OverBench
+      // The agent's entry before it, to put it back after a replay: set on the notices Kettu
       // adds itself, never on an agent's, which its replay sends again.
       after?: string | null
     }
@@ -155,9 +155,9 @@ export type ThreadEntry =
       durationMs: number
       after?: string | null // the agent's entry before it, to put it back after a replay
     }
-  | GitEntry // OverBench's own observation of the repository, see the git design
-  | ArtifactEntry // OverBench's own record of a write to the artifacts service
-  | BrowserOriginEntry // OverBench's own record of a new site's request and answer
+  | GitEntry // Kettu's own observation of the repository, see the git design
+  | ArtifactEntry // Kettu's own record of a write to the artifacts service
+  | BrowserOriginEntry // Kettu's own record of a new site's request and answer
 
 /** `after`: the agent's entry before it, to put it back after a replay; older entries lack it. */
 export type GitEntry =

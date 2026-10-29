@@ -105,7 +105,7 @@ describe('splitLinks', () => {
     ({
       kind: 'tool',
       id,
-      title: `mcp__overbench__${action}`,
+      title: `mcp__kettu__${action}`,
       toolKind: 'other',
       status: 'completed',
       content: [],

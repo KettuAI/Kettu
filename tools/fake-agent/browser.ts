@@ -1,4 +1,4 @@
-// The browser scenario: opens a page through OverBench's browser tools, waitFor its request for a
+// The browser scenario: opens a page through Kettu's browser tools, waitFor its request for a
 // new site to be answered, then reports what the call answered. The screenshots use it to show a
 // new site's card and bar while it waits.
 
@@ -12,9 +12,9 @@ interface CallResult {
 
 type Call = (name: string, args: Record<string, unknown>) => Promise<CallResult>
 
-function overbench(servers: readonly McpServer[]): Extract<McpServer, { type: 'http' }> | null {
+function kettu(servers: readonly McpServer[]): Extract<McpServer, { type: 'http' }> | null {
   for (const server of servers) {
-    if ('type' in server && server.type === 'http' && server.name.startsWith('overbench')) {
+    if ('type' in server && server.type === 'http' && server.name.startsWith('kettu')) {
       return server
     }
   }
@@ -35,7 +35,7 @@ async function say(turn: Turn, text: string): Promise<void> {
  * from opening.
  */
 export const openSite: Scenario = async (turn) => {
-  const server = overbench(turn.session.mcpServers)
+  const server = kettu(turn.session.mcpServers)
   const url = turn.text.trim() || 'https://example.com/'
   if (!server) {
     await say(turn, 'This session has no browser.')

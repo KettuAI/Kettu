@@ -42,7 +42,7 @@ describe('offReason', () => {
 
   it('is off on Linux outside an AppImage', () => {
     expect(offReason(true, 'linux', {})).toEqual({ kind: 'off', reason: 'unsupported' })
-    expect(offReason(true, 'linux', { APPIMAGE: '/opt/OverBench.AppImage' })).toBeNull()
+    expect(offReason(true, 'linux', { APPIMAGE: '/opt/Kettu.AppImage' })).toBeNull()
   })
 
   it('is on for packaged Windows and macOS builds', () => {
@@ -97,20 +97,20 @@ describe('installOnQuit', () => {
 })
 
 describe('dmgDownloadUrl', () => {
-  const files = [{ url: 'OverBench-0.4.0-x64.dmg' }, { url: 'OverBench-0.4.0-arm64.dmg' }]
+  const files = [{ url: 'Kettu-0.4.0-x64.dmg' }, { url: 'Kettu-0.4.0-arm64.dmg' }]
 
   it("picks the .dmg for the Mac's architecture", () => {
     expect(dmgDownloadUrl('0.4.0', files, 'arm64')).toBe(
-      'https://github.com/overbench/overbench/releases/download/v0.4.0/OverBench-0.4.0-arm64.dmg',
+      'https://github.com/KettuAI/Kettu/releases/download/v0.4.0/Kettu-0.4.0-arm64.dmg',
     )
     expect(dmgDownloadUrl('0.4.0', files, 'x64')).toBe(
-      'https://github.com/overbench/overbench/releases/download/v0.4.0/OverBench-0.4.0-x64.dmg',
+      'https://github.com/KettuAI/Kettu/releases/download/v0.4.0/Kettu-0.4.0-x64.dmg',
     )
   })
 
   it('finds none for another architecture or a release without one', () => {
     expect(dmgDownloadUrl('0.4.0', files, 'ia32')).toBeNull()
-    expect(dmgDownloadUrl('0.4.0', [{ url: 'OverBench-0.4.0-arm64-mac.zip' }], 'arm64')).toBeNull()
+    expect(dmgDownloadUrl('0.4.0', [{ url: 'Kettu-0.4.0-arm64-mac.zip' }], 'arm64')).toBeNull()
     expect(dmgDownloadUrl('0.4.0', [], 'arm64')).toBeNull()
   })
 })
@@ -236,7 +236,7 @@ describe('nextState', () => {
   })
 
   it('always stops at available in Link mode, with the .dmg found for this Mac', () => {
-    const url = 'https://github.com/overbench/overbench/releases/download/v0.4.0/x-arm64.dmg'
+    const url = 'https://github.com/KettuAI/Kettu/releases/download/v0.4.0/x-arm64.dmg'
     const link = { ...install, mode: 'link' as const, lastAvailable: '0.4.0', downloadUrl: url }
     expect(
       nextState({ kind: 'checking', manual: false }, { type: 'available', version: '0.4.0' }, link),

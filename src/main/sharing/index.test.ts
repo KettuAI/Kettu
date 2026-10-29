@@ -66,7 +66,7 @@ async function load(
   fetch: Fetch,
   overrides: Partial<SharingDeps> = {},
 ): Promise<{ sharing: Sharing; dir: string }> {
-  const dir = await mkdtemp(join(tmpdir(), 'overbench-sharing-connect-'))
+  const dir = await mkdtemp(join(tmpdir(), 'kettu-sharing-connect-'))
   dirs.push(dir)
   const sharing = await Sharing.load({
     userDataPath: dir,

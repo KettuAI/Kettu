@@ -7,7 +7,7 @@ import type { OpenFile } from '@renderer/stores/files'
 
 vi.mock('./file-type-icon', () => ({ FileTypeIcon: () => null }))
 vi.stubGlobal('window', {
-  overbench: { platform: 'darwin' },
+  kettu: { platform: 'darwin' },
   matchMedia: () => ({ matches: false, addEventListener: () => {} }),
 })
 
@@ -16,7 +16,7 @@ const { FilePreview } = await import('./file-preview')
 const TOKEN = 'abcdefghijklmnopqrstuvwxyz'
 
 function preview(path: string, grant: Omit<MediaGrant, 'url'>): { html: string; url: string } {
-  const url = `overbench-media://${TOKEN}/${path.split('/').pop()}?v=1`
+  const url = `kettu-media://${TOKEN}/${path.split('/').pop()}?v=1`
   const content: FileContent = { kind: 'media', path, grant: { url, ...grant } }
   const file: OpenFile = {
     path,

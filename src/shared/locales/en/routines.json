@@ -1,22 +1,22 @@
 {
   "page": {
     "title": "Routines",
-    "description": "Prompts that run on a schedule while OverBench is open, each run in a session you can open later.",
+    "description": "Prompts that run on a schedule while Kettu is open, each run in a session you can open later.",
     "new": "New routine",
     "on": "On",
     "off": "Off",
     "emptyTitle": "No routines yet",
-    "emptyDescription": "A routine sends a prompt to an agent on a schedule, each run in a session of its own, while OverBench is open.",
+    "emptyDescription": "A routine sends a prompt to an agent on a schedule, each run in a session of its own, while Kettu is open.",
     "unreadableTitle": "Your routines could not be read",
     "unreadable": "routines.json was set aside as {{backup}}, so nothing is lost. New routines work as usual.",
-    "unreadableGone": "OverBench starts with an empty list.",
+    "unreadableGone": "Kettu starts with an empty list.",
     "loadFailed": "The routines could not be loaded.",
     "retry": "Try again",
     "open": "Open {{name}}",
     "switchOn": "Turn on {{name}}",
     "switchOff": "Turn off {{name}}",
     "lastFailed": "Its last run failed",
-    "openAtLogin": "Routines run only while OverBench is open.",
+    "openAtLogin": "Routines run only while Kettu is open.",
     "openAtLoginAction": "Open at login"
   },
   "row": {
@@ -222,10 +222,10 @@
       "description": "Fetch pages and search the web, at any level."
     },
     "caption": {
-      "claude-code": "Claude Code asks before edits and most commands, so OverBench answers each.",
+      "claude-code": "Claude Code asks before edits and most commands, so Kettu answers each.",
       "codex": "Codex keeps its own sandbox: Edit the project also runs commands inside the project without asking; leaving the project or reaching the network asks.",
-      "opencode": "OpenCode asks only for what its own permission settings mark “ask”; by default it asks nothing, so OverBench cannot hold it to this scope.",
-      "pi": "Pi does not ask before it acts, so OverBench cannot hold it to this scope."
+      "opencode": "OpenCode asks only for what its own permission settings mark “ask”; by default it asks nothing, so Kettu cannot hold it to this scope.",
+      "pi": "Pi does not ask before it acts, so Kettu cannot hold it to this scope."
     }
   },
   "limit": {

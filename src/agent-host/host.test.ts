@@ -277,12 +277,12 @@ describe('main messages', () => {
     try {
       const before = port.events.length
       await t.host.updateSettings({ ...settings, locale: 'zh-CN' })
-      expect(await warning()).toMatch(/^OverBench 启动后/)
+      expect(await warning()).toMatch(/^Kettu 启动后/)
       const after = port.events.slice(before)
       expect(after).toContainEqual(
         expect.objectContaining({
           type: 'environment.changed',
-          info: expect.objectContaining({ warning: expect.stringMatching(/^OverBench 启动后/) }),
+          info: expect.objectContaining({ warning: expect.stringMatching(/^Kettu 启动后/) }),
         }),
       )
     } finally {
@@ -724,13 +724,13 @@ describe('sessions without a project', () => {
 })
 
 describe('artifacts', () => {
-  it("reports OverBench's server and where each agent keeps its own, in catalog order", async () => {
+  it("reports Kettu's server and where each agent keeps its own, in catalog order", async () => {
     const { t, port } = await setup()
     const status = await port.request('mcp.status', undefined)
     expect(status.servers).toEqual([
       {
-        name: 'overbench',
-        title: 'OverBench',
+        name: 'kettu',
+        title: 'Kettu',
         builtIn: true,
         running: true,
         error: null,
@@ -1069,7 +1069,7 @@ describe('browser calls', () => {
     expect(await answered).toMatchObject({ error: { code: 'timeout' } })
   })
 
-  it('names the session whose page a call drives, and none for one OverBench lost', async () => {
+  it('names the session whose page a call drives, and none for one Kettu lost', async () => {
     const { t, port } = await setup()
     const session = await port.request('sessions.create', {
       agentId: 'fake-agent',

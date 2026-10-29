@@ -8,7 +8,7 @@ export function useLoginItemStatus(): LoginItemStatus | null {
   const [status, setStatus] = useState<LoginItemStatus | null>(null)
   useEffect(() => {
     let live = true
-    window.overbench.loginItem.getStatus().then(
+    window.kettu.loginItem.getStatus().then(
       (next) => {
         if (live) setStatus(next)
       },

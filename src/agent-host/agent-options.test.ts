@@ -129,11 +129,11 @@ describe('AgentOptionsStore', () => {
     expect(options.rememberedOf('codex')).toEqual({ model: 'large' })
   })
 
-  it('drops a remembered value once the own value changed outside OverBench', () => {
+  it('drops a remembered value once the own value changed outside Kettu', () => {
     const { options } = store()
     options.started('codex', [model('small')], 'p')
     options.chose('codex', model('small'), 'small', [model('small')])
-    // The agent's own model became large outside OverBench, after small was chosen.
+    // The agent's own model became large outside Kettu, after small was chosen.
     expect(options.started('codex', [model('large')], 'p')).toEqual([
       { option: model('large'), wanted: 'small' },
     ])

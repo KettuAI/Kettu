@@ -47,4 +47,4 @@ const noColorLiterals = {
 
 export const rules = { 'no-color-literals': noColorLiterals }
 
-export default { meta: { name: 'overbench' }, rules }
+export default { meta: { name: 'kettu' }, rules }

@@ -335,7 +335,7 @@ export function decideCli(input: {
     else if (compareVersions(found.version, minimum) < 0) problem = { kind: 'too-old', minimum }
   }
   const installed = { ...found, problem }
-  // The adapter reads a variable the environment sets, whatever OverBench passes.
+  // The adapter reads a variable the environment sets, whatever Kettu passes.
   if (found.variable) return { runs: 'installed', installed }
   return { runs: input.prefer === 'installed' && !problem ? 'installed' : 'bundled', installed }
 }

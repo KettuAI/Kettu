@@ -241,9 +241,7 @@ function ReportInteractive() {
   useEffect(() => {
     if (sent.current) return
     sent.current = true
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => window.overbench.app.reportInteractive()),
-    )
+    requestAnimationFrame(() => requestAnimationFrame(() => window.kettu.app.reportInteractive()))
   }, [])
   return null
 }

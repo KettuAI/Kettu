@@ -1,5 +1,5 @@
-// Counters for perf runs (--overbench-perf). tools/perf/measure.mjs reads them over the Chrome
-// DevTools Protocol from `window.__overbenchPerf`; without the flag nothing here runs.
+// Counters for perf runs (--kettu-perf). tools/perf/measure.mjs reads them over the Chrome
+// DevTools Protocol from `window.__kettuPerf`; without the flag nothing here runs.
 import { useThreadsStore } from '@renderer/stores/threads'
 import { createFrameCounter } from './perf-counter'
 
@@ -9,7 +9,7 @@ export interface SwitchTiming {
   ms: number
 }
 
-const enabled = typeof window !== 'undefined' && window.overbench.perf
+const enabled = typeof window !== 'undefined' && window.kettu.perf
 let pendingSwitch: { sessionId: string; start: number } | null = null
 const switches: SwitchTiming[] = []
 
@@ -36,7 +36,7 @@ export function installPerfCounters(): void {
     if (counter.count()) requestAnimationFrame(() => counter.endFrame())
   })
   Object.assign(window, {
-    __overbenchPerf: {
+    __kettuPerf: {
       frames: () => counter.read(),
       switches: () => [...switches],
       reset: () => {

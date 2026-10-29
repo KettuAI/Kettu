@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { HOST_METHODS, type AgentsApi, type HostEvent } from '@shared/agent-host'
 import type { GrantedAttachment } from '@shared/attachments'
-import type { AppCommand, OverbenchApi, QuitRequest } from '@shared/ipc'
+import type { AppCommand, KettuApi, QuitRequest } from '@shared/ipc'
 import { isLocale, type Locale } from '@shared/locale'
 import { TERMINAL_METHODS, type TerminalEvent, type TerminalsApi } from '@shared/terminal-host'
 import { filePaths } from './attachments'
@@ -48,7 +48,7 @@ const onSettingsChanged = subscribe('settings:changed')
 const onThemesChanged = subscribe('themes:changed')
 
 function systemLocale(): Locale {
-  const prefix = '--overbench-system-locale='
+  const prefix = '--kettu-system-locale='
   const value = process.argv.find((arg) => arg.startsWith(prefix))?.slice(prefix.length)
   return isLocale(value) ? value : 'en'
 }
@@ -73,9 +73,9 @@ async function fromFiles(files: File[]): Promise<(GrantedAttachment | null)[]> {
   return paths.map((path) => (path === '' ? null : (granted[next++] ?? null)))
 }
 
-const api: OverbenchApi = {
+const api: KettuApi = {
   platform: process.platform,
-  perf: process.argv.includes('--overbench-perf'),
+  perf: process.argv.includes('--kettu-perf'),
   systemLocale: systemLocale(),
   app: {
     getInfo: () => invoke('app:get-info'),
@@ -225,4 +225,4 @@ const api: OverbenchApi = {
   } as TerminalsApi,
 }
 
-contextBridge.exposeInMainWorld('overbench', api)
+contextBridge.exposeInMainWorld('kettu', api)

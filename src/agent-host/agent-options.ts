@@ -25,7 +25,7 @@ const MAX_LEVELS = 200
 // Folders whose own values are kept per agent, the latest first to stay.
 const MAX_FOLDERS = 50
 
-/** A remembered value dropped because the agent's own value changed outside OverBench since. */
+/** A remembered value dropped because the agent's own value changed outside Kettu since. */
 export interface ReplacedValue {
   option: ConfigOption // as the session lists it, at the agent's own value
   wanted: string | boolean
@@ -95,7 +95,7 @@ export class AgentOptionsStore {
   /**
    * The options of a new session in the folder `folderKey`, at the agent's own values, before any
    * start value is set. A remembered value whose option's own value in that folder changed since
-   * it was last seen there is dropped and returned: the change outside OverBench came after the
+   * it was last seen there is dropped and returned: the change outside Kettu came after the
    * user's choice, so it wins.
    */
   started(agentId: AgentId, config: readonly ConfigOption[], folderKey?: string): ReplacedValue[] {

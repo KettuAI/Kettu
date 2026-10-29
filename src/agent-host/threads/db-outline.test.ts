@@ -17,7 +17,7 @@ afterEach(() => {
 })
 
 function databaseFile(): string {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'overbench-outline-'))
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'kettu-outline-'))
   dirs.push(dir)
   mkdirSync(path.join(dir, 'state'))
   return path.join(dir, 'state', 'threads.db')

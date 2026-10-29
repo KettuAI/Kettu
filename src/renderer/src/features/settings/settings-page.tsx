@@ -342,7 +342,7 @@ function AppFooter() {
       onClick={() => openSettings('about')}
       className="mx-2 flex h-8 shrink-0 items-center gap-1.5 rounded-lg pr-1.5 pl-2.5 text-left text-command text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
     >
-      <span>OverBench</span>
+      <span>Kettu</span>
       <span className="font-mono text-code text-tertiary">{status.current}</span>
       <span className="ml-auto flex min-w-0 items-center">{end}</span>
     </button>

@@ -62,7 +62,7 @@ function context(overrides: Partial<DetectContext> = {}): DetectContext {
   return {
     platform: 'darwin',
     env: { PATH: '/usr/local/bin:/usr/bin' },
-    electronPath: '/Apps/OverBench.app/Contents/MacOS/OverBench',
+    electronPath: '/Apps/Kettu.app/Contents/MacOS/Kettu',
     binaryOverride: null,
     node: {
       nodeVersion: 'v24.1.0',
@@ -444,7 +444,7 @@ describe('detectAgent', () => {
     expect(await detectAgent(def, context())).toMatchObject({
       state: 'available',
       spec: {
-        command: '/Apps/OverBench.app/Contents/MacOS/OverBench',
+        command: '/Apps/Kettu.app/Contents/MacOS/Kettu',
         args: ['/repo/tools/fake-agent/main.ts'],
         env: { ELECTRON_RUN_AS_NODE: '1' },
       },
@@ -507,7 +507,7 @@ describe('detectAgent', () => {
     })
   })
 
-  it('runs the archive OverBench installed only when no copy is on PATH', async () => {
+  it('runs the archive Kettu installed only when no copy is on PATH', async () => {
     const command = '/data/agents/opencode/2026.10.22/dist-package/cursor-agent'
     const def: AgentDefinition = {
       ...OPENCODE,

@@ -113,8 +113,8 @@ export default function UsagePage() {
   const importing = useUsageStore((s) => (s.status?.scanning?.bytes ?? 0) >= IMPORT_SHOWN)
   const page = useUsageStore((s) => s.page)
   const error = useUsageStore((s) => s.error)
-  // OverBench only can be empty while the logs are not; the filters must stay to switch back.
-  const narrowed = useUsageStore((s) => s.filters.scope === 'overbench' && !!s.status?.fromComputer)
+  // Kettu only can be empty while the logs are not; the filters must stay to switch back.
+  const narrowed = useUsageStore((s) => s.filters.scope === 'kettu' && !!s.status?.fromComputer)
 
   useEffect(() => {
     usagePageShown(true)
@@ -462,7 +462,7 @@ function Filters({ page, used }: { page: PageData | null; used: ReadonlySet<numb
             itemClassName={SEGMENT}
             segments={[
               { value: 'computer', label: t('page.scopes.computer') },
-              { value: 'overbench', label: t('page.scopes.overbench') },
+              { value: 'kettu', label: t('page.scopes.kettu') },
             ]}
           />
         )}

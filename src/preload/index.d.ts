@@ -1,7 +1,7 @@
-import type { OverbenchApi } from '@shared/ipc'
+import type { KettuApi } from '@shared/ipc'
 
 declare global {
   interface Window {
-    overbench: OverbenchApi
+    kettu: KettuApi
   }
 }

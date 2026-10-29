@@ -72,7 +72,7 @@
     "losesOnClose": "关闭窗口会丢失这些更改。"
   },
   "notifications": {
-    "testTitle": "OverBench",
+    "testTitle": "Kettu",
     "testBody": "通知已开启。Agent 需要你时，会这样提醒你。"
   },
   "attachments": {

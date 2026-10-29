@@ -327,7 +327,7 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
     run(async () => {
       const media = ready.url ?? carried()
       if (MAIN_DECODES.has(ready.mimeType)) {
-        await window.overbench.media.copyImage(media)
+        await window.kettu.media.copyImage(media)
       } else {
         // An SVG at the size the viewer fits it to; any other picture at its own pixels.
         const fitted =
@@ -341,7 +341,7 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
           typeof media === 'string'
             ? media
             : new Blob([new Uint8Array(media.bytes)], { type: media.mimeType })
-        await window.overbench.media.copyImage({
+        await window.kettu.media.copyImage({
           bytes: await drawnAsPng(source, fitted),
           mimeType: 'image/png',
           name,
@@ -353,7 +353,7 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
     })
   }
   const save = () => {
-    if (ready) run(() => window.overbench.media.saveAs(ready.url ?? carried()))
+    if (ready) run(() => window.kettu.media.saveAs(ready.url ?? carried()))
   }
 
   // A project file opens in the Files pane, which the viewer then uncovers; any other file shows
@@ -363,7 +363,7 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
       return ready?.url ? showFileAction(item.source.path, request.projectPath, ready.url) : null
     }
     const uri = item.source.kind === 'attachment' ? item.source.attachment.uri : null
-    const path = uri ? fileUrlPath(uri, window.overbench.platform) : null
+    const path = uri ? fileUrlPath(uri, window.kettu.platform) : null
     if (!path) return null
     const { projectPath } = request
     return {

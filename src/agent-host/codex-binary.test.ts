@@ -48,7 +48,7 @@ describe('codexLaunchEnv', () => {
   })
 
   it('names codex.exe on Windows', async () => {
-    const nm = 'C:\\Users\\a\\AppData\\Roaming\\OverBench\\agents\\codex\\2.2.2\\node_modules'
+    const nm = 'C:\\Users\\a\\AppData\\Roaming\\Kettu\\agents\\codex\\2.2.2\\node_modules'
     const binary = `${nm}\\@openai\\codex-win32-x64\\vendor\\x86_64-pc-windows-msvc\\bin\\codex.exe`
     const env = await codexLaunchEnv(
       lookup(

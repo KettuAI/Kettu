@@ -145,7 +145,7 @@ function onEvent(event: TerminalEvent): void {
 }
 
 export function initTerminals(): void {
-  const api = window.overbench.terminals
+  const api = window.kettu.terminals
   api.onEvent(onEvent)
   api.onConnection((connection) => {
     const was = useTerminalsStore.getState().connection
@@ -268,7 +268,7 @@ export async function replaceStale(id: string): Promise<void> {
   // A host that crashed too often stays down until asked to start again.
   if (connection === 'failed') {
     try {
-      await window.overbench.terminals.restart()
+      await window.kettu.terminals.restart()
     } catch (error) {
       useTerminalsStore.setState({ error: errorMessage(error) })
       return

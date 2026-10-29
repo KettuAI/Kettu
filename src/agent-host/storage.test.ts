@@ -31,7 +31,7 @@ const log = (level: string, message: string): void => {
 }
 
 beforeEach(async () => {
-  dir = await mkdtemp(path.join(tmpdir(), 'overbench-storage-'))
+  dir = await mkdtemp(path.join(tmpdir(), 'kettu-storage-'))
   logs = []
 })
 afterEach(async () => {

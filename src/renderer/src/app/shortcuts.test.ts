@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 vi.stubGlobal('window', {
-  overbench: { perf: false, platform: 'darwin' },
+  kettu: { perf: false, platform: 'darwin' },
   matchMedia: () => ({ matches: false, addEventListener: () => {} }),
 })
 

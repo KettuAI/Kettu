@@ -11,7 +11,7 @@ afterEach(() => {
 })
 
 function folder(): string {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'overbench-content-'))
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'kettu-content-'))
   dirs.push(dir)
   return path.join(dir, 'content')
 }
