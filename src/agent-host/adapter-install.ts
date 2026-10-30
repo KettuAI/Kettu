@@ -77,11 +77,15 @@ async function isFile(file: string): Promise<boolean> {
   }
 }
 
-/** The package's `bin`: its only entry, or the one named after the package without its scope. */
+/**
+ * The package's `bin`: its only entry, or the one named after the package without its scope. A
+ * library without one, which the host loads instead of running, gives its `main`.
+ */
 export async function binEntry(dir: string, packageName: string): Promise<string | null> {
   const packageDir = path.join(dir, 'node_modules', packageName)
   const manifest = (await readJson(path.join(packageDir, 'package.json'))) as {
     bin?: string | Record<string, string>
+    main?: string
   } | null
   const bin = manifest?.bin
   let relative: string | undefined
@@ -89,7 +93,7 @@ export async function binEntry(dir: string, packageName: string): Promise<string
   else if (bin && typeof bin === 'object') {
     const entries = Object.values(bin)
     relative = entries.length === 1 ? entries[0] : bin[packageName.replace(/^@[^/]+\//, '')]
-  }
+  } else if (bin === undefined) relative = manifest?.main
   if (typeof relative !== 'string') return null
   const entry = path.resolve(packageDir, relative)
   const inside = path.relative(packageDir, entry)

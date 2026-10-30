@@ -276,11 +276,15 @@ describe('runProgram', () => {
 })
 
 describe('binEntry', () => {
-  async function manifest(bin: unknown, files: string[] = ['index.js', 'cli.js']) {
+  async function manifest(
+    bin: unknown,
+    files: string[] = ['index.js', 'cli.js'],
+    extra: Record<string, unknown> = {},
+  ) {
     const dir = await mkdtemp(path.join(tmp, 'bin-'))
     const packageDir = path.join(dir, 'node_modules', '@scope', 'tool')
     await mkdir(packageDir, { recursive: true })
-    await writeFile(path.join(packageDir, 'package.json'), JSON.stringify({ bin }))
+    await writeFile(path.join(packageDir, 'package.json'), JSON.stringify({ bin, ...extra }))
     for (const file of files) await writeFile(path.join(packageDir, file), '')
     return { dir, packageDir }
   }
@@ -290,6 +294,17 @@ describe('binEntry', () => {
     expect(await binEntry(lone.dir, '@scope/tool')).toBe(path.join(lone.packageDir, 'cli.js'))
     const named = await manifest({ other: 'index.js', tool: 'cli.js' })
     expect(await binEntry(named.dir, '@scope/tool')).toBe(path.join(named.packageDir, 'cli.js'))
+  })
+
+  it("takes a library's main when it has no bin, as the host loads it instead of running it", async () => {
+    const library = await manifest(undefined, ['sdk.mjs'], { main: 'sdk.mjs' })
+    expect(await binEntry(library.dir, '@scope/tool')).toBe(
+      path.join(library.packageDir, 'sdk.mjs'),
+    )
+    const neither = await manifest(undefined, [])
+    expect(await binEntry(neither.dir, '@scope/tool')).toBeNull()
+    const outside = await manifest(undefined, [], { main: '../../../evil.js' })
+    expect(await binEntry(outside.dir, '@scope/tool')).toBeNull()
   })
 
   it('refuses an entry outside the package or one that does not exist', async () => {

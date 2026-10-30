@@ -20,7 +20,7 @@
     "noForkPoint": "无法从这条回复分叉",
     "cannotList": "{{agent}} 无法列出它的会话",
     "ultracodeBetweenTurns": "Ultracode 只能在两轮对话之间切换",
-    "ultracodeDescription": "用于大型任务的动态工作流；切换会重启 Claude Code",
+    "ultracodeDescription": "用于大型任务的动态工作流",
     "promptTooLarge": "这条消息连同附件超过 10 MB，请移除一些再发送。",
     "attachmentGone": "{{name}} 已不可用，请移除后重新添加。",
     "attachmentMissing": "有一个附件已不可用，请移除后重新添加。",
@@ -229,6 +229,26 @@
     "localUpstream": "此分支跟踪的是本仓库的分支，没有可推送的远程仓库",
     "otherName": "此分支跟踪的是名称不同的 {{upstream}}，请在终端中推送",
     "unknownRemote": "此仓库有多个远程仓库，且没有为此分支指定其中一个"
+  },
+  "permission": {
+    "allowOnce": "允许一次",
+    "allowAlways": "始终允许 {{changes}}",
+    "addRules": "{{rules}}{{place}}",
+    "addDirectories": "访问 {{directories}}{{place}}",
+    "setMode": "切换到 {{mode}}",
+    "reject": "拒绝",
+    "place": {
+      "user": "（记入用户设置）",
+      "project": "（记入项目设置 .claude/settings.json）",
+      "local": "（记入本地设置 .claude/settings.local.json）",
+      "session": "（仅本会话）"
+    },
+    "exitPlan": {
+      "auto": "是，并使用 Auto 模式",
+      "acceptEdits": "是，并自动接受编辑",
+      "manual": "是，并手动批准编辑",
+      "keepPlanning": "否，继续规划"
+    }
   },
   "content": {
     "audioTooLarge": "音频，{{size}}，太大，无法显示",

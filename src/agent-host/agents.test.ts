@@ -2135,6 +2135,8 @@ async function updateManager(
     /** The adapter pins its CLI, so the check's CLI version is the oldest it runs. */
     pinsVersion?: boolean
     launcher?: AgentLauncher
+    /** The versions an update may move to. */
+    updates?: string
   } = {},
 ) {
   const root = await tempFolder('kettu-updates-')
@@ -2142,7 +2144,12 @@ async function updateManager(
     ...fakeAgent(FAKE_AGENT_MAIN),
     id: 'codex',
     name: 'Codex',
-    launch: { kind: 'package', package: 'fake-adapter', version: '2.0.0' },
+    launch: {
+      kind: 'package',
+      package: 'fake-adapter',
+      version: '2.0.0',
+      ...(options.updates ? { updates: options.updates } : {}),
+    },
     ...(options.installedCli
       ? { cli: { ...FAKE_CLI, pinsVersion: options.pinsVersion ?? false } }
       : {}),
@@ -2212,6 +2219,15 @@ async function updateManager(
 }
 
 describe('update checks', () => {
+  it('asks only for the versions the agent may move to', async () => {
+    const m = await updateManager({ updates: '~2.0.0' })
+    await m.write('2.0.0', '2.0.0', '0.160.1', 1)
+    await m.agents.checkUpdates()
+    expect(m.checks).toEqual([
+      expect.objectContaining({ package: 'fake-adapter', range: '~2.0.0' }),
+    ])
+  })
+
   it('finds a newer CLI for the installed adapter and keeps it across a restart', async () => {
     const m = await updateManager()
     await m.write('2.0.0', '2.0.0', '0.160.1', 1)

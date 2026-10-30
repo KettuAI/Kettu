@@ -75,12 +75,16 @@ import { compareVersions } from './versions'
 export type LaunchKind =
   // Installed from npm into the data directory and run on the user's Node.js. With `perSession`,
   // through the session router, which gives each session an adapter process of its own. `args`
-  // turns on its ACP mode, and `env` keeps its variables to its own launches.
+  // turns on its ACP mode, and `env` keeps its variables to its own launches. A `library` is
+  // not run: its driver loads its entry module into the agent host.
   | {
       kind: 'package'
       package: string
       version: string
       perSession?: true
+      library?: true
+      /** The versions an update may move to, as an npm range; any newer one when not given. */
+      updates?: string
       args?: string[]
       env?: Record<string, string>
     }
@@ -91,7 +95,7 @@ export type LaunchKind =
   | { kind: 'node-script'; script: string }
 
 /** How Kettu talks to an agent; each protocol has its driver in `drivers.ts`. */
-export type AgentProtocol = 'acp' | 'codex-app-server'
+export type AgentProtocol = 'acp' | 'claude-sdk' | 'codex-app-server'
 
 /** A program the adapter runs, which the user installs beside it. */
 export interface AgentRequires {
@@ -332,6 +336,8 @@ export function displayCommand(
         }
       }
       const entry = packageDir(adaptersDir, def) ?? ''
+      if (def.launch.library)
+        return { command: entry, args: [], env: { ...def.env, ...def.launch.env } }
       // A per-session agent reads as the router's own command line.
       const prefix = def.launch.perSession && sessionRouterPath ? [sessionRouterPath, 'node'] : []
       const args = [...prefix, entry, ...(def.launch.args ?? [])]
@@ -410,6 +416,11 @@ export function packageSpec(
   }
 }
 
+/** A library's entry module, which its driver loads instead of a process running it. */
+export function librarySpec(entry: string, env: Record<string, string>): LaunchSpec {
+  return { command: entry, args: [], env, shell: false, display: { command: entry, args: [], env } }
+}
+
 /** `node <entry>` for an installed adapter, with what its `launchEnv` and `requires` add. */
 export async function installedSpec(
   def: AgentDefinition,
@@ -426,6 +437,7 @@ export async function installedSpec(
     ...extraEnv,
     ...(await def.launchEnv?.({ ...lookup, dir: installed.dir, entry: installed.entry })),
   }
+  if (launch.kind === 'package' && launch.library) return librarySpec(installed.entry, env)
   const prefix =
     launch.kind === 'package' && launch.perSession && sessionRouterPath
       ? [sessionRouterPath, node]
@@ -724,6 +736,9 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
             ...requiresEnv,
             ...passed.env,
             [def.cli.variable]: passed.installed.path,
+          }
+          if (launch.library) {
+            return { ...librarySpec(install.entry, env), cli: passed.installed.path }
           }
           return {
             ...packageSpec(
