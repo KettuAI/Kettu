@@ -146,7 +146,7 @@ export function GeneralSwitch({
   field,
   label,
 }: {
-  field: 'restoreLastSession' | 'confirmQuitWhileRunning' | 'sessionTitles'
+  field: 'restoreLastSession' | 'confirmQuitWhileRunning' | 'sessionTitles' | 'background'
   label: string
 }) {
   const checked = useSettings().general[field]

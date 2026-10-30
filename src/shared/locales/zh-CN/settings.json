@@ -55,6 +55,13 @@
       "description": "Agent 不会自行为会话起标题时，每个新会话使用一次该 Agent 的小模型，并消耗其套餐额度或积分。",
       "keywords": "标题 命名 会话 模型 额度 title name session"
     },
+    "background": {
+      "name": "在后台运行",
+      "descriptionMac": "关闭窗口后 Kettu 继续运行，图标留在菜单栏，会话和例程照常工作。",
+      "descriptionWindows": "关闭窗口后 Kettu 继续运行，图标留在通知区域，会话和例程照常工作。",
+      "descriptionLinux": "关闭窗口后 Kettu 继续运行，图标留在系统托盘，会话和例程照常工作。",
+      "keywords": "后台 托盘 菜单栏 通知区域 关闭 窗口 继续运行 background tray menu bar close window"
+    },
     "openAtLogin": {
       "name": "登录时打开",
       "description": "例程只在 Kettu 打开时运行。",

@@ -46,6 +46,7 @@ const SECTION_FIELDS = {
     restoreLastSession: isBoolean,
     confirmQuitWhileRunning: isBoolean,
     openAtLogin: isBoolean,
+    background: isBoolean,
     sessionTitles: isBoolean,
   },
   thread: { outlineSummaries: isBoolean, confirmLinks: isBoolean },

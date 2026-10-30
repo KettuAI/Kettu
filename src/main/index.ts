@@ -32,6 +32,7 @@ import { hasPendingFrame, isRevoked, watchSubframes } from './subframes'
 import { TerminalHost } from './terminal-host'
 import { ThemeCatalog } from './theme-catalog'
 import { readThemeFolder, readThemeSources, ThemeStore } from './themes'
+import { KettuTray } from './tray'
 import { Updater } from './updater'
 import { devUserDataPath } from './user-data'
 import {
@@ -99,10 +100,6 @@ async function start(): Promise<void> {
   electronApp.setAppUserModelId(APP_USER_MODEL_ID)
   const wasOpenedAtLogin =
     process.platform === 'darwin' ? app.getLoginItemSettings().wasOpenedAtLogin : false
-  const start = startMode(
-    process.platform,
-    isOpenedAtLogin(process.platform, process.argv, wasOpenedAtLogin),
-  )
   const icon = devIcon()
   if (icon) app.dock?.setIcon(icon)
   restrictPermissions(
@@ -112,6 +109,11 @@ async function start(): Promise<void> {
   )
   const [settings, windowState, appState, themeFolder, themeSources] = await loading
   syncLoginItem(settings.get().general.openAtLogin)
+  const start = startMode(
+    process.platform,
+    isOpenedAtLogin(process.platform, process.argv, wasOpenedAtLogin),
+    settings.get().general.background,
+  )
 
   // The system's languages are read once; macOS and Windows ask for a restart to change them.
   const systemLocale = matchLocale(app.getPreferredSystemLanguages())
@@ -149,6 +151,9 @@ async function start(): Promise<void> {
   watchTheme()
   configureWindows({ state: windowState, perf, systemLocale })
   setBadgeEnabled(settings.get().notifications.badge)
+  // From launch until quitting, whatever Run in the background says.
+  const tray = new KettuTray({ open: () => showMainWindow(), quit: () => app.quit() })
+  tray.start()
 
   const mediaGrants = new MediaGrants()
   const browserOrigins = await BrowserOriginStore.load(userDataPath)
@@ -186,7 +191,11 @@ async function start(): Promise<void> {
   const agentHost = new AgentHost({
     settings: () => hostSettings(settings.get(), systemLocale),
     onAttention: (message) => notifyAttention(message, settings.get()),
-    onBadge: setBadgeCount,
+    onBadge: (count) => {
+      setBadgeCount(count)
+      tray.setDot(count > 0)
+    },
+    onBusy: (counts) => tray.setBusy(counts),
     onProjects: (paths) => terminalHost.setProjects(paths),
     onAuthCommands: (commands) => terminalHost.setAuthCommands(commands),
     onMediaGrant: (grant) => mediaGrants.add(grant),
@@ -273,6 +282,7 @@ async function start(): Promise<void> {
     if (localeChanged) {
       setLocale(localeOf(next))
       installMenu(menuDeps)
+      tray.updateMenu()
     }
     // The agent host reads `general.sessionTitles`, which `reachesHost` cannot single out.
     if (reachesHost(changed) || localeChanged || changed.has('general')) {
@@ -347,7 +357,7 @@ async function start(): Promise<void> {
     if (!quitFlow.quitting) showMainWindow()
   })
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit()
+    if (process.platform !== 'darwin' && !settings.get().general.background) app.quit()
   })
 }
 

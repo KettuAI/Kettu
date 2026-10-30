@@ -12,10 +12,17 @@ export const OPENED_AT_LOGIN_FLAG = '--opened-at-login'
 
 export type StartMode = 'window' | 'minimized' | 'hidden'
 
-/** macOS opens without a window; Windows and Linux start with the window minimized. */
-export function startMode(platform: NodeJS.Platform, openedAtLogin: boolean): StartMode {
+/**
+ * macOS opens without a window, and so does every platform while Kettu runs in the background;
+ * otherwise Windows and Linux start with the window minimized.
+ */
+export function startMode(
+  platform: NodeJS.Platform,
+  openedAtLogin: boolean,
+  background: boolean,
+): StartMode {
   if (!openedAtLogin) return 'window'
-  return platform === 'darwin' ? 'hidden' : 'minimized'
+  return platform === 'darwin' || background ? 'hidden' : 'minimized'
 }
 
 /** macOS reports a login start itself; the other platforms pass the flag in the login item. */

@@ -52,15 +52,21 @@ function context(platform: NodeJS.Platform, overrides = {}) {
 
 describe('startMode', () => {
   it.each([
-    ['darwin', true, 'hidden'],
-    ['win32', true, 'minimized'],
-    ['linux', true, 'minimized'],
-    ['darwin', false, 'window'],
-    ['win32', false, 'window'],
-    ['linux', false, 'window'],
-  ] as const)('opens %s at login %s as %s', (platform, atLogin, expected) => {
-    expect(startMode(platform, atLogin)).toBe(expected)
-  })
+    ['darwin', true, false, 'hidden'],
+    ['win32', true, false, 'minimized'],
+    ['linux', true, false, 'minimized'],
+    ['darwin', true, true, 'hidden'],
+    ['win32', true, true, 'hidden'],
+    ['linux', true, true, 'hidden'],
+    ['darwin', false, false, 'window'],
+    ['win32', false, true, 'window'],
+    ['linux', false, true, 'window'],
+  ] as const)(
+    'opens %s at login %s, in the background %s, as %s',
+    (platform, atLogin, background, expected) => {
+      expect(startMode(platform, atLogin, background)).toBe(expected)
+    },
+  )
 })
 
 describe('isOpenedAtLogin', () => {

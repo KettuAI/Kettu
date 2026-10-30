@@ -70,10 +70,17 @@ const terminal = { id: 't1', projectPath: '/p', title: 'node' }
 const unsaved = { projectPath: '/p', path: 'src/a.ts' }
 
 function setup(
-  options: { busy?: boolean; confirm?: boolean; window?: boolean; moves?: boolean } = {},
+  options: {
+    busy?: boolean
+    confirm?: boolean
+    window?: boolean
+    moves?: boolean
+    background?: boolean
+  } = {},
 ) {
   const settings: SettingsFile = structuredClone(DEFAULT_SETTINGS)
   settings.general.confirmQuitWhileRunning = options.confirm ?? true
+  settings.general.background = options.background ?? false
   const window = new FakeWindow()
   electron.windows = options.window === false ? [] : [window]
   const calls: string[] = []
@@ -105,6 +112,7 @@ function setup(
 }
 
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
+const platform = process.platform
 
 describe('QuitFlow', () => {
   beforeEach(() => {
@@ -112,7 +120,10 @@ describe('QuitFlow', () => {
     electron.dialog.showMessageBox.mockReset()
     electron.focused = null
   })
-  afterEach(() => vi.useRealTimers())
+  afterEach(() => {
+    vi.useRealTimers()
+    Object.defineProperty(process, 'platform', { value: platform })
+  })
 
   it('stops the hosts and quits when nothing is running', async () => {
     const { calls, beforeQuit, question } = setup()
@@ -322,6 +333,43 @@ describe('QuitFlow', () => {
       let prevented = false
       window.emit('close', { preventDefault: () => (prevented = true) })
       expect(prevented).toBe(true)
+    },
+  )
+
+  it.each(['win32', 'linux'] as const)(
+    'on %s quits as the last window closes only while Kettu does not run in the background',
+    (system) => {
+      Object.defineProperty(process, 'platform', { value: system })
+      for (const background of [false, true]) {
+        const { flow, window, calls } = setup({ background })
+        flow.watchWindow(window as never)
+        let prevented = false
+        window.emit('close', { preventDefault: () => (prevented = true) })
+        expect(prevented).toBe(!background)
+        expect(calls).toEqual([])
+      }
+    },
+  )
+
+  it.each(['win32', 'linux'] as const)(
+    'on %s asks before the last window closes with unsaved files while in the background',
+    async (system) => {
+      Object.defineProperty(process, 'platform', { value: system })
+      const { flow, window, calls, question } = setup({ background: true })
+      const close = vi.fn(() => window.emit('close', { preventDefault: () => {} }))
+      Object.assign(window, { close })
+      flow.watchWindow(window as never)
+      flow.setUnsaved(window.webContents as never, [unsaved])
+      let prevented = false
+      window.emit('close', { preventDefault: () => (prevented = true) })
+      await settle()
+      expect(prevented).toBe(true)
+      expect(question()).toMatchObject({ reason: 'close', unsaved: [unsaved] })
+      flow.respond(1, true)
+      await settle()
+      expect(close).toHaveBeenCalledOnce()
+      expect(calls).toEqual([])
+      expect(electron.app.quit).not.toHaveBeenCalled()
     },
   )
 })

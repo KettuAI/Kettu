@@ -5,6 +5,7 @@ import type { AttachmentGrant } from '@shared/attachments'
 import type { BrowserCallAnswer, BrowserCallRequest, BrowserOriginAnswer } from '@shared/browser'
 import type {
   ArtifactContentResult,
+  BusyCounts,
   BusySession,
   HostToMain,
   MainToHost,
@@ -28,6 +29,7 @@ export interface AgentHostDeps {
   settings(): HostSettings
   onAttention(message: Extract<HostToMain, { type: 'host:attention' }>): void
   onBadge(count: number): void
+  onBusy(counts: BusyCounts): void
   onProjects(paths: string[]): void
   onAuthCommands(commands: string[]): void
   /** A file the host granted, for the media scheme to serve. */
@@ -68,6 +70,10 @@ const UNAVAILABLE: ImportAnswer = { failed: 'unavailable' }
 function unpackedPath(file: string): string {
   if (!app.isPackaged) return file
   return file.replace(/([\\/])app\.asar([\\/])/, '$1app.asar.unpacked$2')
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 }
 
 function isStringList(value: unknown): value is string[] {
@@ -374,6 +380,11 @@ export class AgentHost {
       case 'host:badge':
         if (typeof message.count === 'number') this.deps.onBadge(message.count)
         break
+      case 'host:busy-changed':
+        if (isCount(message.running) && isCount(message.waiting)) {
+          this.deps.onBusy({ running: message.running, waiting: message.waiting })
+        }
+        break
       case 'host:routines-working':
         if (typeof message.working === 'boolean') this.deps.onRoutinesWorking(message.working)
         break
@@ -495,6 +506,7 @@ export class AgentHost {
     this.deps.onServicePort?.(null)
     this.deps.onRoutinesWorking(false)
     this.deps.onBadge(0)
+    this.deps.onBusy({ running: 0, waiting: 0 })
     const roots = this.agentProcesses
     this.agentProcesses = []
     // After a clean stop the host has stopped every agent itself, or left it in its own record.

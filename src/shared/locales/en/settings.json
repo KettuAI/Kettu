@@ -56,6 +56,13 @@
       "description": "For agents that do not title their sessions themselves, uses a small model of the agent, and its plan or credits, once for each new session.",
       "keywords": "title name session model credits"
     },
+    "background": {
+      "name": "Run in the background",
+      "descriptionMac": "Keeps Kettu running with its icon in the menu bar after you close its window, so sessions and routines keep working.",
+      "descriptionWindows": "Keeps Kettu running with its icon in the notification area after you close its window, so sessions and routines keep working.",
+      "descriptionLinux": "Keeps Kettu running with its icon in the system tray after you close its window, so sessions and routines keep working.",
+      "keywords": "background tray menu bar notification area close window keep running"
+    },
     "openAtLogin": {
       "name": "Open at login",
       "description": "Routines run only while Kettu is open.",
