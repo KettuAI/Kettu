@@ -78,19 +78,10 @@ export interface AdapterCli {
 const VERSION_TEXT = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?`
 const FIRST_VERSION = new RegExp(String.raw`\bv?(${VERSION_TEXT})`)
 const EXACT_VERSION = new RegExp(`^${VERSION_TEXT}$`)
-// `1.2.3`, `^1.2.3`, `~1.2.3`, `>=1.2.3` or `=1.2.3`, with an upper bound or none.
-const LOWER_BOUND = new RegExp(
-  String.raw`^\s*(?:\^|~|>=|=)?\s*v?(${VERSION_TEXT})(?:\s+<=?\s*v?${VERSION_TEXT})?\s*$`,
-)
 
 /** The first `x.y.z` in what `--version` printed, with or without a leading `v`. */
 export function parseCliVersion(output: string): string | null {
   return FIRST_VERSION.exec(output)?.[1] ?? null
-}
-
-/** The lowest version a dependency range allows, or null for a range it cannot be read from. */
-export function lowerBound(range: unknown): string | null {
-  return typeof range === 'string' ? (LOWER_BOUND.exec(range)?.[1] ?? null) : null
 }
 
 /**

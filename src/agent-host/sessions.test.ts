@@ -1823,11 +1823,8 @@ describe('unknownSession', () => {
   const failed = (code: number, data?: unknown) =>
     new AgentRequestError('agent_error', 'Internal error', code, data)
 
-  it("takes Claude Code's not found and codex-acp's missing rollout", () => {
+  it("takes the agent's not found", () => {
     expect(unknownSession(failed(-32002))).toBe(true)
-    expect(
-      unknownSession(failed(-32603, { details: 'no rollout found for thread id 0199a2c3' })),
-    ).toBe(true)
   })
 
   it('leaves any other failure to fail the attach', () => {

@@ -1306,7 +1306,6 @@ export class SessionManager {
       context: () => ({
         thread: live.thread,
         replaying: live.replaying,
-        thoughtParts: live.replaying && this.deps.agents.replaysThoughtParts(record.agentId),
         cancelling: live.turn ? live.turn.cancelRequested : live.unansweredCancel !== null,
         scope: live.scope,
         now: this.now(),
@@ -3292,7 +3291,6 @@ export class SessionManager {
       context: () => ({
         thread: scratch,
         replaying: true,
-        thoughtParts: false,
         cancelling: false,
         scope: newTurnScope(),
         now: this.now(),
@@ -5467,17 +5465,10 @@ function canSend(status: SessionStatus): boolean {
 
 /** JSON-RPC's code for a session the agent does not have. */
 const RESOURCE_NOT_FOUND = -32002
-const INTERNAL_ERROR = -32603
-// codex-acp 2.2.2 passes Codex's own error on as an internal one, in `data.details`: Codex writes a
-// thread's rollout on its first turn, so a new process cannot resume a thread never prompted.
-const NO_ROLLOUT = 'no rollout found for thread id'
 
 /** The agent does not have the session it was asked to resume. */
 export function unknownSession(error: AgentRequestError): boolean {
-  if (error.code === RESOURCE_NOT_FOUND) return true
-  if (error.code !== INTERNAL_ERROR) return false
-  const details = (error.data as { details?: unknown } | undefined)?.details
-  return typeof details === 'string' && details.includes(NO_ROLLOUT)
+  return error.code === RESOURCE_NOT_FOUND
 }
 
 /** The number in an entry id such as `e:12`, which the session's new ids count on from. */

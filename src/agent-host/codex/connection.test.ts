@@ -99,7 +99,6 @@ function threadTarget(
     context: () => ({
       thread,
       replaying: state.replaying,
-      thoughtParts: false,
       cancelling: false,
       scope,
       now: 5_000,
