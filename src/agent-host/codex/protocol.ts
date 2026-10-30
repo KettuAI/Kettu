@@ -186,6 +186,8 @@ export interface TurnError {
 
 export interface Turn {
   id: string
+  /** The turn this one runs inside, as a review's own turn runs inside the turn it started. */
+  rootTurnId?: string | null
   items: ThreadItem[]
   status: TurnStatus
   error: TurnError | null
@@ -412,6 +414,71 @@ export interface RateLimitSnapshot {
 export interface GetAccountRateLimitsResponse {
   rateLimits: RateLimitSnapshot
   rateLimitsByLimitId: Record<string, RateLimitSnapshot | undefined> | null
+}
+
+// What Codex's commands use.
+
+export interface SkillMetadata {
+  name: string
+  description: string
+  shortDescription?: string
+  path: string
+  enabled: boolean
+}
+
+export interface SkillsListResponse {
+  data: { cwd: string; skills: SkillMetadata[] }[]
+}
+
+export type McpServerConnectionStatus =
+  | 'notStarted'
+  | 'starting'
+  | 'connected'
+  | 'authenticationRequired'
+  | 'failed'
+  | 'cancelled'
+  | 'disabled'
+
+export interface McpServerStatus {
+  name: string
+  /** Null when Codex has no connection state, or the server's configuration changed. */
+  runtimeStatus: McpServerConnectionStatus | null
+  tools: Record<string, unknown>
+  /** Set when the server gave no tool list. */
+  toolsError: string | null
+  authStatus: 'unknown' | 'unsupported' | 'notLoggedIn' | 'bearerToken' | 'oAuth'
+}
+
+export interface ListMcpServerStatusResponse {
+  data: McpServerStatus[]
+  nextCursor: string | null
+}
+
+export interface McpServerStartupNotification {
+  /** Null for every thread. */
+  threadId: string | null
+  name: string
+  status: 'starting' | 'ready' | 'failed' | 'cancelled'
+  error: string | null
+  failureReason?: 'reauthenticationRequired' | null
+}
+
+export type ReviewTarget =
+  | { type: 'uncommittedChanges' }
+  | { type: 'baseBranch'; branch: string }
+  | { type: 'commit'; sha: string; title: string | null }
+  | { type: 'custom'; instructions: string }
+
+export interface ReviewStartResponse {
+  turn: Turn
+  reviewThreadId: string
+}
+
+export type ThreadGoalStatus =
+  'active' | 'paused' | 'blocked' | 'usageLimited' | 'budgetLimited' | 'complete'
+
+export interface ThreadGoalSetResponse {
+  goal: { threadId: string; objective: string; status: ThreadGoalStatus }
 }
 
 // Requests the server sends.

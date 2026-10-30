@@ -344,6 +344,96 @@
     },
     "notice": {
       "rerouted": "Codex 从 {{from}} 换到了 {{to}}"
+    },
+    "command": {
+      "plan": {
+        "description": "打开计划模式。"
+      },
+      "mcp": {
+        "description": "查看 MCP 服务器的状态，或重新连接它们。",
+        "hint": "[reconnect]"
+      },
+      "skills": {
+        "description": "列出可用的技能。"
+      },
+      "status": {
+        "description": "查看会话配置和 token 用量。"
+      },
+      "review": {
+        "description": "审查未提交的改动，或按自定义说明审查。",
+        "hint": "可选的审查说明"
+      },
+      "review-branch": {
+        "description": "审查相对某个基准分支的改动。",
+        "hint": "分支名"
+      },
+      "review-commit": {
+        "description": "审查某个提交。",
+        "hint": "提交 SHA"
+      },
+      "compact": {
+        "description": "总结对话，以免达到上下文上限。"
+      },
+      "goal": {
+        "description": "设定一个持续推进的目标。",
+        "hint": "[<目标>|clear|pause|resume]"
+      },
+      "rename": {
+        "description": "重命名当前会话。",
+        "hint": "新名称"
+      },
+      "usage": "命令“/{{name}}”需要{{hint}}。",
+      "noArguments": "不带参数",
+      "goalTooLong": "命令“/goal”的目标最多 {{max}} 个字符。",
+      "skillsTitle": "可用的技能：",
+      "noSkills": "没有配置技能。"
+    },
+    "status": {
+      "model": "**模型：** {{value}}",
+      "directory": "**目录：** {{value}}",
+      "approval": "**审批：** {{value}}",
+      "sandbox": "**沙箱：** {{value}}",
+      "account": "**账号：** {{value}}",
+      "session": "**会话：** `{{value}}`",
+      "tokens": "**Token 用量：** {{value}}",
+      "context": "**上下文窗口：** {{value}}",
+      "limit": "**{{label}}限额：** {{value}}",
+      "limits": "**限额：** {{value}}",
+      "notAvailable": "暂无数据",
+      "notSignedIn": "未登录",
+      "tokenCounts": "共 {{total}}（输入 {{input}} + 缓存输入 {{cached}}{{cacheWrite}}，输出 {{output}}）",
+      "cacheWrite": " + 缓存写入 {{count}}",
+      "contextUsed": "已用 {{percent}}%（已用 {{used}} / {{size}}）",
+      "left": "剩余 {{percent}}%{{reset}}",
+      "resetsToday": "（{{time}} 重置）",
+      "resetsOn": "（{{date}} {{time}} 重置）"
+    },
+    "mcp": {
+      "none": "没有配置 MCP 服务器。",
+      "summary": "**MCP 服务器：** {{count}} 个（{{counts}}）",
+      "count": "{{status}} {{count}} 个",
+      "status": {
+        "connected": "已连接",
+        "starting": "连接中",
+        "notStarted": "未启动",
+        "authenticationRequired": "需要认证",
+        "failed": "失败",
+        "cancelled": "已取消",
+        "disabled": "已停用",
+        "unknown": "未知"
+      },
+      "tools_other": "{{count}} 个工具",
+      "notSignedIn": "未登录",
+      "disabled": "**已停用：** {{names}}",
+      "reconnectHint": "运行 `/mcp reconnect` 重启没有连上的服务器。",
+      "arguments": "命令“/mcp”不带参数，或者带 `reconnect`。",
+      "reconnect": "**重新连接：**",
+      "reloaded": "已重新加载所有打开会话的 MCP 配置。Codex 重启了失败、停止或改过配置的服务器；配置没变且已连接的服务器保持连接。",
+      "reloadFailed": "无法重新加载 MCP 配置：{{error}}",
+      "signInUnsupported": "MCP 服务器 {{name}} 需要认证，但这个客户端无法打开登录页面。",
+      "stillStarting": "有些 MCP 服务器还在启动。稍后再运行 `/mcp` 查看它们的状态。",
+      "unknownError": "未知的 MCP 启动错误",
+      "unnamed": "（未命名）"
     }
   }
 }

@@ -345,6 +345,97 @@
     },
     "notice": {
       "rerouted": "Codex switched from {{from}} to {{to}}"
+    },
+    "command": {
+      "plan": {
+        "description": "Turn plan mode on."
+      },
+      "mcp": {
+        "description": "Show the status of the MCP servers, or reconnect them.",
+        "hint": "[reconnect]"
+      },
+      "skills": {
+        "description": "List available skills."
+      },
+      "status": {
+        "description": "Display session configuration and token usage."
+      },
+      "review": {
+        "description": "Review uncommitted changes, or review with custom instructions.",
+        "hint": "optional review instructions"
+      },
+      "review-branch": {
+        "description": "Review changes relative to a base branch.",
+        "hint": "branch name"
+      },
+      "review-commit": {
+        "description": "Review a specific commit.",
+        "hint": "commit sha"
+      },
+      "compact": {
+        "description": "Summarize conversation to avoid hitting the context limit."
+      },
+      "goal": {
+        "description": "Set a goal to keep pursuing.",
+        "hint": "[<objective>|clear|pause|resume]"
+      },
+      "rename": {
+        "description": "Rename the current session.",
+        "hint": "new name"
+      },
+      "usage": "Command \"/{{name}}\" requires {{hint}}.",
+      "noArguments": "no arguments",
+      "goalTooLong": "Command \"/goal\" requires goal text of at most {{max}} characters.",
+      "skillsTitle": "Available skills:",
+      "noSkills": "No skills configured."
+    },
+    "status": {
+      "model": "**Model:** {{value}}",
+      "directory": "**Directory:** {{value}}",
+      "approval": "**Approval:** {{value}}",
+      "sandbox": "**Sandbox:** {{value}}",
+      "account": "**Account:** {{value}}",
+      "session": "**Session:** `{{value}}`",
+      "tokens": "**Token usage:** {{value}}",
+      "context": "**Context window:** {{value}}",
+      "limit": "**{{label}} limit:** {{value}}",
+      "limits": "**Limits:** {{value}}",
+      "notAvailable": "data not available yet",
+      "notSignedIn": "not logged in",
+      "tokenCounts": "{{total}} total  ({{input}} input + {{cached}} cached input{{cacheWrite}}, {{output}} output)",
+      "cacheWrite": " + {{count}} cache write",
+      "contextUsed": "{{percent}}% used ({{used}} used / {{size}})",
+      "left": "{{percent}}% left{{reset}}",
+      "resetsToday": " (resets {{time}})",
+      "resetsOn": " (resets {{time}} on {{date}})"
+    },
+    "mcp": {
+      "none": "No MCP servers are configured.",
+      "summary": "**MCP servers:** {{count}} ({{counts}})",
+      "count": "{{count}} {{status}}",
+      "status": {
+        "connected": "Connected",
+        "starting": "Connecting",
+        "notStarted": "Not started",
+        "authenticationRequired": "Needs authentication",
+        "failed": "Failed",
+        "cancelled": "Cancelled",
+        "disabled": "Disabled",
+        "unknown": "Unknown"
+      },
+      "tools_one": "{{count}} tool",
+      "tools_other": "{{count}} tools",
+      "notSignedIn": "not signed in",
+      "disabled": "**Disabled:** {{names}}",
+      "reconnectHint": "Run `/mcp reconnect` to restart the servers that are not connected.",
+      "arguments": "Command \"/mcp\" accepts no arguments, or `reconnect`.",
+      "reconnect": "**Reconnect:**",
+      "reloaded": "Reloaded the MCP configuration of all open sessions. Codex restarted the servers that failed, stopped, or changed. A connected server with unchanged settings keeps its connection.",
+      "reloadFailed": "Could not reload the MCP configuration: {{error}}",
+      "signInUnsupported": "MCP server {{name}} needs authentication, but this client cannot open a sign-in page.",
+      "stillStarting": "Some MCP servers are still starting. Run `/mcp` again later to see their status.",
+      "unknownError": "unknown MCP startup error",
+      "unnamed": "(unnamed)"
     }
   }
 }

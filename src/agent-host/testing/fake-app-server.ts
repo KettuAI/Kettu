@@ -2,7 +2,14 @@
 // asked, answers from handlers a test can replace, and sends notifications and requests of its own.
 
 import type { MessageTransport } from '../driver'
-import type { Model, ThreadItem, ThreadResponse, Turn } from '../codex/protocol'
+import type {
+  McpServerStatus,
+  Model,
+  SkillMetadata,
+  ThreadItem,
+  ThreadResponse,
+  Turn,
+} from '../codex/protocol'
 
 type Handler = (params: Record<string, unknown>, server: FakeAppServer) => unknown
 
@@ -95,6 +102,9 @@ export class FakeAppServer {
   readonly transport: MessageTransport
   /** Items `thread/items/list` gives, by thread, each with its turn. */
   readonly history = new Map<string, { turnId: string; item: ThreadItem }[]>()
+  /** What `skills/list` and `mcpServerStatus/list` give. */
+  skills: SkillMetadata[] = []
+  mcpServers: McpServerStatus[] = []
   private readonly handlers = new Map<string, Handler>()
   private readonly answers = new Map<number | string, (result: unknown) => void>()
   private readonly writer: WritableStreamDefaultWriter<unknown>
@@ -225,6 +235,18 @@ export class FakeAppServer {
     this.on('turn/start', () => ({ turn: turn(this.nextTurnId()) }))
     this.on('turn/steer', (params) => ({ turnId: params.expectedTurnId }))
     this.on('turn/interrupt', () => ({}))
+    this.on('thread/settings/update', () => ({}))
+    this.on('thread/compact/start', () => ({}))
+    this.on('thread/name/set', () => ({}))
+    this.on('config/mcpServer/reload', () => ({}))
+    this.on('skills/list', (params) => ({
+      data: ((params.cwds as string[] | undefined) ?? ['/project']).map((cwd) => ({
+        cwd,
+        skills: this.skills,
+        errors: [],
+      })),
+    }))
+    this.on('mcpServerStatus/list', () => ({ data: this.mcpServers, nextCursor: null }))
     this.on('account/rateLimits/read', () => ({
       rateLimits: {
         limitId: 'codex',

@@ -312,6 +312,20 @@ export class ThreadMapper {
     return out
   }
 
+  /** A message Kettu writes as the agent's, such as the answer to a command. */
+  say(ctx: MapperContext, markdown: string): MapperOutput {
+    const out = output()
+    addEntry(ctx, out, {
+      kind: 'agent',
+      id: ctx.nextId(),
+      markdown,
+      attachments: [],
+      streaming: false,
+      at: ctx.now,
+    })
+    return out
+  }
+
   private item(ctx: MapperContext, out: MapperOutput, item: ThreadItem, done: boolean): void {
     switch (item.type) {
       case 'userMessage':
@@ -406,6 +420,10 @@ export class ThreadMapper {
       case 'contextCompaction':
         this.compaction(ctx, out, item.id, done)
         break
+      case 'enteredReviewMode':
+      case 'exitedReviewMode':
+        // The review's findings follow as an agent message of their own.
+        break
       default:
         out.effects.push({
           kind: 'ignored',
@@ -442,6 +460,8 @@ export class ThreadMapper {
       if (Object.keys(changes).length > 0) out.patches.push({ op: 'entry.update', id, changes })
       return
     }
+    // A message starts empty, and a review's own messages never get past that.
+    if (text === '') return
     const streaming = !ctx.replaying && !done
     addEntry(ctx, out, {
       kind: 'agent',

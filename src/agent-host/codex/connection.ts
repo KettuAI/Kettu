@@ -32,7 +32,7 @@ import {
 import type { AgentTransport } from '../driver'
 import type { Env } from '../find-command'
 import { t } from '../i18n'
-import type { MapperEffect, MapperOutput } from '../session-updates'
+import { mergeConfig, type MapperEffect, type MapperOutput } from '../session-updates'
 import { mapAccount, mapRateLimits } from './account'
 import {
   commandApproval,
@@ -44,8 +44,17 @@ import {
   type Approval,
 } from './approvals'
 import {
+  commandList,
+  parseCommand,
+  skillsMessage,
+  statusMessage,
+  usageMessage,
+  type ParsedCommand,
+} from './commands'
+import {
   applyOption,
   buildConfig,
+  COLLABORATION_ID,
   ConfigValueError,
   DEFAULT_MODE,
   effortFor,
@@ -55,23 +64,41 @@ import {
   type Settings,
 } from './config'
 import { childThreads, childTurnEffect, ThreadMapper } from './mapper'
+import {
+  errorDetail,
+  inlineCode,
+  McpStartup,
+  mcpStatusMessage,
+  reconnectMessage,
+  type StartupResult,
+} from './mcp-status'
 import type {
   CollaborationMode,
   GetAccountRateLimitsResponse,
   GetAccountResponse,
   InitializeResponse,
   JsonValue,
+  ListMcpServerStatusResponse,
+  McpServerStartupNotification,
+  McpServerStatus,
   Model,
   ModelListResponse,
   RateLimitSnapshot,
   RequestId,
+  ReviewStartResponse,
+  ReviewTarget,
   SandboxMode,
   SandboxPolicy,
+  SkillMetadata,
+  SkillsListResponse,
   Thread,
+  ThreadGoalSetResponse,
   ThreadItem,
   ThreadItemsListResponse,
   ThreadListResponse,
   ThreadResponse,
+  ThreadStatus,
+  ThreadTokenUsage,
   TokenUsageBreakdown,
   Turn,
   TurnError,
@@ -98,6 +125,13 @@ const PENDING_TTL_MS = 60_000
 const CLOSED_THREADS = 256
 const KNOWN_CHILDREN = 1_000
 
+// Codex starts the turn of a goal set on an idle thread by itself, right after the goal.
+const GOAL_TURN_GRACE_MS = 1_000
+const GOAL_MAX_LENGTH = 4_000
+/** What codex-acp sent, as a turn of its own, for a goal Codex started no turn for. */
+const GOAL_CONTINUATION = 'Continue working toward the active goal.'
+const MCP_STARTUP_TIMEOUT_MS = 30_000
+
 /** The kinds of thread `thread/list` names, as codex-acp listed them; subagents are left out. */
 const LISTED_SOURCES = ['cli', 'vscode', 'exec', 'appServer', 'unknown']
 
@@ -114,12 +148,12 @@ const QUIET = new Set([
   'thread/unarchived',
   'thread/deleted',
   'thread/compacted',
+  'thread/goal/updated',
+  'thread/goal/cleared',
   'item/fileChange/outputDelta',
   'item/mcpToolCall/progress',
   'item/commandExecution/terminalInteraction',
-  'mcpServer/startupStatus/updated',
   'remoteControl/status/changed',
-  'skills/changed',
   'turn/moderationMetadata',
 ])
 
@@ -223,8 +257,12 @@ interface Running {
   error: TurnError | null
 }
 
+type ThreadEvent = 'turn' | 'active' | 'inactive'
+
 interface ThreadRecord {
   id: string
+  /** The folder the session was opened in; null for a thread Kettu only saw. */
+  cwd: string | null
   settings: Settings
   /** The settings are the session's own, from its open, not a guess for a thread Kettu saw. */
   known: boolean
@@ -234,6 +272,44 @@ interface ThreadRecord {
   mapper: ThreadMapper
   running: Running | null
   prompting: Prompting | null
+  /** The latest token use Codex reported. */
+  usage: ThreadTokenUsage | null
+  /** The commands last sent to the session, as JSON. */
+  commands: string | null
+  /** A command that answers without a turn, while it runs. */
+  command: AbortController | null
+  /** Told of the thread's turns and status, while a goal waits for its turn. */
+  watch: ((event: ThreadEvent) => void) | null
+}
+
+function threadRecord(
+  id: string,
+  settings: Settings,
+  fields: Pick<ThreadRecord, 'cwd' | 'known' | 'hidden' | 'prompted' | 'mapper'>,
+): ThreadRecord {
+  return {
+    id,
+    settings,
+    ...fields,
+    running: null,
+    prompting: null,
+    usage: null,
+    commands: null,
+    command: null,
+    watch: null,
+  }
+}
+
+const UNKNOWN_SETTINGS: Settings = {
+  mode: DEFAULT_MODE,
+  collaboration: 'default',
+  model: '',
+  effort: null,
+  fast: false,
+}
+
+function stopped(stopReason: PromptResult['stopReason']): PromptResult {
+  return { stopReason, tokens: null, models: [] }
 }
 
 type Delivery = { method: string; params: unknown }
@@ -252,6 +328,8 @@ export class CodexConnection implements AgentConnection {
   /** The models once listed, which each turn's service tier is read from. */
   private knownModels: Model[] = []
   private initialized = false
+  private account: AgentAccount | null = null
+  private readonly startup = new McpStartup()
 
   constructor(
     transport: AgentTransport,
@@ -266,6 +344,7 @@ export class CodexConnection implements AgentConnection {
       traffic: (direction, message) => hooks.traffic(direction, message),
       log: (level, message) => hooks.log(level, message),
     })
+    void this.rpc.closed.then(() => this.startup.close())
   }
 
   get closed(): Promise<void> {
@@ -397,6 +476,7 @@ export class CodexConnection implements AgentConnection {
       const account = mapAccount(
         await this.call<GetAccountResponse>('account/read', { refreshToken: false }),
       )
+      this.account = account
       this.hooks.account(account)
       return account
     } catch (error) {
@@ -417,7 +497,8 @@ export class CodexConnection implements AgentConnection {
       if (error instanceof AgentRequestError && error.kind === 'closed') throw error
       return
     }
-    this.hooks.account(mapAccount(response))
+    this.account = mapAccount(response)
+    this.hooks.account(this.account)
     if (response.requiresOpenaiAuth && !response.account) {
       throw new AgentRequestError('auth_required', t('codex.signInNeeded'))
     }
@@ -449,6 +530,7 @@ export class CodexConnection implements AgentConnection {
 
   private async record(
     id: string,
+    cwd: string,
     response: ThreadResponse,
     hidden: boolean,
     base?: Settings,
@@ -465,17 +547,17 @@ export class CodexConnection implements AgentConnection {
           effort: effortFor(model, response.reasoningEffort),
           fast: !!response.serviceTier && response.serviceTier === fastTier(model),
         }
-    const record: ThreadRecord = {
-      id,
-      settings,
+    const seen = this.threads.get(id)
+    const record = threadRecord(id, settings, {
+      cwd,
       hidden,
       known: true,
       prompted: false,
-      mapper: this.threads.get(id)?.mapper ?? new ThreadMapper(),
-      running: null,
-      prompting: null,
-    }
+      mapper: seen?.mapper ?? new ThreadMapper(),
+    })
+    record.usage = seen?.usage ?? null
     this.threads.set(id, record)
+    void this.publishCommands(id)
     return record
   }
 
@@ -496,7 +578,7 @@ export class CodexConnection implements AgentConnection {
       ephemeral: hidden,
       experimentalRawEvents: false,
     })
-    const record = await this.record(response.thread.id, response, hidden)
+    const record = await this.record(response.thread.id, cwd, response, hidden)
     record.settings = { ...record.settings, mode: DEFAULT_MODE }
     return { sessionId: record.id, config: await this.config(record) }
   }
@@ -523,7 +605,7 @@ export class CodexConnection implements AgentConnection {
       config: sessionConfig(cwd, options.mcpServers),
       excludeTurns: true,
     })
-    const record = await this.record(threadId, response, options.hidden !== undefined, known)
+    const record = await this.record(threadId, cwd, response, options.hidden !== undefined, known)
     record.prompted = true
     return record
   }
@@ -614,7 +696,7 @@ export class CodexConnection implements AgentConnection {
       ephemeral: hidden,
       excludeTurns: true,
     })
-    const record = await this.record(response.thread.id, response, hidden, source)
+    const record = await this.record(response.thread.id, cwd, response, hidden, source)
     record.prompted = true
     return { sessionId: record.id, config: await this.config(record) }
   }
@@ -672,9 +754,11 @@ export class CodexConnection implements AgentConnection {
     this.targets.set(sessionId, target)
     this.unregistered.delete(sessionId)
     const early = this.pending.get(sessionId)
-    if (!early) return
-    this.pending.delete(sessionId)
-    for (const update of early.updates) this.toTarget(sessionId, target, update)
+    if (early) {
+      this.pending.delete(sessionId)
+      for (const update of early.updates) this.toTarget(sessionId, target, update)
+    }
+    void this.publishCommands(sessionId)
   }
 
   unregister(sessionId: string, target?: SessionTarget): void {
@@ -710,23 +794,14 @@ export class CodexConnection implements AgentConnection {
   }
 
   private child(id: string, parent: string): ThreadRecord {
-    const parentSettings = this.threads.get(parent)?.settings
-    const record: ThreadRecord = {
-      id,
-      settings: parentSettings ?? {
-        mode: DEFAULT_MODE,
-        collaboration: 'default',
-        model: '',
-        effort: null,
-        fast: false,
-      },
+    const from = this.threads.get(parent)
+    const record = threadRecord(id, from?.settings ?? UNKNOWN_SETTINGS, {
+      cwd: from?.cwd ?? null,
       hidden: false,
       known: false,
       prompted: true,
       mapper: new ThreadMapper(),
-      running: null,
-      prompting: null,
-    }
+    })
     this.threads.set(id, record)
     return record
   }
@@ -736,22 +811,13 @@ export class CodexConnection implements AgentConnection {
     if (record) return record
     const parent = this.parents.get(id)
     if (parent) return this.child(id, parent)
-    const created: ThreadRecord = {
-      id,
-      settings: {
-        mode: DEFAULT_MODE,
-        collaboration: 'default',
-        model: '',
-        effort: null,
-        fast: false,
-      },
+    const created = threadRecord(id, UNKNOWN_SETTINGS, {
+      cwd: null,
       hidden: false,
       known: false,
       prompted: true,
       mapper: new ThreadMapper(),
-      running: null,
-      prompting: null,
-    }
+    })
     this.threads.set(id, created)
     return created
   }
@@ -819,6 +885,12 @@ export class CodexConnection implements AgentConnection {
       case 'thread/started':
         this.threadStarted(p.thread as Thread)
         return
+      case 'skills/changed':
+        for (const id of this.targets.keys()) void this.publishCommands(id)
+        return
+      case 'mcpServer/startupStatus/updated':
+        this.startup.record(params as McpServerStartupNotification)
+        return
       case 'error':
         this.turnError(p)
         return
@@ -838,6 +910,11 @@ export class CodexConnection implements AgentConnection {
         break
       case 'thread/tokenUsage/updated':
         this.countTokens(threadId, p)
+        break
+      case 'thread/status/changed':
+        this.threads
+          .get(threadId)
+          ?.watch?.((p.status as ThreadStatus).type === 'active' ? 'active' : 'inactive')
         break
       case 'item/started':
       case 'item/completed':
@@ -869,17 +946,25 @@ export class CodexConnection implements AgentConnection {
     record.running = { id: turn.id, usage: null, error: null }
     const prompting = record.prompting
     if (prompting && prompting.turnId === null) {
-      prompting.turnId = turn.id
-      if (prompting.cancel) void this.interrupt(threadId, turn.id)
+      // The turn a review runs in has the one it started as its root, which is the one that ends.
+      const turnId = turn.rootTurnId ?? turn.id
+      prompting.turnId = turnId
+      if (prompting.cancel) void this.interrupt(threadId, turnId)
     }
+    record.watch?.('turn')
     if (this.parents.has(threadId)) this.toParent(threadId, [childTurnEffect(threadId, null, null)])
   }
 
   private countTokens(threadId: string, params: Record<string, unknown>): void {
-    const running = this.threads.get(threadId)?.running
-    const usage = params.tokenUsage as { last?: TokenUsageBreakdown } | undefined
-    if (!running || !usage?.last || (params.turnId && params.turnId !== running.id)) return
-    running.usage = addUsage(running.usage, usage.last)
+    const record = this.threads.get(threadId)
+    const usage = params.tokenUsage as ThreadTokenUsage | undefined
+    if (record && usage?.total) record.usage = usage
+    const running = record?.running
+    const last = usage?.last
+    if (!running || !last || (params.turnId && params.turnId !== running.id)) return
+    // Codex reports a compaction with a total but no input or output, and leaves it out of its own.
+    if (last.inputTokens === 0 && last.outputTokens === 0) return
+    running.usage = addUsage(running.usage, last)
   }
 
   private turnError(params: Record<string, unknown>): void {
@@ -990,7 +1075,8 @@ export class CodexConnection implements AgentConnection {
 
   // Turns.
 
-  private turnParams(record: ThreadRecord, input: UserInput[]): Record<string, unknown> {
+  /** The session's settings as Codex takes them, for a turn or for the thread's next turns. */
+  private settingsParams(record: ThreadRecord): Record<string, unknown> {
     const { settings } = record
     const mode = modeOf(settings.mode) ?? modeOf(DEFAULT_MODE)!
     const collaborationMode: CollaborationMode | null = settings.model
@@ -1005,7 +1091,6 @@ export class CodexConnection implements AgentConnection {
       : null
     return {
       threadId: record.id,
-      input,
       approvalPolicy: mode.approvalPolicy,
       approvalsReviewer: mode.approvalsReviewer,
       sandboxPolicy: mode.sandbox,
@@ -1017,29 +1102,49 @@ export class CodexConnection implements AgentConnection {
     }
   }
 
+  private turnParams(record: ThreadRecord, input: UserInput[]): Record<string, unknown> {
+    return { ...this.settingsParams(record), input }
+  }
+
   private fastTierOf(modelId: string): string | null {
     return fastTier(this.knownModels.find((model) => model.id === modelId))
   }
 
   async prompt(sessionId: string, prompt: readonly PromptBlock[]): Promise<PromptResult> {
     const record = this.thread(sessionId)
-    if (record.prompting) {
+    if (record.prompting || record.command) {
       throw new AgentRequestError('agent_error', 'A turn is already running in this session')
     }
-    await this.listModels()
+    const command = parseCommand(prompt)
+    if (command) return this.runCommand(record, command)
+    return this.runTurn(record, async () => {
+      await this.listModels()
+      const response = await this.call<{ turn: Turn }>(
+        'turn/start',
+        this.turnParams(record, userInputs(prompt)),
+      )
+      return response.turn.id
+    })
+  }
+
+  /**
+   * Runs `start`, which begins a turn and answers its id when it knows it, then resolves once that
+   * turn ends; a turn Codex starts by itself is the one when `start` answers null.
+   */
+  private async runTurn(
+    record: ThreadRecord,
+    start: (prompting: Prompting) => Promise<string | null>,
+  ): Promise<PromptResult> {
     const done = new Promise<PromptResult>((resolve, reject) => {
       record.prompting = { turnId: null, cancel: false, resolve, reject }
     })
     const prompting = record.prompting!
     try {
-      const response = await this.call<{ turn: Turn }>(
-        'turn/start',
-        this.turnParams(record, userInputs(prompt)),
-      )
+      const turnId = await start(prompting)
       record.prompted = true
-      if (prompting.turnId === null) {
-        prompting.turnId = response.turn.id
-        if (prompting.cancel) void this.interrupt(sessionId, response.turn.id)
+      if (turnId !== null && prompting.turnId === null) {
+        prompting.turnId = turnId
+        if (prompting.cancel) void this.interrupt(record.id, turnId)
       }
     } catch (error) {
       if (record.prompting === prompting) record.prompting = null
@@ -1076,6 +1181,8 @@ export class CodexConnection implements AgentConnection {
     sessionId: string,
     prompt: readonly PromptBlock[],
   ): Promise<'injected' | 'promptRequired'> {
+    // A command waits for the turn to end and runs as a prompt of its own.
+    if (parseCommand(prompt)) return 'promptRequired'
     const record = this.threads.get(sessionId)
     const turnId = record?.running?.id ?? record?.prompting?.turnId ?? null
     if (!turnId) return 'promptRequired'
@@ -1101,7 +1208,12 @@ export class CodexConnection implements AgentConnection {
   async cancel(sessionId: string): Promise<void> {
     const record = this.threads.get(sessionId)
     if (!record) return
-    const turnId = record.running?.id ?? record.prompting?.turnId ?? null
+    if (record.command) {
+      record.command.abort()
+      return
+    }
+    // A review's own turn runs inside the one it started, which is the one to stop.
+    const turnId = record.prompting?.turnId ?? record.running?.id ?? null
     if (turnId) {
       await this.interrupt(sessionId, turnId)
       return
@@ -1141,6 +1253,322 @@ export class CodexConnection implements AgentConnection {
       throw error
     }
     return buildConfig(record.settings, models)
+  }
+
+  // Commands: Codex's own, which run through app-server instead of going to the model as text.
+
+  /** Sends the session its commands, Codex's and a `$name` for each skill, when they changed. */
+  private async publishCommands(threadId: string): Promise<void> {
+    const record = this.threads.get(threadId)
+    if (!record || record.hidden || record.cwd === null || this.parents.has(threadId)) return
+    let skills: SkillMetadata[] = []
+    try {
+      skills = await this.skills(record)
+    } catch (error) {
+      if (this.isClosed) return
+      this.hooks.log('warn', `Could not list Codex's skills: ${(error as Error).message}`)
+    }
+    const commands = commandList(skills)
+    const key = JSON.stringify(commands)
+    const target = this.targets.get(threadId)
+    if (!target || this.threads.get(threadId) !== record || record.commands === key) return
+    record.commands = key
+    target.apply({ patches: [{ op: 'session.update', changes: { commands } }], effects: [] })
+  }
+
+  private async skills(record: ThreadRecord): Promise<SkillMetadata[]> {
+    const response = await this.call<SkillsListResponse>(
+      'skills/list',
+      record.cwd === null ? {} : { cwds: [record.cwd] },
+    )
+    return response.data.flatMap((entry) => entry.skills)
+  }
+
+  private runCommand(record: ThreadRecord, { name, rest }: ParsedCommand): Promise<PromptResult> {
+    const usage = async () => usageMessage(name)
+    switch (name) {
+      case 'plan':
+        return rest ? this.answer(record, usage) : this.togglePlan(record)
+      case 'compact':
+        return this.commandTurn(record, async () => {
+          await this.call('thread/compact/start', { threadId: record.id })
+          return null
+        })
+      case 'review':
+        return this.review(
+          record,
+          rest ? { type: 'custom', instructions: rest } : { type: 'uncommittedChanges' },
+        )
+      case 'review-branch':
+        return rest
+          ? this.review(record, { type: 'baseBranch', branch: rest })
+          : this.answer(record, usage)
+      case 'review-commit':
+        return rest
+          ? this.review(record, { type: 'commit', sha: rest, title: null })
+          : this.answer(record, usage)
+      case 'goal':
+        return this.goal(record, rest)
+      case 'rename':
+        // The new title comes back as `thread/name/updated`.
+        return this.answer(record, async () => {
+          if (!rest) return usageMessage(name)
+          await this.call('thread/name/set', { threadId: record.id, name: rest })
+          return null
+        })
+      case 'status':
+        return this.answer(record, () => this.statusAnswer(record))
+      case 'skills':
+        return this.answer(record, async () => skillsMessage(await this.skills(record)))
+      case 'mcp':
+        return this.answer(record, (signal) => this.mcpAnswer(record, rest, signal))
+    }
+  }
+
+  /** Runs a command that answers without a turn, and adds its answer to the thread. */
+  private async answer(
+    record: ThreadRecord,
+    run: (signal: AbortSignal) => Promise<string | null>,
+  ): Promise<PromptResult> {
+    const controller = new AbortController()
+    record.command = controller
+    try {
+      const text = await run(controller.signal)
+      if (controller.signal.aborted) return stopped('cancelled')
+      if (text !== null) this.say(record, text)
+      return stopped('end_turn')
+    } finally {
+      record.command = null
+    }
+  }
+
+  private say(record: ThreadRecord, markdown: string): void {
+    const target = this.targets.get(record.id)
+    if (target) target.apply(record.mapper.say(target.context(), markdown))
+  }
+
+  /** A command's turn, which takes the session's settings first, as a prompt's turn carries them. */
+  private commandTurn(
+    record: ThreadRecord,
+    start: (prompting: Prompting) => Promise<string | null>,
+  ): Promise<PromptResult> {
+    return this.runTurn(record, async (prompting) => {
+      await this.listModels()
+      await this.call('thread/settings/update', this.settingsParams(record))
+      return start(prompting)
+    })
+  }
+
+  private review(record: ThreadRecord, target: ReviewTarget): Promise<PromptResult> {
+    return this.commandTurn(record, async () => {
+      const response = await this.call<ReviewStartResponse>('review/start', {
+        threadId: record.id,
+        target,
+        delivery: 'inline',
+      })
+      return response.turn.id
+    })
+  }
+
+  private goal(record: ThreadRecord, rest: string): Promise<PromptResult> {
+    const threadId = record.id
+    if (!rest) return this.answer(record, async () => usageMessage('goal'))
+    switch (rest.toLowerCase()) {
+      case 'pause':
+        return this.answer(record, async () => {
+          await this.call('thread/goal/set', { threadId, status: 'paused' })
+          return null
+        })
+      case 'clear':
+        return this.answer(record, async () => {
+          await this.call('thread/goal/clear', { threadId })
+          return null
+        })
+      case 'resume':
+        return this.goalTurn(record, { status: 'active' })
+    }
+    if (rest.length > GOAL_MAX_LENGTH) {
+      return this.answer(record, async () =>
+        t('codex.command.goalTooLong', { max: GOAL_MAX_LENGTH }),
+      )
+    }
+    return this.goalTurn(record, { objective: rest, status: 'active' })
+  }
+
+  /** Sets the goal, then follows the turn Codex starts for it, or starts one as codex-acp did. */
+  private goalTurn(
+    record: ThreadRecord,
+    goal: { objective?: string; status: 'active' },
+  ): Promise<PromptResult> {
+    return this.commandTurn(record, async (prompting) => {
+      await this.call<ThreadGoalSetResponse>('thread/goal/set', { threadId: record.id, ...goal })
+      if (await this.goalStarted(record, prompting)) return null
+      if (prompting.cancel) {
+        record.prompting = null
+        prompting.resolve(stopped('cancelled'))
+        return null
+      }
+      const response = await this.call<{ turn: Turn }>(
+        'turn/start',
+        this.turnParams(record, [{ type: 'text', text: GOAL_CONTINUATION, text_elements: [] }]),
+      )
+      return response.turn.id
+    })
+  }
+
+  /**
+   * Whether Codex starts a turn for the goal: one that starts within the grace period, or later
+   * while the thread stays active.
+   */
+  private goalStarted(record: ThreadRecord, prompting: Prompting): Promise<boolean> {
+    if (prompting.turnId !== null) return Promise.resolve(true)
+    return new Promise((resolve) => {
+      let timer: ReturnType<typeof setTimeout> | null = null
+      let active = false
+      const finish = (started: boolean) => {
+        if (timer) clearTimeout(timer)
+        if (record.watch === watch) record.watch = null
+        resolve(started)
+      }
+      const watch = (event: ThreadEvent) => {
+        if (event === 'turn') finish(true)
+        else if (event === 'active') {
+          active = true
+          if (timer) clearTimeout(timer)
+          timer = null
+        } else if (active) finish(false)
+      }
+      record.watch = watch
+      timer = setTimeout(() => finish(false), GOAL_TURN_GRACE_MS)
+      void this.closed.then(() => finish(false))
+    })
+  }
+
+  /** `/plan` turns plan mode on, and off again. */
+  private async togglePlan(record: ThreadRecord): Promise<PromptResult> {
+    const models = await this.listModels()
+    const next = record.settings.collaboration === 'plan' ? 'default' : 'plan'
+    record.settings = applyOption(record.settings, models, COLLABORATION_ID, next)
+    const target = this.targets.get(record.id)
+    if (target) {
+      const config = buildConfig(record.settings, models)
+      target.apply({
+        patches: [
+          {
+            op: 'session.update',
+            changes: { config: mergeConfig(target.context().thread.session.config, config) },
+          },
+        ],
+        effects: [],
+      })
+    }
+    return stopped('end_turn')
+  }
+
+  private async statusAnswer(record: ThreadRecord): Promise<string> {
+    const limits = await this.readLimits().catch((error: unknown) => {
+      if (this.isClosed) throw error
+      this.hooks.log('warn', `Could not read Codex's limits: ${(error as Error).message}`)
+      return null
+    })
+    const account = this.account ?? (await this.refreshAccount())
+    const mode = modeOf(record.settings.mode) ?? modeOf(DEFAULT_MODE)!
+    return statusMessage({
+      model: record.settings.model,
+      effort: record.settings.effort,
+      cwd: record.cwd ?? '',
+      approval: String(mode.approvalPolicy),
+      sandbox: sandboxMode(mode.sandbox),
+      account,
+      sessionId: record.id,
+      usage: record.usage,
+      limits,
+      now: Date.now(),
+    })
+  }
+
+  private async mcpAnswer(
+    record: ThreadRecord,
+    rest: string,
+    signal: AbortSignal,
+  ): Promise<string | null> {
+    const args = rest.split(/\s+/).filter((arg) => arg !== '')
+    if (args.length === 0) return mcpStatusMessage((await this.mcpServers(record.id)).servers)
+    if (args.length === 1 && args[0]!.toLowerCase() === 'reconnect') {
+      return this.mcpReconnect(record, signal)
+    }
+    return t('codex.mcp.arguments')
+  }
+
+  /** The MCP servers as the thread runs them; Codex's configured ones for a thread it lacks. */
+  private async mcpServers(
+    threadId: string,
+  ): Promise<{ servers: McpServerStatus[]; live: boolean }> {
+    try {
+      return { servers: await this.mcpPages(threadId), live: true }
+    } catch (error) {
+      if (!(error instanceof AgentRequestError) || error.code !== RESOURCE_NOT_FOUND) throw error
+      return { servers: await this.mcpPages(null), live: false }
+    }
+  }
+
+  private async mcpPages(threadId: string | null): Promise<McpServerStatus[]> {
+    const servers: McpServerStatus[] = []
+    const seen = new Set<string>()
+    let cursor: string | null = null
+    do {
+      const page: ListMcpServerStatusResponse = await this.call<ListMcpServerStatusResponse>(
+        'mcpServerStatus/list',
+        { cursor, detail: 'toolsAndAuthOnly', ...(threadId ? { threadId } : {}) },
+      )
+      servers.push(...page.data)
+      cursor = page.nextCursor
+      if (cursor !== null && seen.has(cursor)) break
+      if (cursor !== null) seen.add(cursor)
+    } while (cursor !== null)
+    return servers
+  }
+
+  /** `/mcp reconnect`: reloads the MCP configuration, then waits for the servers to start. */
+  private async mcpReconnect(record: ThreadRecord, signal: AbortSignal): Promise<string | null> {
+    const before = await this.mcpServers(record.id)
+    if (before.servers.length === 0) return t('codex.mcp.none')
+    const after = this.startup.version()
+    try {
+      await this.call('config/mcpServer/reload')
+    } catch (error) {
+      if (this.isClosed) throw error
+      const notes = [t('codex.mcp.reloadFailed', { error: errorDetail((error as Error).message) })]
+      return reconnectMessage(notes, mcpStatusMessage((await this.mcpServers(record.id)).servers))
+    }
+    const notes = [t('codex.mcp.reloaded')]
+    let list = await this.mcpServers(record.id)
+    let startup: StartupResult | null = { failed: [] }
+    const names = list.servers
+      .filter((server) => server.runtimeStatus !== 'disabled')
+      .map((server) => server.name)
+    if (list.live && names.length > 0) {
+      startup = await this.startup.wait(names, after, record.id, signal, MCP_STARTUP_TIMEOUT_MS)
+      if (signal.aborted) return null
+      list = await this.mcpServers(record.id)
+    }
+    // Kettu opens no sign-in page for an MCP server, as it did not for codex-acp.
+    const signIn = new Set(
+      list.servers
+        .filter((server) => server.runtimeStatus === 'authenticationRequired')
+        .map((server) => server.name),
+    )
+    for (const failure of startup?.failed ?? []) {
+      if (failure.reauthenticate) signIn.add(failure.server)
+    }
+    for (const name of signIn) {
+      notes.push(t('codex.mcp.signInUnsupported', { name: inlineCode(name) }))
+    }
+    if (startup === null) notes.push(t('codex.mcp.stillStarting'))
+    const errors = new Map(
+      (startup?.failed ?? []).map((failure) => [failure.server, failure.error]),
+    )
+    return reconnectMessage(notes, mcpStatusMessage(list.servers, errors))
   }
 
   // Hidden sessions: ephemeral threads, which app-server never writes to disk.

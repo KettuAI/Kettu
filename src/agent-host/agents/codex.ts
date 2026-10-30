@@ -14,6 +14,5 @@ export const CODEX: AgentDefinition = {
   progressNotes: true,
   cli: CODEX_CLI,
   configVariable: CONFIG_VARIABLES.codex,
-  // app-server takes no slash commands, so none lists its MCP servers in a session.
-  mcpConfig: { project: '.codex/config.toml' },
+  mcpConfig: { project: '.codex/config.toml', listCommand: '/mcp' },
 }
