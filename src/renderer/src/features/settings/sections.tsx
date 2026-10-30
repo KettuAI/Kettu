@@ -24,7 +24,7 @@ import {
 import { AGENT_IDS, type AgentId } from '@shared/thread'
 import { exportDiagnostics } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import { BrandMark } from '@renderer/components/brand'
+import { BrandIcon } from '@renderer/components/brand'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -707,13 +707,7 @@ export function NotificationPreview() {
       className="grid place-items-center rounded-xl bg-[linear-gradient(135deg,color-mix(in_srgb,var(--bg-sidebar),var(--info)_10%),var(--bg-sidebar))] px-4 py-5.5 shadow-card"
     >
       <div className="flex w-87.5 max-w-full gap-2.5 rounded-3xl bg-surface/88 px-3 py-2.5 shadow-menu backdrop-blur-xl">
-        {/* The app's icon, which is light in either mode. */}
-        <span
-          data-theme="light"
-          className="grid size-8 shrink-0 place-items-center rounded-lg bg-subtle shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]"
-        >
-          <BrandMark width={22} className="text-primary" />
-        </span>
+        <BrandIcon size={32} />
         <div className="flex min-w-0 flex-1 flex-col gap-px text-command">
           <div className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate font-semibold">

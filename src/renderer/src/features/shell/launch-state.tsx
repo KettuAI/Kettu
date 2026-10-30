@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { loadHostState } from '@renderer/app/bootstrap'
-import { BrandMark } from '@renderer/components/brand'
+import { BrandIcon } from '@renderer/components/brand'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { FailedState } from '@renderer/features/session/session-states'
 import { useProjectsStore } from '@renderer/stores/projects'
@@ -35,7 +35,7 @@ export function LaunchState() {
   if (!slow) return <div className="h-full" />
   return (
     <div className="flex h-full animate-in flex-col items-center justify-center gap-6 pb-10 animation-duration-(--duration-base) fade-in">
-      <BrandMark width={72} />
+      <BrandIcon size={72} />
       <div role="status" className="flex items-center gap-2.5 text-ui font-medium text-secondary">
         <Spinner className="size-4" />
         {t('launch.starting')}

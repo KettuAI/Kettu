@@ -1,27 +1,24 @@
 {
-  "fill": {
-    "linear-gradient": [
-      "srgb:0.17255,0.16863,0.15686,1.00000",
-      "srgb:0.08627,0.08235,0.07451,1.00000"
-    ],
-    "orientation": {
-      "start": {
-        "x": 0.5,
-        "y": 0
-      },
-      "stop": {
-        "x": 0.5,
-        "y": 1
-      }
-    }
-  },
   "groups": [
     {
       "layers": [
         {
           "glass": false,
-          "image-name": "mark.svg",
-          "name": "mark"
+          "image-name": "fox.png",
+          "name": "fox"
+        }
+      ],
+      "shadow": {
+        "kind": "none",
+        "opacity": 0.5
+      }
+    },
+    {
+      "layers": [
+        {
+          "glass": false,
+          "image-name": "background.png",
+          "name": "background"
         }
       ],
       "shadow": {

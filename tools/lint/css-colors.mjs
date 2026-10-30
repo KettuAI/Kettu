@@ -8,6 +8,8 @@ import { colorLiteralMessage, findColorLiterals, TOKEN_FILE } from './color-lite
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const SCANNED = /\.(?:css|html|svg)$/i
+// The app icon's drawing, written by tools/brand/build.mjs, keeps the brand's own colors.
+const ICON_FILE = 'src/renderer/src/assets/kettu-icon.svg'
 
 /**
  * @param {string} text
@@ -23,10 +25,10 @@ export function locate(text, index) {
 /**
  * @param {string} path forward-slash path from the repository root
  * @param {string} text
- * @returns {string[]} one `path:line:col message` per literal; none for the token file
+ * @returns {string[]} one `path:line:col message` per literal; none for the token file or the icon
  */
 export function checkFile(path, text) {
-  if (path === TOKEN_FILE) return []
+  if (path === TOKEN_FILE || path === ICON_FILE) return []
   const markup = !path.toLowerCase().endsWith('.css')
   return findColorLiterals(text, { css: true, markup }).map(({ index, match }) => {
     const { line, column } = locate(text, index)

@@ -1,28 +1,5 @@
-// The Kettu mark and wordmark. The renderer draws
-// them through components/brand.tsx and tools/brand builds the icons and images from them.
-
-/** The mark's artboard: every size rule measures this box, not the shape inside it. */
-export const MARK_BOX = { x: 10, y: 24, width: 80, height: 52 }
-
-export type MarkVersion = 'standard' | 'small'
-
-/** The small version has wider cuts and a thicker bench, for widths of 16 to 47 px. */
-export const MARK_PATHS: Record<MarkVersion, string> = {
-  standard:
-    'M14.33 68.48L36.59 29.92C38.64 26.38 41.36 26.38 43.41 29.92L46.35 35.02C46.63 35.51 46.69 36.18 46.5 36.71L41.3 50.91C37.98 59.95 38.98 60.42 43.8 52.08L56.59 29.92C58.64 26.38 61.36 26.38 63.41 29.92L66.35 35.02C66.63 35.51 66.69 36.18 66.5 36.71L60.67 52.62C57.73 60.64 58.62 61.05 62.89 53.66L66.54 47.34C68.61 43.74 71.39 43.74 73.46 47.34L85.67 68.48C88.27 72.98 86.54 75.98 81.34 75.98L18.66 75.98C13.46 75.98 11.73 72.98 14.33 68.48Z',
-  small:
-    'M14.33 68.48L37.88 27.69C39.15 25.49 40.85 25.49 42.12 27.69L43.75 30.51C44.04 31.02 44.15 31.74 44.02 32.31L40.58 47.67C38.39 57.46 40.27 58.19 45.29 49.5L57.88 27.69C59.15 25.49 60.85 25.49 62.12 27.69L63.75 30.51C64.04 31.02 64.15 31.74 64.02 32.31L59.79 51.23C58.07 58.88 59.54 59.45 63.46 52.66L66.54 47.34C68.61 43.74 71.39 43.74 73.46 47.34L85.67 68.48C88.27 72.98 86.54 75.98 81.34 75.98L18.66 75.98C13.46 75.98 11.73 72.98 14.33 68.48Z',
-}
-
-/** The vertical centre of each shape's outer box, which icon tiles centre on. */
-export const MARK_CENTER_Y: Record<MarkVersion, number> = { standard: 51.62, small: 51.01 }
-
-/** Widths from this up take the standard version. */
-export const STANDARD_MARK_MIN_WIDTH = 48
-
-export function markVersionFor(width: number): MarkVersion {
-  return width >= STANDARD_MARK_MIN_WIDTH ? 'standard' : 'small'
-}
+// The Kettu wordmark and how it pairs with the icon, whose drawing is tools/brand/fox.mjs. The
+// renderer draws the lockup through components/brand.tsx; tools/brand builds the images from both.
 
 /**
  * "Kettu" in Manrope SemiBold at a font size of 100, tracked -1%, as outlines so it needs no
@@ -43,8 +20,8 @@ export type LockupLayout = 'horizontal' | 'vertical'
 export interface LockupGeometry {
   width: number
   height: number
-  /** The mark's artboard, placed in the lockup. */
-  mark: { x: number; y: number; width: number; height: number }
+  /** The icon's square canvas, transparent margin included, placed in the lockup. */
+  icon: { x: number; y: number; size: number }
   /** Where the wordmark's origin, its baseline at the left edge, sits. */
   text: { x: number; y: number }
 }
@@ -56,31 +33,28 @@ function baselineInLineBox(top: number): number {
 }
 
 /**
- * The fixed lockups at a font size of 100. Horizontal: the mark is 1.95 font sizes wide, 0.45
- * from the wordmark, both centred vertically. Vertical: 3.3 wide, 0.6 above the wordmark.
+ * The fixed lockups at a font size of 100. Horizontal: the icon is 1.6 font sizes square, 0.4 from
+ * the wordmark, both centred vertically. Vertical: 3 square, 0.5 above the wordmark.
  */
 export function lockupGeometry(layout: LockupLayout): LockupGeometry {
-  const ratio = MARK_BOX.height / MARK_BOX.width
   if (layout === 'horizontal') {
-    const markWidth = 1.95 * FONT_SIZE
-    const markHeight = markWidth * ratio
-    const height = Math.max(markHeight, FONT_SIZE)
-    const textX = markWidth + 0.45 * FONT_SIZE
+    const size = 1.6 * FONT_SIZE
+    const height = Math.max(size, FONT_SIZE)
+    const textX = size + 0.4 * FONT_SIZE
     return {
       width: textX + WORDMARK.advance,
       height,
-      mark: { x: 0, y: (height - markHeight) / 2, width: markWidth, height: markHeight },
+      icon: { x: 0, y: (height - size) / 2, size },
       text: { x: textX, y: baselineInLineBox((height - FONT_SIZE) / 2) },
     }
   }
-  const markWidth = 3.3 * FONT_SIZE
-  const markHeight = markWidth * ratio
-  const width = Math.max(markWidth, WORDMARK.advance)
-  const textTop = markHeight + 0.6 * FONT_SIZE
+  const size = 3 * FONT_SIZE
+  const width = Math.max(size, WORDMARK.advance)
+  const textTop = size + 0.5 * FONT_SIZE
   return {
     width,
     height: textTop + FONT_SIZE,
-    mark: { x: (width - markWidth) / 2, y: 0, width: markWidth, height: markHeight },
+    icon: { x: (width - size) / 2, y: 0, size },
     text: { x: (width - WORDMARK.advance) / 2, y: baselineInLineBox(textTop) },
   }
 }
