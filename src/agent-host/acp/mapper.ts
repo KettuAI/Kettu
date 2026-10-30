@@ -231,11 +231,11 @@ function lineCut(text: string, start: number, end: number): { start: number; end
  * link, with the `<context>` block that follows it when the refs match, and a `data:` image link.
  * Anything else stays text, so a text that only looks like one of the forms is not lost.
  */
-function parseReplayedText(
+export function parseReplayedText(
   text: string,
   entryId: string,
   existing: readonly UserContent[],
-  out: Output,
+  out: MapperOutput,
 ): UserContent[] | null {
   const parts: UserContent[] = []
   let attachments = attachmentCount(existing)
@@ -311,11 +311,11 @@ function parseReplayedText(
 }
 
 /** A replayed content block as attachment refs, or null when it is not one of those forms. */
-function replayedBlock(
+export function replayedBlock(
   block: acp.ContentBlock,
   entryId: string,
   existing: readonly UserContent[],
-  out: Output,
+  out: MapperOutput,
 ): UserContent[] | null {
   const index = attachmentCount(existing)
   if (block.type === 'image') {
@@ -530,12 +530,12 @@ function closeThoughts(ctx: MapperContext, out: Output, except?: string): void {
   }
 }
 
-function addEntry(ctx: MapperContext, out: Output, entry: ThreadEntry): void {
+export function addEntry(ctx: MapperContext, out: MapperOutput, entry: ThreadEntry): void {
   closeThoughts(ctx, out, entry.id)
   out.patches.push({ op: 'entry.add', entry })
 }
 
-function messageEntryId(
+export function messageEntryId(
   ctx: MapperContext,
   kind: 'agent' | 'thought' | 'user',
   messageId: string | null | undefined,
@@ -661,8 +661,8 @@ function mapUserChunk(ctx: MapperContext, out: Output, chunk: acp.ContentChunk):
   })
 }
 
-function toolEffects(
-  out: Output,
+export function toolEffects(
+  out: MapperOutput,
   toolCallId: string,
   entryId: string,
   before: ToolEntry['status'] | null,

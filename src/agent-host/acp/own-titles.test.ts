@@ -9,9 +9,8 @@ describe('the titles an agent writes itself', () => {
     expect(at('@agentclientprotocol/claude-agent-acp', '0.97.0')).toBe('sent')
     expect(at('@agentclientprotocol/claude-agent-acp', '0.93.0')).toBeNull()
 
-    expect(at('@agentclientprotocol/codex-acp', '2.2.2')).toBe('sent')
-    expect(at('@agentclientprotocol/codex-acp', '2.3.0')).toBe('sent')
-    expect(at('@agentclientprotocol/codex-acp', '2.2.1')).toBeNull()
+    // Codex runs through its app-server now, so its adapter is no longer known.
+    expect(at('@agentclientprotocol/codex-acp', '2.2.2')).toBeNull()
 
     expect(at('fake-agent', '0.1.0')).toBe('sent')
     expect(at('fake-agent', '0.0.9')).toBeNull()

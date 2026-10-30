@@ -75,7 +75,7 @@ Kettu 为这些工作提供了一个桌面上的家。你用的每个 Agent 都�
 | Agent                                                                           | Kettu 如何运行它                                                                               |
 | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | [Claude Code](https://github.com/anthropics/claude-code)                        | ACP 适配器 `@agentclientprotocol/claude-agent-acp`，首次使用时安装                             |
-| [Codex CLI](https://github.com/openai/codex)                                    | ACP 适配器 `@agentclientprotocol/codex-acp`，首次使用时安装                                    |
+| [Codex CLI](https://github.com/openai/codex)                                    | `codex app-server`，运行你自己安装的 `codex`，或首次使用时安装的 `@openai/codex`               |
 | [opencode](https://opencode.ai)                                                 | 你自己安装的 `opencode`，以 `opencode acp` 运行                                                |
 | [Pi](https://pi.dev)                                                            | ACP 适配器 `pi-acp`，首次使用时安装，并运行你自己安装的 `pi`                                   |
 | [fast-agent](https://fast-agent.ai)                                             | ACP 包 `fast-agent-acp`，通过你安装的 `uv` 以 `uvx` 运行                                       |

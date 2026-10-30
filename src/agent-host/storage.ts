@@ -277,7 +277,6 @@ export interface AgentsFile {
   agents: Partial<
     Record<AgentId, { account: AgentAccount | null; limits: PlanLimit[]; init?: RememberedInit }>
   >
-  codexReportThreadsRemovedAt?: number // when the one-time removal of Codex's archived report threads ran
 }
 
 export interface RememberedInit {
@@ -636,13 +635,7 @@ export function parseAgentsFile(data: Record<string, unknown>): AgentsFile | str
       agents[id] = { account, limits, ...(init ? { init } : {}) }
     }
   }
-  return {
-    version: 1,
-    agents,
-    ...(isTime(data.codexReportThreadsRemovedAt)
-      ? { codexReportThreadsRemovedAt: data.codexReportThreadsRemovedAt }
-      : {}),
-  }
+  return { version: 1, agents }
 }
 
 function initOf(value: unknown): RememberedInit | null {
