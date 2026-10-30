@@ -13,8 +13,6 @@ interface OwnTitlesRow {
 const OWN_TITLES: ReadonlyMap<string, OwnTitlesRow> = new Map([
   // claude-agent-acp 0.94.0 titles each session with a small model and sends it as an update.
   ['@agentclientprotocol/claude-agent-acp', { since: '0.94.0', kind: 'sent' }],
-  // codex-acp 2.2.2 writes the title when the first turn ends and sends it as the thread's name.
-  ['@agentclientprotocol/codex-acp', { since: '2.2.2', kind: 'sent' }],
   // fake-agent 0.1.0 sends its title as an update, as Claude Code's adapter does.
   ['fake-agent', { since: '0.1.0', kind: 'sent' }],
   // OpenCode 2.0.32 titles a root session but sends no update for it, only `session/list`.

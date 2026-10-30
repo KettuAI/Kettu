@@ -1,14 +1,13 @@
-// Codex's own binary inside an installed codex-acp. With `CODEX_PATH` the adapter starts it
-// directly instead of through npm's `codex.js`, a Node.js process of its own (34 to 46 MB) that
-// only finds the binary and forwards signals to it. The variables `codex.js` sets go along, so
-// Codex still knows it was installed by npm.
-// Lookup after @openai/codex 0.160.1's bin/codex.js (Apache-2.0, Copyright OpenAI):
+// Codex's own binary inside an npm install of `@openai/codex`, which Kettu starts directly instead
+// of through npm's `codex.js`, a Node.js process of its own (34 to 46 MB) that only finds the
+// binary and forwards signals to it. The variables `codex.js` sets go along, so Codex still knows
+// it was installed by npm.
+// Lookup after @openai/codex 0.166.0's bin/codex.js (Apache-2.0, Copyright OpenAI):
 // https://github.com/openai/codex/blob/main/codex-cli/bin/codex.js
 
-import { realpath as fsRealpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { Platform } from '@shared/platform'
-import { getEnv, type Env } from './find-command'
+import type { Env } from './find-command'
 
 // Each platform's binaries by architecture; npm installs the one package that fits its Node.js.
 const TARGETS: Partial<Record<Platform, { package: string; triple: string }[]>> = {
@@ -30,21 +29,13 @@ const TARGETS: Partial<Record<Platform, { package: string; triple: string }[]>> 
 export interface AdapterLookup {
   /** The installed version's directory, which holds its `node_modules`. */
   dir: string
-  /** codex-acp's entry, where the lookup starts as Node.js's would. */
+  /** The package's bin entry. */
   entry: string
   platform: Platform
   /** The agent environment. */
   env: Env
   isFile?(file: string): Promise<boolean>
   realpath?(file: string): Promise<string>
-}
-
-async function isFile(file: string): Promise<boolean> {
-  try {
-    return (await stat(file)).isFile()
-  } catch {
-    return false
-  }
 }
 
 /** Node.js's lookup of a package from `from`: each `node_modules` up to `top`, or to the root. */
@@ -85,24 +76,4 @@ export async function codexBinary(
 /** What `codex.js` passes to the binary it starts for an npm install, rooted at its real path. */
 export function npmCodexEnv(root: string): Record<string, string> {
   return { CODEX_MANAGED_BY_NPM: '1', CODEX_MANAGED_PACKAGE_ROOT: root }
-}
-
-/**
- * `CODEX_PATH`, `CODEX_MANAGED_BY_NPM` and `CODEX_MANAGED_PACKAGE_ROOT` for codex-acp, or nothing
- * when the binary is not where npm puts it, and the adapter goes through `codex.js` as before.
- */
-export async function codexLaunchEnv(lookup: AdapterLookup): Promise<Record<string, string>> {
-  const targets = TARGETS[lookup.platform]
-  // A `CODEX_PATH` the user set wins.
-  if (!targets || getEnv(lookup.env, 'CODEX_PATH', lookup.platform)) return {}
-  const p = lookup.platform === 'win32' ? path.win32 : path.posix
-  const exists = lookup.isFile ?? isFile
-  const codex = await findPackage(p, '@openai/codex', p.dirname(lookup.entry), lookup.dir, exists)
-  const binary = codex && (await codexBinary(codex, lookup.platform, lookup.dir, exists))
-  if (!codex || !binary) return {}
-  try {
-    return { CODEX_PATH: binary, ...npmCodexEnv(await (lookup.realpath ?? fsRealpath)(codex)) }
-  } catch {
-    return {}
-  }
 }

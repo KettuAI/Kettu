@@ -35,6 +35,10 @@ export interface DirectReads {
 export interface DriverContext {
   def: AgentDefinition
   hooks: ConnectionHooks
+  /** What detection found to run for the agent; a test that connects directly may leave it out. */
+  spec?: LaunchSpec
+  /** The agent's environment, as its process gets it. */
+  env?: Env
 }
 
 export interface ProcessDriver {
@@ -63,9 +67,7 @@ export interface HostedSpawnOptions {
 export type HostedSpawn = (options: HostedSpawnOptions) => ChildProcess
 
 export interface HostedContext extends DriverContext {
-  /** What detection found to run for the agent. */
   spec: LaunchSpec
-  /** The agent's environment, as its process would get it. */
   env: Env
   spawn: HostedSpawn
 }

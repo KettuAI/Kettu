@@ -165,7 +165,9 @@ export interface AgentStatus {
   state: AgentState
   // From `initialize`, a binary agent's `--version`, or the `requires` program's (Pi's `pi`).
   version: string | null
-  package: { name: string; version: string; installed: boolean } | null // the adapter a start runs; the pin until one is installed
+  // The adapter a start runs, the pin until one is installed; `isCli` for a package that is the
+  // agent's CLI itself, which runs with no adapter.
+  package: { name: string; version: string; installed: boolean; isCli?: true } | null
   signIn: 'unknown' | 'signed-in' | 'required'
   authMethods: AgentAuthMethod[]
   canLogout: boolean

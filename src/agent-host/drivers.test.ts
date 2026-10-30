@@ -18,6 +18,7 @@ import {
   type AgentDefinition,
   type AgentProtocol,
 } from './catalog'
+import { CODEX_DRIVER } from './codex/driver'
 import type { AgentConnection, AgentInit, OpenedSession } from './connection'
 import { Diagnostics } from './diagnostics'
 import type { AgentDriver, HostedContext, HostedDriver, ProcessDriver } from './driver'
@@ -138,8 +139,11 @@ const LIMIT: PlanLimit = {
 }
 
 describe('driverOf', () => {
-  it('starts every agent in the catalog over ACP', () => {
-    for (const def of buildCatalog(FAKE_AGENT_MAIN)) expect(driverOf(def)).toBe(ACP_DRIVER)
+  it('starts Codex through its app-server and every other agent in the catalog over ACP', () => {
+    for (const def of buildCatalog(FAKE_AGENT_MAIN)) {
+      expect(driverOf(def)).toBe(def.id === 'codex' ? CODEX_DRIVER : ACP_DRIVER)
+    }
+    expect(CODEX_DRIVER.reads).toEqual({ limits: true })
   })
 
   it("takes a test's protocol over the catalog's, and its driver over the built-in one", () => {

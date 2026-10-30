@@ -90,6 +90,17 @@ describe('fetchLatest', () => {
     expect(latest).toEqual({ adapterVersion: '0.94.0', cliVersion: '2.1.303' })
   })
 
+  it('takes the version itself for a package that is the CLI, as Codex is', async () => {
+    const npm = fakeNpm({
+      '@openai/codex version dependencies': { json: { version: '0.167.0', dependencies: {} } },
+    })
+    expect(await fetchLatest(options(npm.run, { package: '@openai/codex' }))).toEqual({
+      adapterVersion: '0.167.0',
+      cliVersion: '0.167.0',
+    })
+    expect(npm.calls).toHaveLength(1)
+  })
+
   it('names no CLI when the range is missing, odd, or could mean something to cmd.exe', async () => {
     for (const range of [undefined, 'github:openai/codex', '>=0.1 & calc', '^0.1.0 %PATH%']) {
       const npm = fakeNpm({

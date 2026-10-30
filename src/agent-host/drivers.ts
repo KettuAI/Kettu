@@ -3,10 +3,12 @@
 import type { AgentId } from '@shared/thread'
 import { ACP_DRIVER } from './acp/driver'
 import { protocolOf, type AgentDefinition, type AgentProtocol } from './catalog'
+import { CODEX_DRIVER } from './codex/driver'
 import type { AgentDriver } from './driver'
 
 export const DRIVERS: Readonly<Record<AgentProtocol, AgentDriver>> = {
   acp: ACP_DRIVER,
+  'codex-app-server': CODEX_DRIVER,
 }
 
 /** What replaces the catalog's protocols or the built-in drivers, as a test does. */

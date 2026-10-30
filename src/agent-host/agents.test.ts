@@ -4,7 +4,7 @@ import { chmod, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promis
 import os from 'node:os'
 import path from 'node:path'
 import { gzipSync } from 'node:zlib'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { AgentCliSource, AgentStatus, AgentUpdate } from '@shared/agent-host'
 import type { Platform } from '@shared/platform'
 import { DEFAULT_SETTINGS, type HostSettings } from '@shared/settings'
@@ -31,10 +31,11 @@ import {
   OPENCODE,
   type AgentDefinition,
   type DetectContext,
-  type Detection,
   type LaunchSpec,
 } from './catalog'
+import { CODEX_DRIVER } from './codex/driver'
 import { Diagnostics } from './diagnostics'
+import type { ProcessDriver } from './driver'
 import type { Env } from './find-command'
 import { CliVersions, type AdapterCli, type CliProbe } from './installed-cli'
 import { QUIT_REASON, type ToolOptions } from './process-tree'
@@ -42,6 +43,7 @@ import { EnvironmentService } from './shell-env'
 import { TextRing } from './ring'
 import { parseAgentUpdatesFile, type AgentsFile, type AgentUpdatesFile } from './storage'
 import { archiveTar, serveArchives, sha256 } from './testing/archives'
+import { FakeAppServer } from './testing/fake-app-server'
 import {
   FAKE_AGENT_MAIN,
   inProcessLauncher,
@@ -60,22 +62,6 @@ vi.mock('./adapter-install', async (importOriginal) => {
       removal.calls++
       if (removal.fail) throw removal.fail
       return actual.removeInstall(dir)
-    },
-  }
-})
-
-/** The removal of Codex's archived report threads, as each detection asks for it. */
-const reportThreads = vi.hoisted(() => ({
-  calls: [] as unknown[],
-  answer: (): Promise<number> => Promise.resolve(0),
-}))
-vi.mock('./codex-report-threads', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./codex-report-threads')>()
-  return {
-    ...actual,
-    removeReportThreads: (options: unknown) => {
-      reportThreads.calls.push(options)
-      return reportThreads.answer()
     },
   }
 })
@@ -106,6 +92,8 @@ function manager(
       | 'probeCli'
       | 'cliVersions'
       | 'settings'
+      | 'drivers'
+      | 'protocols'
     >
   > = {},
 ) {
@@ -325,18 +313,16 @@ describe('AgentManager', () => {
     expect(used()).toBeNull()
   })
 
-  it("reads Codex's plan limits from /status", async () => {
-    const m = manager(
-      {},
-      {},
-      { catalog: [{ ...fakeAgent(FAKE_AGENT_MAIN), id: 'codex', name: 'Codex' }] },
-    )
+  it("reads Codex's plan limits from its app-server, with no report", async () => {
+    const { m, server } = codexAppServer()
     expect(m.agents.status('codex').capabilities.reports).toBe(true)
     await m.agents.refreshLimits('codex')
     expect(m.agents.status('codex').limits).toEqual([
       expect.objectContaining({ window: 'five_hour', label: '5-hour', usedPercent: 19 }),
       expect.objectContaining({ window: 'seven_day', label: 'Weekly', usedPercent: 32 }),
     ])
+    expect(server.sent('account/rateLimits/read')).toHaveLength(1)
+    expect(server.sent('thread/start')).toEqual([])
     await m.agents.stopAll()
   })
 
@@ -624,12 +610,8 @@ describe('AgentManager', () => {
     expect(m.state()).toBe('available')
   })
 
-  it('closes a hidden Codex session rather than delete it, which would archive it', async () => {
-    const m = manager(
-      {},
-      {},
-      { catalog: [{ ...fakeAgent(FAKE_AGENT_MAIN), id: 'codex', name: 'Codex' }] },
-    )
+  it("reads Codex's options in an ephemeral thread, which it leaves without deleting", async () => {
+    const { m, server } = codexAppServer()
     const seen: AgentId[] = []
     m.agents.hooks = {
       ...m.agents.hooks,
@@ -638,19 +620,36 @@ describe('AgentManager', () => {
     }
     await m.agents.ensureReady('codex')
     await m.agents.readOptions('codex')
-    await m.agents.refreshLimits('codex')
-    const sent = m.diagnostics
-      .agentRecords('codex')
-      .traffic.filter((r) => r.direction === 'out')
-      .map((r) => r.method)
-    // The limits report records them only while none are known.
+    await until(() => server.sent('thread/unsubscribe').length === 1)
     expect(seen).toEqual(['codex'])
-    expect(sent.filter((method) => method === 'session/new')).toHaveLength(2)
-    expect(sent.filter((method) => method === 'session/close')).toHaveLength(2)
-    expect(sent).not.toContain('session/delete')
+    expect(server.sent('thread/start')).toEqual([expect.objectContaining({ ephemeral: true })])
+    expect(server.sent('thread/delete')).toEqual([])
+    // Steering goes into Codex's running turn by its id.
+    expect(m.agents.status('codex').capabilities.steering).toBe(true)
     await m.agents.stopAll()
   })
 })
+
+/**
+ * Codex through a scripted app-server: the launch runs the fake agent, whose transport the driver
+ * leaves for the server's.
+ */
+function codexAppServer() {
+  const server = new FakeAppServer()
+  const def: AgentDefinition = {
+    ...fakeAgent(FAKE_AGENT_MAIN),
+    id: 'codex',
+    name: 'Codex',
+    protocol: 'codex-app-server',
+  }
+  const driver: ProcessDriver = {
+    kind: 'process',
+    ...(CODEX_DRIVER.reads ? { reads: CODEX_DRIVER.reads } : {}),
+    connect: (_transport, context) => CODEX_DRIVER.connect(server.transport, context),
+  }
+  const m = manager({}, {}, { catalog: [def], drivers: { 'codex-app-server': driver } })
+  return { m, server }
+}
 
 /** The fake agent as a package agent, with installs that only record what they were asked. */
 function packageManager(installedVersions: string[], adaptersDir?: string) {
@@ -1504,6 +1503,155 @@ describe('the CLI the user installed', () => {
   })
 })
 
+describe('an agent whose package is its CLI', () => {
+  const cli: AdapterCli = { ...FAKE_CLI, isPackage: true, minimum: undefined }
+  const install = (version: string): InstalledAdapter => ({
+    version,
+    dir: `/a/${version}`,
+    entry: `/a/${version}/node_modules/fake-cli/bin/fake-cli.js`,
+    installedAt: 1,
+  })
+
+  /** A package agent whose package is `fake-cli` itself, pinned at 2.0.0, as Codex is. */
+  function packageCli(
+    options: {
+      cli?: string | null
+      installed?: InstalledAdapter[]
+      failWithCli?: boolean
+      node?: boolean
+      latest?: string
+    } = {},
+  ) {
+    const def: AgentDefinition = {
+      ...fakeAgent(FAKE_AGENT_MAIN),
+      launch: { kind: 'package', package: 'fake-cli', version: '2.0.0', args: ['serve'] },
+      cli,
+    }
+    const adapters = [...(options.installed ?? [])]
+    const installs: InstallOptions[] = []
+    const launches: LaunchSpec[] = []
+    const base = inProcessLauncher(module)
+    const launcher: AgentLauncher = {
+      launch: (d, spec, env, output) => {
+        launches.push(spec)
+        const launched = base.launch(d, spec, env, output)
+        if (!(spec.cli !== undefined && options.failWithCli)) return launched
+        return {
+          pid: null,
+          startedAt: launched.startedAt,
+          transport: launched.transport,
+          exited: Promise.resolve({ code: 1, signal: null }),
+          hasExited: true,
+          stop: () => launched.stop(),
+          kill: () => launched.kill(),
+        }
+      },
+    }
+    const node =
+      options.node === false
+        ? { nodeVersion: null, npmPath: null, nodePath: null }
+        : { nodeVersion: 'v24.1.0', npmPath: '/x/npm', nodePath: '/x/node' }
+    const m = manager(
+      {},
+      { progressMs: 1 },
+      {
+        catalog: [def],
+        launcher,
+        detect: async (d, ctx) =>
+          detectAgent(d, {
+            ...ctx,
+            node,
+            installed: async () => adapters.toSorted((a, b) => compareInstalls(b, a)),
+            ...(options.cli === null
+              ? { probeCli: async () => ({ error: 'unused' }), isExecutable: async () => false }
+              : cliFound(options.cli ?? '2.0.0')),
+            isFile: async () => false,
+          }),
+        install: async (request) => {
+          installs.push(request)
+          const installed = install(request.version)
+          adapters.push(installed)
+          return installed
+        },
+        fetchLatest: async () => ({ adapterVersion: options.latest ?? '2.0.0', cliVersion: null }),
+      },
+    )
+    return { ...m, installs, launches, status: () => m.agents.status('fake-agent') }
+  }
+
+  it("runs the user's CLI with no install at all when it is as new as the pin", async () => {
+    const m = packageCli({ cli: '2.1.0', latest: '2.5.0' })
+    await m.agents.ensureReady('fake-agent')
+    expect(m.installs).toEqual([])
+    expect(m.launches).toEqual([
+      expect.objectContaining({ args: ['serve'], cli: expect.stringContaining('fake-cli') }),
+    ])
+    expect(m.launches[0]?.command).toMatch(/fake-cli(\.exe)?$/)
+    await m.agents.checkUpdates()
+    expect(m.status()).toMatchObject({
+      package: { name: 'fake-cli', installed: true, isCli: true },
+      cli: { runs: 'installed' },
+      // The user's CLI updates the way they installed it.
+      update: null,
+    })
+    await m.agents.stopAll()
+  })
+
+  it("installs the package with its CLI and runs that when the user's is older than the pin", async () => {
+    const m = packageCli({ cli: '1.9.0', latest: '2.5.0' })
+    await m.agents.ensureReady('fake-agent')
+    expect(m.installs.map((i) => [i.package, i.version, i.withoutCli])).toEqual([
+      ['fake-cli', '2.0.0', undefined],
+    ])
+    expect(m.launches).toEqual([
+      expect.objectContaining({
+        command: '/x/node',
+        args: ['/a/2.0.0/node_modules/fake-cli/bin/fake-cli.js', 'serve'],
+      }),
+    ])
+    expect(m.launches[0]?.cli).toBeUndefined()
+    expect(m.status().cli).toMatchObject({
+      runs: 'bundled',
+      installed: { problem: { kind: 'too-old', minimum: '2.0.0' } },
+    })
+    await m.agents.checkUpdates()
+    expect(m.status().update).toEqual({ adapterVersion: '2.5.0', cliVersion: null })
+    await m.agents.stopAll()
+  })
+
+  it("installs Kettu's copy and keeps to it when a start with the user's CLI fails", async () => {
+    const m = packageCli({ cli: '2.1.0', failWithCli: true })
+    await m.agents.ensureReady('fake-agent')
+    expect(m.launches.map((spec) => spec.cli !== undefined)).toEqual([true, false])
+    expect(m.installs.map((i) => i.version)).toEqual(['2.0.0'])
+    expect(m.status()).toMatchObject({
+      state: 'ready',
+      cli: { runs: 'bundled', installed: { problem: { kind: 'failed' } } },
+    })
+    await m.agents.stop('fake-agent')
+    await m.agents.ensureReady('fake-agent')
+    expect(m.launches.at(-1)?.cli).toBeUndefined()
+    // Reloading the environment tries the user's again.
+    await m.agents.stop('fake-agent')
+    await m.agents.reloadEnvironment()
+    expect(m.status().cli).toMatchObject({ runs: 'installed' })
+    await m.agents.stopAll()
+  })
+
+  it('needs Node.js only to install', async () => {
+    const yours = packageCli({ cli: '2.1.0', node: false })
+    await yours.agents.list()
+    expect(yours.status()).toMatchObject({ state: 'available' })
+    const none = packageCli({ cli: null, node: false })
+    await none.agents.list()
+    expect(none.status()).toMatchObject({ state: 'node-missing' })
+    const installed = packageCli({ cli: null, node: false, installed: [install('2.0.0')] })
+    await installed.agents.list()
+    // Without its platform's binary the copy needs Node.js to run its script.
+    expect(installed.status()).toMatchObject({ state: 'node-missing' })
+  })
+})
+
 describe("a binary agent's version", () => {
   const windows = process.platform === 'win32'
 
@@ -1859,113 +2007,6 @@ describe('details', () => {
     await expect(m.agents.details('unknown-agent' as AgentId)).rejects.toMatchObject({
       code: 'invalid_params',
     })
-  })
-})
-
-describe('the archived report threads', () => {
-  const def: AgentDefinition = { ...fakeAgent(FAKE_AGENT_MAIN), id: 'codex', name: 'Codex' }
-  const spec = {
-    command: '/x/codex',
-    args: [],
-    env: { CODEX_PATH: '/x/codex' },
-    shell: false,
-    display: { command: '/x/codex', args: [], env: {} },
-  }
-  function codexManager(detection: Detection, environment: Env = process.env) {
-    const saved: AgentsFile[] = []
-    const env = new EnvironmentService({
-      platform: process.platform,
-      electronPath: process.execPath,
-      baseEnv: environment,
-      resolve: async ({ baseEnv }) => ({
-        env: baseEnv,
-        source: 'inherited',
-        shell: null,
-        durationMs: 0,
-        warning: null,
-      }),
-      probe: async () => ({ nodeVersion: null, npmPath: null, nodePath: null }),
-    })
-    const m = manager(
-      {},
-      {},
-      {
-        catalog: [def],
-        env,
-        remember: (file) => saved.push(file),
-        detect: async () => detection,
-      },
-    )
-    return { ...m, saved }
-  }
-  const logged = (m: ReturnType<typeof manager>, text: string): boolean =>
-    m.diagnostics.logEntries().some((entry) => entry.message.includes(text))
-
-  beforeEach(() => {
-    reportThreads.calls.length = 0
-    reportThreads.answer = () => Promise.resolve(0)
-  })
-
-  it('removes them once, through the binary its launch runs, and records that it did', async () => {
-    reportThreads.answer = () => Promise.resolve(3)
-    const m = codexManager({ state: 'available', spec, adapter: null })
-    await m.agents.list()
-    expect(reportThreads.calls).toEqual([
-      expect.objectContaining({ binary: '/x/codex', reportsDir: expect.any(String) }),
-    ])
-    await until(() => m.saved.some((file) => file.codexReportThreadsRemovedAt !== undefined))
-    expect(m.saved.at(-1)).toMatchObject({
-      version: 1,
-      codexReportThreadsRemovedAt: expect.any(Number),
-    })
-    expect(logged(m, 'Removed 3 archived Codex threads')).toBe(true)
-    // A later detection in the same launch leaves it alone.
-    await m.agents.check('codex')
-    expect(reportThreads.calls).toHaveLength(1)
-  })
-
-  it('records nothing after a failure, and logs it', async () => {
-    reportThreads.answer = () => Promise.reject(new Error('no rollout found'))
-    const m = codexManager({ state: 'available', spec, adapter: null })
-    await m.agents.list()
-    await until(() => logged(m, 'no rollout found'))
-    expect(m.saved.some((file) => file.codexReportThreadsRemovedAt !== undefined)).toBe(false)
-  })
-
-  it('runs nothing once an earlier run recorded that it did', async () => {
-    const m = codexManager({ state: 'available', spec, adapter: null })
-    m.agents.restore({ version: 1, agents: {}, codexReportThreadsRemovedAt: 7 })
-    await m.agents.list()
-    expect(reportThreads.calls).toEqual([])
-  })
-
-  it('takes the binary from the agent environment when the launch has none', async () => {
-    const m = codexManager(
-      { state: 'available', spec: { ...spec, env: {} }, adapter: null },
-      {
-        ...process.env,
-        CODEX_PATH: '/env/codex',
-      },
-    )
-    await m.agents.list()
-    expect(reportThreads.calls).toEqual([expect.objectContaining({ binary: '/env/codex' })])
-  })
-
-  it('runs nothing for an agent other than Codex, or while Codex is not available', async () => {
-    const other = { ...def, id: 'fake-agent' as const, name: 'Fake agent' }
-    const m = manager(
-      {},
-      {},
-      {
-        catalog: [other],
-        detect: async () => ({ state: 'available', spec, adapter: null }),
-      },
-    )
-    await m.agents.list()
-    expect(reportThreads.calls).toEqual([])
-    const missing = codexManager({ state: 'not-installed', detail: 'Codex is not installed.' })
-    await missing.agents.list()
-    expect(reportThreads.calls).toEqual([])
   })
 })
 

@@ -75,7 +75,7 @@ Install at least one of these agents first; Kettu finds it on your system.
 | Agent                                                                           | How Kettu runs it                                                                                            |
 | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | [Claude Code](https://github.com/anthropics/claude-code)                        | The ACP adapter `@agentclientprotocol/claude-agent-acp`, installed on first use                              |
-| [Codex CLI](https://github.com/openai/codex)                                    | The ACP adapter `@agentclientprotocol/codex-acp`, installed on first use                                     |
+| [Codex CLI](https://github.com/openai/codex)                                    | `codex app-server`, from your installed `codex`, or from `@openai/codex` installed on first use              |
 | [opencode](https://opencode.ai)                                                 | Your installed `opencode`, as `opencode acp`                                                                 |
 | [Pi](https://pi.dev)                                                            | The ACP adapter `pi-acp`, installed on first use, with your installed `pi`                                   |
 | [fast-agent](https://fast-agent.ai)                                             | The ACP package `fast-agent-acp`, run with `uvx` from your installed `uv`                                    |

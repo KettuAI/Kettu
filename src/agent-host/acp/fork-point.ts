@@ -8,7 +8,6 @@ import { compareVersions } from '../versions'
 // The first version of each adapter seen to honour it; the fake agent stands in for them.
 const FORK_POINT_SINCE: ReadonlyMap<string, string> = new Map([
   ['@agentclientprotocol/claude-agent-acp', '0.94.0'],
-  ['@agentclientprotocol/codex-acp', '2.2.2'],
   ['fake-agent', '0.1.0'],
 ])
 

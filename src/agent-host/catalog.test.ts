@@ -261,58 +261,57 @@ describe('detectAgent', () => {
     })
   })
 
-  it('needs npm only until the adapter is installed', async () => {
+  it('needs npm only until Codex is installed', async () => {
     const node = { nodeVersion: 'v24.1.0', npmPath: null, nodePath: '/usr/local/bin/node' }
     expect(await detectAgent(CODEX, context({ node }))).toMatchObject({
       state: 'not-installed',
       detail: expect.stringContaining('npm was not found'),
     })
     expect(
-      await detectAgent(CODEX, context({ node, installed: installed('2.2.2') })),
+      await detectAgent(CODEX, context({ node, installed: installed('0.166.0') })),
     ).toMatchObject({ state: 'available', adapter: { installed: true, npm: null } })
   })
 
-  it("starts Codex's binary directly, without npm's codex.js", async () => {
-    const nm = '/data/agents/codex/2.2.2/node_modules'
+  it("starts Codex's own binary as its app-server, without npm's codex.js", async () => {
+    const nm = '/data/agents/codex/0.166.0/node_modules'
     const binary = `${nm}/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex`
-    const files = new Set([
-      `${nm}/@openai/codex/package.json`,
-      `${nm}/@openai/codex-darwin-arm64/package.json`,
-      binary,
-    ])
+    const files = new Set([`${nm}/@openai/codex-darwin-arm64/package.json`, binary])
     const detection = await detectAgent(
       CODEX,
       context({
-        installed: installed('2.2.2'),
+        installed: async () => [
+          {
+            version: '0.166.0',
+            dir: '/data/agents/codex/0.166.0',
+            entry: `${nm}/@openai/codex/bin/codex.js`,
+            installedAt: 1,
+          },
+        ],
         isFile: async (file) => files.has(file),
         realpath: async (file) => file,
       }),
     )
-    const env = {
-      CODEX_PATH: binary,
-      CODEX_MANAGED_BY_NPM: '1',
-      CODEX_MANAGED_PACKAGE_ROOT: `${nm}/@openai/codex`,
-    }
+    const env = { CODEX_MANAGED_BY_NPM: '1', CODEX_MANAGED_PACKAGE_ROOT: `${nm}/@openai/codex` }
     expect(detection).toMatchObject({
       state: 'available',
-      spec: { args: [entry('codex', '@agentclientprotocol/codex-acp', '2.2.2')], env },
+      spec: { command: binary, args: ['app-server'], env, display: { command: binary, env } },
+      adapter: { package: '@openai/codex', version: '0.166.0', installed: true },
     })
-    if (detection.state === 'available') expect(detection.spec?.display.env).toEqual(env)
+    if (detection.state === 'available') expect(detection.spec?.cli).toBeUndefined()
   })
 
-  it('needs a recent enough Node.js', async () => {
-    expect(
-      await detectAgent(
-        CODEX,
-        context({ node: { nodeVersion: null, npmPath: null, nodePath: null } }),
-      ),
-    ).toMatchObject({ state: 'node-missing' })
+  it('needs Node.js and npm only to install Codex', async () => {
+    const none = { nodeVersion: null, npmPath: null, nodePath: null }
+    expect(await detectAgent(CODEX, context({ node: none }))).toMatchObject({
+      state: 'node-missing',
+    })
+    // An old Node.js still runs npm, and Codex's binary needs none.
     expect(
       await detectAgent(
         CODEX,
         context({ node: { nodeVersion: 'v20.18.0', npmPath: '/x/npm', nodePath: '/x/node' } }),
       ),
-    ).toMatchObject({ state: 'node-outdated', detail: expect.stringContaining('v20.18.0') })
+    ).toMatchObject({ state: 'available', spec: null, adapter: { installed: false } })
   })
 
   it('runs node.exe without a shell on Windows', async () => {
@@ -757,6 +756,103 @@ describe('Minion Code', () => {
   })
 })
 
+describe('detectAgent for Codex, whose package is its CLI', () => {
+  const nm = '/data/agents/codex/0.166.0/node_modules'
+  const copy: InstalledAdapter = {
+    version: '0.166.0',
+    dir: '/data/agents/codex/0.166.0',
+    entry: `${nm}/@openai/codex/bin/codex.js`,
+    installedAt: 1,
+  }
+  // `codex` on PATH, a Homebrew binary that answers `answer`.
+  function withCodex(overrides: Partial<DetectContext> = {}, answer = '0.167.0'): DetectContext {
+    return context({
+      isExecutable: async (file) => file === '/usr/local/bin/codex',
+      probeCli: async () => ({ version: answer }),
+      cliFiles: {
+        isFile: async () => false,
+        realpath: async (file) => file,
+        readText: async (file) => {
+          throw new Error(`ENOENT: ${file}`)
+        },
+      },
+      ...overrides,
+    })
+  }
+
+  it("runs the user's codex app-server with no install and no Node.js, from the pin up", async () => {
+    const detection = await detectAgent(
+      CODEX,
+      withCodex({ node: { nodeVersion: null, npmPath: null, nodePath: null } }),
+    )
+    expect(detection).toMatchObject({
+      state: 'available',
+      spec: {
+        command: '/usr/local/bin/codex',
+        args: ['app-server'],
+        env: {},
+        cli: '/usr/local/bin/codex',
+      },
+      adapter: {
+        installed: false,
+        node: null,
+        cli: { runs: 'installed', installed: { version: '0.167.0', problem: null } },
+      },
+    })
+    // The pin itself runs.
+    expect(await detectAgent(CODEX, withCodex({}, '0.166.0'))).toMatchObject({
+      adapter: { cli: { runs: 'installed' } },
+    })
+  })
+
+  it("installs Codex when the user's is older than the pin, or chosen against", async () => {
+    expect(await detectAgent(CODEX, withCodex({}, '0.165.0'))).toMatchObject({
+      spec: null,
+      adapter: {
+        cli: { runs: 'bundled', installed: { problem: { kind: 'too-old', minimum: '0.166.0' } } },
+      },
+    })
+    const chosen = await detectAgent(
+      CODEX,
+      withCodex({
+        cliPreference: 'bundled',
+        installed: async () => [copy],
+        isFile: async () => false,
+      }),
+    )
+    expect(chosen).toMatchObject({
+      spec: { command: '/usr/local/bin/node', args: [copy.entry, 'app-server'] },
+      adapter: { cli: { runs: 'bundled', installed: { problem: null } } },
+    })
+  })
+
+  it("runs the copy after a start with the user's failed", async () => {
+    const detection = await detectAgent(
+      CODEX,
+      withCodex({
+        installed: async () => [copy],
+        cliFailure: { path: '/usr/local/bin/codex', reason: 'exited with code 1' },
+      }),
+    )
+    expect(detection).toMatchObject({
+      adapter: { cli: { runs: 'bundled', installed: { problem: { kind: 'failed' } } } },
+    })
+    if (detection.state === 'available') expect(detection.spec?.cli).toBeUndefined()
+  })
+
+  it('runs what CODEX_PATH names as it is, with nothing to fall back to', async () => {
+    const detection = await detectAgent(
+      CODEX,
+      withCodex({ env: { PATH: '/usr/bin', CODEX_PATH: '/opt/codex' } }, '0.100.0'),
+    )
+    expect(detection).toMatchObject({
+      spec: { command: '/opt/codex', args: ['app-server'] },
+      adapter: { cli: { runs: 'installed', installed: { variable: 'CODEX_PATH' } } },
+    })
+    if (detection.state === 'available') expect(detection.spec?.cli).toBeUndefined()
+  })
+})
+
 describe('detectAgent with the CLI the user installed', () => {
   const install = (version: string, extra: Partial<InstalledAdapter> = {}): InstalledAdapter => ({
     version,
@@ -996,23 +1092,17 @@ describe('displayCommand', () => {
       env: {},
     })
     expect(displayCommand(CODEX, '/e', null, '/data/agents')).toEqual({
-      command: 'node',
-      args: [
-        path.join(
-          '/data/agents',
-          'codex',
-          '2.2.2',
-          'node_modules',
-          '@agentclientprotocol/codex-acp',
-        ),
-      ],
+      command: 'codex',
+      args: ['app-server'],
       env: {},
     })
   })
 
   it('shows a package agent with its arguments and variables', () => {
+    // Codex's own launch reads as its CLI, so its package here is an adapter's.
     const def: AgentDefinition = {
       ...CODEX,
+      cli: undefined,
       launch: {
         kind: 'package',
         package: '@agentclientprotocol/codex-acp',

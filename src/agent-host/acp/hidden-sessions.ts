@@ -14,10 +14,6 @@ export type Removal = 'delete' | 'delete-again' | 'close'
 // session, so Kettu leaves nothing in a history nobody checked.
 const REMOVALS: Partial<Record<AgentId, Removal>> = {
   'claude-code': 'delete-again',
-  // codex-acp 2.2.2 answers `session/delete` with Codex's `thread/archive`, which writes the thread
-  // to disk among the archived ones. A thread that never reached the model, such as one that only
-  // ran `/status`, is not written at all, and closing it leaves nothing.
-  codex: 'close',
   opencode: 'delete',
   // The session router turns the delete into ending the session's adapter process, then deleting.
   pi: 'delete',
@@ -28,7 +24,7 @@ const REMOVALS: Partial<Record<AgentId, Removal>> = {
 /**
  * How the agent's hidden sessions are removed, or null when it may open none: it was not checked,
  * or it does not offer the request its removal needs. There is no fallback to the other request,
- * which can leave a trace (Codex's delete archives; OpenCode's close keeps the session listed).
+ * which can leave a trace (OpenCode's close keeps the session listed).
  */
 export function hiddenRemoval(
   agentId: AgentId | undefined,
@@ -42,8 +38,7 @@ export function hiddenRemoval(
 
 // claude-agent-acp 0.94 deletes the transcript without waiting for Claude Code to exit, and
 // Claude Code writes the session's title and costs back as it exits, which lists the session
-// again. Deleting once more after that removes it; deleting what is gone does nothing there,
-// while codex-acp fails it as an unknown session.
+// again. Deleting once more after that removes it; deleting what is gone does nothing there.
 export const DELETE_AGAIN_MS = [1_000, 5_000]
 
 // Claude Code's adapter, which the fake agent stands in for.

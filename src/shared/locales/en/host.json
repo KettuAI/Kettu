@@ -241,5 +241,201 @@
     "terminal": "Terminal {{id}}",
     "unknownTool": "Unknown tool content",
     "toolCall": "Tool call"
+  },
+  "codex": {
+    "signInNeeded": "Sign in to Codex with `codex login` in a terminal",
+    "turnFailed": "The turn failed",
+    "noForkPoint": "Codex can't find this reply in its history",
+    "option": {
+      "mode": "Mode",
+      "modeDescription": "Approval and sandboxing preset for the session",
+      "collaboration": "Collaboration mode",
+      "collaborationDescription": "How Codex collaborates for the next turns",
+      "model": "Model",
+      "modelDescription": "Model Codex uses for the session",
+      "effort": "Reasoning effort",
+      "effortDescription": "How much reasoning effort the model uses",
+      "fast": "Fast mode",
+      "fastDescription": "1.5x speed, increased usage"
+    },
+    "mode": {
+      "read-only": {
+        "name": "Read-only",
+        "description": "Requires approval to edit files and access the internet"
+      },
+      "workspace-write": {
+        "name": "Workspace access",
+        "description": "Edit workspace files; ask before writing outside the workspace or accessing the network"
+      },
+      "agent": {
+        "name": "Auto review",
+        "description": "Only ask for actions detected as potentially unsafe"
+      },
+      "agent-full-access": {
+        "name": "Full access",
+        "description": "Unrestricted access to the internet and any file on your computer"
+      }
+    },
+    "collaboration": {
+      "default": "Default",
+      "plan": "Plan",
+      "planDescription": "Plan before making changes"
+    },
+    "auth": {
+      "chatGpt": {
+        "name": "ChatGPT",
+        "description": "Sign in with your ChatGPT account in the browser"
+      },
+      "deviceCode": {
+        "name": "ChatGPT (device code)",
+        "description": "Sign in to ChatGPT by opening a verification page and entering a one-time code"
+      },
+      "apiKey": {
+        "name": "API key",
+        "description": "Paste an OpenAI API key, then press Enter and Ctrl+D"
+      }
+    },
+    "account": {
+      "none": "Not signed in",
+      "apiKey": "OpenAI API key",
+      "gateway": "Custom model provider"
+    },
+    "approval": {
+      "allowOnce": "Yes",
+      "allowSession": "Yes, for this session",
+      "allowTurn": "Yes, for this turn",
+      "allowPrefix": "Yes, and don't ask again for `{{command}}`",
+      "allowHost": "Yes, and allow {{host}} from now on",
+      "denyHost": "No, and block {{host}} from now on",
+      "decline": "No",
+      "cancel": "No, and stop",
+      "accept": "Continue",
+      "network": "Network access",
+      "networkHost": "{{protocol}} access to {{host}}",
+      "networkTitle": "{{protocol}} network access to {{host}}",
+      "read": "Read {{path}}",
+      "write": "Write {{path}}",
+      "permissionsTitle": "More permissions",
+      "elicitationTitle": "{{server}} asks to continue"
+    },
+    "tool": {
+      "readFile": "Read file '{{path}}'",
+      "listFiles": "List files",
+      "listFilesIn": "List files in '{{path}}'",
+      "search": "Search for '{{query}}'",
+      "searchIn": "Search for '{{query}}' in {{path}}",
+      "searchPath": "Search in '{{path}}'",
+      "searchAll": "Search",
+      "runCommand": "Run command",
+      "editFiles": "Editing files",
+      "mcp": "{{server}}: {{tool}}",
+      "webSearch": "Web search: {{query}}",
+      "webSearchAll": "Web search",
+      "openPage": "Open {{url}}",
+      "findInPage": "Find in {{url}}",
+      "viewImage": "View image '{{path}}'",
+      "generateImage": "Generate image",
+      "agent": {
+        "spawnAgent": "Start subagent",
+        "sendInput": "Message subagent",
+        "resumeAgent": "Resume subagent",
+        "wait": "Wait for subagents",
+        "closeAgent": "Close subagent"
+      }
+    },
+    "notice": {
+      "rerouted": "Codex switched from {{from}} to {{to}}"
+    },
+    "command": {
+      "plan": {
+        "description": "Turn plan mode on."
+      },
+      "mcp": {
+        "description": "Show the status of the MCP servers, or reconnect them.",
+        "hint": "[reconnect]"
+      },
+      "skills": {
+        "description": "List available skills."
+      },
+      "status": {
+        "description": "Display session configuration and token usage."
+      },
+      "review": {
+        "description": "Review uncommitted changes, or review with custom instructions.",
+        "hint": "optional review instructions"
+      },
+      "review-branch": {
+        "description": "Review changes relative to a base branch.",
+        "hint": "branch name"
+      },
+      "review-commit": {
+        "description": "Review a specific commit.",
+        "hint": "commit sha"
+      },
+      "compact": {
+        "description": "Summarize conversation to avoid hitting the context limit."
+      },
+      "goal": {
+        "description": "Set a goal to keep pursuing.",
+        "hint": "[<objective>|clear|pause|resume]"
+      },
+      "rename": {
+        "description": "Rename the current session.",
+        "hint": "new name"
+      },
+      "usage": "Command \"/{{name}}\" requires {{hint}}.",
+      "noArguments": "no arguments",
+      "goalTooLong": "Command \"/goal\" requires goal text of at most {{max}} characters.",
+      "skillsTitle": "Available skills:",
+      "noSkills": "No skills configured."
+    },
+    "status": {
+      "model": "**Model:** {{value}}",
+      "directory": "**Directory:** {{value}}",
+      "approval": "**Approval:** {{value}}",
+      "sandbox": "**Sandbox:** {{value}}",
+      "account": "**Account:** {{value}}",
+      "session": "**Session:** `{{value}}`",
+      "tokens": "**Token usage:** {{value}}",
+      "context": "**Context window:** {{value}}",
+      "limit": "**{{label}} limit:** {{value}}",
+      "limits": "**Limits:** {{value}}",
+      "notAvailable": "data not available yet",
+      "notSignedIn": "not logged in",
+      "tokenCounts": "{{total}} total  ({{input}} input + {{cached}} cached input{{cacheWrite}}, {{output}} output)",
+      "cacheWrite": " + {{count}} cache write",
+      "contextUsed": "{{percent}}% used ({{used}} used / {{size}})",
+      "left": "{{percent}}% left{{reset}}",
+      "resetsToday": " (resets {{time}})",
+      "resetsOn": " (resets {{time}} on {{date}})"
+    },
+    "mcp": {
+      "none": "No MCP servers are configured.",
+      "summary": "**MCP servers:** {{count}} ({{counts}})",
+      "count": "{{count}} {{status}}",
+      "status": {
+        "connected": "Connected",
+        "starting": "Connecting",
+        "notStarted": "Not started",
+        "authenticationRequired": "Needs authentication",
+        "failed": "Failed",
+        "cancelled": "Cancelled",
+        "disabled": "Disabled",
+        "unknown": "Unknown"
+      },
+      "tools_one": "{{count}} tool",
+      "tools_other": "{{count}} tools",
+      "notSignedIn": "not signed in",
+      "disabled": "**Disabled:** {{names}}",
+      "reconnectHint": "Run `/mcp reconnect` to restart the servers that are not connected.",
+      "arguments": "Command \"/mcp\" accepts no arguments, or `reconnect`.",
+      "reconnect": "**Reconnect:**",
+      "reloaded": "Reloaded the MCP configuration of all open sessions. Codex restarted the servers that failed, stopped, or changed. A connected server with unchanged settings keeps its connection.",
+      "reloadFailed": "Could not reload the MCP configuration: {{error}}",
+      "signInUnsupported": "MCP server {{name}} needs authentication, but this client cannot open a sign-in page.",
+      "stillStarting": "Some MCP servers are still starting. Run `/mcp` again later to see their status.",
+      "unknownError": "unknown MCP startup error",
+      "unnamed": "(unnamed)"
+    }
   }
 }

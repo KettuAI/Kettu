@@ -1,6 +1,6 @@
-// The Claude Code or Codex CLI the user installed, which an adapter runs instead of the copy it
-// brings: found on PATH, resolved to a file that starts without a shell, asked its version and
-// held against the oldest version the installed adapter runs.
+// The Claude Code or Codex CLI the user installed, which runs instead of the copy Kettu installs:
+// found on PATH, resolved to a file that starts without a shell, asked its version and held
+// against the oldest version that runs.
 
 import { open, readFile, realpath, stat } from 'node:fs/promises'
 import os from 'node:os'
@@ -66,8 +66,13 @@ export interface AdapterCli {
   copyMegabytes: number
   /** The file that runs without a shell, or null when there is none. */
   resolve(found: string, platform: Platform, files: CliFiles): Promise<ResolvedCli | null>
+  /**
+   * The agent's package is this CLI itself, with no adapter: its pinned version is the oldest
+   * that runs, and the user's own CLI runs without any install.
+   */
+  isPackage?: true
   /** The oldest CLI the adapter installed in `dir` runs, or null when it names none. */
-  minimum(dir: string, adapterPackage: string, files: CliFiles): Promise<string | null>
+  minimum?(dir: string, adapterPackage: string, files: CliFiles): Promise<string | null>
 }
 
 const VERSION_TEXT = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?`
@@ -163,7 +168,7 @@ export const CODEX_CLI: AdapterCli = {
   resolve: async (found, platform, files) => {
     const file = await startable(found, platform, files)
     if (!file) return null
-    // npm's codex.js only finds the platform's binary and starts it, so the adapter runs that.
+    // npm's codex.js only finds the platform's binary and starts it, so Kettu runs that.
     const real = await files.realpath(file).catch(() => file)
     const p = platform === 'win32' ? path.win32 : path.posix
     if (real.split(/[\\/]/).slice(-4).join('/') === '@openai/codex/bin/codex.js') {
@@ -175,14 +180,7 @@ export const CODEX_CLI: AdapterCli = {
     }
     return platform !== 'win32' || isWindowsProgram(file) ? { path: file, env: {} } : null
   },
-  minimum: async (dir, adapterPackage, files) => {
-    const manifest = await readManifest(
-      files,
-      path.join(dir, 'node_modules', adapterPackage, 'package.json'),
-    )
-    const dependencies = manifest?.dependencies as Record<string, unknown> | undefined
-    return lowerBound(dependencies?.['@openai/codex'])
-  },
+  isPackage: true,
 }
 
 export type CliVersion = { version: string } | { error: string }

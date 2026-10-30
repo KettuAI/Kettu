@@ -215,7 +215,7 @@ describe('the minimum an adapter names', () => {
       'package.json',
     )
     const read = (manifest: unknown) =>
-      CLAUDE_CLI.minimum(
+      CLAUDE_CLI.minimum!(
         '/data/agents/claude-code/0.94.0',
         'adapter',
         files({ [sdk]: JSON.stringify(manifest) }),
@@ -225,22 +225,9 @@ describe('the minimum an adapter names', () => {
     expect(await read({})).toBeNull()
   })
 
-  it("reads Codex's from the lower bound of codex-acp's dependency", async () => {
-    const manifest = path.join(
-      '/data/agents/codex/2.2.2',
-      'node_modules',
-      '@agentclientprotocol',
-      'codex-acp',
-      'package.json',
-    )
-    const read = (range: unknown) =>
-      CODEX_CLI.minimum(
-        '/data/agents/codex/2.2.2',
-        '@agentclientprotocol/codex-acp',
-        files({ [manifest]: JSON.stringify({ dependencies: { '@openai/codex': range } }) }),
-      )
-    expect(await read('^0.160.1')).toBe('0.160.1')
-    expect(await read(undefined)).toBeNull()
+  it('names none for Codex, whose package is the CLI and whose pin is the oldest that runs', () => {
+    expect(CODEX_CLI.isPackage).toBe(true)
+    expect(CODEX_CLI.minimum).toBeUndefined()
   })
 
   it.each([
