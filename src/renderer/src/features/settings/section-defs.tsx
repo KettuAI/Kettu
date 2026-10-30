@@ -171,6 +171,19 @@ export function useGeneralSection(): SectionDef {
         ),
       },
       {
+        id: 'background',
+        name: t('general.background.name'),
+        english: en('general.background.name'),
+        description: isMac
+          ? t('general.background.descriptionMac')
+          : isWindows
+            ? t('general.background.descriptionWindows')
+            : t('general.background.descriptionLinux'),
+        keywords: t('general.background.keywords'),
+        group: sessions,
+        render: () => <GeneralSwitch field="background" label={t('general.background.name')} />,
+      },
+      {
         id: 'confirm-links',
         name: t('general.confirmLinks.name'),
         english: en('general.confirmLinks.name'),

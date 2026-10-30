@@ -21,7 +21,7 @@ import {
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { firstLine, outlineText } from '@shared/outline'
 import type { BrowserOriginAnswer } from '@shared/browser'
-import type { BusySession } from '@shared/host-control'
+import type { BusyCounts, BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { PermissionScope } from '@shared/routines'
 import type { HostSettings } from '@shared/settings'
@@ -190,6 +190,7 @@ export interface SessionEvents {
     body: string,
   ): void
   badge(count: number): void
+  busy(counts: BusyCounts): void
 }
 
 /** The artifacts service, as the sessions pass it to their agents. */
@@ -529,6 +530,7 @@ export class SessionManager {
   private readonly now: () => number
   private requestCounter = 0
   private badgeCount = 0
+  private busyCounts: BusyCounts = { running: 0, waiting: 0 }
   /** Set once the host shuts down: the last checkpoints are written and no more follow. */
   private stopped = false
   /** The sessions in the index at launch: the only ones `removeEmpty` may remove. */
@@ -771,6 +773,7 @@ export class SessionManager {
     const live = this.live.get(sessionId)
     if (live) this.flushPatches(live)
     this.lastSummaries.set(sessionId, json)
+    this.updateBusy()
     if (live?.prepared) this.deps.events.summary(summary, [live.prepared.portId])
     else this.deps.events.summary(summary)
   }
@@ -781,6 +784,20 @@ export class SessionManager {
     if (count === this.badgeCount) return
     this.badgeCount = count
     this.deps.events.badge(count)
+  }
+
+  /** A session's status or pending requests show in its summary, so each change passes here. */
+  private updateBusy(): void {
+    let running = 0
+    let waiting = 0
+    for (const live of this.live.values()) {
+      const status = live.thread.session.status
+      if (status === 'running' || status === 'awaiting_permission') running++
+      if (live.permissions.size + live.origins.size > 0) waiting++
+    }
+    if (running === this.busyCounts.running && waiting === this.busyCounts.waiting) return
+    this.busyCounts = { running, waiting }
+    this.deps.events.busy(this.busyCounts)
   }
 
   private emit(live: Live, patches: readonly Patch[]): void {
@@ -1390,6 +1407,7 @@ export class SessionManager {
     this.deps.mcp?.detached(live.id)
     this.seqs.set(live.id, live.seq)
     this.live.delete(live.id)
+    this.updateBusy()
     this.deps.agents.sessionsChanged(live.record.agentId)
   }
 

@@ -12,6 +12,7 @@ export interface SettingsFile {
     restoreLastSession: boolean
     confirmQuitWhileRunning: boolean
     openAtLogin: boolean // start at login, so routines keep their schedule
+    background: boolean // keep running with the tray icon after the last window closes
     sessionTitles: boolean // a small model titles a session its agent leaves untitled
   }
   thread: {
@@ -74,6 +75,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     restoreLastSession: true,
     confirmQuitWhileRunning: true,
     openAtLogin: false,
+    background: false,
     sessionTitles: true,
   },
   thread: { outlineSummaries: true, confirmLinks: true },

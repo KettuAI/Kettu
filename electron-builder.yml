@@ -7,6 +7,9 @@ directories:
 extraResources:
   - from: out/third-party-notices.txt
     to: third-party-notices.txt
+  # The tray's images, read from the file system by src/main/tray.ts.
+  - from: resources/tray
+    to: tray
 # The terminal host loads pty.node and starts spawn-helper from the real file system.
 # The session router runs on the user's Node.js, which cannot read inside app.asar.
 asarUnpack:

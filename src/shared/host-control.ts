@@ -14,6 +14,12 @@ export interface BusySession {
   title: string | null
 }
 
+/** Sessions whose turn is running, and how many of them wait for the user to approve something. */
+export interface BusyCounts {
+  running: number
+  waiting: number
+}
+
 export interface BusyTerminal {
   id: string
   projectPath: string
@@ -99,6 +105,7 @@ export type HostToMain =
       body: string
     }
   | { type: 'host:badge'; count: number } // pending permission requests across sessions
+  | ({ type: 'host:busy-changed' } & BusyCounts) // for the tray's state line
   // Whether any routine run is starting or running, for keeping the computer from idle sleep.
   | { type: 'host:routines-working'; working: boolean }
   | { type: 'host:busy'; requestId: number; sessions: BusySession[] }

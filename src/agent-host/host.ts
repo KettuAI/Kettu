@@ -419,6 +419,7 @@ export class AgentHost {
         attention: (sessionId, kind, title, body) =>
           options.send({ type: 'host:attention', sessionId, kind, title, body }),
         badge: (count) => options.send({ type: 'host:badge', count }),
+        busy: (counts) => options.send({ type: 'host:busy-changed', ...counts }),
       },
     })
     this.routines = new RoutinesManager({

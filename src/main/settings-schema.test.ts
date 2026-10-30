@@ -79,6 +79,7 @@ describe('validateSettingsPatch', () => {
     [{ general: { language: 'zh-TW' } }, '"general.language" must be one of'],
     [{ general: { fontFamily: 'x' } }, 'Unknown setting "general.fontFamily"'],
     [{ general: { openAtLogin: 'yes' } }, '"general.openAtLogin" must be a boolean'],
+    [{ general: { background: 'on' } }, '"general.background" must be a boolean'],
     [{ general: 'enter' }, '"general" must be an object'],
     [{ thread: { confirmLinks: 'no' } }, '"thread.confirmLinks" must be a boolean'],
     [{ appearance: { theme: 'sepia' } }, '"appearance.theme" must be one of'],
