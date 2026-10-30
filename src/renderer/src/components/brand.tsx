@@ -1,32 +1,22 @@
-import {
-  lockupGeometry,
-  MARK_BOX,
-  MARK_PATHS,
-  markVersionFor,
-  WORDMARK,
-  type LockupLayout,
-} from '@shared/brand'
+import iconUrl from '@renderer/assets/kettu-icon.svg'
+import { lockupGeometry, WORDMARK, type LockupLayout } from '@shared/brand'
 import { cn } from '@renderer/lib/utils'
 
-const MARK_VIEW_BOX = `${MARK_BOX.x} ${MARK_BOX.y} ${MARK_BOX.width} ${MARK_BOX.height}`
-
-/** The mark alone, `width` px wide, in the version that width calls for. Decorative. */
-export function BrandMark({ width, className }: { width: number; className?: string }) {
+/** The app's icon, `size` px square. Decorative. */
+export function BrandIcon({ size, className }: { size: number; className?: string }) {
   return (
-    <svg
-      aria-hidden
-      viewBox={MARK_VIEW_BOX}
-      width={width}
-      height={(width * MARK_BOX.height) / MARK_BOX.width}
-      fill="currentColor"
-      className={cn('shrink-0 text-brand-kettu', className)}
-    >
-      <path d={MARK_PATHS[markVersionFor(width)]} />
-    </svg>
+    <img
+      alt=""
+      src={iconUrl}
+      width={size}
+      height={size}
+      draggable={false}
+      className={cn('shrink-0', className)}
+    />
   )
 }
 
-/** The mark and the wordmark in their fixed proportions, sized by the wordmark's font size. */
+/** The icon and the wordmark in their fixed proportions, sized by the wordmark's font size. */
 export function BrandLockup({
   fontSize,
   layout = 'horizontal',
@@ -38,7 +28,7 @@ export function BrandLockup({
 }) {
   const g = lockupGeometry(layout)
   const scale = fontSize / 100
-  const { mark, text } = g
+  const { icon, text } = g
   return (
     <svg
       role="img"
@@ -47,11 +37,9 @@ export function BrandLockup({
       width={g.width * scale}
       height={g.height * scale}
       fill="currentColor"
-      className={cn('shrink-0 text-brand-kettu', className)}
+      className={cn('shrink-0 text-primary', className)}
     >
-      <svg x={mark.x} y={mark.y} width={mark.width} height={mark.height} viewBox={MARK_VIEW_BOX}>
-        <path d={MARK_PATHS[markVersionFor(mark.width * scale)]} />
-      </svg>
+      <image href={iconUrl} x={icon.x} y={icon.y} width={icon.size} height={icon.size} />
       <path transform={`translate(${text.x} ${text.y})`} d={WORDMARK.path} />
     </svg>
   )

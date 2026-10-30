@@ -95,10 +95,7 @@
   --primary-ring: #1c1b18;
   --primary-highlight: rgb(255 255 255 / 12%);
 
-  /* The Kettu mark: ink on light, paper on dark. */
-  --brand-kettu: #1c1b18;
-
-  /* Agent marks: with the Kettu mark, the only brand colors in the interface. */
+  /* Agent marks: with the Kettu icon, the only brand colors in the interface. */
   --brand-claude: #d97757;
   --brand-codex-1: #b1a7ff;
   --brand-codex-2: #7a9dff;
@@ -242,8 +239,6 @@
     --brand-opencode-frame: #ffffff;
     --brand-opencode-fill: #5a5858;
 
-    --brand-kettu: #f4f3ee;
-
     --agent-opencode: oklch(0.74 0.008 85);
     /* Pi's yellow mixed 86% with the dark surface. */
     --agent-pi: oklch(0.749 0.115 84.2);
@@ -362,8 +357,6 @@
 
   --brand-opencode-frame: #ffffff;
   --brand-opencode-fill: #5a5858;
-
-  --brand-kettu: #f4f3ee;
 
   --agent-opencode: oklch(0.74 0.008 85);
   /* Pi's yellow mixed 86% with the dark surface. */
