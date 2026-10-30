@@ -4,55 +4,60 @@ What Kettu has and what comes next, release by release. Releases have no fixed d
 
 ## Available now
 
-In v0.0.5:
+Not released yet: v0.0.1 is the first release.
 
-- Claude Code, Codex CLI and opencode side by side, over the Agent Client Protocol
+- Claude Code, Codex, opencode and more than 40 other agents side by side
 - Session history, parallel sessions, sub-sessions and forks from any reply, and an outline of your messages to jump between them
 - Permission cards answered with one key, notifications, and a prompt cache countdown
-- Git status and pull requests, a files pane and a terminal for each project, and a browser pane that keeps your sign-ins
+- Git status and pull requests, a files pane and a terminal for each project, and a built-in browser that agents can drive and that keeps your sign-ins
 - Token usage, requests and cost across agents, with plan limits
 - Artifacts: the pages and canvases agents create, with their versions, an isolated viewer and a link to share them online
-- Attachments: files, folders and images from the composer, the clipboard or `@` mentions, with images, video and audio in replies shown in place
+- Attachments: files, folders and images from the composer, the clipboard or `@` mentions, with images, video and audio shown in replies, tool calls and the files pane
 - Routines: agent tasks that run on a schedule within a permission scope, pause near a plan limit and keep their runs
-- Themes from a file or an online catalog, in light and dark
-- A redrawn model menu, slash command list, usage popover and terminal tabs, with quiet depth on controls and surfaces
+- Themes from a file or an online catalog, in light and dark, with the Paper look built in
+- Kettu keeps running in the background, with a tray icon, after you close its window
 - Preview builds for macOS, Windows and Linux, with updates on Windows and Linux that install when you choose
 
-## v0.0.6: the rest of the core features
+## v0.0.1: the first release
 
-Merged, and shipping with this release:
+- [ ] Claude Code and Codex through their own interfaces, the Claude Agent SDK and `codex app-server`, instead of ACP adapters ([#600](https://github.com/KettuAI/Kettu/issues/600))
+- [ ] The desktop app brought in line with its design, and the open fixes in the [milestone](https://github.com/KettuAI/Kettu/milestone/14)
 
-- [x] On macOS, a command that sends Apple Events gets the system's permission prompt instead of a refusal ([#133](https://github.com/KettuAI/Kettu/issues/133))
-- [x] Images, audio and video in tool calls and the Files pane ([#43](https://github.com/KettuAI/Kettu/issues/43), [#312](https://github.com/KettuAI/Kettu/issues/312)), zoom, step and copy in the image viewer ([#311](https://github.com/KettuAI/Kettu/issues/311)), and audio and video bytes in the conversation ([#313](https://github.com/KettuAI/Kettu/issues/313))
-- [x] The sidebar's header and footer ([#34](https://github.com/KettuAI/Kettu/issues/34)), and the logo, app icon and license in About ([#33](https://github.com/KettuAI/Kettu/issues/33))
-- [x] Smaller fixes: long reasoning folded into its run ([#333](https://github.com/KettuAI/Kettu/issues/333)), clickable links in notices ([#345](https://github.com/KettuAI/Kettu/issues/345)), a slash command highlighted as it is typed ([#363](https://github.com/KettuAI/Kettu/issues/363)), Recent artifacts hidden while the composer has input ([#391](https://github.com/KettuAI/Kettu/issues/391)), a redesigned link confirmation ([#246](https://github.com/KettuAI/Kettu/issues/246)), collapsed work rows without the gaps between them ([#244](https://github.com/KettuAI/Kettu/issues/244)), Codex thoughts from history with their headings apart ([#267](https://github.com/KettuAI/Kettu/issues/267)), and more in the [milestone](https://github.com/KettuAI/Kettu/milestone/11)
+## v0.1.0: the desktop app complete
 
-Still to come:
+- [ ] Every part of the desktop app finished and checked against its design
+- [ ] Builds signed by Apple and Microsoft, and macOS updates that install in one click ([#68](https://github.com/KettuAI/Kettu/issues/68))
 
-- [ ] The Paper look as the built-in theme, which this release waits for: the window as a desk and the thread, panes and pages as sheets on it, with new type and new layouts for several screens ([#423](https://github.com/KettuAI/Kettu/issues/423))
+## v0.2.0: your sessions on your other devices
 
-## v0.0.7: the built-in browser and more agents
+- [ ] Control Kettu on your computer from a web client, which Android phones and tablets use too ([#377](https://github.com/KettuAI/Kettu/issues/377), [#382](https://github.com/KettuAI/Kettu/issues/382))
+- [ ] Pair devices and choose which can connect ([#380](https://github.com/KettuAI/Kettu/issues/380)), reach the computer from outside your home network ([#381](https://github.com/KettuAI/Kettu/issues/381)) or directly on the same network or a VPN ([#581](https://github.com/KettuAI/Kettu/issues/581)), with Kettu running without its window ([#378](https://github.com/KettuAI/Kettu/issues/378))
+- [ ] Answer permission requests ([#385](https://github.com/KettuAI/Kettu/issues/385)), see files, changes and artifacts ([#386](https://github.com/KettuAI/Kettu/issues/386)), open the terminal ([#387](https://github.com/KettuAI/Kettu/issues/387)) and get notifications ([#388](https://github.com/KettuAI/Kettu/issues/388)) on a remote device
+- [ ] Use another computer's Kettu from the desktop app ([#384](https://github.com/KettuAI/Kettu/issues/384)), and work in one session from several devices at once ([#389](https://github.com/KettuAI/Kettu/issues/389))
+- [ ] A Kettu account, needed only for the official relay, notifications and web client
 
-- [ ] A built-in browser agents can drive ([#47](https://github.com/KettuAI/Kettu/issues/47), [#317](https://github.com/KettuAI/Kettu/issues/317)), asking before an agent opens a new site ([#318](https://github.com/KettuAI/Kettu/issues/318))
-- [ ] Cursor, GitHub Copilot CLI, Gemini CLI and Pi as agents ([#350](https://github.com/KettuAI/Kettu/issues/350), [#351](https://github.com/KettuAI/Kettu/issues/351), [#352](https://github.com/KettuAI/Kettu/issues/352), [#353](https://github.com/KettuAI/Kettu/issues/353))
+## v0.3.0: hosts on development machines
 
-## v0.1.0: more agents and artifacts
+- [ ] Kettu as a daemon on Linux and macOS development machines, started with the system
+- [ ] Add a development machine from the desktop app by its SSH address, with Kettu installed or upgraded there for you
+- [ ] Every host's sessions in one place, with the ones that need you easy to spot
 
-- [ ] Qwen Code, Kimi Code, Amp, Factory Droid, Devin CLI, Goose, Cline, Kilo Code and Grok as agents ([#354](https://github.com/KettuAI/Kettu/issues/354), [#355](https://github.com/KettuAI/Kettu/issues/355), [#356](https://github.com/KettuAI/Kettu/issues/356), [#357](https://github.com/KettuAI/Kettu/issues/357), [#358](https://github.com/KettuAI/Kettu/issues/358), [#359](https://github.com/KettuAI/Kettu/issues/359), [#360](https://github.com/KettuAI/Kettu/issues/360), [#361](https://github.com/KettuAI/Kettu/issues/361), [#362](https://github.com/KettuAI/Kettu/issues/362))
-- [ ] Slide decks as artifacts ([#368](https://github.com/KettuAI/Kettu/issues/368)), export as PDF, PNG, PowerPoint or a zip of pages ([#367](https://github.com/KettuAI/Kettu/issues/367)), comments on a part of an artifact sent to the agent ([#366](https://github.com/KettuAI/Kettu/issues/366)), and artifact data reaching the agent and its exports ([#369](https://github.com/KettuAI/Kettu/issues/369))
+## v0.4.0: the iOS app
 
-## v0.2.0: your sessions from other devices
+- [ ] A native app for iPhone and iPad ([#383](https://github.com/KettuAI/Kettu/issues/383)): your sessions, permission requests answered from the lock screen and notifications, a share extension and a usage widget
 
-- [ ] Control Kettu from a web client and an app for phones and tablets ([#377](https://github.com/KettuAI/Kettu/issues/377), [#382](https://github.com/KettuAI/Kettu/issues/382), [#383](https://github.com/KettuAI/Kettu/issues/383))
-- [ ] Pair devices and choose which can connect ([#380](https://github.com/KettuAI/Kettu/issues/380)), reach the computer from outside the home network ([#381](https://github.com/KettuAI/Kettu/issues/381)), and keep Kettu running without its window ([#378](https://github.com/KettuAI/Kettu/issues/378))
-- [ ] Answer permission requests ([#385](https://github.com/KettuAI/Kettu/issues/385)), follow files, changes and artifacts ([#386](https://github.com/KettuAI/Kettu/issues/386)), open the terminal ([#387](https://github.com/KettuAI/Kettu/issues/387)) and get notified ([#388](https://github.com/KettuAI/Kettu/issues/388)) from a remote device
-- [ ] Use another computer's Kettu from the desktop app ([#384](https://github.com/KettuAI/Kettu/issues/384)), and work in one session from several devices ([#389](https://github.com/KettuAI/Kettu/issues/389))
+## v1.0.0: teams
+
+- [ ] Share a session, a project or a whole host with your team: teammates watch it live, suggest messages or carry on in the same session
+- [ ] Hand work over and assign it to people
+- [ ] Limits per member on what they can run and how much they use
 
 ## Later
 
-- [ ] A changes panel for reviewing diffs
-- [ ] Search across sessions and a command palette
-- [ ] Builds signed by Apple and Microsoft, and macOS updates that install in one click ([#68](https://github.com/KettuAI/Kettu/issues/68))
+- [ ] A native Android app
+- [ ] A changes panel for reviewing diffs, and search across sessions with a command palette
+- [ ] Slide decks as artifacts ([#368](https://github.com/KettuAI/Kettu/issues/368)), exports to PDF, PNG and PowerPoint ([#367](https://github.com/KettuAI/Kettu/issues/367)), comments on part of an artifact ([#366](https://github.com/KettuAI/Kettu/issues/366)), and the data an artifact's page keeps reaching the agent ([#369](https://github.com/KettuAI/Kettu/issues/369))
+- [ ] Skills and plugins managed in Settings ([#488](https://github.com/KettuAI/Kettu/issues/488), [#489](https://github.com/KettuAI/Kettu/issues/489)), connectors to outside services ([#494](https://github.com/KettuAI/Kettu/issues/494)), and a session's background tasks ([#495](https://github.com/KettuAI/Kettu/issues/495))
 - [ ] Artifacts built from a project's design system ([#370](https://github.com/KettuAI/Kettu/issues/370)), a canvas page edited directly ([#371](https://github.com/KettuAI/Kettu/issues/371)), and Word, PowerPoint and Excel files as artifacts ([#365](https://github.com/KettuAI/Kettu/issues/365))
 
 Missing something? [Open an issue](https://github.com/KettuAI/Kettu/issues/new/choose) and tell us what you need.
