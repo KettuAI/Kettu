@@ -25,7 +25,7 @@ import {
   type MapperEffect,
   type MapperOutput,
 } from '../session-updates'
-import { FakeChild, FakeClaudeSdk, type FakeQuery } from '../testing/fake-claude-sdk'
+import { FAKE_INIT, FakeChild, FakeClaudeSdk, type FakeQuery } from '../testing/fake-claude-sdk'
 import { ClaudeConnection, promptContent } from './connection'
 import { claudeSdkDriver } from './driver'
 import type { SdkMessage, StoredMessage } from './sdk'
@@ -571,6 +571,30 @@ describe('a turn', () => {
     expect(s.sdk.last.options.resume).toBe(sessionId)
   })
 
+  it('shows the output of a command Claude Code runs itself as its reply', async () => {
+    s.sdk.script = (query) => {
+      query.running()
+      query.emit({
+        type: 'assistant',
+        message: {
+          id: 'bca4585f',
+          model: '<synthetic>',
+          content: [{ type: 'text', text: 'No MCP servers are configured.' }],
+        },
+        parent_tool_use_id: null,
+        uuid: 'u-mcp',
+        session_id: query.sessionId,
+      } as SdkMessage)
+      query.finish({ result: 'No MCP servers are configured.' })
+    }
+    await expect(
+      s.connection.prompt(sessionId, [{ type: 'text', text: '/mcp' }]),
+    ).resolves.toMatchObject({ stopReason: 'end_turn' })
+    expect(target.entries()).toMatchObject([
+      { kind: 'agent', id: 'm:bca4585f', markdown: 'No MCP servers are configured.' },
+    ])
+  })
+
   it('passes an error result on as the turn failing', async () => {
     s.sdk.script = (query) => {
       query.running()
@@ -693,6 +717,7 @@ describe('a turn', () => {
   })
 
   it('deletes a session once its Claude Code has exited, which writes it last', async () => {
+    s.sdk.exitOnClose = false
     const deleted = s.connection.deleteSession(sessionId)
     await settle()
     expect(s.sdk.calls.map((call) => call.method)).not.toContain('deleteSession')
@@ -1139,6 +1164,208 @@ describe('subagents', () => {
     )
   })
 
+  it("fills a background subagent's session live and ends it once, as Claude Code runs it", async () => {
+    const s = await setup()
+    const parent = new Target()
+    const child = new Target()
+    const { sessionId } = await s.connection.newSession('/repo')
+    s.connection.register(sessionId, parent)
+    const task = 'a3134506a8e2491e0'
+    const inChild = { parent_tool_use_id: 'toolu_a', agent_id: task }
+    s.sdk.script = (q) => {
+      const system = (fields: Record<string, unknown>) =>
+        ({ type: 'system', session_id: q.sessionId, ...fields }) as SdkMessage
+      q.running()
+      q.emit(
+        assistant(q, 'msg_1', [
+          {
+            type: 'tool_use',
+            id: 'toolu_a',
+            name: 'Agent',
+            input: {
+              description: 'Count files',
+              subagent_type: 'general-purpose',
+              prompt: 'Run ls',
+            },
+          },
+        ]),
+        system({
+          subtype: 'task_started',
+          task_id: task,
+          tool_use_id: 'toolu_a',
+          description: 'Count files',
+          subagent_type: 'general-purpose',
+          is_backgrounded: true,
+          task_type: 'local_agent',
+          prompt: 'Run ls',
+        }),
+        {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'toolu_a',
+                content: [{ type: 'text', text: 'Async agent launched successfully.' }],
+              },
+            ],
+          },
+          parent_tool_use_id: null,
+          tool_use_result: { isAsync: true, status: 'async_launched', agentId: task },
+          session_id: q.sessionId,
+        } as SdkMessage,
+        assistant(q, 'msg_2', [{ type: 'text', text: 'The subagent is still running.' }]),
+        {
+          type: 'result',
+          subtype: 'success',
+          is_error: false,
+          result: '',
+          stop_reason: 'end_turn',
+          total_cost_usd: 0.004,
+          usage: { input_tokens: 10, output_tokens: 5 },
+          modelUsage: {},
+          session_id: q.sessionId,
+        } as SdkMessage,
+      )
+    }
+    const turn = s.connection.prompt(sessionId, [{ type: 'text', text: 'count' }])
+    await settle()
+    s.connection.register(task, child)
+    const query = s.sdk.last
+    query.emit(
+      assistant(
+        query,
+        'msg_c1',
+        [{ type: 'tool_use', id: 'toolu_ls', name: 'Bash', input: { command: 'ls' } }],
+        inChild,
+      ),
+      {
+        type: 'system',
+        subtype: 'task_progress',
+        task_id: task,
+        tool_use_id: 'toolu_a',
+        description: 'Running ls',
+        usage: { total_tokens: 12463, tool_uses: 1, duration_ms: 1723 },
+        session_id: query.sessionId,
+      } as SdkMessage,
+      {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_ls', content: 'notes.txt' }],
+        },
+        ...inChild,
+        session_id: query.sessionId,
+      } as SdkMessage,
+      assistant(query, 'msg_c2', [{ type: 'text', text: '1' }], inChild),
+      {
+        type: 'system',
+        subtype: 'task_updated',
+        task_id: task,
+        patch: { status: 'completed', end_time: 2 },
+        session_id: query.sessionId,
+      } as SdkMessage,
+      {
+        type: 'system',
+        subtype: 'task_notification',
+        task_id: task,
+        tool_use_id: 'toolu_a',
+        status: 'completed',
+        summary: '1',
+        output_file: '',
+        usage: { total_tokens: 14370, tool_uses: 1, duration_ms: 2600 },
+        session_id: query.sessionId,
+      } as SdkMessage,
+      assistant(query, 'msg_3', [{ type: 'text', text: 'The subagent reports 1.' }]),
+    )
+    query.finish()
+    await expect(turn).resolves.toMatchObject({ stopReason: 'end_turn' })
+    expect(parent.entries().map((entry) => [entry.kind, entry.id])).toEqual([
+      ['agent', 'm:msg_2'],
+      ['agent', 'm:msg_3'],
+    ])
+    expect(child.entries()).toMatchObject([
+      { kind: 'session_message', id: 'sm:toolu_a', content: [{ type: 'text', text: 'Run ls' }] },
+      { kind: 'tool', id: 't:toolu_ls', title: 'ls', status: 'completed' },
+      { kind: 'agent', id: 'm:msg_c2', markdown: '1' },
+    ])
+    const states = parent.effects.flatMap((effect) =>
+      effect.kind === 'subagent' && effect.sessionId === task ? [effect.state] : [],
+    )
+    expect(states).toEqual([
+      { kind: 'running' },
+      { kind: 'idle', stopReason: 'end_turn', error: null, tokens: null },
+    ])
+  })
+
+  it('says a subagent waits while its permission is open, and runs on once answered', async () => {
+    const s = await setup()
+    const parent = new Target()
+    const child = new Target()
+    const { sessionId } = await s.connection.newSession('/repo')
+    s.connection.register(sessionId, parent)
+    s.sdk.script = (q) => {
+      q.running()
+      q.emit({
+        type: 'system',
+        subtype: 'task_started',
+        task_id: 'task-1',
+        tool_use_id: 'toolu_a',
+        description: 'Look',
+        subagent_type: 'Explore',
+        task_type: 'local_agent',
+        session_id: q.sessionId,
+      } as SdkMessage)
+    }
+    const turn = s.connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+    await settle()
+    s.connection.register('task-1', child)
+    const asking = s.sdk.last.options.canUseTool!(
+      'Bash',
+      { command: 'rm -rf build' },
+      { signal: new AbortController().signal, toolUseID: 'toolu_rm', agentID: 'task-1' },
+    )
+    await settle()
+    const state = () =>
+      parent.effects.filter((effect) => effect.kind === 'subagent').map((effect) => effect.state)
+    expect(state()).toEqual([{ kind: 'running' }, { kind: 'requires_action' }])
+    expect(child.asked).toHaveLength(1)
+    child.asked[0]!.answer({ optionId: 'allow-once' })
+    await expect(asking).resolves.toMatchObject({ behavior: 'allow' })
+    expect(state()).toEqual([{ kind: 'running' }, { kind: 'requires_action' }, { kind: 'running' }])
+    s.sdk.last.finish()
+    await turn
+  })
+
+  it('ends the subagents a stopped query leaves running', async () => {
+    const s = await setup()
+    const parent = new Target()
+    const { sessionId } = await s.connection.newSession('/repo')
+    s.connection.register(sessionId, parent)
+    s.sdk.script = (q) => {
+      q.running()
+      q.emit({
+        type: 'system',
+        subtype: 'task_started',
+        task_id: 'task-1',
+        tool_use_id: 'toolu_a',
+        description: 'Look',
+        task_type: 'local_agent',
+        subagent_type: 'Explore',
+        session_id: q.sessionId,
+      } as SdkMessage)
+      q.finish()
+    }
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+    await s.connection.closeSession(sessionId)
+    expect(parent.effects.filter((effect) => effect.kind === 'subagent').at(-1)).toEqual({
+      kind: 'subagent',
+      sessionId: 'task-1',
+      state: { kind: 'idle', stopReason: 'cancelled', error: null, tokens: null },
+    })
+  })
+
   it("replays a subagent's history into its session", async () => {
     const s = await setup()
     s.sdk.history.set('h2', [
@@ -1228,6 +1455,45 @@ describe('reports', () => {
     expect(query.options).toMatchObject({ persistSession: false, settingSources: [] })
     expect(query.calls).toContainEqual({ method: 'usage', args: [{ skipBehaviors: true }] })
     expect(query.closed).toBe(true)
+  })
+
+  it('reports the account with the limits, from the query it reads them in', async () => {
+    const s = await setup()
+    await s.connection.readLimits!()
+    expect(s.accounts).toEqual([{ kind: 'account', label: 'Claude Max', email: 'ada@example.com' }])
+    const { sessionId } = await s.connection.newSession('/repo')
+    const open = s.sdk.last
+    expect(open.sessionId).toBe(sessionId)
+    await s.connection.readLimits!()
+    expect(open.calls).toContainEqual({ method: 'accountInfo', args: [] })
+    expect(s.accounts).toHaveLength(2)
+    s.sdk.account = {
+      email: 'grace@example.com',
+      subscriptionType: 'pro',
+      apiProvider: 'firstParty',
+    }
+    await s.connection.readLimits!()
+    expect(s.accounts.at(-1)).toEqual({
+      kind: 'account',
+      label: 'Claude Pro',
+      email: 'grace@example.com',
+    })
+  })
+
+  it('asks Claude Code whether it is signed in when its account names no one', async () => {
+    const s = await setup()
+    s.sdk.init = { ...FAKE_INIT, account: { tokenSource: 'none', apiProvider: 'firstParty' } }
+    s.sdk.usage = { rate_limits_available: false, rate_limits: null }
+    const reading = s.connection.readLimits!()
+    await settle()
+    const index = s.spawned.findIndex((options) => options.args.join(' ') === 'auth status --json')
+    expect(s.spawned[index]).toMatchObject({ command: '/opt/claude/bin/claude' })
+    s.children[index]!.stdout.write('{"loggedIn": false, "authMethod": "none", "apiProvider": ')
+    s.children[index]!.stdout.write('"firstParty"}\n')
+    s.children[index]!.emit('exit', 1)
+    s.children[index]!.emit('close', 1)
+    expect(await reading).toEqual([])
+    expect(s.accounts).toEqual([{ kind: 'none', label: 'Not signed in', email: null }])
   })
 
   it('gives no limits for an account without them', async () => {

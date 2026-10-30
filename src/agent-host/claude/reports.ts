@@ -41,6 +41,32 @@ export function mapAccount(info: AccountInfo | undefined): AgentAccount | null {
   return null
 }
 
+/**
+ * The account `claude auth status --json` names, which also tells when Claude Code is signed out:
+ * no login, no key and no other provider. A login without a profile names no one.
+ */
+export function mapAuthStatus(stdout: string): AgentAccount | null {
+  let status: unknown
+  try {
+    status = JSON.parse(stdout)
+  } catch {
+    return null
+  }
+  if (typeof status !== 'object' || status === null || Array.isArray(status)) return null
+  const fields = status as Record<string, unknown>
+  if (typeof fields.loggedIn !== 'boolean') return null
+  const text = (name: string): string | undefined =>
+    typeof fields[name] === 'string' ? fields[name] : undefined
+  const info: AccountInfo = {}
+  for (const name of ['apiProvider', 'apiKeySource', 'subscriptionType', 'email'] as const) {
+    const value = text(name)
+    if (value !== undefined) info[name] = value
+  }
+  const account = mapAccount(info)
+  if (account || fields.loggedIn) return account
+  return { kind: 'none', label: 'Not signed in', email: null }
+}
+
 const slug = (text: string): string =>
   text
     .toLowerCase()

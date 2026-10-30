@@ -24,6 +24,7 @@ import {
   type MapperContext,
   type MapperEffect,
   type MapperOutput,
+  type SubagentState,
 } from '../session-updates'
 import type {
   AssistantMessage,
@@ -148,6 +149,8 @@ export class ClaudeMapper {
   private readonly tools = new Map<string, Tool>()
   /** The task id of the subagent each Agent call started, by the call's id. */
   private readonly subagents = new Map<string, string>()
+  /** The session each running subagent's state goes to, by its task id. */
+  private readonly running = new Map<string, string>()
   private readonly tasks = new Map<string, Task>()
   private readonly taskInputs = new Map<string, Record<string, unknown>>()
   private compacting: string | null = null
@@ -161,12 +164,6 @@ export class ClaudeMapper {
     readonly sessionId: string,
     private readonly cwd: string,
   ) {}
-
-  /** Whether the task id names a subagent this session started. */
-  isSubagent(taskId: string): boolean {
-    for (const id of this.subagents.values()) if (id === taskId) return true
-    return false
-  }
 
   /** The session a message belongs to: a subagent's, or this one. */
   private route(message: { agent_id?: string; parent_tool_use_id?: string | null }): string {
@@ -314,8 +311,14 @@ export class ClaudeMapper {
   }
 
   private assistant(message: AssistantMessage, replaying: boolean): Delivery[] {
-    if (message.message.model === SYNTHETIC_MODEL) return []
     const sessionId = this.route(message)
+    // Claude Code's own messages: a command's output shows as the reply, an error as the turn's.
+    if (
+      message.message.model === SYNTHETIC_MODEL &&
+      (replaying || message.error || sessionId !== this.sessionId)
+    ) {
+      return []
+    }
     const messageId = message.message.id
     const deliveries: Delivery[] = []
     for (const block of blocksOf(message.message.content)) {
@@ -764,6 +767,7 @@ export class ClaudeMapper {
       case 'task_notification':
         return this.taskNotification(message)
       case 'task_updated':
+        return this.taskUpdated(message)
       case 'task_progress':
       case 'background_tasks_changed':
       case 'commands_changed':
@@ -790,6 +794,7 @@ export class ClaudeMapper {
     if (toolUseId) this.subagents.set(toolUseId, taskId)
     const parentTask = typeof message.parent_task_id === 'string' ? message.parent_task_id : null
     const parent = parentTask ?? this.sessionId
+    this.running.set(taskId, parent)
     const description = typeof message.description === 'string' ? message.description : null
     const kind = typeof message.subagent_type === 'string' ? message.subagent_type : null
     const prompt = typeof message.prompt === 'string' ? message.prompt : null
@@ -834,21 +839,68 @@ export class ClaudeMapper {
 
   private taskNotification(message: SystemMessage): Delivery[] {
     const taskId = typeof message.task_id === 'string' ? message.task_id : null
-    if (!taskId || !this.isSubagent(taskId)) return []
-    const status = message.status
+    if (!taskId) return []
     const summary = typeof message.summary === 'string' ? message.summary : ''
-    const effect: MapperEffect = {
-      kind: 'subagent',
-      sessionId: taskId,
-      state: {
-        kind: 'idle',
-        stopReason:
-          status === 'completed' ? 'end_turn' : status === 'stopped' ? 'cancelled' : 'error',
-        error: status === 'failed' ? { message: summary || t('session.subagent.failed') } : null,
-        tokens: null,
-      },
+    switch (message.status) {
+      case 'completed':
+        return this.end(taskId, 'end_turn')
+      case 'stopped':
+        return this.end(taskId, 'cancelled')
+      default:
+        return this.end(taskId, 'error', summary)
     }
-    return [{ sessionId: this.sessionId, map: () => ({ patches: [], effects: [effect] }) }]
+  }
+
+  /** A task's terminal state, which Claude Code sends even when it sends no notification. */
+  private taskUpdated(message: SystemMessage): Delivery[] {
+    const taskId = typeof message.task_id === 'string' ? message.task_id : null
+    const patch = inputOf(message.patch)
+    if (!taskId) return []
+    switch (patch.status) {
+      case 'completed':
+        return this.end(taskId, 'end_turn')
+      case 'killed':
+        return this.end(taskId, 'cancelled')
+      case 'failed':
+        return this.end(taskId, 'error', typeof patch.error === 'string' ? patch.error : '')
+      default:
+        return []
+    }
+  }
+
+  /** Ends a running subagent, once: its first terminal message says how. */
+  private end(
+    taskId: string,
+    stopReason: 'end_turn' | 'cancelled' | 'error',
+    why = '',
+  ): Delivery[] {
+    const parent = this.running.get(taskId)
+    if (parent === undefined) return []
+    this.running.delete(taskId)
+    const failed = stopReason === 'error'
+    return this.subagentState(parent, taskId, {
+      kind: 'idle',
+      stopReason,
+      error: failed ? { message: why || t('session.subagent.failed') } : null,
+      tokens: null,
+    })
+  }
+
+  private subagentState(parent: string, taskId: string, state: SubagentState): Delivery[] {
+    const effect: MapperEffect = { kind: 'subagent', sessionId: taskId, state }
+    return [{ sessionId: parent, map: () => ({ patches: [], effects: [effect] }) }]
+  }
+
+  /** A running subagent's state while a permission it asked for is open, or after. */
+  waiting(taskId: string, waits: boolean): Delivery[] {
+    const parent = this.running.get(taskId)
+    if (parent === undefined) return []
+    return this.subagentState(parent, taskId, { kind: waits ? 'requires_action' : 'running' })
+  }
+
+  /** Ends the subagents still running when the query that ran them ends. */
+  endAll(stopReason: 'cancelled' | 'error'): Delivery[] {
+    return [...this.running.keys()].flatMap((taskId) => this.end(taskId, stopReason))
   }
 
   /**

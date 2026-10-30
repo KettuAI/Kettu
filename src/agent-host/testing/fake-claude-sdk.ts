@@ -4,6 +4,7 @@
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import type {
+  AccountInfo,
   ClaudeSdk,
   ContextUsageAnswer,
   FlagSettings,
@@ -171,8 +172,9 @@ export class FakeQuery implements Query {
     return this.sdk.usage
   }
 
-  async accountInfo() {
-    return this.sdk.init.account ?? {}
+  async accountInfo(): Promise<AccountInfo> {
+    this.record('accountInfo')
+    return this.sdk.account ?? this.sdk.init.account ?? {}
   }
 
   async stopTask(taskId: string): Promise<void> {
@@ -188,6 +190,12 @@ export class FakeQuery implements Query {
     if (this.closed) return
     this.closed = true
     this.record('close')
+    // The SDK ends its Claude Code process with the query.
+    const child = this.process
+    if (this.sdk.exitOnClose && child instanceof FakeChild && child.exitCode === null) {
+      child.exitCode = 0
+      queueMicrotask(() => child.emit('exit', 0, null))
+    }
     const resolve = this.waiting
     this.waiting = null
     resolve?.({ value: undefined, done: true })
@@ -211,6 +219,10 @@ export class FakeClaudeSdk implements ClaudeSdk {
   readonly subagentHistory = new Map<string, StoredMessage[]>()
   readonly infos = new Map<string, SessionInfo>()
   init: InitializeAnswer = FAKE_INIT
+  /** Whether a closed query's process exits at once; a test that exits it itself sets false. */
+  exitOnClose = true
+  /** What a query's `accountInfo` answers, when it differs from the account it started with. */
+  account: AccountInfo | null = null
   initError: ((query: FakeQuery) => Error) | null = null
   settings: Record<string, unknown> = {}
   generatedTitle: string | null = null

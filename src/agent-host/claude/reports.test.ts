@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compactTokens, mapAccount } from './reports'
+import { compactTokens, mapAccount, mapAuthStatus } from './reports'
 
 describe('the account a session runs under', () => {
   it('names the provider, then an API key, then the plan', () => {
@@ -27,6 +27,41 @@ describe('the account a session runs under', () => {
     expect(mapAccount({ apiProvider: 'firstParty' })).toBeNull()
     expect(mapAccount({ apiProvider: 'firstParty', apiKeySource: 'none' })).toBeNull()
     expect(mapAccount(undefined)).toBeNull()
+  })
+})
+
+describe("Claude Code's own sign-in status", () => {
+  it('is signed out without a login, a key or another provider', () => {
+    expect(
+      mapAuthStatus('{"loggedIn": false, "authMethod": "none", "apiProvider": "firstParty"}'),
+    ).toEqual({
+      kind: 'none',
+      label: 'Not signed in',
+      email: null,
+    })
+  })
+
+  it('names a key, a provider or a plan as a session would', () => {
+    expect(
+      mapAuthStatus(
+        '{"loggedIn": false, "apiKeySource": "apiKeyHelper", "apiProvider": "firstParty"}',
+      ),
+    ).toMatchObject({ kind: 'api_key' })
+    expect(mapAuthStatus('{"loggedIn": false, "apiProvider": "vertex"}')).toMatchObject({
+      kind: 'external',
+      label: 'Google Vertex AI',
+    })
+    expect(
+      mapAuthStatus(
+        '{"loggedIn": true, "apiProvider": "firstParty", "email": "a@b.c", "subscriptionType": "max"}',
+      ),
+    ).toEqual({ kind: 'account', label: 'Claude Max', email: 'a@b.c' })
+  })
+
+  it('tells nothing from output it does not know', () => {
+    expect(mapAuthStatus('not json')).toBeNull()
+    expect(mapAuthStatus('{"authMethod": "none"}')).toBeNull()
+    expect(mapAuthStatus('{"loggedIn": true, "apiProvider": "firstParty"}')).toBeNull()
   })
 })
 

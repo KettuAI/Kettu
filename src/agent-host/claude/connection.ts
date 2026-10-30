@@ -9,7 +9,7 @@ import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
-import type { ContextBreakdown, PlanLimit } from '@shared/agent-host'
+import type { AgentAccount, ContextBreakdown, PlanLimit } from '@shared/agent-host'
 import type { ConfigOption, TokenTotals } from '@shared/thread'
 import {
   AgentRequestError,
@@ -53,7 +53,7 @@ import {
   type Delivery,
 } from './mapper'
 import { answeredMode, permissionOptions, permissionResult } from './permissions'
-import { mapAccount, mapContextUsage, mapUsageLimits } from './reports'
+import { mapAccount, mapAuthStatus, mapContextUsage, mapUsageLimits } from './reports'
 import type {
   AccountInfo,
   AssistantMessage,
@@ -89,6 +89,7 @@ const TITLE_CONTEXT = 1000
 const TITLE_MINIMUM = 10
 /** How long a stop waits for Claude Code to exit before it goes on. */
 const EXIT_WAIT_MS = 5_000
+const AUTH_STATUS_MS = 10_000
 /** JSON-RPC's code for a session the agent does not have, which the host reads. */
 const RESOURCE_NOT_FOUND = -32002
 const INVALID_PARAMS = -32602
@@ -327,6 +328,8 @@ export class ClaudeConnection implements AgentConnection {
   private readonly unregistered = new Set<string>()
   /** The session each subagent's task runs under. */
   private readonly children = new Map<string, string>()
+  /** How many permissions each subagent has open. */
+  private readonly asking = new Map<string, number>()
   private envQueue: Promise<unknown> = Promise.resolve()
   private account: string | null = null
 
@@ -824,7 +827,10 @@ export class ClaudeConnection implements AgentConnection {
 
   private reportAccount(info: AccountInfo | undefined): void {
     const account = mapAccount(info)
-    if (!account) return
+    if (account) this.report(account)
+  }
+
+  private report(account: AgentAccount): void {
     const key = JSON.stringify(account)
     if (key === this.account) return
     this.account = key
@@ -858,6 +864,7 @@ export class ClaudeConnection implements AgentConnection {
     session.process = null
     input?.close()
     query?.close()
+    for (const delivery of session.mapper.endAll('cancelled')) this.deliver(delivery)
     for (const [task, root] of this.children) if (root === session.id) this.children.delete(task)
     if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve()
     return new Promise((resolve) => {
@@ -891,6 +898,7 @@ export class ClaudeConnection implements AgentConnection {
       session.input?.close()
       session.input = null
       session.stale = true
+      for (const delivery of session.mapper.endAll('error')) this.deliver(delivery)
     }
     const turn = session.turn
     if (!turn) return
@@ -933,7 +941,8 @@ export class ClaudeConnection implements AgentConnection {
     } else if (message.type === 'assistant') {
       const assistant = message as AssistantMessage
       const top = !assistant.parent_tool_use_id && !assistant.agent_id
-      if (assistant.message.model === SYNTHETIC_MODEL || assistant.error) {
+      const synthetic = assistant.message.model === SYNTHETIC_MODEL
+      if (synthetic || assistant.error) {
         const text = assistant.message.content
           .flatMap((block) => (block.type === 'text' ? [(block as { text: string }).text] : []))
           .join('\n')
@@ -941,9 +950,9 @@ export class ClaudeConnection implements AgentConnection {
           turn.notice = text || assistant.error || null
           turn.failure = assistant.error ?? null
         }
-        if (assistant.message.model === SYNTHETIC_MODEL) return
+        if (synthetic && assistant.error) return
       }
-      if (top) {
+      if (top && !synthetic) {
         if (assistant.message.model) session.model = assistant.message.model
         session.uuids.set(assistant.message.id, assistant.uuid)
         const text = assistant.message.content
@@ -1353,6 +1362,36 @@ export class ClaudeConnection implements AgentConnection {
     const targetId = own ? permission.agentID! : session.id
     const target = this.targets.get(targetId)
     if (!target) return permissionResult(null, input, permission)
+    if (targetId === session.id)
+      return this.ask(session, target, targetId, toolName, input, permission)
+    // A subagent waits while any of its permissions is open, as its parent's card shows.
+    const open = (this.asking.get(targetId) ?? 0) + 1
+    this.asking.set(targetId, open)
+    if (open === 1)
+      for (const delivery of session.mapper.waiting(targetId, true)) this.deliver(delivery)
+    try {
+      return await this.ask(session, target, targetId, toolName, input, permission)
+    } finally {
+      const left = (this.asking.get(targetId) ?? 1) - 1
+      if (left > 0) this.asking.set(targetId, left)
+      else {
+        this.asking.delete(targetId)
+        // Withdrawn, the subagent is being stopped rather than running on.
+        if (!permission.signal.aborted) {
+          for (const delivery of session.mapper.waiting(targetId, false)) this.deliver(delivery)
+        }
+      }
+    }
+  }
+
+  private async ask(
+    session: Session,
+    target: SessionTarget,
+    targetId: string,
+    toolName: string,
+    input: Record<string, unknown>,
+    permission: ToolPermissionContext,
+  ): Promise<PermissionResult> {
     const options = permissionOptions(toolName, permission, session.modes)
     const output = session.mapper.permissionTool(
       target.context(),
@@ -1386,11 +1425,15 @@ export class ClaudeConnection implements AgentConnection {
 
   // Reports.
 
+  /** The plan limits, and the account with them, which Settings reads together. */
   async readLimits(): Promise<PlanLimit[]> {
+    // Reported again even when unchanged, since the reader may have forgotten it.
+    this.account = null
     const open = [...this.sessions.values()].find((session) => session.query && !session.stale)
     const temporary = open ? null : await this.temporary(os.tmpdir(), { hidden: 'limits' })
     const query = open?.query ?? temporary?.query
     try {
+      if (query) await this.readAccount(query)
       if (!query?.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET) return []
       const answer = await query.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({
         skipBehaviors: true,
@@ -1405,6 +1448,43 @@ export class ClaudeConnection implements AgentConnection {
     } finally {
       if (temporary) await this.closeSession(temporary.id)
     }
+  }
+
+  /** The account a query runs under; Claude Code's own status tells when it is signed out. */
+  private async readAccount(query: Query): Promise<void> {
+    let info: AccountInfo
+    try {
+      info = await query.accountInfo()
+    } catch (error) {
+      this.context.hooks.log('warn', `Claude Code's account could not be read: ${errorText(error)}`)
+      return
+    }
+    const account = mapAccount(info) ?? (await this.authStatus())
+    if (account) this.report(account)
+  }
+
+  private async authStatus(): Promise<AgentAccount | null> {
+    if (!this.cli) return null
+    const child = this.context.spawn({
+      command: this.cli,
+      args: ['auth', 'status', '--json'],
+      env: this.env,
+      signal: AbortSignal.timeout(AUTH_STATUS_MS),
+    })
+    let stdout = ''
+    child.stdout?.on('data', (chunk: Buffer) => (stdout += chunk.toString()))
+    child.stderr?.resume()
+    try {
+      // Signed out, it exits with 1 and still writes its status.
+      await new Promise<void>((resolve, reject) => {
+        child.once('error', reject)
+        child.once('close', () => resolve())
+      })
+    } catch (error) {
+      this.context.hooks.log('warn', `claude auth status failed: ${errorText(error)}`)
+      return null
+    }
+    return mapAuthStatus(stdout)
   }
 
   async readContext(

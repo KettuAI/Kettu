@@ -22,5 +22,5 @@ export const CLAUDE_CODE: AgentDefinition = {
   reportsAccount: true,
   cli: CLAUDE_CLI,
   configVariable: CONFIG_VARIABLES['claude-code'],
-  mcpConfig: { project: '.mcp.json', listCommand: '/mcp' },
+  mcpConfig: { project: '.mcp.json' },
 }
