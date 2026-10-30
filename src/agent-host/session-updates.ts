@@ -6,8 +6,11 @@ import type {
   ConfigOption,
   Patch,
   StopReason,
+  ThreadEntry,
   ThreadState,
   TokenTotals,
+  ToolContent,
+  ToolEntry,
   ToolKind,
 } from '@shared/thread'
 import { ULTRACODE_OPTION_ID } from '@shared/thread'
@@ -171,4 +174,174 @@ const STOP_REASONS: ReadonlySet<string> = new Set([
 
 export function isStopReason(value: unknown): value is StopReason {
   return typeof value === 'string' && STOP_REASONS.has(value)
+}
+
+// Building blocks of every mapper.
+
+export function toLf(text: string): string {
+  return text.replace(/\r\n?/g, '\n')
+}
+
+const RAW_INPUT_LIMIT = 64 * 1024
+
+/** The command or input of a tool call as text: a command when there is one, else JSON. */
+export function rawInputText(raw: unknown): string | undefined {
+  if (raw === undefined || raw === null) return undefined
+  if (typeof raw === 'string') return toLf(raw)
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    const command = (raw as Record<string, unknown>).command
+    if (typeof command === 'string') return toLf(command)
+    if (Array.isArray(command) && command.every((part) => typeof part === 'string')) {
+      return command.join(' ')
+    }
+  }
+  let json: string | undefined
+  try {
+    json = JSON.stringify(raw, null, 2)
+  } catch {
+    return undefined
+  }
+  if (json === undefined) return undefined
+  return json.length > RAW_INPUT_LIMIT ? `${json.slice(0, RAW_INPUT_LIMIT)}\n…` : json
+}
+
+const DESCRIPTION_LIMIT = 200
+
+/** What a command says it does, as one line: the `description` beside its input's `command`. */
+export function commandDescription(raw: unknown): string | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined
+  const input = raw as Record<string, unknown>
+  if (input.command === undefined) return undefined
+  // Claude Code also accepts `command_description` since CLI 2.1.295, and forwards the key used.
+  const description = input.description ?? input.command_description
+  if (typeof description !== 'string') return undefined
+  const line = [...description.replace(/\s+/g, ' ').trim()]
+  if (line.length === 0) return undefined
+  return line.length > DESCRIPTION_LIMIT
+    ? `${line.slice(0, DESCRIPTION_LIMIT).join('').trimEnd()}…`
+    : line.join('')
+}
+
+export function toolOutput(content: readonly ToolContent[]): string {
+  return content
+    .map((item) => (item.type === 'markdown' ? item.markdown : ''))
+    .filter((text) => text !== '')
+    .join('\n')
+}
+
+export function lastEntry(thread: ThreadState): ThreadEntry | undefined {
+  const id = thread.order[thread.order.length - 1]
+  return id === undefined ? undefined : thread.byId[id]
+}
+
+/** Closes thoughts that are still streaming once something else follows them. */
+export function closeThoughts(ctx: MapperContext, out: MapperOutput, except?: string): void {
+  for (const [id, startedAt] of ctx.scope.thoughts) {
+    if (id === except) continue
+    ctx.scope.thoughts.delete(id)
+    if (ctx.thread.byId[id]) {
+      out.patches.push({
+        op: 'entry.update',
+        id,
+        changes: { streaming: false, durationMs: Math.max(0, ctx.now - startedAt) },
+      })
+    }
+  }
+}
+
+export function addEntry(ctx: MapperContext, out: MapperOutput, entry: ThreadEntry): void {
+  closeThoughts(ctx, out, entry.id)
+  out.patches.push({ op: 'entry.add', entry })
+}
+
+export function messageEntryId(
+  ctx: MapperContext,
+  kind: 'agent' | 'thought' | 'user',
+  messageId: string | null | undefined,
+): string | null {
+  if (!messageId) return null
+  const id = `m:${messageId}`
+  const existing = ctx.thread.byId[id]
+  // An agent may reuse one message id for a message's thought and its text.
+  if (existing && existing.kind !== kind) return `m:${messageId}#${kind}`
+  return id
+}
+
+export function toolEffects(
+  out: MapperOutput,
+  toolCallId: string,
+  entryId: string,
+  before: ToolEntry['status'] | null,
+  after: ToolEntry,
+): void {
+  const active = (status: ToolEntry['status'] | null): boolean =>
+    status !== null && status !== 'pending'
+  const done = (status: ToolEntry['status'] | null): boolean =>
+    status === 'completed' || status === 'failed' || status === 'cancelled'
+  if (!active(before) && active(after.status)) {
+    out.effects.push({
+      kind: 'tool',
+      phase: 'started',
+      toolCallId,
+      entryId,
+      toolKind: after.toolKind,
+      output: '',
+    })
+  }
+  if (!done(before) && done(after.status)) {
+    out.effects.push({
+      kind: 'tool',
+      phase: 'ended',
+      toolCallId,
+      entryId,
+      toolKind: after.toolKind,
+      output: toolOutput(after.content),
+    })
+  }
+}
+
+/** Labels of the plan-limit windows Claude Code names. */
+export const WINDOW_LABELS: Readonly<Record<string, string>> = {
+  five_hour: '5-hour',
+  seven_day: 'Weekly',
+  seven_day_opus: 'Weekly · Opus',
+  seven_day_sonnet: 'Weekly · Sonnet',
+  overage: 'Extra usage',
+}
+
+function windowLabel(window: string): string {
+  if (WINDOW_LABELS[window]) return WINDOW_LABELS[window]
+  const words = window
+    .replace(/^seven_day_?/, 'weekly ')
+    .replace(/_/g, ' ')
+    .trim()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+/**
+ * One `_claude/rateLimit` value from `usage_update._meta`. Claude Code reports
+ * `utilization` as a fraction (0.42 is 42%) and `resetsAt` in Unix seconds.
+ */
+export function mapRateLimit(value: unknown, now: number): PlanLimit | null {
+  if (typeof value !== 'object' || value === null) return null
+  const info = value as Record<string, unknown>
+  const window = info.rateLimitType
+  if (typeof window !== 'string' || window === '') return null
+  const utilization =
+    typeof info.utilization === 'number' && Number.isFinite(info.utilization)
+      ? info.utilization
+      : null
+  const resets =
+    typeof info.resetsAt === 'number' && Number.isFinite(info.resetsAt) ? info.resetsAt : null
+  const status = info.status
+  return {
+    window,
+    label: windowLabel(window),
+    usedPercent:
+      utilization === null ? null : Math.min(100, Math.max(0, Math.round(utilization * 1000) / 10)),
+    // Seconds, as Claude Code sends; a value already in milliseconds is kept.
+    resetsAt: resets === null ? null : resets < 1e12 ? resets * 1000 : resets,
+    state: status === 'allowed_warning' ? 'warning' : status === 'rejected' ? 'reached' : 'ok',
+    observedAt: now,
+  }
 }

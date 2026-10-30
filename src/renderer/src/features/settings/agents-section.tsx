@@ -314,10 +314,15 @@ function AgentPill({ status }: { status: AgentStatus }) {
             title={
               status.package?.isCli
                 ? t('agents.update.availableTo', { version: status.update.adapterVersion })
-                : t('agents.update.adapterVersion', {
-                    name: status.package?.name ?? status.name,
-                    version: status.update.adapterVersion,
-                  })
+                : t(
+                    status.package?.isSdk
+                      ? 'agents.update.sdkVersion'
+                      : 'agents.update.adapterVersion',
+                    {
+                      name: status.package?.name ?? status.name,
+                      version: status.update.adapterVersion,
+                    },
+                  )
             }
             onClick={() => startUpdate(status.id)}
           />
@@ -393,6 +398,8 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
     ) : !installed && canInstall(status) ? (
       status.package?.isCli ? (
         t('agents.install.missingLineCli', { name: status.name })
+      ) : status.package?.isSdk ? (
+        t('agents.install.missingLineSdk')
       ) : status.package ? (
         t('agents.install.missingLineAdapter')
       ) : (
@@ -593,7 +600,7 @@ function AgentPageLine({ status }: { status: AgentStatus }) {
   const adapter = status.package?.name.split('/').at(-1)
   const vendor = VENDORS[status.id]
   const connection = vendor
-    ? status.package?.isCli
+    ? status.package?.isCli || status.package?.isSdk
       ? t('agents.ownInterface', { vendor })
       : adapter
         ? t('agents.via', { vendor, adapter })
@@ -772,11 +779,24 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
                     <RowFrame
                       text={
                         <RowText
-                          name={t(status.package.isCli ? 'agents.package' : 'agents.adapter')}
+                          name={t(
+                            status.package.isCli || status.package.isSdk
+                              ? 'agents.package'
+                              : 'agents.adapter',
+                          )}
                           description={
-                            <code className="font-mono text-meta break-all" data-selectable="">
-                              {status.package.name}@{status.package.version}
-                            </code>
+                            <>
+                              <code className="font-mono text-meta break-all" data-selectable="">
+                                {status.package.name}@{status.package.version}
+                              </code>
+                              {status.package.isSdk && (
+                                <span className="block">
+                                  {t('agents.sdkUpdates', {
+                                    range: `${status.package.version.split('.').slice(0, 2).join('.')}.x`,
+                                  })}
+                                </span>
+                              )}
+                            </>
                           }
                         />
                       }
@@ -796,7 +816,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
                       )}
                     </RowFrame>
                   )}
-                  {status.package && environment?.nodeVersion && (
+                  {status.package && !status.package.isSdk && environment?.nodeVersion && (
                     <Fact name="Node.js" mono>
                       {environment.nodeVersion}
                     </Fact>
@@ -836,7 +856,11 @@ function VersionGroup({ status, version }: { status: AgentStatus; version: strin
       />
       {status.update
         ? t(
-            adapterOnlyUpdate(status) ? 'agents.update.adapterReleased' : 'agents.update.released',
+            adapterOnlyUpdate(status)
+              ? status.package?.isSdk
+                ? 'agents.update.sdkReleased'
+                : 'agents.update.adapterReleased'
+              : 'agents.update.released',
             {
               version: status.update.cliVersion ?? status.update.adapterVersion,
             },
@@ -971,12 +995,17 @@ function TaskNotice({
         }
       >
         {adapter
-          ? t('agents.update.noticeBodyAdapterOnly', {
-              package: adapter.name,
-              current: adapter.version,
-              command: status.cli?.command ?? '',
-              name: status.name,
-            })
+          ? t(
+              status.package?.isSdk
+                ? 'agents.update.noticeBodySdkOnly'
+                : 'agents.update.noticeBodyAdapterOnly',
+              {
+                package: adapter.name,
+                current: adapter.version,
+                command: status.cli?.command ?? '',
+                name: status.name,
+              },
+            )
           : t('agents.update.noticeBody', {
               current: version ?? status.package?.version ?? '',
               name: status.name,
@@ -1208,14 +1237,20 @@ function InstallNotice({ status }: { status: AgentStatus }) {
       {status.package?.isCli
         ? t('agents.install.cliBody', { package: status.package.name })
         : status.package && status.cli?.runs === 'installed' && status.cli.installed?.version
-          ? t('agents.install.adapterBodyCli', {
-              package: status.package.name,
-              command: status.cli.command,
-              version: status.cli.installed.version,
-              name: status.name,
-            })
+          ? t(
+              status.package.isSdk ? 'agents.install.sdkBodyCli' : 'agents.install.adapterBodyCli',
+              {
+                package: status.package.name,
+                command: status.cli.command,
+                version: status.cli.installed.version,
+                name: status.name,
+              },
+            )
           : status.package
-            ? t('agents.install.adapterBody', { package: status.package.name })
+            ? t(status.package.isSdk ? 'agents.install.sdkBody' : 'agents.install.adapterBody', {
+                package: status.package.name,
+                name: status.name,
+              })
             : t('agents.install.body')}
     </Notice>
   )
@@ -1513,12 +1548,13 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
   const { command } = cli
   const problem = installed?.problem
   // A program the environment names runs whatever its problem; any other gives way to the copy.
-  // An agent whose package is the CLI runs it with no adapter in between.
+  // An agent whose package is the CLI runs it with no adapter in between; an SDK runs it itself.
   const own = !!status.package?.isCli
+  const sdk = !!status.package?.isSdk
   const problemNote = !problem
     ? null
     : problem.kind === 'too-old'
-      ? t(own ? 'agents.cli.tooOldCli' : 'agents.cli.tooOld', {
+      ? t(own ? 'agents.cli.tooOldCli' : sdk ? 'agents.cli.tooOldSdk' : 'agents.cli.tooOld', {
           command,
           version: installed?.version,
           minimum: problem.minimum,
@@ -1527,7 +1563,7 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
         ? t(installed?.variable ? 'agents.cli.failedNamed' : 'agents.cli.failed', { command })
         : problem.kind === 'unsupported'
           ? t('agents.cli.unsupported', { command })
-          : t('agents.cli.noMinimum', { name: status.name })
+          : t(sdk ? 'agents.cli.noMinimumSdk' : 'agents.cli.noMinimum', { name: status.name })
   const note = !installed
     ? t('agents.cli.notFound', { command })
     : installed.variable
@@ -1550,7 +1586,14 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
   return (
     <ConfigFrame
       name={t('agents.program')}
-      description={t(own ? 'agents.cli.descriptionCli' : 'agents.cli.description', { command })}
+      description={t(
+        own
+          ? 'agents.cli.descriptionCli'
+          : sdk
+            ? 'agents.cli.descriptionSdk'
+            : 'agents.cli.description',
+        { command },
+      )}
       control={
         <>
           <ControlError error={error ?? retryError} />
@@ -1600,7 +1643,9 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
                 ? 'agents.cli.notDownloaded'
                 : own
                   ? 'agents.cli.bundledLineCli'
-                  : 'agents.cli.bundledLine',
+                  : sdk
+                    ? 'agents.cli.bundledLineSdk'
+                    : 'agents.cli.bundledLine',
             )}
           </span>
           {versionTag}

@@ -5,13 +5,6 @@ const at = (name: string, version: string) => ownTitles({ name, version })
 
 describe('the titles an agent writes itself', () => {
   it('takes each adapter from the first version that writes one', () => {
-    expect(at('@agentclientprotocol/claude-agent-acp', '0.94.0')).toBe('sent')
-    expect(at('@agentclientprotocol/claude-agent-acp', '0.97.0')).toBe('sent')
-    expect(at('@agentclientprotocol/claude-agent-acp', '0.93.0')).toBeNull()
-
-    // Codex runs through its app-server now, so its adapter is no longer known.
-    expect(at('@agentclientprotocol/codex-acp', '2.2.2')).toBeNull()
-
     expect(at('fake-agent', '0.1.0')).toBe('sent')
     expect(at('fake-agent', '0.0.9')).toBeNull()
 
@@ -22,6 +15,9 @@ describe('the titles an agent writes itself', () => {
 
   it('leaves an agent it does not know, and one that does not name itself, to Kettu', () => {
     expect(at('pi-acp', '0.0.34')).toBeNull()
+    // Claude Code and Codex run through their own interfaces now, which send their titles.
+    expect(at('@agentclientprotocol/claude-agent-acp', '0.94.0')).toBeNull()
+    expect(at('@agentclientprotocol/codex-acp', '2.2.2')).toBeNull()
     expect(ownTitles(null)).toBeNull()
     expect(ownTitles(undefined)).toBeNull()
   })

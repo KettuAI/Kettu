@@ -11,19 +11,17 @@ import type {
   ToolEntry,
   UserContent,
 } from '@shared/thread'
+import { replayedBlock } from '../acp/mapper'
+import { hasMessage, t } from '../i18n'
+import { parseReplayedText } from '../replayed-content'
 import {
   addEntry,
+  firstUserMessage,
   messageEntryId,
-  parseReplayedText,
   rawInputText,
-  replayedBlock,
+  repeatsFirstMessage,
   toLf,
   toolEffects,
-} from '../acp/mapper'
-import { hasMessage, t } from '../i18n'
-import {
-  firstUserMessage,
-  repeatsFirstMessage,
   type MapperContext,
   type MapperEffect,
   type MapperOutput,

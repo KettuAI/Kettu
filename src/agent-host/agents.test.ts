@@ -1503,6 +1503,39 @@ describe('the CLI the user installed', () => {
   })
 })
 
+describe('an agent whose package is a library the host loads', () => {
+  it('reports the package as an SDK, which runs without Node.js once installed', async () => {
+    const def: AgentDefinition = {
+      ...fakeAgent(FAKE_AGENT_MAIN),
+      launch: { kind: 'package', package: 'fake-sdk', version: '1.0.0', library: true },
+    }
+    const installed: InstalledAdapter = {
+      version: '1.0.0',
+      dir: '/s/1.0.0',
+      entry: '/s/1.0.0/node_modules/fake-sdk/sdk.mjs',
+      installedAt: 1,
+    }
+    const m = manager(
+      {},
+      {},
+      {
+        catalog: [def],
+        detect: async (d, ctx) =>
+          detectAgent(d, {
+            ...ctx,
+            node: { nodeVersion: null, npmPath: null, nodePath: null },
+            installed: async () => [installed],
+          }),
+      },
+    )
+    await m.agents.detectAll()
+    expect(m.agents.status('fake-agent')).toMatchObject({
+      state: 'available',
+      package: { name: 'fake-sdk', version: '1.0.0', installed: true, isSdk: true },
+    })
+  })
+})
+
 describe('an agent whose package is its CLI', () => {
   const cli: AdapterCli = { ...FAKE_CLI, isPackage: true, minimum: undefined }
   const install = (version: string): InstalledAdapter => ({
@@ -2135,6 +2168,8 @@ async function updateManager(
     /** The adapter pins its CLI, so the check's CLI version is the oldest it runs. */
     pinsVersion?: boolean
     launcher?: AgentLauncher
+    /** The versions an update may move to. */
+    updates?: string
   } = {},
 ) {
   const root = await tempFolder('kettu-updates-')
@@ -2142,7 +2177,12 @@ async function updateManager(
     ...fakeAgent(FAKE_AGENT_MAIN),
     id: 'codex',
     name: 'Codex',
-    launch: { kind: 'package', package: 'fake-adapter', version: '2.0.0' },
+    launch: {
+      kind: 'package',
+      package: 'fake-adapter',
+      version: '2.0.0',
+      ...(options.updates ? { updates: options.updates } : {}),
+    },
     ...(options.installedCli
       ? { cli: { ...FAKE_CLI, pinsVersion: options.pinsVersion ?? false } }
       : {}),
@@ -2212,6 +2252,15 @@ async function updateManager(
 }
 
 describe('update checks', () => {
+  it('asks only for the versions the agent may move to', async () => {
+    const m = await updateManager({ updates: '~2.0.0' })
+    await m.write('2.0.0', '2.0.0', '0.160.1', 1)
+    await m.agents.checkUpdates()
+    expect(m.checks).toEqual([
+      expect.objectContaining({ package: 'fake-adapter', range: '~2.0.0' }),
+    ])
+  })
+
   it('finds a newer CLI for the installed adapter and keeps it across a restart', async () => {
     const m = await updateManager()
     await m.write('2.0.0', '2.0.0', '0.160.1', 1)

@@ -75,12 +75,16 @@ import { compareVersions } from './versions'
 export type LaunchKind =
   // Installed from npm into the data directory and run on the user's Node.js. With `perSession`,
   // through the session router, which gives each session an adapter process of its own. `args`
-  // turns on its ACP mode, and `env` keeps its variables to its own launches.
+  // turns on its ACP mode, and `env` keeps its variables to its own launches. A `library` is
+  // not run: its driver loads its entry module into the agent host.
   | {
       kind: 'package'
       package: string
       version: string
       perSession?: true
+      library?: true
+      /** The versions an update may move to, as an npm range; any newer one when not given. */
+      updates?: string
       args?: string[]
       env?: Record<string, string>
     }
@@ -91,7 +95,7 @@ export type LaunchKind =
   | { kind: 'node-script'; script: string }
 
 /** How Kettu talks to an agent; each protocol has its driver in `drivers.ts`. */
-export type AgentProtocol = 'acp' | 'codex-app-server'
+export type AgentProtocol = 'acp' | 'claude-sdk' | 'codex-app-server'
 
 /** A program the adapter runs, which the user installs beside it. */
 export interface AgentRequires {
@@ -332,6 +336,8 @@ export function displayCommand(
         }
       }
       const entry = packageDir(adaptersDir, def) ?? ''
+      if (def.launch.library)
+        return { command: entry, args: [], env: { ...def.env, ...def.launch.env } }
       // A per-session agent reads as the router's own command line.
       const prefix = def.launch.perSession && sessionRouterPath ? [sessionRouterPath, 'node'] : []
       const args = [...prefix, entry, ...(def.launch.args ?? [])]
@@ -410,10 +416,16 @@ export function packageSpec(
   }
 }
 
+/** A library's entry module, which its driver loads instead of a process running it. */
+export function librarySpec(entry: string, env: Record<string, string>): LaunchSpec {
+  return { command: entry, args: [], env, shell: false, display: { command: entry, args: [], env } }
+}
+
 /** `node <entry>` for an installed adapter, with what its `launchEnv` and `requires` add. */
 export async function installedSpec(
   def: AgentDefinition,
-  node: string,
+  /** The user's Node.js, which only a library runs without. */
+  node: string | null,
   installed: InstalledAdapter,
   lookup: Omit<AdapterLookup, 'dir' | 'entry'>,
   extraEnv: Record<string, string> = {},
@@ -426,6 +438,8 @@ export async function installedSpec(
     ...extraEnv,
     ...(await def.launchEnv?.({ ...lookup, dir: installed.dir, entry: installed.entry })),
   }
+  if (launch.kind === 'package' && launch.library) return librarySpec(installed.entry, env)
+  if (node === null) throw new Error(`${def.name} runs on Node.js, which was not found`)
   const prefix =
     launch.kind === 'package' && launch.perSession && sessionRouterPath
       ? [sessionRouterPath, node]
@@ -613,13 +627,20 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
     case 'package': {
       if (def.cli?.isPackage) return detectCliPackage(def, launch, def.cli, ctx)
       const { nodePath, nodeVersion, npmPath } = ctx.node
-      if (!nodePath || !nodeVersion) {
+      const { library } = launch
+      // A library runs in the host, so the user's Node.js only runs npm, to install it.
+      if (!library && (!nodePath || !nodeVersion)) {
         return {
           state: 'node-missing',
           detail: t('detect.nodeMissing', { agent: def.name }),
         }
       }
-      if (def.requiresNode && !satisfiesNode(nodeVersion, def.requiresNode)) {
+      if (
+        !library &&
+        nodeVersion &&
+        def.requiresNode &&
+        !satisfiesNode(nodeVersion, def.requiresNode)
+      ) {
         return {
           state: 'node-outdated',
           detail: t('detect.nodeOutdated', {
@@ -630,6 +651,12 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
         }
       }
       const { current, other } = await packageInstalls(def, launch, ctx)
+      if (!current && !other && (!nodePath || !nodeVersion)) {
+        return {
+          state: 'node-missing',
+          detail: t('detect.nodeToInstall', { agent: def.name }),
+        }
+      }
       if (!current && !npmPath && !other) {
         return {
           state: 'not-installed',
@@ -686,7 +713,9 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
         return { state: 'not-installed', detail: 'The session router is missing from this build.' }
       }
       const prefix =
-        launch.perSession && ctx.sessionRouterPath ? [ctx.sessionRouterPath, nodePath] : []
+        launch.perSession && ctx.sessionRouterPath && nodePath
+          ? [ctx.sessionRouterPath, nodePath]
+          : []
       const lookup = {
         platform: ctx.platform,
         env: ctx.env,
@@ -725,6 +754,10 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
             ...passed.env,
             [def.cli.variable]: passed.installed.path,
           }
+          if (launch.library) {
+            return { ...librarySpec(install.entry, env), cli: passed.installed.path }
+          }
+          if (!nodePath) return null
           return {
             ...packageSpec(
               nodePath,

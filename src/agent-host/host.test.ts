@@ -741,7 +741,7 @@ describe('artifacts', () => {
     expect(status.servers[0]!.tools.length).toBe(27)
     expect(status.places.map((place) => [place.agentId, place.project, place.listCommand])).toEqual(
       [
-        ['claude-code', '.mcp.json', '/mcp'],
+        ['claude-code', '.mcp.json', null],
         ['codex', '.codex/config.toml', '/mcp'],
         ['opencode', 'opencode.json', null],
       ],

@@ -2,16 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { forkPointMeta, forksAtMessage } from './fork-point'
 
 describe('forksAtMessage', () => {
-  it('knows the adapters that fork at a message, from the version that does', () => {
-    const claude = '@agentclientprotocol/claude-agent-acp'
-    expect(forksAtMessage({ name: claude, version: '0.94.0' })).toBe(true)
-    expect(forksAtMessage({ name: claude, version: '0.95.1' })).toBe(true)
-    expect(forksAtMessage({ name: claude, version: '0.93.2' })).toBe(false)
+  it('knows the agents that fork at a message, from the version that does', () => {
+    expect(forksAtMessage({ name: 'fake-agent', version: '0.1.0' })).toBe(true)
+    expect(forksAtMessage({ name: 'fake-agent', version: '0.0.9' })).toBe(false)
   })
 
   it('leaves out every other agent and one that names no version', () => {
     expect(forksAtMessage({ name: 'opencode', version: '2.0.32' })).toBe(false)
-    // Codex runs through its app-server now, so its adapter is no longer known.
+    // Claude Code and Codex run through their own interfaces now, which fork at a message.
+    expect(
+      forksAtMessage({ name: '@agentclientprotocol/claude-agent-acp', version: '0.94.0' }),
+    ).toBe(false)
     expect(forksAtMessage({ name: '@agentclientprotocol/codex-acp', version: '2.2.2' })).toBe(false)
     expect(forksAtMessage({ name: 'constructor', version: '1.0.0' })).toBe(false)
     expect(forksAtMessage(null)).toBe(false)

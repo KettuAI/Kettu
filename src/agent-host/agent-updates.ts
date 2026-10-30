@@ -23,7 +23,12 @@ export interface LatestOptions {
   npm: string
   /** The adapter's package. */
   package: string
-  /** The package and `package.json` field that name the CLI the adapter carries. */
+  /** The versions an update may move to, as an npm range; the `latest` tag when not given. */
+  range?: string
+  /**
+   * The package and `package.json` field that name the CLI the adapter carries: a dependency's,
+   * or the adapter's own field when it names the adapter's package.
+   */
   cli: { package: string; field: string } | null
   env: Env
   platform: Platform
@@ -84,6 +89,7 @@ async function view(options: LatestOptions, words: string[]): Promise<unknown> {
  * with a reason the user can read.
  */
 export async function fetchLatest(options: LatestOptions): Promise<AgentUpdate> {
+  if (options.range !== undefined) return fetchInRange(options, options.range)
   const manifest = await view(options, [options.package, 'version', 'dependencies'])
   // With both fields npm prints an object; a version without dependencies prints the version.
   const version = isObject(manifest) ? manifest.version : manifest
@@ -99,6 +105,34 @@ export async function fetchLatest(options: LatestOptions): Promise<AgentUpdate> 
   // One matching version prints its field as a string, several as an array.
   const value = await view(options, [`${cli.package}@${range}`, cli.field])
   return { adapterVersion: version, cliVersion: highestVersion(value) }
+}
+
+/**
+ * The newest version in `range`, and the CLI it names in its own field when `cli` names the
+ * package itself. npm prints one version's fields as an object, several versions as an array.
+ */
+async function fetchInRange(options: LatestOptions, range: string): Promise<AgentUpdate> {
+  if (!RANGE.test(range)) throw new Error(t('agent.update.noVersion', { package: options.package }))
+  const own = options.cli?.package === options.package ? options.cli.field : null
+  const fields = own ? ['version', own] : ['version']
+  const value = await view(options, [`${options.package}@${range}`, ...fields])
+  const rows = (Array.isArray(value) ? value : [value]).flatMap((row: unknown) =>
+    isObject(row)
+      ? [{ version: row.version, cli: own ? row[own] : undefined }]
+      : [{ version: row, cli: undefined }],
+  )
+  let best: { version: string; cli: unknown } | null = null
+  for (const row of rows) {
+    if (!isVersion(row.version)) continue
+    if (!best || compareVersions(row.version, best.version) > 0) {
+      best = { version: row.version, cli: row.cli }
+    }
+  }
+  if (!best) throw new Error(t('agent.update.noVersion', { package: options.package }))
+  return {
+    adapterVersion: best.version,
+    cliVersion: typeof best.cli === 'string' && isVersion(best.cli) ? best.cli : null,
+  }
 }
 
 /** The install a start runs, as the update decision sees it. */

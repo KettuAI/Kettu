@@ -200,10 +200,16 @@ describe('detectAgent', () => {
         }
       })
   const CLAUDE = '@agentclientprotocol/claude-agent-acp'
+  // Claude Code as it ran on its ACP adapter: a package that the user's Node.js runs.
+  const CLAUDE_ADAPTER: AgentDefinition = {
+    ...CLAUDE_CODE,
+    protocol: 'acp',
+    launch: { kind: 'package', package: CLAUDE, version: '0.94.0' },
+  }
 
   it('runs an installed adapter with node and its entry', async () => {
     const claudeEntry = entry('claude-code', CLAUDE, '0.94.0')
-    expect(await detectAgent(CLAUDE_CODE, context({ installed: installed('0.94.0') }))).toEqual({
+    expect(await detectAgent(CLAUDE_ADAPTER, context({ installed: installed('0.94.0') }))).toEqual({
       state: 'available',
       spec: {
         command: '/usr/local/bin/node',
@@ -233,7 +239,7 @@ describe('detectAgent', () => {
 
   it('installs the pinned version on first use, with an older one to fall back on', async () => {
     expect(
-      await detectAgent(CLAUDE_CODE, context({ installed: installed('0.93.0') })),
+      await detectAgent(CLAUDE_ADAPTER, context({ installed: installed('0.93.0') })),
     ).toMatchObject({
       state: 'available',
       spec: null,
@@ -246,7 +252,7 @@ describe('detectAgent', () => {
 
   it('runs the newest install from the pin up, and the latest install of one version', async () => {
     const detection = await detectAgent(
-      CLAUDE_CODE,
+      CLAUDE_ADAPTER,
       context({ installed: installed('0.93.0', '0.95.0', '0.95.0~5', '0.94.0') }),
     )
     expect(detection).toMatchObject({
@@ -316,7 +322,7 @@ describe('detectAgent', () => {
 
   it('runs node.exe without a shell on Windows', async () => {
     const detection = await detectAgent(
-      CLAUDE_CODE,
+      CLAUDE_ADAPTER,
       context({
         platform: 'win32',
         node: {
@@ -861,7 +867,7 @@ describe('detectAgent with the CLI the user installed', () => {
     installedAt: 1,
     ...extra,
   })
-  // `claude` on PATH answering 2.1.304, and installs whose SDK names 2.1.303.
+  // `claude` on PATH answering 2.1.304, and SDK installs that name 2.1.303.
   function withClaude(overrides: Partial<DetectContext> = {}, answer = '2.1.304'): DetectContext {
     return context({
       isExecutable: async (file) => file === '/usr/local/bin/claude',
@@ -875,7 +881,7 @@ describe('detectAgent with the CLI the user installed', () => {
           throw new Error(`ENOENT: ${file}`)
         },
       },
-      installed: async () => [install('0.94.0')],
+      installed: async () => [install('0.3.314')],
       ...overrides,
     })
   }
@@ -944,18 +950,18 @@ describe('detectAgent with the CLI the user installed', () => {
   })
 
   it('holds the program to the older install while the pinned one is not installed', async () => {
-    const older = withClaude({ installed: async () => [install('0.93.0')] }, '2.1.200')
+    const older = withClaude({ installed: async () => [install('0.3.300')] }, '2.1.200')
     expect(await detectAgent(CLAUDE_CODE, older)).toMatchObject({
       spec: null,
       adapter: {
-        fallback: { version: '0.93.0', spec: { env: {} } },
+        fallback: { version: '0.3.300', spec: { env: {} } },
         cli: { runs: 'bundled', installed: { problem: { kind: 'too-old', minimum: '2.1.303' } } },
       },
     })
   })
 
   it('installs the copy first when it is needed and the install has none', async () => {
-    const bare = async () => [install('0.94.0', { withoutCli: true })]
+    const bare = async () => [install('0.3.314', { withoutCli: true })]
     expect(
       await detectAgent(CLAUDE_CODE, withClaude({ installed: bare }, '2.1.200')),
     ).toMatchObject({
@@ -973,6 +979,45 @@ describe('detectAgent with the CLI the user installed', () => {
     expect(await detectAgent(CLAUDE_CODE, withClaude({ cliPreference: 'bundled' }))).toMatchObject({
       spec: { env: {} },
       adapter: { cli: { runs: 'bundled', installed: { version: '2.1.304', problem: null } } },
+    })
+  })
+
+  it('loads the SDK in the host instead of running it with Node.js', async () => {
+    const entry = '/data/agents/claude-code/0.3.314/index.js'
+    const bundled = await detectAgent(CLAUDE_CODE, withClaude({ cliPreference: 'bundled' }))
+    expect(bundled).toMatchObject({
+      state: 'available',
+      spec: { command: entry, args: [], shell: false, display: { command: entry, args: [] } },
+    })
+    const own = await detectAgent(CLAUDE_CODE, withClaude())
+    expect(own).toMatchObject({
+      spec: { command: entry, args: [], cli: '/usr/local/bin/claude' },
+    })
+    // The user's Node.js only runs npm, so an older one does the same.
+    const node = { nodeVersion: 'v18.20.0', npmPath: '/x/npm', nodePath: '/x/node' }
+    expect(await detectAgent(CLAUDE_CODE, withClaude({ node }))).toMatchObject({
+      state: 'available',
+      spec: { command: entry },
+    })
+  })
+
+  it('needs no Node.js once the SDK is installed, and Node.js with npm only to install it', async () => {
+    const none = { nodeVersion: null, npmPath: null, nodePath: null }
+    expect(await detectAgent(CLAUDE_CODE, withClaude({ node: none }))).toMatchObject({
+      state: 'available',
+      spec: { command: '/data/agents/claude-code/0.3.314/index.js', cli: '/usr/local/bin/claude' },
+      adapter: { installed: true, node: null },
+    })
+    const fresh = { installed: async () => [] }
+    expect(await detectAgent(CLAUDE_CODE, withClaude({ node: none, ...fresh }))).toEqual({
+      state: 'node-missing',
+      detail:
+        'Claude Code is installed with npm on first use, which needs Node.js, and node was not found on PATH.',
+    })
+    const nodeOnly = { nodeVersion: 'v24.1.0', nodePath: '/x/node', npmPath: null }
+    expect(await detectAgent(CLAUDE_CODE, withClaude({ node: nodeOnly, ...fresh }))).toMatchObject({
+      state: 'not-installed',
+      detail: expect.stringContaining('npm was not found'),
     })
   })
 
@@ -1124,6 +1169,20 @@ describe('displayCommand', () => {
         '--acp',
       ],
       env: { COPILOT_ACP: '1' },
+    })
+  })
+
+  it('shows a library as the folder its driver loads it from', () => {
+    expect(displayCommand(CLAUDE_CODE, '/e', null, '/data/agents')).toEqual({
+      command: path.join(
+        '/data/agents',
+        'claude-code',
+        '0.3.314',
+        'node_modules',
+        '@anthropic-ai/claude-agent-sdk',
+      ),
+      args: [],
+      env: {},
     })
   })
 

@@ -166,8 +166,15 @@ export interface AgentStatus {
   // From `initialize`, a binary agent's `--version`, or the `requires` program's (Pi's `pi`).
   version: string | null
   // The adapter a start runs, the pin until one is installed; `isCli` for a package that is the
-  // agent's CLI itself, which runs with no adapter.
-  package: { name: string; version: string; installed: boolean; isCli?: true } | null
+  // agent's CLI itself, which runs with no adapter, and `isSdk` for the agent's SDK, which Kettu
+  // loads itself and which runs the agent's CLI.
+  package: {
+    name: string
+    version: string
+    installed: boolean
+    isCli?: true
+    isSdk?: true
+  } | null
   signIn: 'unknown' | 'signed-in' | 'required'
   authMethods: AgentAuthMethod[]
   canLogout: boolean

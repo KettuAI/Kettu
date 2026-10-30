@@ -27,11 +27,10 @@ import {
   mapModelUsage,
   mapPermissionOptions,
   mapPermissionToolCall,
-  mapRateLimit,
   mapSessionUpdate,
   mapTokenTotals,
-  rawInputText,
 } from './mapper'
+import { mapRateLimit, rawInputText } from '../session-updates'
 
 const baseSession: SessionView = {
   id: 's1',
