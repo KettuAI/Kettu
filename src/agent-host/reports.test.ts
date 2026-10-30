@@ -2,7 +2,7 @@
 // fake agent running in-process. The fake agent stands in for Claude Code.
 
 import { afterEach, describe, expect, it } from 'vitest'
-import { hiddenSessionMeta } from './reports'
+import { hiddenSessionMeta } from './acp/hidden-sessions'
 import { startTestHost, type TestHost } from './testing/harness'
 
 let current: TestHost | null = null

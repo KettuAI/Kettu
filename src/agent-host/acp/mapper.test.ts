@@ -8,11 +8,18 @@ import {
   type ThreadEntry,
   type ThreadState,
 } from '@shared/thread'
+import { promptBlocks } from '../connection'
+import {
+  addTokenTotals,
+  mergeConfig,
+  newTurnScope,
+  type MapperEffect,
+  type TurnScope,
+} from '../session-updates'
 import claudeReplay from './fixtures/replay-claude.json'
 import codexReplay from './fixtures/replay-codex.json'
 import opencodeReplay from './fixtures/replay-opencode.json'
 import {
-  addTokenTotals,
   CARRIED_DATA_LIMIT,
   contentRef,
   mapAuthStatus,
@@ -23,12 +30,7 @@ import {
   mapRateLimit,
   mapSessionUpdate,
   mapTokenTotals,
-  mergeConfig,
-  newTurnScope,
-  promptBlocks,
   rawInputText,
-  type MapperEffect,
-  type TurnScope,
 } from './mapper'
 
 const baseSession: SessionView = {
@@ -1086,17 +1088,17 @@ describe('subagents', () => {
     expect(effects).toEqual([
       {
         kind: 'subagent',
-        acpSessionId: 'child-1',
+        sessionId: 'child-1',
         title: 'Explore',
         description: 'Find clock reads',
         canCancel: true,
         state: { kind: 'running' },
       },
-      { kind: 'subagent', acpSessionId: 'child-1', state: { kind: 'requires_action' } },
-      { kind: 'subagent', acpSessionId: 'child-1', title: null, canCancel: false },
+      { kind: 'subagent', sessionId: 'child-1', state: { kind: 'requires_action' } },
+      { kind: 'subagent', sessionId: 'child-1', title: null, canCancel: false },
       {
         kind: 'subagent',
-        acpSessionId: 'child-1',
+        sessionId: 'child-1',
         state: {
           kind: 'idle',
           stopReason: 'end_turn',
@@ -1113,11 +1115,11 @@ describe('subagents', () => {
       },
       {
         kind: 'subagent',
-        acpSessionId: 'child-1',
+        sessionId: 'child-1',
         state: { kind: 'idle', stopReason: 'error', error: { message: 'Boom' }, tokens: null },
       },
-      { kind: 'subagent', acpSessionId: 'child-1', state: { kind: 'unknown' } },
-      { kind: 'subagent', acpSessionId: 'child-1', state: { kind: 'cleared' } },
+      { kind: 'subagent', sessionId: 'child-1', state: { kind: 'unknown' } },
+      { kind: 'subagent', sessionId: 'child-1', state: { kind: 'cleared' } },
     ])
   })
 

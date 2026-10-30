@@ -4,13 +4,7 @@
 
 import type { OutlineTitle } from '@shared/agent-host'
 import type { ConfigOption } from '@shared/thread'
-import {
-  hiddenRemoval,
-  hiddenSessionMeta,
-  removeHiddenSession,
-  REPORT_TIMEOUT_MS,
-  type HiddenRuntime,
-} from './reports'
+import { REPORT_TIMEOUT_MS, type HiddenRuntime } from './reports'
 
 /** At most this many messages go in one summary, the newest first... */
 export const SUMMARY_MESSAGES = 100
@@ -110,35 +104,36 @@ export async function writeTitles(
   runtime: HiddenRuntime,
   request: SummaryRequest,
 ): Promise<OutlineTitle[]> {
-  const removal = hiddenRemoval(runtime.agentId, runtime.init)
-  if (!removal) throw new Error("the agent's hidden sessions cannot be removed without a trace")
   const { connection } = runtime
+  if (!connection.hiddenSessions) {
+    throw new Error("the agent's hidden sessions cannot be removed without a trace")
+  }
   const timeoutMs = request.timeoutMs ?? REPORT_TIMEOUT_MS
   const name = request.name ?? 'the outline titles'
   const { positions, prompt } = summaryPrompt(request.messages, request.cut)
-  const remove = (acpSessionId: string): Promise<void> =>
-    removeHiddenSession(runtime, acpSessionId, removal, (message) =>
+  const remove = (sessionId: string): Promise<void> =>
+    connection.removeHidden(sessionId, (message) =>
       request.log(`Could not remove the session of ${name}: ${message}`),
     )
-  const opening = connection.newSession(request.dir, hiddenSessionMeta(runtime.agentId))
-  let acpSessionId: string | null = null
+  const opening = connection.newSession(request.dir, { hidden: 'titles' })
+  let sessionId: string | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
   const work = async (): Promise<string[]> => {
     const setup = await opening
-    acpSessionId = setup.acpSessionId
+    sessionId = setup.sessionId
     const option = modelOption(setup.config)
     const model = pickModel(setup.config, request.sessionModel)
     if (option && model !== null && model !== option.value) {
-      await connection.setConfigOption(setup.acpSessionId, option.id, model)
+      await connection.setConfigOption(setup.sessionId, option.id, model)
     }
-    return connection.collect(setup.acpSessionId, prompt)
+    return connection.collect(setup.sessionId, prompt)
   }
   try {
     const messages = await Promise.race([
       work(),
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
-          if (acpSessionId) void connection.cancel(acpSessionId).catch(() => {})
+          if (sessionId) void connection.cancel(sessionId).catch(() => {})
           reject(new Error(`no answer within ${timeoutMs / 1000} s`))
         }, timeoutMs)
       }),
@@ -148,11 +143,11 @@ export async function writeTitles(
     return titles
   } finally {
     if (timer) clearTimeout(timer)
-    if (acpSessionId) await remove(acpSessionId)
+    if (sessionId) await remove(sessionId)
     // One that opens after the timeout goes the same way.
     else
       void opening.then(
-        (setup) => remove(setup.acpSessionId),
+        (setup) => remove(setup.sessionId),
         () => {},
       )
   }

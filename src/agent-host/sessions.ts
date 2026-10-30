@@ -5,7 +5,6 @@ import { createHash, randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { McpServer } from '@agentclientprotocol/sdk/unstable'
 import {
   REMOVED_WHILE_STARTING,
   type AttachmentBytes,
@@ -54,14 +53,6 @@ import {
   ULTRACODE_OPTION_ID,
 } from '@shared/thread'
 import {
-  AgentRequestError,
-  type AgentConnection,
-  type PermissionAnswer,
-  type PermissionRequest,
-  type SessionTarget,
-} from './acp/connection'
-import type { ForkPoint } from './acp/fork-point'
-import {
   agentEntryBefore,
   gitPatch,
   ReplayKeeper,
@@ -69,21 +60,6 @@ import {
   writePatch,
   type ArtifactWrite,
 } from './artifacts/entries'
-import {
-  addTokenTotals,
-  firstUserMessage,
-  isStopReason,
-  mergeConfig,
-  newTurnScope,
-  SYNTHETIC_MODE_ID,
-  promptBlocks,
-  type MapperEffect,
-  type MapperOutput,
-  type ModelTokens,
-  type PromptBlock,
-  type SubagentState,
-  type TurnScope,
-} from './acp/mapper'
 import { parseContextReport } from './acp/claude-reports'
 import { isValueOf, startOrder, type AgentOptionsStore, type ReplacedValue } from './agent-options'
 import {
@@ -98,6 +74,19 @@ import {
 } from './attachments'
 import { agentError, type AgentManager, type AgentRuntime } from './agents'
 import { carryMode, lostValues, lostValuesNotice, type LostValue } from './config-notice'
+import {
+  AgentRequestError,
+  promptBlocks,
+  type AgentConnection,
+  type ForkPoint,
+  type McpServer,
+  type ModelTokens,
+  type PermissionAnswer,
+  type PermissionRequest,
+  type PromptBlock,
+  type SessionOptions,
+  type SessionTarget,
+} from './connection'
 import type { Diagnostics } from './diagnostics'
 import { holdsNothing, mayBeEmpty } from './empty-sessions'
 import { HostError, invalidParams, notFound } from './errors'
@@ -111,18 +100,23 @@ import type { CacheTtlReader } from './prompt-cache'
 import { cutReply, type ToolSession } from './session-tools'
 import type { RoutineSessionHooksRef, RoutineSessionStart } from './routines/hooks'
 import { scopeAnswer } from './routines/scope'
-import {
-  CONTEXT_REPORT,
-  hasContextReport,
-  hiddenRemoval,
-  hiddenSessionMeta,
-  removeHiddenSession,
-  runReport,
-} from './reports'
+import { CONTEXT_REPORT, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
 import type { JsonFile, ReturnedFile, SessionRecord, SessionsFile } from './storage'
 import { SUMMARY_RETRY_MS, writeTitles } from './outline-titles'
 import { listedTitle, titleMessageText, writeSessionTitle } from './session-titles'
+import {
+  addTokenTotals,
+  firstUserMessage,
+  isStopReason,
+  mergeConfig,
+  newTurnScope,
+  SYNTHETIC_MODE_ID,
+  type MapperEffect,
+  type MapperOutput,
+  type SubagentState,
+  type TurnScope,
+} from './session-updates'
 import {
   attachmentBlobs,
   changesStored,
@@ -447,10 +441,14 @@ function hasUltracode(agentId: AgentId): boolean {
   return agentId === 'claude-code' || agentId === 'fake-agent'
 }
 
-/** `_meta` for session setup: Claude Code's adapter passes `claudeCode.options` to its SDK. */
-function sessionMeta(record: SessionRecord): Record<string, unknown> | undefined {
-  if (!hasUltracode(record.agentId) || record.ultracode === undefined) return undefined
-  return { claudeCode: { options: { settings: { ultracode: record.ultracode } } } }
+/** How a session opens: with the MCP servers it gets, and ultracode for an agent that has it. */
+function sessionOptions(record: SessionRecord, mcpServers: McpServer[] = []): SessionOptions {
+  return {
+    mcpServers,
+    ...(hasUltracode(record.agentId) && record.ultracode !== undefined
+      ? { ultracode: record.ultracode }
+      : {}),
+  }
 }
 
 /** The agent's options with the ultracode switch at the end, for agents that have it. */
@@ -474,7 +472,7 @@ function withUltracode(
   ]
 }
 
-/** The values of a session's agent options; ultracode goes out with the session's `_meta`. */
+/** The values of a session's agent options; ultracode goes out with the session's options. */
 function agentValues(config: readonly ConfigOption[]): Record<string, string | boolean> {
   return Object.fromEntries(
     config
@@ -1574,12 +1572,12 @@ export class SessionManager {
   private applySubagent(parent: Live, effect: Extract<MapperEffect, { kind: 'subagent' }>): void {
     const { agentId } = parent.record
     const now = this.now()
-    let record = this.findByAcp(agentId, effect.acpSessionId)
+    let record = this.findByAcp(agentId, effect.sessionId)
     if (!record) {
       record = {
         id: randomUUID(),
         agentId,
-        acpSessionId: effect.acpSessionId,
+        acpSessionId: effect.sessionId,
         projectPath: parent.record.projectPath,
         title: effect.title ?? null,
         createdAt: now,
@@ -2100,8 +2098,7 @@ export class SessionManager {
     try {
       setup = await runtime.connection.newSession(
         live.record.projectPath,
-        sessionMeta(live.record),
-        this.mcpServers(live.id, live.record, runtime),
+        sessionOptions(live.record, this.mcpServers(live.id, live.record, runtime)),
       )
     } catch (error) {
       if (gone()) throw removedWhileStarting()
@@ -2111,15 +2108,15 @@ export class SessionManager {
     }
     this.deps.prepared?.add({
       agentId,
-      acpSessionId: setup.acpSessionId,
+      acpSessionId: setup.sessionId,
       cwd: live.record.projectPath,
     })
     if (gone()) {
-      await this.removeUnlisted(live.id, runtime, setup.acpSessionId)
-      this.deps.prepared?.remove(agentId, setup.acpSessionId)
+      await this.removeUnlisted(live.id, runtime, setup.sessionId)
+      this.deps.prepared?.remove(agentId, setup.sessionId)
       throw removedWhileStarting()
     }
-    live.record.acpSessionId = setup.acpSessionId
+    live.record.acpSessionId = setup.sessionId
     this.stampConfig(live.record)
     this.attach(live, runtime.connection)
     // The cache names values the session no longer lists, so it is read before it takes them.
@@ -2132,7 +2129,7 @@ export class SessionManager {
         pathKey(live.record.projectPath, this.deps.platform),
       ) ?? []
     this.update(live, {
-      acpSessionId: setup.acpSessionId,
+      acpSessionId: setup.sessionId,
       config: withUltracode(live.record, setup.config),
       error: null,
     })
@@ -2273,8 +2270,7 @@ export class SessionManager {
     try {
       setup = await runtime.connection.newSession(
         live.record.projectPath,
-        sessionMeta(live.record),
-        this.mcpServers(live.id, live.record, runtime),
+        sessionOptions(live.record, this.mcpServers(live.id, live.record, runtime)),
       )
     } catch (error) {
       // Its failure, such as the agent's exit, no longer belongs to a session that went meanwhile.
@@ -2286,15 +2282,15 @@ export class SessionManager {
     }
     if (gone()) {
       // It never reached the index, so the agent's new session goes the way a hidden one does.
-      await this.removeUnlisted(live.id, runtime, setup.acpSessionId)
+      await this.removeUnlisted(live.id, runtime, setup.sessionId)
       throw removedWhileStarting()
     }
     if (this.stopped) {
       // The quit ran while `session/new` was pending: the message waits in its queue and the
       // session goes into the index and the thread store as the quit closes them.
-      live.record.acpSessionId = setup.acpSessionId
+      live.record.acpSessionId = setup.sessionId
       this.update(live, {
-        acpSessionId: setup.acpSessionId,
+        acpSessionId: setup.sessionId,
         config: withUltracode(live.record, chosenConfig(setup.config, live.startValues)),
         status: 'closed',
       })
@@ -2303,7 +2299,7 @@ export class SessionManager {
       this.checkpoint(live, { afterShutdown: true })
       return
     }
-    live.record.acpSessionId = setup.acpSessionId
+    live.record.acpSessionId = setup.sessionId
     this.stampConfig(live.record)
     this.attach(live, runtime.connection)
     live.failure = null
@@ -2321,7 +2317,7 @@ export class SessionManager {
       if (live.startValues[option.id] === wanted) delete live.startValues[option.id]
     }
     this.update(live, {
-      acpSessionId: setup.acpSessionId,
+      acpSessionId: setup.sessionId,
       config: withUltracode(live.record, setup.config),
       error: null,
     })
@@ -2448,9 +2444,8 @@ export class SessionManager {
   ): Promise<void> {
     const log = (message: string): void =>
       this.deps.diagnostics.log('warn', `Could not remove the session of ${sessionId}: ${message}`)
-    const removal = hiddenRemoval(runtime.agentId, runtime.init)
-    if (removal) {
-      await removeHiddenSession(runtime, acpSessionId, removal, log)
+    if (runtime.connection.hiddenSessions) {
+      await runtime.connection.removeHidden(acpSessionId, log)
     } else if (runtime.init.capabilities.closeSession) {
       runtime.connection.unregister(acpSessionId)
       await runtime.connection.closeSession(acpSessionId).catch((error: unknown) => {
@@ -2656,8 +2651,7 @@ export class SessionManager {
           setup = await connection.loadSession(
             acpSessionId,
             projectPath,
-            sessionMeta(live.record),
-            mcpServers,
+            sessionOptions(live.record, mcpServers),
           )
         } catch (error) {
           this.finishReplay(live, false)
@@ -2669,8 +2663,7 @@ export class SessionManager {
         const setup = await connection.resumeSession(
           acpSessionId,
           projectPath,
-          sessionMeta(live.record),
-          mcpServers,
+          sessionOptions(live.record, mcpServers),
         )
         this.opened(live, setup.config)
         if (live.thread.order.length === 0) {
@@ -3106,8 +3099,7 @@ export class SessionManager {
           await connection.resumeSession(
             record.acpSessionId,
             record.projectPath,
-            sessionMeta(record),
-            mcpServers,
+            sessionOptions(record, mcpServers),
           )
         ).config
       } catch (error) {
@@ -3277,13 +3269,12 @@ export class SessionManager {
   ): Promise<ConfigOption[]> {
     const setup = await connection.newSession(
       live.record.projectPath,
-      sessionMeta(live.record),
-      mcpServers,
+      sessionOptions(live.record, mcpServers),
     )
-    live.record.acpSessionId = setup.acpSessionId
+    live.record.acpSessionId = setup.sessionId
     this.stampConfig(live.record)
     live.rewrite = true
-    this.update(live, { acpSessionId: setup.acpSessionId })
+    this.update(live, { acpSessionId: setup.sessionId })
     this.save(live)
     return setup.config
   }
@@ -3316,8 +3307,7 @@ export class SessionManager {
       return await connection.loadSession(
         record.acpSessionId,
         record.projectPath,
-        sessionMeta(record),
-        mcpServers,
+        sessionOptions(record, mcpServers),
       )
     } finally {
       connection.unregister(record.acpSessionId, quiet)
@@ -3337,10 +3327,11 @@ export class SessionManager {
   }
 
   /**
-   * What fills the session's context, from the agent's `/context` report. It runs in a fork,
-   * deleted afterwards, so the session's own thread and history stay as they were. Null for an
-   * agent without the report. A session no turn runs in is read without attaching it: the fork
-   * starts from its transcript on disk, and the agent's idle stop ends it again.
+   * What fills the session's context, from the agent's connection when it reads it, else from the
+   * agent's `/context` report. That runs in a fork, deleted afterwards, so the session's own thread
+   * and history stay as they were. Null for an agent without either. A session no turn runs in is
+   * read without attaching it: the fork starts from its transcript on disk, and the agent's idle
+   * stop ends it again.
    */
   context(sessionId: string): Promise<ContextBreakdown | null> {
     const running = this.contextRuns.get(sessionId)
@@ -3357,12 +3348,24 @@ export class SessionManager {
   private async readContext(sessionId: string): Promise<ContextBreakdown | null> {
     const live = this.live.get(sessionId)
     const record = live?.record ?? this.recordOf(sessionId)
-    if (!hasContextReport(record.agentId) || record.origin === 'subagent') return null
+    if (!this.deps.agents.hasContext(record.agentId) || record.origin === 'subagent') return null
     const status = live?.thread.session.status ?? 'closed'
     const running =
       status === 'starting' || status === 'running' || status === 'awaiting_permission'
     if (running) throw busyError(status)
     const runtime = await this.deps.agents.ensureReady(record.agentId)
+    const { connection } = runtime
+    if (connection.readContext) {
+      try {
+        return await connection.readContext(
+          record.acpSessionId,
+          record.projectPath,
+          sessionOptions(record),
+        )
+      } catch (error) {
+        throw agentError(error)
+      }
+    }
     const agent = this.deps.agents.name(record.agentId)
     if (!runtime.init.capabilities.forkSession) {
       throw new HostError('agent_unavailable', t('session.cannotFork', { agent }))
@@ -3374,12 +3377,11 @@ export class SessionManager {
         runtime,
         async () =>
           (
-            await runtime.connection.forkSession(
-              record.acpSessionId,
-              record.projectPath,
-              hiddenSessionMeta(record.agentId, sessionMeta(record)),
-            )
-          ).acpSessionId,
+            await connection.forkSession(record.acpSessionId, record.projectPath, {
+              ...sessionOptions(record),
+              hidden: 'context',
+            })
+          ).sessionId,
         CONTEXT_REPORT,
         log,
       )
@@ -3901,9 +3903,8 @@ export class SessionManager {
       setup = await runtime.connection.forkSession(
         source.record.acpSessionId,
         source.record.projectPath,
-        sessionMeta(source.record),
+        sessionOptions(source.record, this.mcpServers(forkId, source.record, runtime)),
         cut?.point,
-        this.mcpServers(forkId, source.record, runtime),
       )
     } catch (error) {
       this.deps.mcp?.detached(forkId)
@@ -3915,7 +3916,7 @@ export class SessionManager {
       ...source.record,
       origin: 'user',
       id: forkId,
-      acpSessionId: setup.acpSessionId,
+      acpSessionId: setup.sessionId,
       title: source.thread.session.title,
       createdAt: now,
       updatedAt: now,
@@ -3941,7 +3942,7 @@ export class SessionManager {
     // meanwhile gets them from its next attach. It takes its connection only then, as an attach
     // does, so what the agent sends meanwhile waits rather than change them.
     this.update(live, {
-      acpSessionId: setup.acpSessionId,
+      acpSessionId: setup.sessionId,
       config: withUltracode(record, source.thread.session.config),
       // Nothing records the context or the totals at an earlier reply.
       usage: cut ? null : source.thread.session.usage,
@@ -4208,7 +4209,7 @@ export class SessionManager {
     try {
       const listed = await connection.listSessions(projectPath, null)
       title = listedTitle(
-        listed.sessions.find((item) => item.acpSessionId === acpSessionId)?.title ?? null,
+        listed.sessions.find((item) => item.sessionId === acpSessionId)?.title ?? null,
         firstUserMessage(live.thread),
       )
     } catch (error) {
@@ -4721,8 +4722,10 @@ export class SessionManager {
       const setup = await live.connection.resumeSession(
         live.record.acpSessionId,
         live.record.projectPath,
-        sessionMeta(live.record),
-        this.mcpServers(live.id, live.record, this.deps.agents.runtime(live.record.agentId)),
+        sessionOptions(
+          live.record,
+          this.mcpServers(live.id, live.record, this.deps.agents.runtime(live.record.agentId)),
+        ),
       )
       this.update(live, {
         status: 'ready',
@@ -5341,7 +5344,7 @@ export class SessionManager {
       throw agentError(error)
     }
     for (const item of page.sessions) {
-      const key = `${agentId}\n${item.acpSessionId}`
+      const key = `${agentId}\n${item.sessionId}`
       this.listed.delete(key)
       this.listed.set(key, { title: item.title, updatedAt: item.updatedAt })
       if (this.listed.size > LISTED_SESSIONS) {
@@ -5350,10 +5353,10 @@ export class SessionManager {
     }
     return {
       sessions: page.sessions.map((item) => ({
-        acpSessionId: item.acpSessionId,
+        acpSessionId: item.sessionId,
         title: item.title,
         updatedAt: item.updatedAt,
-        imported: this.findByAcp(agentId, item.acpSessionId) !== undefined,
+        imported: this.findByAcp(agentId, item.sessionId) !== undefined,
       })),
       nextCursor: page.nextCursor,
     }

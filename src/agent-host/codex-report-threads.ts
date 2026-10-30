@@ -4,8 +4,8 @@
 // files under `~/.codex` by hand would leave Codex's thread database behind.
 
 import os from 'node:os'
-import type { AnyMessage } from '@agentclientprotocol/sdk/unstable'
 import type { Platform } from '@shared/platform'
+import { processTransport } from './acp/connection'
 import { spawnAgent } from './agent-process'
 import { needsShell, type Env } from './find-command'
 import { samePath } from './paths'
@@ -34,6 +34,21 @@ interface ThreadPage {
 interface Waiter {
   resolve(value: unknown): void
   reject(error: Error): void
+}
+
+/** What Kettu sends: a JSON-RPC request, or a notification without an id. */
+interface Call {
+  jsonrpc: '2.0'
+  id?: number
+  method: string
+  params?: unknown
+}
+
+/** What the app-server sends, read as far as an answer to a request needs. */
+interface Received {
+  id?: unknown
+  result?: unknown
+  error?: { message: string } | null
 }
 
 /**
@@ -87,14 +102,14 @@ export async function removeReportThreads(options: ReportThreadsOptions): Promis
   })
 
   const pending = new Map<number, Waiter>()
-  const { stream } = launched.transport
+  const { stream } = processTransport(launched.transport.stdin, launched.transport.stdout)
   const writer = stream.writable.getWriter()
   const reader = stream.readable.getReader()
   const reading = (async () => {
     for (;;) {
       const { value, done } = await reader.read()
       if (done) return
-      const message = value as AnyMessage
+      const message = value as Received
       if (!('id' in message) || typeof message.id !== 'number') continue
       const waiter = pending.get(message.id)
       if (!waiter) continue
@@ -105,7 +120,7 @@ export async function removeReportThreads(options: ReportThreadsOptions): Promis
   })().catch((error: unknown) => {
     end(error as Error)
   })
-  const send = (message: AnyMessage): void => {
+  const send = (message: Call): void => {
     void writer.write(message).catch((error: unknown) => end(error as Error))
   }
 

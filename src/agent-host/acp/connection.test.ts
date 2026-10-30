@@ -5,15 +5,10 @@ import os from 'node:os'
 import { describe, expect, it } from 'vitest'
 import type { AnyMessage } from '@agentclientprotocol/sdk/unstable'
 import { applyPatches, threadEntries, threadFromSnapshot, type ThreadState } from '@shared/thread'
+import type { AuthMethodInfo, SessionTarget } from '../connection'
+import { newTurnScope } from '../session-updates'
 import { loadFakeAgent } from '../testing/harness'
-import {
-  AgentConnection,
-  inProcessTransport,
-  type AcpTransport,
-  type AuthMethodInfo,
-  type SessionTarget,
-} from './connection'
-import { newTurnScope } from './mapper'
+import { AcpConnection, inProcessTransport, type AcpTransport } from './connection'
 
 /** A target that applies the patches to a thread, so the test reads what reached the thread. */
 function threadTarget(): {
@@ -168,7 +163,7 @@ async function authAgent(authMethods: unknown[]): Promise<{
   request: Record<string, unknown>
 }> {
   let request: Record<string, unknown> | null = null
-  const connection = AgentConnection.connect(
+  const connection = AcpConnection.connect(
     scripted((message) => {
       if (message.method === 'initialize') {
         request = message.params as Record<string, unknown>
@@ -194,18 +189,18 @@ function chunk(sessionId: string, text: string): AnyMessage {
   }
 }
 
-describe('AgentConnection', () => {
+describe('AcpConnection', () => {
   it('drops the buffered updates of a session it unregisters before any target took them', async () => {
     const module = await loadFakeAgent()
     const app = module.createFakeAgent({ env: { FAKE_AGENT_DELAY_SCALE: '0' } })
-    const connection = AgentConnection.connect(inProcessTransport(app), {
+    const connection = AcpConnection.connect(inProcessTransport(app), {
       traffic: () => {},
       account: () => {},
       ignored: () => {},
       log: () => {},
     })
     await connection.initialize('0.0.0-test')
-    const { acpSessionId } = await connection.newSession(os.tmpdir())
+    const { sessionId: acpSessionId } = await connection.newSession(os.tmpdir())
     // The agent announces its commands right after it answers, before anyone registers.
     await new Promise((resolve) => setTimeout(resolve, 50))
     connection.unregister(acpSessionId)
@@ -223,7 +218,7 @@ describe('AgentConnection', () => {
 
   it('drops the startup note recorded pi-acp repeats, and keeps the rest of the session', async () => {
     const ignored: string[] = []
-    const connection = AgentConnection.connect(
+    const connection = AcpConnection.connect(
       piAgent([
         chunk('pi-session-1', STARTUP_NOTE),
         chunk('pi-session-1', 'What would you like to work on?'),
@@ -237,7 +232,7 @@ describe('AgentConnection', () => {
       },
     )
     await connection.initialize('0.0.0-test')
-    const { acpSessionId } = await connection.newSession(os.tmpdir())
+    const { sessionId: acpSessionId } = await connection.newSession(os.tmpdir())
     const { target, entries } = threadTarget()
     connection.register(acpSessionId, target)
     await new Promise((resolve) => setTimeout(resolve, 50))
@@ -251,7 +246,7 @@ describe('AgentConnection', () => {
   })
 
   it('keeps the startup note for an agent not marked with it', async () => {
-    const connection = AgentConnection.connect(
+    const connection = AcpConnection.connect(
       piAgent([
         chunk('pi-session-1', STARTUP_NOTE),
         chunk('pi-session-1', 'What would you like to work on?'),
@@ -259,7 +254,7 @@ describe('AgentConnection', () => {
       { traffic: () => {}, account: () => {}, ignored: () => {}, log: () => {} },
     )
     await connection.initialize('0.0.0-test')
-    const { acpSessionId } = await connection.newSession(os.tmpdir())
+    const { sessionId: acpSessionId } = await connection.newSession(os.tmpdir())
     const { target, entries } = threadTarget()
     connection.register(acpSessionId, target)
     await new Promise((resolve) => setTimeout(resolve, 50))
@@ -273,7 +268,7 @@ describe('AgentConnection', () => {
   })
 
   it('turns legacy modes into a mode option for an agent not marked levelsAsModes', async () => {
-    const connection = AgentConnection.connect(piAgent(), {
+    const connection = AcpConnection.connect(piAgent(), {
       traffic: () => {},
       account: () => {},
       ignored: () => {},
@@ -289,7 +284,7 @@ describe('AgentConnection', () => {
   })
 
   it('ignores the legacy modes for an agent marked levelsAsModes, which sends its levels as an option', async () => {
-    const connection = AgentConnection.connect(
+    const connection = AcpConnection.connect(
       piAgent([
         chunk('pi-session-1', 'Ready'),
         {
@@ -310,7 +305,7 @@ describe('AgentConnection', () => {
       },
     )
     await connection.initialize('0.0.0-test')
-    const { acpSessionId, config } = await connection.newSession(os.tmpdir())
+    const { sessionId: acpSessionId, config } = await connection.newSession(os.tmpdir())
     expect(config.map((option) => option.id)).toEqual(['model', 'thought_level'])
     // A `current_mode_update` finds no mode option and is dropped, so nothing changes.
     const thread = threadTarget()
@@ -321,7 +316,7 @@ describe('AgentConnection', () => {
   })
 
   it('still answers with the session capabilities and the terminal sign-in pi-acp offers', async () => {
-    const connection = AgentConnection.connect(piAgent(), {
+    const connection = AcpConnection.connect(piAgent(), {
       traffic: () => {},
       account: () => {},
       ignored: () => {},

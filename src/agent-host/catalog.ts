@@ -90,6 +90,9 @@ export type LaunchKind =
   // A script run with Electron's own Node.js, so it needs no Node.js on the machine.
   | { kind: 'node-script'; script: string }
 
+/** How Kettu talks to an agent; each protocol has its driver in `drivers.ts`. */
+export type AgentProtocol = 'acp'
+
 /** A program the adapter runs, which the user installs beside it. */
 export interface AgentRequires {
   /** The command looked up on PATH. */
@@ -104,6 +107,8 @@ export interface AgentDefinition {
   id: AgentId
   name: string
   registryId: string
+  /** The protocol it speaks; ACP when not given. */
+  protocol?: AgentProtocol
   launch: LaunchKind
   requiresNode?: string
   /** A program the adapter runs and the user installs, such as pi's `pi` (pi-acp 0.0.34). */
@@ -157,6 +162,10 @@ export interface AgentDefinition {
    * project's own, relative to its folder, and `listCommand` lists them in a session.
    */
   mcpConfig?: { project: string; listCommand?: string }
+}
+
+export function protocolOf(def: AgentDefinition): AgentProtocol {
+  return def.protocol ?? 'acp'
 }
 
 // Re-exported so a definition is still read from the catalog that lists it.

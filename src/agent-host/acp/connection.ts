@@ -18,15 +18,32 @@ import {
   type AnyMessage,
   type AuthMethod,
   type ClientConnection,
+  type ContentBlock,
   type InitializeResponse,
-  type McpServer,
+  type McpServer as AcpMcpServer,
   type SessionUpdate,
   type Stream,
 } from '@agentclientprotocol/sdk/unstable'
-import type { AgentAccount, PromptCapabilities } from '@shared/agent-host'
-import type { ConfigOption, PendingPermission, StopReason, TokenTotals } from '@shared/thread'
+import type { AgentId, ConfigOption } from '@shared/thread'
 import {
-  isStopReason,
+  AgentRequestError,
+  type AgentConnection,
+  type AgentInit,
+  type AuthMethodInfo,
+  type ConnectionHooks,
+  type ForkPoint,
+  type ListedSession,
+  type McpServer,
+  type OpenedSession,
+  type PromptBlock,
+  type PromptResult,
+  type SessionOptions,
+  type SessionSetup,
+  type SessionTarget,
+} from '../connection'
+import type { AgentTransport, MessageTransport } from '../driver'
+import { isStopReason } from '../session-updates'
+import {
   KNOWN_UPDATES,
   mapAuthStatus,
   mapConfig,
@@ -35,13 +52,10 @@ import {
   mapPermissionToolCall,
   mapSessionUpdate,
   mapTokenTotals,
-  type MapperContext,
-  type MapperOutput,
-  type ModelTokens,
-  type PromptBlock,
 } from './mapper'
-import { forkPointMeta, forksAtMessage, type ForkPoint } from './fork-point'
-import { ownTitles, type OwnTitles } from './own-titles'
+import { forkPointMeta, forksAtMessage } from './fork-point'
+import { DELETE_AGAIN_MS, hiddenRemoval, sessionMeta, type Removal } from './hidden-sessions'
+import { ownTitles } from './own-titles'
 
 /** A message-level stream to an agent, from a process's stdio or an in-process agent. */
 export interface AcpTransport {
@@ -61,109 +75,38 @@ export function processTransport(
 }
 
 /** Connects an SDK `AgentApp` through an in-memory stream pair, for tests and development. */
-export function inProcessTransport(app: AgentApp): AcpTransport {
+export function inProcessTransport(app: AgentApp): AcpTransport & MessageTransport {
   const toAgent = new TransformStream<AnyMessage, AnyMessage>()
   const toClient = new TransformStream<AnyMessage, AnyMessage>()
   const agentConnection = app.connect({ readable: toAgent.readable, writable: toClient.writable })
   return {
+    kind: 'messages',
     stream: { readable: toClient.readable, writable: toAgent.writable },
     close: () => agentConnection.close(),
   }
 }
 
-export interface PermissionRequest {
-  toolCallId: string
-  toolEntryId: string
-  /** Adds or updates the tool entry the request belongs to. */
-  output: MapperOutput
-  options: PendingPermission['options']
+/** The ACP messages over what the launcher gave the driver. */
+function acpTransport(transport: AcpTransport | AgentTransport): AcpTransport {
+  if ('kind' in transport && transport.kind === 'stdio') {
+    return processTransport(transport.stdin, transport.stdout)
+  }
+  return { stream: transport.stream as Stream, close: () => transport.close() }
 }
 
-export type PermissionAnswer = { optionId: string } | 'cancelled'
-
-/** What a live session gives the connection; Kettu types only. */
-export interface SessionTarget {
-  context(): MapperContext
-  apply(output: MapperOutput): void
-  /** Resolves with the user's answer; rejects with `signal.reason` once the agent withdraws it. */
-  requestPermission(request: PermissionRequest, signal: AbortSignal): Promise<PermissionAnswer>
-}
-
-export interface ConnectionHooks {
-  traffic(direction: 'in' | 'out', message: unknown): void
-  account(account: AgentAccount): void
-  /** Something the agent sent that Kettu does not use. */
-  ignored(acpSessionId: string | null, what: string): void
-  log(level: 'info' | 'warn' | 'error', message: string): void
+/** What ACP needs to know of the agent behind it, besides the neutral hooks. */
+export interface AcpOptions {
+  /** The catalog's agent, whose adapter's `_meta` and hidden-session removal apply. */
+  agentId?: AgentId
+  /** Its name, for an error about it. */
+  name?: string
   /** The agent sends its thought levels again as legacy `modes`, which are ignored. */
   levelsAsModes?: boolean
   /** The agent sends its startup note as the first message after `session/new`, which is dropped. */
   startupNote?: boolean
 }
 
-export interface AuthMethodInfo {
-  id: string
-  name: string
-  description?: string
-  type: 'agent' | 'terminal'
-  /** The program a terminal sign-in runs, when the agent names it instead of deriving it. */
-  command?: string
-  args: string[]
-  env: Record<string, string>
-}
-
-export interface AgentInit {
-  protocolVersion: number
-  name: string | null
-  version: string | null
-  capabilities: {
-    loadSession: boolean
-    listSessions: boolean
-    resumeSession: boolean
-    closeSession: boolean
-    deleteSession: boolean
-    forkSession: boolean
-    /** `session/fork` up to a message, which only some adapters take, outside ACP. */
-    forkAtMessage: boolean
-    /** How its own session titles arrive, or null when Kettu writes one. */
-    ownTitles: OwnTitles | null
-    logout: boolean
-    /** `_session/steering`, an extension advertised in the response's own `_meta`. */
-    steering: boolean
-    /** MCP servers over HTTP, which the artifacts service needs. */
-    mcpHttp: boolean
-    prompt: PromptCapabilities
-  }
-  authMethods: AuthMethodInfo[]
-  /** The raw `agentCapabilities`, for diagnostics. */
-  raw: unknown
-}
-
-export interface SessionSetup {
-  config: ConfigOption[]
-}
-
-export interface ListedSession {
-  acpSessionId: string
-  title: string | null
-  updatedAt: string | null
-  cwd: string
-}
-
-export type AgentErrorKind = 'auth_required' | 'agent_error' | 'closed'
-
-/** An ACP request that failed, in Kettu's terms. */
-export class AgentRequestError extends Error {
-  constructor(
-    readonly kind: AgentErrorKind,
-    message: string,
-    readonly code: number | null = null,
-    readonly data?: unknown,
-  ) {
-    super(message)
-    this.name = 'AgentRequestError'
-  }
-}
+export type AcpHooks = ConnectionHooks & AcpOptions
 
 const AUTH_REQUIRED = -32000
 
@@ -243,7 +186,51 @@ const CHILD_SESSIONS = 1_000
 // Sessions Kettu closed: their late updates are dropped, not kept for a later register.
 const CLOSED_SESSIONS = 256
 
-export class AgentConnection {
+/** Kettu's prompt blocks as ACP content blocks. */
+function contentBlocks(prompt: readonly PromptBlock[]): ContentBlock[] {
+  return prompt.map((block): ContentBlock => {
+    switch (block.type) {
+      case 'text':
+        return { type: 'text', text: block.text }
+      case 'image':
+        return {
+          type: 'image',
+          mimeType: block.mimeType,
+          data: block.data,
+          ...(block.uri !== undefined ? { uri: block.uri } : {}),
+        }
+      case 'resource_link':
+        return {
+          type: 'resource_link',
+          uri: block.uri,
+          name: block.name,
+          ...(block.mimeType !== undefined ? { mimeType: block.mimeType } : {}),
+          ...(block.size !== undefined ? { size: block.size } : {}),
+        }
+      case 'resource':
+        return {
+          type: 'resource',
+          resource: {
+            uri: block.resource.uri,
+            mimeType: block.resource.mimeType,
+            text: block.resource.text,
+          },
+        }
+    }
+  })
+}
+
+/** Kettu's MCP servers as ACP's. */
+function mcpServers(servers: readonly McpServer[] | undefined): AcpMcpServer[] {
+  return (servers ?? []).map((server) => ({
+    type: 'http',
+    name: server.name,
+    url: server.url,
+    headers: server.headers.map(({ name, value }) => ({ name, value })),
+  }))
+}
+
+export class AcpConnection implements AgentConnection {
   private readonly connection: ClientConnection
   private readonly targets = new Map<string, SessionTarget>()
   private readonly pending = new Map<string, { at: number; updates: SessionUpdate[] }>()
@@ -254,10 +241,12 @@ export class AgentConnection {
   private readonly children = new Map<string, string>()
   /** The startup note a session others opened by `session/new` sends before its first prompt. */
   private readonly pendingStartup = new Map<string, string>()
+  /** How its hidden sessions go, once `initialize` has answered. */
+  private removal: Removal | null = null
 
   private constructor(
     private readonly transport: AcpTransport,
-    private readonly hooks: ConnectionHooks,
+    private readonly hooks: AcpHooks,
   ) {
     const app = client({ name: 'Kettu' })
       .onNotification(methods.client.session.update, (ctx) => {
@@ -300,8 +289,8 @@ export class AgentConnection {
     this.connection = app.connect(this.tap(transport.stream))
   }
 
-  static connect(transport: AcpTransport, hooks: ConnectionHooks): AgentConnection {
-    return new AgentConnection(transport, hooks)
+  static connect(transport: AcpTransport | AgentTransport, hooks: AcpHooks): AcpConnection {
+    return new AcpConnection(acpTransport(transport), hooks)
   }
 
   /** Records traffic, and drops update variants the SDK's schema would reject noisily. */
@@ -336,21 +325,21 @@ export class AgentConnection {
     return { readable, writable }
   }
 
-  private deliver(acpSessionId: string, update: SessionUpdate): void {
-    if (this.dropStartup(acpSessionId, update)) return
-    this.learnChild(acpSessionId, update)
-    const target = this.targets.get(acpSessionId)
+  private deliver(sessionId: string, update: SessionUpdate): void {
+    if (this.dropStartup(sessionId, update)) return
+    this.learnChild(sessionId, update)
+    const target = this.targets.get(sessionId)
     if (target) {
       target.apply(mapSessionUpdate(update, target.context()))
       return
     }
-    const collector = this.collectors.get(acpSessionId)
+    const collector = this.collectors.get(sessionId)
     if (collector) {
       collector(update)
       return
     }
-    if (this.unregistered.has(acpSessionId)) {
-      this.hooks.ignored(acpSessionId, 'update for a session Kettu closed')
+    if (this.unregistered.has(sessionId)) {
+      this.hooks.ignored(sessionId, 'update for a session Kettu closed')
       return
     }
     const now = Date.now()
@@ -360,14 +349,14 @@ export class AgentConnection {
         this.hooks.ignored(id, `${entry.updates.length} updates for a session Kettu does not have`)
       }
     }
-    let entry = this.pending.get(acpSessionId)
+    let entry = this.pending.get(sessionId)
     if (!entry) {
       if (this.pending.size >= PENDING_SESSIONS) {
-        this.hooks.ignored(acpSessionId, 'update for an unknown session')
+        this.hooks.ignored(sessionId, 'update for an unknown session')
         return
       }
       entry = { at: now, updates: [] }
-      this.pending.set(acpSessionId, entry)
+      this.pending.set(sessionId, entry)
     }
     if (entry.updates.length < PENDING_UPDATES) entry.updates.push(update)
   }
@@ -376,26 +365,26 @@ export class AgentConnection {
    * Drops the startup note an agent marked `startupNote` sends after `session/new`: the first
    * agent message before its first prompt, when its text is the answer's `_meta.piAcp.startupInfo`.
    */
-  private dropStartup(acpSessionId: string, update: SessionUpdate): boolean {
-    const note = this.pendingStartup.get(acpSessionId)
+  private dropStartup(sessionId: string, update: SessionUpdate): boolean {
+    const note = this.pendingStartup.get(sessionId)
     if (note === undefined) return false
     if (update.sessionUpdate !== 'agent_message_chunk') return false
-    this.pendingStartup.delete(acpSessionId)
+    this.pendingStartup.delete(sessionId)
     if (update.content.type !== 'text' || update.content.text !== note) return false
-    this.hooks.ignored(acpSessionId, 'startup note')
+    this.hooks.ignored(sessionId, 'startup note')
     return true
   }
 
-  private learnChild(acpSessionId: string, update: SessionUpdate): void {
+  private learnChild(sessionId: string, update: SessionUpdate): void {
     const child = (
       update._meta as Record<string, { id?: unknown } | undefined> | null | undefined
     )?.[CHILD_SESSION_META]
     const id = child?.id
-    if (typeof id !== 'string' || id === acpSessionId || this.children.get(id) === acpSessionId) {
+    if (typeof id !== 'string' || id === sessionId || this.children.get(id) === sessionId) {
       return
     }
     this.children.delete(id)
-    this.children.set(id, acpSessionId)
+    this.children.set(id, sessionId)
     if (this.children.size > CHILD_SESSIONS) {
       this.children.delete(this.children.keys().next().value!)
     }
@@ -407,33 +396,33 @@ export class AgentConnection {
   }
 
   /** Routes a session's updates to `target`, first replaying any that arrived early. */
-  register(acpSessionId: string, target: SessionTarget): void {
-    this.targets.set(acpSessionId, target)
-    this.unregistered.delete(acpSessionId)
-    const early = this.pending.get(acpSessionId)
+  register(sessionId: string, target: SessionTarget): void {
+    this.targets.set(sessionId, target)
+    this.unregistered.delete(sessionId)
+    const early = this.pending.get(sessionId)
     if (!early) return
-    this.pending.delete(acpSessionId)
+    this.pending.delete(sessionId)
     for (const update of early.updates) {
-      if (!this.dropStartup(acpSessionId, update)) {
+      if (!this.dropStartup(sessionId, update)) {
         target.apply(mapSessionUpdate(update, target.context()))
       }
     }
   }
 
-  unregister(acpSessionId: string, target?: SessionTarget): void {
-    if (target && this.targets.get(acpSessionId) !== target) return
-    this.targets.delete(acpSessionId)
-    this.pending.delete(acpSessionId)
-    this.pendingStartup.delete(acpSessionId)
-    this.unregistered.add(acpSessionId)
+  unregister(sessionId: string, target?: SessionTarget): void {
+    if (target && this.targets.get(sessionId) !== target) return
+    this.targets.delete(sessionId)
+    this.pending.delete(sessionId)
+    this.pendingStartup.delete(sessionId)
+    this.unregistered.add(sessionId)
     if (this.unregistered.size > CLOSED_SESSIONS) {
       this.unregistered.delete(this.unregistered.values().next().value!)
     }
   }
 
   /** Updates for a session Kettu closed wait for its next register again, like early ones. */
-  reopen(acpSessionId: string): void {
-    this.unregistered.delete(acpSessionId)
+  reopen(sessionId: string): void {
+    this.unregistered.delete(sessionId)
   }
 
   get closed(): Promise<void> {
@@ -491,9 +480,14 @@ export class AgentConnection {
         signal ? { cancellationSignal: signal } : undefined,
       ),
     )
+    if (init.protocolVersion !== 1) {
+      throw new Error(
+        `${this.hooks.name ?? 'The agent'} speaks an unsupported protocol version (${init.protocolVersion}).`,
+      )
+    }
     const caps = init.agentCapabilities ?? {}
     const session = caps.sessionCapabilities ?? {}
-    return {
+    const result: AgentInit = {
       protocolVersion: init.protocolVersion,
       name: init.agentInfo?.title ?? init.agentInfo?.name ?? null,
       version: init.agentInfo?.version ?? null,
@@ -507,6 +501,7 @@ export class AgentConnection {
         forkAtMessage: session.fork != null && forksAtMessage(init.agentInfo),
         ownTitles: ownTitles(init.agentInfo),
         logout: caps.auth?.logout != null,
+        // `_session/steering`, an extension advertised in the response's own `_meta`.
         steering:
           (init._meta as { steering?: { supported?: unknown } } | null | undefined)?.steering
             ?.supported === true,
@@ -520,17 +515,20 @@ export class AgentConnection {
       authMethods: (init.authMethods ?? []).map(authMethod),
       raw: init.agentCapabilities ?? null,
     }
+    this.removal = hiddenRemoval(this.hooks.agentId, result.capabilities)
+    return result
   }
 
-  async newSession(
-    cwd: string,
-    meta?: Record<string, unknown>,
-    mcpServers: McpServer[] = [],
-  ): Promise<SessionSetup & { acpSessionId: string }> {
+  private meta(options: SessionOptions): Record<string, unknown> | undefined {
+    return sessionMeta(this.hooks.agentId, options)
+  }
+
+  async newSession(cwd: string, options: SessionOptions = {}): Promise<OpenedSession> {
+    const meta = this.meta(options)
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.new, {
         cwd,
-        mcpServers,
+        mcpServers: mcpServers(options.mcpServers),
         ...(meta ? { _meta: meta } : {}),
       }),
     )
@@ -541,22 +539,22 @@ export class AgentConnection {
       this.pendingStartup.set(response.sessionId, startup)
     }
     return {
-      acpSessionId: response.sessionId,
+      sessionId: response.sessionId,
       config: this.config(response.configOptions, response.modes),
     }
   }
 
   async loadSession(
-    acpSessionId: string,
+    sessionId: string,
     cwd: string,
-    meta?: Record<string, unknown>,
-    mcpServers: McpServer[] = [],
+    options: SessionOptions = {},
   ): Promise<SessionSetup> {
+    const meta = this.meta(options)
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.load, {
-        sessionId: acpSessionId,
+        sessionId,
         cwd,
-        mcpServers,
+        mcpServers: mcpServers(options.mcpServers),
         ...(meta ? { _meta: meta } : {}),
       }),
     )
@@ -564,16 +562,16 @@ export class AgentConnection {
   }
 
   async resumeSession(
-    acpSessionId: string,
+    sessionId: string,
     cwd: string,
-    meta?: Record<string, unknown>,
-    mcpServers: McpServer[] = [],
+    options: SessionOptions = {},
   ): Promise<SessionSetup> {
+    const meta = this.meta(options)
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.resume, {
-        sessionId: acpSessionId,
+        sessionId,
         cwd,
-        mcpServers,
+        mcpServers: mcpServers(options.mcpServers),
         ...(meta ? { _meta: meta } : {}),
       }),
     )
@@ -585,36 +583,34 @@ export class AgentConnection {
    * `point` for an agent with `forkAtMessage`.
    */
   async forkSession(
-    acpSessionId: string,
+    sessionId: string,
     cwd: string,
-    meta?: Record<string, unknown>,
+    options: SessionOptions = {},
     point?: ForkPoint,
-    mcpServers: McpServer[] = [],
-  ): Promise<SessionSetup & { acpSessionId: string }> {
+  ): Promise<OpenedSession> {
+    const meta = this.meta(options)
     const forkMeta = point ? { ...meta, ...forkPointMeta(point) } : meta
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.fork, {
-        sessionId: acpSessionId,
+        sessionId,
         cwd,
-        mcpServers,
+        mcpServers: mcpServers(options.mcpServers),
         ...(forkMeta ? { _meta: forkMeta } : {}),
       }),
     )
     return {
-      acpSessionId: response.sessionId,
+      sessionId: response.sessionId,
       config: this.config(response.configOptions, response.modes),
     }
   }
 
-  async closeSession(acpSessionId: string): Promise<void> {
-    await this.call(() =>
-      this.connection.agent.request(methods.agent.session.close, { sessionId: acpSessionId }),
-    )
+  async closeSession(sessionId: string): Promise<void> {
+    await this.call(() => this.connection.agent.request(methods.agent.session.close, { sessionId }))
   }
 
-  async deleteSession(acpSessionId: string): Promise<void> {
+  async deleteSession(sessionId: string): Promise<void> {
     await this.call(() =>
-      this.connection.agent.request(methods.agent.session.delete, { sessionId: acpSessionId }),
+      this.connection.agent.request(methods.agent.session.delete, { sessionId }),
     )
   }
 
@@ -630,7 +626,7 @@ export class AgentConnection {
     )
     return {
       sessions: response.sessions.map((info) => ({
-        acpSessionId: info.sessionId,
+        sessionId: info.sessionId,
         title: info.title ?? null,
         updatedAt: info.updatedAt ?? null,
         cwd: info.cwd,
@@ -639,16 +635,13 @@ export class AgentConnection {
     }
   }
 
-  async prompt(
-    acpSessionId: string,
-    prompt: readonly PromptBlock[],
-  ): Promise<{ stopReason: StopReason; tokens: TokenTotals | null; models: ModelTokens[] }> {
+  async prompt(sessionId: string, prompt: readonly PromptBlock[]): Promise<PromptResult> {
     // The note comes before a session's first prompt; a message after it is the agent's own.
-    this.pendingStartup.delete(acpSessionId)
+    this.pendingStartup.delete(sessionId)
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.prompt, {
-        sessionId: acpSessionId,
-        prompt: [...prompt],
+        sessionId,
+        prompt: contentBlocks(prompt),
       }),
     )
     return {
@@ -658,14 +651,10 @@ export class AgentConnection {
     }
   }
 
-  /**
-   * Prompts a session no thread shows, such as one made for a report, with `text`, and returns
-   * the text of each agent message of the turn, in order. Its other updates are dropped.
-   */
-  async collect(acpSessionId: string, text: string): Promise<string[]> {
+  async collect(sessionId: string, text: string): Promise<string[]> {
     const messages: { id: string | null; text: string }[] = []
-    this.pending.delete(acpSessionId)
-    this.collectors.set(acpSessionId, (update) => {
+    this.pending.delete(sessionId)
+    this.collectors.set(sessionId, (update) => {
       if (update.sessionUpdate !== 'agent_message_chunk' || update.content.type !== 'text') return
       const id = update.messageId ?? null
       const last = messages.at(-1)
@@ -673,10 +662,10 @@ export class AgentConnection {
       else messages.push({ id, text: update.content.text })
     })
     try {
-      await this.prompt(acpSessionId, [{ type: 'text', text }])
+      await this.prompt(sessionId, [{ type: 'text', text }])
     } finally {
-      this.collectors.delete(acpSessionId)
-      this.unregister(acpSessionId)
+      this.collectors.delete(sessionId)
+      this.unregister(sessionId)
     }
     return messages.map((message) => message.text)
   }
@@ -686,13 +675,13 @@ export class AgentConnection {
    * with no turn running answers so instead of starting one, and the message stays Kettu's.
    */
   async steer(
-    acpSessionId: string,
+    sessionId: string,
     prompt: readonly PromptBlock[],
   ): Promise<'injected' | 'promptRequired'> {
     const response = await this.call(() =>
       this.connection.agent.request<{ outcome?: unknown }>('_session/steering', {
-        sessionId: acpSessionId,
-        prompt: [...prompt],
+        sessionId,
+        prompt: contentBlocks(prompt),
         _meta: { steering: { idleBehavior: 'promptRequired' } },
       }),
     )
@@ -705,23 +694,18 @@ export class AgentConnection {
     )
   }
 
-  async cancel(acpSessionId: string): Promise<void> {
-    await this.call(() =>
-      this.connection.agent.notify(methods.agent.session.cancel, { sessionId: acpSessionId }),
-    )
+  async cancel(sessionId: string): Promise<void> {
+    await this.call(() => this.connection.agent.notify(methods.agent.session.cancel, { sessionId }))
   }
 
-  async setMode(acpSessionId: string, modeId: string): Promise<void> {
+  async setMode(sessionId: string, modeId: string): Promise<void> {
     await this.call(() =>
-      this.connection.agent.request(methods.agent.session.setMode, {
-        sessionId: acpSessionId,
-        modeId,
-      }),
+      this.connection.agent.request(methods.agent.session.setMode, { sessionId, modeId }),
     )
   }
 
   async setConfigOption(
-    acpSessionId: string,
+    sessionId: string,
     optionId: string,
     value: string | boolean,
   ): Promise<ConfigOption[]> {
@@ -729,8 +713,8 @@ export class AgentConnection {
       this.connection.agent.request(
         methods.agent.session.setConfigOption,
         typeof value === 'boolean'
-          ? { sessionId: acpSessionId, configId: optionId, type: 'boolean', value }
-          : { sessionId: acpSessionId, configId: optionId, value },
+          ? { sessionId, configId: optionId, type: 'boolean', value }
+          : { sessionId, configId: optionId, value },
       ),
     )
     return this.config(response.configOptions, null)
@@ -742,6 +726,27 @@ export class AgentConnection {
 
   async logout(): Promise<void> {
     await this.call(() => this.connection.agent.request(methods.agent.logout, {}))
+  }
+
+  get hiddenSessions(): boolean {
+    return this.removal !== null
+  }
+
+  async removeHidden(sessionId: string, log: (message: string) => void): Promise<void> {
+    this.unregister(sessionId)
+    const removal = this.removal
+    if (!removal) return
+    const failed = (error: unknown): void => {
+      if (!this.isClosed) log((error as Error).message)
+    }
+    if (removal === 'close') {
+      await this.closeSession(sessionId).catch(failed)
+      return
+    }
+    await this.deleteSession(sessionId).catch(failed)
+    for (const delay of removal === 'delete-again' ? DELETE_AGAIN_MS : []) {
+      setTimeout(() => void this.deleteSession(sessionId).catch(failed), delay).unref()
+    }
   }
 }
 

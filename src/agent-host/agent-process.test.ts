@@ -7,11 +7,11 @@ import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { applyPatches, threadFromSnapshot, type ThreadState } from '@shared/thread'
-import { AgentConnection, type ConnectionHooks, type SessionTarget } from './acp/connection'
-import { newTurnScope } from './acp/mapper'
+import { AcpConnection } from './acp/connection'
 import { spawnAgent, spawnArguments, STOP_TIMINGS } from './agent-process'
 import { processLauncher, type AgentLauncher } from './agents'
 import type { LaunchSpec } from './catalog'
+import type { ConnectionHooks, SessionTarget } from './connection'
 import {
   processControl,
   runTool,
@@ -19,6 +19,7 @@ import {
   type ProcessControl,
   type ToolOptions,
 } from './process-tree'
+import { newTurnScope } from './session-updates'
 import { startTestHost } from './testing/harness'
 
 const FAKE_AGENT = path.resolve('tools/fake-agent/main.ts')
@@ -82,12 +83,12 @@ function start(env: Record<string, string> = {}, timings = { eofMs: 2_000, termM
 describe('spawnAgent', () => {
   it('speaks ACP over stdio and stops cleanly on EOF', async () => {
     const { agent, stderr, events } = start()
-    const connection = AgentConnection.connect(agent.transport, hooks)
+    const connection = AcpConnection.connect(agent.transport, hooks)
     const init = await connection.initialize('0.0.0-test')
     expect(init).toMatchObject({ protocolVersion: 1, version: '0.1.0', name: 'Fake agent' })
     expect(init.capabilities).toMatchObject({ loadSession: true, listSessions: true, logout: true })
 
-    const { acpSessionId } = await connection.newSession(process.cwd())
+    const { sessionId: acpSessionId } = await connection.newSession(process.cwd())
     let thread: ThreadState = threadFromSnapshot({
       session: {
         id: 's',
@@ -149,9 +150,9 @@ describe('spawnAgent', () => {
 
   it('reports a crash with its exit code', async () => {
     const { agent } = start()
-    const connection = AgentConnection.connect(agent.transport, hooks)
+    const connection = AcpConnection.connect(agent.transport, hooks)
     await connection.initialize('0.0.0-test')
-    const { acpSessionId } = await connection.newSession(process.cwd())
+    const { sessionId: acpSessionId } = await connection.newSession(process.cwd())
     const prompt = connection.prompt(acpSessionId, [{ type: 'text', text: '/crash --code 7' }])
     await expect(prompt).rejects.toMatchObject({ kind: 'closed' })
     expect(await agent.exited).toMatchObject({ code: 7 })

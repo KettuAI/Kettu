@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { SessionSummary } from '@shared/agent-host'
 import type { Attachment, ThreadEntry, ToolEntry, UserContent } from '@shared/thread'
-import { AgentRequestError } from './acp/connection'
+import { AgentRequestError } from './connection'
 import type { AgentLauncher } from './agents'
 import { forkCut, unknownSession } from './sessions'
 import {

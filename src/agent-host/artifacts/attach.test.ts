@@ -3,10 +3,10 @@
 
 import { mkdir, realpath } from 'node:fs/promises'
 import path from 'node:path'
-import type { McpServer } from '@agentclientprotocol/sdk/unstable'
 import { DEFAULT_SETTINGS, type HostSettings } from '@shared/settings'
 import type { ArtifactEntry } from '@shared/thread'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { McpServer } from '../connection'
 import {
   startTestHost,
   type InProcessLauncher,

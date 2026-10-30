@@ -1,6 +1,6 @@
 // The ACP v1 mapper: turns ACP messages into patches against Kettu's session model.
-// Together with connection.ts, the only code that knows ACP types. A v2 mapper would sit
-// next to it and produce the same patches.
+// Together with connection.ts, the only code that knows ACP types. Another protocol's mapper
+// produces the same patches and effects, from session-updates.ts.
 
 import type * as acp from '@agentclientprotocol/sdk/unstable'
 import type { AgentAccount, PlanLimit } from '@shared/agent-host'
@@ -14,7 +14,6 @@ import type {
   PermissionKind,
   PlanItem,
   SlashCommand,
-  StopReason,
   ThreadEntry,
   ThreadState,
   TokenTotals,
@@ -23,89 +22,18 @@ import type {
   ToolKind,
   UserContent,
 } from '@shared/thread'
-import { ULTRACODE_OPTION_ID } from '@shared/thread'
+import type { ModelTokens } from '../connection'
 import { currentLocale, t } from '../i18n'
-
-/** Per-turn bookkeeping the mapper needs to find "current" entries. */
-export interface TurnScope {
-  planId: string | null
-  /** Thought entries still streaming, with the time their first chunk arrived. */
-  thoughts: Map<string, number>
-}
-
-export function newTurnScope(): TurnScope {
-  return { planId: null, thoughts: new Map() }
-}
-
-export interface MapperContext {
-  readonly thread: ThreadState
-  /** True while `session/load` replays history into the thread. */
-  readonly replaying: boolean
-  /**
-   * True while it replays a session whose adapter sends each part of a thought as a chunk of its
-   * own, with nothing between them.
-   */
-  readonly thoughtParts: boolean
-  /** The user stopped the turn and the agent has not answered its prompt yet. */
-  readonly cancelling: boolean
-  readonly scope: TurnScope
-  readonly now: number
-  /** The next `e:<n>` id of this session. */
-  nextId(): string
-  /** The Kettu id of a session of the same agent, by its ACP id. */
-  sessionIdFor(acpSessionId: string): string | null
-}
-
-export type SubagentState =
-  | { kind: 'running' }
-  | { kind: 'requires_action' }
-  | {
-      kind: 'idle'
-      stopReason: string | null
-      error: { message: string; detail?: string } | null
-      tokens: TokenTotals | null
-    }
-  | { kind: 'unknown' }
-  | { kind: 'cleared' }
-
-export type MapperEffect =
-  | {
-      kind: 'subagent'
-      acpSessionId: string
-      // Omitted fields are unchanged; null clears, as the subagents RFD specifies.
-      title?: string | null
-      description?: string | null
-      canCancel?: boolean
-      state?: SubagentState
-    }
-  | { kind: 'limit'; limit: PlanLimit }
-  | { kind: 'title'; title: string | null }
-  | { kind: 'ignored'; variant: string; detail: string }
-  | {
-      kind: 'tool'
-      phase: 'started' | 'ended'
-      toolCallId: string
-      entryId: string
-      toolKind: ToolKind
-      output: string
-    }
-  // Work the agent runs on after its tool call ended, such as a command in the background.
-  | { kind: 'background' }
-  // The session's own thread sent a request to its model, which renews its prompt cache.
-  | { kind: 'request' }
-  // An image replayed by `session/load`, whose bytes the session keeps in its thread store.
-  | {
-      kind: 'replayImage'
-      entryId: string
-      attachmentId: string
-      mimeType: string
-      data: string // base64
-    }
-
-export interface MapperOutput {
-  patches: Patch[]
-  effects: MapperEffect[]
-}
+import {
+  firstUserMessage,
+  mergeConfig,
+  repeatsFirstMessage,
+  SYNTHETIC_MODE_ID,
+  type MapperContext,
+  type MapperEffect,
+  type MapperOutput,
+  type SubagentState,
+} from '../session-updates'
 
 /** Every `sessionUpdate` the SDK's unstable v1 schema accepts; others never reach the SDK. */
 export const KNOWN_UPDATES: ReadonlySet<string> = new Set([
@@ -132,35 +60,6 @@ export const KNOWN_UPDATES: ReadonlySet<string> = new Set([
 
 export function toLf(text: string): string {
   return text.replace(/\r\n?/g, '\n')
-}
-
-/** The text of the thread's first user message, or null when it is not in memory. */
-export function firstUserMessage(thread: ThreadState): string | null {
-  for (const id of thread.order) {
-    const entry = thread.byId[id]
-    if (entry?.kind !== 'user') continue
-    const text = entry.content
-      .flatMap((part) => (part.type === 'text' ? [part.text] : []))
-      .join('\n')
-    return text === '' ? null : text
-  }
-  return null
-}
-
-const collapse = (text: string): string => text.replace(/\s+/g, ' ').trim()
-
-/**
- * Whether a title is only the first user message again: the whole of it, whatever its spacing, or
- * the message cut and ending in an ellipsis. Adapters send the first message as the title just
- * before their own comes.
- */
-export function repeatsFirstMessage(title: string, message: string | null): boolean {
-  if (message === null) return false
-  const said = collapse(message)
-  if (said === '') return false
-  const cut = collapse(title)
-  if (said === cut) return true
-  return cut.endsWith('…') && cut.length > 1 && said.startsWith(cut.slice(0, -1))
 }
 
 // Content blocks.
@@ -881,8 +780,6 @@ const CONFIG_CATEGORIES: ReadonlySet<string> = new Set([
   'thought_level',
 ])
 
-export const SYNTHETIC_MODE_ID = '__mode'
-
 function mapConfigOption(option: acp.SessionConfigOption): ConfigOption | null {
   const category =
     option.category && CONFIG_CATEGORIES.has(option.category)
@@ -944,23 +841,6 @@ export function mapConfig(
     })
   }
   return mapped
-}
-
-/**
- * New options replace the old ones, keeping the synthetic mode when nothing replaces it and the
- * host's own ultracode switch, which the agent never sends.
- */
-export function mergeConfig(
-  previous: readonly ConfigOption[],
-  next: ConfigOption[],
-): ConfigOption[] {
-  const synthetic = previous.find((option) => option.id === SYNTHETIC_MODE_ID)
-  const ultracode = previous.find((option) => option.id === ULTRACODE_OPTION_ID)
-  const merged =
-    synthetic && !next.some((option) => option.category === 'mode') ? [synthetic, ...next] : next
-  return ultracode && !merged.some((option) => option.id === ULTRACODE_OPTION_ID)
-    ? [...merged, ultracode]
-    : merged
 }
 
 function mapCommands(commands: readonly acp.AvailableCommand[]): SlashCommand[] {
@@ -1073,12 +953,6 @@ export function mapTokenTotals(usage: acp.Usage | null | undefined): TokenTotals
   }
 }
 
-/** A turn's tokens for one model, as the agent names it. */
-export interface ModelTokens {
-  model: string
-  tokens: TokenTotals
-}
-
 const count = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 
@@ -1119,24 +993,6 @@ export function mapModelUsage(meta: unknown): ModelTokens[] {
   return models
 }
 
-/**
- * A session's totals with one more turn in them. The adapters report each turn's own counts, though
- * ACP's schema calls them totals. A count no turn has reported yet stays null.
- */
-export function addTokenTotals(sum: TokenTotals | null, turn: TokenTotals): TokenTotals {
-  if (!sum) return turn
-  const add = (a: number | null, b: number | null): number | null =>
-    a === null ? b : b === null ? a : a + b
-  return {
-    total: sum.total + turn.total,
-    input: sum.input + turn.input,
-    output: sum.output + turn.output,
-    thought: add(sum.thought, turn.thought),
-    cacheRead: add(sum.cacheRead, turn.cacheRead),
-    cacheWrite: add(sum.cacheWrite, turn.cacheWrite),
-  }
-}
-
 type CompactionStatus = Extract<ThreadEntry, { kind: 'compaction' }>['status']
 
 const NOTICE_SEVERITIES: ReadonlySet<string> = new Set(['info', 'warning', 'error'])
@@ -1146,18 +1002,6 @@ const COMPACTION_STATUSES: ReadonlySet<string> = new Set([
   'failed',
   'cancelled',
 ])
-const STOP_REASONS: ReadonlySet<string> = new Set([
-  'end_turn',
-  'max_tokens',
-  'max_turn_requests',
-  'refusal',
-  'cancelled',
-])
-
-export function isStopReason(value: unknown): value is StopReason {
-  return typeof value === 'string' && STOP_REASONS.has(value)
-}
-
 function mapCompaction(ctx: MapperContext, out: Output, update: acp.CompactionUpdate): void {
   const id = `c:${update.compactionId}`
   const existing = ctx.thread.byId[id]
@@ -1363,7 +1207,7 @@ export function mapSessionUpdate(update: acp.SessionUpdate, ctx: MapperContext):
     case 'subagent_update': {
       const effect: Extract<MapperEffect, { kind: 'subagent' }> = {
         kind: 'subagent',
-        acpSessionId: update.sessionId,
+        sessionId: update.sessionId,
       }
       if (update.title !== undefined) effect.title = update.title
       if (update.description !== undefined) effect.description = update.description
@@ -1415,29 +1259,4 @@ export function mapPermissionOptions(
     name: option.name,
     kind: option.kind as PermissionKind,
   }))
-}
-
-/** A content block of a prompt as it goes to the agent. */
-export type PromptBlock = acp.ContentBlock
-
-export function promptBlocks(content: readonly UserContent[]): PromptBlock[] {
-  return content.map((item): acp.ContentBlock => {
-    if (item.type === 'text') return { type: 'text', text: item.text }
-    const ref = item.ref
-    switch (ref.kind) {
-      case 'image':
-        return { type: 'image', mimeType: ref.mimeType, data: ref.data }
-      case 'link':
-        return { type: 'resource_link', uri: ref.uri, name: ref.name }
-      // The host turns attachments into images and links before a prompt goes; never reached.
-      case 'attachment':
-        return { type: 'text', text: ref.attachment.name }
-      // Only agents send sounds and clips, so no prompt carries one; never reached.
-      case 'audio':
-      case 'video':
-        return { type: 'text', text: ref.mimeType }
-      default:
-        return { type: 'text', text: ref.label }
-    }
-  })
 }
