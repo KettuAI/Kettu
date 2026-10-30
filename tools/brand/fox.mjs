@@ -106,6 +106,20 @@ const BACKGROUND = `
 const EDGE_LIGHT =
   '<use xlink:href="#badge" fill="none" stroke="url(#edgeLight)" stroke-width="6" opacity=".58" clip-path="url(#badgeClip)"/>'
 
+// The fox's own shapes, which the glyph fills in one color.
+const SHAPES = {
+  'ear-left':
+    'M 328 324.5 C 353 323.5 493.8 388.3 559.5 494.5 C 526 560.5 425 635.5 350.5 638.5 C 311.5 583.8 292.6 489.2 300 408 C 307.2 358.1 316.5 325.1 328 324.5 Z',
+  'ear-right':
+    'M 912 324.5 C 887 323.5 746.2 388.3 680.5 494.5 C 714 560.5 815 635.5 889.5 638.5 C 928.5 583.8 947.4 489.2 940 408 C 932.8 358.1 923.5 325.1 912 324.5 Z',
+  forehead:
+    'M 362 633 C 417.3 543.8 521.9 488 620 488 C 718.1 488 822.7 543.8 878 633 C 882 651 861.6 709.9 847.6 719.9 C 786.5 754.8 730.1 804.6 687.6 847.9 C 657.2 879.4 630 928 620 928 C 610 928 582.8 879.4 552.4 847.9 C 509.9 804.6 453.5 754.8 392.4 719.9 C 378.4 709.9 358 651 362 633 Z',
+  'cheek-left':
+    'M 360.5 624.5 C 413.1 605.5 475.4 636.9 512.5 675.5 C 589.4 755.3 595 844.1 620 922 L 624 925 L 626.9 928.8 C 622.9 929.5 623 929.5 620 929.5 C 590.6 929.5 568.5 890.1 539.5 860.5 C 497.5 817.6 443.1 769.4 383.5 735.5 C 359.9 722.1 339.5 712.3 323.5 700.5 C 306.7 688.1 309.8 670 319.5 657.5 C 330.1 643.8 345.8 629.8 360.5 624.5 Z',
+  'cheek-right':
+    'M 879.5 624.5 C 826.9 605.5 764.6 636.9 727.5 675.5 C 650.6 755.3 645 844.1 620 922 L 616 925 L 613.1 928.8 C 617.1 929.5 617 929.5 620 929.5 C 649.4 929.5 671.5 890.1 700.5 860.5 C 742.5 817.6 796.9 769.4 856.5 735.5 C 880.1 722.1 900.5 712.3 916.5 700.5 C 933.3 688.1 930.2 670 920.5 657.5 C 909.9 643.8 894.2 629.8 879.5 624.5 Z',
+}
+
 const FOX = `
   <clipPath id="earsClip"><use xlink:href="#ear-left"/><use xlink:href="#ear-right"/></clipPath>
   <g id="fox-shadow">
@@ -115,23 +129,23 @@ const FOX = `
     <g filter="url(#foxContact)"><use xlink:href="#ear-left"/><use xlink:href="#ear-right"/><use xlink:href="#cheek-left"/><use xlink:href="#cheek-right"/></g>
   </g>
   <g id="ears">
-    <path id="ear-left" d="M 328 324.5 C 353 323.5 493.8 388.3 559.5 494.5 C 526 560.5 425 635.5 350.5 638.5 C 311.5 583.8 292.6 489.2 300 408 C 307.2 358.1 316.5 325.1 328 324.5 Z" fill="url(#earBase)"/>
+    <path id="ear-left" d="${SHAPES['ear-left']}" fill="url(#earBase)"/>
     <path id="ear-left-inner" d="M 328 324.5 C 382 369.5 426 446.5 454.5 540.5 C 425 580 380 617 350.5 638.5 C 311.5 583.8 292.6 489.2 300 408 C 307.2 358.1 316.5 325.1 328 324.5 Z" fill="url(#earInner)"/>
-    <path id="ear-right" d="M 912 324.5 C 887 323.5 746.2 388.3 680.5 494.5 C 714 560.5 815 635.5 889.5 638.5 C 928.5 583.8 947.4 489.2 940 408 C 932.8 358.1 923.5 325.1 912 324.5 Z" fill="url(#earBaseR)"/>
+    <path id="ear-right" d="${SHAPES['ear-right']}" fill="url(#earBaseR)"/>
     <path id="ear-right-inner" d="M 912 324.5 C 858 369.5 814 446.5 785.5 540.5 C 815 580 860 617 889.5 638.5 C 928.5 583.8 947.4 489.2 940 408 C 932.8 358.1 923.5 325.1 912 324.5 Z" fill="url(#earInnerR)"/>
     <g clip-path="url(#earsClip)"><use xlink:href="#forehead" filter="url(#earOccl)"/></g>
     <path d="M 328 324.5 C 353 323.5 493.8 388.3 559.5 494.5" fill="none" stroke="#FFF8EA" stroke-width="2.5" opacity=".5" filter="url(#hairGlow)"/>
     <path d="M 912 324.5 C 887 323.5 746.2 388.3 680.5 494.5" fill="none" stroke="#FFF8EA" stroke-width="2.5" opacity=".5" filter="url(#hairGlow)"/>
   </g>
   <g id="fox-head">
-    <path id="forehead" d="M 362 633 C 417.3 543.8 521.9 488 620 488 C 718.1 488 822.7 543.8 878 633 C 882 651 861.6 709.9 847.6 719.9 C 786.5 754.8 730.1 804.6 687.6 847.9 C 657.2 879.4 630 928 620 928 C 610 928 582.8 879.4 552.4 847.9 C 509.9 804.6 453.5 754.8 392.4 719.9 C 378.4 709.9 358 651 362 633 Z" fill="url(#faceFront)"/>
+    <path id="forehead" d="${SHAPES['forehead']}" fill="url(#faceFront)"/>
     <path d="M 362 633 C 417.3 543.8 521.9 488 620 488 C 718.1 488 822.7 543.8 878 633 C 882 651 861.6 709.9 847.6 719.9 C 786.5 754.8 730.1 804.6 687.6 847.9 C 657.2 879.4 630 928 620 928 C 610 928 582.8 879.4 552.4 847.9 C 509.9 804.6 453.5 754.8 392.4 719.9 C 378.4 709.9 358 651 362 633 Z" fill="url(#wedgeFade)"/>
     <path d="M 383.9 602.4 C 442.3 531.2 533.7 488 620 488 C 706.3 488 797.7 531.2 856.1 602.4" fill="none" stroke="url(#domeEdgeLight)" stroke-width="4" filter="url(#sharpGlow)"/>
   </g>
   <g id="cheeks">
-    <path id="cheek-left" d="M 360.5 624.5 C 413.1 605.5 475.4 636.9 512.5 675.5 C 589.4 755.3 595 844.1 620 922 L 624 925 L 626.9 928.8 C 622.9 929.5 623 929.5 620 929.5 C 590.6 929.5 568.5 890.1 539.5 860.5 C 497.5 817.6 443.1 769.4 383.5 735.5 C 359.9 722.1 339.5 712.3 323.5 700.5 C 306.7 688.1 309.8 670 319.5 657.5 C 330.1 643.8 345.8 629.8 360.5 624.5 Z" fill="url(#cheek)"/>
+    <path id="cheek-left" d="${SHAPES['cheek-left']}" fill="url(#cheek)"/>
     <path d="M 360.5 624.5 C 413.1 605.5 475.4 636.9 512.5 675.5 C 589.4 755.3 595 844.1 620 922 C 600 846 556 795 507 735 C 441 650 404 622 360.5 624.5 Z" fill="url(#cheekShine)" opacity=".28"/>
-    <path id="cheek-right" d="M 879.5 624.5 C 826.9 605.5 764.6 636.9 727.5 675.5 C 650.6 755.3 645 844.1 620 922 L 616 925 L 613.1 928.8 C 617.1 929.5 617 929.5 620 929.5 C 649.4 929.5 671.5 890.1 700.5 860.5 C 742.5 817.6 796.9 769.4 856.5 735.5 C 880.1 722.1 900.5 712.3 916.5 700.5 C 933.3 688.1 930.2 670 920.5 657.5 C 909.9 643.8 894.2 629.8 879.5 624.5 Z" fill="url(#cheekR)"/>
+    <path id="cheek-right" d="${SHAPES['cheek-right']}" fill="url(#cheekR)"/>
     <path d="M 879.5 624.5 C 826.9 605.5 764.6 636.9 727.5 675.5 C 650.6 755.3 645 844.1 620 922 C 640 846 684 795 733 735 C 799 650 836 622 879.5 624.5 Z" fill="url(#cheekShineR)" opacity=".26"/>
     <path d="M 360.5 624.5 C 413.1 605.5 475.4 636.9 512.5 675.5" fill="none" stroke="#FFFFF4" stroke-width="2" opacity=".65" filter="url(#hairGlow)"/>
     <path d="M 879.5 624.5 C 826.9 605.5 764.6 636.9 727.5 675.5" fill="none" stroke="#FFFFF4" stroke-width="2" opacity=".65" filter="url(#hairGlow)"/>
@@ -185,4 +199,59 @@ export function foxSvg(framing = 'tile', { colors } = {}) {
   if (!colors) return svg
   const map = new Map(Object.entries(colors).map(([from, to]) => [from.toUpperCase(), to]))
   return svg.replace(/#[0-9A-Fa-f]{6}\b/g, (c) => map.get(c.toUpperCase()) ?? c)
+}
+
+// The glyph: the fox in one color for the macOS menu bar and the Windows and Linux trays. Its
+// ears, forehead and cheeks are filled, with a gap under the forehead's upper arc and under each
+// cheek's upper edge: a stroke GLYPH_GAP wide on the tile, laid under the shape above it, so half
+// of it shows.
+const GLYPH_GAP = 100
+// The menu bar's canvas in points, with the fox 16 pt wide and centred; a tray's square is cut
+// from it to the fox's width.
+export const GLYPH_CANVAS = 18
+const GLYPH_WIDTH = 16
+// The dot of a waiting permission request, at the bottom right, with a gap around it.
+const DOT = { cx: 14.5, cy: 14, r: 2.5, gap: 1.2 }
+
+/** `menubar`, the 18 pt canvas of a macOS template image; `tray`, the fox filling a square. */
+export const GLYPH_FRAMINGS = ['menubar', 'tray']
+
+/** The glyph as SVG text, `size` px wide, in `color`, with the dot when `dot` is set. */
+export function glyphSvg(framing = 'menubar', { size, color = '#000', dot = false } = {}) {
+  if (!GLYPH_FRAMINGS.includes(framing)) throw new Error(`Unknown framing: ${framing}`)
+  // The paths hold only x, y pairs; their control points bound the symmetric fox.
+  const numbers = Object.values(SHAPES).flatMap((d) => d.match(/-?[\d.]+/g).map(Number))
+  const xs = numbers.filter((_, i) => i % 2 === 0)
+  const ys = numbers.filter((_, i) => i % 2 === 1)
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
+  const scale = GLYPH_WIDTH / (x1 - x0)
+  const c = GLYPH_CANVAS / 2
+  const transform = `translate(${c} ${c}) scale(${+scale.toFixed(6)}) translate(${-(x0 + x1) / 2} ${-(y0 + y1) / 2})`
+  // The forehead's upper arc is its first two curves; a cheek's upper edge ends at its first line.
+  const arc = SHAPES.forehead.split(' C ').slice(0, 3).join(' C ')
+  const gap = (d) =>
+    `<path d="${d}" fill="none" stroke="#000" stroke-width="${GLYPH_GAP}" stroke-linecap="round"/>`
+  const fill = (id) => `<path d="${SHAPES[id]}" fill="#fff"/>`
+  const fox =
+    fill('ear-left') +
+    fill('ear-right') +
+    gap(arc) +
+    fill('forehead') +
+    gap(SHAPES['cheek-left'].split(' L ')[0]) +
+    gap(SHAPES['cheek-right'].split(' L ')[0]) +
+    fill('cheek-left') +
+    fill('cheek-right')
+  const badge = dot
+    ? `<circle cx="${DOT.cx}" cy="${DOT.cy}" r="${DOT.r + DOT.gap}" fill="#000"/>` +
+      `<circle cx="${DOT.cx}" cy="${DOT.cy}" r="${DOT.r}" fill="#fff"/>`
+    : ''
+  const m = framing === 'tray' ? (GLYPH_CANVAS - GLYPH_WIDTH) / 2 : 0
+  const side = GLYPH_CANVAS - 2 * m
+  const px = size ?? side
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="${m} ${m} ${side} ${side}">` +
+    `<mask id="glyph" maskUnits="userSpaceOnUse" x="0" y="0" width="${GLYPH_CANVAS}" height="${GLYPH_CANVAS}">` +
+    `<g transform="${transform}">${fox}</g>${badge}</mask>` +
+    `<rect width="${GLYPH_CANVAS}" height="${GLYPH_CANVAS}" fill="${color}" mask="url(#glyph)"/></svg>\n`
+  )
 }

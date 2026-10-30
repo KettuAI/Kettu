@@ -3705,3 +3705,19 @@ describe('the index', () => {
     await port.untilStatus(sessionId, 'ready')
   })
 })
+
+describe('busy counts', () => {
+  it('tells main how many sessions run and how many wait for approval', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    const last = () => t.sent.filter((m) => m.type === 'host:busy-changed').at(-1)
+    await turn(port, sessionId, '/permission')
+    await port.untilStatus(sessionId, 'awaiting_permission')
+    expect(last()).toEqual({ type: 'host:busy-changed', running: 1, waiting: 1 })
+    await port.until(() => tools(port, sessionId).some((tool) => tool.permission !== null))
+    const { requestId } = tools(port, sessionId).find((entry) => entry.permission)!.permission!
+    await port.request('permissions.respond', { sessionId, requestId, optionId: 'allow-once' })
+    await port.untilStatus(sessionId, 'ready')
+    expect(last()).toEqual({ type: 'host:busy-changed', running: 0, waiting: 0 })
+  })
+})

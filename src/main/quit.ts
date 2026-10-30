@@ -82,23 +82,31 @@ export class QuitFlow {
   }
 
   /**
-   * On Windows and Linux, closing the last window quits, so it goes through the flow first. On
-   * macOS the app stays, but the page's unsaved edits would go, so that asks first.
+   * On Windows and Linux, closing the last window quits, so it goes through the flow first, unless
+   * Kettu runs in the background. Where the app stays, the page's unsaved edits would go, so that
+   * asks first.
    */
   watchWindow(window: BrowserWindow): void {
+    const confirmUnsaved = (event: Electron.Event): void => {
+      if (this.unsaved.get(window.webContents.id)?.length) {
+        event.preventDefault()
+        void this.confirmClose(window)
+      }
+    }
     if (process.platform === 'darwin') {
       window.on('close', (event) => {
         if (this.phase === 'done' || this.closing === window) return
-        if (this.unsaved.get(window.webContents.id)?.length) {
-          event.preventDefault()
-          void this.confirmClose(window)
-        }
+        confirmUnsaved(event)
       })
       return
     }
     window.on('close', (event) => {
-      if (this.phase === 'done') return
+      if (this.phase === 'done' || this.closing === window) return
       if (BrowserWindow.getAllWindows().filter((other) => !other.isDestroyed()).length > 1) return
+      if (this.deps.settings().general.background) {
+        confirmUnsaved(event)
+        return
+      }
       event.preventDefault()
       this.request('quit')
     })

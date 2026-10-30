@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FRAMINGS, foxSvg } from './fox.mjs'
+import { FRAMINGS, foxSvg, GLYPH_FRAMINGS, glyphSvg } from './fox.mjs'
 
 const ids = (svg: string) => [...svg.matchAll(/ id="([^"]+)"/g)].map((m) => m[1])
 const refs = (svg: string) => [...svg.matchAll(/(?:url\(#|href="#)([^)"]+)/g)].map((m) => m[1])
@@ -49,5 +49,30 @@ describe('foxSvg', () => {
 
   it('rejects an unknown framing', () => {
     expect(() => foxSvg('round')).toThrow('Unknown framing: round')
+  })
+})
+
+describe('glyphSvg', () => {
+  it('draws one color on transparent, from the fox and a mask', () => {
+    for (const framing of GLYPH_FRAMINGS) {
+      for (const dot of [false, true]) {
+        const svg = glyphSvg(framing, { color: '#fff', dot })
+        expect(svg).not.toMatch(/<image|data:|filter|Gradient/)
+        expect(svg).toContain('<rect width="18" height="18" fill="#fff" mask="url(#glyph)"/>')
+        for (const ref of refs(svg)) expect(ids(svg)).toContain(ref)
+        expect(svg.match(/<circle /g)?.length ?? 0).toBe(dot ? 2 : 0)
+      }
+    }
+  })
+
+  it("sets the menu bar on an 18 pt canvas and the tray on the fox's 16 pt square", () => {
+    expect(glyphSvg('menubar')).toMatch(/^<svg [^>]*width="18" height="18" viewBox="0 0 18 18"/)
+    expect(glyphSvg('tray', { size: 48 })).toMatch(
+      /^<svg [^>]*width="48" height="48" viewBox="1 1 16 16"/,
+    )
+  })
+
+  it('rejects an unknown framing', () => {
+    expect(() => glyphSvg('dock')).toThrow('Unknown framing: dock')
   })
 })

@@ -80,5 +80,14 @@
   },
   "attachments": {
     "hostDown": "The agent host isn't running. Try again once it has restarted."
+  },
+  "tray": {
+    "noneRunning": "No sessions running",
+    "running_one": "{{count}} session running",
+    "running_other": "{{count}} sessions running",
+    "waiting_one": "{{count}} needs approval",
+    "waiting_other": "{{count}} need approval",
+    "open": "Open {{name}}",
+    "quit": "Quit {{name}}"
   }
 }

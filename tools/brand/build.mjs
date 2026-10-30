@@ -1,5 +1,5 @@
-// Builds the app icons, the renderer's icon, the README's lockups and the macOS disk image's
-// backgrounds from the icon's drawing in tools/brand/fox.mjs and the wordmark in
+// Builds the app icons, the tray's images, the renderer's icon, the README's lockups and the macOS
+// disk image's backgrounds from the icon's drawing in tools/brand/fox.mjs and the wordmark in
 // src/shared/brand.ts, with `pnpm exec electron tools/brand/build.mjs`; Chromium draws every size
 // from the vector source. No dependencies but the Inter font the backgrounds' text is set in.
 
@@ -9,7 +9,7 @@ import { join, resolve } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import { lockupGeometry, WORDMARK } from '../../src/shared/brand.ts'
 import { DMG_LAYOUT } from './dmg-layout.mjs'
-import { foxSvg } from './fox.mjs'
+import { foxSvg, GLYPH_CANVAS, glyphSvg } from './fox.mjs'
 
 const root = resolve(import.meta.dirname, '../..')
 const INK = '#1c1b18'
@@ -214,6 +214,35 @@ async function main() {
     pngs.push({ size, data: await render(windowsIcon(size), size, size) })
   }
   writeFileSync(join(build, 'icon.ico'), ico(pngs))
+
+  // The tray's images, read by src/main/tray.ts: the macOS menu bar's template image, and the glyph
+  // filling a square in black and in white for Windows (.ico) and Linux (PNG), each with the dot.
+  const tray = join(root, 'resources', 'tray')
+  rmSync(tray, { recursive: true, force: true })
+  mkdirSync(tray, { recursive: true })
+  for (const dot of [false, true]) {
+    for (const [scale, suffix] of [
+      [1, ''],
+      [2, '@2x'],
+    ]) {
+      const size = GLYPH_CANVAS * scale
+      const png = await render(glyphSvg('menubar', { size, dot }), size, size)
+      writeFileSync(join(tray, `tray${dot ? 'Dot' : ''}Template${suffix}.png`), png)
+    }
+    for (const [name, color] of [
+      ['black', '#000'],
+      ['white', '#fff'],
+    ]) {
+      const file = `tray-${name}${dot ? '-dot' : ''}`
+      const sizes = []
+      for (const size of [16, 20, 24, 32, 40, 48]) {
+        sizes.push({ size, data: await render(glyphSvg('tray', { size, color, dot }), size, size) })
+      }
+      writeFileSync(join(tray, `${file}.ico`), ico(sizes))
+      writeFileSync(join(tray, `${file}.png`), sizes.find((s) => s.size === 24).data)
+      writeFileSync(join(tray, `${file}@2x.png`), sizes.find((s) => s.size === 48).data)
+    }
+  }
 
   // The Chinese line is set in PingFang SC, which only macOS has; elsewhere the files stay as is.
   if (process.platform !== 'darwin') {
