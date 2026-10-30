@@ -8,12 +8,10 @@ interface OwnTitlesRow {
   kind: OwnTitles
 }
 
-// The first version of each adapter seen to title its sessions; the fake agent stands in for
-// Claude Code's. Each comment names the version that was read.
+// The first version of each adapter seen to title its sessions. Each comment names the version
+// that was read.
 const OWN_TITLES: ReadonlyMap<string, OwnTitlesRow> = new Map([
-  // claude-agent-acp 0.94.0 titles each session with a small model and sends it as an update.
-  ['@agentclientprotocol/claude-agent-acp', { since: '0.94.0', kind: 'sent' }],
-  // fake-agent 0.1.0 sends its title as an update, as Claude Code's adapter does.
+  // fake-agent 0.1.0 sends its title as an update.
   ['fake-agent', { since: '0.1.0', kind: 'sent' }],
   // OpenCode 2.0.32 titles a root session but sends no update for it, only `session/list`.
   ['OpenCode', { since: '2.0.32', kind: 'listed' }],

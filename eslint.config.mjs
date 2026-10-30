@@ -7,6 +7,8 @@ import globals from 'globals'
 import tseslint from 'typescript-eslint'
 import kettu from './tools/lint/eslint-plugin.mjs'
 
+const SDK_MESSAGE = 'Load the SDK with loadClaudeSdk from src/agent-host/claude/sdk.ts.'
+
 export default defineConfig([
   globalIgnores(['out', 'dist', '.worktrees', 'src/renderer/src/lib/cn-tables.ts']),
   {
@@ -24,6 +26,20 @@ export default defineConfig([
       'tools/**/*.{ts,mjs}',
     ],
     languageOptions: { globals: globals.node },
+  },
+  {
+    // The Claude Agent SDK's license grants no right to ship it, so Kettu installs it on first use
+    // and loads it from there with its own types; an import would bundle it or need it installed.
+    files: ['**/*.{ts,tsx,mjs}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [{ name: '@anthropic-ai/claude-agent-sdk', message: SDK_MESSAGE }],
+          patterns: [{ group: ['@anthropic-ai/claude-agent-sdk/*'], message: SDK_MESSAGE }],
+        },
+      ],
+    },
   },
   {
     files: ['src/renderer/**/*.{ts,tsx}'],

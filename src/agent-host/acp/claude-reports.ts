@@ -1,10 +1,10 @@
-// Claude Code's `/usage` and `/context` reports, which claude-agent-acp 0.94 sends as the
-// markdown of an agent message and exposes nowhere else: the current use of every plan limit,
-// and what fills a session's context. Both formats are the adapter's and Claude Code's, not
-// ACP's, so a report that does not match gives null and the caller keeps what it had.
+// Claude Code's `/usage` and `/context` reports as claude-agent-acp 0.94 sent them, as the
+// markdown of an agent message: the current use of every plan limit, and what fills a session's
+// context. The fake agent still sends them. Both formats are the adapter's and Claude Code's,
+// not ACP's, so a report that does not match gives null and the caller keeps what it had.
 
 import type { ContextBreakdown, ContextList, PlanLimit } from '@shared/agent-host'
-import { WINDOW_LABELS } from './mapper'
+import { WINDOW_LABELS } from '../session-updates'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const DAY_MS = 86_400_000

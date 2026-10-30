@@ -1,15 +1,12 @@
-// A fork point for `session/fork`, which ACP's request cannot carry: both official adapters read
-// one from `_meta.jetbrains.air.fork` and fork the session up to that message.
+// A fork point for `session/fork`, which ACP's request cannot carry: an agent that honours it reads
+// one from `_meta.jetbrains.air.fork` and forks the session up to that message.
 
 import { createHash } from 'node:crypto'
 import type { ForkPoint } from '../connection'
 import { compareVersions } from '../versions'
 
-// The first version of each adapter seen to honour it; the fake agent stands in for them.
-const FORK_POINT_SINCE: ReadonlyMap<string, string> = new Map([
-  ['@agentclientprotocol/claude-agent-acp', '0.94.0'],
-  ['fake-agent', '0.1.0'],
-])
+// The first version of each agent seen to honour it: the fake agent, in the adapters' old form.
+const FORK_POINT_SINCE: ReadonlyMap<string, string> = new Map([['fake-agent', '0.1.0']])
 
 /** Whether the agent `initialize` names forks at a fork point rather than ignoring it. */
 export function forksAtMessage(

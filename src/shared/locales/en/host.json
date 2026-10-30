@@ -20,7 +20,7 @@
     "noForkPoint": "This reply cannot be forked from",
     "cannotList": "{{agent}} cannot list its sessions",
     "ultracodeBetweenTurns": "Ultracode changes between turns",
-    "ultracodeDescription": "Dynamic workflows for substantial tasks; restarts Claude Code",
+    "ultracodeDescription": "Dynamic workflows for substantial tasks",
     "promptTooLarge": "The message is over 10 MB with its attachments. Remove some to send.",
     "attachmentGone": "{{name}} is no longer available. Remove it and add it again.",
     "attachmentMissing": "An attachment is no longer available. Remove it and add it again.",
@@ -179,6 +179,7 @@
   },
   "detect": {
     "nodeMissing": "{{agent}} runs on Node.js, and node was not found on PATH.",
+    "nodeToInstall": "{{agent}} is installed with npm on first use, which needs Node.js, and node was not found on PATH.",
     "nodeOutdated": "{{agent}} needs Node.js {{required}} or later; {{installed}} is installed.",
     "npmMissing": "{{agent}} is installed with npm on first use, and npm was not found on PATH. {{hint}}",
     "programUnusable": "The program chosen for {{agent}} ({{path}}) cannot be run.",
@@ -230,6 +231,26 @@
     "localUpstream": "The branch tracks a branch of this repository, so there is no remote to push to",
     "otherName": "The branch tracks {{upstream}}, which has another name; push it from the terminal",
     "unknownRemote": "This repository has several remotes and none is set for this branch"
+  },
+  "permission": {
+    "allowOnce": "Allow once",
+    "allowAlways": "Always allow {{changes}}",
+    "addRules": "{{rules}} {{place}}",
+    "addDirectories": "access to {{directories}} {{place}}",
+    "setMode": "switch to {{mode}}",
+    "reject": "Reject",
+    "place": {
+      "user": "in user settings",
+      "project": "in project settings (.claude/settings.json)",
+      "local": "in local settings (.claude/settings.local.json)",
+      "session": "for this session"
+    },
+    "exitPlan": {
+      "auto": "Yes, and use Auto mode",
+      "acceptEdits": "Yes, and accept edits",
+      "manual": "Yes, and approve edits manually",
+      "keepPlanning": "No, keep planning"
+    }
   },
   "content": {
     "audioTooLarge": "Audio, {{size}}, too large to show",

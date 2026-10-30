@@ -13,11 +13,10 @@ export type Removal = 'delete' | 'delete-again' | 'close'
 // Each agent's removal, as checked against its own history. An agent not listed opens no hidden
 // session, so Kettu leaves nothing in a history nobody checked.
 const REMOVALS: Partial<Record<AgentId, Removal>> = {
-  'claude-code': 'delete-again',
   opencode: 'delete',
   // The session router turns the delete into ending the session's adapter process, then deleting.
   pi: 'delete',
-  // The fake agent stands in for Claude Code.
+  // The fake agent removes a session as claude-agent-acp 0.94 did, which its tests keep.
   'fake-agent': 'delete-again',
 }
 
@@ -41,9 +40,8 @@ export function hiddenRemoval(
 // again. Deleting once more after that removes it; deleting what is gone does nothing there.
 export const DELETE_AGAIN_MS = [1_000, 5_000]
 
-// Claude Code's adapter, which the fake agent stands in for.
+// The agents that read the `_meta` of claude-agent-acp 0.94: the fake agent, as that adapter did.
 const CLAUDE_AGENTS: Partial<Record<AgentId, true>> = {
-  'claude-code': true,
   'fake-agent': true,
 }
 
@@ -73,7 +71,7 @@ export function hiddenSessionMeta(
   }
 }
 
-/** The `_meta` a session opens with, which only Claude Code's adapter reads. */
+/** The `_meta` a session opens with, which only the fake agent reads. */
 export function sessionMeta(
   agentId: AgentId | undefined,
   options: SessionOptions,

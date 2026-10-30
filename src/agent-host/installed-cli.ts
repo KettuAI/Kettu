@@ -145,12 +145,12 @@ export const CLAUDE_CLI: AdapterCli = {
   pinsVersion: true,
   // The platform package on macOS arm64, measured 2026-10-22.
   copyMegabytes: 256,
-  // The adapter also calls it with execFile, so on Windows it must be a program itself.
+  // The SDK spawns it as a program, so on Windows it must be one itself.
   resolve: async (found, platform, files) => {
     const file = await startable(found, platform, files)
     return file && (platform !== 'win32' || isWindowsProgram(file)) ? { path: file, env: {} } : null
   },
-  // The adapter pins its SDK exactly, which names the one CLI it was built against.
+  // The SDK names the one CLI it was built against.
   minimum: async (dir, _adapterPackage, files) => {
     const sdk = path.join(dir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'package.json')
     const version = (await readManifest(files, sdk))?.claudeCodeVersion

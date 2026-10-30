@@ -557,7 +557,7 @@ async function resolveItem(location: ConfigLocation, log: LogFn): Promise<AgentC
   return { id: location.id, path, exists: false, env: location.env, chosen }
 }
 
-/** The package whose `package.json` names the CLI an adapter runs, and the field that holds it. */
+/** The package whose `package.json` names the CLI an agent's package runs, and the field for it. */
 export const CLI_VERSION_SOURCES: Partial<Record<AgentId, { package: string; field: string }>> = {
   'claude-code': { package: '@anthropic-ai/claude-agent-sdk', field: 'claudeCodeVersion' },
   codex: { package: '@openai/codex', field: 'version' },

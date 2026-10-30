@@ -147,6 +147,52 @@ describe('fetchLatest', () => {
   })
 })
 
+describe('fetchLatest within a range', () => {
+  const SDK = '@anthropic-ai/claude-agent-sdk'
+  const sdk = (run: LatestOptions['run']) =>
+    options(run, {
+      package: SDK,
+      range: '~0.3.314',
+      cli: { package: SDK, field: 'claudeCodeVersion' },
+    })
+
+  it('takes the newest version in the range, with the CLI its own field names', async () => {
+    const npm = fakeNpm({
+      [`${SDK}@~0.3.314 version claudeCodeVersion`]: {
+        json: [
+          { version: '0.3.314', claudeCodeVersion: '2.1.314' },
+          { version: '0.3.320', claudeCodeVersion: '2.1.320' },
+          { version: '0.3.316', claudeCodeVersion: '2.1.316' },
+        ],
+      },
+    })
+    expect(await fetchLatest(sdk(npm.run))).toEqual({
+      adapterVersion: '0.3.320',
+      cliVersion: '2.1.320',
+    })
+    expect(npm.calls.map((call) => call.args.slice(0, 4))).toEqual([
+      ['view', `${SDK}@~0.3.314`, 'version', 'claudeCodeVersion'],
+    ])
+  })
+
+  it('reads the one version npm prints as an object', async () => {
+    const npm = fakeNpm({
+      [`${SDK}@~0.3.314 version claudeCodeVersion`]: {
+        json: { version: '0.3.314', claudeCodeVersion: '2.1.314' },
+      },
+    })
+    expect(await fetchLatest(sdk(npm.run))).toEqual({
+      adapterVersion: '0.3.314',
+      cliVersion: '2.1.314',
+    })
+  })
+
+  it('names no version when the range has none', async () => {
+    const npm = fakeNpm({ [`${SDK}@~0.3.314 version claudeCodeVersion`]: { stdout: '' } })
+    await expect(fetchLatest(sdk(npm.run))).rejects.toThrow(SDK)
+  })
+})
+
 describe('decideUpdate', () => {
   const latest = { adapterVersion: '2.2.2', cliVersion: '0.161.0' }
 

@@ -1,8 +1,8 @@
 // Reports from an agent's own commands, for what its connection does not answer itself and ACP
-// has no request for: Claude Code's `/usage` for the current use of the plan limits, and its
-// `/context` for what fills a session's context. Each runs in a hidden session that Kettu makes
-// for it and removes afterwards, so it shows in no thread and stays in none of the agent's
-// history. Both run in the agent itself, without a model call of their own.
+// has no request for: the fake agent's `/usage` and `/context`, in the format claude-agent-acp 0.94
+// gave Claude Code's. Each runs in a hidden session that Kettu makes for it and removes afterwards,
+// so it shows in no thread and stays in none of the agent's history. Both run in the agent itself,
+// without a model call of their own.
 
 import type { PlanLimit } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
@@ -18,12 +18,6 @@ export interface HiddenRuntime {
   connection: AgentConnection
 }
 
-// Claude Code's reports, which the fake agent stands in for.
-const CLAUDE_AGENTS: Partial<Record<AgentId, true>> = {
-  'claude-code': true,
-  'fake-agent': true,
-}
-
 export interface Report {
   command: string
 }
@@ -37,8 +31,6 @@ export interface LimitsReport extends Report {
 const CLAUDE_USAGE: LimitsReport = { command: '/usage', parse: parseUsageReport }
 
 const LIMITS_REPORTS: Partial<Record<AgentId, LimitsReport>> = {
-  'claude-code': CLAUDE_USAGE,
-  // The fake agent stands in for Claude Code.
   'fake-agent': CLAUDE_USAGE,
 }
 
@@ -48,9 +40,9 @@ export function limitsReport(agentId: AgentId): LimitsReport | null {
   return LIMITS_REPORTS[agentId] ?? null
 }
 
-/** Agents with `/context`: Claude Code, and the fake agent that stands in for it. */
+/** Agents with `/context`: the fake agent. Claude Code's connection answers it directly. */
 export function hasContextReport(agentId: AgentId): boolean {
-  return CLAUDE_AGENTS[agentId] === true
+  return agentId === 'fake-agent'
 }
 
 /**

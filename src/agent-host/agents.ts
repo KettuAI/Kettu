@@ -1194,6 +1194,7 @@ export class AgentManager {
       const latest = await (this.deps.fetchLatest ?? fetchLatest)({
         npm: adapter.npm,
         package: launch.package,
+        ...(launch.updates ? { range: launch.updates } : {}),
         cli: CLI_VERSION_SOURCES[slot.def.id] ?? null,
         env: this.deps.env.agentEnv(slot.def.id),
         platform: this.deps.platform,
@@ -2291,6 +2292,7 @@ export class AgentManager {
                 !!(adapter?.current ?? adapter?.fallback) ||
                 (!!slot.def.cli?.isPackage && adapter?.cli?.runs === 'installed'),
               ...(slot.def.cli?.isPackage ? { isCli: true as const } : {}),
+              ...(launch.library ? { isSdk: true as const } : {}),
             }
           : null,
       signIn: slot.signIn,

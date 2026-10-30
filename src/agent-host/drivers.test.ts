@@ -15,9 +15,10 @@ import {
   CLAUDE_CODE,
   detectAgent,
   fakeAgent,
+  OPENCODE,
   type AgentDefinition,
-  type AgentProtocol,
 } from './catalog'
+import { CLAUDE_SDK_DRIVER } from './claude/driver'
 import { CODEX_DRIVER } from './codex/driver'
 import type { AgentConnection, AgentInit, OpenedSession } from './connection'
 import { Diagnostics } from './diagnostics'
@@ -139,19 +140,24 @@ const LIMIT: PlanLimit = {
 }
 
 describe('driverOf', () => {
-  it('starts Codex through its app-server and every other agent in the catalog over ACP', () => {
-    for (const def of buildCatalog(FAKE_AGENT_MAIN)) {
-      expect(driverOf(def)).toBe(def.id === 'codex' ? CODEX_DRIVER : ACP_DRIVER)
+  it('starts Claude Code through its SDK, Codex through its app-server, the rest over ACP', () => {
+    const own: Partial<Record<string, AgentDriver>> = {
+      'claude-code': CLAUDE_SDK_DRIVER,
+      codex: CODEX_DRIVER,
     }
+    for (const def of buildCatalog(FAKE_AGENT_MAIN)) {
+      expect(driverOf(def)).toBe(own[def.id] ?? ACP_DRIVER)
+    }
+    expect(CLAUDE_SDK_DRIVER.reads).toEqual({ limits: true, context: true })
     expect(CODEX_DRIVER.reads).toEqual({ limits: true })
   })
 
   it("takes a test's protocol over the catalog's, and its driver over the built-in one", () => {
-    // As Claude Code reads once its entry names a protocol of its own.
-    const later = { ...CLAUDE_CODE, protocol: 'sdk' as unknown as AgentProtocol }
-    expect(driverOf(later, { protocols: { 'claude-code': 'acp' } })).toBe(ACP_DRIVER)
+    expect(driverOf(CLAUDE_CODE, { protocols: { 'claude-code': 'acp' } })).toBe(ACP_DRIVER)
     const own = acpWith({})
-    expect(driverOf(CLAUDE_CODE, { drivers: { acp: own } })).toBe(own)
+    expect(driverOf(OPENCODE, { drivers: { acp: own } })).toBe(own)
+    const sdk = hostedDriver([])
+    expect(driverOf(CLAUDE_CODE, { drivers: { 'claude-sdk': sdk } })).toBe(sdk)
   })
 })
 
