@@ -311,10 +311,14 @@ function AgentPill({ status }: { status: AgentStatus }) {
         render={
           <button
             type="button"
-            title={t('agents.update.adapterVersion', {
-              name: status.package?.name ?? status.name,
-              version: status.update.adapterVersion,
-            })}
+            title={
+              status.package?.isCli
+                ? t('agents.update.availableTo', { version: status.update.adapterVersion })
+                : t('agents.update.adapterVersion', {
+                    name: status.package?.name ?? status.name,
+                    version: status.update.adapterVersion,
+                  })
+            }
             onClick={() => startUpdate(status.id)}
           />
         }
@@ -387,7 +391,9 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
     ) : taskError ? (
       <span className="text-danger">{taskError.message}</span>
     ) : !installed && canInstall(status) ? (
-      status.package ? (
+      status.package?.isCli ? (
+        t('agents.install.missingLineCli', { name: status.name })
+      ) : status.package ? (
         t('agents.install.missingLineAdapter')
       ) : (
         method && t('agents.install.missingLine', { method: methodName(t, method) })
@@ -587,9 +593,11 @@ function AgentPageLine({ status }: { status: AgentStatus }) {
   const adapter = status.package?.name.split('/').at(-1)
   const vendor = VENDORS[status.id]
   const connection = vendor
-    ? adapter
-      ? t('agents.via', { vendor, adapter })
-      : t('agents.direct', { vendor })
+    ? status.package?.isCli
+      ? t('agents.ownInterface', { vendor })
+      : adapter
+        ? t('agents.via', { vendor, adapter })
+        : t('agents.direct', { vendor })
     : null
   return (
     <p className="flex min-w-0 items-center gap-1.75 text-command leading-4.5 text-tertiary">
@@ -764,7 +772,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
                     <RowFrame
                       text={
                         <RowText
-                          name={t('agents.adapter')}
+                          name={t(status.package.isCli ? 'agents.package' : 'agents.adapter')}
                           description={
                             <code className="font-mono text-meta break-all" data-selectable="">
                               {status.package.name}@{status.package.version}
@@ -1197,16 +1205,18 @@ function InstallNotice({ status }: { status: AgentStatus }) {
         )
       }
     >
-      {status.package && status.cli?.runs === 'installed' && status.cli.installed?.version
-        ? t('agents.install.adapterBodyCli', {
-            package: status.package.name,
-            command: status.cli.command,
-            version: status.cli.installed.version,
-            name: status.name,
-          })
-        : status.package
-          ? t('agents.install.adapterBody', { package: status.package.name })
-          : t('agents.install.body')}
+      {status.package?.isCli
+        ? t('agents.install.cliBody', { package: status.package.name })
+        : status.package && status.cli?.runs === 'installed' && status.cli.installed?.version
+          ? t('agents.install.adapterBodyCli', {
+              package: status.package.name,
+              command: status.cli.command,
+              version: status.cli.installed.version,
+              name: status.name,
+            })
+          : status.package
+            ? t('agents.install.adapterBody', { package: status.package.name })
+            : t('agents.install.body')}
     </Notice>
   )
 }
@@ -1503,10 +1513,16 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
   const { command } = cli
   const problem = installed?.problem
   // A program the environment names runs whatever its problem; any other gives way to the copy.
+  // An agent whose package is the CLI runs it with no adapter in between.
+  const own = !!status.package?.isCli
   const problemNote = !problem
     ? null
     : problem.kind === 'too-old'
-      ? t('agents.cli.tooOld', { command, version: installed?.version, minimum: problem.minimum })
+      ? t(own ? 'agents.cli.tooOldCli' : 'agents.cli.tooOld', {
+          command,
+          version: installed?.version,
+          minimum: problem.minimum,
+        })
       : problem.kind === 'failed'
         ? t(installed?.variable ? 'agents.cli.failedNamed' : 'agents.cli.failed', { command })
         : problem.kind === 'unsupported'
@@ -1534,7 +1550,7 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
   return (
     <ConfigFrame
       name={t('agents.program')}
-      description={t('agents.cli.description', { command })}
+      description={t(own ? 'agents.cli.descriptionCli' : 'agents.cli.description', { command })}
       control={
         <>
           <ControlError error={error ?? retryError} />
@@ -1579,7 +1595,13 @@ function CliRow({ status, cli }: { status: AgentStatus; cli: AgentCli }) {
       ) : (
         <span className="flex min-h-6.5 items-center gap-2">
           <span className="text-command font-medium">
-            {t(missing ? 'agents.cli.notDownloaded' : 'agents.cli.bundledLine')}
+            {t(
+              missing
+                ? 'agents.cli.notDownloaded'
+                : own
+                  ? 'agents.cli.bundledLineCli'
+                  : 'agents.cli.bundledLine',
+            )}
           </span>
           {versionTag}
         </span>

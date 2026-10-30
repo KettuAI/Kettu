@@ -1,14 +1,12 @@
 // Reports from an agent's own commands, for what its connection does not answer itself and ACP
-// has no request for: Claude Code's `/usage` and Codex's `/status` for the current use of the
-// plan limits, and Claude Code's `/context` for what fills a session's context. Each runs in a
-// hidden session that Kettu makes for it and removes afterwards, so it shows in no thread and
-// stays in none of the agent's history. All three run in the agent itself, without a model call
-// of their own.
+// has no request for: Claude Code's `/usage` for the current use of the plan limits, and its
+// `/context` for what fills a session's context. Each runs in a hidden session that Kettu makes
+// for it and removes afterwards, so it shows in no thread and stays in none of the agent's
+// history. Both run in the agent itself, without a model call of their own.
 
 import type { PlanLimit } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { parseUsageReport } from './acp/claude-reports'
-import { parseStatusReport } from './acp/codex-reports'
 import type { AgentConnection } from './connection'
 import { HostError } from './errors'
 import { t } from './i18n'
@@ -40,7 +38,6 @@ const CLAUDE_USAGE: LimitsReport = { command: '/usage', parse: parseUsageReport 
 
 const LIMITS_REPORTS: Partial<Record<AgentId, LimitsReport>> = {
   'claude-code': CLAUDE_USAGE,
-  codex: { command: '/status', parse: parseStatusReport },
   // The fake agent stands in for Claude Code.
   'fake-agent': CLAUDE_USAGE,
 }

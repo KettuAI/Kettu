@@ -240,5 +240,110 @@
     "terminal": "终端 {{id}}",
     "unknownTool": "未知工具内容",
     "toolCall": "工具调用"
+  },
+  "codex": {
+    "signInNeeded": "请在终端里运行 `codex login` 登录 Codex",
+    "turnFailed": "这一轮失败了",
+    "noForkPoint": "Codex 在它的历史里找不到这条回复",
+    "option": {
+      "mode": "模式",
+      "modeDescription": "这个会话的授权和沙箱预设",
+      "collaboration": "协作模式",
+      "collaborationDescription": "Codex 在接下来几轮怎么协作",
+      "model": "模型",
+      "modelDescription": "Codex 在这个会话里用的模型",
+      "effort": "推理强度",
+      "effortDescription": "模型用多少推理",
+      "fast": "快速模式",
+      "fastDescription": "1.5 倍速度，用量更多"
+    },
+    "mode": {
+      "read-only": {
+        "name": "只读",
+        "description": "修改文件和访问网络都要先授权"
+      },
+      "workspace-write": {
+        "name": "工作区访问",
+        "description": "可以修改工作区的文件；写工作区以外或访问网络前先问"
+      },
+      "agent": {
+        "name": "自动审查",
+        "description": "只在操作可能不安全时才问"
+      },
+      "agent-full-access": {
+        "name": "完全访问",
+        "description": "不受限制地访问网络和电脑上的任何文件"
+      }
+    },
+    "collaboration": {
+      "default": "默认",
+      "plan": "计划",
+      "planDescription": "先做计划再改动"
+    },
+    "auth": {
+      "chatGpt": {
+        "name": "ChatGPT",
+        "description": "在浏览器里用 ChatGPT 账号登录"
+      },
+      "deviceCode": {
+        "name": "ChatGPT（设备码）",
+        "description": "打开验证页面并输入一次性代码来登录 ChatGPT"
+      },
+      "apiKey": {
+        "name": "API key",
+        "description": "粘贴 OpenAI API key，然后按 Enter 和 Ctrl+D"
+      }
+    },
+    "account": {
+      "none": "未登录",
+      "apiKey": "OpenAI API key",
+      "gateway": "自定义模型服务商"
+    },
+    "approval": {
+      "allowOnce": "允许",
+      "allowSession": "允许，本会话内都允许",
+      "allowTurn": "允许，这一轮内都允许",
+      "allowPrefix": "允许，以后 `{{command}}` 不再询问",
+      "allowHost": "允许，以后都允许 {{host}}",
+      "denyHost": "拒绝，以后都拦截 {{host}}",
+      "decline": "拒绝",
+      "cancel": "拒绝并停止",
+      "accept": "继续",
+      "network": "网络访问",
+      "networkHost": "{{protocol}} 访问 {{host}}",
+      "networkTitle": "{{protocol}} 网络访问 {{host}}",
+      "read": "读取 {{path}}",
+      "write": "写入 {{path}}",
+      "permissionsTitle": "更多权限",
+      "elicitationTitle": "{{server}} 请求继续"
+    },
+    "tool": {
+      "readFile": "读取文件 '{{path}}'",
+      "listFiles": "列出文件",
+      "listFilesIn": "列出 '{{path}}' 里的文件",
+      "search": "搜索 '{{query}}'",
+      "searchIn": "在 {{path}} 里搜索 '{{query}}'",
+      "searchPath": "在 '{{path}}' 里搜索",
+      "searchAll": "搜索",
+      "runCommand": "运行命令",
+      "editFiles": "修改文件",
+      "mcp": "{{server}}：{{tool}}",
+      "webSearch": "网页搜索：{{query}}",
+      "webSearchAll": "网页搜索",
+      "openPage": "打开 {{url}}",
+      "findInPage": "在 {{url}} 里查找",
+      "viewImage": "查看图片 '{{path}}'",
+      "generateImage": "生成图片",
+      "agent": {
+        "spawnAgent": "启动子 Agent",
+        "sendInput": "给子 Agent 发消息",
+        "resumeAgent": "恢复子 Agent",
+        "wait": "等待子 Agent",
+        "closeAgent": "关闭子 Agent"
+      }
+    },
+    "notice": {
+      "rerouted": "Codex 从 {{from}} 换到了 {{to}}"
+    }
   }
 }

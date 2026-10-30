@@ -742,7 +742,8 @@ describe('artifacts', () => {
     expect(status.places.map((place) => [place.agentId, place.project, place.listCommand])).toEqual(
       [
         ['claude-code', '.mcp.json', '/mcp'],
-        ['codex', '.codex/config.toml', '/mcp'],
+        // app-server takes no slash commands, so no command lists Codex's.
+        ['codex', '.codex/config.toml', null],
         ['opencode', 'opencode.json', null],
       ],
     )

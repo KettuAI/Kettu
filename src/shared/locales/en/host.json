@@ -241,5 +241,110 @@
     "terminal": "Terminal {{id}}",
     "unknownTool": "Unknown tool content",
     "toolCall": "Tool call"
+  },
+  "codex": {
+    "signInNeeded": "Sign in to Codex with `codex login` in a terminal",
+    "turnFailed": "The turn failed",
+    "noForkPoint": "Codex can't find this reply in its history",
+    "option": {
+      "mode": "Mode",
+      "modeDescription": "Approval and sandboxing preset for the session",
+      "collaboration": "Collaboration mode",
+      "collaborationDescription": "How Codex collaborates for the next turns",
+      "model": "Model",
+      "modelDescription": "Model Codex uses for the session",
+      "effort": "Reasoning effort",
+      "effortDescription": "How much reasoning effort the model uses",
+      "fast": "Fast mode",
+      "fastDescription": "1.5x speed, increased usage"
+    },
+    "mode": {
+      "read-only": {
+        "name": "Read-only",
+        "description": "Requires approval to edit files and access the internet"
+      },
+      "workspace-write": {
+        "name": "Workspace access",
+        "description": "Edit workspace files; ask before writing outside the workspace or accessing the network"
+      },
+      "agent": {
+        "name": "Auto review",
+        "description": "Only ask for actions detected as potentially unsafe"
+      },
+      "agent-full-access": {
+        "name": "Full access",
+        "description": "Unrestricted access to the internet and any file on your computer"
+      }
+    },
+    "collaboration": {
+      "default": "Default",
+      "plan": "Plan",
+      "planDescription": "Plan before making changes"
+    },
+    "auth": {
+      "chatGpt": {
+        "name": "ChatGPT",
+        "description": "Sign in with your ChatGPT account in the browser"
+      },
+      "deviceCode": {
+        "name": "ChatGPT (device code)",
+        "description": "Sign in to ChatGPT by opening a verification page and entering a one-time code"
+      },
+      "apiKey": {
+        "name": "API key",
+        "description": "Paste an OpenAI API key, then press Enter and Ctrl+D"
+      }
+    },
+    "account": {
+      "none": "Not signed in",
+      "apiKey": "OpenAI API key",
+      "gateway": "Custom model provider"
+    },
+    "approval": {
+      "allowOnce": "Yes",
+      "allowSession": "Yes, for this session",
+      "allowTurn": "Yes, for this turn",
+      "allowPrefix": "Yes, and don't ask again for `{{command}}`",
+      "allowHost": "Yes, and allow {{host}} from now on",
+      "denyHost": "No, and block {{host}} from now on",
+      "decline": "No",
+      "cancel": "No, and stop",
+      "accept": "Continue",
+      "network": "Network access",
+      "networkHost": "{{protocol}} access to {{host}}",
+      "networkTitle": "{{protocol}} network access to {{host}}",
+      "read": "Read {{path}}",
+      "write": "Write {{path}}",
+      "permissionsTitle": "More permissions",
+      "elicitationTitle": "{{server}} asks to continue"
+    },
+    "tool": {
+      "readFile": "Read file '{{path}}'",
+      "listFiles": "List files",
+      "listFilesIn": "List files in '{{path}}'",
+      "search": "Search for '{{query}}'",
+      "searchIn": "Search for '{{query}}' in {{path}}",
+      "searchPath": "Search in '{{path}}'",
+      "searchAll": "Search",
+      "runCommand": "Run command",
+      "editFiles": "Editing files",
+      "mcp": "{{server}}: {{tool}}",
+      "webSearch": "Web search: {{query}}",
+      "webSearchAll": "Web search",
+      "openPage": "Open {{url}}",
+      "findInPage": "Find in {{url}}",
+      "viewImage": "View image '{{path}}'",
+      "generateImage": "Generate image",
+      "agent": {
+        "spawnAgent": "Start subagent",
+        "sendInput": "Message subagent",
+        "resumeAgent": "Resume subagent",
+        "wait": "Wait for subagents",
+        "closeAgent": "Close subagent"
+      }
+    },
+    "notice": {
+      "rerouted": "Codex switched from {{from}} to {{to}}"
+    }
   }
 }

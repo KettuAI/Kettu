@@ -80,7 +80,8 @@ async function view(options: LatestOptions, words: string[]): Promise<unknown> {
 
 /**
  * The adapter version npm's `latest` tag names, and the newest CLI its dependency range allows,
- * which a fresh install takes. Rejects with a reason the user can read.
+ * which a fresh install takes; for a package that is the CLI itself, its own version. Rejects
+ * with a reason the user can read.
  */
 export async function fetchLatest(options: LatestOptions): Promise<AgentUpdate> {
   const manifest = await view(options, [options.package, 'version', 'dependencies'])
@@ -89,6 +90,7 @@ export async function fetchLatest(options: LatestOptions): Promise<AgentUpdate> 
   if (!isVersion(version))
     throw new Error(t('agent.update.noVersion', { package: options.package }))
   const { cli } = options
+  if (cli?.package === options.package) return { adapterVersion: version, cliVersion: version }
   const dependencies = isObject(manifest) ? manifest.dependencies : undefined
   const range = cli && isObject(dependencies) ? dependencies[cli.package] : undefined
   if (!cli || typeof range !== 'string' || !RANGE.test(range)) {

@@ -67,7 +67,6 @@ import {
   type Detection,
   type LaunchSpec,
 } from './catalog'
-import { removeReportThreads } from './codex-report-threads'
 import {
   AgentRequestError,
   type AgentConnection,
@@ -335,7 +334,11 @@ function rememberedEntry(slot: Slot): AgentsFile['agents'][AgentId] | null {
  */
 function rememberedCapabilities(slot: Slot): RememberedInit['capabilities'] | undefined {
   const adapter = slot.detection?.state === 'available' ? slot.detection.adapter : null
-  const version = (adapter?.current ?? adapter?.fallback)?.version
+  // An agent whose package is its CLI reports the version of the CLI that runs.
+  const own = slot.def.cli?.isPackage && adapter?.cli?.runs === 'installed'
+  const version = own
+    ? (adapter.cli?.installed?.version ?? undefined)
+    : (adapter?.current ?? adapter?.fallback)?.version
   return version !== undefined && slot.initRecord?.version === version
     ? slot.initRecord.capabilities
     : undefined
@@ -376,9 +379,6 @@ export class AgentManager {
   private updateAbort: AbortController | null = null
   private updateTimer: ReturnType<typeof setTimeout> | null = null
   private stopped = false
-  /** Whether this launch tried removing the archived Codex threads the reports left. */
-  private reportThreadsTried = false
-  private codexReportThreadsRemovedAt: number | null = null
   private readonly cliVersions: CliVersions
   hooks: AgentSessionHooks = {
     liveSessions: () => 0,
@@ -490,45 +490,6 @@ export class AgentManager {
     }
     this.emit(slot)
     if (program) void this.askBinaryVersion(slot, program, env)
-    this.removeReportThreadsOnce(slot, detection, env)
-  }
-
-  /**
-   * The one-time removal of the archived Codex threads the plan limit reports left in its
-   * history, at the first detection that finds Codex available in a launch: its own binary,
-   * the `CODEX_PATH` its launch runs, listed and deleted through its app-server. A failure is
-   * logged, and the next launch tries again.
-   */
-  private removeReportThreadsOnce(slot: Slot, detection: Detection, env: Env): void {
-    if (slot.def.id !== 'codex' || detection.state !== 'available') return
-    if (this.reportThreadsTried || this.codexReportThreadsRemovedAt !== null || this.stopped) return
-    // Tried once a launch: without the binary the adapter would run through npm's `codex.js`.
-    this.reportThreadsTried = true
-    const binary = detection.spec?.env.CODEX_PATH ?? getEnv(env, 'CODEX_PATH', this.deps.platform)
-    if (!binary) return
-    void removeReportThreads({
-      binary,
-      env,
-      reportsDir: this.deps.reportsDir,
-      platform: this.deps.platform,
-      version: this.deps.appVersion,
-      log: (level, message) => this.deps.diagnostics.log(level, message),
-    }).then(
-      (count) => {
-        this.codexReportThreadsRemovedAt = Date.now()
-        this.remember()
-        this.deps.diagnostics.log(
-          'info',
-          `Removed ${count} archived Codex thread${count === 1 ? '' : 's'} that its plan limit reports left; this runs once`,
-        )
-      },
-      (error: unknown) => {
-        this.deps.diagnostics.log(
-          'warn',
-          `Could not remove the archived Codex threads its plan limit reports left, so the next launch tries again: ${(error as Error).message}`,
-        )
-      },
-    )
   }
 
   /** A program's `--version` answer: the test's probe, or the cache the CLIs are asked through. */
@@ -798,7 +759,7 @@ export class AgentManager {
     env: Env,
   ): { launched: AgentRun; connection: AgentConnection } {
     const driver = this.driver(slot)
-    const context = { def: slot.def, hooks: this.connectionHooks(slot) }
+    const context = { def: slot.def, hooks: this.connectionHooks(slot), spec, env }
     if (driver.kind === 'process') {
       const launched = this.deps.launcher.launch(slot.def, spec, env, {
         stderr: (text) => this.onStderr(slot, text),
@@ -941,7 +902,7 @@ export class AgentManager {
     // The copy is needed where the install a start runs has none: that version again, with it.
     const copy = adapter.cli?.needsCopy ? adapter.current : null
     const version = request.version ?? copy?.version ?? adapter.version
-    const withoutCli = !copy && adapter.cli?.runs === 'installed'
+    const withoutCli = !copy && adapter.cli?.runs === 'installed' && !slot.def.cli?.isPackage
     slot.state = 'installing'
     slot.detail = null
     slot.progress.clear()
@@ -1118,6 +1079,8 @@ export class AgentManager {
     const adapter = detection?.state === 'available' ? detection.adapter : null
     const running = adapter?.current ?? adapter?.fallback
     if (!adapter || !running) return null
+    // The user's own CLI runs instead of the package, and updates the way they installed it.
+    if (slot.def.cli?.isPackage && adapter.cli?.runs === 'installed') return null
     let offered = decideUpdate(slot.latest, {
       version: running.version,
       cliVersion: slot.installedCli,
@@ -1289,7 +1252,8 @@ export class AgentManager {
     const { platform, diagnostics } = this.deps
     const version = update.adapterVersion
     // An update that brings no CLI of its own keeps running the user's.
-    const withoutCli = adapter.cli?.runs === 'installed' && update.cliVersion === null
+    const withoutCli =
+      adapter.cli?.runs === 'installed' && update.cliVersion === null && !slot.def.cli?.isPackage
     const [, ...flags] = withoutCli ? [...NPM_INSTALL_ARGS, OMIT_CLI_ARG] : NPM_INSTALL_ARGS
     const command = formatCommand(
       { command: npm, args: ['install', `${launch.package}@${version}`, ...flags] },
@@ -2107,7 +2071,6 @@ export class AgentManager {
 
   /** What the agents reported in an earlier run, shown until each reports again. */
   restore(file: AgentsFile): void {
-    this.codexReportThreadsRemovedAt = file.codexReportThreadsRemovedAt ?? null
     for (const [agentId, entry] of Object.entries(file.agents) as [
       AgentId,
       AgentsFile['agents'][AgentId],
@@ -2322,8 +2285,12 @@ export class AgentManager {
           ? {
               name: launch.package,
               version: (adapter?.current ?? adapter?.fallback)?.version ?? launch.version,
-              // An install below the pin runs too, when the pinned one cannot be installed.
-              installed: !!(adapter?.current ?? adapter?.fallback),
+              // An install below the pin runs too, when the pinned one cannot be installed; the
+              // user's own CLI needs none, for an agent whose package is the CLI.
+              installed:
+                !!(adapter?.current ?? adapter?.fallback) ||
+                (!!slot.def.cli?.isPackage && adapter?.cli?.runs === 'installed'),
+              ...(slot.def.cli?.isPackage ? { isCli: true as const } : {}),
             }
           : null,
       signIn: slot.signIn,
@@ -2378,9 +2345,7 @@ export class AgentManager {
         deleteSession: capabilities?.deleteSession ?? false,
         forkSession: capabilities?.forkSession ?? false,
         forkAtMessage: capabilities?.forkAtMessage ?? false,
-        // codex-acp 2.2.2 ignores `idleBehavior` and starts a turn of its own when none is
-        // running (its PR #593 would fix it), which Kettu would not know about.
-        steering: (capabilities?.steering ?? false) && slot.def.id !== 'codex',
+        steering: capabilities?.steering ?? false,
         reports: this.hasLimits(slot.def.id),
         context: this.hasContext(slot.def.id),
         account: slot.def.reportsAccount ?? false,
@@ -2465,13 +2430,7 @@ export class AgentManager {
       const entry = rememberedEntry(slot)
       if (entry) agents[agentId] = entry
     }
-    this.deps.remember({
-      version: 1,
-      agents,
-      ...(this.codexReportThreadsRemovedAt === null
-        ? {}
-        : { codexReportThreadsRemovedAt: this.codexReportThreadsRemovedAt }),
-    })
+    this.deps.remember({ version: 1, agents })
   }
 
   private rememberUpdates(): void {
