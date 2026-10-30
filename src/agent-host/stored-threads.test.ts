@@ -397,8 +397,8 @@ describe('attaching on use', () => {
     expect(thread?.head.acpSessionId).toBe(renewed)
   })
 
-  it('starts over a Codex-like session with no rollout, for a prompt or a setting', async () => {
-    const agentEnv = { FAKE_AGENT_RESUME_UNKNOWN: 'no-rollout' }
+  it('starts over a session the agent cannot resume, for a prompt or a setting', async () => {
+    const agentEnv = { FAKE_AGENT_RESUME_UNKNOWN: 'fail' }
     for (const use of ['prompt', 'setting', 'after a refused prompt'] as const) {
       const { t: first, port: before } = await setup()
       const sessionId = await newSession(first, before)

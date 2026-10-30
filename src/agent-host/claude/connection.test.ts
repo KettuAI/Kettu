@@ -71,7 +71,6 @@ class Target implements SessionTarget {
     return {
       thread: this.thread,
       replaying: this.replaying,
-      thoughtParts: false,
       cancelling: false,
       scope: this.scope,
       now: 1_000,

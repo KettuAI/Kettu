@@ -30,11 +30,6 @@ export interface MapperContext {
   readonly thread: ThreadState
   /** True while `session/load` replays history into the thread. */
   readonly replaying: boolean
-  /**
-   * True while it replays a session whose adapter sends each part of a thought as a chunk of its
-   * own, with nothing between them.
-   */
-  readonly thoughtParts: boolean
   /** The user stopped the turn and the agent has not answered its prompt yet. */
   readonly cancelling: boolean
   readonly scope: TurnScope

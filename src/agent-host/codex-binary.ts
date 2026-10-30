@@ -25,7 +25,7 @@ const TARGETS: Partial<Record<Platform, { package: string; triple: string }[]>> 
   ],
 }
 
-/** An installed adapter, for a catalog entry's `launchEnv`. */
+/** An installed adapter, and how to look at its files. */
 export interface AdapterLookup {
   /** The installed version's directory, which holds its `node_modules`. */
   dir: string

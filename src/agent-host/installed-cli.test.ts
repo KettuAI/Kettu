@@ -9,7 +9,6 @@ import {
   CODEX_CLI,
   decideCli,
   findInstalledCli,
-  lowerBound,
   parseCliVersion,
   shimTarget,
   type CliFiles,
@@ -228,20 +227,6 @@ describe('the minimum an adapter names', () => {
   it('names none for Codex, whose package is the CLI and whose pin is the oldest that runs', () => {
     expect(CODEX_CLI.isPackage).toBe(true)
     expect(CODEX_CLI.minimum).toBeUndefined()
-  })
-
-  it.each([
-    ['^0.160.1', '0.160.1'],
-    ['~1.2.3', '1.2.3'],
-    ['>=1.2.3 <2.0.0', '1.2.3'],
-    ['1.2.3-beta.1', '1.2.3-beta.1'],
-    ['*', null],
-    ['^1.0.0 || ^2.0.0', null],
-    ['<2.0.0', null],
-    ['github:openai/codex', null],
-    [42, null],
-  ])('takes %j as at least %j', (range, minimum) => {
-    expect(lowerBound(range)).toBe(minimum)
   })
 })
 
