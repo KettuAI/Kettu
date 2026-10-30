@@ -54,7 +54,7 @@ It drives the agents you already have, with your own installation, account and s
 
 ## Your agents, your data
 
-- **Bring your own agents.** Kettu implements no agent of its own. It talks to each one over the open [Agent Client Protocol](https://agentclientprotocol.com) (ACP), so your models, settings, rules and tools stay exactly as you set them up.
+- **Bring your own agents.** Kettu implements no agent of its own. It drives Claude Code and Codex through their own interfaces and every other agent over the open [Agent Client Protocol](https://agentclientprotocol.com) (ACP), so your models, settings, rules and tools stay exactly as you set them up.
 - **Sign in where you always do.** Each agent signs in with its own flow, and Kettu never sees your credentials.
 - **Local by default.** Kettu has no account and no server of its own and collects no telemetry. Your sessions stay on your computer, and each agent talks only to its own provider, as it does in your terminal.
 

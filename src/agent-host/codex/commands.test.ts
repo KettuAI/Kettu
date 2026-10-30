@@ -66,7 +66,6 @@ function sessionTarget() {
     context: () => ({
       thread,
       replaying: false,
-      thoughtParts: false,
       cancelling: false,
       scope,
       now: 5_000,

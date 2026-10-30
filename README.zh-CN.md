@@ -54,7 +54,7 @@ Kettu 为这些工作提供了一个桌面上的家。你用的每个 Agent 都�
 
 ## 你的 Agent，你的数据
 
-- **用你自己的 Agent。** Kettu 自己不实现任何 Agent，而是通过开放的 [Agent Client Protocol](https://agentclientprotocol.com)（ACP）与每个 Agent 通信，你的模型、配置、规则和工具都保持你设置好的样子。
+- **用你自己的 Agent。** Kettu 自己不实现任何 Agent：Claude Code 和 Codex 经它们自己的接口接入，其余 Agent 都通过开放的 [Agent Client Protocol](https://agentclientprotocol.com)（ACP）通信，你的模型、配置、规则和工具都保持你设置好的样子。
 - **在原来的地方登录。** 每个 Agent 都用它自己的登录流程，Kettu 不会接触你的凭据。
 - **默认只在本地。** Kettu 没有自己的账号和服务器，也不收集任何遥测数据。你的会话留在你的电脑上，每个 Agent 只和它自己的服务商通信，和你在终端里用它时一样。
 

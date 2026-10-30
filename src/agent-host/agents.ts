@@ -407,10 +407,6 @@ export class AgentManager {
     return this.slots.get(agentId)?.def.mcpServersByName ?? false
   }
 
-  replaysThoughtParts(agentId: AgentId): boolean {
-    return this.slots.get(agentId)?.def.replaysThoughtParts ?? false
-  }
-
   private slot(agentId: AgentId): Slot {
     const slot = this.slots.get(agentId)
     if (!slot) throw invalidParams(`Unknown agent ${agentId}`)

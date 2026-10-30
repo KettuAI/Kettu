@@ -47,7 +47,6 @@ function run(
     const ctx: MapperContext = {
       thread,
       replaying: options.replaying ?? false,
-      thoughtParts: false,
       cancelling: false,
       scope,
       now,

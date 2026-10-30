@@ -297,10 +297,8 @@ function mapMessageChunk(
 
   if (existing && existing.kind === kind) {
     if (isText) {
-      const appended =
-        existing.kind === 'thought' && ctx.thoughtParts ? nextPart(existing.markdown, text) : text
-      if (appended !== '') {
-        out.patches.push({ op: 'entry.appendText', id: existing.id, text: appended })
+      if (text !== '') {
+        out.patches.push({ op: 'entry.appendText', id: existing.id, text })
       }
     } else if (existing.kind === 'agent') {
       out.patches.push({
@@ -341,12 +339,6 @@ function mapMessageChunk(
     addEntry(ctx, out, { kind: 'thought', id, markdown: text, streaming })
     if (streaming) ctx.scope.thoughts.set(id, ctx.now)
   }
-}
-
-/** A replayed part of a thought, with the blank line its live turns send between parts. */
-function nextPart(thought: string, part: string): string {
-  if (part === '' || thought === '' || thought.endsWith('\n') || /^\r?\n/.test(part)) return part
-  return `\n\n${part}`
 }
 
 function mapUserChunk(ctx: MapperContext, out: Output, chunk: acp.ContentChunk): void {

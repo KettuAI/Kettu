@@ -143,17 +143,10 @@ export interface AgentDefinition {
    */
   progressNotes?: boolean
   /**
-   * Replays each part of a thought as a chunk of its own with nothing between them, where its live
-   * turns send a blank line between parts (codex-acp 2.2.2).
-   */
-  replaysThoughtParts?: boolean
-  /**
    * Keeps MCP servers by name for each folder rather than each session, and names the session on
    * each tool call, so the artifacts service gives its process one token per folder.
    */
   mcpServersByName?: boolean
-  /** Variables a package agent's launch adds, from what its install holds. */
-  launchEnv?(lookup: AdapterLookup): Promise<Record<string, string>>
   /** How Kettu can install a binary agent for the user. */
   installs?: BinaryInstalls
   /** The CLI a package agent's adapter runs, which the user may have installed themselves. */
@@ -421,7 +414,7 @@ export function librarySpec(entry: string, env: Record<string, string>): LaunchS
   return { command: entry, args: [], env, shell: false, display: { command: entry, args: [], env } }
 }
 
-/** `node <entry>` for an installed adapter, with what its `launchEnv` and `requires` add. */
+/** `node <entry>` for an installed adapter, with what its `requires` adds. */
 export async function installedSpec(
   def: AgentDefinition,
   /** The user's Node.js, which only a library runs without. */
@@ -436,7 +429,6 @@ export async function installedSpec(
     ...def.env,
     ...(launch.kind === 'package' ? launch.env : {}),
     ...extraEnv,
-    ...(await def.launchEnv?.({ ...lookup, dir: installed.dir, entry: installed.entry })),
   }
   if (launch.kind === 'package' && launch.library) return librarySpec(installed.entry, env)
   if (node === null) throw new Error(`${def.name} runs on Node.js, which was not found`)

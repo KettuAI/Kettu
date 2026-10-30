@@ -6,7 +6,7 @@ Guidance for coding agents working in this repository. `CLAUDE.md` imports this 
 
 Kettu is an Electron desktop GUI for terminal coding agents: Claude Code, Codex CLI, opencode and Pi. It is in early development; [README.md](./README.md) has the product vision and features, and [ROADMAP.md](./ROADMAP.md) the plans.
 
-Kettu is only a GUI: it implements no agent and talks to every agent over the Agent Client Protocol (ACP).
+Kettu is only a GUI: it implements no agent. It drives Claude Code through the Claude Agent SDK, Codex through `codex app-server`, and every other agent over the Agent Client Protocol (ACP).
 
 ## Engineering rules
 
@@ -38,6 +38,8 @@ Electron 44, electron-vite 6 (Vite 8), React 19, TypeScript 6 in strict mode, Ta
 
 Beyond the UI stack: `@agentclientprotocol/sdk` for ACP (protocol v1 through the SDK's `unstable` entrypoint, whose schema carries the subagent updates), `@modelcontextprotocol/sdk` for the artifacts service's MCP server, `electron-updater` for updates, Vitest for tests, `react-day-picker` for the usage page's date range picker, and the Inter and Source Serif 4 faces from `@fontsource-variable`.
 
+Claude Code's `@anthropic-ai/claude-agent-sdk` and Codex's `@openai/codex` are never dependencies: Kettu installs them into its data folder on first use and loads them at runtime, because the SDK's license grants no right to redistribute it. The repository holds only its own types for the parts of the SDK it uses, and lint rejects a value import of the package.
+
 ### UI stack: one library per concern
 
 | Concern                     | Library                                                               |
@@ -65,7 +67,7 @@ The top of the tree:
 src/
 ├── main/              Main process: lifecycle, windows, menus, IPC, settings, updates
 ├── preload/           Sandboxed bridge exposed as window.kettu
-├── agent-host/        Utility process: agents over ACP, sessions, projects, git
+├── agent-host/        Utility process: agents, sessions, projects, git
 ├── terminal-host/     Utility process: the terminal's shells through node-pty
 ├── renderer/src/      React UI
 │   ├── app/           Bootstrap, actions, shortcuts, menu commands
