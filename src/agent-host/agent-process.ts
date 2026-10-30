@@ -1,9 +1,9 @@
 // Spawning and stopping one agent process, by each platform's rules.
 
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import type { Platform } from '@shared/platform'
-import { processTransport, type AcpTransport } from './acp/connection'
 import type { LaunchSpec } from './catalog'
+import type { StdioTransport } from './driver'
 import type { Env } from './find-command'
 import {
   killSurvivors,
@@ -35,11 +35,12 @@ export const STOP_TIMINGS: StopTimings = { eofMs: 2_000, termMs: 3_000 }
 // record's last write: the longest quit adds up to 5.25 s of the 6 s main allows.
 const KILL_WAIT_MS = 500
 
-export interface SpawnedAgent {
+/** What runs for a started agent and a stop ends: its process, or what it spawned. */
+export interface AgentRun {
+  /** Null for a run with no process of its own. */
   readonly pid: number | null
   /** When it was spawned, which names it apart from a later process with its pid. */
   readonly startedAt: number
-  readonly transport: AcpTransport
   readonly exited: Promise<ExitInfo>
   readonly hasExited: boolean
   /**
@@ -54,6 +55,11 @@ export interface SpawnedAgent {
    * limit on Windows. Resolves once it has exited, or after KILL_WAIT_MS.
    */
   kill(): Promise<void>
+}
+
+export interface SpawnedAgent extends AgentRun {
+  readonly transport: StdioTransport
+  readonly child: ChildProcess
 }
 
 export interface SpawnOptions {
@@ -188,7 +194,8 @@ export function spawnAgent(spec: LaunchSpec, options: SpawnOptions): SpawnedAgen
   return {
     pid: child.pid ?? null,
     startedAt,
-    transport: processTransport(child.stdin, child.stdout),
+    transport: { kind: 'stdio', stdin: child.stdin, stdout: child.stdout },
+    child,
     exited,
     get hasExited() {
       return hasExited

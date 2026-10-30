@@ -3,9 +3,9 @@
 
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
-import type { McpServer } from '@agentclientprotocol/sdk/unstable'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { McpServer } from './connection'
 import { startTestHost, type TestHost, type TestPort } from './testing/harness'
 
 let current: TestHost | null = null

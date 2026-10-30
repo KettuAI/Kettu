@@ -415,7 +415,7 @@ describe('AgentManager', () => {
       path.join(os.tmpdir(), 'kettu-agent-reports'),
       null,
     )
-    expect(listed.sessions.filter((s) => s.acpSessionId.startsWith('fake-'))).toEqual([])
+    expect(listed.sessions.filter((s) => s.sessionId.startsWith('fake-'))).toEqual([])
     await m.agents.stopAll()
   })
 

@@ -266,13 +266,18 @@ export interface TestHostOptions {
   /** Log readers for Usage on this computer, read by both the manager and the worker. */
   usageReaders?: readonly LogReader[]
   cacheTtl?: CacheTtlReader
-  /** Agents that run the fake agent under their own id, such as Claude Code for its folder. */
+  /**
+   * Agents that run the fake agent under their own id, such as Claude Code for its folder. They
+   * speak ACP whatever protocol the catalog gives them.
+   */
   fakeAs?: AgentId[]
   /**
    * Agents that run the fake agent with `--one-session`, through the session router or, with
    * `router` false, as one process for all their sessions, to show what the router is for.
    */
   fakeThroughRouter?: { agentIds: AgentId[]; oneSession?: boolean; router?: boolean }
+  /** Drivers over the built-in ones, by protocol. */
+  drivers?: HostOptions['drivers']
 }
 
 export interface TestHost {
@@ -293,6 +298,13 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
   const module = await loadFakeAgent()
   const launcher = options.launcher ?? inProcessLauncher(module, options.agentEnv)
   const sent: HostToMain[] = []
+  // The fake agent speaks ACP under every id it runs as.
+  const protocols: HostOptions['protocols'] = Object.fromEntries(
+    [...(options.fakeAs ?? []), ...(options.fakeThroughRouter?.agentIds ?? [])].map((id) => [
+      id,
+      'acp',
+    ]),
+  )
   const host = await AgentHost.start({
     userDataPath: dir,
     appVersion: '0.0.0-test',
@@ -348,6 +360,8 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       if (options.fakeAs?.includes(def.id)) return detectAgent(fakeAgent(FAKE_AGENT_MAIN), ctx)
       return { state: 'not-installed', detail: `${def.name} is not part of the tests` }
     },
+    protocols,
+    ...(options.drivers ? { drivers: options.drivers } : {}),
     agentTimings: options.agentTimings ?? {},
     sessionTimings: options.sessionTimings ?? {},
     ...(options.routineTimings ? { routineTimings: options.routineTimings } : {}),

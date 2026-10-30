@@ -2,6 +2,7 @@
 // one from `_meta.jetbrains.air.fork` and fork the session up to that message.
 
 import { createHash } from 'node:crypto'
+import type { ForkPoint } from '../connection'
 import { compareVersions } from '../versions'
 
 // The first version of each adapter seen to honour it; the fake agent stands in for them.
@@ -18,12 +19,6 @@ export function forksAtMessage(
   if (!info) return false
   const since = FORK_POINT_SINCE.get(info.name)
   return since !== undefined && compareVersions(info.version, since) >= 0
-}
-
-export interface ForkPoint {
-  messageId: string // the agent message's ACP messageId
-  text: string // its text, which the adapters fall back to when they cannot find the id
-  occurrence: number // 1-based, among the agent messages up to it with the same text
 }
 
 export function forkPointMeta(point: ForkPoint): Record<string, unknown> {

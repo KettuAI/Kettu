@@ -1,9 +1,7 @@
 // How an agent titles its own sessions, read from the name and version it gives in `initialize`.
 
+import type { OwnTitles } from '../connection'
 import { compareVersions } from '../versions'
-
-/** How an agent's session titles arrive: as `session_info_update`, or only through `session/list`. */
-export type OwnTitles = 'sent' | 'listed'
 
 interface OwnTitlesRow {
   since: string // the first version seen to title its sessions itself
