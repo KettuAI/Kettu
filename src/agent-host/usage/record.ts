@@ -1,7 +1,7 @@
 // Kettu's own record: a turn's rows, one per model, from what its agent reported.
 
 import type { AgentId, TokenTotals } from '@shared/thread'
-import type { ModelTokens } from '../acp/mapper'
+import type { ModelTokens } from '../connection'
 import { normalizeModel, type UsageRow } from './model'
 
 /** Agents whose output leaves the reasoning out, so the total adds it (OpenCode's own does). */

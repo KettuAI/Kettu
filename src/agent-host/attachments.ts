@@ -19,7 +19,7 @@ import {
   type AttachmentGrant,
 } from '@shared/attachments'
 import type { Attachment } from '@shared/thread'
-import type { PromptBlock } from './acp/mapper'
+import type { PromptBlock } from './connection'
 import { invalidParams, notFound } from './errors'
 import { t } from './i18n'
 import { JsonFile, type LogFn } from './storage'

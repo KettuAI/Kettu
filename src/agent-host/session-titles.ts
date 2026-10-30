@@ -2,9 +2,9 @@
 // small model of its agent in a hidden session, removed afterwards as the reports' are.
 
 import type { UserContent } from '@shared/thread'
-import { repeatsFirstMessage } from './acp/mapper'
 import { writeTitles } from './outline-titles'
 import type { HiddenRuntime } from './reports'
+import { repeatsFirstMessage } from './session-updates'
 
 /** The message keeps this much of its text for the title's prompt. */
 export const TITLE_PROMPT_CHARS = 2_000

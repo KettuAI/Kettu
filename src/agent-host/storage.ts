@@ -24,7 +24,7 @@ import {
   type Routine,
   type RoutineRef,
 } from '@shared/routines'
-import type { AgentInit } from './acp/connection'
+import type { AgentInit } from './connection'
 import { isVersion } from './versions'
 
 export type LogFn = (level: 'info' | 'warn' | 'error', message: string) => void

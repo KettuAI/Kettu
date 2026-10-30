@@ -132,6 +132,10 @@ export interface HostOptions {
   resolveEnv?: EnvironmentServiceDeps['resolve']
   probeNode?: EnvironmentServiceDeps['probe']
   detect?: AgentManagerDeps['detect']
+  /** Each agent's protocol over the catalog's, as a test runs the fake ACP agent under its id. */
+  protocols?: AgentManagerDeps['protocols']
+  /** Drivers over the built-in ones, as a test's own. */
+  drivers?: AgentManagerDeps['drivers']
   agentTimings?: Partial<AgentTimings>
   sessionTimings?: Partial<SessionTimings>
   /** How long a minute of a run's time limit lasts, shortened by tests. */
@@ -336,6 +340,8 @@ export class AgentHost {
       adaptersDir: path.join(options.userDataPath, 'agents'),
       sessionRouterPath: options.sessionRouterPath ?? null,
       ...(options.detect ? { detect: options.detect } : {}),
+      ...(options.protocols ? { protocols: options.protocols } : {}),
+      ...(options.drivers ? { drivers: options.drivers } : {}),
       ...(options.agentTimings ? { timings: options.agentTimings } : {}),
       status: (status) => {
         this.hub.broadcast({ type: 'agent.status', status })

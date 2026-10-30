@@ -23,14 +23,6 @@ import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
 import type { AgentId, ConfigOption } from '@shared/thread'
 import {
-  AgentConnection,
-  AgentRequestError,
-  type AcpTransport,
-  type AgentInit,
-  type AuthMethodInfo,
-  type ConnectionHooks,
-} from './acp/connection'
-import {
   installAdapter,
   NPM_INSTALL_ARGS,
   OMIT_CLI_ARG,
@@ -51,7 +43,13 @@ import {
   readAgentDetails,
   readCliVersion,
 } from './agent-details'
-import { spawnAgent, type ExitInfo, type StopTimings } from './agent-process'
+import {
+  spawnAgent,
+  type AgentRun,
+  type ExitInfo,
+  type SpawnedAgent,
+  type StopTimings,
+} from './agent-process'
 import type { AgentTrees } from './agent-trees'
 import { decideUpdate, fetchLatest, type LatestOptions } from './agent-updates'
 import {
@@ -70,38 +68,33 @@ import {
   type LaunchSpec,
 } from './catalog'
 import { removeReportThreads } from './codex-report-threads'
+import {
+  AgentRequestError,
+  type AgentConnection,
+  type AgentInit,
+  type AuthMethodInfo,
+  type ConnectionHooks,
+} from './connection'
 import type { Diagnostics } from './diagnostics'
+import type { AgentDriver, AgentTransport } from './driver'
+import { driverOf, type DriverOverrides } from './drivers'
 import { HostError, invalidParams } from './errors'
 import { getEnv, isExecutableFile, type Env } from './find-command'
+import { HostedRun, type HostedRunHooks } from './hosted-run'
 import { t } from './i18n'
 import { CliVersions, type CliProbe, type CliVersion } from './installed-cli'
 import { claudeJsonPath, readPlanTier } from './plan-tier'
 import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { formatCommand } from './quote'
-import {
-  hasContextReport,
-  hiddenRemoval,
-  hiddenSessionMeta,
-  limitsReport,
-  removeHiddenSession,
-  runReport,
-  type LimitsReport,
-  type Removal,
-} from './reports'
+import { hasContextReport, limitsReport, runReport, type LimitsReport } from './reports'
 import { TextRing } from './ring'
 import type { EnvironmentService } from './shell-env'
 import type { AgentsFile, AgentUpdatesFile, RememberedInit } from './storage'
 import { compareVersions } from './versions'
 
-export interface LaunchedAgent {
-  readonly pid: number | null
-  readonly startedAt: number
-  readonly transport: AcpTransport
-  readonly exited: Promise<ExitInfo>
-  readonly hasExited: boolean
-  stop(tools?: ToolOptions): Promise<ExitInfo>
-  /** Ends it now, for a quit that cannot wait for `stop` any longer. */
-  kill(): Promise<void>
+/** The process a process driver speaks over. */
+export interface LaunchedAgent extends AgentRun {
+  readonly transport: AgentTransport
 }
 
 export interface LaunchOutput {
@@ -195,7 +188,7 @@ export interface RunningConfig {
   chosen: string | null
 }
 
-export interface AgentManagerDeps {
+export interface AgentManagerDeps extends DriverOverrides {
   catalog: readonly AgentDefinition[]
   platform: Platform
   electronPath: string
@@ -249,7 +242,7 @@ class Slot {
   detail: string | null = null
   init: AgentInit | null = null
   runtime: AgentRuntime | null = null
-  launched: LaunchedAgent | null = null
+  launched: AgentRun | null = null
   starting: Promise<AgentRuntime> | null = null
   stopping: Promise<void> | null = null
   /** An install on its own, from a reinstall; installs before a start run inside `starting`. */
@@ -374,7 +367,7 @@ function sameUpdate(a: AgentUpdate | null, b: AgentUpdate | null): boolean {
 export class AgentManager {
   private readonly slots = new Map<AgentId, Slot>()
   /** Processes their stop did not end, kept listed and reaped at quit until they exit. */
-  private readonly givenUp = new Map<LaunchedAgent, Slot>()
+  private readonly givenUp = new Map<AgentRun, Slot>()
   private readonly timings: AgentTimings
   private detected: Promise<void> | null = null
   private lastAuthCommands = '[]'
@@ -733,16 +726,7 @@ export class AgentManager {
     slot.launchConfig = this.configIn(slot, env)
     this.emit(slot)
     diagnostics.event(agentId, 'start', formatCommand(spec.display, this.deps.platform))
-    const launched = this.deps.launcher.launch(slot.def, spec, env, {
-      stderr: (text) => this.onStderr(slot, text),
-      event: (event, detail) => diagnostics.event(agentId, event, detail),
-    })
-    slot.launched = launched
-    if (launched.pid !== null) {
-      this.deps.trees?.launched({ pid: launched.pid, startedAt: launched.startedAt })
-    }
-    this.emitProcesses()
-    const connection = AgentConnection.connect(launched.transport, this.connectionHooks(slot))
+    const { launched, connection } = this.connect(slot, spec, env)
     void launched.exited.then((info) => this.onExit(slot, launched, connection, info))
 
     const abort = new AbortController()
@@ -770,11 +754,6 @@ export class AgentManager {
           throw new Error(`${t('agent.exitedBeforeReady', { exit })}${tail ? ` ${tail}` : ''}`)
         }),
       ])
-      if (init.protocolVersion !== 1) {
-        throw new Error(
-          `${slot.def.name} speaks an unsupported protocol version (${init.protocolVersion}).`,
-        )
-      }
       const runtime: AgentRuntime = {
         agentId,
         connection,
@@ -805,9 +784,92 @@ export class AgentManager {
     }
   }
 
+  private driver(slot: Slot): AgentDriver {
+    return driverOf(slot.def, this.deps)
+  }
+
+  /**
+   * Starts the agent through its protocol's driver: over the stdio of the process the launcher
+   * spawns, or as a run in the host whose processes are recorded and stopped as the agent's own.
+   */
+  private connect(
+    slot: Slot,
+    spec: LaunchSpec,
+    env: Env,
+  ): { launched: AgentRun; connection: AgentConnection } {
+    const driver = this.driver(slot)
+    const context = { def: slot.def, hooks: this.connectionHooks(slot) }
+    if (driver.kind === 'process') {
+      const launched = this.deps.launcher.launch(slot.def, spec, env, {
+        stderr: (text) => this.onStderr(slot, text),
+        event: (event, detail) => this.deps.diagnostics.event(slot.def.id, event, detail),
+      })
+      slot.launched = launched
+      if (launched.pid !== null) {
+        this.deps.trees?.launched({ pid: launched.pid, startedAt: launched.startedAt })
+      }
+      this.emitProcesses()
+      return { launched, connection: driver.connect(launched.transport, context) }
+    }
+    const run = new HostedRun(this.deps.platform, this.hostedHooks(slot))
+    slot.launched = run
+    let connection: AgentConnection
+    try {
+      connection = driver.connect({ ...context, spec, env, spawn: run.spawn })
+    } catch (error) {
+      slot.launched = null
+      throw error
+    }
+    run.attach(connection)
+    return { launched: run, connection }
+  }
+
+  /** How a run in the host records and stops the processes it spawns, as the agent's own. */
+  private hostedHooks(slot: Slot): HostedRunHooks {
+    const { diagnostics } = this.deps
+    const agentId = slot.def.id
+    return {
+      stderr: (text) => this.onStderr(slot, text),
+      event: (event, detail) => diagnostics.event(agentId, event, detail),
+      spawned: (child) => {
+        if (child.pid !== null) {
+          this.deps.trees?.launched({ pid: child.pid, startedAt: child.startedAt })
+        }
+        this.emitProcesses()
+      },
+      exited: (child) => {
+        void this.reapTree(slot, child)
+        this.givenUp.delete(child)
+        this.emitProcesses()
+      },
+      stop: (child, tools) => this.stopChild(slot, child, tools),
+    }
+  }
+
+  /** Stops a process a run in the host spawned as `stopProcess` stops an agent's own. */
+  private async stopChild(slot: Slot, child: SpawnedAgent, tools: ToolOptions): Promise<void> {
+    await this.noteTree(child)
+    const info = await child.stop(tools)
+    if (!child.hasExited) {
+      const { diagnostics } = this.deps
+      diagnostics.event(slot.def.id, 'stop failed', describeExit(info))
+      diagnostics.log('warn', `A process ${slot.def.name} ran did not stop: ${describeExit(info)}`)
+      this.givenUp.set(child, slot)
+      this.emitProcesses()
+    }
+    await this.reapTree(slot, child)
+  }
+
+  /** The agent's process, or the processes its run in the host spawned. */
+  private processesOf(slot: Slot): AgentRun[] {
+    const { launched } = slot
+    if (!launched) return []
+    return launched instanceof HostedRun ? launched.children : [launched]
+  }
+
   private onExit(
     slot: Slot,
-    launched: LaunchedAgent,
+    launched: AgentRun,
     connection: AgentConnection,
     info: ExitInfo,
   ): void {
@@ -1649,7 +1711,7 @@ export class AgentManager {
    * closed, so its runtime is never handed out again, and the next start runs a new process. It
    * stays listed for main until it exits, and its tree is stopped once more now and at quit.
    */
-  private letGo(slot: Slot, launched: LaunchedAgent, info: ExitInfo): void {
+  private letGo(slot: Slot, launched: AgentRun, info: ExitInfo): void {
     if (slot.launched !== launched) return
     const { diagnostics } = this.deps
     diagnostics.event(slot.def.id, 'stop failed', describeExit(info))
@@ -1672,14 +1734,14 @@ export class AgentManager {
     return { quitting: this.stopped }
   }
 
-  private noteTree(launched: LaunchedAgent): Promise<void> {
+  private noteTree(launched: AgentRun): Promise<void> {
     const { trees } = this.deps
     if (!trees || launched.pid === null || launched.hasExited) return Promise.resolve()
     return trees.note({ pid: launched.pid, startedAt: launched.startedAt }, this.tools())
   }
 
   /** What the agent's process left behind once it exited: CLIs, servers, commands it ran. */
-  private reapTree(slot: Slot, launched: LaunchedAgent): Promise<void> {
+  private reapTree(slot: Slot, launched: AgentRun): Promise<void> {
     const { trees } = this.deps
     if (!trees || launched.pid === null) return Promise.resolve()
     const root = { pid: launched.pid, startedAt: launched.startedAt }
@@ -1732,17 +1794,14 @@ export class AgentManager {
     return {
       traffic: (direction, message) => {
         diagnostics.traffic(agentId, direction, message)
-        const { launched } = slot
-        if (launched?.pid != null) {
-          this.deps.trees?.active({ pid: launched.pid, startedAt: launched.startedAt })
+        for (const run of this.processesOf(slot)) {
+          if (run.pid != null) this.deps.trees?.active({ pid: run.pid, startedAt: run.startedAt })
         }
       },
       account: (account) => this.setAccount(slot, account),
       ignored: (sessionId, what) =>
         diagnostics.event(agentId, 'ignored', sessionId ? `${what} (session ${sessionId})` : what),
       log: (level, message) => diagnostics.log(level, `${slot.def.name}: ${message}`),
-      levelsAsModes: slot.def.levelsAsModes ?? false,
-      startupNote: slot.def.startupNote ?? false,
     }
   }
 
@@ -1812,52 +1871,52 @@ export class AgentManager {
    */
   async refreshLimits(agentId: AgentId): Promise<void> {
     const slot = this.slot(agentId)
-    const report = limitsReport(agentId)
-    if (!report) return
+    if (!this.hasLimits(agentId)) return
     await this.detectAll()
     if (slot.signIn === 'required' || (!slot.runtime && slot.detection?.state !== 'available')) {
       return
     }
     if (slot.limitsRun) return slot.limitsRun
     if (Date.now() - slot.limitsReadAt < this.timings.limitsMs) return
-    slot.limitsRun = this.readLimits(slot, report).finally(() => {
+    slot.limitsRun = this.readLimits(slot).finally(() => {
       slot.limitsRun = null
     })
     return slot.limitsRun
   }
 
-  private async readLimits(slot: Slot, report: LimitsReport): Promise<void> {
+  /** Whether the agent tells its plan limits: from its connection, or from its report. */
+  hasLimits(agentId: AgentId): boolean {
+    const slot = this.slots.get(agentId)
+    return !!slot && (limitsReport(agentId) !== null || this.driver(slot).reads?.limits === true)
+  }
+
+  /** Whether the agent tells what fills a session's context: from its connection, or its report. */
+  hasContext(agentId: AgentId): boolean {
+    const slot = this.slots.get(agentId)
+    return !!slot && (hasContextReport(agentId) || this.driver(slot).reads?.context === true)
+  }
+
+  /** The limits from the connection when it reads them, else from the agent's report. */
+  private async readLimits(slot: Slot): Promise<void> {
     const runtime = await this.ensureReady(slot.def.id)
-    const dir = this.deps.reportsDir
-    await mkdir(dir, { recursive: true })
-    const log = (message: string): void => this.deps.diagnostics.log('warn', message)
-    let messages: string[]
-    try {
-      messages = await runReport(
-        runtime,
-        async () => {
-          const setup = await runtime.connection.newSession(dir, hiddenSessionMeta(slot.def.id))
-          // Only while none are known: the empty folder's defaults never replace a session's.
-          if (!this.hooks.optionsKnown(slot.def.id))
-            this.hooks.optionsSeen(slot.def.id, setup.config, dir)
-          return setup.acpSessionId
-        },
-        report,
-        log,
-      )
-    } catch (error) {
-      if (error instanceof AgentRequestError && error.kind === 'auth_required') {
-        this.authRequired(slot.def.id)
+    const { connection } = runtime
+    const report = limitsReport(slot.def.id)
+    let limits: PlanLimit[]
+    let now: number
+    if (connection.readLimits) {
+      try {
+        limits = await connection.readLimits()
+      } catch (error) {
+        throw this.limitsError(slot, error)
       }
-      throw agentError(error)
-    }
-    const now = Date.now()
-    slot.limitsReadAt = now
-    const limits = messages
-      .map((text) => report.parse(text, now))
-      .findLast((parsed) => parsed !== null)
-    if (!limits) {
-      log(`${slot.def.name}: ${report.command} gave no report Kettu can read`)
+      now = Date.now()
+      slot.limitsReadAt = now
+    } else if (report) {
+      const read = await this.reportLimits(slot, runtime, report)
+      if (!read) return
+      limits = read.limits
+      now = read.now
+    } else {
       return
     }
     for (const limit of limits) {
@@ -1868,6 +1927,51 @@ export class AgentManager {
       slot.limits.set(limit.window, held ? { ...limit, state: before.state } : limit)
     }
     this.emit(slot)
+  }
+
+  /** Runs the agent's report in a hidden session; null when it gave none Kettu can read. */
+  private async reportLimits(
+    slot: Slot,
+    runtime: AgentRuntime,
+    report: LimitsReport,
+  ): Promise<{ limits: PlanLimit[]; now: number } | null> {
+    const dir = this.deps.reportsDir
+    await mkdir(dir, { recursive: true })
+    const log = (message: string): void => this.deps.diagnostics.log('warn', message)
+    let messages: string[]
+    try {
+      messages = await runReport(
+        runtime,
+        async () => {
+          const setup = await runtime.connection.newSession(dir, { hidden: 'limits' })
+          // Only while none are known: the empty folder's defaults never replace a session's.
+          if (!this.hooks.optionsKnown(slot.def.id))
+            this.hooks.optionsSeen(slot.def.id, setup.config, dir)
+          return setup.sessionId
+        },
+        report,
+        log,
+      )
+    } catch (error) {
+      throw this.limitsError(slot, error)
+    }
+    const now = Date.now()
+    slot.limitsReadAt = now
+    const limits = messages
+      .map((text) => report.parse(text, now))
+      .findLast((parsed) => parsed !== null)
+    if (!limits) {
+      log(`${slot.def.name}: ${report.command} gave no report Kettu can read`)
+      return null
+    }
+    return { limits, now }
+  }
+
+  private limitsError(slot: Slot, error: unknown): HostError {
+    if (error instanceof AgentRequestError && error.kind === 'auth_required') {
+      this.authRequired(slot.def.id)
+    }
+    return agentError(error)
   }
 
   /**
@@ -1892,10 +1996,9 @@ export class AgentManager {
     await slot.limitsRun?.catch(() => {})
     if (slot.signIn === 'required') return
     const runtime = this.runtime(agentId)
-    const removal = runtime && hiddenRemoval(agentId, runtime.init)
-    if (!runtime || !removal) return
+    if (!runtime?.connection.hiddenSessions) return
     try {
-      await this.readInHiddenSession(slot, runtime, removal, log, folder)
+      await this.readInHiddenSession(slot, runtime, log, folder)
     } catch (error) {
       if (error instanceof AgentRequestError && error.kind === 'auth_required') {
         this.authRequired(agentId)
@@ -1909,18 +2012,17 @@ export class AgentManager {
   private async readInHiddenSession(
     slot: Slot,
     runtime: AgentRuntime,
-    removal: Removal,
     log: (message: string) => void,
     folder: string | undefined,
   ): Promise<void> {
     const agentId = slot.def.id
-    const remove = (acpSessionId: string): Promise<void> =>
-      removeHiddenSession(runtime, acpSessionId, removal, (message) =>
+    const remove = (sessionId: string): Promise<void> =>
+      runtime.connection.removeHidden(sessionId, (message) =>
         log(`could not remove the session its options were read in: ${message}`),
       )
     const dir = folder ?? this.deps.reportsDir
     if (!folder) await mkdir(dir, { recursive: true })
-    const opening = runtime.connection.newSession(dir, hiddenSessionMeta(agentId))
+    const opening = runtime.connection.newSession(dir, { hidden: 'options' })
     let timer: ReturnType<typeof setTimeout> | null = null
     const setup = await Promise.race([
       opening,
@@ -1934,7 +2036,7 @@ export class AgentManager {
       log(`gave no options within ${this.timings.optionsMs / 1000} s`)
       // A late answer still opened a session, which goes like any other.
       void opening.then(
-        (late) => remove(late.acpSessionId),
+        (late) => remove(late.sessionId),
         () => {},
       )
       return
@@ -1943,7 +2045,7 @@ export class AgentManager {
       if (setup.config.length > 0) this.hooks.optionsSeen(agentId, setup.config, dir)
       this.signedIn(agentId)
     } finally {
-      const removing = remove(setup.acpSessionId)
+      const removing = remove(setup.sessionId)
       slot.optionsRemoval = removing
       try {
         await removing
@@ -2030,7 +2132,7 @@ export class AgentManager {
     await this.detectAll()
     if (slot.signIn === 'required') return
     if (!slot.runtime && (slot.detection?.state !== 'available' || !slot.detection.spec)) return
-    if (limitsReport(agentId)) await this.refreshLimits(agentId)
+    if (this.hasLimits(agentId)) await this.refreshLimits(agentId)
     else await this.ensureReady(agentId)
   }
 
@@ -2279,8 +2381,8 @@ export class AgentManager {
         // codex-acp 2.2.2 ignores `idleBehavior` and starts a turn of its own when none is
         // running (its PR #593 would fix it), which Kettu would not know about.
         steering: (capabilities?.steering ?? false) && slot.def.id !== 'codex',
-        reports: limitsReport(slot.def.id) !== null,
-        context: hasContextReport(slot.def.id),
+        reports: this.hasLimits(slot.def.id),
+        context: this.hasContext(slot.def.id),
         account: slot.def.reportsAccount ?? false,
         progressNotes: slot.def.progressNotes ?? false,
         mcpHttp: capabilities?.mcpHttp ?? null,
@@ -2387,14 +2489,13 @@ export class AgentManager {
   }
 
   processes(): AgentProcess[] {
-    const running = [
-      ...[...this.slots.values()].map((slot) => [slot.launched, slot] as const),
-      ...this.givenUp,
-    ]
-    return running.flatMap(([launched, { def }]) =>
-      launched?.pid != null
-        ? [{ agentId: def.id, pid: launched.pid, startedAt: launched.startedAt }]
-        : [],
+    const running = new Map<AgentRun, Slot>()
+    for (const slot of this.slots.values()) {
+      for (const run of this.processesOf(slot)) running.set(run, slot)
+    }
+    for (const [run, slot] of this.givenUp) running.set(run, slot)
+    return [...running].flatMap(([run, { def }]) =>
+      run.pid != null ? [{ agentId: def.id, pid: run.pid, startedAt: run.startedAt }] : [],
     )
   }
 }
@@ -2414,7 +2515,7 @@ function settledWithin(promise: Promise<void>, ms: number): Promise<void> {
   })
 }
 
-/** Maps a failed ACP request to the port error the renderer acts on. */
+/** Maps a failed request to the agent to the port error the renderer acts on. */
 export function agentError(error: unknown): HostError {
   if (error instanceof HostError) return error
   if (error instanceof AgentRequestError) {
