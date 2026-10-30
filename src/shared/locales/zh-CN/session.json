@@ -250,6 +250,7 @@
       "notInstalledLong": "{{agent}} 还没有安装。",
       "installsOnFirstUse": "{{agent}} 尚未安装，首次使用时会自动安装。",
       "setsUpLong": "{{agent}} 会在首次使用时自动配置：Kettu 会为它安装适配器；适配器不接受你的 {{command}} 版本时，还会下载一份 {{agent}}。",
+      "setsUpLongSdk": "{{agent}} 会在首次使用时自动配置：Kettu 会为它安装 SDK；SDK 不接受你的 {{command}} 版本时，还会下载一份 {{agent}}。",
       "install": "安装…",
       "failedLong": "{{agent}} 启动失败。",
       "retry": "重试",

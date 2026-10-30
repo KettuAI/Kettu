@@ -485,7 +485,12 @@ function Pane({
     } else if (need === 'setup') {
       notice = (
         <Notice
-          text={t('newSession.agentMenu.setsUpLong', { agent: name, command: status.cli?.command })}
+          text={t(
+            status.package?.isSdk
+              ? 'newSession.agentMenu.setsUpLongSdk'
+              : 'newSession.agentMenu.setsUpLong',
+            { agent: name, command: status.cli?.command },
+          )}
           tone="neutral"
         >
           {install}

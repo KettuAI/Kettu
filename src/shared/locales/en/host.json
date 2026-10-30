@@ -179,6 +179,7 @@
   },
   "detect": {
     "nodeMissing": "{{agent}} runs on Node.js, and node was not found on PATH.",
+    "nodeToInstall": "{{agent}} is installed with npm on first use, which needs Node.js, and node was not found on PATH.",
     "nodeOutdated": "{{agent}} needs Node.js {{required}} or later; {{installed}} is installed.",
     "npmMissing": "{{agent}} is installed with npm on first use, and npm was not found on PATH. {{hint}}",
     "programUnusable": "The program chosen for {{agent}} ({{path}}) cannot be run.",

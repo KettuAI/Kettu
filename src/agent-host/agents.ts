@@ -2292,6 +2292,7 @@ export class AgentManager {
                 !!(adapter?.current ?? adapter?.fallback) ||
                 (!!slot.def.cli?.isPackage && adapter?.cli?.runs === 'installed'),
               ...(slot.def.cli?.isPackage ? { isCli: true as const } : {}),
+              ...(launch.library ? { isSdk: true as const } : {}),
             }
           : null,
       signIn: slot.signIn,

@@ -1001,6 +1001,26 @@ describe('detectAgent with the CLI the user installed', () => {
     })
   })
 
+  it('needs no Node.js once the SDK is installed, and Node.js with npm only to install it', async () => {
+    const none = { nodeVersion: null, npmPath: null, nodePath: null }
+    expect(await detectAgent(CLAUDE_CODE, withClaude({ node: none }))).toMatchObject({
+      state: 'available',
+      spec: { command: '/data/agents/claude-code/0.3.314/index.js', cli: '/usr/local/bin/claude' },
+      adapter: { installed: true, node: null },
+    })
+    const fresh = { installed: async () => [] }
+    expect(await detectAgent(CLAUDE_CODE, withClaude({ node: none, ...fresh }))).toEqual({
+      state: 'node-missing',
+      detail:
+        'Claude Code is installed with npm on first use, which needs Node.js, and node was not found on PATH.',
+    })
+    const nodeOnly = { nodeVersion: 'v24.1.0', nodePath: '/x/node', npmPath: null }
+    expect(await detectAgent(CLAUDE_CODE, withClaude({ node: nodeOnly, ...fresh }))).toMatchObject({
+      state: 'not-installed',
+      detail: expect.stringContaining('npm was not found'),
+    })
+  })
+
   it('leaves a program the environment names to the adapter', async () => {
     const detection = await detectAgent(
       CLAUDE_CODE,

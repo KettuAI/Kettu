@@ -1503,6 +1503,39 @@ describe('the CLI the user installed', () => {
   })
 })
 
+describe('an agent whose package is a library the host loads', () => {
+  it('reports the package as an SDK, which runs without Node.js once installed', async () => {
+    const def: AgentDefinition = {
+      ...fakeAgent(FAKE_AGENT_MAIN),
+      launch: { kind: 'package', package: 'fake-sdk', version: '1.0.0', library: true },
+    }
+    const installed: InstalledAdapter = {
+      version: '1.0.0',
+      dir: '/s/1.0.0',
+      entry: '/s/1.0.0/node_modules/fake-sdk/sdk.mjs',
+      installedAt: 1,
+    }
+    const m = manager(
+      {},
+      {},
+      {
+        catalog: [def],
+        detect: async (d, ctx) =>
+          detectAgent(d, {
+            ...ctx,
+            node: { nodeVersion: null, npmPath: null, nodePath: null },
+            installed: async () => [installed],
+          }),
+      },
+    )
+    await m.agents.detectAll()
+    expect(m.agents.status('fake-agent')).toMatchObject({
+      state: 'available',
+      package: { name: 'fake-sdk', version: '1.0.0', installed: true, isSdk: true },
+    })
+  })
+})
+
 describe('an agent whose package is its CLI', () => {
   const cli: AdapterCli = { ...FAKE_CLI, isPackage: true, minimum: undefined }
   const install = (version: string): InstalledAdapter => ({

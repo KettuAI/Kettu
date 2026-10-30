@@ -5,10 +5,8 @@ import { createHash } from 'node:crypto'
 import type { ForkPoint } from '../connection'
 import { compareVersions } from '../versions'
 
-// The first version of each agent seen to honour it: the fake agent, in the official adapters' form.
-const FORK_POINT_SINCE: ReadonlyMap<string, string> = new Map([
-  ['fake-agent', '0.1.0'],
-])
+// The first version of each agent seen to honour it: the fake agent, in the adapters' old form.
+const FORK_POINT_SINCE: ReadonlyMap<string, string> = new Map([['fake-agent', '0.1.0']])
 
 /** Whether the agent `initialize` names forks at a fork point rather than ignoring it. */
 export function forksAtMessage(
