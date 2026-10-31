@@ -503,7 +503,11 @@ describeUnix('kettu', () => {
       await until(async () => latest(device)?.[0]?.host === 'frp.example.com', 'the address')
       expect(latest(device)![0]).toEqual({ host: 'frp.example.com', port: 60021 })
     }
-    expect((await cli('direct')).stdout).toMatch(/^ {2}frp\.example\.com:60021 +yours$/m)
+    // An address is passed on without waiting for the remote host, whose report follows.
+    await until(
+      async () => /^ {2}frp\.example\.com:60021 +yours$/m.test((await cli('direct')).stdout),
+      'the address listed',
+    )
     expect(await cli('direct', 'add', 'FRP.example.com:60021')).toEqual({
       code: 1,
       stdout: '',
@@ -514,7 +518,6 @@ describeUnix('kettu', () => {
       code: 0,
       stdout: 'Added [fd00::1]:4567, which devices try first.\n',
     })
-    // Passed on without waiting for the remote host, whose report follows.
     await until(
       async () => /^ {2}\[fd00::1\]:4567 +yours$/m.test((await cli('direct')).stdout),
       'the IPv6 address listed',

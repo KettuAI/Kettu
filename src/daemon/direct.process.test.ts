@@ -203,9 +203,11 @@ describeUnix('direct connections on the daemon', () => {
     await callControl(socket, 'direct.port', { port: refused })
     expect((await sent()).length).toBe(listening)
 
-    // Addresses of the owner's own, refused as the app refuses them.
+    // Addresses of the owner's own, refused as the app refuses them. They are passed on without
+    // waiting for the remote host, so what it was sent shows a moment later.
+    const lastSent = () => expect.poll(async () => (await sent()).at(-1), { timeout: 10_000 })
     expect(await callControl(socket, 'direct.add', FRP)).toMatchObject({ own: [FRP] })
-    expect((await sent()).at(-1)).toEqual({
+    await lastSent().toEqual({
       type: 'remote-host:direct',
       direct: { enabled: true, port: refused, addresses: [FRP] },
     })
@@ -228,12 +230,11 @@ describeUnix('direct connections on the daemon', () => {
       callControl(socket, 'direct.remove', { host: 'fd00::1', port: 4567 }),
     ).rejects.toMatchObject({ code: 'not_found', message: 'This address is not in the list' })
     expect(await callControl(socket, 'direct.remove', FRP)).toMatchObject({ own: [] })
-    expect((await sent()).at(-1)).toEqual({
+    await lastSent().toEqual({
       type: 'remote-host:direct',
       direct: { enabled: true, port: refused, addresses: [] },
     })
     await callControl(socket, 'direct.add', FRP)
-    // An address is passed on without waiting for the remote host, whose report follows.
     const reported = await until(async () => {
       const { direct } = await callControl(socket, 'status', undefined)
       return direct?.state === 'listening' && direct.addresses.length === 2 && direct
