@@ -228,6 +228,7 @@ async function start(): Promise<void> {
           process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text',
       }),
     hostName: () => hostname(),
+    direct: () => settings.get().remote.direct,
     openPort: (device) => agentHost.connectDevice(device),
   })
   const artifacts = new Artifacts({
@@ -307,7 +308,10 @@ async function start(): Promise<void> {
       agentHost.pushSettings(hostSettings(next, systemLocale))
     }
     if (changed.has('terminal')) terminalHost.pushSettings(terminalSettings(next))
-    if (changed.has('remote')) void remoteHost.setEnabled(next.remote.enabled)
+    if (changed.has('remote')) {
+      remoteHost.directChanged()
+      void remoteHost.setEnabled(next.remote.enabled)
+    }
     if (changed.has('appearance')) {
       applyTheme(next.appearance.theme)
       applyZoom(next.appearance.zoom)
@@ -365,7 +369,10 @@ async function start(): Promise<void> {
     updater.systemShutdown()
   })
   powerMonitor.on('suspend', () => agentHost.power('suspend'))
-  powerMonitor.on('resume', () => agentHost.power('resume'))
+  powerMonitor.on('resume', () => {
+    agentHost.power('resume')
+    remoteHost.resume()
+  })
 
   agentHost.start()
   void remoteHost.setEnabled(settings.get().remote.enabled)

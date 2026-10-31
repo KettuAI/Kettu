@@ -159,6 +159,7 @@ describe('the remote host under Node.js', () => {
       devices: [],
       online: [],
       refused: 0,
+      direct: { state: 'off' },
     })
 
     const phone = await generateKeyPair()

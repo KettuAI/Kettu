@@ -3,6 +3,7 @@ import type { MessagePortMain } from 'electron'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RemoteHostStatus } from '@shared/host-control'
 import type { PortDevice } from '@shared/remote/device'
+import type { DirectSettings } from '@shared/settings'
 
 const electron = vi.hoisted(() => ({ fork: (): unknown => null }))
 
@@ -47,17 +48,21 @@ function makeHost(
   options: { identity?: () => Promise<{ privateKey: string; plainText: boolean }> } = {},
 ) {
   const opened: PortDevice[] = []
+  const settings: { direct: DirectSettings } = {
+    direct: { enabled: false, port: null, addresses: [] },
+  }
   const host = new RemoteHost({
     userDataPath: '/data',
     appVersion: '1.2.3',
     identity: options.identity ?? (async () => ({ privateKey: 'key', plainText: true })),
     hostName: () => 'Studio',
+    direct: () => settings.direct,
     openPort: (asked) => {
       opened.push(asked)
       return asked.name === 'Phone' ? port : null
     },
   })
-  return { host, opened }
+  return { host, opened, settings }
 }
 
 afterEach(() => {
@@ -77,6 +82,7 @@ describe('RemoteHost', () => {
       hostName: 'Studio',
       privateKey: 'key',
       plainTextKey: true,
+      direct: { enabled: false, port: null, addresses: [] },
     })
     children[0]!.emit('message', { type: 'remote-host:ready' })
     // On again changes nothing.
@@ -140,13 +146,58 @@ describe('RemoteHost', () => {
       devices: [],
       online: [],
       refused: 2,
+      direct: {
+        state: 'listening',
+        port: 50123,
+        addresses: [{ host: '192.168.1.5', port: 50123 }],
+      },
     }
     child.emit('message', { type: 'remote-host:status', status })
     expect(host.status).toEqual(status)
     child.emit('message', { type: 'remote-host:status', status: { ...status, refused: -1 } })
     expect(host.status).toEqual(status)
+    const failed = { ...status, direct: { state: 'failed', port: 50123, reason: 'port_in_use' } }
+    child.emit('message', { type: 'remote-host:status', status: failed })
+    expect(host.status).toEqual(failed)
+    for (const direct of [
+      undefined,
+      { state: 'listening', port: 0, addresses: [] },
+      { state: 'listening', port: 50123, addresses: [{ host: 'a b', port: 1 }] },
+      { state: 'failed', port: 50123, reason: 'busy' },
+      { state: 'on' },
+    ]) {
+      child.emit('message', { type: 'remote-host:status', status: { ...status, direct } })
+      expect(host.status).toEqual(failed)
+    }
     await host.setEnabled(false)
     expect(host.status).toBeNull()
+  })
+
+  it('passes changed direct settings on, and the wake from sleep', async () => {
+    const { host, settings } = makeHost()
+    host.directChanged()
+    host.resume()
+    await host.setEnabled(true)
+    const child = children[0]!
+    child.emit('message', { type: 'remote-host:ready' })
+    // The init carried these already.
+    host.directChanged()
+    settings.direct = {
+      enabled: true,
+      port: 50123,
+      addresses: [{ host: 'studio.example.com', port: 7000 }],
+    }
+    host.directChanged()
+    host.directChanged()
+    host.resume()
+    expect(child.posted.slice(1).map(({ message }) => message)).toEqual([
+      { type: 'remote-host:direct', direct: settings.direct },
+      { type: 'remote-host:resume' },
+    ])
+    await host.setEnabled(false)
+    await host.setEnabled(true)
+    expect(children[1]!.posted[0]!.message).toMatchObject({ direct: settings.direct })
+    await host.stop()
   })
 
   it('does not start without its key', async () => {

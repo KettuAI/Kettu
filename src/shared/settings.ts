@@ -1,4 +1,5 @@
 import type { LanguageSetting, Locale } from './locale'
+import type { DirectAddress } from './remote/protocol'
 import { BUILTIN_THEME_ID } from './themes'
 import type { AgentId, HarnessId } from './thread'
 
@@ -50,7 +51,19 @@ export interface SettingsFile {
     fromComputer: boolean // read the agents' own logs
     sidebar: 'today' | 'cost' | 'limit' | 'off' // what the sidebar's Usage row shows at its end
   }
-  remote: { enabled: boolean } // paired devices may connect to this computer
+  remote: {
+    enabled: boolean // paired devices may connect to this computer
+    direct: DirectSettings
+  }
+}
+
+/** Devices connecting over TCP on the same network or a VPN, without the relay. */
+export interface DirectSettings {
+  enabled: boolean
+  // Picked at random the first time direct connections turn on, then kept, so firewall rules and
+  // forwarded ports stay valid.
+  port: number | null
+  addresses: DirectAddress[] // the owner's own, such as a forwarded port, listed before the found
 }
 
 /** An agent added beside a harness's default one, with a configuration folder of its own. */
@@ -115,7 +128,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   updates: { automatic: 'download' },
   privacy: { hideAccount: false },
   usage: { fromComputer: false, sidebar: 'today' },
-  remote: { enabled: false },
+  remote: { enabled: false, direct: { enabled: false, port: null, addresses: [] } },
 }
 
 /** The zoom one step in (1) or out (-1), held at the ends; 0 returns to the default. */
@@ -143,7 +156,11 @@ export interface SettingsPatch {
   updates?: Partial<SettingsFile['updates']>
   privacy?: Partial<SettingsFile['privacy']>
   usage?: Partial<SettingsFile['usage']>
-  remote?: Partial<SettingsFile['remote']>
+  remote?: {
+    enabled?: boolean
+    // `port` from 1024: below it a port may need privileges; the list is replaced whole.
+    direct?: { enabled?: boolean; port?: number; addresses?: DirectAddress[] }
+  }
 }
 
 /** The part of the settings the agent host receives. */
