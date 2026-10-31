@@ -145,6 +145,70 @@ jobs:
       - run: pnpm build
         env:
           MAIN_VITE_UPDATE_MODE: ${{ matrix.update_mode }}
+      # The daemon as a real LaunchAgent, which is never installed on a developer's computer: it is
+      # installed from an SSH session that then ends, must run as a service, come back after it is
+      # killed, and stop when the service is removed.
+      - name: Check the daemon's service
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node="$(command -v node)"
+          main="$PWD/out/daemon/main.cjs"
+          kettu() { "$node" "$main" "$@"; }
+          # The first line names the daemon's own pid.
+          daemon_pid() { sed -n '1s/.*(pid \([0-9]*\))$/\1/p' "$1"; }
+          status="$RUNNER_TEMP/daemon-status.txt"
+          trap 'tail -n 50 "$HOME/Library/Application Support/Kettu Daemon/logs/daemon.log" || true' EXIT
+
+          # Remote Login, for an SSH session to install the service from.
+          ssh-keygen -q -t ed25519 -N '' -f "$RUNNER_TEMP/ssh-key"
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          cat "$RUNNER_TEMP/ssh-key.pub" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys
+          sudo launchctl enable system/com.openssh.sshd || true
+          sudo launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist || true
+          ssh_to_self=(ssh -i "$RUNNER_TEMP/ssh-key" -o BatchMode=yes -o ConnectTimeout=10
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$(id -un)@localhost")
+          if "${ssh_to_self[@]}" true; then
+            "${ssh_to_self[@]}" "'$node' '$main' service install"
+            echo "Installed from an SSH session, which has ended"
+            sleep 5
+          else
+            echo "::warning::Remote Login could not be turned on; the service is installed without SSH"
+            kettu service install
+          fi
+          kettu status | tee "$status"
+          grep -q 'is running as a service' "$status"
+          grep -q 'Private key: *in a file only you can read' "$status"
+          launchctl print "gui/$(id -u)/sh.kettu.daemon" | head -n 40
+
+          # launchd starts it again whenever it exits.
+          pid="$(daemon_pid "$status")"
+          kill -9 "$pid"
+          restarted=''
+          for _ in $(seq 60); do
+            sleep 1
+            if kettu status > "$status"; then
+              restarted="$(daemon_pid "$status")"
+              if [ -n "$restarted" ] && [ "$restarted" != "$pid" ]; then break; fi
+            fi
+          done
+          cat "$status"
+          if [ -z "$restarted" ] || [ "$restarted" = "$pid" ]; then
+            echo "::error::launchd did not start the daemon again after it was killed"
+            exit 1
+          fi
+
+          kettu service uninstall
+          if kettu status; then
+            echo "::error::The daemon still runs after its service was removed"
+            exit 1
+          fi
+          test ! -e "$HOME/Library/LaunchAgents/sh.kettu.daemon.plist"
+          if launchctl print "gui/$(id -u)/sh.kettu.daemon" > /dev/null 2>&1; then
+            echo "::error::launchd still has the service after it was removed"
+            exit 1
+          fi
       # The Icon Composer app icon compiles only with Xcode 26's actool or later, which the macOS 15
       # image has but does not select.
       - name: Select Xcode 26 or later

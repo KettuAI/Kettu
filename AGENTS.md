@@ -70,6 +70,7 @@ src/
 ├── agent-host/        Utility process: agents, sessions, projects, git
 ├── terminal-host/     Utility process: the terminal's shells through node-pty
 ├── remote-host/       Utility process: paired devices' encrypted connections to the agent host
+├── daemon/            The `kettu` CLI: runs the hosts under Node.js on a computer without the app
 ├── renderer/src/      React UI
 │   ├── app/           Bootstrap, actions, shortcuts, menu commands
 │   ├── features/      One folder per area: session, sidebar, settings, git, terminal, ...
