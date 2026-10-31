@@ -251,10 +251,10 @@ describe('agentNeed', () => {
     expect(agentNeed(status({ id: 'opencode', state: 'ready', signIn: 'signed-in' }))).toBeNull()
   })
 
-  it('counts a package agent without its adapter as not installed, yet startable', () => {
+  it('cannot start a package agent without its adapter until Settings installs it', () => {
     const codex = status({ package: adapter(false) })
     expect(agentNeed(codex)).toBe('adapter')
-    expect(canStart(codex)).toBe(true)
+    expect(canStart(codex)).toBe(false)
   })
 
   it('sets up a package agent without its adapter on first use when its own CLI runs', () => {
@@ -279,8 +279,10 @@ describe('agentNeed', () => {
     // A program set by CODEX_PATH runs whether or not its version could be read.
     const unread = cli('installed', { variable: 'CODEX_PATH', version: null })
     expect(agentNeed(status({ package: adapter(false), cli: unread }))).toBe('setup')
-    // The copy is to run, so the first start downloads Codex too.
-    expect(agentNeed(status({ package: adapter(false), cli: cli('bundled') }))).toBe('adapter')
+    // The copy is to run, so Codex is not on the machine yet and installs from Settings.
+    const bundled = status({ package: adapter(false), cli: cli('bundled') })
+    expect(agentNeed(bundled)).toBe('adapter')
+    expect(canStart(bundled)).toBe(false)
     expect(agentNeed(status({ package: adapter(true), cli: cli('installed') }))).toBeNull()
   })
 
@@ -308,7 +310,7 @@ describe('noAgentCanStart', () => {
     expect(
       noAgentCanStart([
         status({ ...claude, state: 'node-missing' }),
-        status({ package: adapter(false) }),
+        status({ package: adapter(true) }),
       ]),
     ).toBeNull()
   })
@@ -324,6 +326,11 @@ describe('noAgentCanStart', () => {
   })
 
   it('names none when every agent needs installing', () => {
-    expect(noAgentCanStart([status({ ...opencode, state: 'not-installed' })])).toEqual([])
+    expect(
+      noAgentCanStart([
+        status({ ...opencode, state: 'not-installed' }),
+        status({ package: adapter(false) }),
+      ]),
+    ).toEqual([])
   })
 })
