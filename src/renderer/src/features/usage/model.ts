@@ -276,6 +276,25 @@ export function figures(
   }
 }
 
+/** The token types, in the order the composition lists them. */
+const TOKEN_PARTS = ['input', 'output', 'reasoning', 'cacheRead', 'cacheWrite'] as const
+export type TokenPart = (typeof TOKEN_PARTS)[number]
+
+/**
+ * What the tokens are made of: each type's tokens and share of `total`, the share null without
+ * tokens. Reasoning shows only where an agent reports it apart from the output.
+ */
+export function tokenParts(
+  parts: Pick<TokenParts, TokenPart>,
+  total: number,
+): { part: TokenPart; tokens: number; share: number | null }[] {
+  return TOKEN_PARTS.filter((part) => part !== 'reasoning' || parts.reasoning > 0).map((part) => ({
+    part,
+    tokens: parts[part],
+    share: total > 0 ? parts[part] / total : null,
+  }))
+}
+
 /** The range's tokens per request; null without requests. */
 export function tokensPerRequest(facts: Pick<Figures, 'tokens' | 'total'>): number | null {
   return facts.total > 0 ? facts.tokens / facts.total : null
@@ -556,6 +575,15 @@ export function heatLevels(totals: readonly number[]): number[] {
   return totals.map((t) => (t <= 0 ? 0 : t <= q1 ? 1 : t <= q2 ? 2 : t <= q3 ? 3 : 4))
 }
 
+/** Whether a day outside the range has usage, which the heatmap then draws in gray. */
+export function usedOutside(
+  days: readonly number[],
+  values: readonly number[],
+  range: DayRange,
+): boolean {
+  return days.some((day, i) => (day < range.from || day >= range.to) && (values[i] ?? 0) > 0)
+}
+
 /**
  * Where the `index`th figure sits when the figures' card holds two to a row. A cell draws the
  * hairline on its top when a row is above it, and on its left when a cell is beside it.
@@ -746,6 +774,17 @@ export function planAgents<T extends { id: AgentId; limits: readonly unknown[] }
   used: readonly AgentId[],
 ): T[] {
   return agents.filter((agent) => agent.limits.length > 0 || used.includes(agent.id))
+}
+
+/**
+ * The plan limits' rows: an account that reports limits, or will once read, has a row; the agents
+ * that report none join one line.
+ */
+export function splitPlans<
+  T extends { limits: readonly unknown[]; capabilities: { reports: boolean } },
+>(agents: readonly T[]): { rows: T[]; unreported: T[] } {
+  const reports = (agent: T) => agent.limits.length > 0 || agent.capabilities.reports
+  return { rows: agents.filter(reports), unreported: agents.filter((agent) => !reports(agent)) }
 }
 
 /** How a plan window's reset reads: the time left when it is within a day, else when it is. */

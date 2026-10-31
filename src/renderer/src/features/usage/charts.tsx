@@ -18,6 +18,14 @@ import {
 } from './model'
 
 const HEAT_FILL = ['bg-heat-0', 'bg-heat-1', 'bg-heat-2', 'bg-heat-3', 'bg-heat-4'] as const
+/** A day outside the range: its step in gray, so the shades still compare. */
+const HEAT_OUT = [
+  'bg-heat-0',
+  'bg-heat-out-1',
+  'bg-heat-out-2',
+  'bg-heat-out-3',
+  'bg-heat-out-4',
+] as const
 /** The heatmap's cells: seven rows as tall as the squares they hold. */
 const HEAT_CELLS = 'grid-rows-[repeat(7,auto)]'
 /** The weekday labels: seven rows sharing the cells' height, adding none of their own. */
@@ -80,7 +88,7 @@ export function TrendChart({
 }) {
   const begun = bars.length - future
   return (
-    <div className="relative flex min-h-49 flex-1 flex-col shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-default)]">
+    <div className="relative flex h-52 flex-col shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-default)]">
       <span
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 border-t border-dashed border-strong"
@@ -321,8 +329,7 @@ const Cells = memo(function Cells({
           data-i={i}
           className={cn(
             'aspect-square self-center rounded-xs',
-            HEAT_FILL[level],
-            outside[i] && 'opacity-35',
+            (outside[i] ? HEAT_OUT : HEAT_FILL)[level],
           )}
         />
       ))}

@@ -41,9 +41,9 @@ describe('the built-in colors', () => {
     expect(BUILTIN_COLORS.light['terminal-background']).toBe('#ffffff')
   })
 
-  it('deepen the heatmap from the secondary text color', () => {
+  it('deepen the heatmap from the accent orange', () => {
     for (const mode of ['light', 'dark'] as const) {
-      expect(BUILTIN_COLORS[mode]['heat-hue']).toBe(BUILTIN_COLORS[mode]['text-secondary'])
+      expect(BUILTIN_COLORS[mode]['heat-hue']).toBe(BUILTIN_COLORS[mode]['attention-dot'])
     }
   })
 

@@ -468,12 +468,17 @@
   --agent-omp: color-mix(in oklch, var(--brand-omp-2) 86%, var(--bg-surface));
   --agent-muse: color-mix(in oklch, var(--brand-muse) 86%, var(--bg-surface));
   --agent-codewhale: color-mix(in oklch, var(--brand-codewhale-1) 86%, var(--bg-surface));
-  /* The heatmap deepens in the secondary text color, which the page already draws amounts in. */
-  --heat-hue: var(--text-secondary);
-  --heat-1: color-mix(in oklch, var(--heat-hue) 26%, transparent);
-  --heat-2: color-mix(in oklch, var(--heat-hue) 48%, transparent);
-  --heat-3: color-mix(in oklch, var(--heat-hue) 74%, transparent);
+  /* Amounts deepen in the accent orange, mixed with the card so each step is opaque. */
+  --heat-hue: var(--attention-dot);
+  --heat-1: color-mix(in oklch, var(--heat-hue) 28%, var(--bg-surface));
+  --heat-2: color-mix(in oklch, var(--heat-hue) 48%, var(--bg-surface));
+  --heat-3: color-mix(in oklch, var(--heat-hue) 74%, var(--bg-surface));
   --heat-4: var(--heat-hue);
+  /* A day outside the range keeps its step's lightness in gray. */
+  --heat-out-1: oklch(from var(--heat-1) l 0 h);
+  --heat-out-2: oklch(from var(--heat-2) l 0 h);
+  --heat-out-3: oklch(from var(--heat-3) l 0 h);
+  --heat-out-4: oklch(from var(--heat-4) l 0 h);
 
   /* The autocompact buffer in the context bar. */
   --context-hatch: repeating-linear-gradient(
