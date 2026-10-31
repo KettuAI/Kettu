@@ -17,9 +17,13 @@ function status(
   update: AgentUpdate | null,
   overrides: Partial<AgentStatus> = {},
 ): AgentStatus {
+  const name = id.startsWith('codex') ? 'Codex' : 'Claude Code'
   return {
     id,
-    name: id === 'codex' ? 'Codex' : 'Claude Code',
+    name,
+    harnessName: name,
+    isDefault: !id.includes('~'),
+    cli: null,
     update,
     updateCheckedAt: 1_000,
     updateSkipped: false,
@@ -78,6 +82,28 @@ describe('agentUpdateNotice', () => {
         ),
         status('codex', { adapterVersion: '2.2.3', cliVersion: null }),
       ]),
+    ).toEqual({ kind: 'one', agentId: 'codex', name: 'Codex', version: '2.2.3' })
+  })
+
+  it("names the version of the user's CLI an update brings", () => {
+    const cli = {
+      command: 'codex',
+      installed: null,
+      method: 'npm' as const,
+      update: { version: '0.170.0', command: 'npm install -g @openai/codex@latest' },
+    }
+    expect(agentUpdateNotice([status('codex', null, { cli })])).toEqual({
+      kind: 'one',
+      agentId: 'codex',
+      name: 'Codex',
+      version: '0.170.0',
+    })
+  })
+
+  it('shows each harness once, through its default agent', () => {
+    const update = { adapterVersion: '2.2.3', cliVersion: null }
+    expect(
+      agentUpdateNotice([status('codex', update), status('codex~work', update, { name: 'Work' })]),
     ).toEqual({ kind: 'one', agentId: 'codex', name: 'Codex', version: '2.2.3' })
   })
 

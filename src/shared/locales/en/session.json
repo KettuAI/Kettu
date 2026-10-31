@@ -289,7 +289,8 @@
       "noSwitch": "{{agent}} has no {{option}} option now, so it cannot be turned on.",
       "switchOff": "{{agent}} starts with {{option}} off, not on.",
       "switchOn": "{{agent}} starts with {{option}} on, not off."
-    }
+    },
+    "installHarness": "Install a harness…"
   },
   "signIn": {
     "title": "Sign in to {{agent}}",

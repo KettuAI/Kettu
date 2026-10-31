@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS, type SettingsFile } from '@shared/settings'
+import { DEFAULT_SETTINGS, type AddedAgent, type SettingsFile } from '@shared/settings'
 import {
   changedSections,
   reachesHost,
@@ -9,8 +9,11 @@ import {
   SettingsError,
   terminalSettings,
   validateSettingsPatch,
+  agentName,
+  withAddedAgent,
   withAgentBinary,
-  withAgentConfigDir,
+  withoutAgent,
+  withRenamedAgent,
   withShellPath,
 } from './settings-schema'
 
@@ -29,7 +32,7 @@ describe('validateSettingsPatch', () => {
       },
       appearance: { theme: 'dark', colorTheme: 'rose-pine', zoom: 1.25 },
       notifications: { sound: true },
-      agents: { opencode: { binaryPath: null }, codex: { cli: 'bundled' } },
+      agents: { opencode: { binaryPath: null }, codex: { hidden: true } },
       proxy: { mode: 'custom', url: 'http://proxy.local:8080', noProxy: 'localhost' },
       terminal: { fontSize: 14, shellPath: null },
       git: { backgroundFetch: true },
@@ -90,12 +93,18 @@ describe('validateSettingsPatch', () => {
     [{ appearance: { zoom: 2 } }, '"appearance.zoom" must be one of'],
     [{ appearance: { zoom: '1.1' } }, '"appearance.zoom" must be one of'],
     [{ notifications: { badge: 'yes' } }, '"notifications.badge" must be a boolean'],
-    [{ agents: { unknown: { binaryPath: null } } }, 'Unknown agent "agents.unknown"'],
+    [{ agents: { unknown: { binaryPath: null } } }, 'Unknown harness "agents.unknown"'],
     [{ agents: { codex: { binaryPath: '/bin/sh' } } }, 'can only be cleared with null'],
-    [{ agents: { codex: { args: [] } } }, 'accepts only "binaryPath", "cli" and "configDir"'],
-    [{ agents: { codex: { configDir: '/srv/codex' } } }, 'choose a folder in the dialog'],
-    [{ agents: { opencode: { configDir: null } } }, 'has no configuration folder of its own'],
-    [{ agents: { codex: { cli: 'path' } } }, '"agents.codex.cli" must be one of'],
+    [{ agents: { codex: { args: [] } } }, 'accepts only "binaryPath", "configDir" and "hidden"'],
+    [
+      { agents: { codex: { cli: 'bundled' } } },
+      'accepts only "binaryPath", "configDir" and "hidden"',
+    ],
+    [{ agents: { codex: { configDir: '/srv/codex' } } }, 'can only be cleared with null'],
+    [{ agents: { codex: { hidden: 'yes' } } }, '"agents.codex.hidden" must be a boolean'],
+    [{ agents: { 'codex~work': { hidden: true } } }, 'Unknown harness "agents.codex~work"'],
+    [{ addedAgents: [] }, 'Unknown setting "addedAgents"'],
+    [{ general: { defaultAgent: 'codex~' } }, '"general.defaultAgent" must be an agent id'],
     [{ terminal: { shellPath: '/bin/zsh' } }, 'can only be cleared with null'],
     [{ terminal: { fontSize: 16 } }, '"terminal.fontSize" must be one of'],
     [{ terminal: { cursor: 'block' } }, 'Unknown setting "terminal.cursor"'],
@@ -155,30 +164,25 @@ describe('mergeSettings', () => {
     expect(cleared.terminal).toEqual({ fontSize: 13 })
   })
 
-  it('keeps the choice of CLI and the binary apart', () => {
-    const chosen = mergeSettings(withAgentBinary(defaults(), 'codex', '/opt/codex'), {
-      agents: { codex: { cli: 'bundled' } },
+  it('hides a default agent and shows it again, beside its binary', () => {
+    const hidden = mergeSettings(withAgentBinary(defaults(), 'codex', '/opt/codex'), {
+      agents: { codex: { hidden: true } },
     })
-    expect(chosen.agents.codex).toEqual({ binaryPath: '/opt/codex', cli: 'bundled' })
-    expect(withAgentBinary(chosen, 'codex', '/opt/other').agents.codex).toEqual({
-      binaryPath: '/opt/other',
-      cli: 'bundled',
+    expect(hidden.agents.codex).toEqual({ binaryPath: '/opt/codex', hidden: true })
+    expect(mergeSettings(hidden, { agents: { codex: { hidden: false } } }).agents).toEqual({
+      codex: { binaryPath: '/opt/codex' },
     })
-    const cleared = mergeSettings(chosen, { agents: { codex: { binaryPath: null } } })
-    expect(cleared.agents).toEqual({ codex: { cli: 'bundled' } })
-    expect(mergeSettings(cleared, { agents: { codex: { cli: 'installed' } } }).agents).toEqual({
-      codex: { cli: 'installed' },
-    })
+    const cleared = mergeSettings(hidden, { agents: { codex: { binaryPath: null } } })
+    expect(cleared.agents).toEqual({ codex: { hidden: true } })
   })
 
-  it('sets a configuration folder from the dialog and clears it with null', () => {
-    const picked = mergeSettings(withAgentConfigDir(defaults(), 'claude-code', '/srv/claude'), {
-      agents: { 'claude-code': { cli: 'bundled' } },
+  it('clears a folder chosen before agents could be added, and only with null', () => {
+    const { settings } = parseSettingsFile({
+      version: 1,
+      agents: { 'claude-code': { configDir: '/srv/claude', hidden: true } },
     })
-    expect(picked.agents['claude-code']).toEqual({ configDir: '/srv/claude', cli: 'bundled' })
     const patch = validateSettingsPatch({ agents: { 'claude-code': { configDir: null } } })
-    expect(mergeSettings(picked, patch).agents).toEqual({ 'claude-code': { cli: 'bundled' } })
-    expect(() => withAgentConfigDir(defaults(), 'opencode', '/srv/oc')).toThrow(SettingsError)
+    expect(mergeSettings(settings, patch).agents).toEqual({ 'claude-code': { hidden: true } })
   })
 
   it('keeps the shell path when only the font size changes', () => {
@@ -223,16 +227,16 @@ describe('parseSettingsFile', () => {
     expect(read('../x').problems).toEqual(['"appearance.colorTheme" must be a theme id'])
   })
 
-  it('reads stored executable paths and choices of CLI', () => {
+  it('reads stored executable paths, and passes over the choice of CLI that is gone', () => {
     const loaded = parseSettingsFile({
       version: 1,
-      agents: { opencode: { binaryPath: '/opt/oc' }, codex: { cli: 'bundled' } },
+      agents: { opencode: { binaryPath: '/opt/oc' }, codex: { cli: 'bundled', hidden: true } },
       terminal: { shellPath: '/bin/fish', fontSize: 12 },
     })
     expect(loaded.problems).toEqual([])
     expect(loaded.settings.agents).toEqual({
       opencode: { binaryPath: '/opt/oc' },
-      codex: { cli: 'bundled' },
+      codex: { hidden: true },
     })
     expect(loaded.settings.terminal).toEqual({ shellPath: '/bin/fish', fontSize: 12 })
   })
@@ -302,12 +306,99 @@ describe('parseSettingsFile', () => {
   })
 })
 
+describe('added agents', () => {
+  const work: AddedAgent = {
+    id: 'claude-code~work',
+    name: 'Work',
+    configDir: '/srv/work',
+    created: true,
+  }
+
+  it('takes a name of 1 to 40 characters, trimmed, with no control characters', () => {
+    expect(agentName('  Work  ')).toBe('Work')
+    expect(agentName('工作账号')).toBe('工作账号')
+    expect(agentName('x'.repeat(40))).toHaveLength(40)
+    for (const bad of ['', '   ', 'x'.repeat(41), 'a\nb', 7, null]) {
+      expect(() => agentName(bad)).toThrow(SettingsError)
+    }
+  })
+
+  it('adds an agent to a harness that has them, once', () => {
+    const added = withAddedAgent(defaults(), { ...work, name: ' Work ' })
+    expect(added.addedAgents).toEqual([work])
+    expect(() => withAddedAgent(added, work)).toThrow('exists already')
+    expect(() => withAddedAgent(defaults(), { ...work, id: 'claude-code' })).toThrow(
+      'not an agent that can be added',
+    )
+    expect(() => withAddedAgent(defaults(), { ...work, id: 'opencode~work' })).toThrow(
+      'not an agent that can be added',
+    )
+  })
+
+  it('renames an added agent, and no other', () => {
+    const added = withAddedAgent(defaults(), work)
+    expect(withRenamedAgent(added, 'claude-code~work', ' Client ').addedAgents).toEqual([
+      { ...work, name: 'Client' },
+    ])
+    expect(() => withRenamedAgent(added, 'claude-code', 'X')).toThrow('No added agent')
+    expect(() => withRenamedAgent(added, 'claude-code~work', '')).toThrow(SettingsError)
+  })
+
+  it('removes an added agent with the settings that name it', () => {
+    const added = mergeSettings(withAddedAgent(defaults(), work), {
+      general: { defaultAgent: 'claude-code~work' },
+      mcp: { kettu: { off: ['claude-code~work', 'codex'] } },
+    })
+    const removed = withoutAgent(added, 'claude-code~work')
+    expect(removed.addedAgents).toEqual([])
+    expect(removed.general.defaultAgent).toBeNull()
+    expect(removed.mcp.kettu.off).toEqual(['codex'])
+    expect(() => withoutAgent(removed, 'claude-code~work')).toThrow('No added agent')
+  })
+
+  it('reads stored agents, dropping each that is invalid or repeats an id or a folder', () => {
+    const loaded = parseSettingsFile({
+      version: 1,
+      addedAgents: [
+        work,
+        { ...work, name: 'Again' },
+        { ...work, id: 'claude-code~other' },
+        { ...work, id: 'codex', configDir: '/srv/c' },
+        { ...work, id: 'codex~a', name: '', configDir: '/srv/a' },
+        { ...work, id: 'codex~b', configDir: '', name: 'B' },
+        { id: 'codex~c', name: 'C', configDir: '/srv/c' },
+        'codex~d',
+        { id: 'codex~e', name: 'E', configDir: '/srv/e', created: false },
+      ],
+    })
+    expect(loaded.settings.addedAgents).toEqual([
+      work,
+      { id: 'codex~e', name: 'E', configDir: '/srv/e', created: false },
+    ])
+    expect(loaded.problems).toHaveLength(7)
+    expect(parseSettingsFile({ version: 1, addedAgents: {} }).problems).toEqual([
+      '"addedAgents" must be an array',
+    ])
+  })
+
+  it('reads an added agent as the default agent and in the server list', () => {
+    const loaded = parseSettingsFile({
+      version: 1,
+      general: { defaultAgent: 'codex~work' },
+      mcp: { kettu: { off: ['codex~work', 'codex~', 'codex~work'] } },
+    })
+    expect(loaded.settings.general.defaultAgent).toBe('codex~work')
+    expect(loaded.settings.mcp.kettu.off).toEqual(['codex~work'])
+  })
+})
+
 describe('derived settings', () => {
   it('splits out what each host receives', () => {
     const settings = withShellPath(withAgentBinary(defaults(), 'opencode', '/opt/oc'), '/bin/fish')
     expect(hostSettings(settings, 'zh-CN')).toEqual({
       locale: 'zh-CN',
       agents: { opencode: { binaryPath: '/opt/oc' } },
+      addedAgents: [],
       proxy: { mode: 'environment' },
       git: { backgroundFetch: false },
       mcp: { kettu: { off: [] } },

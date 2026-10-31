@@ -241,6 +241,7 @@ describe('main messages', () => {
     await t.host.updateSettings({
       locale: 'en',
       agents: { opencode: { binaryPath: path.join(t.dir, 'no-opencode') } },
+      addedAgents: [],
       proxy: { mode: 'custom', url: 'http://proxy.test:8080', noProxy: 'localhost' },
       git: { backgroundFetch: true },
       mcp: DEFAULT_SETTINGS.mcp,
@@ -265,6 +266,7 @@ describe('main messages', () => {
     const settings = {
       locale: 'en' as const,
       agents: {},
+      addedAgents: [],
       proxy: { mode: 'environment' as const },
       git: { backgroundFetch: false },
       mcp: DEFAULT_SETTINGS.mcp,
@@ -538,6 +540,7 @@ describe('git', () => {
     await t.host.updateSettings({
       locale: 'en',
       agents: {},
+      addedAgents: [],
       proxy: { mode: 'environment' },
       git: { backgroundFetch: true },
       mcp: DEFAULT_SETTINGS.mcp,

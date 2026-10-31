@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AgentId } from '@shared/thread'
+import type { AgentId, HarnessId } from '@shared/thread'
 import { markSwitchStart } from '@renderer/app/perf'
 import {
   GROUPINGS,
@@ -80,6 +80,7 @@ export type SettingsSection =
   | 'general'
   | 'appearance'
   | 'agents'
+  | 'harnesses'
   | 'terminal'
   | 'git'
   | 'notifications'
@@ -652,6 +653,11 @@ export function openSettingsItem(section: SettingsSection, item: string | null):
 /** Opens Agents at one agent's page, or at the list with null. */
 export function openAgentSettings(agent: AgentId | null): void {
   openSettingsItem('agents', agent)
+}
+
+/** Opens Harnesses at one harness's page, or at the list with null. */
+export function openHarnessSettings(harness: HarnessId | null): void {
+  openSettingsItem('harnesses', harness)
 }
 
 /** What Esc does in Settings: from an item's page to its list, else out of Settings. */

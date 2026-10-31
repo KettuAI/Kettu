@@ -4,7 +4,7 @@
 import { watch, type FSWatcher } from 'node:fs'
 import path from 'node:path'
 import type { Platform } from '@shared/platform'
-import { AGENT_IDS, type AgentId } from '@shared/thread'
+import { harnessOf, isAgentId, type AgentId } from '@shared/thread'
 import { configLocations } from './agent-details'
 import { pathKey } from './paths'
 import { JsonFile, type LogFn } from './storage'
@@ -26,9 +26,9 @@ export function parsePreparedFile(data: Record<string, unknown>): PreparedFile |
   const sessions = data.sessions.flatMap((item): PreparedRecord[] => {
     if (typeof item !== 'object' || item === null) return []
     const { agentId, acpSessionId, cwd } = item as Record<string, unknown>
-    if (typeof agentId !== 'string' || !AGENT_IDS.includes(agentId as AgentId)) return []
+    if (!isAgentId(agentId)) return []
     if (typeof acpSessionId !== 'string' || typeof cwd !== 'string') return []
-    return [{ agentId: agentId as AgentId, acpSessionId, cwd }]
+    return [{ agentId, acpSessionId, cwd }]
   })
   return { version: 1, sessions }
 }
@@ -137,9 +137,11 @@ export function settingsTargets(
     if (known) known.names = [...new Set([...known.names, ...names])]
     else targets.set(key, { dir, names })
   }
-  const settings = configLocations(agentId, getEnv, home, platform).find((l) => l.id === 'settings')
+  // An added agent reads its own folder's settings, which `getEnv` moves, and the project's.
+  const harness = harnessOf(agentId)
+  const settings = configLocations(harness, getEnv, home, platform).find((l) => l.id === 'settings')
   for (const file of settings?.candidates ?? []) add(p.dirname(file), [p.basename(file)])
-  for (const { dir, names } of PROJECT_SETTINGS[agentId] ?? []) add(p.join(folder, dir), names)
+  for (const { dir, names } of PROJECT_SETTINGS[harness] ?? []) add(p.join(folder, dir), names)
   return [...targets.values()]
 }
 

@@ -77,6 +77,13 @@ function context(overrides: Partial<DetectContext> = {}): DetectContext {
   }
 }
 
+/** A definition that runs no CLI of the user's, for what any package agent does. */
+function withoutUserCli(def: AgentDefinition): AgentDefinition {
+  const copy = { ...def }
+  delete copy.cli
+  return copy
+}
+
 describe('buildCatalog', () => {
   it('lists the fake agent only when main passes its path', () => {
     expect(buildCatalog(null).map((d) => d.id)).toEqual([
@@ -201,11 +208,11 @@ describe('detectAgent', () => {
       })
   const CLAUDE = '@agentclientprotocol/claude-agent-acp'
   // Claude Code as it ran on its ACP adapter: a package that the user's Node.js runs.
-  const CLAUDE_ADAPTER: AgentDefinition = {
+  const CLAUDE_ADAPTER: AgentDefinition = withoutUserCli({
     ...CLAUDE_CODE,
     protocol: 'acp',
     launch: { kind: 'package', package: CLAUDE, version: '0.94.0' },
-  }
+  })
 
   it('runs an installed adapter with node and its entry', async () => {
     const claudeEntry = entry('claude-code', CLAUDE, '0.94.0')
@@ -232,7 +239,6 @@ describe('detectAgent', () => {
         nodeVersion: 'v24.1.0',
         npm: '/usr/local/bin/npm',
         fallback: null,
-        cli: { runs: 'bundled', installed: null, needsCopy: false },
       },
     })
   })
@@ -265,59 +271,6 @@ describe('detectAgent', () => {
         fallback: { version: '0.93.0', dir: '/data/agents/claude-code/0.93.0' },
       },
     })
-  })
-
-  it('needs npm only until Codex is installed', async () => {
-    const node = { nodeVersion: 'v24.1.0', npmPath: null, nodePath: '/usr/local/bin/node' }
-    expect(await detectAgent(CODEX, context({ node }))).toMatchObject({
-      state: 'not-installed',
-      detail: expect.stringContaining('npm was not found'),
-    })
-    expect(
-      await detectAgent(CODEX, context({ node, installed: installed('0.166.0') })),
-    ).toMatchObject({ state: 'available', adapter: { installed: true, npm: null } })
-  })
-
-  it("starts Codex's own binary as its app-server, without npm's codex.js", async () => {
-    const nm = '/data/agents/codex/0.166.0/node_modules'
-    const binary = `${nm}/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex`
-    const files = new Set([`${nm}/@openai/codex-darwin-arm64/package.json`, binary])
-    const detection = await detectAgent(
-      CODEX,
-      context({
-        installed: async () => [
-          {
-            version: '0.166.0',
-            dir: '/data/agents/codex/0.166.0',
-            entry: `${nm}/@openai/codex/bin/codex.js`,
-            installedAt: 1,
-          },
-        ],
-        isFile: async (file) => files.has(file),
-        realpath: async (file) => file,
-      }),
-    )
-    const env = { CODEX_MANAGED_BY_NPM: '1', CODEX_MANAGED_PACKAGE_ROOT: `${nm}/@openai/codex` }
-    expect(detection).toMatchObject({
-      state: 'available',
-      spec: { command: binary, args: ['app-server'], env, display: { command: binary, env } },
-      adapter: { package: '@openai/codex', version: '0.166.0', installed: true },
-    })
-    if (detection.state === 'available') expect(detection.spec?.cli).toBeUndefined()
-  })
-
-  it('needs Node.js and npm only to install Codex', async () => {
-    const none = { nodeVersion: null, npmPath: null, nodePath: null }
-    expect(await detectAgent(CODEX, context({ node: none }))).toMatchObject({
-      state: 'node-missing',
-    })
-    // An old Node.js still runs npm, and Codex's binary needs none.
-    expect(
-      await detectAgent(
-        CODEX,
-        context({ node: { nodeVersion: 'v20.18.0', npmPath: '/x/npm', nodePath: '/x/node' } }),
-      ),
-    ).toMatchObject({ state: 'available', spec: null, adapter: { installed: false } })
   })
 
   it('runs node.exe without a shell on Windows', async () => {
@@ -461,7 +414,7 @@ describe('detectAgent', () => {
 
   it('runs a package agent with the arguments and variables its ACP mode needs', async () => {
     const def: AgentDefinition = {
-      ...CLAUDE_CODE,
+      ...CLAUDE_ADAPTER,
       launch: {
         kind: 'package',
         package: CLAUDE,
@@ -762,14 +715,7 @@ describe('Minion Code', () => {
   })
 })
 
-describe('detectAgent for Codex, whose package is its CLI', () => {
-  const nm = '/data/agents/codex/0.166.0/node_modules'
-  const copy: InstalledAdapter = {
-    version: '0.166.0',
-    dir: '/data/agents/codex/0.166.0',
-    entry: `${nm}/@openai/codex/bin/codex.js`,
-    installedAt: 1,
-  }
+describe("detectAgent for Codex, which runs the user's codex", () => {
   // `codex` on PATH, a Homebrew binary that answers `answer`.
   function withCodex(overrides: Partial<DetectContext> = {}, answer = '0.167.0'): DetectContext {
     return context({
@@ -786,76 +732,63 @@ describe('detectAgent for Codex, whose package is its CLI', () => {
     })
   }
 
-  it("runs the user's codex app-server with no install and no Node.js, from the pin up", async () => {
+  it("runs the user's codex app-server with no install and no Node.js, from the oldest that runs", async () => {
     const detection = await detectAgent(
       CODEX,
       withCodex({ node: { nodeVersion: null, npmPath: null, nodePath: null } }),
     )
     expect(detection).toMatchObject({
       state: 'available',
-      spec: {
-        command: '/usr/local/bin/codex',
-        args: ['app-server'],
-        env: {},
-        cli: '/usr/local/bin/codex',
-      },
-      adapter: {
-        installed: false,
-        node: null,
-        cli: { runs: 'installed', installed: { version: '0.167.0', problem: null } },
-      },
+      spec: { command: '/usr/local/bin/codex', args: ['app-server'], env: {} },
+      adapter: null,
+      cli: { path: '/usr/local/bin/codex', version: '0.167.0', problem: null },
     })
-    // The pin itself runs.
     expect(await detectAgent(CODEX, withCodex({}, '0.166.0'))).toMatchObject({
-      adapter: { cli: { runs: 'installed' } },
+      state: 'available',
     })
   })
 
-  it("installs Codex when the user's is older than the pin, or chosen against", async () => {
+  it("is not installed while the user's codex is missing, too old or does not answer", async () => {
+    expect(await detectAgent(CODEX, withCodex({ isExecutable: async () => false }))).toEqual({
+      state: 'not-installed',
+      detail: expect.stringContaining('codex'),
+    })
     expect(await detectAgent(CODEX, withCodex({}, '0.165.0'))).toMatchObject({
-      spec: null,
-      adapter: {
-        cli: { runs: 'bundled', installed: { problem: { kind: 'too-old', minimum: '0.166.0' } } },
-      },
+      state: 'not-installed',
+      detail: expect.stringContaining('0.166.0'),
+      cli: { version: '0.165.0', problem: { kind: 'too-old', minimum: '0.166.0' } },
     })
-    const chosen = await detectAgent(
-      CODEX,
-      withCodex({
-        cliPreference: 'bundled',
-        installed: async () => [copy],
-        isFile: async () => false,
-      }),
-    )
-    expect(chosen).toMatchObject({
-      spec: { command: '/usr/local/bin/node', args: [copy.entry, 'app-server'] },
-      adapter: { cli: { runs: 'bundled', installed: { problem: null } } },
+    const failing = withCodex({ probeCli: async () => ({ error: 'codex exited with code 1.' }) })
+    expect(await detectAgent(CODEX, failing)).toMatchObject({
+      state: 'not-installed',
+      detail: expect.stringContaining('code 1'),
+      cli: { problem: { kind: 'failed' } },
     })
   })
 
-  it("runs the copy after a start with the user's failed", async () => {
-    const detection = await detectAgent(
-      CODEX,
-      withCodex({
-        installed: async () => [copy],
-        cliFailure: { path: '/usr/local/bin/codex', reason: 'exited with code 1' },
-      }),
-    )
-    expect(detection).toMatchObject({
-      adapter: { cli: { runs: 'bundled', installed: { problem: { kind: 'failed' } } } },
-    })
-    if (detection.state === 'available') expect(detection.spec?.cli).toBeUndefined()
-  })
-
-  it('runs what CODEX_PATH names as it is, with nothing to fall back to', async () => {
+  it('runs what CODEX_PATH names as it is, whatever its version', async () => {
     const detection = await detectAgent(
       CODEX,
       withCodex({ env: { PATH: '/usr/bin', CODEX_PATH: '/opt/codex' } }, '0.100.0'),
     )
     expect(detection).toMatchObject({
+      state: 'available',
       spec: { command: '/opt/codex', args: ['app-server'] },
-      adapter: { cli: { runs: 'installed', installed: { variable: 'CODEX_PATH' } } },
+      cli: { variable: 'CODEX_PATH' },
     })
-    if (detection.state === 'available') expect(detection.spec?.cli).toBeUndefined()
+  })
+
+  it('runs a chosen program without asking it anything', async () => {
+    const detection = await detectAgent(
+      CODEX,
+      withCodex({
+        binaryOverride: '/opt/my-codex',
+        isExecutable: async (file) => file === '/opt/my-codex',
+        probeCli: async () => ({ error: 'not asked' }),
+      }),
+    )
+    expect(detection).toMatchObject({ state: 'available', spec: { command: '/opt/my-codex' } })
+    expect(detection.cli).toBeUndefined()
   })
 })
 
@@ -881,117 +814,68 @@ describe('detectAgent with the CLI the user installed', () => {
           throw new Error(`ENOENT: ${file}`)
         },
       },
-      installed: async () => [install('0.3.314')],
+      installed: async () => [install('0.3.314', { withoutCli: true })],
       ...overrides,
     })
   }
 
-  it('passes the installed program to the adapter when it is new enough', async () => {
+  it('passes the installed program to the SDK when it is new enough', async () => {
     const detection = await detectAgent(CLAUDE_CODE, withClaude())
     const env = { CLAUDE_CODE_EXECUTABLE: '/usr/local/bin/claude' }
     expect(detection).toMatchObject({
       state: 'available',
       spec: { env, display: { env }, cli: '/usr/local/bin/claude' },
-      adapter: {
-        cli: {
-          runs: 'installed',
-          installed: { path: '/usr/local/bin/claude', version: '2.1.304', problem: null },
-          needsCopy: false,
-        },
-      },
+      cli: { path: '/usr/local/bin/claude', version: '2.1.304', problem: null },
     })
   })
 
-  it('runs the copy when the program is older than the adapter needs, or missing', async () => {
-    const old = await detectAgent(CLAUDE_CODE, withClaude({}, '2.1.200'))
-    expect(old).toMatchObject({
-      spec: { env: {} },
-      adapter: {
-        cli: { runs: 'bundled', installed: { problem: { kind: 'too-old', minimum: '2.1.303' } } },
-      },
-    })
-    if (old.state === 'available') expect(old.spec?.cli).toBeUndefined()
+  it('is not installed while the program is missing, or older than the SDK needs', async () => {
     const none = await detectAgent(CLAUDE_CODE, withClaude({ isExecutable: async () => false }))
-    expect(none).toMatchObject({
-      spec: { env: {} },
-      adapter: { cli: { runs: 'bundled', installed: null } },
+    expect(none).toEqual({ state: 'not-installed', detail: expect.stringContaining('claude') })
+    expect(await detectAgent(CLAUDE_CODE, withClaude({}, '2.1.200'))).toMatchObject({
+      state: 'not-installed',
+      detail: expect.stringContaining('2.1.303'),
+      cli: { version: '2.1.200', problem: { kind: 'too-old', minimum: '2.1.303' } },
     })
   })
 
-  it('runs the copy when the program does not start, or after a start with it failed', async () => {
+  it('is not installed while the program does not answer', async () => {
     expect(
       await detectAgent(
         CLAUDE_CODE,
         withClaude({ probeCli: async () => ({ error: 'claude exited with code 1.' }) }),
       ),
     ).toMatchObject({
-      adapter: { cli: { runs: 'bundled', installed: { problem: { kind: 'failed' } } } },
-    })
-    expect(
-      await detectAgent(
-        CLAUDE_CODE,
-        withClaude({ cliFailure: { path: '/usr/local/bin/claude', reason: 'It exited.' } }),
-      ),
-    ).toMatchObject({
-      spec: { env: {} },
-      adapter: {
-        cli: { runs: 'bundled', installed: { problem: { kind: 'failed', reason: 'It exited.' } } },
-      },
+      state: 'not-installed',
+      detail: expect.stringContaining('code 1'),
+      cli: { problem: { kind: 'failed', reason: 'claude exited with code 1.' } },
     })
   })
 
-  it('counts the program as usable before the adapter is installed, which says the minimum', async () => {
-    expect(await detectAgent(CLAUDE_CODE, withClaude({ installed: async () => [] }))).toMatchObject(
-      {
-        spec: null,
-        adapter: { installed: false, cli: { runs: 'installed', needsCopy: false } },
-      },
-    )
+  it('counts the program as usable before the SDK is installed, which names the minimum', async () => {
+    expect(
+      await detectAgent(CLAUDE_CODE, withClaude({ installed: async () => [] }, '2.1.200')),
+    ).toMatchObject({
+      state: 'available',
+      spec: null,
+      adapter: { installed: false },
+      cli: { version: '2.1.200', problem: null },
+    })
   })
 
   it('holds the program to the older install while the pinned one is not installed', async () => {
     const older = withClaude({ installed: async () => [install('0.3.300')] }, '2.1.200')
     expect(await detectAgent(CLAUDE_CODE, older)).toMatchObject({
-      spec: null,
-      adapter: {
-        fallback: { version: '0.3.300', spec: { env: {} } },
-        cli: { runs: 'bundled', installed: { problem: { kind: 'too-old', minimum: '2.1.303' } } },
-      },
-    })
-  })
-
-  it('installs the copy first when it is needed and the install has none', async () => {
-    const bare = async () => [install('0.3.314', { withoutCli: true })]
-    expect(
-      await detectAgent(CLAUDE_CODE, withClaude({ installed: bare }, '2.1.200')),
-    ).toMatchObject({
-      spec: null,
-      adapter: { installed: true, cli: { runs: 'bundled', needsCopy: true } },
-    })
-    // The installed program does not need the copy.
-    expect(await detectAgent(CLAUDE_CODE, withClaude({ installed: bare }))).toMatchObject({
-      spec: { cli: '/usr/local/bin/claude' },
-      adapter: { cli: { runs: 'installed', needsCopy: false } },
-    })
-  })
-
-  it('runs the copy when the user chose it', async () => {
-    expect(await detectAgent(CLAUDE_CODE, withClaude({ cliPreference: 'bundled' }))).toMatchObject({
-      spec: { env: {} },
-      adapter: { cli: { runs: 'bundled', installed: { version: '2.1.304', problem: null } } },
+      state: 'not-installed',
+      cli: { problem: { kind: 'too-old', minimum: '2.1.303' } },
     })
   })
 
   it('loads the SDK in the host instead of running it with Node.js', async () => {
     const entry = '/data/agents/claude-code/0.3.314/index.js'
-    const bundled = await detectAgent(CLAUDE_CODE, withClaude({ cliPreference: 'bundled' }))
-    expect(bundled).toMatchObject({
+    expect(await detectAgent(CLAUDE_CODE, withClaude())).toMatchObject({
       state: 'available',
-      spec: { command: entry, args: [], shell: false, display: { command: entry, args: [] } },
-    })
-    const own = await detectAgent(CLAUDE_CODE, withClaude())
-    expect(own).toMatchObject({
-      spec: { command: entry, args: [], cli: '/usr/local/bin/claude' },
+      spec: { command: entry, args: [], shell: false, cli: '/usr/local/bin/claude' },
     })
     // The user's Node.js only runs npm, so an older one does the same.
     const node = { nodeVersion: 'v18.20.0', npmPath: '/x/npm', nodePath: '/x/node' }
@@ -1021,20 +905,20 @@ describe('detectAgent with the CLI the user installed', () => {
     })
   })
 
-  it('leaves a program the environment names to the adapter', async () => {
+  it('leaves a program the environment names to the SDK, whatever its version', async () => {
     const detection = await detectAgent(
       CLAUDE_CODE,
-      withClaude({ env: { PATH: '/usr/local/bin', CLAUDE_CODE_EXECUTABLE: '/opt/claude' } }),
+      withClaude(
+        { env: { PATH: '/usr/local/bin', CLAUDE_CODE_EXECUTABLE: '/opt/claude' } },
+        '2.1.200',
+      ),
     )
     expect(detection).toMatchObject({
+      state: 'available',
       spec: { env: {} },
-      adapter: {
-        cli: {
-          runs: 'installed',
-          installed: { path: '/opt/claude', variable: 'CLAUDE_CODE_EXECUTABLE' },
-        },
-      },
+      cli: { path: '/opt/claude', variable: 'CLAUDE_CODE_EXECUTABLE' },
     })
+    if (detection.state === 'available') expect(detection.spec?.cli).toBeUndefined()
   })
 })
 

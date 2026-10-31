@@ -1,27 +1,26 @@
 // Agent supervision: detection, lazy start, one process per agent, idle stop, crash counting,
-// sign-in state and the AgentStatus every port sees.
+// sign-in state and the AgentStatus every port sees. A harness's detection, installs and updates
+// are shared by its agents: its default agent and those added with folders of their own.
 
-import { mkdir } from 'node:fs/promises'
+import { mkdir, realpath } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type {
   AgentAccount,
   AgentAuthMethod,
-  AgentCliSource,
   AgentDetails,
   AgentInstallMethod,
   AgentState,
   AgentStatus,
   AgentTask,
   AgentUpdate,
-  InstalledCli,
   McpStatus,
   PlanLimit,
 } from '@shared/agent-host'
 import type { AgentProcess } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
-import type { HostSettings } from '@shared/settings'
-import type { AgentId, ConfigOption } from '@shared/thread'
+import type { AddedAgent, HostSettings } from '@shared/settings'
+import { harnessOf, type AgentId, type ConfigOption, type HarnessId } from '@shared/thread'
 import {
   installAdapter,
   NPM_INSTALL_ARGS,
@@ -57,7 +56,14 @@ import {
   type ArchiveInstallOptions,
   type InstalledArchive,
 } from './archive-install'
-import { installedFolder, installPlans, type InstallPlan } from './binary-install'
+import { checkApiKey, clearClaudeKey, writeClaudeKey, type ApiKeyInput } from './api-key'
+import {
+  installedFolder,
+  installMethodOf,
+  installPlans,
+  updatePlan,
+  type InstallPlan,
+} from './binary-install'
 import {
   detectAgent,
   displayCommand,
@@ -216,6 +222,8 @@ export interface AgentManagerDeps extends DriverOverrides {
   cliVersions?: CliVersions
   timings?: Partial<AgentTimings>
   status(status: AgentStatus): void
+  /** An added agent was removed from the settings, and its slot with it. */
+  removed?(agentId: AgentId): void
   processes(processes: AgentProcess[]): void
   /** Notes each launch, and stops what an agent's process leaves behind once it exits. */
   trees?: AgentTrees
@@ -235,36 +243,34 @@ interface UpdateCheck {
   failures: string[]
 }
 
-class Slot {
-  state: AgentState = 'available'
+/** What a harness's agents share: its program and installs, and the updates found for them. */
+class Harness {
   detection: Detection | null = null
-  detail: string | null = null
-  init: AgentInit | null = null
-  runtime: AgentRuntime | null = null
-  launched: AgentRun | null = null
-  starting: Promise<AgentRuntime> | null = null
-  stopping: Promise<void> | null = null
   /** An install on its own, from a reinstall; installs before a start run inside `starting`. */
   installing: Promise<unknown> | null = null
   installAbort: AbortController | null = null
+  /** The package install a start runs, which a start of another agent of the harness waits for. */
+  packageInstall: Promise<unknown> | null = null
   /** Says the agent runs an older version because the pinned one could not be installed. */
   adapterNote: string | null = null
-  /** What the running launch ran, which is the command shown while it runs. */
-  launchSpec: LaunchSpec | null = null
-  /** The configuration folder the running launch got, for an agent whose folder can be chosen. */
-  launchConfig: RunningConfig | null = null
   /** The install whose older siblings were last deleted, once it first initialized. */
   cleanedDir: string | null = null
   /** What the last update check found, and when it finished. */
   latest: AgentUpdate | null = null
+  /** The newest version of the user's own CLI on npm, from the same check. */
+  cliLatest: string | null = null
   checkedAt: number | null = null
   /** The update whose notice the user dismissed in the sidebar, until a newer one is found. */
   skipped: AgentUpdate | null = null
-  /** When a check last ran for this agent, found or failed; the daily check waits from it. */
+  /** The version of the user's own CLI whose notice the user dismissed. */
+  cliSkipped: string | null = null
+  /** When a check last ran for this harness, found or failed; the daily check waits from it. */
   attemptedAt: number | null = null
   rememberedUpdate = 'null'
   /** The CLI version of the install a start runs, read at detection. */
   installedCli: string | null = null
+  /** How the user's CLI was installed, told by where it lives. */
+  cliMethod: AgentInstallMethod['id'] | null = null
   /** A binary agent's version, from its own `--version`, until it starts and reports its own. */
   binaryVersion: string | null = null
   /** The `requires` program detection found, and the version it printed. */
@@ -274,20 +280,37 @@ class Slot {
   binaryProgram: string | null = null
   /** The `--version` failure already logged, so a repeated detection logs it once. */
   binaryVersionFailure: string | null = null
-  /** A binary agent's install routes, found at detection. */
+  /** The program's install routes, found at detection. */
   installPlans: InstallPlan[] = []
-  /** The user's CLI a start failed with; the copy runs until the setting or environment changes. */
-  cliFailure: { path: string; reason: string } | null = null
-  /** An install or update the user asked for, which runs beside the agent's own lifecycle. */
+  /** An install or update the user asked for, which runs beside the agents' own lifecycle. */
   task: Omit<AgentTask, 'progress'> | null = null
   taskRun: Promise<void> | null = null
   taskAbort: AbortController | null = null
   taskOutput = new TextRing(8 * 1024)
+
+  constructor(readonly def: AgentDefinition) {}
+}
+
+/** One agent: its process, sign-in, account and limits, on its harness's shared state. */
+class Slot {
+  state: AgentState = 'available'
+  detail: string | null = null
+  init: AgentInit | null = null
+  runtime: AgentRuntime | null = null
+  launched: AgentRun | null = null
+  starting: Promise<AgentRuntime> | null = null
+  stopping: Promise<void> | null = null
+  /** What the running launch ran, which is the command shown while it runs. */
+  launchSpec: LaunchSpec | null = null
+  /** The configuration folder the running launch got, for an agent whose folder can be chosen. */
+  launchConfig: RunningConfig | null = null
   intentionalStop = false
   failures: number[] = []
   signIn: AgentStatus['signIn'] = 'unknown'
   account: AgentAccount | null = null
   limits = new Map<string, PlanLimit>()
+  /** Kettu handed the harness an API key for this agent, which it never reads back. */
+  apiKey = false
   /** The capabilities of the last `initialize`, from this run or an earlier one. */
   initRecord: RememberedInit | null = null
   /** The account, limits and capabilities as last remembered, so only a change is written. */
@@ -302,7 +325,20 @@ class Slot {
   progressTimer: ReturnType<typeof setTimeout> | null = null
   lastStatus = ''
 
-  constructor(readonly def: AgentDefinition) {}
+  constructor(
+    readonly id: AgentId,
+    readonly h: Harness,
+    /** An added agent's name and folder; null for the harness's default agent. */
+    public added: AddedAgent | null,
+  ) {}
+
+  get def(): AgentDefinition {
+    return this.h.def
+  }
+
+  get name(): string {
+    return this.added?.name ?? this.h.def.name
+  }
 }
 
 // For diagnostics, which stay in English.
@@ -323,8 +359,8 @@ function rememberedEntry(slot: Slot): AgentsFile['agents'][AgentId] | null {
   const account = slot.account?.kind === 'none' ? null : slot.account
   const limits = [...slot.limits.values()]
   const init = slot.initRecord
-  return account || limits.length > 0 || init
-    ? { account, limits, ...(init ? { init } : {}) }
+  return account || limits.length > 0 || init || slot.apiKey
+    ? { account, limits, ...(init ? { init } : {}), ...(slot.apiKey ? { apiKey: true } : {}) }
     : null
 }
 
@@ -333,12 +369,13 @@ function rememberedEntry(slot: Slot): AgentsFile['agents'][AgentId] | null {
  * would run is the version that reported them.
  */
 function rememberedCapabilities(slot: Slot): RememberedInit['capabilities'] | undefined {
-  const adapter = slot.detection?.state === 'available' ? slot.detection.adapter : null
-  // An agent whose package is its CLI reports the version of the CLI that runs.
-  const own = slot.def.cli?.isPackage && adapter?.cli?.runs === 'installed'
-  const version = own
-    ? (adapter.cli?.installed?.version ?? undefined)
-    : (adapter?.current ?? adapter?.fallback)?.version
+  const detection = slot.h.detection
+  const available = detection?.state === 'available' ? detection : null
+  const adapter = available?.adapter ?? null
+  // A harness that runs the user's CLI itself reports that CLI's version.
+  const version = adapter
+    ? (adapter.current ?? adapter.fallback)?.version
+    : (available?.cli?.version ?? undefined)
   return version !== undefined && slot.initRecord?.version === version
     ? slot.initRecord.capabilities
     : undefined
@@ -348,17 +385,19 @@ function rememberedJson(slot: Slot): string {
   return JSON.stringify(rememberedEntry(slot))
 }
 
-function updateJson(slot: Slot): string {
-  return JSON.stringify(updateEntry(slot))
+function updateJson(h: Harness): string {
+  return JSON.stringify(updateEntry(h))
 }
 
-function updateEntry(slot: Slot): AgentUpdatesFile['agents'][AgentId] {
-  if (slot.attemptedAt === null) return undefined
+function updateEntry(h: Harness): AgentUpdatesFile['agents'][AgentId] {
+  if (h.attemptedAt === null) return undefined
   return {
-    checkedAt: slot.checkedAt,
-    attemptedAt: slot.attemptedAt,
-    latest: slot.latest,
-    ...(slot.skipped ? { skipped: slot.skipped } : {}),
+    checkedAt: h.checkedAt,
+    attemptedAt: h.attemptedAt,
+    latest: h.latest,
+    ...(h.cliLatest ? { cli: h.cliLatest } : {}),
+    ...(h.skipped ? { skipped: h.skipped } : {}),
+    ...(h.cliSkipped ? { skippedCli: h.cliSkipped } : {}),
   }
 }
 
@@ -368,6 +407,7 @@ function sameUpdate(a: AgentUpdate | null, b: AgentUpdate | null): boolean {
 }
 
 export class AgentManager {
+  private readonly harnesses = new Map<HarnessId, Harness>()
   private readonly slots = new Map<AgentId, Slot>()
   /** Processes their stop did not end, kept listed and reaped at quit until they exit. */
   private readonly givenUp = new Map<AgentRun, Slot>()
@@ -380,6 +420,9 @@ export class AgentManager {
   private updateTimer: ReturnType<typeof setTimeout> | null = null
   private stopped = false
   private readonly cliVersions: CliVersions
+  /** The update command for each harness's user program, and what it was worked out for. */
+  private readonly cliCommands = new Map<Harness, string>()
+  private readonly cliCommandKeys = new Map<Harness, string>()
   hooks: AgentSessionHooks = {
     liveSessions: () => 0,
     agentExited: () => {},
@@ -392,15 +435,60 @@ export class AgentManager {
   constructor(private readonly deps: AgentManagerDeps) {
     this.timings = { ...AGENT_TIMINGS, ...deps.timings }
     this.cliVersions = deps.cliVersions ?? new CliVersions({ platform: deps.platform })
-    for (const def of deps.catalog) this.slots.set(def.id, new Slot(def))
+    for (const def of deps.catalog) {
+      const h = new Harness(def)
+      this.harnesses.set(def.id, h)
+      this.slots.set(def.id, new Slot(def.id, h, null))
+    }
+    this.syncAgents(deps.settings().addedAgents)
   }
 
   has(agentId: AgentId): boolean {
     return this.slots.has(agentId)
   }
 
+  /** The agent's name; a removed agent's sessions name its harness. */
   name(agentId: AgentId): string {
-    return this.slots.get(agentId)?.def.name ?? agentId
+    return (
+      this.slots.get(agentId)?.name ?? this.harnesses.get(harnessOf(agentId))?.def.name ?? agentId
+    )
+  }
+
+  /** The agents of a harness, its default agent first. */
+  private agentsOf(h: Harness): Slot[] {
+    return [...this.slots.values()].filter((slot) => slot.h === h)
+  }
+
+  /**
+   * Makes a slot for each added agent and drops those removed, stopping their processes. Returns
+   * the ids removed, whose sessions the host closes.
+   */
+  private syncAgents(added: readonly AddedAgent[]): AgentId[] {
+    const removed: AgentId[] = []
+    for (const slot of [...this.slots.values()]) {
+      if (!slot.added) continue
+      const now = added.find((agent) => agent.id === slot.id)
+      if (now) {
+        slot.added = now
+        continue
+      }
+      this.slots.delete(slot.id)
+      removed.push(slot.id)
+      void this.stopProcess(slot).catch(() => {})
+    }
+    for (const agent of added) {
+      if (this.slots.has(agent.id)) continue
+      const h = this.harnesses.get(harnessOf(agent.id))
+      // An agent of a harness this build does not have stays in the settings, unlisted.
+      if (!h?.def.configVariable) continue
+      const slot = new Slot(agent.id, h, agent)
+      if (h.detection) {
+        slot.state = h.detection.state
+        slot.detail = h.detection.state === 'available' ? null : h.detection.detail
+      }
+      this.slots.set(agent.id, slot)
+    }
+    return removed
   }
 
   mcpServersByName(agentId: AgentId): boolean {
@@ -413,79 +501,102 @@ export class AgentManager {
     return slot
   }
 
+  /** The harness's default agent, whose folder detection, installs and updates run with. */
+  private home(h: Harness): Slot {
+    return this.slot(h.def.id)
+  }
+
   // Detection.
 
   /** The first detection pass, after the environment resolves; agents.list waits for it. */
   detectAll(): Promise<void> {
     this.detected ??= (async () => {
       await this.deps.env.ready()
-      await Promise.all([...this.slots.values()].map((slot) => this.detect(slot)))
+      await Promise.all([...this.harnesses.values()].map((h) => this.detect(h)))
     })()
     return this.detected
   }
 
-  private async detect(slot: Slot): Promise<void> {
+  private async detect(h: Harness): Promise<void> {
     const platform = this.deps.platform
-    const agentSettings = this.deps.settings().agents[slot.def.id]
-    const env = this.deps.env.agentEnv(slot.def.id)
+    const harnessSettings = this.deps.settings().agents[h.def.id]
+    const env = this.deps.env.agentEnv(h.def.id)
     const node = this.deps.env.nodeProbe()
     const isExecutable = (file: string): Promise<boolean> => isExecutableFile(file, platform)
-    const detection = await (this.deps.detect ?? detectAgent)(slot.def, {
+    const detection = await (this.deps.detect ?? detectAgent)(h.def, {
       platform,
       env,
       electronPath: this.deps.electronPath,
-      binaryOverride: agentSettings?.binaryPath ?? null,
+      binaryOverride: harnessSettings?.binaryPath ?? null,
       node,
       adaptersDir: this.deps.adaptersDir,
       sessionRouterPath: this.deps.sessionRouterPath ?? null,
       isExecutable,
       probeCli: (program, cliEnv) => this.askVersion(program, cliEnv),
-      cliPreference: agentSettings?.cli ?? 'installed',
-      cliFailure: slot.cliFailure,
     })
     const adapter = detection.state === 'available' ? detection.adapter : null
     const running = adapter?.current ?? adapter?.fallback
     const log = (level: 'info' | 'warn' | 'error', message: string): void =>
       this.deps.diagnostics.log(level, message)
-    const [installedCli, plans] = await Promise.all([
-      running ? readCliVersion(slot.def.id, running.dir, log) : null,
-      slot.def.installs
-        ? installPlans(slot.def.installs, {
+    const [installedCli, plans, cliMethod] = await Promise.all([
+      running ? readCliVersion(h.def.id, running.dir, log) : null,
+      h.def.installs
+        ? installPlans(h.def.installs, {
             platform,
             arch: process.arch,
             env,
             npm: node.npmPath,
             root: this.deps.adaptersDir,
-            agentId: slot.def.id,
+            agentId: h.def.id,
             isExecutable,
           })
         : [],
+      this.cliMethod(h, detection),
     ])
-    slot.detection = detection
-    slot.installedCli = installedCli
-    slot.installPlans = plans
-    slot.requiresProgram =
+    h.detection = detection
+    h.installedCli = installedCli
+    h.installPlans = plans
+    h.cliMethod = cliMethod
+    h.requiresProgram =
       detection.state === 'available' ? (detection.requires?.program ?? null) : null
-    slot.requiresVersion =
+    h.requiresVersion =
       detection.state === 'available' ? (detection.requires?.version ?? null) : null
     // A binary agent's own version is asked in the background, so detection never waits for it.
     const program =
-      slot.def.launch.kind === 'binary' && detection.state === 'available'
+      h.def.launch.kind === 'binary' && detection.state === 'available'
         ? (detection.spec?.command ?? null)
         : null
-    if (program !== slot.binaryProgram) {
-      slot.binaryProgram = program
-      slot.binaryVersion = null
-      slot.binaryVersionFailure = null
+    if (program !== h.binaryProgram) {
+      h.binaryProgram = program
+      h.binaryVersion = null
+      h.binaryVersionFailure = null
     }
-    // A running, installing, failed or recovering agent keeps its lifecycle state.
-    const idle = !slot.launched && !slot.starting && !slot.installing && slot.state !== 'failed'
-    if (idle) {
-      slot.state = detection.state
-      slot.detail = detection.state === 'available' ? null : detection.detail
+    for (const slot of this.agentsOf(h)) {
+      // A running, installing, failed or recovering agent keeps its lifecycle state.
+      const idle = !slot.launched && !slot.starting && !h.installing && slot.state !== 'failed'
+      if (idle) {
+        slot.state = detection.state
+        slot.detail = detection.state === 'available' ? null : detection.detail
+      }
     }
-    this.emit(slot)
-    if (program) void this.askBinaryVersion(slot, program, env)
+    this.emit(this.home(h))
+    if (program) void this.askBinaryVersion(h, program, env)
+  }
+
+  /** How the user's own CLI, or a binary harness's program, was installed. */
+  private async cliMethod(
+    h: Harness,
+    detection: Detection,
+  ): Promise<AgentInstallMethod['id'] | null> {
+    const installs = h.def.installs
+    const found =
+      detection.cli?.path ??
+      (h.def.launch.kind === 'binary' && detection.state === 'available'
+        ? detection.spec?.command
+        : undefined)
+    if (!installs || !found) return null
+    const real = await realpath(found).catch(() => found)
+    return installMethodOf(installs, real, { platform: this.deps.platform, home: os.homedir() })
   }
 
   /** A program's `--version` answer: the test's probe, or the cache the CLIs are asked through. */
@@ -499,7 +610,7 @@ export class AgentManager {
    * A binary agent's version from `--version`, asked in the background as detection finds the
    * program: Settings shows it before the agent starts, and `initialize` reports its own after.
    */
-  private async askBinaryVersion(slot: Slot, program: string, env: Env): Promise<void> {
+  private async askBinaryVersion(h: Harness, program: string, env: Env): Promise<void> {
     let answer: CliVersion
     try {
       answer = await this.askVersion(program, env)
@@ -507,22 +618,22 @@ export class AgentManager {
       answer = { error: (error as Error).message }
     }
     // A detection that moved on to another program has asked its own version.
-    if (slot.binaryProgram !== program) return
+    if (h.binaryProgram !== program) return
     if ('error' in answer) {
-      slot.binaryVersion = null
+      h.binaryVersion = null
       // The same failure is logged once, however often detection asks again.
-      if (slot.binaryVersionFailure !== answer.error) {
-        slot.binaryVersionFailure = answer.error
+      if (h.binaryVersionFailure !== answer.error) {
+        h.binaryVersionFailure = answer.error
         this.deps.diagnostics.log(
           'warn',
-          `${slot.def.name}: could not read its version: ${answer.error}`,
+          `${h.def.name}: could not read its version: ${answer.error}`,
         )
       }
     } else {
-      slot.binaryVersion = answer.version
-      slot.binaryVersionFailure = null
+      h.binaryVersion = answer.version
+      h.binaryVersionFailure = null
     }
-    this.emit(slot)
+    this.emit(this.home(h))
   }
 
   async list(): Promise<AgentStatus[]> {
@@ -532,54 +643,48 @@ export class AgentManager {
 
   async check(agentId?: AgentId): Promise<AgentStatus[]> {
     await this.detectAll()
-    const slots = agentId ? [this.slot(agentId)] : [...this.slots.values()]
-    await Promise.all(slots.map((slot) => this.detect(slot)))
+    const harnesses = agentId ? [this.slot(agentId).h] : [...this.harnesses.values()]
+    await Promise.all(harnesses.map((h) => this.detect(h)))
     return this.statuses()
   }
 
   async reloadEnvironment(): Promise<AgentStatus[]> {
     await this.deps.env.reload()
     this.cliVersions.clear()
-    for (const slot of this.slots.values()) slot.cliFailure = null
-    await Promise.all([...this.slots.values()].map((slot) => this.detect(slot)))
+    await Promise.all([...this.harnesses.values()].map((h) => this.detect(h)))
     return this.statuses()
   }
 
   /**
-   * Binary overrides, the choice of CLI or the configuration folder changed: detect the affected
-   * agents again. The environment already carries the new folder.
+   * Agents were added, renamed or removed, a program was picked, or a default agent hidden: sync
+   * the slots and detect the affected harnesses again. The environment already carries each
+   * agent's folder. Returns the agents removed.
    */
-  async settingsChanged(previous: HostSettings, next: HostSettings): Promise<void> {
-    const before = (slot: Slot) => previous.agents[slot.def.id]
-    const after = (slot: Slot) => next.agents[slot.def.id]
-    const folderChanged = (slot: Slot) =>
-      !!slot.def.configVariable && before(slot)?.configDir !== after(slot)?.configDir
-    // Choosing again tries the installed CLI again, after a start with it failed.
-    for (const slot of this.slots.values()) {
-      if (before(slot)?.cli !== after(slot)?.cli) slot.cliFailure = null
-    }
-    // The account, limits and prepared session belong to the folder the agent ran with.
-    for (const slot of this.slots.values()) {
-      if (!folderChanged(slot)) continue
+  async settingsChanged(previous: HostSettings, next: HostSettings): Promise<AgentId[]> {
+    const removed = this.syncAgents(next.addedAgents)
+    for (const agentId of removed) this.deps.removed?.(agentId)
+    // A default agent's folder from before agents could be added can only be cleared, which
+    // gives its account, limits and prepared session back to the harness's default folder.
+    for (const h of this.harnesses.values()) {
+      if (!h.def.configVariable) continue
+      if (previous.agents[h.def.id]?.configDir === next.agents[h.def.id]?.configDir) continue
+      const slot = this.home(h)
       slot.account = null
       slot.limits.clear()
-      this.hooks.configChanged(slot.def.id)
+      this.hooks.configChanged(slot.id)
     }
     // Detecting again rewrites each idle agent's guidance in the new language.
-    const changed = [...this.slots.values()].filter(
-      (slot) =>
+    const changed = [...this.harnesses.values()].filter(
+      (h) =>
         previous.locale !== next.locale ||
-        before(slot)?.binaryPath !== after(slot)?.binaryPath ||
-        before(slot)?.cli !== after(slot)?.cli ||
-        folderChanged(slot),
+        previous.agents[h.def.id]?.binaryPath !== next.agents[h.def.id]?.binaryPath ||
+        previous.agents[h.def.id]?.configDir !== next.agents[h.def.id]?.configDir,
     )
-    await Promise.all(changed.map((slot) => this.detect(slot)))
-    // A switch for Kettu's server changes what a start gets, and waits for the next one.
-    const wasOff = new Set(previous.mcp.kettu.off)
-    const isOff = new Set(next.mcp.kettu.off)
-    for (const slot of this.slots.values()) {
-      if (wasOff.has(slot.def.id) !== isOff.has(slot.def.id)) this.emit(slot)
-    }
+    await Promise.all(changed.map((h) => this.detect(h)))
+    // A rename, a hidden default agent or a switch for Kettu's server shows in the status; the
+    // switch changes what a start gets, and waits for the next one.
+    for (const slot of this.slots.values()) this.emit(slot)
+    return removed
   }
 
   // Lifecycle.
@@ -591,25 +696,28 @@ export class AgentManager {
 
   /** Starts the agent if needed; rejects with `agent_unavailable` when it cannot run. */
   async ensureReady(agentId: AgentId): Promise<AgentRuntime> {
+    // A session keeps its agent, which may have been removed since.
+    if (!this.slots.has(agentId)) throw new HostError('agent_unavailable', t('agent.removed'))
     const slot = this.slot(agentId)
+    const { h } = slot
     await this.detectAll()
     if (slot.stopping) await slot.stopping
-    if (slot.installing) await slot.installing.catch(() => {})
+    if (h.installing) await h.installing.catch(() => {})
     if (slot.runtime) return slot.runtime
     if (slot.starting) return slot.starting
     if (slot.state === 'failed') {
       throw new HostError(
         'agent_unavailable',
-        slot.detail ?? t('agent.failedToStart', { agent: slot.def.name }),
+        slot.detail ?? t('agent.failedToStart', { agent: slot.name }),
         { agentId, state: 'failed' },
       )
     }
-    if (slot.detection?.state !== 'available') await this.detect(slot)
-    const detection = slot.detection
+    if (h.detection?.state !== 'available') await this.detect(h)
+    const detection = h.detection
     if (detection?.state !== 'available') {
       throw new HostError(
         'agent_unavailable',
-        detection?.detail ?? t('agent.notAvailable', { agent: slot.def.name }),
+        detection?.detail ?? t('agent.notAvailable', { agent: slot.name }),
         {
           agentId,
           state: detection?.state ?? 'not-installed',
@@ -619,41 +727,35 @@ export class AgentManager {
     return this.start(slot, detection.spec)
   }
 
-  /**
-   * Launches `spec`, or installs the pinned adapter first when it is null. A launch with the
-   * user's own CLI that fails is tried once more with the adapter's copy, for an adapter that
-   * starts its CLI while it initializes; any other failure is the adapter's.
-   */
+  /** Launches `spec`, or installs the pinned adapter first when it is null. */
   private async start(slot: Slot, spec: LaunchSpec | null): Promise<AgentRuntime> {
-    const run = (async () => {
-      const first = spec ?? (await this.installPackage(slot))
-      try {
-        return await this.launch(slot, first)
-      } catch (error) {
-        if (!first.cli || !slot.def.cli?.startsAtInitialize || this.stopped) throw error
-        const reason = (error as Error).message
-        slot.cliFailure = { path: first.cli, reason }
-        this.deps.diagnostics.event(slot.def.id, 'cli failed', `${first.cli}: ${reason}`)
-        await this.detect(slot)
-        const copy = slot.detection?.state === 'available' ? slot.detection.spec : null
-        return this.launch(slot, copy ?? (await this.installPackage(slot)))
-      }
-    })()
+    const run = (async () => this.launch(slot, spec ?? (await this.installPackage(slot))))()
     slot.starting = run
     try {
       const runtime = await run
       this.cleanUpVersions(slot)
-      this.sessionsChanged(slot.def.id)
+      this.sessionsChanged(slot.id)
       return runtime
     } catch (error) {
       const message = (error as Error).message
       // A start the quit stopped did not fail either.
       if (error instanceof InstallCancelled || this.stopped) {
-        slot.state = slot.detection?.state ?? 'available'
+        slot.state = slot.h.detection?.state ?? 'available'
         slot.detail = null
         this.emit(slot)
         throw new HostError('agent_unavailable', message, {
-          agentId: slot.def.id,
+          agentId: slot.id,
+          state: slot.state,
+        })
+      }
+      // The SDK it just installed needs a newer CLI than the user's: that is not a failure.
+      const detection = slot.h.detection
+      if (detection && detection.state !== 'available') {
+        slot.state = detection.state
+        slot.detail = detection.detail
+        this.emit(slot)
+        throw new HostError('agent_unavailable', detection.detail, {
+          agentId: slot.id,
           state: slot.state,
         })
       }
@@ -662,7 +764,7 @@ export class AgentManager {
       slot.detail = message
       this.emit(slot)
       throw new HostError('agent_unavailable', slot.detail ?? message, {
-        agentId: slot.def.id,
+        agentId: slot.id,
         state: slot.state,
       })
     } finally {
@@ -672,8 +774,8 @@ export class AgentManager {
 
   private async launch(slot: Slot, spec: LaunchSpec): Promise<AgentRuntime> {
     const { diagnostics } = this.deps
-    const agentId = slot.def.id
-    if (this.stopped) throw new Error(`${slot.def.name} was not started: the host is stopping.`)
+    const agentId = slot.id
+    if (this.stopped) throw new Error(`${slot.name} was not started: the host is stopping.`)
     slot.state = 'starting'
     slot.detail = null
     slot.progress.clear()
@@ -698,7 +800,7 @@ export class AgentManager {
             reject(
               new Error(
                 t('agent.initializeTimeout', {
-                  agent: slot.def.name,
+                  agent: slot.name,
                   seconds: String(timeoutMs / 1000),
                 }),
               ),
@@ -707,7 +809,7 @@ export class AgentManager {
         }),
         launched.exited.then((info): never => {
           const tail = slot.progress.lastLines(3).join(' ')
-          const exit = exitText(slot.def.name, info)
+          const exit = exitText(slot.name, info)
           throw new Error(`${t('agent.exitedBeforeReady', { exit })}${tail ? ` ${tail}` : ''}`)
         }),
       ])
@@ -734,7 +836,7 @@ export class AgentManager {
       const info = await launched.stop(this.tools())
       if (!launched.hasExited) this.letGo(slot, launched, info)
       throw error instanceof AgentRequestError
-        ? new Error(`${slot.def.name} failed to initialize: ${error.message}`)
+        ? new Error(`${slot.name} failed to initialize: ${error.message}`)
         : error
     } finally {
       if (timer) clearTimeout(timer)
@@ -759,7 +861,7 @@ export class AgentManager {
     if (driver.kind === 'process') {
       const launched = this.deps.launcher.launch(slot.def, spec, env, {
         stderr: (text) => this.onStderr(slot, text),
-        event: (event, detail) => this.deps.diagnostics.event(slot.def.id, event, detail),
+        event: (event, detail) => this.deps.diagnostics.event(slot.id, event, detail),
       })
       slot.launched = launched
       if (launched.pid !== null) {
@@ -784,7 +886,7 @@ export class AgentManager {
   /** How a run in the host records and stops the processes it spawns, as the agent's own. */
   private hostedHooks(slot: Slot): HostedRunHooks {
     const { diagnostics } = this.deps
-    const agentId = slot.def.id
+    const agentId = slot.id
     return {
       stderr: (text) => this.onStderr(slot, text),
       event: (event, detail) => diagnostics.event(agentId, event, detail),
@@ -809,8 +911,8 @@ export class AgentManager {
     const info = await child.stop(tools)
     if (!child.hasExited) {
       const { diagnostics } = this.deps
-      diagnostics.event(slot.def.id, 'stop failed', describeExit(info))
-      diagnostics.log('warn', `A process ${slot.def.name} ran did not stop: ${describeExit(info)}`)
+      diagnostics.event(slot.id, 'stop failed', describeExit(info))
+      diagnostics.log('warn', `A process ${slot.name} ran did not stop: ${describeExit(info)}`)
       this.givenUp.set(child, slot)
       this.emitProcesses()
     }
@@ -830,7 +932,7 @@ export class AgentManager {
     connection: AgentConnection,
     info: ExitInfo,
   ): void {
-    const agentId = slot.def.id
+    const agentId = slot.id
     this.deps.diagnostics.event(agentId, 'exit', describeExit(info))
     void this.reapTree(slot, launched)
     connection.close()
@@ -846,7 +948,7 @@ export class AgentManager {
     if (slot.intentionalStop || slot.starting) {
       // A stop we asked for, or a start that failed and reports itself.
       if (!slot.starting) {
-        slot.state = slot.detection?.state ?? 'available'
+        slot.state = slot.h.detection?.state ?? 'available'
         slot.detail = null
         this.emit(slot)
       }
@@ -857,11 +959,11 @@ export class AgentManager {
     if (this.recordFailure(slot)) {
       slot.state = 'failed'
       slot.detail = t('agent.stoppedTooOften', {
-        detail: t('agent.exited', { exit: exitText(slot.def.name, info) }),
+        detail: t('agent.exited', { exit: exitText(slot.name, info) }),
         count: this.timings.maxFailures,
       })
     } else {
-      slot.state = slot.detection?.state ?? 'available'
+      slot.state = slot.h.detection?.state ?? 'available'
       slot.detail = null
     }
     this.emit(slot)
@@ -879,71 +981,92 @@ export class AgentManager {
   /**
    * Installs the pinned adapter, or the version asked for, and returns how to run the install a
    * start now picks. When the pinned one fails and an older version is installed, returns that one
-   * instead and says so in the status.
+   * instead and says so in the status. Another agent of the harness that starts meanwhile waits
+   * for this install rather than run its own.
    */
   private async installPackage(
     slot: Slot,
     request: { version?: string; alongside?: boolean; fallback?: boolean } = {},
   ): Promise<LaunchSpec> {
-    if (this.stopped) {
-      throw new InstallCancelled(`${slot.def.name} was not installed: the host is stopping.`)
+    const { h } = slot
+    if (h.packageInstall && request.version === undefined) {
+      await h.packageInstall.catch(() => {})
+      const spec = h.detection?.state === 'available' ? h.detection.spec : null
+      if (spec) return spec
     }
-    const detection = slot.detection
+    const run = this.installPackageNow(slot, request)
+    h.packageInstall = run
+    try {
+      return await run
+    } finally {
+      if (h.packageInstall === run) h.packageInstall = null
+    }
+  }
+
+  private async installPackageNow(
+    slot: Slot,
+    request: { version?: string; alongside?: boolean; fallback?: boolean },
+  ): Promise<LaunchSpec> {
+    const { h } = slot
+    if (this.stopped) {
+      throw new InstallCancelled(`${h.def.name} was not installed: the host is stopping.`)
+    }
+    const detection = h.detection
     const adapter = detection?.state === 'available' ? detection.adapter : null
     if (!detection || detection.state !== 'available' || !adapter) {
-      throw new Error(`${slot.def.name} has no adapter to install.`)
+      throw new Error(`${h.def.name} has no adapter to install.`)
     }
     const { diagnostics, platform } = this.deps
-    const agentId = slot.def.id
-    // The copy is needed where the install a start runs has none: that version again, with it.
-    const copy = adapter.cli?.needsCopy ? adapter.current : null
-    const version = request.version ?? copy?.version ?? adapter.version
-    const withoutCli = !copy && adapter.cli?.runs === 'installed' && !slot.def.cli?.isPackage
+    const harnessId = h.def.id
+    const version = request.version ?? adapter.version
+    // The SDK never brings the CLI of its own: only the user's runs.
+    const withoutCli = !!h.def.cli
     slot.state = 'installing'
     slot.detail = null
     slot.progress.clear()
     this.emit(slot)
     const abort = new AbortController()
-    slot.installAbort = abort
+    h.installAbort = abort
     const started = Date.now()
-    diagnostics.event(agentId, 'install', `${adapter.package}@${version}`)
+    diagnostics.event(slot.id, 'install', `${adapter.package}@${version}`)
     try {
       if (!adapter.npm) throw new Error('npm was not found on PATH.')
       await (this.deps.install ?? installAdapter)({
         root: this.deps.adaptersDir,
-        agentId,
+        agentId: harnessId,
         package: adapter.package,
         version,
         npm: adapter.npm,
         nodeVersion: adapter.nodeVersion,
         platform,
-        env: this.deps.env.agentEnv(agentId),
+        env: this.deps.env.agentEnv(harnessId),
         timeoutMs: this.timings.installMs,
         signal: abort.signal,
         onOutput: (text) => this.onProgress(slot, text),
-        ...(request.alongside || copy ? { alongside: true } : {}),
+        ...(request.alongside ? { alongside: true } : {}),
         ...(withoutCli ? { withoutCli: true } : {}),
       })
-      diagnostics.event(agentId, 'installed', `${version} in ${Date.now() - started} ms`)
-      slot.adapterNote = null
-      await this.detect(slot)
-      const detected = slot.detection?.state === 'available' ? slot.detection : null
-      // The user's CLI turned out older than the adapter just installed needs: the copy comes too.
-      const copyToo = withoutCli && !detected?.spec && detected?.adapter?.cli?.needsCopy
-      if (!copyToo) {
-        const spec = detected?.spec ?? null
-        if (!spec) throw new Error(`${adapter.package} ${version} is incomplete on disk.`)
-        return spec
+      diagnostics.event(slot.id, 'installed', `${version} in ${Date.now() - started} ms`)
+      h.adapterNote = null
+      await this.detect(h)
+      const detected = h.detection?.state === 'available' ? h.detection : null
+      const spec = detected?.spec ?? null
+      // The SDK just installed may need a newer CLI than the user's, which detection now says.
+      if (!spec) {
+        throw new Error(
+          h.detection?.state === 'available'
+            ? `${adapter.package} ${version} is incomplete on disk.`
+            : h.detection?.detail,
+        )
       }
-      // A cancel that came while this install was being detected stops the copy before it starts.
-      abort.signal.throwIfAborted()
+      return spec
     } catch (error) {
       const message = (error as Error).message
-      diagnostics.event(agentId, 'install failed', message)
-      const text = t('agent.installFailed', { agent: slot.def.name, message })
+      diagnostics.event(slot.id, 'install failed', message)
+      const text = t('agent.installFailed', { agent: h.def.name, message })
       if (abort.signal.aborted) throw new InstallCancelled(text, { cause: error })
       if (adapter.fallback && request.fallback !== false) {
-        slot.adapterNote = t('agent.runningFallback', {
+        h.adapterNote = t('agent.runningFallback', {
           fallback: adapter.fallback.version,
           version,
           message,
@@ -952,11 +1075,8 @@ export class AgentManager {
       }
       throw new Error(text, { cause: error })
     } finally {
-      slot.installAbort = null
+      h.installAbort = null
     }
-    // Once this install has settled, so that the install of the copy holds the abort while it runs,
-    // and its cancel or failure reaches the caller as its own.
-    return this.installPackage(slot, request.fallback === false ? { fallback: false } : {})
   }
 
   /**
@@ -966,128 +1086,140 @@ export class AgentManager {
    * last one exits.
    */
   private cleanUpVersions(slot: Slot): void {
-    const detection = slot.detection
-    const { launch } = slot.def
+    const { h } = slot
+    const detection = h.detection
+    const { launch } = h.def
     if (detection?.state !== 'available' || launch.kind !== 'package') return
     const current = detection.adapter?.current
     if (!current || !detection.spec || slot.launchSpec !== detection.spec) return
-    if (slot.cleanedDir === current.dir) return
-    if (this.givenUpRuns(slot)) return
-    slot.cleanedDir = current.dir
-    const agentId = slot.def.id
-    removeOlderInstalls(this.deps.adaptersDir, agentId, launch.package, current).then(
+    if (h.cleanedDir === current.dir) return
+    if (this.agentsOf(h).some((agent) => this.givenUpRuns(agent))) return
+    h.cleanedDir = current.dir
+    const harnessId = h.def.id
+    removeOlderInstalls(this.deps.adaptersDir, harnessId, launch.package, current).then(
       (removed) => {
-        if (removed.length > 0) this.deps.diagnostics.event(agentId, 'removed', removed.join(', '))
+        if (removed.length > 0) {
+          this.deps.diagnostics.event(slot.id, 'removed', removed.join(', '))
+        }
       },
       (error: unknown) =>
         this.deps.diagnostics.log(
           'warn',
-          `${slot.def.name}: could not remove older versions: ${(error as Error).message}`,
+          `${h.def.name}: could not remove older versions: ${(error as Error).message}`,
         ),
     )
   }
 
   /** Refuses a second install or update while one runs. */
-  private assertNoInstall(slot: Slot): void {
-    if (slot.task?.state === 'running' || slot.installing || slot.state === 'installing') {
-      throw new HostError('busy', t('agent.busyTask', { agent: slot.def.name }))
+  private assertNoInstall(h: Harness): void {
+    const installing = this.agentsOf(h).some((slot) => slot.state === 'installing')
+    if (h.task?.state === 'running' || h.installing || installing) {
+      throw new HostError('busy', t('agent.busyTask', { agent: h.def.name }))
     }
   }
 
+  /** The sessions open with any of the harness's agents. */
+  private liveSessionsOf(h: Harness): number {
+    return this.agentsOf(h).reduce((sum, slot) => sum + this.hooks.liveSessions(slot.id), 0)
+  }
+
   /**
-   * Deletes the installed adapter and installs it again, while no session uses the agent. The
-   * slot is claimed before the first await, so a start that comes meanwhile waits for the result.
+   * Deletes the installed adapter and installs it again, while no session uses any of the
+   * harness's agents. The harness is claimed before the first await, so a start that comes
+   * meanwhile waits for the result.
    */
   async reinstall(agentId: AgentId): Promise<void> {
-    const slot = this.slot(agentId)
-    const { launch } = slot.def
+    const { h } = this.slot(agentId)
+    const home = this.home(h)
+    const agents = this.agentsOf(h)
+    const { launch } = h.def
     if (launch.kind !== 'package') {
-      throw invalidParams(`${slot.def.name} is not installed by Kettu`)
+      throw invalidParams(`${h.def.name} is not installed by Kettu`)
     }
-    if (slot.installing || slot.starting) {
-      throw new HostError('busy', t('agent.busyInstalling', { agent: slot.def.name }))
+    if (h.installing || agents.some((slot) => slot.starting)) {
+      throw new HostError('busy', t('agent.busyInstalling', { agent: h.def.name }))
     }
-    if (slot.task?.state === 'running') {
-      throw new HostError('busy', t('agent.busyTask', { agent: slot.def.name }))
+    if (h.task?.state === 'running') {
+      throw new HostError('busy', t('agent.busyTask', { agent: h.def.name }))
     }
-    if (this.hooks.liveSessions(agentId) > 0) {
-      throw new HostError('busy', t('agent.closeSessionsFirst', { agent: slot.def.name }))
+    if (this.liveSessionsOf(h) > 0) {
+      throw new HostError('busy', t('agent.closeSessionsFirst', { agent: h.def.name }))
     }
     const stillRunning = (): HostError =>
-      new HostError('busy', t('agent.stillRunning', { agent: slot.def.name }))
-    if (this.givenUpRuns(slot)) throw stillRunning()
+      new HostError('busy', t('agent.stillRunning', { agent: h.def.name }))
+    const givenUp = (): boolean => agents.some((slot) => this.givenUpRuns(slot))
+    if (givenUp()) throw stillRunning()
     const run = (async () => {
       await this.detectAll()
-      await this.stopProcess(slot)
+      await Promise.all(agents.map((slot) => this.stopProcess(slot)))
       // A process its stop gave up may still run from the install, which must not go under it.
-      if (this.givenUpRuns(slot)) throw stillRunning()
+      if (givenUp()) throw stillRunning()
       // The install a start runs goes, and the same version comes back.
-      const detected = slot.detection?.state === 'available' ? slot.detection.adapter : null
+      const detected = h.detection?.state === 'available' ? h.detection.adapter : null
       const removed = detected?.current ?? null
       if (removed) await removeInstall(removed.dir)
-      slot.failures = []
-      slot.cleanedDir = null
-      slot.state = 'available'
-      slot.detail = null
-      await this.detect(slot)
-      if (slot.detection?.state !== 'available') {
+      h.cleanedDir = null
+      for (const slot of agents) {
+        slot.failures = []
+        slot.state = 'available'
+        slot.detail = null
+      }
+      await this.detect(h)
+      if (h.detection?.state !== 'available') {
         throw new HostError(
           'agent_unavailable',
-          slot.detection?.detail ?? t('agent.cannotInstall', { agent: slot.def.name }),
+          h.detection?.detail ?? t('agent.cannotInstall', { agent: h.def.name }),
         )
       }
       try {
-        await this.installPackage(slot, {
+        await this.installPackage(home, {
           version: removed?.version ?? launch.version,
           alongside: true,
         })
-        slot.state = 'available'
+        home.state = 'available'
       } catch (error) {
         if (error instanceof InstallCancelled) {
-          slot.state = slot.detection?.state ?? 'available'
-          slot.detail = null
+          home.state = h.detection?.state ?? 'available'
+          home.detail = null
           return
         }
-        slot.state = 'failed'
-        slot.detail = (error as Error).message
-        throw new HostError('agent_unavailable', slot.detail, { agentId, state: 'failed' })
+        home.state = 'failed'
+        home.detail = (error as Error).message
+        throw new HostError('agent_unavailable', home.detail, { agentId, state: 'failed' })
       } finally {
-        this.emit(slot)
+        this.emit(home)
       }
     })()
-    slot.installing = run
+    h.installing = run
     try {
       await run
     } finally {
-      slot.installing = null
+      h.installing = null
     }
   }
 
   // Updates and installs the user asks for.
 
   /**
-   * The update to offer: what the last check found, against the install a start runs. An agent
-   * that runs an install below the pin, because the pinned one could not be installed, is offered
-   * the pin at least.
+   * The SDK update to offer: what the last check found, against the install a start runs. One that
+   * runs an install below the pin, because the pinned one could not be installed, is offered the
+   * pin at least.
    */
-  private updateOf(slot: Slot): AgentUpdate | null {
-    const detection = slot.detection
+  private updateOf(h: Harness): AgentUpdate | null {
+    const detection = h.detection
     const adapter = detection?.state === 'available' ? detection.adapter : null
     const running = adapter?.current ?? adapter?.fallback
     if (!adapter || !running) return null
-    // The user's own CLI runs instead of the package, and updates the way they installed it.
-    if (slot.def.cli?.isPackage && adapter.cli?.runs === 'installed') return null
-    let offered = decideUpdate(slot.latest, {
+    let offered = decideUpdate(h.latest, {
       version: running.version,
-      cliVersion: slot.installedCli,
+      cliVersion: h.installedCli,
     })
-    // While the user's own CLI runs, only a newer adapter is an update, and it comes without a CLI.
-    // One that needs a newer CLI than the user's waits until theirs updates itself, usually within
-    // hours, rather than bring a copy of its own of a few hundred MB.
-    if (offered && adapter.cli?.runs === 'installed') {
-      const mine = adapter.cli.installed
+    // Only a newer adapter is an update, and it comes without a CLI. One that needs a newer CLI
+    // than the user's waits until theirs is updated, which updating the CLI does at once.
+    if (offered && h.def.cli) {
+      const mine = detection?.state === 'available' ? detection.cli : undefined
       const outgrown =
-        !!slot.def.cli?.pinsVersion &&
+        h.def.cli.pinsVersion &&
         !!offered.cliVersion &&
         !!mine?.version &&
         !mine.variable &&
@@ -1103,32 +1235,61 @@ export class AgentManager {
       : { adapterVersion: adapter.version, cliVersion: null }
   }
 
-  /** What an earlier run's update check found, so an update shows without the network. */
-  restoreUpdates(file: AgentUpdatesFile): void {
-    for (const [agentId, entry] of Object.entries(file.agents) as [
-      AgentId,
-      AgentUpdatesFile['agents'][AgentId],
-    ][]) {
-      const slot = this.slots.get(agentId)
-      if (!slot || !entry || slot.def.launch.kind !== 'package') continue
-      slot.latest = entry.latest
-      slot.checkedAt = entry.checkedAt
-      slot.attemptedAt = entry.attemptedAt
-      slot.skipped = entry.skipped ?? null
-      slot.rememberedUpdate = updateJson(slot)
-      this.emit(slot)
+  /** The user's own program, as detection found it: the SDK's CLI, or a binary harness's program. */
+  private userProgram(h: Harness): { path: string; version: string | null } | null {
+    const detection = h.detection
+    if (detection?.cli) return { path: detection.cli.path, version: detection.cli.version }
+    if (h.def.launch.kind !== 'binary' || detection?.state !== 'available' || !detection.spec) {
+      return null
     }
+    return { path: detection.spec.command, version: h.binaryVersion }
   }
 
   /**
-   * Checks each agent once its last check, found or failed, is a day old, but no sooner than a
+   * A newer version of the user's own program than the one it runs: from npm, or, for one too old
+   * to run, at least the oldest that runs, which its own update brings before any check.
+   */
+  private cliUpdateVersion(h: Harness): string | null {
+    const mine = this.userProgram(h)
+    const problem = h.detection?.cli?.problem
+    if (problem?.kind === 'too-old') return h.cliLatest ?? problem.minimum
+    if (!h.cliLatest || !mine?.version) return null
+    return compareVersions(h.cliLatest, mine.version) > 0 ? h.cliLatest : null
+  }
+
+  /** What an earlier run's update check found, so an update shows without the network. */
+  restoreUpdates(file: AgentUpdatesFile): void {
+    for (const [harnessId, entry] of Object.entries(file.agents) as [
+      AgentId,
+      AgentUpdatesFile['agents'][AgentId],
+    ][]) {
+      const h = this.harnesses.get(harnessId as HarnessId)
+      if (!h || !entry || !this.checksUpdates(h)) continue
+      h.latest = entry.latest
+      h.cliLatest = entry.cli ?? null
+      h.checkedAt = entry.checkedAt
+      h.attemptedAt = entry.attemptedAt
+      h.skipped = entry.skipped ?? null
+      h.cliSkipped = entry.skippedCli ?? null
+      h.rememberedUpdate = updateJson(h)
+      this.emit(this.home(h))
+    }
+  }
+
+  /** Kettu's own package for it, or the user's program, which npm publishes, is checked. */
+  private checksUpdates(h: Harness): boolean {
+    return h.def.launch.kind === 'package' || !!h.def.installs?.npm
+  }
+
+  /**
+   * Checks each harness once its last check, found or failed, is a day old, but no sooner than a
    * minute after start. Called once the first detection is done, and again after each check.
    */
   scheduleUpdateChecks(): void {
     if (this.updateTimer || this.stopped) return
-    const slots = this.checkable()
-    if (slots.length === 0) return
-    const next = Math.min(...slots.map((slot) => this.checkDue(slot)))
+    const harnesses = this.checkable()
+    if (harnesses.length === 0) return
+    const next = Math.min(...harnesses.map((h) => this.checkDue(h)))
     const delayMs = Math.max(this.timings.updateDelayMs, next - Date.now())
     this.updateTimer = setTimeout(() => {
       this.updateTimer = null
@@ -1137,24 +1298,29 @@ export class AgentManager {
     this.updateTimer.unref?.()
   }
 
-  /** The package agents whose npm was found, which a check can ask about. */
-  private checkable(): Slot[] {
-    return [...this.slots.values()].filter(
-      (slot) =>
-        slot.def.launch.kind === 'package' &&
-        slot.detection?.state === 'available' &&
-        slot.detection.adapter?.npm,
-    )
+  /**
+   * The harnesses a check can ask npm about: those with a package of Kettu's whose npm was found,
+   * and those whose user's program is installed, whose versions npm publishes too.
+   */
+  private checkable(): Harness[] {
+    const npm = this.deps.env.nodeProbe().npmPath
+    return [...this.harnesses.values()].filter((h) => {
+      const detection = h.detection
+      if (h.def.launch.kind === 'package') {
+        return detection?.state === 'available' && !!detection.adapter?.npm
+      }
+      return !!npm && !!h.def.installs?.npm && !!this.userProgram(h)
+    })
   }
 
-  private checkDue(slot: Slot): number {
-    return (slot.attemptedAt ?? 0) + this.timings.updateIntervalMs
+  private checkDue(h: Harness): number {
+    return (h.attemptedAt ?? 0) + this.timings.updateIntervalMs
   }
 
   /**
-   * The user's check (`all`) asks about every agent; the daily one only about those due, so an
-   * agent whose check keeps failing waits a day like the others. Never rejects, and a failure
-   * keeps the last result. A user's check during a daily one runs after it.
+   * The user's check (`all`) asks about every harness; the daily one only about those due, so one
+   * whose check keeps failing waits a day like the others. Never rejects, and a failure keeps the
+   * last result. A user's check during a daily one runs after it.
    */
   private runUpdateCheck(all: boolean): Promise<UpdateCheck> {
     if (this.updateCheck && (this.updateCheckAll || !all)) return this.updateCheck
@@ -1166,9 +1332,9 @@ export class AgentManager {
       const abort = new AbortController()
       this.updateAbort = abort
       const now = Date.now()
-      const slots = this.checkable().filter((slot) => all || this.checkDue(slot) <= now)
-      const results = await Promise.all(slots.map((slot) => this.checkSlot(slot, abort.signal)))
-      return { checked: slots.length, failures: results.filter((r) => r !== null) }
+      const harnesses = this.checkable().filter((h) => all || this.checkDue(h) <= now)
+      const results = await Promise.all(harnesses.map((h) => this.checkHarness(h, abort.signal)))
+      return { checked: harnesses.length, failures: results.filter((r) => r !== null) }
     })().finally(() => {
       if (this.updateCheck !== run) return
       this.updateCheck = null
@@ -1180,39 +1346,60 @@ export class AgentManager {
     return run
   }
 
-  private async checkSlot(slot: Slot, signal: AbortSignal): Promise<string | null> {
-    const { launch } = slot.def
-    const adapter = slot.detection?.state === 'available' ? slot.detection.adapter : null
-    if (launch.kind !== 'package' || !adapter?.npm) return null
+  private async checkHarness(h: Harness, signal: AbortSignal): Promise<string | null> {
+    const { launch } = h.def
+    const detection = h.detection
+    const npm =
+      (detection?.state === 'available' ? detection.adapter?.npm : null) ??
+      this.deps.env.nodeProbe().npmPath
+    if (!npm) return null
+    const options = {
+      npm,
+      env: this.deps.env.agentEnv(h.def.id),
+      platform: this.deps.platform,
+      cwd: os.homedir(),
+      timeoutMs: this.timings.updateViewMs,
+      signal,
+    }
+    const fetch = this.deps.fetchLatest ?? fetchLatest
+    const cliPackage = h.def.installs?.npm
     try {
-      const latest = await (this.deps.fetchLatest ?? fetchLatest)({
-        npm: adapter.npm,
-        package: launch.package,
-        ...(launch.updates ? { range: launch.updates } : {}),
-        cli: CLI_VERSION_SOURCES[slot.def.id] ?? null,
-        env: this.deps.env.agentEnv(slot.def.id),
-        platform: this.deps.platform,
-        cwd: os.homedir(),
-        timeoutMs: this.timings.updateViewMs,
-        signal,
-      })
-      slot.latest = latest
-      slot.checkedAt = Date.now()
-      slot.attemptedAt = slot.checkedAt
-      const cli = latest.cliVersion ? `, CLI ${latest.cliVersion}` : ''
-      this.deps.diagnostics.event(slot.def.id, 'update check', `${latest.adapterVersion}${cli}`)
-      this.emit(slot)
+      const [latest, cli] = await Promise.all([
+        launch.kind === 'package'
+          ? fetch({
+              ...options,
+              package: launch.package,
+              ...(launch.updates ? { range: launch.updates } : {}),
+              cli: CLI_VERSION_SOURCES[h.def.id] ?? null,
+            })
+          : null,
+        cliPackage && this.userProgram(h)
+          ? fetch({ ...options, package: cliPackage, cli: null })
+          : null,
+      ])
+      if (latest) h.latest = latest
+      if (cli) h.cliLatest = cli.adapterVersion
+      h.checkedAt = Date.now()
+      h.attemptedAt = h.checkedAt
+      const found = [
+        latest
+          ? `${latest.adapterVersion}${latest.cliVersion ? `, CLI ${latest.cliVersion}` : ''}`
+          : '',
+        cli ? `${cliPackage} ${cli.adapterVersion}` : '',
+      ]
+      this.deps.diagnostics.event(h.def.id, 'update check', found.filter(Boolean).join('; '))
+      this.emit(this.home(h))
       return null
     } catch (error) {
       const message = (error as Error).message
-      this.deps.diagnostics.log('warn', `${slot.def.name}: the update check failed: ${message}`)
-      slot.attemptedAt = Date.now()
-      this.emit(slot)
+      this.deps.diagnostics.log('warn', `${h.def.name}: the update check failed: ${message}`)
+      h.attemptedAt = Date.now()
+      this.emit(this.home(h))
       return message
     }
   }
 
-  /** The user's check: resolves with the statuses, or rejects when no agent could be checked. */
+  /** The user's check: resolves with the statuses, or rejects when no harness could be checked. */
   async checkUpdates(): Promise<AgentStatus[]> {
     const { checked, failures } = await this.runUpdateCheck(true)
     if (checked === 0) throw new HostError('agent_unavailable', t('agent.update.noNpm'))
@@ -1223,170 +1410,264 @@ export class AgentManager {
   }
 
   /**
-   * Installs the update beside the install that runs now, which keeps running; a start after it
-   * runs the new one. Resolves when done or cancelled; a failure leaves the old install as it was.
+   * Installs the SDK's update beside the install that runs now, which keeps running; a start after
+   * it runs the new one. Resolves when done or cancelled; a failure leaves the old install as it was.
    */
   async update(agentId: AgentId): Promise<void> {
-    const slot = this.slot(agentId)
-    const { launch } = slot.def
+    const { h } = this.slot(agentId)
+    const { launch } = h.def
     if (launch.kind !== 'package') {
-      throw invalidParams(`${slot.def.name} is not installed by Kettu`)
+      throw invalidParams(`${h.def.name} is not installed by Kettu`)
     }
     await this.detectAll()
-    const update = this.updateOf(slot)
-    if (!update) throw invalidParams(t('agent.update.none', { agent: slot.def.name }))
-    this.assertNoInstall(slot)
-    const adapter = slot.detection?.state === 'available' ? slot.detection.adapter : null
+    const update = this.updateOf(h)
+    if (!update) throw invalidParams(t('agent.update.none', { agent: h.def.name }))
+    this.assertNoInstall(h)
+    const command = this.packageUpdateCommand(h, update)
+    await this.runTask(
+      h,
+      'update',
+      command,
+      (signal, onOutput) => this.installUpdate(h, update, signal, onOutput),
+      (message) => t('agent.updateFailed', { agent: h.def.name, message }),
+    )
+  }
+
+  private packageUpdateCommand(h: Harness, update: AgentUpdate): string {
+    const { launch } = h.def
+    const adapter = h.detection?.state === 'available' ? h.detection.adapter : null
+    if (launch.kind !== 'package' || !adapter?.npm) return ''
+    const [, ...flags] = h.def.cli ? [...NPM_INSTALL_ARGS, OMIT_CLI_ARG] : NPM_INSTALL_ARGS
+    return formatCommand(
+      {
+        command: adapter.npm,
+        args: ['install', `${launch.package}@${update.adapterVersion}`, ...flags],
+      },
+      this.deps.platform,
+    )
+  }
+
+  /** Installs the SDK's or adapter's update beside the running install. */
+  private async installUpdate(
+    h: Harness,
+    update: AgentUpdate,
+    signal: AbortSignal,
+    onOutput: (text: string) => void,
+  ): Promise<void> {
+    const { launch } = h.def
+    const adapter = h.detection?.state === 'available' ? h.detection.adapter : null
     const npm = adapter?.npm
-    if (!adapter || !npm) {
+    if (launch.kind !== 'package' || !adapter || !npm) {
       throw new HostError(
         'agent_unavailable',
-        t('detect.npmMissing', { agent: slot.def.name, hint: t(slot.def.install.hint) }),
+        t('detect.npmMissing', { agent: h.def.name, hint: t(h.def.install.hint) }),
       )
     }
     const { platform, diagnostics } = this.deps
+    const harnessId = h.def.id
     const version = update.adapterVersion
-    // An update that brings no CLI of its own keeps running the user's.
-    const withoutCli =
-      adapter.cli?.runs === 'installed' && update.cliVersion === null && !slot.def.cli?.isPackage
-    const [, ...flags] = withoutCli ? [...NPM_INSTALL_ARGS, OMIT_CLI_ARG] : NPM_INSTALL_ARGS
-    const command = formatCommand(
-      { command: npm, args: ['install', `${launch.package}@${version}`, ...flags] },
+    const started = Date.now()
+    diagnostics.event(harnessId, 'update', `${launch.package}@${version}`)
+    const installed = await (this.deps.install ?? installAdapter)({
+      root: this.deps.adaptersDir,
+      agentId: harnessId,
+      package: launch.package,
+      version,
+      npm,
+      nodeVersion: adapter.nodeVersion,
       platform,
-    )
-    await this.runTask(
-      slot,
-      'update',
-      command,
-      async (signal, onOutput) => {
-        const started = Date.now()
-        diagnostics.event(agentId, 'update', `${launch.package}@${version}`)
-        const installed = await (this.deps.install ?? installAdapter)({
-          root: this.deps.adaptersDir,
-          agentId,
-          package: launch.package,
-          version,
-          npm,
-          nodeVersion: adapter.nodeVersion,
-          platform,
-          env: this.deps.env.agentEnv(agentId),
-          timeoutMs: this.timings.installMs,
-          signal,
-          onOutput,
-          alongside: true,
-          ...(withoutCli ? { withoutCli: true } : {}),
-        })
-        diagnostics.event(agentId, 'updated', `${installed.version} in ${Date.now() - started} ms`)
-        await this.detect(slot)
-        slot.skipped = null
-        // A fresh install can take another CLI than the check foresaw; what it took is the latest.
-        if (this.updateOf(slot)) {
-          slot.latest = { adapterVersion: installed.version, cliVersion: slot.installedCli }
-        }
-      },
-      (message) => t('agent.updateFailed', { agent: slot.def.name, message }),
-    )
+      env: this.deps.env.agentEnv(harnessId),
+      timeoutMs: this.timings.installMs,
+      signal,
+      onOutput,
+      alongside: true,
+      ...(h.def.cli ? { withoutCli: true } : {}),
+    })
+    diagnostics.event(harnessId, 'updated', `${installed.version} in ${Date.now() - started} ms`)
+    await this.detect(h)
+    h.skipped = null
+    // A fresh install can take another CLI than the check foresaw; what it took is the latest.
+    if (this.updateOf(h)) {
+      h.latest = { adapterVersion: installed.version, cliVersion: h.installedCli }
+    }
   }
 
   /**
-   * Skips the agent's current update in the sidebar's notice, until a newer adapter or CLI is
+   * Updates the user's own program the way it was installed: its own update command or the
+   * install script again, `brew upgrade`, `winget upgrade` or `npm install -g`. For Claude Code the
+   * SDK then moves to the version that matches, when one is on offer.
+   */
+  async updateCli(agentId: AgentId): Promise<void> {
+    const { h } = this.slot(agentId)
+    await this.detectAll()
+    const plan = await this.cliUpdatePlan(h)
+    if (!plan?.run) {
+      throw invalidParams(
+        plan
+          ? t('agent.binaryInstall.unavailable', { command: plan.command })
+          : t('agent.update.none', { agent: h.def.name }),
+      )
+    }
+    this.assertNoInstall(h)
+    const run = plan.run
+    const { platform, diagnostics } = this.deps
+    const timeoutMs = this.timings.installMs
+    await this.runTask(
+      h,
+      'update',
+      plan.command,
+      async (signal, onOutput) => {
+        diagnostics.event(h.def.id, 'update', plan.command)
+        const result = await (this.deps.runProgram ?? runProgram)({
+          program: run.program,
+          args: run.args,
+          cwd: os.homedir(),
+          env: this.deps.env.agentEnv(h.def.id),
+          platform,
+          timeoutMs,
+          signal,
+          onOutput,
+        })
+        const name = path.basename(run.program).replace(/\.(?:cmd|exe)$/i, '')
+        const failure = programFailure(name, result, timeoutMs)
+        if (failure) throw new Error(failure)
+        this.cliVersions.clear()
+        await this.detect(h)
+        h.cliSkipped = null
+        const update = this.updateOf(h)
+        if (update && !this.stopped) await this.installUpdate(h, update, signal, onOutput)
+      },
+      (message) => t('agent.updateFailed', { agent: h.def.name, message }),
+      h.cliMethod,
+    )
+  }
+
+  /** The update the user's program takes, the way it was installed; null when that is unknown. */
+  private async cliUpdatePlan(
+    h: Harness,
+  ): Promise<{ command: string; run: { program: string; args: string[] } | null } | null> {
+    const installs = h.def.installs
+    const mine = this.userProgram(h)
+    if (!installs || !mine || !h.cliMethod) return null
+    const platform = this.deps.platform
+    return updatePlan(installs, h.cliMethod, {
+      platform,
+      env: this.deps.env.agentEnv(h.def.id),
+      npm: this.deps.env.nodeProbe().npmPath,
+      isExecutable: (file) => isExecutableFile(file, platform),
+      program: mine.path,
+    })
+  }
+
+  /**
+   * Skips the harness's current update in the sidebar's notice, until a newer adapter or CLI is
    * found. Installing an update clears the skip.
    */
   async skipUpdate(agentId: AgentId): Promise<void> {
-    const slot = this.slot(agentId)
-    const update = this.updateOf(slot)
+    const { h } = this.slot(agentId)
+    const update = this.updateOf(h)
+    const cli = this.cliUpdateVersion(h)
     // The update can be gone by the time the click arrives, as when it installed meanwhile.
-    if (!update) return
-    slot.skipped = update
-    this.emit(slot)
+    if (!update && !cli) return
+    if (update) h.skipped = update
+    if (cli) h.cliSkipped = cli
+    this.emit(this.home(h))
   }
 
   /**
-   * Installs an agent that is missing: a package agent's pinned adapter now, without starting it,
-   * or a binary agent by one of its routes. Resolves when done or cancelled.
+   * Installs a harness that is missing: the user's own program by one of its routes, or a package
+   * harness's pinned adapter now, without starting it. Resolves when done or cancelled.
    */
   async install(agentId: AgentId, method?: AgentInstallMethod['id']): Promise<void> {
-    const slot = this.slot(agentId)
+    const { h } = this.slot(agentId)
     await this.detectAll()
-    switch (slot.def.launch.kind) {
+    // The user's CLI the SDK runs is installed first; one found too old is updated instead.
+    const cliMissing = h.detection?.state === 'not-installed' && !h.detection.cli
+    if (h.def.cli && h.def.launch.kind === 'package' && cliMissing) {
+      return this.installProgram(h, method)
+    }
+    switch (h.def.launch.kind) {
       case 'package':
-        return this.installNow(slot)
+        return this.installNow(h)
       case 'binary':
-        return this.installBinary(slot, method)
+        return this.installProgram(h, method)
       case 'uvx':
       case 'node-script':
-        throw invalidParams(`${slot.def.name} is not installed by Kettu`)
+        throw invalidParams(`${h.def.name} is not installed by Kettu`)
     }
   }
 
   /** The first-use install, shared with any start that waits for it. */
-  private async installNow(slot: Slot): Promise<void> {
-    const agentId = slot.def.id
-    if (slot.installing) {
-      await slot.installing
+  private async installNow(h: Harness): Promise<void> {
+    const home = this.home(h)
+    const agentId = home.id
+    if (h.installing) {
+      await h.installing
       return
     }
-    if (!slot.starting && slot.detection?.state !== 'available') await this.detect(slot)
-    const detection = slot.detection
+    if (!home.starting && h.detection?.state !== 'available') await this.detect(h)
+    const detection = h.detection
     if (detection?.state !== 'available') {
       throw new HostError(
         'agent_unavailable',
-        detection?.detail ?? t('agent.cannotInstall', { agent: slot.def.name }),
+        detection?.detail ?? t('agent.cannotInstall', { agent: h.def.name }),
         { agentId, state: detection?.state ?? 'not-installed' },
       )
     }
     if (detection.adapter?.installed) return
     // A start that installs first.
-    if (slot.starting) {
-      await slot.starting
+    const starting = this.agentsOf(h).find((slot) => slot.starting)?.starting
+    if (starting) {
+      await starting
       return
     }
-    this.assertNoInstall(slot)
+    this.assertNoInstall(h)
     const run = (async () => {
       try {
-        await this.installPackage(slot, { fallback: false })
-        slot.state = 'available'
+        await this.installPackage(home, { fallback: false })
+        home.state = 'available'
       } catch (error) {
         if (error instanceof InstallCancelled) {
-          slot.state = slot.detection?.state ?? 'available'
-          slot.detail = null
+          home.state = h.detection?.state ?? 'available'
+          home.detail = null
           return
         }
         const message = (error as Error).message
         // An older install still runs, so the agent stays usable and only this install failed.
         if (detection.adapter?.fallback) {
-          slot.state = slot.detection?.state ?? 'available'
-          slot.detail = null
+          home.state = h.detection?.state ?? 'available'
+          home.detail = null
           throw new HostError('agent_error', message, { agentId })
         }
-        slot.state = 'failed'
-        slot.detail = message
-        throw new HostError('agent_unavailable', slot.detail, { agentId, state: 'failed' })
+        home.state = 'failed'
+        home.detail = message
+        throw new HostError('agent_unavailable', home.detail, { agentId, state: 'failed' })
       } finally {
-        this.emit(slot)
+        this.emit(home)
       }
     })()
-    slot.installing = run
+    h.installing = run
     try {
       await run
     } finally {
-      slot.installing = null
+      h.installing = null
     }
   }
 
-  private async installBinary(
-    slot: Slot,
+  /** Installs the harness's program by one of its vendor's routes, or the registry's archive. */
+  private async installProgram(
+    h: Harness,
     methodId: AgentInstallMethod['id'] | undefined,
   ): Promise<void> {
-    const installs = slot.def.installs
-    const agent = slot.def.name
+    const installs = h.def.installs
+    const agent = h.def.name
     if (!installs) throw invalidParams(`${agent} is not installed by Kettu`)
-    if (slot.detection?.state === 'available') {
+    if (h.detection?.state === 'available') {
       throw invalidParams(t('agent.alreadyInstalled', { agent }))
     }
     const plan = methodId
-      ? slot.installPlans.find((candidate) => candidate.id === methodId)
-      : slot.installPlans.find((candidate) => candidate.available)
+      ? h.installPlans.find((candidate) => candidate.id === methodId)
+      : h.installPlans.find((candidate) => candidate.available)
     if (!plan) {
       throw invalidParams(
         methodId
@@ -1397,26 +1678,26 @@ export class AgentManager {
     if (!plan.available) {
       throw invalidParams(t('agent.binaryInstall.unavailable', { command: plan.command }))
     }
-    if (plan.id === 'archive') return this.installArchive(slot, plan)
+    if (plan.id === 'archive') return this.installArchive(h, plan)
     const run = plan.run
     if (!run) {
       throw invalidParams(t('agent.binaryInstall.unavailable', { command: plan.command }))
     }
-    this.assertNoInstall(slot)
+    this.assertNoInstall(h)
     const { platform, diagnostics } = this.deps
     const home = os.homedir()
     const timeoutMs = this.timings.installMs
     await this.runTask(
-      slot,
+      h,
       'install',
       plan.command,
       async (signal, onOutput) => {
-        diagnostics.event(slot.def.id, 'install', plan.command)
+        diagnostics.event(h.def.id, 'install', plan.command)
         const result = await (this.deps.runProgram ?? runProgram)({
           program: run.program,
           args: run.args,
           cwd: home,
-          env: this.deps.env.agentEnv(slot.def.id),
+          env: this.deps.env.agentEnv(h.def.id),
           platform,
           timeoutMs,
           signal,
@@ -1427,14 +1708,16 @@ export class AgentManager {
         if (failure) throw new Error(failure)
         // The script adds its folder to PATH in shell startup files, which a new login shell reads.
         await this.deps.env.reload()
-        await Promise.all([...this.slots.values()].map((other) => this.detect(other)))
-        if (slot.detection?.state === 'available') return
+        this.cliVersions.clear()
+        await Promise.all([...this.harnesses.values()].map((other) => this.detect(other)))
+        if (h.detection?.state === 'available') return
         const folder = await installedFolder(plan, installs, {
           platform,
           home,
           npmPrefix: () => this.npmPrefix(plan.tool),
         })
-        const command = slot.def.launch.kind === 'binary' ? slot.def.launch.command : agent
+        const command =
+          h.def.cli?.command ?? (h.def.launch.kind === 'binary' ? h.def.launch.command : agent)
         throw new Error(
           folder
             ? t('agent.binaryInstall.notOnPath', { agent, command, folder })
@@ -1446,23 +1729,23 @@ export class AgentManager {
     )
   }
 
-  /** Downloads the registry's archive for the agent, then detects again so it turns available. */
-  private async installArchive(slot: Slot, plan: InstallPlan): Promise<void> {
+  /** Downloads the registry's archive for the harness, then detects again so it turns available. */
+  private async installArchive(h: Harness, plan: InstallPlan): Promise<void> {
     const archive = plan.archive
-    if (!archive) throw invalidParams(`${slot.def.name} has no archive to download`)
-    this.assertNoInstall(slot)
+    if (!archive) throw invalidParams(`${h.def.name} has no archive to download`)
+    this.assertNoInstall(h)
     const { platform, diagnostics } = this.deps
-    const agent = slot.def.name
+    const agent = h.def.name
     const timeoutMs = this.timings.installMs
     await this.runTask(
-      slot,
+      h,
       'install',
       plan.command,
       async (signal, onOutput) => {
-        diagnostics.event(slot.def.id, 'install', plan.command)
+        diagnostics.event(h.def.id, 'install', plan.command)
         const installed = await (this.deps.installArchive ?? installArchive)({
           root: this.deps.adaptersDir,
-          agentId: slot.def.id,
+          agentId: h.def.id,
           version: archive.version,
           url: archive.url,
           ...(archive.sha256 ? { sha256: archive.sha256 } : {}),
@@ -1481,8 +1764,8 @@ export class AgentManager {
             `${archive.url} has no SHA-256 in the registry; installed the file with ${installed.sha256}.`,
           )
         }
-        await this.detect(slot)
-        if (slot.detection?.state === 'available') return
+        await this.detect(h)
+        if (h.detection?.state === 'available') return
         throw new Error(t('agent.binaryInstall.incomplete', { agent }))
       },
       (message) => t('agent.installFailed', { agent, message }),
@@ -1505,9 +1788,9 @@ export class AgentManager {
     return prefix === '' ? null : prefix
   }
 
-  /** Runs an install or update as the agent's task, with its progress, failure and cancel. */
+  /** Runs an install or update as the harness's task, with its progress, failure and cancel. */
   private async runTask(
-    slot: Slot,
+    h: Harness,
     kind: AgentTask['kind'],
     command: string,
     work: (signal: AbortSignal, onOutput: (text: string) => void) => Promise<void>,
@@ -1517,33 +1800,33 @@ export class AgentManager {
     // Nothing installs once the quit has begun, as though cancelled at once.
     if (this.stopped) return
     const abort = new AbortController()
-    slot.taskOutput.clear()
-    slot.task = { kind, state: 'running', command, method, error: null }
-    slot.taskAbort = abort
-    this.emit(slot)
+    h.taskOutput.clear()
+    h.task = { kind, state: 'running', command, method, error: null }
+    h.taskAbort = abort
+    this.emit(this.home(h))
     const run = (async () => {
       try {
-        await work(abort.signal, (text) => this.onTaskOutput(slot, text))
-        slot.task = null
+        await work(abort.signal, (text) => this.onTaskOutput(h, text))
+        h.task = null
       } catch (error) {
         if (abort.signal.aborted) {
-          slot.task = null
+          h.task = null
           return
         }
         const message = failure((error as Error).message)
-        this.deps.diagnostics.event(slot.def.id, `${kind} failed`, message)
-        slot.task = { kind, state: 'failed', command, method, error: message }
-        throw new HostError('agent_error', message, { agentId: slot.def.id })
+        this.deps.diagnostics.event(h.def.id, `${kind} failed`, message)
+        h.task = { kind, state: 'failed', command, method, error: message }
+        throw new HostError('agent_error', message, { agentId: h.def.id })
       } finally {
-        slot.taskAbort = null
-        this.emit(slot)
+        h.taskAbort = null
+        this.emit(this.home(h))
       }
     })()
-    slot.taskRun = run
+    h.taskRun = run
     try {
       await run
     } finally {
-      if (slot.taskRun === run) slot.taskRun = null
+      if (h.taskRun === run) h.taskRun = null
     }
   }
 
@@ -1552,40 +1835,44 @@ export class AgentManager {
    * clears one that failed. Resolves once it has stopped.
    */
   async cancelTask(agentId: AgentId): Promise<void> {
-    const slot = this.slot(agentId)
-    if (slot.task?.state === 'failed') {
-      slot.task = null
-      this.emit(slot)
+    const { h } = this.slot(agentId)
+    if (h.task?.state === 'failed') {
+      h.task = null
+      this.emit(this.home(h))
       return
     }
-    if (slot.task?.state === 'running') {
-      slot.taskAbort?.abort()
-      await slot.taskRun?.catch(() => {})
+    if (h.task?.state === 'running') {
+      h.taskAbort?.abort()
+      await h.taskRun?.catch(() => {})
       return
     }
-    // A package agent's first-use install, whether a start or Install asked for it.
-    if (slot.installAbort) {
-      slot.installAbort.abort()
-      await Promise.all([slot.installing?.catch(() => {}), slot.starting?.catch(() => {})])
+    // A package harness's first-use install, whether a start or Install asked for it.
+    if (h.installAbort) {
+      h.installAbort.abort()
+      await Promise.all([
+        h.installing?.catch(() => {}),
+        ...this.agentsOf(h).map((slot) => slot.starting?.catch(() => {})),
+      ])
     }
   }
 
   /**
-   * A failed task whose aim was reached some other way: the agent was installed meanwhile, such as
-   * by a program picked in Settings, or the update it was for is no longer offered.
+   * A failed task whose aim was reached some other way: the harness was installed meanwhile, such
+   * as by a program picked in Settings, or the update it was for is no longer offered.
    */
-  private taskSettled(slot: Slot): boolean {
-    if (slot.task?.kind === 'update') return this.updateOf(slot) === null
-    const adapter = slot.detection?.state === 'available' ? slot.detection.adapter : null
-    return slot.detection?.state === 'available' && (!adapter || !!adapter.current)
+  private taskSettled(h: Harness): boolean {
+    if (h.task?.kind === 'update') return this.updateOf(h) === null && !this.cliUpdateVersion(h)
+    const adapter = h.detection?.state === 'available' ? h.detection.adapter : null
+    return h.detection?.state === 'available' && (!adapter || !!adapter.current)
   }
 
-  private onTaskOutput(slot: Slot, text: string): void {
-    this.deps.diagnostics.stderr(slot.def.id, text)
-    slot.taskOutput.push(text)
-    slot.progressTimer ??= setTimeout(() => {
-      slot.progressTimer = null
-      this.emit(slot)
+  private onTaskOutput(h: Harness, text: string): void {
+    this.deps.diagnostics.stderr(h.def.id, text)
+    h.taskOutput.push(text)
+    const home = this.home(h)
+    home.progressTimer ??= setTimeout(() => {
+      home.progressTimer = null
+      this.emit(home)
     }, this.timings.progressMs)
   }
 
@@ -1596,7 +1883,7 @@ export class AgentManager {
       slot.failures = []
       slot.state = 'available'
       slot.detail = null
-      await this.detect(slot)
+      await this.detect(slot.h)
     }
     if (this.hooks.liveSessions(agentId) > 0 && !slot.runtime) await this.ensureReady(agentId)
   }
@@ -1624,8 +1911,11 @@ export class AgentManager {
 
   async stop(agentId: AgentId): Promise<void> {
     const slot = this.slot(agentId)
-    slot.installAbort?.abort(this.stopped ? QUIT_REASON : undefined)
-    if (slot.installing) await slot.installing.catch(() => {})
+    // An install runs for the whole harness, so only a quit stops it.
+    if (this.stopped) {
+      slot.h.installAbort?.abort(QUIT_REASON)
+      if (slot.h.installing) await slot.h.installing.catch(() => {})
+    }
     await this.stopProcess(slot)
   }
 
@@ -1673,8 +1963,8 @@ export class AgentManager {
   private letGo(slot: Slot, launched: AgentRun, info: ExitInfo): void {
     if (slot.launched !== launched) return
     const { diagnostics } = this.deps
-    diagnostics.event(slot.def.id, 'stop failed', describeExit(info))
-    diagnostics.log('warn', `${slot.def.name} did not stop: ${describeExit(info)}`)
+    diagnostics.event(slot.id, 'stop failed', describeExit(info))
+    diagnostics.log('warn', `${slot.name} did not stop: ${describeExit(info)}`)
     slot.runtime?.connection.close()
     slot.launched = null
     slot.runtime = null
@@ -1683,7 +1973,7 @@ export class AgentManager {
     void this.reapTree(slot, launched)
     // A start that failed reports itself.
     if (slot.starting) return
-    slot.state = slot.detection?.state ?? 'available'
+    slot.state = slot.h.detection?.state ?? 'available'
     slot.detail = null
     this.emit(slot)
   }
@@ -1704,7 +1994,7 @@ export class AgentManager {
     const { trees } = this.deps
     if (!trees || launched.pid === null) return Promise.resolve()
     const root = { pid: launched.pid, startedAt: launched.startedAt }
-    return trees.reap(root, slot.def.name, this.tools())
+    return trees.reap(root, slot.name, this.tools())
   }
 
   /**
@@ -1718,11 +2008,12 @@ export class AgentManager {
     this.updateTimer = null
     this.updateAbort?.abort(QUIT_REASON)
     const slots = [...this.slots.values()]
-    for (const slot of slots) slot.taskAbort?.abort(QUIT_REASON)
+    const harnesses = [...this.harnesses.values()]
+    for (const h of harnesses) h.taskAbort?.abort(QUIT_REASON)
     const stops = Promise.all([
       this.updateCheck,
-      ...slots.map((slot) => slot.taskRun?.catch(() => {})),
-      ...slots.map((slot) => this.stop(slot.def.id)),
+      ...harnesses.map((h) => h.taskRun?.catch(() => {})),
+      ...slots.map((slot) => this.stop(slot.id)),
       ...[...this.givenUp].map(([launched, slot]) => this.reapTree(slot, launched)),
     ]).then(() => true)
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -1738,7 +2029,7 @@ export class AgentManager {
         if (!launched || launched.hasExited) return
         this.deps.diagnostics.log(
           'warn',
-          `${slot.def.name} had not stopped ${this.timings.quitStopMs / 1000} s into the quit; killing it`,
+          `${slot.name} had not stopped ${this.timings.quitStopMs / 1000} s into the quit; killing it`,
         )
         return launched.kill()
       }),
@@ -1749,7 +2040,7 @@ export class AgentManager {
 
   private connectionHooks(slot: Slot): ConnectionHooks {
     const { diagnostics } = this.deps
-    const agentId = slot.def.id
+    const agentId = slot.id
     return {
       traffic: (direction, message) => {
         diagnostics.traffic(agentId, direction, message)
@@ -1760,7 +2051,7 @@ export class AgentManager {
       account: (account) => this.setAccount(slot, account),
       ignored: (sessionId, what) =>
         diagnostics.event(agentId, 'ignored', sessionId ? `${what} (session ${sessionId})` : what),
-      log: (level, message) => diagnostics.log(level, `${slot.def.name}: ${message}`),
+      log: (level, message) => diagnostics.log(level, `${slot.name}: ${message}`),
     }
   }
 
@@ -1774,7 +2065,7 @@ export class AgentManager {
     slot.account = same && before.tier ? { ...account, tier: before.tier } : account
     slot.signIn = account.kind === 'none' ? 'required' : 'signed-in'
     this.emit(slot)
-    if (wasRequired && slot.signIn === 'signed-in') this.hooks.signedIn(slot.def.id)
+    if (wasRequired && slot.signIn === 'signed-in') this.hooks.signedIn(slot.id)
     if (slot.def.id === 'claude-code' && account.kind === 'account') {
       void this.readTier(slot, slot.account)
     }
@@ -1783,7 +2074,7 @@ export class AgentManager {
   /** Adds the subscription's tier, which only Claude Code's own `.claude.json` holds. */
   private async readTier(slot: Slot, account: AgentAccount): Promise<void> {
     const { platform } = this.deps
-    const env = this.deps.env.agentEnv(slot.def.id)
+    const env = this.deps.env.agentEnv(slot.id)
     const folder = configLocations(
       slot.def.id,
       (name) => getEnv(env, name, platform),
@@ -1832,7 +2123,7 @@ export class AgentManager {
     const slot = this.slot(agentId)
     if (!this.hasLimits(agentId)) return
     await this.detectAll()
-    if (slot.signIn === 'required' || (!slot.runtime && slot.detection?.state !== 'available')) {
+    if (slot.signIn === 'required' || (!slot.runtime && slot.h.detection?.state !== 'available')) {
       return
     }
     if (slot.limitsRun) return slot.limitsRun
@@ -1846,18 +2137,20 @@ export class AgentManager {
   /** Whether the agent tells its plan limits: from its connection, or from its report. */
   hasLimits(agentId: AgentId): boolean {
     const slot = this.slots.get(agentId)
-    return !!slot && (limitsReport(agentId) !== null || this.driver(slot).reads?.limits === true)
+    return (
+      !!slot && (limitsReport(slot.def.id) !== null || this.driver(slot).reads?.limits === true)
+    )
   }
 
   /** Whether the agent tells what fills a session's context: from its connection, or its report. */
   hasContext(agentId: AgentId): boolean {
     const slot = this.slots.get(agentId)
-    return !!slot && (hasContextReport(agentId) || this.driver(slot).reads?.context === true)
+    return !!slot && (hasContextReport(slot.def.id) || this.driver(slot).reads?.context === true)
   }
 
   /** The limits from the connection when it reads them, else from the agent's report. */
   private async readLimits(slot: Slot): Promise<void> {
-    const runtime = await this.ensureReady(slot.def.id)
+    const runtime = await this.ensureReady(slot.id)
     const { connection } = runtime
     const report = limitsReport(slot.def.id)
     let limits: PlanLimit[]
@@ -1904,8 +2197,7 @@ export class AgentManager {
         async () => {
           const setup = await runtime.connection.newSession(dir, { hidden: 'limits' })
           // Only while none are known: the empty folder's defaults never replace a session's.
-          if (!this.hooks.optionsKnown(slot.def.id))
-            this.hooks.optionsSeen(slot.def.id, setup.config, dir)
+          if (!this.hooks.optionsKnown(slot.id)) this.hooks.optionsSeen(slot.id, setup.config, dir)
           return setup.sessionId
         },
         report,
@@ -1920,7 +2212,7 @@ export class AgentManager {
       .map((text) => report.parse(text, now))
       .findLast((parsed) => parsed !== null)
     if (!limits) {
-      log(`${slot.def.name}: ${report.command} gave no report Kettu can read`)
+      log(`${slot.name}: ${report.command} gave no report Kettu can read`)
       return null
     }
     return { limits, now }
@@ -1928,7 +2220,7 @@ export class AgentManager {
 
   private limitsError(slot: Slot, error: unknown): HostError {
     if (error instanceof AgentRequestError && error.kind === 'auth_required') {
-      this.authRequired(slot.def.id)
+      this.authRequired(slot.id)
     }
     return agentError(error)
   }
@@ -1948,9 +2240,9 @@ export class AgentManager {
   }
 
   private async openForOptions(slot: Slot, folder: string | undefined): Promise<void> {
-    const agentId = slot.def.id
+    const agentId = slot.id
     const log = (message: string): void =>
-      this.deps.diagnostics.log('warn', `${slot.def.name}: ${message}`)
+      this.deps.diagnostics.log('warn', `${slot.name}: ${message}`)
     // A limits report running meanwhile reads them too.
     await slot.limitsRun?.catch(() => {})
     if (slot.signIn === 'required') return
@@ -1980,7 +2272,7 @@ export class AgentManager {
     await slot.limitsRun?.catch(() => {})
     if (slot.signIn === 'required' || !runtime.connection.hiddenSessions) return
     const log = (message: string): void =>
-      this.deps.diagnostics.log('warn', `${slot.def.name}: ${message}`)
+      this.deps.diagnostics.log('warn', `${slot.name}: ${message}`)
     let read: boolean
     try {
       read = await this.readInHiddenSession(slot, runtime, log, undefined)
@@ -1995,7 +2287,7 @@ export class AgentManager {
       throw new HostError(
         'agent_unavailable',
         t('agent.noOptions', {
-          agent: slot.def.name,
+          agent: slot.name,
           seconds: String(this.timings.optionsMs / 1000),
         }),
       )
@@ -2012,7 +2304,7 @@ export class AgentManager {
     log: (message: string) => void,
     folder: string | undefined,
   ): Promise<boolean> {
-    const agentId = slot.def.id
+    const agentId = slot.id
     const remove = (sessionId: string): Promise<void> =>
       runtime.connection.removeHidden(sessionId, (message) =>
         log(`could not remove the session its options were read in: ${message}`),
@@ -2057,18 +2349,18 @@ export class AgentManager {
   async details(agentId: AgentId): Promise<AgentDetails> {
     const slot = this.slot(agentId)
     await this.detectAll()
-    const { launch } = slot.def
-    const adapter = slot.detection?.state === 'available' ? slot.detection.adapter : null
+    const { launch, id: harnessId } = slot.def
+    const adapter = slot.h.detection?.state === 'available' ? slot.h.detection.adapter : null
     // The install in use, as for diagnostics: the one a start picks, or the fallback until then.
     const inUse = adapter?.current?.dir ?? adapter?.fallback?.dir
-    return readAgentDetails(agentId, {
+    return readAgentDetails(harnessId, {
       getEnv: (name) => this.deps.env.get(name, agentId),
       chosen: this.chosenFolder(slot),
       home: os.homedir(),
       platform: this.deps.platform,
       adapterDir:
         launch.kind === 'package'
-          ? (inUse ?? path.join(this.deps.adaptersDir, agentId, launch.version))
+          ? (inUse ?? path.join(this.deps.adaptersDir, harnessId, launch.version))
           : null,
       log: (level, message) => this.deps.diagnostics.log(level, message),
     })
@@ -2083,7 +2375,7 @@ export class AgentManager {
       if (!config) continue
       const location = await mcpLocation(
         slot.def.id,
-        (name) => this.deps.env.get(name, slot.def.id),
+        (name) => this.deps.env.get(name, slot.id),
         os.homedir(),
         platform,
         this.chosenFolder(slot),
@@ -2091,7 +2383,7 @@ export class AgentManager {
       )
       if (!location) continue
       places.push({
-        agentId: slot.def.id,
+        agentId: slot.id,
         path: location.path,
         exists: location.exists,
         env: location.env,
@@ -2114,6 +2406,7 @@ export class AgentManager {
       slot.account = entry.account
       slot.limits = new Map(entry.limits.map((limit) => [limit.window, limit]))
       slot.initRecord = entry.init ?? null
+      slot.apiKey = entry.apiKey === true
       slot.remembered = rememberedJson(slot)
       this.emit(slot)
     }
@@ -2128,7 +2421,7 @@ export class AgentManager {
     if (!slot.def.reportsAccount) return
     await this.detectAll()
     if (slot.signIn === 'required') return
-    if (!slot.runtime && (slot.detection?.state !== 'available' || !slot.detection.spec)) return
+    if (!slot.runtime && (slot.h.detection?.state !== 'available' || !slot.h.detection.spec)) return
     if (this.hasLimits(agentId)) await this.refreshLimits(agentId)
     else await this.ensureReady(agentId)
   }
@@ -2186,7 +2479,7 @@ export class AgentManager {
   // Status.
 
   private display(slot: Slot): CommandWords {
-    const detection = slot.detection
+    const detection = slot.h.detection
     if (detection?.state === 'available') {
       const spec = slot.state === 'ready' || slot.state === 'starting' ? slot.launchSpec : null
       const shown = spec ?? detection.spec
@@ -2202,15 +2495,105 @@ export class AgentManager {
     )
   }
 
-  /** The folder picked in Settings for an agent whose folder can be moved. */
+  /**
+   * The agent's own folder, which Kettu sets in its harness's variable: an added agent's, or one a
+   * default agent was given before agents could be added; null at the harness's default.
+   */
   private chosenFolder(slot: Slot): string | null {
-    const folder = this.deps.settings().agents[slot.def.id]?.configDir
-    return slot.def.configVariable && folder ? folder : null
+    if (!slot.def.configVariable) return null
+    if (slot.added) return slot.added.configDir
+    return this.deps.settings().agents[slot.def.id]?.configDir ?? null
   }
 
   /** Whether Kettu's MCP server is on for this agent, from the settings. */
   private kettuOn(agentId: AgentId): boolean {
     return !this.deps.settings().mcp.kettu.off.includes(agentId)
+  }
+
+  // API keys.
+
+  /**
+   * Hands the harness an API key for this agent to keep: Claude Code's in its folder's
+   * settings.json, Codex's through `codex login --with-api-key`. A process that runs keeps its
+   * credentials until it stops, so an idle one is stopped and the next start uses the key.
+   */
+  async setApiKey(agentId: AgentId, input: ApiKeyInput): Promise<void> {
+    const slot = this.slot(agentId)
+    await this.detectAll()
+    const checked = checkApiKey(input, slot.def.id === 'claude-code')
+    if (slot.def.id === 'claude-code') {
+      await writeClaudeKey(this.settingsFile(slot), checked)
+    } else if (slot.def.id === 'codex') {
+      await this.runCodexLogin(slot, ['login', '--with-api-key'], checked.key)
+    } else {
+      throw invalidParams(`${slot.def.name} takes no API key from Kettu`)
+    }
+    this.deps.diagnostics.event(agentId, 'api key', 'set')
+    slot.apiKey = true
+    await this.credentialsChanged(slot)
+  }
+
+  /** Removes what `setApiKey` handed over: the variables it wrote, or Codex's login. */
+  async clearApiKey(agentId: AgentId): Promise<void> {
+    const slot = this.slot(agentId)
+    await this.detectAll()
+    if (slot.def.id === 'claude-code') await clearClaudeKey(this.settingsFile(slot))
+    else if (slot.def.id === 'codex') await this.runCodexLogin(slot, ['logout'])
+    else throw invalidParams(`${slot.def.name} takes no API key from Kettu`)
+    this.deps.diagnostics.event(agentId, 'api key', 'cleared')
+    slot.apiKey = false
+    await this.credentialsChanged(slot)
+  }
+
+  /** The agent's settings file, where Claude Code reads the variables of its `env`. */
+  private settingsFile(slot: Slot): string {
+    const { platform } = this.deps
+    const env = this.deps.env.agentEnv(slot.id)
+    const file = configLocations(
+      slot.def.id,
+      (name) => getEnv(env, name, platform),
+      os.homedir(),
+      platform,
+      this.chosenFolder(slot),
+    ).find((location) => location.id === 'settings')?.candidates[0]
+    if (!file) throw new Error(`${slot.name} has no settings file`)
+    return file
+  }
+
+  /** Runs the user's `codex` with the agent's folder, feeding it `input`, as its sign-in does. */
+  private async runCodexLogin(slot: Slot, args: string[], input?: string): Promise<void> {
+    const program = this.userProgram(slot.h)
+    const detection = slot.h.detection
+    if (!program) {
+      throw new HostError(
+        'agent_unavailable',
+        detection && detection.state !== 'available'
+          ? detection.detail
+          : t('agent.notAvailable', { agent: slot.name }),
+      )
+    }
+    const timeoutMs = this.timings.optionsMs
+    const result = await (this.deps.runProgram ?? runProgram)({
+      program: program.path,
+      args,
+      cwd: os.homedir(),
+      env: this.deps.env.agentEnv(slot.id),
+      platform: this.deps.platform,
+      timeoutMs,
+      ...(input !== undefined ? { input } : {}),
+    })
+    const failure = programFailure('codex', result, timeoutMs)
+    if (failure) throw new HostError('agent_error', failure)
+  }
+
+  /** The account and limits belong to the old credentials; an idle process goes with them. */
+  private async credentialsChanged(slot: Slot): Promise<void> {
+    slot.account = null
+    slot.limits.clear()
+    slot.limitsReadAt = 0
+    slot.signIn = 'unknown'
+    if (slot.runtime && this.hooks.liveSessions(slot.id) === 0) await this.stopProcess(slot)
+    this.emit(slot)
   }
 
   /** The configuration folder `env` gives the agent; null for an agent whose folder is fixed. */
@@ -2239,27 +2622,19 @@ export class AgentManager {
     return slot && this.running(slot) ? slot.launchConfig : null
   }
 
-  /** The configuration folder the environment gives the agent, without one picked in Settings. */
+  /** The configuration folder the environment gives the harness, without an agent's own. */
   environmentConfig(agentId: AgentId): string | null {
     const slot = this.slots.get(agentId)
     if (!slot?.def.configVariable) return null
     const { platform } = this.deps
     const env = this.deps.env.agentEnv()
     const locations = configLocations(
-      agentId,
+      slot.def.id,
       (name) => getEnv(env, name, platform),
       os.homedir(),
       platform,
     )
     return locations.find((location) => location.id === 'folder')?.candidates[0] ?? null
-  }
-
-  /** The CLI the running adapter process uses, which a change of setting leaves until it stops. */
-  private activeCli(slot: Slot, installed: InstalledCli | null): AgentCliSource | null {
-    const spec = slot.state === 'ready' || slot.state === 'starting' ? slot.launchSpec : null
-    if (!spec) return null
-    // A program the environment names runs whatever Kettu passes.
-    return spec.cli !== undefined || installed?.variable ? 'installed' : 'bundled'
   }
 
   /** What a terminal sign-in runs: the command the agent names, or its launch command. */
@@ -2275,8 +2650,8 @@ export class AgentManager {
     }
     return formatCommand(
       // pi-acp 0.0.34's only method just runs the `requires` program, so it runs alone.
-      slot.def.signInWithCli && slot.requiresProgram
-        ? { command: slot.requiresProgram, args: [], env: {} }
+      slot.def.signInWithCli && slot.h.requiresProgram
+        ? { command: slot.h.requiresProgram, args: [], env: {} }
         : { command: display.command, args: [...display.args, ...method.args], env },
       this.deps.platform,
     )
@@ -2284,6 +2659,7 @@ export class AgentManager {
 
   status(agentId: AgentId): AgentStatus {
     const slot = this.slot(agentId)
+    const { h } = slot
     const platform = this.deps.platform
     const display = this.display(slot)
     const init = slot.init
@@ -2304,27 +2680,35 @@ export class AgentManager {
     }))
     const capabilities = init?.capabilities ?? rememberedCapabilities(slot)
     const { launch } = slot.def
-    const adapter = slot.detection?.state === 'available' ? slot.detection.adapter : null
-    const update = this.updateOf(slot)
+    const detection = h.detection
+    const adapter = detection?.state === 'available' ? detection.adapter : null
+    const update = this.updateOf(h)
+    const harnessSettings = this.deps.settings().agents[slot.def.id]
+    const cliVersion = this.cliUpdateVersion(h)
+    const cliCommand = cliVersion ? (this.cliCommands.get(h) ?? null) : null
     return {
-      id: slot.def.id,
-      name: slot.def.name,
+      id: slot.id,
+      name: slot.name,
+      harnessId: slot.def.id,
+      harnessName: slot.def.name,
+      isDefault: !slot.added,
+      hidden: !slot.added && harnessSettings?.hidden === true,
+      apiKey:
+        slot.def.id === 'claude-code' || slot.def.id === 'codex'
+          ? { set: slot.apiKey, providers: slot.def.id === 'claude-code' }
+          : null,
       state: slot.state,
       // For an agent with a `requires` program its own version is the one shown, never the adapter's.
       version: slot.def.requires
-        ? (slot.requiresVersion ?? slot.binaryVersion ?? null)
-        : (init?.version ?? slot.binaryVersion ?? null),
+        ? (h.requiresVersion ?? h.binaryVersion ?? null)
+        : (init?.version ?? h.binaryVersion ?? null),
       package:
         launch.kind === 'package'
           ? {
               name: launch.package,
               version: (adapter?.current ?? adapter?.fallback)?.version ?? launch.version,
-              // An install below the pin runs too, when the pinned one cannot be installed; the
-              // user's own CLI needs none, for an agent whose package is the CLI.
-              installed:
-                !!(adapter?.current ?? adapter?.fallback) ||
-                (!!slot.def.cli?.isPackage && adapter?.cli?.runs === 'installed'),
-              ...(slot.def.cli?.isPackage ? { isCli: true as const } : {}),
+              // An install below the pin runs too, when the pinned one cannot be installed.
+              installed: !!(adapter?.current ?? adapter?.fallback),
               ...(launch.library ? { isSdk: true as const } : {}),
             }
           : null,
@@ -2333,7 +2717,7 @@ export class AgentManager {
       canLogout: capabilities?.logout ?? false,
       account: slot.account,
       limits: [...slot.limits.values()],
-      detail: slot.detail ?? slot.adapterNote,
+      detail: slot.detail ?? h.adapterNote,
       installUrl:
         slot.state === 'not-installed' ||
         slot.state === 'node-missing' ||
@@ -2343,33 +2727,35 @@ export class AgentManager {
       progress:
         slot.state === 'starting' || slot.state === 'installing' ? slot.progress.lastLines(5) : [],
       launchCommand: formatCommand(display, platform),
-      binaryOverride: this.deps.settings().agents[slot.def.id]?.binaryPath ?? null,
+      binaryOverride: harnessSettings?.binaryPath ?? null,
       binaryCommand: launch.kind === 'binary' ? launch.command : null,
       update,
-      updateCheckedAt: launch.kind === 'package' ? slot.checkedAt : null,
-      updateSkipped: sameUpdate(update, slot.skipped),
-      task: slot.task ? { ...slot.task, progress: slot.taskOutput.lastLines(5) } : null,
-      installMethods: slot.installPlans.map(({ id, label, command, available }) => ({
+      updateCheckedAt: this.checksUpdates(h) ? h.checkedAt : null,
+      // Skipped when every update on offer was dismissed: Kettu's package's and the CLI's.
+      updateSkipped:
+        (!update || sameUpdate(update, h.skipped)) &&
+        (!cliVersion || cliVersion === h.cliSkipped) &&
+        (!!update || !!cliVersion),
+      task: h.task ? { ...h.task, progress: h.taskOutput.lastLines(5) } : null,
+      installMethods: h.installPlans.map(({ id, label, command, available }) => ({
         id,
         label,
         command,
         available,
       })),
-      cli:
-        adapter?.cli && slot.def.cli
-          ? {
-              command: slot.def.cli.command,
-              prefer: this.deps.settings().agents[slot.def.id]?.cli ?? 'installed',
-              runs: adapter.cli.runs,
-              active: this.activeCli(slot, adapter.cli.installed),
-              installed: adapter.cli.installed,
-              needsCopy: adapter.cli.needsCopy,
-              copyMegabytes: slot.def.cli.copyMegabytes,
-            }
-          : null,
-      configDir: config ? { runs: config.folder, active: active?.folder ?? null } : null,
+      cli: slot.def.cli
+        ? {
+            command: slot.def.cli.command,
+            installed: detection?.cli ?? null,
+            method: h.cliMethod,
+            update: cliVersion && cliCommand ? { version: cliVersion, command: cliCommand } : null,
+          }
+        : null,
+      configDir: config
+        ? { runs: config.folder, active: active?.folder ?? null, created: !!slot.added?.created }
+        : null,
       kettuServer: {
-        runs: this.kettuOn(slot.def.id),
+        runs: this.kettuOn(slot.id),
         active: this.running(slot) ? (slot.runtime?.kettu ?? null) : null,
       },
       capabilities: {
@@ -2381,8 +2767,8 @@ export class AgentManager {
         forkSession: capabilities?.forkSession ?? false,
         forkAtMessage: capabilities?.forkAtMessage ?? false,
         steering: capabilities?.steering ?? false,
-        reports: this.hasLimits(slot.def.id),
-        context: this.hasContext(slot.def.id),
+        reports: this.hasLimits(slot.id),
+        context: this.hasContext(slot.id),
         account: slot.def.reportsAccount ?? false,
         progressNotes: slot.def.progressNotes ?? false,
         mcpHttp: capabilities?.mcpHttp ?? null,
@@ -2397,10 +2783,9 @@ export class AgentManager {
 
   /** The files of the adapter version in use, for diagnostics. */
   async adapterFiles(agentId: AgentId): Promise<{ installed: unknown; lock: unknown } | null> {
-    const slot = this.slots.get(agentId)
-    const detection = slot?.detection
+    const detection = this.slots.get(agentId)?.h.detection
     const adapter = detection?.state === 'available' ? detection.adapter : null
-    if (!slot || !adapter) return null
+    if (!adapter) return null
     const dir = adapter.current?.dir ?? adapter.fallback?.dir
     return dir ? readInstallFiles(dir) : null
   }
@@ -2415,13 +2800,13 @@ export class AgentManager {
   }
 
   private onStderr(slot: Slot, text: string): void {
-    this.deps.diagnostics.stderr(slot.def.id, text)
+    this.deps.diagnostics.stderr(slot.id, text)
     if (slot.state === 'starting') this.onProgress(slot, text)
   }
 
   /** npm's output while installing, or the agent's stderr while starting. */
   private onProgress(slot: Slot, text: string): void {
-    if (slot.state === 'installing') this.deps.diagnostics.stderr(slot.def.id, text)
+    if (slot.state === 'installing') this.deps.diagnostics.stderr(slot.id, text)
     slot.progress.push(text)
     // Progress lines arrive fast while npm downloads; a few status events a second is enough.
     slot.progressTimer ??= setTimeout(() => {
@@ -2430,22 +2815,30 @@ export class AgentManager {
     }, this.timings.progressMs)
   }
 
+  /**
+   * Sends the status of the slot and of the other agents of its harness that changed, since a
+   * harness's detection, task and updates show in each of them.
+   */
   private emit(slot: Slot): void {
-    if (slot.task?.state === 'failed' && this.taskSettled(slot)) slot.task = null
-    const status = this.status(slot.def.id)
-    const json = JSON.stringify(status)
-    if (json !== slot.lastStatus) {
-      slot.lastStatus = json
-      this.deps.status(status)
+    const { h } = slot
+    if (h.task?.state === 'failed' && this.taskSettled(h)) h.task = null
+    void this.refreshCliCommand(h)
+    for (const agent of this.agentsOf(h)) {
+      const status = this.status(agent.id)
+      const json = JSON.stringify(status)
+      if (json !== agent.lastStatus) {
+        agent.lastStatus = json
+        this.deps.status(status)
+      }
+      const remembered = rememberedJson(agent)
+      if (remembered !== agent.remembered) {
+        agent.remembered = remembered
+        this.remember()
+      }
     }
-    const remembered = rememberedJson(slot)
-    if (remembered !== slot.remembered) {
-      slot.remembered = remembered
-      this.remember()
-    }
-    const update = updateJson(slot)
-    if (update !== slot.rememberedUpdate) {
-      slot.rememberedUpdate = update
+    const update = updateJson(h)
+    if (update !== h.rememberedUpdate) {
+      h.rememberedUpdate = update
       this.rememberUpdates()
     }
     const commands = this.statuses().flatMap((s) =>
@@ -2456,6 +2849,21 @@ export class AgentManager {
       this.lastAuthCommands = commandsJson
       this.deps.authCommands(commands)
     }
+  }
+
+  /**
+   * The command that updates the user's program, worked out once a newer version is known: it
+   * looks up tools such as brew on PATH, which `status` does not wait for.
+   */
+  private async refreshCliCommand(h: Harness): Promise<void> {
+    const key = `${this.cliUpdateVersion(h)}\0${h.cliMethod}\0${this.userProgram(h)?.path}`
+    if (!this.cliUpdateVersion(h) || this.cliCommandKeys.get(h) === key) return
+    this.cliCommandKeys.set(h, key)
+    const plan = await this.cliUpdatePlan(h).catch(() => null)
+    if (this.cliCommandKeys.get(h) !== key) return
+    if (plan) this.cliCommands.set(h, plan.command)
+    else this.cliCommands.delete(h)
+    this.emit(this.home(h))
   }
 
   private remember(): void {
@@ -2471,9 +2879,9 @@ export class AgentManager {
   private rememberUpdates(): void {
     if (!this.deps.rememberUpdates) return
     const agents: AgentUpdatesFile['agents'] = {}
-    for (const [agentId, slot] of this.slots) {
-      const entry = updateEntry(slot)
-      if (entry) agents[agentId] = entry
+    for (const [harnessId, h] of this.harnesses) {
+      const entry = updateEntry(h)
+      if (entry) agents[harnessId] = entry
     }
     this.deps.rememberUpdates({ version: 1, agents })
   }
@@ -2488,8 +2896,8 @@ export class AgentManager {
       for (const run of this.processesOf(slot)) running.set(run, slot)
     }
     for (const [run, slot] of this.givenUp) running.set(run, slot)
-    return [...running].flatMap(([run, { def }]) =>
-      run.pid != null ? [{ agentId: def.id, pid: run.pid, startedAt: run.startedAt }] : [],
+    return [...running].flatMap(([run, slot]) =>
+      run.pid != null ? [{ agentId: slot.id, pid: run.pid, startedAt: run.startedAt }] : [],
     )
   }
 }

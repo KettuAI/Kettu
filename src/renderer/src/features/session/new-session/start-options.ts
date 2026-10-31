@@ -4,12 +4,11 @@ import { listedInstalled, readiness } from '@renderer/features/agents/readiness'
 import type { OptionValues } from '@renderer/stores/agent-options'
 
 /**
- * What an agent needs before New session can start it, by the checks Settings › Agents lists it
- * with. `adapter` is a package agent whose adapter is not installed yet, and `install` one missing
- * from the machine: neither can be chosen until Settings › Agents installs it. `setup` is a
- * package agent without its adapter while the user's own CLI is to run: the user installed the
- * agent, so it can be chosen, and its first start installs the adapter without the CLI's copy
- * unless the adapter rejects the CLI's version.
+ * What an agent needs before New session can start it, by the checks Settings > Harnesses lists
+ * it with. `adapter` is a package agent whose adapter is not installed yet, and `install` one
+ * missing from the machine: neither can be chosen until Settings > Harnesses installs it. `setup`
+ * is Claude Code with the user's own CLI but not yet the SDK: the user installed the agent, so it
+ * can be chosen, and its first start installs the SDK.
  */
 export type AgentNeed = 'install' | 'installing' | 'failed' | 'adapter' | 'setup' | 'sign-in' | null
 
@@ -19,7 +18,7 @@ export function agentNeed(status: AgentStatus): AgentNeed {
   if (r.kind === 'installing') return 'installing'
   if (r.kind === 'failed') return 'failed'
   if (!listedInstalled(status)) {
-    return status.cli?.runs === 'installed' ? 'setup' : 'adapter'
+    return status.cli ? 'setup' : 'adapter'
   }
   return r.kind === 'sign-in' ? 'sign-in' : null
 }

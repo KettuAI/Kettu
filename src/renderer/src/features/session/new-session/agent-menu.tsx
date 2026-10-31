@@ -49,7 +49,7 @@ import { cn } from '@renderer/lib/utils'
 import { useAgentOptionsStore, type OptionValues } from '@renderer/stores/agent-options'
 import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { refreshLimits } from '@renderer/stores/usage'
-import { openAgentSettings } from '@renderer/stores/view'
+import { openAgentSettings, openHarnessSettings } from '@renderer/stores/view'
 import {
   agentNeed,
   canStart,
@@ -71,11 +71,12 @@ const isSelect = (o: ConfigOption | undefined): o is SelectOption =>
   !!o && o.type === 'select' && !!o.choices?.length
 
 /**
- * The agents New session can start, the installed first, each group in catalog order, as
- * Settings › Agents lists them. The others are installed there, so the menu leaves them out.
+ * The agents New session can start, the installed first, each group in catalog order with each
+ * harness's default agent first. Hidden default agents stay out, and the harnesses still to
+ * install are installed in Settings > Harnesses, so the menu leaves them out too.
  */
 function menuAgents(statuses: AgentStatus[]): AgentStatus[] {
-  const listed = statuses.filter(canStart)
+  const listed = statuses.filter((s) => canStart(s) && !s.hidden)
   return [...listed.filter(listedInstalled), ...listed.filter((s) => !listedInstalled(s))]
 }
 
@@ -536,7 +537,7 @@ function Pane({
       size="xs"
       onClick={() => {
         onLeave()
-        openAgentSettings(status.id)
+        openHarnessSettings(status.harnessId)
       }}
     >
       {t('newSession.agentMenu.install')}

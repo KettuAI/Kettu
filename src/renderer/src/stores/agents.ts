@@ -6,7 +6,7 @@ import type {
   AgentTask,
   EnvironmentInfo,
 } from '@shared/agent-host'
-import type { AgentId } from '@shared/thread'
+import { harnessOf, sortAgentIds, type AgentId, type HarnessId } from '@shared/thread'
 import { errorMessage, host } from '@renderer/lib/host'
 
 interface AgentsStore {
@@ -27,13 +27,17 @@ interface AgentsStore {
   taskErrors: Partial<Record<AgentId, { kind: AgentTask['kind']; message: string }>>
   setAll(statuses: AgentStatus[]): void
   setOne(status: AgentStatus): void
+  /** An added agent the user removed; its sessions stay. */
+  remove(agentId: AgentId): void
   refresh(): Promise<void>
   check(agentId?: AgentId): Promise<void>
   reloadEnvironment(): Promise<void>
   loadDetails(agentId: AgentId): Promise<void>
   checkUpdates(): Promise<void>
-  /** These three never reject: a failure shows as the agent's failed task or in `taskErrors`. */
+  /** These four never reject: a failure shows as the agent's failed task or in `taskErrors`. */
   update(agentId: AgentId): Promise<void>
+  /** Updates the user's own program the way it was installed. */
+  updateCli(agentId: AgentId): Promise<void>
   install(agentId: AgentId, method?: AgentInstallMethod['id']): Promise<void>
   /** Stops a running install or update, or dismisses one that failed. */
   cancelTask(agentId: AgentId): Promise<void>
@@ -57,14 +61,24 @@ export const useAgentsStore = create<AgentsStore>()((set, get) => ({
   setAll(statuses) {
     set({
       byId: Object.fromEntries(statuses.map((s) => [s.id, s])),
-      order: statuses.map((s) => s.id),
+      order: sortAgentIds(statuses.map((s) => s.id)),
       loaded: true,
     })
+  },
+  remove(agentId) {
+    set((state) => ({
+      byId: without(state.byId, agentId),
+      order: state.order.filter((id) => id !== agentId),
+      details: without(state.details, agentId),
+    }))
   },
   setOne(status) {
     set((state) => ({
       byId: { ...state.byId, [status.id]: status },
-      order: state.order.includes(status.id) ? state.order : [...state.order, status.id],
+      // An agent added since takes its place beside its harness's other agents.
+      order: state.order.includes(status.id)
+        ? state.order
+        : sortAgentIds([...state.order, status.id]),
       // A task the host reports says more than a request's error.
       taskErrors: status.task ? without(state.taskErrors, status.id) : state.taskErrors,
     }))
@@ -110,6 +124,12 @@ export const useAgentsStore = create<AgentsStore>()((set, get) => ({
       .loadDetails(agentId)
       .catch((e: unknown) => console.warn(`Could not read the agent details: ${errorMessage(e)}`))
   },
+  async updateCli(agentId) {
+    const done = await taskRequest(agentId, 'update', () => host('agents.updateCli', { agentId }))
+    if (done && !get().byId[agentId]?.task) {
+      set((state) => ({ updated: { ...state.updated, [agentId]: true } }))
+    }
+  },
   async install(agentId, method) {
     await taskRequest(agentId, 'install', () =>
       host('agents.install', method ? { agentId, method } : { agentId }),
@@ -151,11 +171,12 @@ async function taskRequest(
   }
 }
 
+/** The agent's name; a removed agent's sessions name its harness. */
 export function agentName(agentId: AgentId): string {
-  return useAgentsStore.getState().byId[agentId]?.name ?? AGENT_NAMES[agentId]
+  return useAgentsStore.getState().byId[agentId]?.name ?? AGENT_NAMES[harnessOf(agentId)]
 }
 
-export const AGENT_NAMES: Record<AgentId, string> = {
+export const AGENT_NAMES: Record<HarnessId, string> = {
   'claude-code': 'Claude Code',
   codex: 'Codex',
   opencode: 'OpenCode',
@@ -205,9 +226,19 @@ export const AGENT_NAMES: Record<AgentId, string> = {
   'fake-agent': 'Fake agent',
 }
 
-/** Agents the user can start a session with, in catalog order. */
+/** Every agent the host reports, in its order: by harness, each harness's default agent first. */
 export function usableAgents(order: AgentId[], byId: AgentsStore['byId']): AgentStatus[] {
   return order.map((id) => byId[id]).filter((s): s is AgentStatus => !!s)
+}
+
+/** One status per harness, its default agent's, which carries the harness's install and updates. */
+export function harnessStatuses(order: AgentId[], byId: AgentsStore['byId']): AgentStatus[] {
+  return usableAgents(order, byId).filter((s) => s.isDefault)
+}
+
+/** The agents the agent menu lists: those on installed harnesses, but no hidden default agent. */
+export function menuAgents(order: AgentId[], byId: AgentsStore['byId']): AgentStatus[] {
+  return usableAgents(order, byId).filter((s) => isInstalled(s) && !s.hidden)
 }
 
 export function isInstalled(status: AgentStatus): boolean {

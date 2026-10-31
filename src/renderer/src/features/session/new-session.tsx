@@ -29,7 +29,7 @@ import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
   choosePaneAgent,
-  openAgentSettings,
+  openHarnessSettings,
   openArtifacts,
   paneAgent,
   useViewStore,
@@ -404,9 +404,9 @@ function NoAgentLine({ waitingForNode }: { waitingForNode: string[] }) {
         variant="outline"
         size="xs"
         className="shrink-0"
-        onClick={() => openAgentSettings(null)}
+        onClick={() => openHarnessSettings(null)}
       >
-        {t('newSession.setUpAgents')}
+        {t('newSession.installHarness')}
       </Button>
     </div>
   )

@@ -1,7 +1,6 @@
-import type { AgentCliSource } from './agent-host'
 import type { LanguageSetting, Locale } from './locale'
 import { BUILTIN_THEME_ID } from './themes'
-import type { AgentId } from './thread'
+import type { AgentId, HarnessId } from './thread'
 
 export interface SettingsFile {
   version: 1
@@ -34,9 +33,10 @@ export interface SettingsFile {
     sound: boolean
     badge: boolean // the Dock icon on macOS, the taskbar button on Windows
   }
-  agents: Partial<
-    Record<AgentId, { binaryPath?: string; cli?: AgentCliSource; configDir?: string }>
-  > // configDir: a configuration folder of the agent's own, picked in a native dialog
+  // Keyed by harness: the program picked for it, and its default agent's folder and visibility.
+  // configDir: a folder picked before agents could be added, which the default agent keeps.
+  agents: Partial<Record<HarnessId, { binaryPath?: string; configDir?: string; hidden?: true }>>
+  addedAgents: AddedAgent[] // in the order they were added
   proxy: ProxySettings
   terminal: {
     shellPath?: string // picked in a native dialog; the platform default when absent
@@ -52,8 +52,19 @@ export interface SettingsFile {
   }
 }
 
-/** The variable that moves each agent's configuration folder, for those whose folder can be chosen. */
-export const CONFIG_VARIABLES: Partial<Record<AgentId, string>> = {
+/** An agent added beside a harness's default one, with a configuration folder of its own. */
+export interface AddedAgent {
+  id: AgentId // `<harness>~<slug>`, see `addedAgentId`
+  name: string
+  configDir: string // Kettu's own new folder, or one picked in a native dialog
+  created: boolean // Kettu made the folder, so removing the agent offers to move it to the trash
+}
+
+/** The longest name an added agent may have. */
+export const AGENT_NAME_CHARS = 40
+
+/** The variable that moves each harness's configuration folder, for those that carry agents. */
+export const CONFIG_VARIABLES: Partial<Record<HarnessId, string>> = {
   'claude-code': 'CLAUDE_CONFIG_DIR',
   codex: 'CODEX_HOME',
 }
@@ -95,6 +106,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     badge: true,
   },
   agents: {},
+  addedAgents: [],
   proxy: { mode: 'environment' },
   terminal: { fontSize: 13 },
   git: { backgroundFetch: false },
@@ -121,7 +133,7 @@ export interface SettingsPatch {
   thread?: Partial<SettingsFile['thread']>
   appearance?: Partial<SettingsFile['appearance']>
   notifications?: Partial<SettingsFile['notifications']>
-  agents?: Partial<Record<AgentId, { binaryPath?: null; cli?: AgentCliSource; configDir?: null }>>
+  agents?: Partial<Record<HarnessId, { binaryPath?: null; configDir?: null; hidden?: boolean }>>
   proxy?: ProxySettings
   terminal?: { shellPath?: null; fontSize?: SettingsFile['terminal']['fontSize'] }
   git?: Partial<SettingsFile['git']>
@@ -135,6 +147,7 @@ export interface SettingsPatch {
 export interface HostSettings {
   locale: Locale // the language of the text the host writes for the user
   agents: SettingsFile['agents']
+  addedAgents: AddedAgent[]
   proxy: ProxySettings
   git: SettingsFile['git']
   mcp: SettingsFile['mcp']

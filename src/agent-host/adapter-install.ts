@@ -214,6 +214,8 @@ export interface ProgramOptions {
   timeoutMs: number
   signal?: AbortSignal
   onOutput?(text: string): void
+  /** Written to its stdin, which is closed after it; stdin is closed at once without it. */
+  input?: string
   /** The process tools that stop it; tests pass their own. */
   control?: ProcessControl
 }
@@ -268,11 +270,14 @@ export function runProgram(options: ProgramOptions): Promise<ProgramRun> {
     const child = spawn(file, args, {
       cwd: options.cwd,
       env: options.env as NodeJS.ProcessEnv,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: 'pipe',
       detached: platform !== 'win32',
       windowsHide: true,
       shell,
     })
+    // A program that exits before reading it all closes the pipe, which is no failure of ours.
+    child.stdin.on('error', () => {})
+    child.stdin.end(options.input)
     const exited = new Promise<void>((done) => child.once('close', () => done()))
     const take = (text: string): void => {
       output.push(text)

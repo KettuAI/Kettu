@@ -78,6 +78,7 @@ function manager(
     settings: () => ({
       locale: 'en',
       agents: {},
+      addedAgents: [],
       proxy: { mode: 'environment' },
       git: { backgroundFetch: false },
       mcp: DEFAULT_SETTINGS.mcp,

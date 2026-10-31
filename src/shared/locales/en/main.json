@@ -41,14 +41,14 @@
   "dialogs": {
     "openProject": "Open Project",
     "chooseAgentProgram": "Choose Agent Program",
-    "chooseAgentConfigFolder": "Choose Configuration Folder",
     "chooseShell": "Choose Shell",
     "exportDiagnostics": "Export Diagnostics",
     "programs": "Programs",
     "addFiles": "Add Files or Photos",
     "addFolder": "Add Folder",
     "installTheme": "Install Theme",
-    "exportTheme": "Export Theme"
+    "exportTheme": "Export Theme",
+    "chooseAgentFolder": "Choose Agent Folder"
   },
   "quit": {
     "titleQuit": "Quit {{name}}?",
@@ -89,5 +89,8 @@
     "waiting_other": "{{count}} need approval",
     "open": "Open {{name}}",
     "quit": "Quit {{name}}"
+  },
+  "agents": {
+    "folderTaken": "This folder already belongs to {{agent}}. Choose another one, or let Kettu make a new one."
   }
 }

@@ -11,7 +11,8 @@
     "archived": "Archived sessions",
     "sharing": "Sharing",
     "browser": "Browser",
-    "mcp": "MCP servers"
+    "mcp": "MCP servers",
+    "harnesses": "Harnesses"
   },
   "page": {
     "title": "Settings",
@@ -355,9 +356,6 @@
     "signInTitle": "Sign in to {{name}} to use it",
     "launch": "Launch",
     "copyLaunch": "Copy launch command",
-    "adapter": "Adapter",
-    "package": "Package",
-    "sdkUpdates": "Updates stay within {{range}}; a newer SDK comes with an update of Kettu.",
     "reinstall": "Reinstall",
     "installsOnFirstUse": "Installs on first use",
     "account": "Account",
@@ -365,34 +363,8 @@
     "checkLimits": "Check plan limits",
     "program": "Program",
     "programOnPath": "{{command}} on PATH",
-    "binaryDescription": "The {{command}} binary Kettu starts.",
     "reset": "Reset",
     "chooseBinary": "Choose binary…",
-    "cli": {
-      "choose": "Which {{name}} runs",
-      "description": "The {{command}} program the adapter runs.",
-      "descriptionCli": "The {{command}} program Kettu runs.",
-      "descriptionSdk": "The {{command}} program the SDK runs.",
-      "installed": "Installed",
-      "bundled": "Bundled",
-      "bundledLine": "Bundled with the adapter",
-      "bundledLineCli": "Installed by Kettu",
-      "bundledLineSdk": "Bundled with the SDK",
-      "found": "Your {{command}} {{version}} is installed too.",
-      "notFound": "No {{command}} found on PATH.",
-      "tooOld": "Your {{command}} is {{version}}; the adapter needs {{minimum}} or later.",
-      "tooOldCli": "Your {{command}} is {{version}}; Kettu needs {{minimum}} or later.",
-      "tooOldSdk": "Your {{command}} is {{version}}; the SDK needs {{minimum}} or later.",
-      "failed": "Your {{command}} did not start, so the bundled one runs. Fix it, then retry.",
-      "failedNamed": "Your {{command}} did not start. Fix it, then retry.",
-      "unsupported": "Your {{command}} cannot run without a shell.",
-      "noMinimum": "The adapter does not say which {{name}} it needs.",
-      "noMinimumSdk": "The SDK does not say which {{name}} it needs.",
-      "setByWith": "Set by {{env}}. {{problem}}",
-      "notDownloaded": "Bundled, not downloaded yet",
-      "downloadsNext": "Downloads with the next start, about {{size}} MB.",
-      "nextStart": "Takes effect from the next start."
-    },
     "environment": {
       "pending": "Reading your environment…",
       "loginShell": "Read from your login shell ({{shell}}) {{ago}} in {{ms}} ms.",
@@ -402,13 +374,15 @@
       "reload": "Reload environment",
       "keywords": "PATH shell node npm environment variables"
     },
+    "cli": {
+      "notFound": "No {{command}} found on PATH.",
+      "unsupported": "Your {{command}} cannot run without a shell."
+    },
     "groups": {
-      "installed": "Installed",
-      "notInstalled": "Not installed"
+      "list": "On this computer"
     },
     "search": "Search agents",
     "noMatch": "No matching agents",
-    "version": "Version",
     "plan": "Plan",
     "loginMethod": "Login method",
     "email": "Email",
@@ -422,15 +396,8 @@
       "instructions": "Instructions file"
     },
     "configFolder": {
-      "choose": "Choose folder…",
-      "label": "Configuration folder for {{name}}",
       "description": "Where {{name}} keeps its sign-in, settings and history.",
-      "useEnvironment": "Use the environment",
-      "custom": "A folder of its own",
-      "explain": "The folder you choose keeps {{name}}'s sign-in, settings and history apart from the {{name}} you run in a terminal. Nothing is copied into it: a new folder needs you to sign in again, and sessions started with the current folder continue only after you switch back.",
-      "chosen": "Chosen in Kettu",
-      "untilChosen": "{{name}} uses this folder until you choose one.",
-      "nextStart": "Takes effect from the agent's next start."
+      "chosen": "Chosen in Kettu"
     },
     "setBy": "Set by {{env}}",
     "notCreated": "Not created yet",
@@ -455,7 +422,6 @@
     "resetsIn": "Resets in {{time}}",
     "resetsAt": "Resets {{time}}",
     "versionGroup": "Version",
-    "currentVersion": "Current version",
     "ownInstaller": "Updated by its own installer, not by Kettu.",
     "update": {
       "mark": "Update available: {{names}}",
@@ -470,9 +436,6 @@
       "checkFailed": "Couldn't check for updates",
       "notChecked": "Not checked yet",
       "available": "Update",
-      "availableTo": "Update to {{version}}",
-      "adapterVersion": "Adapter {{name}} {{version}}",
-      "sdkVersion": "SDK {{name}} {{version}}",
       "updating": "Updating…",
       "cancel": "Cancel update",
       "failed": "Update failed, retry",
@@ -501,33 +464,96 @@
     },
     "install": {
       "button": "Install",
-      "through": "Install through {{method}}",
       "installing": "Installing…",
       "cancel": "Cancel install",
       "failed": "Install failed, retry",
-      "missingLine": "Not installed. Install sets it up through {{method}}.",
       "missingLineAdapter": "Not installed yet. Install puts its adapter in Kettu's data folder.",
-      "missingLineCli": "Not installed yet. Install puts {{name}} in Kettu's data folder.",
       "missingLineSdk": "Not installed yet. Install puts its SDK in Kettu's data folder.",
       "title": "Install {{name}}",
       "body": "Kettu installs it in the background; when it is done, this page shows it as installed.",
       "adapterBody": "Kettu installs {{package}} into its own data folder and runs it on your Node.js.",
-      "adapterBodyCli": "Kettu installs {{package}} into its own data folder and runs it on your Node.js, with your {{command}} {{version}} if the adapter accepts that version; otherwise it downloads {{name}} too.",
-      "cliBody": "Kettu installs {{package}} into its own data folder and runs it from there.",
-      "sdkBody": "Kettu installs {{package}} into its own data folder and runs it itself, with the {{name}} it carries.",
-      "sdkBodyCli": "Kettu installs {{package}} into its own data folder and runs it itself, with your {{command}} {{version}} if the SDK accepts that version; otherwise it downloads {{name}} too.",
-      "method": "Install with",
-      "methods": {
-        "archive": "Download",
-        "brew": "Homebrew",
-        "npm": "npm",
-        "script": "Official script"
-      },
       "notFound": "not found",
       "progressTitle": "Installing {{name}}",
       "failedTitle": "Install failed",
       "elsewhere": "Installed somewhere else? Choose the program…",
       "copyLog": "Copy log"
+    },
+    "default": "Default",
+    "hiddenTag": "Hidden",
+    "footerBefore": "To use another program, install it in ",
+    "footerAfter": ".",
+    "onHarness": "On {{harness}}",
+    "openHarness": "Open {{harness}} in Harnesses",
+    "openHarnessButton": "Open",
+    "harness": "Harness",
+    "folderDefault": "{{name}}'s own folder, shared with the {{name}} you run in a terminal.",
+    "folderOwn": "This agent's own folder, which keeps its sign-in, settings and history.",
+    "folderCreated": "Made by Kettu for this agent; it keeps its sign-in, settings and history.",
+    "signInRow": "Sign-in",
+    "signInRowHint": "The harness signs in itself, in a terminal; Kettu never sees the credentials.",
+    "signInAgain": "Sign in again in terminal",
+    "hide": {
+      "name": "Hide in the agent menu",
+      "description": "The default agent is {{name}} as you run it in a terminal, so it cannot be deleted, only hidden."
+    },
+    "remove": {
+      "name": "Delete agent",
+      "description": "Its sessions stay, but cannot continue.",
+      "button": "Delete",
+      "title": "Delete {{name}}?",
+      "body": "Its sessions stay in the list and say the agent was deleted; they cannot continue.",
+      "trash": "Move its folder to the trash",
+      "trashHint": "Kettu made the folder; it holds the agent's sign-in and the harness's own session records.",
+      "keepsFolder": "You picked its folder, so it stays as it is."
+    },
+    "rename": {
+      "button": "Rename",
+      "title": "Rename agent",
+      "save": "Save"
+    },
+    "add": {
+      "button": "Add agent",
+      "keywords": "new account folder api key profile",
+      "title": "Add agent",
+      "description": "Another account on the same harness, in a configuration folder of its own.",
+      "harness": "Harness",
+      "harnessHint": "Only harnesses that keep their sign-in in a folder can have more agents; OpenCode, Pi and the others have the default one.",
+      "name": "Name",
+      "namePlaceholder": "Such as Company API",
+      "nameTooLong_one": "At most {{count}} character",
+      "nameTooLong_other": "At most {{count}} characters",
+      "folder": "Configuration folder",
+      "folderNew": "A new folder",
+      "folderNewHint": "Kettu makes it in its data folder; sign in once the agent is added.",
+      "folderExisting": "A folder you already use",
+      "folderExistingHint": "A folder {{variable}} pointed at in a terminal; its sign-in and settings carry over.",
+      "choose": "Choose…",
+      "login": "Sign-in",
+      "loginTerminal": "Sign in in a terminal",
+      "loginTerminalHint": "With a subscription or a console account, as the harness asks.",
+      "loginKey": "API key",
+      "loginKeyHint": "Your own key, for Anthropic or a gateway that speaks its API.",
+      "loginKeyHintOpenAi": "An OpenAI API key.",
+      "submit": "Add agent"
+    },
+    "key": {
+      "row": "API key",
+      "set": "Set; {{name}} keeps it, Kettu has no copy.",
+      "notSet": "Your own key and provider, in place of a sign-in.",
+      "notSetOpenAi": "An OpenAI API key, in place of a sign-in.",
+      "setButton": "Set…",
+      "replace": "Replace…",
+      "clear": "Clear",
+      "title": "API key for {{name}}",
+      "defaultWarning": "This is the folder {{name}} uses in a terminal too, so your {{command}} there also switches to this key.",
+      "save": "Save",
+      "baseUrl": "Base URL",
+      "baseUrlHint": "Leave it empty for Anthropic; for a gateway, the address it gives you.",
+      "key": "API key",
+      "model": "Model",
+      "modelPlaceholder": "Optional; {{name}}'s default when empty",
+      "noteClaude": "Claude Code keeps the key in the settings.json of this agent's folder; Kettu keeps no copy and never reads it back. {{command}} in a terminal with this folder uses it too.",
+      "noteCodex": "Codex keeps the key through its own codex login; Kettu keeps no copy. For another provider, set it up in this folder's config.toml."
     }
   },
   "about": {
@@ -591,7 +617,7 @@
     "general": "The interface language, how you type, and what new sessions and launches do.",
     "appearance": "Theme, color mode, zoom and text size. Changes apply at once.",
     "notifications": "They show only while no Kettu window is in front, so they never interrupt what you are reading.",
-    "agents": "Kettu drives these coding agents. Their accounts, plan usage and installs are here.",
+    "agents": "The agents you pick to work with, each with its own account and limits. One harness can have several agents, such as one on a subscription and one on a company API key.",
     "terminal": "Which shell the side panel's terminal runs, and its font size.",
     "git": "The top bar's branch and changes, pull requests and their checks all come from these two tools.",
     "advanced": "Network proxy, diagnostics and the data Kettu keeps on this computer.",
@@ -599,7 +625,8 @@
     "archived": "Sessions you archived, off the sidebar but kept. Restore one to put it back in its project.",
     "sharing": "Publish artifacts to links anyone can open, through your own Cloudflare account.",
     "browser": "The browser in the side panel keeps one profile for every session: sign-ins, site data and cache.",
-    "mcp": "Agents reach tools through these MCP servers. Kettu's own is here, and where each agent keeps its own."
+    "mcp": "Agents reach tools through these MCP servers. Kettu's own is here, and where each agent keeps its own.",
+    "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Install and update them here; accounts are in Agents."
   },
   "footer": {
     "about": "About Kettu",
@@ -701,5 +728,58 @@
       "takesNone": "{{name}} takes no MCP servers over HTTP.",
       "nextStart": "Takes effect from {{name}}'s next start."
     }
+  },
+  "harnesses": {
+    "groups": {
+      "installed": "Installed",
+      "notInstalled": "Not installed"
+    },
+    "keywords": "install update program binary cli node npm",
+    "search": "Search harnesses",
+    "noMatch": "No matching harnesses",
+    "methods": {
+      "archive": "Download",
+      "brew": "Homebrew",
+      "npm": "npm",
+      "script": "Official install script",
+      "winget": "WinGet"
+    },
+    "updateTo": "Update to {{version}}",
+    "yours": "your {{command}}",
+    "sdkOnFirstUse": "SDK installs on first use",
+    "picked": "the program you chose",
+    "kettus": "{{name}} installed by Kettu",
+    "agentCount_one": "{{count}} agent",
+    "agentCount_other": "{{count}} agents",
+    "missingLine": "Not installed. Install shows the ways {{name}}'s maker documents.",
+    "install": {
+      "title": "Install {{name}}",
+      "body": "Kettu brings no {{name}} of its own: it uses the one on your computer. Pick one of {{vendor}}'s documented ways; Kettu runs it in the background and detects {{name}} again when it is done.",
+      "bodyPlain": "Pick one of the documented ways; Kettu runs it in the background and detects {{name}} again when it is done.",
+      "method": "Install with",
+      "recommended": "Recommended",
+      "runs": "Runs",
+      "copy": "Copy command",
+      "ownTerminal": "You can also run it in your own terminal, then come back and reload the environment.",
+      "open": "Install…",
+      "cliBody": "Kettu runs your own {{command}}, and brings none. Install it one of the ways its maker documents."
+    },
+    "cliOutdated": "Your {{name}} {{current}} is older than Kettu needs; update it to use it.",
+    "cliUpdateBody": "You have {{current}}. The update runs the way you installed {{name}}; the command shows below.",
+    "cliUpdateBodySdk": "You have {{current}}. The update runs the way you installed {{name}}, and moves Claude Agent SDK to the version that matches; the command shows below.",
+    "reinstall": "{{name}}",
+    "reinstallBody": "Delete Kettu's install and install it again.",
+    "programName": "{{command}}",
+    "installedWith": "Your own · {{method}}",
+    "programSdk": "Your own, which the SDK runs.",
+    "programOwn": "Your own, which Kettu runs.",
+    "packageGroup": "Installed by Kettu",
+    "sdkLine": "{{version}} · in Kettu's data folder, without the CLI",
+    "adapterLine": "{{version}} · in Kettu's data folder",
+    "sdkNote": "Kettu brings no {{name}}, only the SDK that drives it; updates stay within {{range}}.",
+    "adapterNote": "The adapter Kettu runs {{name}} through, on your Node.js.",
+    "usedBy": "Used by",
+    "listSeparator": ", ",
+    "manageAgents": "Manage in Agents"
   }
 }

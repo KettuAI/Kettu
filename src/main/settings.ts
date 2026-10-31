@@ -1,6 +1,6 @@
 import { join } from 'node:path'
-import type { SettingsFile } from '@shared/settings'
-import type { AgentId } from '@shared/thread'
+import type { AddedAgent, SettingsFile } from '@shared/settings'
+import type { AgentId, HarnessId } from '@shared/thread'
 import { JsonFileWriter, quarantineFile, readJsonFile } from './json-file'
 import { createLogger } from './log'
 import {
@@ -10,8 +10,10 @@ import {
   SETTINGS_VERSION,
   type SettingsSection,
   validateSettingsPatch,
+  withAddedAgent,
   withAgentBinary,
-  withAgentConfigDir,
+  withoutAgent,
+  withRenamedAgent,
   withShellPath,
 } from './settings-schema'
 
@@ -69,12 +71,20 @@ export class SettingsStore {
     return this.replace(mergeSettings(this.current, validateSettingsPatch(patch)))
   }
 
-  setAgentBinary(agentId: AgentId, binaryPath: string): SettingsFile {
-    return this.replace(withAgentBinary(this.current, agentId, binaryPath))
+  setAgentBinary(harnessId: HarnessId, binaryPath: string): SettingsFile {
+    return this.replace(withAgentBinary(this.current, harnessId, binaryPath))
   }
 
-  setAgentConfigDir(agentId: AgentId, configDir: string): SettingsFile {
-    return this.replace(withAgentConfigDir(this.current, agentId, configDir))
+  addAgent(agent: AddedAgent): SettingsFile {
+    return this.replace(withAddedAgent(this.current, agent))
+  }
+
+  renameAgent(agentId: AgentId, name: string): SettingsFile {
+    return this.replace(withRenamedAgent(this.current, agentId, name))
+  }
+
+  removeAgent(agentId: AgentId): SettingsFile {
+    return this.replace(withoutAgent(this.current, agentId))
   }
 
   setShellPath(shellPath: string): SettingsFile {

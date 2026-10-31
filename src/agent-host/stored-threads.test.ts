@@ -461,6 +461,7 @@ describe('attaching on use', () => {
     const settings = (configDir?: string): HostSettings => ({
       locale: 'en',
       agents: configDir ? { 'claude-code': { configDir } } : {},
+      addedAgents: [],
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
       mcp: DEFAULT_SETTINGS.mcp,
@@ -468,7 +469,7 @@ describe('attaching on use', () => {
       sessionTitles: true,
     })
     const message = (folder: string) =>
-      `This session was started with the configuration folder ${folder}. Switch back to it in Settings › Agents to continue it.`
+      `This session was started with the configuration folder ${folder}, which its agent no longer uses, so it cannot continue here.`
 
     async function claudeSession(first: TestHost, port: TestPort) {
       const summary = await port.request('sessions.create', {

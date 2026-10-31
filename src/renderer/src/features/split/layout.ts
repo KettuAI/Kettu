@@ -1,7 +1,7 @@
 // The split view's layout: columns left to right of panes top to bottom, each pane and column
 // holding a share of the room above it, and the pane in focus. Every rule here is pure.
 
-import { AGENT_IDS, type AgentId } from '@shared/thread'
+import { isAgentId, type AgentId } from '@shared/thread'
 
 export type PaneView =
   | { kind: 'session'; sessionId: string; projectPath: string }
@@ -502,9 +502,7 @@ function readView(view: unknown): PaneView | null {
   if (value.kind === 'new') {
     return {
       kind: 'new',
-      agentId: (AGENT_IDS as readonly string[]).includes(value.agentId as string)
-        ? (value.agentId as AgentId)
-        : null,
+      agentId: isAgentId(value.agentId) ? value.agentId : null,
       projectPath: typeof value.projectPath === 'string' ? value.projectPath : null,
       noProject: value.noProject === true,
       ...(typeof value.parentId === 'string' ? { parentId: value.parentId } : {}),

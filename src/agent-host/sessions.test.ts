@@ -1043,6 +1043,7 @@ describe('prepared sessions', () => {
     const settings = {
       locale: 'en' as const,
       agents: { 'claude-code': { configDir: path.join(t.dir, 'claude-config') } },
+      addedAgents: [],
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
       mcp: DEFAULT_SETTINGS.mcp,
@@ -2073,6 +2074,7 @@ describe('a prompt turn', () => {
       settings: {
         locale: 'en',
         agents: DEFAULT_SETTINGS.agents,
+        addedAgents: [],
         proxy: DEFAULT_SETTINGS.proxy,
         git: DEFAULT_SETTINGS.git,
         mcp: DEFAULT_SETTINGS.mcp,

@@ -5,6 +5,11 @@ import { listedInstalled } from './readiness'
 const status = (overrides: Partial<AgentStatus>): AgentStatus => ({
   id: 'codex',
   name: 'Codex',
+  harnessId: 'codex',
+  harnessName: 'Codex',
+  isDefault: true,
+  hidden: false,
+  apiKey: null,
   state: 'available',
   version: null,
   package: null,

@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import type { Platform } from '@shared/platform'
 import {
   installedFolder,
+  installMethodOf,
   installPlans,
+  updatePlan,
   type BinaryInstalls,
   type PlanContext,
 } from './binary-install'
-import { KILO, KIMI, OPENCODE } from './catalog'
+import { CLAUDE_CODE, CODEX, KILO, KIMI, OPENCODE } from './catalog'
 
 const installs = OPENCODE.installs!
 
@@ -251,5 +253,146 @@ describe("the registry agents' own routes", () => {
         (plan) => plan.id,
       ),
     ).toEqual(['archive'])
+  })
+})
+
+describe("the routes of a harness that runs the user's CLI", () => {
+  const claude = CLAUDE_CODE.installs!
+  const codex = CODEX.installs!
+
+  it("offers Claude Code its script, its cask on macOS and npm, in its maker's order", async () => {
+    const tools = ['/opt/bin/brew', '/opt/bin/bash', '/opt/bin/curl']
+    const mac = await installPlans(claude, context('darwin', tools, '/opt/bin/npm'))
+    expect(mac.map(({ id, command }) => [id, command])).toEqual([
+      ['script', 'curl -fsSL https://claude.ai/install.sh | bash'],
+      ['brew', 'brew install --cask claude-code'],
+      ['npm', 'npm install -g @anthropic-ai/claude-code'],
+    ])
+    // Casks are macOS only.
+    const linux = await installPlans(claude, context('linux', tools, '/opt/bin/npm'))
+    expect(linux.map((plan) => plan.id)).toEqual(['script', 'npm'])
+  })
+
+  it('offers winget on Windows, run without stopping to ask', async () => {
+    const plans = await installPlans(claude, context('win32', ['C:\\tools\\winget.exe'], null))
+    expect(
+      plans.map(({ id, command, available, run }) => ({ id, command, available, run })),
+    ).toEqual([
+      {
+        id: 'winget',
+        command: 'winget install --id Anthropic.ClaudeCode -e',
+        available: true,
+        run: {
+          program: 'C:\\tools\\winget.exe',
+          args: ['install', '--id', 'Anthropic.ClaudeCode', '-e', '--disable-interactivity'],
+        },
+      },
+      {
+        id: 'npm',
+        command: 'npm install -g @anthropic-ai/claude-code',
+        available: false,
+        run: null,
+      },
+    ])
+  })
+
+  it("runs Codex's script with sh, which gets the script only once curl succeeded", async () => {
+    const plans = await installPlans(
+      codex,
+      context('darwin', ['/opt/bin/brew', '/opt/bin/sh', '/opt/bin/curl'], '/opt/bin/npm'),
+    )
+    expect(plans.map((plan) => plan.id)).toEqual(['script', 'brew', 'npm'])
+    expect(plans[0]).toMatchObject({
+      command: 'curl -fsSL https://chatgpt.com/codex/install.sh | sh',
+      run: {
+        program: '/opt/bin/sh',
+        args: [
+          '-c',
+          `script="$(curl -fsSL https://chatgpt.com/codex/install.sh)" && printf '%s\\n' "$script" | sh`,
+        ],
+      },
+    })
+    expect(plans[1]?.command).toBe('brew install --cask codex')
+  })
+})
+
+describe('installMethodOf', () => {
+  const home = '/Users/me'
+  const of = (installs: BinaryInstalls, file: string, platform: Platform = 'darwin') =>
+    installMethodOf(installs, file, { platform, home })
+
+  it('tells the way a program was installed from where its file is', () => {
+    const claude = CLAUDE_CODE.installs!
+    expect(of(claude, '/Users/me/.local/share/claude/versions/2.1.304')).toBe('script')
+    expect(of(claude, '/opt/homebrew/Caskroom/claude-code/2.1.304/claude')).toBe('brew')
+    expect(of(claude, '/usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe')).toBe(
+      'npm',
+    )
+    expect(of(claude, '/opt/my/claude')).toBeNull()
+    // A folder that only starts with the script's is not it.
+    expect(of(claude, '/Users/me/.local/share/claude-other/claude')).toBeNull()
+    const codex = CODEX.installs!
+    expect(of(codex, '/Users/me/.codex/packages/standalone/0.170.0/codex')).toBe('script')
+    expect(of(codex, '/opt/homebrew/Caskroom/codex/0.170.0/codex-aarch64-apple-darwin')).toBe(
+      'brew',
+    )
+  })
+
+  it('compares Windows paths without case, with either slash', () => {
+    const claude = CLAUDE_CODE.installs!
+    const winget =
+      'C:\\Users\\me\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Anthropic.ClaudeCode\\claude.exe'
+    expect(installMethodOf(claude, winget, { platform: 'win32', home: 'C:\\Users\\me' })).toBe(
+      'winget',
+    )
+    const npm = 'C:\\Users\\me\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\x'
+    expect(installMethodOf(claude, npm, { platform: 'win32', home: 'C:\\Users\\me' })).toBe('npm')
+  })
+})
+
+describe('updatePlan', () => {
+  const ctx = (found: string[], npm: string | null = '/opt/bin/npm') => ({
+    platform: 'darwin' as const,
+    env: { PATH: '/opt/bin' },
+    npm,
+    isExecutable: async (file: string) => found.includes(file),
+    program: '/Users/me/.local/bin/claude',
+  })
+
+  it("runs a script install's own update command, or the script again", async () => {
+    expect(await updatePlan(CLAUDE_CODE.installs!, 'script', ctx([]))).toEqual({
+      command: 'claude update',
+      run: { program: '/Users/me/.local/bin/claude', args: ['update'] },
+    })
+    const tools = ['/opt/bin/sh', '/opt/bin/curl']
+    expect(await updatePlan(CODEX.installs!, 'script', ctx(tools))).toMatchObject({
+      command: 'curl -fsSL https://chatgpt.com/codex/install.sh | sh',
+      run: { program: '/opt/bin/sh' },
+    })
+  })
+
+  it('upgrades a cask, a winget package or an npm package to the latest', async () => {
+    expect(await updatePlan(CODEX.installs!, 'brew', ctx(['/opt/bin/brew']))).toEqual({
+      command: 'brew upgrade --cask codex',
+      run: { program: '/opt/bin/brew', args: ['upgrade', '--cask', 'codex'] },
+    })
+    expect(await updatePlan(CLAUDE_CODE.installs!, 'winget', ctx([]))).toEqual({
+      command: 'winget upgrade --id Anthropic.ClaudeCode -e',
+      run: null,
+    })
+    expect(await updatePlan(CODEX.installs!, 'npm', ctx([]))).toEqual({
+      command: 'npm install -g @openai/codex@latest',
+      run: {
+        program: '/opt/bin/npm',
+        args: expect.arrayContaining(['install', '-g', '@openai/codex@latest', '--no-fund']),
+      },
+    })
+    // The command still shows while its tool is missing.
+    expect(await updatePlan(CODEX.installs!, 'npm', ctx([], null))).toMatchObject({ run: null })
+  })
+
+  it('has no update for a route the harness does not have', async () => {
+    expect(await updatePlan(CODEX.installs!, 'winget', ctx([]))).toBeNull()
+    expect(await updatePlan(CODEX.installs!, 'archive', ctx([]))).toBeNull()
   })
 })

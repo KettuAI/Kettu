@@ -53,6 +53,7 @@ function settings(sessionTitles: boolean): HostSettings {
   return {
     locale: 'en',
     agents: DEFAULT_SETTINGS.agents,
+    addedAgents: [],
     proxy: DEFAULT_SETTINGS.proxy,
     git: DEFAULT_SETTINGS.git,
     mcp: DEFAULT_SETTINGS.mcp,

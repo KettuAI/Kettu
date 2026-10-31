@@ -104,6 +104,22 @@ describe('agents store', () => {
     expect(useAgentsStore.getState().taskErrors).toEqual({})
   })
 
+  it("lists an agent beside its harness's others, as it comes and goes", () => {
+    const status = (id: string) => ({ id }) as AgentStatus
+    const { setAll, setOne, remove } = useAgentsStore.getState()
+    setAll([status('codex'), status('claude-code'), status('opencode')])
+    expect(useAgentsStore.getState().order).toEqual(['claude-code', 'codex', 'opencode'])
+    setOne(status('claude-code~work'))
+    expect(useAgentsStore.getState().order).toEqual([
+      'claude-code',
+      'claude-code~work',
+      'codex',
+      'opencode',
+    ])
+    remove('claude-code~work')
+    expect(useAgentsStore.getState().order).toEqual(['claude-code', 'codex', 'opencode'])
+  })
+
   it('keeps a failed update check as an error, not as checked', async () => {
     request.mockRejectedValue(new Error('offline'))
     useAgentsStore.setState({ updateCheck: { running: false, finishedAt: null, error: null } })

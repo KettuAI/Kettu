@@ -410,6 +410,7 @@ describe('the artifacts service in sessions', () => {
     const settingsWith = (off: HostSettings['mcp']['kettu']['off']) => ({
       locale: 'en' as const,
       agents: DEFAULT_SETTINGS.agents,
+      addedAgents: [],
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
       mcp: { kettu: { off } },

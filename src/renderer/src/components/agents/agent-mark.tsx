@@ -1,4 +1,4 @@
-import type { AgentId } from '@shared/thread'
+import { harnessOf, type AgentId } from '@shared/thread'
 import { cn } from '@renderer/lib/utils'
 import { AGENT_MARKS } from './marks'
 
@@ -10,9 +10,12 @@ interface AgentMarkProps {
   className?: string
 }
 
-/** The agent's official mark in its own colors, the only brand colors in the interface. */
+/**
+ * The mark of the agent's harness in its own colors, the only brand colors in the interface; the
+ * agents of one harness share it.
+ */
 export function AgentMark({ agent, size = 14, mono = false, className }: AgentMarkProps) {
-  const { viewBox, Body } = AGENT_MARKS[agent]
+  const { viewBox, Body } = AGENT_MARKS[harnessOf(agent)]
   return (
     <svg
       width={size}

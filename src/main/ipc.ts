@@ -18,8 +18,8 @@ import type {
   IpcSendContract,
   UnsavedFile,
 } from '@shared/ipc'
-import { CONFIG_VARIABLES } from '@shared/settings'
-import { AGENT_IDS, type AgentId } from '@shared/thread'
+import { isHarnessId, type HarnessId } from '@shared/thread'
+import { AgentFolders } from './agent-folders'
 import type { AgentHost } from './agent-host'
 import { grantClipboardFiles, grantPaths } from './attachments'
 import type { Artifacts } from './artifacts'
@@ -122,11 +122,9 @@ function on<C extends keyof IpcSendContract>(
   })
 }
 
-function agentId(value: unknown): AgentId {
-  if (typeof value !== 'string' || !AGENT_IDS.includes(value as AgentId)) {
-    throw new Error(`Unknown agent "${String(value)}"`)
-  }
-  return value as AgentId
+function harnessId(value: unknown): HarnessId {
+  if (!isHarnessId(value)) throw new Error(`Unknown harness "${String(value)}"`)
+  return value
 }
 
 const SESSION_ID_MAX_CHARS = 256
@@ -318,6 +316,12 @@ export function registerIpcHandlers({
 
   handle('settings:get', 0, () => settings.get())
   handle('settings:update', 1, (_, patch) => settings.update(patch))
+  const agentFolders = new AgentFolders(settings, join(app.getPath('userData'), 'agent-config'))
+  handle('settings:add-agent', 3, (_, harness, name, folder) =>
+    agentFolders.add(harness, name, folder),
+  )
+  handle('settings:rename-agent', 2, (_, id, name) => agentFolders.rename(id, name))
+  handle('settings:remove-agent', 2, (_, id, trash) => agentFolders.remove(id, trash))
   handle('login-item:status', 0, () => loginItemStatus())
 
   handle('themes:get', 0, () => themes.refresh())
@@ -347,24 +351,22 @@ export function registerIpcHandlers({
   })
 
   handle('dialog:choose-agent-binary', 1, async ({ window }, id) => {
-    const agent = agentId(id)
+    const harness = harnessId(id)
     const path = await chooseProgram(window, t('dialogs.chooseAgentProgram'))
-    if (path) settings.setAgentBinary(agent, path)
+    if (path) settings.setAgentBinary(harness, path)
     return path
   })
 
-  handle('dialog:choose-agent-config-folder', 1, async ({ window }, id) => {
-    const agent = agentId(id)
-    if (!CONFIG_VARIABLES[agent]) throw new Error(`${agent} has no configuration folder of its own`)
+  handle('dialog:choose-agent-folder', 0, async ({ window }) => {
     const options: Electron.OpenDialogOptions = {
-      title: t('dialogs.chooseAgentConfigFolder'),
-      properties: ['openDirectory', 'createDirectory', 'dontAddToRecent'],
+      title: t('dialogs.chooseAgentFolder'),
+      properties: ['openDirectory', 'createDirectory', 'showHiddenFiles', 'dontAddToRecent'],
     }
     const result = window
       ? await dialog.showOpenDialog(window, options)
       : await dialog.showOpenDialog(options)
     const path = result.canceled ? null : (result.filePaths[0] ?? null)
-    if (path) settings.setAgentConfigDir(agent, path)
+    if (path) agentFolders.remember(path)
     return path
   })
 

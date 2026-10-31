@@ -11,7 +11,8 @@
     "archived": "已归档会话",
     "sharing": "分享",
     "browser": "浏览器",
-    "mcp": "MCP 服务器"
+    "mcp": "MCP 服务器",
+    "harnesses": "Harness"
   },
   "page": {
     "title": "设置",
@@ -353,9 +354,6 @@
     "signInTitle": "登录 {{name}} 后才能使用",
     "launch": "启动命令",
     "copyLaunch": "复制启动命令",
-    "adapter": "适配器",
-    "package": "npm 包",
-    "sdkUpdates": "只更新到 {{range}} 以内的版本；更新的 SDK 随 Kettu 的更新提供。",
     "reinstall": "重新安装",
     "installsOnFirstUse": "首次使用时安装",
     "account": "账号",
@@ -363,34 +361,8 @@
     "checkLimits": "查看套餐限额",
     "program": "程序",
     "programOnPath": "PATH 中的 {{command}}",
-    "binaryDescription": "Kettu 启动的 {{command}} 程序。",
     "reset": "重置",
     "chooseBinary": "选择可执行文件…",
-    "cli": {
-      "choose": "运行哪个 {{name}}",
-      "description": "适配器运行的 {{command}} 程序。",
-      "descriptionCli": "Kettu 运行的 {{command}} 程序。",
-      "descriptionSdk": "SDK 运行的 {{command}} 程序。",
-      "installed": "已安装",
-      "bundled": "内置",
-      "bundledLine": "适配器内置",
-      "bundledLineCli": "Kettu 装的那份",
-      "bundledLineSdk": "SDK 内置",
-      "found": "你也装有 {{command}} {{version}}。",
-      "notFound": "PATH 中没有找到 {{command}}。",
-      "tooOld": "你的 {{command}} 是 {{version}}，适配器需要 {{minimum}} 或更高版本。",
-      "tooOldCli": "你的 {{command}} 是 {{version}}，Kettu 需要 {{minimum}} 或更高版本。",
-      "tooOldSdk": "你的 {{command}} 是 {{version}}，SDK 需要 {{minimum}} 或更高版本。",
-      "failed": "你的 {{command}} 无法启动，现在运行内置版本。修好后重试。",
-      "failedNamed": "你的 {{command}} 无法启动。修好后重试。",
-      "unsupported": "你的 {{command}} 需要通过 Shell 才能运行。",
-      "noMinimum": "适配器没有说明它需要哪个版本的 {{name}}。",
-      "noMinimumSdk": "SDK 没有说明它需要哪个版本的 {{name}}。",
-      "setByWith": "由 {{env}} 指定。{{problem}}",
-      "notDownloaded": "内置，尚未下载",
-      "downloadsNext": "下次启动时下载，约 {{size}} MB。",
-      "nextStart": "下次启动时生效。"
-    },
     "environment": {
       "pending": "正在读取你的环境…",
       "loginShell": "{{ago}}从登录 Shell（{{shell}}）读取，耗时 {{ms}} ms。",
@@ -400,13 +372,15 @@
       "reload": "重新加载环境",
       "keywords": "环境 环境变量 PATH shell node npm"
     },
+    "cli": {
+      "notFound": "PATH 中没有找到 {{command}}。",
+      "unsupported": "你的 {{command}} 需要通过 Shell 才能运行。"
+    },
     "groups": {
-      "installed": "已安装",
-      "notInstalled": "未安装"
+      "list": "这台电脑上的"
     },
     "search": "搜索 Agent",
     "noMatch": "没有匹配的 Agent",
-    "version": "版本",
     "plan": "套餐",
     "loginMethod": "登录方式",
     "email": "邮箱",
@@ -420,15 +394,8 @@
       "instructions": "指令文件"
     },
     "configFolder": {
-      "choose": "选择目录…",
-      "label": "{{name}} 的配置目录",
       "description": "{{name}} 存放登录信息、设置和历史记录的位置。",
-      "useEnvironment": "使用环境变量",
-      "custom": "单独的目录",
-      "explain": "你选择的目录会单独存放 {{name}} 的登录信息、设置和历史记录，与你在终端中运行的 {{name}} 互不影响。原目录中的内容不会复制过去：新目录需要重新登录，用原目录开始的会话要切换回来才能继续。",
-      "chosen": "在 Kettu 中选定",
-      "untilChosen": "选择目录前，{{name}} 仍使用这个目录。",
-      "nextStart": "将在 Agent 下次启动时生效。"
+      "chosen": "在 Kettu 中选定"
     },
     "setBy": "由 {{env}} 指定",
     "notCreated": "尚未创建",
@@ -453,7 +420,6 @@
     "resetsIn": "{{time}}后重置",
     "resetsAt": "{{time}} 重置",
     "versionGroup": "版本",
-    "currentVersion": "当前版本",
     "ownInstaller": "由它自己的安装程序更新，不经过 Kettu。",
     "update": {
       "mark": "{{names}} 有可用更新",
@@ -467,9 +433,6 @@
       "checkFailed": "无法检查更新",
       "notChecked": "还没有检查过",
       "available": "可更新",
-      "availableTo": "更新到 {{version}}",
-      "adapterVersion": "适配器 {{name}} {{version}}",
-      "sdkVersion": "SDK {{name}} {{version}}",
       "updating": "正在更新…",
       "cancel": "取消更新",
       "failed": "更新失败，重试",
@@ -498,33 +461,95 @@
     },
     "install": {
       "button": "安装",
-      "through": "通过 {{method}} 安装",
       "installing": "正在安装…",
       "cancel": "取消安装",
       "failed": "安装失败，重试",
-      "missingLine": "未安装。点“安装”，Kettu 会通过 {{method}} 装好它。",
       "missingLineAdapter": "尚未安装。点“安装”，Kettu 会把它的适配器装进自己的数据目录。",
-      "missingLineCli": "尚未安装。点“安装”，Kettu 会把 {{name}} 装进自己的数据目录。",
       "missingLineSdk": "尚未安装。点“安装”，Kettu 会把它的 SDK 装进自己的数据目录。",
       "title": "安装 {{name}}",
       "body": "Kettu 在后台装好它，装完这一页会直接变成已安装的状态。",
       "adapterBody": "Kettu 会把 {{package}} 装进自己的数据目录，用你的 Node.js 运行。",
-      "adapterBodyCli": "Kettu 会把 {{package}} 装进自己的数据目录，用你的 Node.js 运行；适配器接受你的 {{command}} {{version}} 时就用它，否则还会下载一份 {{name}}。",
-      "cliBody": "Kettu 会把 {{package}} 装进自己的数据目录，从那里运行。",
-      "sdkBody": "Kettu 会把 {{package}} 装进自己的数据目录，自己运行它，用它带的那份 {{name}}。",
-      "sdkBodyCli": "Kettu 会把 {{package}} 装进自己的数据目录，自己运行它；SDK 接受你的 {{command}} {{version}} 时就用它，否则还会下载一份 {{name}}。",
-      "method": "安装方式",
-      "methods": {
-        "archive": "下载",
-        "brew": "Homebrew",
-        "npm": "npm",
-        "script": "官方脚本"
-      },
       "notFound": "未找到",
       "progressTitle": "正在安装 {{name}}",
       "failedTitle": "安装失败",
       "elsewhere": "已经装在别处？选择可执行文件…",
       "copyLog": "复制日志"
+    },
+    "default": "默认",
+    "hiddenTag": "已隐藏",
+    "footerBefore": "要用别的程序，先到 ",
+    "footerAfter": " 里安装。",
+    "onHarness": "用 {{harness}}",
+    "openHarness": "到 Harness 里打开 {{harness}}",
+    "openHarnessButton": "打开",
+    "harness": "Harness",
+    "folderDefault": "{{name}} 自己的目录，和终端里运行的 {{name}} 共用。",
+    "folderOwn": "这个 Agent 自己的目录，放着它的登录、设置和历史。",
+    "folderCreated": "Kettu 为这个 Agent 新建的目录，放着它的登录、设置和历史。",
+    "signInRow": "登录",
+    "signInRowHint": "由 Harness 自己在终端里登录，Kettu 不经手凭据。",
+    "signInAgain": "在终端中重新登录",
+    "hide": {
+      "name": "在 Agent 菜单里隐藏",
+      "description": "默认 Agent 就是终端里的 {{name}}，所以不能删，只能隐藏。"
+    },
+    "remove": {
+      "name": "删除 Agent",
+      "description": "它的会话会留着，但不能再继续。",
+      "button": "删除",
+      "title": "删除 {{name}}？",
+      "body": "它的会话仍留在列表里，标明 Agent 已删除，不能再继续。",
+      "trash": "把它的配置目录移到废纸篓",
+      "trashHint": "这个目录是 Kettu 新建的，里面有它的登录凭据和 Harness 的会话记录。",
+      "keepsFolder": "它的配置目录是你选的，原样保留。"
+    },
+    "rename": {
+      "button": "改名",
+      "title": "给 Agent 改名",
+      "save": "保存"
+    },
+    "add": {
+      "button": "添加 Agent",
+      "keywords": "新建 账号 配置目录 API key",
+      "title": "添加 Agent",
+      "description": "同一个 Harness 上的另一个账号，用它自己的配置目录。",
+      "harness": "Harness",
+      "harnessHint": "只有能分开配置目录的 Harness 能加 Agent；OpenCode、Pi 等只有默认的那一个。",
+      "name": "名字",
+      "namePlaceholder": "比如 公司 API",
+      "nameTooLong_other": "最多 {{count}} 个字",
+      "folder": "配置目录",
+      "folderNew": "新建一个",
+      "folderNewHint": "Kettu 在自己的数据目录里新建，加好后登录。",
+      "folderExisting": "用已有的",
+      "folderExistingHint": "终端里 {{variable}} 指过的目录，里面的登录和设置照用。",
+      "choose": "选择…",
+      "login": "登录",
+      "loginTerminal": "在终端中登录",
+      "loginTerminalHint": "按 Harness 自己的方式，用订阅或控制台账号登录。",
+      "loginKey": "API key",
+      "loginKeyHint": "你自己的 key，用 Anthropic 官方或兼容它的网关。",
+      "loginKeyHintOpenAi": "OpenAI 的 API key。",
+      "submit": "添加 Agent"
+    },
+    "key": {
+      "row": "API key",
+      "set": "已设置，由 {{name}} 保存，Kettu 不留副本。",
+      "notSet": "用你自己的 key 和服务商，代替登录。",
+      "notSetOpenAi": "用 OpenAI 的 API key 代替登录。",
+      "setButton": "设置…",
+      "replace": "重新填写…",
+      "clear": "清除",
+      "title": "{{name}} 的 API key",
+      "defaultWarning": "这是终端里 {{name}} 也在用的目录，终端里的 {{command}} 也会改用这个 key。",
+      "save": "保存",
+      "baseUrl": "服务地址",
+      "baseUrlHint": "留空就是 Anthropic 官方；第三方网关填它给的地址。",
+      "key": "API key",
+      "model": "模型",
+      "modelPlaceholder": "可选，留空用 {{name}} 的默认",
+      "noteClaude": "key 交给 Claude Code，存进这个 Agent 配置目录里的 settings.json；Kettu 不留副本，也不读回。终端里用这个目录运行 {{command}} 也能用。",
+      "noteCodex": "key 经 Codex 自己的 codex login 保存；Kettu 不留副本。要接别的服务商，在这个目录的 config.toml 里自己配。"
     }
   },
   "about": {
@@ -588,7 +613,7 @@
     "general": "界面语言、输入方式，以及新会话和启动时的行为。",
     "appearance": "主题、颜色模式、缩放和文字大小。改动立即生效。",
     "notifications": "只在 Kettu 的所有窗口都不在前台时提醒你，免得打断正在看的内容。",
-    "agents": "Kettu 驱动这些编程 Agent。在这里查看账号、套餐用量和安装状态。",
+    "agents": "你选来干活的 Agent，每个有自己的账号和额度。同一个 Harness 能有几个 Agent，比如一个用订阅、一个用公司的 API key。",
     "terminal": "侧边面板里的终端用哪个 Shell，以及它的字号。",
     "git": "顶栏的分支与更改、Pull Request 和它的检查结果，都靠下面两个工具。",
     "advanced": "网络代理、诊断信息，以及 Kettu 保存在这台电脑上的数据。",
@@ -596,7 +621,8 @@
     "archived": "你归档的会话，不在侧边栏里但都保留着。恢复后会回到原来的项目里。",
     "sharing": "通过你自己的 Cloudflare 账号，把 artifact 发布为任何人都能打开的链接。",
     "browser": "侧边面板里的浏览器让所有会话共用一个配置：登录状态、网站数据和缓存都在这里。",
-    "mcp": "Agent 通过这些 MCP 服务器使用工具。这里有 Kettu 自带的服务器，以及各 Agent 自己的服务器所在的位置。"
+    "mcp": "Agent 通过这些 MCP 服务器使用工具。这里有 Kettu 自带的服务器，以及各 Agent 自己的服务器所在的位置。",
+    "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。在这里安装和更新；账号在 Agent 里。"
   },
   "footer": {
     "about": "关于 Kettu",
@@ -698,5 +724,57 @@
       "takesNone": "{{name}} 不支持通过 HTTP 连接的 MCP 服务器。",
       "nextStart": "将在 {{name}} 下次启动时生效。"
     }
+  },
+  "harnesses": {
+    "groups": {
+      "installed": "已安装",
+      "notInstalled": "未安装"
+    },
+    "keywords": "安装 更新 程序 可执行文件 cli node npm",
+    "search": "搜索 Harness",
+    "noMatch": "没有匹配的 Harness",
+    "methods": {
+      "archive": "下载",
+      "brew": "Homebrew",
+      "npm": "npm",
+      "script": "官方安装脚本",
+      "winget": "WinGet"
+    },
+    "updateTo": "更新到 {{version}}",
+    "yours": "你装的 {{command}}",
+    "sdkOnFirstUse": "SDK 首次使用时安装",
+    "picked": "你选的程序",
+    "kettus": "Kettu 装的 {{name}}",
+    "agentCount_other": "{{count}} 个 Agent",
+    "missingLine": "未安装。点“安装”查看 {{name}} 官方文档里的安装方式。",
+    "install": {
+      "title": "安装 {{name}}",
+      "body": "Kettu 不自带 {{name}}，用的是你电脑上装的那份。选一种 {{vendor}} 文档里的安装方式，Kettu 会在后台运行它，装好后重新检测 {{name}}。",
+      "bodyPlain": "选一种文档里的安装方式，Kettu 会在后台运行它，装好后重新检测 {{name}}。",
+      "method": "装法",
+      "recommended": "推荐",
+      "runs": "要运行的",
+      "copy": "复制命令",
+      "ownTerminal": "也能复制到你自己的终端里运行，装好后回来点“重新加载环境”。",
+      "open": "安装…",
+      "cliBody": "Kettu 只用你自己装的 {{command}}，不带一份。按厂商文档里的一种方式装上它。"
+    },
+    "cliOutdated": "你的 {{name}} {{current}} 比 Kettu 要的旧，更新后才能用。",
+    "cliUpdateBody": "你装的是 {{current}}。更新按你装 {{name}} 的方式运行，命令在下面。",
+    "cliUpdateBodySdk": "你装的是 {{current}}。更新按你装 {{name}} 的方式运行，Claude Agent SDK 一并换成对应的版本；命令在下面。",
+    "reinstall": "{{name}}",
+    "reinstallBody": "删掉 Kettu 装的这一份，重新安装。",
+    "programName": "{{command}}",
+    "installedWith": "你自己装的 · {{method}}",
+    "programSdk": "你自己装的，由 SDK 运行。",
+    "programOwn": "你自己装的，由 Kettu 运行。",
+    "packageGroup": "Kettu 装的包",
+    "sdkLine": "{{version}} · 装在 Kettu 的数据目录，不含 CLI",
+    "adapterLine": "{{version}} · 装在 Kettu 的数据目录",
+    "sdkNote": "Kettu 不带 {{name}}，只装驱动它的 SDK；更新只在 {{range}} 之内。",
+    "adapterNote": "Kettu 经这个适配器运行 {{name}}，用你的 Node.js。",
+    "usedBy": "在用它的",
+    "listSeparator": "、",
+    "manageAgents": "在 Agent 里管理"
   }
 }

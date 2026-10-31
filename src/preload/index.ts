@@ -123,6 +123,9 @@ const api: KettuApi = {
     get: () => invoke('settings:get'),
     update: (patch) => invoke('settings:update', patch),
     onChanged: onSettingsChanged,
+    addAgent: (harnessId, name, folder) => invoke('settings:add-agent', harnessId, name, folder),
+    renameAgent: (agentId, name) => invoke('settings:rename-agent', agentId, name),
+    removeAgent: (agentId, trash) => invoke('settings:remove-agent', agentId, trash),
   },
   themes: {
     get: () => invoke('themes:get'),
@@ -143,8 +146,8 @@ const api: KettuApi = {
   },
   dialogs: {
     openProject: () => invoke('dialog:open-project'),
-    chooseAgentBinary: (agentId) => invoke('dialog:choose-agent-binary', agentId),
-    chooseAgentConfigFolder: (agentId) => invoke('dialog:choose-agent-config-folder', agentId),
+    chooseAgentBinary: (harnessId) => invoke('dialog:choose-agent-binary', harnessId),
+    chooseAgentFolder: () => invoke('dialog:choose-agent-folder'),
     chooseShell: () => invoke('dialog:choose-shell'),
   },
   diagnostics: {

@@ -26,7 +26,7 @@
     "attachmentMissing": "有一个附件已不可用，请移除后重新添加。",
     "attachmentUnreadable": "Kettu 无法读取 {{name}}。",
     "attachmentDenied": "Kettu 没有读取 {{name}} 的权限。",
-    "otherConfigFolder": "这个会话是在配置目录 {{path}} 下开始的。请在「设置 › Agent」中切换回该目录以继续这个会话。",
+    "otherConfigFolder": "这个会话是在配置目录 {{path}} 下开始的，它的 Agent 已不再使用这个目录，所以无法在这里继续。",
     "topLevelOnly": "只有顶层会话可以置顶或归档",
     "untitled": "未命名会话",
     "subagent": {
@@ -161,8 +161,8 @@
     "binaryInstall": {
       "noMethod": "找不到安装 {{agent}} 的方式：PATH 中没有 Homebrew、curl 和 bash，也没有 npm。",
       "unavailable": "{{command}} 需要的程序在 PATH 中找不到。",
-      "notOnPath": "{{agent}} 已安装到 {{folder}}，但在 PATH 中仍然找不到 {{command}}。请把该文件夹加入 PATH 后重新加载环境，或在「设置 › Agent」中选择它的程序。",
-      "notFound": "{{agent}} 已安装，但在 PATH 中仍然找不到 {{command}}。请重新加载环境，或在「设置 › Agent」中选择它的程序。",
+      "notOnPath": "{{agent}} 已安装到 {{folder}}，但在 PATH 中仍然找不到 {{command}}。请把该文件夹加入 PATH 后重新加载环境，或在「设置 › Harness」中选择它的程序。",
+      "notFound": "{{agent}} 已安装，但在 PATH 中仍然找不到 {{command}}。请重新加载环境，或在「设置 › Harness」中选择它的程序。",
       "incomplete": "{{agent}} 已安装，但它的程序无法运行。",
       "programOutside": "压缩包中的程序路径指向了它自己的文件夹之外：{{command}}。",
       "programMissing": "压缩包里没有 {{command}}。",
@@ -175,7 +175,8 @@
       "extracting": "正在解压…"
     },
     "reportTimeout": "{{command}} 没有在 {{seconds}} 秒内完成",
-    "unreadableReport": "{{agent}} 的 {{command}} 没有返回 Kettu 能读取的报告"
+    "unreadableReport": "{{agent}} 的 {{command}} 没有返回 Kettu 能读取的报告",
+    "removed": "这个 Agent 已删除，这个会话无法继续。"
   },
   "detect": {
     "nodeMissing": "{{agent}} 需要 Node.js，但在 PATH 中找不到 node。",
@@ -191,22 +192,28 @@
     "hint": {
       "node": "请从 nodejs.org 安装 Node.js，然后在设置中点击「重新加载环境」。",
       "uv": "请从 docs.astral.sh/uv 安装 uv，然后在设置中点击「重新加载环境」。",
-      "opencode": "请安装 OpenCode，或在「设置 › Agent」中选择它的程序。",
+      "opencode": "请安装 OpenCode，或在「设置 › Harness」中选择它的程序。",
       "pi": "请用 `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` 或 pi.dev 上的安装程序安装 pi。",
-      "cursor": "请安装 Cursor，或在「设置 › Agent」中选择它的程序。",
+      "cursor": "请安装 Cursor，或在「设置 › Harness」中选择它的程序。",
       "kimi": "请用「安装」按钮安装 Kimi Code CLI；若当前平台没有对应的压缩包，请从它的网站安装。",
-      "amp": "请安装 Amp，或在「设置 › Agent」中选择它的程序。",
-      "goose": "请安装 goose，或在「设置 › Agent」中选择它的程序。",
-      "kilo": "请安装 Kilo Code，或在「设置 › Agent」中选择它的程序。",
+      "amp": "请安装 Amp，或在「设置 › Harness」中选择它的程序。",
+      "goose": "请安装 goose，或在「设置 › Harness」中选择它的程序。",
+      "kilo": "请安装 Kilo Code，或在「设置 › Harness」中选择它的程序。",
       "omp": "请用 `bun install -g @oh-my-pi/pi-coding-agent` 或 omp.sh 上的安装程序安装 OMP。",
       "hermes": "请用 hermes-agent.nousresearch.com 上的安装程序安装 Hermes Agent，并带上它的 `acp` 扩展。",
-      "muse": "请从 dev.meta.ai 安装 Muse Code，或在「设置 › Agent」中选择它的程序。",
-      "codewhale": "请用 codewhale.net 上的安装程序安装 CodeWhale，或在「设置 › Agent」中选择它的程序。",
-      "harn": "请安装 Harn，或在「设置 › Agent」中选择它的程序。",
-      "kimchi": "请安装 Kimchi，或在「设置 › Agent」中选择它的程序。",
-      "archive": "请在「设置 › Agent」中安装。",
-      "fakeAgent": "Fake agent 运行仓库中的 tools/fake-agent/main.ts。"
-    }
+      "muse": "请从 dev.meta.ai 安装 Muse Code，或在「设置 › Harness」中选择它的程序。",
+      "codewhale": "请用 codewhale.net 上的安装程序安装 CodeWhale，或在「设置 › Harness」中选择它的程序。",
+      "harn": "请安装 Harn，或在「设置 › Harness」中选择它的程序。",
+      "kimchi": "请安装 Kimchi，或在「设置 › Harness」中选择它的程序。",
+      "archive": "请在「设置 › Harness」中安装。",
+      "fakeAgent": "Fake agent 运行仓库中的 tools/fake-agent/main.ts。",
+      "claudeCode": "请在「设置 › Harness」中安装 Claude Code，或在那里选择它的程序。",
+      "codex": "请在「设置 › Harness」中安装 Codex，或在那里选择它的程序。"
+    },
+    "cliMissing": "{{agent}} 运行你自己的 {{command}}，但在 PATH 中找不到它。请在「设置 › Harness」中安装。",
+    "cliUnsupported": "{{agent}} 找到的 {{path}} 不经 Shell 无法运行。",
+    "cliFailed": "{{agent}} 无法读取它的程序的版本：{{reason}}",
+    "cliOutdated": "{{agent}} 需要 {{command}} {{required}} 或更高版本，当前安装的是 {{installed}}。请在「设置 › Harness」中更新。"
   },
   "environment": {
     "inherited": "Kettu 启动后对 PATH 的修改要在重启后才生效。",

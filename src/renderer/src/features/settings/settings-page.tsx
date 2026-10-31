@@ -33,6 +33,7 @@ import {
   useArchivedSection,
   useAdvancedSection,
   useAgentsSection,
+  useHarnessesSection,
   useAppearanceSection,
   useBrowserSection,
   useGeneralSection,
@@ -57,7 +58,13 @@ export default function SettingsPage() {
   // the rest.
   const clusters: SectionDef[][] = [
     [useGeneralSection(), useAppearanceSection(), useNotificationsSection()],
-    [useAgentsSection(), useUsageSection(), useTerminalSection(), useGitSection()],
+    [
+      useAgentsSection(),
+      useHarnessesSection(),
+      useUsageSection(),
+      useTerminalSection(),
+      useGitSection(),
+    ],
     [useMcpSection()],
     [
       useArchivedSection(),

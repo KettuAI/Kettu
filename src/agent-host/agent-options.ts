@@ -5,7 +5,7 @@
 
 import path from 'node:path'
 import type { AgentOptions } from '@shared/agent-host'
-import { AGENT_IDS, type AgentId, type ConfigOption } from '@shared/thread'
+import { isAgentId, type AgentId, type ConfigOption } from '@shared/thread'
 import { JsonFile, type LogFn } from './storage'
 
 export interface AgentOptionsFile {
@@ -295,7 +295,7 @@ function optionOf(value: unknown): ConfigOption | null {
 export function parseAgentOptionsFile(data: Record<string, unknown>): AgentOptionsFile | string {
   if (!isRecord(data.agents)) return 'agents is not an object'
   const agents: AgentOptionsFile['agents'] = {}
-  for (const agentId of AGENT_IDS) {
+  for (const agentId of Object.keys(data.agents).filter(isAgentId)) {
     const entry = data.agents[agentId]
     if (!isRecord(entry) || !Array.isArray(entry.config)) continue
     const config = entry.config.map(optionOf).filter((o): o is ConfigOption => o !== null)

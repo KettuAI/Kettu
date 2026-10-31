@@ -2,7 +2,8 @@ import { BotIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { errorMessage, host } from '@renderer/lib/host'
-import { openAgentSettings, openSettings } from '@renderer/stores/view'
+import { harnessOf } from '@shared/thread'
+import { openHarnessSettings, openSettings } from '@renderer/stores/view'
 import { agentUpdateLabel, type AgentUpdateNotice } from './agent-updates'
 import { NoticeCard, NoticeVersion } from './update-notice'
 
@@ -11,8 +12,8 @@ export function AgentUpdateCard({ notice }: { notice: AgentUpdateNotice }) {
   const { t } = useTranslation('updates')
 
   const open = () => {
-    if (notice.kind === 'one') openAgentSettings(notice.agentId)
-    else openSettings('agents')
+    if (notice.kind === 'one') openHarnessSettings(harnessOf(notice.agentId))
+    else openSettings('harnesses')
   }
 
   const dismiss = () => {

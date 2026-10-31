@@ -21,7 +21,7 @@ import {
   type SettingsFile,
   type ZoomStep,
 } from '@shared/settings'
-import { AGENT_IDS, type AgentId } from '@shared/thread'
+import type { AgentId } from '@shared/thread'
 import { exportDiagnostics } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { BrandIcon } from '@renderer/components/brand'
@@ -48,7 +48,7 @@ import { basename } from '@renderer/lib/format'
 import { fileManagerName, formatShortcut, isMac, isWindows } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
 import { cn } from '@renderer/lib/utils'
-import { AGENT_NAMES, isInstalled, useAgentsStore } from '@renderer/stores/agents'
+import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { loadGitTools, useGitStore } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
@@ -103,12 +103,12 @@ export function Language() {
 export function DefaultAgent() {
   const { t } = useTranslation('settings')
   const value = useSettings().general.defaultAgent
-  const missing = useAgentsStore(
+  // A hidden default agent stays listed while it is the one chosen, so the choice still reads.
+  const agents = useAgentsStore(
     useShallow((s) =>
-      AGENT_IDS.filter((id) => {
-        const status = s.byId[id]
-        return !!status && !isInstalled(status)
-      }),
+      usableAgents(s.order, s.byId).filter(
+        (a) => a.id !== 'fake-agent' && (!a.hidden || a.id === value),
+      ),
     ),
   )
   const [apply, error] = useApply()
@@ -118,14 +118,14 @@ export function DefaultAgent() {
       label: t('general.defaultAgent.askEachTime'),
       icon: <CircleHelpIcon className="size-3.5 text-icon" />,
     },
-    ...AGENT_IDS.filter((id) => id !== 'fake-agent').map((id) => {
-      const absent = missing.includes(id)
+    ...agents.map((agent) => {
+      const absent = !isInstalled(agent)
       return {
-        value: id as string,
-        label: AGENT_NAMES[id],
-        icon: <AgentMark agent={id} className="size-3.5" />,
+        value: agent.id as string,
+        label: agent.name,
+        icon: <AgentMark agent={agent.id} className="size-3.5" />,
         disabled: absent,
-        hint: absent ? t('agents.groups.notInstalled') : undefined,
+        hint: absent ? t('harnesses.groups.notInstalled') : undefined,
       }
     }),
   ]
