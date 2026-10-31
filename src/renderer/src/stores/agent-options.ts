@@ -18,6 +18,13 @@ export interface PreparedState {
   error: string | null
 }
 
+/** A first read of an agent's options, while none are cached and New session has no folder. */
+export interface FirstRead {
+  reading: boolean
+  /** Why it failed, shown until a retry. */
+  error: string | null
+}
+
 interface AgentOptionsStore {
   /** Each agent's cached options, for the agents with no prepared session and the first paint. */
   byId: Partial<Record<AgentId, AgentOptions>>
@@ -27,6 +34,7 @@ interface AgentOptionsStore {
   /** What New session set for each agent and the agent has not answered yet. */
   picks: Partial<Record<AgentId, OptionValues>>
   prepared: PreparedState | null
+  firstReads: Partial<Record<AgentId, FirstRead>>
 }
 
 export const useAgentOptionsStore = create<AgentOptionsStore>()(() => ({
@@ -35,6 +43,7 @@ export const useAgentOptionsStore = create<AgentOptionsStore>()(() => ({
   error: null,
   picks: {},
   prepared: null,
+  firstReads: {},
 }))
 
 export async function loadAgentOptions(): Promise<void> {

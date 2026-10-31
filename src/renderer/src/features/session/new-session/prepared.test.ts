@@ -15,6 +15,7 @@ const {
   leaveNewSession,
   prepareFor,
   preparedRemoved,
+  readFirstOptions,
   receivePrepared,
   setOption,
   settleOptions,
@@ -136,5 +137,54 @@ describe('prepared sessions in New session', () => {
     adoptedPrepared('p1')
     expect(useAgentOptionsStore.getState().prepared).toBeNull()
     expect(calls('sessions.discard')).toEqual([])
+  })
+})
+
+describe('first options before New session has a folder', () => {
+  const options = { agentId: 'codex' } as never
+
+  beforeEach(() => {
+    request.mockReset()
+    useAgentOptionsStore.setState({ byId: {}, loaded: true, firstReads: {} })
+  })
+
+  it('reads nothing before the cache has loaded, or for an agent it holds', async () => {
+    useAgentOptionsStore.setState({ loaded: false })
+    await readFirstOptions('codex')
+    useAgentOptionsStore.setState({ loaded: true, byId: { codex: options } })
+    await readFirstOptions('codex')
+    expect(calls('agents.readFirstOptions')).toEqual([])
+  })
+
+  it('reads once per agent, while it reads and after it has', async () => {
+    request.mockResolvedValue(undefined)
+    const first = readFirstOptions('codex')
+    expect(useAgentOptionsStore.getState().firstReads.codex).toEqual({
+      reading: true,
+      error: null,
+    })
+    await readFirstOptions('codex')
+    await first
+    await readFirstOptions('codex')
+    expect(calls('agents.readFirstOptions')).toEqual([{ agentId: 'codex' }])
+    expect(useAgentOptionsStore.getState().firstReads.codex).toEqual({
+      reading: false,
+      error: null,
+    })
+  })
+
+  it('keeps the reason of a failed read until a retry reads again', async () => {
+    request.mockRejectedValueOnce(new Error('Codex gave no models within 15 s'))
+    await readFirstOptions('codex')
+    expect(useAgentOptionsStore.getState().firstReads.codex).toEqual({
+      reading: false,
+      error: 'Codex gave no models within 15 s',
+    })
+    await readFirstOptions('codex')
+    expect(calls('agents.readFirstOptions')).toHaveLength(1)
+    request.mockResolvedValueOnce(undefined)
+    await readFirstOptions('codex', true)
+    expect(calls('agents.readFirstOptions')).toHaveLength(2)
+    expect(useAgentOptionsStore.getState().firstReads.codex?.error).toBeNull()
   })
 })
