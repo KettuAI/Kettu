@@ -214,6 +214,9 @@ export function foxSvg(framing = 'tile', { colors } = {}) {
 // trays, in one color whose opacity follows the drawing's luminance, so the parts stay apart by
 // their shading. The opacity is lifted a little so the cheeks and ear tips come out solid.
 const GLYPH_SHADE = { slope: 1.25, intercept: -0.05 }
+// On a light ground the curve is inverted, so the drawing's brightest parts are the faintest ink and
+// the fox keeps its light, instead of the murky negative the dark ground's curve gives in black.
+const GLYPH_INK_SHADE = { slope: -0.95, intercept: 1.38 }
 // The menu bar's canvas in points, with the fox 16 pt wide and centred; a tray's square is cut
 // from it to the fox's width.
 export const GLYPH_CANVAS = 18
@@ -224,9 +227,17 @@ const DOT = { cx: 14.5, cy: 14, r: 2.5, gap: 1.2 }
 /** `menubar`, the 18 pt canvas of a macOS template image; `tray`, the fox filling a square. */
 export const GLYPH_FRAMINGS = ['menubar', 'tray']
 
-/** The glyph as SVG text, `size` px wide, in `color`, with the dot when `dot` is set. */
-export function glyphSvg(framing = 'menubar', { size, color = '#000', dot = false } = {}) {
+/**
+ * The glyph as SVG text, `size` px wide, in `color`, with the dot when `dot` is set, shaded for a
+ * `dark` or `light` ground.
+ */
+export function glyphSvg(
+  framing = 'menubar',
+  { size, color = '#000', dot = false, ground = 'dark' } = {},
+) {
   if (!GLYPH_FRAMINGS.includes(framing)) throw new Error(`Unknown framing: ${framing}`)
+  if (!['dark', 'light'].includes(ground)) throw new Error(`Unknown ground: ${ground}`)
+  const { slope, intercept } = ground === 'light' ? GLYPH_INK_SHADE : GLYPH_SHADE
   // The paths hold only x, y pairs; their control points bound the symmetric fox.
   const numbers = Object.values(SHAPES).flatMap((d) => d.match(/-?[\d.]+/g).map(Number))
   const xs = numbers.filter((_, i) => i % 2 === 0)
@@ -238,7 +249,7 @@ export function glyphSvg(framing = 'menubar', { size, color = '#000', dot = fals
   // The mask reads luminance, so the shade is white at the opacity the luminance gives.
   const shade =
     '<filter id="shade" color-interpolation-filters="sRGB"><feColorMatrix type="luminanceToAlpha"/>' +
-    `<feComponentTransfer><feFuncA type="linear" slope="${GLYPH_SHADE.slope}" intercept="${GLYPH_SHADE.intercept}"/></feComponentTransfer>` +
+    `<feComponentTransfer><feFuncA type="linear" slope="${slope}" intercept="${intercept}"/></feComponentTransfer>` +
     '<feComposite in2="SourceAlpha" operator="in" result="opacity"/>' +
     '<feFlood flood-color="#fff"/><feComposite in2="opacity" operator="in"/></filter>'
   const badge = dot

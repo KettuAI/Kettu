@@ -281,6 +281,8 @@
   --duration-base: 200ms;
   --duration-slow: 300ms;
   --duration-slower: 450ms;
+  /* One breath of the launch cover's fox, slow enough to read as calm. */
+  --duration-breath: 2400ms;
 
   /* Type. */
   --prose-size: 14px;
@@ -613,6 +615,22 @@
   animation: attention-pulse var(--duration-slower) var(--ease-out-quart) 1;
 }
 
+/* The launch cover's fox breathes while Kettu starts: firmer and a little larger, then back. */
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+}
+@utility animate-breathe {
+  animation: breathe var(--duration-breath) ease-in-out infinite;
+}
+
 @keyframes stream-caret {
   50% {
     opacity: 0;
@@ -637,6 +655,7 @@
   .animate-pulse,
   .animate-spin,
   .animate-attention,
+  .animate-breathe,
   .shimmer,
   [data-caret] {
     animation: none !important;
@@ -661,6 +680,7 @@
   & .animate-pulse,
   & .animate-spin,
   & .animate-attention,
+  & .animate-breathe,
   & .shimmer,
   & [data-caret] {
     animation: none !important;
