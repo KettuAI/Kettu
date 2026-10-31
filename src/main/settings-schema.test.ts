@@ -38,6 +38,7 @@ describe('validateSettingsPatch', () => {
       git: { backgroundFetch: true },
       updates: { automatic: 'notify' },
       privacy: { hideAccount: true },
+      remote: { enabled: true },
     }
     expect(validateSettingsPatch(patch)).toEqual(patch)
   })
@@ -115,6 +116,7 @@ describe('validateSettingsPatch', () => {
     [{ proxy: { mode: 'environment', url: 'http://p:1' } }, 'Unknown setting "proxy.url"'],
     [{ updates: { automatic: 'always' } }, '"updates.automatic" must be one of'],
     [{ privacy: { hideAccount: 'yes' } }, '"privacy.hideAccount" must be a boolean'],
+    [{ remote: { enabled: 'on' } }, '"remote.enabled" must be a boolean'],
     [{ privacy: { hideEmail: true } }, 'Unknown setting "privacy.hideEmail"'],
     [{ mcp: { kettu: { off: ['unknown-agent'] } } }, '"mcp.kettu.off" names an unknown agent'],
     [{ mcp: { kettu: { off: ['codex', 'codex'] } } }, '"mcp.kettu.off" names an agent twice'],

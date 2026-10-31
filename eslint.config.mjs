@@ -27,6 +27,7 @@ export default defineConfig([
       'src/preload/**/*.ts',
       'src/agent-host/**/*.ts',
       'src/terminal-host/**/*.ts',
+      'src/remote-host/**/*.ts',
       'tools/**/*.{ts,mjs}',
     ],
     languageOptions: { globals: globals.node },
@@ -42,8 +43,8 @@ export default defineConfig([
   {
     // The hosts run under Node.js too, so only their utility-process entries may use Electron.
     // A later config replaces the rule's options, so this one repeats the SDK's.
-    files: ['src/agent-host/**/*.ts', 'src/terminal-host/**/*.ts'],
-    ignores: ['src/agent-host/index.ts', 'src/terminal-host/index.ts'],
+    files: ['src/agent-host/**/*.ts', 'src/terminal-host/**/*.ts', 'src/remote-host/**/*.ts'],
+    ignores: ['src/agent-host/index.ts', 'src/terminal-host/index.ts', 'src/remote-host/index.ts'],
     rules: {
       'no-restricted-imports': [
         'error',

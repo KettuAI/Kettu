@@ -1,5 +1,5 @@
-// The envelope used on every MessagePort between a renderer and a utility process
-// (the agent host and the terminal host).
+// The envelope used on every MessagePort between a renderer and a utility process (the agent
+// host and the terminal host), and on a paired device's channel to the agent host.
 
 export type PortErrorCode =
   | 'invalid_params'
@@ -7,6 +7,7 @@ export type PortErrorCode =
   | 'not_found'
   | 'busy'
   | 'restricted'
+  | 'forbidden' // a device asked for what only a window may do
   | 'agent_unavailable'
   | 'auth_required'
   | 'agent_error'

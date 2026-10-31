@@ -26,6 +26,7 @@
     "src/preload/**/*",
     "src/shared/**/*",
     "src/agent-host/**/*",
-    "src/terminal-host/**/*"
+    "src/terminal-host/**/*",
+    "src/remote-host/**/*"
   ]
 }

@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { app, type WebContents } from 'electron'
+import { app, MessageChannelMain, type MessagePortMain, type WebContents } from 'electron'
 import { ARTIFACT_ID, type ArtifactImportResult } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import type { BrowserCallAnswer, BrowserCallRequest, BrowserOriginAnswer } from '@shared/browser'
@@ -11,6 +11,7 @@ import type {
   MainToHost,
 } from '@shared/host-control'
 import { isMediaType, MEDIA_TOKEN, type MediaGrantRecord } from '@shared/media'
+import type { PortDevice } from '@shared/remote/device'
 import type { HostSettings } from '@shared/settings'
 import agentHostPath from '../agent-host/index?modulePath'
 // The host's own bundle is built without electron-vite's worker plugin, so main builds this one.
@@ -210,6 +211,19 @@ export class AgentHost {
 
   revoke(webContents: WebContents): void {
     this.host.revoke(webContents)
+  }
+
+  /**
+   * A port for a paired device's session, which the host serves with what devices may do; null
+   * while the host is not running.
+   */
+  connectDevice(device: PortDevice): MessagePortMain | null {
+    if (this.host.state !== 'ready') return null
+    const { port1, port2 } = new MessageChannelMain()
+    if (this.host.post({ type: 'host:connect', device }, [port1])) return port2
+    port1.close()
+    port2.close()
+    return null
   }
 
   restart(): void {

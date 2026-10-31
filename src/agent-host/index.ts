@@ -4,6 +4,7 @@
 import type { MessagePortMain } from 'electron'
 import type { MainToHost } from '@shared/host-control'
 import type { PortChannel } from '@shared/port-channel'
+import { parsePortDevice } from '@shared/remote/device'
 import { startAgentHost } from './start'
 
 const parentPort = process.parentPort
@@ -28,6 +29,11 @@ const host = startAgentHost({
       const message = data as MainToHost
       if (message.type !== 'host:connect') return listener(message)
       const port = ports[0]
-      if (port) host.connect(channel(port))
+      if (!port) return
+      if (!('device' in message)) return host.connect(channel(port), null)
+      // A device's port that does not name one validly is never served as a window's.
+      const device = parsePortDevice(message.device)
+      if (device) host.connect(channel(port), device)
+      else port.close()
     }),
 })

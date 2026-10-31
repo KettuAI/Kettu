@@ -31,12 +31,17 @@ export async function quarantineFile(path: string, now = Date.now()): Promise<st
 
 const RENAME_RETRIES = 5
 
-/** Writes through `<file>.tmp`, fsync and rename, so a crash mid-write keeps the previous file. */
-export async function writeFileAtomic(path: string, data: string): Promise<void> {
+/**
+ * Writes through `<file>.tmp`, fsync and rename, so a crash mid-write keeps the previous file.
+ * With `mode`, as 0o600 for a file only the user may read, the file has it before any data does.
+ */
+export async function writeFileAtomic(path: string, data: string, mode?: number): Promise<void> {
   await mkdir(dirname(path), { recursive: true })
   const temporary = `${path}.tmp`
-  const handle = await open(temporary, 'w')
+  const handle = await open(temporary, 'w', mode)
   try {
+    // A temporary file left by a crash keeps its own mode, which open does not change.
+    if (mode !== undefined) await handle.chmod(mode)
     await handle.writeFile(data, 'utf8')
     await handle.sync()
   } finally {
