@@ -1,53 +1,42 @@
 {
   "page": {
     "title": "Artifacts",
-    "summary_other": "{{count}} 个 Artifact，来自 {{sessions}} 个会话",
-    "count_other": "{{count}} 个 Artifact",
-    "sessions_other": "{{count}} 个会话",
-    "loading": "正在加载 Artifact",
-    "groupBy": "分组方式",
-    "groupByChoice": "分组方式：{{choice}}",
+    "ask": "让 Agent 做一份",
+    "kinds": {
+      "web": "网页",
+      "canvas": "画布"
+    },
+    "askLine": {
+      "web": "做一个网页 artifact：",
+      "canvas": "做一个多页的画布 artifact："
+    },
+    "filterMenu": "筛选",
+    "filterOn": "筛选，已启用",
+    "kind": "类型",
+    "allKinds": "全部类型",
+    "project": "项目",
+    "allProjects": "全部项目",
+    "display": "显示方式",
+    "layout": "布局",
+    "layouts": {
+      "none": "平铺",
+      "project-session": "按项目和会话分组"
+    },
     "sort": "排序",
-    "sortChoice": "排序：{{choice}}",
-    "sentence": "{{summary}}，<group>{{grouping}}</group>，<sort>{{sorting}}</sort>",
-    "groupings": {
-      "project-session": "项目和会话",
-      "project": "项目",
-      "date": "日期",
-      "none": "不分组"
-    },
-    "groupedBy": {
-      "project-session": "按项目和会话分组",
-      "project": "按项目分组",
-      "date": "按日期分组",
-      "none": "不分组"
-    },
     "sorts": {
-      "newest": "最新优先",
-      "oldest": "最早优先",
-      "name": "名称，A 到 Z",
-      "name-desc": "名称，Z 到 A"
+      "recent": "最近打开",
+      "updated": "最近更新",
+      "name": "名称"
     },
-    "sortedBy": {
-      "newest": "最新优先",
-      "oldest": "最早优先",
-      "name": "按名称从 A 到 Z",
-      "name-desc": "按名称从 Z 到 A"
-    },
+    "loading": "正在加载 Artifact",
     "filter": "按标题筛选",
     "clearFilter": "清除筛选",
+    "clearFilters": "清除筛选",
     "noProject": "无项目",
-    "dates": {
-      "today": "今天",
-      "yesterday": "昨天",
-      "week": "过去 7 天",
-      "month": "过去 30 天",
-      "older": "更早"
-    },
     "deletedSession": "已删除的会话",
     "openSession": "打开会话",
     "emptyTitle": "还没有 Artifact",
-    "emptyDescription": "Agent 为你制作的页面会按项目和会话显示在这里。可以让 Agent 做一份报告、一套幻灯片或几个设计方案。",
+    "emptyDescription": "点上面的类型让 Agent 做一份，或在任何会话里让它做；做好的会按最近打开排在这里。",
     "noMatch": "没有匹配的 Artifact",
     "errorTitle": "无法加载 Artifact",
     "errorDescription": "{{error}} 你的 Artifact 仍安全地保存在这台电脑上。",
@@ -71,10 +60,10 @@
   },
   "card": {
     "version": "v{{version}}",
-    "canvas_other": "画布，{{count}} 页",
     "noPreview": "无预览",
     "more": "{{title}} 的更多操作",
     "when": "版本 {{version}} · {{time}}",
+    "opened": "{{time}}打开",
     "daysLeft_other": "{{project}} · 剩 {{count}} 天",
     "editing": "编辑中",
     "shared": "已在线分享"

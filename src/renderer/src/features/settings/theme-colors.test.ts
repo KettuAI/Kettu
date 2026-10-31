@@ -16,9 +16,9 @@ import {
   themeFile,
 } from './theme-colors'
 
-// What tokens.css holds that a theme never changes: the white page under an SVG, the shadows and
-// the brand marks.
-const KEPT_OUT = /^(?:canvas|highlight|elevation-.+|brand-.+)$/
+// What tokens.css holds that a theme never changes: the white page under an SVG, the shadows, the
+// brand marks and the artifact kinds' colors.
+const KEPT_OUT = /^(?:canvas|highlight|elevation-.+|brand-.+|kind-.+)$/
 
 const nord: Theme = {
   name: 'Nord',

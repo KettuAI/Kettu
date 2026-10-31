@@ -135,7 +135,8 @@ interface Persisted {
   splitSidePane?: SidePane | null
   /** One pane per column, the pane in focus; read back as the split a restart opens. */
   layout?: unknown
-  artifactsView?: { group?: string; sort?: string }
+  /** Under a new name since the page went flat: every run saved the old grouping as it was. */
+  artifactsDisplay?: { group?: string; sort?: string }
   /** Read once from versions before the Files pane, when the side panel held only the terminal. */
   terminalOpen?: Record<string, boolean>
 }
@@ -171,8 +172,8 @@ export const useViewStore = create<ViewStore>()(() => ({
   sideArtifact: {},
   sidePaneMaximized: false,
   artifactsView: {
-    group: oneOf(GROUPINGS, saved.artifactsView?.group, 'project-session'),
-    sort: oneOf(SORTS, saved.artifactsView?.sort, 'newest'),
+    group: oneOf(GROUPINGS, saved.artifactsDisplay?.group, 'none'),
+    sort: oneOf(SORTS, saved.artifactsDisplay?.sort, 'recent'),
   },
 }))
 
@@ -196,7 +197,7 @@ useViewStore.subscribe((state) => {
       ),
       splitSidePane: state.splitSidePane === 'artifact' ? null : (state.splitSidePane ?? null),
       layout: saveLayout(state.layout),
-      artifactsView: state.artifactsView,
+      artifactsDisplay: state.artifactsView,
     }
     writeJson(KEY, persisted)
   }, 300)
@@ -507,7 +508,7 @@ export function openRoutine(routineId: string | null, { replace = false } = {}):
 
 /** The Artifacts page from the sidebar, with its whole list. */
 export function openArtifacts(): void {
-  useArtifactsStore.setState({ filter: '', opened: null })
+  useArtifactsStore.setState({ filter: '', kindFilter: null, projectFilter: null, opened: null })
   useViewStore.setState((s) => ({
     main: { kind: 'artifacts' },
     settings: { ...s.settings, open: false },

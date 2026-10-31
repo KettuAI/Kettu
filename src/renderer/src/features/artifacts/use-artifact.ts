@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ArtifactSession, ArtifactSummary } from '@shared/artifacts'
 import { errorCode, host } from '@renderer/lib/host'
-import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
+import {
+  artifactListShown,
+  markArtifactOpened,
+  useArtifactsStore,
+} from '@renderer/stores/artifacts'
 import { useConnectionStore } from '@renderer/stores/connection'
 import { layoutCanvas, parseCanvas, type CanvasLayout } from './canvas'
 
@@ -56,8 +60,10 @@ export function useArtifact(id: string, version: number | null) {
           return
         }
         opened = result.url
-        if (live) setUrl(result.url)
-        else void window.kettu.artifacts.close(result.url).catch(() => {})
+        if (live) {
+          setUrl(result.url)
+          markArtifactOpened(id)
+        } else void window.kettu.artifacts.close(result.url).catch(() => {})
       },
       (reason: unknown) => {
         console.error(`Could not open ${id}`, reason)

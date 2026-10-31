@@ -1,4 +1,4 @@
-// The Artifacts page's list: the filter, then the groups and their order.
+// The Artifacts page's list: the filters, then the groups and their order.
 
 import {
   ARTIFACT_KEEP_DELETED_MS,
@@ -8,27 +8,76 @@ import {
 } from '@shared/artifacts'
 import { basename } from '@renderer/lib/format'
 
-export type ArtifactGrouping = 'project-session' | 'project' | 'date' | 'none'
-export type ArtifactSort = 'newest' | 'oldest' | 'name' | 'name-desc'
+export type ArtifactGrouping = 'none' | 'project-session'
+export type ArtifactSort = 'recent' | 'updated' | 'name'
 
-export const GROUPINGS: readonly ArtifactGrouping[] = ['project-session', 'project', 'date', 'none']
-export const SORTS: readonly ArtifactSort[] = ['newest', 'oldest', 'name', 'name-desc']
+export const GROUPINGS: readonly ArtifactGrouping[] = ['none', 'project-session']
+export const SORTS: readonly ArtifactSort[] = ['recent', 'updated', 'name']
 
-export type DateBucket = 'today' | 'yesterday' | 'week' | 'month' | 'older'
+/** The kinds Kettu makes; documents, slides and spreadsheets join when it makes them. */
+export type ArtifactKind = 'web' | 'canvas'
 
-const DATE_BUCKETS: readonly DateBucket[] = ['today', 'yesterday', 'week', 'month', 'older']
+export const ARTIFACT_KINDS: readonly ArtifactKind[] = ['web', 'canvas']
 
-/** What a group stands for; the page names it. */
+export function artifactKind(artifact: ArtifactSummary): ArtifactKind {
+  return artifact.pages >= 2 ? 'canvas' : 'web'
+}
+
+/** When this device last showed each artifact, by id. */
+export type OpenedTimes = Readonly<Record<string, number>>
+
+/** The later of when this device last showed it and when its latest version was made. */
+export function recency(artifact: ArtifactSummary, opened: OpenedTimes): number {
+  return Math.max(opened[artifact.id] ?? 0, artifact.updatedAt)
+}
+
+/** Opened times as stored, keeping only well-formed entries. */
+export function parseOpened(value: unknown): Record<string, number> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, number] =>
+        typeof entry[1] === 'number' && Number.isFinite(entry[1]),
+    ),
+  )
+}
+
+/**
+ * The times with `id` shown at `at`; once the lists are known (`known`), only artifacts still on
+ * this computer keep theirs.
+ */
+export function withOpened(
+  opened: OpenedTimes,
+  id: string,
+  at: number,
+  known: ReadonlySet<string> | null,
+): Record<string, number> {
+  const next: Record<string, number> = { [id]: at }
+  for (const [other, time] of Object.entries(opened)) {
+    if (other !== id && (!known || known.has(other))) next[other] = time
+  }
+  return next
+}
+
+/** What the project filter picks for the artifacts under No project; a folder is never empty. */
+export const NO_PROJECT = ''
+
+export interface ListFilter {
+  /** Text the title holds; blank keeps every title. */
+  title: string
+  kind: ArtifactKind | null
+  /** A project's folder, or NO_PROJECT; null keeps every project. */
+  project: string | null
+}
+
+/** A group's heading; the page names it. */
 export type GroupKind =
-  | { kind: 'project'; path: string; name: string }
-  | { kind: 'no-project' }
-  | { kind: 'date'; bucket: DateBucket }
-  | { kind: 'all' }
+  { kind: 'project'; path: string; name: string } | { kind: 'no-project' } | { kind: 'all' }
 
 /** A session's cards under its row, or a grid without a row. */
 export interface Section {
   key: string
-  /** The session whose row heads the section, under Project and session only. */
+  /** The session whose row heads the section, when grouped only. */
   sessionId: string | null
   artifacts: ArtifactSummary[]
 }
@@ -51,7 +100,7 @@ export interface ListContext {
   imported: string
   /** Names in the interface language, with numbers in numeric order. */
   collator: Intl.Collator
-  now: number
+  opened: OpenedTimes
 }
 
 /** Folded for matching: no case, no accents. */
@@ -59,33 +108,29 @@ export function foldForMatch(text: string): string {
   return text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase()
 }
 
-/** The artifacts whose title holds the filter's text; a blank filter keeps them all. */
-export function filterByTitle(list: readonly ArtifactSummary[], filter: string): ArtifactSummary[] {
-  const wanted = foldForMatch(filter.trim())
-  if (!wanted) return [...list]
-  return list.filter((artifact) => foldForMatch(artifact.title).includes(wanted))
+/** The artifacts the filter keeps: the title holds its text, of its kind, in its project. */
+export function filterArtifacts(
+  list: readonly ArtifactSummary[],
+  { title, kind, project }: ListFilter,
+): ArtifactSummary[] {
+  const wanted = foldForMatch(title.trim())
+  return list.filter(
+    (artifact) =>
+      (!wanted || foldForMatch(artifact.title).includes(wanted)) &&
+      (!kind || artifactKind(artifact) === kind) &&
+      (project === null ||
+        (project === NO_PROJECT
+          ? artifact.scratch
+          : !artifact.scratch && artifact.project === project)),
+  )
 }
 
-const DAY = 24 * 60 * 60 * 1000
-
-/** How long before `now` a time falls, in local calendar days. */
-function daysBefore(at: number, now: number): number {
-  const start = (t: number): number => new Date(t).setHours(0, 0, 0, 0)
-  // Rounded, since a day across a DST change is not 24 hours.
-  return Math.round((start(now) - start(at)) / DAY)
-}
-
-export function dateBucket(at: number, now: number): DateBucket {
-  const days = daysBefore(at, now)
-  if (days <= 0) return 'today'
-  if (days === 1) return 'yesterday'
-  if (days <= 7) return 'week'
-  if (days <= 30) return 'month'
-  return 'older'
-}
-
-function byTime(sort: ArtifactSort) {
-  return (a: number, b: number): number => (sort === 'oldest' ? a - b : b - a)
+/** The projects the artifacts are in, in the grouping's order, for the project filter. */
+export function projectsOf(
+  list: readonly ArtifactSummary[],
+  context: Pick<ListContext, 'projects' | 'collator'>,
+): GroupKind[] {
+  return projectGroups(list, context).map((group) => group.of)
 }
 
 /** The page's groups, from artifacts already filtered. */
@@ -95,13 +140,12 @@ export function groupArtifacts(
   sort: ArtifactSort,
   context: ListContext,
 ): Group[] {
-  const named = sort === 'name' || sort === 'name-desc'
-  const sign = sort === 'name-desc' ? -1 : 1
-  const time = byTime(sort)
+  const time = (artifact: ArtifactSummary): number =>
+    sort === 'updated' ? artifact.updatedAt : recency(artifact, context.opened)
   const cards = [...list].sort((a, b) =>
-    named
-      ? sign * context.collator.compare(a.title, b.title) || b.updatedAt - a.updatedAt
-      : time(a.updatedAt, b.updatedAt) || a.id.localeCompare(b.id),
+    sort === 'name'
+      ? context.collator.compare(a.title, b.title) || time(b) - time(a)
+      : time(b) - time(a) || a.id.localeCompare(b.id),
   )
 
   if (grouping === 'none') {
@@ -111,42 +155,21 @@ export function groupArtifacts(
             key: 'all',
             of: { kind: 'all' },
             count: cards.length,
-            sections: [section('all', cards)],
+            sections: [{ key: 'all', sessionId: null, artifacts: cards }],
           },
         ]
       : []
-  }
-
-  if (grouping === 'date') {
-    const buckets = named || sort === 'newest' ? DATE_BUCKETS : [...DATE_BUCKETS].reverse()
-    return buckets.flatMap((bucket) => {
-      const mine = cards.filter((a) => dateBucket(a.updatedAt, context.now) === bucket)
-      return mine.length
-        ? [
-            {
-              key: bucket,
-              of: { kind: 'date', bucket },
-              count: mine.length,
-              sections: [section(bucket, mine)],
-            },
-          ]
-        : []
-    })
   }
 
   return projectGroups(cards, context).map(({ key, of, artifacts }) => ({
     key,
     of,
     count: artifacts.length,
-    sections:
-      grouping === 'project'
-        ? [section(key, artifacts)]
-        : sessionSections(artifacts, sort, context).map((s) => ({ ...s, key: `${key}\n${s.key}` })),
+    sections: sessionSections(artifacts, sort, time, context).map((s) => ({
+      ...s,
+      key: `${key}\n${s.key}`,
+    })),
   }))
-}
-
-function section(key: string, artifacts: ArtifactSummary[]): Section {
-  return { key, sessionId: null, artifacts }
 }
 
 /**
@@ -155,7 +178,7 @@ function section(key: string, artifacts: ArtifactSummary[]): Section {
  */
 function projectGroups(
   cards: readonly ArtifactSummary[],
-  context: ListContext,
+  context: Pick<ListContext, 'projects' | 'collator'>,
 ): { key: string; of: GroupKind; artifacts: ArtifactSummary[] }[] {
   const byFolder = new Map<string, ArtifactSummary[]>()
   const scratch: ArtifactSummary[] = []
@@ -187,10 +210,14 @@ function projectGroups(
   return groups
 }
 
-/** A project's sessions, each heading its cards, in the chosen order. */
+/**
+ * A project's sessions, each heading its cards: by title, by the session's last update, or by the
+ * most recent of its cards.
+ */
 function sessionSections(
   cards: readonly ArtifactSummary[],
   sort: ArtifactSort,
+  time: (artifact: ArtifactSummary) => number,
   context: ListContext,
 ): Section[] {
   const bySession = new Map<string, ArtifactSummary[]>()
@@ -201,28 +228,32 @@ function sessionSections(
   }
   const rows = [...bySession].map(([sessionId, artifacts]) => {
     const session = sessionId === NO_SESSION ? null : context.session(sessionId)
+    const newest = Math.max(...artifacts.map(time))
     return {
       sessionId,
       artifacts,
       title:
         session?.title ?? (sessionId === NO_SESSION ? context.imported : context.deletedSession),
       // A deleted session, and the imports, last changed with their newest artifact.
-      updatedAt: session?.updatedAt ?? Math.max(...artifacts.map((a) => a.updatedAt)),
+      time: sort === 'updated' ? (session?.updatedAt ?? newest) : newest,
     }
   })
-  const named = sort === 'name' || sort === 'name-desc'
-  const sign = sort === 'name-desc' ? -1 : 1
-  const time = byTime(sort)
   rows.sort((a, b) =>
-    named
-      ? sign * context.collator.compare(a.title, b.title) || b.updatedAt - a.updatedAt
-      : time(a.updatedAt, b.updatedAt) || a.sessionId.localeCompare(b.sessionId),
+    sort === 'name'
+      ? context.collator.compare(a.title, b.title) || b.time - a.time
+      : b.time - a.time || a.sessionId.localeCompare(b.sessionId),
   )
   return rows.map((row) => ({
     key: row.sessionId,
     sessionId: row.sessionId,
     artifacts: row.artifacts,
   }))
+}
+
+/** New session's draft with the line that asks for a kind: after a blank line when it has text. */
+export function withAskLine(draft: string, line: string): string {
+  const written = draft.replace(/\s+$/, '')
+  return written ? `${written}\n\n${line}` : line
 }
 
 /** How many sessions the artifact's top shows as avatars before it counts the rest. */
@@ -248,12 +279,7 @@ export function presenceShown(sessions: readonly ArtifactSession[]): PresenceSho
   return { all, shown, more: all.length - shown.length }
 }
 
-/** How many sessions the artifacts come from; the user's imports come from none. */
-export function sessionCount(list: readonly ArtifactSummary[]): number {
-  const sessions = new Set(list.map((artifact) => artifact.sessionId))
-  sessions.delete(NO_SESSION)
-  return sessions.size
-}
+const DAY = 24 * 60 * 60 * 1000
 
 /** Whole days before Recently deleted removes an artifact for good: 30 on the day it went. */
 export function daysLeft(deletedAt: number, now: number): number {

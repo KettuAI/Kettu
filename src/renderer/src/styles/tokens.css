@@ -116,6 +116,13 @@
   --brand-codewhale-1: #1e8fd8;
   --brand-codewhale-2: #0b48bb;
 
+  /* Artifact kinds: each one's color, as file type icons carry it, and its tint, used only on the
+     kind's icon and on the ground of its tile and thumbnail. */
+  --kind-web: #2d6e7e;
+  --kind-web-tint: #e6f2f4;
+  --kind-canvas: #7653c9;
+  --kind-canvas-tint: #f1edfb;
+
   /* Usage charts: each agent's series, and the empty day the heatmap deepens from. */
   --agent-opencode: oklch(0.6 0 0);
   /* Pi's yellow mixed 86% with the light surface, as Claude Code's and Codex's series are. */
@@ -235,6 +242,11 @@
     --brand-opencode-frame: #ffffff;
     --brand-opencode-fill: #5a5858;
 
+    --kind-web: #6cc0d2;
+    --kind-web-tint: #1e3236;
+    --kind-canvas: #a88beb;
+    --kind-canvas-tint: #2b2540;
+
     --agent-opencode: oklch(0.74 0 0);
     /* Pi's yellow mixed 86% with the dark surface. */
     --agent-pi: oklch(0.749 0.115 84.2);
@@ -348,6 +360,11 @@
 
   --brand-opencode-frame: #ffffff;
   --brand-opencode-fill: #5a5858;
+
+  --kind-web: #6cc0d2;
+  --kind-web-tint: #1e3236;
+  --kind-canvas: #a88beb;
+  --kind-canvas-tint: #2b2540;
 
   --agent-opencode: oklch(0.74 0 0);
   /* Pi's yellow mixed 86% with the dark surface. */

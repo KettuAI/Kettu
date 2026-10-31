@@ -1,56 +1,42 @@
 {
   "page": {
     "title": "Artifacts",
-    "summary_one": "{{count}} artifact from $t(page.sessions, {\"count\": {{sessions}} })",
-    "summary_other": "{{count}} artifacts from $t(page.sessions, {\"count\": {{sessions}} })",
-    "count_one": "{{count}} artifact",
-    "count_other": "{{count}} artifacts",
-    "sessions_one": "{{count}} session",
-    "sessions_other": "{{count}} sessions",
-    "loading": "Loading artifacts",
-    "groupBy": "Group by",
-    "groupByChoice": "Group by: {{choice}}",
+    "ask": "Ask an agent for one",
+    "kinds": {
+      "web": "Web page",
+      "canvas": "Canvas"
+    },
+    "askLine": {
+      "web": "Make a web page artifact: ",
+      "canvas": "Make a canvas artifact with several pages: "
+    },
+    "filterMenu": "Filter",
+    "filterOn": "Filter, on",
+    "kind": "Kind",
+    "allKinds": "All kinds",
+    "project": "Project",
+    "allProjects": "All projects",
+    "display": "Display",
+    "layout": "Layout",
+    "layouts": {
+      "none": "Flat",
+      "project-session": "By project and session"
+    },
     "sort": "Sort",
-    "sortChoice": "Sort: {{choice}}",
-    "sentence": "{{summary}}, <group>{{grouping}}</group>, <sort>{{sorting}}</sort>",
-    "groupings": {
-      "project-session": "Project and session",
-      "project": "Project",
-      "date": "Date",
-      "none": "None"
-    },
-    "groupedBy": {
-      "project-session": "by project and session",
-      "project": "by project",
-      "date": "by date",
-      "none": "in one list"
-    },
     "sorts": {
-      "newest": "Newest first",
-      "oldest": "Oldest first",
-      "name": "Name, A to Z",
-      "name-desc": "Name, Z to A"
+      "recent": "Recently opened",
+      "updated": "Recently updated",
+      "name": "Name"
     },
-    "sortedBy": {
-      "newest": "newest first",
-      "oldest": "oldest first",
-      "name": "name, A to Z",
-      "name-desc": "name, Z to A"
-    },
+    "loading": "Loading artifacts",
     "filter": "Filter by title",
     "clearFilter": "Clear the filter",
+    "clearFilters": "Clear filters",
     "noProject": "No project",
-    "dates": {
-      "today": "Today",
-      "yesterday": "Yesterday",
-      "week": "Previous 7 days",
-      "month": "Previous 30 days",
-      "older": "Older"
-    },
     "deletedSession": "Deleted session",
     "openSession": "Open the session",
     "emptyTitle": "No artifacts yet",
-    "emptyDescription": "Pages your agents make for you show here, by project and session. Ask an agent for a report, a deck or design options.",
+    "emptyDescription": "Pick a kind above to ask an agent for one, or ask in any session; what they make shows here, the most recently opened first.",
     "noMatch": "No matching artifacts",
     "errorTitle": "Artifacts could not be loaded",
     "errorDescription": "{{error}} Your artifacts are safe on this computer.",
@@ -74,10 +60,10 @@
   },
   "card": {
     "version": "v{{version}}",
-    "canvas_other": "Canvas, {{count}} pages",
     "noPreview": "No preview",
     "more": "More for {{title}}",
     "when": "Version {{version}} · {{time}}",
+    "opened": "Opened {{time}}",
     "daysLeft_one": "{{project}} · {{count}} day left",
     "daysLeft_other": "{{project}} · {{count}} days left",
     "editing": "Editing",
