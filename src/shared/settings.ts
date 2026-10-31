@@ -52,8 +52,9 @@ export interface SettingsFile {
     sidebar: 'today' | 'cost' | 'limit' | 'off' // what the sidebar's Usage row shows at its end
   }
   remote: {
-    enabled: boolean // paired devices may connect to this computer
-    direct: DirectSettings
+    enabled: boolean // paired devices may connect to this computer; keeps Kettu in the background
+    name: string | null // the name devices show for this computer; null for the system's
+    direct: DirectSettings // on while remote access is, since devices have no other way yet
   }
 }
 
@@ -128,7 +129,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   updates: { automatic: 'download' },
   privacy: { hideAccount: false },
   usage: { fromComputer: false, sidebar: 'today' },
-  remote: { enabled: false, direct: { enabled: false, port: null, addresses: [] } },
+  remote: { enabled: false, name: null, direct: { enabled: false, port: null, addresses: [] } },
 }
 
 /** The zoom one step in (1) or out (-1), held at the ends; 0 returns to the default. */
@@ -158,6 +159,7 @@ export interface SettingsPatch {
   usage?: Partial<SettingsFile['usage']>
   remote?: {
     enabled?: boolean
+    name?: string | null
     // `port` from 1024: below it a port may need privileges; the list is replaced whole.
     direct?: { enabled?: boolean; port?: number; addresses?: DirectAddress[] }
   }

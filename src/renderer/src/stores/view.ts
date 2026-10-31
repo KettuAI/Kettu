@@ -88,6 +88,7 @@ export type SettingsSection =
   | 'mcp'
   | 'archived'
   | 'sharing'
+  | 'remote'
   | 'browser'
   | 'advanced'
   | 'about'

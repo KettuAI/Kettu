@@ -29,7 +29,7 @@ export function SectionBody({ section }: { section: SectionDef }) {
     <div className="flex flex-col gap-7">
       {groups.map(({ group, rows }, i) => (
         <section key={group?.id ?? i} aria-label={group?.label} className="flex flex-col">
-          {group && <GroupLabel group={group} />}
+          {group && !group.unlabeled && <GroupLabel group={group} />}
           {group?.plain ? (
             rows.map((row) => (
               <RowShell key={row.id} id={row.id} bare>
@@ -49,10 +49,16 @@ export function SectionBody({ section }: { section: SectionDef }) {
               )}
             </RowGroup>
           )}
+          {group?.note}
         </section>
       ))}
     </div>
   )
+}
+
+/** A line under a group's card, as `GroupDef.note` takes it. */
+export function GroupNote({ children }: { children: ReactNode }) {
+  return <p className="mt-2.5 px-1 text-xs text-pretty text-tertiary">{children}</p>
 }
 
 /** A group's label in the caption role, with its count and actions at the end. */

@@ -57,6 +57,8 @@ const onShortcut = subscribe('app:shortcut')
 const onArtifactBlocked = subscribe('artifact:blocked')
 const onArtifactStopped = subscribe('artifact:stopped')
 const onSharingChanged = subscribe('sharing:changed')
+const onRemoteChanged = subscribe('remote:changed')
+const onRemotePairing = subscribe('remote:pairing')
 const onBrowserState = subscribe('browser:state')
 const onBrowserOpened = subscribe('browser:opened')
 
@@ -109,6 +111,19 @@ const api: KettuApi = {
     import: (project) => invoke('artifact:import', project),
     onBlocked: onArtifactBlocked,
     onStopped: onArtifactStopped,
+  },
+  remote: {
+    status: () => invoke('remote:status'),
+    pair: () => invoke('remote:pair'),
+    closePairing: (codeId) => invoke('remote:pair-close', codeId),
+    answerPairing: (codeId, add, name) => invoke('remote:pair-answer', codeId, add, name),
+    renameDevice: (id, name) => invoke('remote:rename-device', id, name),
+    removeDevice: (id) => invoke('remote:remove-device', id),
+    activity: (id) => invoke('remote:activity', id),
+    reset: () => invoke('remote:reset'),
+    retryDirect: () => invoke('remote:retry-direct'),
+    onChanged: onRemoteChanged,
+    onPairing: onRemotePairing,
   },
   sharing: {
     status: () => invoke('sharing:status'),

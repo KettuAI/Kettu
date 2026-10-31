@@ -5,6 +5,7 @@ import { execFile } from 'node:child_process'
 import { join } from 'node:path'
 import { app, Menu, nativeImage, nativeTheme, Tray } from 'electron'
 import type { BusyCounts } from '@shared/host-control'
+import type { RemoteStatus } from '@shared/remote/status'
 import { t } from './i18n'
 import { createLogger } from './log'
 
@@ -49,6 +50,20 @@ export function stateLine(counts: BusyCounts): string {
   if (counts.running > 0) parts.push(t('tray.running', { count: counts.running }))
   if (counts.waiting > 0) parts.push(t('tray.waiting', { count: counts.waiting }))
   return parts.length > 0 ? parts.join(' · ') : t('tray.noneRunning')
+}
+
+/** Remote access's line while it is on: whether it runs and how many devices are online. */
+export function remoteLine(status: Pick<RemoteStatus, 'state' | 'online'>): string | null {
+  switch (status.state) {
+    case 'off':
+      return null
+    case 'starting':
+      return t('tray.remoteStarting')
+    case 'failed':
+      return t('tray.remoteFailed')
+    case 'on':
+      return t('tray.remoteOn', { count: status.online.length })
+  }
 }
 
 function callPortal(method: 'ReadOne' | 'Read'): Promise<string | null> {
@@ -103,6 +118,7 @@ export interface TrayDeps {
 export class KettuTray {
   private tray: Tray | null = null
   private counts: BusyCounts = { running: 0, waiting: 0 }
+  private remote: Pick<RemoteStatus, 'state' | 'online'> = { state: 'off', online: [] }
   private dot = false
   private white = false
   // Only the latest theme reading applies, since the portal answers out of order.
@@ -128,6 +144,12 @@ export class KettuTray {
     this.updateMenu()
   }
 
+  setRemote(remote: Pick<RemoteStatus, 'state' | 'online'>): void {
+    if (remoteLine(remote) === remoteLine(this.remote)) return
+    this.remote = remote
+    this.updateMenu()
+  }
+
   setDot(dot: boolean): void {
     if (dot === this.dot) return
     this.dot = dot
@@ -136,9 +158,11 @@ export class KettuTray {
 
   /** The menu's text follows a change of language. */
   updateMenu(): void {
+    const remote = remoteLine(this.remote)
     this.tray?.setContextMenu(
       Menu.buildFromTemplate([
         { label: stateLine(this.counts), enabled: false },
+        ...(remote ? [{ label: remote, enabled: false }] : []),
         { type: 'separator' },
         { label: t('tray.open', { name: app.name }), click: () => this.deps.open() },
         { label: t('tray.quit', { name: app.name }), click: () => this.deps.quit() },

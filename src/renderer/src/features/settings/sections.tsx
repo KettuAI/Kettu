@@ -145,9 +145,11 @@ export function DefaultAgent() {
 export function GeneralSwitch({
   field,
   label,
+  disabled,
 }: {
   field: 'restoreLastSession' | 'confirmQuitWhileRunning' | 'sessionTitles' | 'background'
   label: string
+  disabled?: boolean
 }) {
   const checked = useSettings().general[field]
   const [apply, error] = useApply()
@@ -157,6 +159,7 @@ export function GeneralSwitch({
       <SettingSwitch
         label={label}
         checked={checked}
+        disabled={disabled}
         onChange={(v) => apply({ general: { [field]: v } })}
       />
     </>

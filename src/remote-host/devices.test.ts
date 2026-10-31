@@ -11,7 +11,16 @@ const quiet = (): void => {}
 
 async function newDevice(name = 'Phone') {
   const key = await generateKeyPair()
-  return { key, device: { publicKey: base64(key.publicKey), name, kind: 'ios', platform: 'ios' } }
+  return {
+    key,
+    device: {
+      publicKey: base64(key.publicKey),
+      name,
+      kind: 'ios',
+      platform: 'ios',
+      model: 'iPhone',
+    },
+  }
 }
 
 describe('DeviceStore', () => {
@@ -59,9 +68,35 @@ describe('DeviceStore', () => {
       { ...device, name: 'Line\nbreak' },
       { ...device, kind: '' },
       { ...device, platform: 'x'.repeat(65) },
+      { ...device, model: 'x'.repeat(65) },
+      { ...device, model: 'Line\nbreak' },
     ]
     for (const entry of invalid) expect(await store.add(entry)).toBeNull()
     expect(store.list()).toEqual([])
+  })
+
+  it('renames a device under a name it can keep', async () => {
+    const dir = await tempFolder('kettu-devices-')
+    const store = await DeviceStore.load(dir, quiet)
+    const added = (await store.add((await newDevice()).device))!
+    expect(await store.rename(added.id, 'Work phone')).toEqual({ ...added, name: 'Work phone' })
+    expect(await store.rename(added.id, ' Padded')).toBeNull()
+    expect(await store.rename('f'.repeat(32), 'Other')).toBeNull()
+    expect((await DeviceStore.load(dir, quiet)).list()).toEqual([{ ...added, name: 'Work phone' }])
+  })
+
+  it('reads a device kept before models were, with none', async () => {
+    const dir = await tempFolder('kettu-devices-')
+    const { key, device } = await newDevice()
+    const { publicKey, name, kind, platform } = device
+    const id = await deviceId(key.publicKey)
+    const entry = { id, publicKey, name, kind, platform, addedAt: 1, lastConnectedAt: 2 }
+    await mkdir(path.join(dir, 'remote'))
+    await writeFile(
+      path.join(dir, 'remote', 'devices.json'),
+      JSON.stringify({ version: 1, devices: [entry] }),
+    )
+    expect((await DeviceStore.load(dir, quiet)).list()).toEqual([{ ...entry, model: '' }])
   })
 
   it('drops an entry whose id is not its key', async () => {

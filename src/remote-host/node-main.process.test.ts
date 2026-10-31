@@ -165,7 +165,13 @@ describe('the remote host under Node.js', () => {
     const phone = await generateKeyPair()
     remote.child.send({
       type: 'remote-host:add-device',
-      device: { publicKey: base64(phone.publicKey), name: 'Phone', kind: 'ios', platform: 'ios' },
+      device: {
+        publicKey: base64(phone.publicKey),
+        name: 'Phone',
+        kind: 'ios',
+        platform: 'ios',
+        model: 'iPhone 17 Pro',
+      },
     } satisfies MainToRemoteHost)
     await remote.until(() => statuses().at(-1)!.devices.length === 1, 'the added device')
     const stored = JSON.parse(await readFile(path.join(data, 'remote', 'devices.json'), 'utf8'))

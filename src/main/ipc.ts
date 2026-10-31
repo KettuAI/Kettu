@@ -8,8 +8,11 @@ import {
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   shell,
+  type WebContents,
 } from 'electron'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
+import { DEVICE_ID, normalizeDeviceName } from '@shared/remote/device'
+import type { RemoteStatus } from '@shared/remote/status'
 import type { BrowserBounds, BrowserOriginDecision } from '@shared/browser'
 import type {
   AppInfo,
@@ -27,6 +30,7 @@ import type { Avatars } from './avatars'
 import type { BrowserViews } from './browser/views'
 import { originOf } from './browser/origins'
 import { mainDiagnostics, saveDiagnostics } from './diagnostics'
+import { sendEvent } from './events'
 import { isExecutableFile } from './executable'
 import { t } from './i18n'
 import { loginItemStatus } from './login-item'
@@ -35,6 +39,7 @@ import { grantedPath, type MediaGrants } from './media'
 import { copyImage, revealMedia, saveMediaAs } from './media-actions'
 import { notifyTest } from './notifications'
 import type { QuitFlow } from './quit'
+import type { RemoteHost } from './remote-host'
 import { isRendererUrl } from './renderer'
 import type { SettingsStore } from './settings'
 import type { Sharing } from './sharing'
@@ -56,6 +61,8 @@ export interface IpcDeps {
   browserViews: BrowserViews
   mediaGrants: MediaGrants
   sharing: Sharing
+  remoteHost: RemoteHost
+  remoteStatus(): RemoteStatus
   updater: Updater
   quit: QuitFlow
   /** Started with --kettu-perf. */
@@ -194,6 +201,24 @@ function browserOrigin(value: unknown): string {
   return value
 }
 
+/** A paired device's id: untrusted input from the renderer. */
+function deviceIdArg(value: unknown): string {
+  if (typeof value !== 'string' || !DEVICE_ID.test(value)) throw new Error('Not a device id')
+  return value
+}
+
+/** A device's name as the owner typed it, cleaned up as the remote host keeps it. */
+function deviceName(value: unknown): string {
+  const name = normalizeDeviceName(value)
+  if (!name) throw new Error('A device needs a name')
+  return name
+}
+
+function pairingCode(value: unknown): number {
+  if (!Number.isSafeInteger(value)) throw new Error('A pairing code id must be an integer')
+  return value as number
+}
+
 /** A request id main handed out for a new origin. */
 function originRequestId(value: unknown): number {
   if (!Number.isSafeInteger(value) || (value as number) < 1) {
@@ -295,6 +320,8 @@ export function registerIpcHandlers({
   browserViews,
   mediaGrants,
   sharing,
+  remoteHost,
+  remoteStatus,
   updater,
   quit,
   perf,
@@ -478,6 +505,51 @@ export function registerIpcHandlers({
   handle('sharing:publish', 2, (_, id, version) => sharing.publish(id, version))
   handle('sharing:update', 2, (_, id, version) => sharing.update(id, version))
   handle('sharing:unpublish', 1, (_, id) => sharing.unpublish(id))
+
+  handle('remote:status', 0, () => remoteStatus())
+  // Each code belongs to the page that opened it, which alone hears it and answers it.
+  const codeOwners = new Map<number, WebContents>()
+  handle('remote:pair', 0, ({ event }) => {
+    const page = event.sender
+    const codeId = remoteHost.pair((pairing) => {
+      if (pairing.state === 'added' || pairing.state === 'void') codeOwners.delete(codeId!)
+      sendEvent(page, 'remote:pairing', { codeId: codeId!, pairing })
+    })
+    if (codeId === null) return null
+    codeOwners.set(codeId, page)
+    page.once('destroyed', () => {
+      if (codeOwners.get(codeId) !== page) return
+      codeOwners.delete(codeId)
+      remoteHost.closePairing(codeId)
+    })
+    return codeId
+  })
+  const ownCode = (sender: WebContents, value: unknown): number | null => {
+    const codeId = pairingCode(value)
+    return codeOwners.get(codeId) === sender ? codeId : null
+  }
+  handle('remote:pair-close', 1, ({ event }, codeId) => {
+    const owned = ownCode(event.sender, codeId)
+    if (owned === null) return
+    codeOwners.delete(owned)
+    remoteHost.closePairing(owned)
+  })
+  handle('remote:pair-answer', 3, ({ event }, codeId, add, name) => {
+    if (typeof add !== 'boolean') throw new Error('"remote:pair-answer" takes whether to add')
+    const owned = ownCode(event.sender, codeId)
+    if (owned !== null) remoteHost.answerPairing(owned, add, add ? deviceName(name) : '')
+  })
+  handle('remote:rename-device', 2, (_, id, name) => {
+    if (!remoteHost.renameDevice(deviceIdArg(id), deviceName(name))) {
+      throw new Error('Remote access is not on')
+    }
+  })
+  handle('remote:remove-device', 1, (_, id) => {
+    if (!remoteHost.removeDevice(deviceIdArg(id))) throw new Error('Remote access is not on')
+  })
+  handle('remote:activity', 1, (_, id) => remoteHost.activity(deviceIdArg(id)))
+  handle('remote:reset', 0, () => remoteHost.reset())
+  handle('remote:retry-direct', 0, () => remoteHost.retryDirect())
 
   handle('browser:show', 1, (_, id) => browserViews.show(sessionId(id)))
   handle('browser:hide', 1, (_, id) => browserViews.hide(sessionId(id)))

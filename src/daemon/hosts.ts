@@ -13,6 +13,7 @@ import type {
   TerminalHostToMain,
 } from '@shared/host-control'
 import type { Locale } from '@shared/locale'
+import { isPairingState, type PairingState } from '@shared/remote/pairing'
 import type { SettingsFile } from '@shared/settings'
 import { processControl, stopTrees, type ProcessId } from '../agent-host/process-tree'
 import { createLogger } from '../main/log'
@@ -88,6 +89,8 @@ export class Hosts {
   private agentProcesses: ProcessId[] = []
   private remoteStatus: RemoteHostStatus | null = null
   private readonly statusListeners = new Set<() => void>()
+  private readonly askers = new Map<number, (pairing: PairingState) => void>()
+  private nextCode = 1
 
   constructor(options: HostsOptions) {
     const bundle = (name: string): string => path.join(options.bundleDir, name)
@@ -160,7 +163,10 @@ export class Hosts {
       readyType: 'remote-host:ready',
       stoppedType: 'remote-host:stopped',
       onMessage: (message) => this.receiveRemote(message),
-      onExit: () => this.setRemoteStatus(null),
+      onExit: () => {
+        this.setRemoteStatus(null)
+        this.voidCodes()
+      },
     })
   }
 
@@ -237,6 +243,37 @@ export class Hosts {
     })
   }
 
+  /**
+   * Opens a pairing code, voiding any other; `listener` hears its progress until it is added or
+   * void. Throws while remote access is not running.
+   */
+  pair(listener: (pairing: PairingState) => void): number {
+    const codeId = this.nextCode++
+    if (!this.remoteStatus || !this.remote.post({ type: 'remote-host:pair', codeId })) {
+      throw new ControlError('unavailable', 'Remote access is not running')
+    }
+    this.askers.set(codeId, listener)
+    return codeId
+  }
+
+  /** The asker went, which voids its code. */
+  closePairing(codeId: number): void {
+    if (this.askers.delete(codeId)) this.remote.post({ type: 'remote-host:pair-close', codeId })
+  }
+
+  /** The answer to the device the code's asker was asked about. */
+  answerPairing(codeId: number, add: boolean, name: string): void {
+    if (!this.askers.has(codeId)) throw new ControlError('not_found', 'The code is not open')
+    this.remote.post({ type: 'remote-host:pair-answer', codeId, add, name })
+  }
+
+  /** The remote host went, and every code with it. */
+  private voidCodes(): void {
+    const askers = [...this.askers.values()]
+    this.askers.clear()
+    for (const listener of askers) listener({ state: 'void', reason: 'stopped' })
+  }
+
   /** Stops the hosts as main does when the app quits: devices hear why before the agent host goes. */
   async stop(): Promise<void> {
     await Promise.all([this.remote.stop().then(() => this.agent.stop()), this.terminal.stop()])
@@ -252,6 +289,16 @@ export class Hosts {
       case 'remote-host:status':
         if (isRemoteStatus(message.status)) this.setRemoteStatus(message.status)
         break
+      case 'remote-host:pairing': {
+        const listener = this.askers.get(message.codeId)
+        if (!listener || !isPairingState(message.pairing)) break
+        // A code ends once added or void; a new one has an id of its own.
+        if (message.pairing.state === 'added' || message.pairing.state === 'void') {
+          this.askers.delete(message.codeId)
+        }
+        listener(message.pairing)
+        break
+      }
       // Under Node.js the remote host connects to the agent host's socket itself, so a request
       // for a port gets the answer that none comes.
       case 'remote-host:open-port':

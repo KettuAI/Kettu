@@ -1,8 +1,10 @@
 // What a device and the host say on the channel around the host protocol: the device's hello, the
-// host's welcome, and why the host ends a connection. After the welcome, the channel's JSON
-// messages are the host protocol's requests, responses and events, as a window's port carries them.
+// host's welcome, the device's name, and why the host ends a connection. After the welcome, the
+// channel's other JSON messages are the host protocol's requests, responses and events, as a
+// window's port carries them.
 
 import type { Platform } from '../platform'
+import { isDeviceModel, normalizeDeviceName } from './device'
 
 /** The newest protocol version this side speaks; one number covers every change on the channel. */
 export const PROTOCOL_VERSION = 1
@@ -30,6 +32,8 @@ export interface Hello {
     version: string
     platform: string
   }
+  /** While pairing: the name the device suggests for itself and its model, as "iPhone 17 Pro". */
+  device?: { name: string; model: string }
 }
 
 /** A direct address the device may also try. */
@@ -48,6 +52,8 @@ export interface Welcome {
   features: string[]
   /** Who this device is on the host: the owner, for every paired device. */
   role: 'owner'
+  /** The device as the host knows it, with the name the owner may have given it when pairing. */
+  device: { id: string; name: string }
   /** Whether the device may use the host's terminal. */
   terminal: boolean
   /** Where the device may also connect directly, the owner's own first; none while it is off. */
@@ -60,6 +66,18 @@ export interface Addresses {
   addresses: DirectAddress[]
 }
 
+/** The device renames itself, once welcomed. */
+export interface Rename {
+  type: 'rename'
+  name: string
+}
+
+/** The device's name changed, by the owner or by the device itself. */
+export interface Renamed {
+  type: 'renamed'
+  name: string
+}
+
 export type ClosingReason =
   /** The device speaks only versions older than the host's oldest: update the app. */
   | 'update_client'
@@ -69,6 +87,8 @@ export type ClosingReason =
   | 'invalid'
   /** The device was removed from the host. */
   | 'removed'
+  /** The owner did not add the device that paired with the code; the code is void. */
+  | 'rejected'
   /** The owner turned remote access off. */
   | 'remote_off'
   /** Kettu on the host is quitting or restarting. */
@@ -95,14 +115,25 @@ function isClientField(value: unknown): value is string {
 /** A hello as the host reads it, or null when it is not one. */
 export function parseHello(value: unknown): Hello | null {
   if (typeof value !== 'object' || value === null) return null
-  const { type, protocol, client } = value as Record<string, unknown>
+  const { type, protocol, client, device } = value as Record<string, unknown>
   if (type !== 'hello' || typeof protocol !== 'object' || protocol === null) return null
   const { min, max } = protocol as Record<string, unknown>
   if (!isVersion(min) || !isVersion(max) || min > max) return null
   if (typeof client !== 'object' || client === null) return null
   const { kind, version, platform } = client as Record<string, unknown>
   if (!isClientField(kind) || !isClientField(version) || !isClientField(platform)) return null
-  return { type, protocol: { min, max }, client: { kind, version, platform } }
+  const hello: Hello = { type, protocol: { min, max }, client: { kind, version, platform } }
+  const pairing = parsePairingDevice(device)
+  if (pairing) hello.device = pairing
+  return hello
+}
+
+/** The name and model a pairing device sends, or null when they are not there or not valid. */
+function parsePairingDevice(value: unknown): Hello['device'] | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { name, model } = value as Record<string, unknown>
+  const kept = normalizeDeviceName(name)
+  return kept && isDeviceModel(model) ? { name: kept, model } : null
 }
 
 /** The newest version both sides speak, or which side has to be updated when there is none. */
