@@ -11,23 +11,25 @@ const SDK_MESSAGE = 'Load the SDK with loadClaudeSdk from src/agent-host/claude/
 const SDK_PATHS = [{ name: '@anthropic-ai/claude-agent-sdk', message: SDK_MESSAGE }]
 const SDK_PATTERNS = [{ group: ['@anthropic-ai/claude-agent-sdk/*'], message: SDK_MESSAGE }]
 const HOST_MESSAGE =
-  'The hosts also run under Node.js; only their entries, index.ts, adapt Electron to them.'
+  "The hosts and the daemon run under Node.js; only the hosts' index.ts adapts Electron to them."
 
 export default defineConfig([
   globalIgnores(['out', 'dist', '.worktrees', 'src/renderer/src/lib/cn-tables.ts']),
   {
-    files: ['**/*.{ts,tsx,mjs}'],
+    files: ['**/*.{ts,tsx,mts,mjs}'],
     extends: [js.configs.recommended, tseslint.configs.recommended],
   },
   {
     files: [
       'electron.vite.config.ts',
       'vitest.config.mts',
+      'vite.daemon.config.mts',
       'src/main/**/*.ts',
       'src/preload/**/*.ts',
       'src/agent-host/**/*.ts',
       'src/terminal-host/**/*.ts',
       'src/remote-host/**/*.ts',
+      'src/daemon/**/*.ts',
       'tools/**/*.{ts,mjs}',
     ],
     languageOptions: { globals: globals.node },
@@ -35,15 +37,21 @@ export default defineConfig([
   {
     // The Claude Agent SDK's license grants no right to ship it, so Kettu installs it on first use
     // and loads it from there with its own types; an import would bundle it or need it installed.
-    files: ['**/*.{ts,tsx,mjs}'],
+    files: ['**/*.{ts,tsx,mts,mjs}'],
     rules: {
       'no-restricted-imports': ['error', { paths: SDK_PATHS, patterns: SDK_PATTERNS }],
     },
   },
   {
-    // The hosts run under Node.js too, so only their utility-process entries may use Electron.
-    // A later config replaces the rule's options, so this one repeats the SDK's.
-    files: ['src/agent-host/**/*.ts', 'src/terminal-host/**/*.ts', 'src/remote-host/**/*.ts'],
+    // The hosts run under Node.js too, so only their utility-process entries may use Electron, and
+    // the daemon never does. A later config replaces the rule's options, so this one repeats the
+    // SDK's.
+    files: [
+      'src/agent-host/**/*.ts',
+      'src/terminal-host/**/*.ts',
+      'src/remote-host/**/*.ts',
+      'src/daemon/**/*.ts',
+    ],
     ignores: ['src/agent-host/index.ts', 'src/terminal-host/index.ts', 'src/remote-host/index.ts'],
     rules: {
       'no-restricted-imports': [

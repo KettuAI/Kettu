@@ -127,12 +127,15 @@ async function keptPrebuilds(config: Configuration, platform: Platform): Promise
 
 beforeAll(async () => {
   project = await mkdtemp(path.join(os.tmpdir(), 'app-files-'))
-  // A file in each of the repository's top-level entries, and a built out/ with its notices.
+  // A file in each of the repository's top-level entries, and a built out/ with its notices and
+  // the daemon, which ships on its own.
   const entries = await readdir(root, { withFileTypes: true })
   const files = [
     ...entries
       .filter((entry) => !['node_modules', 'out', 'dist'].includes(entry.name))
       .map((entry) => (entry.isDirectory() ? `${entry.name}/file` : entry.name)),
+    'out/daemon/main.cjs',
+    'out/daemon/chunks/model.cjs',
     'out/main/index.js',
     'out/preload/index.mjs',
     'out/renderer/index.html',
@@ -152,7 +155,7 @@ describe.each([
   ['electron-builder.yml', 'linux'],
   ['electron-builder.mac-signed.yml', 'mac'],
 ] as const)('%s for %s', (file, platform) => {
-  it('copies only out/, without the notices, and package.json from the project folder', async () => {
+  it('copies only out/, without the notices or the daemon, and package.json', async () => {
     expect(await appFiles(await getConfig(root, file, null), platform)).toEqual([
       'out/main/index.js',
       'out/preload/index.mjs',

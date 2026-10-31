@@ -65,6 +65,8 @@ mac:
     - '!node_modules/node-pty/build/Release/{obj.target,.deps,node-addon-api@*}{,/**/*}'
     - '!node_modules/node-pty/**/*.{pdb,test.js,map}'
     - '!out/third-party-notices.txt'
+    # The daemon's build, which ships as a package of its own.
+    - '!out/daemon{,/**/*}'
     - '!node_modules/node-pty/prebuilds/win32-*{,/**/*}'
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
@@ -93,6 +95,8 @@ win:
     - '!node_modules/node-pty/build/Release/{obj.target,.deps,node-addon-api@*}{,/**/*}'
     - '!node_modules/node-pty/**/*.{pdb,test.js,map}'
     - '!out/third-party-notices.txt'
+    # The daemon's build, which ships as a package of its own.
+    - '!out/daemon{,/**/*}'
     - '!node_modules/node-pty/prebuilds/darwin-*{,/**/*}'
 nsis:
   artifactName: ${productName}-${version}-${arch}-setup.${ext}
@@ -110,6 +114,8 @@ linux:
     - '!node_modules/node-pty/build/Release/{obj.target,.deps,node-addon-api@*}{,/**/*}'
     - '!node_modules/node-pty/**/*.{pdb,test.js,map}'
     - '!out/third-party-notices.txt'
+    # The daemon's build, which ships as a package of its own.
+    - '!out/daemon{,/**/*}'
     - '!node_modules/node-pty/prebuilds{,/**/*}'
 appImage:
   # No version in the name: an update replaces the file a launcher already points at.

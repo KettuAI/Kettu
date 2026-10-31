@@ -22,11 +22,13 @@
     "electron.vite.config.ts",
     "tools/build/third-party-notices.ts",
     "vitest.config.mts",
+    "vite.daemon.config.mts",
     "src/main/**/*",
     "src/preload/**/*",
     "src/shared/**/*",
     "src/agent-host/**/*",
     "src/terminal-host/**/*",
-    "src/remote-host/**/*"
+    "src/remote-host/**/*",
+    "src/daemon/**/*"
   ]
 }
