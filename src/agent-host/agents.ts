@@ -1081,8 +1081,9 @@ export class AgentManager {
       version: running.version,
       cliVersion: slot.installedCli,
     })
-    // While the user's own CLI runs, only a newer adapter is an update; its CLI would not run,
-    // unless the new adapter needs a newer CLI than the user's, which the update then brings.
+    // While the user's own CLI runs, only a newer adapter is an update, and it comes without a CLI.
+    // One that needs a newer CLI than the user's waits until theirs updates itself, usually within
+    // hours, rather than bring a copy of its own of a few hundred MB.
     if (offered && adapter.cli?.runs === 'installed') {
       const mine = adapter.cli.installed
       const outgrown =
@@ -1092,11 +1093,8 @@ export class AgentManager {
         !mine.variable &&
         compareVersions(mine.version, offered.cliVersion) < 0
       offered =
-        compareVersions(offered.adapterVersion, running.version) > 0
-          ? {
-              adapterVersion: offered.adapterVersion,
-              cliVersion: outgrown ? offered.cliVersion : null,
-            }
+        !outgrown && compareVersions(offered.adapterVersion, running.version) > 0
+          ? { adapterVersion: offered.adapterVersion, cliVersion: null }
           : null
     }
     if (adapter.current) return offered
