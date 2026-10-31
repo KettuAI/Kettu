@@ -15,6 +15,7 @@ import type { PortDevice } from '@shared/remote/device'
 import { generateKeyPair } from '@shared/remote/noise'
 import type {
   TerminalEvent,
+  TerminalInfo,
   TerminalMethod,
   TerminalParams,
   TerminalResult,
@@ -23,6 +24,7 @@ import type { TerminalSettings } from '@shared/settings'
 import { startTerminalHost } from '../terminal-host/start'
 import type { PtyProcess, PtySpawn } from '../terminal-host/terminals'
 import { ActivityLog } from './activity'
+import { DeviceTerminal, NOT_ALLOWED } from './device-terminal'
 import { DeviceStore } from './devices'
 import { PairingCodes } from './pairing'
 import { RemoteServer } from './server'
@@ -389,6 +391,8 @@ describe("a device's terminals", () => {
     await expect(ask(device, 'terminals.list', {})).rejects.toMatchObject({
       code: 'terminal_not_allowed',
     })
+    // The port the remote host closed itself: no terminals.restarted.
+    expect(device.notices).toEqual([{ type: 'terminal', allowed: false }])
     expect(dataOf(eventsOf(device), info.id)).toBe('')
     expect(t.terminalActivity()).toEqual([
       { kind: 'terminal-opened', projectPath: t.project },
@@ -409,18 +413,31 @@ describe("a device's terminals", () => {
     expect(t.opened).toHaveLength(2)
   })
 
-  it('answers what waits on a terminal port that ends, and opens another at the next ask', async () => {
+  it('tells the device its terminals ended with a port that closes, and opens another', async () => {
     const t = await setup({ terminal: true })
+    const window = t.window()
+    const shared = await window.request('terminals.create', { projectPath: t.project, ...SIZE })
     const device = await t.connect()
     await device.first
-    const info = await ask(device, 'terminals.create', { projectPath: t.project, ...SIZE })
+    const own = await ask(device, 'terminals.create', { projectPath: t.project, ...SIZE })
+    await ask(device, 'terminals.attach', { id: shared.id })
     // As when the terminal host restarts.
     t.terminalPorts[0]!.close()
-    await expect.poll(() => t.terminalActivity().at(-1)?.kind).toBe('terminal-closed')
-    expect(await ask(device, 'terminals.list', {})).toEqual([
-      expect.objectContaining({ id: info.id }),
+    await expect
+      .poll(() => device.notices)
+      .toEqual([{ type: 'terminals.restarted', ids: [own.id, shared.id] }])
+    expect(t.terminalActivity().map((event) => event.kind)).toEqual([
+      'terminal-opened',
+      'terminal-opened',
+      'terminal-closed',
+      'terminal-closed',
+    ])
+    expect((await ask(device, 'terminals.list', {})).map((info) => info.id)).toEqual([
+      shared.id,
+      own.id,
     ])
     expect(t.opened).toHaveLength(2)
+    expect(device.notices).toHaveLength(1)
     expect(t.logs).toEqual([`warn: The terminal port of device ${t.phone.id} closed`])
   })
 
@@ -474,5 +491,127 @@ describe('a slow device', () => {
     await expect.poll(() => dataOf(eventsOf(device), id).endsWith('fresh\n')).toBe(true)
     expect(window.data(id)).toBe(`${written}fresh\n`)
     expect(t.ptys[0]!.pauses).toBe(0)
+  })
+})
+
+describe('DeviceTerminal', () => {
+  interface HostEnd {
+    port: PortChannel
+    /** The requests it heard, in order. */
+    requests: { id: number; method: string }[]
+    closed: boolean
+  }
+
+  const infoOf = (id: string): TerminalInfo => ({
+    id,
+    projectPath: '/project',
+    shell: 'sh',
+    title: 'sh',
+    busy: false,
+    exitCode: null,
+    createdAt: 0,
+  })
+
+  /** A device's terminals alone, with the test as the terminal host on each port they open. */
+  function alone() {
+    const sent: unknown[] = []
+    const hosts: HostEnd[] = []
+    const terminal = new DeviceTerminal({
+      device: { id: 'phone', name: 'Phone' },
+      allowed: () => true,
+      open: async () => {
+        const [remoteEnd, hostEnd] = memoryPorts()
+        const host: HostEnd = { port: hostEnd, requests: [], closed: false }
+        hostEnd.onMessage((data) => host.requests.push(data as HostEnd['requests'][number]))
+        hostEnd.onClose(() => (host.closed = true))
+        hosts.push(host)
+        return remoteEnd
+      },
+      send: (value) => sent.push(value),
+      opened: () => {},
+      closed: () => {},
+      log: () => {},
+    })
+    const request = (id: number, method: string, params: unknown = {}): void =>
+      terminal.request({ type: 'request', id, method, params })
+    /** The nth port's terminal host end, once that port opened. */
+    const host = async (index: number): Promise<HostEnd> => {
+      await expect.poll(() => hosts.length).toBe(index + 1)
+      return hosts[index]!
+    }
+    /** Waits until the host heard requests with these ids, the remote host's list being -1. */
+    const heard = (end: HostEnd, ids: number[]) =>
+      expect.poll(() => end.requests.map((request) => request.id)).toEqual(ids)
+    const answer = (end: HostEnd, id: number, result: unknown): void =>
+      end.port.send({ type: 'response', id, result })
+    return { terminal, sent, hosts, request, host, heard, answer }
+  }
+
+  it('names the terminals that ended as its port closes, then answers what waits', async () => {
+    const t = alone()
+    t.request(1, 'terminals.create', { projectPath: '/project', ...SIZE })
+    const first = await t.host(0)
+    await t.heard(first, [-1])
+    t.answer(first, -1, [infoOf('shared')])
+    await t.heard(first, [-1, 1])
+    t.answer(first, 1, infoOf('own'))
+    t.request(2, 'terminals.attach', { id: 'shared' })
+    await t.heard(first, [-1, 1, 2])
+    t.answer(first, 2, { replay: '' })
+    t.request(3, 'terminals.input', { id: 'own', data: 'ls\r' })
+    await t.heard(first, [-1, 1, 2, 3])
+    await expect.poll(() => t.sent).toHaveLength(2)
+
+    first.port.close()
+    await expect
+      .poll(() => t.sent.slice(2))
+      .toEqual([
+        { type: 'terminals.restarted', ids: ['own', 'shared'] },
+        { type: 'error', id: 3, error: expect.objectContaining({ code: 'host_restarted' }) },
+      ])
+
+    // The next request opens a new port; one that closes with no terminal open says so too.
+    t.request(4, 'terminals.list')
+    const second = await t.host(1)
+    await t.heard(second, [-1])
+    t.answer(second, -1, [infoOf('shared')])
+    await t.heard(second, [-1, 4])
+    t.answer(second, 4, [infoOf('shared')])
+    await expect.poll(() => t.sent).toHaveLength(5)
+    expect(t.sent[4]).toEqual({ type: 'response', id: 4, result: [infoOf('shared')] })
+    second.port.close()
+    await expect.poll(() => t.sent).toHaveLength(6)
+    expect(t.sent[5]).toEqual({ type: 'terminals.restarted', ids: [] })
+    expect(t.hosts).toHaveLength(2)
+  })
+
+  it('says nothing of a port it closes itself, as turned off or as the session ends', async () => {
+    const t = alone()
+    t.request(1, 'terminals.create', { projectPath: '/project', ...SIZE })
+    const first = await t.host(0)
+    await t.heard(first, [-1])
+    t.answer(first, -1, [])
+    await t.heard(first, [-1, 1])
+    t.answer(first, 1, infoOf('own'))
+    t.request(2, 'terminals.input', { id: 'own', data: 'ls\r' })
+    await t.heard(first, [-1, 1, 2])
+
+    t.terminal.close(NOT_ALLOWED)
+    await expect.poll(() => first.closed).toBe(true)
+    expect(t.sent).toEqual([
+      { type: 'response', id: 1, result: infoOf('own') },
+      { type: 'error', id: 2, error: NOT_ALLOWED },
+    ])
+
+    t.request(3, 'terminals.attach', { id: 'own' })
+    const second = await t.host(1)
+    await t.heard(second, [-1])
+    t.answer(second, -1, [infoOf('own')])
+    await t.heard(second, [-1, 3])
+    t.answer(second, 3, { replay: '' })
+    await expect.poll(() => t.sent).toHaveLength(3)
+    t.terminal.close(null)
+    await expect.poll(() => second.closed).toBe(true)
+    expect(t.sent).toHaveLength(3)
   })
 })
