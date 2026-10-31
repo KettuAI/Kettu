@@ -4,6 +4,7 @@
 import path from 'node:path'
 import {
   ACTIVITY_DAYS,
+  ACTIVITY_TITLE_CHARS,
   MAX_ACTIVITY,
   type DeviceActivity,
   type NewActivity,
@@ -17,6 +18,8 @@ const KEEP_MS = ACTIVITY_DAYS * 24 * 60 * 60 * 1000
 // Removed devices keep their logs too; past this many, the least recent ones go.
 const MAX_LOGS = 2000
 const MAX_SESSION_ID = 128
+/** A device back this soon after its last session ended is on the same connection. */
+const RECONNECT_MS = 10 * 60 * 1000
 
 interface ActivityFile {
   version: 1
@@ -29,6 +32,8 @@ const isTime = (value: unknown): value is number =>
 
 const isSessionId = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= MAX_SESSION_ID
+
+const cutTitle = (title: string): string => [...title].slice(0, ACTIVITY_TITLE_CHARS).join('')
 
 function parseEvent(value: unknown): DeviceActivity | null {
   if (typeof value !== 'object' || value === null) return null
@@ -52,8 +57,13 @@ function parseEvent(value: unknown): DeviceActivity | null {
     }
     case 'session-created':
     case 'session-archived':
-    case 'session-deleted':
-      return isSessionId(event.sessionId) ? { at, kind, sessionId: event.sessionId } : null
+    case 'session-deleted': {
+      const { sessionId, title = null } = event
+      if (!isSessionId(sessionId)) return null
+      // Events kept before titles were have none.
+      if (title !== null && (typeof title !== 'string' || cutTitle(title) !== title)) return null
+      return { at, kind, sessionId, title }
+    }
     default:
       return null
   }
@@ -77,6 +87,9 @@ function parseActivityFile(data: Record<string, unknown>): ActivityFile | string
 
 export class ActivityLog {
   private readonly logs: Map<string, DeviceActivity[]>
+  /** Each device's sessions open now, and when its last one ended; for this run only. */
+  private readonly open = new Map<string, number>()
+  private readonly ended = new Map<string, number>()
 
   private constructor(
     private readonly file: JsonFile<ActivityFile>,
@@ -103,13 +116,34 @@ export class ActivityLog {
   /** Notes an event now; the write waits a moment, as events come in bursts. */
   record(deviceId: string, event: NewActivity): void {
     const events = this.logs.get(deviceId) ?? []
-    events.push({ ...event, at: this.now() } as DeviceActivity)
+    const kept = 'title' in event && event.title !== null ? { title: cutTitle(event.title) } : {}
+    events.push({ ...event, ...kept, at: this.now() } as DeviceActivity)
     if (events.length > MAX_ACTIVITY) events.splice(0, events.length - MAX_ACTIVITY)
     // Most recent last, so the least recent log is the first to go past the cap.
     this.logs.delete(deviceId)
     this.logs.set(deviceId, events)
     while (this.logs.size > MAX_LOGS) this.logs.delete(this.logs.keys().next().value!)
     this.save()
+  }
+
+  /**
+   * Notes a session of the device opening: a connection, unless another of its sessions is open
+   * or the last one ended within 10 minutes, as a flaky network's do again and again.
+   */
+  opened(deviceId: string): void {
+    const open = this.open.get(deviceId) ?? 0
+    this.open.set(deviceId, open + 1)
+    const ended = this.ended.get(deviceId)
+    if (open > 0 || (ended !== undefined && this.now() - ended < RECONNECT_MS)) return
+    this.record(deviceId, { kind: 'connected' })
+  }
+
+  /** Notes a session of the device ending. */
+  closed(deviceId: string): void {
+    const open = (this.open.get(deviceId) ?? 0) - 1
+    if (open > 0) return void this.open.set(deviceId, open)
+    this.open.delete(deviceId)
+    this.ended.set(deviceId, this.now())
   }
 
   /** A device's events of the last 30 days, newest first. */

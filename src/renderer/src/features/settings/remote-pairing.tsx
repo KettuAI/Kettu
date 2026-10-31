@@ -1,4 +1,13 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import {
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type Ref,
+  type RefObject,
+} from 'react'
 import {
   CheckIcon,
   CircleAlertIcon,
@@ -27,6 +36,7 @@ import { countdown } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useSeconds } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
+import { closeRequest } from './pair-close'
 import { QrCode } from './qr-code'
 import { DeviceIcon, DeviceTile } from './remote-parts'
 import { kindLabel } from './remote-text'
@@ -35,6 +45,12 @@ export type Shown =
   | { kind: 'loading' }
   | { kind: 'failed'; message: string }
   | { kind: 'pairing'; pairing: PairingState }
+
+/** What Add device may do with the question while it is shown. */
+export interface ConfirmHandle {
+  /** Answers as Reject does, unless it was answered already. */
+  reject(): void
+}
 
 /**
  * Add device: a code as a QR code and a link while it waits, the question once a device's secret
@@ -50,15 +66,25 @@ export function PairDialog({
   // Each opening, and each new code, starts afresh.
   const [opened, setOpened] = useState(open)
   const [round, setRound] = useState(0)
+  const confirmRef = useRef<ConfirmHandle>(null)
   if (open !== opened) {
     setOpened(open)
     if (open) setRound((n) => n + 1)
   }
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next, details) => {
+        if (next) return onOpenChange(true)
+        const action = closeRequest(confirmRef.current !== null, details.reason)
+        if (action === 'reject') confirmRef.current?.reject()
+        else if (action === 'close') onOpenChange(false)
+      }}
+    >
       <PairFlow
         key={round}
         open={open}
+        confirmRef={confirmRef}
         onNewCode={() => setRound((n) => n + 1)}
         onDone={() => onOpenChange(false)}
       />
@@ -68,10 +94,12 @@ export function PairDialog({
 
 function PairFlow({
   open,
+  confirmRef,
   onNewCode,
   onDone,
 }: {
   open: boolean
+  confirmRef: RefObject<ConfirmHandle | null>
   onNewCode: () => void
   onDone: () => void
 }) {
@@ -141,7 +169,7 @@ function PairFlow({
       className={cn('gap-0 p-0', confirm ? 'sm:max-w-110' : 'sm:max-w-145')}
     >
       {confirm ? (
-        <Confirm pairing={confirm} onAnswer={answer} />
+        <Confirm ref={confirmRef} pairing={confirm} onAnswer={answer} />
       ) : (
         <>
           <DialogHeader className="px-5 pt-5">
@@ -303,9 +331,11 @@ function ExpiresIn({ expiresAt }: { expiresAt: number }) {
 export function Confirm({
   pairing,
   onAnswer,
+  ref,
 }: {
   pairing: Extract<PairingState, { state: 'confirm' }>
   onAnswer: (add: boolean, name: string) => void
+  ref?: Ref<ConfirmHandle>
 }) {
   const { t } = useTranslation('settings')
   const { device } = pairing
@@ -318,6 +348,7 @@ export function Confirm({
     setAnswered(true)
     onAnswer(add, add ? trimmed : '')
   }
+  useImperativeHandle(ref, () => ({ reject: () => answer(false) }))
   const submit = (event: FormEvent): void => {
     event.preventDefault()
     answer(true)

@@ -4,6 +4,7 @@ import { createElement, type ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { addressText, parseAddress, parsePort } from '@shared/remote/address'
+import type { DeviceActivity } from '@shared/remote/activity'
 import type { PairedDevice } from '@shared/remote/device'
 import type { DirectAddress } from '@shared/remote/protocol'
 import type { RemoteStatus } from '@shared/remote/status'
@@ -19,12 +20,12 @@ vi.mock('@renderer/stores/remote', () => ({
   useRemoteStore: (select: (state: { status: RemoteStatus | null }) => unknown) =>
     select({ status: remote.status }),
 }))
-const settings = vi.hoisted(() => ({ own: [] as DirectAddress[] }))
+const settings = vi.hoisted(() => ({ own: [] as DirectAddress[], enabled: true }))
 vi.mock('@renderer/stores/settings', () => {
   const state = () => {
     const file: SettingsFile = structuredClone(DEFAULT_SETTINGS)
     file.remote = {
-      enabled: true,
+      enabled: settings.enabled,
       name: null,
       direct: { enabled: true, port: 47821, addresses: settings.own },
     }
@@ -41,10 +42,12 @@ vi.mock('@renderer/lib/use-now', () => ({ useNow: () => Date.now(), useSeconds: 
 
 const { i18n } = await import('@renderer/lib/i18n')
 const { Dialog } = await import('@renderer/components/ui/dialog')
-const { DeviceRow, NoDevices, PlainKeyNote, RemoteStatusRow, StaleNote } =
+const { AddDeviceRow, DeviceRow, NoDevices, PlainKeyNote, RemoteStatusRow, StaleNote } =
   await import('./remote-section')
 const { CodeBody, Confirm } = await import('./remote-pairing')
-const { DevicePage } = await import('./remote-device')
+const { closeRequest } = await import('./pair-close')
+const { ActivityRow, DevicePage } = await import('./remote-device')
+const { useRemoteSection } = await import('./section-defs')
 const { DirectPortField, FoundAddresses, OwnAddresses } = await import('./remote-direct')
 const { qrPath } = await import('./qr-path')
 const { encode } = await import('uqr')
@@ -91,6 +94,7 @@ const text = (element: ReactElement): string =>
 afterEach(async () => {
   remote.status = null
   settings.own = []
+  settings.enabled = true
   await i18n.changeLanguage('en')
 })
 
@@ -250,6 +254,34 @@ describe('the list', () => {
     )
   })
 
+  it('stays with remote access off, all offline, with only Add device waiting for it', () => {
+    settings.enabled = false
+    remote.status = status({ state: 'off', online: [], direct: { state: 'off' } })
+    let section: ReturnType<typeof useRemoteSection> | null = null
+    const Probe = () => {
+      section = useRemoteSection()
+      return null
+    }
+    renderToStaticMarkup(createElement(Probe))
+    const rows = section!.rows
+    expect(rows.map((row) => row.id)).toEqual(['remote', phone.id, 'add-device'])
+    expect(text(rows[1]!.render('') as ReactElement)).toContain('Connected 3 days ago')
+    expect(renderToStaticMarkup(rows[2]!.render('') as ReactElement)).toContain(
+      '<button type="button" disabled=""',
+    )
+    expect(text(rows[1]!.group!.note as ReactElement)).toBe(
+      'Turn on remote access to add a device.',
+    )
+    // With no device to show, the page is the switch alone.
+    remote.status = status({ state: 'off', devices: [] })
+    renderToStaticMarkup(createElement(Probe))
+    expect(section!.rows.map((row) => row.id)).toEqual(['remote'])
+  })
+
+  it('opens Add device while remote access is on', () => {
+    expect(renderToStaticMarkup(createElement(AddDeviceRow))).not.toContain('disabled=""')
+  })
+
   it('notes a device in its last days', () => {
     const stale = { ...phone, lastConnectedAt: now - 85 * DAY - 60_000 }
     remote.status = status({ devices: [stale, { ...phone, id: 'b'.repeat(32) }] })
@@ -323,7 +355,30 @@ describe('Add device', () => {
   })
 })
 
+describe('the question on Add device', () => {
+  it('takes no click outside as an answer, and Esc or a close button as Reject', () => {
+    expect(closeRequest(true, 'outside-press')).toBe('stay')
+    expect(closeRequest(true, 'focus-out')).toBe('stay')
+    expect(closeRequest(true, 'escape-key')).toBe('reject')
+    expect(closeRequest(true, 'close-press')).toBe('reject')
+    // Before the question and once it is answered, the dialog closes as any does.
+    for (const reason of ['outside-press', 'escape-key', 'close-press'] as const) {
+      expect(closeRequest(false, reason)).toBe('close')
+    }
+  })
+})
+
 describe("a device's page", () => {
+  it('names a session in its activity by the title it had then', () => {
+    const row = (event: DeviceActivity) => text(createElement(ActivityRow, { event, kind: 'ios' }))
+    expect(
+      row({ at: now, kind: 'session-archived', sessionId: 's1', title: 'Fix the login' }),
+    ).toContain('Archived “Fix the login”')
+    expect(row({ at: now, kind: 'session-deleted', sessionId: 's2', title: null })).toContain(
+      'Deleted a session',
+    )
+  })
+
   it('has when it joined and last connected, its activity and Remove', () => {
     remote.status = status({ online: [phone.id] })
     const page = text(createElement(DevicePage, { id: phone.id }))

@@ -1000,9 +1000,43 @@ export function useRemoteSection(): SectionDef {
     hero: <RemoteHeader id="settings-remote" />,
     itemPage: (id: string) => <DevicePage id={id} />,
   }
-  if (!enabled) return { ...base, rows: [switchRow] }
   const devices = status?.devices ?? []
   const online = status?.online ?? []
+  const list = group('devices', t('remote.devices.group'), {
+    count: devices.length > 0 ? devices.length : undefined,
+    note: enabled ? (
+      <StaleNote />
+    ) : (
+      <>
+        <StaleNote />
+        <GroupNote>{t('remote.devices.addOff')}</GroupNote>
+      </>
+    ),
+  })
+  const deviceRows: RowDef[] = [
+    ...devices.map((device): RowDef => ({
+      id: device.id,
+      name: device.name,
+      description: deviceLine(t, device),
+      keywords: t('remote.keywords'),
+      group: list,
+      layout: 'custom',
+      render: () => <DeviceRow device={device} online={online.includes(device.id)} />,
+      open: () => openSettingsItem('remote', device.id),
+    })),
+    {
+      id: 'add-device',
+      name: t('remote.devices.add'),
+      english: en('remote.devices.add'),
+      keywords: t('remote.keywords'),
+      group: list,
+      layout: 'custom',
+      render: () => (devices.length === 0 ? <NoDevices /> : <AddDeviceRow disabled={!enabled} />),
+    },
+  ]
+  // Off, the devices are still listed to rename and remove; only adding one waits.
+  if (!enabled)
+    return { ...base, rows: devices.length > 0 ? [switchRow, ...deviceRows] : [switchRow] }
   const state = group('status', t('remote.switch'), {
     unlabeled: true,
     note: (
@@ -1011,10 +1045,6 @@ export function useRemoteSection(): SectionDef {
         <GroupNote>{t('remote.background')}</GroupNote>
       </>
     ),
-  })
-  const list = group('devices', t('remote.devices.group'), {
-    count: devices.length > 0 ? devices.length : undefined,
-    note: <StaleNote />,
   })
   const direct = group('direct', t('remote.direct.group'), {
     note: <GroupNote>{t('remote.direct.note')}</GroupNote>,
@@ -1040,25 +1070,7 @@ export function useRemoteSection(): SectionDef {
       group: state,
       render: () => <HostNameField label={t('remote.hostName.name')} />,
     },
-    ...devices.map((device): RowDef => ({
-      id: device.id,
-      name: device.name,
-      description: deviceLine(t, device),
-      keywords: t('remote.keywords'),
-      group: list,
-      layout: 'custom',
-      render: () => <DeviceRow device={device} online={online.includes(device.id)} />,
-      open: () => openSettingsItem('remote', device.id),
-    })),
-    {
-      id: 'add-device',
-      name: t('remote.devices.add'),
-      english: en('remote.devices.add'),
-      keywords: t('remote.keywords'),
-      group: list,
-      layout: 'custom',
-      render: () => (devices.length === 0 ? <NoDevices /> : <AddDeviceRow />),
-    },
+    ...deviceRows,
     {
       id: 'direct',
       name: t('remote.direct.name'),

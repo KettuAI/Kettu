@@ -230,11 +230,16 @@ export function startRemoteHost(
         })
         break
       }
-      case 'remote-host:stop-serving':
+      case 'remote-host:stop-serving': {
+        const { requestId } = message
         withRunning(() => {
           serving = serving.then((current) => stopServing(current, 'remote_off'))
+          if (Number.isSafeInteger(requestId)) {
+            void serving.then(() => send({ type: 'remote-host:stop-serving', requestId }))
+          }
         })
         break
+      }
       case 'remote-host:add-device':
         withServing(async ({ server }) => {
           const added = await server.addDevice(message.device)

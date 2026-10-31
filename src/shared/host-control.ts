@@ -215,8 +215,9 @@ export type MainToRemoteHost =
   // would have carried.
   | { type: 'remote-host:serve'; privateKey: string; plainTextKey: boolean; direct: DirectSettings }
   // Remote access turned off: devices hear `remote_off` and nothing listens, while the
-  // connections to other hosts go on.
-  | { type: 'remote-host:stop-serving' }
+  // connections to other hosts go on. Answered by remote-host:stop-serving once the device files
+  // are written for the last time, which main then reads and changes itself.
+  | { type: 'remote-host:stop-serving'; requestId: number }
   // The answer to remote-host:open-host-port: the port travels in the transfer list.
   | { type: 'remote-host:host-port'; requestId: number }
   // Pairs with the host of a pairing link, suggesting this computer's model; its progress comes
@@ -290,4 +291,5 @@ export type RemoteHostToMain =
   // Newest first.
   | { type: 'remote-host:activity'; requestId: number; events: DeviceActivity[] }
   | { type: 'remote-host:reset'; requestId: number }
+  | { type: 'remote-host:stop-serving'; requestId: number }
   | { type: 'remote-host:stopped' }

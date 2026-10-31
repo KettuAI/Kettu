@@ -238,16 +238,17 @@ export function DeviceRow({ device, online }: { device: PairedDevice; online: bo
   )
 }
 
-/** The row at the list's end that opens Add device. */
-export function AddDeviceRow() {
+/** The row at the list's end that opens Add device; disabled while remote access is off. */
+export function AddDeviceRow({ disabled = false }: { disabled?: boolean }) {
   const { t } = useTranslation('settings')
   const [open, setOpen] = useState(false)
   return (
     <>
       <button
         type="button"
+        disabled={disabled}
         onClick={() => setOpen(true)}
-        className="-mx-3 flex w-[calc(100%+1.5rem)] items-center gap-3 rounded-[inherit] py-3 pr-3 pl-4 text-left text-ui text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-visible:shadow-[inset_0_0_0_2px_var(--focus)]"
+        className="-mx-3 flex w-[calc(100%+1.5rem)] items-center gap-3 rounded-[inherit] py-3 pr-3 pl-4 text-left text-ui text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-visible:shadow-[inset_0_0_0_2px_var(--focus)] disabled:pointer-events-none disabled:opacity-50"
       >
         <span className="grid size-7.5 shrink-0 place-items-center rounded-lg border border-dashed border-strong">
           <PlusIcon className="size-4" />

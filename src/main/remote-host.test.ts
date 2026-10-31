@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import type { MessagePortMain } from 'electron'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RemoteHostStatus } from '@shared/host-control'
-import type { PortDevice } from '@shared/remote/device'
+import type { PairedDevice, PortDevice } from '@shared/remote/device'
 import type { HostPairingState, HostStatus } from '@shared/remote/hosts'
 import type { DirectSettings } from '@shared/settings'
 import type { PairingState } from '@shared/remote/pairing'
@@ -38,15 +38,25 @@ vi.mock('electron', () => ({
 vi.mock('../remote-host/index?modulePath', () => ({ default: '/remote-host.js' }))
 
 const { RemoteHost } = await import('./remote-host')
+const { loadStoredDevices } = await import('./remote-devices')
+const { tempFolder } = await import('../agent-host/testing/temp')
+const { DeviceStore } = await import('../remote-host/devices')
+const { generateKeyPair } = await import('@shared/remote/noise')
 
 class FakeChild extends EventEmitter {
   pid = 42
   stdout = null
   stderr = null
   posted: { message: { type: string; [key: string]: unknown }; transfer: unknown[] }[] = []
-  postMessage(message: { type: string }, transfer: unknown[] = []): void {
+  /** Whether it answers that it stopped serving by itself, as the remote host does at once. */
+  answersStopServing = true
+  postMessage(message: { type: string; [key: string]: unknown }, transfer: unknown[] = []): void {
     this.posted.push({ message, transfer })
     if (message.type === 'remote-host:shutdown') setImmediate(() => this.emit('exit', 0))
+    if (message.type === 'remote-host:stop-serving' && this.answersStopServing) {
+      const { requestId } = message
+      setImmediate(() => this.emit('message', { type: 'remote-host:stop-serving', requestId }))
+    }
   }
   kill(): boolean {
     this.emit('exit', 0)
@@ -72,6 +82,7 @@ function makeHost(
     identity?: () => Promise<{ privateKey: string; plainText: boolean }>
     deviceKey?: () => Promise<{ privateKey: string; plainText: boolean }>
     hostsKnown?: boolean
+    dataPath?: string
   } = {},
 ) {
   const opened: PortDevice[] = []
@@ -90,6 +101,7 @@ function makeHost(
     devicePlatform: async () => 'macOS 26.1',
     hostsKnown: async () => options.hostsKnown ?? false,
     hostName: () => 'Studio',
+    devices: () => loadStoredDevices(options.dataPath ?? '/nowhere', () => {}),
     direct: () => settings.direct,
     openPort: (asked) => {
       opened.push(asked)
@@ -102,6 +114,23 @@ function makeHost(
 }
 
 const newDevice = { publicKey: 'k', name: 'Phone', kind: 'ios', platform: 'ios', model: 'iPhone' }
+
+/** A phone paired in the data folder's device files. */
+async function pairedPhone(dir: string): Promise<PairedDevice> {
+  const store = await DeviceStore.load(dir, () => {})
+  const key = await generateKeyPair()
+  const added = await store.add({
+    publicKey: Buffer.from(key.publicKey).toString('base64'),
+    name: 'Phone',
+    kind: 'ios',
+    platform: 'iOS 26.1',
+    model: 'iPhone 17 Pro',
+  })
+  return added!
+}
+
+const namedIn = async (dir: string, id: string) =>
+  (await DeviceStore.load(dir, () => {})).get(id)?.name
 
 const status: RemoteHostStatus = {
   publicKey: 'public',
@@ -207,8 +236,8 @@ describe('RemoteHost', () => {
     const child = children[0]!
     child.emit('message', { type: 'remote-host:ready' })
     expect(host.addDevice(newDevice)).toBe(true)
-    expect(host.removeDevice(device.id)).toBe(true)
-    expect(host.renameDevice(device.id, 'Pocket')).toBe(true)
+    expect(await host.removeDevice(device.id)).toBe(true)
+    expect(await host.renameDevice(device.id, 'Pocket')).toBe(true)
     expect(child.types().slice(1)).toEqual([
       'remote-host:add-device',
       'remote-host:remove-device',
@@ -339,7 +368,7 @@ describe('RemoteHost', () => {
     // The hosts this computer connects to stay connected meanwhile.
     expect(children).toHaveLength(1)
     expect(child.posted.slice(-2).map(({ message }) => message)).toEqual([
-      { type: 'remote-host:stop-serving' },
+      { type: 'remote-host:stop-serving', requestId: expect.any(Number) },
       {
         type: 'remote-host:serve',
         privateKey: 'new key',
@@ -350,6 +379,78 @@ describe('RemoteHost', () => {
     expect(host.status).toBeNull()
     child.emit('message', { type: 'remote-host:status', status: { ...status, publicKey: 'new' } })
     expect(host.state).toBe('on')
+    await host.stop()
+  })
+
+  it('lists, renames and removes the stored devices while remote access is off', async () => {
+    const dir = await tempFolder('kettu-remote-off-')
+    const phone = await pairedPhone(dir)
+    const { host, changes } = makeHost({ dataPath: dir })
+    await host.setEnabled(false)
+    expect(children).toEqual([])
+    expect(host.state).toBe('off')
+    expect(host.devices).toEqual([phone])
+
+    const before = changes()
+    expect(await host.renameDevice(phone.id, 'Pocket')).toBe(true)
+    expect(host.devices).toEqual([{ ...phone, name: 'Pocket' }])
+    expect(changes()).toBeGreaterThan(before)
+    expect(await namedIn(dir, phone.id)).toBe('Pocket')
+    expect(await host.activity(phone.id)).toEqual([
+      { at: expect.any(Number), kind: 'renamed', from: 'Phone', to: 'Pocket', by: 'owner' },
+    ])
+    expect(await host.renameDevice('d'.repeat(32), 'Desk')).toBe(false)
+
+    expect(await host.removeDevice(phone.id)).toBe(true)
+    expect(await host.removeDevice(phone.id)).toBe(false)
+    expect(host.devices).toEqual([])
+    expect((await DeviceStore.load(dir, () => {})).list()).toEqual([])
+    expect((await host.activity(phone.id))[0]).toMatchObject({ kind: 'removed', by: 'owner' })
+    // Only adding a device waits for remote access.
+    expect(host.addDevice(newDevice)).toBe(false)
+    expect(host.pair(() => {})).toBeNull()
+    expect(children).toEqual([])
+  })
+
+  it('hands the device files to the remote host to serve, and takes them back after', async () => {
+    const dir = await tempFolder('kettu-remote-off-')
+    const phone = await pairedPhone(dir)
+    const { host } = makeHost({ dataPath: dir, hostsKnown: true })
+    await host.setEnabled(false)
+    const child = children[0]!
+    child.emit('message', { type: 'remote-host:ready' })
+    expect(host.devices).toEqual([phone])
+    expect(await host.renameDevice(phone.id, 'Pocket')).toBe(true)
+    expect(child.types()).not.toContain('remote-host:rename-device')
+
+    // The remote host reads the files as it starts serving, then has them to itself.
+    await host.setEnabled(true)
+    expect(child.types().at(-1)).toBe('remote-host:serve')
+    expect(await namedIn(dir, phone.id)).toBe('Pocket')
+    const served = { ...phone, name: 'Pocket' }
+    child.emit('message', { type: 'remote-host:status', status: { ...status, devices: [served] } })
+    expect(host.devices).toEqual([served])
+    expect(await host.renameDevice(phone.id, 'Desk')).toBe(true)
+    expect(child.posted.at(-1)!.message).toEqual({
+      type: 'remote-host:rename-device',
+      id: phone.id,
+      name: 'Desk',
+    })
+
+    // Off again, main reads them once the remote host has written them for the last time.
+    child.answersStopServing = false
+    let off = false
+    const stopping = host.setEnabled(false).then(() => (off = true))
+    await vi.waitFor(() => expect(child.types().at(-1)).toBe('remote-host:stop-serving'))
+    const store = await DeviceStore.load(dir, () => {})
+    await store.rename(phone.id, 'Desk')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(off).toBe(false)
+    expect(host.devices).toEqual([served])
+    const { requestId } = child.posted.at(-1)!.message
+    child.emit('message', { type: 'remote-host:stop-serving', requestId })
+    await stopping
+    expect(host.devices).toEqual([{ ...phone, name: 'Desk' }])
     await host.stop()
   })
 
@@ -394,7 +495,10 @@ describe('RemoteHost', () => {
     child.emit('message', { type: 'remote-host:status', status })
     expect(host.state).toBe('on')
     await host.setEnabled(false)
-    expect(child.posted.at(-1)!.message).toEqual({ type: 'remote-host:stop-serving' })
+    expect(child.posted.at(-1)!.message).toEqual({
+      type: 'remote-host:stop-serving',
+      requestId: expect.any(Number),
+    })
     expect(host.state).toBe('off')
     expect(host.status).toBeNull()
     expect(host.addDevice(newDevice)).toBe(false)

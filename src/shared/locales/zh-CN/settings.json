@@ -803,6 +803,7 @@
       "emptyTitle": "还没有设备",
       "emptyHint": "用 iPhone 或 iPad 上的 Kettu 扫码，或者在另一台电脑的 Kettu 里打开 设置 › 主机 › 添加主机…，粘贴链接。",
       "add": "添加设备…",
+      "addOff": "打开远程访问后才能添加设备。",
       "online": "在线",
       "seenToday": "今天 {{time}} 连接过",
       "seenYesterday": "昨天 {{time}} 连接过",

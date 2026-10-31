@@ -30,7 +30,7 @@ import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useRemoteStore } from '@renderer/stores/remote'
-import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { useSessionsStore } from '@renderer/stores/sessions'
 import { openSettingsItem } from '@renderer/stores/view'
 import { Fact } from './agent-parts'
 import { CONFIRM, ControlError } from './controls'
@@ -185,7 +185,7 @@ function Activity({ device }: { device: PairedDevice }) {
   )
 }
 
-function ActivityRow({ event, kind }: { event: DeviceActivity; kind: string }) {
+export function ActivityRow({ event, kind }: { event: DeviceActivity; kind: string }) {
   const { t } = useTranslation('settings')
   const now = useNow()
   const sessionId = 'sessionId' in event ? event.sessionId : null
@@ -196,7 +196,8 @@ function ActivityRow({ event, kind }: { event: DeviceActivity; kind: string }) {
         basename(summary.projectPath))
       : null,
   )
-  const title = summary ? sessionTitle(summary) : null
+  // The title the session had then, which a later rename does not change.
+  const title = 'title' in event ? event.title : null
   return (
     <li className="relative flex h-10 items-center gap-4 px-4 before:absolute before:top-0 before:right-0 before:left-4 before:h-(--hairline) before:bg-border-soft first:before:hidden">
       <span className="w-28 shrink-0 truncate text-xs text-tertiary tabular">
