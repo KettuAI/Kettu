@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { FRAMINGS, foxSvg, GLYPH_FRAMINGS, glyphSvg } from './fox.mjs'
 
@@ -81,5 +82,21 @@ describe('glyphSvg', () => {
 
   it('rejects an unknown framing', () => {
     expect(() => glyphSvg('dock')).toThrow('Unknown framing: dock')
+  })
+
+  it('inverts the shading for a light ground', () => {
+    expect(glyphSvg('tray')).toContain('slope="1.25" intercept="-0.05"')
+    expect(glyphSvg('tray', { ground: 'light' })).toContain('slope="-0.95" intercept="1.38"')
+    expect(() => glyphSvg('tray', { ground: 'grey' })).toThrow('Unknown ground: grey')
+  })
+
+  it("ships the renderer's glyphs as the build writes them", () => {
+    for (const ground of ['dark', 'light']) {
+      const asset = readFileSync(
+        new URL(`../../src/renderer/src/assets/kettu-glyph-on-${ground}.svg`, import.meta.url),
+        'utf8',
+      )
+      expect(asset).toBe(glyphSvg('tray', { color: '#fff', ground }))
+    }
   })
 })

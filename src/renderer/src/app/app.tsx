@@ -11,6 +11,7 @@ import { TooltipProvider } from '@renderer/components/ui/tooltip'
 import { ArtifactDialogs } from '@renderer/features/artifacts/artifact-dialogs'
 import { MediaViewer } from '@renderer/features/session/media/media-viewer'
 import { HostBanner } from '@renderer/features/shell/host-banner'
+import { LaunchCover } from '@renderer/features/shell/launch-cover'
 import { SplitDragProvider } from '@renderer/features/split/session-drag'
 import { MainArea } from '@renderer/features/shell/main-area'
 import { ShortcutsDialog } from '@renderer/features/shell/shortcuts-dialog'
@@ -60,6 +61,7 @@ export function App() {
             )}
           </div>
         </div>
+        <LaunchCover />
         <QuitConfirm />
         <ArtifactDialogs />
         <MediaViewer />

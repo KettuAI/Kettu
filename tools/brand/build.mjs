@@ -1,7 +1,8 @@
-// Builds the app icons, the tray's images, the renderer's icon, the README's lockups and the macOS
-// disk image's backgrounds from the icon's drawing in tools/brand/fox.mjs and the wordmark in
-// src/shared/brand.ts, with `pnpm exec electron tools/brand/build.mjs`; Chromium draws every size
-// from the vector source. No dependencies but the Inter font the backgrounds' text is set in.
+// Builds the app icons, the tray's images, the renderer's icon and glyphs, the README's lockups
+// and the macOS disk image's backgrounds from the icon's drawing in tools/brand/fox.mjs and the
+// wordmark in src/shared/brand.ts, with `pnpm exec electron tools/brand/build.mjs`; Chromium draws
+// every size from the vector source. No dependencies but the Inter font the backgrounds' text is
+// set in.
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -203,6 +204,13 @@ async function main() {
   write(join(assets, 'lockup-horizontal.svg'), lockupSvg('horizontal', 100, INK))
   write(join(assets, 'lockup-horizontal-dark.svg'), lockupSvg('horizontal', 100, PAPER))
   writeFileSync(join(root, 'src/renderer/src/assets/kettu-icon.svg'), foxSvg('tile'))
+  // The launch cover's fox, masks the renderer fills with the theme's text color.
+  for (const ground of ['dark', 'light']) {
+    writeFileSync(
+      join(root, `src/renderer/src/assets/kettu-glyph-on-${ground}.svg`),
+      glyphSvg('tray', { color: '#fff', ground }),
+    )
+  }
 
   await iconComposer(join(build, 'icon.icon'))
 
