@@ -325,6 +325,38 @@ describe('MediaService', () => {
     })
   })
 
+  it('authorizes only a file in the folder without a session, asking no thread', async () => {
+    const { media, grants, asked } = service([join(outside, 'chart.png')])
+    expect(await media.authorize(root, 'out/desktop shot.png', null)).toEqual({
+      kind: 'granted',
+      file: {
+        path: join(root, 'out', 'desktop shot.png'),
+        name: 'desktop shot.png',
+        kind: 'image',
+        mimeType: 'image/png',
+        size: 33,
+        width: 2000,
+        height: 1281,
+      },
+    })
+    expect(await media.authorize(root, join(root, 'mark.svg'), null)).toMatchObject({
+      kind: 'granted',
+    })
+    expect(await media.authorize(root, join(outside, 'chart.png'), null)).toEqual({
+      kind: 'forbidden',
+    })
+    expect(await media.authorize(root, '../../elsewhere/chart.png', null)).toEqual({
+      kind: 'forbidden',
+    })
+    expect(await media.authorize(root, 'out/missing.png', null)).toEqual({ kind: 'not_found' })
+    expect(asked).toEqual([])
+    // With the session, the file its thread names comes through, as for a window.
+    expect(await media.authorize(root, join(outside, 'chart.png'), sessionId)).toMatchObject({
+      kind: 'granted',
+    })
+    expect(grants).toEqual([])
+  })
+
   posixOnly('follows a link to where it leads before deciding', async () => {
     await symlink(join(outside, 'chart.png'), join(root, 'link.png'))
     expect(await service().media.open(root, 'link.png', sessionId)).toEqual({

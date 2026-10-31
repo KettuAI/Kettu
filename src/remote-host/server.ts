@@ -36,6 +36,7 @@ import {
   isDeviceStream,
   isUploadRef,
   MAX_MEDIA_STREAMS,
+  MAX_UPLOADS,
   type MediaReadResult,
   type StreamCancel,
   type StreamRef,
@@ -88,6 +89,8 @@ export interface RemoteServerOptions {
   uploads: string
   /** How long an upload may wait for bytes or a request, a minute unless a test shortens it. */
   uploadIdleMs?: number
+  /** Bytes a device's uploads may hold unwritten, MAX_UNWRITTEN unless a test lowers it. */
+  maxUnwritten?: number
   /** A port to the agent host for a device's session, or null while the agent host is down. */
   openAgentPort(device: PortDevice): Promise<PortChannel | null>
   /** Whether devices may use the terminal from the start; they may not when absent. */
@@ -112,11 +115,12 @@ export class RemoteServer {
   private stopped = false
   private sweeper: ReturnType<typeof setInterval> | null = null
   private readonly now: () => number
-  /** Each device's uploads in flight, over all its connections. */
-  readonly uploads = new UploadCounts()
+  /** Each device's uploads in flight and their bytes not yet written, over all its connections. */
+  readonly uploads: UploadCounts
 
   constructor(readonly options: RemoteServerOptions) {
     this.now = options.now ?? Date.now
+    this.uploads = new UploadCounts(MAX_UPLOADS, options.maxUnwritten)
     this.terminalAllowed = options.terminal ?? false
   }
 
@@ -487,6 +491,7 @@ class DeviceConnection {
       folder: this.server.options.uploads,
       deviceId: device.id,
       counts: this.server.uploads,
+      transport: this.transport,
       ...(this.server.options.uploadIdleMs ? { idleMs: this.server.options.uploadIdleMs } : {}),
       cancelled: (stream, error) => {
         this.server.options.log('warn', `Device ${device.id}'s upload failed: ${error.message}`)
@@ -497,6 +502,8 @@ class DeviceConnection {
       channel: this.channel!,
       transport: this.transport,
       send: (message) => this.send(message),
+      failed: (reason) =>
+        this.server.options.log('warn', `Device ${device.id}'s download failed: ${reason}`),
     })
     // Sent before the port's listener is set, so nothing from the agent host comes before it.
     this.send({
@@ -713,8 +720,13 @@ class DeviceConnection {
     let streaming = false
     try {
       const { projectPath, path, sessionId } = (params ?? {}) as Record<string, unknown>
-      // The agent host checks these as it checks a window's media.open.
-      const answer = await this.ask('media.authorize', { projectPath, path, sessionId })
+      // The agent host checks these as it checks a window's media.open, or as files.read without
+      // a session.
+      const answer = await this.ask('media.authorize', {
+        projectPath,
+        path,
+        ...(sessionId === undefined ? {} : { sessionId }),
+      })
       if (answer.kind !== 'granted') {
         return reply({ type: 'response', id, result: { kind: answer.kind } })
       }

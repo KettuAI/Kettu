@@ -66,11 +66,22 @@ export interface DownloadsOptions {
   transport: Pick<Transport, 'buffered' | 'drained'>
   /** Sends a JSON message on the connection, in order with everything else. */
   send(message: StreamEnd | StreamCancel): void
+  /** The host gave a download up, for the log; `reason` never names the file. */
+  failed(reason: string): void
   highWater?: number
 }
 
 /** A file that is shorter than when it was opened. */
 class EndedEarly extends Error {}
+
+/** What went wrong, as a system error's code or an error's name, which hold no path. */
+function errorCode(error: unknown): string {
+  return (
+    (error as NodeJS.ErrnoException | undefined)?.code ??
+    (error as Error | undefined)?.name ??
+    'unknown'
+  )
+}
 
 /** One connection's downloads; the host's stream ids are even, from 2 up. */
 export class Downloads {
@@ -147,13 +158,14 @@ export class Downloads {
       if (!download.over) this.options.send({ type: 'stream.end', stream })
     } catch (error) {
       if (download.over) return
+      const ended = error instanceof EndedEarly
       // Never the error's own message, which may name the file.
-      const message =
-        error instanceof EndedEarly
-          ? `The file ended before its ${source.size} bytes`
-          : 'The bytes could not be read'
+      const message = ended
+        ? `The file ended before its ${source.size} bytes`
+        : 'The bytes could not be read'
       const failed: PortError = { code: 'internal', message }
       this.options.send({ type: 'stream.cancel', stream, error: failed })
+      this.options.failed(ended ? message : `${message} (${errorCode(error)})`)
     } finally {
       download.over = true
       await this.settle(download)

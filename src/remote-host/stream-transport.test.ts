@@ -1,5 +1,6 @@
 // The stream transport's buffer as the remote host paces byte streams by it: what the socket has
-// not passed on yet, and a drain once the other side reads again.
+// not passed on yet, and a drain once the other side reads again; and its reading, which an upload
+// pauses while the disk lags behind.
 
 import { connect, type Server, type Socket } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -49,6 +50,34 @@ describe('streamTransport', () => {
     reader!.resume()
     await draining
     expect(host.buffered()).toBe(0)
+  })
+
+  it('stops reading while paused and hands over what waited once it resumes', async () => {
+    const host = await connected()
+    const received: number[] = []
+    host.onMessage((message) => {
+      received.push(message[0]!)
+      // Paused by a message, the rest of its chunk waits too.
+      if (received.length === 1) host.pause()
+    })
+    const frame = (n: number, size: number): Buffer => {
+      const bytes = Buffer.alloc(2 + size)
+      bytes.writeUInt16BE(size, 0)
+      bytes[2] = n
+      return bytes
+    }
+    reader!.write(Buffer.concat([frame(0, 10), frame(1, 10), frame(2, 10)]))
+    await expect.poll(() => received.length).toBe(1)
+    // Far more than the system's buffers take: the sender has to keep the rest.
+    for (let n = 3; n < 67; n++) reader!.write(frame(n, 60_000))
+    await expect.poll(() => reader!.writableLength).toBeGreaterThan(0)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(received).toEqual([0])
+
+    host.resume()
+    await expect.poll(() => received.length).toBe(67)
+    expect(received).toEqual(Array.from({ length: 67 }, (_, n) => n))
+    await expect.poll(() => reader!.writableLength).toBe(0)
   })
 
   it('stops waiting for a drain when the connection ends', async () => {
