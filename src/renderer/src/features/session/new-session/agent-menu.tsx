@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { SearchIcon } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { ChevronRightIcon, SearchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
@@ -33,6 +33,7 @@ import {
   tierOf,
   type SelectOption,
 } from '@renderer/features/session/composer/levels'
+import { shownChoice, shownValue } from '@renderer/features/session/composer/model-list'
 import { listedInstalled } from '@renderer/features/agents/readiness'
 import { Ring } from '@renderer/features/session/composer/usage'
 import {
@@ -52,8 +53,11 @@ import { openAgentSettings } from '@renderer/stores/view'
 import {
   agentNeed,
   canStart,
+  isMoreKey,
   itemKey,
   menuGroups,
+  menuModels,
+  moreKey,
   parseItemKey,
   preparedConfig,
   startConfig,
@@ -110,6 +114,8 @@ export function AgentMenu({
   const shownPrepared = shown && prepared?.agentId === shown ? prepared : null
   const firstRead = useAgentOptionsStore((s) => (shown ? s.firstReads[shown] : undefined))
   const [query, setQuery] = useState('')
+  // The agent whose older models the list shows.
+  const [expanded, setExpanded] = useState<AgentId | null>(null)
   const { contains } = useComboboxFilter()
   const body = useRef<HTMLDivElement>(null)
   const rail = useRef<HTMLDivElement>(null)
@@ -135,21 +141,38 @@ export function AgentMenu({
       choosable: canStart(status),
     }
   })
-  const groups = menuGroups(agents, shown, query, contains)
+  const groups = menuGroups(agents, shown, query, contains, expanded)
   // Every item, so the chosen one's label resolves while the list shows another agent.
   const allGroups = useMemo<MenuGroup[]>(
     () =>
-      agents.map((a) => ({
-        agentId: a.agentId,
-        items: a.model?.choices?.length
-          ? a.model.choices.map((c) => itemKey(a.agentId, c.value))
-          : [itemKey(a.agentId, null)],
-      })),
+      agents.map((a) => {
+        if (!a.model?.choices?.length)
+          return { agentId: a.agentId, items: [itemKey(a.agentId, null)] }
+        const { current, older } = menuModels(a.model.choices)
+        return {
+          agentId: a.agentId,
+          items: [
+            ...current.map((c) => itemKey(a.agentId, c.value)),
+            ...(older.length > 0 ? [moreKey(a.agentId)] : []),
+            ...older.map((c) => itemKey(a.agentId, c.value)),
+          ],
+        }
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- agents is derived from these
     [statuses, configs],
   )
   const chosenModel = agentId ? agents.find((a) => a.agentId === agentId)?.model : null
-  const value = agentId ? itemKey(agentId, chosenModel ? String(chosenModel.value) : null) : null
+  const chosenChoice = chosenModel?.choices
+    ? shownChoice(chosenModel.choices, String(chosenModel.value))
+    : undefined
+  const value = agentId
+    ? itemKey(
+        agentId,
+        chosenModel
+          ? (shownValue(chosenModel.choices ?? [], String(chosenModel.value)) ?? null)
+          : null,
+      )
+    : null
   const searching = query.trim().length > 0
   const visibleRail = searching
     ? statuses.filter((s) => groups.some((g) => g.agentId === s.id))
@@ -165,9 +188,8 @@ export function AgentMenu({
 
   const label = (key: string) => {
     const { agentId: id, model } = parseItemKey(key)
-    const choice = agents
-      .find((a) => a.agentId === id)
-      ?.model?.choices?.find((c) => c.value === model)
+    const choices = agents.find((a) => a.agentId === id)?.model?.choices
+    const choice = choices && model !== null ? shownChoice(choices, model) : undefined
     return choice ? `${agentName(id)} ${choice.name}` : agentName(id)
   }
 
@@ -183,6 +205,7 @@ export function AgentMenu({
         ? agentId
         : ((statuses.find(listedInstalled) ?? statuses[0])?.id ?? null),
     )
+    setExpanded(chosenChoice?.older ? agentId : null)
     for (const status of statuses) {
       if (status.state !== 'ready' || !status.capabilities.reports) continue
       refreshLimits(status.id).catch((error: unknown) =>
@@ -215,8 +238,15 @@ export function AgentMenu({
       filteredItems={groups}
       filter={null}
       value={value}
-      onValueChange={(key: string | null) => {
+      onValueChange={(key: string | null, details) => {
         if (!key) return
+        if (isMoreKey(key)) {
+          // The row only shows or hides the older models, so the menu stays open.
+          details.cancel()
+          const { agentId: id } = parseItemKey(key)
+          setExpanded((current) => (current === id ? null : id))
+          return
+        }
         const choice = parseItemKey(key)
         onChoose(choice.agentId, choice.model)
       }}
@@ -304,6 +334,7 @@ export function AgentMenu({
                       : () => void readFirstOptions(shown, true)
                   }
                   searching={searching}
+                  expanded={expanded}
                   groups={groups}
                   agents={agents}
                   onLeave={close}
@@ -342,7 +373,7 @@ function AgentButtonLabel({ agentId, values }: { agentId: AgentId | null; values
   const model = config?.find((o) => o.category === 'model')
   const effort = config?.find((o) => o.category === 'thought_level')
   const modelName = isSelect(model)
-    ? (model.choices.find((c) => c.value === model.value)?.name ?? String(model.value))
+    ? (shownChoice(model.choices, String(model.value))?.name ?? String(model.value))
     : null
   const level = isSelect(effort) ? levelsOf(effort, String(effort.value)) : null
   const levelName = isSelect(effort)
@@ -461,6 +492,7 @@ function Pane({
   failure,
   onRetry,
   searching,
+  expanded,
   groups,
   agents,
   onLeave,
@@ -475,6 +507,8 @@ function Pane({
   failure: string | null
   onRetry: () => void
   searching: boolean
+  /** The agent whose older models are shown. */
+  expanded: AgentId | null
   groups: MenuGroup[]
   agents: MenuAgent[]
   onLeave: () => void
@@ -624,6 +658,7 @@ function Pane({
               group={group}
               agent={agents.find((a) => a.agentId === group.agentId)}
               searching={searching}
+              expanded={expanded === group.agentId}
             />
           )}
         </ComboboxList>
@@ -669,14 +704,18 @@ function ModelGroup({
   group,
   agent,
   searching,
+  expanded,
 }: {
   group: MenuGroup
   agent: MenuAgent | undefined
   searching: boolean
+  /** Whether the agent's older models are shown under More models. */
+  expanded: boolean
 }) {
   const { t } = useTranslation('session')
   if (!agent) return null
   const choices = agent.model?.choices ?? []
+  const older = menuModels(choices).older
   return (
     <ComboboxGroup items={group.items}>
       {searching ? (
@@ -689,6 +728,9 @@ function ModelGroup({
       )}
       <ComboboxCollection>
         {(key: string) => {
+          if (isMoreKey(key)) {
+            return <MoreRow key={key} value={key} count={older.length} expanded={expanded} />
+          }
           const { model } = parseItemKey(key)
           const choice = choices.find((c) => c.value === model)
           return choice ? (
@@ -710,6 +752,38 @@ function ModelGroup({
         }}
       </ComboboxCollection>
     </ComboboxGroup>
+  )
+}
+
+/**
+ * The row that shows or hides the older models in place. Expanding it scrolls it to the top of the
+ * list, so the older models come into view below it.
+ */
+function MoreRow({ value, count, expanded }: { value: string; count: number; expanded: boolean }) {
+  const { t } = useTranslation('session')
+  const row = useRef<HTMLDivElement>(null)
+  const wasExpanded = useRef(expanded)
+  useLayoutEffect(() => {
+    if (expanded && !wasExpanded.current) row.current?.scrollIntoView({ block: 'start' })
+    wasExpanded.current = expanded
+  }, [expanded])
+  return (
+    <ComboboxItem
+      ref={row}
+      value={value}
+      aria-expanded={expanded}
+      className="items-center text-secondary"
+    >
+      <span className="min-w-0 flex-1 truncate">
+        {t('newSession.agentMenu.moreModels', { number: count })}
+      </span>
+      <ChevronRightIcon
+        className={cn(
+          'size-3 text-icon transition-transform duration-(--duration-fast)',
+          expanded && 'rotate-90',
+        )}
+      />
+    </ComboboxItem>
   )
 }
 

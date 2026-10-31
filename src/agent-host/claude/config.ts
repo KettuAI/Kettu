@@ -66,11 +66,23 @@ export function buildConfig(
     },
   ]
   if (models.length > 0) {
-    const listed = models.map((model) => ({
-      value: model.value,
-      name: model.displayName,
-      ...(model.description ? { description: model.description } : {}),
-    }))
+    // An alias such as `opus` follows the newest model of its family, so a row pinned to a model
+    // id is an older version; Default is the alias that resolves to the same model.
+    const aliases = models.filter((m) => m.resolvedModel && m.resolvedModel !== m.value)
+    const listed: NonNullable<ConfigOption['choices']> = models.map((model) => {
+      const same =
+        model.value === DEFAULT_MODEL
+          ? aliases.find((a) => a.value !== model.value && a.resolvedModel === model.resolvedModel)
+          : undefined
+      const older = aliases.length > 0 && model.resolvedModel === model.value
+      return {
+        value: model.value,
+        name: model.displayName,
+        ...(model.description ? { description: model.description } : {}),
+        ...(same ? { shownAs: same.value } : {}),
+        ...(older ? { older: true as const } : {}),
+      }
+    })
     // A model the settings name that the list leaves out still shows as the one in use.
     if (!listed.some((choice) => choice.value === choices.model)) {
       listed.push({ value: choices.model, name: choices.model })
