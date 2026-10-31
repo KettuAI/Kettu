@@ -1,6 +1,7 @@
 // What the Codex mapper makes of app-server items, against the same thread model ACP fills.
 
 import os from 'node:os'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { applyPatches, threadEntries, threadFromSnapshot, type ThreadState } from '@shared/thread'
 import { newTurnScope, type MapperContext, type MapperEffect } from '../session-updates'
@@ -83,7 +84,7 @@ describe('commands', () => {
     ).toEqual({
       title: "Read file 'a.ts'",
       toolKind: 'read',
-      locations: [{ path: '/p/a.ts' }],
+      locations: [{ path: path.resolve('/p', 'a.ts') }],
     })
     expect(
       commandFacts('rg x', '/p', [{ type: 'search', command: 'rg x', query: 'x', path: 'src' }]),
