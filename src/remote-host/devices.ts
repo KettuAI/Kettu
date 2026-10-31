@@ -1,4 +1,5 @@
-// `remote/devices.json`: the devices paired with this computer, which the remote host owns. Main
+// `remote/devices.json`: the devices paired with this computer, which the remote host owns, and
+// the keys of the devices removed, so one that comes back hears why it can no longer connect. Main
 // adds and removes them; the remote host reads them for each handshake and notes each connection.
 
 import path from 'node:path'
@@ -15,10 +16,21 @@ import { JsonFile, type LogFn, type Migration } from '../agent-host/storage'
 const DEVICES_VERSION = 1
 const DEVICES_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 const MAX_DEVICES = 1000
+const MAX_REMOVED = 1000
+
+/** A device removed by the owner or for not being seen, whose key the host still recognizes. */
+export interface RemovedDevice {
+  id: string
+  /** Its X25519 public key, in base64. */
+  publicKey: string
+  removedAt: number
+}
 
 interface DevicesFile {
   version: 1
   devices: PairedDevice[]
+  /** Oldest first; absent in files written before removed devices were kept. */
+  removed?: RemovedDevice[]
 }
 
 const KEY_BYTES = 32
@@ -59,6 +71,15 @@ function parseDevice(value: unknown): PairedDevice | null {
   }
 }
 
+function parseRemoved(value: unknown): RemovedDevice | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { id, publicKey, removedAt } = value as Record<string, unknown>
+  if (typeof id !== 'string' || publicKeyBytes(publicKey) === null || !isTime(removedAt)) {
+    return null
+  }
+  return { id, publicKey: publicKey as string, removedAt }
+}
+
 function parseDevicesFile(data: Record<string, unknown>): DevicesFile | string {
   if (!Array.isArray(data.devices) || data.devices.length > MAX_DEVICES) {
     return 'devices is not a list'
@@ -69,19 +90,39 @@ function parseDevicesFile(data: Record<string, unknown>): DevicesFile | string {
     if (!device) return `device ${index} is malformed`
     devices.push(device)
   }
-  return { version: 1, devices }
+  const listed = data.removed ?? []
+  if (!Array.isArray(listed) || listed.length > MAX_REMOVED) return 'removed is not a list'
+  const removed: RemovedDevice[] = []
+  for (const [index, item] of listed.entries()) {
+    const entry = parseRemoved(item)
+    if (!entry) return `removed device ${index} is malformed`
+    removed.push(entry)
+  }
+  return { version: 1, devices, removed }
+}
+
+/** The entries whose id is the one their key gives. */
+async function withTrueIds<T extends { id: string; publicKey: string }>(
+  entries: T[],
+): Promise<T[]> {
+  const ids = await Promise.all(entries.map((entry) => deviceId(publicKeyBytes(entry.publicKey)!)))
+  return entries.filter((entry, index) => ids[index] === entry.id)
 }
 
 export class DeviceStore {
   private readonly byId = new Map<string, PairedDevice>()
   private readonly byKey = new Map<string, PairedDevice>()
+  /** In the order they were removed, so the first is the oldest. */
+  private readonly removedByKey = new Map<string, RemovedDevice>()
 
   private constructor(
     private readonly file: JsonFile<DevicesFile>,
     devices: PairedDevice[],
+    removed: RemovedDevice[],
     private readonly now: () => number,
   ) {
     for (const device of devices) this.put(device)
+    for (const entry of removed) this.removedByKey.set(entry.publicKey, entry)
   }
 
   static async load(userDataPath: string, log: LogFn, now = Date.now): Promise<DeviceStore> {
@@ -90,20 +131,16 @@ export class DeviceStore {
       version: DEVICES_VERSION,
       migrations: DEVICES_MIGRATIONS,
       parse: parseDevicesFile,
-      empty: () => ({ version: 1, devices: [] }),
+      empty: () => ({ version: 1, devices: [], removed: [] }),
       log,
     })
-    const { devices } = await file.load()
+    const { devices, removed = [] } = await file.load()
     // An id is derived from the key; an entry whose id is not is dropped rather than trusted.
-    const checked = await Promise.all(
-      devices.map(async (device) =>
-        (await deviceId(publicKeyBytes(device.publicKey)!)) === device.id ? device : null,
-      ),
-    )
-    const kept = checked.filter((device): device is PairedDevice => device !== null)
-    if (kept.length !== devices.length) log('warn', 'Dropped devices whose id is not their key')
-    const store = new DeviceStore(file, kept, now)
-    if (kept.length !== devices.length) store.save()
+    const [kept, keptRemoved] = await Promise.all([withTrueIds(devices), withTrueIds(removed)])
+    const dropped = kept.length !== devices.length || keptRemoved.length !== removed.length
+    if (dropped) log('warn', 'Dropped devices whose id is not their key')
+    const store = new DeviceStore(file, kept, keptRemoved, now)
+    if (dropped) store.save()
     return store
   }
 
@@ -120,7 +157,15 @@ export class DeviceStore {
     return this.byKey.get(Buffer.from(publicKey).toString('base64')) ?? null
   }
 
-  /** Pairs a device, replacing the entry of the same key; null when the device is not valid. */
+  /** The removed device with this public key, or null for a key not on the removed list. */
+  removedWithKey(publicKey: Uint8Array): RemovedDevice | null {
+    return this.removedByKey.get(Buffer.from(publicKey).toString('base64')) ?? null
+  }
+
+  /**
+   * Pairs a device, replacing the entry of the same key and taking the key off the removed list;
+   * null when the device is not valid.
+   */
   async add(device: NewDevice): Promise<PairedDevice | null> {
     const key = publicKeyBytes(device.publicKey)
     if (!key || !isDeviceName(device.name)) return null
@@ -139,19 +184,34 @@ export class DeviceStore {
       lastConnectedAt: null,
     }
     this.put(added)
+    this.removedByKey.delete(added.publicKey)
     this.save()
     await this.file.flush()
     return added
   }
 
+  /** Forgets a device and puts its key on the removed list, dropping the oldest past the cap. */
   async remove(id: string): Promise<boolean> {
     const device = this.byId.get(id)
     if (!device) return false
     this.byId.delete(id)
     this.byKey.delete(device.publicKey)
+    const { publicKey } = device
+    this.removedByKey.set(publicKey, { id, publicKey, removedAt: this.now() })
+    for (const key of this.removedByKey.keys()) {
+      if (this.removedByKey.size <= MAX_REMOVED) break
+      this.removedByKey.delete(key)
+    }
     this.save()
     await this.file.flush()
     return true
+  }
+
+  /** Empties the removed list, as a reset does: a new identity is a new host to every device. */
+  async clearRemoved(): Promise<void> {
+    this.removedByKey.clear()
+    this.save()
+    await this.file.flush()
   }
 
   /** The device under its new name, or null when there is no such device or the name is not one. */
@@ -186,6 +246,6 @@ export class DeviceStore {
   }
 
   private save(): void {
-    this.file.save({ version: 1, devices: this.list() })
+    this.file.save({ version: 1, devices: this.list(), removed: [...this.removedByKey.values()] })
   }
 }
