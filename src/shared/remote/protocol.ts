@@ -76,6 +76,17 @@ export interface TerminalAccess {
   allowed: boolean
 }
 
+/**
+ * The device's port to the terminal host ended on the terminal host's side, as when it stopped or
+ * restarted; sent once for each such port, never for one the host closed itself. `ids` are the
+ * terminals the device had created or attached on it, possibly none, which stream no more. The
+ * device's next `terminals.*` request opens a new port.
+ */
+export interface TerminalsRestarted {
+  type: 'terminals.restarted'
+  ids: string[]
+}
+
 /** The device renames itself, once welcomed. */
 export interface Rename {
   type: 'rename'
