@@ -45,7 +45,7 @@ import type { Transport } from '@shared/remote/transport'
 import type { LogFn } from '../agent-host/storage'
 import type { ActivityLog } from './activity'
 import { DeviceTerminal, isTerminalMethod, NOT_ALLOWED } from './device-terminal'
-import type { DeviceStore } from './devices'
+import type { DeviceStore, RemovedDevice } from './devices'
 import { bytesSource, Downloads, fileSource } from './downloads'
 import type { PairingCode, PairingCodes } from './pairing'
 import { bytesOf, findPlaces, isBinary } from './places'
@@ -178,7 +178,7 @@ export class RemoteServer {
 
   /** Forgets a device and ends its sessions at once. */
   async removeDevice(id: string, by: 'owner' | 'unseen' | 'reset' = 'owner'): Promise<boolean> {
-    // The store forgets the device before its write, so no handshake accepts it meanwhile.
+    // The store forgets the device before its write, so a handshake meanwhile finds it removed.
     const removing = this.options.devices.remove(id)
     const closing = [...this.connections]
       .filter((connection) => connection.device?.id === id)
@@ -236,10 +236,11 @@ export class RemoteServer {
     }
   }
 
-  /** Removes every device and voids the code, for main to make a new identity. */
+  /** Removes every device, forgets the removed ones and voids the code, for a new identity. */
   async reset(): Promise<void> {
     this.options.pairing.stop()
     for (const device of this.options.devices.list()) await this.removeDevice(device.id, 'reset')
+    await this.options.devices.clearRemoved()
     await Promise.all([this.options.devices.flush(), this.options.activity.flush()])
   }
 
@@ -297,6 +298,8 @@ type State = 'handshake' | 'hello' | 'confirming' | 'opening' | 'open' | 'closin
 
 class DeviceConnection {
   device: PairedDevice | null = null
+  /** The removed device whose key the handshake named, told why at its hello. */
+  private removed: RemovedDevice | null = null
   private state: State = 'handshake'
   private channel: Channel | null = null
   private port: PortChannel | null = null
@@ -403,7 +406,7 @@ class DeviceConnection {
     this.transport.send(reply)
   }
 
-  /** The first message as a paired device's Noise IK, or null. */
+  /** The first message as the Noise IK of a paired or a removed device, or null. */
   private async known(message: Uint8Array): Promise<Handshake | null> {
     const { options } = this.server
     let named = false
@@ -415,15 +418,17 @@ class DeviceConnection {
         accept: (publicKey) => {
           named = true
           this.device = options.devices.withKey(publicKey)
-          return this.device !== null
+          this.removed = this.device ? null : options.devices.removedWithKey(publicKey)
+          return this.device !== null || this.removed !== null
         },
       })
       await responder.readMessage(message)
       return responder
     } catch {
       this.device = null
-      // An IK handshake from a key the host does not know, as a removed device's, is no attempt at
-      // the code: only a message that did not decrypt as IK may be pairing.
+      this.removed = null
+      // An IK handshake from a key the host does not know is no attempt at the code: only a message
+      // that did not decrypt as IK may be pairing.
       if (named) this.mayPair = false
       return null
     }
@@ -480,7 +485,13 @@ class DeviceConnection {
       ? await this.confirm(hello)
       : this.device && this.server.options.devices.get(this.device.id)
     if (this.state !== 'hello' && this.state !== 'confirming') return
-    if (!device) return this.close(this.pairing ? 'invalid' : 'removed')
+    if (!device) {
+      if (this.pairing) return this.close('invalid')
+      // By its id alone, never with the key or where it came from.
+      const id = this.device?.id ?? this.removed?.id
+      this.server.options.log('info', `Told device ${id} that it was removed`)
+      return this.close('removed')
+    }
     this.device = device
     this.state = 'opening'
     const port = await this.server.options.openAgentPort({ id: device.id, name: device.name })
