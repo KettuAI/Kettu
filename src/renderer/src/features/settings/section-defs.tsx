@@ -34,7 +34,7 @@ import { useAppInfo } from '@renderer/lib/use-app-info'
 import {
   agentName,
   harnessStatuses,
-  isInstalled,
+  hasProgram,
   usableAgents,
   useAgentsStore,
 } from '@renderer/stores/agents'
@@ -458,9 +458,7 @@ export function useUsageSection(): SectionDef {
 export function useAgentsSection(): SectionDef {
   const { t } = useTranslation('settings')
   const en = english()
-  const agents = useAgentsStore(
-    useShallow((s) => usableAgents(s.order, s.byId).filter((a) => isInstalled(a))),
-  )
+  const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId).filter(hasProgram)))
   const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
   const list: GroupDef = {
     id: 'agents',
@@ -507,7 +505,7 @@ export function useHarnessesSection(): SectionDef {
   const harnesses = useAgentsStore(useShallow((s) => harnessStatuses(s.order, s.byId)))
   const environment = useAgentsStore((s) => s.environment)
   // Installed: its program is on the machine, even before Kettu's package for it installs.
-  const installed = harnesses.filter((h) => isInstalled(h) || !!h.cli?.installed)
+  const installed = harnesses.filter(hasProgram)
   const missing = harnesses.filter((h) => !installed.includes(h))
   const groups = {
     installed: {

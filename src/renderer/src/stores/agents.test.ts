@@ -4,7 +4,7 @@ import type { AgentStatus, EnvironmentInfo } from '@shared/agent-host'
 const request = vi.fn()
 vi.stubGlobal('window', { kettu: { agents: { request } } })
 
-const { useAgentsStore } = await import('./agents')
+const { hasProgram, useAgentsStore } = await import('./agents')
 
 const info = (overrides: Partial<EnvironmentInfo>): EnvironmentInfo => ({
   source: 'pending',
@@ -129,5 +129,20 @@ describe('agents store', () => {
       finishedAt: null,
       error: 'offline',
     })
+  })
+
+  it('counts an agent whose program is too old as on the machine, not one that is missing', () => {
+    const status = (overrides: Partial<AgentStatus>) =>
+      ({ id: 'claude-code', state: 'not-installed', cli: null, ...overrides }) as AgentStatus
+    const cli = (installed: unknown) => ({ command: 'claude', installed }) as AgentStatus['cli']
+    const tooOld = { path: '/x/claude', version: '2.1.310', variable: null }
+    expect(hasProgram(status({ state: 'available' }))).toBe(true)
+    expect(
+      hasProgram(
+        status({ cli: cli({ ...tooOld, problem: { kind: 'too-old', minimum: '2.1.314' } }) }),
+      ),
+    ).toBe(true)
+    expect(hasProgram(status({ cli: cli(null) }))).toBe(false)
+    expect(hasProgram(status({}))).toBe(false)
   })
 })
