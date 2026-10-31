@@ -148,6 +148,7 @@ describe('the remote host under Node.js', () => {
       hostName: 'Studio',
       privateKey: base64(privateKey),
       plainTextKey: false,
+      terminal: false,
       agentHostSocket: agentSocket.path,
       socketPath: remoteSocket.path,
     } satisfies MainToRemoteHost)

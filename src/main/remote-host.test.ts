@@ -76,6 +76,7 @@ electron.fork = () => {
 
 const device: PortDevice = { id: 'b'.repeat(32), name: 'Phone' }
 const port = { close: vi.fn() } as unknown as MessagePortMain
+const terminalPort = { close: vi.fn() } as unknown as MessagePortMain
 
 function makeHost(
   options: {
@@ -86,8 +87,10 @@ function makeHost(
   } = {},
 ) {
   const opened: PortDevice[] = []
-  const settings: { direct: DirectSettings } = {
+  const terminals: PortDevice[] = []
+  const settings: { direct: DirectSettings; terminal: boolean } = {
     direct: { enabled: false, port: null, addresses: [] },
+    terminal: false,
   }
   let key = 'key'
   let changes = 0
@@ -103,14 +106,26 @@ function makeHost(
     hostName: () => 'Studio',
     devices: () => loadStoredDevices(options.dataPath ?? '/nowhere', () => {}),
     direct: () => settings.direct,
+    terminal: () => settings.terminal,
     openPort: (asked) => {
       opened.push(asked)
       return asked.name === 'Phone' ? port : null
     },
+    openTerminalPort: (asked) => {
+      terminals.push(asked)
+      return asked.name === 'Phone' ? terminalPort : null
+    },
     changed: () => changes++,
     hostsChanged: () => hostsChanges++,
   })
-  return { host, opened, settings, changes: () => changes, hostsChanges: () => hostsChanges }
+  return {
+    host,
+    opened,
+    terminals,
+    settings,
+    changes: () => changes,
+    hostsChanges: () => hostsChanges,
+  }
 }
 
 const newDevice = { publicKey: 'k', name: 'Phone', kind: 'ios', platform: 'ios', model: 'iPhone' }
@@ -185,6 +200,7 @@ describe('RemoteHost', () => {
       privateKey: 'key',
       plainTextKey: true,
       direct: { enabled: false, port: null, addresses: [] },
+      terminal: false,
       device: { privateKey: 'device key', platform: 'macOS 26.1' },
     })
     children[0]!.emit('message', { type: 'remote-host:ready' })
@@ -207,6 +223,51 @@ describe('RemoteHost', () => {
     // Nothing starts it once Kettu quits.
     await host.setEnabled(true)
     expect(children).toHaveLength(2)
+  })
+
+  it("answers a device's terminal port request with the terminal host's while allowed", async () => {
+    const { host, terminals, settings } = makeHost()
+    await host.setEnabled(true)
+    const child = children[0]!
+    child.emit('message', { type: 'remote-host:ready' })
+    // Not allowed: the terminal host is not even asked.
+    child.emit('message', { type: 'remote-host:open-terminal-port', requestId: 1, device })
+    settings.terminal = true
+    child.emit('message', { type: 'remote-host:open-terminal-port', requestId: 2, device })
+    child.emit('message', {
+      type: 'remote-host:open-terminal-port',
+      requestId: 3,
+      device: { ...device, name: 'Laptop' },
+    })
+    child.emit('message', { type: 'remote-host:open-terminal-port', requestId: 4, device: {} })
+    expect(terminals).toEqual([device, { ...device, name: 'Laptop' }])
+    expect(child.posted.slice(1)).toEqual([
+      { message: { type: 'remote-host:port', requestId: 1 }, transfer: [] },
+      { message: { type: 'remote-host:port', requestId: 2 }, transfer: [terminalPort] },
+      { message: { type: 'remote-host:port', requestId: 3 }, transfer: [] },
+    ])
+    await host.stop()
+  })
+
+  it('tells the process when devices may use the terminal, and each start reads it', async () => {
+    const { host, settings } = makeHost()
+    // Nothing runs yet, so nothing is told.
+    settings.terminal = true
+    host.terminalChanged()
+    await host.setEnabled(true)
+    const first = children[0]!
+    expect(first.posted[0]!.message).toMatchObject({ type: 'remote-host:init', terminal: true })
+    first.emit('message', { type: 'remote-host:ready' })
+    host.terminalChanged()
+    settings.terminal = false
+    host.terminalChanged()
+    host.terminalChanged()
+    expect(first.types().filter((type) => type === 'remote-host:terminal')).toHaveLength(1)
+    expect(first.posted.at(-1)!.message).toEqual({ type: 'remote-host:terminal', allowed: false })
+    await host.setEnabled(false)
+    await host.setEnabled(true)
+    expect(children[1]!.posted[0]!.message).toMatchObject({ terminal: false })
+    await host.stop()
   })
 
   it("answers a device's port request with the agent host's port, or none", async () => {
@@ -476,6 +537,7 @@ describe('RemoteHost', () => {
       hostName: 'Studio',
       plainTextKey: false,
       direct: { enabled: false, port: null, addresses: [] },
+      terminal: false,
       device: { privateKey: 'device key', platform: 'macOS 26.1' },
     })
     expect(host.state).toBe('off')

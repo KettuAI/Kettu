@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TERMINAL_FLOW } from '@shared/terminal-host'
-import { FlowControl } from './flow'
+import { DeviceFlow, FlowControl } from './flow'
 
 describe('FlowControl', () => {
   it('uses the VS Code watermarks by default', () => {
@@ -49,5 +49,53 @@ describe('FlowControl', () => {
     flow.ack('a', 150)
     expect(flow.removePort('b')).toBe('resume')
     expect(flow.removePort('b')).toBeNull()
+  })
+})
+
+describe('DeviceFlow', () => {
+  it('stops sending to a port past the high watermark, the one chunk that put it there sent', () => {
+    const flow = new DeviceFlow(100, 10)
+    expect(flow.sent(['phone'], 60)).toEqual(['phone'])
+    expect(flow.sent(['phone'], 60)).toEqual(['phone'])
+    expect(flow.sent(['phone'], 60)).toEqual([])
+    expect(flow.sent(['phone', 'tablet'], 60)).toEqual(['tablet'])
+  })
+
+  it('catches a port up once it acknowledges back under the low watermark', () => {
+    const flow = new DeviceFlow(100, 10)
+    flow.sent(['phone'], 120)
+    flow.sent(['phone'], 50)
+    expect(flow.ack('phone', 100)).toBe(false)
+    expect(flow.ack('phone', 15)).toBe(true)
+    // Caught up: it gets data again, and the next ack is an ordinary one.
+    expect(flow.sent(['phone'], 5)).toEqual(['phone'])
+    expect(flow.ack('phone', 10)).toBe(false)
+  })
+
+  it('never catches up a port that did not fall behind', () => {
+    const flow = new DeviceFlow(100, 10)
+    flow.sent(['phone'], 90)
+    expect(flow.ack('phone', 90)).toBe(false)
+    expect(flow.ack('tablet', 90)).toBe(false)
+  })
+
+  it('starts a port over after an attach, and forgets one that went away', () => {
+    const flow = new DeviceFlow(100, 10)
+    flow.sent(['phone', 'tablet'], 150)
+    flow.reset('phone')
+    expect(flow.sent(['phone', 'tablet'], 10)).toEqual(['phone'])
+    flow.removePort('tablet')
+    expect(flow.sent(['tablet'], 10)).toEqual(['tablet'])
+    expect(flow.ack('tablet', 10)).toBe(false)
+  })
+
+  it('uses the same watermarks as the windows by default', () => {
+    const flow = new DeviceFlow()
+    expect(flow.sent(['phone'], TERMINAL_FLOW.highWatermark)).toEqual(['phone'])
+    expect(flow.sent(['phone'], 1)).toEqual(['phone'])
+    expect(flow.sent(['phone'], 1)).toEqual([])
+    const back = TERMINAL_FLOW.highWatermark + 1 - TERMINAL_FLOW.lowWatermark
+    expect(flow.ack('phone', back)).toBe(false)
+    expect(flow.ack('phone', 1)).toBe(true)
   })
 })

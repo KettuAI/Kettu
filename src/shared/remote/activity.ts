@@ -1,5 +1,5 @@
 // What a device did on the host, as its page in Settings lists it: when it happened and what, and
-// which session, but never content, commands or where it connected from.
+// which session or project, but never content, commands or where it connected from.
 
 /** How long an event is kept. */
 export const ACTIVITY_DAYS = 30
@@ -26,6 +26,8 @@ export type DeviceActivity =
       sessionId: string
       title: string | null
     }
+  /** `terminal-closed`: the device killed it, or its terminal port ended with it open. */
+  | { at: number; kind: 'terminal-opened' | 'terminal-closed'; projectPath: string }
 
 type Without<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never
 

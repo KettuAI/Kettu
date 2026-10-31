@@ -320,6 +320,22 @@ export function StaleNote() {
   )
 }
 
+/** Allow terminal: whether devices may use this computer's terminal. */
+export function TerminalSwitch({ label }: { label: string }) {
+  const checked = useSettingsStore((s) => s.settings.remote.terminal)
+  const [apply, error] = useApply()
+  return (
+    <>
+      <ControlError error={error} />
+      <SettingSwitch
+        label={label}
+        checked={checked}
+        onChange={(v) => apply({ remote: { terminal: v } })}
+      />
+    </>
+  )
+}
+
 /** Reset remote access, after a confirm naming how many devices go. */
 export function ResetRemote() {
   const { t } = useTranslation(['settings', 'common'])

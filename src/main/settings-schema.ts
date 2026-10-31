@@ -192,8 +192,8 @@ function checkRemote(value: unknown, problems: string[]): void {
     return
   }
   for (const [key, fieldValue] of Object.entries(value)) {
-    if (key === 'enabled' || key === 'name') {
-      const problem = (key === 'enabled' ? isBoolean : isHostName)(fieldValue, `remote.${key}`)
+    if (key === 'enabled' || key === 'name' || key === 'terminal') {
+      const problem = (key === 'name' ? isHostName : isBoolean)(fieldValue, `remote.${key}`)
       if (problem) problems.push(problem)
     } else if (key === 'direct') {
       if (!isRecord(fieldValue)) {
@@ -345,9 +345,10 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
     if (patch.terminal.shellPath === null) delete next.terminal.shellPath
   }
   if (patch.remote) {
-    const { enabled, name, direct } = patch.remote
+    const { enabled, name, direct, terminal } = patch.remote
     if (enabled !== undefined) next.remote.enabled = enabled
     if (name !== undefined) next.remote.name = name
+    if (terminal !== undefined) next.remote.terminal = terminal
     if (direct?.enabled !== undefined) next.remote.direct.enabled = direct.enabled
     if (direct?.port !== undefined) next.remote.direct.port = direct.port
     if (direct?.addresses) {
@@ -587,6 +588,9 @@ function readRemote(raw: Record<string, unknown>, problems: string[]): SettingsF
   }
   read(raw.enabled, 'remote.enabled', isBoolean, () => (remote.enabled = raw.enabled as boolean))
   read(raw.name, 'remote.name', isHostName, () => (remote.name = raw.name as string | null))
+  read(raw.terminal, 'remote.terminal', isBoolean, () => {
+    remote.terminal = raw.terminal as boolean
+  })
   const direct = raw.direct
   if (direct === undefined) return remote
   if (!isRecord(direct)) {
@@ -664,7 +668,11 @@ export function reachesHost(changed: ReadonlySet<SettingsSection>): boolean {
 }
 
 export function terminalSettings(settings: SettingsFile): TerminalSettings {
-  return { shellPath: settings.terminal.shellPath ?? null, fontSize: settings.terminal.fontSize }
+  return {
+    shellPath: settings.terminal.shellPath ?? null,
+    fontSize: settings.terminal.fontSize,
+    allowDevices: settings.remote.terminal,
+  }
 }
 
 export type SettingsSection = Exclude<keyof SettingsFile, 'version'>

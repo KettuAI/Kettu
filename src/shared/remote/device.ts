@@ -1,4 +1,7 @@
-// A paired device as the host knows it, and the identity the agent host gives a device's port.
+// A paired device as the host knows it, and the identity the agent host and the terminal host give a
+// device's port.
+
+import type { PortChannel } from '../port-channel'
 
 /** A device's id: the first 16 bytes of its X25519 public key's SHA-256, in hex. */
 export const DEVICE_ID = /^[0-9a-f]{32}$/
@@ -77,4 +80,44 @@ export function parsePortDevice(value: unknown): PortDevice | null {
   const { id, name } = value as Record<string, unknown>
   if (typeof id !== 'string' || !DEVICE_ID.test(id) || !isDeviceName(name)) return null
   return { id, name }
+}
+
+/**
+ * Reads who a port on a host's socket serves from its first message: a paired device's port starts
+ * with a message of type `connect` that names it, as main sends it in the desktop app; any other
+ * first message is a window's first request, which the port still carries.
+ */
+export function identifyPort(
+  port: PortChannel,
+  connect: string,
+  serve: (port: PortChannel, device: PortDevice | null) => void,
+): void {
+  let identified = false
+  let listener: ((data: unknown) => void) | null = null
+  const waiting: unknown[] = []
+  const rest: PortChannel = {
+    send: (message) => port.send(message),
+    onMessage: (next) => {
+      listener = next
+      for (const message of waiting.splice(0)) next(message)
+    },
+    onClose: (next) => port.onClose(next),
+    close: () => port.close(),
+  }
+  port.onMessage((data) => {
+    if (identified) {
+      if (listener) listener(data)
+      else waiting.push(data)
+      return
+    }
+    identified = true
+    if ((data as { type?: unknown } | null)?.type !== connect) {
+      waiting.push(data)
+      return serve(rest, null)
+    }
+    // A device's port that does not name one validly is never served as a window's.
+    const device = parsePortDevice((data as { device?: unknown }).device)
+    if (device) serve(rest, device)
+    else port.close()
+  })
 }

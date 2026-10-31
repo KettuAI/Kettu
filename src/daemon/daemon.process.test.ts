@@ -2,8 +2,8 @@
 // turn of the fake agent through the agent host's socket, answers `kettu status` and
 // `kettu devices` with the remote host's devices, restarts a host that is killed, and stops
 // everything on SIGTERM. A paired device connects to it directly while `kettu direct` moves the
-// port and adds and removes an address, and uploads an image the fake agent gets, then reads it
-// and a project's file back as byte streams.
+// port and adds and removes an address, uploads an image the fake agent gets, then reads it and a
+// project's file back as byte streams, and uses a shell once `kettu terminal on` allows it.
 
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import {
@@ -31,6 +31,12 @@ import { parsePairingLink } from '@shared/remote/pairing'
 import type { DirectAddress } from '@shared/remote/protocol'
 import type { MediaReadResult, StreamRef } from '@shared/remote/streams'
 import { connectPort } from '@shared/socket-port'
+import type {
+  TerminalEvent,
+  TerminalMethod,
+  TerminalParams,
+  TerminalResult,
+} from '@shared/terminal-host'
 import type { Attachment } from '@shared/thread'
 import { FAKE_AGENT_MAIN, TestPort } from '../agent-host/testing/harness'
 import { connectTransport } from '../remote-host/direct'
@@ -664,5 +670,119 @@ describeUnix('kettu', () => {
 
     daemonRun.child.kill('SIGTERM')
     expect(await daemonRun.exited).toBe(0)
+  }, 90_000)
+
+  it('lets a paired device use a shell once kettu terminal on allows it', async () => {
+    const folder = path.join(dir, 'data-terminal')
+    const at = path.join(folder, 'control.sock')
+    const phone = await generateKeyPair()
+    const paired: PairedDevice = {
+      id: await deviceId(phone.publicKey),
+      publicKey: Buffer.from(phone.publicKey).toString('base64'),
+      name: "Ada's iPhone",
+      kind: 'ios',
+      platform: 'ios',
+      model: 'iPhone 17 Pro',
+      addedAt: Date.now(),
+      lastConnectedAt: null,
+    }
+    await mkdir(path.join(folder, 'remote'), { recursive: true })
+    await writeFile(
+      path.join(folder, 'remote', 'devices.json'),
+      JSON.stringify({ version: 1, devices: [paired] }),
+    )
+    const daemonRun = run(folder)
+    const cli = (...args: string[]): Promise<Run> => kettuOn(folder, ...args)
+    const listening = await until(async () => {
+      const printed = await cli('direct')
+      return (
+        printed.code === 0 && /^Direct connections listen on port (\d+)\.\n/.exec(printed.stdout)
+      )
+    }, `direct connections listening\n${daemonRun.output()}`)
+    expect(await cli('terminal')).toEqual({
+      code: 0,
+      stdout: 'Devices may not use the terminal. kettu terminal on lets them.\n',
+      stderr: '',
+    })
+
+    // A project the agent host knows, which it tells the terminal host of.
+    const project = path.join(dir, 'terminal-project')
+    await mkdir(project)
+    const agent = await agentPort(at)
+    await agent.request('sessions.create', { agentId: 'fake-agent', projectPath: project })
+
+    const identity = JSON.parse(
+      await readFile(path.join(folder, 'remote', 'identity.json'), 'utf8'),
+    )
+    const hostKey = (await importKeyPair(Buffer.from(identity.privateKey, 'base64'))).publicKey
+    const transport = await connectTransport({ host: '127.0.0.1', port: Number(listening[1]) })
+    const device = await connectDevice({ transport, hostKey, key: phone })
+    devices.push(device)
+    const ask = <M extends TerminalMethod>(
+      method: M,
+      params: TerminalParams<M>,
+    ): Promise<TerminalResult<M>> =>
+      device.port.request(method as never, params as never) as Promise<TerminalResult<M>>
+    const output = (id: string): string =>
+      (device.port.events as unknown as TerminalEvent[])
+        .map((event) => (event.type === 'terminal.data' && event.id === id ? event.data : ''))
+        .join('')
+    const told = (allowed: boolean): Promise<unknown> =>
+      until(
+        async () =>
+          device.notices.some(
+            (notice) =>
+              (notice as { type?: unknown; allowed?: unknown }).type === 'terminal' &&
+              (notice as { allowed?: unknown }).allowed === allowed,
+          ),
+        `the terminal ${allowed ? 'allowed' : 'not allowed'}`,
+      )
+    expect(await device.first).toMatchObject({ type: 'welcome', terminal: false })
+    await expect(ask('terminals.list', {})).rejects.toMatchObject({ code: 'terminal_not_allowed' })
+    expect((await status(at)).hosts.terminal.state).toBe('idle')
+
+    const allowed = await cli('terminal', 'on')
+    expect(allowed).toMatchObject({ code: 0, stderr: '' })
+    expect(allowed.stdout).toMatch(/^Devices may use the terminal: they can run any command/)
+    await told(true)
+    // The device's own port to the terminal host, which starts for it.
+    const shell = await ask('terminals.create', { projectPath: project, cols: 80, rows: 24 })
+    expect(shell).toMatchObject({ projectPath: project, exitCode: null })
+    expect((await status(at)).hosts.terminal.state).toBe('ready')
+    // The typed text and its output differ, so only the shell's own output matches.
+    await ask('terminals.input', { id: shell.id, data: 'echo "over""bench"\r' })
+    await until(async () => output(shell.id).includes('overbench'), 'the shell output')
+
+    expect(await cli('terminal', 'off')).toEqual({
+      code: 0,
+      stdout: 'Devices may not use the terminal. kettu terminal on lets them.\n',
+      stderr: '',
+    })
+    await told(false)
+    await expect(ask('terminals.list', {})).rejects.toMatchObject({ code: 'terminal_not_allowed' })
+    // The shell keeps running on the host.
+    const { path: terminalSocket } = await callControl(at, 'host.socket', { host: 'terminal' })
+    const window = await connectPort(terminalSocket)
+    clients.push(window)
+    const listed = await new Promise<unknown>((resolve) => {
+      window.onMessage((message) => {
+        if ((message as { type?: unknown }).type === 'response') resolve(message)
+      })
+      window.send({ type: 'request', id: 1, method: 'terminals.list', params: {} })
+    })
+    expect(listed).toMatchObject({ result: [{ id: shell.id, exitCode: null }] })
+
+    daemonRun.child.kill('SIGTERM')
+    expect(await daemonRun.exited).toBe(0)
+    const saved = JSON.parse(await readFile(path.join(folder, 'settings.json'), 'utf8'))
+    expect(saved.remote.terminal).toBe(false)
+    // Its activity names the project, never what it typed or saw.
+    const activity = await readFile(path.join(folder, 'remote', 'activity.json'), 'utf8')
+    const events = JSON.parse(activity).devices[paired.id] as { kind: string }[]
+    expect(events.filter((event) => event.kind.startsWith('terminal-'))).toEqual([
+      { at: expect.any(Number), kind: 'terminal-opened', projectPath: project },
+      { at: expect.any(Number), kind: 'terminal-closed', projectPath: project },
+    ])
+    expect(activity).not.toContain('overbench')
   }, 90_000)
 })

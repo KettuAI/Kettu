@@ -4,7 +4,7 @@ import type { Platform } from '@shared/platform'
 import type { PortErrorCode } from '@shared/port-rpc'
 import type { TerminalCommand, TerminalInfo, TerminalParams } from '@shared/terminal-host'
 import { TERMINAL_FLOW } from '@shared/terminal-host'
-import { FlowControl } from './flow'
+import { DeviceFlow, FlowControl } from './flow'
 import { OutputScanner } from './output-scanner'
 import type { ProjectRegistry } from './projects'
 import { ReplayBuffer } from './replay'
@@ -37,7 +37,9 @@ export type PtySpawn = (
 ) => PtyProcess
 
 export interface TerminalSink {
-  data(id: string, data: string, ports: ReadonlySet<string>): void
+  data(id: string, data: string, ports: Iterable<string>): void
+  /** A device's port caught up after it fell behind: its screen starts over from `replay`. */
+  replay(id: string, port: string, replay: string): void
   info(info: TerminalInfo): void
   removed(id: string): void
 }
@@ -63,6 +65,8 @@ export interface TerminalManagerOptions {
   warn?: (message: string) => void
   /** Lists the processes attached to a Windows console, the shell's included. */
   consoleProcesses?: (pty: PtyProcess) => Promise<number[] | null>
+  /** Whether a port serves a paired device, which never pauses the pty; none do when absent. */
+  isDevicePort?: (port: string) => boolean
 }
 
 const TITLE_CHECK_MS = 100
@@ -80,7 +84,8 @@ interface Terminal {
   pty: PtyProcess | null
   generation: number
   replay: ReplayBuffer
-  flow: FlowControl
+  flow: FlowControl // windows' ports
+  devices: DeviceFlow // devices' ports
   scanner: OutputScanner
   ports: Set<string>
   pending: string
@@ -174,6 +179,7 @@ export class TerminalManager {
       generation: 0,
       replay: new ReplayBuffer(),
       flow: new FlowControl(),
+      devices: new DeviceFlow(),
       scanner: new OutputScanner(),
       ports: new Set([port]),
       pending: '',
@@ -202,6 +208,7 @@ export class TerminalManager {
     const terminal = this.get(id)
     this.flush(terminal)
     terminal.ports.add(port)
+    if (this.isDevice(port)) terminal.devices.reset(port)
     return { replay: terminal.replay.snapshot() }
   }
 
@@ -219,7 +226,14 @@ export class TerminalManager {
 
   ack(port: string, id: string, chars: number): void {
     const terminal = this.get(id)
-    this.applyFlow(terminal, terminal.flow.ack(port, chars))
+    if (!this.isDevice(port)) {
+      this.applyFlow(terminal, terminal.flow.ack(port, chars))
+      return
+    }
+    // Output still batched is not in the replay; it reaches the port as data once flushed.
+    if (terminal.devices.ack(port, chars) && terminal.ports.has(port)) {
+      this.options.sink.replay(id, port, terminal.replay.snapshot())
+    }
   }
 
   kill(id: string): void {
@@ -246,6 +260,7 @@ export class TerminalManager {
     })
     terminal.shellProcess = null
     terminal.flow = new FlowControl()
+    terminal.devices = new DeviceFlow()
     await this.spawn(terminal)
     this.options.sink.info({ ...terminal.info })
     return { ...terminal.info }
@@ -255,6 +270,7 @@ export class TerminalManager {
   detach(port: string): void {
     for (const terminal of this.terminals.values()) {
       if (!terminal.ports.delete(port)) continue
+      terminal.devices.removePort(port)
       this.applyFlow(terminal, terminal.flow.removePort(port))
     }
   }
@@ -278,6 +294,10 @@ export class TerminalManager {
   dispose(): void {
     for (const terminal of this.terminals.values()) this.stopPty(terminal)
     this.terminals.clear()
+  }
+
+  private isDevice(port: string): boolean {
+    return this.options.isDevicePort?.(port) ?? false
   }
 
   private get(id: string): Terminal {
@@ -343,8 +363,12 @@ export class TerminalManager {
     terminal.replay.append(data)
     terminal.scanner.scan(data)
     if (terminal.ports.size > 0) {
-      this.options.sink.data(terminal.info.id, data, terminal.ports)
-      this.applyFlow(terminal, terminal.flow.sent(terminal.ports, data.length))
+      const windows: string[] = []
+      const devices: string[] = []
+      for (const port of terminal.ports) (this.isDevice(port) ? devices : windows).push(port)
+      const receiving = [...windows, ...terminal.devices.sent(devices, data.length)]
+      if (receiving.length > 0) this.options.sink.data(terminal.info.id, data, receiving)
+      this.applyFlow(terminal, terminal.flow.sent(windows, data.length))
     }
     terminal.titleTimer ??= setTimeout(() => {
       terminal.titleTimer = null

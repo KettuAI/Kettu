@@ -84,6 +84,7 @@ import {
   RemoteStatusRow,
   ResetRemote,
   StaleNote,
+  TerminalSwitch,
 } from './remote-section'
 import { deviceLine } from './remote-text'
 import { PublishedRow, SharingAccount } from './sharing-section'
@@ -1110,6 +1111,15 @@ export function useRemoteSection(): SectionDef {
       group: direct,
       layout: 'block',
       render: (text) => <OwnAddresses text={text} />,
+    },
+    {
+      id: 'terminal',
+      name: t('remote.terminal.name'),
+      english: en('remote.terminal.name'),
+      description: t('remote.terminal.description'),
+      keywords: t('remote.terminal.keywords'),
+      group: group('terminal', t('remote.terminal.name'), { unlabeled: true }),
+      render: () => <TerminalSwitch label={t('remote.terminal.name')} />,
     },
     {
       id: 'reset',

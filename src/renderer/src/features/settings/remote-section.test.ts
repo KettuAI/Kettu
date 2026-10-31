@@ -20,7 +20,7 @@ vi.mock('@renderer/stores/remote', () => ({
   useRemoteStore: (select: (state: { status: RemoteStatus | null }) => unknown) =>
     select({ status: remote.status }),
 }))
-const settings = vi.hoisted(() => ({ own: [] as DirectAddress[], enabled: true }))
+const settings = vi.hoisted(() => ({ own: [] as DirectAddress[], enabled: true, terminal: false }))
 vi.mock('@renderer/stores/settings', () => {
   const state = () => {
     const file: SettingsFile = structuredClone(DEFAULT_SETTINGS)
@@ -28,6 +28,7 @@ vi.mock('@renderer/stores/settings', () => {
       enabled: settings.enabled,
       name: null,
       direct: { enabled: true, port: 47821, addresses: settings.own },
+      terminal: settings.terminal,
     }
     return { settings: file, update: async () => {} }
   }
@@ -42,8 +43,15 @@ vi.mock('@renderer/lib/use-now', () => ({ useNow: () => Date.now(), useSeconds: 
 
 const { i18n } = await import('@renderer/lib/i18n')
 const { Dialog } = await import('@renderer/components/ui/dialog')
-const { AddDeviceRow, DeviceRow, NoDevices, PlainKeyNote, RemoteStatusRow, StaleNote } =
-  await import('./remote-section')
+const {
+  AddDeviceRow,
+  DeviceRow,
+  NoDevices,
+  PlainKeyNote,
+  RemoteStatusRow,
+  StaleNote,
+  TerminalSwitch,
+} = await import('./remote-section')
 const { CodeBody, Confirm } = await import('./remote-pairing')
 const { closeRequest } = await import('./pair-close')
 const { ActivityRow, DevicePage } = await import('./remote-device')
@@ -95,6 +103,7 @@ afterEach(async () => {
   remote.status = null
   settings.own = []
   settings.enabled = true
+  settings.terminal = false
   await i18n.changeLanguage('en')
 })
 
@@ -178,6 +187,53 @@ describe('the Direct group', () => {
     expect(text(createElement(OwnAddresses, { text: 'Own' }))).toMatch(
       /You can add up to 10 addresses\.$/,
     )
+  })
+})
+
+describe('Allow terminal', () => {
+  it('is a switch for the setting, off until the owner turns it on', () => {
+    const markup = () =>
+      renderToStaticMarkup(createElement(TerminalSwitch, { label: 'Allow terminal' }))
+    expect(markup()).toContain('aria-label="Allow terminal"')
+    expect(markup()).toContain('aria-checked="false"')
+    settings.terminal = true
+    expect(markup()).toContain('aria-checked="true"')
+  })
+
+  it('sits after the Direct group while remote access is on', () => {
+    remote.status = status()
+    let section: ReturnType<typeof useRemoteSection> | null = null
+    const Probe = () => {
+      section = useRemoteSection()
+      return null
+    }
+    renderToStaticMarkup(createElement(Probe))
+    const ids = section!.rows.map((row) => row.id)
+    expect(ids.slice(ids.indexOf('direct-own'))).toEqual(['direct-own', 'terminal', 'reset'])
+    const row = section!.rows.find((entry) => entry.id === 'terminal')!
+    expect([row.name, row.english]).toEqual(['Allow terminal', 'Allow terminal'])
+    expect(renderToStaticMarkup(row.render('') as ReactElement)).toContain('aria-checked="false"')
+    // Off, the page lists devices only.
+    settings.enabled = false
+    renderToStaticMarkup(createElement(Probe))
+    expect(section!.rows.map((entry) => entry.id)).not.toContain('terminal')
+  })
+
+  it('says what devices can do with it, in English and in Chinese', async () => {
+    const row = () => [
+      i18n.t('settings:remote.terminal.name'),
+      i18n.t('settings:remote.terminal.description'),
+    ]
+    expect(row()).toEqual([
+      'Allow terminal',
+      'Devices can run any command on this computer, beyond what an agent asks to run. Turning ' +
+        "it off closes devices' terminals; the terminals keep running here.",
+    ])
+    await i18n.changeLanguage('zh-CN')
+    expect(row()).toEqual([
+      '允许终端',
+      '设备能在这台电脑上运行任何命令，超出 Agent 要授权的范围。关掉时断开设备上的终端，终端本身继续运行。',
+    ])
   })
 })
 
@@ -377,6 +433,20 @@ describe("a device's page", () => {
     expect(row({ at: now, kind: 'session-deleted', sessionId: 's2', title: null })).toContain(
       'Deleted a session',
     )
+  })
+
+  it('names the project of a terminal it opened or closed, beside its sessions', async () => {
+    const row = (event: DeviceActivity) => text(createElement(ActivityRow, { event, kind: 'ios' }))
+    const opened: DeviceActivity = { at: now, kind: 'terminal-opened', projectPath: '/work/kettu' }
+    const closed: DeviceActivity = { at: now, kind: 'terminal-closed', projectPath: '/work/kettu' }
+    expect(row(opened)).toMatch(/ Opened a terminal kettu$/)
+    expect(row(closed)).toMatch(/ Closed a terminal kettu$/)
+    expect(
+      row({ at: now, kind: 'session-created', sessionId: 's1', title: 'Fix the login' }),
+    ).toContain('Started “Fix the login”')
+    await i18n.changeLanguage('zh-CN')
+    expect(row(opened)).toMatch(/ 打开终端 kettu$/)
+    expect(row(closed)).toMatch(/ 关闭终端 kettu$/)
   })
 
   it('has when it joined and last connected, its activity and Remove', () => {

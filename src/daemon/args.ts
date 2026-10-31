@@ -18,6 +18,8 @@ export type Command =
   | { kind: 'direct-port'; port: number; yes: boolean }
   | { kind: 'direct-add'; address: DirectAddress }
   | { kind: 'direct-remove'; address: DirectAddress }
+  | { kind: 'terminal' }
+  | { kind: 'terminal-set'; allowed: boolean }
   | { kind: 'service-install' }
   | { kind: 'service-uninstall' }
   /** What was wrong with the command line, in a short sentence. */
@@ -37,6 +39,9 @@ Commands:
   direct port <port>           Listen on another port, from 1024 to 65535
   direct add <host>:<port>     Add an address of your own, such as a forwarded port
   direct remove <host>:<port>  Remove an address of your own
+  terminal                     Say whether devices may use this computer's terminal
+  terminal on                  Let devices use the terminal, which runs any command
+  terminal off                 Stop it; devices' terminals close but keep running here
   service install              Run the daemon as a service that starts with the computer
   service uninstall            Stop the service and remove it
 
@@ -49,7 +54,7 @@ Environment:
   KETTU_DAEMON_DATA            The data folder to use instead of the default
 
 Write an IPv6 address in brackets, as [fd00::1]:4567.
-kettu status and the direct commands exit with 3 when the daemon is not running.
+kettu status and the direct and terminal commands exit with 3 when the daemon is not running.
 `
 
 const OPTIONS = {
@@ -120,6 +125,12 @@ function parseWords(words: string[], yes: boolean): Command {
       return extra(2) ?? { kind: 'devices-remove', id: rest[1]! }
     case 'direct':
       return parseDirect(rest, yes)
+    case 'terminal':
+      if (rest[0] === undefined) return { kind: 'terminal' }
+      if (rest[0] !== 'on' && rest[0] !== 'off') {
+        return { kind: 'usage', message: `Unknown terminal command ${quote(rest[0])}` }
+      }
+      return extra(1) ?? { kind: 'terminal-set', allowed: rest[0] === 'on' }
     case 'service':
       if (rest[0] === 'install') return extra(1) ?? { kind: 'service-install' }
       if (rest[0] === 'uninstall') return extra(1) ?? { kind: 'service-uninstall' }

@@ -24,6 +24,11 @@ import { clearUploads } from './uploads'
 export interface RemoteHostDeps {
   /** A port to the agent host for a device's session, or null while the agent host is down. */
   openAgentPort(device: PortDevice): Promise<PortChannel | null>
+  /**
+   * A port to the terminal host for a device's terminals, or null while devices may not use it or
+   * it cannot run.
+   */
+  openTerminalPort(device: PortDevice): Promise<PortChannel | null>
   /** A port to main for a host's device session; only the desktop app has one. */
   openMainPort?(hostId: string): Promise<PortChannel | null>
 }
@@ -63,6 +68,8 @@ export function startRemoteHost(
   let serving: Promise<Serving | null> = Promise.resolve(null)
   let client: HostClient | null = null
   let hostName = ''
+  // Whether devices may use the terminal; each server starts with it and hears when it changes.
+  let terminal = false
 
   async function serve(options: ServeOptions): Promise<Serving> {
     const { userDataPath, platform, appVersion } = init!
@@ -100,6 +107,8 @@ export function startRemoteHost(
       host: { name: hostName, platform, version: appVersion },
       uploads,
       openAgentPort: (device) => deps.openAgentPort(device),
+      terminal,
+      openTerminalPort: (device) => deps.openTerminalPort(device),
       changed,
       log,
     })
@@ -154,6 +163,7 @@ export function startRemoteHost(
   async function begin(message: Init): Promise<void> {
     init = message
     hostName = message.hostName
+    terminal = message.terminal === true
     // Without its own key the app still serves devices, and the other way round.
     let reportHosts: (() => void) | null = null
     if (message.device) {
@@ -260,6 +270,12 @@ export function startRemoteHost(
       case 'remote-host:direct':
         withServing(({ direct }) => direct.apply(message.direct))
         break
+      case 'remote-host:terminal': {
+        const allowed = message.allowed === true
+        terminal = allowed
+        withServing(({ server: s }) => s.setTerminal(allowed))
+        break
+      }
       case 'remote-host:resume':
         withServing(({ direct }) => direct.checkAddresses())
         withRunning(() => client?.resume())

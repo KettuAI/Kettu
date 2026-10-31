@@ -60,8 +60,15 @@ export interface RemoteHostDeps {
   devices(): Promise<StoredDevices>
   /** The direct connections' settings now. */
   direct(): DirectSettings
+  /** Whether devices may use the terminal now. */
+  terminal(): boolean
   /** A port to the agent host for a device's session, or null while it is not running. */
   openPort(device: PortDevice): MessagePortMain | null
+  /**
+   * A port to the terminal host for a device's terminals, or null while devices may not use it or
+   * it cannot run.
+   */
+  openTerminalPort(device: PortDevice): MessagePortMain | null
   /** The state or the report changed, for Settings and the tray. */
   changed?(): void
   /** The known hosts, their connections or the device key changed, for Settings › Hosts. */
@@ -110,6 +117,8 @@ export class RemoteHost {
   private latest: RemoteHostStatus | null = null
   private ownKey: string | null = null
   private direct: string | null = null
+  /** Whether devices may use the terminal, as the running process was last told. */
+  private terminal: boolean | null = null
   private quitting = false
   private failed = false
   /** The setting: whether this computer serves devices. */
@@ -209,6 +218,13 @@ export class RemoteHost {
     const sent = JSON.stringify(direct)
     if (!this.serving || sent === this.direct) return
     if (this.toServer({ type: 'remote-host:direct', direct })) this.direct = sent
+  }
+
+  /** Tells the process when devices may use the terminal or no longer may; each start reads it. */
+  terminalChanged(): void {
+    const allowed = this.deps.terminal()
+    if (allowed === this.terminal) return
+    if (this.host?.post({ type: 'remote-host:terminal', allowed })) this.terminal = allowed
   }
 
   /** Passes the same settings on again, so a port that could not be opened is tried again. */
@@ -497,6 +513,7 @@ export class RemoteHost {
       ...(identity ? { privateKey: identity.privateKey } : {}),
       plainTextKey: identity?.plainText ?? false,
       direct: this.initDirect(),
+      terminal: this.initTerminal(),
       ...(this.device
         ? { device: { privateKey: this.device.privateKey, platform: this.platform } }
         : {}),
@@ -507,6 +524,11 @@ export class RemoteHost {
     const direct = this.deps.direct()
     this.direct = JSON.stringify(direct)
     return direct
+  }
+
+  private initTerminal(): boolean {
+    this.terminal = this.deps.terminal()
+    return this.terminal
   }
 
   private async startServing(): Promise<void> {
@@ -617,6 +639,18 @@ export class RemoteHost {
           return
         }
         const port = this.deps.openPort(device)
+        const answer: MainToRemoteHost = { type: 'remote-host:port', requestId: message.requestId }
+        if (!host.post(answer, port ? [port] : [])) port?.close()
+        break
+      }
+      case 'remote-host:open-terminal-port': {
+        const device = parsePortDevice(message.device)
+        if (!Number.isSafeInteger(message.requestId) || !device) {
+          log.warn('Ignored a terminal port request that names no device')
+          return
+        }
+        // Main checks the setting too, so a remote host that misbehaves gets no port.
+        const port = this.deps.terminal() ? this.deps.openTerminalPort(device) : null
         const answer: MainToRemoteHost = { type: 'remote-host:port', requestId: message.requestId }
         if (!host.post(answer, port ? [port] : [])) port?.close()
         break

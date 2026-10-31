@@ -162,7 +162,8 @@ export type MainToTerminalHost =
       // Under Node.js, the local socket the host takes its ports on; the desktop app hands them over.
       socketPath?: string
     }
-  | { type: 'terminal-host:connect'; windowId: number } // the port travels in the transfer list
+  // The port travels in the transfer list; `device` names the paired device it serves, if any.
+  | { type: 'terminal-host:connect'; windowId: number; device?: PortDevice }
   | { type: 'terminal-host:settings'; settings: TerminalSettings }
   | { type: 'terminal-host:projects'; paths: string[] }
   | { type: 'terminal-host:auth-commands'; commands: string[] }
@@ -193,6 +194,8 @@ export type MainToRemoteHost =
       plainTextKey: boolean
       /** Direct connections on the same network or a VPN; off when absent. */
       direct?: DirectSettings
+      /** Whether devices may use the terminal; `remote-host:terminal` says when it changes. */
+      terminal: boolean
       /**
        * The desktop app as a device of other hosts: the 32 bytes of its own X25519 private key, in
        * base64 and never logged, and its system as its hello names it. Absent under the daemon.
@@ -204,8 +207,14 @@ export type MainToRemoteHost =
       socketPath?: string
     }
   // The answer to remote-host:open-port: the agent host's port travels in the transfer list, and
-  // none comes while the agent host is not running.
+  // none comes while the agent host is not running. It answers remote-host:open-terminal-port the
+  // same way with the terminal host's, none while devices may not use it or it cannot run.
   | { type: 'remote-host:port'; requestId: number }
+  // Under Node.js, the answer to remote-host:open-terminal-port: the terminal host's socket, which
+  // the remote host connects to itself; null while devices may not use it or it cannot run.
+  | { type: 'remote-host:terminal-socket'; requestId: number; socketPath: string | null }
+  // The owner allowed devices the terminal or stopped allowing it.
+  | { type: 'remote-host:terminal'; allowed: boolean }
   | { type: 'remote-host:add-device'; device: NewDevice }
   // Forgets the device and closes its sessions at once.
   | { type: 'remote-host:remove-device'; id: string }
@@ -280,6 +289,9 @@ export type RemoteHostToMain =
   | { type: 'remote-host:status'; status: RemoteHostStatus }
   // A port to the agent host for a device's session; answered by remote-host:port.
   | { type: 'remote-host:open-port'; requestId: number; device: PortDevice }
+  // A port to the terminal host for a device's terminals; answered by remote-host:port in the
+  // desktop app and by remote-host:terminal-socket under Node.js.
+  | { type: 'remote-host:open-terminal-port'; requestId: number; device: PortDevice }
   | { type: 'remote-host:log'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'remote-host:pairing'; codeId: number; pairing: PairingState }
   // The known hosts and their connections, whenever they change.
