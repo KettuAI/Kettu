@@ -1,6 +1,7 @@
 // What `kettu status` and `kettu devices` print.
 
 import type { DaemonStatus, DeviceSummary, HostStatus } from './control'
+import { directLine } from './direct'
 
 function host(status: HostStatus): string {
   const restarted =
@@ -51,6 +52,7 @@ ${rows([
   ['Terminal host', host(status.hosts.terminal)],
   ['Remote host', host(status.hosts.remote)],
   ['Connected devices', devices],
+  ['Direct connections', directLine(status.direct)],
 ])}
 `
 }

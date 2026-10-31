@@ -3,14 +3,13 @@
 
 import type { MessagePortMain } from 'electron'
 import type {
-  DirectStatus,
   MainToRemoteHost,
   RemoteHostStatus,
   RemoteHostStopReason,
   RemoteHostToMain,
 } from '@shared/host-control'
 import type { DeviceActivity } from '@shared/remote/activity'
-import { isPort, parseDirectAddress } from '@shared/remote/address'
+import { isDirectStatus } from '@shared/remote/address'
 import { parsePortDevice, type NewDevice, type PortDevice } from '@shared/remote/device'
 import { isPairingState, type PairingState } from '@shared/remote/pairing'
 import type { DirectSettings } from '@shared/settings'
@@ -22,7 +21,6 @@ import { UtilityHost } from './utility-host'
 const log = createLogger('remote-host')
 
 const MAX_DEVICES = 1000
-const MAX_ADDRESSES = 64
 const MAX_ACTIVITY = 500
 /** How long a request to the remote host may take before it answers with nothing. */
 const REQUEST_TIMEOUT_MS = 10_000
@@ -42,22 +40,6 @@ export interface RemoteHostDeps {
   openPort(device: PortDevice): MessagePortMain | null
   /** The state or the report changed, for Settings and the tray. */
   changed?(): void
-}
-
-function isDirectStatus(value: unknown): value is DirectStatus {
-  if (typeof value !== 'object' || value === null) return false
-  const { state, port, addresses, reason } = value as Record<string, unknown>
-  if (state === 'off') return true
-  if (state === 'failed') {
-    return isPort(port) && ['port_in_use', 'not_permitted', 'other'].includes(reason as string)
-  }
-  return (
-    state === 'listening' &&
-    isPort(port) &&
-    Array.isArray(addresses) &&
-    addresses.length <= MAX_ADDRESSES &&
-    addresses.every((address) => parseDirectAddress(address) !== null)
-  )
 }
 
 /** Whoever opened Add device hears its code's progress. */

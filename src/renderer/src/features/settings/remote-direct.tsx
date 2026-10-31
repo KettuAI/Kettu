@@ -1,7 +1,13 @@
 import { useId, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { CircleAlertIcon, XIcon } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
-import { addressKey, MAX_OWN_ADDRESSES } from '@shared/remote/address'
+import {
+  addressKey,
+  addressText,
+  MAX_OWN_ADDRESSES,
+  parseAddress,
+  parsePort,
+} from '@shared/remote/address'
 import type { DirectAddress } from '@shared/remote/protocol'
 import {
   AlertDialog,
@@ -18,7 +24,7 @@ import { Input } from '@renderer/components/ui/input'
 import { useRemoteStore } from '@renderer/stores/remote'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { CONFIRM, ControlError } from './controls'
-import { addressText, DIRECT_PORT_FIELD, parseAddress, parsePort } from './remote-text'
+import { DIRECT_PORT_FIELD } from './remote-text'
 import { useApply } from './use-apply'
 
 const isComposing = (event: KeyboardEvent<HTMLInputElement>): boolean =>

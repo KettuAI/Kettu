@@ -1,7 +1,5 @@
 import type { TFunction } from 'i18next'
-import { isDirectHost, isPort } from '@shared/remote/address'
 import type { PairedDevice } from '@shared/remote/device'
-import type { DirectAddress } from '@shared/remote/protocol'
 import { removalAt, UNSEEN_NOTICE_DAYS } from '@shared/remote/status'
 import { clockTime, daysBefore, monthDay } from '@renderer/lib/format'
 
@@ -68,33 +66,6 @@ export function daysUnseen(
   now = Date.now(),
 ): number {
   return Math.floor((now - (device.lastConnectedAt ?? device.addedAt)) / DAY)
-}
-
-/** An address as devices dial it: an IPv6 address in brackets, then the port. */
-export function addressText({ host, port }: DirectAddress): string {
-  return `${host.includes(':') ? `[${host}]` : host}:${port}`
-}
-
-const ADDRESS_INPUT = /^(?:\[([^\]]+)\]|([^\s:/[\]]+)):(\d{1,5})$/
-
-/** What the owner typed as an address of their own: `host:port` or `[IPv6]:port`, else null. */
-export function parseAddress(text: string): DirectAddress | null {
-  const match = ADDRESS_INPUT.exec(text.trim())
-  if (!match) return null
-  const host = match[1] ?? match[2]!
-  const port = Number(match[3])
-  return isDirectHost(host) && isPort(port) ? { host, port } : null
-}
-
-/** The lowest port the owner may pick: below it a port may need privileges. */
-export const MIN_OWN_PORT = 1024
-
-/** The port the owner typed, or null when it is not one they may pick. */
-export function parsePort(text: string): number | null {
-  const trimmed = text.trim()
-  if (!/^\d{1,5}$/.test(trimmed)) return null
-  const port = Number(trimmed)
-  return isPort(port) && port >= MIN_OWN_PORT ? port : null
 }
 
 /** The port field's id, which Change port on the status line focuses. */
