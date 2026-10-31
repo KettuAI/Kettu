@@ -10,9 +10,12 @@ export type Connect = (address: DirectAddress, signal: AbortSignal) => Promise<T
 
 export type DialResult =
   | { kind: 'open'; channel: DeviceChannel; address: DirectAddress }
-  /** The host ended a handshake, as it does for a key or a code it refuses, and none finished. */
+  /**
+   * Every address failed, at least one by ending the handshake, as the host does for a key or a
+   * code it refuses.
+   */
   | { kind: 'dropped' }
-  /** No handshake finished in time. */
+  /** No handshake finished in time, or none was ended. */
   | { kind: 'unreachable' }
   | { kind: 'aborted' }
 
@@ -26,8 +29,9 @@ export interface DialOptions {
 }
 
 /**
- * Tries every address at once. A host that ends a handshake while no other is waiting for its
- * answer settles it at once: its other addresses lead to the same host, which ends theirs too.
+ * Tries every address at once. An ended handshake is the answer only once every other address
+ * has failed too: a proxy that takes every connection and closes it ends one of an unreachable
+ * host's, while the host may still answer at another.
  */
 export function dial(options: DialOptions): Promise<DialResult> {
   const { addresses, connect, start, timeoutMs, signal } = options
@@ -51,11 +55,9 @@ export function dial(options: DialOptions): Promise<DialResult> {
     const abort = (): void => finish({ kind: 'aborted' })
     const settled = (): void => {
       unsettled--
-      if (done) return
-      if (dropped && waiting.size === 0) finish({ kind: 'dropped' })
-      else if (unsettled === 0) finish({ kind: 'unreachable' })
+      if (!done && unsettled === 0) finish({ kind: dropped ? 'dropped' : 'unreachable' })
     }
-    const timer = setTimeout(() => finish({ kind: dropped ? 'dropped' : 'unreachable' }), timeoutMs)
+    const timer = setTimeout(() => finish({ kind: 'unreachable' }), timeoutMs)
 
     const attempt = async (address: DirectAddress): Promise<void> => {
       let transport: Transport

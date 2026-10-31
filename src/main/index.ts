@@ -28,6 +28,7 @@ import { sessionProxy } from './proxy'
 import { Sharing } from './sharing'
 import { restrictPermissions } from './permissions'
 import { QuitFlow } from './quit'
+import { loadStoredDevices } from './remote-devices'
 import { RemoteHost } from './remote-host'
 import { loadDeviceKey, loadIdentity, newIdentity, type IdentityCipher } from './remote-identity'
 import { readJsonFile } from './json-file'
@@ -235,7 +236,7 @@ async function start(): Promise<void> {
       state: remoteHost.state,
       hostName: hostName(),
       systemName: hostname(),
-      devices: status?.devices ?? [],
+      devices: remoteHost.devices,
       online: status?.online ?? [],
       plainTextKey: status?.plainTextKey ?? false,
       direct: status?.direct ?? { state: 'off' },
@@ -267,6 +268,7 @@ async function start(): Promise<void> {
     }
     return model
   }
+  const remoteLog = createLogger('remote-devices')
   const remoteHost: RemoteHost = new RemoteHost({
     userDataPath,
     appVersion: app.getVersion(),
@@ -280,6 +282,7 @@ async function start(): Promise<void> {
       return Array.isArray(hosts) && hosts.length > 0
     },
     hostName,
+    devices: () => loadStoredDevices(userDataPath, (level, message) => remoteLog[level](message)),
     direct: () => settings.get().remote.direct,
     openPort: (device) => agentHost.connectDevice(device),
     changed: remoteChanged,

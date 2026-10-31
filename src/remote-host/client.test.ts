@@ -23,6 +23,8 @@ import { memoryPorts, memoryTransports } from './testing/memory'
 
 const STUDIO: DirectAddress = { host: '192.168.1.8', port: 47821 }
 const NOWHERE: DirectAddress = { host: '192.0.2.1', port: 9 }
+/** Behind a proxy that takes every connection and closes it once the device speaks. */
+const PROXIED: DirectAddress = { host: '198.51.100.7', port: 47821 }
 const quiet = (): void => {}
 
 const cleanups: (() => unknown)[] = []
@@ -75,7 +77,7 @@ async function startHost(dir: string, hostKey: KeyPair) {
   return { server, devices, pairing, openCode, until }
 }
 
-async function setup(options: { timeoutMs?: number; retryMs?: number } = {}) {
+async function setup(options: { timeoutMs?: number; retryMs?: number; lateMs?: number } = {}) {
   const dir = await tempFolder('kettu-client-')
   const hostKey = await generateKeyPair()
   const deviceKey = await generateKeyPair()
@@ -86,8 +88,17 @@ async function setup(options: { timeoutMs?: number; retryMs?: number } = {}) {
   const connect = (address: DirectAddress, signal: AbortSignal): Promise<Transport> => {
     dialed.push(`${address.host}:${address.port}`)
     if (address.host === STUDIO.host && reachable) {
-      const [deviceEnd, hostEnd] = memoryTransports()
-      host.server.accept(hostEnd)
+      const open = (): Transport => {
+        const [deviceEnd, hostEnd] = memoryTransports()
+        host.server.accept(hostEnd)
+        return deviceEnd
+      }
+      if (!options.lateMs) return Promise.resolve(open())
+      return new Promise((resolve) => setTimeout(() => resolve(open()), options.lateMs))
+    }
+    if (address.host === PROXIED.host) {
+      const [deviceEnd, proxyEnd] = memoryTransports()
+      proxyEnd.onMessage(() => proxyEnd.close())
       return Promise.resolve(deviceEnd)
     }
     // An address nothing answers at: the try waits until the dialing gives up.
@@ -220,6 +231,25 @@ describe('pairing with a host', () => {
     t.host.openCode(2)
     t.client.pair(1, payload, 'MacBook Pro')
     expect(await t.pairingEnd(1)).toEqual({ state: 'failed', reason: 'void' })
+  })
+
+  it('takes a dropped handshake as the answer only once every address has failed', async () => {
+    const t = await setup({ lateMs: 100 })
+    const payload = t.host.openCode()
+    t.client.pair(1, { ...payload, addresses: [PROXIED, STUDIO] }, 'MacBook Pro')
+    await t.host.until(1, 'confirm')
+    expect(t.states(1)).toEqual(['connecting', 'confirm'])
+    t.host.pairing.answer(1, { add: true, name: 'Desk' })
+    expect(await t.pairingEnd(1)).toMatchObject({
+      state: 'added',
+      host: { connection: { state: 'online', address: STUDIO } },
+    })
+  })
+
+  it('says a host is unreachable when one address drops and another never answers', async () => {
+    const t = await setup({ timeoutMs: 200 })
+    t.client.pair(1, { ...t.host.openCode(), addresses: [PROXIED, NOWHERE] }, 'MacBook Pro')
+    expect(await t.pairingEnd(1)).toEqual({ state: 'failed', reason: 'unreachable' })
   })
 
   it('gives up on a host nothing answers for within the timeout', async () => {

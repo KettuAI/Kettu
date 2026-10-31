@@ -12,7 +12,12 @@ import type {
 } from '@shared/host-control'
 import type { DeviceActivity } from '@shared/remote/activity'
 import { isDirectStatus } from '@shared/remote/address'
-import { parsePortDevice, type NewDevice, type PortDevice } from '@shared/remote/device'
+import {
+  parsePortDevice,
+  type NewDevice,
+  type PairedDevice,
+  type PortDevice,
+} from '@shared/remote/device'
 import {
   parseHostPairingState,
   parseHostStatus,
@@ -24,6 +29,7 @@ import type { DirectAddress } from '@shared/remote/protocol'
 import type { DirectSettings } from '@shared/settings'
 import remoteHostPath from '../remote-host/index?modulePath'
 import { createLogger } from './log'
+import type { StoredDevices } from './remote-devices'
 import type { RemoteIdentity } from './remote-identity'
 import { UtilityHost } from './utility-host'
 
@@ -50,6 +56,8 @@ export interface RemoteHostDeps {
   hostsKnown(): Promise<boolean>
   /** The name devices show for this computer, and the one it suggests to a host. */
   hostName(): string
+  /** The device files, read for while the remote host does not serve devices. */
+  devices(): Promise<StoredDevices>
   /** The direct connections' settings now. */
   direct(): DirectSettings
   /** A port to the agent host for a device's session, or null while it is not running. */
@@ -122,12 +130,21 @@ export class RemoteHost {
   private nextPair = 1
   private readonly requests = new Map<number, (message: RemoteHostToMain | null) => void>()
   private nextRequest = 1
+  /** The device files while the remote host does not serve devices, which leaves them alone. */
+  private stored: StoredDevices | null = null
+  /** The paired devices as last read, from the remote host's reports or the files. */
+  private paired: PairedDevice[] = []
 
   constructor(private readonly deps: RemoteHostDeps) {}
 
   /** What the remote host last reported of the devices, or null while it does not serve them. */
   get status(): RemoteHostStatus | null {
     return this.serving ? this.latest : null
+  }
+
+  /** The paired devices, whether or not remote access is on. */
+  get devices(): PairedDevice[] {
+    return this.serving && this.latest ? this.latest.devices : this.paired
   }
 
   get state(): RemoteHostState {
@@ -166,7 +183,10 @@ export class RemoteHost {
   /** Tells every device why and stops for good, as when Kettu quits. */
   stop(): Promise<void> {
     this.quitting = true
-    this.changes = this.changes.then(() => this.end('stopping'))
+    this.changes = this.changes.then(async () => {
+      await this.end('stopping')
+      await this.releaseDevices()
+    })
     return this.changes
   }
 
@@ -175,9 +195,12 @@ export class RemoteHost {
     return this.toServer({ type: 'remote-host:add-device', device })
   }
 
-  /** Forgets a device and ends its sessions; false while the host does not serve devices. */
-  removeDevice(id: string): boolean {
-    return this.toServer({ type: 'remote-host:remove-device', id })
+  /** Forgets a device and ends its sessions; false when it could not. */
+  removeDevice(id: string): Promise<boolean> {
+    return this.withDevices(
+      () => this.toServer({ type: 'remote-host:remove-device', id }),
+      (stored) => stored.remove(id),
+    )
   }
 
   /** Passes the direct connections' settings on when they changed; each start reads them anew. */
@@ -199,9 +222,12 @@ export class RemoteHost {
     this.host?.post({ type: 'remote-host:resume' })
   }
 
-  /** Renames a device, which its sessions hear; false while the host does not serve devices. */
-  renameDevice(id: string, name: string): boolean {
-    return this.toServer({ type: 'remote-host:rename-device', id, name })
+  /** Renames a device, which its sessions hear; false when it could not. */
+  renameDevice(id: string, name: string): Promise<boolean> {
+    return this.withDevices(
+      () => this.toServer({ type: 'remote-host:rename-device', id, name }),
+      (stored) => stored.rename(id, name),
+    )
   }
 
   /** The name the next welcomes carry, and the one pairing suggests to a host. */
@@ -279,8 +305,9 @@ export class RemoteHost {
     return this.host?.post({ type: 'remote-host:remove-host', id }) ?? false
   }
 
-  /** A device's activity, newest first; none while the host does not serve devices. */
+  /** A device's activity, newest first; none when it cannot be read. */
   async activity(id: string): Promise<DeviceActivity[]> {
+    if (!this.serving) return this.stored?.activity(id) ?? []
     const answer = await this.request((requestId) => ({
       type: 'remote-host:activity',
       requestId,
@@ -300,7 +327,7 @@ export class RemoteHost {
       if (!this.host || !this.serving || !this.latest) throw new Error('Remote access is not on')
       const answer = await this.request((requestId) => ({ type: 'remote-host:reset', requestId }))
       if (!answer) throw new Error('The remote host did not reset')
-      this.stopServing()
+      await this.stopServing()
       await this.deps.newIdentity()
       await this.apply()
     })
@@ -310,6 +337,29 @@ export class RemoteHost {
 
   private toServer(message: MainToRemoteHost): boolean {
     return this.serving && (this.host?.post(message) ?? false)
+  }
+
+  /**
+   * Changes a device through the remote host while it serves devices, and in the files
+   * otherwise; in turn with starting and stopping, which hand the files over.
+   */
+  private withDevices(
+    served: () => boolean,
+    stored: (devices: StoredDevices) => Promise<boolean>,
+  ): Promise<boolean> {
+    const run = this.changes.then(async () => {
+      if (this.serving) return served()
+      if (!this.stored) return false
+      const changed = await stored(this.stored)
+      this.paired = this.stored.list()
+      if (changed) this.deps.changed?.()
+      return changed
+    })
+    this.changes = run.then(
+      () => {},
+      () => {},
+    )
+    return run
   }
 
   private request(
@@ -345,11 +395,36 @@ export class RemoteHost {
     await this.launchRead
     // A key that would not decrypt is remote access's failure, which ends with the setting.
     if (!this.enabled) this.failed = false
-    if (!this.enabled && !this.known && this.hostPairings.size === 0) return this.end('remote_off')
-    if (!this.host) return this.begin()
-    if (this.enabled && !this.serving) return this.startServing()
-    if (!this.enabled && this.serving) return this.stopServing()
+    // The remote host reads the device files as it starts serving, after what main wrote.
+    if (this.enabled) await this.releaseDevices()
+    if (!this.enabled && !this.known && this.hostPairings.size === 0) await this.end('remote_off')
+    else if (!this.host) await this.begin()
+    else if (this.enabled && !this.serving) await this.startServing()
+    else if (!this.enabled && this.serving) await this.stopServing()
+    else this.deps.changed?.()
+    if (!this.serving) await this.takeDevices()
+  }
+
+  /** Reads the device files, which the remote host leaves alone while it does not serve. */
+  private async takeDevices(): Promise<void> {
+    if (this.stored || this.quitting) return
+    try {
+      this.stored = await this.deps.devices()
+    } catch (error) {
+      log.error('Could not read the paired devices', error)
+      return
+    }
+    this.paired = this.stored.list()
     this.deps.changed?.()
+  }
+
+  /** Hands the device files back to the remote host, with what main still had to write. */
+  private async releaseDevices(): Promise<void> {
+    const stored = this.stored
+    this.stored = null
+    await stored?.flush().catch((error: unknown) => {
+      log.error('Could not write the paired devices', error)
+    })
   }
 
   /** The device key, loaded once; null when the system cannot decrypt it. */
@@ -447,13 +522,17 @@ export class RemoteHost {
     this.deps.changed?.()
   }
 
-  /** Devices hear that remote access is off; the connections to other hosts go on. */
-  private stopServing(): void {
-    this.host?.post({ type: 'remote-host:stop-serving' })
+  /**
+   * Devices hear that remote access is off; the connections to other hosts go on. Settles once
+   * the remote host wrote the device files for the last time, or after the request timeout.
+   */
+  private async stopServing(): Promise<void> {
+    const stopped = this.request((requestId) => ({ type: 'remote-host:stop-serving', requestId }))
     this.serving = false
     this.latest = null
     this.voidCodes()
     this.deps.changed?.()
+    await stopped
   }
 
   private async end(reason: RemoteHostStopReason): Promise<void> {
@@ -554,6 +633,7 @@ export class RemoteHost {
       case 'remote-host:status':
         if (this.host === host && this.serving && isStatus(message.status)) {
           this.latest = message.status
+          this.paired = message.status.devices
           this.ownKey = message.status.publicKey
           this.deps.changed?.()
         }
@@ -592,6 +672,7 @@ export class RemoteHost {
       }
       case 'remote-host:activity':
       case 'remote-host:reset':
+      case 'remote-host:stop-serving':
         if (this.host === host) this.requests.get(message.requestId)?.(message)
         break
       case 'remote-host:log': {

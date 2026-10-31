@@ -17,10 +17,10 @@ describe('ActivityLog', () => {
     log.record(phone, { kind: 'paired' })
     now = 2000
     log.record(phone, { kind: 'connected' })
-    log.record(phone, { kind: 'session-created', sessionId: 's1' })
+    log.record(phone, { kind: 'session-created', sessionId: 's1', title: null })
     log.record(tablet, { kind: 'renamed', from: 'iPad', to: 'Tablet', by: 'device' })
     expect(log.list(phone)).toEqual([
-      { at: 2000, kind: 'session-created', sessionId: 's1' },
+      { at: 2000, kind: 'session-created', sessionId: 's1', title: null },
       { at: 2000, kind: 'connected' },
       { at: 1000, kind: 'paired' },
     ])
@@ -56,6 +56,48 @@ describe('ActivityLog', () => {
     expect(Object.keys(file.devices)).toEqual([phone])
   })
 
+  it('keeps a session under the title it had then', async () => {
+    const dir = await tempFolder('kettu-activity-')
+    const log = await ActivityLog.load(dir, quiet, () => 1000)
+    log.record(phone, { kind: 'session-archived', sessionId: 's1', title: 'Fix the login' })
+    log.record(phone, { kind: 'session-deleted', sessionId: 's2', title: 'x'.repeat(300) })
+    await log.flush()
+    const reloaded = await ActivityLog.load(dir, quiet, () => 1000)
+    expect(reloaded.list(phone)).toEqual([
+      // Cut as long as a session's own title may be.
+      { at: 1000, kind: 'session-deleted', sessionId: 's2', title: 'x'.repeat(200) },
+      { at: 1000, kind: 'session-archived', sessionId: 's1', title: 'Fix the login' },
+    ])
+  })
+
+  it('logs a device connecting again within 10 minutes of its last session as no new one', async () => {
+    const dir = await tempFolder('kettu-activity-')
+    let now = 0
+    const log = await ActivityLog.load(dir, quiet, () => now)
+    const connections = () => log.list(phone).filter((event) => event.kind === 'connected')
+    log.opened(phone)
+    now = 30 * 60_000
+    log.closed(phone)
+    // A flaky network: back after a few minutes, and again before the old session is noticed gone.
+    now += 9 * 60_000
+    log.opened(phone)
+    log.opened(phone)
+    log.closed(phone)
+    now += 60 * 60_000
+    log.closed(phone)
+    expect(connections()).toEqual([{ at: 0, kind: 'connected' }])
+    // Ten minutes after the last session ended, it is a new connection.
+    now += 10 * 60_000
+    log.opened(phone)
+    expect(connections()).toEqual([
+      { at: now, kind: 'connected' },
+      { at: 0, kind: 'connected' },
+    ])
+    // Each device on its own.
+    log.opened(tablet)
+    expect(log.list(tablet)).toEqual([{ at: now, kind: 'connected' }])
+  })
+
   it('drops events it cannot read and keeps the rest', async () => {
     const dir = await tempFolder('kettu-activity-')
     await mkdir(path.join(dir, 'remote'))
@@ -69,6 +111,9 @@ describe('ActivityLog', () => {
             { at: 6, kind: 'typed', text: 'secret' },
             { at: 7, kind: 'renamed', from: 'A', to: '', by: 'owner' },
             { at: 8, kind: 'removed', by: 'owner' },
+            // Kept before titles were.
+            { at: 9, kind: 'session-archived', sessionId: 's1' },
+            { at: 9, kind: 'session-deleted', sessionId: 's2', title: 7 },
           ],
           'not-an-id': [{ at: 9, kind: 'connected' }],
         },
@@ -76,6 +121,7 @@ describe('ActivityLog', () => {
     )
     const log = await ActivityLog.load(dir, quiet, () => 10)
     expect(log.list(phone)).toEqual([
+      { at: 9, kind: 'session-archived', sessionId: 's1', title: null },
       { at: 8, kind: 'removed', by: 'owner' },
       { at: 5, kind: 'connected' },
     ])
