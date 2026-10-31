@@ -6,6 +6,7 @@
 import type { PortChannel } from '@shared/port-channel'
 import type { PortError } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
+import type { TerminalsRestarted } from '@shared/remote/protocol'
 import type { LogFn } from '../agent-host/storage'
 
 /** Whether a request's method is the terminal host's, which goes to the device's terminal port. */
@@ -126,6 +127,9 @@ export class DeviceTerminal {
       this.options.log('warn', `The terminal port of device ${this.options.device.id} closed`)
       this.port = null
       this.state = 'idle'
+      // Before the waiting requests' errors, so the device knows its terminals ended first.
+      const ids = [...this.opened.keys()]
+      this.options.send({ type: 'terminals.restarted', ids } satisfies TerminalsRestarted)
       this.reset(UNAVAILABLE)
     })
     port.send({ type: 'request', id: LIST_ID, method: 'terminals.list', params: {} })
