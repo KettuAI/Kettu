@@ -99,6 +99,8 @@ export class Hosts {
   private remoteStatus: RemoteHostStatus | null = null
   /** The direct settings the remote host was last given, as JSON. */
   private sentDirect: string | null = null
+  /** Whether devices may use the terminal, as the remote host was last told. */
+  private sentTerminal: boolean | null = null
   private readonly settings: () => SettingsFile
   private readonly statusListeners = new Set<() => void>()
   private readonly askers = new Map<number, (pairing: PairingState) => void>()
@@ -169,6 +171,7 @@ export class Hosts {
         privateKey: options.privateKey,
         plainTextKey: true,
         direct: this.initDirect(),
+        terminal: this.initTerminal(),
         // The agent host's socket outlives its restarts, so a device's session finds it again.
         agentHostSocket: this.agent.socketPath ?? undefined,
       }),
@@ -324,6 +327,43 @@ export class Hosts {
     })
   }
 
+  /**
+   * Tells the remote host and the terminal host when devices may use the terminal or no longer
+   * may; each start reads it.
+   */
+  terminalChanged(): void {
+    const allowed = this.settings().remote.terminal
+    if (allowed === this.sentTerminal) return
+    if (this.remote.post({ type: 'remote-host:terminal', allowed })) this.sentTerminal = allowed
+    // After the remote host, so devices hear why their terminals close.
+    this.terminal.post({
+      type: 'terminal-host:settings',
+      settings: terminalSettings(this.settings()),
+    })
+  }
+
+  private initTerminal(): boolean {
+    this.sentTerminal = this.settings().remote.terminal
+    return this.sentTerminal
+  }
+
+  /** The terminal host's socket for a device's terminals, starting it; none while not allowed. */
+  private async openTerminal(requestId: number): Promise<void> {
+    let socketPath: string | null = null
+    if (this.settings().remote.terminal) {
+      try {
+        await this.terminal.ready()
+        // Checked again, since it may have been turned off while the terminal host started.
+        if (this.settings().remote.terminal) socketPath = this.terminal.socketPath
+      } catch (error) {
+        log.warn(
+          `A device's terminal cannot open: the terminal host is ${(error as Error).message}`,
+        )
+      }
+    }
+    this.remote.post({ type: 'remote-host:terminal-socket', requestId, socketPath })
+  }
+
   private initDirect(): DirectSettings {
     const { direct } = this.settings().remote
     this.sentDirect = JSON.stringify(direct)
@@ -368,6 +408,10 @@ export class Hosts {
         if (Number.isSafeInteger(message.requestId)) {
           this.remote.post({ type: 'remote-host:port', requestId: message.requestId })
         }
+        break
+      // The terminal host starts on the first device that asks, so its socket is named then.
+      case 'remote-host:open-terminal-port':
+        if (Number.isSafeInteger(message.requestId)) void this.openTerminal(message.requestId)
         break
       case 'remote-host:log': {
         const text = typeof message.message === 'string' ? message.message : ''

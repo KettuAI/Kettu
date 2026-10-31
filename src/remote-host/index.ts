@@ -1,6 +1,7 @@
 // Entry of the remote host utility process: Electron's parent port adapted to the host's control
 // channel, and the ports main hands over as MessagePorts: the agent host's for devices' sessions,
-// and its own for the sessions on other hosts. The only file of the host that uses Electron.
+// the terminal host's for their terminals, and its own for the sessions on other hosts. The only
+// file of the host that uses Electron.
 
 import type { MessagePortMain } from 'electron'
 import type { MainToRemoteHost, RemoteHostToMain } from '@shared/host-control'
@@ -53,6 +54,8 @@ startRemoteHost(
   {
     openAgentPort: (device) =>
       askPort((requestId) => ({ type: 'remote-host:open-port', requestId, device })),
+    openTerminalPort: (device) =>
+      askPort((requestId) => ({ type: 'remote-host:open-terminal-port', requestId, device })),
     openMainPort: (hostId) =>
       askPort((requestId) => ({ type: 'remote-host:open-host-port', requestId, hostId })),
   },

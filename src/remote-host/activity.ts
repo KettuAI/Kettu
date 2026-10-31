@@ -18,6 +18,7 @@ const KEEP_MS = ACTIVITY_DAYS * 24 * 60 * 60 * 1000
 // Removed devices keep their logs too; past this many, the least recent ones go.
 const MAX_LOGS = 2000
 const MAX_SESSION_ID = 128
+const MAX_PROJECT_PATH = 4096
 /** A device back this soon after its last session ended is on the same connection. */
 const RECONNECT_MS = 10 * 60 * 1000
 
@@ -32,6 +33,9 @@ const isTime = (value: unknown): value is number =>
 
 const isSessionId = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= MAX_SESSION_ID
+
+const isProjectPath = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0 && value.length <= MAX_PROJECT_PATH
 
 const cutTitle = (title: string): string => [...title].slice(0, ACTIVITY_TITLE_CHARS).join('')
 
@@ -64,6 +68,9 @@ function parseEvent(value: unknown): DeviceActivity | null {
       if (title !== null && (typeof title !== 'string' || cutTitle(title) !== title)) return null
       return { at, kind, sessionId, title }
     }
+    case 'terminal-opened':
+    case 'terminal-closed':
+      return isProjectPath(event.projectPath) ? { at, kind, projectPath: event.projectPath } : null
     default:
       return null
   }
@@ -90,6 +97,11 @@ export class ActivityLog {
   /** Each device's sessions open now, and when its last one ended; for this run only. */
   private readonly open = new Map<string, number>()
   private readonly ended = new Map<string, number>()
+  /**
+   * The terminals each device's ended session had open, by terminal id, with when it ended: noted
+   * closed then only if the device does not open them again within 10 minutes; for this run only.
+   */
+  private readonly left = new Map<string, Map<string, { projectPath: string; at: number }>>()
 
   private constructor(
     private readonly file: JsonFile<ActivityFile>,
@@ -115,15 +127,35 @@ export class ActivityLog {
 
   /** Notes an event now; the write waits a moment, as events come in bursts. */
   record(deviceId: string, event: NewActivity): void {
-    const events = this.logs.get(deviceId) ?? []
     const kept = 'title' in event && event.title !== null ? { title: cutTitle(event.title) } : {}
-    events.push({ ...event, ...kept, at: this.now() } as DeviceActivity)
-    if (events.length > MAX_ACTIVITY) events.splice(0, events.length - MAX_ACTIVITY)
-    // Most recent last, so the least recent log is the first to go past the cap.
-    this.logs.delete(deviceId)
-    this.logs.set(deviceId, events)
-    while (this.logs.size > MAX_LOGS) this.logs.delete(this.logs.keys().next().value!)
-    this.save()
+    this.insert(deviceId, { ...event, ...kept, at: this.now() } as DeviceActivity)
+  }
+
+  /**
+   * Notes the device opening a terminal, unless its last session ended with it open and the device
+   * is back for it within 10 minutes: then it stayed open, as the connection did.
+   */
+  terminalOpened(deviceId: string, terminalId: string, projectPath: string): void {
+    this.settle(false)
+    if (this.left.get(deviceId)?.delete(terminalId)) return
+    this.record(deviceId, { kind: 'terminal-opened', projectPath })
+  }
+
+  /**
+   * Notes the device closing a terminal. With `left`, its session ended with the terminal open:
+   * that counts as closing it, at the time it ended, only once 10 minutes pass without the device
+   * opening it again.
+   */
+  terminalClosed(deviceId: string, terminalId: string, projectPath: string, left: boolean): void {
+    this.settle(false)
+    if (!left) {
+      this.left.get(deviceId)?.delete(terminalId)
+      return this.record(deviceId, { kind: 'terminal-closed', projectPath })
+    }
+    const terminals =
+      this.left.get(deviceId) ?? new Map<string, { projectPath: string; at: number }>()
+    terminals.set(terminalId, { projectPath, at: this.now() })
+    this.left.set(deviceId, terminals)
   }
 
   /**
@@ -148,12 +180,45 @@ export class ActivityLog {
 
   /** A device's events of the last 30 days, newest first. */
   list(deviceId: string): DeviceActivity[] {
+    this.settle(false)
     this.prune()
     return [...(this.logs.get(deviceId) ?? [])].reverse()
   }
 
+  /**
+   * Writes what is noted. Terminals that ended sessions left open are noted closed first, since no
+   * device can open them again once this run ends.
+   */
   flush(): Promise<void> {
+    this.settle(true)
     return this.file.flush()
+  }
+
+  /** Notes closed the terminals left open 10 minutes ago or more, or all of them. */
+  private settle(all: boolean): void {
+    const now = this.now()
+    for (const [deviceId, terminals] of this.left) {
+      for (const [terminalId, { projectPath, at }] of terminals) {
+        if (!all && now - at < RECONNECT_MS) continue
+        terminals.delete(terminalId)
+        this.insert(deviceId, { at, kind: 'terminal-closed', projectPath })
+      }
+      if (terminals.size === 0) this.left.delete(deviceId)
+    }
+  }
+
+  /** Puts an event among the device's in time order; a new one goes last. */
+  private insert(deviceId: string, event: DeviceActivity): void {
+    const events = this.logs.get(deviceId) ?? []
+    let index = events.length
+    while (index > 0 && events[index - 1]!.at > event.at) index--
+    events.splice(index, 0, event)
+    if (events.length > MAX_ACTIVITY) events.splice(0, events.length - MAX_ACTIVITY)
+    // Most recent last, so the least recent log is the first to go past the cap.
+    this.logs.delete(deviceId)
+    this.logs.set(deviceId, events)
+    while (this.logs.size > MAX_LOGS) this.logs.delete(this.logs.keys().next().value!)
+    this.save()
   }
 
   private prune(): void {

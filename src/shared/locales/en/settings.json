@@ -854,6 +854,11 @@
       },
       "note": "Direct connections are plain TCP, so a tunnel that only forwards HTTPS, such as Cloudflare Tunnel, cannot carry them."
     },
+    "terminal": {
+      "name": "Allow terminal",
+      "description": "Devices can run any command on this computer, beyond what an agent asks to run. Turning it off closes devices' terminals; the terminals keep running here.",
+      "keywords": "terminal shell command console"
+    },
     "kinds": {
       "ios": "iOS app",
       "desktop": "Desktop app",
@@ -946,7 +951,9 @@
         "sessionArchived": "Archived “{{title}}”",
         "sessionArchivedUnknown": "Archived a session",
         "sessionDeleted": "Deleted “{{title}}”",
-        "sessionDeletedUnknown": "Deleted a session"
+        "sessionDeletedUnknown": "Deleted a session",
+        "terminalOpened": "Opened a terminal",
+        "terminalClosed": "Closed a terminal"
       },
       "remove": {
         "name": "Remove this device",

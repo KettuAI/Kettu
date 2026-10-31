@@ -20,7 +20,7 @@ describe('the remote host', () => {
     let deliver: (message: MainToRemoteHost) => void = () => {}
     const host = startRemoteHost(
       { send: (message) => sent.push(message), onMessage: (listener) => (deliver = listener) },
-      { openAgentPort: async () => memoryPorts()[0] },
+      { openAgentPort: async () => memoryPorts()[0], openTerminalPort: async () => null },
     )
     const privateKey = new Uint8Array(32).fill(7)
     deliver({
@@ -31,6 +31,7 @@ describe('the remote host', () => {
       hostName: 'Studio',
       privateKey: base64(privateKey),
       plainTextKey: false,
+      terminal: false,
     })
     const statuses = () =>
       sent.flatMap((message) => (message.type === 'remote-host:status' ? [message.status] : []))

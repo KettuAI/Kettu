@@ -36,6 +36,10 @@ describe('parseCommand', () => {
       { kind: 'direct-remove', address: { host: '192.0.2.10', port: 4567 } },
     ],
     [['direct', '--help'], { kind: 'help' }],
+    [['terminal'], { kind: 'terminal' }],
+    [['terminal', 'on'], { kind: 'terminal-set', allowed: true }],
+    [['terminal', 'off'], { kind: 'terminal-set', allowed: false }],
+    [['terminal', 'on', '--help'], { kind: 'help' }],
   ])('reads %j', (argv, command) => {
     expect(parseCommand(argv)).toEqual(command)
   })
@@ -69,6 +73,9 @@ describe('parseCommand', () => {
     [['direct', '--yes'], "'--yes' is only for kettu direct port"],
     [['direct', 'add', 'a.example:1', '-y'], "'-y' is only for kettu direct port"],
     [['status', '--yes'], "'--yes' is only for kettu direct port"],
+    [['terminal', 'yes'], "Unknown terminal command 'yes'"],
+    [['terminal', 'on', 'now'], "Unexpected argument 'now'"],
+    [['terminal', 'off', '-y'], "'-y' is only for kettu direct port"],
   ])('refuses %j', (argv, message) => {
     expect(parseCommand(argv)).toEqual({ kind: 'usage', message })
   })

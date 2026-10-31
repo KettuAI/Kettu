@@ -300,12 +300,14 @@ describe('mergeSettings', () => {
       enabled: false,
       name: null,
       direct: { enabled: true, port: 50123, addresses: [{ host: 'a.example', port: 7000 }] },
+      terminal: false,
     })
     const off = mergeSettings(withPort, { remote: { direct: { enabled: false } } })
     expect(off.remote).toEqual({
       enabled: false,
       name: null,
       direct: { enabled: false, port: 50123, addresses: [{ host: 'a.example', port: 7000 }] },
+      terminal: false,
     })
     const replaced = mergeSettings(off, {
       remote: { direct: { addresses: [{ host: '10.0.0.2', port: 7001 }] } },
@@ -331,6 +333,26 @@ describe('mergeSettings', () => {
     const chosen = mergeSettings(defaults(), { remote: { direct: { port: 9000 } } })
     const on = mergeSettings(chosen, { remote: { direct: { enabled: true } } })
     expect(withDirectPort(on, () => 60000).remote.direct.port).toBe(9000)
+  })
+
+  it('lets devices use the terminal only once the owner turns it on, apart from remote access', () => {
+    expect(defaults().remote.terminal).toBe(false)
+    expect(validateSettingsPatch({ remote: { terminal: true } })).toEqual({
+      remote: { terminal: true },
+    })
+    expect(() => validateSettingsPatch({ remote: { terminal: 'on' } })).toThrow(
+      '"remote.terminal" must be a boolean',
+    )
+    const on = mergeSettings(defaults(), { remote: { terminal: true } })
+    expect(on.remote).toEqual({ ...DEFAULT_SETTINGS.remote, terminal: true })
+    expect(terminalSettings(on).allowDevices).toBe(true)
+    // Remote access going off and on leaves it as it was.
+    const again = mergeSettings(mergeSettings(on, { remote: { enabled: true } }), {
+      remote: { enabled: false },
+    })
+    expect(again.remote.terminal).toBe(true)
+    const off = mergeSettings(on, { remote: { terminal: false } })
+    expect(terminalSettings(off).allowDevices).toBe(false)
   })
 
   it('picks the direct port only the first time direct connections are on', () => {
@@ -488,6 +510,7 @@ describe('parseSettingsFile', () => {
           { host: '192.168.1.20', port: 50123 },
         ],
       },
+      terminal: false,
     })
     expect(loaded.problems).toEqual([
       '"remote.direct.addresses[1]" must be a host name or IP address and a port from 1 to 65535',
@@ -514,6 +537,7 @@ describe('parseSettingsFile', () => {
         port: null,
         addresses: Array.from({ length: 10 }, (_, i) => ({ host: 'a.example', port: i + 1 })),
       },
+      terminal: false,
     })
     expect(invalid.problems).toEqual([
       '"remote.enabled" must be a boolean',
@@ -528,7 +552,17 @@ describe('parseSettingsFile', () => {
       enabled: true,
       name: null,
       direct: { ...DEFAULT_SETTINGS.remote.direct, enabled: true },
+      terminal: false,
     })
+  })
+
+  it('reads whether devices may use the terminal, which stays off unless it is true', () => {
+    const on = parseSettingsFile({ version: 1, remote: { terminal: true } })
+    expect(on.settings.remote.terminal).toBe(true)
+    expect(on.problems).toEqual([])
+    const odd = parseSettingsFile({ version: 1, remote: { terminal: 'yes' } })
+    expect(odd.settings.remote.terminal).toBe(false)
+    expect(odd.problems).toEqual(['"remote.terminal" must be a boolean'])
   })
 
   it('reads a newer version but marks it read-only', () => {
@@ -647,7 +681,11 @@ describe('derived settings', () => {
       hostSettings({ ...settings, general: { ...settings.general, language: 'en' } }, 'zh-CN')
         .locale,
     ).toBe('en')
-    expect(terminalSettings(settings)).toEqual({ shellPath: '/bin/fish', fontSize: 13 })
+    expect(terminalSettings(settings)).toEqual({
+      shellPath: '/bin/fish',
+      fontSize: 13,
+      allowDevices: false,
+    })
     expect(terminalSettings(defaults()).shellPath).toBeNull()
   })
 

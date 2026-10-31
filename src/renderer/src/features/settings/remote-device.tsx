@@ -190,10 +190,16 @@ export function ActivityRow({ event, kind }: { event: DeviceActivity; kind: stri
   const now = useNow()
   const sessionId = 'sessionId' in event ? event.sessionId : null
   const summary = useSessionsStore((s) => (sessionId ? s.byId[sessionId] : undefined))
+  // A session's project, or a terminal's.
+  const projectPath =
+    'projectPath' in event
+      ? event.projectPath
+      : summary && !summary.scratch
+        ? summary.projectPath
+        : null
   const project = useProjectsStore((s) =>
-    summary && !summary.scratch
-      ? (s.projects.find((p) => p.path === summary.projectPath)?.name ??
-        basename(summary.projectPath))
+    projectPath
+      ? (s.projects.find((p) => p.path === projectPath)?.name ?? basename(projectPath))
       : null,
   )
   // The title the session had then, which a later rename does not change.
@@ -249,6 +255,10 @@ function eventText(
       return title
         ? t('remote.device.events.sessionDeleted', { title })
         : t('remote.device.events.sessionDeletedUnknown')
+    case 'terminal-opened':
+      return t('remote.device.events.terminalOpened')
+    case 'terminal-closed':
+      return t('remote.device.events.terminalClosed')
   }
 }
 

@@ -1,4 +1,5 @@
-// The contract between the renderer and the terminal host, over the terminal host port.
+// The contract between the renderer and the terminal host, over the terminal host port, which a
+// paired device's terminal port speaks too.
 
 import type { PortConnectionState } from './port-rpc'
 
@@ -52,6 +53,11 @@ export const TERMINAL_METHODS = [
 
 export type TerminalEvent =
   | { type: 'terminal.data'; id: string; data: string }
+  /**
+   * To a device's port that fell behind and missed output: the screen starts over from `replay`,
+   * as after `terminals.attach`. Its characters are not acknowledged.
+   */
+  | { type: 'terminal.replay'; id: string; replay: string }
   | { type: 'terminal.info'; info: TerminalInfo }
   | { type: 'terminal.removed'; id: string }
 

@@ -1,7 +1,8 @@
 // Device connections: each one answered as the Noise IK responder, or as the IKpsk1 responder of
 // the open pairing code, then hello and welcome, then the device's session as a port to the agent
 // host, whose protocol passes through unchanged but for binary values: a request's come from the
-// device's uploads, a result's go as byte streams, and media is read from disk here.
+// device's uploads, a result's go as byte streams, and media is read from disk here. The device's
+// terminals go on a port of their own to the terminal host.
 
 import { open, realpath, type FileHandle } from 'node:fs/promises'
 import type { HostMethod, HostResult } from '@shared/agent-host'
@@ -26,6 +27,7 @@ import {
   type DirectAddress,
   type Hello,
   type Renamed,
+  type TerminalAccess,
   type Welcome,
 } from '@shared/remote/protocol'
 import { removalAt } from '@shared/remote/status'
@@ -41,6 +43,7 @@ import {
 import type { Transport } from '@shared/remote/transport'
 import type { LogFn } from '../agent-host/storage'
 import type { ActivityLog } from './activity'
+import { DeviceTerminal, isTerminalMethod, NOT_ALLOWED } from './device-terminal'
 import type { DeviceStore } from './devices'
 import { bytesSource, Downloads, fileSource } from './downloads'
 import type { PairingCode, PairingCodes } from './pairing'
@@ -87,6 +90,10 @@ export interface RemoteServerOptions {
   uploadIdleMs?: number
   /** A port to the agent host for a device's session, or null while the agent host is down. */
   openAgentPort(device: PortDevice): Promise<PortChannel | null>
+  /** Whether devices may use the terminal from the start; they may not when absent. */
+  terminal?: boolean
+  /** A port to the terminal host for a device's terminals, or null while it cannot have one. */
+  openTerminalPort?(device: PortDevice): Promise<PortChannel | null>
   /** The devices or the sessions open changed, or refusals did, reported at most once a second. */
   changed(): void
   log: LogFn
@@ -101,6 +108,7 @@ export class RemoteServer {
   private refusedTimer: ReturnType<typeof setTimeout> | null = null
   private refusedUnreported = false
   private directAddresses: DirectAddress[] = []
+  private terminalAllowed: boolean
   private stopped = false
   private sweeper: ReturnType<typeof setInterval> | null = null
   private readonly now: () => number
@@ -109,6 +117,7 @@ export class RemoteServer {
 
   constructor(readonly options: RemoteServerOptions) {
     this.now = options.now ?? Date.now
+    this.terminalAllowed = options.terminal ?? false
   }
 
   /** Takes a device's connection, which ends at its first message unless that names a device. */
@@ -131,6 +140,18 @@ export class RemoteServer {
     if (JSON.stringify(addresses) === JSON.stringify(this.directAddresses)) return
     this.directAddresses = addresses.map(({ host, port }) => ({ host, port }))
     for (const connection of this.connections) connection.sendAddresses(this.directAddresses)
+  }
+
+  /** Whether devices may use the terminal: in each welcome, and sent again when it changes. */
+  get terminal(): boolean {
+    return this.terminalAllowed
+  }
+
+  /** The owner allowed devices the terminal or no longer does, which closes their terminals. */
+  setTerminal(allowed: boolean): void {
+    if (allowed === this.terminalAllowed) return
+    this.terminalAllowed = allowed
+    for (const connection of this.connections) connection.terminalChanged(allowed)
   }
 
   /** The ids of the devices with a session open now. */
@@ -275,6 +296,7 @@ class DeviceConnection {
   private state: State = 'handshake'
   private channel: Channel | null = null
   private port: PortChannel | null = null
+  private terminal: DeviceTerminal | null = null
   private wasOpen = false
   private closing: Promise<void> | null = null
   private received = 0
@@ -333,6 +355,13 @@ class DeviceConnection {
     this.state = 'closing'
     this.closing = this.sayClosing(reason)
     return this.closing
+  }
+
+  /** Tells the device whether it may use the terminal; once it may not, its terminals close. */
+  terminalChanged(allowed: boolean): void {
+    if (this.state !== 'open') return
+    this.send({ type: 'terminal', allowed } satisfies TerminalAccess)
+    if (!allowed) this.terminal?.close(NOT_ALLOWED)
   }
 
   /** The device's name changed: its sessions hear the new one. */
@@ -477,11 +506,12 @@ class DeviceConnection {
       features: [BYTES_FEATURE],
       role: 'owner',
       device: { id: device.id, name: device.name },
-      terminal: false,
+      terminal: this.server.terminal,
       addresses: this.server.addresses,
     } satisfies Welcome)
     this.state = 'open'
     this.wasOpen = true
+    this.terminal = this.deviceTerminal(device)
     port.onMessage((data) => {
       if (this.answered(data)) return
       this.fromHost(data)
@@ -569,6 +599,22 @@ class DeviceConnection {
     this.toHost(value)
   }
 
+  /** The device's terminals, whose port to the terminal host opens at its first request. */
+  private deviceTerminal(device: PairedDevice): DeviceTerminal {
+    const { server } = this
+    return new DeviceTerminal({
+      device: { id: device.id, name: device.name },
+      allowed: () => server.terminal,
+      open: (portDevice) => server.options.openTerminalPort?.(portDevice) ?? Promise.resolve(null),
+      send: (value) => this.send(value),
+      opened: (terminalId, projectPath) =>
+        server.options.activity.terminalOpened(device.id, terminalId, projectPath),
+      closed: (terminalId, projectPath, left) =>
+        server.options.activity.terminalClosed(device.id, terminalId, projectPath, left),
+      log: server.options.log,
+    })
+  }
+
   /** A request from the device, unless it is one a device may not make. */
   private toHost(value: object): void {
     const { type, id, method, params } = value as Record<string, unknown>
@@ -594,6 +640,10 @@ class DeviceConnection {
           error: { code: 'forbidden', message: `A paired device may not call "${method}"` },
         })
       }
+      return
+    }
+    if (isTerminalMethod(method)) {
+      this.terminal?.request({ type, id, method, params })
       return
     }
     if (method === 'media.read') return void this.readMedia(id, params)
@@ -787,6 +837,7 @@ class DeviceConnection {
     const port = this.port
     this.port = null
     port?.close()
+    this.terminal?.close(null)
     if (this.channel) {
       const closing: Closing = { type: 'closing', reason }
       await this.channel.send({ kind: 'json', value: closing }).catch(() => {})
@@ -805,6 +856,7 @@ class DeviceConnection {
     const port = this.port
     this.port = null
     port?.close()
+    this.terminal?.close(null)
     this.transport.close()
     if (this.pairing) this.server.options.pairing.release(this.pairing.code)
     this.server.ended(this, this.wasOpen ? this.device : null)

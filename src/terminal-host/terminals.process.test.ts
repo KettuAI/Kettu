@@ -59,6 +59,7 @@ describe('TerminalManager with node-pty', () => {
         info: (next) => {
           info = next
         },
+        replay: () => {},
         removed: () => {},
       },
     })

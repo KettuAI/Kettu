@@ -18,8 +18,12 @@ describe('ActivityLog', () => {
     now = 2000
     log.record(phone, { kind: 'connected' })
     log.record(phone, { kind: 'session-created', sessionId: 's1', title: null })
+    log.record(phone, { kind: 'terminal-opened', projectPath: '/work/app' })
+    log.record(phone, { kind: 'terminal-closed', projectPath: '/work/app' })
     log.record(tablet, { kind: 'renamed', from: 'iPad', to: 'Tablet', by: 'device' })
     expect(log.list(phone)).toEqual([
+      { at: 2000, kind: 'terminal-closed', projectPath: '/work/app' },
+      { at: 2000, kind: 'terminal-opened', projectPath: '/work/app' },
       { at: 2000, kind: 'session-created', sessionId: 's1', title: null },
       { at: 2000, kind: 'connected' },
       { at: 1000, kind: 'paired' },
@@ -98,6 +102,50 @@ describe('ActivityLog', () => {
     expect(log.list(tablet)).toEqual([{ at: now, kind: 'connected' }])
   })
 
+  it('keeps a terminal open across a session that ends and comes back within 10 minutes', async () => {
+    const dir = await tempFolder('kettu-activity-')
+    let now = 1000
+    const log = await ActivityLog.load(dir, quiet, () => now)
+    const terminals = () => log.list(phone).filter((event) => event.kind.startsWith('terminal-'))
+    log.terminalOpened(phone, 't1', '/work/app')
+    log.terminalOpened(phone, 't2', '/work/api')
+    // The session ends with both open; the device is back for t1 within 10 minutes.
+    now = 2000
+    log.terminalClosed(phone, 't1', '/work/app', true)
+    log.terminalClosed(phone, 't2', '/work/api', true)
+    now += 9 * 60_000
+    log.terminalOpened(phone, 't1', '/work/app')
+    expect(terminals()).toEqual([
+      { at: 1000, kind: 'terminal-opened', projectPath: '/work/api' },
+      { at: 1000, kind: 'terminal-opened', projectPath: '/work/app' },
+    ])
+    // t2 is not back within 10 minutes: closed when the session ended, before what came since.
+    now += 60_000
+    log.record(phone, { kind: 'connected' })
+    expect(log.list(phone)).toEqual([
+      { at: now, kind: 'connected' },
+      { at: 2000, kind: 'terminal-closed', projectPath: '/work/api' },
+      { at: 1000, kind: 'terminal-opened', projectPath: '/work/api' },
+      { at: 1000, kind: 'terminal-opened', projectPath: '/work/app' },
+    ])
+    // Opening it later is a new opening; killing one is noted at once.
+    log.terminalOpened(phone, 't2', '/work/api')
+    log.terminalClosed(phone, 't1', '/work/app', false)
+    expect(terminals().slice(0, 2)).toEqual([
+      { at: now, kind: 'terminal-closed', projectPath: '/work/app' },
+      { at: now, kind: 'terminal-opened', projectPath: '/work/api' },
+    ])
+    // A session that ends as the host stops leaves its terminals closed in the file.
+    log.terminalClosed(phone, 't2', '/work/api', true)
+    await log.flush()
+    const reloaded = await ActivityLog.load(dir, quiet, () => now)
+    expect(reloaded.list(phone)[0]).toEqual({
+      at: now,
+      kind: 'terminal-closed',
+      projectPath: '/work/api',
+    })
+  })
+
   it('drops events it cannot read and keeps the rest', async () => {
     const dir = await tempFolder('kettu-activity-')
     await mkdir(path.join(dir, 'remote'))
@@ -111,6 +159,8 @@ describe('ActivityLog', () => {
             { at: 6, kind: 'typed', text: 'secret' },
             { at: 7, kind: 'renamed', from: 'A', to: '', by: 'owner' },
             { at: 8, kind: 'removed', by: 'owner' },
+            { at: 8, kind: 'terminal-opened' },
+            { at: 8, kind: 'terminal-closed', projectPath: 7 },
             // Kept before titles were.
             { at: 9, kind: 'session-archived', sessionId: 's1' },
             { at: 9, kind: 'session-deleted', sessionId: 's2', title: 7 },

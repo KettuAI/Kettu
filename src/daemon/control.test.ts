@@ -52,6 +52,8 @@ function handlers(overrides: Partial<ControlHandlers> = {}): ControlHandlers {
     'direct.port': async () => report,
     'direct.add': async () => report,
     'direct.remove': async () => report,
+    'terminal.get': async () => ({ allowed: false }),
+    'terminal.set': async ({ allowed }) => ({ allowed }),
     ...overrides,
   }
 }

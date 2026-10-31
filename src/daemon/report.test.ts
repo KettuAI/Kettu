@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DaemonStatus } from './control'
-import { devicesReport, runningReport, stoppedReport } from './report'
+import { devicesReport, runningReport, stoppedReport, terminalReport } from './report'
 
 const status: DaemonStatus = {
   version: '0.1.0',
@@ -133,6 +133,18 @@ describe('devicesReport', () => {
         'c3    Web           web      web       3 h ago',
         '',
       ].join('\n'),
+    )
+  })
+})
+
+describe('terminalReport', () => {
+  it('says whether devices may use the terminal, what that means and how to change it', () => {
+    expect(terminalReport(false)).toBe(
+      'Devices may not use the terminal. kettu terminal on lets them.\n',
+    )
+    expect(terminalReport(true)).toBe(
+      'Devices may use the terminal: they can run any command on this computer, beyond what an\n' +
+        'agent asks to run. kettu terminal off closes their terminals, which keep running here.\n',
     )
   })
 })
