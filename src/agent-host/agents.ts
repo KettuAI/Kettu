@@ -1967,13 +1967,51 @@ export class AgentManager {
     }
   }
 
-  /** `session/new` in the folder, bounded by `optionsMs`, then the session's removal. */
+  /**
+   * Reads the config options of an agent none are cached for, for the agent menu while New
+   * session has no folder: starts the agent if it is not running, installing what its first start
+   * needs, then reads them as readOptions does in the hidden folder. Unlike readOptions it rejects
+   * with the reason, which the menu shows. An agent that must sign in first, or whose hidden
+   * sessions would leave a trace, is not read.
+   */
+  async readFirstOptions(agentId: AgentId): Promise<void> {
+    const slot = this.slot(agentId)
+    const runtime = await this.ensureReady(agentId)
+    await slot.limitsRun?.catch(() => {})
+    if (slot.signIn === 'required' || !runtime.connection.hiddenSessions) return
+    const log = (message: string): void =>
+      this.deps.diagnostics.log('warn', `${slot.def.name}: ${message}`)
+    let read: boolean
+    try {
+      read = await this.readInHiddenSession(slot, runtime, log, undefined)
+    } catch (error) {
+      if (error instanceof AgentRequestError && error.kind === 'auth_required') {
+        this.authRequired(agentId)
+        return
+      }
+      throw agentError(error)
+    }
+    if (!read) {
+      throw new HostError(
+        'agent_unavailable',
+        t('agent.noOptions', {
+          agent: slot.def.name,
+          seconds: String(this.timings.optionsMs / 1000),
+        }),
+      )
+    }
+  }
+
+  /**
+   * `session/new` in the folder, bounded by `optionsMs`, then the session's removal. False when
+   * no answer came in time.
+   */
   private async readInHiddenSession(
     slot: Slot,
     runtime: AgentRuntime,
     log: (message: string) => void,
     folder: string | undefined,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const agentId = slot.def.id
     const remove = (sessionId: string): Promise<void> =>
       runtime.connection.removeHidden(sessionId, (message) =>
@@ -1998,7 +2036,7 @@ export class AgentManager {
         (late) => remove(late.sessionId),
         () => {},
       )
-      return
+      return false
     }
     try {
       if (setup.config.length > 0) this.hooks.optionsSeen(agentId, setup.config, dir)
@@ -2012,6 +2050,7 @@ export class AgentManager {
         slot.optionsRemoval = null
       }
     }
+    return true
   }
 
   /** Where the agent reads its configuration and which CLI its adapter runs, for its page. */

@@ -422,6 +422,9 @@ export interface HostContract {
   'agents.cancelTask': { params: { agentId: AgentId }; result: void }
   // Reads the options of a running agent again, in the project's folder, when they are stale.
   'agents.readOptions': { params: { agentId: AgentId; projectPath: string | null }; result: void }
+  // Reads the options of an agent none are cached for, starting it if need be, before New session
+  // has a folder; rejects with the reason.
+  'agents.readFirstOptions': { params: { agentId: AgentId }; result: void }
   'agents.refreshLimits': { params: { agentId: AgentId }; result: void }
   'agents.details': { params: { agentId: AgentId }; result: AgentDetails }
   'agents.refreshAccount': { params: { agentId: AgentId }; result: void }
@@ -669,6 +672,7 @@ export const HOST_METHODS = [
   'agents.install',
   'agents.cancelTask',
   'agents.readOptions',
+  'agents.readFirstOptions',
   'agents.refreshLimits',
   'agents.details',
   'agents.refreshAccount',

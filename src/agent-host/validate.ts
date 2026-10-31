@@ -488,6 +488,7 @@ export function createValidators(platform: Platform): Validators {
         projectPath: o.projectPath === null ? null : absolutePath(o, 'projectPath', platform),
       }
     },
+    'agents.readFirstOptions': agent,
     'agents.refreshLimits': agent,
     'agents.details': agent,
     'agents.refreshAccount': agent,

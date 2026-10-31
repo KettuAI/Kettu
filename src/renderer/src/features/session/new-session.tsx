@@ -47,6 +47,7 @@ import {
   leaveNewSession,
   noteActivity,
   prepareFor,
+  readFirstOptions,
   setOption,
   settleOptions,
 } from './new-session/prepared'
@@ -196,6 +197,13 @@ function DraftComposer({
     prepareFor(agentId && ready && !signIn ? { agentId, projectPath, parentId } : null)
   }, [agentId, ready, signIn, projectPath, parentId])
 
+  // Without a folder nothing is prepared, so an agent with no options cached reads them once, and
+  // the menu lists its models before a project is chosen.
+  const optionsLoaded = useAgentOptionsStore((s) => s.loaded)
+  useEffect(() => {
+    if (agentId && !ready && !signIn && optionsLoaded) void readFirstOptions(agentId)
+  }, [agentId, ready, signIn, optionsLoaded])
+
   useEffect(() => {
     editor.current?.focus()
   }, [editor])
@@ -305,7 +313,7 @@ function DraftComposer({
           )}
           {!inScratch && project && <BranchLabel projectPath={project.path} />}
           <span className="min-w-2 flex-1" />
-          <AgentMenu agentId={agentId} onChoose={choose} />
+          <AgentMenu agentId={agentId} onChoose={choose} folderless={!ready} />
           <ModeMenu agentId={agentId} />
         </div>
         {(projectError || (project?.missing && !inScratch)) && (

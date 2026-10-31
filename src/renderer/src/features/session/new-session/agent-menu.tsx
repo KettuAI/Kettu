@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { SearchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
@@ -60,7 +60,7 @@ import {
   type MenuAgent,
   type MenuGroup,
 } from './start-options'
-import { refreshOnMenu, retryPrepare, setOption } from './prepared'
+import { readFirstOptions, refreshOnMenu, retryPrepare, setOption } from './prepared'
 import { useStartConfig } from './use-start-config'
 
 const isSelect = (o: ConfigOption | undefined): o is SelectOption =>
@@ -85,6 +85,7 @@ export function AgentMenu({
   onChoose,
   values,
   onValues,
+  folderless = false,
 }: {
   agentId: AgentId | null
   onChoose: (agentId: AgentId, model: string | null) => void
@@ -95,6 +96,8 @@ export function AgentMenu({
   values?: OptionValues
   /** With `values`, each change to them; the caller saves it. */
   onValues?: (optionId: string, value: string | boolean) => void
+  /** New session has no folder yet, so an agent shown with no options cached reads them once. */
+  folderless?: boolean
 }) {
   const { t } = useTranslation('session')
   const statuses = useAgentsStore(useShallow((s) => menuAgents(usableAgents(s.order, s.byId))))
@@ -105,6 +108,7 @@ export function AgentMenu({
   const [open, setOpen] = useState(false)
   const [shown, setShown] = useState<AgentId | null>(agentId)
   const shownPrepared = shown && prepared?.agentId === shown ? prepared : null
+  const firstRead = useAgentOptionsStore((s) => (shown ? s.firstReads[shown] : undefined))
   const [query, setQuery] = useState('')
   const { contains } = useComboboxFilter()
   const body = useRef<HTMLDivElement>(null)
@@ -150,6 +154,14 @@ export function AgentMenu({
   const visibleRail = searching
     ? statuses.filter((s) => groups.some((g) => g.agentId === s.id))
     : statuses
+
+  const shownStatus = statuses.find((s) => s.id === shown)
+  const shownNeed = shownStatus ? agentNeed(shownStatus) : null
+  useEffect(() => {
+    if (!open || !folderless || !shown || !loaded) return
+    if (shownNeed === 'sign-in' || shownNeed === 'failed') return
+    void readFirstOptions(shown)
+  }, [open, folderless, shown, loaded, shownNeed])
 
   const label = (key: string) => {
     const { agentId: id, model } = parseItemKey(key)
@@ -281,11 +293,16 @@ export function AgentMenu({
                 className="ml-1.5 flex w-80 min-w-0 flex-col"
               >
                 <Pane
-                  status={statuses.find((s) => s.id === shown) ?? null}
+                  status={shownStatus ?? null}
                   config={shown ? (configs.get(shown) ?? null) : null}
                   loaded={loaded}
-                  opening={shownPrepared?.opening ?? false}
-                  failure={shownPrepared?.error ?? null}
+                  opening={shownPrepared ? shownPrepared.opening : (firstRead?.reading ?? false)}
+                  failure={shownPrepared ? shownPrepared.error : (firstRead?.error ?? null)}
+                  onRetry={
+                    shownPrepared || !shown
+                      ? retryPrepare
+                      : () => void readFirstOptions(shown, true)
+                  }
                   searching={searching}
                   groups={groups}
                   agents={agents}
@@ -442,6 +459,7 @@ function Pane({
   loaded,
   opening,
   failure,
+  onRetry,
   searching,
   groups,
   agents,
@@ -451,10 +469,11 @@ function Pane({
   status: AgentStatus | null
   config: ConfigOption[] | null
   loaded: boolean
-  /** The agent's prepared session is opening, so what shows may still change. */
+  /** The agent's prepared session, or its first read of options, is under way. */
   opening: boolean
-  /** Why the agent's prepared session could not open. */
+  /** Why the agent's prepared session could not open, or its options could not be read. */
   failure: string | null
+  onRetry: () => void
   searching: boolean
   groups: MenuGroup[]
   agents: MenuAgent[]
@@ -545,7 +564,7 @@ function Pane({
           text={t('newSession.agentMenu.prepareFailed', { agent: name, error: failure })}
           tone="danger"
         >
-          <Button variant="outline" size="xs" onClick={retryPrepare}>
+          <Button variant="outline" size="xs" onClick={onRetry}>
             {t('newSession.agentMenu.retry')}
           </Button>
         </Notice>
@@ -568,9 +587,11 @@ function Pane({
             className={cn('size-3 shrink-0', status.state === 'installing' && 'text-info')}
           />
           <span className="truncate shimmer">
-            {t(status.state === 'installing' ? 'agentStart.installing' : 'agentStart.starting', {
-              agent: name,
-            })}
+            {status.state === 'installing'
+              ? t('agentStart.installing', { agent: name })
+              : status.state === 'starting'
+                ? t('agentStart.starting', { agent: name })
+                : t('newSession.agentMenu.checking', { agent: name })}
           </span>
         </div>
       )}

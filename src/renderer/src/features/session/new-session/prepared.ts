@@ -9,8 +9,10 @@ import {
   pickOption,
   settlePick,
   useAgentOptionsStore,
+  type FirstRead,
   type PreparedState,
 } from '@renderer/stores/agent-options'
+import { useAgentsStore } from '@renderer/stores/agents'
 
 export interface PrepareTarget {
   agentId: AgentId
@@ -221,4 +223,32 @@ export function hostRestarted(): void {
 /** Tries the failed prepare again. */
 export function retryPrepare(): void {
   if (target) void prepare(target, true)
+}
+
+const setFirstRead = (agentId: AgentId, read: FirstRead | null): void =>
+  useAgentOptionsStore.setState((s) => {
+    const firstReads = { ...s.firstReads }
+    if (read) firstReads[agentId] = read
+    else delete firstReads[agentId]
+    return { firstReads }
+  })
+
+/**
+ * Reads the options of an agent with none cached while New session has no folder, so its menu
+ * lists the models before a project is chosen: once per agent, and after a failure only on a
+ * retry. The options reach the cache as any the host sees do.
+ */
+export async function readFirstOptions(agentId: AgentId, retry = false): Promise<void> {
+  const { loaded, byId, firstReads } = useAgentOptionsStore.getState()
+  const current = firstReads[agentId]
+  if (!loaded || byId[agentId] || current?.reading || (current && !retry)) return
+  setFirstRead(agentId, { reading: true, error: null })
+  try {
+    await host('agents.readFirstOptions', { agentId })
+    // An agent that turned out to need signing in read nothing, so it reads once signed in.
+    const signIn = useAgentsStore.getState().byId[agentId]?.signIn === 'required'
+    setFirstRead(agentId, signIn ? null : { reading: false, error: null })
+  } catch (error) {
+    setFirstRead(agentId, { reading: false, error: errorMessage(error) })
+  }
 }

@@ -877,6 +877,10 @@ export class AgentHost {
             : await projects.resolveDirectory(projectPath).catch(() => null)
         await agents.readOptions(agentId, folder ?? undefined)
       },
+      'agents.readFirstOptions': async ({ agentId }) => {
+        if (this.agentOptions.get(agentId)) return
+        await agents.readFirstOptions(agentId)
+      },
       'agents.refreshLimits': ({ agentId }) => agents.refreshLimits(agentId),
       'agents.details': ({ agentId }) => agents.details(agentId),
       'agents.refreshAccount': ({ agentId }) => agents.refreshAccount(agentId),

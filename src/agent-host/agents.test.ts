@@ -431,6 +431,50 @@ describe('AgentManager', () => {
     await m.agents.stopAll()
   })
 
+  it('starts a stopped agent to read its first options', async () => {
+    const m = manager()
+    const seen: AgentId[] = []
+    m.agents.hooks = {
+      ...m.agents.hooks,
+      optionsKnown: () => false,
+      optionsSeen: (agentId) => seen.push(agentId),
+    }
+    expect(m.agents.runtime('fake-agent')).toBeNull()
+    await m.agents.readFirstOptions('fake-agent')
+    expect(seen).toEqual(['fake-agent'])
+    expect(m.state()).toBe('ready')
+    await m.agents.stopAll()
+  })
+
+  it('rejects with the reason when the first options do not come in time', async () => {
+    const m = manager({ FAKE_AGENT_NEW_SESSION_MS: '300' }, { optionsMs: 20 })
+    m.agents.hooks = { ...m.agents.hooks, optionsKnown: () => false }
+    await expect(m.agents.readFirstOptions('fake-agent')).rejects.toThrow(/within 0.02 s/)
+    await m.agents.stopAll()
+  })
+
+  it('reads no first options from an agent that lacks the request that removes them', async () => {
+    const m = manager(
+      { FAKE_AGENT_WITHOUT: 'close' },
+      {},
+      { catalog: [{ ...fakeAgent(FAKE_AGENT_MAIN), id: 'codex', name: 'Codex' }] },
+    )
+    const seen: AgentId[] = []
+    m.agents.hooks = {
+      ...m.agents.hooks,
+      optionsKnown: () => false,
+      optionsSeen: (agentId) => seen.push(agentId),
+    }
+    await m.agents.readFirstOptions('codex')
+    const sent = m.diagnostics
+      .agentRecords('codex')
+      .traffic.filter((r) => r.direction === 'out')
+      .map((r) => r.method)
+    expect(seen).toEqual([])
+    expect(sent).not.toContain('session/new')
+    await m.agents.stopAll()
+  })
+
   it('does not hand out the runtime of an agent its stop did not end', async () => {
     const { launcher, launches, pids, exitFirst } = stopFails()
     const m = manager({}, {}, { launcher })
