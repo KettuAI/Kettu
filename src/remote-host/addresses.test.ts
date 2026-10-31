@@ -45,6 +45,18 @@ describe('findAddresses', () => {
     ['wg0', '0.0.0.0', false],
     ['wg0', '239.1.1.1', false],
     ['wg0', 'ff02::1', false],
+    // Never a bridge to containers or virtual machines
+    ['docker0', '172.17.0.1', false],
+    ['br-3f9a2c1d7e60', '172.18.0.1', false],
+    ['virbr0', '192.168.122.1', false],
+    ['veth1a2b3c4', '10.200.0.1', false],
+    ['vmnet8', '192.168.200.1', false],
+    ['vboxnet0', '192.168.56.1', false],
+    ['bridge100', '192.168.64.1', false],
+    ['bridge0', 'fd00::64', false],
+    // Names that only look like one, as Hyper-V's switch to the computer's own network
+    ['vEthernet (External)', '192.168.1.30', true],
+    ['bridged', '192.168.1.31', true],
   ])('on %s, %s is listed: %s', (name, address, listed) => {
     const found = findAddresses({ [name]: [info(address)] }, 50123)
     expect(found).toEqual(listed ? [{ host: address, port: 50123 }] : [])
@@ -54,7 +66,7 @@ describe('findAddresses', () => {
     const interfaces: Interfaces = {
       lo0: [info('10.0.0.9', true)],
       en0: [info('192.168.1.20'), info('fe80::1'), info('fd00::20')],
-      bridge0: [info('192.168.1.20')],
+      en1: [info('192.168.1.20')],
       utun3: [info('100.100.1.2')],
     }
     expect(findAddresses(interfaces, 50123)).toEqual([

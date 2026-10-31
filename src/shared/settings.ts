@@ -158,7 +158,8 @@ export interface SettingsPatch {
   usage?: Partial<SettingsFile['usage']>
   remote?: {
     enabled?: boolean
-    direct?: { enabled?: boolean; addresses?: DirectAddress[] } // the list is replaced whole
+    // `port` from 1024: below it a port may need privileges; the list is replaced whole.
+    direct?: { enabled?: boolean; port?: number; addresses?: DirectAddress[] }
   }
 }
 

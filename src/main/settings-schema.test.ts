@@ -43,6 +43,7 @@ describe('validateSettingsPatch', () => {
         enabled: true,
         direct: {
           enabled: true,
+          port: 50123,
           addresses: [
             { host: 'frp.example.com', port: 7000 },
             { host: '203.0.113.7', port: 443 },
@@ -133,7 +134,10 @@ describe('validateSettingsPatch', () => {
     [{ remote: { relay: true } }, 'Unknown setting "remote.relay"'],
     [{ remote: { direct: true } }, '"remote.direct" must be an object'],
     [{ remote: { direct: { enabled: 1 } } }, '"remote.direct.enabled" must be a boolean'],
-    [{ remote: { direct: { port: 50123 } } }, 'Unknown setting "remote.direct.port"'],
+    ...[1023, 0, 65536, 50123.5, '50123', null].map((port): [unknown, string] => [
+      { remote: { direct: { port } } },
+      '"remote.direct.port" must be a port from 1024 to 65535',
+    ]),
     [{ remote: { direct: { addresses: {} } } }, '"remote.direct.addresses" must be an array'],
     ...[
       { host: 'frp.example.com', port: 0 },
@@ -283,6 +287,25 @@ describe('mergeSettings', () => {
     })
     expect(replaced.remote.direct.addresses).toEqual([{ host: '10.0.0.2', port: 7001 }])
     expect(off.remote.direct.addresses).toEqual([{ host: 'a.example', port: 7000 }])
+  })
+
+  it('takes the port the owner picks, from 1024 to 65535, which no pick replaces', () => {
+    for (const port of [1024, 65535]) {
+      expect(validateSettingsPatch({ remote: { direct: { port } } })).toEqual({
+        remote: { direct: { port } },
+      })
+    }
+    const picked = withDirectPort(
+      mergeSettings(defaults(), { remote: { direct: { enabled: true } } }),
+      () => 50123,
+    )
+    const changed = mergeSettings(picked, { remote: { direct: { port: 8022 } } })
+    expect(changed.remote.direct).toEqual({ enabled: true, port: 8022, addresses: [] })
+    expect(withDirectPort(changed, () => 60000)).toBe(changed)
+    // Set while off, it is the port direct connections take when they turn on.
+    const chosen = mergeSettings(defaults(), { remote: { direct: { port: 9000 } } })
+    const on = mergeSettings(chosen, { remote: { direct: { enabled: true } } })
+    expect(withDirectPort(on, () => 60000).remote.direct.port).toBe(9000)
   })
 
   it('picks the direct port only the first time direct connections are on', () => {

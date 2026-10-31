@@ -11,6 +11,10 @@ export type Interfaces = NodeJS.Dict<NetworkInterfaceInfo[]>
 // VPN interfaces: utun on macOS; tun, wg, zt and tailscale0 on Linux; the VPN's name on Windows.
 const VPN_INTERFACE = /^(utun|tun|tap|wg|zt|ppp|ipsec)|tailscale|wireguard|zerotier|openvpn/i
 
+// Bridges to containers and virtual machines, which no device reaches. Case matters, so Hyper-V's
+// vEthernet on Windows, which may carry the computer's own network, stays.
+const VIRTUAL_BRIDGE = /^(docker|br-|virbr|veth|vmnet|vboxnet)|^bridge\d+$/
+
 /** Keeps the welcome small on a host with many interfaces, as one with many container networks. */
 const MAX_FOUND = 16
 
@@ -56,6 +60,7 @@ function isPrivate(address: string): boolean {
 export function findAddresses(interfaces: Interfaces, port: number): DirectAddress[] {
   const found: DirectAddress[] = []
   for (const [name, list] of Object.entries(interfaces)) {
+    if (VIRTUAL_BRIDGE.test(name)) continue
     const vpn = VPN_INTERFACE.test(name)
     for (const info of list ?? []) {
       const host = info.address

@@ -94,8 +94,12 @@ describe('SettingsStore', () => {
     store.update({ remote: { direct: { enabled: false } } })
     store.update({ remote: { direct: { enabled: true } } })
     expect(store.get().remote.direct.port).toBe(port)
+    store.update({ remote: { direct: { port: 8022 } } })
+    expect(store.get().remote.direct.port).toBe(8022)
     await store.flush()
-    expect(await readSettings()).toMatchObject({ remote: { direct: { enabled: true, port } } })
+    expect(await readSettings()).toMatchObject({
+      remote: { direct: { enabled: true, port: 8022 } },
+    })
   })
 
   it('gives a file that turns direct connections on by hand its port, and saves it', async () => {

@@ -175,7 +175,11 @@ function checkOwnAddresses(value: unknown, path: string): string | null {
   return null
 }
 
-/** `remote` in a patch; the port is Kettu's to pick, so a patch cannot set it. */
+/** A port the owner picks; whether it is free shows only when the remote host listens on it. */
+const isOwnPort: Check = (value, path) =>
+  isPort(value) && value >= 1024 ? null : `"${path}" must be a port from 1024 to 65535`
+
+/** `remote` in a patch. */
 function checkRemote(value: unknown, problems: string[]): void {
   if (!isRecord(value)) {
     problems.push('"remote" must be an object')
@@ -195,9 +199,11 @@ function checkRemote(value: unknown, problems: string[]): void {
         const problem =
           directKey === 'enabled'
             ? isBoolean(directValue, path)
-            : directKey === 'addresses'
-              ? checkOwnAddresses(directValue, path)
-              : `Unknown setting "${path}"`
+            : directKey === 'port'
+              ? isOwnPort(directValue, path)
+              : directKey === 'addresses'
+                ? checkOwnAddresses(directValue, path)
+                : `Unknown setting "${path}"`
         if (problem) problems.push(problem)
       }
     } else {
@@ -323,6 +329,7 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
     const { enabled, direct } = patch.remote
     if (enabled !== undefined) next.remote.enabled = enabled
     if (direct?.enabled !== undefined) next.remote.direct.enabled = direct.enabled
+    if (direct?.port !== undefined) next.remote.direct.port = direct.port
     if (direct?.addresses) {
       next.remote.direct.addresses = direct.addresses.map(({ host, port }) => ({ host, port }))
     }

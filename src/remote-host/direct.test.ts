@@ -122,6 +122,15 @@ const on = (addresses: DirectSettings['addresses'] = [], port = 0): DirectSettin
 })
 const off: DirectSettings = { enabled: false, port: null, addresses: [] }
 
+/** A port nothing listens on just now. */
+async function freePort(): Promise<number> {
+  const probe = createServer()
+  await new Promise<void>((resolve) => probe.listen(0, LOCALHOST, resolve))
+  const { port } = probe.address() as { port: number }
+  await new Promise<void>((resolve) => probe.close(() => resolve()))
+  return port
+}
+
 /** A raw TCP connection, open once the host took it. */
 function rawSocket(port: number): Promise<Socket> {
   return new Promise((resolve, reject) => {
@@ -182,6 +191,32 @@ describe('direct connections', () => {
     expect(t.listening().port).toBe(port)
     const again = await t.connectPhone(port)
     expect(await again.first).toMatchObject({ type: 'welcome' })
+  })
+
+  it('move to a port the owner changes, telling connected devices the new list', async () => {
+    const t = await setup()
+    await t.direct.apply(on())
+    const { port } = t.listening()
+    const device = await t.connectPhone()
+    expect(await device.first).toMatchObject({ addresses: [{ host: '192.168.1.20', port }] })
+
+    const next = await freePort()
+    await t.direct.apply(on([], next))
+    expect(t.listening()).toEqual({
+      state: 'listening',
+      port: next,
+      addresses: [{ host: '192.168.1.20', port: next }],
+    })
+    await expect
+      .poll(() => device.addresses)
+      .toEqual([{ type: 'addresses', addresses: [{ host: '192.168.1.20', port: next }] }])
+    // The device stays connected while it moves over, and the old port is closed.
+    expect(t.server.online()).toHaveLength(1)
+    await expect(connectTransport({ host: LOCALHOST, port })).rejects.toMatchObject({
+      code: 'ECONNREFUSED',
+    })
+    const moved = await t.connectPhone(next)
+    expect(await moved.first).toMatchObject({ type: 'welcome' })
   })
 
   it('report a port in use and do not try it again until the settings change', async () => {

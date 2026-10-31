@@ -19,7 +19,7 @@ import type { Transport } from '@shared/remote/transport'
 import type { LogFn } from '../agent-host/storage'
 import type { DeviceStore } from './devices'
 
-/** How long a connection has from its first message to its hello. */
+/** How long a connection has from being accepted to its hello. */
 const HELLO_TIMEOUT_MS = 10_000
 
 /** Refusals report at most once a second, so a flood of them does not flood main with statuses. */
