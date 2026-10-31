@@ -33,6 +33,8 @@ Development builds also list a **Fake agent**, which needs no account or network
 
 Packaging on macOS also needs Xcode 26 or later, whose `actool` compiles the app icon.
 
+`pnpm build` also builds the daemon into `out/daemon/`: the `kettu` CLI and the hosts it runs under Node.js, without Electron. Give it a data folder of its own and run it in the foreground, such as `KETTU_DAEMON_DATA=/tmp/kettu-daemon node out/daemon/main.cjs run`; `status` with the same folder asks the running daemon, and `KETTU_FAKE_AGENT=tools/fake-agent/main.ts` adds the Fake agent. `kettu service install` sets up a real system service, so it runs only on the Release workflow's macOS runners, never on a contributor's computer.
+
 What is planned next is in the [roadmap](./ROADMAP.md).
 
 ## Project work

@@ -19,7 +19,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "preview": "electron-vite preview",
-    "build": "pnpm typecheck && electron-vite build",
+    "build": "pnpm typecheck && electron-vite build && vite build -c vite.daemon.config.mts",
     "typecheck": "pnpm typecheck:node && pnpm typecheck:web && pnpm typecheck:tools",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
