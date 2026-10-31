@@ -172,7 +172,7 @@ export class AgentHost {
         appVersion: app.getVersion(),
         platform: process.platform,
         isPackaged: app.isPackaged,
-        electronPath: process.execPath,
+        nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
         fakeAgentPath: app.isPackaged
           ? (process.env.KETTU_FAKE_AGENT ?? null)
           : join(app.getAppPath(), 'tools/fake-agent/main.ts'),

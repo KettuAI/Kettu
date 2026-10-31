@@ -103,7 +103,7 @@ function manager(
   let live = 0
   const environment = new EnvironmentService({
     platform: process.platform,
-    electronPath: process.execPath,
+    nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
     baseEnv: process.env,
     resolve: async ({ baseEnv }) => ({
       env: baseEnv,
@@ -117,7 +117,7 @@ function manager(
   const agents = new AgentManager({
     catalog: [fakeAgent(FAKE_AGENT_MAIN)],
     platform: process.platform,
-    electronPath: process.execPath,
+    nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
     appVersion: '0.0.0-test',
     env: environment,
     diagnostics,
@@ -1380,7 +1380,7 @@ describe("updating the user's CLI", () => {
     const node = { nodeVersion: 'v24.1.0', npmPath: '/x/npm', nodePath: '/x/node' }
     const env = new EnvironmentService({
       platform: process.platform,
-      electronPath: process.execPath,
+      nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
       baseEnv: {},
       resolve: async () => ({
         env: { PATH: bin },
@@ -1594,7 +1594,7 @@ describe("a binary agent's version", () => {
     if (!windows) await chmod(program, 0o755)
     const env = new EnvironmentService({
       platform: process.platform,
-      electronPath: process.execPath,
+      nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
       baseEnv: {},
       resolve: async () => ({
         env: { PATH: bin, PATHEXT: '.EXE;.CMD' },
@@ -1679,7 +1679,7 @@ describe('a configuration folder of its own', () => {
     let current = settingsWith()
     const env = new EnvironmentService({
       platform: process.platform,
-      electronPath: process.execPath,
+      nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
       baseEnv: { ...process.env, CLAUDE_CONFIG_DIR: shellFolder },
       resolve: async ({ baseEnv }) => ({
         env: baseEnv,
@@ -1866,7 +1866,7 @@ describe('agents added to a harness', () => {
     let current = initial
     const env = new EnvironmentService({
       platform: process.platform,
-      electronPath: process.execPath,
+      nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
       baseEnv: { ...process.env, CLAUDE_CONFIG_DIR: shellFolder },
       resolve: async ({ baseEnv }) => ({
         env: baseEnv,
@@ -2859,7 +2859,7 @@ describe('installing a binary agent', () => {
     const runs: ProgramOptions[] = []
     const env = new EnvironmentService({
       platform: process.platform,
-      electronPath: process.execPath,
+      nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
       baseEnv: {},
       resolve: async () => ({
         env: { PATH: bin, PATHEXT: '.EXE;.CMD' },
@@ -3020,7 +3020,7 @@ describe('installing a binary agent from its archive', () => {
     }
     const env = new EnvironmentService({
       platform: process.platform,
-      electronPath: process.execPath,
+      nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
       baseEnv: {},
       resolve: async () => ({
         env: { PATH: bin, PATHEXT: '.EXE;.CMD' },
