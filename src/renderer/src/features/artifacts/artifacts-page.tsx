@@ -1,15 +1,18 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { flushSync } from 'react-dom'
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
-  ChevronDownIcon,
   ChevronRightIcon,
   CircleAlertIcon,
   FileUpIcon,
+  LayoutGridIcon,
+  ListFilterIcon,
+  SearchIcon,
   TrashIcon,
   XIcon,
 } from 'lucide-react'
-import { Trans, useTranslation } from 'react-i18next'
+import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { NO_SESSION, type ArtifactSummary } from '@shared/artifacts'
 import { backTo } from '@renderer/app/history'
@@ -35,11 +38,11 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@renderer/components/ui/empty'
-import { Skeleton } from '@renderer/components/ui/skeleton'
+import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { CornerControls } from '@renderer/features/shell/top-bar'
 import { basename, longAgo } from '@renderer/lib/format'
-import { isMac, isMod } from '@renderer/lib/platform'
+import { formatShortcut, isMac, isMod } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import {
@@ -48,6 +51,8 @@ import {
   importArtifact,
   retryArtifacts,
   setArtifactsFilter,
+  setArtifactsKindFilter,
+  setArtifactsProjectFilter,
   useArtifactsStore,
   type ImportFailure,
 } from '@renderer/stores/artifacts'
@@ -59,22 +64,26 @@ import {
   setArtifactsView,
   useViewStore,
 } from '@renderer/stores/view'
-import { ArtifactCard, CardSkeleton } from './artifact-card'
+import { ArtifactCard, CardSkeleton, type CardTime } from './artifact-card'
+import { askForArtifact } from './ask'
 import { isEditable } from './keys'
+import { KIND_LOOK } from './kinds'
 import {
+  ARTIFACT_KINDS,
   daysLeft,
-  filterByTitle,
+  filterArtifacts,
   groupArtifacts,
   GROUPINGS,
-  sessionCount,
+  NO_PROJECT,
+  projectsOf,
   SORTS,
   type ArtifactGrouping,
   type ArtifactSort,
   type Group,
 } from './model'
 
-/** Cards at least 250 px wide, 20 px apart: three across in the 896 px column. */
-const GRID = 'grid grid-cols-[repeat(auto-fill,minmax(--spacing(62.5),1fr))] gap-x-5 gap-y-6.5'
+/** Three across in the 960 px column, two or one as it narrows. */
+const GRID = 'grid grid-cols-1 gap-6 @min-[34rem]:grid-cols-2 @min-[50rem]:grid-cols-3'
 
 interface SessionInfo {
   title: string | null
@@ -91,8 +100,8 @@ function leaveRecentlyDeleted(): void {
 }
 
 /**
- * Every artifact as a card, grouped by project and session or as the user chooses; with
- * `deleted`, the page's Recently deleted view.
+ * Every artifact as a card, the most recently opened first or as the user chooses, under a row of
+ * kinds to ask an agent for; with `deleted`, the page's Recently deleted view.
  */
 export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   const { t, i18n } = useTranslation(['artifacts', 'common'])
@@ -100,6 +109,9 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   const trash = useArtifactsStore((s) => s.deleted)
   const error = useArtifactsStore((s) => s.error)
   const filter = useArtifactsStore((s) => s.filter)
+  const kindFilter = useArtifactsStore((s) => s.kindFilter)
+  const projectFilter = useArtifactsStore((s) => s.projectFilter)
+  const openedAt = useArtifactsStore((s) => s.openedAt)
   const importFailed = useArtifactsStore((s) => s.importFailed)
   const { group, sort } = useViewStore(useShallow((s) => s.artifactsView))
   const projects = useProjectsStore((s) => s.projects)
@@ -108,6 +120,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   const scroller = useRef<HTMLDivElement>(null)
   const filterField = useRef<HTMLInputElement>(null)
   const [active, setActive] = useState<string | null>(null)
+  const [searching, setSearching] = useState(false)
 
   useEffect(() => {
     artifactListShown(true)
@@ -132,6 +145,8 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
         event.key.toLowerCase() === 'f'
       ) {
         event.preventDefault()
+        if (!useArtifactsStore.getState().list?.length) return
+        flushSync(() => setSearching(true))
         filterField.current?.focus()
         filterField.current?.select()
       } else if (event.key === 'Escape' && useArtifactsStore.getState().filter && onPage) {
@@ -165,8 +180,13 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     () => new Intl.Collator(i18n.language, { numeric: true, sensitivity: 'base' }),
     [i18n.language],
   )
-  const day = new Date(now).setHours(0, 0, 0, 0)
-  const shown = useMemo(() => (list ? filterByTitle(list, filter) : []), [list, filter])
+  const shown = useMemo(
+    () =>
+      list
+        ? filterArtifacts(list, { title: filter, kind: kindFilter, project: projectFilter })
+        : [],
+    [list, filter, kindFilter, projectFilter],
+  )
   const groups = useMemo(() => {
     if (!list) return []
     return groupArtifacts(shown, group, sort, {
@@ -180,9 +200,9 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
       deletedSession: t('page.deletedSession'),
       imported: t('page.imported'),
       collator,
-      now: day,
+      opened: openedAt,
     })
-  }, [list, shown, group, sort, projects, sessions, collator, day, t])
+  }, [list, shown, group, sort, projects, sessions, collator, openedAt, t])
 
   const projectName = (artifact: ArtifactSummary): string =>
     artifact.scratch
@@ -194,11 +214,24 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     if (!info) return t('page.deletedSession')
     return info.title ?? t('common:untitledSession')
   }
-  const card = (artifact: ArtifactSummary, lead: string, tabbable: string | null) => (
+  // The time the order goes by: when it was opened here or written, or when it was written.
+  const timeOf = (artifact: ArtifactSummary): CardTime => {
+    const opened = openedAt[artifact.id] ?? 0
+    return sort !== 'updated' && opened > artifact.updatedAt
+      ? { at: opened, opened: true }
+      : { at: artifact.updatedAt, opened: false }
+  }
+  const card = (
+    artifact: ArtifactSummary,
+    lead: string,
+    time: CardTime | null,
+    tabbable: string | null,
+  ) => (
     <ArtifactCard
       key={artifact.id}
       artifact={artifact}
       lead={lead}
+      time={time}
       project={projectName(artifact)}
       session={sessionName(artifact.sessionId)}
       tabbable={artifact.id === tabbable}
@@ -211,9 +244,11 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
       if (id) setActive(id)
     },
   }
-  const clearFilter = () => {
+  const clearFilters = () => {
     setArtifactsFilter('')
-    filterField.current?.focus()
+    setArtifactsKindFilter(null)
+    setArtifactsProjectFilter(null)
+    setSearching(false)
   }
 
   let body
@@ -226,7 +261,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
       body = (
         <>
           {error && <ListError error={error} />}
-          <div {...cardsProps} className={GRID}>
+          <div {...cardsProps} className={cn(GRID, 'mt-8')}>
             {trash.map((artifact) =>
               card(
                 artifact,
@@ -234,6 +269,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                   project: projectName(artifact),
                   count: daysLeft(artifact.deletedAt ?? now, now),
                 }),
+                null,
                 tabbable,
               ),
             )}
@@ -247,12 +283,12 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     if (list === null && error) body = <ListError error={error} />
     else if (list === null) body = <LoadingList />
     else if (list.length === 0) body = <NoArtifacts />
-    else if (groups.length === 0) body = <NoMatch onClear={clearFilter} />
+    else if (groups.length === 0) body = <NoMatch onClear={clearFilters} />
     else {
       body = (
         <>
           {error && <ListError error={error} />}
-          <div {...cardsProps}>
+          <div {...cardsProps} className="mt-8">
             {groups.map((g, i) => (
               <GroupView
                 key={g.key}
@@ -266,9 +302,8 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                     artifact,
                     group === 'project-session'
                       ? t('card.version', { version: artifact.version })
-                      : group === 'project'
-                        ? sessionName(artifact.sessionId)
-                        : projectName(artifact),
+                      : projectName(artifact),
+                    timeOf(artifact),
                     tabbable,
                   )
                 }
@@ -280,11 +315,12 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     }
   }
 
-  const sessionsShown = sessionCount(shown)
-  const summary =
-    sessionsShown > 0
-      ? t('page.summary', { count: shown.length, sessions: sessionsShown })
-      : t('page.count', { count: shown.length })
+  const any = list !== null && list.length > 0
+  const searchOpen = searching || filter !== ''
+  const openSearch = () => {
+    flushSync(() => setSearching(true))
+    filterField.current?.focus()
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -294,7 +330,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
         onScroll={(event) => (scrolledTo = event.currentTarget.scrollTop)}
         className="min-h-0 flex-1 overflow-y-auto px-8 pb-18 [scrollbar-gutter:stable]"
       >
-        <div className="@container mx-auto flex max-w-224 flex-col">
+        <div className="@container mx-auto flex max-w-240 flex-col">
           {deleted ? (
             <>
               <Tooltip>
@@ -315,7 +351,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                   {t('page.backToArtifacts')} <span className="opacity-60">Esc</span>
                 </TooltipContent>
               </Tooltip>
-              <header className="mb-7.5">
+              <header>
                 <h1 className="font-heading text-title font-medium">{t('page.recentlyDeleted')}</h1>
                 <p className="mt-1.5 text-small leading-5.5 text-secondary">
                   {t('page.deletedDescription')}
@@ -323,67 +359,63 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
               </header>
             </>
           ) : (
-            <header className="mb-7.5 flex items-start gap-2">
-              <div className="min-w-0 flex-1">
-                <h1 className="font-heading text-title font-medium">{t('page.title')}</h1>
-                {list && list.length > 0 && (
-                  <p className="mt-1.5 text-small leading-5.5 text-secondary">
-                    <Trans
-                      t={t}
-                      i18nKey="page.sentence"
-                      values={{
-                        summary,
-                        grouping: t(`page.groupedBy.${group}`),
-                        sorting: t(`page.sortedBy.${sort}`),
-                      }}
-                      components={{
-                        group: (
-                          <InlineChoice
-                            title={t('page.groupBy')}
-                            label={t('page.groupByChoice', {
-                              choice: t(`page.groupings.${group}`),
-                            })}
-                            choices={GROUPINGS.map((g) => [g, t(`page.groupings.${g}`)] as const)}
-                            value={group}
-                            onPick={(g: ArtifactGrouping) => setArtifactsView({ group: g })}
-                          />
-                        ),
-                        sort: (
-                          <InlineChoice
-                            title={t('page.sort')}
-                            label={t('page.sortChoice', { choice: t(`page.sorts.${sort}`) })}
-                            choices={SORTS.map((s) => [s, t(`page.sorts.${s}`)] as const)}
-                            value={sort}
-                            onPick={(s: ArtifactSort) => setArtifactsView({ sort: s })}
-                          />
-                        ),
-                      }}
-                    />
-                  </p>
-                )}
-                {list === null && !error && (
-                  <div className="mt-1.5 flex h-5.5 items-center">
-                    <Skeleton className="h-3 w-55" />
-                  </div>
-                )}
-              </div>
-              {list && list.length > 0 && (
-                <>
-                  <SearchField
-                    value={filter}
-                    onChange={setArtifactsFilter}
-                    label={t('page.filter')}
-                    clearLabel={t('page.clearFilter')}
-                    inputRef={filterField}
-                    className="w-50 @min-[47.5rem]:w-65"
-                  />
+            <>
+              <header className="flex h-7.5 items-center gap-2">
+                <h1 className="min-w-0 flex-1 font-heading text-title font-medium">
+                  {t('page.title')}
+                </h1>
+                <div className="flex items-center gap-0.5">
+                  {any &&
+                    (searchOpen ? (
+                      <div
+                        onBlur={(event) => {
+                          if (!filter && !event.currentTarget.contains(event.relatedTarget)) {
+                            setSearching(false)
+                          }
+                        }}
+                        className="mr-1"
+                      >
+                        <SearchField
+                          value={filter}
+                          onChange={setArtifactsFilter}
+                          label={t('page.filter')}
+                          clearLabel={t('page.clearFilter')}
+                          inputRef={filterField}
+                          className="w-50 @min-[47.5rem]:w-60"
+                        />
+                      </div>
+                    ) : (
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              variant="quiet"
+                              size="icon-sm"
+                              aria-label={t('page.filter')}
+                              onClick={openSearch}
+                            />
+                          }
+                        >
+                          <SearchIcon />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {t('page.filter')} <Kbd>{formatShortcut('Mod+F')}</Kbd>
+                        </TooltipContent>
+                      </Tooltip>
+                    ))}
+                  {any && <FilterMenu list={list} />}
+                  {any && <DisplayMenu group={group} sort={sort} />}
                   <ImportMenu align="end">
                     <Tooltip>
                       <TooltipTrigger
                         render={
                           <DropdownMenuTrigger
                             render={
-                              <Button variant="outline" size="icon" aria-label={t('page.import')} />
+                              <Button
+                                variant="quiet"
+                                size="icon-sm"
+                                aria-label={t('page.import')}
+                              />
                             }
                           />
                         }
@@ -393,9 +425,10 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                       <TooltipContent>{t('page.import')}</TooltipContent>
                     </Tooltip>
                   </ImportMenu>
-                </>
-              )}
-            </header>
+                </div>
+              </header>
+              <KindTiles />
+            </>
           )}
           {!deleted && importFailed && <ImportError failure={importFailed} />}
           {body}
@@ -403,7 +436,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
             <button
               type="button"
               onClick={() => openRecentlyDeleted(true)}
-              className="mt-10 flex h-11 w-full items-center gap-2.5 rounded-lg px-2.5 text-ui text-secondary shadow-[0_calc(-1*var(--hairline))_0_var(--border-subtle)] outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring"
+              className="mt-8 flex h-11 w-full items-center gap-2.5 rounded-lg px-2.5 text-ui text-secondary shadow-[0_calc(-1*var(--hairline))_0_var(--border-subtle)] outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring"
             >
               <TrashIcon className="size-4 text-icon" />
               {t('page.recentlyDeleted')}
@@ -454,13 +487,7 @@ function GroupView({
   const { t } = useTranslation(['artifacts', 'common'])
   const of = group.of
   const label =
-    of.kind === 'project'
-      ? of.name
-      : of.kind === 'no-project'
-        ? t('page.noProject')
-        : of.kind === 'date'
-          ? t(`page.dates.${of.bucket}`)
-          : null
+    of.kind === 'project' ? of.name : of.kind === 'no-project' ? t('page.noProject') : null
   return (
     <section
       aria-label={label ?? undefined}
@@ -531,42 +558,196 @@ function SessionRow({ id, info, now }: { id: string; info: SessionInfo | undefin
   )
 }
 
-/**
- * A choice inside the page's sentence, "by project and session": the words open a menu that picks
- * another and closes. `children` are the words, as the sentence's translation places them.
- */
-function InlineChoice<T extends string>({
-  title,
+/** The row of kinds an agent makes, each opening New session to ask for one. */
+function KindTiles() {
+  const { t } = useTranslation('artifacts')
+  return (
+    <section aria-labelledby="artifacts-ask" className="mt-6.5">
+      <h2 id="artifacts-ask" className="text-xs text-tertiary">
+        {t('page.ask')}
+      </h2>
+      <div className="mt-2.5 flex flex-wrap gap-4">
+        {ARTIFACT_KINDS.map((kind) => {
+          const look = KIND_LOOK[kind]
+          return (
+            <button
+              key={kind}
+              type="button"
+              onClick={() => askForArtifact(kind)}
+              className="group/tile flex w-30 flex-col gap-2 text-left text-ui text-primary outline-none"
+            >
+              <span
+                className={cn(
+                  'grid h-20 place-items-center rounded-code transition-colors duration-(--duration-fast) group-focus-visible/tile:outline-2 group-focus-visible/tile:outline-offset-2 group-focus-visible/tile:outline-focus',
+                  look.tint,
+                  look.tileHover,
+                )}
+              >
+                <look.icon strokeWidth={1.5} className={cn('size-7', look.color)} />
+              </span>
+              <span className="pl-0.5">{t(`page.kinds.${kind}`)}</span>
+            </button>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+/** A header button that opens one of the page's menus; `active` while its choice is not the default. */
+function MenuButton({
   label,
-  choices,
-  value,
-  onPick,
+  active,
   children,
 }: {
-  title: string
-  /** The trigger's name: what it chooses and the current choice. */
   label: string
-  choices: readonly (readonly [T, string])[]
-  value: T
-  onPick: (value: T) => void
-  children?: React.ReactNode
+  active: boolean
+  children: React.ReactNode
 }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label={label}
-        className="-mr-0.75 -ml-1 inline-flex h-5.5 items-center gap-0.5 rounded-md pr-0.75 pl-1 align-top font-medium text-primary underline decoration-border-strong decoration-dotted underline-offset-4 outline-none transition-colors duration-(--duration-fast) focus-ring hover:bg-hover hover:decoration-transparent aria-expanded:bg-hover aria-expanded:decoration-transparent"
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="quiet"
+                size="icon-sm"
+                aria-label={label}
+                data-active={active || undefined}
+                className="data-active:bg-pressed data-active:text-foreground data-active:shadow-sunk"
+              />
+            }
+          />
+        }
       >
         {children}
-        <ChevronDownIcon className="size-3 text-tertiary" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" alignOffset={-6} sideOffset={6} className="min-w-53">
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+const ALL = 'all'
+
+/** Narrows the list to a kind and a project, each "All" by default. */
+function FilterMenu({ list }: { list: ArtifactSummary[] }) {
+  const { t, i18n } = useTranslation('artifacts')
+  const kindFilter = useArtifactsStore((s) => s.kindFilter)
+  const projectFilter = useArtifactsStore((s) => s.projectFilter)
+  const projects = useProjectsStore((s) => s.projects)
+  const choices = useMemo(
+    () =>
+      projectsOf(list, {
+        projects,
+        collator: new Intl.Collator(i18n.language, { numeric: true, sensitivity: 'base' }),
+      }),
+    [list, projects, i18n.language],
+  )
+  // A radio value per project: its folder after a prefix, so "All" can never be a folder.
+  const projectValue =
+    projectFilter === null ? ALL : projectFilter === NO_PROJECT ? 'none' : `in:${projectFilter}`
+  const active = kindFilter !== null || projectFilter !== null
+  return (
+    <DropdownMenu>
+      <MenuButton label={active ? t('page.filterOn') : t('page.filterMenu')} active={active}>
+        <ListFilterIcon />
+      </MenuButton>
+      <DropdownMenuContent align="end" sideOffset={6} className="max-w-72 min-w-50">
         <DropdownMenuGroup>
-          <DropdownMenuLabel>{title}</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={value} onValueChange={(v) => onPick(v as T)}>
-            {choices.map(([v, name]) => (
-              <DropdownMenuRadioItem key={v} value={v} closeOnClick>
-                {name}
+          <DropdownMenuLabel>{t('page.kind')}</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={kindFilter ?? ALL}
+            onValueChange={(value) =>
+              setArtifactsKindFilter(ARTIFACT_KINDS.find((kind) => kind === value) ?? null)
+            }
+          >
+            <DropdownMenuRadioItem value={ALL} closeOnClick>
+              {t('page.allKinds')}
+            </DropdownMenuRadioItem>
+            {ARTIFACT_KINDS.map((kind) => {
+              const look = KIND_LOOK[kind]
+              return (
+                <DropdownMenuRadioItem key={kind} value={kind} closeOnClick>
+                  <look.icon className={look.color} />
+                  {t(`page.kinds.${kind}`)}
+                </DropdownMenuRadioItem>
+              )
+            })}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t('page.project')}</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={projectValue}
+            onValueChange={(value) =>
+              setArtifactsProjectFilter(
+                value === ALL
+                  ? null
+                  : value === 'none'
+                    ? NO_PROJECT
+                    : String(value).slice('in:'.length),
+              )
+            }
+          >
+            <DropdownMenuRadioItem value={ALL} closeOnClick>
+              {t('page.allProjects')}
+            </DropdownMenuRadioItem>
+            {choices.map((of) =>
+              of.kind === 'project' ? (
+                <DropdownMenuRadioItem key={of.path} value={`in:${of.path}`} closeOnClick>
+                  <span className="truncate">{of.name}</span>
+                </DropdownMenuRadioItem>
+              ) : (
+                <DropdownMenuRadioItem key="none" value="none" closeOnClick>
+                  {t('page.noProject')}
+                </DropdownMenuRadioItem>
+              ),
+            )}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+/** Flat or grouped, and the order; active away from flat and recently opened. */
+function DisplayMenu({ group, sort }: { group: ArtifactGrouping; sort: ArtifactSort }) {
+  const { t } = useTranslation('artifacts')
+  return (
+    <DropdownMenu>
+      <MenuButton label={t('page.display')} active={group !== 'none' || sort !== 'recent'}>
+        <LayoutGridIcon />
+      </MenuButton>
+      <DropdownMenuContent align="end" sideOffset={6} className="min-w-53">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t('page.layout')}</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={group}
+            onValueChange={(value) =>
+              setArtifactsView({ group: GROUPINGS.find((g) => g === value) ?? 'none' })
+            }
+          >
+            {GROUPINGS.map((g) => (
+              <DropdownMenuRadioItem key={g} value={g} closeOnClick>
+                {t(`page.layouts.${g}`)}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t('page.sort')}</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={sort}
+            onValueChange={(value) =>
+              setArtifactsView({ sort: SORTS.find((s) => s === value) ?? 'recent' })
+            }
+          >
+            {SORTS.map((s) => (
+              <DropdownMenuRadioItem key={s} value={s} closeOnClick>
+                {t(`page.sorts.${s}`)}
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
@@ -675,13 +856,10 @@ function useSessionInfo(...lists: (ArtifactSummary[] | null)[]): Map<string, Ses
 function LoadingList() {
   const { t } = useTranslation('artifacts')
   return (
-    <div aria-busy aria-label={t('page.loading')} className="flex flex-col">
-      <Skeleton className="mt-2 mb-4.5 h-4 w-45" />
-      <div className={GRID}>
-        {Array.from({ length: 3 }, (_, i) => (
-          <CardSkeleton key={i} />
-        ))}
-      </div>
+    <div aria-busy aria-label={t('page.loading')} className={cn(GRID, 'mt-8')}>
+      {Array.from({ length: 3 }, (_, i) => (
+        <CardSkeleton key={i} />
+      ))}
     </div>
   )
 }
@@ -703,11 +881,10 @@ function EmptyTray() {
 function NoArtifacts() {
   const { t } = useTranslation('artifacts')
   return (
-    <Empty className="py-18">
-      <EmptyHeader>
-        <EmptyTray />
+    <Empty className="mt-16 flex-none">
+      <EmptyHeader className="max-w-125">
         <EmptyTitle>{t('page.emptyTitle')}</EmptyTitle>
-        <EmptyDescription>{t('page.emptyDescription')}</EmptyDescription>
+        <EmptyDescription className="max-w-none">{t('page.emptyDescription')}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
         <ImportMenu align="center">
@@ -777,7 +954,7 @@ function ImportMenu({
 function ImportError({ failure }: { failure: ImportFailure }) {
   const { t } = useTranslation(['artifacts', 'common'])
   return (
-    <Alert variant="error" className="mb-7">
+    <Alert variant="error" className="mt-8">
       <CircleAlertIcon />
       <AlertTitle>{t('page.importFailedTitle')}</AlertTitle>
       <AlertDescription>{t(`page.importFailed.${failure}`)}</AlertDescription>
@@ -798,10 +975,10 @@ function ImportError({ failure }: { failure: ImportFailure }) {
 function NoMatch({ onClear }: { onClear: () => void }) {
   const { t } = useTranslation('artifacts')
   return (
-    <div className="flex flex-col items-center gap-1.5 py-14 text-center">
+    <div className="mt-8 flex flex-col items-center gap-1.5 py-14 text-center">
       <p className="font-heading text-subheading font-medium text-secondary">{t('page.noMatch')}</p>
       <Button variant="quiet" size="sm" onClick={onClear}>
-        {t('page.clearFilter')}
+        {t('page.clearFilters')}
       </Button>
     </div>
   )
@@ -810,7 +987,7 @@ function NoMatch({ onClear }: { onClear: () => void }) {
 function ListError({ error }: { error: string }) {
   const { t } = useTranslation(['artifacts', 'common'])
   return (
-    <Alert variant="error" className="mb-7">
+    <Alert variant="error" className="mt-8">
       <CircleAlertIcon />
       <AlertTitle>{t('page.errorTitle')}</AlertTitle>
       <AlertDescription>{t('page.errorDescription', { error })}</AlertDescription>

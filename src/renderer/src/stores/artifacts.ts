@@ -1,6 +1,15 @@
 import { create } from 'zustand'
 import type { ArtifactImportResult, ArtifactSummary } from '@shared/artifacts'
+import {
+  parseOpened,
+  withOpened,
+  type ArtifactKind,
+  type OpenedTimes,
+} from '@renderer/features/artifacts/model'
 import { errorMessage, host } from '@renderer/lib/host'
+import { readJson, writeJson } from '@renderer/lib/storage'
+
+const OPENED_KEY = 'artifacts.opened'
 
 interface ArtifactsStore {
   /** Every artifact outside Recently deleted, newest first; null until the first read. */
@@ -9,8 +18,13 @@ interface ArtifactsStore {
   deleted: ArtifactSummary[] | null
   /** Why the last read failed, until a read succeeds. */
   error: string | null
-  /** The page's filter, kept while the viewer shows so Back returns to the same list. */
+  /** The page's filters, kept while the viewer shows so Back returns to the same list. */
   filter: string
+  kindFilter: ArtifactKind | null
+  /** A project's folder, or NO_PROJECT. */
+  projectFilter: string | null
+  /** When this device last showed each artifact. */
+  openedAt: OpenedTimes
   /** The card the viewer was opened from, which takes the focus back. */
   opened: string | null
   /** Why the last import failed, until it is dismissed or another import starts. */
@@ -31,6 +45,9 @@ export const useArtifactsStore = create<ArtifactsStore>()(() => ({
   deleted: null,
   error: null,
   filter: '',
+  kindFilter: null,
+  projectFilter: null,
+  openedAt: parseOpened(readJson<unknown>(OPENED_KEY, {})),
   opened: null,
   importFailed: null,
   dialog: null,
@@ -85,6 +102,23 @@ export function retryArtifacts(): void {
 
 export function setArtifactsFilter(filter: string): void {
   useArtifactsStore.setState({ filter })
+}
+
+export function setArtifactsKindFilter(kindFilter: ArtifactKind | null): void {
+  useArtifactsStore.setState({ kindFilter })
+}
+
+export function setArtifactsProjectFilter(projectFilter: string | null): void {
+  useArtifactsStore.setState({ projectFilter })
+}
+
+/** A viewer or pane shows the artifact: the page lists it as just opened. */
+export function markArtifactOpened(id: string): void {
+  const { openedAt, list, deleted } = useArtifactsStore.getState()
+  const known = list && deleted ? new Set([...list, ...deleted].map((a) => a.id)) : null
+  const next = withOpened(openedAt, id, Date.now(), known)
+  useArtifactsStore.setState({ openedAt: next })
+  writeJson(OPENED_KEY, next)
 }
 
 // The host announces each change with `artifacts.changed`, which reads the lists again.

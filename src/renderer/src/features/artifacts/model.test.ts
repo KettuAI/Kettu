@@ -1,15 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { NO_SESSION, type ArtifactSession, type ArtifactSummary } from '@shared/artifacts'
 import {
-  dateBucket,
+  artifactKind,
   daysLeft,
-  filterByTitle,
+  filterArtifacts,
   groupArtifacts,
+  NO_PROJECT,
+  parseOpened,
   presenceShown,
-  sessionCount,
+  projectsOf,
+  recency,
+  withAskLine,
+  withOpened,
   type ArtifactGrouping,
   type ArtifactSort,
   type ListContext,
+  type ListFilter,
+  type OpenedTimes,
 } from './model'
 
 const NOW = new Date(2026, 9, 24, 15, 0).getTime()
@@ -50,7 +57,7 @@ const context: ListContext = {
   deletedSession: 'Deleted session',
   imported: 'Imported',
   collator: new Intl.Collator('en', { numeric: true, sensitivity: 'base' }),
-  now: NOW,
+  opened: {},
 }
 
 const titles = (groups: ReturnType<typeof groupArtifacts>) =>
@@ -59,39 +66,94 @@ const titles = (groups: ReturnType<typeof groupArtifacts>) =>
 const group = (
   list: ArtifactSummary[],
   grouping: ArtifactGrouping,
-  sort: ArtifactSort = 'newest',
-) => groupArtifacts(list, grouping, sort, context)
+  sort: ArtifactSort = 'recent',
+  opened: OpenedTimes = {},
+) => groupArtifacts(list, grouping, sort, { ...context, opened })
 
-describe('filterByTitle', () => {
+describe('filterArtifacts', () => {
+  const ALL: ListFilter = { title: '', kind: null, project: null }
   const list = [
     artifact({ title: 'Café menu' }),
-    artifact({ title: 'Q3 Traffic report' }),
-    artifact({ title: 'Slides' }),
+    artifact({ title: 'Q3 Traffic report', project: '/work/deck' }),
+    artifact({ title: 'Slides', pages: 3 }),
+    artifact({ title: 'Scratch', project: '/data/scratch/scratch-1', scratch: true }),
   ]
+  const titles = (filter: Partial<ListFilter>) =>
+    filterArtifacts(list, { ...ALL, ...filter }).map((a) => a.title)
 
-  it('matches case- and accent-insensitively', () => {
-    expect(filterByTitle(list, 'CAFE').map((a) => a.title)).toEqual(['Café menu'])
-    expect(filterByTitle(list, 'traffic').map((a) => a.title)).toEqual(['Q3 Traffic report'])
+  it('matches the title case- and accent-insensitively', () => {
+    expect(titles({ title: 'CAFE' })).toEqual(['Café menu'])
+    expect(titles({ title: 'traffic' })).toEqual(['Q3 Traffic report'])
+    expect(titles({ title: 'zz' })).toEqual([])
   })
 
-  it('keeps everything for a blank filter, and nothing for no match', () => {
-    expect(filterByTitle(list, '  ')).toHaveLength(3)
-    expect(filterByTitle(list, 'zz')).toEqual([])
+  it('keeps everything for a blank filter', () => {
+    expect(titles({ title: '  ' })).toHaveLength(4)
+  })
+
+  it('keeps one kind, a canvas being two or more pages', () => {
+    expect(titles({ kind: 'canvas' })).toEqual(['Slides'])
+    expect(titles({ kind: 'web' })).toEqual(['Café menu', 'Q3 Traffic report', 'Scratch'])
+  })
+
+  it('keeps one project, or No project', () => {
+    expect(titles({ project: '/work/deck' })).toEqual(['Q3 Traffic report'])
+    expect(titles({ project: NO_PROJECT })).toEqual(['Scratch'])
+    expect(titles({ project: '/work/acme', kind: 'canvas' })).toEqual(['Slides'])
   })
 })
 
-describe('dateBucket', () => {
-  it.each([
-    [NOW - HOUR, 'today'],
-    [new Date(2026, 9, 24, 0, 1).getTime(), 'today'],
-    [new Date(2026, 9, 23, 23, 59).getTime(), 'yesterday'],
-    [NOW - 2 * DAY, 'week'],
-    [NOW - 7 * DAY, 'week'],
-    [NOW - 8 * DAY, 'month'],
-    [NOW - 30 * DAY, 'month'],
-    [NOW - 31 * DAY, 'older'],
-  ])('puts %s in %s', (at, bucket) => {
-    expect(dateBucket(at, NOW)).toBe(bucket)
+describe('artifactKind', () => {
+  it('reads two or more pages as a canvas', () => {
+    expect(artifactKind(artifact({ pages: 1 }))).toBe('web')
+    expect(artifactKind(artifact({ pages: 2 }))).toBe('canvas')
+  })
+})
+
+describe('opened times', () => {
+  it('takes the later of the open and the latest version', () => {
+    const a = artifact({ updatedAt: NOW - HOUR })
+    expect(recency(a, {})).toBe(NOW - HOUR)
+    expect(recency(a, { [a.id]: NOW })).toBe(NOW)
+    expect(recency(a, { [a.id]: NOW - DAY })).toBe(NOW - HOUR)
+  })
+
+  it('records an open, dropping artifacts no longer listed once the lists are known', () => {
+    expect(withOpened({ a: 1, b: 2 }, 'c', 3, null)).toEqual({ a: 1, b: 2, c: 3 })
+    expect(withOpened({ a: 1, b: 2 }, 'a', 5, null)).toEqual({ a: 5, b: 2 })
+    expect(withOpened({ a: 1, b: 2 }, 'c', 3, new Set(['b', 'c']))).toEqual({ b: 2, c: 3 })
+  })
+
+  it('reads only well-formed stored times', () => {
+    expect(parseOpened({ a: 1, b: 'x', c: Number.NaN, d: null })).toEqual({ a: 1 })
+    expect(parseOpened(null)).toEqual({})
+    expect(parseOpened([1, 2])).toEqual({})
+  })
+})
+
+describe('withAskLine', () => {
+  it("writes the line into an empty draft, and after a blank line under the user's text", () => {
+    expect(withAskLine('', 'Make a web page artifact: ')).toBe('Make a web page artifact: ')
+    expect(withAskLine('Notes so far\n\n', 'Make a canvas: ')).toBe(
+      'Notes so far\n\nMake a canvas: ',
+    )
+  })
+})
+
+describe('projectsOf', () => {
+  it('lists the projects with artifacts as the grouping orders them', () => {
+    const list = [
+      artifact({ project: '/work/acme' }),
+      artifact({ project: '/data/scratch/scratch-1', scratch: true }),
+      artifact({ project: '/old/zeta' }),
+      artifact({ project: '/work/deck' }),
+    ]
+    expect(projectsOf(list, context)).toEqual([
+      { kind: 'project', path: '/work/deck', name: 'deck' },
+      { kind: 'project', path: '/work/acme', name: 'acme' },
+      { kind: 'project', path: '/old/zeta', name: 'zeta' },
+      { kind: 'no-project' },
+    ])
   })
 })
 
@@ -104,7 +166,7 @@ describe('groupArtifacts', () => {
       artifact({ title: 'Alpha', project: '/old/alpha' }),
       artifact({ title: 'Deck', project: '/work/deck' }),
     ]
-    const groups = group(list, 'project')
+    const groups = group(list, 'project-session')
     expect(groups.map((g) => g.of)).toEqual([
       { kind: 'project', path: '/work/deck', name: 'deck' },
       { kind: 'project', path: '/work/acme', name: 'acme' },
@@ -117,23 +179,35 @@ describe('groupArtifacts', () => {
 
   it('keeps the project order whatever the sort', () => {
     const list = [artifact({ project: '/work/acme' }), artifact({ project: '/work/deck' })]
-    for (const sort of ['newest', 'oldest', 'name', 'name-desc'] as const) {
-      expect(group(list, 'project', sort).map((g) => g.key)).toEqual(['/work/deck', '/work/acme'])
+    for (const sort of ['recent', 'updated', 'name'] as const) {
+      expect(group(list, 'project-session', sort).map((g) => g.key)).toEqual([
+        '/work/deck',
+        '/work/acme',
+      ])
     }
   })
 
-  it('puts sessions under their project, by their last update, each with its cards', () => {
+  it('puts sessions under their project, by their most recent card, each with its cards', () => {
     const list = [
       artifact({ title: 'One', sessionId: 's1', updatedAt: NOW - 3 * HOUR }),
       artifact({ title: 'Two', sessionId: 's2', updatedAt: NOW - 5 * HOUR }),
       artifact({ title: 'Three', sessionId: 's1', updatedAt: NOW - HOUR }),
     ]
     const [acme] = group(list, 'project-session')
-    expect(acme!.sections.map((s) => s.sessionId)).toEqual(['s2', 's1'])
-    expect(titles(group(list, 'project-session'))).toEqual([[['Two'], ['Three', 'One']]])
+    expect(acme!.sections.map((s) => s.sessionId)).toEqual(['s1', 's2'])
+    expect(titles(group(list, 'project-session'))).toEqual([[['Three', 'One'], ['Two']]])
     expect(acme!.count).toBe(3)
-    const oldest = group(list, 'project-session', 'oldest')
-    expect(oldest[0]!.sections.map((s) => s.sessionId)).toEqual(['s1', 's2'])
+    const opened = group(list, 'project-session', 'recent', { [list[1]!.id]: NOW })
+    expect(titles(opened)).toEqual([[['Two'], ['Three', 'One']]])
+  })
+
+  it('orders sessions by their own last update when sorted by update', () => {
+    const list = [
+      artifact({ sessionId: 's1', updatedAt: NOW - 3 * HOUR }),
+      artifact({ sessionId: 's2', updatedAt: NOW - 5 * HOUR }),
+    ]
+    const updated = group(list, 'project-session', 'updated')[0]!.sections.map((s) => s.sessionId)
+    expect(updated).toEqual(['s2', 's1'])
   })
 
   it('sorts sessions by title, and a deleted session by its name and newest artifact', () => {
@@ -144,8 +218,8 @@ describe('groupArtifacts', () => {
     ]
     const byName = group(list, 'project-session', 'name')[0]!.sections.map((s) => s.sessionId)
     expect(byName).toEqual(['s2', 'gone', 's1'])
-    const newest = group(list, 'project-session')[0]!.sections.map((s) => s.sessionId)
-    expect(newest).toEqual(['gone', 's2', 's1'])
+    const updated = group(list, 'project-session', 'updated')[0]!.sections.map((s) => s.sessionId)
+    expect(updated).toEqual(['gone', 's2', 's1'])
   })
 
   it('puts what the user imported under its own label, by its newest artifact', () => {
@@ -166,56 +240,29 @@ describe('groupArtifacts', () => {
   it('sorts names in numeric order', () => {
     const list = ['Slide 10', 'slide 2', 'Slide 1'].map((title) => artifact({ title }))
     expect(titles(group(list, 'none', 'name'))).toEqual([[['Slide 1', 'slide 2', 'Slide 10']]])
-    expect(titles(group(list, 'none', 'name-desc'))).toEqual([[['Slide 10', 'slide 2', 'Slide 1']]])
   })
 
-  it('sorts by the latest version, newest or oldest first', () => {
+  it('puts the most recently opened or written first, or the latest version first', () => {
     const list = [
       artifact({ title: 'Middle', updatedAt: NOW - 2 * HOUR }),
       artifact({ title: 'New', updatedAt: NOW - HOUR }),
       artifact({ title: 'Old', updatedAt: NOW - 3 * HOUR }),
     ]
     expect(titles(group(list, 'none'))).toEqual([[['New', 'Middle', 'Old']]])
-    expect(titles(group(list, 'none', 'oldest'))).toEqual([[['Old', 'Middle', 'New']]])
+    const opened = { [list[2]!.id]: NOW }
+    expect(titles(group(list, 'none', 'recent', opened))).toEqual([[['Old', 'New', 'Middle']]])
+    expect(titles(group(list, 'none', 'updated', opened))).toEqual([[['New', 'Middle', 'Old']]])
   })
 
-  it('groups by date, newest first unless sorted oldest first', () => {
-    const list = [
-      artifact({ title: 'Today', updatedAt: NOW - HOUR }),
-      artifact({ title: 'Older', updatedAt: NOW - 90 * DAY }),
-      artifact({ title: 'Week', updatedAt: NOW - 3 * DAY }),
-    ]
-    const buckets = (sort: ArtifactSort) =>
-      group(list, 'date', sort).map((g) => (g.of.kind === 'date' ? g.of.bucket : null))
-    expect(buckets('newest')).toEqual(['today', 'week', 'older'])
-    expect(buckets('name')).toEqual(['today', 'week', 'older'])
-    expect(buckets('oldest')).toEqual(['older', 'week', 'today'])
-  })
-
-  it('shows one unlabelled grid for None, and no group for nothing', () => {
+  it('shows one unlabelled grid when flat, and no group for nothing', () => {
     const list = [artifact({}), artifact({ project: '/work/deck' })]
     const groups = group(list, 'none')
     expect(groups).toHaveLength(1)
     expect(groups[0]!.of).toEqual({ kind: 'all' })
     expect(groups[0]!.sections[0]!.sessionId).toBeNull()
-    for (const grouping of ['project-session', 'project', 'date', 'none'] as const) {
+    for (const grouping of ['project-session', 'none'] as const) {
       expect(group([], grouping)).toEqual([])
     }
-  })
-})
-
-describe('sessionCount', () => {
-  it('counts the sessions the artifacts show under', () => {
-    expect(
-      sessionCount([artifact({ sessionId: 'a' }), artifact({ sessionId: 'b' }), artifact({})]),
-    ).toBe(3)
-    expect(sessionCount([artifact({ sessionId: 'a' }), artifact({ sessionId: 'a' })])).toBe(1)
-  })
-
-  it('counts no session for what the user imported', () => {
-    expect(sessionCount([artifact({ sessionId: NO_SESSION }), artifact({ sessionId: 'a' })])).toBe(
-      1,
-    )
   })
 })
 
