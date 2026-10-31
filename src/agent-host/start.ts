@@ -8,14 +8,18 @@ import type { AttachmentGrant } from '@shared/attachments'
 import type { HostToMain, MainToHost } from '@shared/host-control'
 import type { ControlChannel, PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
+import type { PortDevice } from '@shared/remote/device'
 import { createGitService } from './git'
 import { AgentHost } from './host'
 import { nodeThreadWorker } from './threads/store'
 import { nodeUsageWorker } from './usage/store'
 
 export interface StartedAgentHost {
-  /** A client's port; it is served once the host has started, and closed if it never was. */
-  connect(port: PortChannel<FromPort<HostEvent>>): void
+  /**
+   * A window's port, or a paired device's when `device` names it; it is served once the host has
+   * started, and closed if it never was.
+   */
+  connect(port: PortChannel<FromPort<HostEvent>>, device: PortDevice | null): void
 }
 
 function isGrant(value: unknown): value is AttachmentGrant {
@@ -145,8 +149,8 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
   })
 
   return {
-    connect: (port) => {
-      if (!withHost((h) => h.connect(port))) port.close()
+    connect: (port, device) => {
+      if (!withHost((h) => h.connect(port, device))) port.close()
     },
   }
 }

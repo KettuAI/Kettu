@@ -18,6 +18,7 @@ import type {
 import type { Platform } from '@shared/platform'
 import type { PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
+import type { PortDevice } from '@shared/remote/device'
 import type { HostSettings } from '@shared/settings'
 import { agentOptionsFile, AgentOptionsStore } from './agent-options'
 import { STOP_TIMINGS } from './agent-process'
@@ -559,8 +560,9 @@ export class AgentHost {
     this.options.send({ type: 'host:agent-processes', processes })
   }
 
-  connect(channel: PortChannel<FromPort<HostEvent>>): string {
-    return this.hub.add(channel)
+  /** Serves a window's port, or a paired device's when `device` names it. */
+  connect(channel: PortChannel<FromPort<HostEvent>>, device: PortDevice | null = null): string {
+    return this.hub.add(channel, device)
   }
 
   private portClosed(portId: string): void {

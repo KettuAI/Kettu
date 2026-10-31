@@ -83,6 +83,7 @@ const SECTION_FIELDS = {
   updates: { automatic: oneOf('download', 'restart', 'notify', 'off') },
   privacy: { hideAccount: isBoolean },
   usage: { fromComputer: isBoolean, sidebar: oneOf('today', 'cost', 'limit', 'off') },
+  remote: { enabled: isBoolean },
 } as const satisfies Record<string, Record<string, Check>>
 
 type FieldSection = keyof typeof SECTION_FIELDS

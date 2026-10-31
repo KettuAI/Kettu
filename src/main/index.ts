@@ -1,3 +1,4 @@
+import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { app, powerMonitor, protocol, safeStorage, session } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
@@ -25,6 +26,8 @@ import { sessionProxy } from './proxy'
 import { Sharing } from './sharing'
 import { restrictPermissions } from './permissions'
 import { QuitFlow } from './quit'
+import { RemoteHost } from './remote-host'
+import { loadIdentity } from './remote-identity'
 import { isRendererUrl } from './renderer'
 import { SettingsStore } from './settings'
 import { hostSettings, reachesHost, terminalSettings } from './settings-schema'
@@ -213,6 +216,20 @@ async function start(): Promise<void> {
       ),
   })
   hostRef.current = agentHost
+  const remoteHost = new RemoteHost({
+    userDataPath,
+    appVersion: app.getVersion(),
+    identity: () =>
+      loadIdentity(userDataPath, {
+        available: () => safeStorage.isAsyncEncryptionAvailable(),
+        encrypt: (text) => safeStorage.encryptStringAsync(text),
+        decrypt: (encrypted) => safeStorage.decryptStringAsync(encrypted),
+        plainText: () =>
+          process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text',
+      }),
+    hostName: () => hostname(),
+    openPort: (device) => agentHost.connectDevice(device),
+  })
   const artifacts = new Artifacts({
     content: (id, version) => agentHost.artifactContent(id, version),
     contentDir: join(userDataPath, 'artifacts', 'content'),
@@ -256,7 +273,8 @@ async function start(): Promise<void> {
     busySessions: (timeoutMs) => agentHost.busy(timeoutMs),
     busyTerminals: (timeoutMs) => terminalHost.busy(timeoutMs),
     shutDown: async () => {
-      await Promise.all([agentHost.stop(), terminalHost.stop()])
+      // Devices hear that Kettu is stopping before their sessions' agent host goes.
+      await Promise.all([remoteHost.stop().then(() => agentHost.stop()), terminalHost.stop()])
       await Promise.all([
         settings.flush(),
         windowState.flush(),
@@ -289,6 +307,7 @@ async function start(): Promise<void> {
       agentHost.pushSettings(hostSettings(next, systemLocale))
     }
     if (changed.has('terminal')) terminalHost.pushSettings(terminalSettings(next))
+    if (changed.has('remote')) void remoteHost.setEnabled(next.remote.enabled)
     if (changed.has('appearance')) {
       applyTheme(next.appearance.theme)
       applyZoom(next.appearance.zoom)
@@ -349,6 +368,7 @@ async function start(): Promise<void> {
   powerMonitor.on('resume', () => agentHost.power('resume'))
 
   agentHost.start()
+  void remoteHost.setEnabled(settings.get().remote.enabled)
   const window = createMainWindow(start)
   window.once('show', () => updater.start())
   ready = true

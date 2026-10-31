@@ -50,6 +50,7 @@ export interface SettingsFile {
     fromComputer: boolean // read the agents' own logs
     sidebar: 'today' | 'cost' | 'limit' | 'off' // what the sidebar's Usage row shows at its end
   }
+  remote: { enabled: boolean } // paired devices may connect to this computer
 }
 
 /** An agent added beside a harness's default one, with a configuration folder of its own. */
@@ -114,6 +115,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   updates: { automatic: 'download' },
   privacy: { hideAccount: false },
   usage: { fromComputer: false, sidebar: 'today' },
+  remote: { enabled: false },
 }
 
 /** The zoom one step in (1) or out (-1), held at the ends; 0 returns to the default. */
@@ -141,6 +143,7 @@ export interface SettingsPatch {
   updates?: Partial<SettingsFile['updates']>
   privacy?: Partial<SettingsFile['privacy']>
   usage?: Partial<SettingsFile['usage']>
+  remote?: Partial<SettingsFile['remote']>
 }
 
 /** The part of the settings the agent host receives. */

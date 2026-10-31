@@ -2,6 +2,7 @@ import {
   BrowserWindow,
   MessageChannelMain,
   utilityProcess,
+  type MessagePortMain,
   type UtilityProcess,
   type WebContents,
 } from 'electron'
@@ -26,12 +27,15 @@ export interface UtilityHostEvent {
 
 export interface UtilityHostConfig<ToChild, FromChild extends { type: string }> {
   label: string
-  /** Prefix of the preload channels: `<channel>:port` and `<channel>:reset`. */
-  channel: 'agent-host' | 'terminal-host'
+  /**
+   * Prefix of the preload channels: `<channel>:port` and `<channel>:reset`. A host no page
+   * connects to, as the remote host, has none and no `connectMessage`.
+   */
+  channel?: 'agent-host' | 'terminal-host'
   modulePath: string
   serviceName: string
   initMessage(): ToChild
-  connectMessage(windowId: number): ToChild
+  connectMessage?(windowId: number): ToChild
   shutdownMessage: ToChild
   readyType: FromChild['type']
   stoppedType: FromChild['type']
@@ -126,15 +130,24 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
     this.sendReset(webContents, true)
   }
 
-  /** Posts to the process if it exists; messages sent before it is ready queue behind init. */
-  post(message: ToChild): boolean {
+  /**
+   * Posts to the process if it exists, with `transfer`'s ports; messages sent before it is ready
+   * queue behind init.
+   */
+  post(message: ToChild, transfer: MessagePortMain[] = []): boolean {
     if (!this.child || this.status === 'stopping') return false
-    this.child.postMessage(message)
+    this.child.postMessage(message, transfer)
     return true
   }
 
-  /** Asks the process to exit and waits for it; kills it after 6 s. Nothing restarts afterwards. */
-  async stop(timeoutMs = STOP_TIMEOUT_MS): Promise<void> {
+  /**
+   * Asks the process to exit with `shutdownMessage` and waits for it; kills it after 6 s. Nothing
+   * restarts afterwards.
+   */
+  async stop(
+    timeoutMs = STOP_TIMEOUT_MS,
+    shutdownMessage: ToChild = this.config.shutdownMessage,
+  ): Promise<void> {
     this.shutDown = true
     if (this.restartTimer) clearTimeout(this.restartTimer)
     this.restartTimer = null
@@ -146,7 +159,7 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
     }
     const exited = this.exited
     this.status = 'stopping'
-    child.postMessage(this.config.shutdownMessage)
+    child.postMessage(shutdownMessage)
     const timedOut = await Promise.race([
       exited.then(() => false),
       new Promise<boolean>((resolve) => setTimeout(() => resolve(true), timeoutMs)),
@@ -279,11 +292,12 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
   }
 
   private handOff(webContents: WebContents): void {
-    if (webContents.isDestroyed() || !this.child) return
+    const { channel, connectMessage } = this.config
+    if (webContents.isDestroyed() || !this.child || !channel || !connectMessage) return
     const windowId = BrowserWindow.fromWebContents(webContents)?.id ?? -1
     const { port1, port2 } = new MessageChannelMain()
-    this.child.postMessage(this.config.connectMessage(windowId), [port1])
-    webContents.postMessage(`${this.config.channel}:port`, null, [port2])
+    this.child.postMessage(connectMessage(windowId), [port1])
+    webContents.postMessage(`${channel}:port`, null, [port2])
   }
 
   private resetClients(failed: boolean): void {
@@ -291,7 +305,7 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
   }
 
   private sendReset(webContents: WebContents, failed: boolean): void {
-    if (webContents.isDestroyed()) return
+    if (webContents.isDestroyed() || !this.config.channel) return
     const event: HostResetEvent = { failed }
     webContents.send(`${this.config.channel}:reset`, event)
   }
