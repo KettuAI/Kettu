@@ -25,6 +25,7 @@ Kettu 现在有什么、接下来做什么，按版本列出。版本没有固�
 - [ ] 把会话退回到任意一条消息之前，撤销 Agent 在那之后改的文件（[#615](https://github.com/KettuAI/Kettu/issues/615)）
 - [ ] Agent 问的选择题显示成点一下就能回答的卡片（[#616](https://github.com/KettuAI/Kettu/issues/616)），以及每个会话的 MCP 服务器和它们的连接状态（[#617](https://github.com/KettuAI/Kettu/issues/617)）
 - [ ] 并行的会话各自在自己的 Git worktree 里工作（[#618](https://github.com/KettuAI/Kettu/issues/618)），以及在一处审阅一个会话或一轮的改动（[#619](https://github.com/KettuAI/Kettu/issues/619)）
+- [ ] 盯着会话开的 Pull Request，检查失败、出现冲突或有人评审时叫醒 Agent 接着处理（[#621](https://github.com/KettuAI/Kettu/issues/621)）
 
 ## v0.2.0：在其他设备上使用会话
 
@@ -53,7 +54,7 @@ Kettu 现在有什么、接下来做什么，按版本列出。版本没有固�
 ## 以后
 
 - [ ] 原生的安卓应用
-- [ ] 跨会话搜索与命令面板
+- [ ] 按对话内容搜索所有会话（[#622](https://github.com/KettuAI/Kettu/issues/622)）
 - [ ] 以 Artifacts 形式制作幻灯片（[#368](https://github.com/KettuAI/Kettu/issues/368)），导出为 PDF、PNG 或 PowerPoint（[#367](https://github.com/KettuAI/Kettu/issues/367)），在 Artifact 的某一部分留下评论（[#366](https://github.com/KettuAI/Kettu/issues/366)），以及让 Artifact 页面保存的数据到达 Agent（[#369](https://github.com/KettuAI/Kettu/issues/369)）
 - [ ] 在设置中管理技能和插件（[#488](https://github.com/KettuAI/Kettu/issues/488)、[#489](https://github.com/KettuAI/Kettu/issues/489)），以及显示会话启动的后台任务（[#495](https://github.com/KettuAI/Kettu/issues/495)）
 - [ ] 从项目的设计系统生成 Artifacts（[#370](https://github.com/KettuAI/Kettu/issues/370)）、直接编辑画布页面（[#371](https://github.com/KettuAI/Kettu/issues/371)），以及把 Word、PowerPoint 和 Excel 文件作为 Artifacts 显示（[#365](https://github.com/KettuAI/Kettu/issues/365)）
