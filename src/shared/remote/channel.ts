@@ -15,6 +15,9 @@ const MAX_PAYLOAD = MAX_FRAME - HEADER
 const STREAM_ID = 4
 const COMPRESS_OVER = 1024
 
+/** The most bytes of a stream one frame carries, so a bytes message this long is one frame. */
+export const BYTES_PER_FRAME = MAX_PAYLOAD - STREAM_ID
+
 const KIND = 0b11
 const JSON_KIND = 0
 const DEFLATED_JSON_KIND = 1

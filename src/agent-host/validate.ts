@@ -450,6 +450,16 @@ export function createValidators(platform: Platform): Validators {
     const o = fields(params)
     return { sessionId: sessionId(o), itemId: string(o, 'itemId', ID_CHARS) }
   }
+  const mediaFile = (params: unknown): HostParams<'media.open'> => {
+    const o = fields(params)
+    const written = string(o, 'path', PATH_CHARS)
+    if (written.includes('\0')) throw invalidParams('path contains a NUL character')
+    return {
+      projectPath: absolutePath(o, 'projectPath', platform),
+      path: written,
+      sessionId: sessionId(o),
+    }
+  }
 
   return {
     'agents.list': none,
@@ -770,16 +780,8 @@ export function createValidators(platform: Platform): Validators {
     },
     'git.currentPullRequest': project,
     'git.tools': none,
-    'media.open': (params) => {
-      const o = fields(params)
-      const written = string(o, 'path', PATH_CHARS)
-      if (written.includes('\0')) throw invalidParams('path contains a NUL character')
-      return {
-        projectPath: absolutePath(o, 'projectPath', platform),
-        path: written,
-        sessionId: sessionId(o),
-      }
-    },
+    'media.open': mediaFile,
+    'media.authorize': mediaFile,
     'usage.summary': (params) => {
       const o = fields(params)
       if (o.scope !== 'computer' && o.scope !== 'kettu') {
