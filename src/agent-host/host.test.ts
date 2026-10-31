@@ -719,6 +719,46 @@ describe('media', () => {
       code: 'forbidden',
     })
   })
+
+  it('authorizes a file in the project for a device without a session, and nothing outside', async () => {
+    const { t, port: window } = await setup()
+    await window.request('projects.add', { path: t.project })
+    const device = t.connect({ id: 'a'.repeat(32), name: 'Phone' })
+    const file = path.join(t.project, 'shot.png')
+    await writeFile(file, Buffer.from('\x89PNG\r\n\x1a\n', 'latin1'))
+    const outside = path.join(t.dir, 'outside.png')
+    await writeFile(outside, Buffer.from('\x89PNG\r\n\x1a\n', 'latin1'))
+    const authorize = (written: string) =>
+      device.request('media.authorize', { projectPath: t.project, path: written })
+    expect(await authorize('shot.png')).toMatchObject({
+      kind: 'granted',
+      file: { path: await realpath(file), mimeType: 'image/png' },
+    })
+    expect(await authorize(file)).toMatchObject({ kind: 'granted' })
+    expect(await authorize(outside)).toEqual({ kind: 'forbidden' })
+    expect(await authorize('missing.png')).toEqual({ kind: 'not_found' })
+    expect(t.sent.some((message) => message.type === 'host:media-grant')).toBe(false)
+  })
+
+  it("describes a media file to a device's files.read and grants main nothing", async () => {
+    const { t, port: window } = await setup()
+    await window.request('projects.add', { path: t.project })
+    const device = t.connect({ id: 'a'.repeat(32), name: 'Phone' })
+    await writeFile(path.join(t.project, 'shot.png'), Buffer.from('\x89PNG\r\n\x1a\n', 'latin1'))
+    const params = { projectPath: t.project, path: 'shot.png' }
+    expect(await device.request('files.read', params)).toEqual({
+      kind: 'media',
+      path: 'shot.png',
+      media: { name: 'shot.png', kind: 'image', mimeType: 'image/png', size: 8 },
+    })
+    expect(t.sent.some((message) => message.type === 'host:media-grant')).toBe(false)
+    // A window's read still has its grant on the media scheme.
+    expect(await window.request('files.read', params)).toMatchObject({
+      kind: 'media',
+      grant: { kind: 'image', mimeType: 'image/png', url: expect.stringContaining('/shot.png') },
+    })
+    expect(t.sent.filter((message) => message.type === 'host:media-grant')).toHaveLength(1)
+  })
 })
 
 describe('mentioned files', () => {

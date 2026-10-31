@@ -53,11 +53,14 @@ export interface StreamRef {
   size?: number
 }
 
-/** A device's `media.read`: a file named as `media.open` names one, or a part of it. */
+/**
+ * A device's `media.read`: a file named as `media.open` names one, or a part of it. Without
+ * `sessionId`, only a file in the project is read, as the Files pane finds one.
+ */
 export interface MediaReadParams {
   projectPath: string
   path: string
-  sessionId: string
+  sessionId?: string
   /** The first byte, 0 unless given. */
   offset?: number
   /** How many bytes, to the end of the file unless given. */

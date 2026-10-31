@@ -1,6 +1,7 @@
 // What a device uploads as byte streams, each assembled in a file of the remote host's upload
 // folder until a request names it, read once and deleted. An upload the device cancels, one it
 // leaves without bytes or unnamed for a minute, and every one of a connection that ends goes too.
+// While the disk lags behind what a device sends, its connections stop reading.
 
 import { randomBytes } from 'node:crypto'
 import { mkdir, open, readFile, rm, type FileHandle } from 'node:fs/promises'
@@ -12,6 +13,10 @@ import {
   MAX_UPLOADS,
   UPLOAD_IDLE_MS,
 } from '@shared/remote/streams'
+import type { Transport } from '@shared/remote/transport'
+
+/** Bytes a device's uploads may hold, received and not yet written, before it is read no more. */
+export const MAX_UNWRITTEN = 1024 * 1024
 
 /** Empties the upload folder of what an earlier run left, and makes it when there is none. */
 export async function clearUploads(folder: string): Promise<void> {
@@ -19,11 +24,17 @@ export async function clearUploads(folder: string): Promise<void> {
   await mkdir(folder, { recursive: true, mode: 0o700 })
 }
 
-/** Uploads in flight per device, over all its connections. */
+/** Uploads in flight per device, over all its connections, and their bytes not yet written. */
 export class UploadCounts {
   private readonly counts = new Map<string, number>()
+  private readonly unwrittenBytes = new Map<string, number>()
+  /** The connections of each device that stopped reading until its writes are within the bound. */
+  private readonly behind = new Map<string, Set<() => void>>()
 
-  constructor(readonly max = MAX_UPLOADS) {}
+  constructor(
+    readonly max = MAX_UPLOADS,
+    readonly maxUnwritten = MAX_UNWRITTEN,
+  ) {}
 
   take(deviceId: string): boolean {
     const count = this.counts.get(deviceId) ?? 0
@@ -40,6 +51,42 @@ export class UploadCounts {
 
   of(deviceId: string): number {
     return this.counts.get(deviceId) ?? 0
+  }
+
+  /** Bytes the device's uploads received; whether its writes now lag past the bound. */
+  received(deviceId: string, bytes: number): boolean {
+    const total = this.unwritten(deviceId) + bytes
+    this.unwrittenBytes.set(deviceId, total)
+    return total > this.maxUnwritten
+  }
+
+  /** Bytes received before are written, or gone with their upload. */
+  written(deviceId: string, bytes: number): void {
+    const total = this.unwritten(deviceId) - bytes
+    if (total > 0) this.unwrittenBytes.set(deviceId, total)
+    else this.unwrittenBytes.delete(deviceId)
+    if (total > this.maxUnwritten) return
+    const waiting = this.behind.get(deviceId)
+    this.behind.delete(deviceId)
+    for (const resume of waiting ?? []) resume()
+  }
+
+  unwritten(deviceId: string): number {
+    return this.unwrittenBytes.get(deviceId) ?? 0
+  }
+
+  /**
+   * Calls `resume` once the device's writes are back within the bound, which they are past now;
+   * the function it returns stops waiting.
+   */
+  caughtUp(deviceId: string, resume: () => void): () => void {
+    const waiting = this.behind.get(deviceId) ?? new Set<() => void>()
+    this.behind.set(deviceId, waiting)
+    waiting.add(resume)
+    return () => {
+      waiting.delete(resume)
+      if (waiting.size === 0 && this.behind.get(deviceId) === waiting) this.behind.delete(deviceId)
+    }
   }
 }
 
@@ -69,6 +116,8 @@ export interface UploadsOptions {
   folder: string
   deviceId: string
   counts: UploadCounts
+  /** The connection's, which stops reading while the device's writes lag past the bound. */
+  transport: Pick<Transport, 'pause' | 'resume'>
   /** The host gave an upload up, for the device to hear why. */
   cancelled(stream: number, error: PortError): void
   maxBytes?: number
@@ -80,6 +129,8 @@ export class Uploads {
   private readonly uploads = new Map<number, Upload>()
   private last = 0
   private closed = false
+  /** Stops waiting for the device's writes, while this connection reads nothing. */
+  private behind: (() => void) | null = null
   private readonly maxBytes: number
   private readonly idleMs: number
 
@@ -114,7 +165,14 @@ export class Uploads {
     if (upload.received > upload.size) {
       return this.fail(upload, `Upload ${stream} carried more than its ${upload.size} bytes`)
     }
-    this.queue(upload, (handle) => write(handle, data))
+    const { counts, deviceId } = this.options
+    const lagging = counts.received(deviceId, data.length)
+    this.queue(
+      upload,
+      (handle) => write(handle, data),
+      () => counts.written(deviceId, data.length),
+    )
+    if (lagging) this.stopReading()
     this.watch(upload)
   }
 
@@ -169,6 +227,8 @@ export class Uploads {
   /** The connection ended: every upload goes. */
   closeAll(): void {
     this.closed = true
+    this.behind?.()
+    this.behind = null
     const error = { code: 'invalid_params' as const, message: 'The connection ended' }
     for (const upload of [...this.uploads.values()]) this.drop(upload, error)
   }
@@ -199,16 +259,35 @@ export class Uploads {
     this.watch(upload)
   }
 
-  /** Runs `step` on the upload's file after every step before it, while the upload is kept. */
-  private queue(upload: Upload, step: (handle: FileHandle) => Promise<unknown>): void {
+  /**
+   * Runs `step` on the upload's file after every step before it, while the upload is kept, then
+   * `settled` whether it ran or not.
+   */
+  private queue(
+    upload: Upload,
+    step: (handle: FileHandle) => Promise<unknown>,
+    settled?: () => void,
+  ): void {
     upload.writing = upload.writing.then(async (handle) => {
-      if (!handle || this.uploads.get(upload.stream) !== upload) return handle
       try {
-        await step(handle)
+        if (handle && this.uploads.get(upload.stream) === upload) await step(handle)
       } catch {
         this.fail(upload, `Upload ${upload.stream} could not be written`, 'internal')
+      } finally {
+        settled?.()
       }
       return handle
+    })
+  }
+
+  /** The disk lags past the bound: the connection reads nothing until it is back within it. */
+  private stopReading(): void {
+    if (this.behind || this.closed) return
+    const { transport, counts, deviceId } = this.options
+    transport.pause()
+    this.behind = counts.caughtUp(deviceId, () => {
+      this.behind = null
+      transport.resume()
     })
   }
 

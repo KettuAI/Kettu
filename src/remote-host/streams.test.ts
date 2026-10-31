@@ -1,9 +1,10 @@
 // Byte streams on a device's channel, through the real remote host and an in-process agent host:
-// uploads named by requests, results' binary values sent as streams, media read from disk, and
-// how streams share the channel with JSON and wait for a device that stops reading.
+// uploads named by requests, results' binary values sent as streams, media read from disk, how
+// streams share the channel with JSON and wait for a device that stops reading, and how uploads
+// wait for the disk.
 
 import { createHash, randomBytes } from 'node:crypto'
-import { mkdir, readdir, realpath, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, realpath, truncate, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { HostMethod } from '@shared/agent-host'
@@ -64,7 +65,9 @@ const sha = (data: Uint8Array): string => createHash('sha256').update(data).dige
 /** What a request carries in place of a binary value; the TestPort's types want the buffer. */
 const upload = (stream: number) => ({ $stream: stream }) as unknown as ArrayBuffer
 
-async function setup(options: { held?: boolean; uploadIdleMs?: number } = {}) {
+async function setup(
+  options: { held?: boolean; uploadIdleMs?: number; maxUnwritten?: number } = {},
+) {
   agent = await startTestHost()
   const host = agent
   const logs: string[] = []
@@ -92,6 +95,7 @@ async function setup(options: { held?: boolean; uploadIdleMs?: number } = {}) {
     host: { name: 'Studio', platform: process.platform, version: '0.0.0-test' },
     uploads,
     ...(options.uploadIdleMs ? { uploadIdleMs: options.uploadIdleMs } : {}),
+    ...(options.maxUnwritten === undefined ? {} : { maxUnwritten: options.maxUnwritten }),
     openAgentPort: async (device) => {
       const [remoteEnd, agentEnd] = memoryPorts()
       const recording: PortChannel = {
@@ -113,10 +117,22 @@ async function setup(options: { held?: boolean; uploadIdleMs?: number } = {}) {
     log,
   })
   let held: HeldTransports | null = null
+  // How often the host's ends stopped reading, and read on again.
+  const reading = { pauses: 0, resumes: 0 }
   const connect = async (): Promise<TestDevice> => {
     held = options.held ? heldTransports() : null
     const [deviceEnd, hostEnd] = held ? [held.device, held.host] : memoryTransports()
-    server.accept(hostEnd)
+    server.accept({
+      ...hostEnd,
+      pause: () => {
+        reading.pauses++
+        hostEnd.pause()
+      },
+      resume: () => {
+        reading.resumes++
+        hostEnd.resume()
+      },
+    })
     const device = await connectDevice({
       transport: deviceEnd,
       hostKey: hostKey.publicKey,
@@ -139,6 +155,7 @@ async function setup(options: { held?: boolean; uploadIdleMs?: number } = {}) {
     window,
     project,
     held: () => held!,
+    reading,
     uploadsLeft: () => readdir(uploads),
     methods: () => toAgent.map((message) => (message as { method?: string }).method),
   }
@@ -323,6 +340,27 @@ describe('uploads', () => {
     await expect.poll(() => t.uploadsLeft()).toEqual([])
   })
 
+  it('stop the connection reading while the disk lags behind, and read on once it catches up', async () => {
+    // With no bytes allowed to wait, every part of the upload waits for its write.
+    const t = await setup({ maxUnwritten: 0 })
+    const device = await t.connect()
+    const big = new Uint8Array(randomBytes(1024 * 1024))
+    big.set(PNG)
+    const stream = await device.upload(big)
+    const added = await device.port.request('attachments.add', {
+      source: { bytes: upload(stream), mimeType: 'image/png', name: 'big.png' },
+      thumb: null,
+    })
+    expect(added.size).toBe(big.length)
+    expect(t.reading.pauses).toBeGreaterThan(0)
+    expect(t.reading.resumes).toBe(t.reading.pauses)
+    const request = t.toAgent.find(
+      (message) => (message as { method?: string }).method === 'attachments.add',
+    ) as { params: { source: { bytes: ArrayBuffer } } }
+    expect(sha(new Uint8Array(request.params.source.bytes))).toBe(sha(big))
+    expect(t.server.uploads.unwritten(t.server.options.devices.list()[0]!.id)).toBe(0)
+  })
+
   it('in the folder at start are deleted', async () => {
     const t = await setup()
     await writeFile(path.join(t.uploads, 'left.part'), 'x')
@@ -444,6 +482,35 @@ describe('media', () => {
     expect(await device.download(ref.$stream)).toEqual(PNG)
   })
 
+  it('reads media the Files pane finds in the project without a session', async () => {
+    const t = await setup()
+    const device = await t.connect()
+    await writeFile(path.join(t.agent.project, 'shot.png'), PNG)
+    const outside = path.join(t.agent.dir, 'elsewhere', 'shot.png')
+    await mkdir(path.dirname(outside), { recursive: true })
+    await writeFile(outside, PNG)
+    const sessionId = await newSession(device, t.agent.project)
+    await device.port.request('sessions.prompt', {
+      sessionId,
+      content: [{ type: 'text', text: `Look at ${outside}` }],
+    })
+    await device.port.untilEntry(sessionId, (entry) => entry.kind === 'turn_end')
+
+    // The Files pane hears what the file is, with no URL for main to serve.
+    const media = { name: 'shot.png', kind: 'image', mimeType: 'image/png', size: PNG.length }
+    expect(
+      await device.port.request('files.read', { projectPath: t.agent.project, path: 'shot.png' }),
+    ).toEqual({ kind: 'media', path: 'shot.png', media: { ...media, width: 3, height: 2 } })
+    const read = (file: string) => readMedia(device, { projectPath: t.agent.project, path: file })
+    const granted = await read('shot.png')
+    expect(granted).toMatchObject({ kind: 'granted', media, length: PNG.length })
+    const ref = (granted as Extract<MediaReadResult, { kind: 'granted' }>).bytes
+    expect(await device.download(ref.$stream)).toEqual(PNG)
+    // Without the session, a file only its thread names stays out.
+    expect(await read(outside)).toEqual({ kind: 'forbidden' })
+    expect(t.agent.sent.some((message) => message.type === 'host:media-grant')).toBe(false)
+  })
+
   it('refuses media.authorize to the device, whose answer would name the file', async () => {
     const t = await setup()
     const device = await t.connect()
@@ -460,6 +527,31 @@ describe('media', () => {
     expect(await device.port.request('projects.list', undefined)).toHaveLength(1)
     expect(t.methods().filter((method) => method === 'projects.list')).toHaveLength(1)
     expect(t.methods()).not.toContain('media.authorize')
+  })
+
+  it('logs a download it gives up with the device and why, never the path', async () => {
+    const t = await setup({ held: true })
+    const device = await t.connect()
+    const file = path.join(t.agent.project, 'clip.mp4')
+    const clip = mp4(HIGH_WATER * 4)
+    await writeFile(file, clip)
+    const held = t.held()
+    held.hold()
+    const reading = readMedia(device, { projectPath: t.agent.project, path: 'clip.mp4' })
+    // The stream has started and waits for the device to read; the file is cut short meanwhile.
+    await expect.poll(() => held.waiting().some((length) => length > 4096)).toBe(true)
+    await truncate(file, 10)
+    held.release()
+    expect(await reading).toMatchObject({ kind: 'granted', length: clip.length })
+    await expect(device.download(2)).rejects.toMatchObject({
+      error: { code: 'internal', message: `The file ended before its ${clip.length} bytes` },
+    })
+    const id = t.server.options.devices.list()[0]!.id
+    expect(t.logs).toContain(
+      `warn: Device ${id}'s download failed: The file ended before its ${clip.length} bytes`,
+    )
+    expect(t.logs.join('\n')).not.toContain(t.project)
+    expect(t.logs.join('\n')).not.toContain('clip.mp4')
   })
 
   it(`reads at most ${MAX_MEDIA_STREAMS} files at once on a connection`, async () => {

@@ -50,11 +50,33 @@ function pair<T>(copy: (message: T) => T): [End<T>, End<T>] {
   return [end(0), end(1)]
 }
 
-const unbuffered = (end: End<Uint8Array>): Transport => ({
-  ...end,
-  buffered: () => 0,
-  drained: () => Promise.resolve(),
-})
+/** A transport over one end, which keeps what arrives while it is paused. */
+function unbuffered(end: End<Uint8Array>): Transport {
+  let paused = false
+  let listener: ((message: Uint8Array) => void) | null = null
+  const waiting: Uint8Array[] = []
+  const deliver = (): void => {
+    while (!paused && listener && waiting.length > 0) listener(waiting.shift()!)
+  }
+  end.onMessage((message) => {
+    waiting.push(message)
+    deliver()
+  })
+  return {
+    ...end,
+    onMessage: (next) => {
+      listener = next
+      deliver()
+    },
+    buffered: () => 0,
+    drained: () => Promise.resolve(),
+    pause: () => (paused = true),
+    resume: () => {
+      paused = false
+      deliver()
+    },
+  }
+}
 
 /** A device's end and the host's end of one connection. */
 export function memoryTransports(): [Transport, Transport] {

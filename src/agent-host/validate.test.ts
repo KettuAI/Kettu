@@ -313,6 +313,20 @@ describe('createValidators', () => {
     rejects(() => media({ projectPath: 'p', path: '/a.png', sessionId: 's' }))
     rejects(() => media({ projectPath: '/p', path: 'a\0b.png', sessionId: 's' }))
     rejects(() => media({ projectPath: '/p', path: '', sessionId: 's' }))
+    // A device's remote host may ask without a session, for a file in the project only.
+    const authorize = posix['media.authorize']
+    expect(authorize({ projectPath: '/p', path: 'a.png', extra: 1 })).toEqual({
+      projectPath: '/p',
+      path: 'a.png',
+    })
+    expect(authorize({ projectPath: '/p', path: '/a.png', sessionId: 's' })).toEqual({
+      projectPath: '/p',
+      path: '/a.png',
+      sessionId: 's',
+    })
+    rejects(() => authorize({ projectPath: '/p', path: 'a.png', sessionId: 3 }))
+    rejects(() => authorize({ projectPath: '/p', path: 'a.png', sessionId: '' }))
+    rejects(() => authorize({ projectPath: '/p', path: 'a\0b.png' }))
 
     const search = posix['files.search']
     expect(search({ projectPath: '/p', query: 'needle', extra: 1 })).toEqual({

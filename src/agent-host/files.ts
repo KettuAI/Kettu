@@ -10,13 +10,14 @@ import {
   FILE_MATCH_CHARS,
   FILE_READ_LIMIT,
   FILE_SEARCH_LIMIT,
+  type DeviceFileContent,
   type FileContent,
   type FileList,
   type FileMatch,
   type FileSearch,
   type FileWritten,
 } from '@shared/files'
-import type { MediaGrant } from '@shared/media'
+import type { MediaFile, MediaGrant } from '@shared/media'
 import type { Platform } from '@shared/platform'
 import { HostError, invalidParams, notFound } from './errors'
 import { describeFailure, GIT_TIMEOUT_MS, type Exec, type ExecResult } from './git/exec'
@@ -55,6 +56,8 @@ export interface FilesServiceDeps {
   platform: Platform
   /** A grant on the media scheme for a file at its real path, or null when it is no media. */
   media(real: string, info: Stats): Promise<MediaGrant | null>
+  /** The same file described as media for a paired device, granting nothing. */
+  describeMedia(real: string, info: Stats): Promise<Omit<MediaFile, 'path'> | null>
   /** Replaces the default limits, for tests. */
   limits?: Partial<FilesLimits>
 }
@@ -173,14 +176,31 @@ export class FilesService {
   /**
    * A file's text, or its grant when it is media, or why there is none. `relativePath` uses `/`
    * between segments. A file named as media is one only if its first bytes say so; `asText` reads
-   * it as any other file.
+   * it as any other file. A paired `device` gets media described instead of granted.
    */
-  async read(root: string, relativePath: string, asText = false): Promise<FileContent> {
+  read(root: string, relativePath: string, asText?: boolean): Promise<FileContent>
+  read(
+    root: string,
+    relativePath: string,
+    asText: boolean | undefined,
+    device: boolean,
+  ): Promise<FileContent | DeviceFileContent>
+  async read(
+    root: string,
+    relativePath: string,
+    asText = false,
+    device = false,
+  ): Promise<FileContent | DeviceFileContent> {
     const relative = this.normalize(relativePath)
     const real = await this.resolveInside(root, relative)
     const info = await this.fileStat(real, relative)
-    const grant = asText ? null : await this.deps.media(real, info)
-    if (grant) return { kind: 'media', path: relative, grant }
+    if (!asText && device) {
+      const media = await this.deps.describeMedia(real, info)
+      if (media) return { kind: 'media', path: relative, media }
+    } else if (!asText) {
+      const grant = await this.deps.media(real, info)
+      if (grant) return { kind: 'media', path: relative, grant }
+    }
     const { size } = info
     if (size > this.limits.read) {
       return { kind: 'too-large', path: relative, size, limit: this.limits.read }

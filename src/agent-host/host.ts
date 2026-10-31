@@ -243,6 +243,7 @@ export class AgentHost {
       exec: this.execRunner.exec,
       platform,
       media: (real, info) => this.media.grantFile(real, info, null),
+      describeMedia: (real, info) => this.media.describe(real, info),
     })
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
@@ -1030,8 +1031,9 @@ export class AgentHost {
       'attachments.held': ({ ids }) => this.attachments.held(ids),
       'files.list': ({ projectPath }) =>
         this.filesCall(projectPath, (root) => this.files.list(root)),
-      'files.read': ({ projectPath, path, asText }) =>
-        this.filesCall(projectPath, (root) => this.files.read(root, path, asText)),
+      'files.read': ({ projectPath, path, asText }, { device }) =>
+        // A device's media is read through its remote host, never main's media scheme.
+        this.filesCall(projectPath, (root) => this.files.read(root, path, asText, device !== null)),
       'files.search': ({ projectPath, query }) =>
         this.filesCall(projectPath, (root) => this.files.search(root, query)),
       'files.write': ({ projectPath, path, text, version }) =>
@@ -1048,7 +1050,7 @@ export class AgentHost {
         }
         const root = await projects.resolveDirectory(projectPath)
         if (!this.scratch.contains(root)) projects.match(root)
-        return this.media.authorize(root, path, sessionId)
+        return this.media.authorize(root, path, sessionId ?? null)
       },
       'usage.summary': ({ dayStarts, from, to, scope }) =>
         this.usage.summary(dayStarts, from, to, scope),

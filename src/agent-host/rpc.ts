@@ -3,6 +3,7 @@
 
 import {
   HOST_METHODS,
+  type DeviceResult,
   type HostEvent,
   type HostMethod,
   type HostParams,
@@ -20,11 +21,12 @@ export interface RequestContext {
   device: PortDevice | null
 }
 
+/** A method's handler, which answers a paired device's port with its `DeviceResult`. */
 export type Handlers = {
   [M in HostMethod]: (
     params: HostParams<M>,
     ctx: RequestContext,
-  ) => Promise<HostResult<M>> | HostResult<M>
+  ) => Promise<HostResult<M> | DeviceResult<M>> | HostResult<M> | DeviceResult<M>
 }
 
 export type Validators = { [M in HostMethod]: (params: unknown) => HostParams<M> }
@@ -142,7 +144,7 @@ export class PortHub {
     method: M,
     raw: unknown,
     ctx: RequestContext,
-  ): Promise<HostResult<M>> {
+  ): Promise<HostResult<M> | DeviceResult<M>> {
     let params: HostParams<M>
     try {
       params = this.deps.validators[method](raw)
