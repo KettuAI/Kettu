@@ -123,7 +123,7 @@ Kettu drives agents that run shell commands, so these are not negotiable:
 
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck` and `pnpm test` pass. Also run `pnpm build` when you touch config, the main process or the preload.
 - Logic you add or change comes with tests; a bug fix starts with a test that fails.
-- CI checks pull requests on Linux only; Windows and macOS run in the release run before each release. A change that may behave differently by platform, such as spawning processes, paths, shells, native modules or packaging, runs the Release workflow on its branch before it is marked ready (`gh workflow run release.yml --ref <branch>`).
+- CI checks pull requests on Linux only; Windows and macOS run in the release run before each release, not on branches.
 - For UI changes, run the app and look at the result in light and dark themes before reporting the work as done. In development, `REMOTE_DEBUGGING_PORT=9222 pnpm dev` exposes the renderer over the Chrome DevTools Protocol for inspection and screenshots.
 
 ## Conventions
