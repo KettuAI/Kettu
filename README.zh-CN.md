@@ -60,13 +60,13 @@ Kettu 为这些工作提供了一个桌面上的家。你用的每个 Agent 都�
 
 ## 安装
 
-从 [Releases](https://github.com/KettuAI/Kettu/releases/latest) 下载对应系统的安装包。预览版还没有经过 Apple 和 Microsoft 的签名，所以首次启动前系统会询问一次。
+从 [Releases](https://github.com/KettuAI/Kettu/releases/latest) 下载对应系统的安装包。macOS 版经过 Apple 签名和公证；Windows 版还没有签名，所以首次启动前 Windows 会询问一次。
 
-- **macOS**：Apple 芯片打开 `Kettu-<版本>-arm64.dmg`，Intel 芯片打开 `Kettu-<版本>-x64.dmg`，把 Kettu 拖进「应用程序」。macOS 提示无法验证该应用时，打开「系统设置 › 隐私与安全性」，点击「仍要打开」。
+- **macOS**：Apple 芯片打开 `Kettu-<版本>-arm64.dmg`，Intel 芯片打开 `Kettu-<版本>-x64.dmg`，把 Kettu 拖进「应用程序」。
 - **Windows**：运行 `Kettu-<版本>-x64-setup.exe`，Arm 设备运行 `Kettu-<版本>-arm64-setup.exe`。SmartScreen 提示「Windows 已保护你的电脑」时，点击「更多信息」，再点击「仍要运行」。
 - **Linux**：用 `chmod +x` 给 `Kettu-x86_64.AppImage`（Arm 设备为 `Kettu-arm64.AppImage`）加上执行权限后运行。AppImage 需要 FUSE 2：`libfuse2`，Ubuntu 24.04 及以上为 `libfuse2t64`。
 
-在 Windows 和 Linux 上，新版本会在后台下载，并在 Kettu 重启时安装；在 macOS 上，安装包完成签名之前，Kettu 会给出新版本的下载链接。v0.0.1 无法发现更新，请手动安装一次最新版本覆盖它。
+新版本会在后台下载，并在 Kettu 重启时安装。
 
 ### Agent
 

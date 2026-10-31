@@ -4,9 +4,9 @@ Kettu 现在有什么、接下来做什么，按版本列出。版本没有固�
 
 ## 现在已有
 
-还没有发布：v0.0.1 是第一个版本。
+[v0.0.1](https://github.com/KettuAI/Kettu/releases/tag/v0.0.1) 中：
 
-- 并排使用 Claude Code、Codex、opencode 和另外 40 多个 Agent
+- 并排使用 Claude Code、Codex、opencode 和另外 40 多个 Agent，其中 Claude Code 和 Codex 经它们自己的接口接入
 - 会话历史、多会话并行、子会话，以及从任意一条回复分叉，还有一份消息大纲，可以在你发过的消息之间跳转
 - 按一个键就能回答的授权卡片、会话需要你时发送通知，以及 Prompt 缓存倒计时
 - Git 状态与 Pull Request，每个项目都有文件面板和终端，还有 Agent 可以操作、能保留登录状态的内置浏览器
@@ -16,17 +16,12 @@ Kettu 现在有什么、接下来做什么，按版本列出。版本没有固�
 - Routines：按计划自动运行的 Agent 任务，在权限范围内运行，接近套餐额度时暂停，并保留每次运行的记录
 - 可从文件或在线目录安装的主题，有浅色和深色，内置 Paper 外观
 - 关掉窗口后 Kettu 继续在后台运行，并显示托盘图标
-- macOS、Windows、Linux 预览版，Windows 和 Linux 上的更新在你选择的时候安装
-
-## v0.0.1：第一个版本
-
-- [ ] Claude Code 和 Codex 经它们自己的接口接入，即 Claude Agent SDK 和 `codex app-server`，不再经 ACP 适配器（[#600](https://github.com/KettuAI/Kettu/issues/600)）
-- [ ] 让桌面应用和它的设计一致，以及 [Milestone](https://github.com/KettuAI/Kettu/milestone/14) 中还没修完的问题
+- macOS、Windows、Linux 预览版，macOS 版经过 Apple 签名和公证，更新在你选择的时候安装
 
 ## v0.1.0：完整的桌面应用
 
 - [ ] 桌面应用的每个部分都做完，并对照设计验收
-- [ ] 经过 Apple 和 Microsoft 签名的安装包，以及 macOS 上一键安装更新（[#68](https://github.com/KettuAI/Kettu/issues/68)）
+- [ ] 经过 Microsoft 签名的 Windows 安装包，并在两个版本之间验证 macOS 一键更新（[#68](https://github.com/KettuAI/Kettu/issues/68)）
 
 ## v0.2.0：在其他设备上使用会话
 

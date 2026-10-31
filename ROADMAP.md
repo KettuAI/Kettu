@@ -4,9 +4,9 @@ What Kettu has and what comes next, release by release. Releases have no fixed d
 
 ## Available now
 
-Not released yet: v0.0.1 is the first release.
+In [v0.0.1](https://github.com/KettuAI/Kettu/releases/tag/v0.0.1):
 
-- Claude Code, Codex, opencode and more than 40 other agents side by side
+- Claude Code, Codex, opencode and more than 40 other agents side by side, with Claude Code and Codex through their own interfaces
 - Session history, parallel sessions, sub-sessions and forks from any reply, and an outline of your messages to jump between them
 - Permission cards answered with one key, notifications, and a prompt cache countdown
 - Git status and pull requests, a files pane and a terminal for each project, and a built-in browser that agents can drive and that keeps your sign-ins
@@ -16,17 +16,12 @@ Not released yet: v0.0.1 is the first release.
 - Routines: agent tasks that run on a schedule within a permission scope, pause near a plan limit and keep their runs
 - Themes from a file or an online catalog, in light and dark, with the Paper look built in
 - Kettu keeps running in the background, with a tray icon, after you close its window
-- Preview builds for macOS, Windows and Linux, with updates on Windows and Linux that install when you choose
-
-## v0.0.1: the first release
-
-- [ ] Claude Code and Codex through their own interfaces, the Claude Agent SDK and `codex app-server`, instead of ACP adapters ([#600](https://github.com/KettuAI/Kettu/issues/600))
-- [ ] The desktop app brought in line with its design, and the open fixes in the [milestone](https://github.com/KettuAI/Kettu/milestone/14)
+- Preview builds for macOS, Windows and Linux, the macOS ones signed and notarized by Apple, with updates that install when you choose
 
 ## v0.1.0: the desktop app complete
 
 - [ ] Every part of the desktop app finished and checked against its design
-- [ ] Builds signed by Apple and Microsoft, and macOS updates that install in one click ([#68](https://github.com/KettuAI/Kettu/issues/68))
+- [ ] Windows builds signed by Microsoft, and one-click macOS updates checked from one release to the next ([#68](https://github.com/KettuAI/Kettu/issues/68))
 
 ## v0.2.0: your sessions on your other devices
 
