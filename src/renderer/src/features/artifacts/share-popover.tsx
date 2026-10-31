@@ -140,7 +140,7 @@ export function ShareButton({
   } else if (published) {
     body = (
       <>
-        <h2 className="flex items-center gap-2 font-heading text-subheading font-semibold">
+        <h2 className="flex items-center gap-2 font-heading text-subheading font-medium">
           <GlobeIcon className="size-3.5 text-success" />
           {t('share.publishedTitle')}
         </h2>

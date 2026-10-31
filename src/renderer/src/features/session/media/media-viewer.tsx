@@ -469,7 +469,7 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
           className={cn(
             'flex shrink-0 items-center gap-1 pr-2.5 pl-5 app-region-drag',
             isMac
-              ? 'h-[calc(var(--sheet-gap)+var(--top-bar))] pt-(--sheet-gap) pl-[calc(32px+var(--traffic-lights))]'
+              ? 'h-top-bar pl-[calc(36px+var(--traffic-lights))]'
               : 'h-(--title-bar) pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+10px)]',
           )}
         >

@@ -123,10 +123,7 @@ function Status({ decision }: { decision: BrowserOriginAnswer | null }) {
   if (decision === null) {
     return (
       <span className="inline-flex shrink-0 items-center gap-1.75 text-xs font-medium text-attention">
-        <span
-          aria-hidden
-          className="size-2 rounded-full bg-attention-dot ring-3 ring-attention-dot/16"
-        />
+        <span aria-hidden className="size-2 rounded-full bg-attention-dot" />
         {t('browserOrigin.waiting')}
       </span>
     )

@@ -113,6 +113,7 @@ export function themeFile(theme: Theme | null): string {
     name: theme?.name ?? 'My Theme',
     ...(theme?.author ? { author: theme.author } : {}),
     ...(theme?.version ? { version: theme.version } : {}),
+    ...(theme?.fonts ? { fonts: theme.fonts } : {}),
     ...Object.fromEntries(THEME_MODES.map((mode) => [mode, variant(mode)])),
   }
   return `${JSON.stringify(file, null, 2)}\n`

@@ -30,8 +30,8 @@ export function TopBar({
   return (
     <header
       className={cn(
-        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 bg-app pr-2.5 pl-4 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
-        cornered && 'pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]',
+        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 bg-app pr-3 pl-4',
+        cornered && 'pl-[calc(36px+var(--traffic-lights))]',
         className,
       )}
     >
@@ -42,7 +42,7 @@ export function TopBar({
 }
 
 /**
- * Windows and Linux: the band of desk across the top of the main area, beside the window controls.
+ * Windows and Linux: the band across the top of the main area, beside the window controls.
  * It drags the window and, while the sidebar is collapsed, holds the sidebar toggle with Back and
  * Forward.
  */
@@ -50,7 +50,7 @@ export function TitleBand() {
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
   if (isMac) return null
   return (
-    <div className="app-region-drag absolute inset-x-0 top-0 flex h-(--title-bar) items-center pl-(--sheet-gap)">
+    <div className="app-region-drag absolute inset-x-0 top-0 flex h-(--title-bar) items-center pl-2">
       {collapsed && <CornerControls />}
     </div>
   )

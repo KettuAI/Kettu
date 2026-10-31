@@ -114,6 +114,26 @@ export const PREVIEW_TOKENS = [
   'primary-to',
 ] as const satisfies readonly ThemeToken[]
 
+/**
+ * The text a theme may choose a face for, and the faces Kettu ships for each; `system` is the
+ * platform's own. Code takes only fixed-width faces.
+ */
+export const THEME_FONTS = {
+  ui: ['system', 'inter', 'source-serif-4', 'jetbrains-mono'],
+  prose: ['system', 'inter', 'source-serif-4', 'jetbrains-mono'],
+  code: ['system', 'jetbrains-mono'],
+} as const
+export type ThemeFontRole = keyof typeof THEME_FONTS
+export const THEME_FONT_ROLES = Object.keys(THEME_FONTS) as ThemeFontRole[]
+export type ThemeFonts = { [Role in ThemeFontRole]?: (typeof THEME_FONTS)[Role][number] }
+
+const isFontRole = (name: string): name is ThemeFontRole => Object.hasOwn(THEME_FONTS, name)
+
+/** Whether `face` is one the role can take. */
+export function isThemeFont(role: ThemeFontRole, face: unknown): boolean {
+  return (THEME_FONTS[role] as readonly unknown[]).includes(face)
+}
+
 export type ThemeColors = Partial<Record<ThemeToken, string>>
 
 export interface ThemeVariant {
@@ -126,6 +146,8 @@ export interface Theme {
   name: string
   author?: string
   version?: string
+  /** Shared by both variants; a role left out keeps the built-in theme's face. */
+  fonts?: ThemeFonts
   light: ThemeVariant
   dark: ThemeVariant
 }
@@ -304,6 +326,22 @@ export function parseThemeFile(source: string): ThemeFileResult {
       }
       theme[mode].code = code
     }
+  }
+
+  // A face is named, never given as CSS or a file, so a theme still loads nothing of its own.
+  if (raw['fonts'] !== undefined) {
+    const fonts = raw['fonts']
+    if (!isRecord(fonts)) return fail({ code: 'invalid-field', path: 'fonts' })
+    const chosen: Partial<Record<ThemeFontRole, string>> = {}
+    for (const [role, face] of Object.entries(fonts)) {
+      if (!isFontRole(role)) {
+        ignore(`fonts.${role}`)
+        continue
+      }
+      if (!isThemeFont(role, face)) return fail({ code: 'invalid-field', path: `fonts.${role}` })
+      chosen[role] = face as string
+    }
+    if (Object.keys(chosen).length > 0) theme.fonts = chosen as ThemeFonts
   }
   return { ok: true, theme, ignored }
 }

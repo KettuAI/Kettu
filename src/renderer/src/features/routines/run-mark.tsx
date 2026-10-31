@@ -31,10 +31,7 @@ export function RunMark({ status, className }: { status: RunStatus; className?: 
       return (
         <span
           aria-hidden
-          className={cn(
-            'size-2 shrink-0 rounded-full bg-attention-dot ring-3 ring-attention-dot/16',
-            className,
-          )}
+          className={cn('size-2 shrink-0 rounded-full bg-attention-dot', className)}
         />
       )
     case 'running':

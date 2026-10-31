@@ -55,16 +55,11 @@
 }
 
 @theme inline {
-  --font-heading: var(--font-serif);
-  --font-sans:
-    'Inter Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC',
-    system-ui, sans-serif;
-  --font-mono:
-    'JetBrains Mono Variable', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
-  /* Titles and the agent's prose; Chinese falls through to the sans faces, as in the reference. */
-  --font-serif:
-    'Source Serif 4 Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
-    'Noto Sans CJK SC', ui-serif, Georgia, serif;
+  /* The faces the theme gives each kind of text, below; titles take the prose face. */
+  --font-sans: var(--ui-face);
+  --font-heading: var(--prose-face);
+  --font-prose: var(--prose-face);
+  --font-mono: var(--code-face);
 
   /* The palette's own names, from tokens.css: bg-app, text-secondary, border-subtle, ... */
   --background-color-app: var(--bg-app);
@@ -221,54 +216,51 @@
   --container-thread: calc(48 * var(--prose-size));
   --text-ui: var(--ui-size);
   --text-prose--line-height: 1.45;
-  /* The type scale of the design system. Titles are the serif, through font-heading. */
-  --text-greeting: 34px;
-  --text-greeting--line-height: 40px;
+  /* The type scale of the design system. Titles take the prose face, through font-heading. */
+  --text-greeting: 28px;
+  --text-greeting--line-height: 36px;
   --text-greeting--letter-spacing: -0.01em;
-  /* A figure on the usage page, the serif at weight 500 with tabular figures. */
-  --text-figure: 27px;
-  --text-figure--line-height: 32px;
-  --text-figure--letter-spacing: -0.015em;
-  --text-title: 24px;
+  /* A figure on the usage page, at weight 500 with tabular figures. */
+  --text-figure: 24px;
+  --text-figure--line-height: 30px;
+  --text-figure--letter-spacing: -0.01em;
+  --text-title: 22px;
   --text-title--line-height: 30px;
-  --text-title--letter-spacing: -0.008em;
-  --text-heading: 18px;
-  --text-heading--line-height: 24px;
-  --text-subheading: 16.5px;
-  --text-subheading--line-height: 22px;
-  --text-subheading--letter-spacing: -0.006em;
-  --text-group: 13.5px;
-  --text-group--line-height: 20px;
-  --text-group--letter-spacing: -0.003em;
-  --text-small: 13px;
-  --text-small--line-height: 1.5;
-  --text-control: 14px;
-  --text-control--line-height: 20px;
-  --text-command: 12.5px;
-  --text-command--line-height: 20px;
+  --text-title--letter-spacing: -0.006em;
+  --text-heading: 16px;
+  --text-heading--line-height: 22px;
+  --text-subheading: 15px;
+  --text-subheading--line-height: 20px;
+  --text-subheading--letter-spacing: -0.003em;
+  --text-group: 13px;
+  --text-group--line-height: 18px;
+  --text-small: 12px;
+  --text-small--line-height: 1.45;
+  --text-control: 13px;
+  --text-control--line-height: 18px;
+  --text-command: 12px;
+  --text-command--line-height: 18px;
   --text-code: 12px;
   --text-code--line-height: 20px;
-  --text-meta: 11.5px;
+  --text-meta: 12px;
   --text-meta--line-height: 16px;
 }
 
 :root {
   --hairline: 1px;
 
-  /* Density: the reference's, measured from its screenshots. */
+  /* Density: a native macOS app's. */
   --radius: 8px;
-  --control-height: 32px;
-  --control-height-sm: 28px;
-  --row-height: 32px;
+  --control-height: 28px;
+  --control-height-sm: 24px;
+  --row-height: 30px;
   /* Interface text: the sidebar, menus and controls. Prose has its own size below. */
-  --ui-size: 14px;
+  --ui-size: 13px;
   --card-header: 40px;
   --composer-min: 56px;
-  --icon-size: 20px;
-  --top-bar: 48px;
-  /* The desk around a sheet, and between two sheets. */
-  --sheet-gap: 8px;
-  /* Windows and Linux: the band of desk across the window's top, where the window controls sit;
+  --icon-size: 16px;
+  --top-bar: 44px;
+  /* Windows and Linux: the band across the window's top, where the window controls sit;
      main's title bar overlay has the same height. */
   --title-bar: 40px;
   /* The page zoom, from settings; the macOS traffic lights keep their size under it. */
@@ -287,7 +279,27 @@
   --duration-slower: 450ms;
 
   /* Type. */
-  --prose-size: 15px;
+  --prose-size: 14px;
+  /* The faces a theme may name, each with Chinese in the platform's face. A face's files are
+     only fetched once text uses it, so the built-in theme never loads Inter or Source Serif 4. */
+  --face-system:
+    system-ui, 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  --face-inter:
+    'Inter Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC',
+    system-ui, sans-serif;
+  --face-source-serif-4:
+    'Source Serif 4 Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
+    'Noto Sans CJK SC', ui-serif, Georgia, serif;
+  --face-jetbrains-mono:
+    'JetBrains Mono Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
+    'Noto Sans CJK SC', ui-monospace, monospace;
+  --face-system-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+
+  --ui-face: var(--face-system);
+  --prose-face: var(--face-system);
+  --code-face: 'JetBrains Mono Variable', var(--face-system-mono);
+  /* The serif reads about a size smaller than the sans faces at the same pixel size. */
+  --prose-scale: 1;
   --weight-normal: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
@@ -299,6 +311,29 @@
   --diffs-header-font-family: var(--font-sans);
 }
 
+:root[data-font-ui='inter'] {
+  --ui-face: var(--face-inter);
+}
+:root[data-font-ui='source-serif-4'] {
+  --ui-face: var(--face-source-serif-4);
+}
+:root[data-font-ui='jetbrains-mono'] {
+  --ui-face: var(--face-jetbrains-mono);
+}
+:root[data-font-prose='inter'] {
+  --prose-face: var(--face-inter);
+}
+:root[data-font-prose='source-serif-4'] {
+  --prose-face: var(--face-source-serif-4);
+  --prose-scale: 1.1;
+}
+:root[data-font-prose='jetbrains-mono'] {
+  --prose-face: var(--face-jetbrains-mono);
+}
+:root[data-font-code='system'] {
+  --code-face: var(--face-system-mono);
+}
+
 /* Light text on a dark surface looks heavier than it is. */
 [data-theme='dark'] {
   --weight-normal: 360;
@@ -307,10 +342,10 @@
 }
 
 :root[data-text-size='small'] {
-  --prose-size: 14px;
+  --prose-size: 13px;
 }
 :root[data-text-size='large'] {
-  --prose-size: 16px;
+  --prose-size: 15px;
 }
 
 @layer base {
@@ -642,9 +677,8 @@
    classes Streamdown puts on each element. Sizes are in em of the prose size, so Text size
    scales them; the spec's pixel values are those of the default 16.5 px. */
 .markdown {
-  font-family: var(--font-serif);
-  /* The serif reads about a size smaller than Inter at the same pixel size. */
-  font-size: calc(var(--prose-size) * 1.1);
+  font-family: var(--font-prose);
+  font-size: calc(var(--prose-size) * var(--prose-scale));
   line-height: 1.56;
   letter-spacing: -0.002em;
   /* Italics are the serif's own; Chinese, which has none, stays upright. */
@@ -990,7 +1024,7 @@
 /* Thoughts, progress notes and summaries: the same structure, quieter. */
 .markdown-muted {
   color: var(--text-tertiary);
-  font-size: calc(var(--prose-size) * 1.1 * 0.88);
+  font-size: calc(var(--prose-size) * var(--prose-scale) * 0.88);
   line-height: 1.55;
 }
 /* A thought; notes and summaries stay upright, since they are messages. */

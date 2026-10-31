@@ -316,9 +316,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                 </TooltipContent>
               </Tooltip>
               <header className="mb-7.5">
-                <h1 className="font-heading text-title font-semibold">
-                  {t('page.recentlyDeleted')}
-                </h1>
+                <h1 className="font-heading text-title font-medium">{t('page.recentlyDeleted')}</h1>
                 <p className="mt-1.5 text-small leading-5.5 text-secondary">
                   {t('page.deletedDescription')}
                 </p>
@@ -327,7 +325,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
           ) : (
             <header className="mb-7.5 flex items-start gap-2">
               <div className="min-w-0 flex-1">
-                <h1 className="font-heading text-title font-semibold">{t('page.title')}</h1>
+                <h1 className="font-heading text-title font-medium">{t('page.title')}</h1>
                 {list && list.length > 0 && (
                   <p className="mt-1.5 text-small leading-5.5 text-secondary">
                     <Trans
@@ -428,8 +426,8 @@ function DragStrip() {
   return (
     <div
       className={cn(
-        'app-region-drag flex h-[calc(var(--top-bar)-var(--sheet-gap))] shrink-0 items-end',
-        cornered && 'pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]',
+        'app-region-drag flex h-top-bar shrink-0 items-end',
+        cornered && 'pl-[calc(36px+var(--traffic-lights))]',
       )}
     >
       {cornered && <CornerControls className="-ml-1" />}
@@ -472,7 +470,7 @@ function GroupView({
       )}
     >
       {label !== null && (
-        <h2 className="mb-1 flex min-w-0 items-baseline gap-2 font-heading text-heading font-semibold">
+        <h2 className="mb-1 flex min-w-0 items-baseline gap-2 font-heading text-heading font-medium">
           {of.kind === 'project' ? (
             <Tooltip>
               <TooltipTrigger render={<span className="truncate" />} delay={700}>
@@ -801,9 +799,7 @@ function NoMatch({ onClear }: { onClear: () => void }) {
   const { t } = useTranslation('artifacts')
   return (
     <div className="flex flex-col items-center gap-1.5 py-14 text-center">
-      <p className="font-heading text-subheading font-semibold text-secondary">
-        {t('page.noMatch')}
-      </p>
+      <p className="font-heading text-subheading font-medium text-secondary">{t('page.noMatch')}</p>
       <Button variant="quiet" size="sm" onClick={onClear}>
         {t('page.clearFilter')}
       </Button>

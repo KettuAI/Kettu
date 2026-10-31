@@ -24,7 +24,7 @@ export function RoutineSection({ title, children }: { title: string; children: R
   return (
     <section aria-label={title} className="mt-9">
       <div className={HEADING}>
-        <h2 className="font-heading text-heading font-semibold">{title}</h2>
+        <h2 className="font-heading text-heading font-medium">{title}</h2>
       </div>
       {children}
     </section>

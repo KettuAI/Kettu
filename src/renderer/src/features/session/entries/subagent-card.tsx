@@ -80,7 +80,7 @@ export const SubagentCard = memo(function SubagentCard({
         </span>
         <span className="flex h-lh shrink-0 items-center gap-1.5 text-muted-foreground">
           {waiting ? (
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-attention">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
               <span aria-hidden className="size-1.5 rounded-full bg-attention-dot" />
               {t('status.needsApproval')}
             </span>

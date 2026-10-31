@@ -262,7 +262,7 @@ const CALENDAR = {
   button_previous: MONTH_BUTTON,
   button_next: MONTH_BUTTON,
   month_caption: 'flex h-7 w-full items-center justify-center px-7',
-  caption_label: 'font-heading text-group font-semibold select-none',
+  caption_label: 'font-heading text-group font-medium select-none',
   weekdays: 'mb-0.5 flex',
   weekday: 'flex-1 text-meta leading-5 font-normal text-tertiary select-none',
   week: 'mt-0.5 flex w-full',

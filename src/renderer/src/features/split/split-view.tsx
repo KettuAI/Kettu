@@ -124,7 +124,7 @@ function Column({
   })
   return (
     <>
-      {!first && <ResizableHandle withHandle className="w-(--sheet-gap)" />}
+      {!first && <ResizableHandle withHandle className="bg-border" />}
       <ResizablePanel
         id={columnId}
         minSize={`${MIN_COLUMN_WIDTH}px`}
@@ -160,7 +160,7 @@ function PanePanel({ last, children }: { last: boolean; children: ReactNode }) {
       <ResizablePanel minSize={`${MIN_PANE_HEIGHT}px`} className="min-w-0">
         {children}
       </ResizablePanel>
-      {!last && <ResizableHandle withHandle className="h-(--sheet-gap)" />}
+      {!last && <ResizableHandle withHandle className="bg-border" />}
     </>
   )
 }

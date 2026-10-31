@@ -94,7 +94,7 @@ function Details({ pr }: { pr: PullRequest }) {
         className="group/title flex items-start gap-2 rounded-md text-primary no-underline focus-ring"
       >
         <PrIcon state={pr.state} size={16} className="mt-0.75" />
-        <span className="line-clamp-3 min-w-0 font-heading text-subheading font-semibold underline-offset-2 group-hover/title:underline">
+        <span className="line-clamp-3 min-w-0 font-heading text-subheading font-medium underline-offset-2 group-hover/title:underline">
           {pr.title}
         </span>
       </a>
