@@ -9,6 +9,10 @@ import { DATA_ENV, logPath } from './paths'
 export const LAUNCH_AGENT_LABEL = 'sh.kettu.daemon'
 export const SYSTEMD_UNIT = 'kettu.service'
 
+// launchd kills an agent 5 s after SIGTERM unless told otherwise; the daemon may take 6 s for a
+// host to stop and 2 s more to kill it, then lets the control socket go.
+const EXIT_TIMEOUT_S = 20
+
 /** The command line the service runs, and the variables it sets. */
 export interface ServiceCommand {
   program: string
@@ -132,6 +136,8 @@ ${env}
 \t<true/>
 \t<key>KeepAlive</key>
 \t<true/>
+\t<key>ExitTimeOut</key>
+\t<integer>${EXIT_TIMEOUT_S}</integer>
 \t<key>StandardOutPath</key>
 \t<string>${xml(log)}</string>
 \t<key>StandardErrorPath</key>

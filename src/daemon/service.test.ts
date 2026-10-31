@@ -129,6 +129,8 @@ describe('launchAgent', () => {
     )
     expect(plist).toContain('<key>RunAtLoad</key>\n\t<true/>')
     expect(plist).toContain('<key>KeepAlive</key>\n\t<true/>')
+    // launchd's 5 s would cut short the hosts' stop, which can take 6 s and a kill's 2 s.
+    expect(plist).toContain('<key>ExitTimeOut</key>\n\t<integer>20</integer>')
     expect(plist).toContain('<key>StandardOutPath</key>\n\t<string>/data/logs/daemon.log</string>')
     expect(plist).toContain(
       '<key>StandardErrorPath</key>\n\t<string>/data/logs/daemon.log</string>',

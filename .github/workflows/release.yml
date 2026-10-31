@@ -180,7 +180,9 @@ jobs:
           kettu status | tee "$status"
           grep -q 'is running as a service' "$status"
           grep -q 'Private key: *in a file only you can read' "$status"
-          launchctl print "gui/$(id -u)/sh.kettu.daemon" | head -n 40
+          launchctl print "gui/$(id -u)/sh.kettu.daemon" > "$RUNNER_TEMP/launchd.txt"
+          head -n 40 "$RUNNER_TEMP/launchd.txt"
+          grep -q 'exit timeout = 20' "$RUNNER_TEMP/launchd.txt"
 
           # launchd starts it again whenever it exits.
           pid="$(daemon_pid "$status")"
