@@ -84,6 +84,27 @@ export type MediaOpenResult =
   | { kind: 'forbidden' } // outside the session's folder, and the thread does not name it
   | { kind: 'not_media' } // not named as media, or its bytes are no media
 
+/**
+ * A media file as `media.authorize` finds it for a device's remote host, which streams it from
+ * `path` and never tells the device where it is.
+ */
+export interface MediaFile {
+  path: string // the real path when authorized
+  name: string
+  kind: MediaKind
+  mimeType: MediaType // from the first bytes, never the name
+  size: number // bytes
+  width?: number // pixels, when the header holds them
+  height?: number
+}
+
+/** `media.authorize`: the file to stream, or why there is none, as for `media.open`. */
+export type MediaAuthorization =
+  | { kind: 'granted'; file: MediaFile }
+  | { kind: 'not_found' }
+  | { kind: 'forbidden' }
+  | { kind: 'not_media' }
+
 /** What main keeps for a grant and serves on its token. */
 export interface MediaGrantRecord {
   token: string

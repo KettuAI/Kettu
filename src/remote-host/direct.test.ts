@@ -80,6 +80,7 @@ async function setup(options: { agent?: boolean } = {}) {
     activity: await ActivityLog.load(dir, log),
     pairing: codes,
     host: { name: 'Studio', platform: process.platform, version: '0.0.0-test' },
+    uploads: path.join(dir, 'remote', 'uploads'),
     openAgentPort: async (device) => {
       const [remoteEnd, agentEnd] = memoryPorts()
       if (agent) agent.host.connect(agentEnd as Parameters<TestHost['host']['connect']>[0], device)
@@ -169,7 +170,7 @@ describe('direct connections', () => {
       type: 'welcome',
       protocol: 1,
       host: { name: 'Studio', platform: process.platform, version: '0.0.0-test' },
-      features: [],
+      features: ['bytes'],
       role: 'owner',
       device: { id: expect.any(String), name: 'Phone' },
       terminal: false,

@@ -2,24 +2,36 @@
 // turn of the fake agent through the agent host's socket, answers `kettu status` and
 // `kettu devices` with the remote host's devices, restarts a host that is killed, and stops
 // everything on SIGTERM. A paired device connects to it directly while `kettu direct` moves the
-// port and adds and removes an address.
+// port and adds and removes an address, and uploads an image the fake agent gets, then reads it
+// and a project's file back as byte streams.
 
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
-import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises'
 import { createServer } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'vite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { HostEvent } from '@shared/agent-host'
+import type { HostEvent, HostMethod } from '@shared/agent-host'
 import type { PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
 import { deviceId, type PairedDevice } from '@shared/remote/device'
 import { generateKeyPair, importKeyPair, type KeyPair } from '@shared/remote/noise'
 import { parsePairingLink } from '@shared/remote/pairing'
 import type { DirectAddress } from '@shared/remote/protocol'
+import type { MediaReadResult, StreamRef } from '@shared/remote/streams'
 import { connectPort } from '@shared/socket-port'
+import type { Attachment } from '@shared/thread'
 import { FAKE_AGENT_MAIN, TestPort } from '../agent-host/testing/harness'
 import { connectTransport } from '../remote-host/direct'
 import { connectDevice, type TestDevice } from '../remote-host/testing/device'
@@ -540,5 +552,117 @@ describeUnix('kettu', () => {
     expect(await daemonRun.exited).toBe(0)
     const kept = JSON.parse(await readFile(path.join(folder, 'settings.json'), 'utf8'))
     expect(kept.remote.direct).toEqual({ enabled: true, port: second, addresses: [] })
+  }, 90_000)
+
+  it("carries a device's upload to the agent and its image and media back", async () => {
+    const folder = path.join(dir, 'data-bytes')
+    const phone = await generateKeyPair()
+    const paired: PairedDevice = {
+      id: await deviceId(phone.publicKey),
+      publicKey: Buffer.from(phone.publicKey).toString('base64'),
+      name: "Ada's iPhone",
+      kind: 'ios',
+      platform: 'ios',
+      model: 'iPhone 17 Pro',
+      addedAt: Date.now(),
+      lastConnectedAt: null,
+    }
+    await mkdir(path.join(folder, 'remote', 'uploads'), { recursive: true })
+    await writeFile(
+      path.join(folder, 'remote', 'devices.json'),
+      JSON.stringify({ version: 1, devices: [paired] }),
+    )
+    // Left by a run before, and gone once the remote host starts.
+    await writeFile(path.join(folder, 'remote', 'uploads', 'left.part'), 'x')
+    const daemonRun = run(folder)
+    const control = path.join(folder, 'control.sock')
+    const listening = await until(async () => {
+      const { direct, hosts } = await status(control)
+      return hosts.remote.state === 'ready' && direct?.state === 'listening' && direct
+    }, `direct connections listening\n${daemonRun.output()}`)
+    const uploads = () => readdir(path.join(folder, 'remote', 'uploads'))
+    expect(await uploads()).toEqual([])
+
+    const project = path.join(dir, 'project-bytes')
+    await mkdir(project)
+    const png = Buffer.from([
+      ...[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52],
+      ...[0, 0, 0, 3, 0, 0, 0, 2, 8, 6, 0, 0, 0, 1, 2, 3, 4],
+    ])
+    await writeFile(path.join(project, 'shot.png'), png)
+    const window = await agentPort(control)
+    await window.request('projects.add', { path: project })
+
+    const identity = JSON.parse(
+      await readFile(path.join(folder, 'remote', 'identity.json'), 'utf8'),
+    )
+    const hostKey = (await importKeyPair(Buffer.from(identity.privateKey, 'base64'))).publicKey
+    const transport = await connectTransport({ host: '127.0.0.1', port: listening.port })
+    const device = await connectDevice({ transport, hostKey, key: phone })
+    devices.push(device)
+    expect(await device.first).toMatchObject({ type: 'welcome', features: ['bytes'] })
+    const session = await device.port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: project,
+    })
+    await device.port.open(session.id)
+
+    // The image goes up as a stream the request names, and on to the fake agent.
+    const stream = await device.upload(png, { chunk: 7 })
+    const added = await device.port.request('attachments.add', {
+      source: {
+        bytes: { $stream: stream } as unknown as ArrayBuffer,
+        mimeType: 'image/png',
+        name: 'photo.png',
+      },
+      thumb: null,
+    })
+    expect(added).toMatchObject({ type: 'image', size: png.length })
+    expect(await uploads()).toEqual([])
+    await device.port.request('sessions.prompt', {
+      sessionId: session.id,
+      content: [
+        { type: 'text', text: '/attachments' },
+        { type: 'ref', ref: { kind: 'attachment', attachment: { id: added.id } as Attachment } },
+      ],
+    })
+    await device.port.untilEntry(session.id, (entry) => entry.kind === 'turn_end')
+    const replies = device.port
+      .entries(session.id)
+      .map((entry) => (entry.kind === 'agent' ? entry.markdown : ''))
+      .join('\n')
+    expect(replies).toContain(`- image image/png, ${png.length} bytes`)
+
+    // The image the thread kept comes back as a stream after its answer.
+    const user = device.port.entries(session.id).findLast((entry) => entry.kind === 'user')
+    const sent = user?.kind === 'user' ? user.content.find((c) => c.type === 'ref')?.ref : null
+    const hash = sent?.kind === 'attachment' ? sent.attachment.blob : null
+    expect(hash).toMatch(/^[0-9a-f]{64}$/)
+    const blob = await device.port.request('sessions.blob', { sessionId: session.id, hash: hash! })
+    const ref = blob.bytes as unknown as StreamRef
+    expect(ref.size).toBe(png.length)
+    expect(Buffer.from(await device.download(ref.$stream))).toEqual(png)
+
+    // A file in the project, read from disk by the remote host, a part of it as asked.
+    const media = (await device.port.request(
+      'media.read' as HostMethod,
+      {
+        projectPath: project,
+        path: 'shot.png',
+        sessionId: session.id,
+        offset: 8,
+      } as never,
+    )) as MediaReadResult
+    expect(media).toMatchObject({
+      kind: 'granted',
+      media: { name: 'shot.png', kind: 'image', mimeType: 'image/png', width: 3, height: 2 },
+      offset: 8,
+      length: png.length - 8,
+    })
+    if (media.kind !== 'granted') throw new Error('The file was not granted')
+    expect(Buffer.from(await device.download(media.bytes.$stream))).toEqual(png.subarray(8))
+
+    daemonRun.child.kill('SIGTERM')
+    expect(await daemonRun.exited).toBe(0)
   }, 90_000)
 })

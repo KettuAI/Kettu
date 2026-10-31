@@ -7,7 +7,7 @@ export type PortErrorCode =
   | 'not_found'
   | 'busy'
   | 'restricted'
-  | 'forbidden' // a device asked for what only a window may do
+  | 'forbidden' // a device asked for what only a window may do, or the other way round
   | 'agent_unavailable'
   | 'auth_required'
   | 'agent_error'

@@ -50,9 +50,64 @@ function pair<T>(copy: (message: T) => T): [End<T>, End<T>] {
   return [end(0), end(1)]
 }
 
+const unbuffered = (end: End<Uint8Array>): Transport => ({
+  ...end,
+  buffered: () => 0,
+  drained: () => Promise.resolve(),
+})
+
 /** A device's end and the host's end of one connection. */
 export function memoryTransports(): [Transport, Transport] {
-  return pair<Uint8Array>((message) => message.slice())
+  const [device, host] = pair<Uint8Array>((message) => message.slice())
+  return [unbuffered(device), unbuffered(host)]
+}
+
+/** The host's end of a connection whose device can stop reading, which the host then buffers. */
+export interface HeldTransports {
+  device: Transport
+  host: Transport
+  /** The device stops reading: what the host sends waits, counted as buffered. */
+  hold(): void
+  /** The device reads again, everything that waited first. */
+  release(): void
+  /** Bytes the host has sent in all, read or not. */
+  sent(): number
+  /** The length of each transport message waiting, in order. */
+  waiting(): number[]
+}
+
+export function heldTransports(): HeldTransports {
+  const [device, host] = memoryTransports()
+  let holding = false
+  let held: Uint8Array[] = []
+  let heldBytes = 0
+  let sent = 0
+  const drains: (() => void)[] = []
+  return {
+    device,
+    host: {
+      ...host,
+      send: (message) => {
+        sent += message.length
+        if (!holding) return host.send(message)
+        held.push(message)
+        heldBytes += message.length
+      },
+      buffered: () => heldBytes,
+      drained: () =>
+        heldBytes === 0 ? Promise.resolve() : new Promise((resolve) => drains.push(resolve)),
+    },
+    hold: () => (holding = true),
+    release: () => {
+      holding = false
+      for (const message of held) host.send(message)
+      held = []
+      heldBytes = 0
+      for (const resolve of drains.splice(0)) resolve()
+    },
+    sent: () => sent,
+    waiting: () => held.map((message) => message.length),
+  }
 }
 
 /** The two ends of a port, as a MessageChannel's. */

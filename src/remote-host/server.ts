@@ -1,8 +1,12 @@
 // Device connections: each one answered as the Noise IK responder, or as the IKpsk1 responder of
 // the open pairing code, then hello and welcome, then the device's session as a port to the agent
-// host, whose protocol passes through unchanged.
+// host, whose protocol passes through unchanged but for binary values: a request's come from the
+// device's uploads, a result's go as byte streams, and media is read from disk here.
 
+import { open, realpath, type FileHandle } from 'node:fs/promises'
+import type { HostMethod, HostResult } from '@shared/agent-host'
 import type { PortChannel } from '@shared/port-channel'
+import { isPortError, type PortError } from '@shared/port-rpc'
 import type { ActivityActor, NewActivity } from '@shared/remote/activity'
 import { forbiddenToDevices } from '@shared/remote/allow-list'
 import { Channel, type ChannelMessage } from '@shared/remote/channel'
@@ -25,12 +29,24 @@ import {
   type Welcome,
 } from '@shared/remote/protocol'
 import { removalAt } from '@shared/remote/status'
+import {
+  BYTES_FEATURE,
+  isDeviceStream,
+  isUploadRef,
+  MAX_MEDIA_STREAMS,
+  type MediaReadResult,
+  type StreamCancel,
+  type StreamRef,
+} from '@shared/remote/streams'
 import type { Transport } from '@shared/remote/transport'
 import type { LogFn } from '../agent-host/storage'
 import type { ActivityLog } from './activity'
 import type { DeviceStore } from './devices'
+import { bytesSource, Downloads, fileSource } from './downloads'
 import type { PairingCode, PairingCodes } from './pairing'
+import { bytesOf, findPlaces, isBinary } from './places'
 import { SessionTitles } from './titles'
+import { UploadCounts, UploadError, Uploads } from './uploads'
 
 /** How long a connection has from being accepted to its hello. */
 const HELLO_TIMEOUT_MS = 10_000
@@ -56,12 +72,19 @@ type Summary = { id?: unknown; title?: unknown }
 
 const MAX_HOST_NAME = 256
 
+/** Methods only the remote host calls on a device's port, whose answers the device never sees. */
+const REMOTE_HOST_ONLY: ReadonlySet<string> = new Set<HostMethod>(['media.authorize'])
+
 export interface RemoteServerOptions {
   staticKey: KeyPair
   devices: DeviceStore
   activity: ActivityLog
   pairing: PairingCodes
   host: Welcome['host']
+  /** The folder uploads are assembled in, emptied before the server starts. */
+  uploads: string
+  /** How long an upload may wait for bytes or a request, a minute unless a test shortens it. */
+  uploadIdleMs?: number
   /** A port to the agent host for a device's session, or null while the agent host is down. */
   openAgentPort(device: PortDevice): Promise<PortChannel | null>
   /** The devices or the sessions open changed, or refusals did, reported at most once a second. */
@@ -81,6 +104,8 @@ export class RemoteServer {
   private stopped = false
   private sweeper: ReturnType<typeof setInterval> | null = null
   private readonly now: () => number
+  /** Each device's uploads in flight, over all its connections. */
+  readonly uploads = new UploadCounts()
 
   constructor(readonly options: RemoteServerOptions) {
     this.now = options.now ?? Date.now
@@ -264,6 +289,16 @@ class DeviceConnection {
     { kind: NotedKind; sessionId: unknown; title: string | null }
   >()
   private readonly titles = new SessionTitles()
+  private uploads: Uploads | null = null
+  private downloads: Downloads | null = null
+  /** The remote host's own requests on the port, by their ids, which are negative. */
+  private readonly asking = new Map<
+    number,
+    { resolve: (result: unknown) => void; reject: (error: PortError) => void }
+  >()
+  private asked = 0
+  /** Media reads being authorized or streamed. */
+  private mediaReads = 0
 
   constructor(
     private readonly transport: Transport,
@@ -390,8 +425,11 @@ class DeviceConnection {
   }
 
   private receive(message: ChannelMessage): void {
-    // Byte streams come with uploads and media; until then they are dropped.
-    if (message.kind !== 'json') return
+    if (message.kind === 'bytes') {
+      // A device has nothing to upload before its welcome.
+      if (this.state === 'open') this.uploads!.bytes(message.stream, message.data)
+      return
+    }
     if (this.state === 'hello') void this.hello(message.value)
     // Nothing but the hello comes before the welcome.
     else if (this.state === 'confirming' || this.state === 'opening') void this.close('invalid')
@@ -416,12 +454,27 @@ class DeviceConnection {
     if (this.state !== 'opening') return port?.close()
     if (!port) return this.close('unavailable')
     this.port = port
+    this.uploads = new Uploads({
+      folder: this.server.options.uploads,
+      deviceId: device.id,
+      counts: this.server.uploads,
+      ...(this.server.options.uploadIdleMs ? { idleMs: this.server.options.uploadIdleMs } : {}),
+      cancelled: (stream, error) => {
+        this.server.options.log('warn', `Device ${device.id}'s upload failed: ${error.message}`)
+        this.send({ type: 'stream.cancel', stream, error } satisfies StreamCancel)
+      },
+    })
+    this.downloads = new Downloads({
+      channel: this.channel!,
+      transport: this.transport,
+      send: (message) => this.send(message),
+    })
     // Sent before the port's listener is set, so nothing from the agent host comes before it.
     this.send({
       type: 'welcome',
       protocol: version,
       host: this.server.options.host,
-      features: [],
+      features: [BYTES_FEATURE],
       role: 'owner',
       device: { id: device.id, name: device.name },
       terminal: false,
@@ -430,8 +483,9 @@ class DeviceConnection {
     this.state = 'open'
     this.wasOpen = true
     port.onMessage((data) => {
+      if (this.answered(data)) return
       this.fromHost(data)
-      this.send(data)
+      this.toDevice(data)
     })
     port.onClose(() => void this.close('unavailable'))
     this.server.opened(device)
@@ -487,14 +541,30 @@ class DeviceConnection {
   /** A message from the device once welcomed. */
   private fromDevice(value: unknown): void {
     if (typeof value !== 'object' || value === null) return
-    const { type, name } = value as Record<string, unknown>
-    if (type === 'rename') {
-      void this.server.renameDevice(this.device!.id, name, 'device').then((renamed) => {
-        if (!renamed) {
-          this.server.options.log('warn', `Device ${this.device?.id} asked for a name that is none`)
-        }
-      })
-      return
+    const { type, name, stream, size } = value as Record<string, unknown>
+    switch (type) {
+      case 'rename':
+        void this.server.renameDevice(this.device!.id, name, 'device').then((renamed) => {
+          if (!renamed) {
+            this.server.options.log(
+              'warn',
+              `Device ${this.device?.id} asked for a name that is none`,
+            )
+          }
+        })
+        return
+      case 'stream.open':
+        // An id it may not open, or one it opened before, would make every later word on it
+        // mean either stream.
+        if (!this.uploads!.open(stream, size)) void this.close('invalid')
+        return
+      case 'stream.end':
+        if (typeof stream === 'number') this.uploads!.end(stream)
+        return
+      case 'stream.cancel':
+        if (isDeviceStream(stream)) this.uploads!.cancel(stream)
+        else if (typeof stream === 'number') this.downloads!.cancel(stream)
+        return
     }
     this.toHost(value)
   }
@@ -504,7 +574,15 @@ class DeviceConnection {
     const { type, id, method, params } = value as Record<string, unknown>
     // Only requests reach the agent host; anything else a newer device sends is dropped.
     if (type !== 'request') return
-    if (typeof method === 'string' && forbiddenToDevices(method, params)) {
+    // The remote host's own requests on the port have negative ids, and their answers stay here.
+    if (typeof id === 'number' && id < 0) {
+      this.server.options.log('warn', `Device ${this.device!.id} sent a request with a negative id`)
+      return
+    }
+    const refused =
+      typeof method === 'string' &&
+      (forbiddenToDevices(method, params) || REMOTE_HOST_ONLY.has(method))
+    if (refused) {
       this.server.options.log(
         'warn',
         `Device ${this.device!.id} asked for ${method}, which devices may not call`,
@@ -518,6 +596,42 @@ class DeviceConnection {
       }
       return
     }
+    if (method === 'media.read') return void this.readMedia(id, params)
+    const named = findPlaces(value as Record<string, unknown>, 'params', isUploadRef)
+    if (named.length === 0) return this.forward(value)
+    void this.withUploads(value, id, named)
+  }
+
+  /** Puts the bytes of the uploads a request names in their places, then passes it on. */
+  private async withUploads(
+    request: object,
+    id: unknown,
+    named: ReturnType<typeof findPlaces>,
+  ): Promise<void> {
+    // Each upload is claimed at once, so one named twice fails here and not later.
+    const claims = named.map(({ holder, key }) =>
+      this.uploads!.claim((holder[key] as { $stream: unknown }).$stream),
+    )
+    const settled = await Promise.allSettled(claims)
+    if (this.state !== 'open') return
+    const failed = settled.find((result) => result.status === 'rejected')
+    if (failed) {
+      const reason = failed.reason
+      const error: PortError =
+        reason instanceof UploadError
+          ? reason.error
+          : { code: 'internal', message: 'An upload could not be read' }
+      if (typeof id === 'number') this.send({ type: 'error', id, error })
+      return
+    }
+    named.forEach(({ holder, key }, index) => {
+      holder[key] = (settled[index] as PromiseFulfilledResult<ArrayBuffer>).value
+    })
+    this.forward(request)
+  }
+
+  private forward(request: object): void {
+    const { id, method, params } = request as Record<string, unknown>
     this.titles.request(id, method)
     if (typeof id === 'number' && Object.hasOwn(NOTED, method as string)) {
       const kind = NOTED[method as keyof typeof NOTED]
@@ -525,7 +639,107 @@ class DeviceConnection {
       const title = this.titles.get(sessionId) ?? null
       if (this.noted.size < MAX_NOTED) this.noted.set(id, { kind, sessionId, title })
     }
-    this.port?.send(value)
+    this.port?.send(request)
+  }
+
+  /**
+   * A device's `media.read`: the agent host checks the file as for a window's `media.open`, and
+   * the bytes asked for are streamed from disk here, never through it. The device never hears
+   * where the file is.
+   */
+  private async readMedia(id: unknown, params: unknown): Promise<void> {
+    if (typeof id !== 'number') return
+    const reply = (message: unknown): void => {
+      if (this.state === 'open') this.send(message)
+    }
+    const fail = (error: PortError): void => reply({ type: 'error', id, error })
+    const range = mediaRange(params)
+    if (typeof range === 'string') return fail({ code: 'invalid_params', message: range })
+    if (this.mediaReads >= MAX_MEDIA_STREAMS) {
+      const message = `A connection may read at most ${MAX_MEDIA_STREAMS} media files at once`
+      return fail({ code: 'busy', message })
+    }
+    this.mediaReads++
+    let streaming = false
+    try {
+      const { projectPath, path, sessionId } = (params ?? {}) as Record<string, unknown>
+      // The agent host checks these as it checks a window's media.open.
+      const answer = await this.ask('media.authorize', { projectPath, path, sessionId })
+      if (answer.kind !== 'granted') {
+        return reply({ type: 'response', id, result: { kind: answer.kind } })
+      }
+      const { path: real, ...media } = answer.file
+      const opened = await openMedia(real)
+      if (!opened || this.state !== 'open') {
+        await opened?.handle.close()
+        return reply({ type: 'response', id, result: { kind: 'not_found' } })
+      }
+      const { handle, size } = opened
+      if (range.offset > size) {
+        await handle.close()
+        return fail({ code: 'invalid_params', message: 'offset is past the end of the file' })
+      }
+      const length = Math.min(range.length ?? size, size - range.offset)
+      const { stream, finished } = this.downloads!.open(fileSource(handle, range.offset, length))
+      streaming = true
+      void finished.then(() => this.mediaReads--)
+      const result: MediaReadResult = {
+        kind: 'granted',
+        media: { ...media, size },
+        offset: range.offset,
+        length,
+        bytes: { $stream: stream, size: length },
+      }
+      reply({ type: 'response', id, result })
+      this.downloads!.start(stream)
+    } catch (error) {
+      fail(isPortError(error) ? error : { code: 'internal', message: 'The file could not be read' })
+    } finally {
+      if (!streaming) this.mediaReads--
+    }
+  }
+
+  /** Asks the agent host on the device's port, under an id no request of the device's has. */
+  private ask<M extends HostMethod>(method: M, params: unknown): Promise<HostResult<M>> {
+    const port = this.port
+    if (!port) return Promise.reject(ENDED)
+    const id = -++this.asked
+    return new Promise((resolve, reject) => {
+      this.asking.set(id, { resolve: resolve as (result: unknown) => void, reject })
+      port.send({ type: 'request', id, method, params })
+    })
+  }
+
+  /** Whether an answer from the agent host is to one of the remote host's own requests. */
+  private answered(data: unknown): boolean {
+    if (typeof data !== 'object' || data === null) return false
+    const { type, id, result, error } = data as Record<string, unknown>
+    if ((type !== 'response' && type !== 'error') || typeof id !== 'number' || id >= 0) {
+      return false
+    }
+    const asked = this.asking.get(id)
+    this.asking.delete(id)
+    if (type === 'response') asked?.resolve(result)
+    else asked?.reject(isPortError(error) ? error : ENDED)
+    return true
+  }
+
+  /** A message from the agent host on its way to the device, a result's binary values as streams. */
+  private toDevice(data: unknown): void {
+    const response = data as { type?: unknown; result?: unknown }
+    const binary =
+      typeof data === 'object' && data !== null && response.type === 'response'
+        ? findPlaces(response as Record<string, unknown>, 'result', isBinary)
+        : []
+    if (binary.length === 0) return this.send(data)
+    const streams = binary.map(({ holder, key }) => {
+      const bytes = bytesOf(holder[key] as ArrayBuffer | ArrayBufferView)
+      const { stream } = this.downloads!.open(bytesSource(bytes))
+      holder[key] = { $stream: stream, size: bytes.length } satisfies StreamRef
+      return stream
+    })
+    this.send(data)
+    for (const stream of streams) this.downloads!.start(stream)
   }
 
   /**
@@ -584,11 +798,50 @@ class DeviceConnection {
     if (this.state === 'closed') return
     this.state = 'closed'
     clearTimeout(this.timer)
+    this.uploads?.closeAll()
+    this.downloads?.closeAll()
+    for (const asked of this.asking.values()) asked.reject(ENDED)
+    this.asking.clear()
     const port = this.port
     this.port = null
     port?.close()
     this.transport.close()
     if (this.pairing) this.server.options.pairing.release(this.pairing.code)
     this.server.ended(this, this.wasOpen ? this.device : null)
+  }
+}
+
+const ENDED: PortError = { code: 'internal', message: 'The connection ended' }
+
+/** The part of a file a `media.read` asks for, or why its numbers are not one. */
+function mediaRange(params: unknown): { offset: number; length: number | null } | string {
+  const { offset, length } = (typeof params === 'object' && params !== null ? params : {}) as {
+    offset?: unknown
+    length?: unknown
+  }
+  const count = (value: unknown) =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+  if (offset !== undefined && !count(offset)) return 'offset must be a whole number of bytes'
+  if (length !== undefined && !count(length)) return 'length must be a whole number of bytes'
+  return {
+    offset: (offset as number | undefined) ?? 0,
+    length: (length as number | undefined) ?? null,
+  }
+}
+
+/**
+ * The file the agent host authorized, open, when it is still a regular file at the same real
+ * path; null otherwise, as when it was swapped for a link since.
+ */
+async function openMedia(real: string): Promise<{ handle: FileHandle; size: number } | null> {
+  try {
+    if ((await realpath(real)) !== real) return null
+    const handle = await open(real, 'r')
+    const info = await handle.stat().catch(() => null)
+    if (info?.isFile()) return { handle, size: info.size }
+    await handle.close()
+    return null
+  } catch {
+    return null
   }
 }

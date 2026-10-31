@@ -130,6 +130,63 @@ describe('socketPort', () => {
     expect(received).toEqual([])
   })
 
+  it('carries ArrayBuffers where a message holds them, as a MessagePort does', async () => {
+    const { stream, received } = streamPort()
+    const bytes = (...values: number[]) => new Uint8Array(values).buffer
+    const message = {
+      type: 'request',
+      id: 1,
+      params: { source: { bytes: bytes(1, 2, 3), name: 'a.png' }, list: [bytes(), null, 'x'] },
+    }
+    const top = bytes(9)
+    stream.write(Buffer.concat([encodeMessage(message), encodeMessage(top), encodeMessage(null)]))
+    await until(() => received.length === 3)
+    expect(received[0]).toEqual(message)
+    const params = (received[0] as typeof message).params
+    expect(params.source.bytes).toBeInstanceOf(ArrayBuffer)
+    expect(new Uint8Array(params.source.bytes)).toEqual(new Uint8Array([1, 2, 3]))
+    expect(params.list[0]).toBeInstanceOf(ArrayBuffer)
+    expect(received[1]).toBeInstanceOf(ArrayBuffer)
+    expect(new Uint8Array(received[1] as ArrayBuffer)).toEqual(new Uint8Array([9]))
+    expect(received[2]).toBeNull()
+    // A message without buffers is plain JSON, as before.
+    expect(encodeMessage({ a: 1 }).subarray(4).toString('utf8')).toBe('{"a":1}')
+  })
+
+  it('closes the port on buffers that do not fit their message', async () => {
+    const one = [new Uint8Array([1])]
+    const bad: [string, Uint8Array[]][] = [
+      // A path to a place that holds something else, and the message for a second buffer.
+      ['[{"a":1},[["a"]]]', one],
+      ['[null,[[],[]]]', [new Uint8Array([1]), new Uint8Array([2])]],
+      // A path to nowhere, and one to the prototype.
+      ['[{"a":null},[["b"]]]', one],
+      ['[{"__proto__":null},[["__proto__"]]]', one],
+      // A buffer missing, and bytes past the last one.
+      ['[{"a":null},[["a"]]]', []],
+      ['[{"a":null},[["a"]]]', [new Uint8Array([1]), new Uint8Array([2])]],
+    ]
+    for (const [json, buffers] of bad) {
+      const { stream, port, received } = streamPort()
+      let closed = false
+      port.onClose(() => (closed = true))
+      const text = Buffer.from(json, 'utf8')
+      const parts = [Buffer.alloc(4), text]
+      parts[0]!.writeUInt32BE(text.length, 0)
+      for (const buffer of buffers) {
+        const length = Buffer.alloc(4)
+        length.writeUInt32BE(buffer.length, 0)
+        parts.push(length, Buffer.from(buffer))
+      }
+      const body = Buffer.concat(parts)
+      const header = Buffer.alloc(4)
+      header.writeUInt32BE((0x80000000 | body.length) >>> 0, 0)
+      stream.write(Buffer.concat([header, body, encodeMessage({ after: true })]))
+      await until(() => closed)
+      expect(received).toEqual([])
+    }
+  })
+
   it('closes the port on a message that is not JSON', async () => {
     const { stream, port, received } = streamPort()
     let closed = false

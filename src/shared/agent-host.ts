@@ -2,7 +2,7 @@
 
 import type { ArtifactContent, ArtifactSession, ArtifactSummary, VersionSummary } from './artifacts'
 import type { FileContent, FileList, FileSearch, FileWritten } from './files'
-import type { MediaOpenResult } from './media'
+import type { MediaAuthorization, MediaOpenResult } from './media'
 import type {
   ChangedFile,
   CommitDetails,
@@ -634,6 +634,12 @@ export interface HostContract {
     params: { projectPath: string; path: string; sessionId: string }
     result: MediaOpenResult
   }
+  // The same file and check for a paired device's remote host, which streams it from the real
+  // path in the answer; main is granted nothing, and a window is refused.
+  'media.authorize': {
+    params: { projectPath: string; path: string; sessionId: string }
+    result: MediaAuthorization
+  }
   // `dayStarts`: the periods to sum, local days or a day's hours, as n + 1 ascending boundaries.
   'usage.summary': {
     params: { dayStarts: number[]; from: number; to: number; scope: UsageScope }
@@ -769,6 +775,7 @@ export const HOST_METHODS = [
   'files.search',
   'files.write',
   'media.open',
+  'media.authorize',
   'usage.summary',
   'usage.total',
   'usage.status',

@@ -3,6 +3,7 @@
 // addresses, renames, removal and the timeout.
 
 import { createServer } from 'node:net'
+import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { PortChannel } from '@shared/port-channel'
 import { deviceId } from '@shared/remote/device'
@@ -48,6 +49,7 @@ async function startHost(dir: string, hostKey: KeyPair) {
     activity,
     pairing,
     host: { name: 'Studio', platform: 'linux', version: '0.2.0' },
+    uploads: path.join(dir, 'remote', 'uploads'),
     openAgentPort: async () => {
       const [remoteEnd, agentEnd] = memoryPorts()
       agentEnd.onMessage((data) => {

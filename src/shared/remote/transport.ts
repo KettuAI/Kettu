@@ -9,4 +9,8 @@ export interface Transport {
   /** The connection ended, from either side. */
   onClose(listener: () => void): void
   close(): void
+  /** Bytes sent that have not left for the other side yet; 0 when the carrier cannot tell. */
+  buffered(): number
+  /** Settles once what was buffered has left, or the connection has ended. */
+  drained(): Promise<void>
 }

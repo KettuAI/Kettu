@@ -58,6 +58,19 @@ export function streamTransport(socket: Socket): Transport {
       open = false
       socket.end()
     },
+    buffered: () => socket.writableLength,
+    drained: () =>
+      new Promise((resolve) => {
+        // Only a write the socket had no room for brings a drain.
+        if (closed || !socket.writableNeedDrain) return resolve()
+        const done = (): void => {
+          socket.off('drain', done)
+          socket.off('close', done)
+          resolve()
+        }
+        socket.on('drain', done)
+        socket.on('close', done)
+      }),
   }
 }
 
