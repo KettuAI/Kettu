@@ -91,30 +91,31 @@ jobs:
       fail-fast: false
       matrix:
         # Each architecture builds on its own runner, so node-pty is compiled or picked for the
-        # machine that tests it.
+        # machine that tests it. The *_RUNNER repository variables, when set, replace GitHub's
+        # runners; Intel macOS and Arm Windows keep GitHub's.
         include:
-          - os: macos-latest
+          - os: ${{ vars.MACOS_RUNNER || 'macos-latest' }}
             target: --mac --arm64
             # Only a Developer ID signed build can replace itself; an ad-hoc one links to the release.
             update_mode: ${{ needs.mac-signing.outputs.signed == 'true' && 'install' || 'link' }}
           - os: macos-15-intel
             target: --mac --x64
             update_mode: ${{ needs.mac-signing.outputs.signed == 'true' && 'install' || 'link' }}
-          - os: windows-latest
+          - os: ${{ vars.WINDOWS_RUNNER || 'windows-latest' }}
             target: --win --x64
             update_mode: install
           - os: windows-11-arm
             target: --win --arm64
             update_mode: install
-          - os: ubuntu-24.04
+          - os: ${{ vars.LINUX_RUNNER || 'ubuntu-24.04' }}
             target: --linux --x64
             update_mode: install
-          - os: ubuntu-24.04-arm
+          - os: ${{ vars.LINUX_ARM_RUNNER || 'ubuntu-24.04-arm' }}
             target: --linux --arm64
             update_mode: install
     runs-on: ${{ matrix.os }}
     env:
-      MAC_SIGNED: ${{ startsWith(matrix.os, 'macos') && needs.mac-signing.outputs.signed == 'true' }}
+      MAC_SIGNED: ${{ startsWith(matrix.target, '--mac') && needs.mac-signing.outputs.signed == 'true' }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
