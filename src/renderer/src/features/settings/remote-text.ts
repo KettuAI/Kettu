@@ -1,7 +1,9 @@
 import type { TFunction } from 'i18next'
-import type { PairedDevice } from '@shared/remote/device'
+import type { DeviceChangeFailure, PairedDevice } from '@shared/remote/device'
 import { removalAt, UNSEEN_NOTICE_DAYS } from '@shared/remote/status'
 import { clockTime, daysBefore, monthDay } from '@renderer/lib/format'
+import { errorMessage } from '@renderer/lib/host'
+import { platformName } from './host-text'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -15,7 +17,22 @@ export function kindLabel(t: TFunction<'settings'>, kind: string): string {
 
 /** The line under a device's name: what it runs Kettu in, its model and its system. */
 export function deviceLine(t: TFunction<'settings'>, device: Device): string {
-  return [kindLabel(t, device.kind), device.model, device.platform].filter(Boolean).join(' · ')
+  return [kindLabel(t, device.kind), device.model, platformName(device.platform)]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+/** Renames or removes a device through main: null once done, else what to show for it. */
+export async function changeDevice(
+  t: TFunction<'settings'>,
+  change: () => Promise<DeviceChangeFailure | null>,
+): Promise<string | null> {
+  try {
+    const failure = await change()
+    return failure === null ? null : t(`remote.device.failed.${failure}`)
+  } catch (error) {
+    return errorMessage(error)
+  }
 }
 
 /** What a device is, for its icon: a phone, a tablet, a laptop, a desktop or a browser. */

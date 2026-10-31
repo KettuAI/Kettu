@@ -54,6 +54,8 @@ const {
 } = await import('./remote-section')
 const { CodeBody, Confirm } = await import('./remote-pairing')
 const { closeRequest } = await import('./pair-close')
+const { changeDevice, deviceLine } = await import('./remote-text')
+const { platformName } = await import('./host-text')
 const { ActivityRow, DevicePage } = await import('./remote-device')
 const { useRemoteSection } = await import('./section-defs')
 const { DirectPortField, FoundAddresses, OwnAddresses } = await import('./remote-direct')
@@ -62,6 +64,8 @@ const { encode } = await import('uqr')
 
 const DAY = 24 * 60 * 60 * 1000
 const now = Date.now()
+/** The page's own translations, in the language now chosen. */
+const t = () => i18n.getFixedT(null, 'settings')
 const WIFI = { host: '192.168.1.8', port: 47821 }
 const TAILSCALE = { host: '100.88.12.7', port: 47821 }
 const FRP = { host: '203.0.113.24', port: 60021 }
@@ -71,7 +75,7 @@ const phone: PairedDevice = {
   publicKey: 'key',
   name: 'My iPhone',
   kind: 'ios',
-  platform: 'iOS 26.1',
+  platform: 'ios',
   model: 'iPhone 17 Pro',
   addedAt: now - 10 * DAY,
   lastConnectedAt: now - 3 * DAY,
@@ -280,7 +284,17 @@ describe('addresses as the owner types them', () => {
 describe('a device row', () => {
   it('names the device, what it runs, and that it is online', () => {
     const row = text(createElement(DeviceRow, { device: phone, online: true }))
-    expect(row).toBe('My iPhone iOS app · iPhone 17 Pro · iOS 26.1 Online')
+    expect(row).toBe('My iPhone iOS app · iPhone 17 Pro · iOS Online')
+  })
+
+  it('names the platform as people do, in either language', async () => {
+    const line = (platform: string) => deviceLine(t(), { ...phone, platform })
+    expect(line('ipados')).toBe('iOS app · iPhone 17 Pro · iPadOS')
+    await i18n.changeLanguage('zh-CN')
+    expect(line('ios')).toBe('iOS 应用 · iPhone 17 Pro · iOS')
+    expect(deviceLine(t(), { kind: 'desktop', model: '', platform: 'darwin' })).toBe(
+      '桌面应用 · macOS',
+    )
   })
 
   it('says when it last connected', () => {
@@ -300,6 +314,14 @@ describe('a device row', () => {
     )
     // Online, it is seen now.
     expect(text(createElement(DeviceRow, { device: stale, online: true }))).not.toContain('Removed')
+  })
+})
+
+describe('platform names', () => {
+  it('read as people name them, and anything else as sent', () => {
+    expect(
+      ['ios', 'ipados', 'darwin', 'win32', 'linux', 'freebsd', 'iOS 26.1'].map(platformName),
+    ).toEqual(['iOS', 'iPadOS', 'macOS', 'Windows', 'Linux', 'freebsd', 'iOS 26.1'])
   })
 })
 
@@ -372,14 +394,16 @@ describe('Add device', () => {
   })
 
   it.each([
-    ['expired', 'This code has expired'],
-    ['attempts', 'Too many tries, so this code is void'],
-    ['rejected', 'You rejected the device, so this code is void'],
-  ] as const)('says why a code is void: %s', (reason, title) => {
+    ['expired', 'Expired', 'This code has expired'],
+    ['attempts', 'Too many tries', 'Too many tries, so this code is void'],
+    ['rejected', 'Rejected', 'You rejected the device, so this code is void'],
+    ['replaced', 'Opened elsewhere', 'Add device opened elsewhere, so this code is void'],
+    ['stopped', 'Remote access stopped', 'Remote access stopped, so this code is void'],
+  ] as const)('says why a code is void: %s', (reason, label, title) => {
     const shown = { kind: 'pairing' as const, pairing: { state: 'void' as const, reason } }
     const body = text(createElement(CodeBody, { shown, link }))
-    expect(body).toContain('Expired')
-    expect(body).toContain(title)
+    // The QR code's overlay names the reason, then the text beside it says more.
+    expect(body).toMatch(new RegExp(`^${label} ${title} `))
     expect(body).not.toContain('expires in')
     // The link stays, greyed out, and copies no more.
     expect(renderToStaticMarkup(createElement(CodeBody, { shown, link }))).toMatch(
@@ -387,14 +411,26 @@ describe('Add device', () => {
     )
   })
 
+  it.each([
+    ['expired', '已失效'],
+    ['attempts', '试错太多次'],
+    ['rejected', '已拒绝'],
+    ['replaced', '已在别处打开'],
+    ['stopped', '远程访问已停止'],
+  ] as const)('names why a code is void in Chinese: %s', async (reason, label) => {
+    await i18n.changeLanguage('zh-CN')
+    const shown = { kind: 'pairing' as const, pairing: { state: 'void' as const, reason } }
+    expect(text(createElement(CodeBody, { shown, link }))).toMatch(new RegExp(`^${label} `))
+  })
+
   it('asks whether to add the device, with its name to edit', () => {
     const pairing = {
       state: 'confirm' as const,
       device: {
-        name: 'iPad Air',
+        name: 'Lin’s iPad',
         model: 'iPad Air',
         kind: 'ios',
-        platform: 'iPadOS 26.1',
+        platform: 'ipados',
         known: false,
       },
     }
@@ -403,11 +439,30 @@ describe('Add device', () => {
       null,
       createElement(Confirm, { pairing, onAnswer: () => {} }),
     )
-    expect(renderToStaticMarkup(confirm)).toContain('value="iPad Air"')
+    expect(renderToStaticMarkup(confirm)).toContain('value="Lin’s iPad"')
     const body = text(confirm)
     expect(body).toContain('Add this device?')
-    expect(body).toContain('iOS app · iPadOS 26.1 · Just connected with this code')
+    // Its model and platform, as the device list shows them.
+    expect(body).toContain('iOS app · iPad Air · iPadOS · Just connected with this code')
     expect(body).toMatch(/Reject Add$/)
+  })
+
+  it('asks in Chinese, and says when the device was added before', async () => {
+    await i18n.changeLanguage('zh-CN')
+    const device = { name: 'MacBook', model: 'MacBook Pro', kind: 'desktop', platform: 'darwin' }
+    const confirm = (known: boolean) =>
+      text(
+        createElement(
+          Dialog,
+          null,
+          createElement(Confirm, {
+            pairing: { state: 'confirm', device: { ...device, known } },
+            onAnswer: () => {},
+          }),
+        ),
+      )
+    expect(confirm(false)).toContain('桌面应用 · MacBook Pro · macOS · 刚用这个码连上')
+    expect(confirm(true)).toContain('桌面应用 · MacBook Pro · macOS · 添加过，刚用这个码重新连上')
   })
 })
 
@@ -459,6 +514,27 @@ describe("a device's page", () => {
     expect(page).toMatch(/Online now, connected at/)
     expect(page).toContain('Activity Last 30 days')
     expect(page).toContain('Remove this device')
+  })
+
+  it('says what it runs, with the platform as people name it', () => {
+    remote.status = status()
+    expect(text(createElement(DevicePage, { id: phone.id }))).toContain(
+      'iOS app · iPhone 17 Pro · iOS',
+    )
+  })
+
+  it("words main's codes when it could not rename or remove the device", async () => {
+    const failed = (code: 'not_renamed' | 'not_removed') => changeDevice(t(), async () => code)
+    expect(await failed('not_renamed')).toBe('The device could not be renamed. Try again.')
+    expect(await failed('not_removed')).toBe('The device could not be removed. Try again.')
+    expect(await changeDevice(t(), async () => null)).toBeNull()
+    // A call main refused outright still says why.
+    expect(await changeDevice(t(), () => Promise.reject(new Error('Not a device id')))).toBe(
+      'Not a device id',
+    )
+    await i18n.changeLanguage('zh-CN')
+    expect(await failed('not_renamed')).toBe('没能给设备改名，再试一次。')
+    expect(await failed('not_removed')).toBe('没能移除这台设备，再试一次。')
   })
 
   it('says when the device is gone', () => {

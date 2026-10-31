@@ -4,8 +4,10 @@ import { addressText } from '@shared/remote/address'
 import type { HostConnection, HostStatus } from '@shared/remote/hosts'
 import { longAgo } from '@renderer/lib/format'
 
-/** "macOS", "Windows", "Linux": what a host runs, by its platform. */
+/** "iOS", "macOS", "Windows": what a host or device runs, by the platform it sent. */
 export function platformName(platform: Platform | string): string {
+  if (platform === 'ios') return 'iOS'
+  if (platform === 'ipados') return 'iPadOS'
   if (platform === 'darwin') return 'macOS'
   if (platform === 'win32') return 'Windows'
   if (platform === 'linux') return 'Linux'

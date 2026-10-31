@@ -884,27 +884,31 @@
       "expires": "It adds one device and expires in <time>{{time}}</time>. The device has to reach this computer directly: on the same network, the same VPN, or through an address you added.",
       "waiting": "Waiting for a device to scan…",
       "qr": "Pairing QR code",
-      "expired": "Expired",
       "failed": "Kettu could not make a code: {{message}}",
       "newCode": "New code",
       "ends": {
         "expired": {
+          "short": "Expired",
           "title": "This code has expired",
           "body": "No device connected within 5 minutes. Make a new code and scan that."
         },
         "attempts": {
+          "short": "Too many tries",
           "title": "Too many tries, so this code is void",
           "body": "A device used a wrong code 5 times. Let only your own devices scan the new one."
         },
         "rejected": {
+          "short": "Rejected",
           "title": "You rejected the device, so this code is void",
           "body": "To add another device, make a new code."
         },
         "replaced": {
+          "short": "Opened elsewhere",
           "title": "Add device opened elsewhere, so this code is void",
           "body": "To add a device here, make a new code."
         },
         "stopped": {
+          "short": "Remote access stopped",
           "title": "Remote access stopped, so this code is void",
           "body": "Make a new code once remote access is on again."
         }
@@ -937,6 +941,10 @@
       "activityNote": "Only what happened is kept, never content, commands or addresses; at most 500 events.",
       "noActivity": "Nothing yet.",
       "gone": "This device is no longer paired.",
+      "failed": {
+        "not_renamed": "The device could not be renamed. Try again.",
+        "not_removed": "The device could not be removed. Try again."
+      },
       "events": {
         "paired": "Added to this computer from a scanned code",
         "pairedLink": "Added to this computer from a pasted link",

@@ -31,6 +31,9 @@ export interface PairedDevice {
 /** What pairing learns of a device; the host derives its id and the times. */
 export type NewDevice = Pick<PairedDevice, 'publicKey' | 'name' | 'kind' | 'platform' | 'model'>
 
+/** Main could not rename or remove a device, as when the device files could not be read. */
+export type DeviceChangeFailure = 'not_renamed' | 'not_removed'
+
 /** The device a port to the agent host serves. */
 export interface PortDevice {
   id: string
