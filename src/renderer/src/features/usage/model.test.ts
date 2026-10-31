@@ -32,12 +32,15 @@ import {
   resetForm,
   seriesOf,
   shownSeries,
+  splitPlans,
   shownTotals,
+  tokenParts,
   tokensPerRequest,
   trend,
   typedDay,
   typedRange,
   unpricedTokens,
+  usedOutside,
   weekStartOf,
   wholeMonth,
   widest,
@@ -558,6 +561,51 @@ describe('heatLevels', () => {
   })
 })
 
+describe('usedOutside', () => {
+  const days = [TODAY, addDays(TODAY, 1), addDays(TODAY, 2)]
+  const range = { from: addDays(TODAY, 1), to: addDays(TODAY, 3) }
+
+  it('tells when a day outside the range has usage', () => {
+    expect(usedOutside(days, [5, 0, 0], range)).toBe(true)
+  })
+
+  it('ignores empty days outside the range and usage inside it', () => {
+    expect(usedOutside(days, [0, 7, 9], range)).toBe(false)
+  })
+})
+
+describe('tokenParts', () => {
+  const parts = { input: 30, output: 20, reasoning: 0, cacheRead: 40, cacheWrite: 10 }
+
+  it('gives each type its tokens and share, in order', () => {
+    expect(tokenParts(parts, 100)).toEqual([
+      { part: 'input', tokens: 30, share: 0.3 },
+      { part: 'output', tokens: 20, share: 0.2 },
+      { part: 'cacheRead', tokens: 40, share: 0.4 },
+      { part: 'cacheWrite', tokens: 10, share: 0.1 },
+    ])
+  })
+
+  it('keeps reasoning where an agent reports it', () => {
+    expect(tokenParts({ ...parts, reasoning: 5 }, 105).map((p) => p.part)).toEqual([
+      'input',
+      'output',
+      'reasoning',
+      'cacheRead',
+      'cacheWrite',
+    ])
+  })
+
+  it('has no shares without tokens', () => {
+    expect(tokenParts({ ...parts, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, 0)).toEqual([
+      { part: 'input', tokens: 0, share: null },
+      { part: 'output', tokens: 0, share: null },
+      { part: 'cacheRead', tokens: 0, share: null },
+      { part: 'cacheWrite', tokens: 0, share: null },
+    ])
+  })
+})
+
 describe('figure cells', () => {
   it('lines the four figures two to a row', () => {
     expect(Array.from({ length: 4 }, (_, i) => ledgerCell(i))).toEqual([
@@ -583,6 +631,20 @@ describe('plan limits', () => {
       'fake-agent',
     ])
     expect(planAgents(agents, [])).toHaveLength(2)
+  })
+
+  it('gives each account that reports limits a row, and joins the others in a line', () => {
+    const reports = { reports: true }
+    const silent = { reports: false }
+    const agents = [
+      { id: 'claude-code', limits: [{}], capabilities: reports },
+      { id: 'codex', limits: [], capabilities: reports },
+      { id: 'opencode', limits: [], capabilities: silent },
+      { id: 'pi', limits: [], capabilities: silent },
+    ]
+    const { rows, unreported } = splitPlans(agents)
+    expect(rows.map((a) => a.id)).toEqual(['claude-code', 'codex'])
+    expect(unreported.map((a) => a.id)).toEqual(['opencode', 'pi'])
   })
 
   it('counts down to a reset within a day, and names the time of one further off', () => {

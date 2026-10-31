@@ -76,9 +76,11 @@ import {
   seriesOf,
   shownSeries,
   shownTotals,
+  tokenParts,
   tokensPerRequest,
   trend,
   unpricedTokens,
+  usedOutside,
   wholeMonth,
   type BreakdownRow,
   type DayTotal,
@@ -86,6 +88,7 @@ import {
   type Metric,
   type MetricKind,
   type RangeKind,
+  type TokenPart,
   type TrendBar,
 } from './model'
 import { Panel, PanelHead, Readout } from './panel'
@@ -102,9 +105,6 @@ interface HourTotals {
 
 /** A scan with less than this to read is over before its progress is worth showing. */
 const IMPORT_SHOWN = 50_000_000
-
-/** Two panels in a row: the wider one first. */
-const PANEL_ROW = 'grid grid-cols-1 gap-4 @3xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]'
 
 /** The usage page: a dashboard of the tokens the agents used, for a chosen agent and range. */
 export default function UsagePage() {
@@ -360,11 +360,8 @@ function LoadingState() {
       <span role="status" className="sr-only">
         {t('page.loading')}
       </span>
-      <Skeleton className="h-24 rounded-xl" />
-      <div className={PANEL_ROW}>
-        <Skeleton className="h-72.5 rounded-xl" />
-        <Skeleton className="h-72.5 rounded-xl" />
-      </div>
+      <Skeleton className="h-41 rounded-xl" />
+      <Skeleton className="h-72.5 rounded-xl" />
       <Skeleton className="h-57 rounded-xl" />
     </div>
   )
@@ -521,7 +518,7 @@ function Dashboard({ page, notice }: { page: PageData; notice: ReactNode }) {
   const day = useClock(dayOf)
   useEffect(() => usageDayTurned(day), [day])
   const facts = useMemo(() => figures(days, range, metric, scope), [days, range, metric, scope])
-  // The table by type and the cache share count tokens, whatever the metric.
+  // The composition and the cache share count tokens, whatever the metric.
   const tokenFacts = useMemo(() => figures(days, range), [days, range])
   const heat = heatmapRange(today, firstDay)
   const heatDays = useMemo(
@@ -547,19 +544,16 @@ function Dashboard({ page, notice }: { page: PageData; notice: ReactNode }) {
             metric={metric}
             scope={scope}
             rangeLabel={rangeText(range.from, range.to)}
+            tokenFacts={tokenFacts}
           />
           {kind === 'cost' && (
             <EstimateNote asOf={summary.pricesAsOf} unpriced={unpricedTokens(facts)} />
           )}
         </div>
 
-        <div className={PANEL_ROW}>
-          <TrendCard days={days} hours={hours} page={page} metric={metric} scope={scope} />
-          <PlanLimits used={summary.agents} />
-        </div>
-
+        <TrendCard days={days} hours={hours} page={page} metric={metric} scope={scope} />
         <ActivityCard days={heatDays} page={page} metric={metric} scope={scope} />
-        <PartsCard facts={tokenFacts} />
+        <PlanLimits used={summary.agents} />
 
         <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-2">
           <BreakdownCard
@@ -742,6 +736,7 @@ function Figures({
   metric,
   scope,
   rangeLabel,
+  tokenFacts,
 }: {
   facts: ReturnType<typeof figures>
   hours: HourTotals | null
@@ -749,6 +744,8 @@ function Figures({
   metric: Metric
   scope: UsageScope
   rangeLabel: string
+  /** The range in tokens, whatever the metric, for the composition. */
+  tokenFacts: ReturnType<typeof figures>
 }) {
   const { t } = useTranslation('usage')
   const hourText = useHourText(hours?.zoned ?? false)
@@ -839,32 +836,31 @@ function Figures({
           },
   )
   return (
-    <div
-      role="group"
-      aria-label={t('figures.label')}
-      className="grid grid-cols-2 rounded-xl bg-card shadow-card @min-[52rem]:grid-cols-4"
-    >
-      {cells.map((cell, i) => {
-        const { top, left } = ledgerCell(i)
-        return (
-          <div
-            key={cell.label}
-            className={cn(
-              'flex min-w-0 flex-col px-4.5 pt-3.5 pb-3.75',
-              LEDGER_LINES[top ? (left ? 'both' : 'top') : left ? 'left' : 'none'],
-              i === 0
-                ? '@min-[52rem]:shadow-none'
-                : '@min-[52rem]:shadow-[inset_var(--hairline)_0_0_var(--border-subtle)]',
-            )}
-          >
-            <span className="text-command font-medium text-secondary">{cell.label}</span>
-            <span className="mt-1.5 font-heading text-figure font-medium tabular-nums lining-nums">
-              {cell.value}
-            </span>
-            <span className="mt-0.75 text-xs text-pretty text-tertiary">{cell.note}</span>
-          </div>
-        )
-      })}
+    <div role="group" aria-label={t('figures.label')} className="rounded-xl bg-card shadow-card">
+      <div className="grid grid-cols-2 @min-[52rem]:grid-cols-4">
+        {cells.map((cell, i) => {
+          const { top, left } = ledgerCell(i)
+          return (
+            <div
+              key={cell.label}
+              className={cn(
+                'flex min-w-0 flex-col px-4.5 pt-3.5 pb-3.75',
+                LEDGER_LINES[top ? (left ? 'both' : 'top') : left ? 'left' : 'none'],
+                i === 0
+                  ? '@min-[52rem]:shadow-none'
+                  : '@min-[52rem]:shadow-[inset_var(--hairline)_0_0_var(--border-subtle)]',
+              )}
+            >
+              <span className="text-command font-medium text-secondary">{cell.label}</span>
+              <span className="mt-1.5 font-heading text-figure font-medium tabular-nums lining-nums">
+                {cell.value}
+              </span>
+              <span className="mt-0.75 text-xs text-pretty text-tertiary">{cell.note}</span>
+            </div>
+          )
+        })}
+      </div>
+      <Composition facts={tokenFacts} />
     </div>
   )
 }
@@ -1103,7 +1099,7 @@ function ActivityCard({
     (day: number) => new Intl.DateTimeFormat(i18n.language, { weekday: 'short' }).format(day),
     [i18n.language],
   )
-  const outside = starts.some((d) => d < page.range.from || d >= page.range.to)
+  const outside = usedOutside(starts, values, page.range)
   const day = shown === null ? undefined : starts[shown]
   const value = shown === null ? 0 : values[shown]!
   return (
@@ -1139,42 +1135,69 @@ function ActivityCard({
   )
 }
 
-/** The table's rows: input and output, reasoning where reported, then the cache's two parts. */
-const PARTS = ['input', 'output', 'reasoning', 'cacheRead', 'cacheWrite'] as const
+/** The token types' grays, as the context bar draws what fills the context. */
+const PART_FILL: Record<TokenPart, string> = {
+  input: 'bg-context-1',
+  output: 'bg-context-3',
+  reasoning: 'bg-context-5',
+  cacheRead: 'bg-context-7',
+  cacheWrite: 'bg-context-4',
+}
 
-function PartsCard({ facts }: { facts: ReturnType<typeof figures> }) {
+/** What the range's tokens are made of: a bar of the types, then each one's tokens and share. */
+function Composition({ facts }: { facts: ReturnType<typeof figures> }) {
   const { t } = useTranslation('usage')
-  const rows = PARTS.filter((part) => part !== 'reasoning' || facts.parts.reasoning > 0)
-  const some = facts.total > 0
+  const parts = tokenParts(facts.parts, facts.total)
+  const spoken = parts
+    .map(({ part, share }) => `${t(`parts.${part}`)} ${share !== null ? percent(share) : '—'}`)
+    .join(', ')
   return (
-    <Panel>
-      <PanelHead title={t('parts.title')} />
-      <table className="w-full text-small tabular-nums">
-        <thead className="text-xs text-tertiary">
-          <tr className="h-6.5">
-            <th className="text-left font-medium">{t('parts.type')}</th>
-            <th className="text-right font-medium">{t('parts.tokens')}</th>
-            <th className="w-18 pl-4 text-right font-medium">{t('parts.share')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((part) => (
-            <tr key={part} className="h-8.5 border-t border-subtle">
-              <td>{t(`parts.${part}`)}</td>
-              <td className="pl-4 text-right">{some ? exactCount(facts.parts[part]) : '—'}</td>
-              <td className="pl-4 text-right text-secondary">
-                {some ? percent(facts.parts[part] / facts.total) : '—'}
-              </td>
-            </tr>
-          ))}
-          <tr className="h-8.5 border-t border-default font-semibold">
-            <td>{t('parts.total')}</td>
-            <td className="pl-4 text-right">{some ? exactCount(facts.total) : '—'}</td>
-            <td className="pl-4 text-right">{some ? percent(1) : '—'}</td>
-          </tr>
-        </tbody>
-      </table>
-    </Panel>
+    <div className="px-4.5 pt-3.25 pb-3.75 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
+      <span className="text-command font-medium text-secondary">{t('parts.title')}</span>
+      <div
+        role="img"
+        aria-label={`${t('parts.title')}: ${spoken}`}
+        className="mt-2.25 flex h-2 gap-0.5 overflow-hidden rounded-xs bg-track"
+      >
+        {parts.map(
+          ({ part, share }) =>
+            share !== null &&
+            share > 0 && (
+              <span
+                key={part}
+                className={cn('min-w-0.5 rounded-xs', PART_FILL[part])}
+                style={{ flexGrow: share, flexBasis: 0 }}
+              />
+            ),
+        )}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5 @min-[52rem]:grid-cols-5">
+        {parts.map(({ part, tokens: value, share }) => (
+          <div key={part} className="flex min-w-0 flex-col gap-0.75">
+            <span className="flex items-center gap-1.5 text-xs text-secondary">
+              <span
+                aria-hidden
+                className={cn(
+                  'size-2 shrink-0 rounded-xs shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
+                  PART_FILL[part],
+                )}
+              />
+              <span className="truncate">{t(`parts.${part}`)}</span>
+            </span>
+            <span className="flex items-baseline gap-1.5">
+              {share !== null ? (
+                <>
+                  <Count value={value} className="text-ui font-medium" />
+                  <span className="text-xs text-tertiary tabular-nums">{percent(share)}</span>
+                </>
+              ) : (
+                <span className="text-ui text-tertiary">—</span>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -1205,7 +1228,7 @@ function BreakdownCard({
         <thead className="text-xs text-tertiary">
           <tr className="h-6.5">
             <th className="text-left font-medium">{column}</th>
-            <th className="w-36 text-right font-medium">{valueLabel}</th>
+            <th className="w-24 text-right font-medium">{valueLabel}</th>
             <th className="w-28 pl-4 text-right font-medium">{t('parts.share')}</th>
           </tr>
         </thead>
@@ -1239,11 +1262,13 @@ function BreakdownCard({
                     </Tooltip>
                   </td>
                   <td className={cn('text-right', row.value === null && 'text-secondary')}>
-                    {row.value === null
-                      ? t('noPrice')
-                      : kind === 'cost'
-                        ? usd(row.value)
-                        : exactCount(row.value)}
+                    {row.value === null ? (
+                      t('noPrice')
+                    ) : kind === 'cost' ? (
+                      usd(row.value)
+                    ) : (
+                      <Count value={row.value} />
+                    )}
                   </td>
                   <td className="pl-4">
                     <span className="flex items-center justify-end gap-2.5 text-secondary">
@@ -1252,7 +1277,7 @@ function BreakdownCard({
                         className="h-1 w-11 shrink-0 overflow-hidden rounded-full bg-track"
                       >
                         <span
-                          className="block h-full rounded-full bg-(--text-secondary)"
+                          className="block h-full rounded-full bg-heat-4"
                           style={{ width: `${(share ?? 0) * 100}%` }}
                         />
                       </span>

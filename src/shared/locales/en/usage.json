@@ -105,10 +105,13 @@
     "title": "Plan limits",
     "none": "No agent has reported plan limits yet.",
     "read": "Read {{ago}}",
+    "accounts_one": "{{count}} account",
+    "accounts_other": "{{count}} accounts",
     "used": "{{limit}} used",
     "resetsIn": "Resets in {{time}}",
     "resetsAt": "Resets {{time}}",
-    "notReported": "{{name}} does not report plan usage.",
+    "notReported_one": "{{name}} does not report plan usage.",
+    "notReported_other": "{{name}} do not report plan usage.",
     "notYet": "No plan usage reported yet."
   },
   "activity": {
@@ -116,20 +119,17 @@
     "weeks": "Last 53 weeks",
     "less": "Less",
     "more": "More",
-    "outside": "Days outside the range are dimmed",
+    "outside": "Days outside the range are gray",
     "label": "Tokens per day over the last 53 weeks; use the arrow keys to move between days"
   },
   "parts": {
     "title": "Tokens by type",
-    "type": "Type",
-    "tokens": "Tokens",
     "share": "Share",
     "input": "Input",
     "output": "Output",
     "reasoning": "Reasoning",
     "cacheRead": "Cache read",
-    "cacheWrite": "Cache write",
-    "total": "Total"
+    "cacheWrite": "Cache write"
   },
   "models": {
     "title": "By model",

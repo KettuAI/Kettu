@@ -13,12 +13,13 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { isInstalled, useAgentsStore } from '@renderer/stores/agents'
 import { refreshLimits } from '@renderer/stores/usage'
-import { planAgents, resetForm } from './model'
+import { planAgents, resetForm, splitPlans } from './model'
 import { Panel, PanelHead } from './panel'
 
 /**
- * Each agent's plan and its limits as they stand: the agents with limits, and the other agents
- * with usage, which say why they have none.
+ * The plans and their limits as they stand: a row per account that reports limits, its windows
+ * in columns that line up across the rows, then one line for the agents with usage that report
+ * none.
  */
 export function PlanLimits({ used }: { used: readonly AgentId[] }) {
   const { t } = useTranslation('usage')
@@ -42,10 +43,21 @@ export function PlanLimits({ used }: { used: readonly AgentId[] }) {
     }
   }, [])
   const read = Math.max(0, ...agents.flatMap((a) => a.limits.map((l) => l.observedAt)))
+  const { rows, unreported } = splitPlans(agents)
+  const names = new Intl.ListFormat(currentLocale(), { type: 'conjunction' }).format(
+    unreported.map((a) => a.name),
+  )
   return (
     <Panel>
       <PanelHead
         title={t('limits.title')}
+        caption={
+          rows.length > 0 && (
+            <span className="ml-0.5 text-xs text-tertiary">
+              {t('limits.accounts', { count: rows.length })}
+            </span>
+          )
+        }
         aside={
           read > 0 && (
             <span className="text-xs text-tertiary">
@@ -57,34 +69,46 @@ export function PlanLimits({ used }: { used: readonly AgentId[] }) {
       {agents.length === 0 ? (
         <p className="text-xs text-secondary">{t('limits.none')}</p>
       ) : (
-        agents.map((status) => <Plan key={status.id} status={status} now={now} />)
+        <>
+          {rows.map((status) => (
+            <Plan key={status.id} status={status} now={now} />
+          ))}
+          {unreported.length > 0 && (
+            <p className="border-t border-subtle pt-2.75 text-xs text-tertiary">
+              {t('limits.notReported', { name: names, count: unreported.length })}
+            </p>
+          )}
+        </>
       )}
     </Panel>
   )
 }
 
+/** An account's row: its mark, name and plan, then its windows, three to a line. */
 function Plan({ status, now }: { status: AgentStatus; now: number }) {
   const { t } = useTranslation('usage')
   return (
     <section
       aria-label={status.name}
-      className="flex flex-col gap-2 [&+&]:mt-3.5 [&+&]:pt-3.5 [&+&]:shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]"
+      className="grid gap-x-8 gap-y-2.5 border-t border-subtle py-3 @3xl:grid-cols-[--spacing(50)_minmax(0,1fr)]"
     >
-      <div className="flex items-center gap-1.75 text-ui">
-        <AgentMark agent={status.id} mono={!isInstalled(status)} />
-        <span className="truncate font-medium">{status.name}</span>
-        {status.account && (
-          <span className="ml-auto truncate text-xs text-tertiary">{status.account.label}</span>
-        )}
+      <div className="flex min-w-0 items-start gap-2 text-ui">
+        <AgentMark agent={status.id} mono={!isInstalled(status)} className="mt-0.5" />
+        <div className="flex min-w-0 flex-col">
+          <span className="truncate font-medium">{status.name}</span>
+          {status.account && (
+            <span className="truncate text-xs text-tertiary">{status.account.label}</span>
+          )}
+        </div>
       </div>
       {status.limits.length > 0 ? (
-        status.limits.map((limit) => <Window key={limit.window} limit={limit} now={now} />)
+        <div className="grid grid-cols-2 gap-x-8 gap-y-3 @3xl:grid-cols-3">
+          {status.limits.map((limit) => (
+            <Window key={limit.window} limit={limit} now={now} />
+          ))}
+        </div>
       ) : (
-        <p className="text-xs text-tertiary">
-          {status.capabilities.reports
-            ? t('limits.notYet')
-            : t('limits.notReported', { name: status.name })}
-        </p>
+        <p className="self-center text-xs text-tertiary">{t('limits.notYet')}</p>
       )}
     </section>
   )

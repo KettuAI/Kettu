@@ -172,6 +172,10 @@
   --color-heat-2: var(--heat-2);
   --color-heat-3: var(--heat-3);
   --color-heat-4: var(--heat-4);
+  --color-heat-out-1: var(--heat-out-1);
+  --color-heat-out-2: var(--heat-out-2);
+  --color-heat-out-3: var(--heat-out-3);
+  --color-heat-out-4: var(--heat-out-4);
 
   --radius-sm: calc(var(--radius) * 0.5);
   --radius-md: calc(var(--radius) * 0.75);
