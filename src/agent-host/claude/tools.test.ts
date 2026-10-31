@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { fenced, resultContent, toolView } from './tools'
 
@@ -6,7 +7,7 @@ describe('toolView', () => {
     expect(
       toolView('Read', { file_path: '/repo/src/a.ts', offset: 10, limit: 5 }, '/repo'),
     ).toEqual({
-      title: 'Read src/a.ts (10 - 14)',
+      title: `Read ${path.join('src', 'a.ts')} (10 - 14)`,
       toolKind: 'read',
       locations: [{ path: '/repo/src/a.ts', line: 10 }],
       content: [],

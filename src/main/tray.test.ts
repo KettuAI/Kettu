@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const electron = vi.hoisted(() => {
@@ -78,7 +79,7 @@ const { KettuTray, linuxTrayIsWhite, parseColorScheme, stateLine, trayImageName 
 const platform = process.platform
 const desktop = process.env['XDG_CURRENT_DESKTOP']
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
-const imageOf = (tray: FakeTrayShape): string => tray.image.slice(tray.image.lastIndexOf('/') + 1)
+const imageOf = (tray: FakeTrayShape): string => path.basename(tray.image)
 
 function start(system: NodeJS.Platform) {
   Object.defineProperty(process, 'platform', { value: system })
