@@ -12,6 +12,7 @@ import type {
   SessionSummary,
 } from '@shared/agent-host'
 import type { HostToMain } from '@shared/host-control'
+import type { PortChannel } from '@shared/port-channel'
 import { PortRequestError, type FromPort } from '@shared/port-rpc'
 import { DEFAULT_SETTINGS, type HostSettings } from '@shared/settings'
 import {
@@ -32,7 +33,6 @@ import type { GitServiceApi } from '../git/api'
 import { AgentHost, type HostOptions } from '../host'
 import type { ProcessControl } from '../process-tree'
 import type { CacheTtlReader } from '../prompt-cache'
-import type { PortChannel } from '../rpc'
 import type { SessionTimings } from '../sessions'
 import type { RoutineTimings } from '../routines/manager'
 import type { RoutineClock } from '../routines/scheduler'
@@ -118,7 +118,7 @@ export function inProcessLauncher(module: FakeAgentModule, env: Env = {}): InPro
 type Waiter = { check: () => boolean; resolve: () => void }
 
 /** A renderer port: requests with `request`, events in `events`, replicas of watched threads. */
-export class TestPort implements PortChannel {
+export class TestPort implements PortChannel<FromPort<HostEvent>> {
   readonly events: HostEvent[] = []
   readonly replicas = new Map<string, { thread: ThreadState; seq: number; batches: number }>()
   private listener: ((data: unknown) => void) | null = null
@@ -309,7 +309,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     userDataPath: dir,
     appVersion: '0.0.0-test',
     platform: process.platform,
-    electronPath: process.execPath,
+    nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
     fakeAgentPath: FAKE_AGENT_MAIN,
     settings: options.settings ?? {
       locale: 'en',

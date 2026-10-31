@@ -58,11 +58,11 @@ function manager(
   const agents = new AgentManager({
     catalog: [def],
     platform: process.platform,
-    electronPath: process.execPath,
+    nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
     appVersion: '0.0.0-test',
     env: new EnvironmentService({
       platform: process.platform,
-      electronPath: process.execPath,
+      nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
       baseEnv: process.env,
       resolve: async ({ baseEnv }) => ({
         env: baseEnv,

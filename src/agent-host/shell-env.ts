@@ -5,6 +5,7 @@ import { execFile, spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import path from 'node:path'
 import type { EnvironmentInfo } from '@shared/agent-host'
+import type { NodeRuntime } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { ProxySettings } from '@shared/settings'
 import type { AgentId } from '@shared/thread'
@@ -22,15 +23,15 @@ export function defaultShell(platform: Platform, env: Env): string {
 }
 
 /**
- * Arguments that make `shell` print the environment between two markers. csh and tcsh
- * accept `-l` only as their sole flag, so they run interactive without it (`-ic`), as in
- * VS Code; pwsh and nu need their own syntax.
+ * Arguments that make `shell` print the environment between two markers through `node`, the
+ * program that runs as Node.js. csh and tcsh accept `-l` only as their sole flag, so they run
+ * interactive without it (`-ic`), as in VS Code; pwsh and nu need their own syntax.
  */
-export function shellProbeArgs(shell: string, electronPath: string, mark: string): string[] {
+export function shellProbeArgs(shell: string, node: string, mark: string): string[] {
   const name = path.posix.basename(shell).replace(/\.exe$/i, '')
-  const exe = quotePosix(electronPath)
+  const exe = quotePosix(node)
   if (/^(?:pwsh|powershell)(?:-preview)?$/.test(name)) {
-    const ps = `'${electronPath.replace(/'/g, "''")}'`
+    const ps = `'${node.replace(/'/g, "''")}'`
     return [
       '-Login',
       '-Command',
@@ -127,20 +128,20 @@ export interface ShellEnvironment {
 
 export interface ResolveOptions {
   platform: Platform
-  electronPath: string
+  nodeRuntime: NodeRuntime
   baseEnv: Env
   timeoutMs?: number
 }
 
 function runProbe(shell: string, options: ResolveOptions, timeoutMs: number): Promise<Env> {
   const mark = randomBytes(8).toString('hex')
-  const args = shellProbeArgs(shell, options.electronPath, mark)
+  const args = shellProbeArgs(shell, options.nodeRuntime.command, mark)
   return new Promise((resolve, reject) => {
     const child = spawn(shell, args, {
       // No controlling terminal, so an interactive profile cannot stop the probe for input.
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...options.baseEnv, ELECTRON_RUN_AS_NODE: '1', ELECTRON_NO_ATTACH_CONSOLE: '1' },
+      env: { ...options.baseEnv, ...options.nodeRuntime.env },
       windowsHide: true,
     })
     let stdout = ''
@@ -259,7 +260,7 @@ export function satisfiesNode(version: string, requirement: string): boolean {
 
 export interface EnvironmentServiceDeps {
   platform: Platform
-  electronPath: string
+  nodeRuntime: NodeRuntime
   baseEnv: Env
   resolve?: (options: ResolveOptions) => Promise<ShellEnvironment>
   probe?: (env: Env, platform: Platform) => Promise<NodeProbe>
@@ -295,7 +296,7 @@ export class EnvironmentService {
     const resolve = this.deps.resolve ?? resolveShellEnvironment
     this.resolved = await resolve({
       platform: this.deps.platform,
-      electronPath: this.deps.electronPath,
+      nodeRuntime: this.deps.nodeRuntime,
       baseEnv: this.deps.baseEnv,
     })
     this.node = await (this.deps.probe ?? probeNode)(this.resolved.env, this.deps.platform)

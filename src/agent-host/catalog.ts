@@ -4,6 +4,7 @@
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { InstalledCli } from '@shared/agent-host'
+import type { NodeRuntime } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
 import { harnessOf, type AgentId, type HarnessId } from '@shared/thread'
@@ -321,7 +322,7 @@ export function packageDir(adaptersDir: string, def: AgentDefinition): string | 
 /** How the launch reads to the user, before or after detection. */
 export function displayCommand(
   def: AgentDefinition,
-  electronPath: string,
+  nodeRuntime: NodeRuntime,
   binaryOverride: string | null,
   adaptersDir: string,
   sessionRouterPath: string | null = null,
@@ -350,9 +351,9 @@ export function displayCommand(
       }
     case 'node-script':
       return {
-        command: electronPath,
+        command: nodeRuntime.command,
         args: [def.launch.script],
-        env: { ELECTRON_RUN_AS_NODE: '1' },
+        env: { ...nodeRuntime.env },
       }
   }
 }
@@ -451,7 +452,7 @@ export async function installedSpec(
 export interface DetectContext {
   platform: Platform
   env: Env
-  electronPath: string
+  nodeRuntime: NodeRuntime
   binaryOverride: string | null
   node: NodeProbe
   /** `<userData>/agents`, where package agents and release archives are installed. */
@@ -625,7 +626,7 @@ function checkUserCli(
 export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Promise<Detection> {
   const display = displayCommand(
     def,
-    ctx.electronPath,
+    ctx.nodeRuntime,
     ctx.binaryOverride,
     ctx.adaptersDir,
     ctx.sessionRouterPath ?? null,
@@ -891,9 +892,9 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
       return {
         state: 'available',
         spec: {
-          command: ctx.electronPath,
+          command: ctx.nodeRuntime.command,
           args: [launch.script],
-          env: { ELECTRON_RUN_AS_NODE: '1' },
+          env: { ...ctx.nodeRuntime.env },
           shell: false,
           display,
         },

@@ -8,6 +8,10 @@ import tseslint from 'typescript-eslint'
 import kettu from './tools/lint/eslint-plugin.mjs'
 
 const SDK_MESSAGE = 'Load the SDK with loadClaudeSdk from src/agent-host/claude/sdk.ts.'
+const SDK_PATHS = [{ name: '@anthropic-ai/claude-agent-sdk', message: SDK_MESSAGE }]
+const SDK_PATTERNS = [{ group: ['@anthropic-ai/claude-agent-sdk/*'], message: SDK_MESSAGE }]
+const HOST_MESSAGE =
+  'The hosts also run under Node.js; only their entries, index.ts, adapt Electron to them.'
 
 export default defineConfig([
   globalIgnores(['out', 'dist', '.worktrees', 'src/renderer/src/lib/cn-tables.ts']),
@@ -32,11 +36,20 @@ export default defineConfig([
     // and loads it from there with its own types; an import would bundle it or need it installed.
     files: ['**/*.{ts,tsx,mjs}'],
     rules: {
+      'no-restricted-imports': ['error', { paths: SDK_PATHS, patterns: SDK_PATTERNS }],
+    },
+  },
+  {
+    // The hosts run under Node.js too, so only their utility-process entries may use Electron.
+    // A later config replaces the rule's options, so this one repeats the SDK's.
+    files: ['src/agent-host/**/*.ts', 'src/terminal-host/**/*.ts'],
+    ignores: ['src/agent-host/index.ts', 'src/terminal-host/index.ts'],
+    rules: {
       'no-restricted-imports': [
         'error',
         {
-          paths: [{ name: '@anthropic-ai/claude-agent-sdk', message: SDK_MESSAGE }],
-          patterns: [{ group: ['@anthropic-ai/claude-agent-sdk/*'], message: SDK_MESSAGE }],
+          paths: [...SDK_PATHS, { name: 'electron', message: HOST_MESSAGE }],
+          patterns: [...SDK_PATTERNS, { group: ['electron/*'], message: HOST_MESSAGE }],
         },
       ],
     },

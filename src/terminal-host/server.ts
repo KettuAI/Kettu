@@ -1,8 +1,10 @@
-import type { MessagePortMain } from 'electron'
+import type { PortChannel } from '@shared/port-channel'
 import type { FromPort, PortError, ToPort } from '@shared/port-rpc'
 import type { TerminalEvent, TerminalMethod } from '@shared/terminal-host'
 import { TerminalError } from './terminals'
 import { ValidationError, validators } from './validate'
+
+type Port = PortChannel<FromPort<TerminalEvent>>
 
 export type Handlers = {
   [M in TerminalMethod]: (port: string, params: ReturnType<(typeof validators)[M]>) => unknown
@@ -10,7 +12,7 @@ export type Handlers = {
 
 /** The terminal side of each renderer port: the shared envelope, validation and dispatch. */
 export class PortServer {
-  private readonly ports = new Map<string, MessagePortMain>()
+  private readonly ports = new Map<string, Port>()
   private nextPort = 1
 
   constructor(
@@ -19,15 +21,14 @@ export class PortServer {
     private readonly warn: (message: string) => void,
   ) {}
 
-  attach(port: MessagePortMain, windowId: number): void {
+  attach(port: Port, windowId: number): void {
     const id = `${windowId}:${this.nextPort++}`
     this.ports.set(id, port)
-    port.on('message', ({ data }) => void this.receive(id, port, data))
-    port.on('close', () => {
+    port.onMessage((data) => void this.receive(id, port, data))
+    port.onClose(() => {
       this.ports.delete(id)
       this.onClose(id)
     })
-    port.start()
   }
 
   send(portId: string, event: TerminalEvent): void {
@@ -43,7 +44,7 @@ export class PortServer {
     this.ports.clear()
   }
 
-  private async receive(portId: string, port: MessagePortMain, data: unknown): Promise<void> {
+  private async receive(portId: string, port: Port, data: unknown): Promise<void> {
     const request = data as ToPort
     if (
       typeof request !== 'object' ||
@@ -72,12 +73,12 @@ export class PortServer {
     }
   }
 
-  private reply(port: MessagePortMain, id: number, error: PortError): void {
+  private reply(port: Port, id: number, error: PortError): void {
     this.post(port, { type: 'error', id, error })
   }
 
-  private post(port: MessagePortMain | undefined, message: FromPort<TerminalEvent>): void {
-    port?.postMessage(message)
+  private post(port: Port | undefined, message: FromPort<TerminalEvent>): void {
+    port?.send(message)
   }
 }
 

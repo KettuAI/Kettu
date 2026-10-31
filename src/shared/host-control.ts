@@ -1,4 +1,5 @@
-// Messages between main and the two utility processes, over `utilityProcess` messaging.
+// Messages between main and the two hosts: over `utilityProcess` messaging in the desktop app,
+// or the IPC of `child_process.fork` when a host runs under Node.js.
 
 import type { ArtifactImportResult } from './artifacts'
 import type { AttachmentGrant } from './attachments'
@@ -20,6 +21,16 @@ export interface BusyCounts {
   waiting: number
 }
 
+/**
+ * The program that runs a script as Node.js, for the shell probe and the agents that are scripts:
+ * Electron's binary with ELECTRON_RUN_AS_NODE in the desktop app, Node.js itself under Node.js.
+ */
+export interface NodeRuntime {
+  command: string
+  /** Variables the program needs to run as Node.js, over the environment it is given. */
+  env: Record<string, string>
+}
+
 export interface BusyTerminal {
   id: string
   projectPath: string
@@ -33,13 +44,15 @@ export type MainToHost =
       appVersion: string
       platform: Platform
       isPackaged: boolean
-      electronPath: string // runs as Node.js with ELECTRON_RUN_AS_NODE, for the shell probe
+      nodeRuntime: NodeRuntime
       fakeAgentPath: string | null // tools/fake-agent/main.ts in development, or from KETTU_FAKE_AGENT
       threadWorkerPath: string // the thread worker's bundle, which main builds beside the host's
       usageWorkerPath: string // the usage worker's bundle, built the same way
       // The session router's bundle, which a per-session agent's process runs under the user's Node.js.
       sessionRouterPath: string
       settings: HostSettings
+      // Under Node.js, the local socket the host takes its ports on; the desktop app hands them over.
+      socketPath?: string
     }
   | { type: 'host:connect'; windowId: number } // the port travels in the transfer list
   | { type: 'host:settings'; settings: HostSettings }
@@ -138,6 +151,8 @@ export type MainToTerminalHost =
       settings: TerminalSettings
       projects: string[]
       authCommands: string[]
+      // Under Node.js, the local socket the host takes its ports on; the desktop app hands them over.
+      socketPath?: string
     }
   | { type: 'terminal-host:connect'; windowId: number } // the port travels in the transfer list
   | { type: 'terminal-host:settings'; settings: TerminalSettings }

@@ -1,5 +1,6 @@
-// The agent host, assembled: state, agents, sessions, git and the ports. index.ts runs it in
-// the utility process; tests run it in-process with fakes for the launcher, shell and git.
+// The agent host, assembled: state, agents, sessions, git and the ports. start.ts runs it in
+// the utility process or under Node.js; tests run it in-process with fakes for the launcher,
+// shell and git.
 
 import os from 'node:os'
 import path from 'node:path'
@@ -12,8 +13,11 @@ import type {
   ArtifactContentResult,
   ArtifactListResult,
   HostToMain,
+  NodeRuntime,
 } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
+import type { PortChannel } from '@shared/port-channel'
+import type { FromPort } from '@shared/port-rpc'
 import type { HostSettings } from '@shared/settings'
 import { agentOptionsFile, AgentOptionsStore } from './agent-options'
 import { STOP_TIMINGS } from './agent-process'
@@ -42,7 +46,7 @@ import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
 import { Projects } from './projects'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
-import { PortHub, type Handlers, type PortChannel } from './rpc'
+import { PortHub, type Handlers } from './rpc'
 import { Attachments } from './attachments'
 import { RoutinesManager, type RoutineTimings } from './routines/manager'
 import type { RoutineSessionHooksRef } from './routines/hooks'
@@ -119,7 +123,7 @@ export interface HostOptions {
   userDataPath: string
   appVersion: string
   platform: Platform
-  electronPath: string
+  nodeRuntime: NodeRuntime
   fakeAgentPath: string | null
   /** The session router's bundle, which a per-session agent's process runs under. */
   sessionRouterPath?: string | null
@@ -218,7 +222,7 @@ export class AgentHost {
     )
     this.env = new EnvironmentService({
       platform,
-      electronPath: options.electronPath,
+      nodeRuntime: options.nodeRuntime,
       baseEnv: options.baseEnv,
       ...(options.resolveEnv ? { resolve: options.resolveEnv } : {}),
       ...(options.probeNode ? { probe: options.probeNode } : {}),
@@ -330,7 +334,7 @@ export class AgentHost {
     this.agents = new AgentManager({
       catalog,
       platform,
-      electronPath: options.electronPath,
+      nodeRuntime: options.nodeRuntime,
       appVersion: options.appVersion,
       env: this.env,
       diagnostics: this.diagnostics,
@@ -555,7 +559,7 @@ export class AgentHost {
     this.options.send({ type: 'host:agent-processes', processes })
   }
 
-  connect(channel: PortChannel): string {
+  connect(channel: PortChannel<FromPort<HostEvent>>): string {
     return this.hub.add(channel)
   }
 
