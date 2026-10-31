@@ -1,12 +1,15 @@
 // `kettu run`: what main does in the desktop app, without windows. It holds the control socket,
-// the host's key and the settings, starts the hosts and stops them in order.
+// the host's key and the settings, starts the hosts and stops them in order. It alone writes the
+// settings, so a change from the CLI comes through the control socket and applies at once.
 
 import { chmod, rm } from 'node:fs/promises'
 import os from 'node:os'
 import { matchLocale } from '@shared/locale'
+import { addressKey, MAX_OWN_ADDRESSES } from '@shared/remote/address'
 import { createLogger } from '../main/log'
 import type { RemoteIdentity } from '../main/remote-identity'
 import { SettingsStore } from '../main/settings'
+import { SettingsError } from '../main/settings-schema'
 import {
   callControl,
   ControlError,
@@ -16,6 +19,7 @@ import {
   type ControlHandlers,
   type ControlServer,
   type DaemonStatus,
+  type DirectReport,
 } from './control'
 import { isUnavailable, type HostTimings } from './forked-host'
 import { Hosts } from './hosts'
@@ -124,6 +128,45 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       starting().answerPairing(codeId, add, name)
       return null
     },
+    'direct.get': async () => {
+      starting()
+      return directReport()
+    },
+    'direct.port': async ({ port }) => {
+      const running = starting()
+      const before = running.directStatus()
+      if (port !== settings.get().remote.direct.port) {
+        changeSettings({ remote: { direct: { port } } })
+      } else if (before?.state === 'listening') {
+        return directReport()
+      } else {
+        running.retryDirect()
+      }
+      await running.directSettled(before)
+      return directReport()
+    },
+    'direct.add': async (address) => {
+      starting()
+      const own = settings.get().remote.direct.addresses
+      if (own.some((kept) => addressKey(kept) === addressKey(address))) {
+        throw new ControlError('invalid_params', 'This address is already in the list')
+      }
+      if (own.length >= MAX_OWN_ADDRESSES) {
+        throw new ControlError('invalid_params', `You can add up to ${MAX_OWN_ADDRESSES} addresses`)
+      }
+      changeSettings({ remote: { direct: { addresses: [...own, address] } } })
+      return directReport()
+    },
+    'direct.remove': async (address) => {
+      starting()
+      const own = settings.get().remote.direct.addresses
+      const kept = own.filter((entry) => addressKey(entry) !== addressKey(address))
+      if (kept.length === own.length) {
+        throw new ControlError('not_found', 'This address is not in the list')
+      }
+      changeSettings({ remote: { direct: { addresses: kept } } })
+      return directReport()
+    },
   }
   const server = await claimControlSocket(options.controlSocket, () =>
     serveControl(options.controlSocket, handlers, (message) => log.warn(message)),
@@ -135,6 +178,11 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     await chmod(options.controlSocket, 0o600)
     identity = await loadHostKey(options.dataPath, (message) => log.warn(message))
     settings = await SettingsStore.load(options.dataPath)
+    // Without the relay devices reach the daemon only directly, as the app without it; turning
+    // them on the first time picks their port.
+    if (!settings.get().remote.direct.enabled) {
+      settings.update({ remote: { direct: { enabled: true } } })
+    }
   } catch (error) {
     await release(server, options.controlSocket)
     throw error
@@ -156,6 +204,9 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     timings: options.timings,
   })
   hosts = running
+  settings.onChange((_, changed) => {
+    if (changed.has('remote')) running.directChanged()
+  })
   running.start()
   log.info(
     `Kettu daemon ${options.version} running (pid ${process.pid}), data in ${options.dataPath}`,
@@ -175,6 +226,22 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       key: { storage: 'file', path: keyFile, private: await keyIsPrivate(keyFile) },
       hosts: hosts?.status() ?? { agent: idle, terminal: idle, remote: idle },
       connectedDevices: hosts?.connectedDevices() ?? null,
+      direct: hosts?.directStatus() ?? null,
+    }
+  }
+
+  function directReport(): DirectReport {
+    const { port, addresses } = settings.get().remote.direct
+    return { port, own: addresses, status: starting().directStatus() }
+  }
+
+  /** Applies a change to the settings, refused with the store's reason when it is not valid. */
+  function changeSettings(patch: unknown): void {
+    try {
+      settings.update(patch)
+    } catch (error) {
+      if (error instanceof SettingsError) throw new ControlError('invalid_params', error.message)
+      throw error
     }
   }
 

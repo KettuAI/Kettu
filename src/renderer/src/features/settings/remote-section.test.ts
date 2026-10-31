@@ -3,6 +3,7 @@
 import { createElement, type ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { addressText, parseAddress, parsePort } from '@shared/remote/address'
 import type { PairedDevice } from '@shared/remote/device'
 import type { DirectAddress } from '@shared/remote/protocol'
 import type { RemoteStatus } from '@shared/remote/status'
@@ -45,7 +46,6 @@ const { DeviceRow, NoDevices, PlainKeyNote, RemoteStatusRow, StaleNote } =
 const { CodeBody, Confirm } = await import('./remote-pairing')
 const { DevicePage } = await import('./remote-device')
 const { DirectPortField, FoundAddresses, OwnAddresses } = await import('./remote-direct')
-const { addressText, parseAddress, parsePort } = await import('./remote-text')
 const { qrPath } = await import('./qr-path')
 const { encode } = await import('uqr')
 

@@ -14,6 +14,7 @@ import {
   type ControlHandlers,
   type ControlServer,
   type DaemonStatus,
+  type DirectReport,
 } from './control'
 
 // The control socket is a Unix socket, which the daemon has only on macOS and Linux.
@@ -35,6 +36,7 @@ afterEach(async () => {
 })
 
 const status = { version: '1.2.3', pid: 1 } as DaemonStatus
+const report: DirectReport = { port: 51234, own: [], status: null }
 
 function handlers(overrides: Partial<ControlHandlers> = {}): ControlHandlers {
   return {
@@ -46,6 +48,10 @@ function handlers(overrides: Partial<ControlHandlers> = {}): ControlHandlers {
     },
     'pair.open': async () => ({ codeId: 1 }),
     'pair.answer': async () => null,
+    'direct.get': async () => report,
+    'direct.port': async () => report,
+    'direct.add': async () => report,
+    'direct.remove': async () => report,
     ...overrides,
   }
 }
@@ -165,6 +171,60 @@ describeUnix('the control socket', () => {
       { codeId: 1, add: false, name: '' },
     ])
     expect(connections.size).toBe(1)
+  })
+
+  it('takes a port the owner may pick and an address as the app keeps it', async () => {
+    const calls: unknown[] = []
+    server = await serveControl(
+      socket,
+      handlers({
+        'direct.port': async (params) => {
+          calls.push(params)
+          return report
+        },
+        'direct.add': async (params) => {
+          calls.push(params)
+          return report
+        },
+        'direct.remove': async (params) => {
+          calls.push(params)
+          return report
+        },
+      }),
+      () => {},
+    )
+    const client = await connectControl(socket)
+    expect(await client.call('direct.port', { port: 4567 })).toEqual(report)
+    await client.call('direct.add', { host: 'fd00::1', port: 4567, extra: true } as never)
+    await client.call('direct.remove', { host: 'frp.example.com', port: 60021 })
+    for (const port of [1023, 65536, 4567.5, '4567']) {
+      await expect(client.call('direct.port', { port } as never)).rejects.toMatchObject({
+        code: 'invalid_params',
+        message: 'Use a port from 1024 to 65535',
+      })
+    }
+    for (const address of [
+      { host: 'https://frp.example.com', port: 443 },
+      { host: 'frp.example.com', port: 0 },
+      { host: '[fd00::1]', port: 4567 },
+      null,
+    ]) {
+      await expect(client.call('direct.add', address as never)).rejects.toMatchObject({
+        code: 'invalid_params',
+      })
+    }
+    await expect(
+      client.call('direct.remove', { host: 'frp example.com', port: 1 }),
+    ).rejects.toMatchObject({
+      code: 'invalid_params',
+      message: expect.stringMatching(/^Not an address: enter only a host name or IP address/),
+    })
+    client.close()
+    expect(calls).toEqual([
+      { port: 4567 },
+      { host: 'fd00::1', port: 4567 },
+      { host: 'frp.example.com', port: 60021 },
+    ])
   })
 
   it('throws NotRunning when nothing listens', async () => {

@@ -3,9 +3,12 @@
 // ports, framed as their sockets frame it.
 
 import type { Server } from 'node:net'
+import type { DirectStatus } from '@shared/host-control'
 import type { PortChannel } from '@shared/port-channel'
+import { isPort, MIN_OWN_PORT, parseDirectAddress } from '@shared/remote/address'
 import { DEVICE_ID, normalizeDeviceName } from '@shared/remote/device'
 import type { PairingState } from '@shared/remote/pairing'
+import type { DirectAddress } from '@shared/remote/protocol'
 import { connectPort, listenPorts } from '@shared/socket-port'
 import type { HostState } from './forked-host'
 
@@ -48,7 +51,27 @@ export interface DaemonStatus {
   hosts: Record<HostName | 'remote', HostStatus>
   /** How many devices are connected, or null while remote access is not running. */
   connectedDevices: number | null
+  /** Direct connections as the remote host runs them, or null while remote access is not running. */
+  direct: DirectStatus | null
 }
+
+/** Direct connections: what the settings ask for and what the remote host makes of them. */
+export interface DirectReport {
+  /** The port the settings name, picked at random on the first run. */
+  port: number | null
+  /** The owner's own addresses, which devices try first. */
+  own: DirectAddress[]
+  /** As the remote host runs them, or null while remote access is not running. */
+  status: DirectStatus | null
+}
+
+/** What the app says when an address of the owner's own is not one. */
+export const ADDRESS_PROBLEM =
+  'Not an address: enter only a host name or IP address and a port, such as ' +
+  'frp.example.com:60021, without https://'
+
+/** What the app says when a port is not one the owner may pick. */
+export const PORT_PROBLEM = `Use a port from ${MIN_OWN_PORT} to 65535`
 
 export interface ControlCalls {
   status: { params: undefined; result: DaemonStatus }
@@ -63,6 +86,15 @@ export interface ControlCalls {
   'pair.open': { params: undefined; result: { codeId: number } }
   /** Adds the device this connection's code was asked about, under `name`, or rejects it. */
   'pair.answer': { params: { codeId: number; add: boolean; name: string }; result: null }
+  'direct.get': { params: undefined; result: DirectReport }
+  /**
+   * Listens on another port, or tries the same one again after it could not be opened; settles
+   * with what came of it.
+   */
+  'direct.port': { params: { port: number }; result: DirectReport }
+  /** Adds an address of the owner's own, which devices online get at once. */
+  'direct.add': { params: DirectAddress; result: DirectReport }
+  'direct.remove': { params: DirectAddress; result: DirectReport }
 }
 
 /** What the daemon tells a connection unasked. */
@@ -124,6 +156,12 @@ function record(raw: unknown): Record<string, unknown> {
   return raw as Record<string, unknown>
 }
 
+function address(raw: unknown): DirectAddress {
+  const parsed = parseDirectAddress(record(raw))
+  if (!parsed) throw new ControlError('invalid_params', ADDRESS_PROBLEM)
+  return parsed
+}
+
 const validators: { [M in ControlMethod]: (raw: unknown) => Params<M> } = {
   status: none,
   'host.socket': (raw) => {
@@ -152,6 +190,14 @@ const validators: { [M in ControlMethod]: (raw: unknown) => Params<M> } = {
     if (kept === null) throw new ControlError('invalid_params', 'The name must not be empty')
     return { codeId: codeId as number, add, name: kept }
   },
+  'direct.get': none,
+  'direct.port': (raw) => {
+    const { port } = record(raw)
+    if (!isPort(port) || port < MIN_OWN_PORT) throw new ControlError('invalid_params', PORT_PROBLEM)
+    return { port }
+  },
+  'direct.add': address,
+  'direct.remove': address,
 }
 
 export interface ControlServer {

@@ -4,6 +4,7 @@ import { execFile } from 'node:child_process'
 import { realpath } from 'node:fs/promises'
 import os from 'node:os'
 import { createInterface } from 'node:readline'
+import { addressText } from '@shared/remote/address'
 import { version } from '../../package.json'
 import { HELP, parseCommand, type Command } from './args'
 import {
@@ -15,6 +16,7 @@ import {
   type DaemonStatus,
 } from './control'
 import { AlreadyRunning, SERVICE_ENV, startDaemon } from './daemon'
+import { changePort, directReport } from './direct'
 import { prepareDataFolder } from './key'
 import { pairDevice } from './pair'
 import { controlSocketPath, DATA_ENV, dataPath } from './paths'
@@ -33,7 +35,17 @@ const START_WAIT_MS = 20_000
 const STOP_WAIT_MS = 15_000
 
 /** A failure the CLI reports in a line of its own, without a stack. */
-class Failure extends Error {}
+class Failure extends Error {
+  constructor(
+    message: string,
+    readonly code = 1,
+  ) {
+    super(message)
+  }
+}
+
+/** The exit code of a command that needs the daemon when none runs, as `kettu status` exits. */
+const NOT_RUNNING = 3
 
 const out = (text: string): void => void process.stdout.write(text)
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
@@ -95,6 +107,50 @@ async function pair(socket: string): Promise<number> {
     throw error
   } finally {
     process.off('SIGINT', abort)
+  }
+}
+
+/** A command of `kettu direct`, which goes through the running daemon's control socket. */
+async function direct(
+  socket: string,
+  command: Extract<Command, { kind: 'direct' | 'direct-port' | 'direct-add' | 'direct-remove' }>,
+): Promise<number> {
+  try {
+    switch (command.kind) {
+      case 'direct':
+        out(directReport(await callControl(socket, 'direct.get', undefined)))
+        return 0
+      case 'direct-port': {
+        const client = await connectControl(socket)
+        try {
+          return await changePort(
+            client,
+            {
+              write: out,
+              error: (message) => void process.stderr.write(`kettu: ${message}\n`),
+              interactive: process.stdin.isTTY === true,
+              ask: (question) => ask(question),
+            },
+            command.port,
+            command.yes,
+          )
+        } finally {
+          client.close()
+        }
+      }
+      case 'direct-add':
+        await callControl(socket, 'direct.add', command.address)
+        out(`Added ${addressText(command.address)}, which devices try first.\n`)
+        return 0
+      case 'direct-remove':
+        await callControl(socket, 'direct.remove', command.address)
+        out(`Removed ${addressText(command.address)}.\n`)
+        return 0
+    }
+  } catch (error) {
+    if (error instanceof NotRunning) throw new Failure(error.message, NOT_RUNNING)
+    if (error instanceof ControlError) throw new Failure(error.message)
+    throw error
   }
 }
 
@@ -169,6 +225,12 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
 
     case 'pair':
       return pair(socket)
+
+    case 'direct':
+    case 'direct-port':
+    case 'direct-add':
+    case 'direct-remove':
+      return direct(socket, command)
 
     case 'service-install': {
       const running = await statusOf(socket)
@@ -245,7 +307,7 @@ async function main(argv: string[]): Promise<number> {
     process.stderr.write(
       `kettu: ${known ? (error as Error).message : ((error as Error)?.stack ?? String(error))}\n`,
     )
-    return 1
+    return error instanceof Failure ? error.code : 1
   }
 }
 
