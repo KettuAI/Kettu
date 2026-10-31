@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { UpdateStatus } from '@shared/updates'
 import { i18n } from '@renderer/lib/i18n'
-import { appUpdateNotice, appUpdateRow } from './app-updates'
+import { appUpdateNotice, appUpdateRow, cardAction } from './app-updates'
 
 afterEach(() => i18n.changeLanguage('en'))
 
@@ -76,6 +76,7 @@ describe('appUpdateRow', () => {
       versionFirst: false,
       label: 'Update ready 0.3.0',
       detail: 'Restart to finish; your sessions come back.',
+      note: 'Your sessions come back',
       action: 'restart',
       actionLabel: 'Restart',
       href: null,
@@ -87,6 +88,7 @@ describe('appUpdateRow', () => {
     expect(appUpdateRow({ kind: 'available', version: '0.3.0', moves: false })).toMatchObject({
       label: '0.3.0 is out',
       detail: 'Update downloads it, then restarts; your sessions come back.',
+      note: 'Downloads, then restarts',
       action: 'update',
       actionLabel: 'Update',
       href: null,
@@ -98,6 +100,7 @@ describe('appUpdateRow', () => {
     expect(appUpdateRow({ kind: 'available', version: '0.3.0', moves: true })).toMatchObject({
       label: '0.3.0 is out',
       detail: 'Update moves Kettu to Applications, then restarts; your sessions come back.',
+      note: 'Moves to Applications, then restarts',
       action: 'update',
     })
     expect(appUpdateRow({ kind: 'moving', version: '0.3.0' })).toEqual({
@@ -105,6 +108,7 @@ describe('appUpdateRow', () => {
       versionFirst: false,
       label: 'Moving to Applications…',
       detail: null,
+      note: null,
       action: null,
       actionLabel: '',
       href: null,
@@ -154,7 +158,9 @@ describe('appUpdateRow', () => {
     expect(appUpdateRow({ kind: 'available', version: '0.3.0', moves: false })).toMatchObject({
       label: '0.3.0 已发布',
       detail: '「更新」会下载并重启，会话会自动恢复。',
+      note: '下载后重启',
     })
+    expect(appUpdateRow({ kind: 'ready', version: '0.3.0' }).note).toBe('会话会自动恢复')
     expect(appUpdateRow({ kind: 'available', version: '0.3.0', moves: true }).detail).toBe(
       '「更新」会把 Kettu 移到“应用程序”文件夹并重启，会话会自动恢复。',
     )
@@ -162,5 +168,24 @@ describe('appUpdateRow', () => {
     expect(appUpdateRow({ kind: 'updated', version: '0.3.0', from: '0.2.0' }).detail).toBe(
       '从 0.2.0 更新而来。',
     )
+  })
+})
+
+describe('cardAction', () => {
+  it('runs the action of the row from anywhere on the card, but not a cancel or a move', () => {
+    expect(cardAction(appUpdateRow({ kind: 'ready', version: '0.3.0' }))).toBe('restart')
+    expect(cardAction(appUpdateRow({ kind: 'available', version: '0.3.0', moves: false }))).toBe(
+      'update',
+    )
+    expect(cardAction(appUpdateRow({ kind: 'link', version: '0.3.0', downloadUrl: null }))).toBe(
+      'download',
+    )
+    expect(cardAction(appUpdateRow({ kind: 'updated', version: '0.3.0', from: '0.2.0' }))).toBe(
+      'whats-new',
+    )
+    expect(cardAction(appUpdateRow({ kind: 'downloading', version: '0.3.0', percent: 4 }))).toBe(
+      null,
+    )
+    expect(cardAction(appUpdateRow({ kind: 'moving', version: '0.3.0' }))).toBe(null)
   })
 })

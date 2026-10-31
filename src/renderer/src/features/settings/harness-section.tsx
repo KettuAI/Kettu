@@ -19,6 +19,7 @@ import { useShallow } from 'zustand/react/shallow'
 import type { AgentInstallMethod, AgentStatus, AgentTask } from '@shared/agent-host'
 import type { HarnessId } from '@shared/thread'
 import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
+import { CommandLine } from '@renderer/components/command-line'
 import { useRefresh } from '@renderer/components/refresh'
 import { RefreshIcon } from '@renderer/components/refresh-icon'
 import { Badge } from '@renderer/components/ui/badge'
@@ -889,23 +890,6 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
     )
   }
   return null
-}
-
-/** A command as it runs, which can be copied into a terminal. */
-function CommandLine({ command }: { command: string }) {
-  const { t } = useTranslation('settings')
-  return (
-    <div className="flex items-center gap-1.5 rounded-lg bg-code-block py-0.75 pr-0.75 pl-2.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]">
-      <code
-        className="min-w-0 flex-1 truncate font-mono text-code text-primary"
-        data-selectable=""
-        title={command}
-      >
-        {command}
-      </code>
-      <CopyAction text={command} label={t('harnesses.install.copy')} />
-    </div>
-  )
 }
 
 /** A failed install or update: why, its log, and retry, copy or dismiss. */

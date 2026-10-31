@@ -41,8 +41,10 @@ export interface AppUpdateRow {
   versionFirst: boolean
   /** The first line as one string, for names and lists. */
   label: string
-  /** The second line; null while downloading, when the progress bar is the second line. */
+  /** The card's tooltip; null while downloading, when the progress bar is the second line. */
   detail: string | null
+  /** A short second line on the card, saying what clicking it does. */
+  note: string | null
   /** Null while the app moves, which nothing can stop. */
   action: AppUpdateAction | null
   actionLabel: string
@@ -61,11 +63,13 @@ export function appUpdateRow(notice: AppUpdateNotice): AppUpdateRow {
     action: AppUpdateAction,
     actionLabel: string,
     href: string | null = null,
+    note: string | null = null,
   ): AppUpdateRow => ({
     words,
     versionFirst,
     label: versionFirst ? `${notice.version} ${words}` : `${words} ${notice.version}`,
     detail,
+    note,
     action,
     actionLabel,
     href,
@@ -79,6 +83,8 @@ export function appUpdateRow(notice: AppUpdateNotice): AppUpdateRow {
         i18n.t('updates:notice.readyDetail'),
         'restart',
         i18n.t('updates:notice.restart'),
+        null,
+        i18n.t('updates:notice.readyNote'),
       )
     case 'available':
       return row(
@@ -87,6 +93,8 @@ export function appUpdateRow(notice: AppUpdateNotice): AppUpdateRow {
         notice.moves ? i18n.t('updates:notice.moveDetail') : i18n.t('updates:notice.updateDetail'),
         'update',
         i18n.t('updates:notice.update'),
+        null,
+        i18n.t(notice.moves ? 'updates:notice.moveNote' : 'updates:notice.updateNote'),
       )
     case 'moving': {
       // The app moves, not the version, so the words stand alone.
@@ -96,6 +104,7 @@ export function appUpdateRow(notice: AppUpdateNotice): AppUpdateRow {
         versionFirst: false,
         label: words,
         detail: null,
+        note: null,
         action: null,
         actionLabel: '',
         href: null,
@@ -129,4 +138,9 @@ export function appUpdateRow(notice: AppUpdateNotice): AppUpdateRow {
         releaseUrl(notice.version),
       )
   }
+}
+
+/** What clicking the card does: the row's own action, except a cancel, which is the corner's. */
+export function cardAction(row: AppUpdateRow): AppUpdateAction | null {
+  return row.action === 'cancel' ? null : row.action
 }

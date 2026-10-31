@@ -63,11 +63,12 @@ export function useNotices(): Notices & { summary: NoticeSummary | null } {
     ),
   )
   const statuses = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
+  const taskErrors = useAgentsStore((s) => s.taskErrors)
   const status = useUpdatesStore((s) => s.status)
   const updatedSeen = useUpdatesStore((s) => s.updatedDismissed)
   const notices: Notices = {
     signIn,
-    agentUpdate: agentUpdateNotice(statuses),
+    agentUpdate: agentUpdateNotice(statuses, taskErrors),
     appUpdate: appUpdateNotice(status, updatedSeen),
   }
   return { ...notices, summary: noticeSummary(notices) }
