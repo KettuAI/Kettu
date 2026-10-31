@@ -85,6 +85,32 @@ describe('SettingsStore', () => {
     expect(await readSettings()).toMatchObject({ general: { sendKey: 'mod-enter' } })
   })
 
+  it('picks a dynamic port the first time direct connections turn on, and keeps it', async () => {
+    const store = await SettingsStore.load(dir)
+    store.update({ remote: { direct: { enabled: true } } })
+    const port = store.get().remote.direct.port
+    expect(port).toBeGreaterThanOrEqual(49152)
+    expect(port).toBeLessThanOrEqual(65535)
+    store.update({ remote: { direct: { enabled: false } } })
+    store.update({ remote: { direct: { enabled: true } } })
+    expect(store.get().remote.direct.port).toBe(port)
+    await store.flush()
+    expect(await readSettings()).toMatchObject({ remote: { direct: { enabled: true, port } } })
+  })
+
+  it('gives a file that turns direct connections on by hand its port, and saves it', async () => {
+    await writeFile(
+      join(dir, 'settings.json'),
+      JSON.stringify({ version: 1, remote: { direct: { enabled: true } } }),
+    )
+    const store = await SettingsStore.load(dir)
+    const port = store.get().remote.direct.port
+    expect(port).toBeGreaterThanOrEqual(49152)
+    await store.flush()
+    expect(await readSettings()).toMatchObject({ remote: { direct: { enabled: true, port } } })
+    expect(await readdir(dir)).toEqual(['settings.json'])
+  })
+
   it('never overwrites a file from a newer version', async () => {
     const newer = JSON.stringify({ version: 2, appearance: { theme: 'light' }, future: true })
     await writeFile(join(dir, 'settings.json'), newer)

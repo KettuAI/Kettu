@@ -50,6 +50,13 @@ export interface Welcome {
   role: 'owner'
   /** Whether the device may use the host's terminal. */
   terminal: boolean
+  /** Where the device may also connect directly, the owner's own first; none while it is off. */
+  addresses: DirectAddress[]
+}
+
+/** The host's direct addresses again, sent to each welcomed device whenever they change. */
+export interface Addresses {
+  type: 'addresses'
   addresses: DirectAddress[]
 }
 

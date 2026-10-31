@@ -12,6 +12,7 @@ import {
   agentName,
   withAddedAgent,
   withAgentBinary,
+  withDirectPort,
   withoutAgent,
   withRenamedAgent,
   withShellPath,
@@ -38,7 +39,18 @@ describe('validateSettingsPatch', () => {
       git: { backgroundFetch: true },
       updates: { automatic: 'notify' },
       privacy: { hideAccount: true },
-      remote: { enabled: true },
+      remote: {
+        enabled: true,
+        direct: {
+          enabled: true,
+          addresses: [
+            { host: 'frp.example.com', port: 7000 },
+            { host: '203.0.113.7', port: 443 },
+            { host: 'fd7a:115c:a1e0::1', port: 50123 },
+            { host: 'studio', port: 50123 },
+          ],
+        },
+      },
     }
     expect(validateSettingsPatch(patch)).toEqual(patch)
   })
@@ -117,6 +129,62 @@ describe('validateSettingsPatch', () => {
     [{ updates: { automatic: 'always' } }, '"updates.automatic" must be one of'],
     [{ privacy: { hideAccount: 'yes' } }, '"privacy.hideAccount" must be a boolean'],
     [{ remote: { enabled: 'on' } }, '"remote.enabled" must be a boolean'],
+    [{ remote: 'on' }, '"remote" must be an object'],
+    [{ remote: { relay: true } }, 'Unknown setting "remote.relay"'],
+    [{ remote: { direct: true } }, '"remote.direct" must be an object'],
+    [{ remote: { direct: { enabled: 1 } } }, '"remote.direct.enabled" must be a boolean'],
+    [{ remote: { direct: { port: 50123 } } }, 'Unknown setting "remote.direct.port"'],
+    [{ remote: { direct: { addresses: {} } } }, '"remote.direct.addresses" must be an array'],
+    ...[
+      { host: 'frp.example.com', port: 0 },
+      { host: 'frp.example.com', port: 65536 },
+      { host: 'frp.example.com', port: 70.5 },
+      { host: 'frp.example.com', port: '7000' },
+      { host: 'frp.example.com' },
+      { host: '', port: 7000 },
+      { host: 'frp example.com', port: 7000 },
+      { host: 'https://frp.example.com', port: 7000 },
+      { host: 'frp.example.com:7000', port: 7000 },
+      { host: '[fd00::1]', port: 7000 },
+      { host: '-frp.example.com', port: 7000 },
+      { host: '10.0.0.256', port: 7000 },
+      { host: '10.1', port: 7000 },
+      { host: 'fd00::1::2', port: 7000 },
+      { host: 'fe80::1%en0', port: 7000 },
+      { host: 'k\u00e4ttu.example', port: 7000 },
+      { host: `${'a'.repeat(64)}.example`, port: 7000 },
+      'frp.example.com:7000',
+    ].map((address): [unknown, string] => [
+      { remote: { direct: { addresses: [address] } } },
+      '"remote.direct.addresses[0]" must be a host name or IP address and a port from 1 to 65535',
+    ]),
+    [
+      { remote: { direct: { addresses: [{ host: 'a.example', port: 1, name: 'Home' }] } } },
+      'Unknown setting "remote.direct.addresses[0].name"',
+    ],
+    [
+      {
+        remote: {
+          direct: {
+            addresses: [
+              { host: 'A.example', port: 1 },
+              { host: 'a.example', port: 1 },
+            ],
+          },
+        },
+      },
+      '"remote.direct.addresses" names an address twice',
+    ],
+    [
+      {
+        remote: {
+          direct: {
+            addresses: Array.from({ length: 11 }, (_, i) => ({ host: 'a.example', port: i + 1 })),
+          },
+        },
+      },
+      '"remote.direct.addresses" may hold at most 10 addresses',
+    ],
     [{ privacy: { hideEmail: true } }, 'Unknown setting "privacy.hideEmail"'],
     [{ mcp: { kettu: { off: ['unknown-agent'] } } }, '"mcp.kettu.off" names an unknown agent'],
     [{ mcp: { kettu: { off: ['codex', 'codex'] } } }, '"mcp.kettu.off" names an agent twice'],
@@ -192,6 +260,44 @@ describe('mergeSettings', () => {
       terminal: { fontSize: 12 },
     })
     expect(next.terminal).toEqual({ shellPath: '/bin/fish', fontSize: 12 })
+  })
+
+  it("turns direct connections on and off, keeping the port, and replaces the owner's list", () => {
+    const withPort = withDirectPort(
+      mergeSettings(defaults(), {
+        remote: { direct: { enabled: true, addresses: [{ host: 'a.example', port: 7000 }] } },
+      }),
+      () => 50123,
+    )
+    expect(withPort.remote).toEqual({
+      enabled: false,
+      direct: { enabled: true, port: 50123, addresses: [{ host: 'a.example', port: 7000 }] },
+    })
+    const off = mergeSettings(withPort, { remote: { enabled: true, direct: { enabled: false } } })
+    expect(off.remote).toEqual({
+      enabled: true,
+      direct: { enabled: false, port: 50123, addresses: [{ host: 'a.example', port: 7000 }] },
+    })
+    const replaced = mergeSettings(off, {
+      remote: { direct: { addresses: [{ host: '10.0.0.2', port: 7001 }] } },
+    })
+    expect(replaced.remote.direct.addresses).toEqual([{ host: '10.0.0.2', port: 7001 }])
+    expect(off.remote.direct.addresses).toEqual([{ host: 'a.example', port: 7000 }])
+  })
+
+  it('picks the direct port only the first time direct connections are on', () => {
+    const pick = (): number => 50123
+    const off = defaults()
+    expect(withDirectPort(off, pick)).toBe(off)
+    const on = mergeSettings(off, { remote: { direct: { enabled: true } } })
+    const picked = withDirectPort(on, pick)
+    expect(picked.remote.direct.port).toBe(50123)
+    expect(on.remote.direct.port).toBeNull()
+    expect(withDirectPort(picked, () => 60000)).toBe(picked)
+    const again = mergeSettings(mergeSettings(picked, { remote: { direct: { enabled: false } } }), {
+      remote: { direct: { enabled: true } },
+    })
+    expect(withDirectPort(again, () => 60000).remote.direct.port).toBe(50123)
   })
 
   it('replaces the list of agents the server is off for whole', () => {
@@ -293,6 +399,72 @@ describe('parseSettingsFile', () => {
     expect(loaded.settings.mcp).toEqual({ kettu: { off: ['codex', 'pi'] } })
     expect(loaded.problems).toEqual([])
     expect(loaded.settings.general).toEqual(DEFAULT_SETTINGS.general)
+  })
+
+  it('reads the direct settings, keeping each valid value and address', () => {
+    const loaded = parseSettingsFile({
+      version: 1,
+      remote: {
+        enabled: true,
+        direct: {
+          enabled: true,
+          port: 50123,
+          addresses: [
+            { host: 'frp.example.com', port: 7000, note: 'ignored' },
+            { host: 'frp.example.com', port: 70000 },
+            { host: 'FRP.example.com', port: 7000 },
+            { host: '192.168.1.20', port: 50123 },
+          ],
+        },
+      },
+    })
+    expect(loaded.settings.remote).toEqual({
+      enabled: true,
+      direct: {
+        enabled: true,
+        port: 50123,
+        addresses: [
+          { host: 'frp.example.com', port: 7000 },
+          { host: '192.168.1.20', port: 50123 },
+        ],
+      },
+    })
+    expect(loaded.problems).toEqual([
+      '"remote.direct.addresses[1]" must be a host name or IP address and a port from 1 to 65535',
+      '"remote.direct.addresses[2]" repeats another address',
+    ])
+
+    const invalid = parseSettingsFile({
+      version: 1,
+      remote: {
+        enabled: 'yes',
+        direct: {
+          enabled: true,
+          port: 0,
+          addresses: Array.from({ length: 11 }, (_, i) => ({ host: 'a.example', port: i + 1 })),
+        },
+      },
+    })
+    expect(invalid.settings.remote).toEqual({
+      enabled: false,
+      direct: {
+        enabled: true,
+        port: null,
+        addresses: Array.from({ length: 10 }, (_, i) => ({ host: 'a.example', port: i + 1 })),
+      },
+    })
+    expect(invalid.problems).toEqual([
+      '"remote.enabled" must be a boolean',
+      '"remote.direct.port" must be a port from 1 to 65535 or null',
+      '"remote.direct.addresses[10]" is beyond the 10 addresses kept',
+    ])
+    expect(parseSettingsFile({ version: 1, remote: { direct: [] } }).problems).toEqual([
+      '"remote.direct" must be an object',
+    ])
+    expect(parseSettingsFile({ version: 1, remote: { enabled: true } }).settings.remote).toEqual({
+      enabled: true,
+      direct: DEFAULT_SETTINGS.remote.direct,
+    })
   })
 
   it('reads a newer version but marks it read-only', () => {
