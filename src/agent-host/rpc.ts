@@ -7,16 +7,9 @@ import {
   type HostParams,
   type HostResult,
 } from '@shared/agent-host'
+import type { PortChannel } from '@shared/port-channel'
 import type { FromPort, PortError } from '@shared/port-rpc'
 import { HostError, isHostError } from './errors'
-
-/** One renderer's port, as the hub sees it; index.ts adapts `MessagePortMain` to this. */
-export interface PortChannel {
-  send(message: FromPort<HostEvent>): void
-  onMessage(listener: (data: unknown) => void): void
-  onClose(listener: () => void): void
-  close(): void
-}
 
 export interface RequestContext {
   portId: string
@@ -47,12 +40,12 @@ function toPortError(error: unknown): PortError {
 }
 
 export class PortHub {
-  private readonly ports = new Map<string, PortChannel>()
+  private readonly ports = new Map<string, PortChannel<FromPort<HostEvent>>>()
   private counter = 0
 
   constructor(private readonly deps: PortHubDeps) {}
 
-  add(channel: PortChannel): string {
+  add(channel: PortChannel<FromPort<HostEvent>>): string {
     const portId = `port-${++this.counter}`
     this.ports.set(portId, channel)
     channel.onMessage((data) => void this.receive(portId, channel, data))
@@ -83,7 +76,11 @@ export class PortHub {
     }
   }
 
-  private async receive(portId: string, channel: PortChannel, data: unknown): Promise<void> {
+  private async receive(
+    portId: string,
+    channel: PortChannel<FromPort<HostEvent>>,
+    data: unknown,
+  ): Promise<void> {
     const message = data as { type?: unknown; id?: unknown; method?: unknown; params?: unknown }
     if (typeof message !== 'object' || message === null || message.type !== 'request') {
       this.deps.log('warn', `Port ${portId} sent a message that is not a request`)

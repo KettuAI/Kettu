@@ -119,7 +119,7 @@ describe('resolveShellEnvironment', () => {
   it('uses the inherited environment on Windows, with the restart note', async () => {
     const result = await resolveShellEnvironment({
       platform: 'win32',
-      electronPath: 'electron.exe',
+      nodeRuntime: { command: 'electron.exe', env: { ELECTRON_RUN_AS_NODE: '1' } },
       baseEnv: { Path: 'C:\\x', ELECTRON_RUN_AS_NODE: '1' },
     })
     expect(result).toMatchObject({ source: 'inherited', env: { Path: 'C:\\x' } })
@@ -141,7 +141,7 @@ describe('resolveShellEnvironment', () => {
     it('reads the login shell environment through Node.js', async () => {
       const result = await resolveShellEnvironment({
         platform: process.platform,
-        electronPath: process.execPath,
+        nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
         baseEnv: { SHELL: '/bin/sh', PATH: process.env.PATH, KETTU_PROBE: 'yes' },
       })
       expect(result.source).toBe('login-shell')
@@ -152,7 +152,7 @@ describe('resolveShellEnvironment', () => {
     it('falls back with a warning when the shell does not answer in time', async () => {
       const result = await resolveShellEnvironment({
         platform: process.platform,
-        electronPath: process.execPath,
+        nodeRuntime: { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' } },
         baseEnv: { SHELL: path.join(dir, 'slow.sh'), PATH: '/usr/bin:/bin', KEEP: '1' },
         timeoutMs: 300,
       })
@@ -169,7 +169,7 @@ describe('EnvironmentService', () => {
     let runs = 0
     const service = new EnvironmentService({
       platform: 'linux',
-      electronPath: '/e',
+      nodeRuntime: { command: '/e', env: { ELECTRON_RUN_AS_NODE: '1' } },
       baseEnv: { PATH: '/inherited' },
       resolve: async () => {
         runs++
@@ -205,7 +205,7 @@ describe('EnvironmentService', () => {
   it("adds an agent's own folder after the proxy, for that agent alone", async () => {
     const service = new EnvironmentService({
       platform: 'linux',
-      electronPath: '/e',
+      nodeRuntime: { command: '/e', env: { ELECTRON_RUN_AS_NODE: '1' } },
       baseEnv: {},
       resolve: async () => ({
         env: { PATH: '/login', CLAUDE_CONFIG_DIR: '/shell/claude' },

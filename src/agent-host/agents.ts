@@ -17,7 +17,7 @@ import type {
   McpStatus,
   PlanLimit,
 } from '@shared/agent-host'
-import type { AgentProcess } from '@shared/host-control'
+import type { AgentProcess, NodeRuntime } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { AddedAgent, HostSettings } from '@shared/settings'
 import { harnessOf, type AgentId, type ConfigOption, type HarnessId } from '@shared/thread'
@@ -196,7 +196,7 @@ export interface RunningConfig {
 export interface AgentManagerDeps extends DriverOverrides {
   catalog: readonly AgentDefinition[]
   platform: Platform
-  electronPath: string
+  nodeRuntime: NodeRuntime
   appVersion: string
   env: EnvironmentService
   diagnostics: Diagnostics
@@ -526,7 +526,7 @@ export class AgentManager {
     const detection = await (this.deps.detect ?? detectAgent)(h.def, {
       platform,
       env,
-      electronPath: this.deps.electronPath,
+      nodeRuntime: this.deps.nodeRuntime,
       binaryOverride: harnessSettings?.binaryPath ?? null,
       node,
       adaptersDir: this.deps.adaptersDir,
@@ -2488,7 +2488,7 @@ export class AgentManager {
     const override = this.deps.settings().agents[slot.def.id]?.binaryPath ?? null
     return displayCommand(
       slot.def,
-      this.deps.electronPath,
+      this.deps.nodeRuntime,
       override,
       this.deps.adaptersDir,
       this.deps.sessionRouterPath ?? null,

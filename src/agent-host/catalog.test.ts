@@ -58,11 +58,16 @@ import {
 import { archiveEntry, type BinaryInstalls } from './binary-install'
 import { programPath, type InstalledArchive } from './archive-install'
 
+const NODE_RUNTIME = { command: '/e', env: { ELECTRON_RUN_AS_NODE: '1' } }
+
 function context(overrides: Partial<DetectContext> = {}): DetectContext {
   return {
     platform: 'darwin',
     env: { PATH: '/usr/local/bin:/usr/bin' },
-    electronPath: '/Apps/Kettu.app/Contents/MacOS/Kettu',
+    nodeRuntime: {
+      command: '/Apps/Kettu.app/Contents/MacOS/Kettu',
+      env: { ELECTRON_RUN_AS_NODE: '1' },
+    },
     binaryOverride: null,
     node: {
       nodeVersion: 'v24.1.0',
@@ -673,7 +678,7 @@ describe('fast-agent', () => {
   })
 
   it('shows the uvx line the user would type', () => {
-    expect(displayCommand(FAST_AGENT, '/e', null, '/data/agents')).toEqual(display)
+    expect(displayCommand(FAST_AGENT, NODE_RUNTIME, null, '/data/agents')).toEqual(display)
   })
 })
 
@@ -711,7 +716,7 @@ describe('Minion Code', () => {
   })
 
   it('shows the uvx line the user would type', () => {
-    expect(displayCommand(MINION, '/e', null, '/data/agents')).toEqual(display)
+    expect(displayCommand(MINION, NODE_RUNTIME, null, '/data/agents')).toEqual(display)
   })
 })
 
@@ -1005,7 +1010,7 @@ describe('a program the adapter runs (Pi)', () => {
   })
 
   it('shows the router command line as the launch', () => {
-    expect(displayCommand(PI, '/e', null, '/data/agents', ROUTER)).toEqual({
+    expect(displayCommand(PI, NODE_RUNTIME, null, '/data/agents', ROUTER)).toEqual({
       command: 'node',
       args: [ROUTER, 'node', path.join('/data/agents', 'pi', '0.0.34', 'node_modules', PI_ACP)],
       env: { PI_ACP_ENABLE_EMBEDDED_CONTEXT: 'true' },
@@ -1015,12 +1020,12 @@ describe('a program the adapter runs (Pi)', () => {
 
 describe('displayCommand', () => {
   it('shows the bare command the user would type', () => {
-    expect(displayCommand(OPENCODE, '/e', null, '/data/agents')).toEqual({
+    expect(displayCommand(OPENCODE, NODE_RUNTIME, null, '/data/agents')).toEqual({
       command: 'opencode',
       args: ['acp'],
       env: {},
     })
-    expect(displayCommand(CODEX, '/e', null, '/data/agents')).toEqual({
+    expect(displayCommand(CODEX, NODE_RUNTIME, null, '/data/agents')).toEqual({
       command: 'codex',
       args: ['app-server'],
       env: {},
@@ -1040,7 +1045,7 @@ describe('displayCommand', () => {
         env: { COPILOT_ACP: '1' },
       },
     }
-    expect(displayCommand(def, '/e', null, '/data/agents')).toEqual({
+    expect(displayCommand(def, NODE_RUNTIME, null, '/data/agents')).toEqual({
       command: 'node',
       args: [
         path.join(
@@ -1057,7 +1062,7 @@ describe('displayCommand', () => {
   })
 
   it('shows a library as the folder its driver loads it from', () => {
-    expect(displayCommand(CLAUDE_CODE, '/e', null, '/data/agents')).toEqual({
+    expect(displayCommand(CLAUDE_CODE, NODE_RUNTIME, null, '/data/agents')).toEqual({
       command: path.join(
         '/data/agents',
         'claude-code',
@@ -1075,7 +1080,7 @@ describe('displayCommand', () => {
       ...OPENCODE,
       launch: { kind: 'uvx', package: 'fast-agent-acp', version: '0.10.1', args: ['-x'] },
     }
-    expect(displayCommand(def, '/e', null, '/data/agents')).toEqual({
+    expect(displayCommand(def, NODE_RUNTIME, null, '/data/agents')).toEqual({
       command: 'uvx',
       args: ['fast-agent-acp==0.10.1', '-x'],
       env: {},
