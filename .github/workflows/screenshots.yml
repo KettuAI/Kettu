@@ -4,18 +4,14 @@ on:
   workflow_dispatch:
   # The release run calls it to see the app start on each platform.
   workflow_call:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths: ['src/**', 'tools/**', 'package.json', '.github/workflows/screenshots.yml']
 
 concurrency:
   group: screenshots-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   capture:
     name: ${{ matrix.os }}
-    if: ${{ !github.event.pull_request.draft }}
     strategy:
       fail-fast: false
       matrix:
