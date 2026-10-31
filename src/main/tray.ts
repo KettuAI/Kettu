@@ -14,9 +14,13 @@ const PORTAL_TIMEOUT_MS = 2000
 // The light value of the XDG desktop portal's org.freedesktop.appearance color-scheme.
 const PREFERS_LIGHT = 2
 
-/** Which of resources/tray's images the icon shows. */
+/**
+ * Which of resources/tray's images the icon shows. The macOS menu bar always takes the white
+ * glyph untinted: a template image carries one opacity map, and the shading that reads right in
+ * white turns a murky black on light bars.
+ */
 export function trayImageName(platform: NodeJS.Platform, white: boolean, dot: boolean): string {
-  if (platform === 'darwin') return dot ? 'trayDotTemplate.png' : 'trayTemplate.png'
+  if (platform === 'darwin') return dot ? 'tray-menubar-dot.png' : 'tray-menubar.png'
   const name = `tray-${white ? 'white' : 'black'}${dot ? '-dot' : ''}`
   return platform === 'win32' ? `${name}.ico` : `${name}.png`
 }
@@ -147,7 +151,6 @@ export class KettuTray {
       join(imagesDir(), trayImageName(process.platform, this.white, this.dot)),
     )
     if (image.isEmpty()) log.warn('The tray image is missing')
-    if (process.platform === 'darwin') image.setTemplateImage(true)
     return image
   }
 

@@ -13,6 +13,7 @@ const electron = vi.hoisted(() => {
     theme,
     trays: [] as FakeTrayShape[],
     portal: new Map<string, string | null>(),
+    templated: [] as string[],
   }
 })
 
@@ -51,7 +52,7 @@ vi.mock('electron', async () => {
       createFromPath: (path: string) => ({
         path,
         isEmpty: () => false,
-        setTemplateImage: () => {},
+        setTemplateImage: () => electron.templated.push(path),
       }),
     },
     nativeTheme: electron.theme,
@@ -92,6 +93,7 @@ function start(system: NodeJS.Platform) {
 beforeEach(() => {
   electron.trays.length = 0
   electron.portal.clear()
+  electron.templated.length = 0
   electron.theme.shouldUseDarkColorsForSystemIntegratedUI = false
   electron.theme.reset()
 })
@@ -104,9 +106,9 @@ afterEach(() => {
 })
 
 describe('trayImageName', () => {
-  it('takes the template image on macOS, which tints it itself', () => {
-    expect(trayImageName('darwin', true, false)).toBe('trayTemplate.png')
-    expect(trayImageName('darwin', false, true)).toBe('trayDotTemplate.png')
+  it('takes the white menu bar image on macOS, whatever the theme', () => {
+    expect(trayImageName('darwin', true, false)).toBe('tray-menubar.png')
+    expect(trayImageName('darwin', false, true)).toBe('tray-menubar-dot.png')
   })
 
   it('takes the .ico on Windows and a PNG on Linux, in black or white', () => {
@@ -153,7 +155,7 @@ describe('stateLine', () => {
 describe('KettuTray', () => {
   it('shows its menu and puts the dot on while a request waits', () => {
     const { tray, deps, fake } = start('darwin')
-    expect(imageOf(fake)).toBe('trayTemplate.png')
+    expect(imageOf(fake)).toBe('tray-menubar.png')
     expect(fake.tooltip).toBe('Kettu')
     expect(fake.menu.map((item) => item.label ?? item.type)).toEqual([
       'No sessions running',
@@ -167,7 +169,8 @@ describe('KettuTray', () => {
     expect(deps.open).toHaveBeenCalledOnce()
     expect(deps.quit).toHaveBeenCalledOnce()
     tray.setDot(true)
-    expect(imageOf(fake)).toBe('trayDotTemplate.png')
+    expect(imageOf(fake)).toBe('tray-menubar-dot.png')
+    expect(electron.templated).toEqual([])
     tray.setBusy({ running: 2, waiting: 1 })
     expect(fake.menu[0]!.label).toBe('2 sessions running · 1 needs approval')
   })
