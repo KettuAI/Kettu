@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { systemName } from './system-name'
+import { systemName, systemRelease } from './system-name'
 
 describe('systemName', () => {
   it('names macOS and Windows with the versions they report', () => {
@@ -24,6 +24,15 @@ describe('systemName', () => {
     )
     expect(systemName('linux', '6.8.0', 'arm64', 'ID=alpine\nNAME="Alpine Linux"\n')).toBe(
       'Linux 6.8.0 (arm64)',
+    )
+  })
+})
+
+describe('systemRelease', () => {
+  it('leaves the architecture out', () => {
+    expect(systemRelease('darwin', '26.0.1', null)).toBe('macOS 26.0.1')
+    expect(systemRelease('linux', '6.8.0', 'PRETTY_NAME="Ubuntu 24.04.1 LTS"\n')).toBe(
+      'Ubuntu 24.04.1 LTS',
     )
   })
 })

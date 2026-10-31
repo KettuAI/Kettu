@@ -87,7 +87,8 @@ export function pairDevice(
     const waiting = (pairing: Extract<PairingState, { state: 'waiting' }>): void => {
       terminal.write(
         `${terminalQr(pairing.link)}\n\n` +
-          `Scan it with Kettu on an iPhone or iPad. The same code as a link:\n\n  ${pairing.link}\n\n` +
+          'Scan it with Kettu on an iPhone or iPad. The same code as a link, which another computer\n' +
+          `pastes in Kettu's Settings › Hosts › Add host…:\n\n  ${pairing.link}\n\n` +
           'It adds one device, which must reach this computer directly: on the same network, the\n' +
           'same VPN, or at an address of your own.\n\n',
       )

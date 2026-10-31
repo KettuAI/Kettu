@@ -7,7 +7,9 @@ import type { Locale } from './locale'
 import type { CarriedMedia } from './media'
 import type { Platform } from './platform'
 import type { DeviceActivity } from './remote/activity'
+import type { HostPairingState, HostPairStart, HostsStatus } from './remote/hosts'
 import type { PairingState } from './remote/pairing'
+import type { DirectAddress } from './remote/protocol'
 import type { RemoteStatus } from './remote/status'
 import type { SettingsFile, SettingsPatch } from './settings'
 import type { SharingConnectResult, SharingResult, SharingStatus } from './sharing'
@@ -202,6 +204,15 @@ export interface IpcInvokeContract {
   'remote:reset': { args: []; result: void }
   // Listens for direct connections again on the same port, as after the port was in use.
   'remote:retry-direct': { args: []; result: void }
+  'hosts:status': { args: []; result: HostsStatus }
+  // Pairs with the host of a pasted link, its progress as `hosts:pairing` under the id.
+  'hosts:pair': { args: [link: string]; result: HostPairStart }
+  'hosts:pair-close': { args: [pairId: number]; result: void }
+  // This computer's name on a connected host.
+  'hosts:rename': { args: [id: string, name: string]; result: void }
+  'hosts:set-addresses': { args: [id: string, addresses: DirectAddress[]]; result: void }
+  // Forgets the host here; nothing changes on it.
+  'hosts:remove': { args: [id: string]; result: void }
   'browser:show': { args: [sessionId: string]; result: void }
   'browser:hide': { args: [sessionId: string]; result: void }
   'browser:bounds': { args: [sessionId: string, bounds: BrowserBounds]; result: void }
@@ -248,12 +259,20 @@ export interface IpcEventContract {
   'remote:changed': RemoteStatus
   /** Sent only to the page that opened the code. */
   'remote:pairing': RemotePairingEvent
+  'hosts:changed': HostsStatus
+  /** Sent only to the page that pasted the link. */
+  'hosts:pairing': HostPairingEvent
   'browser:state': BrowserState
   /** An agent's first navigation opened a session's page, so the pane may show it. */
   'browser:opened': { sessionId: string }
 }
 
 export type IpcEventChannel = keyof IpcEventContract
+
+export interface HostPairingEvent {
+  pairId: number
+  pairing: HostPairingState
+}
 
 export interface RemotePairingEvent {
   codeId: number
@@ -364,6 +383,21 @@ export interface KettuApi {
     retryDirect(): Promise<void>
     onChanged(listener: (status: RemoteStatus) => void): () => void
     onPairing(listener: (event: RemotePairingEvent) => void): () => void
+  }
+  /** Other hosts this computer connects to as a device. */
+  hosts: {
+    status(): Promise<HostsStatus>
+    /** Pairs with the host of a pasted link, unless it is no link or this computer's own. */
+    pair(link: string): Promise<HostPairStart>
+    /** Add host closed: a pairing not yet added ends. */
+    closePairing(pairId: number): Promise<void>
+    /** Renames this computer on a connected host. */
+    rename(id: string, name: string): Promise<void>
+    setAddresses(id: string, addresses: DirectAddress[]): Promise<void>
+    /** Forgets the host here; nothing changes on it. */
+    remove(id: string): Promise<void>
+    onChanged(listener: (status: HostsStatus) => void): () => void
+    onPairing(listener: (event: HostPairingEvent) => void): () => void
   }
   settings: {
     get(): Promise<SettingsFile>

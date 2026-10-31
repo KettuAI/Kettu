@@ -13,7 +13,8 @@
     "remote": "Remote access",
     "browser": "Browser",
     "mcp": "MCP servers",
-    "harnesses": "Harnesses"
+    "harnesses": "Harnesses",
+    "hosts": "Hosts"
   },
   "page": {
     "title": "Settings",
@@ -629,7 +630,8 @@
     "remote": "Use this computer's sessions in Kettu on an iPhone, an iPad or another computer; everything stays on this computer.",
     "browser": "The browser in the side panel keeps one profile for every session: sign-ins, site data and cache.",
     "mcp": "Agents reach tools through these MCP servers. Kettu's own is here, and where each agent keeps its own.",
-    "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Install and update them here; accounts are in Agents."
+    "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Install and update them here; accounts are in Agents.",
+    "hosts": "The hosts Kettu on this computer connects to. Sessions, projects and agents stay on each host; this is only how to reach them."
   },
   "footer": {
     "about": "About Kettu",
@@ -687,6 +689,92 @@
       "empty": "Nothing is published yet."
     }
   },
+  "hosts": {
+    "keywords": "hosts host computer computers connect pair pairing link remote other machine",
+    "self": {
+      "badge": "Local",
+      "label": "This computer"
+    },
+    "version": "Kettu {{version}}",
+    "via": {
+      "direct": "Direct",
+      "directAt": "Direct {{address}}"
+    },
+    "state": {
+      "online": "Online",
+      "connecting": "Connecting…",
+      "offline": "Offline",
+      "offlineSince": "Offline · {{ago}}",
+      "removed": "Removed",
+      "update_client": "Update Kettu here",
+      "update_host": "Update Kettu on it"
+    },
+    "note": "To connect to this computer from a phone or another computer, add the device in <link>Remote access</link>.",
+    "plainTextKey": "The key this computer connects to other hosts with is kept in a file only you can read, because the system has no keyring.",
+    "keyFailed": "The system could not decrypt the key this computer connects to other hosts with, so it connects to none.",
+    "add": {
+      "button": "Add host…",
+      "title": "Add host",
+      "hint": "In Kettu on that host, open Settings › Remote access › Add device, or run <code>kettu pair</code> on a development machine, and paste the link it shows here.",
+      "label": "Pairing link",
+      "placeholder": "https://kettu.sh/pair#…",
+      "add": "Add",
+      "connecting": "Connecting…",
+      "waiting": "Waiting for the host…",
+      "confirmTitle": "Confirm on that host",
+      "confirmBody": "Connected, and waiting for Add on the host. Nothing is added until then, and anyone else with this link cannot get in.",
+      "invalid": "This is not a Kettu pairing link, or it was not copied whole.",
+      "void": "This pairing code no longer works: it expired, was used, or the host made a new one. Click Add device on the host for a new code and paste that.",
+      "rejected": "The host did not add this computer.",
+      "unreachable": "Could not reach the host within 15 seconds. Check that both computers are on the same network or VPN and that remote access is on there; for an address you added for the host, check that the port forwarding still works.",
+      "self": "This is this computer's own pairing code. To connect another device to this computer, scan or paste it on that device.",
+      "update_client": "Kettu on this computer is too old for this host. Update it and try again.",
+      "update_host": "Kettu on the host is too old for this computer. Update it there and try again.",
+      "retry": "Retry",
+      "newLink": "Paste a new link",
+      "added": "Added {{name}}",
+      "nameLabel": "This computer's name on {{name}}",
+      "nameHint": "{{name}} lists this computer under this name; change it later in Settings › Hosts › {{name}}.",
+      "done": "Done"
+    },
+    "page": {
+      "added": "Added {{date}}",
+      "gone": "This host is no longer in the list.",
+      "connection": "Connection",
+      "route": "Reached",
+      "addresses": "Addresses",
+      "edit": "Edit…",
+      "addressesNote": "When {{name}} connects, it tells this computer its latest addresses; edit them here when it changed its port and has not connected since.",
+      "self": "This computer on {{name}}",
+      "name": "Name",
+      "nameDescription": "{{name}} lists this computer under this name.",
+      "nameOffline": "{{name}} lists this computer under this name, which can be changed while it is online.",
+      "editTitle": "Addresses of {{name}}",
+      "editBody": "This computer tries all of them at once and uses the first that answers.",
+      "save": "Save",
+      "remove": {
+        "name": "Remove from this computer",
+        "description": "This computer stops connecting to {{name}}; the sessions and projects on {{name}} stay as they are. To use it again, add it again.",
+        "button": "Remove…",
+        "title": "Remove “{{name}}” from this computer?",
+        "body": "This computer disconnects from {{name}} at once. Nothing changes on {{name}}, which lists this computer among its devices until it is removed there. To use it again, add it again.",
+        "confirm": "Remove"
+      },
+      "removed": {
+        "title": "{{name}} removed this computer",
+        "body": "This computer no longer connects to it. To use it again, open Add device on it and paste the link here.",
+        "action": "Add again…"
+      },
+      "update_client": {
+        "title": "Update Kettu on this computer",
+        "body": "Kettu on {{name}} no longer takes this computer's version. It connects again once Kettu here is updated."
+      },
+      "update_host": {
+        "title": "Update Kettu on {{name}}",
+        "body": "Kettu on {{name}} is too old for this computer. It connects once Kettu there is updated."
+      }
+    }
+  },
   "remote": {
     "keywords": "remote access phone iphone ipad tablet device devices pair pairing qr code scan connect",
     "switch": "Remote access",
@@ -718,7 +806,7 @@
     "devices": {
       "group": "Devices",
       "emptyTitle": "No devices yet",
-      "emptyHint": "Scan the code with Kettu on an iPhone or iPad.",
+      "emptyHint": "Scan the code with Kettu on an iPhone or iPad, or paste the link in Settings › Hosts › Add host… in Kettu on another computer.",
       "add": "Add device…",
       "online": "Online",
       "seenToday": "Connected today at {{time}}",
@@ -784,6 +872,7 @@
     "pair": {
       "title": "Add device",
       "scan": "Scan this code with Kettu on an iPhone or iPad.",
+      "otherComputer": "On another computer, open Settings › Hosts › Add host… in its Kettu and paste this link.",
       "copy": "Copy",
       "copied": "Copied",
       "expires": "It adds one device and expires in <time>{{time}}</time>. The device has to reach this computer directly: on the same network, the same VPN, or through an address you added.",

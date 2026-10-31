@@ -89,6 +89,7 @@ export type SettingsSection =
   | 'archived'
   | 'sharing'
   | 'remote'
+  | 'hosts'
   | 'browser'
   | 'advanced'
   | 'about'

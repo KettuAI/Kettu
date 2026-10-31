@@ -1,6 +1,8 @@
-// `remote/identity.json`: the X25519 key pair devices know this computer by. Main makes it the
-// first time remote access starts, keeps the private key encrypted by the system, and hands it to
-// the remote host alone.
+// `remote/identity.json`: the X25519 key pair devices know this computer by, and
+// `remote/device-key.json`: the pair this computer connects to other hosts with as a device,
+// separate so that resetting remote access leaves those hosts connected. Main makes each the
+// first time it is needed, keeps the private key encrypted by the system, and hands it to the
+// remote host alone.
 
 import { join } from 'node:path'
 import { generateKeyPair } from '@shared/remote/noise'
@@ -8,6 +10,9 @@ import { quarantineFile, readJsonFile, writeFileAtomic } from './json-file'
 import { createLogger } from './log'
 
 const log = createLogger('remote-identity')
+
+const IDENTITY_FILE = 'identity.json'
+const DEVICE_KEY_FILE = 'device-key.json'
 
 const VERSION = 1
 const KEY_BYTES = 32
@@ -76,36 +81,62 @@ async function keep(
   return { privateKey, plainText }
 }
 
-/**
- * The identity, made and kept on first use. A key the system cannot decrypt, as in a data folder
- * copied from another computer, is an error rather than the start of a new identity, which would
- * leave every paired device out.
- */
-export async function loadIdentity(
+/** A key file under `remote/`, made and kept on first use; `lost` says who has to pair again. */
+async function loadKey(
   userDataPath: string,
+  name: string,
   cipher: IdentityCipher,
+  lost: string,
 ): Promise<RemoteIdentity> {
-  const path = join(userDataPath, 'remote', 'identity.json')
+  const path = join(userDataPath, 'remote', name)
   const read = await readJsonFile(path)
   if (read.kind === 'missing') return keep(path, await newKey(), cipher)
   if (read.kind === 'ok') {
     const version = (read.value as { version?: unknown } | null)?.version
     if (typeof version === 'number' && version > VERSION) {
-      throw new Error('remote/identity.json is from a newer version of Kettu')
+      throw new Error(`remote/${name} is from a newer version of Kettu`)
     }
   }
   const file = read.kind === 'ok' ? parseFile(read.value) : null
   if (!file) {
     const reason = read.kind === 'unreadable' ? `: ${read.reason}` : ''
-    log.warn(`remote/identity.json is invalid${reason}; devices have to pair again`)
+    log.warn(`remote/${name} is invalid${reason}; ${lost}`)
     log.warn(`Moved the invalid file to ${await quarantineFile(path)}`)
     return keep(path, await newKey(), cipher)
   }
   if (!file.encrypted) return { privateKey: file.privateKey, plainText: true }
   const { result, shouldReEncrypt } = await cipher.decrypt(Buffer.from(file.privateKey, 'base64'))
-  if (!isKey(result)) throw new Error('remote/identity.json does not decrypt to a key')
+  if (!isKey(result)) throw new Error(`remote/${name} does not decrypt to a key`)
   if (shouldReEncrypt) return keep(path, result, cipher)
   return { privateKey: result, plainText: file.plainText }
+}
+
+/**
+ * The identity, made and kept on first use. A key the system cannot decrypt, as in a data folder
+ * copied from another computer, is an error rather than the start of a new identity, which would
+ * leave every paired device out.
+ */
+export function loadIdentity(
+  userDataPath: string,
+  cipher: IdentityCipher,
+): Promise<RemoteIdentity> {
+  return loadKey(userDataPath, IDENTITY_FILE, cipher, 'devices have to pair again')
+}
+
+/**
+ * The device key, made and kept on first use the same way; one the system cannot decrypt is an
+ * error too, as a new key would leave every host this computer was added to.
+ */
+export function loadDeviceKey(
+  userDataPath: string,
+  cipher: IdentityCipher,
+): Promise<RemoteIdentity> {
+  return loadKey(
+    userDataPath,
+    DEVICE_KEY_FILE,
+    cipher,
+    'this computer has to be added to its hosts again',
+  )
 }
 
 /** Replaces the identity with a new key, as resetting remote access does. */
@@ -113,5 +144,5 @@ export async function newIdentity(
   userDataPath: string,
   cipher: IdentityCipher,
 ): Promise<RemoteIdentity> {
-  return keep(join(userDataPath, 'remote', 'identity.json'), await newKey(), cipher)
+  return keep(join(userDataPath, 'remote', IDENTITY_FILE), await newKey(), cipher)
 }

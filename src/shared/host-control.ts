@@ -8,6 +8,7 @@ import type { MediaGrantRecord } from './media'
 import type { Platform } from './platform'
 import type { DeviceActivity } from './remote/activity'
 import type { NewDevice, PairedDevice, PortDevice } from './remote/device'
+import type { HostPairingState, HostStatus } from './remote/hosts'
 import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { DirectSettings, HostSettings, TerminalSettings } from './settings'
@@ -181,14 +182,22 @@ export type MainToRemoteHost =
       userDataPath: string
       appVersion: string
       platform: Platform
-      /** The name devices show for this computer. */
+      /** The name devices show for this computer, and the one it suggests when it pairs. */
       hostName: string
-      /** The 32 bytes of the host's X25519 private key, in base64. Never logged. */
-      privateKey: string
+      /**
+       * The 32 bytes of the host's X25519 private key, in base64. Never logged. Absent while remote
+       * access is off: the host then listens nowhere and takes no device.
+       */
+      privateKey?: string
       /** The key is kept in a file only the user can read, without the system's encryption. */
       plainTextKey: boolean
       /** Direct connections on the same network or a VPN; off when absent. */
       direct?: DirectSettings
+      /**
+       * The desktop app as a device of other hosts: the 32 bytes of its own X25519 private key, in
+       * base64 and never logged, and its system as its hello names it. Absent under the daemon.
+       */
+      device?: { privateKey: string; platform: string }
       // Under Node.js: the agent host's socket, which each device's session connects to, and a
       // local socket devices may connect on, each connection a stream transport.
       agentHostSocket?: string
@@ -202,7 +211,27 @@ export type MainToRemoteHost =
   | { type: 'remote-host:remove-device'; id: string }
   // The direct connections' settings changed.
   | { type: 'remote-host:direct'; direct: DirectSettings }
-  // The computer woke from sleep, maybe on another network: the direct addresses are read again.
+  // Remote access turned on while the host runs for other hosts, with what `remote-host:init`
+  // would have carried.
+  | { type: 'remote-host:serve'; privateKey: string; plainTextKey: boolean; direct: DirectSettings }
+  // Remote access turned off: devices hear `remote_off` and nothing listens, while the
+  // connections to other hosts go on.
+  | { type: 'remote-host:stop-serving' }
+  // The answer to remote-host:open-host-port: the port travels in the transfer list.
+  | { type: 'remote-host:host-port'; requestId: number }
+  // Pairs with the host of a pairing link, suggesting this computer's model; its progress comes
+  // back as remote-host:host-pairing under the same id.
+  | { type: 'remote-host:pair-host'; pairId: number; link: string; model: string }
+  // Add host closed: the pairing connection ends, unless it was added.
+  | { type: 'remote-host:pair-host-close'; pairId: number }
+  // Renames this computer on a host it is connected to; the host's `renamed` answers.
+  | { type: 'remote-host:rename-on-host'; id: string; name: string }
+  // The addresses a known host is tried at, as the owner edited them here.
+  | { type: 'remote-host:host-addresses'; id: string; addresses: DirectAddress[] }
+  // Forgets a host here; nothing changes on it.
+  | { type: 'remote-host:remove-host'; id: string }
+  // The computer woke from sleep, maybe on another network: the direct addresses are read again
+  // and the hosts not connected are tried at once.
   | { type: 'remote-host:resume' }
   | { type: 'remote-host:rename-device'; id: string; name: string }
   // Opens a pairing code for the asker `codeId` names, voiding any code still open; its progress
@@ -252,6 +281,12 @@ export type RemoteHostToMain =
   | { type: 'remote-host:open-port'; requestId: number; device: PortDevice }
   | { type: 'remote-host:log'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'remote-host:pairing'; codeId: number; pairing: PairingState }
+  // The known hosts and their connections, whenever they change.
+  | { type: 'remote-host:hosts'; hosts: HostStatus[] }
+  | { type: 'remote-host:host-pairing'; pairId: number; pairing: HostPairingState }
+  // A port for a host's device session, which carries the host protocol; answered by
+  // remote-host:host-port.
+  | { type: 'remote-host:open-host-port'; requestId: number; hostId: string }
   // Newest first.
   | { type: 'remote-host:activity'; requestId: number; events: DeviceActivity[] }
   | { type: 'remote-host:reset'; requestId: number }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { negotiate, parseHello } from './protocol'
+import { negotiate, parseClosing, parseHello, parseWelcome } from './protocol'
 
 const hello = {
   type: 'hello',
@@ -46,5 +46,51 @@ describe('parseHello', () => {
     { ...hello, client: { kind: 'ios', version: 'x'.repeat(65), platform: 'ios' } },
   ])('refuses %j', (value) => {
     expect(parseHello(value)).toBeNull()
+  })
+})
+
+const welcome = {
+  type: 'welcome',
+  protocol: 1,
+  host: { name: 'Studio', platform: 'linux', version: '0.2.0' },
+  features: [],
+  role: 'owner',
+  device: { id: 'a'.repeat(32), name: 'Lin MacBook' },
+  terminal: false,
+  addresses: [{ host: '192.168.1.8', port: 47821 }],
+}
+
+describe('parseWelcome', () => {
+  it('reads a welcome, dropping the addresses that are none', () => {
+    expect(parseWelcome(welcome)).toEqual(welcome)
+    expect(
+      parseWelcome({
+        ...welcome,
+        addresses: [{ host: 'a b', port: 1 }, ...welcome.addresses, 'x'],
+        resume: 'token',
+      }),
+    ).toEqual(welcome)
+  })
+
+  it.each([
+    null,
+    { ...welcome, type: 'hello' },
+    { ...welcome, protocol: 2 },
+    { ...welcome, host: { name: '', platform: 'linux', version: '0.2.0' } },
+    { ...welcome, host: null },
+    { ...welcome, device: { id: 'x', name: 'Lin MacBook' } },
+    { ...welcome, device: { id: 'a'.repeat(32), name: ' ' } },
+  ])('refuses %j', (value) => {
+    expect(parseWelcome(value)).toBeNull()
+  })
+})
+
+describe('parseClosing', () => {
+  it('reads the reasons it knows', () => {
+    expect(parseClosing({ type: 'closing', reason: 'removed' })).toEqual({
+      type: 'closing',
+      reason: 'removed',
+    })
+    expect(parseClosing({ type: 'closing', reason: 'later' })).toBeNull()
   })
 })
