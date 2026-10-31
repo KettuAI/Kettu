@@ -2,8 +2,10 @@
 // the host's key and the settings, starts the hosts and stops them in order.
 
 import { chmod, rm } from 'node:fs/promises'
+import os from 'node:os'
 import { matchLocale } from '@shared/locale'
 import { createLogger } from '../main/log'
+import type { RemoteIdentity } from '../main/remote-identity'
 import { SettingsStore } from '../main/settings'
 import {
   callControl,
@@ -79,31 +81,35 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   let stopping = false
   let hosts: Hosts | null = null
 
-  const unavailable = (): never => {
-    throw new ControlError('unavailable', 'Remote access is not running')
+  const starting = (): Hosts => {
+    if (!hosts) throw new ControlError('unavailable', 'The daemon is starting')
+    return hosts
   }
   const handlers: ControlHandlers = {
     status: async () => status(),
     'host.socket': async ({ host }) => {
-      if (!hosts) throw new ControlError('unavailable', 'The daemon is starting')
       try {
-        return { path: await hosts.socket(host) }
+        return { path: await starting().socket(host) }
       } catch (error) {
         if (!isUnavailable(error)) throw error
         throw new ControlError('unavailable', `The ${host} host is ${error.message}`)
       }
     },
-    'devices.list': async () => unavailable(),
-    'devices.remove': async () => unavailable(),
+    'devices.list': async () => starting().devices(),
+    'devices.remove': async ({ id }) => {
+      await starting().removeDevice(id)
+      return null
+    },
   }
   const server = await claimControlSocket(options.controlSocket, () =>
     serveControl(options.controlSocket, handlers, (message) => log.warn(message)),
   )
 
   let settings: SettingsStore
+  let identity: RemoteIdentity
   try {
     await chmod(options.controlSocket, 0o600)
-    await loadHostKey(options.dataPath, (message) => log.warn(message))
+    identity = await loadHostKey(options.dataPath, (message) => log.warn(message))
     settings = await SettingsStore.load(options.dataPath)
   } catch (error) {
     await release(server, options.controlSocket)
@@ -120,6 +126,8 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     version: options.version,
     systemLocale: matchLocale([Intl.DateTimeFormat().resolvedOptions().locale]),
     settings: () => settings.get(),
+    privateKey: identity.privateKey,
+    hostName: os.hostname(),
     env: hostEnv,
     timings: options.timings,
   })
@@ -132,7 +140,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   // Asked for as soon as the socket listens, before the key and the hosts exist.
   async function status(): Promise<DaemonStatus> {
     const keyFile = keyPath(options.dataPath)
-    const notStarted = { state: 'idle', pid: null, restarts: 0 } as const
+    const idle = { state: 'idle', pid: null, restarts: 0 } as const
     return {
       version: options.version,
       pid: process.pid,
@@ -141,8 +149,8 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       dataPath: options.dataPath,
       service: options.env[SERVICE_ENV] === '1',
       key: { storage: 'file', path: keyFile, private: await keyIsPrivate(keyFile) },
-      hosts: hosts?.status() ?? { agent: notStarted, terminal: notStarted },
-      connectedDevices: null,
+      hosts: hosts?.status() ?? { agent: idle, terminal: idle, remote: idle },
+      connectedDevices: hosts?.connectedDevices() ?? null,
     }
   }
 

@@ -13,8 +13,9 @@ const status: DaemonStatus = {
   hosts: {
     agent: { state: 'ready', pid: 4243, restarts: 0 },
     terminal: { state: 'idle', pid: null, restarts: 0 },
+    remote: { state: 'ready', pid: 4244, restarts: 0 },
   },
-  connectedDevices: null,
+  connectedDevices: 0,
 }
 
 describe('runningReport', () => {
@@ -24,7 +25,8 @@ Data folder:       /home/ada/.local/share/kettu
 Private key:       in a file only you can read, /home/ada/.local/share/kettu/host.key
 Agent host:        ready (pid 4243)
 Terminal host:     not started
-Connected devices: unknown, remote access is not running
+Remote host:       ready (pid 4244)
+Connected devices: 0
 `)
   })
 
@@ -36,14 +38,16 @@ Connected devices: unknown, remote access is not running
       hosts: {
         agent: { state: 'ready', pid: 7, restarts: 1 },
         terminal: { state: 'failed', pid: null, restarts: 4 },
+        remote: { state: 'waiting', pid: null, restarts: 1 },
       },
-      connectedDevices: 2,
+      connectedDevices: null,
     })
     expect(report).toContain('is running in the foreground (pid 4242)')
     expect(report).toContain('Private key:       in a file others can read too, ')
     expect(report).toContain('Agent host:        ready (pid 7, restarted 1 time)')
     expect(report).toContain('Terminal host:     failed, it exited too often, restarted 4 times')
-    expect(report).toContain('Connected devices: 2')
+    expect(report).toContain('Remote host:       restarting, restarted 1 time')
+    expect(report).toContain('Connected devices: unknown, remote access is not running')
   })
 
   it('says when it is stopping', () => {
@@ -68,11 +72,26 @@ describe('devicesReport', () => {
 
   it('lists each device with when it last connected', () => {
     const devices = [
-      { id: 'a1', name: "Ada's iPhone", platform: 'ios', connected: true, lastConnectedAt: now },
-      { id: 'b2b2', name: 'Laptop', platform: 'darwin', connected: false, lastConnectedAt: null },
+      {
+        id: 'a1',
+        name: "Ada's iPhone",
+        kind: 'ios',
+        platform: 'ios',
+        connected: true,
+        lastConnectedAt: now,
+      },
+      {
+        id: 'b2b2',
+        name: 'Laptop',
+        kind: 'desktop',
+        platform: 'darwin',
+        connected: false,
+        lastConnectedAt: null,
+      },
       {
         id: 'c3',
         name: 'Web',
+        kind: 'web',
         platform: 'web',
         connected: false,
         lastConnectedAt: now - 3 * 3_600_000,
@@ -80,10 +99,10 @@ describe('devicesReport', () => {
     ]
     expect(devicesReport(devices, now)).toBe(
       [
-        'ID    NAME          PLATFORM  LAST CONNECTED',
-        "a1    Ada's iPhone  ios       connected now",
-        'b2b2  Laptop        darwin    never',
-        'c3    Web           web       3 h ago',
+        'ID    NAME          KIND     PLATFORM  LAST CONNECTED',
+        "a1    Ada's iPhone  ios      ios       connected now",
+        'b2b2  Laptop        desktop  darwin    never',
+        'c3    Web           web      web       3 h ago',
         '',
       ].join('\n'),
     )

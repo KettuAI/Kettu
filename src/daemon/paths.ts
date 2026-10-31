@@ -35,9 +35,9 @@ export function controlSocketPath(data: string): string | null {
   return Buffer.byteLength(socket) <= MAX_SOCKET_PATH ? socket : null
 }
 
-/** The host's private key, in a file only the user can read. */
+/** The host's identity with its private key, where the desktop app keeps its own. */
 export function keyPath(data: string): string {
-  return path.join(data, 'host.key')
+  return path.join(data, 'remote', 'identity.json')
 }
 
 /** Where the macOS service writes the daemon's output, which launchd sends to a file. */

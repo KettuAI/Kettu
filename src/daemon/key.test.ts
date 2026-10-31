@@ -16,6 +16,7 @@ beforeEach(async () => {
 afterEach(() => rm(dir, { recursive: true, force: true }))
 
 const mode = async (file: string): Promise<number> => (await stat(file)).mode & 0o777
+const keyFile = (): string => path.join(dir, 'remote', 'identity.json')
 
 describeUnix('prepareDataFolder', () => {
   it('makes the folder only the user can open', async () => {
@@ -34,39 +35,46 @@ describeUnix('prepareDataFolder', () => {
 })
 
 describeUnix('loadHostKey', () => {
-  it('makes a 32-byte key on first start, in a file only the user can read', async () => {
-    const key = await loadHostKey(dir, () => {})
-    expect(key.path).toBe(path.join(dir, 'host.key'))
-    expect(key.privateKey).toHaveLength(32)
-    expect(await mode(key.path)).toBe(0o600)
-    expect(await keyIsPrivate(key.path)).toBe(true)
-    expect(Buffer.from((await readFile(key.path, 'utf8')).trim(), 'base64')).toEqual(
-      Buffer.from(key.privateKey),
-    )
+  it('makes the key on first start, in a file only the user can read', async () => {
+    const identity = await loadHostKey(dir, () => {})
+    expect(Buffer.from(identity.privateKey, 'base64')).toHaveLength(32)
+    // The remote host is told the key is kept without the system's encryption.
+    expect(identity.plainText).toBe(true)
+    expect(await mode(keyFile())).toBe(0o600)
+    expect(await mode(path.dirname(keyFile()))).toBe(0o700)
+    expect(await keyIsPrivate(keyFile())).toBe(true)
+    expect(JSON.parse(await readFile(keyFile(), 'utf8'))).toEqual({
+      version: 1,
+      privateKey: identity.privateKey,
+      encrypted: false,
+      plainText: true,
+    })
   })
 
   it('keeps the key from then on', async () => {
     const first = await loadHostKey(dir, () => {})
     const second = await loadHostKey(dir, () => {})
-    expect(second.privateKey).toEqual(first.privateKey)
+    expect(second.privateKey).toBe(first.privateKey)
   })
 
   it('makes the file private again when others could read it, and says so', async () => {
-    const { path: file } = await loadHostKey(dir, () => {})
-    await chmod(file, 0o644)
-    expect(await keyIsPrivate(file)).toBe(false)
+    await loadHostKey(dir, () => {})
+    await chmod(keyFile(), 0o644)
+    expect(await keyIsPrivate(keyFile())).toBe(false)
     const warnings: string[] = []
     await loadHostKey(dir, (message) => warnings.push(message))
-    expect(await mode(file)).toBe(0o600)
-    expect(warnings).toEqual([`Others could read ${file}; it is readable only by you again`])
+    expect(await mode(keyFile())).toBe(0o600)
+    expect(warnings).toEqual([`Others could read ${keyFile()}; it is readable only by you again`])
   })
 
-  it('refuses a damaged key rather than making a new identity', async () => {
-    await writeFile(path.join(dir, 'host.key'), 'not a key\n', { mode: 0o600 })
-    await expect(loadHostKey(dir, () => {})).rejects.toThrow('is damaged')
+  it("refuses a key the system encrypted, as in the app's data folder copied over", async () => {
+    await mkdir(path.dirname(keyFile()), { recursive: true })
+    const file = { version: 1, privateKey: 'ZW5jcnlwdGVk', encrypted: true, plainText: false }
+    await writeFile(keyFile(), JSON.stringify(file), { mode: 0o600 })
+    await expect(loadHostKey(dir, () => {})).rejects.toThrow('encrypted by the system')
   })
 
   it('reports no file before the first start', async () => {
-    expect(await keyIsPrivate(path.join(dir, 'host.key'))).toBeNull()
+    expect(await keyIsPrivate(keyFile())).toBeNull()
   })
 })

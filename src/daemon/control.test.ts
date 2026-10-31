@@ -57,9 +57,10 @@ describeUnix('the control socket', () => {
 
   it("passes on a handler's error with its code", async () => {
     server = await serveControl(socket, handlers(), () => {})
-    const error = await callControl(socket, 'devices.remove', { id: 'x' }).catch((e) => e)
+    const id = 'ab'.repeat(16)
+    const error = await callControl(socket, 'devices.remove', { id }).catch((e) => e)
     expect(error).toBeInstanceOf(ControlError)
-    expect(error).toMatchObject({ code: 'not_found', message: 'No device x' })
+    expect(error).toMatchObject({ code: 'not_found', message: `No device ${id}` })
   })
 
   it('hides what an unexpected failure says, and logs it', async () => {
@@ -87,7 +88,7 @@ describeUnix('the control socket', () => {
     port.onMessage((data) => replies.push(data))
     port.send({ type: 'request', id: 1, method: 'host.restart', params: null })
     port.send({ type: 'request', id: 2, method: 'host.socket', params: { host: 'remote' } })
-    port.send({ type: 'request', id: 3, method: 'devices.remove', params: { id: '' } })
+    port.send({ type: 'request', id: 3, method: 'devices.remove', params: { id: 'ABC' } })
     port.send({ type: 'request', id: 4, method: 'status', params: { all: true } })
     port.send({ type: 'request', id: 5, method: 'toString', params: null })
     while (replies.length < 5) await new Promise((resolve) => setTimeout(resolve, 10))

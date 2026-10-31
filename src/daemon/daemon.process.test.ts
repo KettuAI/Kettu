@@ -1,9 +1,10 @@
 // Process test: `kettu run` built as it ships, on a data folder and a home of its own. It runs a
 // turn of the fake agent through the agent host's socket, answers `kettu status` and
-// `kettu devices`, restarts a host that is killed, and stops everything on SIGTERM.
+// `kettu devices` with the remote host's devices, restarts a host that is killed, and stops
+// everything on SIGTERM.
 
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
-import { access, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -12,6 +13,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { HostEvent } from '@shared/agent-host'
 import type { PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
+import { deviceId, type PairedDevice } from '@shared/remote/device'
+import { generateKeyPair } from '@shared/remote/noise'
 import { connectPort } from '@shared/socket-port'
 import { FAKE_AGENT_MAIN, TestPort } from '../agent-host/testing/harness'
 import { callControl, type DaemonStatus } from './control'
@@ -143,6 +146,23 @@ describeUnix('kettu', () => {
   })
 
   it('runs the hosts, restarts one that dies and stops them all on SIGTERM', async () => {
+    // A device paired before, as the remote host keeps it.
+    const { publicKey } = await generateKeyPair()
+    const phone: PairedDevice = {
+      id: await deviceId(publicKey),
+      publicKey: Buffer.from(publicKey).toString('base64'),
+      name: "Ada's iPhone",
+      kind: 'ios',
+      platform: 'ios',
+      addedAt: Date.now(),
+      lastConnectedAt: null,
+    }
+    await mkdir(path.join(data, 'remote'), { recursive: true })
+    await writeFile(
+      path.join(data, 'remote', 'devices.json'),
+      JSON.stringify({ version: 1, devices: [phone] }),
+    )
+
     let output = ''
     daemon = spawn(process.execPath, [path.join(bundle, 'main.cjs'), 'run'], {
       env,
@@ -151,18 +171,29 @@ describeUnix('kettu', () => {
     daemon.stdout!.on('data', (chunk: Buffer) => (output += chunk.toString()))
     daemon.stderr!.on('data', (chunk: Buffer) => (output += chunk.toString()))
     const exited = new Promise<number | null>((resolve) => daemon!.once('exit', resolve))
-    const ready = await until(
-      async () => (await status()).hosts.agent.state === 'ready' && status(),
-      `ready agent host\n${output}`,
-    )
+    // Remote access is on from the start, once the agent host it connects to is ready.
+    const ready = await until(async () => {
+      const current = await status()
+      return current.hosts.remote.state === 'ready' && current.connectedDevices !== null && current
+    }, `ready remote host\n${output}`)
+    const keyFile = path.join(data, 'remote', 'identity.json')
     expect(ready).toMatchObject({
       version: '0.0.0',
       pid: daemon.pid,
       dataPath: data,
       service: false,
-      key: { storage: 'file', path: path.join(data, 'host.key'), private: true },
-      hosts: { terminal: { state: 'idle', pid: null, restarts: 0 } },
-      connectedDevices: null,
+      key: { storage: 'file', path: keyFile, private: true },
+      hosts: {
+        agent: { state: 'ready', restarts: 0 },
+        terminal: { state: 'idle', pid: null, restarts: 0 },
+        remote: { state: 'ready', restarts: 0 },
+      },
+      connectedDevices: 0,
+    })
+    // The key is kept as the app keeps it without the system's encryption.
+    expect(JSON.parse(await readFile(keyFile, 'utf8'))).toMatchObject({
+      encrypted: false,
+      plainText: true,
     })
 
     // The CLI against the running daemon.
@@ -171,12 +202,31 @@ describeUnix('kettu', () => {
     expect(printed.stdout).toContain(
       `Kettu daemon 0.0.0 is running in the foreground (pid ${daemon.pid})`,
     )
-    expect(printed.stdout).toContain(`Private key:       in a file only you can read, ${data}`)
+    expect(printed.stdout).toContain(`Private key:       in a file only you can read, ${keyFile}`)
     expect(printed.stdout).toContain(`Agent host:        ready (pid ${ready.hosts.agent.pid})`)
-    expect(await kettu('devices')).toMatchObject({
+    expect(printed.stdout).toContain(`Remote host:       ready (pid ${ready.hosts.remote.pid})`)
+    expect(printed.stdout).toContain('Connected devices: 0')
+    const listed = await kettu('devices')
+    expect(listed).toMatchObject({ code: 0, stderr: '' })
+    expect(listed.stdout.split('\n')[1]).toMatch(
+      new RegExp(`^${phone.id}  Ada's iPhone  ios +ios +never$`),
+    )
+    expect(await kettu('devices', 'remove', 'phone')).toEqual({
       code: 1,
-      stderr: 'kettu: Remote access is not running\n',
+      stdout: '',
+      stderr: "kettu: A device's id is 32 hexadecimal digits\n",
     })
+    const stranger = 'f'.repeat(32)
+    expect(await kettu('devices', 'remove', stranger)).toMatchObject({
+      code: 1,
+      stderr: `kettu: No device ${stranger} is paired with this computer\n`,
+    })
+    expect(await kettu('devices', 'remove', phone.id)).toEqual({
+      code: 0,
+      stdout: `Removed the device ${phone.id}.\n`,
+      stderr: '',
+    })
+    expect((await kettu('devices')).stdout).toBe('No devices are paired with this computer.\n')
     expect(await kettu('run')).toMatchObject({
       code: 1,
       stderr: `kettu: A Kettu daemon is already running on this data folder (pid ${daemon.pid})\n`,
@@ -206,8 +256,9 @@ describeUnix('kettu', () => {
     expect(both.hosts.terminal).toMatchObject({ state: 'ready', restarts: 0 })
     const terminalPid = both.hosts.terminal.pid!
 
-    // A host killed is started again, on a new socket.
+    // A host killed is started again, on its socket, which the remote host keeps using.
     const killed = both.hosts.agent.pid!
+    const remotePid = both.hosts.remote.pid!
     process.kill(killed, 'SIGKILL')
     const restarted = await until(async () => {
       const { agent } = (await status()).hosts
@@ -218,12 +269,19 @@ describeUnix('kettu', () => {
     const again = await agentPort()
     const agents = await again.request('agents.list', undefined)
     expect(agents.map((agent) => agent.id)).toContain('fake-agent')
+    expect((await status()).hosts.remote).toMatchObject({ state: 'ready', pid: remotePid })
 
     daemon.kill('SIGTERM')
     expect(await exited).toBe(0)
     expect(alive(restarted.pid!)).toBe(false)
     expect(alive(terminalPid)).toBe(false)
+    expect(alive(remotePid)).toBe(false)
     expect(await exists(socket)).toBe(false)
+    // Devices are told before their sessions' agent host stops.
+    expect(output.indexOf('[remote-host] Stopped')).toBeGreaterThan(0)
+    expect(output.indexOf('[remote-host] Stopped')).toBeLessThan(
+      output.indexOf('[agent-host] Stopped with code 0'),
+    )
     expect(output).toContain('[daemon] Stopped')
     expect((await kettu('status')).code).toBe(3)
   }, 90_000)

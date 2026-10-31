@@ -2,6 +2,7 @@
 // refuses to stop as each test asks.
 
 import { access, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { connect } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
@@ -9,12 +10,14 @@ import type { Logger } from '../main/log'
 import { ForkedHost, isUnavailable, type ForkedHostConfig } from './forked-host'
 
 type ToChild =
-  | { type: 'init'; socketPath: string }
+  | { type: 'init'; socketPath: string | null }
   | { type: 'echo'; value: number }
   | { type: 'crash' }
   | { type: 'shutdown' }
 type FromChild =
-  { type: 'ready' } | { type: 'echo'; value: number; socketPath: string } | { type: 'stopped' }
+  | { type: 'ready' }
+  | { type: 'echo'; value: number; socketPath: string | null }
+  | { type: 'stopped' }
 
 const HOST = `
 let socketPath = null
@@ -23,11 +26,17 @@ process.on('message', (message) => {
   if (message.type === 'init') {
     socketPath = message.socketPath
     if (mode === 'crash-at-init') process.exit(3)
-    if (mode !== 'never-ready') process.send({ type: 'ready' })
+    if (mode === 'never-ready') return
+    if (!socketPath) return process.send({ type: 'ready' })
+    // Listens as a host does, so a socket file left behind would fail the next one.
+    require('node:net')
+      .createServer((socket) => socket.end())
+      .on('error', () => process.exit(4))
+      .listen(socketPath, () => process.send({ type: 'ready' }))
   } else if (message.type === 'echo') {
     process.send({ type: 'echo', value: message.value, socketPath })
   } else if (message.type === 'crash') {
-    process.exit(5)
+    process.kill(process.pid, 'SIGKILL')
   } else if (message.type === 'shutdown' && mode !== 'stubborn') {
     process.send({ type: 'stopped' })
     setImmediate(() => process.exit(0))
@@ -111,12 +120,25 @@ const exists = (file: string): Promise<boolean> =>
     () => false,
   )
 
+const listening = (socketPath: string): Promise<boolean> =>
+  new Promise((resolve) => {
+    const socket = connect(socketPath)
+    socket.once('connect', () => {
+      socket.destroy()
+      resolve(true)
+    })
+    socket.once('error', () => resolve(false))
+  })
+
 describeUnix('ForkedHost', () => {
   it('starts a host on its own socket, passes messages and stops it cleanly', async () => {
     const { host, received, exits } = make('normal')
     expect(host.state).toBe('idle')
-    const socketPath = await host.ready()
+    expect(host.socketPath).toBeNull()
+    await host.ready()
+    const socketPath = host.socketPath!
     expect(host.state).toBe('ready')
+    expect(await listening(socketPath)).toBe(true)
     expect(host.pid).toBeGreaterThan(0)
     // privateSocketPath's folder, which only the user can open.
     expect(await exists(path.dirname(socketPath))).toBe(true)
@@ -127,11 +149,12 @@ describeUnix('ForkedHost', () => {
     expect(host.state).toBe('stopped')
     expect(exits).toEqual([true])
     expect(await exists(path.dirname(socketPath))).toBe(false)
+    expect(host.socketPath).toBeNull()
     expect(host.post({ type: 'echo', value: 8 })).toBe(false)
     await expect(host.ready()).rejects.toSatisfy(isUnavailable)
   })
 
-  it('restarts a host that exits, on a socket of its own', async () => {
+  it('restarts a host that is killed, on the socket it had', async () => {
     // What the host reports just after it hears of the exit, before anything else runs.
     const seen: { state: string; pid: number | null }[] = []
     const made: Made = make('normal', {
@@ -141,17 +164,29 @@ describeUnix('ForkedHost', () => {
       },
     })
     const { host, exits } = made
-    const first = await host.ready()
+    await host.ready()
+    const socketPath = host.socketPath!
     const pid = host.pid
     host.post({ type: 'crash' })
     await until(() => host.state === 'waiting' || host.state === 'starting', 'restart')
     // Never ready without a process, as status would otherwise say.
     expect(seen).toEqual([{ state: 'waiting', pid: null }])
-    const second = await host.ready()
+    await host.ready()
     expect(host.pid).not.toBe(pid)
-    expect(second).not.toBe(first)
+    // The killed process's socket file did not keep the new one from listening there.
+    expect(host.socketPath).toBe(socketPath)
+    expect(await listening(socketPath)).toBe(true)
     expect(host.restarts).toBe(1)
     expect(exits).toEqual([false])
+  })
+
+  it('runs a host that takes no ports without a socket', async () => {
+    const { host, received } = make('normal', { socketName: null })
+    await host.ready()
+    expect(host.socketPath).toBeNull()
+    host.post({ type: 'echo', value: 1 })
+    await until(() => received.length > 0, 'echo')
+    expect(received).toEqual([{ type: 'echo', value: 1, socketPath: null }])
   })
 
   it('gives up on a host that keeps exiting', async () => {

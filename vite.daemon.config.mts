@@ -1,5 +1,6 @@
-// The daemon's build: the `kettu` CLI and the hosts it forks, for Node.js, into out/daemon/. Every
-// package is bundled except node-pty, which is native and loads from beside the bundle.
+// The daemon's build: the `kettu` CLI and the three hosts it forks, for Node.js, into
+// out/daemon/. Every package is bundled except node-pty, which is native and loads from beside
+// the bundle.
 
 import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
@@ -36,6 +37,7 @@ export default defineConfig({
         main: source('src/daemon/main.ts'),
         'agent-host': source('src/agent-host/node-main.ts'),
         'terminal-host': source('src/terminal-host/node-main.ts'),
+        'remote-host': source('src/remote-host/node-main.ts'),
         'thread-worker': source('src/agent-host/threads/worker.ts'),
         'usage-worker': source('src/agent-host/usage/worker.ts'),
         'session-router': source('src/agent-host/session-router/router.ts'),

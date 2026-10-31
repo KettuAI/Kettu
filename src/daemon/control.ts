@@ -4,9 +4,11 @@
 
 import type { Server } from 'node:net'
 import type { PortChannel } from '@shared/port-channel'
+import { DEVICE_ID } from '@shared/remote/device'
 import { connectPort, listenPorts } from '@shared/socket-port'
 import type { HostState } from './forked-host'
 
+/** A host that takes ports; the remote host takes devices' connections instead. */
 export type HostName = 'agent' | 'terminal'
 
 export interface HostStatus {
@@ -16,10 +18,13 @@ export interface HostStatus {
   restarts: number
 }
 
+/** A paired device, without its key. */
 export interface DeviceSummary {
   id: string
   name: string
+  kind: string
   platform: string
+  /** It has a session open now. */
   connected: boolean
   lastConnectedAt: number | null
 }
@@ -39,7 +44,7 @@ export interface DaemonStatus {
     /** Whether only the user can read the file; null when it is missing. */
     private: boolean | null
   }
-  hosts: Record<HostName, HostStatus>
+  hosts: Record<HostName | 'remote', HostStatus>
   /** How many devices are connected, or null while remote access is not running. */
   connectedDevices: number | null
 }
@@ -86,7 +91,6 @@ export type ControlHandlers = {
   [M in ControlMethod]: (params: Params<M>) => Promise<Result<M>>
 }
 
-const MAX_ID = 256
 const CLOSE_WAIT_MS = 2000
 
 function none(raw: unknown): undefined {
@@ -113,8 +117,8 @@ const validators: { [M in ControlMethod]: (raw: unknown) => Params<M> } = {
   'devices.list': none,
   'devices.remove': (raw) => {
     const { id } = record(raw)
-    if (typeof id !== 'string' || id.length === 0 || id.length > MAX_ID) {
-      throw new ControlError('invalid_params', `id must be a string of 1 to ${MAX_ID} characters`)
+    if (typeof id !== 'string' || !DEVICE_ID.test(id)) {
+      throw new ControlError('invalid_params', "A device's id is 32 hexadecimal digits")
     }
     return { id }
   },

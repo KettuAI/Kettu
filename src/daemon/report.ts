@@ -49,6 +49,7 @@ ${rows([
   ['Private key', key],
   ['Agent host', host(status.hosts.agent)],
   ['Terminal host', host(status.hosts.terminal)],
+  ['Remote host', host(status.hosts.remote)],
   ['Connected devices', devices],
 ])}
 `
@@ -66,10 +67,11 @@ ${rows([
 export function devicesReport(devices: DeviceSummary[], now: number): string {
   if (devices.length === 0) return 'No devices are paired with this computer.\n'
   const table = [
-    ['ID', 'NAME', 'PLATFORM', 'LAST CONNECTED'],
+    ['ID', 'NAME', 'KIND', 'PLATFORM', 'LAST CONNECTED'],
     ...devices.map((device) => [
       device.id,
       device.name,
+      device.kind,
       device.platform,
       device.connected ? 'connected now' : since(device.lastConnectedAt, now),
     ]),
