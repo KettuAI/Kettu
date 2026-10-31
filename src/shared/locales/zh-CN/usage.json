@@ -102,10 +102,11 @@
     "title": "套餐限额",
     "none": "还没有 Agent 报告套餐限额。",
     "read": "{{ago}}读取",
+    "accounts_other": "{{count}} 个账号",
     "used": "已使用：{{limit}}",
     "resetsIn": "{{time}}后重置",
     "resetsAt": "{{time}} 重置",
-    "notReported": "{{name}} 不提供套餐用量。",
+    "notReported_other": "{{name}} 不提供套餐用量。",
     "notYet": "还没有报告套餐用量。"
   },
   "activity": {
@@ -113,20 +114,17 @@
     "weeks": "近 53 周",
     "less": "少",
     "more": "多",
-    "outside": "所选时间范围以外的日子调暗",
+    "outside": "所选时间范围以外的日子显示为灰色",
     "label": "近 53 周每天的 token 用量；用方向键在日子之间移动"
   },
   "parts": {
     "title": "Token 构成",
-    "type": "类型",
-    "tokens": "token",
     "share": "占比",
     "input": "输入",
     "output": "输出",
     "reasoning": "推理",
     "cacheRead": "缓存读取",
-    "cacheWrite": "缓存写入",
-    "total": "合计"
+    "cacheWrite": "缓存写入"
   },
   "models": {
     "title": "按模型",
