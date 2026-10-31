@@ -30,6 +30,7 @@ import type { LogFn } from '../agent-host/storage'
 import type { ActivityLog } from './activity'
 import type { DeviceStore } from './devices'
 import type { PairingCode, PairingCodes } from './pairing'
+import { SessionTitles } from './titles'
 
 /** How long a connection has from being accepted to its hello. */
 const HELLO_TIMEOUT_MS = 10_000
@@ -50,6 +51,8 @@ const NOTED = {
 const MAX_NOTED = 64
 
 type NotedKind = (typeof NOTED)[keyof typeof NOTED]
+
+type Summary = { id?: unknown; title?: unknown }
 
 const MAX_HOST_NAME = 256
 
@@ -226,7 +229,7 @@ export class RemoteServer {
 
   opened(device: PairedDevice): void {
     this.options.devices.connected(device.id)
-    this.options.activity.record(device.id, { kind: 'connected' })
+    this.options.activity.opened(device.id)
     this.options.changed()
   }
 
@@ -235,6 +238,7 @@ export class RemoteServer {
     if (!device) return
     // Last connected is when the session ended, so a device online for months is not unseen.
     this.options.devices.connected(device.id)
+    this.options.activity.closed(device.id)
     this.options.changed()
   }
 }
@@ -254,8 +258,12 @@ class DeviceConnection {
   private pairing: { code: PairingCode; publicKey: Uint8Array } | null = null
   /** False once the first message named a key, so it was no attempt at the pairing code. */
   private mayPair = true
-  /** Requests to note in the device's activity once they succeed, by id. */
-  private readonly noted = new Map<number, { kind: NotedKind; sessionId: unknown }>()
+  /** Requests to note in the device's activity once they succeed, by id, with the title then. */
+  private readonly noted = new Map<
+    number,
+    { kind: NotedKind; sessionId: unknown; title: string | null }
+  >()
+  private readonly titles = new SessionTitles()
 
   constructor(
     private readonly transport: Transport,
@@ -510,27 +518,35 @@ class DeviceConnection {
       }
       return
     }
+    this.titles.request(id, method)
     if (typeof id === 'number' && Object.hasOwn(NOTED, method as string)) {
       const kind = NOTED[method as keyof typeof NOTED]
       const sessionId = (params as { sessionId?: unknown } | null)?.sessionId
-      if (this.noted.size < MAX_NOTED) this.noted.set(id, { kind, sessionId })
+      const title = this.titles.get(sessionId) ?? null
+      if (this.noted.size < MAX_NOTED) this.noted.set(id, { kind, sessionId, title })
     }
     this.port?.send(value)
   }
 
-  /** Notes the requests of `NOTED` the agent host answered, before the answer goes on. */
+  /**
+   * Keeps the titles the device is told, and notes the requests of `NOTED` the agent host
+   * answered, before the answer goes on.
+   */
   private fromHost(data: unknown): void {
-    if (this.noted.size === 0 || typeof data !== 'object' || data === null) return
+    if (typeof data !== 'object' || data === null) return
     const { type, id, result } = data as Record<string, unknown>
+    this.titles.received(data as Record<string, unknown>)
+    if (this.noted.size === 0) return
     if ((type !== 'response' && type !== 'error') || typeof id !== 'number') return
     const noted = this.noted.get(id)
     if (!noted) return
     this.noted.delete(id)
-    // A new session's id is in the answer, the others' in the request.
-    const sessionId =
-      noted.kind === 'session-created' ? (result as { id?: unknown } | null)?.id : noted.sessionId
+    // A new session's id and title are in the answer, the others' in the request.
+    const created = noted.kind === 'session-created' ? (result as Summary | null) : null
+    const sessionId = created ? created.id : noted.sessionId
+    const title = created ? (typeof created.title === 'string' ? created.title : null) : noted.title
     if (type === 'response' && typeof sessionId === 'string' && this.device) {
-      this.server.note(this.device.id, { kind: noted.kind, sessionId })
+      this.server.note(this.device.id, { kind: noted.kind, sessionId, title })
     }
   }
 

@@ -592,3 +592,43 @@ describe('reset', () => {
     expect(t.activity.list(t.phone.id)[0]).toMatchObject({ kind: 'removed', by: 'reset' })
   })
 })
+
+describe("a device's activity", () => {
+  it('names a session by the title it had at the time', async () => {
+    const t = await setup()
+    const device = await t.connect()
+    await device.first
+    const session = await device.port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.agent.project,
+    })
+    const rename = async (title: string): Promise<void> => {
+      await device.port.request('sessions.rename', { sessionId: session.id, title })
+      await expect.poll(() => device.port.summary(session.id)?.title).toBe(title)
+    }
+    await rename('Fix the login')
+    await device.port.request('sessions.archive', { sessionId: session.id })
+    await rename('Login, done')
+    await device.port.request('sessions.delete', { sessionId: session.id })
+    const sessions = () =>
+      t.activity
+        .list(t.phone.id)
+        .flatMap((event) => ('sessionId' in event ? [[event.kind, event.title]] : []))
+    await expect.poll(sessions).toEqual([
+      ['session-deleted', 'Login, done'],
+      ['session-archived', 'Fix the login'],
+      ['session-created', null],
+    ])
+  })
+
+  it('logs no new connection for a device back within minutes', async () => {
+    const t = await setup()
+    const first = await t.connect()
+    await first.first
+    first.close()
+    await expect.poll(() => t.server.online()).toEqual([])
+    const again = await t.connect()
+    await again.first
+    expect(t.activity.list(t.phone.id).map((event) => event.kind)).toEqual(['connected'])
+  })
+})

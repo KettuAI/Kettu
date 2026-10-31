@@ -570,13 +570,15 @@ export function registerIpcHandlers({
     const owned = ownCode(event.sender, codeId)
     if (owned !== null) remoteHost.answerPairing(owned, add, add ? deviceName(name) : '')
   })
-  handle('remote:rename-device', 2, (_, id, name) => {
-    if (!remoteHost.renameDevice(deviceIdArg(id), deviceName(name))) {
-      throw new Error('Remote access is not on')
+  handle('remote:rename-device', 2, async (_, id, name) => {
+    if (!(await remoteHost.renameDevice(deviceIdArg(id), deviceName(name)))) {
+      throw new Error('The device could not be renamed')
     }
   })
-  handle('remote:remove-device', 1, (_, id) => {
-    if (!remoteHost.removeDevice(deviceIdArg(id))) throw new Error('Remote access is not on')
+  handle('remote:remove-device', 1, async (_, id) => {
+    if (!(await remoteHost.removeDevice(deviceIdArg(id)))) {
+      throw new Error('The device could not be removed')
+    }
   })
   handle('remote:activity', 1, (_, id) => remoteHost.activity(deviceIdArg(id)))
   handle('remote:reset', 0, () => remoteHost.reset())

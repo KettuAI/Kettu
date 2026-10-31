@@ -808,6 +808,7 @@
       "emptyTitle": "No devices yet",
       "emptyHint": "Scan the code with Kettu on an iPhone or iPad, or paste the link in Settings › Hosts › Add host… in Kettu on another computer.",
       "add": "Add device…",
+      "addOff": "Turn on remote access to add a device.",
       "online": "Online",
       "seenToday": "Connected today at {{time}}",
       "seenYesterday": "Connected yesterday at {{time}}",
