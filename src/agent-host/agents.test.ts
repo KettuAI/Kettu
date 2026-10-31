@@ -2204,6 +2204,7 @@ async function updateManager(
   const checks: unknown[] = []
   const saved: AgentUpdatesFile[] = []
   let cli = '0.160.1'
+  let userCli = options.installedCli
   let installImpl: (options: InstallOptions) => Promise<void> = async () => {}
   const m = manager(
     {},
@@ -2219,7 +2220,7 @@ async function updateManager(
             npmPath: options.npm === undefined ? '/x/npm' : options.npm,
             nodePath: '/x/node',
           },
-          ...(options.installedCli ? cliFound(options.installedCli) : {}),
+          ...(userCli ? cliFound(userCli) : {}),
         }),
       install: async (request) => {
         installs.push(request)
@@ -2245,6 +2246,8 @@ async function updateManager(
     saved,
     write,
     setCli: (version: string) => (cli = version),
+    /** The version the user's own CLI answers from now on, as after it updated itself. */
+    setUserCli: (version: string) => (userCli = version),
     onInstall: (impl: (options: InstallOptions) => Promise<void>) => (installImpl = impl),
     status: () => m.agents.status('codex'),
     dirs: async () => (await readdir(path.join(root, 'codex'))).sort(),
@@ -2326,19 +2329,21 @@ describe('update checks', () => {
     expect(newer.installs.map((i) => [i.version, i.withoutCli])).toEqual([['2.1.0', true]])
   })
 
-  it('brings the CLI with an update that needs a newer one than the user has', async () => {
+  it('holds an update that needs a newer CLI than the user has until theirs catches up', async () => {
     const m = await updateManager({
       installedCli: '2.0.0',
       pinsVersion: true,
       latest: async () => ({ adapterVersion: '2.1.0', cliVersion: '2.5.0' }),
     })
     await m.write('2.0.0', '2.0.0', '0.160.1', 1)
-    expect((await m.agents.checkUpdates())[0]?.update).toEqual({
+    expect((await m.agents.checkUpdates())[0]?.update).toBeNull()
+    m.setUserCli('2.5.0')
+    expect((await m.agents.check())[0]?.update).toEqual({
       adapterVersion: '2.1.0',
-      cliVersion: '2.5.0',
+      cliVersion: null,
     })
     await m.agents.update('codex')
-    expect(m.installs.map((i) => [i.version, i.withoutCli])).toEqual([['2.1.0', undefined]])
+    expect(m.installs.map((i) => [i.version, i.withoutCli])).toEqual([['2.1.0', true]])
   })
 
   it('offers nothing when up to date, or before the first install', async () => {
