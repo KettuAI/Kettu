@@ -60,13 +60,13 @@ It drives the agents you already have, with your own installation, account and s
 
 ## Install
 
-Download the installer for your system from [Releases](https://github.com/KettuAI/Kettu/releases/latest). Preview builds are not signed by Apple or Microsoft yet, so your system asks once before the first launch.
+Download the installer for your system from [Releases](https://github.com/KettuAI/Kettu/releases/latest). macOS builds are signed and notarized by Apple; Windows builds are not signed yet, so Windows asks once before the first launch.
 
-- **macOS**: open `Kettu-<version>-arm64.dmg` on Apple silicon or `Kettu-<version>-x64.dmg` on an Intel Mac, and drag Kettu to Applications. When macOS says it cannot verify the app, open System Settings › Privacy & Security and choose **Open Anyway**.
+- **macOS**: open `Kettu-<version>-arm64.dmg` on Apple silicon or `Kettu-<version>-x64.dmg` on an Intel Mac, and drag Kettu to Applications.
 - **Windows**: run `Kettu-<version>-x64-setup.exe`, or `Kettu-<version>-arm64-setup.exe` on Arm. When SmartScreen says it protected your PC, choose **More info**, then **Run anyway**.
 - **Linux**: make `Kettu-x86_64.AppImage`, or `Kettu-arm64.AppImage` on Arm, executable with `chmod +x`, then run it. AppImages need FUSE 2: `libfuse2`, or `libfuse2t64` on Ubuntu 24.04 and later.
 
-On Windows and Linux, new versions download in the background and install when Kettu restarts; on macOS, Kettu links to the download until its builds are signed. v0.0.1 cannot find updates, so install the latest version over it once by hand.
+New versions download in the background and install when Kettu restarts.
 
 ### Agents
 
