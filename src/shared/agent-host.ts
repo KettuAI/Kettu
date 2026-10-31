@@ -1,7 +1,7 @@
 // The contract between the renderer and the agent host, over the agent host port.
 
 import type { ArtifactContent, ArtifactSession, ArtifactSummary, VersionSummary } from './artifacts'
-import type { FileContent, FileList, FileSearch, FileWritten } from './files'
+import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { MediaAuthorization, MediaOpenResult } from './media'
 import type {
   ChangedFile,
@@ -621,6 +621,7 @@ export interface HostContract {
   'files.read': {
     params: { projectPath: string; path: string; asText?: boolean }
     result: FileContent
+    deviceResult: DeviceFileContent
   }
   'files.search': { params: { projectPath: string; query: string }; result: FileSearch }
   // A null `version` overwrites whatever the file holds.
@@ -635,9 +636,10 @@ export interface HostContract {
     result: MediaOpenResult
   }
   // The same file and check for a paired device's remote host, which streams it from the real
-  // path in the answer; main is granted nothing, and a window is refused.
+  // path in the answer; main is granted nothing, and a window is refused. Without `sessionId`,
+  // only a file in the project is let through, as for `files.read`.
   'media.authorize': {
-    params: { projectPath: string; path: string; sessionId: string }
+    params: { projectPath: string; path: string; sessionId?: string }
     result: MediaAuthorization
   }
   // `dayStarts`: the periods to sum, local days or a day's hours, as n + 1 ascending boundaries.
@@ -674,6 +676,10 @@ export interface HostContract {
 export type HostMethod = keyof HostContract
 export type HostParams<M extends HostMethod> = HostContract[M]['params']
 export type HostResult<M extends HostMethod> = HostContract[M]['result']
+/** What a paired device's port gets: a method's `deviceResult` where it has one, else its result. */
+export type DeviceResult<M extends HostMethod> = HostContract[M] extends { deviceResult: infer R }
+  ? R
+  : HostResult<M>
 
 export const HOST_METHODS = [
   'agents.list',

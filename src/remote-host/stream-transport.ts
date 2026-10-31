@@ -12,14 +12,14 @@ export function streamTransport(socket: Socket): Transport {
   let pending: Buffer = Buffer.alloc(0)
   let open = true
   let closed = false
+  let paused = false
   let listener: ((message: Uint8Array) => void) | null = null
   const waiting: Uint8Array[] = []
   const closeListeners: (() => void)[] = []
 
-  socket.on('data', (chunk: Buffer) => {
-    if (!open) return
-    pending = pending.length === 0 ? chunk : Buffer.concat([pending, chunk])
-    while (pending.length >= HEADER_BYTES) {
+  /** Hands over each whole message received, until the transport pauses or ends. */
+  const deliver = (): void => {
+    while (open && !paused && pending.length >= HEADER_BYTES) {
       const end = HEADER_BYTES + pending.readUInt16BE(0)
       if (pending.length < end) return
       // A copy, so a message keeps no larger chunk alive.
@@ -27,8 +27,13 @@ export function streamTransport(socket: Socket): Transport {
       pending = pending.subarray(end)
       if (listener) listener(message)
       else waiting.push(message)
-      if (!open) return
     }
+  }
+
+  socket.on('data', (chunk: Buffer) => {
+    if (!open) return
+    pending = pending.length === 0 ? chunk : Buffer.concat([pending, chunk])
+    deliver()
   })
   // A reset or a broken pipe; 'close' follows it.
   socket.on('error', () => {})
@@ -57,6 +62,17 @@ export function streamTransport(socket: Socket): Transport {
     close: () => {
       open = false
       socket.end()
+    },
+    pause: () => {
+      paused = true
+      socket.pause()
+    },
+    resume: () => {
+      if (!paused) return
+      paused = false
+      deliver()
+      // A message handed over may have paused it again.
+      if (!paused) socket.resume()
     },
     buffered: () => socket.writableLength,
     drained: () =>

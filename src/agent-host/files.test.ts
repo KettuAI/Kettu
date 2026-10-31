@@ -52,6 +52,7 @@ function service(limits: Partial<FilesLimits> = {}, exec: Exec = s.exec): FilesS
     platform,
     limits,
     media: (real, info) => media.grantFile(real, info, null),
+    describeMedia: (real, info) => media.describe(real, info),
   })
 }
 
@@ -318,6 +319,32 @@ describe('read', () => {
     expect(await service().read(dir, 'photo.png')).toMatchObject({
       grant: { mimeType: 'image/jpeg' },
     })
+  })
+
+  it("describes media to a paired device's read, which grants nothing", async () => {
+    const dir = await plain()
+    granted.length = 0
+    const png = Buffer.alloc(33, 1)
+    Buffer.from('\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR', 'latin1').copy(png, 0)
+    png.writeUInt32BE(64, 16)
+    png.writeUInt32BE(32, 20)
+    await writeFile(join(dir, 'cover.png'), png)
+    await s.write(dir, 'notes.txt', 'text')
+    expect(await service().read(dir, 'cover.png', false, true)).toEqual({
+      kind: 'media',
+      path: 'cover.png',
+      media: {
+        name: 'cover.png',
+        kind: 'image',
+        mimeType: 'image/png',
+        size: 33,
+        width: 64,
+        height: 32,
+      },
+    })
+    expect(await service().read(dir, 'cover.png', true, true)).toMatchObject({ kind: 'binary' })
+    expect(await service().read(dir, 'notes.txt', false, true)).toMatchObject({ kind: 'text' })
+    expect(granted).toEqual([])
   })
 
   it('reads a media file as any other file when asked, as an SVG for its source', async () => {

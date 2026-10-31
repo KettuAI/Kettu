@@ -266,9 +266,13 @@ export class MediaService {
 
   /**
    * The file `open` would grant, checked the same way, with its real path for a device's remote
-   * host to stream; main is granted nothing.
+   * host to stream; main is granted nothing. Without a session only a file inside `root` is.
    */
-  async authorize(root: string, written: string, sessionId: string): Promise<MediaAuthorization> {
+  async authorize(
+    root: string,
+    written: string,
+    sessionId: string | null,
+  ): Promise<MediaAuthorization> {
     const found = await this.find(root, written, sessionId)
     if (found.kind !== 'found') return found
     const file = await this.describe(found.real, found.info)
@@ -293,11 +297,12 @@ export class MediaService {
   private async find(
     root: string,
     written: string,
-    sessionId: string,
+    sessionId: string | null,
   ): Promise<{ kind: 'found'; real: string; info: Stats } | { kind: 'forbidden' | 'not_found' }> {
     let named: boolean | undefined
     const allowed = async (file: string) =>
-      this.inside(root, file) || (named ??= await this.deps.names(sessionId, written))
+      this.inside(root, file) ||
+      (sessionId !== null && (named ??= await this.deps.names(sessionId, written)))
     const candidates = this.candidates(root, written)
     let real: string | null = null
     let refused = candidates.length === 0
@@ -321,8 +326,11 @@ export class MediaService {
     return { kind: 'found', real, info }
   }
 
-  /** The file at `real` as media, by its name and its first bytes; null when it is none. */
-  private async describe(real: string, info: Stats): Promise<Omit<MediaFile, 'path'> | null> {
+  /**
+   * The regular file at `real`, a real path the caller has allowed, as media, by its name and its
+   * first bytes; null when it is none. Nothing is granted.
+   */
+  async describe(real: string, info: Stats): Promise<Omit<MediaFile, 'path'> | null> {
     const name = this.paths.basename(real)
     const nominated = mediaKindOfName(name)
     if (!nominated) return null

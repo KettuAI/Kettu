@@ -13,4 +13,8 @@ export interface Transport {
   buffered(): number
   /** Settles once what was buffered has left, or the connection has ended. */
   drained(): Promise<void>
+  /** Hands over no message, and reads none from the other side, until `resume`. */
+  pause(): void
+  /** Hands over the messages that waited, then reads on. */
+  resume(): void
 }

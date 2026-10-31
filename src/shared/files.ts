@@ -1,6 +1,6 @@
 // A project's files as the Files pane lists, reads and searches them through the agent host.
 
-import type { MediaGrant } from './media'
+import type { MediaFile, MediaGrant } from './media'
 
 /** Paths are relative to the project's root, with `/` between segments on every platform. */
 export interface FileList {
@@ -17,6 +17,14 @@ export type FileContent =
   | { kind: 'binary'; path: string; size: number }
   // Larger than `limit`, which is FILE_READ_LIMIT; not read.
   | { kind: 'too-large'; path: string; size: number; limit: number }
+
+/**
+ * `files.read` as a paired device gets it: a media file is described, not granted, since only
+ * main serves the media scheme; the device reads its bytes with `media.read`.
+ */
+export type DeviceFileContent =
+  | Exclude<FileContent, { kind: 'media' }>
+  | { kind: 'media'; path: string; media: Omit<MediaFile, 'path'> }
 
 /** A saved file's new version and size in bytes. */
 export interface FileWritten {
