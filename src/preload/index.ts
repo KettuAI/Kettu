@@ -59,6 +59,8 @@ const onArtifactStopped = subscribe('artifact:stopped')
 const onSharingChanged = subscribe('sharing:changed')
 const onRemoteChanged = subscribe('remote:changed')
 const onRemotePairing = subscribe('remote:pairing')
+const onHostsChanged = subscribe('hosts:changed')
+const onHostPairing = subscribe('hosts:pairing')
 const onBrowserState = subscribe('browser:state')
 const onBrowserOpened = subscribe('browser:opened')
 
@@ -124,6 +126,16 @@ const api: KettuApi = {
     retryDirect: () => invoke('remote:retry-direct'),
     onChanged: onRemoteChanged,
     onPairing: onRemotePairing,
+  },
+  hosts: {
+    status: () => invoke('hosts:status'),
+    pair: (link) => invoke('hosts:pair', link),
+    closePairing: (pairId) => invoke('hosts:pair-close', pairId),
+    rename: (id, name) => invoke('hosts:rename', id, name),
+    setAddresses: (id, addresses) => invoke('hosts:set-addresses', id, addresses),
+    remove: (id) => invoke('hosts:remove', id),
+    onChanged: onHostsChanged,
+    onPairing: onHostPairing,
   },
   sharing: {
     status: () => invoke('sharing:status'),

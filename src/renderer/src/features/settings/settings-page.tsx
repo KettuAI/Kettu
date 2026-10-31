@@ -38,6 +38,7 @@ import {
   useBrowserSection,
   useGeneralSection,
   useGitSection,
+  useHostsSection,
   useMcpSection,
   useNotificationsSection,
   useRemoteSection,
@@ -55,10 +56,16 @@ const FLASH_MS = 1200
  */
 export default function SettingsPage() {
   const { t } = useTranslation('settings')
-  // The list in three clusters: how the app looks and behaves, the agents and their tools, then
-  // the rest.
+  // The list in clusters: what belongs to this client first, then the agents and their tools,
+  // then the rest.
   const clusters: SectionDef[][] = [
-    [useGeneralSection(), useAppearanceSection(), useNotificationsSection()],
+    [
+      useGeneralSection(),
+      useAppearanceSection(),
+      useNotificationsSection(),
+      useHostsSection(),
+      useBrowserSection(),
+    ],
     [
       useAgentsSection(),
       useHarnessesSection(),
@@ -67,7 +74,7 @@ export default function SettingsPage() {
       useGitSection(),
     ],
     [useMcpSection()],
-    [useArchivedSection(), useBrowserSection(), useSharingSection()],
+    [useArchivedSection(), useSharingSection()],
     [useRemoteSection()],
     [useAdvancedSection(), useAboutSection()],
   ]

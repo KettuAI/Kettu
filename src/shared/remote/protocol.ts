@@ -4,7 +4,8 @@
 // window's port carries them.
 
 import type { Platform } from '../platform'
-import { isDeviceModel, normalizeDeviceName } from './device'
+import { parseDirectAddress } from './address'
+import { DEVICE_ID, isDeviceModel, normalizeDeviceName } from './device'
 
 /** The newest protocol version this side speaks; one number covers every change on the channel. */
 export const PROTOCOL_VERSION = 1
@@ -134,6 +135,75 @@ function parsePairingDevice(value: unknown): Hello['device'] | null {
   const { name, model } = value as Record<string, unknown>
   const kept = normalizeDeviceName(name)
   return kept && isDeviceModel(model) ? { name: kept, model } : null
+}
+
+const CLOSING_REASONS: readonly string[] = [
+  'update_client',
+  'update_host',
+  'invalid',
+  'removed',
+  'rejected',
+  'remote_off',
+  'stopping',
+  'unavailable',
+]
+
+/** A closing as the device reads it, or null when the value is not one. */
+export function parseClosing(value: unknown): Closing | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { type, reason } = value as Record<string, unknown>
+  if (type !== 'closing' || !CLOSING_REASONS.includes(reason as string)) return null
+  return { type, reason: reason as ClosingReason }
+}
+
+const MAX_HOST_FIELD = 256
+/** The most addresses a device keeps from one welcome or addresses message. */
+export const MAX_WELCOME_ADDRESSES = 64
+
+function isHostField(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= MAX_HOST_FIELD
+}
+
+/** The addresses of a welcome or addresses message that are ones, the rest dropped. */
+export function parseAddresses(value: unknown): DirectAddress[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .slice(0, MAX_WELCOME_ADDRESSES)
+    .map(parseDirectAddress)
+    .filter((address): address is DirectAddress => address !== null)
+}
+
+/**
+ * A welcome as the device reads it, with the fields it uses, or null when the value is not one
+ * or speaks a version this side does not.
+ */
+export function parseWelcome(value: unknown): Welcome | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { type, protocol, host, features, device, terminal, addresses } = value as Record<
+    string,
+    unknown
+  >
+  if (type !== 'welcome' || !isVersion(protocol)) return null
+  if (protocol < MIN_PROTOCOL_VERSION || protocol > PROTOCOL_VERSION) return null
+  if (typeof host !== 'object' || host === null) return null
+  const { name, platform, version } = host as Record<string, unknown>
+  if (!isHostField(name) || !isClientField(platform) || !isClientField(version)) return null
+  if (typeof device !== 'object' || device === null) return null
+  const { id, name: deviceName } = device as Record<string, unknown>
+  const kept = normalizeDeviceName(deviceName)
+  if (typeof id !== 'string' || !DEVICE_ID.test(id) || !kept) return null
+  return {
+    type,
+    protocol,
+    host: { name, platform: platform as Platform, version },
+    features: Array.isArray(features)
+      ? features.filter((feature): feature is string => typeof feature === 'string')
+      : [],
+    role: 'owner',
+    device: { id, name: kept },
+    terminal: terminal === true,
+    addresses: parseAddresses(addresses),
+  }
 }
 
 /** The newest version both sides speak, or which side has to be updated when there is none. */

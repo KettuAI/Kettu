@@ -11,7 +11,11 @@ import {
   type WebContents,
 } from 'electron'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
+import { addressKey, parseDirectAddress } from '@shared/remote/address'
 import { DEVICE_ID, normalizeDeviceName } from '@shared/remote/device'
+import { MAX_HOST_ADDRESSES, type HostPairStart, type HostsStatus } from '@shared/remote/hosts'
+import { parsePairingLink } from '@shared/remote/pairing'
+import type { DirectAddress } from '@shared/remote/protocol'
 import type { RemoteStatus } from '@shared/remote/status'
 import type { BrowserBounds, BrowserOriginDecision } from '@shared/browser'
 import type {
@@ -63,6 +67,10 @@ export interface IpcDeps {
   sharing: Sharing
   remoteHost: RemoteHost
   remoteStatus(): RemoteStatus
+  /** Settings › Hosts; it reads the computer's model the first time, then says it changed. */
+  hostsStatus(): HostsStatus
+  /** The computer's model, read once per run. */
+  computerModel(): Promise<string>
   updater: Updater
   quit: QuitFlow
   /** Started with --kettu-perf. */
@@ -214,6 +222,27 @@ function deviceName(value: unknown): string {
   return name
 }
 
+/** A known host's id: untrusted input from the renderer. */
+function hostIdArg(value: unknown): string {
+  if (typeof value !== 'string' || !DEVICE_ID.test(value)) throw new Error('Not a host id')
+  return value
+}
+
+/** The addresses a host is tried at, as the owner edited them: each one once, one at least. */
+function hostAddresses(value: unknown): DirectAddress[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_HOST_ADDRESSES) {
+    throw new Error(`A host takes 1 to ${MAX_HOST_ADDRESSES} addresses`)
+  }
+  const addresses = value.map(parseDirectAddress)
+  if (addresses.some((address) => address === null)) throw new Error('Not an address')
+  const kept = addresses as DirectAddress[]
+  if (new Set(kept.map(addressKey)).size !== kept.length) throw new Error('An address is repeated')
+  return kept
+}
+
+/** The longest text a pairing link may be: its version, keys and every address it may carry. */
+const MAX_PAIRING_LINK = 4096
+
 function pairingCode(value: unknown): number {
   if (!Number.isSafeInteger(value)) throw new Error('A pairing code id must be an integer')
   return value as number
@@ -322,6 +351,8 @@ export function registerIpcHandlers({
   sharing,
   remoteHost,
   remoteStatus,
+  hostsStatus,
+  computerModel,
   updater,
   quit,
   perf,
@@ -550,6 +581,52 @@ export function registerIpcHandlers({
   handle('remote:activity', 1, (_, id) => remoteHost.activity(deviceIdArg(id)))
   handle('remote:reset', 0, () => remoteHost.reset())
   handle('remote:retry-direct', 0, () => remoteHost.retryDirect())
+
+  handle('hosts:status', 0, () => hostsStatus())
+  // Each pairing belongs to the page that pasted its link, which alone hears it.
+  const pairOwners = new Map<number, WebContents>()
+  handle('hosts:pair', 1, async ({ event }, value): Promise<HostPairStart> => {
+    const link = typeof value === 'string' && value.length <= MAX_PAIRING_LINK ? value.trim() : ''
+    const payload = parsePairingLink(link)
+    if (!payload) return { kind: 'invalid' }
+    if (Buffer.from(payload.hostKey).toString('base64') === remoteHost.publicKey) {
+      return { kind: 'self' }
+    }
+    const page = event.sender
+    const pairId = await remoteHost.pairHost(link, await computerModel(), (id, pairing) => {
+      if (pairing.state === 'added' || pairing.state === 'failed') pairOwners.delete(id)
+      sendEvent(page, 'hosts:pairing', { pairId: id, pairing })
+    })
+    if (pairId === null) return { kind: 'unavailable' }
+    pairOwners.set(pairId, page)
+    page.once('destroyed', () => {
+      if (pairOwners.get(pairId) !== page) return
+      pairOwners.delete(pairId)
+      remoteHost.closeHostPairing(pairId)
+    })
+    return { kind: 'pairing', pairId }
+  })
+  handle('hosts:pair-close', 1, ({ event }, value) => {
+    const pairId = pairingCode(value)
+    if (pairOwners.get(pairId) !== event.sender) return
+    pairOwners.delete(pairId)
+    remoteHost.closeHostPairing(pairId)
+  })
+  handle('hosts:rename', 2, (_, id, name) => {
+    if (!remoteHost.renameOnHost(hostIdArg(id), deviceName(name))) {
+      throw new Error('The host is not connected')
+    }
+  })
+  handle('hosts:set-addresses', 2, (_, id, addresses) => {
+    if (!remoteHost.setHostAddresses(hostIdArg(id), hostAddresses(addresses))) {
+      throw new Error('This computer does not know that host')
+    }
+  })
+  handle('hosts:remove', 1, (_, id) => {
+    if (!remoteHost.removeHost(hostIdArg(id))) {
+      throw new Error('This computer does not know that host')
+    }
+  })
 
   handle('browser:show', 1, (_, id) => browserViews.show(sessionId(id)))
   handle('browser:hide', 1, (_, id) => browserViews.hide(sessionId(id)))

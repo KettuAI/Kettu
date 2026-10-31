@@ -213,7 +213,12 @@ export function CodeBody({ shown, link }: { shown: Shown; link: string | null })
         ) : end ? (
           <EndText end={end} />
         ) : (
-          <p className="text-ui font-medium">{t('remote.pair.scan')}</p>
+          <div className="flex flex-col gap-1">
+            <p className="text-ui font-medium">{t('remote.pair.scan')}</p>
+            <p className="text-xs leading-4.5 text-pretty text-tertiary">
+              {t('remote.pair.otherComputer')}
+            </p>
+          </div>
         )}
         <LinkBox link={link} disabled={!waiting} />
         {waiting && <ExpiresIn expiresAt={waiting.expiresAt} />}
