@@ -23,6 +23,8 @@ import { useArtifactsStore } from '@renderer/stores/artifacts'
 import { useSharingStore } from '@renderer/stores/sharing'
 import { openArtifact } from '@renderer/stores/view'
 import { ArtifactMenuItems } from './artifact-menu'
+import { KIND_LOOK } from './kinds'
+import { artifactKind } from './model'
 import { useThumbnail, type Thumbnail } from './thumbnails'
 import { useInView } from './use-in-view'
 
@@ -32,34 +34,39 @@ function openFromPage(id: string, history = false): void {
   openArtifact(id, { history })
 }
 
-// Pointed at, focused or with its menu open, the tray darkens a little and the page lifts; a
-// canvas's pages lift less, as they lie flatter.
-const TRAY =
-  'relative isolate block aspect-16/10 w-full overflow-hidden rounded-code bg-sidebar shadow-sunk transition-colors duration-(--duration-base) group-hover/open:bg-[color-mix(in_srgb,var(--bg-sidebar),var(--text-primary)_2.5%)] group-focus-visible/open:outline-2 group-focus-visible/open:outline-offset-2 group-focus-visible/open:outline-focus group-data-held/card:bg-[color-mix(in_srgb,var(--bg-sidebar),var(--text-primary)_2.5%)]'
-const SHEET =
-  'absolute inset-[9%] overflow-hidden rounded-xs bg-canvas shadow-(--elevation-page) transition-[translate,box-shadow] duration-(--duration-base) ease-out-quart group-hover/open:shadow-(--elevation-page-lift) group-focus-visible/open:shadow-(--elevation-page-lift) group-data-held/card:shadow-(--elevation-page-lift) motion-safe:group-hover/open:-translate-y-0.5 motion-safe:group-focus-visible/open:-translate-y-0.5 motion-safe:group-data-held/card:-translate-y-0.5 motion-safe:group-active/open:-translate-y-px motion-safe:group-active/open:duration-(--duration-instant)'
-const FRAMES =
-  'absolute inset-0 transition-[translate] duration-(--duration-base) ease-out-quart motion-safe:group-hover/open:-translate-y-[1.5px] motion-safe:group-focus-visible/open:-translate-y-[1.5px] motion-safe:group-data-held/card:-translate-y-[1.5px]'
+// Pointed at, focused or with its menu open, the card's border darkens.
+const CARD =
+  'group/open flex w-full flex-col overflow-hidden border border-default bg-app text-left outline-none transition-colors duration-(--duration-fast) hover:border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus group-data-held/card:border-strong'
+// The artifact's page stands on the band, cut by its lower edge.
+// A canvas's pages lie on its ground, under the fade with the rest of the frame.
+const PAGE = 'relative min-w-0 flex-1 overflow-hidden border border-b-0 border-default'
 // What lies in Recently deleted shows faded.
 const FADED = 'opacity-72 grayscale-85'
 
+/** When the card says it was last seen: opened on this device, or its latest version. */
+export interface CardTime {
+  at: number
+  opened: boolean
+}
+
 /**
- * One artifact: a sheet lying in its tray of desk, or a canvas's pages laid out as on the canvas,
- * with the title and caption under it, and its menu. On the page by default; `recent` is New
- * session's card, whose caption ends with when.
+ * One artifact: its page on a band, then its title and caption, and its menu. On the page the band
+ * takes its kind's tint, under the kind's icon; `recent` is New session's smaller card.
  */
 export const ArtifactCard = memo(function ArtifactCard({
   artifact,
   lead,
+  time,
   project,
   session,
   tabbable,
   variant = 'page',
 }: {
   artifact: ArtifactSummary
-  /** What the grouping hides: the version, the session or the project; in Recently deleted, the
-   * project and the days left. */
+  /** The caption before the time: the project, or the version when grouped; in Recently deleted,
+   * the project and the days left. */
   lead: string
+  time: CardTime | null
   project: string
   session: string
   tabbable: boolean
@@ -74,16 +81,11 @@ export const ArtifactCard = memo(function ArtifactCard({
     (s) => s.status?.published.some((page) => page.id === artifact.id) ?? false,
   )
   const recent = variant === 'recent'
+  const kind = artifactKind(artifact)
+  const look = KIND_LOOK[kind]
   // Only the page takes the focus back to the card it opened.
   const open = (history = false) =>
     recent ? openArtifact(artifact.id, { history }) : openFromPage(artifact.id, history)
-  // The short caption keeps its room for when; the tray shows a canvas's pages anyway.
-  const caption = [
-    lead,
-    !recent && artifact.pages >= 2 && t('card.canvas', { count: artifact.pages }),
-  ]
-    .filter(Boolean)
-    .join(' · ')
 
   const items = (
     <ArtifactMenuItems
@@ -113,25 +115,54 @@ export const ArtifactCard = memo(function ArtifactCard({
           setMoreOpen(true)
         }
       }}
-      className="group/open flex w-full flex-col gap-2.5 text-left outline-none"
+      className={cn(CARD, recent ? 'rounded-code' : 'rounded-xl')}
     >
-      <span className={TRAY}>
-        <TrayContent thumbnail={thumbnail} faded={artifact.deletedAt !== null} />
+      <span
+        className={cn(
+          'relative flex shrink-0 overflow-hidden border-b border-default',
+          recent ? 'h-30 bg-sidebar px-3.5 pt-3.5' : cn('aspect-video px-8 pt-6', look.tint),
+        )}
+      >
+        <span
+          className={cn(
+            PAGE,
+            kind === 'canvas' ? 'bg-subtle' : 'bg-canvas',
+            recent ? 'rounded-t-md' : 'rounded-t-lg',
+          )}
+        >
+          <PageContent thumbnail={thumbnail} faded={artifact.deletedAt !== null} />
+        </span>
         {artifact.editing.length > 0 && <EditingPill />}
       </span>
-      <span className="flex min-w-0 flex-col gap-0.5 pr-9 pl-0.5">
-        <span className="truncate text-ui font-medium text-primary">{artifact.title}</span>
-        <span className="flex min-w-0 items-center gap-1.25 text-xs text-tertiary tabular-nums">
-          {shared && (
-            <GlobeIcon
-              role="img"
-              aria-label={t('card.shared')}
-              className="size-3 shrink-0 text-success"
-            />
-          )}
-          <span className="truncate">
-            {caption}
-            {recent && <Ago at={artifact.updatedAt} />}
+      <span
+        className={cn(
+          'flex min-w-0 items-center gap-2.5',
+          recent ? 'px-3 pt-2.25 pb-2.75' : 'h-16 pr-11 pl-3',
+        )}
+      >
+        {!recent && (
+          <span
+            role="img"
+            aria-label={t(`page.kinds.${kind}`)}
+            className={cn('grid size-8 shrink-0 place-items-center rounded-lg', look.tint)}
+          >
+            <look.icon className={cn('size-4', look.color)} />
+          </span>
+        )}
+        <span className={cn('flex min-w-0 flex-col', recent ? 'gap-px pr-6' : 'gap-0.5')}>
+          <span className="truncate text-ui font-medium text-primary">{artifact.title}</span>
+          <span className="flex min-w-0 items-center gap-1.25 text-xs text-tertiary tabular-nums">
+            {shared && (
+              <GlobeIcon
+                role="img"
+                aria-label={t('card.shared')}
+                className="size-3 shrink-0 text-success"
+              />
+            )}
+            <span className="truncate">
+              {lead}
+              {time && <Ago time={time} />}
+            </span>
           </span>
         </span>
       </span>
@@ -150,7 +181,7 @@ export const ArtifactCard = memo(function ArtifactCard({
           <TooltipContent className="flex-col items-start gap-0.5">
             <span>{project}</span>
             <span>{session}</span>
-            <CardTime artifact={artifact} />
+            <VersionTime artifact={artifact} />
           </TooltipContent>
         </Tooltip>
         <ContextMenuContent>{items}</ContextMenuContent>
@@ -161,10 +192,13 @@ export const ArtifactCard = memo(function ArtifactCard({
           render={
             <Button
               variant="quiet"
-              size="icon-sm"
+              size={recent ? 'icon-xs' : 'icon-sm'}
               tabIndex={-1}
               aria-label={t('card.more', { title: artifact.title })}
-              className="absolute -right-1 bottom-1 opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/card:opacity-100 group-hover/card:opacity-100 data-popup-open:opacity-100"
+              className={cn(
+                'absolute opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/card:opacity-100 group-hover/card:opacity-100 data-popup-open:opacity-100',
+                recent ? 'right-2 bottom-3' : 'right-3 bottom-4.5',
+              )}
             />
           }
         >
@@ -176,35 +210,35 @@ export const ArtifactCard = memo(function ArtifactCard({
   )
 })
 
-/** What lies in the tray: a page as a sheet, a canvas's pages where they lie, or why neither. */
-function TrayContent({ thumbnail, faded }: { thumbnail: Thumbnail; faded: boolean }) {
+/**
+ * The page at the band's width and its own proportions: a page as rendered, or a canvas's pages
+ * where they lie on its ground; or why neither shows.
+ */
+function PageContent({ thumbnail, faded }: { thumbnail: Thumbnail; faded: boolean }) {
   const { t } = useTranslation('artifacts')
-  if (thumbnail.state === 'loading') return <Skeleton className="absolute inset-[9%] rounded-xs" />
+  if (thumbnail.state === 'loading') return <Skeleton className="absolute inset-0 rounded-none" />
   if (thumbnail.state === 'failed') {
     return (
-      <span className="absolute inset-[9%] flex flex-col items-center justify-center gap-1.5 rounded-xs border-[1.5px] border-dashed border-strong text-xs text-tertiary">
+      <span className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-subtle text-xs text-tertiary">
         <ImageOffIcon className="size-3.5" />
         {t('card.noPreview')}
       </span>
     )
   }
-  const fade = 'animate-in fade-in duration-(--duration-fast)'
-  if (!thumbnail.pages) {
-    return (
-      <span className={cn(SHEET, fade, faded && FADED)}>
-        <img src={thumbnail.src} alt="" draggable={false} className="size-full object-cover" />
-      </span>
-    )
-  }
-  // The image draws the pages on a clear ground; each page takes its edge and shadow over it.
   return (
-    <span className={cn(FRAMES, fade, faded && FADED)}>
+    <span
+      className={cn(
+        'absolute inset-x-0 top-0 block aspect-16/10 animate-in fade-in duration-(--duration-fast)',
+        faded && FADED,
+      )}
+    >
       <img src={thumbnail.src} alt="" draggable={false} className="size-full object-cover" />
-      {thumbnail.pages.map((page, i) => (
+      {/* The image draws the pages on a clear ground; each page takes its edge over it. */}
+      {thumbnail.pages?.map((page, i) => (
         <span
           key={i}
           aria-hidden
-          className="absolute shadow-[0_0_0_var(--hairline)_var(--border-default),var(--elevation-card)]"
+          className="absolute shadow-[0_0_0_var(--hairline)_var(--border-default)]"
           style={{
             left: `${page.left * 100}%`,
             top: `${page.top * 100}%`,
@@ -229,13 +263,14 @@ function EditingPill() {
 }
 
 /** The caption's time, apart so only it follows the clock. */
-function Ago({ at }: { at: number }) {
-  const now = useNow()
-  return <> · {longAgo(at, now)}</>
+function Ago({ time }: { time: CardTime }) {
+  const { t } = useTranslation('artifacts')
+  const ago = longAgo(time.at, useNow())
+  return <> · {time.opened ? t('card.opened', { time: ago }) : ago}</>
 }
 
 /** In the tooltip only, so it reads the time as it opens. */
-function CardTime({ artifact }: { artifact: ArtifactSummary }) {
+function VersionTime({ artifact }: { artifact: ArtifactSummary }) {
   const { t } = useTranslation('artifacts')
   const now = useNow()
   return (
@@ -247,13 +282,24 @@ function CardTime({ artifact }: { artifact: ArtifactSummary }) {
 
 /** A card's place before the list arrives, at its real size. */
 export function CardSkeleton({ variant = 'page' }: { variant?: 'page' | 'recent' }) {
+  const recent = variant === 'recent'
   return (
-    <div aria-hidden className="flex min-w-0 flex-col gap-2.5">
-      <Skeleton className="aspect-16/10 w-full rounded-code" />
-      <div className="flex flex-col pr-9 pl-0.5">
-        <Skeleton className="mt-1 h-3 w-[62%]" />
-        {/* The recent card's caption, a project and a time, runs longer than a version. */}
-        <Skeleton className={cn('mt-1.5 h-2.5', variant === 'recent' ? 'w-[48%]' : 'w-[34%]')} />
+    <div
+      aria-hidden
+      className={cn(
+        'flex min-w-0 flex-col overflow-hidden border border-default',
+        recent ? 'rounded-code' : 'rounded-xl',
+      )}
+    >
+      <Skeleton className={cn('w-full rounded-none', recent ? 'h-30' : 'aspect-video')} />
+      <div
+        className={cn('flex items-center gap-2.5', recent ? 'px-3 pt-2.25 pb-2.75' : 'h-16 px-3')}
+      >
+        {!recent && <Skeleton className="size-8 shrink-0 rounded-lg" />}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Skeleton className="mt-0.5 h-3 w-[62%]" />
+          <Skeleton className="mt-1.5 h-2.5 w-[40%]" />
+        </div>
       </div>
     </div>
   )

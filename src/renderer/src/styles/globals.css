@@ -92,6 +92,10 @@
   --color-info-tint: var(--info-tint);
   --color-info-tint-hover: var(--info-tint-hover);
   --color-merged: var(--merged);
+  --color-kind-web: var(--kind-web);
+  --color-kind-web-tint: var(--kind-web-tint);
+  --color-kind-canvas: var(--kind-canvas);
+  --color-kind-canvas-tint: var(--kind-canvas-tint);
   --color-warning: var(--warning);
   --color-warning-tint: var(--warning-tint);
   --color-link: var(--link);

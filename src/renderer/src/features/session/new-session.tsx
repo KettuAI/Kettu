@@ -559,6 +559,7 @@ function RecentArtifacts({ hidden }: { hidden: boolean }) {
               <ArtifactCard
                 artifact={artifact}
                 lead={where(artifact)}
+                time={{ at: artifact.updatedAt, opened: false }}
                 project={where(artifact)}
                 session={sessions[index] ?? ''}
                 tabbable
