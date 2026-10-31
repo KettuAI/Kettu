@@ -9,6 +9,7 @@ import type { PortChannel } from '@shared/port-channel'
 import { deviceId } from '@shared/remote/device'
 import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
 import { parsePairingLink, type PairingState } from '@shared/remote/pairing'
+import { PROTOCOL_VERSION } from '@shared/remote/protocol'
 import { startTestHost, type TestHost } from '../agent-host/testing/harness'
 import { ActivityLog } from './activity'
 import { DeviceStore } from './devices'
@@ -302,6 +303,28 @@ describe('the handshake', () => {
     const device = await t.connect(undefined, null)
     expect(await device.closing).toBeNull()
     expect(t.server.refused).toBe(0)
+    expect(t.logs).toEqual([])
+  })
+
+  it('welcomes a removed device paired again between its handshake and its hello', async () => {
+    const t = await setup()
+    await t.server.removeDevice(t.phone.id)
+    const device = await t.connect(undefined, null)
+    expect(await device.answered).toBe(true)
+    await t.devices.add({
+      publicKey: base64(t.phoneKey.publicKey),
+      name: 'Phone',
+      kind: 'ios',
+      platform: 'ios',
+      model: 'iPhone 17 Pro',
+    })
+    await device.send({
+      type: 'hello',
+      protocol: { min: PROTOCOL_VERSION, max: PROTOCOL_VERSION },
+      client: { kind: 'ios', version: '1.0.0', platform: 'ios' },
+    })
+    expect(await device.first).toMatchObject({ type: 'welcome', device: { id: t.phone.id } })
+    expect(t.server.online()).toEqual([t.phone.id])
     expect(t.logs).toEqual([])
   })
 

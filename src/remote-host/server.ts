@@ -480,16 +480,16 @@ class DeviceConnection {
     clearTimeout(this.timer)
     const version = negotiate(hello.protocol)
     if (typeof version !== 'number') return this.failPairing(version)
-    // The device may have been removed since its handshake.
+    // The device may have been removed, or paired again, since its handshake.
+    const known = this.device ?? this.removed
     const device = this.pairing
       ? await this.confirm(hello)
-      : this.device && this.server.options.devices.get(this.device.id)
+      : known && this.server.options.devices.get(known.id)
     if (this.state !== 'hello' && this.state !== 'confirming') return
     if (!device) {
       if (this.pairing) return this.close('invalid')
       // By its id alone, never with the key or where it came from.
-      const id = this.device?.id ?? this.removed?.id
-      this.server.options.log('info', `Told device ${id} that it was removed`)
+      this.server.options.log('info', `Told device ${known?.id} that it was removed`)
       return this.close('removed')
     }
     this.device = device
