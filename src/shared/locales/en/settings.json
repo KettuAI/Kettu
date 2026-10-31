@@ -707,7 +707,8 @@
         "other": "Something on this computer kept Kettu from listening on this port. Pick another port, or retry."
       },
       "changePort": "Change port",
-      "retry": "Retry"
+      "retry": "Retry",
+      "plainTextKey": "This computer's key is kept in a file only your user can read, because the system has no keyring."
     },
     "hostName": {
       "name": "This computer's name",
@@ -717,7 +718,7 @@
     "devices": {
       "group": "Devices",
       "emptyTitle": "No devices yet",
-      "emptyHint": "Scan the code with Kettu on an iPhone or iPad, or paste the link in Kettu on another computer.",
+      "emptyHint": "Scan the code with Kettu on an iPhone or iPad.",
       "add": "Add device…",
       "online": "Online",
       "seenToday": "Connected today at {{time}}",
@@ -783,7 +784,6 @@
     "pair": {
       "title": "Add device",
       "scan": "Scan this code with Kettu on an iPhone or iPad.",
-      "computer": "On another computer: in its Kettu, open Settings › Hosts › Add host… and paste this link.",
       "copy": "Copy",
       "copied": "Copied",
       "expires": "It adds one device and expires in <time>{{time}}</time>. The device has to reach this computer directly: on the same network, the same VPN, or through an address you added.",

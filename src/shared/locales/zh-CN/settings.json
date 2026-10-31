@@ -702,7 +702,8 @@
         "other": "这台电脑上有东西挡住了 Kettu 在这个端口监听。换个端口，或者再重试。"
       },
       "changePort": "换个端口",
-      "retry": "重试"
+      "retry": "重试",
+      "plainTextKey": "这台电脑的密钥存在只有当前用户能读的文件里，因为系统没有钥匙串。"
     },
     "hostName": {
       "name": "这台电脑的名字",
@@ -712,7 +713,7 @@
     "devices": {
       "group": "设备",
       "emptyTitle": "还没有设备",
-      "emptyHint": "用 iPhone、iPad 上的 Kettu 扫码，或者在另一台电脑的 Kettu 里粘贴链接。",
+      "emptyHint": "用 iPhone 或 iPad 上的 Kettu 扫码。",
       "add": "添加设备…",
       "online": "在线",
       "seenToday": "今天 {{time}} 连接过",
@@ -773,7 +774,6 @@
     "pair": {
       "title": "添加设备",
       "scan": "用 iPhone 或 iPad 上的 Kettu 扫这个码。",
-      "computer": "另一台电脑：在它的 Kettu 里打开 设置 › 主机 › 添加主机…，粘贴这个链接。",
       "copy": "复制",
       "copied": "已复制",
       "expires": "只能添加一台设备，<time>{{time}}</time> 后失效。设备要能直连这台电脑：同一网络、同一个 VPN，或连得到你加的地址。",

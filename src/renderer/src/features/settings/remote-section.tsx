@@ -287,6 +287,13 @@ export function NoDevices() {
   )
 }
 
+/** Under the status, when the key is in a file because the system has no keyring. */
+export function PlainKeyNote() {
+  const { t } = useTranslation('settings')
+  const plain = useRemoteStore((s) => s.status?.plainTextKey === true)
+  return plain ? <GroupNote>{t('remote.status.plainTextKey')}</GroupNote> : null
+}
+
 /** Under the list, while a device is in its last days before it is removed. */
 export function StaleNote() {
   const { t } = useTranslation('settings')

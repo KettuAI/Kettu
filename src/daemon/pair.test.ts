@@ -68,6 +68,7 @@ describe('kettu pair', () => {
     c.send({ state: 'waiting', link: LINK, expiresAt: NOW + 5 * 60_000 })
     expect(t.written()).toContain(terminalQr(LINK))
     expect(t.written()).toContain(`\n  ${LINK}\n`)
+    expect(t.written()).not.toContain('another computer')
     expect(t.written()).toContain('the code expires in 5:00.')
 
     c.send({ state: 'confirm', device: iPad })

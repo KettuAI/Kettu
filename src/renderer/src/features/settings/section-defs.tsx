@@ -74,6 +74,7 @@ import {
   DeviceRow,
   HostNameField,
   NoDevices,
+  PlainKeyNote,
   RemoteHeader,
   RemoteStatusRow,
   ResetRemote,
@@ -932,7 +933,12 @@ export function useRemoteSection(): SectionDef {
   const online = status?.online ?? []
   const state = group('status', t('remote.switch'), {
     unlabeled: true,
-    note: <GroupNote>{t('remote.background')}</GroupNote>,
+    note: (
+      <>
+        <PlainKeyNote />
+        <GroupNote>{t('remote.background')}</GroupNote>
+      </>
+    ),
   })
   const list = group('devices', t('remote.devices.group'), {
     count: devices.length > 0 ? devices.length : undefined,

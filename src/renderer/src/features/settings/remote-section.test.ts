@@ -40,7 +40,8 @@ vi.mock('@renderer/lib/use-now', () => ({ useNow: () => Date.now(), useSeconds: 
 
 const { i18n } = await import('@renderer/lib/i18n')
 const { Dialog } = await import('@renderer/components/ui/dialog')
-const { DeviceRow, NoDevices, RemoteStatusRow, StaleNote } = await import('./remote-section')
+const { DeviceRow, NoDevices, PlainKeyNote, RemoteStatusRow, StaleNote } =
+  await import('./remote-section')
 const { CodeBody, Confirm } = await import('./remote-pairing')
 const { DevicePage } = await import('./remote-device')
 const { DirectPortField, FoundAddresses, OwnAddresses } = await import('./remote-direct')
@@ -139,6 +140,17 @@ describe('the status line', () => {
   })
 })
 
+describe('the key kept in a file', () => {
+  it('is noted only when the system has no keyring', () => {
+    remote.status = status({ plainTextKey: true })
+    expect(text(createElement(PlainKeyNote))).toBe(
+      "This computer's key is kept in a file only your user can read, because the system has no keyring.",
+    )
+    remote.status = status()
+    expect(renderToStaticMarkup(createElement(PlainKeyNote))).toBe('')
+  })
+})
+
 describe('the Direct group', () => {
   it('shows the port to edit', () => {
     const markup = renderToStaticMarkup(createElement(DirectPortField, { label: 'Port' }))
@@ -234,7 +246,7 @@ describe('a device row', () => {
 describe('the list', () => {
   it('without devices says how to add one', () => {
     expect(text(createElement(NoDevices))).toBe(
-      'No devices yet Scan the code with Kettu on an iPhone or iPad, or paste the link in Kettu on another computer. Add device…',
+      'No devices yet Scan the code with Kettu on an iPhone or iPad. Add device…',
     )
   })
 
@@ -263,6 +275,8 @@ describe('Add device', () => {
       createElement(CodeBody, { shown: { kind: 'pairing', pairing: waiting }, link }),
     )
     expect(body).toContain('Scan this code with Kettu on an iPhone or iPad.')
+    // Pairing from another computer comes later, so nothing asks for it yet.
+    expect(body).not.toMatch(/another computer|Add host/)
     expect(body).toContain(link)
     expect(body).toMatch(/expires in 4:3[12] ?\./)
   })
