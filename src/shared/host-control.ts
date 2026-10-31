@@ -1,11 +1,12 @@
-// Messages between main and the two hosts: over `utilityProcess` messaging in the desktop app,
-// or the IPC of `child_process.fork` when a host runs under Node.js.
+// Messages between main and the hosts: over `utilityProcess` messaging in the desktop app, or the
+// IPC of `child_process.fork` when a host runs under Node.js.
 
 import type { ArtifactImportResult } from './artifacts'
 import type { AttachmentGrant } from './attachments'
 import type { BrowserOriginAnswer } from './browser'
 import type { MediaGrantRecord } from './media'
 import type { Platform } from './platform'
+import type { NewDevice, PairedDevice, PortDevice } from './remote/device'
 import type { HostSettings, TerminalSettings } from './settings'
 import type { AgentId } from './thread'
 
@@ -55,6 +56,9 @@ export type MainToHost =
       socketPath?: string
     }
   | { type: 'host:connect'; windowId: number } // the port travels in the transfer list
+  // A paired device's session, which may do less than a window. In the desktop app the port
+  // travels in the transfer list; under Node.js this is the first message on the socket's port.
+  | { type: 'host:connect'; device: PortDevice }
   | { type: 'host:settings'; settings: HostSettings }
   | { type: 'host:busy-request'; requestId: number }
   | { type: 'host:grant'; requestId: number; grants: AttachmentGrant[] } // answered by host:granted
@@ -165,3 +169,51 @@ export type TerminalHostToMain =
   | { type: 'terminal-host:ready' }
   | { type: 'terminal-host:busy'; requestId: number; terminals: BusyTerminal[] }
   | { type: 'terminal-host:stopped' }
+
+export type RemoteHostStopReason = 'remote_off' | 'stopping'
+
+export type MainToRemoteHost =
+  | {
+      type: 'remote-host:init'
+      userDataPath: string
+      appVersion: string
+      platform: Platform
+      /** The name devices show for this computer. */
+      hostName: string
+      /** The 32 bytes of the host's X25519 private key, in base64. Never logged. */
+      privateKey: string
+      /** The key is kept in a file only the user can read, without the system's encryption. */
+      plainTextKey: boolean
+      // Under Node.js: the agent host's socket, which each device's session connects to, and a
+      // local socket devices may connect on, each connection a stream transport.
+      agentHostSocket?: string
+      socketPath?: string
+    }
+  // The answer to remote-host:open-port: the agent host's port travels in the transfer list, and
+  // none comes while the agent host is not running.
+  | { type: 'remote-host:port'; requestId: number }
+  | { type: 'remote-host:add-device'; device: NewDevice }
+  // Forgets the device and closes its sessions at once.
+  | { type: 'remote-host:remove-device'; id: string }
+  // Tells every device why, then stops.
+  | { type: 'remote-host:shutdown'; reason: RemoteHostStopReason }
+
+/** What the remote host reports to main, for Settings. */
+export interface RemoteHostStatus {
+  /** The host's X25519 public key, in base64, for pairing codes. */
+  publicKey: string
+  plainTextKey: boolean
+  devices: PairedDevice[]
+  /** The ids of the devices with a session open now. */
+  online: string[]
+  /** Connections refused at their first message since the remote host started. */
+  refused: number
+}
+
+export type RemoteHostToMain =
+  | { type: 'remote-host:ready' }
+  | { type: 'remote-host:status'; status: RemoteHostStatus }
+  // A port to the agent host for a device's session; answered by remote-host:port.
+  | { type: 'remote-host:open-port'; requestId: number; device: PortDevice }
+  | { type: 'remote-host:log'; level: 'info' | 'warn' | 'error'; message: string }
+  | { type: 'remote-host:stopped' }

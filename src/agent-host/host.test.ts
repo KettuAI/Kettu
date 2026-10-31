@@ -54,6 +54,39 @@ describe('the port envelope', () => {
     ])
   })
 
+  it("refuses a paired device's port what needs main, and logs it", async () => {
+    const { t, port: window } = await setup()
+    const device = t.connect({ id: 'a'.repeat(32), name: 'Phone' })
+    await writeFile(path.join(t.project, 'a.txt'), 'x')
+    const refused = [
+      ['media.open', { projectPath: t.project, path: 'a.txt', sessionId: 'none' }],
+      ['projects.add', { path: t.project }],
+      ['attachments.add', { source: { grantId: 'grant' }, thumb: null }],
+    ] as const
+    for (const [method, params] of refused) {
+      await expect(device.request(method, params as never)).rejects.toMatchObject({
+        code: 'forbidden',
+      })
+    }
+    expect(await device.request('projects.list', undefined)).toEqual([])
+
+    // A window still may; the device may do everything else, as mention a project's file.
+    await window.request('projects.add', { path: t.project })
+    expect(await device.request('projects.list', undefined)).toHaveLength(1)
+    expect(
+      await device.request('attachments.add', {
+        source: { projectPath: t.project, path: 'a.txt' },
+        thumb: null,
+      }),
+    ).toMatchObject({ type: 'file', name: 'a.txt' })
+    const warnings = t.host.diagnostics.logEntries().filter((entry) => entry.level === 'warn')
+    expect(warnings.map((entry) => entry.message)).toEqual(
+      refused.map(
+        ([method]) => `Device ${'a'.repeat(32)} asked for ${method}, which devices may not call`,
+      ),
+    )
+  })
+
   it('answers not_found for sessions that do not exist', async () => {
     const { port } = await setup()
     for (const method of ['sessions.open', 'sessions.watch', 'sessions.close'] as const) {

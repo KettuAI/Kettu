@@ -1,4 +1,5 @@
-// The renderer ports: the request/response/event envelope, validation and dispatch.
+// The clients' ports, windows' and paired devices': the request/response/event envelope,
+// validation and dispatch.
 
 import {
   HOST_METHODS,
@@ -9,6 +10,8 @@ import {
 } from '@shared/agent-host'
 import type { PortChannel } from '@shared/port-channel'
 import type { FromPort, PortError } from '@shared/port-rpc'
+import { forbiddenToDevices } from '@shared/remote/allow-list'
+import type { PortDevice } from '@shared/remote/device'
 import { HostError, isHostError } from './errors'
 
 export interface RequestContext {
@@ -41,16 +44,21 @@ function toPortError(error: unknown): PortError {
 
 export class PortHub {
   private readonly ports = new Map<string, PortChannel<FromPort<HostEvent>>>()
+  /** The ports that serve a paired device, which may do less than a window. */
+  private readonly devices = new Map<string, PortDevice>()
   private counter = 0
 
   constructor(private readonly deps: PortHubDeps) {}
 
-  add(channel: PortChannel<FromPort<HostEvent>>): string {
+  /** Serves a window's port, or a paired device's when `device` names it. */
+  add(channel: PortChannel<FromPort<HostEvent>>, device: PortDevice | null = null): string {
     const portId = `port-${++this.counter}`
     this.ports.set(portId, channel)
+    if (device) this.devices.set(portId, device)
     channel.onMessage((data) => void this.receive(portId, channel, data))
     channel.onClose(() => {
       if (!this.ports.delete(portId)) return
+      this.devices.delete(portId)
       this.deps.closed(portId)
     })
     return portId
@@ -71,6 +79,7 @@ export class PortHub {
   closeAll(): void {
     for (const [portId, channel] of [...this.ports]) {
       this.ports.delete(portId)
+      this.devices.delete(portId)
       channel.close()
       this.deps.closed(portId)
     }
@@ -101,6 +110,16 @@ export class PortHub {
         type: 'error',
         id,
         error: { code: 'unknown_method', message: `Unknown method "${String(method)}"` },
+      })
+      return
+    }
+    const device = this.devices.get(portId)
+    if (device && forbiddenToDevices(method, message.params)) {
+      this.deps.log('warn', `Device ${device.id} asked for ${method}, which devices may not call`)
+      reply({
+        type: 'error',
+        id,
+        error: { code: 'forbidden', message: `A paired device may not call "${method}"` },
       })
       return
     }

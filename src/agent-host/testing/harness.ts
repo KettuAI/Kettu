@@ -14,6 +14,7 @@ import type {
 import type { HostToMain } from '@shared/host-control'
 import type { PortChannel } from '@shared/port-channel'
 import { PortRequestError, type FromPort } from '@shared/port-rpc'
+import type { PortDevice } from '@shared/remote/device'
 import { DEFAULT_SETTINGS, type HostSettings } from '@shared/settings'
 import {
   applyPatches,
@@ -286,7 +287,8 @@ export interface TestHost {
   sent: HostToMain[]
   dir: string
   project: string
-  connect(): TestPort
+  /** A window's port, or a paired device's when `device` names it. */
+  connect(device?: PortDevice): TestPort
   stop(): Promise<void>
 }
 
@@ -382,9 +384,9 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     sent,
     dir,
     project: await realpath(project),
-    connect: () => {
+    connect: (device) => {
       const port = new TestPort()
-      host.connect(port)
+      host.connect(port, device ?? null)
       return port
     },
     stop: async () => {
