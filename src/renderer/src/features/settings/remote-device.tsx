@@ -26,7 +26,6 @@ import { Field, FieldError, FieldLabel } from '@renderer/components/ui/field'
 import { Input } from '@renderer/components/ui/input'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { basename, monthDay } from '@renderer/lib/format'
-import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useRemoteStore } from '@renderer/stores/remote'
@@ -35,7 +34,7 @@ import { openSettingsItem } from '@renderer/stores/view'
 import { Fact } from './agent-parts'
 import { CONFIRM, ControlError } from './controls'
 import { DeviceIcon, DeviceTile, OnlineDot } from './remote-parts'
-import { deviceLine, whenAt } from './remote-text'
+import { changeDevice, deviceLine, whenAt } from './remote-text'
 import { GroupLabel, ItemPageHeader, RowFrame, RowGroup, RowText } from './rows'
 
 const back = () => openSettingsItem('remote', null)
@@ -282,14 +281,10 @@ function RenameDialog({
     if (!valid || busy) return
     if (trimmed === device.name) return onOpenChange(false)
     setBusy(true)
-    try {
-      await window.kettu.remote.renameDevice(device.id, trimmed)
-      onOpenChange(false)
-    } catch (e) {
-      setError(errorMessage(e))
-    } finally {
-      setBusy(false)
-    }
+    const failed = await changeDevice(t, () => window.kettu.remote.renameDevice(device.id, trimmed))
+    setBusy(false)
+    if (failed) setError(failed)
+    else onOpenChange(false)
   }
   return (
     <Dialog
@@ -346,14 +341,14 @@ function RemoveDevice({ device }: { device: PairedDevice }) {
   const remove = async (): Promise<void> => {
     setBusy(true)
     setError(null)
-    try {
-      await window.kettu.remote.removeDevice(device.id)
-      setOpen(false)
-      back()
-    } catch (e) {
-      setError(errorMessage(e))
+    const failed = await changeDevice(t, () => window.kettu.remote.removeDevice(device.id))
+    if (failed) {
+      setError(failed)
       setBusy(false)
+      return
     }
+    setOpen(false)
+    back()
   }
   return (
     <>

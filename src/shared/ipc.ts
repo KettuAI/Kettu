@@ -198,8 +198,9 @@ export interface IpcInvokeContract {
   'remote:pair': { args: []; result: number | null }
   'remote:pair-close': { args: [codeId: number]; result: void }
   'remote:pair-answer': { args: [codeId: number, add: boolean, name: string]; result: void }
-  'remote:rename-device': { args: [id: string, name: string]; result: void }
-  'remote:remove-device': { args: [id: string]; result: void }
+  // Null once done, else a code the page words in the user's language.
+  'remote:rename-device': { args: [id: string, name: string]; result: 'not_renamed' | null }
+  'remote:remove-device': { args: [id: string]; result: 'not_removed' | null }
   'remote:activity': { args: [id: string]; result: DeviceActivity[] }
   'remote:reset': { args: []; result: void }
   // Listens for direct connections again on the same port, as after the port was in use.
@@ -372,9 +373,10 @@ export interface KettuApi {
     closePairing(codeId: number): Promise<void>
     /** Adds the device the code paired, under `name`, or rejects it. */
     answerPairing(codeId: number, add: boolean, name: string): Promise<void>
-    renameDevice(id: string, name: string): Promise<void>
-    /** Removes the device and ends its sessions at once. */
-    removeDevice(id: string): Promise<void>
+    /** Null once renamed, else why not. */
+    renameDevice(id: string, name: string): Promise<'not_renamed' | null>
+    /** Removes the device and ends its sessions at once; null once removed, else why not. */
+    removeDevice(id: string): Promise<'not_removed' | null>
     /** The device's activity of the last 30 days, newest first. */
     activity(id: string): Promise<DeviceActivity[]>
     /** Removes every device and gives this computer a new identity. */

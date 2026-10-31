@@ -4,7 +4,6 @@ import {
   useRef,
   useState,
   type FormEvent,
-  type ReactNode,
   type Ref,
   type RefObject,
 } from 'react'
@@ -39,7 +38,7 @@ import { cn } from '@renderer/lib/utils'
 import { closeRequest } from './pair-close'
 import { QrCode } from './qr-code'
 import { DeviceIcon, DeviceTile } from './remote-parts'
-import { kindLabel } from './remote-text'
+import { deviceLine } from './remote-text'
 
 export type Shown =
   | { kind: 'loading' }
@@ -223,8 +222,10 @@ export function CodeBody({ shown, link }: { shown: Shown; link: string | null })
         )}
         {end && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-canvas-ink/60">
-            <ClockIcon className="size-5" />
-            <span className="text-ui font-medium">{t('remote.pair.expired')}</span>
+            <EndIcon end={end} className="size-5" />
+            <span className="text-ui font-medium">
+              {t(`remote.pair.ends.${endKey(end)}.short`)}
+            </span>
           </div>
         )}
         {!link && !end && (
@@ -255,20 +256,24 @@ export function CodeBody({ shown, link }: { shown: Shown; link: string | null })
   )
 }
 
+// A closed code is never shown: its dialog is gone.
+const endKey = (end: PairingEnd) => (end === 'closed' ? 'expired' : end)
+
+function EndIcon({ end, className }: { end: PairingEnd; className: string }) {
+  const Icon = end === 'attempts' ? CircleAlertIcon : end === 'rejected' ? CircleXIcon : ClockIcon
+  return <Icon className={className} />
+}
+
 function EndText({ end }: { end: PairingEnd }) {
   const { t } = useTranslation('settings')
-  // A closed code is never shown: its dialog is gone.
-  const key = end === 'closed' ? 'expired' : end
+  const key = endKey(end)
   return (
     <>
       <p className="flex items-center gap-1.5 text-ui font-medium">
-        {end === 'attempts' ? (
-          <CircleAlertIcon className="size-4 shrink-0 text-danger" />
-        ) : end === 'rejected' ? (
-          <CircleXIcon className="size-4 shrink-0 text-tertiary" />
-        ) : (
-          <ClockIcon className="size-4 shrink-0 text-tertiary" />
-        )}
+        <EndIcon
+          end={end}
+          className={cn('size-4 shrink-0', end === 'attempts' ? 'text-danger' : 'text-tertiary')}
+        />
         {t(`remote.pair.ends.${key}.title`)}
       </p>
       <p className="text-xs leading-4.5 text-tertiary">{t(`remote.pair.ends.${key}.body`)}</p>
@@ -353,9 +358,8 @@ export function Confirm({
     event.preventDefault()
     answer(true)
   }
-  const line: ReactNode = [
-    kindLabel(t, device.kind),
-    device.platform,
+  const line = [
+    deviceLine(t, device),
     device.known ? t('remote.pair.confirm.again') : t('remote.pair.confirm.justNow'),
   ]
     .filter(Boolean)
@@ -365,13 +369,13 @@ export function Confirm({
       <DialogHeader className="px-5 pt-5">
         <DialogTitle>{t('remote.pair.confirm.title')}</DialogTitle>
       </DialogHeader>
-      <div className="flex flex-col gap-4 px-5 pt-4">
+      <div className="flex min-w-0 flex-col gap-4 px-5 pt-4">
         <p className="text-ui leading-5 text-secondary">{t('remote.pair.confirm.body')}</p>
         <div className="flex items-center gap-3 rounded-xl bg-subtle p-3 shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]">
           <DeviceTile large icon={<DeviceIcon device={device} className="size-5" />} />
           <div className="min-w-0 flex-1">
             <div className="truncate text-ui font-medium">{device.name}</div>
-            <div className="mt-0.5 truncate text-xs leading-4 text-tertiary">{line}</div>
+            <div className="mt-0.5 text-xs leading-4 text-pretty text-tertiary">{line}</div>
           </div>
         </div>
         <Field data-invalid={!valid || undefined}>
