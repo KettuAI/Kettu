@@ -871,6 +871,69 @@ describe('detectAgent with the CLI the user installed', () => {
     })
   })
 
+  // Installs of these SDK versions, each naming the Claude Code of its own patch, as the SDK does.
+  function withSdks(versions: string[], answer: string, env?: DetectContext['env']) {
+    return withClaude(
+      {
+        ...(env ? { env } : {}),
+        isExecutable: async (file) => file === '/usr/local/bin/claude' || file === '/opt/claude',
+        installed: async () => versions.map((v) => install(v, { withoutCli: true })),
+        cliFiles: {
+          isFile: async () => true,
+          realpath: async (file) => file,
+          readText: async (file) => {
+            const patch = /claude-code[\\/]0\.3\.(\d+)/.exec(file)?.[1]
+            if (patch && file.endsWith(path.join('claude-agent-sdk', 'package.json')))
+              return JSON.stringify({ claudeCodeVersion: `2.1.${patch}` })
+            throw new Error(`ENOENT: ${file}`)
+          },
+        },
+      },
+      answer,
+    )
+  }
+
+  it('runs the newest install the program fits, below a newer one it does not', async () => {
+    expect(
+      await detectAgent(CLAUDE_CODE, withSdks(['0.3.316', '0.3.314'], '2.1.314')),
+    ).toMatchObject({
+      state: 'available',
+      spec: { command: '/data/agents/claude-code/0.3.314/index.js' },
+      adapter: { installed: true, current: { version: '0.3.314' } },
+      cli: { version: '2.1.314', problem: null },
+    })
+  })
+
+  it('leaves the pin to install when only installs the program does not fit are on disk', async () => {
+    expect(await detectAgent(CLAUDE_CODE, withSdks(['0.3.316'], '2.1.314'))).toMatchObject({
+      state: 'available',
+      spec: null,
+      adapter: { version: '0.3.314', installed: false, current: null },
+      cli: { version: '2.1.314', problem: null },
+    })
+  })
+
+  it('is too old only for a program the pinned install does not fit either', async () => {
+    expect(
+      await detectAgent(CLAUDE_CODE, withSdks(['0.3.316', '0.3.314'], '2.1.310')),
+    ).toMatchObject({
+      state: 'not-installed',
+      detail: expect.stringContaining('2.1.314'),
+      cli: { version: '2.1.310', problem: { kind: 'too-old', minimum: '2.1.314' } },
+    })
+  })
+
+  it('runs the newest install with a program the environment names', async () => {
+    const env = { PATH: '/usr/bin', CLAUDE_CODE_EXECUTABLE: '/opt/claude' }
+    expect(
+      await detectAgent(CLAUDE_CODE, withSdks(['0.3.316', '0.3.314'], '2.1.314', env)),
+    ).toMatchObject({
+      state: 'available',
+      spec: { command: '/data/agents/claude-code/0.3.316/index.js' },
+      cli: { path: '/opt/claude', variable: 'CLAUDE_CODE_EXECUTABLE' },
+    })
+  })
+
   it('loads the SDK in the host instead of running it with Node.js', async () => {
     const entry = '/data/agents/claude-code/0.3.314/index.js'
     expect(await detectAgent(CLAUDE_CODE, withClaude())).toMatchObject({

@@ -500,12 +500,12 @@ function binaryDetection(
 
 type PackageLaunch = Extract<LaunchKind, { kind: 'package' }>
 
-/** The installs of a package agent, newest first: the one a start runs, and one below the pin. */
+/** The installs of a package agent, newest first: those at or above the pin, and one below it. */
 async function packageInstalls(
   def: AgentDefinition,
   launch: PackageLaunch,
   ctx: DetectContext,
-): Promise<{ current: InstalledAdapter | null; other: InstalledAdapter | null }> {
+): Promise<{ atPin: InstalledAdapter[]; other: InstalledAdapter | null }> {
   const installed = (
     await (ctx.installed ?? ((id, name) => listInstalled(ctx.adaptersDir, id, name)))(
       def.id,
@@ -515,9 +515,42 @@ async function packageInstalls(
   const fromPin = (adapter: InstalledAdapter): number =>
     compareVersions(adapter.version, launch.version)
   return {
-    current: installed.find((adapter) => fromPin(adapter) >= 0) ?? null,
+    atPin: installed.filter((adapter) => fromPin(adapter) >= 0),
     other: installed.find((adapter) => fromPin(adapter) < 0) ?? null,
   }
+}
+
+/**
+ * The install a start runs and the CLI version it needs. An SDK pins its CLI, so it is the newest
+ * install the user's CLI fits; when none does, the pin installs on the first start, and only a
+ * pinned install the CLI does not fit either makes the CLI too old.
+ */
+async function installForCli(
+  cli: AdapterCli,
+  launch: PackageLaunch,
+  installs: { atPin: InstalledAdapter[]; other: InstalledAdapter | null },
+  found: InstalledCli,
+  files: CliFiles,
+): Promise<{ current: InstalledAdapter | null; minimum: string | null | undefined }> {
+  const minimumOf = async (install: InstalledAdapter) =>
+    (await cli.minimum?.(install.dir, launch.package, files)) ?? null
+  const [newest] = installs.atPin
+  // Until the pinned version is installed, the older install a start falls back to says it.
+  if (!newest) {
+    return { current: null, minimum: installs.other ? await minimumOf(installs.other) : undefined }
+  }
+  // A program the environment names runs whatever its version.
+  if (!cli.pinsVersion || !found.version || found.variable) {
+    return { current: newest, minimum: await minimumOf(newest) }
+  }
+  for (const install of installs.atPin) {
+    const minimum = await minimumOf(install)
+    if (minimum === null || compareVersions(found.version, minimum) >= 0) {
+      return { current: install, minimum }
+    }
+  }
+  const pinned = installs.atPin.find((install) => install.version === launch.version)
+  return { current: null, minimum: pinned ? await minimumOf(pinned) : undefined }
 }
 
 /** Why the user's CLI cannot run, in the user's terms, or null when it can. */
@@ -540,12 +573,11 @@ function cliDetail(def: AgentDefinition, cli: AdapterCli, installed: InstalledCl
   }
 }
 
-/** The user's CLI, or the detection that says it is missing or cannot run. */
-async function userCli(
+/** The user's CLI as found, or the detection that says it is missing. */
+async function findUserCli(
   def: AgentDefinition,
   cli: AdapterCli,
   ctx: DetectContext,
-  minimum: string | null | undefined,
 ): Promise<{ found: FoundCli } | { missing: Detection }> {
   const files = ctx.cliFiles ?? CLI_FILES
   const found = ctx.probeCli
@@ -559,6 +591,27 @@ async function userCli(
       },
     }
   }
+  return { found }
+}
+
+/** The user's CLI, or the detection that says it is missing or cannot run. */
+async function userCli(
+  def: AgentDefinition,
+  cli: AdapterCli,
+  ctx: DetectContext,
+  minimum: string | null | undefined,
+): Promise<{ found: FoundCli } | { missing: Detection }> {
+  const result = await findUserCli(def, cli, ctx)
+  return 'missing' in result ? result : checkUserCli(def, cli, result.found, minimum)
+}
+
+/** The CLI found, or the detection that says it cannot run, such as one below `minimum`. */
+function checkUserCli(
+  def: AgentDefinition,
+  cli: AdapterCli,
+  found: FoundCli,
+  minimum: string | null | undefined,
+): { found: FoundCli } | { missing: Detection } {
   const installed = checkCli(found.installed, minimum)
   const detail = cliDetail(def, cli, installed)
   // A program the environment names is the user's choice, and runs whatever its version.
@@ -582,17 +635,18 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
     case 'package': {
       const { nodePath, nodeVersion, npmPath } = ctx.node
       const { library } = launch
-      const { current, other } = await packageInstalls(def, launch, ctx)
+      const installs = await packageInstalls(def, launch, ctx)
+      const { other } = installs
+      let current: InstalledAdapter | null = installs.atPin[0] ?? null
       const files = ctx.cliFiles ?? CLI_FILES
       // Only the user's own CLI runs: one missing or too old is said before anything installs.
       let cli: FoundCli | null = null
       if (def.cli) {
-        // Until the pinned version is installed, the older install a start falls back to says it.
-        const runs = current ?? other
-        const minimum = runs
-          ? ((await def.cli.minimum?.(runs.dir, launch.package, files)) ?? null)
-          : undefined
-        const result = await userCli(def, def.cli, ctx, minimum)
+        const found = await findUserCli(def, def.cli, ctx)
+        if ('missing' in found) return found.missing
+        const runs = await installForCli(def.cli, launch, installs, found.found.installed, files)
+        current = runs.current
+        const result = checkUserCli(def, def.cli, found.found, runs.minimum)
         if ('missing' in result) return result.missing
         cli = result.found
       }

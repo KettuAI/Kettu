@@ -61,7 +61,7 @@ import { readiness } from '@renderer/features/agents/readiness'
 import { errorMessage, host } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import { hasProgram, isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
@@ -1164,9 +1164,7 @@ function RenameDialog({
 /** The agent's name as the page's title, opening a searchable list of the agents. */
 function AgentPicker({ status }: { status: AgentStatus }) {
   const { t } = useTranslation('settings')
-  const agents = useAgentsStore(
-    useShallow((s) => usableAgents(s.order, s.byId).filter((a) => isInstalled(a))),
-  )
+  const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId).filter(hasProgram)))
   const { contains } = useComboboxFilter()
   const name = (id: AgentId) => agents.find((a) => a.id === id)?.name ?? id
   return (
