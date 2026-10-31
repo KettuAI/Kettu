@@ -28,7 +28,7 @@ export function PanelHead({
 }) {
   return (
     <div className="mb-3.5 flex min-h-5.5 items-baseline gap-2.5">
-      <h2 className="font-heading text-subheading font-semibold">{title}</h2>
+      <h2 className="font-heading text-subheading font-medium">{title}</h2>
       {caption}
       <span className="flex-1" />
       {aside}

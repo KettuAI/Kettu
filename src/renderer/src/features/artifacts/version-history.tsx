@@ -33,7 +33,7 @@ export function VersionHistory({
       className="flex w-75 shrink-0 animate-in flex-col bg-app shadow-[inset_var(--hairline)_0_0_var(--border-subtle)] fade-in duration-(--duration-fast)"
     >
       <div className="flex h-12 shrink-0 items-center gap-2 pr-2 pl-4.5">
-        <h2 className="flex-1 font-heading text-subheading font-semibold">{t('history.title')}</h2>
+        <h2 className="flex-1 font-heading text-subheading font-medium">{t('history.title')}</h2>
         <Tooltip>
           <TooltipTrigger
             render={
@@ -80,7 +80,7 @@ export function VersionHistory({
                       : 'before:inset-y-0',
                 'after:absolute after:top-3.25 after:left-2.75 after:size-2.25 after:rounded-full',
                 on
-                  ? 'bg-surface shadow-outline after:bg-primary after:shadow-[0_0_0_3px_var(--bg-surface)]'
+                  ? 'bg-selected after:bg-primary after:shadow-[0_0_0_3px_var(--bg-selected)]'
                   : 'after:bg-app after:shadow-[inset_0_0_0_1.5px_var(--border-strong)] hover:bg-hover',
               )}
             >

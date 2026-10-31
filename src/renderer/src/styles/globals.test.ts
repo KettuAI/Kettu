@@ -100,11 +100,16 @@ function declarations(block: string): Map<string, string> {
   return found
 }
 
-// A size in px from a product of px values, numbers and var(--prose-size), as calc() takes it.
-function pixels(value: string, proseSize: string): number {
+// A size in px from a product of px values, numbers, var(--prose-size) and var(--prose-scale), as
+// calc() takes it.
+function pixels(value: string, proseSize: string, proseScale = '1'): number {
   const product = /^calc\((.*)\)$/.exec(value)?.[1] ?? value
   return product.split('*').reduce((total, term) => {
-    const factor = term.trim() === 'var(--prose-size)' ? proseSize : term.trim()
+    const vars: Record<string, string> = {
+      'var(--prose-size)': proseSize,
+      'var(--prose-scale)': proseScale,
+    }
+    const factor = vars[term.trim()] ?? term.trim()
     const number = Number(factor.replace(/px$/, ''))
     expect(Number.isFinite(number), `cannot read ${term} in ${value}`).toBe(true)
     return total * number
@@ -118,22 +123,29 @@ describe('type in globals.css', () => {
     large: declarationsAfter(":root[data-text-size='large']").get('--prose-size')!,
   }
 
+  const scales = {
+    builtIn: declarationsAfter(':root {').get('--prose-scale')!,
+    serif: declarationsAfter(":root[data-font-prose='source-serif-4']").get('--prose-scale')!,
+  }
+
   it.each([
-    ['small', 14, 15.4],
-    ['default', 15, 16.5],
-    ['large', 16, 17.6],
+    ['small', 13, 14.3],
+    ['default', 14, 15.4],
+    ['large', 15, 16.5],
   ] as const)(
-    "sets the agent's prose at 1.1 times the prose size at the %s text size",
-    (size, user, agent) => {
+    "sets the agent's prose at the prose size, or 1.1 times it in the serif, at the %s text size",
+    (size, user, serif) => {
       const prose = textSizes[size]
+      const font = declarationsAfter('.markdown {').get('font-size')!
       expect(pixels(prose, prose)).toBe(user)
-      expect(pixels(declarationsAfter('.markdown {').get('font-size')!, prose)).toBeCloseTo(agent)
+      expect(pixels(font, prose, scales.builtIn)).toBeCloseTo(user)
+      expect(pixels(font, prose, scales.serif)).toBeCloseTo(serif)
     },
   )
 
   it("sets thoughts, notes and summaries at 0.88 of the agent's prose", () => {
     const muted = declarationsAfter('.markdown-muted {').get('font-size')!
-    expect(pixels(muted, textSizes.default)).toBeCloseTo(16.5 * 0.88)
+    expect(pixels(muted, textSizes.default, scales.serif)).toBeCloseTo(15.4 * 0.88)
   })
 
   it.each([
@@ -173,10 +185,9 @@ describe('type in globals.css', () => {
     }
   })
 
-  it('puts the alias family right after the Latin face of the sans and the serif', () => {
-    const theme = declarationsAfter('@theme inline')
-    for (const stack of ['--font-sans', '--font-serif']) {
-      expect(theme.get(stack)!.split(',')[1].trim()).toBe("'Platform Chinese'")
+  it('puts the alias family right after the Latin face of every face a theme may name', () => {
+    for (const face of ['system', 'inter', 'source-serif-4', 'jetbrains-mono']) {
+      expect(light.get(`--face-${face}`)!.split(',')[1].trim()).toBe("'Platform Chinese'")
     }
   })
 })

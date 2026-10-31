@@ -103,6 +103,15 @@ function watchOnce(): void {
   onColorsChange(() => {
     const theme = readTheme()
     for (const instance of ready.values()) instance.term.options.theme = theme
+    // A theme may name another face for code, which must load before xterm.js measures it.
+    const family = fontFamily()
+    void loadFont().then(() => {
+      for (const instance of ready.values()) {
+        if (instance.term.options.fontFamily === family) continue
+        instance.term.options.fontFamily = family
+        if (instance.visible) fitNow(instance)
+      }
+    })
   })
   useSettingsStore.subscribe((state, previous) => {
     const size = state.settings.terminal.fontSize

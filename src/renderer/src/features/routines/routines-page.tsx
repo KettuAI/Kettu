@@ -214,7 +214,7 @@ export default function RoutinesPage() {
           <RunAnnouncements />
           <header className="mb-7 flex items-start gap-4">
             <div className="min-w-0 flex-1">
-              <h1 className="font-heading text-title font-semibold">{t('page.title')}</h1>
+              <h1 className="font-heading text-title font-medium">{t('page.title')}</h1>
               <p className="mt-1 max-w-100 text-small text-tertiary">{t('page.description')}</p>
             </div>
             {!empty && (
@@ -286,7 +286,7 @@ function RoutineGroup({
   return (
     <section aria-label={label} className="flex flex-col">
       <div className={HEADING}>
-        <h2 className="font-heading text-heading font-semibold">{label}</h2>
+        <h2 className="font-heading text-heading font-medium">{label}</h2>
         <span className="text-xs text-tertiary tabular">{routines.length}</span>
       </div>
       <ul className="flex flex-col">
@@ -484,10 +484,7 @@ function RowWhen({ id, routine, now }: { id: string; routine: RoutineView; now: 
     case 'waiting':
       first = (
         <span className="flex items-center gap-1.5 text-ui leading-5.5 font-medium text-attention">
-          <span
-            aria-hidden
-            className="size-2 shrink-0 rounded-full bg-attention-dot ring-3 ring-attention-dot/16"
-          />
+          <span aria-hidden className="size-2 shrink-0 rounded-full bg-attention-dot" />
           {t('row.waiting')}
         </span>
       )

@@ -112,10 +112,10 @@ export function SidePanelArea({
       </ResizablePanel>
       {pane && (
         <>
-          {/* The desk between the two sheets. */}
+          {/* The line between the two columns. */}
           <ResizableHandle
             withHandle={!maximized}
-            className={cn('app-region-no-drag w-(--sheet-gap)', maximized && 'pointer-events-none')}
+            className={cn('app-region-no-drag bg-border', maximized && 'pointer-events-none')}
           />
           <ResizablePanel
             key={pane}

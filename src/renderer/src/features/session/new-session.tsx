@@ -116,7 +116,7 @@ export function NewSessionView({
       </TopBar>
       <ColumnScroller className="flex flex-col px-7">
         <div className="mx-auto flex w-full max-w-thread flex-1 flex-col justify-end">
-          <h1 className="mt-6 mb-6.5 animate-in text-center font-heading text-greeting text-balance fade-in animation-duration-(--duration-slow)">
+          <h1 className="mt-6 mb-6.5 animate-in text-center font-heading text-greeting font-medium text-balance fade-in animation-duration-(--duration-slow)">
             {t('newSession.heading')}
           </h1>
         </div>

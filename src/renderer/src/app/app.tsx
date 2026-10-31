@@ -194,30 +194,20 @@ function Workbench() {
           <AppSidebar />
         </div>
       </ResizablePanel>
-      {/* On the main sheet's edge, which draws the line between the two. Collapsed, the handle
-          takes no width and leaves the tab order. */}
+      {/* The line between the two. Collapsed, the handle takes no width and leaves the tab
+          order. */}
       <ResizableHandle
         withHandle={!collapsed}
         disabled={collapsed}
-        className={cn(collapsed && 'pointer-events-none w-0')}
+        className={cn('bg-border', collapsed && 'pointer-events-none w-0')}
         onPointerDown={() => sliding.current && endSlide()}
       />
       <ResizablePanel id="main" minSize="560px" className={SLIDING_PANEL} style={SHEET_PANEL}>
-        {/* The desk around the main area's sheets, which drags the window; its left side only
-            while the sidebar is collapsed. On Windows and Linux the band above them holds the
-            window controls. */}
-        <main
-          ref={desk}
-          className={cn(
-            PANEL_CONTENT,
-            DESK,
-            'py-(--sheet-gap) pr-(--sheet-gap)',
-            collapsed && 'pl-(--sheet-gap)',
-            !isMac && 'pt-[calc(var(--title-bar)+var(--sheet-gap))]',
-          )}
-        >
+        {/* Under the main area's columns, which drags the window. On Windows and Linux the band
+            above them holds the window controls. */}
+        <main ref={desk} className={cn(PANEL_CONTENT, DESK, !isMac && 'pt-(--title-bar)')}>
           <TitleBand />
-          <div ref={frame} className="relative flex h-full justify-end rounded-xl">
+          <div ref={frame} className="relative flex h-full justify-end">
             <div ref={mainContent} className="isolate h-full w-full min-w-0 shrink-0">
               <MainArea />
             </div>

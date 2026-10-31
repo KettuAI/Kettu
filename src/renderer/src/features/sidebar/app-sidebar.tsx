@@ -115,11 +115,11 @@ export function AppSidebar() {
       className="w-full bg-transparent"
       aria-label={t('nav.label')}
     >
-      {/* On macOS level with the top bar, under the gap above the sheets; elsewhere in the band. */}
+      {/* On macOS level with the top bar; elsewhere in the band. */}
       <div
         className={cn(
-          'app-region-drag flex shrink-0 items-center pr-2 pl-4',
-          isMac ? 'h-[calc(var(--sheet-gap)+var(--top-bar))] pt-(--sheet-gap)' : 'h-(--title-bar)',
+          'app-region-drag flex shrink-0 items-center pr-2.5 pl-5',
+          isMac ? 'h-top-bar' : 'h-(--title-bar)',
         )}
       >
         {isMac && <span aria-hidden className="w-(--traffic-lights)" />}
@@ -196,7 +196,7 @@ export function AppSidebar() {
           )}
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="gap-1.5 p-2">
+      <SidebarFooter className="gap-1.5 border-t p-2">
         <SidebarFooterContent />
       </SidebarFooter>
       {importing && (
@@ -234,7 +234,7 @@ export function NavRow({
       isActive={current}
       onClick={onClick}
       aria-label={ariaLabel}
-      className="[&_svg]:size-5 data-active:font-normal"
+      className="[&_svg]:size-4"
     >
       <span className="contents text-secondary group-data-active/menu-button:text-primary">
         {icon}
@@ -473,7 +473,7 @@ function ProjectGroup({
       }}
       className={cn(GROUP_LABEL, project?.missing ? 'text-disabled' : 'hover:text-secondary')}
     >
-      <span className="min-w-0 truncate font-heading text-group font-semibold">{name}</span>
+      <span className="min-w-0 truncate font-heading text-group font-medium">{name}</span>
       <FoldChevron open={open} />
     </SidebarMenuButton>
   )

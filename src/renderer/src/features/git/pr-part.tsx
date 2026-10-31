@@ -164,7 +164,7 @@ function PullRequestDetails({ pr, onOpen }: { pr: PullRequest; onOpen: () => voi
         onClick={onOpen}
       >
         <PrIcon state={pr.state} size={16} className="mt-0.75" />
-        <span className="line-clamp-2 font-heading text-subheading font-semibold">{pr.title}</span>
+        <span className="line-clamp-2 font-heading text-subheading font-medium">{pr.title}</span>
         <span className="mt-0.75 inline-flex items-center gap-0.5 text-xs text-tertiary tabular group-focus/pr:text-primary">
           #{pr.number}
           <ExternalLinkIcon aria-hidden className="size-3" />

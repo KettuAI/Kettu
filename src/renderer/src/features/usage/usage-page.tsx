@@ -156,7 +156,7 @@ export default function UsagePage() {
       <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
         <div className="@container mx-auto w-full max-w-275 px-10 pb-20">
           <header className="mb-5 flex min-h-7.5 items-center gap-3">
-            <h1 className="truncate font-heading text-title font-semibold">{t('page.title')}</h1>
+            <h1 className="truncate font-heading text-title font-medium">{t('page.title')}</h1>
             <span className="flex-1" />
             {!unavailable && !empty && <SyncState />}
           </header>
@@ -177,7 +177,7 @@ function PageBar() {
     <div
       className={cn(
         'app-region-drag flex shrink-0 items-center',
-        cornered ? 'h-top-bar pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]' : 'h-9',
+        cornered ? 'h-top-bar pl-[calc(36px+var(--traffic-lights))]' : 'h-9',
       )}
     >
       {cornered && <CornerControls className="-ml-1" />}
@@ -1045,7 +1045,7 @@ function TrendCard({
         {late ? (
           <Skeleton className="min-h-49 flex-1" />
         ) : max === 0 ? (
-          <p className="flex min-h-49 flex-1 items-center justify-center font-serif text-prose text-tertiary shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-default)]">
+          <p className="flex min-h-49 flex-1 items-center justify-center font-prose text-prose text-tertiary shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-default)]">
             {kind === 'cost' && days.some((day) => day.total > 0) ? t('noCost') : t('noUsage')}
           </p>
         ) : (

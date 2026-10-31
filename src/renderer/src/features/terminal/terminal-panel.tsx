@@ -122,7 +122,7 @@ export function TerminalPanel({
       <div
         className={cn(
           'app-region-drag flex h-top-bar shrink-0 items-center gap-1 pr-2 pl-2.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
-          cornered && 'pl-[calc(32px-var(--sheet-gap)+var(--traffic-lights))]',
+          cornered && 'pl-[calc(36px+var(--traffic-lights))]',
         )}
       >
         {cornered && <CornerControls className="mr-1" />}
@@ -290,7 +290,7 @@ export function TerminalTab({
           editing
             ? 'bg-surface text-primary ring-1 ring-border-strong ring-inset'
             : selected || isDragging
-              ? 'bg-surface text-primary shadow-outline'
+              ? 'bg-selected text-primary'
               : 'text-tertiary hover:bg-hover hover:text-secondary',
         )}
       >

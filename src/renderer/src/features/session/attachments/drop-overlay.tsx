@@ -21,7 +21,7 @@ export function DropOverlay({
       )}
     >
       <div className="rounded-2xl bg-surface px-7 py-5 text-center shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)]">
-        <div className="font-heading text-subheading font-semibold text-primary">
+        <div className="font-heading text-subheading font-medium text-primary">
           {starting
             ? t('attachments.waitForAgent', { agent: agentName })
             : t('attachments.dropTitle')}

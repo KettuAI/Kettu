@@ -36,7 +36,7 @@ Kettu is only a GUI: it implements no agent. It drives Claude Code through the C
 
 Electron 44, electron-vite 6 (Vite 8), React 19, TypeScript 6 in strict mode, Tailwind CSS v4, pnpm 10, electron-builder. TypeScript stays on 6.0 until typescript-eslint supports 7.
 
-Beyond the UI stack: `@agentclientprotocol/sdk` for ACP (protocol v1 through the SDK's `unstable` entrypoint, whose schema carries the subagent updates), `@modelcontextprotocol/sdk` for the artifacts service's MCP server, `electron-updater` for updates, Vitest for tests, `react-day-picker` for the usage page's date range picker, and the Inter and Source Serif 4 faces from `@fontsource-variable`.
+Beyond the UI stack: `@agentclientprotocol/sdk` for ACP (protocol v1 through the SDK's `unstable` entrypoint, whose schema carries the subagent updates), `@modelcontextprotocol/sdk` for the artifacts service's MCP server, `electron-updater` for updates, Vitest for tests, `react-day-picker` for the usage page's date range picker, and the Inter, Source Serif 4 and JetBrains Mono faces from `@fontsource-variable`, which themes may choose; the built-in theme sets text in the system font.
 
 Claude Code's `@anthropic-ai/claude-agent-sdk` and Codex's `@openai/codex` are never dependencies: Kettu installs them into its data folder on first use and loads them at runtime, because the SDK's license grants no right to redistribute it. The repository holds only its own types for the parts of the SDK it uses, and lint rejects a value import of the package.
 
@@ -137,8 +137,8 @@ Kettu drives agents that run shell commands, so these are not negotiable:
 ## Gotchas
 
 - shadcn/ui here is built on Base UI, not Radix: components take a `render` prop instead of `asChild`. To make a link look like a button, put `buttonVariants()` on a plain `<a>` rather than `<Button render={<a />}>`.
-- `BACKGROUND_COLOR` in `src/main/window.ts` must match the desk, `--bg-sidebar` in `tokens.css`, or the window flashes on load.
-- On macOS the title bar is hidden: the top header is the drag region (`app-region-drag`) and leaves room for the traffic lights. Give interactive elements inside it `app-region-no-drag`. The desk around the sheets drags the window too, so a sheet takes `SHEET` from `features/shell/sheet.ts`, which opts out.
+- `BACKGROUND_COLOR` in `src/main/window.ts` must match `--bg-sidebar` in `tokens.css`, or the window flashes on load.
+- On macOS the title bar is hidden: the top header is the drag region (`app-region-drag`) and leaves room for the traffic lights. Give interactive elements inside it `app-region-no-drag`. What lies under the columns drags the window too, so a column takes `SHEET` from `features/shell/sheet.ts`, which opts out.
 - `@dnd-kit/react` is still 0.x; read its changelog before bumping the minor version, and never mix in the legacy `@dnd-kit/core` packages.
 - Enter-to-send handlers must ignore IME composition (`event.nativeEvent.isComposing`, or `keyCode` 229), or Chinese, Japanese and Korean input sends half-typed text.
 - macOS, Windows and Linux are equal targets. Code that spawns processes, resolves executables or compares paths handles each: a minimal `PATH` when the app starts from the macOS or Linux desktop, `PATHEXT` and `.cmd` shims on Windows, and paths compared only after `path.resolve` and `fs.realpath.native`, case-insensitively on Windows.
