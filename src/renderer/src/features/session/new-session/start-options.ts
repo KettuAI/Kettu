@@ -5,10 +5,11 @@ import type { OptionValues } from '@renderer/stores/agent-options'
 
 /**
  * What an agent needs before New session can start it, by the checks Settings › Agents lists it
- * with. `adapter` is a package agent whose adapter is not installed yet: its first start installs
- * it, so it can still be chosen. `setup` is the same while the user's own CLI is to run, so that
- * start installs the adapter without the CLI's copy unless the adapter rejects the CLI's version.
- * `install` cannot be chosen.
+ * with. `adapter` is a package agent whose adapter is not installed yet, and `install` one missing
+ * from the machine: neither can be chosen until Settings › Agents installs it. `setup` is a
+ * package agent without its adapter while the user's own CLI is to run: the user installed the
+ * agent, so it can be chosen, and its first start installs the adapter without the CLI's copy
+ * unless the adapter rejects the CLI's version.
  */
 export type AgentNeed = 'install' | 'installing' | 'failed' | 'adapter' | 'setup' | 'sign-in' | null
 
@@ -23,7 +24,11 @@ export function agentNeed(status: AgentStatus): AgentNeed {
   return r.kind === 'sign-in' ? 'sign-in' : null
 }
 
-export const canStart = (status: AgentStatus): boolean => agentNeed(status) !== 'install'
+/** Whether New session can start the agent, and so whether its menu lists it. */
+export function canStart(status: AgentStatus): boolean {
+  const need = agentNeed(status)
+  return need !== 'install' && need !== 'adapter'
+}
 
 /**
  * While no agent can start, the names of those waiting for Node.js, which installing it fixes;

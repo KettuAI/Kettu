@@ -66,9 +66,13 @@ import { useStartConfig } from './use-start-config'
 const isSelect = (o: ConfigOption | undefined): o is SelectOption =>
   !!o && o.type === 'select' && !!o.choices?.length
 
-/** The installed agents first, each group in catalog order, as Settings › Agents lists them. */
-function menuOrder(statuses: AgentStatus[]): AgentStatus[] {
-  return [...statuses.filter(listedInstalled), ...statuses.filter((s) => !listedInstalled(s))]
+/**
+ * The agents New session can start, the installed first, each group in catalog order, as
+ * Settings › Agents lists them. The others are installed there, so the menu leaves them out.
+ */
+function menuAgents(statuses: AgentStatus[]): AgentStatus[] {
+  const listed = statuses.filter(canStart)
+  return [...listed.filter(listedInstalled), ...listed.filter((s) => !listedInstalled(s))]
 }
 
 /**
@@ -93,7 +97,7 @@ export function AgentMenu({
   onValues?: (optionId: string, value: string | boolean) => void
 }) {
   const { t } = useTranslation('session')
-  const statuses = useAgentsStore(useShallow((s) => menuOrder(usableAgents(s.order, s.byId))))
+  const statuses = useAgentsStore(useShallow((s) => menuAgents(usableAgents(s.order, s.byId))))
   const entries = useAgentOptionsStore((s) => s.byId)
   const picks = useAgentOptionsStore((s) => s.picks)
   const loaded = useAgentOptionsStore((s) => s.loaded)
@@ -163,9 +167,9 @@ export function AgentMenu({
       return
     }
     setShown(
-      agentId ??
-        (statuses.find(listedInstalled) ?? statuses.find(canStart) ?? statuses[0])?.id ??
-        null,
+      statuses.some((s) => s.id === agentId)
+        ? agentId
+        : ((statuses.find(listedInstalled) ?? statuses[0])?.id ?? null),
     )
     for (const status of statuses) {
       if (status.state !== 'ready' || !status.capabilities.reports) continue
@@ -238,54 +242,74 @@ export function AgentMenu({
             <SearchIcon className="size-3.5" />
           </InputGroupAddon>
         </ComboboxInput>
-        <Tabs
-          orientation="vertical"
-          value={shown}
-          onValueChange={(next: AgentId) => {
-            setShown(next)
-            setQuery('')
-          }}
-          className="min-h-0 flex-1 flex-row gap-0"
-        >
-          <div
-            ref={body}
-            className="flex min-h-0 flex-1 p-1.5"
-            style={searching && size ? { minHeight: size.height } : undefined}
+        {statuses.length === 0 ? (
+          <p className="flex-1 px-3.5 py-3 text-ui text-muted-foreground">
+            {t('newSession.noAgent')}
+          </p>
+        ) : (
+          <Tabs
+            orientation="vertical"
+            value={shown}
+            onValueChange={(next: AgentId) => {
+              setShown(next)
+              setQuery('')
+            }}
+            className="min-h-0 flex-1 flex-row gap-0"
           >
-            <TabsList
-              ref={rail}
-              style={searching && size ? { minWidth: size.rail } : undefined}
-              variant="rail"
-              activateOnFocus
-              aria-label={t('newSession.agentMenu.agents')}
-              className="max-h-[min(--spacing(96),calc(var(--available-height)---spacing(12)))] w-auto min-w-49 shrink-0 scroll-fade-y justify-start overflow-y-auto overscroll-contain pr-1.5"
+            <div
+              ref={body}
+              className="flex min-h-0 flex-1 p-1.5"
+              style={searching && size ? { minHeight: size.height } : undefined}
             >
-              {visibleRail.map((status) => (
-                <RailRow key={status.id} status={status} />
-              ))}
-            </TabsList>
-            <Separator orientation="vertical" className="bg-border-soft" />
-            <TabsContent
-              value={shown ?? undefined}
-              tabIndex={-1}
-              keepMounted={false}
-              className="ml-1.5 flex w-80 min-w-0 flex-col"
-            >
-              <Pane
-                status={statuses.find((s) => s.id === shown) ?? null}
-                config={shown ? (configs.get(shown) ?? null) : null}
-                loaded={loaded}
-                opening={shownPrepared?.opening ?? false}
-                failure={shownPrepared?.error ?? null}
-                searching={searching}
-                groups={groups}
-                agents={agents}
-                onLeave={close}
-                onOption={pickOption}
-              />
-            </TabsContent>
-          </div>
-        </Tabs>
+              <TabsList
+                ref={rail}
+                style={searching && size ? { minWidth: size.rail } : undefined}
+                variant="rail"
+                activateOnFocus
+                aria-label={t('newSession.agentMenu.agents')}
+                className="max-h-[min(--spacing(96),calc(var(--available-height)---spacing(12)))] w-auto min-w-49 shrink-0 scroll-fade-y justify-start overflow-y-auto overscroll-contain pr-1.5"
+              >
+                {visibleRail.map((status) => (
+                  <RailRow key={status.id} status={status} />
+                ))}
+              </TabsList>
+              <Separator orientation="vertical" className="bg-border-soft" />
+              <TabsContent
+                value={shown ?? undefined}
+                tabIndex={-1}
+                keepMounted={false}
+                className="ml-1.5 flex w-80 min-w-0 flex-col"
+              >
+                <Pane
+                  status={statuses.find((s) => s.id === shown) ?? null}
+                  config={shown ? (configs.get(shown) ?? null) : null}
+                  loaded={loaded}
+                  opening={shownPrepared?.opening ?? false}
+                  failure={shownPrepared?.error ?? null}
+                  searching={searching}
+                  groups={groups}
+                  agents={agents}
+                  onLeave={close}
+                  onOption={pickOption}
+                />
+              </TabsContent>
+            </div>
+          </Tabs>
+        )}
+        <Separator className="bg-border-soft" />
+        <div className="p-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start px-2 text-ui font-normal"
+            onClick={() => {
+              close()
+              openAgentSettings(null)
+            }}
+          >
+            {t('newSession.setUpAgents')}
+          </Button>
+        </div>
       </ComboboxContent>
     </Combobox>
   )
@@ -333,17 +357,15 @@ function RailRow({ status }: { status: AgentStatus }) {
   const limit = tightestLimit(status.limits, now)
   const need = agentNeed(status)
   const trailing =
-    need === 'install' || need === 'adapter'
-      ? t('newSession.agentMenu.notInstalled')
-      : need === 'setup'
-        ? t('newSession.agentMenu.setsUp')
-        : need === 'installing'
-          ? t('newSession.agentMenu.installing')
-          : need === 'failed'
-            ? t('newSession.agentMenu.failed')
-            : need === 'sign-in'
-              ? t('newSession.agentMenu.signIn')
-              : null
+    need === 'setup'
+      ? t('newSession.agentMenu.setsUp')
+      : need === 'installing'
+        ? t('newSession.agentMenu.installing')
+        : need === 'failed'
+          ? t('newSession.agentMenu.failed')
+          : need === 'sign-in'
+            ? t('newSession.agentMenu.signIn')
+            : null
 
   return (
     <TabsTrigger
@@ -444,7 +466,6 @@ function Pane({
   if (!status) return null
   const name = status.name
   const need = agentNeed(status)
-  const installed = need !== 'install'
   // The options load with the list, and with a start until the agent has reported them.
   const startingUp = loaded && !config && (opening || status.state === 'starting')
   const loading = !loaded || startingUp
@@ -470,19 +491,7 @@ function Pane({
   )
   let notice = null
   if (!searching) {
-    if (need === 'install') {
-      notice = (
-        <Notice text={t('newSession.agentMenu.notInstalledLong', { agent: name })} tone="neutral">
-          {install}
-        </Notice>
-      )
-    } else if (need === 'adapter') {
-      notice = (
-        <Notice text={t('newSession.agentMenu.installsOnFirstUse', { agent: name })} tone="neutral">
-          {install}
-        </Notice>
-      )
-    } else if (need === 'setup') {
+    if (need === 'setup') {
       notice = (
         <Notice
           text={t(
@@ -549,7 +558,7 @@ function Pane({
   return (
     <>
       {notice}
-      {!searching && installed && startingUp && (
+      {!searching && startingUp && (
         // Words once a start takes longer than a moment; the space is kept, so nothing shifts.
         <div
           role="status"
@@ -565,7 +574,7 @@ function Pane({
           </span>
         </div>
       )}
-      {!searching && installed && config && opening && (
+      {!searching && config && opening && (
         // The cached models stand in until the prepared session answers.
         <div
           role="status"
@@ -577,7 +586,7 @@ function Pane({
           </span>
         </div>
       )}
-      {!searching && installed && loading ? (
+      {!searching && loading ? (
         <div
           className="flex animate-in flex-col gap-1 fade-in fill-mode-backwards delay-200 animation-duration-(--duration-base)"
           aria-hidden
@@ -603,7 +612,7 @@ function Pane({
           {t('newSession.agentMenu.noMatch')}
         </p>
       )}
-      {!searching && installed && config && (isSelect(effort) || switches.length > 0) && (
+      {!searching && config && (isSelect(effort) || switches.length > 0) && (
         <div className="flex flex-col">
           {isSelect(effort) && (
             <>
