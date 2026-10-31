@@ -26,7 +26,7 @@ concurrency:
 jobs:
   version:
     name: Version
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
     steps:
@@ -60,14 +60,14 @@ jobs:
   # and stays ad-hoc signed when none is; a half-configured set fails the run here.
   mac-signing:
     name: macOS signing
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
     outputs:
       signed: ${{ steps.decide.outputs.signed }}
       notarize: ${{ steps.decide.outputs.notarize }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: useblacksmith/checkout@v1
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -93,23 +93,23 @@ jobs:
         # Each architecture builds on its own runner, so node-pty is compiled or picked for the
         # machine that tests it.
         include:
-          - os: macos-latest
+          - os: blacksmith-6vcpu-macos-15
             target: --mac --arm64
             # Only a Developer ID signed build can replace itself; an ad-hoc one links to the release.
             update_mode: ${{ needs.mac-signing.outputs.signed == 'true' && 'install' || 'link' }}
-          - os: macos-15-intel
+          - os: blacksmith-6vcpu-macos-15
             target: --mac --x64
             update_mode: ${{ needs.mac-signing.outputs.signed == 'true' && 'install' || 'link' }}
-          - os: windows-latest
+          - os: blacksmith-4vcpu-windows-2025
             target: --win --x64
             update_mode: install
-          - os: windows-11-arm
+          - os: blacksmith-4vcpu-windows-2025
             target: --win --arm64
             update_mode: install
-          - os: ubuntu-24.04
+          - os: blacksmith-4vcpu-ubuntu-2404
             target: --linux --x64
             update_mode: install
-          - os: ubuntu-24.04-arm
+          - os: blacksmith-4vcpu-ubuntu-2404-arm
             target: --linux --arm64
             update_mode: install
     runs-on: ${{ matrix.os }}
@@ -306,7 +306,7 @@ jobs:
 
   publish:
     needs: [mac-signing, build, screenshots]
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
     steps:
