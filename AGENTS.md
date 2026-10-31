@@ -36,7 +36,7 @@ Kettu is only a GUI: it implements no agent. It drives Claude Code through the C
 
 Electron 44, electron-vite 6 (Vite 8), React 19, TypeScript 6 in strict mode, Tailwind CSS v4, pnpm 10, electron-builder. TypeScript stays on 6.0 until typescript-eslint supports 7.
 
-Beyond the UI stack: `@agentclientprotocol/sdk` for ACP (protocol v1 through the SDK's `unstable` entrypoint, whose schema carries the subagent updates), `@modelcontextprotocol/sdk` for the artifacts service's MCP server, `electron-updater` for updates, Vitest for tests, `react-day-picker` for the usage page's date range picker, and the Inter, Source Serif 4 and JetBrains Mono faces from `@fontsource-variable`, which themes may choose; the built-in theme sets text in the system font.
+Beyond the UI stack: `@agentclientprotocol/sdk` for ACP (protocol v1 through the SDK's `unstable` entrypoint, whose schema carries the subagent updates), `@modelcontextprotocol/sdk` for the artifacts service's MCP server, `electron-updater` for updates, Vitest for tests, `react-day-picker` for the usage page's date range picker, `uqr` for the pairing QR code in Settings › Remote access, and the Inter, Source Serif 4 and JetBrains Mono faces from `@fontsource-variable`, which themes may choose; the built-in theme sets text in the system font.
 
 Claude Code's `@anthropic-ai/claude-agent-sdk` and Codex's `@openai/codex` are never dependencies: Kettu installs them into its data folder on first use and loads them at runtime, because the SDK's license grants no right to redistribute it. The repository holds only its own types for the parts of the SDK it uses, and lint rejects a value import of the package.
 

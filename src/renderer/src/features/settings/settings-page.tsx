@@ -40,6 +40,7 @@ import {
   useGitSection,
   useMcpSection,
   useNotificationsSection,
+  useRemoteSection,
   useSharingSection,
   useTerminalSection,
   useUsageSection,
@@ -66,13 +67,9 @@ export default function SettingsPage() {
       useGitSection(),
     ],
     [useMcpSection()],
-    [
-      useArchivedSection(),
-      useBrowserSection(),
-      useSharingSection(),
-      useAdvancedSection(),
-      useAboutSection(),
-    ],
+    [useArchivedSection(), useBrowserSection(), useSharingSection()],
+    [useRemoteSection()],
+    [useAdvancedSection(), useAboutSection()],
   ]
   const sections = clusters.flat()
   const [query, setQuery] = useState('')

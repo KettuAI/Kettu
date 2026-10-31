@@ -5,9 +5,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { connectPort } from '@shared/socket-port'
 import {
   callControl,
+  connectControl,
   ControlError,
   NotRunning,
   serveControl,
+  type ControlConnection,
+  type ControlEvent,
   type ControlHandlers,
   type ControlServer,
   type DaemonStatus,
@@ -41,6 +44,8 @@ function handlers(overrides: Partial<ControlHandlers> = {}): ControlHandlers {
     'devices.remove': async ({ id }) => {
       throw new ControlError('not_found', `No device ${id}`)
     },
+    'pair.open': async () => ({ codeId: 1 }),
+    'pair.answer': async () => null,
     ...overrides,
   }
 }
@@ -100,6 +105,66 @@ describeUnix('the control socket', () => {
       { type: 'error', id: 4, error: { code: 'invalid_params', message: expect.any(String) } },
       { type: 'error', id: 5, error: { code: 'unknown_method', message: expect.any(String) } },
     ])
+  })
+
+  it('sends a connection its events, answers it again and tells the handler once it goes', async () => {
+    let closed = false
+    const expired: ControlEvent = {
+      type: 'pairing',
+      codeId: 7,
+      pairing: { state: 'void', reason: 'expired' },
+    }
+    server = await serveControl(
+      socket,
+      handlers({
+        'pair.open': async (_, connection) => {
+          connection.onClose(() => (closed = true))
+          connection.notify(expired)
+          return { codeId: 7 }
+        },
+      }),
+      () => {},
+    )
+    const client = await connectControl(socket)
+    const events: ControlEvent[] = []
+    client.onEvent((event) => events.push(event))
+    expect(await client.call('pair.open', undefined)).toEqual({ codeId: 7 })
+    expect(events).toEqual([expired])
+    expect(await client.call('status', undefined)).toEqual(status)
+    expect(closed).toBe(false)
+    client.close()
+    while (!closed) await new Promise((resolve) => setTimeout(resolve, 10))
+  })
+
+  it("takes a pairing answer with the name kept as a device's, from the connection asked", async () => {
+    const answers: unknown[] = []
+    const connections = new Set<ControlConnection>()
+    server = await serveControl(
+      socket,
+      handlers({
+        'pair.answer': async (params, connection) => {
+          answers.push(params)
+          connections.add(connection)
+          return null
+        },
+      }),
+      () => {},
+    )
+    const client = await connectControl(socket)
+    await client.call('pair.answer', { codeId: 1, add: true, name: ' My\u0007 iPad ' })
+    await client.call('pair.answer', { codeId: 1, add: false, name: 'ignored' })
+    await expect(
+      client.call('pair.answer', { codeId: 1, add: true, name: ' \u0007 ' }),
+    ).rejects.toMatchObject({ code: 'invalid_params' })
+    await expect(
+      client.call('pair.answer', { codeId: 1.5, add: true, name: 'iPad' }),
+    ).rejects.toMatchObject({ code: 'invalid_params' })
+    client.close()
+    expect(answers).toEqual([
+      { codeId: 1, add: true, name: 'My iPad' },
+      { codeId: 1, add: false, name: '' },
+    ])
+    expect(connections.size).toBe(1)
   })
 
   it('throws NotRunning when nothing listens', async () => {

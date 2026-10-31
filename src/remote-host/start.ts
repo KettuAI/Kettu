@@ -8,8 +8,10 @@ import type { PortDevice } from '@shared/remote/device'
 import { importKeyPair } from '@shared/remote/noise'
 import type { Transport } from '@shared/remote/transport'
 import type { LogFn } from '../agent-host/storage'
+import { ActivityLog } from './activity'
 import { DeviceStore } from './devices'
 import { DirectListener } from './direct'
+import { PairingCodes } from './pairing'
 import { RemoteServer } from './server'
 
 export interface RemoteHostDeps {
@@ -39,8 +41,16 @@ export function startRemoteHost(
     message: Extract<MainToRemoteHost, { type: 'remote-host:init' }>,
   ): Promise<Running> {
     const staticKey = await importKeyPair(Buffer.from(message.privateKey, 'base64'))
-    const devices = await DeviceStore.load(message.userDataPath, log)
+    const [devices, activity] = await Promise.all([
+      DeviceStore.load(message.userDataPath, log),
+      ActivityLog.load(message.userDataPath, log),
+    ])
     const publicKey = Buffer.from(staticKey.publicKey).toString('base64')
+    const pairing = new PairingCodes({
+      hostKey: staticKey.publicKey,
+      addresses: () => server.addresses,
+      send: (codeId, state) => send({ type: 'remote-host:pairing', codeId, pairing: state }),
+    })
     const status = (): RemoteHostStatus => ({
       publicKey,
       plainTextKey: message.plainTextKey,
@@ -56,6 +66,8 @@ export function startRemoteHost(
     const server: RemoteServer = new RemoteServer({
       staticKey,
       devices,
+      activity,
+      pairing,
       host: { name: message.hostName, platform: message.platform, version: message.appVersion },
       openAgentPort: (device) => deps.openAgentPort(device),
       changed,
@@ -67,6 +79,7 @@ export function startRemoteHost(
     ready = true
     send({ type: 'remote-host:ready' })
     send({ type: 'remote-host:status', status: status() })
+    server.startSweeping()
     return { server, direct }
   }
 
@@ -116,6 +129,58 @@ export function startRemoteHost(
       case 'remote-host:resume':
         withRunning(({ direct }) => direct.checkAddresses())
         break
+      case 'remote-host:rename-device':
+        if (typeof message.id === 'string') {
+          withRunning(async ({ server: s }) => {
+            if (!(await s.renameDevice(message.id, message.name, 'owner'))) {
+              log('warn', 'A device to rename was not there or its name was not one')
+            }
+          })
+        }
+        break
+      case 'remote-host:pair':
+        if (Number.isSafeInteger(message.codeId)) {
+          withRunning(({ server: s }) => s.options.pairing.open(message.codeId))
+        }
+        break
+      case 'remote-host:pair-close':
+        withRunning(({ server: s }) => s.options.pairing.close(message.codeId))
+        break
+      case 'remote-host:pair-answer':
+        withRunning(({ server: s }) =>
+          s.options.pairing.answer(message.codeId, {
+            add: message.add === true,
+            name: typeof message.name === 'string' ? message.name : '',
+          }),
+        )
+        break
+      case 'remote-host:activity': {
+        const { requestId, id } = message
+        if (!Number.isSafeInteger(requestId)) break
+        const answered = withRunning(({ server: s }) =>
+          send({
+            type: 'remote-host:activity',
+            requestId,
+            events: typeof id === 'string' ? s.options.activity.list(id) : [],
+          }),
+        )
+        if (!answered) send({ type: 'remote-host:activity', requestId, events: [] })
+        break
+      }
+      case 'remote-host:host-name':
+        if (typeof message.name === 'string')
+          withRunning(({ server: s }) => s.setHostName(message.name))
+        break
+      case 'remote-host:reset': {
+        const { requestId } = message
+        if (!Number.isSafeInteger(requestId)) break
+        const reset = withRunning(async ({ server: s }) => {
+          await s.reset()
+          send({ type: 'remote-host:reset', requestId })
+        })
+        if (!reset) send({ type: 'remote-host:reset', requestId })
+        break
+      }
       case 'remote-host:shutdown': {
         const reason = message.reason === 'remote_off' ? 'remote_off' : 'stopping'
         if (!running) {

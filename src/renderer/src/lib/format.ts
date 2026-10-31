@@ -72,6 +72,23 @@ export function fullTime(at: number): string {
   return format().full.format(at)
 }
 
+/** The clock time alone: "14:32", or "2:32 PM" in English. */
+export function clockTime(at: number): string {
+  return format().clock.format(at)
+}
+
+/** The day alone: "Oct 28", "10月28日". */
+export function monthDay(at: number): string {
+  return format().monthDay.format(at)
+}
+
+/** Calendar days from `at` to `now`: 0 the same day, 1 the day before. */
+export function daysBefore(at: number, now = Date.now()): number {
+  const day = (t: number): number => new Date(t).setHours(0, 0, 0, 0)
+  // Rounded, since a day across a DST change is not 24 hours.
+  return Math.round((day(now) - day(at)) / DAY)
+}
+
 /** "2 m 13 s", "48 s", "1 h 5 m". */
 export function duration(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000))

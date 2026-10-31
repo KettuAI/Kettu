@@ -41,6 +41,7 @@ describe('validateSettingsPatch', () => {
       privacy: { hideAccount: true },
       remote: {
         enabled: true,
+        name: 'Studio',
         direct: {
           enabled: true,
           port: 50123,
@@ -189,6 +190,8 @@ describe('validateSettingsPatch', () => {
       },
       '"remote.direct.addresses" may hold at most 10 addresses',
     ],
+    [{ remote: { name: ' Studio' } }, '"remote.name" must be null or a trimmed name'],
+    [{ remote: { name: 'x'.repeat(65) } }, '"remote.name" must be null or a trimmed name'],
     [{ privacy: { hideEmail: true } }, 'Unknown setting "privacy.hideEmail"'],
     [{ mcp: { kettu: { off: ['unknown-agent'] } } }, '"mcp.kettu.off" names an unknown agent'],
     [{ mcp: { kettu: { off: ['codex', 'codex'] } } }, '"mcp.kettu.off" names an agent twice'],
@@ -209,6 +212,26 @@ describe('validateSettingsPatch', () => {
 })
 
 describe('mergeSettings', () => {
+  it('keeps Kettu in the background and direct connections on while remote access is on', () => {
+    const on = mergeSettings(defaults(), {
+      remote: { enabled: true, direct: { enabled: false } },
+      general: { background: false },
+    })
+    expect(on.general.background).toBe(true)
+    expect(on.remote.direct.enabled).toBe(true)
+    const held = mergeSettings(on, {
+      general: { background: false },
+      remote: { direct: { enabled: false } },
+    })
+    expect(held.general.background).toBe(true)
+    expect(held.remote.direct.enabled).toBe(true)
+    const off = mergeSettings(on, { remote: { enabled: false } })
+    expect(mergeSettings(off, { general: { background: false } }).general.background).toBe(false)
+    expect(
+      mergeSettings(off, { remote: { direct: { enabled: false } } }).remote.direct.enabled,
+    ).toBe(false)
+  })
+
   it('merges sections key by key without touching the input', () => {
     const current = defaults()
     const next = mergeSettings(current, { general: { sendKey: 'mod-enter' } })
@@ -275,11 +298,13 @@ describe('mergeSettings', () => {
     )
     expect(withPort.remote).toEqual({
       enabled: false,
+      name: null,
       direct: { enabled: true, port: 50123, addresses: [{ host: 'a.example', port: 7000 }] },
     })
-    const off = mergeSettings(withPort, { remote: { enabled: true, direct: { enabled: false } } })
+    const off = mergeSettings(withPort, { remote: { direct: { enabled: false } } })
     expect(off.remote).toEqual({
-      enabled: true,
+      enabled: false,
+      name: null,
       direct: { enabled: false, port: 50123, addresses: [{ host: 'a.example', port: 7000 }] },
     })
     const replaced = mergeSettings(off, {
@@ -333,6 +358,16 @@ describe('mergeSettings', () => {
 })
 
 describe('parseSettingsFile', () => {
+  it('reads Run in the background and direct connections as on while remote access is', () => {
+    const loaded = parseSettingsFile({
+      version: 1,
+      general: { background: false },
+      remote: { enabled: true, direct: { enabled: false } },
+    })
+    expect(loaded.settings.general.background).toBe(true)
+    expect(loaded.settings.remote.direct.enabled).toBe(true)
+  })
+
   it('fills missing keys with defaults', () => {
     const loaded = parseSettingsFile({ version: 1, appearance: { theme: 'light' } })
     expect(loaded.problems).toEqual([])
@@ -429,6 +464,7 @@ describe('parseSettingsFile', () => {
       version: 1,
       remote: {
         enabled: true,
+        name: 'Studio',
         direct: {
           enabled: true,
           port: 50123,
@@ -443,6 +479,7 @@ describe('parseSettingsFile', () => {
     })
     expect(loaded.settings.remote).toEqual({
       enabled: true,
+      name: 'Studio',
       direct: {
         enabled: true,
         port: 50123,
@@ -461,6 +498,7 @@ describe('parseSettingsFile', () => {
       version: 1,
       remote: {
         enabled: 'yes',
+        name: ' Studio',
         direct: {
           enabled: true,
           port: 0,
@@ -470,6 +508,7 @@ describe('parseSettingsFile', () => {
     })
     expect(invalid.settings.remote).toEqual({
       enabled: false,
+      name: null,
       direct: {
         enabled: true,
         port: null,
@@ -478,6 +517,7 @@ describe('parseSettingsFile', () => {
     })
     expect(invalid.problems).toEqual([
       '"remote.enabled" must be a boolean',
+      '"remote.name" must be null or a trimmed name of 1 to 64 characters',
       '"remote.direct.port" must be a port from 1 to 65535 or null',
       '"remote.direct.addresses[10]" is beyond the 10 addresses kept',
     ])
@@ -486,7 +526,8 @@ describe('parseSettingsFile', () => {
     ])
     expect(parseSettingsFile({ version: 1, remote: { enabled: true } }).settings.remote).toEqual({
       enabled: true,
-      direct: DEFAULT_SETTINGS.remote.direct,
+      name: null,
+      direct: { ...DEFAULT_SETTINGS.remote.direct, enabled: true },
     })
   })
 

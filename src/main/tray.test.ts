@@ -74,7 +74,7 @@ vi.mock('node:child_process', () => ({
 }))
 
 const { setLocale } = await import('./i18n')
-const { KettuTray, linuxTrayIsWhite, parseColorScheme, stateLine, trayImageName } =
+const { KettuTray, linuxTrayIsWhite, parseColorScheme, remoteLine, stateLine, trayImageName } =
   await import('./tray')
 
 const platform = process.platform
@@ -152,7 +152,31 @@ describe('stateLine', () => {
   })
 })
 
+describe('remoteLine', () => {
+  it('says how remote access is doing while it is on', () => {
+    expect(remoteLine({ state: 'off', online: [] })).toBeNull()
+    expect(remoteLine({ state: 'starting', online: [] })).toBe('Remote access is starting')
+    expect(remoteLine({ state: 'failed', online: [] })).toBe('Remote access could not start')
+    expect(remoteLine({ state: 'on', online: ['a'] })).toBe('Remote access on · 1 device online')
+    setLocale('zh-CN')
+    expect(remoteLine({ state: 'on', online: ['a', 'b'] })).toBe('远程访问已打开 · 2 台设备在线')
+  })
+})
+
 describe('KettuTray', () => {
+  it('has a line for remote access while it is on', () => {
+    const { tray, fake } = start('darwin')
+    tray.setRemote({ state: 'on', online: [] })
+    expect(fake.menu.map((item) => item.label ?? item.type).slice(0, 3)).toEqual([
+      'No sessions running',
+      'Remote access on · 0 devices online',
+      'separator',
+    ])
+    expect(fake.menu[1]!.enabled).toBe(false)
+    tray.setRemote({ state: 'off', online: [] })
+    expect(fake.menu[1]!.type).toBe('separator')
+  })
+
   it('shows its menu and puts the dot on while a request waits', () => {
     const { tray, deps, fake } = start('darwin')
     expect(imageOf(fake)).toBe('tray-menubar.png')

@@ -17,6 +17,10 @@ export interface GroupDef {
   tone?: 'danger'
   /** Rows that draw on the page itself rather than on a card, as the theme tiles do. */
   plain?: boolean
+  /** The label names the group for assistive technology only, as a lone card needs none. */
+  unlabeled?: boolean
+  /** What shows under the group's card, as a `GroupNote` saying what a setting implies. */
+  note?: ReactNode
 }
 
 /** One row of a settings section: its name and description are what search matches. */

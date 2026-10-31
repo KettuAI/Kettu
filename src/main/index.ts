@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { app, powerMonitor, protocol, safeStorage, session } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
+import type { RemoteStatus } from '@shared/remote/status'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
 import { AgentHost } from './agent-host'
 import { Artifacts, disableDnsPrefetching } from './artifacts'
@@ -27,7 +28,7 @@ import { Sharing } from './sharing'
 import { restrictPermissions } from './permissions'
 import { QuitFlow } from './quit'
 import { RemoteHost } from './remote-host'
-import { loadIdentity } from './remote-identity'
+import { loadIdentity, newIdentity, type IdentityCipher } from './remote-identity'
 import { isRendererUrl } from './renderer'
 import { SettingsStore } from './settings'
 import { hostSettings, reachesHost, terminalSettings } from './settings-schema'
@@ -216,20 +217,40 @@ async function start(): Promise<void> {
       ),
   })
   hostRef.current = agentHost
-  const remoteHost = new RemoteHost({
+  const identityCipher: IdentityCipher = {
+    available: () => safeStorage.isAsyncEncryptionAvailable(),
+    encrypt: (text) => safeStorage.encryptStringAsync(text),
+    decrypt: (encrypted) => safeStorage.decryptStringAsync(encrypted),
+    plainText: () =>
+      process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text',
+  }
+  const hostName = (): string => settings.get().remote.name ?? hostname()
+  const remoteStatus = (): RemoteStatus => {
+    const status = remoteHost.status
+    return {
+      state: remoteHost.state,
+      hostName: hostName(),
+      systemName: hostname(),
+      devices: status?.devices ?? [],
+      online: status?.online ?? [],
+      plainTextKey: status?.plainTextKey ?? false,
+      direct: status?.direct ?? { state: 'off' },
+    }
+  }
+  const remoteChanged = (): void => {
+    const status = remoteStatus()
+    broadcast('remote:changed', status)
+    tray.setRemote(status)
+  }
+  const remoteHost: RemoteHost = new RemoteHost({
     userDataPath,
     appVersion: app.getVersion(),
-    identity: () =>
-      loadIdentity(userDataPath, {
-        available: () => safeStorage.isAsyncEncryptionAvailable(),
-        encrypt: (text) => safeStorage.encryptStringAsync(text),
-        decrypt: (encrypted) => safeStorage.decryptStringAsync(encrypted),
-        plainText: () =>
-          process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text',
-      }),
-    hostName: () => hostname(),
+    identity: () => loadIdentity(userDataPath, identityCipher),
+    newIdentity: () => newIdentity(userDataPath, identityCipher),
+    hostName,
     direct: () => settings.get().remote.direct,
     openPort: (device) => agentHost.connectDevice(device),
+    changed: remoteChanged,
   })
   const artifacts = new Artifacts({
     content: (id, version) => agentHost.artifactContent(id, version),
@@ -311,6 +332,8 @@ async function start(): Promise<void> {
     if (changed.has('remote')) {
       remoteHost.directChanged()
       void remoteHost.setEnabled(next.remote.enabled)
+      remoteHost.setHostName(hostName())
+      remoteChanged()
     }
     if (changed.has('appearance')) {
       applyTheme(next.appearance.theme)
@@ -337,6 +360,8 @@ async function start(): Promise<void> {
     browserViews,
     mediaGrants,
     sharing,
+    remoteHost,
+    remoteStatus,
     updater,
     quit: quitFlow,
     perf,

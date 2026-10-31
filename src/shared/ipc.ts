@@ -6,6 +6,9 @@ import type { BusySession, BusyTerminal } from './host-control'
 import type { Locale } from './locale'
 import type { CarriedMedia } from './media'
 import type { Platform } from './platform'
+import type { DeviceActivity } from './remote/activity'
+import type { PairingState } from './remote/pairing'
+import type { RemoteStatus } from './remote/status'
 import type { SettingsFile, SettingsPatch } from './settings'
 import type { SharingConnectResult, SharingResult, SharingStatus } from './sharing'
 import type { TerminalsApi } from './terminal-host'
@@ -187,6 +190,18 @@ export interface IpcInvokeContract {
   'sharing:publish': { args: [id: string, version: number]; result: SharingResult }
   'sharing:update': { args: [id: string, version: number]; result: SharingResult }
   'sharing:unpublish': { args: [id: string]; result: SharingResult }
+  'remote:status': { args: []; result: RemoteStatus }
+  // A pairing code for this page, voiding any other; null while remote access is not on. Its
+  // progress comes as `remote:pairing` under the id.
+  'remote:pair': { args: []; result: number | null }
+  'remote:pair-close': { args: [codeId: number]; result: void }
+  'remote:pair-answer': { args: [codeId: number, add: boolean, name: string]; result: void }
+  'remote:rename-device': { args: [id: string, name: string]; result: void }
+  'remote:remove-device': { args: [id: string]; result: void }
+  'remote:activity': { args: [id: string]; result: DeviceActivity[] }
+  'remote:reset': { args: []; result: void }
+  // Listens for direct connections again on the same port, as after the port was in use.
+  'remote:retry-direct': { args: []; result: void }
   'browser:show': { args: [sessionId: string]; result: void }
   'browser:hide': { args: [sessionId: string]; result: void }
   'browser:bounds': { args: [sessionId: string, bounds: BrowserBounds]; result: void }
@@ -230,12 +245,20 @@ export interface IpcEventContract {
   'artifact:blocked': ArtifactBlockedEvent
   'artifact:stopped': ArtifactStoppedEvent
   'sharing:changed': SharingStatus
+  'remote:changed': RemoteStatus
+  /** Sent only to the page that opened the code. */
+  'remote:pairing': RemotePairingEvent
   'browser:state': BrowserState
   /** An agent's first navigation opened a session's page, so the pane may show it. */
   'browser:opened': { sessionId: string }
 }
 
 export type IpcEventChannel = keyof IpcEventContract
+
+export interface RemotePairingEvent {
+  codeId: number
+  pairing: PairingState
+}
 
 /** Messages the renderer sends to main without waiting for an answer. */
 export interface IpcSendContract {
@@ -320,6 +343,27 @@ export interface KettuApi {
     update(id: string, version: number): Promise<SharingResult>
     unpublish(id: string): Promise<SharingResult>
     onChanged(listener: (status: SharingStatus) => void): () => void
+  }
+  /** Remote access: devices paired with this computer, and pairing more. */
+  remote: {
+    status(): Promise<RemoteStatus>
+    /** Opens a pairing code for this page; null while remote access is not on. */
+    pair(): Promise<number | null>
+    /** Add device closed, which voids its code. */
+    closePairing(codeId: number): Promise<void>
+    /** Adds the device the code paired, under `name`, or rejects it. */
+    answerPairing(codeId: number, add: boolean, name: string): Promise<void>
+    renameDevice(id: string, name: string): Promise<void>
+    /** Removes the device and ends its sessions at once. */
+    removeDevice(id: string): Promise<void>
+    /** The device's activity of the last 30 days, newest first. */
+    activity(id: string): Promise<DeviceActivity[]>
+    /** Removes every device and gives this computer a new identity. */
+    reset(): Promise<void>
+    /** Tries the direct connections' port again. */
+    retryDirect(): Promise<void>
+    onChanged(listener: (status: RemoteStatus) => void): () => void
+    onPairing(listener: (event: RemotePairingEvent) => void): () => void
   }
   settings: {
     get(): Promise<SettingsFile>

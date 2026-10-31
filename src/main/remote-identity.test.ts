@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { importKeyPair } from '@shared/remote/noise'
-import { loadIdentity, type IdentityCipher } from './remote-identity'
+import { loadIdentity, newIdentity, type IdentityCipher } from './remote-identity'
 
 const dirs: string[] = []
 
@@ -131,5 +131,16 @@ describe('loadIdentity', () => {
     expect(second.privateKey).not.toBe(first.privateKey)
     const files = await readdir(path.join(dir, 'remote'))
     expect(files.some((file) => file.startsWith('identity.corrupt-'))).toBe(true)
+  })
+})
+
+describe('newIdentity', () => {
+  it('replaces the key with a new one, which loads from then on', async () => {
+    const dir = await dataFolder()
+    const cipher = fakeCipher()
+    const first = await loadIdentity(dir, cipher)
+    const second = await newIdentity(dir, cipher)
+    expect(second.privateKey).not.toBe(first.privateKey)
+    expect(await loadIdentity(dir, cipher)).toEqual(second)
   })
 })

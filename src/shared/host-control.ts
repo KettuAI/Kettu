@@ -6,7 +6,9 @@ import type { AttachmentGrant } from './attachments'
 import type { BrowserOriginAnswer } from './browser'
 import type { MediaGrantRecord } from './media'
 import type { Platform } from './platform'
+import type { DeviceActivity } from './remote/activity'
 import type { NewDevice, PairedDevice, PortDevice } from './remote/device'
+import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { DirectSettings, HostSettings, TerminalSettings } from './settings'
 import type { AgentId } from './thread'
@@ -202,6 +204,20 @@ export type MainToRemoteHost =
   | { type: 'remote-host:direct'; direct: DirectSettings }
   // The computer woke from sleep, maybe on another network: the direct addresses are read again.
   | { type: 'remote-host:resume' }
+  | { type: 'remote-host:rename-device'; id: string; name: string }
+  // Opens a pairing code for the asker `codeId` names, voiding any code still open; its progress
+  // comes back as remote-host:pairing under the same id.
+  | { type: 'remote-host:pair'; codeId: number }
+  // The asker closed Add device, which voids its code.
+  | { type: 'remote-host:pair-close'; codeId: number }
+  // The asker's answer to a device whose secret checked out, with the name to add it under.
+  | { type: 'remote-host:pair-answer'; codeId: number; add: boolean; name: string }
+  // A device's activity; answered by remote-host:activity.
+  | { type: 'remote-host:activity'; requestId: number; id: string }
+  | { type: 'remote-host:host-name'; name: string }
+  // Removes every device and voids the code, before main makes a new identity; answered by
+  // remote-host:reset.
+  | { type: 'remote-host:reset'; requestId: number }
   // Tells every device why, then stops.
   | { type: 'remote-host:shutdown'; reason: RemoteHostStopReason }
 
@@ -235,4 +251,8 @@ export type RemoteHostToMain =
   // A port to the agent host for a device's session; answered by remote-host:port.
   | { type: 'remote-host:open-port'; requestId: number; device: PortDevice }
   | { type: 'remote-host:log'; level: 'info' | 'warn' | 'error'; message: string }
+  | { type: 'remote-host:pairing'; codeId: number; pairing: PairingState }
+  // Newest first.
+  | { type: 'remote-host:activity'; requestId: number; events: DeviceActivity[] }
+  | { type: 'remote-host:reset'; requestId: number }
   | { type: 'remote-host:stopped' }

@@ -10,6 +10,7 @@
     "about": "关于",
     "archived": "已归档会话",
     "sharing": "分享",
+    "remote": "远程访问",
     "browser": "浏览器",
     "mcp": "MCP 服务器",
     "harnesses": "Harness"
@@ -61,7 +62,8 @@
       "descriptionMac": "关闭窗口后 Kettu 继续运行，图标留在菜单栏，会话和例程照常工作。",
       "descriptionWindows": "关闭窗口后 Kettu 继续运行，图标留在通知区域，会话和例程照常工作。",
       "descriptionLinux": "关闭窗口后 Kettu 继续运行，图标留在系统托盘，会话和例程照常工作。",
-      "keywords": "后台 托盘 菜单栏 通知区域 关闭 窗口 继续运行 background tray menu bar close window"
+      "keywords": "后台 托盘 菜单栏 通知区域 关闭 窗口 继续运行 background tray menu bar close window",
+      "lockedByRemote": "远程访问开着时一直开着，关掉窗口后设备也连得上这台电脑。"
     },
     "openAtLogin": {
       "name": "登录时打开",
@@ -620,6 +622,7 @@
     "about": "Kettu 的版本、更新和链接。",
     "archived": "你归档的会话，不在侧边栏里但都保留着。恢复后会回到原来的项目里。",
     "sharing": "通过你自己的 Cloudflare 账号，把 artifact 发布为任何人都能打开的链接。",
+    "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑上的会话，东西都留在这台电脑上。",
     "browser": "侧边面板里的浏览器让所有会话共用一个配置：登录状态、网站数据和缓存都在这里。",
     "mcp": "Agent 通过这些 MCP 服务器使用工具。这里有 Kettu 自带的服务器，以及各 Agent 自己的服务器所在的位置。",
     "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。在这里安装和更新；账号在 Agent 里。"
@@ -678,6 +681,186 @@
       "unpublished": "已取消发布",
       "otherAccount": "此页面是用另一个 Cloudflare 账号发布的。连接该账号后才能修改。",
       "empty": "还没有发布任何 artifact。"
+    }
+  },
+  "remote": {
+    "keywords": "远程 访问 手机 平板 设备 配对 二维码 扫码 连接 remote device pair qr",
+    "switch": "远程访问",
+    "status": {
+      "on": "已打开",
+      "listening": "在端口 {{port}} 监听",
+      "online_other": "{{count}} 台设备在线",
+      "noneOnline": "没有设备在线",
+      "noDevices": "还没有设备",
+      "starting": "正在打开…",
+      "failed": "远程访问没能打开",
+      "failedHint": "系统没能解开这台电脑的密钥。关掉再打开远程访问重试。",
+      "cannotListen": "没能在端口 {{port}} 监听",
+      "cannotListenHint": {
+        "port_in_use": "这个端口被别的程序占用了。换个端口，或者关掉那个程序再重试。",
+        "not_permitted": "系统不让在这个端口监听。换个端口，或者再重试。",
+        "other": "这台电脑上有东西挡住了 Kettu 在这个端口监听。换个端口，或者再重试。"
+      },
+      "changePort": "换个端口",
+      "retry": "重试",
+      "plainTextKey": "这台电脑的密钥存在只有当前用户能读的文件里，因为系统没有钥匙串。"
+    },
+    "hostName": {
+      "name": "这台电脑的名字",
+      "description": "设备上显示的名字，默认是系统里的电脑名。"
+    },
+    "background": "远程访问开着时，关掉窗口 Kettu 也在后台运行，设备才连得上；通用里的“在后台运行”这时关不掉。",
+    "devices": {
+      "group": "设备",
+      "emptyTitle": "还没有设备",
+      "emptyHint": "用 iPhone 或 iPad 上的 Kettu 扫码。",
+      "add": "添加设备…",
+      "online": "在线",
+      "seenToday": "今天 {{time}} 连接过",
+      "seenYesterday": "昨天 {{time}} 连接过",
+      "seenDaysAgo_other": "{{count}} 天前连接过",
+      "neverSeen": "还没连接过",
+      "removedIn_other": "{{count}} 天后自动移除",
+      "staleOne_other": "90 天没连过的设备会自动移除。“{{name}}”已经 {{days}} 天没连了，{{count}} 天内连上一次就会留下。",
+      "staleMany": "90 天没连过的设备会自动移除。有 {{count}} 台设备快满 90 天了，连上一次就会留下。"
+    },
+    "direct": {
+      "group": "直连",
+      "name": "直连",
+      "description": "没用 Kettu 中继，直连是设备唯一的路，所以随远程访问一起打开。",
+      "keywords": "直连 端口 地址 局域网 网络 VPN tailscale frp 转发 direct port address",
+      "port": {
+        "name": "端口",
+        "description": "第一次打开时随机选的，之后不变；做端口转发时，转发的就是它。",
+        "invalid": "端口要在 1024 到 65535 之间",
+        "confirmTitle": "换成端口 {{port}}？",
+        "confirmBody": "在线的设备会收到新端口；不在线的设备只认得旧端口，要重新添加才连得上。做了端口转发的话，也要跟着改。",
+        "confirm": "换端口"
+      },
+      "found": {
+        "name": "设备会试的地址",
+        "description": "这台电脑找到的私有地址和 VPN 地址，网络变了自动更新。",
+        "none": "还没找到私有地址或 VPN 地址。",
+        "notListening": "端口监听上之后才有。"
+      },
+      "own": {
+        "name": "自己的地址",
+        "description": "比如 frp 转发出来的公网地址，随配对码发给设备，和上面的一起试。",
+        "label": "添加自己的地址",
+        "placeholder": "主机名或 IP:端口",
+        "add": "添加",
+        "remove": "移除 {{address}}",
+        "invalid": "<strong>格式不对：</strong>只填主机名或 IP 加端口，比如 <code>frp.example.com:60021</code>，不带 https://。",
+        "repeat": "这个地址已经在列表里了。",
+        "full_other": "最多加 {{count}} 个地址。"
+      },
+      "note": "直连是裸 TCP，只转发 HTTPS 的隧道（比如 Cloudflare Tunnel）接不上。"
+    },
+    "kinds": {
+      "ios": "iOS 应用",
+      "desktop": "桌面应用",
+      "web": "网页版"
+    },
+    "reset": {
+      "name": "重置远程访问",
+      "description": "移除所有设备，换一个新的身份；之后每台设备都要重新添加。",
+      "keywords": "身份 密钥 忘记 设备 reset identity",
+      "button": "重置…",
+      "title": "重置远程访问？",
+      "body_other": "{{count}} 台设备马上断开并被移除，这台电脑换一个新的身份。之后每台设备都要重新扫码添加。",
+      "bodyNone": "这台电脑换一个新的身份。之后每台设备都要重新扫码添加。",
+      "confirm": "重置"
+    },
+    "pair": {
+      "title": "添加设备",
+      "scan": "用 iPhone 或 iPad 上的 Kettu 扫这个码。",
+      "copy": "复制",
+      "copied": "已复制",
+      "expires": "只能添加一台设备，<time>{{time}}</time> 后失效。设备要能直连这台电脑：同一网络、同一个 VPN，或连得到你加的地址。",
+      "waiting": "正在等设备扫码…",
+      "qr": "配对二维码",
+      "expired": "已失效",
+      "failed": "没能生成配对码：{{message}}",
+      "newCode": "换一个新码",
+      "ends": {
+        "expired": {
+          "title": "这个码已失效",
+          "body": "5 分钟内没有设备连上。换一个新码再扫。"
+        },
+        "attempts": {
+          "title": "试错太多次，这个码已作废",
+          "body": "有设备连续 5 次用了不对的码。新码只给你自己的设备扫。"
+        },
+        "rejected": {
+          "title": "你拒绝了这台设备，这个码已作废",
+          "body": "要添加别的设备，换一个新码。"
+        },
+        "replaced": {
+          "title": "别处打开了添加设备，这个码已作废",
+          "body": "要在这里添加，换一个新码。"
+        },
+        "stopped": {
+          "title": "远程访问停了，这个码已作废",
+          "body": "远程访问重新打开后，换一个新码。"
+        }
+      },
+      "confirm": {
+        "title": "要添加这台设备吗？",
+        "body": "确认它是你手里刚扫码的那台再添加；别人拍下这个码，没有你在这里点添加也连不上。拒绝后这个码就作废。",
+        "justNow": "刚用这个码连上",
+        "again": "添加过，刚用这个码重新连上",
+        "name": "名字",
+        "nameHint": "设备上也能改。",
+        "reject": "拒绝",
+        "add": "添加"
+      },
+      "added": "已添加“{{name}}”"
+    },
+    "device": {
+      "rename": "改名",
+      "renameTitle": "给设备改名",
+      "save": "保存",
+      "facts": "设备信息",
+      "joined": "加入",
+      "joinedScan": "{{date}}，扫码添加",
+      "joinedLink": "{{date}}，粘贴链接添加",
+      "lastConnected": "上次连接",
+      "onlineSince": "现在在线，{{time}} 连上",
+      "never": "还没连接过",
+      "activity": "活动记录",
+      "days": "最近 30 天",
+      "activityNote": "只记做了什么，不记内容、命令和地址；最多留 500 条。",
+      "noActivity": "还没有活动记录。",
+      "gone": "这台设备已经不在了。",
+      "events": {
+        "paired": "扫码添加，加入这台电脑",
+        "pairedLink": "粘贴链接添加，加入这台电脑",
+        "connected": "连接",
+        "renamed": "改名：{{from}} → {{to}}",
+        "renamedOnDevice": "在设备上改名：{{from}} → {{to}}",
+        "removed": "被移除",
+        "removedUnseen": "90 天没连，自动移除",
+        "removedReset": "重置远程访问时移除",
+        "sessionCreated": "新建会话“{{title}}”",
+        "sessionCreatedUnknown": "新建了一个会话",
+        "sessionArchived": "归档会话“{{title}}”",
+        "sessionArchivedUnknown": "归档了一个会话",
+        "sessionDeleted": "删除会话“{{title}}”",
+        "sessionDeletedUnknown": "删除了一个会话"
+      },
+      "remove": {
+        "name": "移除这台设备",
+        "description": "它的密钥马上失效、连接断开；它缓存的这台电脑的内容，下次连上时清掉。要再用，得重新添加。",
+        "button": "移除…",
+        "title": "移除“{{name}}”？",
+        "body": "它马上断开，之后连不上这台电脑；它缓存的会话列表，等它下次连上时清掉。要再用，得重新扫码添加。",
+        "confirm": "移除"
+      }
+    },
+    "time": {
+      "today": "今天 {{time}}",
+      "yesterday": "昨天 {{time}}",
+      "date": "{{date}} {{time}}"
     }
   },
   "usage": {

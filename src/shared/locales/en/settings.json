@@ -10,6 +10,7 @@
     "about": "About",
     "archived": "Archived sessions",
     "sharing": "Sharing",
+    "remote": "Remote access",
     "browser": "Browser",
     "mcp": "MCP servers",
     "harnesses": "Harnesses"
@@ -62,7 +63,8 @@
       "descriptionMac": "Keeps Kettu running with its icon in the menu bar after you close its window, so sessions and routines keep working.",
       "descriptionWindows": "Keeps Kettu running with its icon in the notification area after you close its window, so sessions and routines keep working.",
       "descriptionLinux": "Keeps Kettu running with its icon in the system tray after you close its window, so sessions and routines keep working.",
-      "keywords": "background tray menu bar notification area close window keep running"
+      "keywords": "background tray menu bar notification area close window keep running",
+      "lockedByRemote": "On while remote access is, so devices can reach this computer after you close its window."
     },
     "openAtLogin": {
       "name": "Open at login",
@@ -624,6 +626,7 @@
     "about": "Kettu's version, updates and links.",
     "archived": "Sessions you archived, off the sidebar but kept. Restore one to put it back in its project.",
     "sharing": "Publish artifacts to links anyone can open, through your own Cloudflare account.",
+    "remote": "Use this computer's sessions in Kettu on an iPhone, an iPad or another computer; everything stays on this computer.",
     "browser": "The browser in the side panel keeps one profile for every session: sign-ins, site data and cache.",
     "mcp": "Agents reach tools through these MCP servers. Kettu's own is here, and where each agent keeps its own.",
     "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Install and update them here; accounts are in Agents."
@@ -682,6 +685,192 @@
       "unpublished": "Unpublished",
       "otherAccount": "Published with another Cloudflare account. Connect that account to change it.",
       "empty": "Nothing is published yet."
+    }
+  },
+  "remote": {
+    "keywords": "remote access phone iphone ipad tablet device devices pair pairing qr code scan connect",
+    "switch": "Remote access",
+    "status": {
+      "on": "On",
+      "listening": "Listening on port {{port}}",
+      "online_one": "{{count}} device online",
+      "online_other": "{{count}} devices online",
+      "noneOnline": "No device online",
+      "noDevices": "No devices yet",
+      "starting": "Starting…",
+      "failed": "Remote access could not start",
+      "failedHint": "The system could not unlock this computer's key. Turn remote access off and on again to retry.",
+      "cannotListen": "Could not listen on port {{port}}",
+      "cannotListenHint": {
+        "port_in_use": "Another program is using this port. Pick another port, or close that program and retry.",
+        "not_permitted": "The system did not allow listening on this port. Pick another port, or retry.",
+        "other": "Something on this computer kept Kettu from listening on this port. Pick another port, or retry."
+      },
+      "changePort": "Change port",
+      "retry": "Retry",
+      "plainTextKey": "This computer's key is kept in a file only your user can read, because the system has no keyring."
+    },
+    "hostName": {
+      "name": "This computer's name",
+      "description": "The name devices show, the computer's own name until you change it."
+    },
+    "background": "While remote access is on, Kettu keeps running in the background after you close its window, so devices can connect; Run in the background in General stays on.",
+    "devices": {
+      "group": "Devices",
+      "emptyTitle": "No devices yet",
+      "emptyHint": "Scan the code with Kettu on an iPhone or iPad.",
+      "add": "Add device…",
+      "online": "Online",
+      "seenToday": "Connected today at {{time}}",
+      "seenYesterday": "Connected yesterday at {{time}}",
+      "seenDaysAgo_one": "Connected {{count}} day ago",
+      "seenDaysAgo_other": "Connected {{count}} days ago",
+      "neverSeen": "Never connected",
+      "removedIn_one": "Removed in {{count}} day",
+      "removedIn_other": "Removed in {{count}} days",
+      "staleOne_one": "Devices not connected for 90 days are removed. “{{name}}” has not connected for {{days}} days; connecting once within a day keeps it.",
+      "staleOne_other": "Devices not connected for 90 days are removed. “{{name}}” has not connected for {{days}} days; connecting once in the next {{count}} days keeps it.",
+      "staleMany": "Devices not connected for 90 days are removed. {{count}} devices are close to it; connecting once keeps each of them."
+    },
+    "direct": {
+      "group": "Direct",
+      "name": "Direct connections",
+      "description": "Without a Kettu relay, direct connections are the only way devices reach this computer, so they turn on with remote access.",
+      "keywords": "direct connection port address lan network vpn tailscale frp forward forwarding",
+      "port": {
+        "name": "Port",
+        "description": "Picked at random the first time, then kept; it is the port to forward.",
+        "invalid": "Use a port from 1024 to 65535",
+        "confirmTitle": "Change the port to {{port}}?",
+        "confirmBody": "Devices online now learn the new port. Devices that are not connected only know the old one and cannot connect until you add them again. A port you forward has to change too.",
+        "confirm": "Change port"
+      },
+      "found": {
+        "name": "Addresses devices try",
+        "description": "The private and VPN addresses this computer found, updated when the network changes.",
+        "none": "No private or VPN address found yet.",
+        "notListening": "Shown once the port is listening."
+      },
+      "own": {
+        "name": "Your own addresses",
+        "description": "Such as a public address frp forwards. Devices get them with the pairing code and try them with the ones above.",
+        "label": "Add an address of your own",
+        "placeholder": "Host name or IP:port",
+        "add": "Add",
+        "remove": "Remove {{address}}",
+        "invalid": "<strong>Not an address:</strong> enter only a host name or IP address and a port, such as <code>frp.example.com:60021</code>, without https://.",
+        "repeat": "This address is already in the list.",
+        "full_one": "You can add up to {{count}} address.",
+        "full_other": "You can add up to {{count}} addresses."
+      },
+      "note": "Direct connections are plain TCP, so a tunnel that only forwards HTTPS, such as Cloudflare Tunnel, cannot carry them."
+    },
+    "kinds": {
+      "ios": "iOS app",
+      "desktop": "Desktop app",
+      "web": "Web"
+    },
+    "reset": {
+      "name": "Reset remote access",
+      "description": "Removes every device and gives this computer a new identity; every device has to be added again.",
+      "keywords": "identity key forget devices",
+      "button": "Reset…",
+      "title": "Reset remote access?",
+      "body_one": "{{count}} device disconnects and is removed at once, and this computer gets a new identity. Every device then has to scan a code to be added again.",
+      "body_other": "{{count}} devices disconnect and are removed at once, and this computer gets a new identity. Every device then has to scan a code to be added again.",
+      "bodyNone": "This computer gets a new identity. Every device then has to scan a code to be added.",
+      "confirm": "Reset"
+    },
+    "pair": {
+      "title": "Add device",
+      "scan": "Scan this code with Kettu on an iPhone or iPad.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "expires": "It adds one device and expires in <time>{{time}}</time>. The device has to reach this computer directly: on the same network, the same VPN, or through an address you added.",
+      "waiting": "Waiting for a device to scan…",
+      "qr": "Pairing QR code",
+      "expired": "Expired",
+      "failed": "Kettu could not make a code: {{message}}",
+      "newCode": "New code",
+      "ends": {
+        "expired": {
+          "title": "This code has expired",
+          "body": "No device connected within 5 minutes. Make a new code and scan that."
+        },
+        "attempts": {
+          "title": "Too many tries, so this code is void",
+          "body": "A device used a wrong code 5 times. Let only your own devices scan the new one."
+        },
+        "rejected": {
+          "title": "You rejected the device, so this code is void",
+          "body": "To add another device, make a new code."
+        },
+        "replaced": {
+          "title": "Add device opened elsewhere, so this code is void",
+          "body": "To add a device here, make a new code."
+        },
+        "stopped": {
+          "title": "Remote access stopped, so this code is void",
+          "body": "Make a new code once remote access is on again."
+        }
+      },
+      "confirm": {
+        "title": "Add this device?",
+        "body": "Add it only if it is the one in your hand that just scanned the code: someone who photographs the code cannot connect unless you choose Add here. Rejecting it voids the code.",
+        "justNow": "Just connected with this code",
+        "again": "Added before; just connected with this code again",
+        "name": "Name",
+        "nameHint": "It can be changed on the device too.",
+        "reject": "Reject",
+        "add": "Add"
+      },
+      "added": "“{{name}}” is added"
+    },
+    "device": {
+      "rename": "Rename",
+      "renameTitle": "Rename the device",
+      "save": "Save",
+      "facts": "Device",
+      "joined": "Joined",
+      "joinedScan": "{{date}}, from a scanned code",
+      "joinedLink": "{{date}}, from a pasted link",
+      "lastConnected": "Last connected",
+      "onlineSince": "Online now, connected at {{time}}",
+      "never": "Never",
+      "activity": "Activity",
+      "days": "Last 30 days",
+      "activityNote": "Only what happened is kept, never content, commands or addresses; at most 500 events.",
+      "noActivity": "Nothing yet.",
+      "gone": "This device is no longer paired.",
+      "events": {
+        "paired": "Added to this computer from a scanned code",
+        "pairedLink": "Added to this computer from a pasted link",
+        "connected": "Connected",
+        "renamed": "Renamed: {{from}} → {{to}}",
+        "renamedOnDevice": "Renamed on the device: {{from}} → {{to}}",
+        "removed": "Removed",
+        "removedUnseen": "Removed after 90 days without connecting",
+        "removedReset": "Removed when remote access was reset",
+        "sessionCreated": "Started “{{title}}”",
+        "sessionCreatedUnknown": "Started a session",
+        "sessionArchived": "Archived “{{title}}”",
+        "sessionArchivedUnknown": "Archived a session",
+        "sessionDeleted": "Deleted “{{title}}”",
+        "sessionDeletedUnknown": "Deleted a session"
+      },
+      "remove": {
+        "name": "Remove this device",
+        "description": "Its key stops working and it disconnects at once; what it cached of this computer is cleared the next time it connects. To use it again, add it again.",
+        "button": "Remove…",
+        "title": "Remove “{{name}}”?",
+        "body": "It disconnects at once and can no longer reach this computer; the session list it cached is cleared the next time it connects. To use it again, scan a code to add it again.",
+        "confirm": "Remove"
+      }
+    },
+    "time": {
+      "today": "Today {{time}}",
+      "yesterday": "Yesterday {{time}}",
+      "date": "{{date}}, {{time}}"
     }
   },
   "usage": {

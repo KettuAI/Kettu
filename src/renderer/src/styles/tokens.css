@@ -60,6 +60,9 @@
   --queue-back: #f2f2f2;
   /* The page under an SVG preview: white in both themes, the page an SVG is drawn for. */
   --canvas: #ffffff;
+  /* A QR code's modules on the canvas, black in both themes so scanners read it; the dark blocks
+     leave it to this one. */
+  --canvas-ink: #000000;
   --scrollbar-thumb: rgb(0 0 0 / 20%);
   /* The dimmed page behind a dialog or a sheet. */
   --scrim: rgb(0 0 0 / 18%);

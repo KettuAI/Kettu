@@ -1,5 +1,5 @@
-// Test helper: a paired device's side of a connection. It runs the Noise initiator, says hello on
-// the channel and speaks the host protocol through a TestPort.
+// Test helper: a device's side of a connection, paired or pairing. It runs the Noise initiator,
+// says hello on the channel and speaks the host protocol through a TestPort.
 
 import { Channel } from '@shared/remote/channel'
 import { Handshake, type KeyPair } from '@shared/remote/noise'
@@ -16,6 +16,8 @@ export interface TestDevice {
   closing: Promise<Closing | null>
   /** The host's addresses messages, as they came. */
   addresses: Addresses[]
+  /** Messages around the host protocol after the welcome, such as `renamed`. */
+  notices: unknown[]
   /** Sends a JSON message on the channel as it is. */
   send(value: unknown): Promise<void>
   close(): void
@@ -27,15 +29,19 @@ export interface TestDeviceOptions {
   key: KeyPair
   /** Fields over the default hello, or null to send none. */
   hello?: Partial<Hello> | Record<string, unknown> | null
+  /** A pairing code's secret: the handshake is IKpsk1 with it. */
+  psk?: Uint8Array
 }
 
 export async function connectDevice(options: TestDeviceOptions): Promise<TestDevice> {
   const { transport, hostKey, key } = options
   const handshake = await Handshake.create({
     role: 'initiator',
-    pattern: 'IK',
     staticKey: key,
     remoteStaticKey: hostKey,
+    ...(options.psk
+      ? { pattern: 'IKpsk1' as const, psk: options.psk }
+      : { pattern: 'IK' as const }),
   })
   const port = new TestPort()
   let channel: Channel | null = null
@@ -46,6 +52,7 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
   let resolveClosing!: (closing: Closing | null) => void
   const first = new Promise<unknown>((resolve) => (resolveFirst = resolve))
   const closing = new Promise<Closing | null>((resolve) => (resolveClosing = resolve))
+  const notices: unknown[] = []
 
   const received = (value: unknown): void => {
     const type = (value as { type?: unknown } | null)?.type
@@ -55,6 +62,7 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
     }
     if (type === 'closing') closingMessage = value as Closing
     else if (type === 'addresses') addresses.push(value as Addresses)
+    else if (type === 'renamed') notices.push(value)
     else if (type !== 'welcome') port.send(value as Parameters<TestPort['send']>[0])
   }
 
@@ -92,6 +100,7 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
     port,
     closing,
     addresses,
+    notices,
     send: async (value) => {
       if (!channel) throw new Error('The handshake is not done')
       await channel.send({ kind: 'json', value })

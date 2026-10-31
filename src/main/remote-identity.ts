@@ -107,3 +107,11 @@ export async function loadIdentity(
   if (shouldReEncrypt) return keep(path, result, cipher)
   return { privateKey: result, plainText: file.plainText }
 }
+
+/** Replaces the identity with a new key, as resetting remote access does. */
+export async function newIdentity(
+  userDataPath: string,
+  cipher: IdentityCipher,
+): Promise<RemoteIdentity> {
+  return keep(join(userDataPath, 'remote', 'identity.json'), await newKey(), cipher)
+}

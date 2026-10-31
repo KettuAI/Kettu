@@ -82,6 +82,9 @@
     "noneRunning": "没有正在运行的会话",
     "running_other": "{{count}} 个会话正在运行",
     "waiting_other": "{{count}} 个需要批准",
+    "remoteStarting": "远程访问正在打开",
+    "remoteFailed": "远程访问没能打开",
+    "remoteOn_other": "远程访问已打开 · {{count}} 台设备在线",
     "open": "打开 {{name}}",
     "quit": "退出 {{name}}"
   },

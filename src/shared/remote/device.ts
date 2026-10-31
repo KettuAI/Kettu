@@ -16,13 +16,17 @@ export interface PairedDevice {
   name: string
   /** `ios`, `web` or `desktop`. */
   kind: string
+  /** What the device runs, as "iOS 26.1". */
   platform: string
+  /** The device's model, as "iPhone 17 Pro"; empty when it named none. */
+  model: string
   addedAt: number
+  /** When a session last opened or ended; while one is open, when it opened. */
   lastConnectedAt: number | null
 }
 
 /** What pairing learns of a device; the host derives its id and the times. */
-export type NewDevice = Pick<PairedDevice, 'publicKey' | 'name' | 'kind' | 'platform'>
+export type NewDevice = Pick<PairedDevice, 'publicKey' | 'name' | 'kind' | 'platform' | 'model'>
 
 /** The device a port to the agent host serves. */
 export interface PortDevice {
@@ -45,6 +49,26 @@ export function isDeviceName(value: unknown): value is string {
 /** A device's kind or platform: a short word. */
 export function isDeviceField(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= MAX_DEVICE_FIELD
+}
+
+/** A device's model: a short word, or empty when the device named none. */
+export function isDeviceModel(value: unknown): value is string {
+  return value === '' || (isDeviceField(value) && ![...value].some((char) => char < ' '))
+}
+
+// Longer text is refused outright rather than cut, so a device cannot make the host scan megabytes.
+const MAX_NAME_INPUT = 1024
+
+/**
+ * A name a device or the owner typed, made one the host keeps: control characters dropped, the
+ * ends trimmed and cut to `DEVICE_NAME_CHARS`; null when nothing is left.
+ */
+export function normalizeDeviceName(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > MAX_NAME_INPUT) return null
+  const chars = [...value].filter((char) => char >= ' ' && char !== '\u007f')
+  const name = chars.join('').trim()
+  const cut = [...name].slice(0, DEVICE_NAME_CHARS).join('').trim()
+  return cut.length > 0 ? cut : null
 }
 
 /** The device a port names, or null when the value does not name one. */

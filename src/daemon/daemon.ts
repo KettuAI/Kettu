@@ -12,6 +12,7 @@ import {
   ControlError,
   NotRunning,
   serveControl,
+  type ControlConnection,
   type ControlHandlers,
   type ControlServer,
   type DaemonStatus,
@@ -85,6 +86,8 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     if (!hosts) throw new ControlError('unavailable', 'The daemon is starting')
     return hosts
   }
+  // Only the connection that opened a code may answer for it.
+  const codeOwners = new Map<number, ControlConnection>()
   const handlers: ControlHandlers = {
     status: async () => status(),
     'host.socket': async ({ host }) => {
@@ -98,6 +101,27 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     'devices.list': async () => starting().devices(),
     'devices.remove': async ({ id }) => {
       await starting().removeDevice(id)
+      return null
+    },
+    'pair.open': async (_, connection) => {
+      const running = starting()
+      let codeId = 0
+      codeId = running.pair((pairing) => {
+        if (pairing.state === 'added' || pairing.state === 'void') codeOwners.delete(codeId)
+        connection.notify({ type: 'pairing', codeId, pairing })
+      })
+      codeOwners.set(codeId, connection)
+      connection.onClose(() => {
+        codeOwners.delete(codeId)
+        running.closePairing(codeId)
+      })
+      return { codeId }
+    },
+    'pair.answer': async ({ codeId, add, name }, connection) => {
+      if (codeOwners.get(codeId) !== connection) {
+        throw new ControlError('not_found', 'This connection opened no such code')
+      }
+      starting().answerPairing(codeId, add, name)
       return null
     },
   }

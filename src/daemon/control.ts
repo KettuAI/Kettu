@@ -4,7 +4,8 @@
 
 import type { Server } from 'node:net'
 import type { PortChannel } from '@shared/port-channel'
-import { DEVICE_ID } from '@shared/remote/device'
+import { DEVICE_ID, normalizeDeviceName } from '@shared/remote/device'
+import type { PairingState } from '@shared/remote/pairing'
 import { connectPort, listenPorts } from '@shared/socket-port'
 import type { HostState } from './forked-host'
 
@@ -55,6 +56,23 @@ export interface ControlCalls {
   'host.socket': { params: { host: HostName }; result: { path: string } }
   'devices.list': { params: undefined; result: DeviceSummary[] }
   'devices.remove': { params: { id: string }; result: null }
+  /**
+   * Opens a pairing code for this connection, voiding any other. Its progress comes as `pairing`
+   * events on the connection, and the code is void once the connection closes.
+   */
+  'pair.open': { params: undefined; result: { codeId: number } }
+  /** Adds the device this connection's code was asked about, under `name`, or rejects it. */
+  'pair.answer': { params: { codeId: number; add: boolean; name: string }; result: null }
+}
+
+/** What the daemon tells a connection unasked. */
+export type ControlEvent = { type: 'pairing'; codeId: number; pairing: PairingState }
+
+/** One client's connection, as a handler sees it. */
+export interface ControlConnection {
+  notify(event: ControlEvent): void
+  /** Runs once the client is gone. */
+  onClose(listener: () => void): void
 }
 
 export type ControlMethod = keyof ControlCalls
@@ -86,9 +104,10 @@ type Request = { type: 'request'; id: number; method: string; params: unknown }
 type Reply =
   | { type: 'response'; id: number; result: unknown }
   | { type: 'error'; id: number; error: { code: ControlErrorCode; message: string } }
+  | { type: 'event'; event: ControlEvent }
 
 export type ControlHandlers = {
-  [M in ControlMethod]: (params: Params<M>) => Promise<Result<M>>
+  [M in ControlMethod]: (params: Params<M>, connection: ControlConnection) => Promise<Result<M>>
 }
 
 const CLOSE_WAIT_MS = 2000
@@ -122,6 +141,17 @@ const validators: { [M in ControlMethod]: (raw: unknown) => Params<M> } = {
     }
     return { id }
   },
+  'pair.open': none,
+  'pair.answer': (raw) => {
+    const { codeId, add, name } = record(raw)
+    if (!Number.isSafeInteger(codeId)) {
+      throw new ControlError('invalid_params', 'codeId must be an integer')
+    }
+    if (typeof add !== 'boolean') throw new ControlError('invalid_params', 'add must be a boolean')
+    const kept = add ? normalizeDeviceName(name) : ''
+    if (kept === null) throw new ControlError('invalid_params', 'The name must not be empty')
+    return { codeId: codeId as number, add, name: kept }
+  },
 }
 
 export interface ControlServer {
@@ -139,7 +169,11 @@ export async function serveControl(
   const server: Server = await listenPorts(socketPath, (port) => {
     ports.add(port)
     port.onClose(() => ports.delete(port))
-    port.onMessage((data) => void answer(port, data))
+    const connection: ControlConnection = {
+      notify: (event) => port.send({ type: 'event', event } satisfies Reply),
+      onClose: (listener) => port.onClose(listener),
+    }
+    port.onMessage((data) => void answer(port, connection, data))
   })
   return {
     close: () =>
@@ -154,7 +188,11 @@ export async function serveControl(
       }),
   }
 
-  async function answer(port: PortChannel, data: unknown): Promise<void> {
+  async function answer(
+    port: PortChannel,
+    connection: ControlConnection,
+    data: unknown,
+  ): Promise<void> {
     const request = data as Request
     if (
       typeof request !== 'object' ||
@@ -172,8 +210,12 @@ export async function serveControl(
         throw new ControlError('unknown_method', `Unknown method "${String(method)}"`)
       }
       const params = validators[method](request.params)
-      const handler = handlers[method] as (params: unknown) => Promise<unknown>
-      reply = { type: 'response', id: request.id, result: (await handler(params)) ?? null }
+      const handler = handlers[method] as (
+        params: unknown,
+        connection: ControlConnection,
+      ) => Promise<unknown>
+      const result = await handler(params, connection)
+      reply = { type: 'response', id: request.id, result: result ?? null }
     } catch (error) {
       const known = error instanceof ControlError
       if (!known) warn(`Control request ${String(method)} failed: ${(error as Error)?.stack}`)
@@ -189,13 +231,21 @@ export async function serveControl(
   }
 }
 
-/** One request to the running daemon; throws `NotRunning` when nothing listens. */
-export async function callControl<M extends ControlMethod>(
-  socketPath: string,
-  method: M,
-  params: Params<M>,
-  timeoutMs = 30_000,
-): Promise<Result<M>> {
+/** A connection to the running daemon, for several requests and the events between them. */
+export interface ControlClient {
+  call<M extends ControlMethod>(
+    method: M,
+    params: Params<M>,
+    timeoutMs?: number,
+  ): Promise<Result<M>>
+  onEvent(listener: (event: ControlEvent) => void): void
+  /** Runs once the connection is gone, closed by either end. */
+  onClose(listener: () => void): void
+  close(): void
+}
+
+/** Connects to the running daemon; throws `NotRunning` when nothing listens. */
+export async function connectControl(socketPath: string): Promise<ControlClient> {
   let port: PortChannel
   try {
     port = await connectPort(socketPath)
@@ -204,23 +254,59 @@ export async function callControl<M extends ControlMethod>(
     if (code === 'ENOENT' || code === 'ECONNREFUSED') throw new NotRunning()
     throw error
   }
-  return new Promise<Result<M>>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`The daemon did not answer within ${timeoutMs / 1000} s`))
-      port.close()
-    }, timeoutMs)
-    port.onClose(() => {
-      clearTimeout(timer)
-      reject(new Error('The daemon closed the connection before it answered'))
-    })
-    port.onMessage((data) => {
-      const reply = data as Reply
-      if (reply?.id !== 1) return
-      clearTimeout(timer)
-      if (reply.type === 'response') resolve(reply.result as Result<M>)
-      else reject(new ControlError(reply.error.code, reply.error.message))
-      port.close()
-    })
-    port.send({ type: 'request', id: 1, method, params } satisfies Request)
+  const pending = new Map<number, (reply: Reply | null) => void>()
+  const eventListeners: ((event: ControlEvent) => void)[] = []
+  let nextId = 1
+  let closed = false
+  port.onClose(() => {
+    closed = true
+    for (const settle of [...pending.values()]) settle(null)
   })
+  port.onMessage((data) => {
+    const reply = data as Reply
+    if (reply?.type === 'event') {
+      for (const listener of eventListeners) listener(reply.event)
+    } else if (reply && pending.has(reply.id)) {
+      pending.get(reply.id)!(reply)
+    }
+  })
+  return {
+    call: (method, params, timeoutMs = 30_000) =>
+      new Promise((resolve, reject) => {
+        const id = nextId++
+        const timer = setTimeout(() => {
+          pending.delete(id)
+          reject(new Error(`The daemon did not answer within ${timeoutMs / 1000} s`))
+        }, timeoutMs)
+        pending.set(id, (reply) => {
+          clearTimeout(timer)
+          pending.delete(id)
+          if (!reply) reject(new Error('The daemon closed the connection before it answered'))
+          else if (reply.type === 'response') resolve(reply.result as Result<typeof method>)
+          else if (reply.type === 'error') {
+            reject(new ControlError(reply.error.code, reply.error.message))
+          }
+        })
+        if (closed) pending.get(id)!(null)
+        else port.send({ type: 'request', id, method, params } satisfies Request)
+      }),
+    onEvent: (listener) => void eventListeners.push(listener),
+    onClose: (listener) => port.onClose(listener),
+    close: () => port.close(),
+  }
+}
+
+/** One request to the running daemon; throws `NotRunning` when nothing listens. */
+export async function callControl<M extends ControlMethod>(
+  socketPath: string,
+  method: M,
+  params: Params<M>,
+  timeoutMs = 30_000,
+): Promise<Result<M>> {
+  const client = await connectControl(socketPath)
+  try {
+    return await client.call(method, params, timeoutMs)
+  } finally {
+    client.close()
+  }
 }
