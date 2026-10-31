@@ -1,14 +1,18 @@
 // The remote host's side of device connections, against an in-process agent host running the
-// fake agent: handshake, hello and welcome, the session passed through, and what ends it.
+// fake agent: handshake, pairing, hello and welcome, the session passed through, and what ends it.
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PortChannel } from '@shared/port-channel'
+import { deviceId } from '@shared/remote/device'
 import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
+import { parsePairingLink, type PairingState } from '@shared/remote/pairing'
 import { startTestHost, type TestHost } from '../agent-host/testing/harness'
+import { ActivityLog } from './activity'
 import { DeviceStore } from './devices'
+import { PairingCodes } from './pairing'
 import { RemoteServer } from './server'
 import { connectDevice, type TestDeviceOptions } from './testing/device'
 import { memoryPorts, memoryTransports } from './testing/memory'
@@ -22,12 +26,21 @@ afterEach(async () => {
   agent = null
 })
 
-async function setup(options: { agentDown?: boolean; helloTimeoutMs?: number } = {}) {
+const DAY = 24 * 60 * 60 * 1000
+
+async function setup(
+  options: {
+    agentDown?: boolean
+    helloTimeoutMs?: number
+    ttlMs?: number
+    now?: () => number
+  } = {},
+) {
   agent = await startTestHost()
   const logs: string[] = []
-  const devices = await DeviceStore.load(agent.dir, (level, message) =>
-    logs.push(`${level}: ${message}`),
-  )
+  const log = (level: string, message: string) => logs.push(`${level}: ${message}`)
+  const devices = await DeviceStore.load(agent.dir, log, options.now)
+  const activity = await ActivityLog.load(agent.dir, log, options.now)
   const hostKey = await generateKeyPair()
   const phoneKey = await generateKeyPair()
   const phone = (await devices.add({
@@ -35,7 +48,16 @@ async function setup(options: { agentDown?: boolean; helloTimeoutMs?: number } =
     name: 'Phone',
     kind: 'ios',
     platform: 'ios',
+    model: 'iPhone 17 Pro',
   }))!
+  // What each asker heard of its code, by code id.
+  const heard = new Map<number, PairingState[]>()
+  const pairing = new PairingCodes({
+    hostKey: hostKey.publicKey,
+    addresses: () => [{ host: '192.168.1.8', port: 47821 }],
+    send: (codeId, state) => heard.set(codeId, [...(heard.get(codeId) ?? []), state]),
+    ...(options.ttlMs ? { ttlMs: options.ttlMs } : {}),
+  })
   // What reached the agent host, and whether its port was closed.
   const forwarded: unknown[] = []
   const agentPorts: { closed: boolean }[] = []
@@ -44,6 +66,8 @@ async function setup(options: { agentDown?: boolean; helloTimeoutMs?: number } =
   const server = new RemoteServer({
     staticKey: hostKey,
     devices,
+    activity,
+    pairing,
     host: { name: 'Studio', platform: process.platform, version: '0.0.0-test' },
     openAgentPort: async (device) => {
       if (options.agentDown) return null
@@ -63,26 +87,60 @@ async function setup(options: { agentDown?: boolean; helloTimeoutMs?: number } =
       return remoteEnd
     },
     changed: () => changes++,
-    log: (level, message) => logs.push(`${level}: ${message}`),
+    log,
     ...(options.helloTimeoutMs ? { helloTimeoutMs: options.helloTimeoutMs } : {}),
+    ...(options.now ? { now: options.now } : {}),
   })
   const connect = (
     key: KeyPair = phoneKey,
     hello?: TestDeviceOptions['hello'],
+    psk?: Uint8Array,
   ): ReturnType<typeof connectDevice> => {
     const [deviceEnd, hostEnd] = memoryTransports()
     server.accept(hostEnd)
-    return connectDevice({ transport: deviceEnd, hostKey: hostKey.publicKey, key, hello })
+    return connectDevice({ transport: deviceEnd, hostKey: hostKey.publicKey, key, hello, psk })
+  }
+  /** Opens a code for the asker `codeId` and reads its secret off the link. */
+  const openCode = (codeId = 1): Uint8Array => {
+    pairing.open(codeId)
+    const waiting = heard.get(codeId)!.at(-1)!
+    if (waiting.state !== 'waiting') throw new Error('The code is not waiting')
+    const payload = parsePairingLink(waiting.link)!
+    expect(payload.hostKey).toEqual(hostKey.publicKey)
+    expect(payload.addresses).toEqual([{ host: '192.168.1.8', port: 47821 }])
+    return payload.secret
+  }
+  /** Pairs a device with the secret, as an iPad saying hello with its name and model. */
+  const pairWith = (secret: Uint8Array, key: KeyPair, name = 'iPad Air') =>
+    connect(
+      key,
+      {
+        client: { kind: 'ios', version: '1.0.0', platform: 'iPadOS 26.1' },
+        device: { name, model: 'iPad Air' },
+      },
+      secret,
+    )
+  const states = (codeId = 1) => (heard.get(codeId) ?? []).map((state) => state.state)
+  const until = async (codeId: number, state: PairingState['state']) => {
+    await expect.poll(() => states(codeId).at(-1)).toBe(state)
+    return heard.get(codeId)!.at(-1)!
   }
   return {
     agent,
     server,
     devices,
+    activity,
+    pairing,
     phone,
+    phoneKey,
     logs,
     forwarded,
     agentPorts,
     connect,
+    openCode,
+    pairWith,
+    states,
+    until,
     changes: () => changes,
   }
 }
@@ -97,6 +155,7 @@ describe('a paired device', () => {
       host: { name: 'Studio', platform: process.platform, version: '0.0.0-test' },
       features: [],
       role: 'owner',
+      device: { id: t.phone.id, name: 'Phone' },
       terminal: false,
       addresses: [],
     })
@@ -263,9 +322,16 @@ describe('refusals', () => {
   it('update the status at once, then at most once a second', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-refusals-'))
     let changes = 0
+    const staticKey = await generateKeyPair()
     const server = new RemoteServer({
-      staticKey: await generateKeyPair(),
+      staticKey,
       devices: await DeviceStore.load(dir, () => {}),
+      activity: await ActivityLog.load(dir, () => {}),
+      pairing: new PairingCodes({
+        hostKey: staticKey.publicKey,
+        addresses: () => [],
+        send: () => {},
+      }),
       host: { name: 'Studio', platform: process.platform, version: '0.0.0-test' },
       openAgentPort: async () => null,
       changed: () => changes++,
@@ -294,5 +360,235 @@ describe('refusals', () => {
       vi.useRealTimers()
       await rm(dir, { recursive: true, force: true })
     }
+  })
+})
+describe('pairing', () => {
+  it('adds a device whose secret checks out once the asker agrees, and runs its session', async () => {
+    const t = await setup()
+    const secret = t.openCode()
+    const padKey = await generateKeyPair()
+    const pad = await t.pairWith(secret, padKey)
+    const asked = await t.until(1, 'confirm')
+    expect(asked).toEqual({
+      state: 'confirm',
+      device: {
+        name: 'iPad Air',
+        model: 'iPad Air',
+        kind: 'ios',
+        platform: 'iPadOS 26.1',
+        known: false,
+      },
+    })
+    // Nothing is added before the answer.
+    expect(t.devices.list()).toHaveLength(1)
+    t.pairing.answer(1, { add: true, name: 'My iPad' })
+
+    const id = await deviceId(padKey.publicKey)
+    expect(await pad.first).toMatchObject({ type: 'welcome', device: { id, name: 'My iPad' } })
+    expect(await t.until(1, 'added')).toMatchObject({
+      state: 'added',
+      device: { id, name: 'My iPad', model: 'iPad Air', kind: 'ios', platform: 'iPadOS 26.1' },
+    })
+    expect(t.devices.get(id)).toMatchObject({ name: 'My iPad', model: 'iPad Air' })
+    expect(t.server.online()).toEqual([id])
+    // The code paired its one device.
+    expect(t.pairing.current()).toBeNull()
+
+    const session = await pad.port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.agent.project,
+    })
+    await expect
+      .poll(() => t.activity.list(id).map((event) => event.kind))
+      .toEqual(['session-created', 'connected', 'paired'])
+    expect(t.activity.list(id)[0]).toMatchObject({ sessionId: session.id })
+
+    // Once added, the device connects as any paired device does.
+    pad.close()
+    const again = await t.connect(padKey)
+    expect(await again.first).toMatchObject({ type: 'welcome', device: { id } })
+  })
+
+  it('counts a wrong secret as one attempt, and the fifth voids the code', async () => {
+    const t = await setup()
+    const secret = t.openCode()
+    for (let i = 0; i < 5; i++) {
+      const wrong = crypto.getRandomValues(new Uint8Array(32))
+      const device = await t.pairWith(wrong, await generateKeyPair())
+      expect(await device.closing).toBeNull()
+    }
+    expect(await t.until(1, 'void')).toEqual({ state: 'void', reason: 'attempts' })
+    expect(t.server.refused).toBe(5)
+    const late = await t.pairWith(secret, await generateKeyPair())
+    expect(await late.closing).toBeNull()
+    expect(t.devices.list()).toHaveLength(1)
+  })
+
+  it('takes no attempt for a handshake from a key the host does not know', async () => {
+    const t = await setup()
+    const secret = t.openCode()
+    for (let i = 0; i < 6; i++) {
+      const stranger = await t.connect(await generateKeyPair())
+      expect(await stranger.closing).toBeNull()
+    }
+    expect(t.server.refused).toBe(6)
+    const pad = await t.pairWith(secret, await generateKeyPair())
+    await t.until(1, 'confirm')
+    pad.close()
+  })
+
+  it('voids the code after five minutes', async () => {
+    const t = await setup({ ttlMs: 50 })
+    const secret = t.openCode()
+    expect(await t.until(1, 'void')).toEqual({ state: 'void', reason: 'expired' })
+    const late = await t.pairWith(secret, await generateKeyPair())
+    expect(await late.closing).toBeNull()
+  })
+
+  it('voids the code when Add device closes, or another opens', async () => {
+    const t = await setup()
+    const first = t.openCode(1)
+    const second = t.openCode(2)
+    expect(await t.until(1, 'void')).toEqual({ state: 'void', reason: 'replaced' })
+    expect(t.states(2)).toEqual(['waiting'])
+    const replaced = await t.pairWith(first, await generateKeyPair())
+    expect(await replaced.closing).toBeNull()
+    t.pairing.close(2)
+    expect(await t.until(2, 'void')).toEqual({ state: 'void', reason: 'closed' })
+    const closed = await t.pairWith(second, await generateKeyPair())
+    expect(await closed.closing).toBeNull()
+  })
+
+  it('closes the device the asker rejects, with the reason, and voids the code', async () => {
+    const t = await setup()
+    const secret = t.openCode()
+    const pad = await t.pairWith(secret, await generateKeyPair())
+    await t.until(1, 'confirm')
+    t.pairing.answer(1, { add: false, name: 'iPad Air' })
+    expect(await pad.first).toEqual({ type: 'closing', reason: 'rejected' })
+    expect(await t.until(1, 'void')).toEqual({ state: 'void', reason: 'rejected' })
+    expect(t.devices.list()).toHaveLength(1)
+    const again = await t.pairWith(secret, await generateKeyPair())
+    expect(await again.closing).toBeNull()
+  })
+
+  it('gives the code back when the device leaves before the answer', async () => {
+    const t = await setup()
+    const secret = t.openCode()
+    const pad = await t.pairWith(secret, await generateKeyPair())
+    await t.until(1, 'confirm')
+    pad.close()
+    expect(await t.until(1, 'waiting')).toMatchObject({ state: 'waiting' })
+    const next = await t.pairWith(secret, await generateKeyPair(), 'Other iPad')
+    expect(await t.until(1, 'confirm')).toMatchObject({ device: { name: 'Other iPad' } })
+    next.close()
+  })
+
+  it('pairs a known key again, replacing its entry', async () => {
+    const t = await setup()
+    const secret = t.openCode()
+    const phone = await t.pairWith(secret, t.phoneKey, 'Phone again')
+    expect(await t.until(1, 'confirm')).toMatchObject({ device: { known: true } })
+    t.pairing.answer(1, { add: true, name: 'Phone again' })
+    expect(await phone.first).toMatchObject({ type: 'welcome', device: { id: t.phone.id } })
+    expect(t.devices.list()).toEqual([
+      expect.objectContaining({ id: t.phone.id, name: 'Phone again', model: 'iPad Air' }),
+    ])
+  })
+
+  it('closes a pairing device whose hello has no name, spending an attempt', async () => {
+    const t = await setup()
+    const secret = t.openCode()
+    for (let i = 0; i < 5; i++) {
+      const device = await t.connect(await generateKeyPair(), undefined, secret)
+      expect(await device.first).toEqual({ type: 'closing', reason: 'invalid' })
+    }
+    expect(await t.until(1, 'void')).toEqual({ state: 'void', reason: 'attempts' })
+  })
+})
+
+describe('a device name', () => {
+  it('changes from the owner and from the device, each telling the device', async () => {
+    const t = await setup()
+    const device = await t.connect()
+    await device.first
+    expect(await t.server.renameDevice(t.phone.id, '  Work phone ', 'owner')).toMatchObject({
+      name: 'Work phone',
+    })
+    await expect.poll(() => device.notices).toEqual([{ type: 'renamed', name: 'Work phone' }])
+
+    await device.send({ type: 'rename', name: 'Pocket' })
+    await expect.poll(() => t.devices.get(t.phone.id)?.name).toBe('Pocket')
+    await expect.poll(() => device.notices).toHaveLength(2)
+    expect(device.notices[1]).toEqual({ type: 'renamed', name: 'Pocket' })
+    expect(
+      t.activity
+        .list(t.phone.id)
+        .filter((event) => event.kind === 'renamed')
+        .map((event) => event.kind === 'renamed' && [event.from, event.to, event.by]),
+    ).toEqual([
+      ['Work phone', 'Pocket', 'device'],
+      ['Phone', 'Work phone', 'owner'],
+    ])
+    // A rename does not reach the agent host.
+    expect(t.forwarded).toEqual([])
+  })
+
+  it('stays when the new one is empty once cleaned up', async () => {
+    const t = await setup()
+    expect(await t.server.renameDevice(t.phone.id, ' \n ', 'owner')).toBeNull()
+    expect(t.devices.get(t.phone.id)?.name).toBe('Phone')
+  })
+})
+
+describe('devices not seen for 90 days', () => {
+  it('are removed, unless a session is open', async () => {
+    let now = Date.now()
+    const t = await setup({ now: () => now })
+    const tabletKey = await generateKeyPair()
+    const tablet = (await t.devices.add({
+      publicKey: base64(tabletKey.publicKey),
+      name: 'Tablet',
+      kind: 'ios',
+      platform: 'iPadOS 26.1',
+      model: 'iPad Air',
+    }))!
+    const phone = await t.connect()
+    await phone.first
+    now += 90 * DAY - 1
+    await t.server.sweep()
+    expect(t.devices.list()).toHaveLength(2)
+    now += 1
+    await t.server.sweep()
+    // The phone is online, so it was seen.
+    expect(t.devices.list().map((device) => device.id)).toEqual([t.phone.id])
+    expect(t.activity.list(tablet.id)[0]).toMatchObject({ kind: 'removed', by: 'unseen' })
+  })
+
+  it('are looked for every hour', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+    try {
+      const t = await setup()
+      t.server.startSweeping()
+      await vi.advanceTimersByTimeAsync(90 * DAY + 60 * 60 * 1000)
+      expect(t.devices.list()).toEqual([])
+      await t.server.stop('stopping')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('reset', () => {
+  it('removes every device, closing its sessions, and voids the code', async () => {
+    const t = await setup()
+    const device = await t.connect()
+    await device.first
+    t.openCode()
+    await t.server.reset()
+    expect(await device.closing).toEqual({ type: 'closing', reason: 'removed' })
+    expect(t.devices.list()).toEqual([])
+    expect(t.states()).toEqual(['waiting', 'void'])
+    expect(t.activity.list(t.phone.id)[0]).toMatchObject({ kind: 'removed', by: 'reset' })
   })
 })

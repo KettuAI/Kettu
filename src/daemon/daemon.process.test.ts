@@ -15,6 +15,7 @@ import type { PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
 import { deviceId, type PairedDevice } from '@shared/remote/device'
 import { generateKeyPair } from '@shared/remote/noise'
+import { parsePairingLink } from '@shared/remote/pairing'
 import { connectPort } from '@shared/socket-port'
 import { FAKE_AGENT_MAIN, TestPort } from '../agent-host/testing/harness'
 import { callControl, type DaemonStatus } from './control'
@@ -178,6 +179,7 @@ describeUnix('kettu', () => {
       name: "Ada's iPhone",
       kind: 'ios',
       platform: 'ios',
+      model: 'iPhone 17 Pro',
       addedAt: Date.now(),
       lastConnectedAt: null,
     }
@@ -255,6 +257,25 @@ describeUnix('kettu', () => {
       code: 1,
       stderr: `kettu: A Kettu daemon is already running on this data folder (pid ${daemon.pid})\n`,
     })
+
+    // A pairing code from the remote host, void once the command is stopped.
+    const pairing = spawn(process.execPath, [path.join(bundle, 'main.cjs'), 'pair'], {
+      env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+    let paired = ''
+    pairing.stdout!.on('data', (chunk: Buffer) => (paired += chunk.toString()))
+    pairing.stderr!.on('data', (chunk: Buffer) => (paired += chunk.toString()))
+    const pairExit = new Promise<number | null>((resolve) => pairing.once('exit', resolve))
+    const link = await until(
+      async () => /https:\/\/kettu\.sh\/pair#\S+/.exec(paired)?.[0] ?? null,
+      `pairing link\n${paired}`,
+    )
+    expect(parsePairingLink(link)).toMatchObject({ version: 1, addresses: [] })
+    expect(paired).toContain('the code expires in 5:00.')
+    pairing.kill('SIGINT')
+    expect(await pairExit).toBe(130)
+    expect(paired).toMatch(/Stopped; the code is void\.\n$/)
 
     // A turn of the fake agent over a port to the agent host's socket.
     const project = path.join(dir, 'project')

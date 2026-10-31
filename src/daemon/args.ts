@@ -9,6 +9,7 @@ export type Command =
   | { kind: 'status' }
   | { kind: 'devices' }
   | { kind: 'devices-remove'; id: string }
+  | { kind: 'pair' }
   | { kind: 'service-install' }
   | { kind: 'service-uninstall' }
   /** What was wrong with the command line, in a short sentence. */
@@ -23,6 +24,7 @@ Commands:
   status               Say whether the daemon is running, with its details
   devices              List the devices paired with this computer
   devices remove <id>  Remove a paired device and close its sessions
+  pair                 Add a device: show a code to scan, then confirm the device
   service install      Run the daemon as a service that starts with the computer
   service uninstall    Stop the service and remove it
 
@@ -82,6 +84,8 @@ export function parseCommand(argv: readonly string[]): Command {
       return extra(0) ?? { kind: 'run' }
     case 'status':
       return extra(0) ?? { kind: 'status' }
+    case 'pair':
+      return extra(0) ?? { kind: 'pair' }
     case 'devices':
       if (rest.length === 0) return { kind: 'devices' }
       if (rest[0] !== 'remove') {

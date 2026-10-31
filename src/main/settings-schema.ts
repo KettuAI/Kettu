@@ -15,6 +15,7 @@ import {
 import { LANGUAGE_SETTINGS, resolveLocale, type Locale } from '@shared/locale'
 import { addressKey, isPort, MAX_OWN_ADDRESSES, parseDirectAddress } from '@shared/remote/address'
 import type { DirectAddress } from '@shared/remote/protocol'
+import { DEVICE_NAME_CHARS, isDeviceName } from '@shared/remote/device'
 import { THEME_ID } from '@shared/themes'
 import {
   HARNESS_IDS,
@@ -50,6 +51,11 @@ const isBoolean: Check = (value, path) =>
 
 const isAgentChoice: Check = (value, path) =>
   value === null || isAgentId(value) ? null : `"${path}" must be an agent id or null`
+
+const isHostName: Check = (value, path) =>
+  value === null || isDeviceName(value)
+    ? null
+    : `"${path}" must be null or a trimmed name of 1 to ${DEVICE_NAME_CHARS} characters`
 
 const isThemeId: Check = (value, path) =>
   typeof value === 'string' && THEME_ID.test(value) ? null : `"${path}" must be a theme id`
@@ -186,8 +192,8 @@ function checkRemote(value: unknown, problems: string[]): void {
     return
   }
   for (const [key, fieldValue] of Object.entries(value)) {
-    if (key === 'enabled') {
-      const problem = isBoolean(fieldValue, 'remote.enabled')
+    if (key === 'enabled' || key === 'name') {
+      const problem = (key === 'enabled' ? isBoolean : isHostName)(fieldValue, `remote.${key}`)
       if (problem) problems.push(problem)
     } else if (key === 'direct') {
       if (!isRecord(fieldValue)) {
@@ -300,7 +306,20 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
   return raw as SettingsPatch
 }
 
-/** Applies a validated patch. Sections merge key by key; `proxy` is replaced whole. */
+/**
+ * Devices reach the computer only while Kettu runs, and with no relay yet only directly, so remote
+ * access keeps it in the background and direct connections on.
+ */
+function holdForRemote(settings: SettingsFile): void {
+  if (!settings.remote.enabled) return
+  settings.general.background = true
+  settings.remote.direct.enabled = true
+}
+
+/**
+ * Applies a validated patch. Sections merge key by key; `proxy` is replaced whole. Run in the
+ * background and direct connections stay on while remote access is.
+ */
 export function mergeSettings(current: SettingsFile, patch: SettingsPatch): SettingsFile {
   const next = structuredClone(current)
   for (const section of FIELD_SECTIONS) {
@@ -326,14 +345,16 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
     if (patch.terminal.shellPath === null) delete next.terminal.shellPath
   }
   if (patch.remote) {
-    const { enabled, direct } = patch.remote
+    const { enabled, name, direct } = patch.remote
     if (enabled !== undefined) next.remote.enabled = enabled
+    if (name !== undefined) next.remote.name = name
     if (direct?.enabled !== undefined) next.remote.direct.enabled = direct.enabled
     if (direct?.port !== undefined) next.remote.direct.port = direct.port
     if (direct?.addresses) {
       next.remote.direct.addresses = direct.addresses.map(({ host, port }) => ({ host, port }))
     }
   }
+  holdForRemote(next)
   return next
 }
 
@@ -515,6 +536,7 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
       }
     }
   }
+  holdForRemote(settings)
   return { settings, problems, readOnly: version > SETTINGS_VERSION }
 }
 
@@ -564,6 +586,7 @@ function readRemote(raw: Record<string, unknown>, problems: string[]): SettingsF
     else keep()
   }
   read(raw.enabled, 'remote.enabled', isBoolean, () => (remote.enabled = raw.enabled as boolean))
+  read(raw.name, 'remote.name', isHostName, () => (remote.name = raw.name as string | null))
   const direct = raw.direct
   if (direct === undefined) return remote
   if (!isRecord(direct)) {

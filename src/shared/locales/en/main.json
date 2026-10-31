@@ -87,6 +87,10 @@
     "running_other": "{{count}} sessions running",
     "waiting_one": "{{count}} needs approval",
     "waiting_other": "{{count}} need approval",
+    "remoteStarting": "Remote access is starting",
+    "remoteFailed": "Remote access could not start",
+    "remoteOn_one": "Remote access on · {{count}} device online",
+    "remoteOn_other": "Remote access on · {{count}} devices online",
     "open": "Open {{name}}",
     "quit": "Quit {{name}}"
   },

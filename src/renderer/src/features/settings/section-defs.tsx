@@ -8,6 +8,7 @@ import {
   GitBranchIcon,
   GlobeIcon,
   InfoIcon,
+  MonitorSmartphoneIcon,
   PlugIcon,
   SettingsIcon,
   ShareIcon,
@@ -43,6 +44,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { archivedSessions, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useMcpStore } from '@renderer/stores/mcp'
+import { useRemoteStore } from '@renderer/stores/remote'
 import { useSharingStore } from '@renderer/stores/sharing'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { useUsageStore } from '@renderer/stores/usage'
@@ -63,7 +65,21 @@ import {
 } from './harness-section'
 import { AgentPlaceRow, FailedRead, McpServerPage, PendingList, ServerRow } from './mcp-section'
 import { ArchivedRow } from './archived-section'
-import { GroupLabel } from './rows'
+import { GroupLabel, GroupNote } from './rows'
+import { SettingSwitch } from './controls'
+import { DevicePage } from './remote-device'
+import { DirectPortField, FoundAddresses, OwnAddresses } from './remote-direct'
+import {
+  AddDeviceRow,
+  DeviceRow,
+  HostNameField,
+  NoDevices,
+  RemoteHeader,
+  RemoteStatusRow,
+  ResetRemote,
+  StaleNote,
+} from './remote-section'
+import { deviceLine } from './remote-text'
 import { PublishedRow, SharingAccount } from './sharing-section'
 import { useLoginItemStatus } from './use-login-item'
 import { environmentText } from './environment-text'
@@ -118,6 +134,8 @@ export function useGeneralSection(): SectionDef {
   const thread = group('thread', t('general.groups.thread'))
   const startup = group('startup', t('general.groups.startup'))
   const loginItem = useLoginItemStatus()
+  // Devices reach the computer only while Kettu runs, so remote access holds it on.
+  const remoteOn = useSettingsStore((s) => s.settings.remote.enabled)
   const openAtLoginDescription = loginItem
     ? !loginItem.available
       ? t('general.openAtLogin.unavailable')
@@ -192,14 +210,22 @@ export function useGeneralSection(): SectionDef {
         id: 'background',
         name: t('general.background.name'),
         english: en('general.background.name'),
-        description: isMac
-          ? t('general.background.descriptionMac')
-          : isWindows
-            ? t('general.background.descriptionWindows')
-            : t('general.background.descriptionLinux'),
+        description: remoteOn
+          ? t('general.background.lockedByRemote')
+          : isMac
+            ? t('general.background.descriptionMac')
+            : isWindows
+              ? t('general.background.descriptionWindows')
+              : t('general.background.descriptionLinux'),
         keywords: t('general.background.keywords'),
         group: sessions,
-        render: () => <GeneralSwitch field="background" label={t('general.background.name')} />,
+        render: () => (
+          <GeneralSwitch
+            field="background"
+            label={t('general.background.name')}
+            disabled={remoteOn}
+          />
+        ),
       },
       {
         id: 'confirm-links',
@@ -877,6 +903,135 @@ export function useArchivedSection(): SectionDef {
       </Empty>
     ),
   }
+}
+
+export function useRemoteSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
+  const enabled = useSettingsStore((s) => s.settings.remote.enabled)
+  const status = useRemoteStore((s) => s.status)
+  const switchRow: RowDef = {
+    id: 'remote',
+    name: t('remote.switch'),
+    english: en('remote.switch'),
+    description: t('pages.remote'),
+    keywords: t('remote.keywords'),
+    searchOnly: true,
+    render: () => null,
+  }
+  const base = {
+    id: 'remote' as const,
+    title: t('sections.remote'),
+    description: t('pages.remote'),
+    icon: MonitorSmartphoneIcon,
+    hero: <RemoteHeader id="settings-remote" />,
+    itemPage: (id: string) => <DevicePage id={id} />,
+  }
+  if (!enabled) return { ...base, rows: [switchRow] }
+  const devices = status?.devices ?? []
+  const online = status?.online ?? []
+  const state = group('status', t('remote.switch'), {
+    unlabeled: true,
+    note: <GroupNote>{t('remote.background')}</GroupNote>,
+  })
+  const list = group('devices', t('remote.devices.group'), {
+    count: devices.length > 0 ? devices.length : undefined,
+    note: <StaleNote />,
+  })
+  const direct = group('direct', t('remote.direct.group'), {
+    note: <GroupNote>{t('remote.direct.note')}</GroupNote>,
+  })
+  const rows: RowDef[] = [
+    switchRow,
+    {
+      id: 'status',
+      name: t('remote.switch'),
+      group: state,
+      layout: 'custom',
+      render: () => (
+        <div className="px-1">
+          <RemoteStatusRow status={status} />
+        </div>
+      ),
+    },
+    {
+      id: 'host-name',
+      name: t('remote.hostName.name'),
+      english: en('remote.hostName.name'),
+      description: t('remote.hostName.description'),
+      group: state,
+      render: () => <HostNameField label={t('remote.hostName.name')} />,
+    },
+    ...devices.map((device): RowDef => ({
+      id: device.id,
+      name: device.name,
+      description: deviceLine(t, device),
+      keywords: t('remote.keywords'),
+      group: list,
+      layout: 'custom',
+      render: () => <DeviceRow device={device} online={online.includes(device.id)} />,
+      open: () => openSettingsItem('remote', device.id),
+    })),
+    {
+      id: 'add-device',
+      name: t('remote.devices.add'),
+      english: en('remote.devices.add'),
+      keywords: t('remote.keywords'),
+      group: list,
+      layout: 'custom',
+      render: () => (devices.length === 0 ? <NoDevices /> : <AddDeviceRow />),
+    },
+    {
+      id: 'direct',
+      name: t('remote.direct.name'),
+      english: en('remote.direct.name'),
+      description: t('remote.direct.description'),
+      keywords: t('remote.direct.keywords'),
+      group: direct,
+      render: () => (
+        <SettingSwitch label={t('remote.direct.name')} checked disabled onChange={() => {}} />
+      ),
+    },
+    {
+      id: 'direct-port',
+      name: t('remote.direct.port.name'),
+      english: en('remote.direct.port.name'),
+      description: t('remote.direct.port.description'),
+      keywords: t('remote.direct.keywords'),
+      group: direct,
+      render: () => <DirectPortField label={t('remote.direct.port.name')} />,
+    },
+    {
+      id: 'direct-found',
+      name: t('remote.direct.found.name'),
+      english: en('remote.direct.found.name'),
+      description: t('remote.direct.found.description'),
+      keywords: t('remote.direct.keywords'),
+      group: direct,
+      layout: 'block',
+      render: (text) => <FoundAddresses text={text} />,
+    },
+    {
+      id: 'direct-own',
+      name: t('remote.direct.own.name'),
+      english: en('remote.direct.own.name'),
+      description: t('remote.direct.own.description'),
+      keywords: t('remote.direct.keywords'),
+      group: direct,
+      layout: 'block',
+      render: (text) => <OwnAddresses text={text} />,
+    },
+    {
+      id: 'reset',
+      name: t('remote.reset.name'),
+      english: en('remote.reset.name'),
+      description: t('remote.reset.description'),
+      keywords: t('remote.reset.keywords'),
+      group: group('reset', t('remote.reset.name'), { unlabeled: true }),
+      render: () => <ResetRemote />,
+    },
+  ]
+  return { ...base, rows }
 }
 
 /** Each published artifact's title, read while there are published pages to name. */

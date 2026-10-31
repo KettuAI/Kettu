@@ -3,11 +3,20 @@
 import { execFile } from 'node:child_process'
 import { realpath } from 'node:fs/promises'
 import os from 'node:os'
+import { createInterface } from 'node:readline'
 import { version } from '../../package.json'
 import { HELP, parseCommand, type Command } from './args'
-import { callControl, ControlError, NotRunning, type DaemonStatus } from './control'
+import {
+  callControl,
+  connectControl,
+  ControlError,
+  NotRunning,
+  type ControlClient,
+  type DaemonStatus,
+} from './control'
 import { AlreadyRunning, SERVICE_ENV, startDaemon } from './daemon'
 import { prepareDataFolder } from './key'
+import { pairDevice } from './pair'
 import { controlSocketPath, DATA_ENV, dataPath } from './paths'
 import { devicesReport, runningReport, stoppedReport } from './report'
 import {
@@ -45,6 +54,47 @@ async function statusOf(socket: string): Promise<DaemonStatus | null> {
   } catch (error) {
     if (error instanceof NotRunning) return null
     throw error
+  }
+}
+
+/** A question on the terminal with `initial` typed for the owner to edit; null once input ends. */
+function ask(question: string, initial?: string): Promise<string | null> {
+  // Typed ahead only on a terminal; piped input would be read after it on the same line.
+  const typed = process.stdin.isTTY === true
+  const lines = createInterface({ input: process.stdin, output: process.stdout })
+  return new Promise<string | null>((resolve) => {
+    lines.once('close', () => resolve(null))
+    lines.once('SIGINT', () => lines.close())
+    lines.question(initial && !typed ? `${question}[${initial}] ` : question, (answer) => {
+      resolve(answer)
+      lines.close()
+    })
+    if (initial && typed) lines.write(initial)
+  })
+}
+
+async function pair(socket: string): Promise<number> {
+  let client: ControlClient
+  try {
+    client = await connectControl(socket)
+  } catch (error) {
+    if (error instanceof NotRunning) throw new Failure('The daemon is not running')
+    throw error
+  }
+  const stop = new AbortController()
+  const abort = (): void => stop.abort()
+  process.once('SIGINT', abort)
+  try {
+    return await pairDevice(
+      client,
+      { write: out, live: process.stdout.isTTY === true, ask },
+      stop.signal,
+    )
+  } catch (error) {
+    if (error instanceof ControlError) throw new Failure(error.message)
+    throw error
+  } finally {
+    process.off('SIGINT', abort)
   }
 }
 
@@ -116,6 +166,9 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
         throw error
       }
     }
+
+    case 'pair':
+      return pair(socket)
 
     case 'service-install': {
       const running = await statusOf(socket)

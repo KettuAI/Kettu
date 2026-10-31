@@ -5,6 +5,7 @@ import path from 'node:path'
 import {
   deviceId,
   isDeviceField,
+  isDeviceModel,
   isDeviceName,
   type NewDevice,
   type PairedDevice,
@@ -36,12 +37,15 @@ const isTime = (value: unknown): value is number =>
 
 function parseDevice(value: unknown): PairedDevice | null {
   if (typeof value !== 'object' || value === null) return null
-  const { id, publicKey, name, kind, platform, addedAt, lastConnectedAt } = value as Record<
+  const { id, publicKey, name, kind, platform, model, addedAt, lastConnectedAt } = value as Record<
     string,
     unknown
   >
   if (typeof id !== 'string' || publicKeyBytes(publicKey) === null) return null
   if (!isDeviceName(name) || !isDeviceField(kind) || !isDeviceField(platform)) return null
+  // Devices paired before models were kept have none.
+  const kept = model ?? ''
+  if (!isDeviceModel(kept)) return null
   if (!isTime(addedAt) || !(lastConnectedAt === null || isTime(lastConnectedAt))) return null
   return {
     id,
@@ -49,6 +53,7 @@ function parseDevice(value: unknown): PairedDevice | null {
     name,
     kind,
     platform,
+    model: kept,
     addedAt,
     lastConnectedAt,
   }
@@ -120,6 +125,7 @@ export class DeviceStore {
     const key = publicKeyBytes(device.publicKey)
     if (!key || !isDeviceName(device.name)) return null
     if (!isDeviceField(device.kind) || !isDeviceField(device.platform)) return null
+    if (!isDeviceModel(device.model)) return null
     const id = await deviceId(key)
     if (!this.byId.has(id) && this.byId.size >= MAX_DEVICES) return null
     const added: PairedDevice = {
@@ -128,6 +134,7 @@ export class DeviceStore {
       name: device.name,
       kind: device.kind,
       platform: device.platform,
+      model: device.model,
       addedAt: this.now(),
       lastConnectedAt: null,
     }
@@ -147,7 +154,21 @@ export class DeviceStore {
     return true
   }
 
-  /** Notes a session opening now; the write waits a moment, as connections come in bursts. */
+  /** The device under its new name, or null when there is no such device or the name is not one. */
+  async rename(id: string, name: string): Promise<PairedDevice | null> {
+    const device = this.byId.get(id)
+    if (!device || !isDeviceName(name)) return null
+    const renamed = { ...device, name }
+    this.put(renamed)
+    this.save()
+    await this.file.flush()
+    return renamed
+  }
+
+  /**
+   * Notes a session opening or ending now; the write waits a moment, as connections come in
+   * bursts.
+   */
   connected(id: string): void {
     const device = this.byId.get(id)
     if (!device) return

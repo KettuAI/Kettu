@@ -9,12 +9,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DirectStatus } from '@shared/host-control'
 import type { PortChannel } from '@shared/port-channel'
 import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
+import { parsePairingLink, type PairingState } from '@shared/remote/pairing'
 import type { DirectSettings } from '@shared/settings'
 import { startTestHost, type TestHost } from '../agent-host/testing/harness'
+import { ActivityLog } from './activity'
 import type { Interfaces } from './addresses'
 import { CHECK_ADDRESSES_MS, connectTransport, DirectListener } from './direct'
 import { DeviceStore } from './devices'
 import { SOURCE_BURST } from './limits'
+import { PairingCodes } from './pairing'
 import { RemoteServer } from './server'
 import { connectDevice } from './testing/device'
 import { memoryPorts } from './testing/memory'
@@ -63,10 +66,19 @@ async function setup(options: { agent?: boolean } = {}) {
     name: 'Phone',
     kind: 'ios',
     platform: 'ios',
+    model: 'iPhone 17 Pro',
   })
-  const server = new RemoteServer({
+  const pairing: PairingState[] = []
+  const codes = new PairingCodes({
+    hostKey: hostKey.publicKey,
+    addresses: () => server.addresses,
+    send: (_codeId, state) => void pairing.push(state),
+  })
+  const server: RemoteServer = new RemoteServer({
     staticKey: hostKey,
     devices,
+    activity: await ActivityLog.load(dir, log),
+    pairing: codes,
     host: { name: 'Studio', platform: process.platform, version: '0.0.0-test' },
     openAgentPort: async (device) => {
       const [remoteEnd, agentEnd] = memoryPorts()
@@ -107,6 +119,8 @@ async function setup(options: { agent?: boolean } = {}) {
     agent,
     server,
     direct,
+    codes,
+    pairing,
     logs,
     statuses,
     listening,
@@ -157,6 +171,7 @@ describe('direct connections', () => {
       host: { name: 'Studio', platform: process.platform, version: '0.0.0-test' },
       features: [],
       role: 'owner',
+      device: { id: expect.any(String), name: 'Phone' },
       terminal: false,
       addresses,
     })
@@ -167,6 +182,30 @@ describe('direct connections', () => {
     await device.port.open(session.id)
     expect(device.port.summary(session.id)).toMatchObject({ id: session.id, agentId: 'fake-agent' })
     expect(t.server.online()).toHaveLength(1)
+  })
+
+  it("pair a device through a code that carries the listener's addresses", async () => {
+    const t = await setup()
+    const frp = { host: 'frp.example.com', port: 7000 }
+    await t.direct.apply(on([frp]))
+    const { port, addresses } = t.listening()
+    t.codes.open(1)
+    const waiting = t.pairing.at(-1)
+    if (waiting?.state !== 'waiting') throw new Error('No code opened')
+    const payload = parsePairingLink(waiting.link)!
+    expect(payload.addresses).toEqual(addresses)
+
+    const pad = await connectDevice({
+      transport: await connectTransport({ host: LOCALHOST, port }),
+      hostKey: payload.hostKey,
+      key: await generateKeyPair(),
+      psk: payload.secret,
+      hello: { device: { name: 'iPad', model: 'iPad Air' } },
+    })
+    cleanups.push(() => pad.close())
+    await expect.poll(() => t.pairing.at(-1)?.state).toBe('confirm')
+    t.codes.answer(1, { add: true, name: 'iPad' })
+    expect(await pad.first).toMatchObject({ type: 'welcome', device: { name: 'iPad' }, addresses })
   })
 
   it('follow the setting on and off, keeping the port', async () => {
@@ -234,6 +273,18 @@ describe('direct connections', () => {
     expect(t.statuses).toHaveLength(1)
 
     await t.direct.apply(off)
+    await t.direct.apply(on([], port))
+    expect(t.listening().port).toBe(port)
+  })
+
+  it('try a port that was in use again when the same settings come again, as Retry sends', async () => {
+    const t = await setup()
+    const blocker: Server = createServer()
+    await new Promise<void>((resolve) => blocker.listen(0, LOCALHOST, resolve))
+    const port = (blocker.address() as { port: number }).port
+    await t.direct.apply(on([], port))
+    expect(t.direct.status).toMatchObject({ state: 'failed', reason: 'port_in_use' })
+    await new Promise<void>((resolve) => blocker.close(() => resolve()))
     await t.direct.apply(on([], port))
     expect(t.listening().port).toBe(port)
   })
