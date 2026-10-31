@@ -246,7 +246,7 @@ describe('a device row', () => {
 describe('the list', () => {
   it('without devices says how to add one', () => {
     expect(text(createElement(NoDevices))).toBe(
-      'No devices yet Scan the code with Kettu on an iPhone or iPad. Add device…',
+      'No devices yet Scan the code with Kettu on an iPhone or iPad, or paste the link in Settings › Hosts › Add host… in Kettu on another computer. Add device…',
     )
   })
 
@@ -275,8 +275,10 @@ describe('Add device', () => {
       createElement(CodeBody, { shown: { kind: 'pairing', pairing: waiting }, link }),
     )
     expect(body).toContain('Scan this code with Kettu on an iPhone or iPad.')
-    // Pairing from another computer comes later, so nothing asks for it yet.
-    expect(body).not.toMatch(/another computer|Add host/)
+    // Another computer pastes the link where it adds hosts.
+    expect(body).toContain(
+      'On another computer, open Settings › Hosts › Add host… in its Kettu and paste this link.',
+    )
     expect(body).toContain(link)
     expect(body).toMatch(/expires in 4:3[12] ?\./)
   })

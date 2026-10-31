@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react'
-import { GlobeIcon, LaptopIcon, MonitorIcon, SmartphoneIcon, TabletIcon } from 'lucide-react'
+import {
+  GlobeIcon,
+  LaptopIcon,
+  MonitorIcon,
+  ServerIcon,
+  SmartphoneIcon,
+  TabletIcon,
+} from 'lucide-react'
 import type { PairedDevice } from '@shared/remote/device'
 import { cn } from '@renderer/lib/utils'
 import { deviceShape } from './remote-text'
@@ -24,6 +31,15 @@ export function DeviceIcon({
     case 'phone':
       return <SmartphoneIcon className={className} />
   }
+}
+
+/** A host by what it runs: a server for Linux, a desktop otherwise. */
+export function HostIcon({ platform, className }: { platform: string; className?: string }) {
+  return platform === 'linux' ? (
+    <ServerIcon className={className} />
+  ) : (
+    <MonitorIcon className={className} />
+  )
 }
 
 /** A dot in the success color, beside "Online". */

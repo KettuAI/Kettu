@@ -3,14 +3,36 @@ import type { MessagePortMain } from 'electron'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RemoteHostStatus } from '@shared/host-control'
 import type { PortDevice } from '@shared/remote/device'
+import type { HostPairingState, HostStatus } from '@shared/remote/hosts'
 import type { DirectSettings } from '@shared/settings'
 import type { PairingState } from '@shared/remote/pairing'
 
-const electron = vi.hoisted(() => ({ fork: (): unknown => null }))
+const electron = vi.hoisted(() => ({
+  fork: (): unknown => null,
+  channels: [] as { port1: unknown; port2: unknown }[],
+}))
+
+class FakePort extends EventEmitter {
+  started = false
+  closed = false
+  start(): void {
+    this.started = true
+  }
+  close(): void {
+    this.closed = true
+    this.emit('close')
+  }
+}
 
 vi.mock('electron', () => ({
   BrowserWindow: { fromWebContents: () => null },
-  MessageChannelMain: class {},
+  MessageChannelMain: class {
+    port1 = new FakePort()
+    port2 = new FakePort()
+    constructor() {
+      electron.channels.push(this)
+    }
+  },
   utilityProcess: { fork: () => electron.fork() },
 }))
 vi.mock('../remote-host/index?modulePath', () => ({ default: '/remote-host.js' }))
@@ -46,7 +68,11 @@ const device: PortDevice = { id: 'b'.repeat(32), name: 'Phone' }
 const port = { close: vi.fn() } as unknown as MessagePortMain
 
 function makeHost(
-  options: { identity?: () => Promise<{ privateKey: string; plainText: boolean }> } = {},
+  options: {
+    identity?: () => Promise<{ privateKey: string; plainText: boolean }>
+    deviceKey?: () => Promise<{ privateKey: string; plainText: boolean }>
+    hostsKnown?: boolean
+  } = {},
 ) {
   const opened: PortDevice[] = []
   const settings: { direct: DirectSettings } = {
@@ -54,11 +80,15 @@ function makeHost(
   }
   let key = 'key'
   let changes = 0
+  let hostsChanges = 0
   const host = new RemoteHost({
     userDataPath: '/data',
     appVersion: '1.2.3',
     identity: options.identity ?? (async () => ({ privateKey: key, plainText: true })),
     newIdentity: async () => (key = 'new key'),
+    deviceKey: options.deviceKey ?? (async () => ({ privateKey: 'device key', plainText: false })),
+    devicePlatform: async () => 'macOS 26.1',
+    hostsKnown: async () => options.hostsKnown ?? false,
     hostName: () => 'Studio',
     direct: () => settings.direct,
     openPort: (asked) => {
@@ -66,8 +96,9 @@ function makeHost(
       return asked.name === 'Phone' ? port : null
     },
     changed: () => changes++,
+    hostsChanged: () => hostsChanges++,
   })
-  return { host, opened, settings, changes: () => changes }
+  return { host, opened, settings, changes: () => changes, hostsChanges: () => hostsChanges }
 }
 
 const newDevice = { publicKey: 'k', name: 'Phone', kind: 'ios', platform: 'ios', model: 'iPhone' }
@@ -92,7 +123,24 @@ async function running() {
 
 afterEach(() => {
   children = []
+  electron.channels = []
 })
+
+const LAN = { host: '192.168.1.42', port: 51234 }
+const devBox: HostStatus = {
+  id: 'c'.repeat(32),
+  publicKey: 'key',
+  name: 'dev-box',
+  platform: 'linux',
+  version: '0.2.0',
+  addresses: [LAN],
+  deviceName: 'Studio',
+  addedAt: 1,
+  lastOnlineAt: 2,
+  removed: false,
+  connection: { state: 'online', address: LAN },
+}
+const link = 'https://kettu.sh/pair#AQID'
 
 describe('RemoteHost', () => {
   it('runs while the setting is on, and tells devices why it stops', async () => {
@@ -108,6 +156,7 @@ describe('RemoteHost', () => {
       privateKey: 'key',
       plainTextKey: true,
       direct: { enabled: false, port: null, addresses: [] },
+      device: { privateKey: 'device key', platform: 'macOS 26.1' },
     })
     children[0]!.emit('message', { type: 'remote-host:ready' })
     // On again changes nothing.
@@ -280,22 +329,27 @@ describe('RemoteHost', () => {
     expect(await unanswered).toEqual([])
   })
 
-  it('resets: every device removed, then a new identity and a new start', async () => {
+  it('resets: every device removed, then a new identity in the same process', async () => {
     const { host, child } = await running()
     const resetting = host.reset()
     await vi.waitFor(() => expect(child.types().at(-1)).toBe('remote-host:reset'))
     const { requestId } = child.posted.at(-1)!.message
     child.emit('message', { type: 'remote-host:reset', requestId })
     await resetting
-    expect(child.posted.at(-1)!.message).toEqual({
-      type: 'remote-host:shutdown',
-      reason: 'remote_off',
-    })
-    expect(children).toHaveLength(2)
-    expect(children[1]!.posted[0]!.message).toMatchObject({
-      type: 'remote-host:init',
-      privateKey: 'new key',
-    })
+    // The hosts this computer connects to stay connected meanwhile.
+    expect(children).toHaveLength(1)
+    expect(child.posted.slice(-2).map(({ message }) => message)).toEqual([
+      { type: 'remote-host:stop-serving' },
+      {
+        type: 'remote-host:serve',
+        privateKey: 'new key',
+        plainTextKey: true,
+        direct: { enabled: false, port: null, addresses: [] },
+      },
+    ])
+    expect(host.status).toBeNull()
+    child.emit('message', { type: 'remote-host:status', status: { ...status, publicKey: 'new' } })
+    expect(host.state).toBe('on')
     await host.stop()
   })
 
@@ -305,6 +359,175 @@ describe('RemoteHost', () => {
     // The failed reset leaves later changes to run.
     await host.setEnabled(true)
     expect(children).toHaveLength(1)
+    await host.stop()
+  })
+
+  it('runs for the hosts it knows while remote access is off, serving no device', async () => {
+    const { host } = makeHost({ hostsKnown: true })
+    await host.setEnabled(false)
+    expect(children).toHaveLength(1)
+    const child = children[0]!
+    expect(child.posted[0]!.message).toEqual({
+      type: 'remote-host:init',
+      userDataPath: '/data',
+      appVersion: '1.2.3',
+      platform: process.platform,
+      hostName: 'Studio',
+      plainTextKey: false,
+      direct: { enabled: false, port: null, addresses: [] },
+      device: { privateKey: 'device key', platform: 'macOS 26.1' },
+    })
+    expect(host.state).toBe('off')
+    expect(host.hosts).toBeNull()
+    expect(host.pair(() => {})).toBeNull()
+    child.emit('message', { type: 'remote-host:ready' })
+
+    // On: the same process serves devices too, and off again it stops only that.
+    await host.setEnabled(true)
+    expect(child.posted.at(-1)!.message).toEqual({
+      type: 'remote-host:serve',
+      privateKey: 'key',
+      plainTextKey: true,
+      direct: { enabled: false, port: null, addresses: [] },
+    })
+    expect(host.state).toBe('starting')
+    child.emit('message', { type: 'remote-host:status', status })
+    expect(host.state).toBe('on')
+    await host.setEnabled(false)
+    expect(child.posted.at(-1)!.message).toEqual({ type: 'remote-host:stop-serving' })
+    expect(host.state).toBe('off')
+    expect(host.status).toBeNull()
+    expect(host.addDevice(newDevice)).toBe(false)
+    expect(children).toHaveLength(1)
+
+    // The last host forgotten here, nothing needs the process.
+    child.emit('message', { type: 'remote-host:hosts', hosts: [] })
+    await vi.waitFor(() =>
+      expect(child.posted.at(-1)!.message).toEqual({
+        type: 'remote-host:shutdown',
+        reason: 'remote_off',
+      }),
+    )
+    expect(host.hosts).toEqual([])
+  })
+
+  it('keeps the hosts it reports, and passes changes to them on', async () => {
+    const { host, hostsChanges } = makeHost({ hostsKnown: true })
+    await host.setEnabled(false)
+    const child = children[0]!
+    child.emit('message', { type: 'remote-host:ready' })
+    child.emit('message', { type: 'remote-host:hosts', hosts: [devBox] })
+    expect(host.hosts).toEqual([devBox])
+    expect(hostsChanges()).toBeGreaterThan(0)
+    child.emit('message', { type: 'remote-host:hosts', hosts: [{ ...devBox, id: 'x' }] })
+    expect(host.hosts).toEqual([devBox])
+
+    expect(host.renameOnHost(devBox.id, 'Desk')).toBe(true)
+    expect(host.setHostAddresses(devBox.id, [LAN])).toBe(true)
+    expect(host.removeHost(devBox.id)).toBe(true)
+    expect(host.removeHost('d'.repeat(32))).toBe(false)
+    expect(child.posted.slice(-3).map(({ message }) => message)).toEqual([
+      { type: 'remote-host:rename-on-host', id: devBox.id, name: 'Desk' },
+      { type: 'remote-host:host-addresses', id: devBox.id, addresses: [LAN] },
+      { type: 'remote-host:remove-host', id: devBox.id },
+    ])
+    // A host not connected cannot hear a new name.
+    child.emit('message', {
+      type: 'remote-host:hosts',
+      hosts: [{ ...devBox, connection: { state: 'offline' } }],
+    })
+    expect(host.renameOnHost(devBox.id, 'Desk')).toBe(false)
+    await host.stop()
+  })
+
+  it("hands a host's session a port of main's, closed with the process", async () => {
+    const { host } = makeHost({ hostsKnown: true })
+    await host.setEnabled(false)
+    const child = children[0]!
+    child.emit('message', { type: 'remote-host:ready' })
+    child.emit('message', { type: 'remote-host:open-host-port', requestId: 5, hostId: devBox.id })
+    const [channel] = electron.channels as { port1: FakePort; port2: FakePort }[]
+    expect(child.posted.at(-1)).toEqual({
+      message: { type: 'remote-host:host-port', requestId: 5 },
+      transfer: [channel!.port1],
+    })
+    expect(channel!.port2.started).toBe(true)
+    child.emit('exit', 1)
+    expect(channel!.port2.closed).toBe(true)
+    await host.stop()
+  })
+
+  it('starts for Add host, and keeps running once the host is added', async () => {
+    const { host } = makeHost()
+    const heard: [number, HostPairingState][] = []
+    const pairId = await host.pairHost(link, 'MacBook Pro', (id, pairing) =>
+      heard.push([id, pairing]),
+    )
+    expect(pairId).not.toBeNull()
+    expect(children).toHaveLength(1)
+    const child = children[0]!
+    expect(child.posted[0]!.message).not.toHaveProperty('privateKey')
+    expect(child.posted.at(-1)!.message).toEqual({
+      type: 'remote-host:pair-host',
+      pairId,
+      link,
+      model: 'MacBook Pro',
+    })
+    child.emit('message', { type: 'remote-host:ready' })
+    child.emit('message', {
+      type: 'remote-host:host-pairing',
+      pairId,
+      pairing: { state: 'confirm' },
+    })
+    child.emit('message', { type: 'remote-host:host-pairing', pairId, pairing: { state: 'odd' } })
+    child.emit('message', { type: 'remote-host:hosts', hosts: [devBox] })
+    child.emit('message', {
+      type: 'remote-host:host-pairing',
+      pairId,
+      pairing: { state: 'added', host: devBox },
+    })
+    expect(heard).toEqual([
+      [pairId, { state: 'confirm' }],
+      [pairId, { state: 'added', host: devBox }],
+    ])
+    // Known now, the host keeps the process running with remote access off.
+    await host.setEnabled(false)
+    expect(child.types()).not.toContain('remote-host:shutdown')
+    await host.stop()
+  })
+
+  it('stops again when a pairing ends with nothing added and nothing else needs it', async () => {
+    const { host } = makeHost()
+    const failed = await host.pairHost(link, '', () => {})
+    const child = children[0]!
+    child.emit('message', { type: 'remote-host:ready' })
+    child.emit('message', {
+      type: 'remote-host:host-pairing',
+      pairId: failed,
+      pairing: { state: 'failed', reason: 'void' },
+    })
+    await vi.waitFor(() => expect(child.types().at(-1)).toBe('remote-host:shutdown'))
+
+    const closed = (await host.pairHost(link, '', () => {}))!
+    const next = children[1]!
+    host.closeHostPairing(closed)
+    await vi.waitFor(() => expect(next.types().at(-1)).toBe('remote-host:shutdown'))
+    expect(next.posted.at(-2)!.message).toEqual({
+      type: 'remote-host:pair-host-close',
+      pairId: closed,
+    })
+  })
+
+  it('pairs with no host without the device key, and says so', async () => {
+    const { host } = makeHost({
+      deviceKey: () => Promise.reject(new Error('The keychain said no')),
+    })
+    expect(await host.pairHost(link, '', () => {})).toBeNull()
+    expect(host.deviceKeyFailed).toBe(true)
+    expect(children).toEqual([])
+    // Remote access still runs without it.
+    await host.setEnabled(true)
+    expect(children[0]!.posted[0]!.message).not.toHaveProperty('device')
     await host.stop()
   })
 })

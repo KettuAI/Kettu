@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { app, powerMonitor, protocol, safeStorage, session } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
+import { HOSTS_FILE, type HostsStatus } from '@shared/remote/hosts'
 import type { RemoteStatus } from '@shared/remote/status'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
 import { AgentHost } from './agent-host'
@@ -28,7 +29,10 @@ import { Sharing } from './sharing'
 import { restrictPermissions } from './permissions'
 import { QuitFlow } from './quit'
 import { RemoteHost } from './remote-host'
-import { loadIdentity, newIdentity, type IdentityCipher } from './remote-identity'
+import { loadDeviceKey, loadIdentity, newIdentity, type IdentityCipher } from './remote-identity'
+import { readJsonFile } from './json-file'
+import { computerModelForRun } from './system-model'
+import { systemReleaseForRun } from './system-name'
 import { isRendererUrl } from './renderer'
 import { SettingsStore } from './settings'
 import { hostSettings, reachesHost, terminalSettings } from './settings-schema'
@@ -242,15 +246,44 @@ async function start(): Promise<void> {
     broadcast('remote:changed', status)
     tray.setRemote(status)
   }
+  let computerModel = ''
+  const hostsStatus = (): HostsStatus => ({
+    self: {
+      name: hostName(),
+      platform: process.platform,
+      version: app.getVersion(),
+      model: computerModel,
+    },
+    hosts: remoteHost.hosts,
+    plainTextKey: remoteHost.plainTextDeviceKey,
+    keyFailed: remoteHost.deviceKeyFailed,
+  })
+  const hostsChanged = (): void => broadcast('hosts:changed', hostsStatus())
+  const readComputerModel = async (): Promise<string> => {
+    const model = await computerModelForRun()
+    if (model !== computerModel) {
+      computerModel = model
+      hostsChanged()
+    }
+    return model
+  }
   const remoteHost: RemoteHost = new RemoteHost({
     userDataPath,
     appVersion: app.getVersion(),
     identity: () => loadIdentity(userDataPath, identityCipher),
     newIdentity: () => newIdentity(userDataPath, identityCipher),
+    deviceKey: () => loadDeviceKey(userDataPath, identityCipher),
+    devicePlatform: systemReleaseForRun,
+    hostsKnown: async () => {
+      const read = await readJsonFile(join(userDataPath, ...HOSTS_FILE))
+      const hosts = read.kind === 'ok' ? (read.value as { hosts?: unknown } | null)?.hosts : null
+      return Array.isArray(hosts) && hosts.length > 0
+    },
     hostName,
     direct: () => settings.get().remote.direct,
     openPort: (device) => agentHost.connectDevice(device),
     changed: remoteChanged,
+    hostsChanged,
   })
   const artifacts = new Artifacts({
     content: (id, version) => agentHost.artifactContent(id, version),
@@ -334,6 +367,7 @@ async function start(): Promise<void> {
       void remoteHost.setEnabled(next.remote.enabled)
       remoteHost.setHostName(hostName())
       remoteChanged()
+      hostsChanged()
     }
     if (changed.has('appearance')) {
       applyTheme(next.appearance.theme)
@@ -362,6 +396,11 @@ async function start(): Promise<void> {
     sharing,
     remoteHost,
     remoteStatus,
+    hostsStatus: () => {
+      void readComputerModel()
+      return hostsStatus()
+    },
+    computerModel: readComputerModel,
     updater,
     quit: quitFlow,
     perf,

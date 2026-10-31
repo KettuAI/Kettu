@@ -9,6 +9,19 @@ function prettyName(text: string): string | null {
   return (quoted?.[2] ?? line) || null
 }
 
+/** The system and its version, as a host lists this computer among its devices. */
+export function systemRelease(
+  platform: Platform,
+  version: string,
+  osRelease: string | null,
+): string {
+  if (platform === 'darwin') return `macOS ${version}`
+  if (platform === 'win32') return `Windows ${version}`
+  const release = platform === 'linux' && osRelease ? prettyName(osRelease) : null
+  // A distribution's name carries its version; the kernel stands in when there is none.
+  return release ?? `${platform === 'linux' ? 'Linux' : platform} ${version}`
+}
+
 /** The system as a bug report names it: the system and its version, then the architecture. */
 export function systemName(
   platform: Platform,
@@ -16,28 +29,29 @@ export function systemName(
   arch: string,
   osRelease: string | null,
 ): string {
-  let system: string
-  if (platform === 'darwin') {
-    system = `macOS ${version}`
-  } else if (platform === 'win32') {
-    system = `Windows ${version}`
-  } else {
-    const release = platform === 'linux' && osRelease ? prettyName(osRelease) : null
-    // A distribution's name carries its version; the kernel stands in when there is none.
-    system = release ?? `${platform === 'linux' ? 'Linux' : platform} ${version}`
-  }
-  return `${system} (${arch})`
+  return `${systemRelease(platform, version, osRelease)} (${arch})`
 }
 
-let forRun: Promise<string> | null = null
+let osReleaseForRun: Promise<string | null> | null = null
 
 /** The system's name, read once per run: a Linux distribution's name comes from its os-release. */
-export function systemNameForRun(): Promise<string> {
-  forRun ??= readSystemName()
-  return forRun
+export async function systemNameForRun(): Promise<string> {
+  osReleaseForRun ??= readOsRelease()
+  return systemName(
+    process.platform,
+    process.getSystemVersion(),
+    process.arch,
+    await osReleaseForRun,
+  )
 }
 
-async function readSystemName(): Promise<string> {
+/** The system and its version, read once per run like `systemNameForRun`. */
+export async function systemReleaseForRun(): Promise<string> {
+  osReleaseForRun ??= readOsRelease()
+  return systemRelease(process.platform, process.getSystemVersion(), await osReleaseForRun)
+}
+
+async function readOsRelease(): Promise<string | null> {
   let osRelease: string | null = null
   if (process.platform === 'linux') {
     for (const path of ['/etc/os-release', '/usr/lib/os-release']) {
@@ -49,5 +63,5 @@ async function readSystemName(): Promise<string> {
       }
     }
   }
-  return systemName(process.platform, process.getSystemVersion(), process.arch, osRelease)
+  return osRelease
 }

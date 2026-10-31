@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { importKeyPair } from '@shared/remote/noise'
-import { loadIdentity, newIdentity, type IdentityCipher } from './remote-identity'
+import { loadDeviceKey, loadIdentity, newIdentity, type IdentityCipher } from './remote-identity'
 
 const dirs: string[] = []
 
@@ -142,5 +142,36 @@ describe('newIdentity', () => {
     const second = await newIdentity(dir, cipher)
     expect(second.privateKey).not.toBe(first.privateKey)
     expect(await loadIdentity(dir, cipher)).toEqual(second)
+  })
+})
+
+describe('loadDeviceKey', () => {
+  it('keeps a key of its own, which a new identity leaves as it is', async () => {
+    const dir = await dataFolder()
+    const cipher = fakeCipher()
+    const device = await loadDeviceKey(dir, cipher)
+    const identity = await loadIdentity(dir, cipher)
+    expect(device.privateKey).not.toBe(identity.privateKey)
+    const file = path.join(dir, 'remote', 'device-key.json')
+    expect(await readFile(file, 'utf8')).not.toContain(device.privateKey)
+    if (process.platform !== 'win32') expect((await stat(file)).mode & 0o777).toBe(0o600)
+
+    await newIdentity(dir, cipher)
+    expect(await loadDeviceKey(dir, cipher)).toEqual(device)
+  })
+
+  it('says so where the system cannot encrypt it', async () => {
+    const dir = await dataFolder()
+    const key = await loadDeviceKey(dir, fakeCipher({ available: false }))
+    expect(key.plainText).toBe(true)
+  })
+
+  it('fails without a new key when the key does not decrypt', async () => {
+    const dir = await dataFolder()
+    await loadDeviceKey(dir, fakeCipher())
+    const file = path.join(dir, 'remote', 'device-key.json')
+    const stored = JSON.parse(await readFile(file, 'utf8'))
+    await writeFile(file, JSON.stringify({ ...stored, privateKey: 'b3RoZXI=' }))
+    await expect(loadDeviceKey(dir, fakeCipher())).rejects.toThrow("Not this system's encryption")
   })
 })

@@ -10,6 +10,7 @@ import {
   InfoIcon,
   MonitorSmartphoneIcon,
   PlugIcon,
+  ServerIcon,
   SettingsIcon,
   ShareIcon,
   SquareTerminalIcon,
@@ -44,6 +45,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { archivedSessions, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useMcpStore } from '@renderer/stores/mcp'
+import { loadHosts, useHostsStore } from '@renderer/stores/hosts'
 import { useRemoteStore } from '@renderer/stores/remote'
 import { useSharingStore } from '@renderer/stores/sharing'
 import { useUpdatesStore } from '@renderer/stores/updates'
@@ -67,6 +69,9 @@ import { AgentPlaceRow, FailedRead, McpServerPage, PendingList, ServerRow } from
 import { ArchivedRow } from './archived-section'
 import { GroupLabel, GroupNote } from './rows'
 import { SettingSwitch } from './controls'
+import { HostPage } from './host-page'
+import { hostLine } from './host-text'
+import { HostRow, HostsHeader, HostsLoading, HostsNote, SelfRow } from './hosts-section'
 import { DevicePage } from './remote-device'
 import { DirectPortField, FoundAddresses, OwnAddresses } from './remote-direct'
 import {
@@ -903,6 +908,73 @@ export function useArchivedSection(): SectionDef {
         </EmptyHeader>
       </Empty>
     ),
+  }
+}
+
+export function useHostsSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
+  const status = useHostsStore((s) => s.status)
+  // Read when Settings opens: the computer's model is read only then.
+  useEffect(() => {
+    void loadHosts()
+  }, [])
+  const list = group('hosts', t('sections.hosts'), { unlabeled: true, note: <HostsNote /> })
+  const hosts = status?.hosts
+  const rows: RowDef[] = [
+    {
+      id: 'hosts',
+      name: t('sections.hosts'),
+      english: en('sections.hosts'),
+      description: t('pages.hosts'),
+      keywords: t('hosts.keywords'),
+      searchOnly: true,
+      render: () => null,
+    },
+    {
+      id: 'add-host',
+      name: t('hosts.add.button'),
+      english: en('hosts.add.button'),
+      keywords: t('hosts.keywords'),
+      searchOnly: true,
+      render: () => null,
+    },
+    {
+      id: 'this-computer',
+      name: status?.self.name ?? t('hosts.self.label'),
+      description: t('hosts.self.label'),
+      group: list,
+      layout: 'custom',
+      render: () => (status ? <SelfRow self={status.self} /> : <HostsLoading />),
+    },
+    ...(hosts ?? []).map((host): RowDef => ({
+      id: host.id,
+      name: host.name,
+      description: hostLine(t, host),
+      keywords: t('hosts.keywords'),
+      group: list,
+      layout: 'custom',
+      render: () => <HostRow host={host} />,
+      open: () => openSettingsItem('hosts', host.id),
+    })),
+  ]
+  if (status && hosts === null) {
+    rows.push({
+      id: 'hosts-loading',
+      name: t('sections.hosts'),
+      group: list,
+      layout: 'custom',
+      render: () => <HostsLoading />,
+    })
+  }
+  return {
+    id: 'hosts',
+    title: t('sections.hosts'),
+    description: t('pages.hosts'),
+    icon: ServerIcon,
+    hero: <HostsHeader id="settings-hosts" />,
+    rows,
+    itemPage: (id: string) => <HostPage id={id} />,
   }
 }
 

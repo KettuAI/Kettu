@@ -13,7 +13,8 @@
     "remote": "远程访问",
     "browser": "浏览器",
     "mcp": "MCP 服务器",
-    "harnesses": "Harness"
+    "harnesses": "Harness",
+    "hosts": "主机"
   },
   "page": {
     "title": "设置",
@@ -625,7 +626,8 @@
     "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑上的会话，东西都留在这台电脑上。",
     "browser": "侧边面板里的浏览器让所有会话共用一个配置：登录状态、网站数据和缓存都在这里。",
     "mcp": "Agent 通过这些 MCP 服务器使用工具。这里有 Kettu 自带的服务器，以及各 Agent 自己的服务器所在的位置。",
-    "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。在这里安装和更新；账号在 Agent 里。"
+    "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。在这里安装和更新；账号在 Agent 里。",
+    "hosts": "这台电脑上的 Kettu 连着的主机。会话、项目和 Agent 都在各自的主机上，这里只管怎么连。"
   },
   "footer": {
     "about": "关于 Kettu",
@@ -683,6 +685,92 @@
       "empty": "还没有发布任何 artifact。"
     }
   },
+  "hosts": {
+    "keywords": "主机 电脑 连接 配对 链接 远程 别的电脑 开发机 hosts host computer connect pair link",
+    "self": {
+      "badge": "本机",
+      "label": "这台电脑"
+    },
+    "version": "Kettu {{version}}",
+    "via": {
+      "direct": "直连",
+      "directAt": "直连 {{address}}"
+    },
+    "state": {
+      "online": "在线",
+      "connecting": "正在连接…",
+      "offline": "离线",
+      "offlineSince": "离线 · {{ago}}",
+      "removed": "已被移除",
+      "update_client": "要更新这台电脑的 Kettu",
+      "update_host": "要更新它上面的 Kettu"
+    },
+    "note": "要从手机或别的电脑连这台电脑，到 <link>远程访问</link> 里添加设备。",
+    "plainTextKey": "这台电脑连别的主机用的密钥存在只有当前用户能读的文件里，因为系统没有钥匙串。",
+    "keyFailed": "系统没能解开这台电脑连别的主机用的密钥，所以连不了别的主机。",
+    "add": {
+      "button": "添加主机…",
+      "title": "添加主机",
+      "hint": "在那台主机的 Kettu 里打开 设置 › 远程访问 › 添加设备，或在开发机上运行 <code>kettu pair</code>，把显示的链接粘贴到这里。",
+      "label": "配对链接",
+      "placeholder": "https://kettu.sh/pair#…",
+      "add": "添加",
+      "connecting": "正在连接…",
+      "waiting": "等主机确认…",
+      "confirmTitle": "在那台主机上确认",
+      "confirmBody": "已连上，正在等主机那边点添加。确认之后才算添加，别人拿到这个链接也连不进来。",
+      "invalid": "这不是 Kettu 的配对链接，或者没复制完整。",
+      "void": "这个配对码已经失效：过期了、用过了，或者主机换了新码。在主机上点添加设备，换一个新码再粘贴。",
+      "rejected": "主机那边没有添加这台电脑。",
+      "unreachable": "15 秒内没连上主机。确认两台电脑在同一网络或同一个 VPN 里、主机开着远程访问；用的是你给主机加的地址时，确认端口转发还在。",
+      "self": "这是本机自己的配对码。要让别的设备连这台电脑，在那台设备上扫码或粘贴。",
+      "update_client": "这台电脑的 Kettu 太旧，连不了这台主机。更新 Kettu 后再试。",
+      "update_host": "那台主机上的 Kettu 太旧，这台电脑连不了。在主机上更新 Kettu 后再试。",
+      "retry": "重试",
+      "newLink": "粘贴新链接",
+      "added": "已添加 {{name}}",
+      "nameLabel": "这台电脑在 {{name}} 上的名字",
+      "nameHint": "{{name}} 的设备列表里显示这个名字，以后在 设置 › 主机 › {{name}} 里改。",
+      "done": "完成"
+    },
+    "page": {
+      "added": "{{date}} 添加",
+      "gone": "这台主机已经不在列表里了。",
+      "connection": "连接",
+      "route": "怎么连",
+      "addresses": "地址",
+      "edit": "编辑…",
+      "addressesNote": "{{name}} 连上时会告诉这台电脑最新的地址；它换了端口又一直没连上时，在这里改。",
+      "self": "这台电脑在 {{name}} 上",
+      "name": "名字",
+      "nameDescription": "{{name}} 的设备列表里显示这个名字。",
+      "nameOffline": "{{name}} 的设备列表里显示这个名字，它在线时才能改。",
+      "editTitle": "{{name}} 的地址",
+      "editBody": "这台电脑同时试这些地址，先连上的那个就用。",
+      "save": "保存",
+      "remove": {
+        "name": "从这台电脑移除",
+        "description": "这台电脑不再连 {{name}}；{{name}} 上的会话和项目不受影响，之后要再添加。",
+        "button": "移除…",
+        "title": "从这台电脑移除“{{name}}”？",
+        "body": "这台电脑马上断开，不再连 {{name}}。{{name}} 上什么都不变，这台电脑仍在它的设备列表里，直到它那边移除。要再用，得重新添加。",
+        "confirm": "移除"
+      },
+      "removed": {
+        "title": "{{name}} 移除了这台电脑",
+        "body": "这台电脑不再连它。要再用，在它上面打开添加设备，把链接粘贴到这里。",
+        "action": "再次添加…"
+      },
+      "update_client": {
+        "title": "要更新这台电脑的 Kettu",
+        "body": "{{name}} 上的 Kettu 不再接受这台电脑的版本。这台电脑的 Kettu 更新后会自动重连。"
+      },
+      "update_host": {
+        "title": "要更新 {{name}} 上的 Kettu",
+        "body": "{{name}} 上的 Kettu 太旧，读不懂这台电脑说的。在它上面更新 Kettu 后会自动连上。"
+      }
+    }
+  },
   "remote": {
     "keywords": "远程 访问 手机 平板 设备 配对 二维码 扫码 连接 remote device pair qr",
     "switch": "远程访问",
@@ -713,7 +801,7 @@
     "devices": {
       "group": "设备",
       "emptyTitle": "还没有设备",
-      "emptyHint": "用 iPhone 或 iPad 上的 Kettu 扫码。",
+      "emptyHint": "用 iPhone 或 iPad 上的 Kettu 扫码，或者在另一台电脑的 Kettu 里打开 设置 › 主机 › 添加主机…，粘贴链接。",
       "add": "添加设备…",
       "online": "在线",
       "seenToday": "今天 {{time}} 连接过",
@@ -774,6 +862,7 @@
     "pair": {
       "title": "添加设备",
       "scan": "用 iPhone 或 iPad 上的 Kettu 扫这个码。",
+      "otherComputer": "另一台电脑：在它的 Kettu 里打开 设置 › 主机 › 添加主机…，粘贴这个链接。",
       "copy": "复制",
       "copied": "已复制",
       "expires": "只能添加一台设备，<time>{{time}}</time> 后失效。设备要能直连这台电脑：同一网络、同一个 VPN，或连得到你加的地址。",

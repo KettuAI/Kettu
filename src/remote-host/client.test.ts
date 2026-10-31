@@ -1,0 +1,402 @@
+// The desktop app's side as a device of other hosts, against the real remote host in-process:
+// pairing through IKpsk1 and the owner's answer, the welcome saving the host, reconnecting with IK,
+// addresses, renames, removal and the timeout.
+
+import { createServer } from 'node:net'
+import { afterEach, describe, expect, it } from 'vitest'
+import type { PortChannel } from '@shared/port-channel'
+import { deviceId } from '@shared/remote/device'
+import { PAIR_HOST_TIMEOUT_MS, type HostPairingState } from '@shared/remote/hosts'
+import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
+import { parsePairingLink, type PairingPayload, type PairingState } from '@shared/remote/pairing'
+import type { DirectAddress } from '@shared/remote/protocol'
+import type { Transport } from '@shared/remote/transport'
+import { tempFolder } from '../agent-host/testing/temp'
+import { ActivityLog } from './activity'
+import { HostClient } from './client'
+import { DeviceStore } from './devices'
+import { connectTransport, DirectListener } from './direct'
+import { HostStore } from './hosts'
+import { PairingCodes } from './pairing'
+import { RemoteServer } from './server'
+import { memoryPorts, memoryTransports } from './testing/memory'
+
+const STUDIO: DirectAddress = { host: '192.168.1.8', port: 47821 }
+const NOWHERE: DirectAddress = { host: '192.0.2.1', port: 9 }
+const quiet = (): void => {}
+
+const cleanups: (() => unknown)[] = []
+afterEach(async () => {
+  for (const cleanup of cleanups.splice(0).reverse()) await cleanup()
+})
+
+/** A host as the remote host runs it, whose agent host answers `ping` with `pong`. */
+async function startHost(dir: string, hostKey: KeyPair) {
+  const devices = await DeviceStore.load(dir, quiet)
+  const activity = await ActivityLog.load(dir, quiet)
+  const heard = new Map<number, PairingState[]>()
+  const pairing = new PairingCodes({
+    hostKey: hostKey.publicKey,
+    addresses: () => [STUDIO],
+    send: (codeId, state) => heard.set(codeId, [...(heard.get(codeId) ?? []), state]),
+  })
+  const server = new RemoteServer({
+    staticKey: hostKey,
+    devices,
+    activity,
+    pairing,
+    host: { name: 'Studio', platform: 'linux', version: '0.2.0' },
+    openAgentPort: async () => {
+      const [remoteEnd, agentEnd] = memoryPorts()
+      agentEnd.onMessage((data) => {
+        const { type, id, method } = data as { type: string; id: number; method: string }
+        if (type === 'request' && method === 'ping') {
+          agentEnd.send({ type: 'response', id, result: 'pong' })
+        }
+      })
+      return remoteEnd
+    },
+    changed: quiet,
+    log: quiet,
+  })
+  const last = (codeId: number) => heard.get(codeId)?.at(-1)
+  const until = async (codeId: number, state: PairingState['state']) => {
+    await expect.poll(() => last(codeId)?.state).toBe(state)
+    return last(codeId)!
+  }
+  /** A new code and what its link carries. */
+  const openCode = (codeId = 1): PairingPayload => {
+    pairing.open(codeId)
+    const waiting = last(codeId)
+    if (waiting?.state !== 'waiting') throw new Error('The code is not waiting')
+    return parsePairingLink(waiting.link)!
+  }
+  cleanups.push(() => server.stop('stopping'))
+  return { server, devices, pairing, openCode, until }
+}
+
+async function setup(options: { timeoutMs?: number; retryMs?: number } = {}) {
+  const dir = await tempFolder('kettu-client-')
+  const hostKey = await generateKeyPair()
+  const deviceKey = await generateKeyPair()
+  const host = await startHost(dir, hostKey)
+  // Whether the host's address answers, and how many connections each address was asked for.
+  let reachable = true
+  const dialed: string[] = []
+  const connect = (address: DirectAddress, signal: AbortSignal): Promise<Transport> => {
+    dialed.push(`${address.host}:${address.port}`)
+    if (address.host === STUDIO.host && reachable) {
+      const [deviceEnd, hostEnd] = memoryTransports()
+      host.server.accept(hostEnd)
+      return Promise.resolve(deviceEnd)
+    }
+    // An address nothing answers at: the try waits until the dialing gives up.
+    return new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason)))
+  }
+  const pairings = new Map<number, HostPairingState[]>()
+  const mainPorts: PortChannel[] = []
+  const store = await HostStore.load(dir, quiet)
+  let changes = 0
+  const makeClient = (hosts: HostStore): HostClient => {
+    const client = new HostClient({
+      key: deviceKey,
+      hosts,
+      client: { kind: 'desktop', version: '0.3.0', platform: 'macOS 26.1' },
+      name: () => 'Lin MacBook',
+      openMainPort: async () => {
+        const [clientEnd, mainEnd] = memoryPorts()
+        mainPorts.push(mainEnd)
+        return clientEnd
+      },
+      changed: () => changes++,
+      pairing: (pairId, state) => pairings.set(pairId, [...(pairings.get(pairId) ?? []), state]),
+      log: quiet,
+      connect,
+      timeoutMs: options.timeoutMs ?? 2_000,
+      retryDelay: () => options.retryMs ?? 20,
+    })
+    cleanups.push(() => client.stop())
+    return client
+  }
+  const client = makeClient(store)
+  client.start()
+  const states = (pairId: number) => (pairings.get(pairId) ?? []).map((state) => state.state)
+  const pairingEnd = async (pairId: number) => {
+    await expect.poll(() => ['added', 'failed'].includes(states(pairId).at(-1) ?? '')).toBe(true)
+    return pairings.get(pairId)!.at(-1)!
+  }
+  /** Pairs with a fresh code, the owner adding this computer under `name`. */
+  const paired = async (name = 'Lin MacBook') => {
+    const payload = host.openCode()
+    client.pair(1, payload, 'MacBook Pro')
+    await host.until(1, 'confirm')
+    host.pairing.answer(1, { add: true, name })
+    const added = await pairingEnd(1)
+    if (added.state !== 'added') throw new Error(`Not added: ${JSON.stringify(added)}`)
+    return added.host
+  }
+  const hostId = await deviceId(hostKey.publicKey)
+  const connection = (id = hostId) => client.list().find((entry) => entry.id === id)?.connection
+  return {
+    dir,
+    host,
+    hostId,
+    hostKey,
+    deviceKey,
+    client,
+    store,
+    makeClient,
+    dialed,
+    mainPorts,
+    states,
+    pairingEnd,
+    paired,
+    connection,
+    setReachable: (next: boolean) => (reachable = next),
+    changes: () => changes,
+  }
+}
+
+describe('pairing with a host', () => {
+  it('waits for the owner, then keeps the host it was added to', async () => {
+    const t = await setup()
+    const payload = t.host.openCode()
+    t.client.pair(1, { ...payload, addresses: [NOWHERE, STUDIO] }, 'MacBook Pro')
+    // The owner sees this computer as the desktop app, under its own name and model.
+    const confirm = await t.host.until(1, 'confirm')
+    expect(confirm).toEqual({
+      state: 'confirm',
+      device: {
+        name: 'Lin MacBook',
+        model: 'MacBook Pro',
+        kind: 'desktop',
+        platform: 'macOS 26.1',
+        known: false,
+      },
+    })
+    expect(t.states(1)).toEqual(['connecting', 'confirm'])
+    t.host.pairing.answer(1, { add: true, name: 'Desk' })
+
+    const added = await t.pairingEnd(1)
+    expect(added).toEqual({
+      state: 'added',
+      host: expect.objectContaining({
+        id: t.hostId,
+        name: 'Studio',
+        platform: 'linux',
+        version: '0.2.0',
+        deviceName: 'Desk',
+        // The answering address first, then the code's, as the host's welcome names none.
+        addresses: [STUDIO, NOWHERE],
+        removed: false,
+        connection: { state: 'online', address: STUDIO },
+      }),
+    })
+    // The host has this computer's own key, and this computer has the host's.
+    const device = t.host.devices.withKey(t.deviceKey.publicKey)
+    expect(device).toMatchObject({ name: 'Desk', kind: 'desktop', model: 'MacBook Pro' })
+    await t.store.flush()
+    const kept = (await HostStore.load(t.dir, quiet)).get(t.hostId)
+    expect(kept).toMatchObject({
+      publicKey: Buffer.from(t.hostKey.publicKey).toString('base64'),
+      deviceName: 'Desk',
+    })
+    expect(t.host.server.online()).toEqual([device!.id])
+  })
+
+  it('says so when the owner does not add it', async () => {
+    const t = await setup()
+    t.client.pair(1, t.host.openCode(), 'MacBook Pro')
+    await t.host.until(1, 'confirm')
+    t.host.pairing.answer(1, { add: false, name: '' })
+    expect(await t.pairingEnd(1)).toEqual({ state: 'failed', reason: 'rejected' })
+    expect(t.client.list()).toEqual([])
+  })
+
+  it('says a code is no longer valid when the host ends the handshake', async () => {
+    const t = await setup()
+    const payload = t.host.openCode()
+    // A code that was replaced: its secret no longer opens anything.
+    t.host.openCode(2)
+    t.client.pair(1, payload, 'MacBook Pro')
+    expect(await t.pairingEnd(1)).toEqual({ state: 'failed', reason: 'void' })
+  })
+
+  it('gives up on a host nothing answers for within the timeout', async () => {
+    expect(PAIR_HOST_TIMEOUT_MS).toBe(15_000)
+    const t = await setup({ timeoutMs: 200 })
+    t.setReachable(false)
+    const started = Date.now()
+    t.client.pair(1, t.host.openCode(), 'MacBook Pro')
+    expect(await t.pairingEnd(1)).toEqual({ state: 'failed', reason: 'unreachable' })
+    expect(Date.now() - started).toBeGreaterThanOrEqual(190)
+  })
+
+  it('ends when Add host closes, and the host takes devices with the code again', async () => {
+    const t = await setup()
+    t.client.pair(1, t.host.openCode(), 'MacBook Pro')
+    await t.host.until(1, 'confirm')
+    t.client.closePairing(1)
+    await t.host.until(1, 'waiting')
+    expect(t.states(1)).toEqual(['connecting', 'confirm'])
+  })
+})
+
+describe('a known host', () => {
+  it('carries the host protocol to main once welcomed', async () => {
+    const t = await setup()
+    await t.paired()
+    await expect.poll(() => t.mainPorts.length).toBe(1)
+    const port = t.mainPorts[0]!
+    const answers: unknown[] = []
+    port.onMessage((data) => answers.push(data))
+    port.send({ type: 'request', id: 1, method: 'ping' })
+    await expect.poll(() => answers).toEqual([{ type: 'response', id: 1, result: 'pong' }])
+  })
+
+  it('connects again with IK when the app starts again', async () => {
+    const t = await setup()
+    await t.paired()
+    await t.client.stop()
+    const again = t.makeClient(await HostStore.load(t.dir, quiet))
+    again.start()
+    expect(again.list()[0]!.connection).toEqual({ state: 'connecting' })
+    await expect
+      .poll(() => again.list()[0]!.connection)
+      .toEqual({ state: 'online', address: STUDIO })
+    // No code was open: the handshake was IK with the key the host knows.
+    expect(t.host.server.online()).toHaveLength(1)
+  })
+
+  it('stops for good when the host removes it', async () => {
+    const t = await setup({ timeoutMs: 100 })
+    await t.paired()
+    for (const id of t.host.server.online()) await t.host.server.removeDevice(id)
+    await expect.poll(() => t.connection()?.state).toBe('stopped')
+    // Removed is for good, so this host is tried no more.
+    const dialed = t.dialed.length
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    expect(t.dialed).toHaveLength(dialed)
+    expect(t.connection()).toEqual({ state: 'stopped', reason: 'removed' })
+    expect(t.store.get(t.hostId)!.removed).toBe(true)
+  })
+
+  it('reconnects with backoff: offline once a try fails, then online again', async () => {
+    const t = await setup({ timeoutMs: 100 })
+    await t.paired()
+    const before = t.store.get(t.hostId)!.lastOnlineAt!
+    t.setReachable(false)
+    // Kettu on the host restarts: devices hear `stopping`.
+    await t.host.server.stop('stopping')
+    await expect.poll(() => t.connection()).toEqual({ state: 'offline' })
+    expect(t.store.get(t.hostId)!.lastOnlineAt).toBeGreaterThanOrEqual(before)
+
+    const restarted = await startHost(await tempFolder('kettu-client-'), t.hostKey)
+    // The same identity and the same paired device on the host that came back.
+    await restarted.devices.add({
+      publicKey: Buffer.from(t.deviceKey.publicKey).toString('base64'),
+      name: 'Desk',
+      kind: 'desktop',
+      platform: 'macOS 26.1',
+      model: 'MacBook Pro',
+    })
+    t.host.server = restarted.server
+    t.setReachable(true)
+    await expect.poll(() => t.connection()).toEqual({ state: 'online', address: STUDIO })
+  })
+
+  it('keeps the addresses the host tells it, the answering one first', async () => {
+    const t = await setup()
+    await t.paired()
+    const vpn = { host: '100.88.12.7', port: 47821 }
+    t.host.server.setAddresses([vpn, STUDIO])
+    await expect.poll(() => t.store.get(t.hostId)!.addresses).toEqual([STUDIO, vpn])
+  })
+
+  it('tries the addresses the owner gives it at once', async () => {
+    // A try after a failure waits longer than the test does.
+    const t = await setup({ retryMs: 60_000 })
+    await t.paired()
+    t.client.setAddresses(t.hostId, [NOWHERE])
+    // Kettu on the host restarts, as when it changed its port.
+    await t.host.server.stop('stopping')
+    await expect.poll(() => t.connection()).toEqual({ state: 'connecting' })
+    const restarted = await startHost(await tempFolder('kettu-client-'), t.hostKey)
+    await restarted.devices.add({
+      publicKey: Buffer.from(t.deviceKey.publicKey).toString('base64'),
+      name: 'Desk',
+      kind: 'desktop',
+      platform: 'macOS 26.1',
+      model: 'MacBook Pro',
+    })
+    t.host.server = restarted.server
+    expect(t.client.setAddresses(t.hostId, [STUDIO])).toBe(true)
+    await expect.poll(() => t.connection()).toEqual({ state: 'online', address: STUDIO })
+  })
+
+  it('renames this computer on the host, and hears the owner rename it', async () => {
+    const t = await setup()
+    await t.paired()
+    const device = t.host.devices.withKey(t.deviceKey.publicKey)!
+    expect(t.client.rename(t.hostId, 'Lin at home')).toBe(true)
+    await expect.poll(() => t.host.devices.get(device.id)?.name).toBe('Lin at home')
+    await expect.poll(() => t.store.get(t.hostId)!.deviceName).toBe('Lin at home')
+    await t.host.server.renameDevice(device.id, 'Desk', 'owner')
+    await expect.poll(() => t.store.get(t.hostId)!.deviceName).toBe('Desk')
+  })
+
+  it('forgets a host here only', async () => {
+    const t = await setup()
+    await t.paired()
+    expect(await t.client.remove(t.hostId)).toBe(true)
+    expect(t.client.list()).toEqual([])
+    await expect.poll(() => t.host.server.online()).toEqual([])
+    expect(t.host.devices.withKey(t.deviceKey.publicKey)).not.toBeNull()
+    expect(t.client.rename(t.hostId, 'x')).toBe(false)
+  })
+})
+
+describe('direct connections', () => {
+  it('tries every address at once, and the first finished handshake wins', async () => {
+    const dir = await tempFolder('kettu-client-')
+    const hostKey = await generateKeyPair()
+    const host = await startHost(dir, hostKey)
+    const direct = new DirectListener({
+      server: host.server,
+      changed: quiet,
+      log: quiet,
+      host: '127.0.0.1',
+    })
+    await direct.apply({ enabled: true, port: 0, addresses: [] })
+    cleanups.push(() => direct.stop())
+    const status = direct.status
+    if (status.state !== 'listening') throw new Error('Not listening')
+    // A port nothing listens on, beside the host's.
+    const closed = await new Promise<number>((resolve) => {
+      const probe = createServer()
+      probe.listen(0, '127.0.0.1', () => {
+        const { port } = probe.address() as { port: number }
+        probe.close(() => resolve(port))
+      })
+    })
+    const payload = host.openCode()
+    const live = { host: '127.0.0.1', port: status.port }
+    const pairings: HostPairingState[] = []
+    const client = new HostClient({
+      key: await generateKeyPair(),
+      hosts: await HostStore.load(dir, quiet),
+      client: { kind: 'desktop', version: '0.3.0', platform: 'macOS 26.1' },
+      name: () => 'Lin MacBook',
+      changed: quiet,
+      pairing: (_, state) => pairings.push(state),
+      log: quiet,
+      connect: connectTransport,
+    })
+    cleanups.push(() => client.stop())
+    client.pair(1, { ...payload, addresses: [{ host: '127.0.0.1', port: closed }, live] }, '')
+    await host.until(1, 'confirm')
+    host.pairing.answer(1, { add: true, name: 'Lin MacBook' })
+    await expect.poll(() => pairings.at(-1)?.state).toBe('added')
+    expect(client.list()[0]!.connection).toEqual({ state: 'online', address: live })
+  })
+})

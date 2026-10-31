@@ -32,6 +32,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { initSettings, useSettingsStore } from '@renderer/stores/settings'
+import { initHosts } from '@renderer/stores/hosts'
 import { initRemote } from '@renderer/stores/remote'
 import { initSharing } from '@renderer/stores/sharing'
 import { initTerminals } from '@renderer/stores/terminals'
@@ -219,6 +220,7 @@ export function bootstrap(): Promise<unknown> {
   void initUpdates()
   void initSharing()
   void initRemote()
+  initHosts()
   initTerminals()
   initBrowser()
   // Before any composer shows, so each finds its draft's attachments.

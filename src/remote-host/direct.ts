@@ -199,13 +199,27 @@ function directTransport(socket: Socket, settle: () => void): Transport {
   }
 }
 
-/** Connects to a host's direct address; it rejects when the connection cannot be made. */
-export function connectTransport(address: DirectAddress): Promise<Transport> {
+/**
+ * Connects to a host's direct address; it rejects when the connection cannot be made, or when
+ * `signal` aborts before it is.
+ */
+export function connectTransport(address: DirectAddress, signal?: AbortSignal): Promise<Transport> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason)
     const socket = connect({ host: address.host, port: address.port, ...SOCKET_OPTIONS })
-    socket.once('error', reject)
+    const abort = (): void => {
+      socket.destroy()
+      reject(signal!.reason)
+    }
+    const failed = (error: Error): void => {
+      signal?.removeEventListener('abort', abort)
+      reject(error)
+    }
+    signal?.addEventListener('abort', abort, { once: true })
+    socket.once('error', failed)
     socket.once('connect', () => {
-      socket.off('error', reject)
+      signal?.removeEventListener('abort', abort)
+      socket.off('error', failed)
       resolve(streamTransport(socket))
     })
   })

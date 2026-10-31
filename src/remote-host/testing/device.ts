@@ -1,8 +1,8 @@
-// Test helper: a device's side of a connection, paired or pairing. It runs the Noise initiator,
-// says hello on the channel and speaks the host protocol through a TestPort.
+// Test helper: a device's side of a connection, paired or pairing. It runs the shared device
+// channel, says hello and speaks the host protocol through a TestPort.
 
-import { Channel } from '@shared/remote/channel'
-import { Handshake, type KeyPair } from '@shared/remote/noise'
+import { startDeviceChannel, type DeviceChannel } from '@shared/remote/device-channel'
+import type { KeyPair } from '@shared/remote/noise'
 import { PROTOCOL_VERSION, type Addresses, type Closing, type Hello } from '@shared/remote/protocol'
 import type { Transport } from '@shared/remote/transport'
 import { TestPort } from '../../agent-host/testing/harness'
@@ -34,17 +34,9 @@ export interface TestDeviceOptions {
 }
 
 export async function connectDevice(options: TestDeviceOptions): Promise<TestDevice> {
-  const { transport, hostKey, key } = options
-  const handshake = await Handshake.create({
-    role: 'initiator',
-    staticKey: key,
-    remoteStaticKey: hostKey,
-    ...(options.psk
-      ? { pattern: 'IKpsk1' as const, psk: options.psk }
-      : { pattern: 'IK' as const }),
-  })
+  const { transport, hostKey, key, psk } = options
   const port = new TestPort()
-  let channel: Channel | null = null
+  let channel: DeviceChannel | null = null
   let welcomed = false
   let closingMessage: Closing | null = null
   const addresses: Addresses[] = []
@@ -66,34 +58,25 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
     else if (type !== 'welcome') port.send(value as Parameters<TestPort['send']>[0])
   }
 
-  let reading: Promise<void> = Promise.resolve()
-  // After the messages that arrived before the close are read.
-  transport.onClose(() => void reading.then(() => resolveClosing(closingMessage)))
-  transport.onMessage((message) => {
-    reading = reading
-      .then(async () => {
-        if (channel) return channel.receive(message)
-        await handshake.readMessage(message)
-        channel = new Channel(await handshake.split(), {
-          write: (frame) => transport.send(frame),
-          message: (channelMessage) => {
-            if (channelMessage.kind === 'json') received(channelMessage.value)
-          },
-          end: () => transport.close(),
-        })
-        if (options.hello === null) return
-        const hello = {
+  const hello =
+    options.hello === null
+      ? null
+      : {
           type: 'hello',
           protocol: { min: PROTOCOL_VERSION, max: PROTOCOL_VERSION },
           client: { kind: 'ios', version: '1.0.0', platform: 'ios' },
           ...options.hello,
         }
-        await channel.send({ kind: 'json', value: hello })
-      })
-      .catch(() => transport.close())
-  })
-  port.onMessage((data) => void channel?.send({ kind: 'json', value: data }))
-  transport.send(await handshake.writeMessage())
+  const { opened } = await startDeviceChannel({ transport, hostKey, key, psk, hello })
+  opened.then(
+    (open) => {
+      channel = open
+      open.onMessage(received)
+      void open.closed.then(() => resolveClosing(closingMessage))
+    },
+    () => resolveClosing(null),
+  )
+  port.onMessage((data) => void channel?.send(data))
 
   return {
     first,
@@ -103,7 +86,7 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
     notices,
     send: async (value) => {
       if (!channel) throw new Error('The handshake is not done')
-      await channel.send({ kind: 'json', value })
+      await channel.send(value)
     },
     close: () => transport.close(),
   }
