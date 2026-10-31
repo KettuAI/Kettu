@@ -269,6 +269,7 @@
       "signInAction": "Sign in…",
       "modelsOnStart": "{{agent}} lists its models once it has started.",
       "useAgent": "Use {{agent}}",
+      "moreModels": "More models ({{number}})",
       "noMatch": "No matching agents or models",
       "checking": "Checking {{agent}}'s models…",
       "prepareFailed": "{{agent}} could not open a session: {{error}}"

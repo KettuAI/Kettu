@@ -245,6 +245,8 @@ export type SdkMessage =
 
 export interface ModelInfo {
   value: string
+  /** The model id the row stands for: another one for an alias such as `opus`, else its own. */
+  resolvedModel?: string
   displayName: string
   description: string
   supportsEffort?: boolean

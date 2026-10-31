@@ -369,6 +369,8 @@ export interface Model {
   displayName: string
   description: string
   hidden?: boolean
+  /** The model that replaces this one. */
+  upgrade?: string | null
   supportedReasoningEfforts: ReasoningEffortOption[]
   defaultReasoningEffort: ReasoningEffort
   /** Deprecated for `serviceTiers`; still names `fast`. */

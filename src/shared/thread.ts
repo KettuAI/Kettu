@@ -89,7 +89,16 @@ export interface ConfigOption {
   category: 'mode' | 'model' | 'model_config' | 'thought_level' | 'other'
   type: 'select' | 'boolean'
   value: string | boolean
-  choices?: { value: string; name: string; description?: string; group?: string }[]
+  choices?: {
+    value: string
+    name: string
+    description?: string
+    group?: string
+    /** An earlier version the agent still offers, which menus fold under More models. */
+    older?: true
+    /** The value of the choice this one is shown as, the same model under another name. */
+    shownAs?: string
+  }[]
   idleOnly?: boolean // can change only while no turn runs
 }
 

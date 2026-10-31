@@ -282,6 +282,8 @@ function optionOf(value: unknown): ConfigOption | null {
           name: c.name,
           ...(typeof c.description === 'string' ? { description: c.description } : {}),
           ...(typeof c.group === 'string' ? { group: c.group } : {}),
+          ...(c.older === true ? { older: true as const } : {}),
+          ...(typeof c.shownAs === 'string' ? { shownAs: c.shownAs } : {}),
         },
       ]
     })

@@ -42,7 +42,14 @@ import { errorMessage, host } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { levelRows, levelsOf, splitName, tierOf, type SelectOption } from './levels'
-import { mainModels, numberedModel, MAIN_MODELS } from './model-list'
+import {
+  mainModels,
+  numberedModel,
+  shownChoice,
+  shownValue,
+  splitModels,
+  MAIN_MODELS,
+} from './model-list'
 import { UsageButton } from './usage'
 
 /** Asks the agent to change an option; resolves to whether it did. */
@@ -51,7 +58,7 @@ type Select = (optionId: string, value: string | boolean) => Promise<boolean>
 const isSelect = (o: ConfigOption): o is SelectOption => o.type === 'select' && !!o.choices?.length
 
 function choiceName(option: SelectOption, value: string | undefined): string {
-  return option.choices.find((c) => c.value === value)?.name ?? String(value)
+  return shownChoice(option.choices, value)?.name ?? String(value)
 }
 
 // How long a pick may stand in for the agent's value when no new value arrives.
@@ -570,8 +577,8 @@ function SearchModels({
 }
 
 /**
- * One button for the model, with the reasoning level after it, and one menu for both. The first
- * four models are one-line rows, with the rest under More models and the levels under Effort.
+ * One button for the model, with the reasoning level after it, and one menu for both. The current
+ * models are one-line rows, with the older ones under More models and the levels under Effort.
  * Choosing a model, by click or with 1 to 4, or a level closes the menu; the switches keep it open.
  */
 function ModelMenu({
@@ -598,7 +605,8 @@ function ModelMenu({
   const [effortValue, pickEffort] = usePick(effort, onSelect)
   const choices = model?.choices ?? []
   const main = mainModels(choices, modelValue)
-  const rest = choices.slice(MAIN_MODELS)
+  const rest = splitModels(choices).older
+  const checked = shownValue(choices, modelValue)
   const ultracode = switches.find((o) => o.id === ULTRACODE_OPTION_ID)
   const otherSwitches = switches.filter((o) => o.id !== ULTRACODE_OPTION_ID)
 
@@ -606,7 +614,7 @@ function ModelMenu({
     if (event.metaKey || event.ctrlKey || event.altKey) return
     // Inside a submenu the keys belong to its rows or its search field.
     if ((event.target as Element).closest('[data-slot=dropdown-menu-sub-content]')) return
-    const choice = numberedModel(choices, event.key)
+    const choice = numberedModel(main, event.key)
     if (!choice) return
     event.preventDefault()
     pickModel(choice.value)
@@ -647,7 +655,7 @@ function ModelMenu({
       <DropdownMenuContent side="top" align="end" sideOffset={6} onKeyDown={onKeyDown}>
         <DropdownMenuList>
           {model && (
-            <DropdownMenuRadioGroup value={modelValue} onValueChange={(v) => pickModel(String(v))}>
+            <DropdownMenuRadioGroup value={checked} onValueChange={(v) => pickModel(String(v))}>
               {main.map((choice, index) => (
                 <ChoiceRow
                   key={choice.value}
@@ -674,7 +682,7 @@ function ModelMenu({
           {rest.length > 0 && (
             <MoreModelsMenu
               choices={rest}
-              value={modelValue}
+              value={checked}
               onPick={pickModel}
               onClose={() => setOpen(false)}
             />

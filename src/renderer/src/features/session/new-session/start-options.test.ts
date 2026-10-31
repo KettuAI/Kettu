@@ -10,8 +10,10 @@ import type { ConfigOption } from '@shared/thread'
 import {
   agentNeed,
   canStart,
+  isMoreKey,
   itemKey,
   menuGroups,
+  moreKey,
   noAgentCanStart,
   parseItemKey,
   startConfig,
@@ -140,6 +142,12 @@ describe('item keys', () => {
       model: 'openai/gpt:5',
     })
   })
+
+  it('tell the More models row from a model', () => {
+    expect(isMoreKey(moreKey('codex'))).toBe(true)
+    expect(isMoreKey(itemKey('codex', 'gpt-5.5'))).toBe(false)
+    expect(isMoreKey(itemKey('opencode', null))).toBe(false)
+  })
 })
 
 describe('menuGroups', () => {
@@ -192,6 +200,60 @@ describe('menuGroups', () => {
       'claude-code',
       'codex',
     ])
+  })
+
+  describe('with older models', () => {
+    const marked: MenuAgent = {
+      agentId: 'claude-code',
+      name: 'Claude Code',
+      model: {
+        ...model,
+        value: 'default',
+        choices: [
+          { value: 'default', name: 'Default', shownAs: 'opus' },
+          { value: 'opus', name: 'Opus' },
+          { value: 'sonnet', name: 'Sonnet' },
+          { value: 'claude-opus-5', name: 'Opus 5', older: true },
+          { value: 'claude-sonnet-5', name: 'Sonnet 5', older: true },
+        ],
+      },
+      choosable: true,
+    }
+    const key = (value: string) => itemKey('claude-code', value)
+
+    it('lists the current models, then the More models row', () => {
+      expect(menuGroups([marked], 'claude-code', '', contains)).toEqual([
+        { agentId: 'claude-code', items: [key('opus'), key('sonnet'), moreKey('claude-code')] },
+      ])
+    })
+
+    it('lists the older models after the row once it is expanded', () => {
+      expect(menuGroups([marked], 'claude-code', '', contains, 'claude-code')).toEqual([
+        {
+          agentId: 'claude-code',
+          items: [
+            key('opus'),
+            key('sonnet'),
+            moreKey('claude-code'),
+            key('claude-opus-5'),
+            key('claude-sonnet-5'),
+          ],
+        },
+      ])
+      expect(menuGroups([marked], 'claude-code', '', contains, 'codex')[0]?.items).toHaveLength(3)
+    })
+
+    it('searches the older models too, without the row', () => {
+      expect(menuGroups([marked], 'codex', 'sonnet', contains)).toEqual([
+        { agentId: 'claude-code', items: [key('sonnet'), key('claude-sonnet-5')] },
+      ])
+      expect(menuGroups([marked], 'codex', 'claude', contains)[0]?.items).toEqual([
+        key('opus'),
+        key('sonnet'),
+        key('claude-opus-5'),
+        key('claude-sonnet-5'),
+      ])
+    })
   })
 })
 

@@ -127,6 +127,27 @@ export function parseItemKey(key: string): { agentId: AgentId; model: string | n
   return { agentId: key.slice(0, at) as AgentId, model: key.slice(at + 1) || null }
 }
 
+/** The key of the row that shows or hides an agent's older models. */
+export function moreKey(agentId: AgentId): string {
+  return `${agentId}${SEPARATOR}${SEPARATOR}`
+}
+
+export function isMoreKey(key: string): boolean {
+  return key.endsWith(SEPARATOR + SEPARATOR)
+}
+
+type Choices = NonNullable<ConfigOption['choices']>
+
+/**
+ * An agent's models as the agent menu lists them, split into the current ones and the older ones
+ * under More models. A choice shown as another is not listed, and an agent that marks none as
+ * older has every model current.
+ */
+export function menuModels(choices: Choices): { current: Choices; older: Choices } {
+  const listed = choices.filter((c) => !c.shownAs)
+  return { current: listed.filter((c) => !c.older), older: listed.filter((c) => c.older) }
+}
+
 export interface MenuAgent {
   agentId: AgentId
   name: string
@@ -150,15 +171,17 @@ function namedBy(name: string, query: string): boolean {
 }
 
 /**
- * What the agent menu lists. Without a query, the shown agent's models. With one, the matching
- * models of every agent, each agent's under its name; a query that starts a word of the agent's
- * name keeps all its models, and an agent with unknown models is kept by its name alone.
+ * What the agent menu lists. Without a query, the shown agent's current models, then the More
+ * models row, then its older models while `expanded` names it. With one, the matching models of
+ * every agent, older or not, each agent's under its name; a query that starts a word of the
+ * agent's name keeps all its models, and an agent with unknown models is kept by its name alone.
  */
 export function menuGroups(
   agents: readonly MenuAgent[],
   shown: AgentId | null,
   query: string,
   contains: (text: string, query: string) => boolean,
+  expanded: AgentId | null = null,
 ): MenuGroup[] {
   const q = query.trim()
   const groups: MenuGroup[] = []
@@ -174,15 +197,22 @@ export function menuGroups(
         groups.push({ agentId: agent.agentId, items: [itemKey(agent.agentId, null)] })
       continue
     }
-    const items = agent.model.choices
+    const { current, older } = menuModels(agent.model.choices)
+    if (!q) {
+      const keys = (list: Choices) => list.map((c) => itemKey(agent.agentId, c.value))
+      const items = keys(current)
+      if (older.length > 0) items.push(moreKey(agent.agentId))
+      if (expanded === agent.agentId) items.push(...keys(older))
+      groups.push({ agentId: agent.agentId, items })
+      continue
+    }
+    const items = [...current, ...older]
       .filter(
         (c) =>
-          !q ||
-          byName ||
-          contains(`${c.name} ${c.value} ${c.description ?? ''} ${c.group ?? ''}`, q),
+          byName || contains(`${c.name} ${c.value} ${c.description ?? ''} ${c.group ?? ''}`, q),
       )
       .map((c) => itemKey(agent.agentId, c.value))
-    if (items.length > 0 || !q) groups.push({ agentId: agent.agentId, items })
+    if (items.length > 0) groups.push({ agentId: agent.agentId, items })
   }
   return groups
 }
