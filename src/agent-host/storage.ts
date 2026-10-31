@@ -4,7 +4,7 @@ import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import type { AgentAccount, AgentUpdate, PlanLimit } from '@shared/agent-host'
 import {
-  AGENT_IDS,
+  isAgentId,
   isUserContent,
   type AgentId,
   type PromptCache,
@@ -274,8 +274,12 @@ export interface SessionsFile {
  */
 export interface AgentsFile {
   version: 1
+  /** `apiKey`: Kettu handed the agent's harness an API key, which only it keeps. */
   agents: Partial<
-    Record<AgentId, { account: AgentAccount | null; limits: PlanLimit[]; init?: RememberedInit }>
+    Record<
+      AgentId,
+      { account: AgentAccount | null; limits: PlanLimit[]; init?: RememberedInit; apiKey?: true }
+    >
   >
 }
 
@@ -301,8 +305,12 @@ export interface AgentUpdatesFile {
         checkedAt: number | null
         attemptedAt: number
         latest: AgentUpdate | null
+        /** The newest version of the user's own CLI on npm. */
+        cli?: string
         /** The update whose notice the user dismissed, until a newer one is found. */
         skipped?: AgentUpdate
+        /** The version of the user's CLI whose notice the user dismissed. */
+        skippedCli?: string
       }
     >
   >
@@ -328,8 +336,7 @@ function routineOf(value: unknown): Routine | null {
     typeof prompt !== 'string' ||
     prompt.length === 0 ||
     prompt.length > PROMPT_CHARS ||
-    typeof agentId !== 'string' ||
-    !(AGENT_IDS as readonly string[]).includes(agentId) ||
+    !isAgentId(agentId) ||
     !(value.projectPath === null || typeof value.projectPath === 'string') ||
     !Array.isArray(value.options) ||
     value.options.length > ROUTINE_OPTION_LIMIT ||
@@ -513,8 +520,7 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
     if (
       !isRecord(item) ||
       !isString(item.id) ||
-      !isString(item.agentId) ||
-      !(AGENT_IDS as readonly string[]).includes(item.agentId) ||
+      !isAgentId(item.agentId) ||
       !isString(item.acpSessionId) ||
       !isString(item.projectPath) ||
       !nullableString(item.title) ||
@@ -623,7 +629,7 @@ function limitOf(value: unknown): PlanLimit | null {
 export function parseAgentsFile(data: Record<string, unknown>): AgentsFile | string {
   if (!isRecord(data.agents)) return 'agents is not an object'
   const agents: AgentsFile['agents'] = {}
-  for (const id of AGENT_IDS) {
+  for (const id of Object.keys(data.agents).filter(isAgentId)) {
     const entry = data.agents[id]
     if (!isRecord(entry)) continue
     const limits = Array.isArray(entry.limits)
@@ -631,8 +637,9 @@ export function parseAgentsFile(data: Record<string, unknown>): AgentsFile | str
       : []
     const account = accountOf(entry.account)
     const init = initOf(entry.init)
-    if (account || limits.length > 0 || init) {
-      agents[id] = { account, limits, ...(init ? { init } : {}) }
+    const apiKey = entry.apiKey === true
+    if (account || limits.length > 0 || init || apiKey) {
+      agents[id] = { account, limits, ...(init ? { init } : {}), ...(apiKey ? { apiKey } : {}) }
     }
   }
   return { version: 1, agents }
@@ -664,7 +671,7 @@ function initOf(value: unknown): RememberedInit | null {
 export function parseAgentUpdatesFile(data: Record<string, unknown>): AgentUpdatesFile | string {
   if (!isRecord(data.agents)) return 'agents is not an object'
   const agents: AgentUpdatesFile['agents'] = {}
-  for (const id of AGENT_IDS) {
+  for (const id of Object.keys(data.agents).filter(isAgentId)) {
     const entry = data.agents[id]
     if (!isRecord(entry)) continue
     const latest = isRecord(entry.latest) ? entry.latest : null
@@ -688,7 +695,16 @@ export function parseAgentUpdatesFile(data: Record<string, unknown>): AgentUpdat
           }
         : null
     if (attemptedAt === null) continue
-    agents[id] = { checkedAt, attemptedAt, latest: found, ...(skipped ? { skipped } : {}) }
+    const cli = isVersion(entry.cli) ? entry.cli : null
+    const skippedCli = isVersion(entry.skippedCli) ? entry.skippedCli : null
+    agents[id] = {
+      checkedAt,
+      attemptedAt,
+      latest: found,
+      ...(cli ? { cli } : {}),
+      ...(skipped ? { skipped } : {}),
+      ...(skippedCli ? { skippedCli } : {}),
+    }
   }
   return { version: 1, agents }
 }

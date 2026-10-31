@@ -4,7 +4,7 @@
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import { longer } from '@shared/artifacts'
-import { AGENT_IDS, type AgentId, type FromSession, type SessionStatus } from '@shared/thread'
+import { isAgentId, type AgentId, type FromSession, type SessionStatus } from '@shared/thread'
 import { folded, type Caller } from './artifacts/tools'
 
 export const TITLE_CHARS = 120
@@ -193,8 +193,7 @@ const PROMPT: Schema = {
 }
 const AGENT: Schema = {
   type: 'string',
-  enum: [...AGENT_IDS],
-  description: 'The agent to run it with; yours by default.',
+  description: 'The agent to run it with, as list_agents names it; yours by default.',
 }
 const TIME: Schema = { type: 'string', format: 'date-time' }
 
@@ -227,7 +226,7 @@ function output(
 const INFO: Record<string, Schema> = {
   id: ID,
   title: { type: 'string' },
-  agent: { type: 'string', enum: [...AGENT_IDS] },
+  agent: { type: 'string' },
   status: { type: 'string', enum: [...TOOL_STATUSES] },
   updated_at: TIME,
   parent_id: { type: ['string', 'null'] },
@@ -421,10 +420,8 @@ function includeArchived(o: Args): boolean {
 function agent(o: Args): AgentId | undefined {
   const value = o.agent
   if (value === undefined) return undefined
-  if (typeof value !== 'string' || !(AGENT_IDS as readonly string[]).includes(value)) {
-    throw invalid(`agent must be one of ${AGENT_IDS.join(', ')}.`)
-  }
-  return value as AgentId
+  if (!isAgentId(value)) throw invalid('agent must be an agent id, as list_agents names it.')
+  return value
 }
 
 function titleOf(session: Pick<ToolSession, 'title'>): string {

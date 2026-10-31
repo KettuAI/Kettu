@@ -314,6 +314,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     settings: options.settings ?? {
       locale: 'en',
       agents: DEFAULT_SETTINGS.agents,
+      addedAgents: DEFAULT_SETTINGS.addedAgents,
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
       mcp: DEFAULT_SETTINGS.mcp,

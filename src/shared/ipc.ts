@@ -10,7 +10,7 @@ import type { SettingsFile, SettingsPatch } from './settings'
 import type { SharingConnectResult, SharingResult, SharingStatus } from './sharing'
 import type { TerminalsApi } from './terminal-host'
 import type { CatalogInstallResult, CatalogState, ThemeInstallResult, ThemesState } from './themes'
-import type { AgentId } from './thread'
+import type { AgentId, HarnessId } from './thread'
 import type { UpdateStatus } from './updates'
 
 export interface AppInfo {
@@ -120,8 +120,17 @@ export interface IpcInvokeContract {
   // `url`: an avatar URL `git.avatarUrl` gave; null when it is none or the picture did not load.
   'avatars:load': { args: [url: string]; result: string | null }
   'dialog:open-project': { args: []; result: string | null }
-  'dialog:choose-agent-binary': { args: [agentId: AgentId]; result: string | null }
-  'dialog:choose-agent-config-folder': { args: [agentId: AgentId]; result: string | null }
+  'dialog:choose-agent-binary': { args: [harnessId: HarnessId]; result: string | null }
+  // A folder for an agent to add, which `settings:add-agent` then accepts; null when cancelled.
+  'dialog:choose-agent-folder': { args: []; result: string | null }
+  // `folder`: one the dialog returned, or null for a new folder Kettu makes. Resolves to the id.
+  'settings:add-agent': {
+    args: [harnessId: HarnessId, name: string, folder: string | null]
+    result: AgentId
+  }
+  'settings:rename-agent': { args: [agentId: AgentId, name: string]; result: void }
+  // `trash`: move the folder Kettu made for the agent to the trash.
+  'settings:remove-agent': { args: [agentId: AgentId, trash: boolean]; result: void }
   'dialog:choose-shell': { args: []; result: string | null }
   // `defaultPath`: the folder the dialog opens in, the session's; an empty list when cancelled.
   'dialog:add-attachments': {
@@ -316,6 +325,10 @@ export interface KettuApi {
     get(): Promise<SettingsFile>
     update(patch: SettingsPatch): Promise<SettingsFile>
     onChanged(listener: (settings: SettingsFile) => void): () => void
+    /** Adds an agent to Claude Code or Codex, in a folder from `chooseAgentFolder` or a new one. */
+    addAgent(harnessId: HarnessId, name: string, folder: string | null): Promise<AgentId>
+    renameAgent(agentId: AgentId, name: string): Promise<void>
+    removeAgent(agentId: AgentId, trash: boolean): Promise<void>
   }
   /** The themes folder, which main reads and checks; the page never names a path. */
   themes: {
@@ -346,9 +359,9 @@ export interface KettuApi {
   }
   dialogs: {
     openProject(): Promise<string | null>
-    chooseAgentBinary(agentId: AgentId): Promise<string | null>
-    /** Picks or creates a configuration folder for Claude Code or Codex and stores it. */
-    chooseAgentConfigFolder(agentId: AgentId): Promise<string | null>
+    chooseAgentBinary(harnessId: HarnessId): Promise<string | null>
+    /** Picks or creates a configuration folder for an agent to add, which `addAgent` accepts. */
+    chooseAgentFolder(): Promise<string | null>
     chooseShell(): Promise<string | null>
   }
   diagnostics: {

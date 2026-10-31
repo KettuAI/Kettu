@@ -20,7 +20,7 @@ import {
   type RoutineOption,
 } from '@shared/routines'
 import { ATTACHMENT_BYTES, ATTACHMENT_LIMIT, PROMPT_BYTES, THUMB_CHARS } from '@shared/attachments'
-import { AGENT_IDS, type AgentId, type ContentRef, type UserContent } from '@shared/thread'
+import { isAgentId, type AgentId, type ContentRef, type UserContent } from '@shared/thread'
 import { invalidParams } from './errors'
 import { isAbsolutePath } from './paths'
 
@@ -41,6 +41,7 @@ const INSTALL_METHODS: ReadonlySet<unknown> = new Set<AgentInstallMethod['id']>(
   'archive',
   'brew',
   'script',
+  'winget',
   'npm',
 ])
 
@@ -76,9 +77,8 @@ function optionalString(o: Fields, key: string, max: number): string | undefined
 
 function agentId(o: Fields, key = 'agentId'): AgentId {
   const value = string(o, key, ID_CHARS)
-  if (!(AGENT_IDS as readonly string[]).includes(value))
-    throw invalidParams(`Unknown agent ${value}`)
-  return value as AgentId
+  if (!isAgentId(value)) throw invalidParams(`Unknown agent ${value}`)
+  return value
 }
 
 const CONFIG_VALUES = 64
@@ -469,11 +469,24 @@ export function createValidators(platform: Platform): Validators {
     'agents.checkUpdates': none,
     'agents.skipUpdate': agent,
     'agents.update': agent,
+    'agents.updateCli': agent,
+    'agents.setApiKey': (params) => {
+      const o = fields(params)
+      const baseUrl = optionalString(o, 'baseUrl', 2048)
+      const model = optionalString(o, 'model', 256)
+      return {
+        agentId: agentId(o),
+        key: string(o, 'key', 4096),
+        ...(baseUrl !== undefined ? { baseUrl } : {}),
+        ...(model !== undefined ? { model } : {}),
+      }
+    },
+    'agents.clearApiKey': agent,
     'agents.install': (params) => {
       const o = fields(params)
       const method = o.method
       if (method !== undefined && !INSTALL_METHODS.has(method)) {
-        throw invalidParams('method must be archive, brew, script or npm')
+        throw invalidParams('method must be archive, brew, script, winget or npm')
       }
       return {
         agentId: agentId(o),

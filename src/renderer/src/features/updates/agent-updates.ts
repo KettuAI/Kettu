@@ -8,19 +8,21 @@ export type AgentUpdateNotice =
   | { kind: 'many'; agentIds: AgentId[] }
 
 /**
- * The agents with an update to show: offered, not skipped, and not installing. The version is the
- * CLI's when the update brings one, else the adapter's.
+ * The harnesses with an update to show, once each through its default agent: offered, not
+ * skipped, and not installing. The version is the user's CLI's when it has one on offer, else the
+ * CLI an update of Kettu's package brings, else the package's.
  */
 export function agentUpdateNotice(statuses: AgentStatus[]): AgentUpdateNotice | null {
   const shown: { agentId: AgentId; name: string; version: string }[] = []
   for (const status of statuses) {
     const { update, task } = status
-    if (!update || status.updateSkipped) continue
+    const cli = status.cli?.update
+    if (!status.isDefault || (!update && !cli) || status.updateSkipped) continue
     if (task?.kind === 'update' && task.state === 'running') continue
     shown.push({
       agentId: status.id,
-      name: status.name,
-      version: update.cliVersion ?? update.adapterVersion,
+      name: status.harnessName,
+      version: cli?.version ?? update?.cliVersion ?? update?.adapterVersion ?? '',
     })
   }
   if (shown.length === 0) return null

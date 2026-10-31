@@ -26,7 +26,7 @@
     "attachmentMissing": "An attachment is no longer available. Remove it and add it again.",
     "attachmentUnreadable": "Kettu can't read {{name}}.",
     "attachmentDenied": "Kettu isn't allowed to read {{name}}.",
-    "otherConfigFolder": "This session was started with the configuration folder {{path}}. Switch back to it in Settings › Agents to continue it.",
+    "otherConfigFolder": "This session was started with the configuration folder {{path}}, which its agent no longer uses, so it cannot continue here.",
     "topLevelOnly": "Only a top-level session can be pinned or archived",
     "untitled": "Untitled session",
     "subagent": {
@@ -162,8 +162,8 @@
     "binaryInstall": {
       "noMethod": "No way to install {{agent}} was found: Homebrew, curl and bash, and npm are all missing from PATH.",
       "unavailable": "{{command}} needs a program that was not found on PATH.",
-      "notOnPath": "{{agent}} was installed in {{folder}}, but {{command}} is still not found on PATH. Add that folder to PATH and reload the environment, or choose the program in Settings › Agents.",
-      "notFound": "{{agent}} was installed, but {{command}} is still not found on PATH. Reload the environment, or choose the program in Settings › Agents.",
+      "notOnPath": "{{agent}} was installed in {{folder}}, but {{command}} is still not found on PATH. Add that folder to PATH and reload the environment, or choose the program in Settings › Harnesses.",
+      "notFound": "{{agent}} was installed, but {{command}} is still not found on PATH. Reload the environment, or choose the program in Settings › Harnesses.",
       "incomplete": "{{agent}} was installed, but its program cannot be run.",
       "programOutside": "The archive names a program outside its folder: {{command}}.",
       "programMissing": "The archive does not hold {{command}}.",
@@ -176,7 +176,8 @@
       "extracting": "Extracting the archive…"
     },
     "reportTimeout": "{{command}} did not finish in {{seconds}} s",
-    "unreadableReport": "{{agent}}'s {{command}} gave no report Kettu can read"
+    "unreadableReport": "{{agent}}'s {{command}} gave no report Kettu can read",
+    "removed": "This agent was deleted, so this session cannot continue."
   },
   "detect": {
     "nodeMissing": "{{agent}} runs on Node.js, and node was not found on PATH.",
@@ -192,22 +193,28 @@
     "hint": {
       "node": "Install Node.js from nodejs.org, then reload the environment in Settings.",
       "uv": "Install uv from docs.astral.sh/uv, then reload the environment in Settings.",
-      "opencode": "Install OpenCode, or choose its binary in Settings › Agents.",
+      "opencode": "Install OpenCode, or choose its binary in Settings › Harnesses.",
       "pi": "Install pi with `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` or the installer at pi.dev.",
-      "cursor": "Install Cursor, or choose its binary in Settings › Agents.",
+      "cursor": "Install Cursor, or choose its binary in Settings › Harnesses.",
       "kimi": "Install Kimi Code CLI with Install, or from its site on a platform the registry has no archive for.",
-      "amp": "Install Amp, or choose its binary in Settings › Agents.",
-      "goose": "Install goose, or choose its binary in Settings › Agents.",
-      "kilo": "Install Kilo Code, or choose its binary in Settings › Agents.",
+      "amp": "Install Amp, or choose its binary in Settings › Harnesses.",
+      "goose": "Install goose, or choose its binary in Settings › Harnesses.",
+      "kilo": "Install Kilo Code, or choose its binary in Settings › Harnesses.",
       "omp": "Install OMP with `bun install -g @oh-my-pi/pi-coding-agent` or its installer at omp.sh.",
       "hermes": "Install Hermes Agent with the installer at hermes-agent.nousresearch.com, with its `acp` extra.",
-      "muse": "Install Muse Code from dev.meta.ai, or choose its binary in Settings › Agents.",
-      "codewhale": "Install CodeWhale with the installer at codewhale.net, or choose its binary in Settings › Agents.",
-      "harn": "Install Harn, or choose its binary in Settings › Agents.",
-      "kimchi": "Install Kimchi, or choose its binary in Settings › Agents.",
-      "archive": "Install it in Settings › Agents.",
-      "fakeAgent": "The fake agent runs tools/fake-agent/main.ts from the repository."
-    }
+      "muse": "Install Muse Code from dev.meta.ai, or choose its binary in Settings › Harnesses.",
+      "codewhale": "Install CodeWhale with the installer at codewhale.net, or choose its binary in Settings › Harnesses.",
+      "harn": "Install Harn, or choose its binary in Settings › Harnesses.",
+      "kimchi": "Install Kimchi, or choose its binary in Settings › Harnesses.",
+      "archive": "Install it in Settings › Harnesses.",
+      "fakeAgent": "The fake agent runs tools/fake-agent/main.ts from the repository.",
+      "claudeCode": "Install Claude Code in Settings › Harnesses, or choose its program there.",
+      "codex": "Install Codex in Settings › Harnesses, or choose its program there."
+    },
+    "cliMissing": "{{agent}} runs your own {{command}}, which was not found on PATH. Install it in Settings › Harnesses.",
+    "cliUnsupported": "{{agent}} found {{path}}, which cannot be run without a shell.",
+    "cliFailed": "{{agent}} could not read the version of its program: {{reason}}",
+    "cliOutdated": "{{agent}} needs {{command}} {{required}} or later; {{installed}} is installed. Update it in Settings › Harnesses."
   },
   "environment": {
     "inherited": "Changes to PATH made after Kettu started take effect after a restart.",

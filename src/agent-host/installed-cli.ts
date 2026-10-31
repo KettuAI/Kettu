@@ -1,11 +1,10 @@
-// The Claude Code or Codex CLI the user installed, which runs instead of the copy Kettu installs:
-// found on PATH, resolved to a file that starts without a shell, asked its version and held
-// against the oldest version that runs.
+// The Claude Code or Codex CLI the user installed, the only one that runs: found on PATH, resolved
+// to a file that starts without a shell, asked its version and held against the oldest that runs.
 
 import { open, readFile, realpath, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import type { AgentCliSource, InstalledCli } from '@shared/agent-host'
+import type { InstalledCli } from '@shared/agent-host'
 import type { Platform } from '@shared/platform'
 import { programFailure, runProgram, type ProgramOptions, type ProgramRun } from './adapter-install'
 import { codexBinary, npmCodexEnv } from './codex-binary'
@@ -46,33 +45,23 @@ export interface ResolvedCli {
   env: Record<string, string>
 }
 
-/** How a package agent's adapter can run a CLI the user installed. */
+/** The user's CLI a harness runs: passed to its SDK, or run itself. */
 export interface AdapterCli {
   /** The command the user's CLI answers to on PATH. */
   command: string
-  /** The variable the adapter reads to run it instead of its own. */
+  /** The variable that names the program, which the user's environment may set to decide alone. */
   variable: string
   /**
-   * The adapter starts the CLI while it initializes, so a start that fails can be put down to the
-   * CLI and tried again with the copy. Otherwise the CLI first runs with a session.
-   */
-  startsAtInitialize: boolean
-  /**
-   * The adapter pins one CLI version exactly, so the CLI version an update check finds for a new
-   * adapter is also the oldest that adapter runs.
+   * The SDK pins one CLI version exactly, so the CLI version an update check finds for a new SDK
+   * is also the oldest that SDK runs.
    */
   pinsVersion: boolean
-  /** About how large the copy the adapter brings is, in MB, said before a start downloads it. */
-  copyMegabytes: number
   /** The file that runs without a shell, or null when there is none. */
   resolve(found: string, platform: Platform, files: CliFiles): Promise<ResolvedCli | null>
-  /**
-   * The agent's package is this CLI itself, with no adapter: its pinned version is the oldest
-   * that runs, and the user's own CLI runs without any install.
-   */
-  isPackage?: true
-  /** The oldest CLI the adapter installed in `dir` runs, or null when it names none. */
+  /** The oldest CLI the SDK installed in `dir` runs, or null when it names none. */
   minimum?(dir: string, adapterPackage: string, files: CliFiles): Promise<string | null>
+  /** The oldest version that runs, for a harness that runs the CLI itself. */
+  oldest?: string
 }
 
 const VERSION_TEXT = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?`
@@ -132,10 +121,7 @@ async function readManifest(
 export const CLAUDE_CLI: AdapterCli = {
   command: 'claude',
   variable: 'CLAUDE_CODE_EXECUTABLE',
-  startsAtInitialize: false,
   pinsVersion: true,
-  // The platform package on macOS arm64, measured 2026-10-22.
-  copyMegabytes: 256,
   // The SDK spawns it as a program, so on Windows it must be one itself.
   resolve: async (found, platform, files) => {
     const file = await startable(found, platform, files)
@@ -152,10 +138,9 @@ export const CLAUDE_CLI: AdapterCli = {
 export const CODEX_CLI: AdapterCli = {
   command: 'codex',
   variable: 'CODEX_PATH',
-  startsAtInitialize: true,
   pinsVersion: false,
-  // The platform package on macOS arm64, measured 2026-10-22.
-  copyMegabytes: 318,
+  // The app-server protocol the mapping is written against.
+  oldest: '0.166.0',
   resolve: async (found, platform, files) => {
     const file = await startable(found, platform, files)
     if (!file) return null
@@ -171,7 +156,6 @@ export const CODEX_CLI: AdapterCli = {
     }
     return platform !== 'win32' || isWindowsProgram(file) ? { path: file, env: {} } : null
   },
-  isPackage: true,
 }
 
 export type CliVersion = { version: string } | { error: string }
@@ -297,34 +281,14 @@ export async function findInstalledCli(
   return { installed: answered({ path: resolved.path, variable: null }, answer), env: resolved.env }
 }
 
-export interface CliDecision {
-  runs: AgentCliSource
-  installed: InstalledCli | null
-}
-
 /**
- * The installed program runs when the setting allows it, it answered its version, it meets the
- * adapter's minimum and no start with it failed. `minimum` is undefined before the adapter is
- * installed, when it is not known yet.
+ * The user's CLI with why it cannot run: its own problem, or a version below `minimum`. `minimum` is
+ * unknown (null or undefined) before the SDK that names it is installed, or when it names none.
  */
-export function decideCli(input: {
-  prefer: AgentCliSource
-  found: InstalledCli | null
-  minimum: string | null | undefined
-  failure: { path: string; reason: string } | null
-}): CliDecision {
-  const { found, minimum, failure } = input
-  if (!found) return { runs: 'bundled', installed: null }
-  let problem = found.problem
-  if (!problem && failure?.path === found.path) {
-    problem = { kind: 'failed', reason: failure.reason }
+export function checkCli(found: InstalledCli, minimum: string | null | undefined): InstalledCli {
+  if (found.problem || !found.version || minimum == null) return found
+  if (compareVersions(found.version, minimum) < 0) {
+    return { ...found, problem: { kind: 'too-old', minimum } }
   }
-  if (!problem && found.version && minimum !== undefined) {
-    if (minimum === null) problem = { kind: 'no-minimum' }
-    else if (compareVersions(found.version, minimum) < 0) problem = { kind: 'too-old', minimum }
-  }
-  const installed = { ...found, problem }
-  // The adapter reads a variable the environment sets, whatever Kettu passes.
-  if (found.variable) return { runs: 'installed', installed }
-  return { runs: input.prefer === 'installed' && !problem ? 'installed' : 'bundled', installed }
+  return found
 }

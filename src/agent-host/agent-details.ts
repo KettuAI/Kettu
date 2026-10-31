@@ -5,7 +5,7 @@ import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { AgentConfigItem, AgentDetails } from '@shared/agent-host'
 import type { Platform } from '@shared/platform'
-import type { AgentId } from '@shared/thread'
+import type { AgentId, HarnessId } from '@shared/thread'
 import type { LogFn } from './storage'
 
 /** One configuration entry; `candidates` are the paths the agent tries, first choice first. */
@@ -24,7 +24,7 @@ export interface ConfigLocation {
  * is the folder picked in Settings for Claude Code or Codex, which the agent gets in its variable.
  */
 export function configLocations(
-  agentId: AgentId,
+  agentId: HarnessId,
   getEnv: (name: string) => string | undefined,
   home: string,
   platform: Platform,
@@ -618,7 +618,7 @@ export interface AgentDetailsContext {
 
 /** Never rejects: a place or version that cannot be read comes back as missing or null. */
 export async function readAgentDetails(
-  agentId: AgentId,
+  agentId: HarnessId,
   ctx: AgentDetailsContext,
 ): Promise<AgentDetails> {
   const locations = configLocations(agentId, ctx.getEnv, ctx.home, ctx.platform, ctx.chosen)

@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Platform } from '@shared/platform'
-import type { AgentId } from '@shared/thread'
+import type { HarnessId } from '@shared/agents'
 import {
   configLocations,
   mcpLocation,
@@ -13,7 +13,7 @@ import {
 
 type Vars = Record<string, string | undefined>
 
-function locations(agentId: AgentId, vars: Vars, home: string, platform: Platform) {
+function locations(agentId: HarnessId, vars: Vars, home: string, platform: Platform) {
   return configLocations(agentId, (name) => vars[name], home, platform)
 }
 
@@ -161,7 +161,7 @@ describe('configLocations', () => {
   })
 
   /** Pi's instructions row in `home`. */
-  async function detailsOf(agentId: AgentId, home: string) {
+  async function detailsOf(agentId: HarnessId, home: string) {
     const { config } = await readAgentDetails(agentId, {
       getEnv: () => undefined,
       home,
@@ -539,7 +539,7 @@ describe('mcpLocation', () => {
     await rm(home, { recursive: true, force: true })
   })
 
-  const locate = (agentId: AgentId, vars: Vars, chosen: string | null = null) =>
+  const locate = (agentId: HarnessId, vars: Vars, chosen: string | null = null) =>
     mcpLocation(
       agentId,
       (name) => vars[name],
@@ -652,7 +652,7 @@ describe('readAgentDetails', () => {
   }
 
   function read(
-    agentId: AgentId,
+    agentId: HarnessId,
     home: string,
     options: { vars?: Vars; adapterVersion?: string | null; chosen?: string } = {},
   ) {

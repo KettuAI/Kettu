@@ -226,7 +226,7 @@ export class AgentHost {
     const catalog = buildCatalog(options.fakeAgentPath)
     this.catalog = catalog
     this.env.setProxy(options.settings.proxy)
-    this.env.setConfigFolders(configFolders(catalog, options.settings.agents))
+    this.env.setConfigFolders(configFolders(catalog, options.settings))
     this.execRunner = createExec(() => this.env.agentEnv() as NodeJS.ProcessEnv)
     this.media = new MediaService({
       platform,
@@ -347,6 +347,7 @@ export class AgentHost {
         this.hub.broadcast({ type: 'agent.status', status })
         this.routines.limitsChanged(status.id)
       },
+      removed: (agentId) => this.hub.broadcast({ type: 'agent.removed', agentId }),
       processes: (processes) => this.reportProcesses(processes),
       trees: this.trees,
       authCommands: (commands) => options.send({ type: 'host:auth-commands', commands }),
@@ -581,7 +582,7 @@ export class AgentHost {
       this.git?.setBackgroundFetch(next.git.backgroundFetch)
     }
     this.usage.setFromComputer(next.usage.fromComputer)
-    this.env.setConfigFolders(configFolders(this.catalog, next.agents))
+    this.env.setConfigFolders(configFolders(this.catalog, next))
     await this.agents.settingsChanged(previous, next)
   }
 
@@ -866,6 +867,9 @@ export class AgentHost {
       'agents.checkUpdates': () => agents.checkUpdates(),
       'agents.skipUpdate': ({ agentId }) => agents.skipUpdate(agentId),
       'agents.update': ({ agentId }) => agents.update(agentId),
+      'agents.updateCli': ({ agentId }) => agents.updateCli(agentId),
+      'agents.setApiKey': ({ agentId, ...input }) => agents.setApiKey(agentId, input),
+      'agents.clearApiKey': ({ agentId }) => agents.clearApiKey(agentId),
       'agents.install': ({ agentId, method }) => agents.install(agentId, method),
       'agents.cancelTask': ({ agentId }) => agents.cancelTask(agentId),
       'agents.readOptions': async ({ agentId, projectPath }) => {
