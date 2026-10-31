@@ -22,6 +22,9 @@ In [v0.0.1](https://github.com/KettuAI/Kettu/releases/tag/v0.0.1):
 
 - [ ] Every part of the desktop app finished and checked against its design
 - [ ] Windows builds signed by Microsoft, and one-click macOS updates checked from one release to the next ([#68](https://github.com/KettuAI/Kettu/issues/68))
+- [ ] Take a session back to before any message, with the agent's file changes after it undone ([#615](https://github.com/KettuAI/Kettu/issues/615))
+- [ ] An agent's multiple-choice questions as cards you answer with a click ([#616](https://github.com/KettuAI/Kettu/issues/616)), and each session's MCP servers with their status ([#617](https://github.com/KettuAI/Kettu/issues/617))
+- [ ] Parallel sessions in their own Git worktrees ([#618](https://github.com/KettuAI/Kettu/issues/618)), and the changes of a session or a turn reviewed in one place ([#619](https://github.com/KettuAI/Kettu/issues/619))
 
 ## v0.2.0: your sessions on your other devices
 
@@ -50,9 +53,9 @@ In [v0.0.1](https://github.com/KettuAI/Kettu/releases/tag/v0.0.1):
 ## Later
 
 - [ ] A native Android app
-- [ ] A changes panel for reviewing diffs, and search across sessions with a command palette
+- [ ] Search across sessions with a command palette
 - [ ] Slide decks as artifacts ([#368](https://github.com/KettuAI/Kettu/issues/368)), exports to PDF, PNG and PowerPoint ([#367](https://github.com/KettuAI/Kettu/issues/367)), comments on part of an artifact ([#366](https://github.com/KettuAI/Kettu/issues/366)), and the data an artifact's page keeps reaching the agent ([#369](https://github.com/KettuAI/Kettu/issues/369))
-- [ ] Skills and plugins managed in Settings ([#488](https://github.com/KettuAI/Kettu/issues/488), [#489](https://github.com/KettuAI/Kettu/issues/489)), connectors to outside services ([#494](https://github.com/KettuAI/Kettu/issues/494)), and a session's background tasks ([#495](https://github.com/KettuAI/Kettu/issues/495))
+- [ ] Skills and plugins managed in Settings ([#488](https://github.com/KettuAI/Kettu/issues/488), [#489](https://github.com/KettuAI/Kettu/issues/489)), and a session's background tasks ([#495](https://github.com/KettuAI/Kettu/issues/495))
 - [ ] Artifacts built from a project's design system ([#370](https://github.com/KettuAI/Kettu/issues/370)), a canvas page edited directly ([#371](https://github.com/KettuAI/Kettu/issues/371)), and Word, PowerPoint and Excel files as artifacts ([#365](https://github.com/KettuAI/Kettu/issues/365))
 
 Missing something? [Open an issue](https://github.com/KettuAI/Kettu/issues/new/choose) and tell us what you need.
