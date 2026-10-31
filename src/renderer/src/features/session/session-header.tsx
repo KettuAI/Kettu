@@ -106,7 +106,7 @@ export function SessionHeader({
             // The ring's outer edge is the button's box (30 px tall, text 4 px in, 6 px radius), so
             // the hover fill and the ring match and the text does not move.
             style={{ minWidth: Math.max(titleWidth - 5, 0) }}
-            className="mx-[5.5px] field-sizing-content h-[25px] rounded-sm bg-transparent px-[1.5px] py-0 font-heading text-subheading font-semibold outline-[1.5px] outline-offset-1 outline-edit-ring outline-solid selection:bg-edit-selection aria-invalid:outline-danger"
+            className="mx-[5.5px] field-sizing-content h-[25px] rounded-sm bg-transparent px-[1.5px] py-0 font-heading text-ui font-medium outline-[1.5px] outline-offset-1 outline-edit-ring outline-solid selection:bg-edit-selection aria-invalid:outline-danger"
           />
         ) : (
           <TitleButton
@@ -202,7 +202,7 @@ function TitleButton({
       variant="ghost"
       title={`${title} · ${description}`}
       className={cn(
-        'mx-[3px] h-7.5 min-w-16 shrink-10 rounded-md px-[3px] font-heading text-subheading font-semibold focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0',
+        'mx-[3px] h-7.5 min-w-16 shrink-10 rounded-md px-[3px] font-heading text-ui font-medium focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0',
         !focused && 'text-secondary hover:text-primary',
       )}
       onClick={onRename}

@@ -165,7 +165,7 @@
     },
     "textSize": {
       "name": "Text size",
-      "description": "For the thread and the composer: 14, 15 or 16 px.",
+      "description": "For the thread and the composer: 13, 14 or 15 px.",
       "keywords": "font",
       "small": "Small",
       "default": "Default",

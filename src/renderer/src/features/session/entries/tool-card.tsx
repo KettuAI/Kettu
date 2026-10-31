@@ -329,11 +329,8 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
   const { t } = useTranslation('session')
   if (entry.permission) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1.75 text-xs font-medium text-attention">
-        <span
-          aria-hidden
-          className="size-2 rounded-full bg-attention-dot ring-3 ring-attention-dot/16"
-        />
+      <span className="inline-flex shrink-0 items-center gap-1.75 text-xs font-medium text-primary">
+        <span aria-hidden className="size-2 rounded-full bg-attention-dot" />
         {t('status.needsApproval')}
       </span>
     )

@@ -436,8 +436,6 @@
 
   /* Meaning, derived. */
   --attention-foreground: var(--bg-surface);
-  --attention-ring: color-mix(in srgb, var(--attention-dot) 55%, transparent);
-  --attention-halo: color-mix(in srgb, var(--attention-dot) 9%, transparent);
   --destructive-tint: var(--danger-tint);
   --destructive-tint-hover: color-mix(in srgb, var(--danger) 13%, transparent);
   --destructive-foreground: var(--bg-surface);
@@ -508,11 +506,10 @@
     inset 0 0 0 var(--hairline) var(--border-strong), var(--float-shadow), var(--highlight);
   --queue-ring:
     inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-queue), var(--highlight);
+  /* A card waiting on the user: framed like any card, since the orange dot carries the call. */
   --attention-ring-shadow:
-    0 0 0 1px var(--attention-ring), 0 0 0 4px var(--attention-halo), var(--elevation-float),
-    var(--highlight);
-  --segment-ring:
-    0 0 0 var(--hairline) var(--border-default), var(--elevation-segment), var(--highlight);
+    inset 0 0 0 var(--hairline) var(--border-default), var(--float-shadow), var(--highlight);
+  --segment-ring: var(--elevation-segment), var(--highlight);
   --thumb-shadow: var(--elevation-thumb);
   --elevation-sm: var(--elevation-card);
   --elevation-md: var(--elevation-popover);

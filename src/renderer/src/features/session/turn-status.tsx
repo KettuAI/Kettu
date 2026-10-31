@@ -52,10 +52,7 @@ export const TurnStatus = memo(function TurnStatus({ sessionId }: { sessionId: s
       className="flex h-6 min-w-0 animate-in items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground animation-duration-(--duration-base) fade-in"
     >
       {phase === 'approval' ? (
-        <span
-          aria-hidden
-          className="size-2 shrink-0 rounded-full bg-attention-dot ring-3 ring-attention-dot/16"
-        />
+        <span aria-hidden className="size-2 shrink-0 rounded-full bg-attention-dot" />
       ) : (
         <Spinner aria-hidden className="size-3 shrink-0 text-info" />
       )}

@@ -2,7 +2,7 @@
 // lies on it mark a pseudo-element covering them instead of themselves: their content keeps no
 // region, and an overlay in it, even a transparent one, cannot cancel a drag bar it covers.
 
-/** The desk the sheets lie on, which drags the window. */
+/** What the columns lie on, which drags the window where nothing covers it. */
 export const DESK =
   'relative before:pointer-events-none before:absolute before:inset-0 before:app-region-drag'
 
@@ -10,8 +10,8 @@ export const DESK =
 export const ON_DESK =
   'relative before:pointer-events-none before:absolute before:inset-0 before:app-region-no-drag'
 
-/** A sheet laid on the desk: the main area, a page or a side pane. */
-export const SHEET = `${ON_DESK} overflow-clip rounded-xl bg-app shadow-sheet`
+/** A flat column: the main area, a page or a side pane, divided from the next by a hairline. */
+export const SHEET = `${ON_DESK} overflow-clip bg-app`
 
-/** The style of a resizable panel that holds a sheet, whose ring and shadow it would clip. */
+/** The style of a resizable panel that holds a sheet, whose focus ring it would clip. */
 export const SHEET_PANEL = { overflow: 'visible' } as const

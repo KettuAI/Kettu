@@ -62,11 +62,9 @@ describe('TerminalTab', () => {
     expect(markup).toContain('group-focus-within/tab:opacity-100')
   })
 
-  it('raises the active tab on the surface and leaves the others flat', () => {
-    expect(render({}, true)).toContain('bg-surface')
-    expect(render({}, true)).toContain('shadow-outline')
-    expect(render({}, false)).not.toContain('bg-surface')
-    expect(render({}, false)).not.toContain('shadow-outline')
+  it('fills the active tab like a selected row and leaves the others clear', () => {
+    expect(render({}, true)).toContain('bg-selected')
+    expect(render({}, false)).not.toContain('bg-selected')
   })
 
   it('marks a tab whose command is running, in place of its new output', () => {

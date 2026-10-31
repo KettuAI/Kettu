@@ -81,6 +81,12 @@ describe('themeFile', () => {
       dark: { code: 'nord', colors: themeColors(nord, 'dark') },
     })
   })
+
+  it('keeps the faces a theme chooses', () => {
+    const paper: Theme = { ...nord, name: 'Paper', fonts: { ui: 'inter', prose: 'source-serif-4' } }
+    const parsed = parseThemeFile(themeFile(paper))
+    expect(parsed.ok && parsed.theme.fonts).toEqual({ ui: 'inter', prose: 'source-serif-4' })
+  })
 })
 
 describe('previewColors', () => {

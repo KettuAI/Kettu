@@ -62,7 +62,7 @@ export const SessionStartedEntry = memo(function SessionStartedEntry({
       </span>
       <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
         {waiting ? (
-          <span className="inline-flex items-center gap-1.5 text-attention">
+          <span className="inline-flex items-center gap-1.5 text-primary">
             <span aria-hidden className="size-1.5 rounded-full bg-attention-dot" />
             {t('status.needsApproval')}
           </span>
