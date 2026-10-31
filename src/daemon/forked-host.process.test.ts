@@ -132,11 +132,21 @@ describeUnix('ForkedHost', () => {
   })
 
   it('restarts a host that exits, on a socket of its own', async () => {
-    const { host, exits } = make('normal')
+    // What the host reports just after it hears of the exit, before anything else runs.
+    const seen: { state: string; pid: number | null }[] = []
+    const made: Made = make('normal', {
+      onExit: (clean) => {
+        made.exits.push(clean)
+        queueMicrotask(() => seen.push({ state: made.host.state, pid: made.host.pid }))
+      },
+    })
+    const { host, exits } = made
     const first = await host.ready()
     const pid = host.pid
     host.post({ type: 'crash' })
     await until(() => host.state === 'waiting' || host.state === 'starting', 'restart')
+    // Never ready without a process, as status would otherwise say.
+    expect(seen).toEqual([{ state: 'waiting', pid: null }])
     const second = await host.ready()
     expect(host.pid).not.toBe(pid)
     expect(second).not.toBe(first)

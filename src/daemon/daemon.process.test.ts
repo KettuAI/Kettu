@@ -211,7 +211,7 @@ describeUnix('kettu', () => {
     process.kill(killed, 'SIGKILL')
     const restarted = await until(async () => {
       const { agent } = (await status()).hosts
-      return agent.state === 'ready' && agent.pid !== killed && agent
+      return agent.state === 'ready' && agent.pid !== null && agent.pid !== killed && agent
     }, `restarted agent host\n${output}`)
     expect(restarted.restarts).toBe(1)
     expect(output).toContain('[agent-host] Exited unexpectedly with signal SIGKILL')

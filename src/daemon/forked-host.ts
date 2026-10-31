@@ -244,18 +244,19 @@ export class ForkedHost<ToChild, FromChild extends { type: string }> {
     } catch (error) {
       this.config.log.error('Exit handler failed', error)
     }
-    await socket.remove().catch((error: unknown) => {
-      this.config.log.warn(`Could not remove its socket folder: ${(error as Error).message}`)
-    })
+    // Settled before the folder goes, so the state never names a process that is gone.
     if (this.status === 'stopping' || this.shutDown) {
       this.status = 'stopped'
       this.config.log.info(
         `Stopped with ${detail}${clean ? '' : ' without reporting a clean stop'}`,
       )
-      return
+    } else {
+      this.config.log.error(`Exited unexpectedly with ${detail}`)
+      this.scheduleRestart()
     }
-    this.config.log.error(`Exited unexpectedly with ${detail}`)
-    this.scheduleRestart()
+    await socket.remove().catch((error: unknown) => {
+      this.config.log.warn(`Could not remove its socket folder: ${(error as Error).message}`)
+    })
   }
 
   private scheduleRestart(): void {
