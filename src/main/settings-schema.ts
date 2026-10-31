@@ -1,8 +1,10 @@
 // Pure validation and merging of settings.json and of the renderer's patches.
 
 import {
+  AGENT_NAME_CHARS,
   CONFIG_VARIABLES,
   DEFAULT_SETTINGS,
+  type AddedAgent,
   type HostSettings,
   type ProxySettings,
   type SettingsFile,
@@ -12,7 +14,16 @@ import {
 } from '@shared/settings'
 import { LANGUAGE_SETTINGS, resolveLocale, type Locale } from '@shared/locale'
 import { THEME_ID } from '@shared/themes'
-import { AGENT_IDS, type AgentId } from '@shared/thread'
+import {
+  HARNESS_IDS,
+  isAgentId,
+  isDefaultAgent,
+  isHarnessId,
+  harnessOf,
+  MULTI_AGENT_HARNESSES,
+  type AgentId,
+  type HarnessId,
+} from '@shared/thread'
 
 export const SETTINGS_VERSION = 1
 
@@ -35,13 +46,16 @@ const oneOf =
 const isBoolean: Check = (value, path) =>
   typeof value === 'boolean' ? null : `"${path}" must be a boolean`
 
+const isAgentChoice: Check = (value, path) =>
+  value === null || isAgentId(value) ? null : `"${path}" must be an agent id or null`
+
 const isThemeId: Check = (value, path) =>
   typeof value === 'string' && THEME_ID.test(value) ? null : `"${path}" must be a theme id`
 
 const SECTION_FIELDS = {
   general: {
     language: oneOf(...LANGUAGE_SETTINGS),
-    defaultAgent: oneOf(null, ...AGENT_IDS),
+    defaultAgent: isAgentChoice,
     sendKey: oneOf('enter', 'mod-enter'),
     restoreLastSession: isBoolean,
     confirmQuitWhileRunning: isBoolean,
@@ -74,7 +88,6 @@ const SECTION_FIELDS = {
 type FieldSection = keyof typeof SECTION_FIELDS
 
 const FIELD_SECTIONS = Object.keys(SECTION_FIELDS) as FieldSection[]
-const AGENT_CLI = oneOf('installed', 'bundled')
 const FONT_SIZES = [12, 13, 14] as const
 const PROXY_PROTOCOLS = ['http:', 'https:', 'socks:', 'socks4:', 'socks5:']
 const MAX_PATH_LENGTH = 4096
@@ -107,14 +120,14 @@ function checkProxy(value: unknown, path: string): string | null {
   return null
 }
 
-const AGENT_KEYS: readonly string[] = ['binaryPath', 'cli', 'configDir']
+const AGENT_KEYS: readonly string[] = ['binaryPath', 'configDir', 'hidden']
 
-/** The agents Kettu's own MCP server is off for: each a catalog id, once. */
+/** The agents Kettu's own MCP server is off for: each an agent id, once. */
 function checkMcpOff(value: unknown, path: string): string | null {
   if (!Array.isArray(value)) return `"${path}" must be an array`
   const seen = new Set<unknown>()
   for (const id of value) {
-    if (!AGENT_IDS.includes(id as AgentId)) return `"${path}" names an unknown agent`
+    if (!isAgentId(id)) return `"${path}" names an unknown agent`
     if (seen.has(id)) return `"${path}" names an agent twice`
     seen.add(id)
   }
@@ -170,29 +183,25 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
         problems.push('"agents" must be an object')
         continue
       }
-      for (const [agentId, entry] of Object.entries(value)) {
-        if (!AGENT_IDS.includes(agentId as AgentId)) {
-          problems.push(`Unknown agent "agents.${agentId}"`)
+      for (const [harnessId, entry] of Object.entries(value)) {
+        if (!isHarnessId(harnessId)) {
+          problems.push(`Unknown harness "agents.${harnessId}"`)
         } else if (
           !isRecord(entry) ||
           Object.keys(entry).some((key) => !AGENT_KEYS.includes(key))
         ) {
-          problems.push(`"agents.${agentId}" accepts only "binaryPath", "cli" and "configDir"`)
+          problems.push(`"agents.${harnessId}" accepts only "binaryPath", "configDir" and "hidden"`)
         } else {
           if ('binaryPath' in entry && entry.binaryPath !== null) {
             problems.push(
-              `"agents.${agentId}.binaryPath" can only be cleared with null; choose a program in the dialog`,
+              `"agents.${harnessId}.binaryPath" can only be cleared with null; choose a program in the dialog`,
             )
           }
-          if ('configDir' in entry) {
-            const problem = !CONFIG_VARIABLES[agentId as AgentId]
-              ? `"agents.${agentId}" has no configuration folder of its own`
-              : entry.configDir !== null
-                ? `"agents.${agentId}.configDir" can only be cleared with null; choose a folder in the dialog`
-                : null
-            if (problem) problems.push(problem)
+          if ('configDir' in entry && entry.configDir !== null) {
+            problems.push(`"agents.${harnessId}.configDir" can only be cleared with null`)
           }
-          const problem = 'cli' in entry ? AGENT_CLI(entry.cli, `agents.${agentId}.cli`) : null
+          const problem =
+            'hidden' in entry ? isBoolean(entry.hidden, `agents.${harnessId}.hidden`) : null
           if (problem) problems.push(problem)
         }
       }
@@ -239,14 +248,15 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
   if (patch.proxy) next.proxy = normalizeProxy(patch.proxy)
   if (patch.mcp) next.mcp = { kettu: { off: [...patch.mcp.kettu.off] } }
   if (patch.agents) {
-    for (const agentId of Object.keys(patch.agents) as AgentId[]) {
-      const change = patch.agents[agentId]
-      const entry = { ...next.agents[agentId] }
+    for (const harnessId of Object.keys(patch.agents) as HarnessId[]) {
+      const change = patch.agents[harnessId]
+      const entry = { ...next.agents[harnessId] }
       if (change?.binaryPath === null) delete entry.binaryPath
       if (change?.configDir === null) delete entry.configDir
-      if (change?.cli) entry.cli = change.cli
-      if (Object.keys(entry).length > 0) next.agents[agentId] = entry
-      else delete next.agents[agentId]
+      if (change?.hidden === true) entry.hidden = true
+      if (change?.hidden === false) delete entry.hidden
+      if (Object.keys(entry).length > 0) next.agents[harnessId] = entry
+      else delete next.agents[harnessId]
     }
   }
   if (patch.terminal) {
@@ -258,24 +268,58 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
 
 export function withAgentBinary(
   current: SettingsFile,
-  agentId: AgentId,
+  harnessId: HarnessId,
   binaryPath: string,
 ): SettingsFile {
   const next = structuredClone(current)
-  next.agents[agentId] = { ...next.agents[agentId], binaryPath }
+  next.agents[harnessId] = { ...next.agents[harnessId], binaryPath }
   return next
 }
 
-export function withAgentConfigDir(
-  current: SettingsFile,
-  agentId: AgentId,
-  configDir: string,
-): SettingsFile {
-  if (!CONFIG_VARIABLES[agentId]) {
-    throw new SettingsError(`"agents.${agentId}" has no configuration folder of its own`)
+/** An agent's name as stored: trimmed, and within `AGENT_NAME_CHARS`. */
+export function agentName(value: unknown): string {
+  const name = typeof value === 'string' ? value.trim() : ''
+  const control = [...name].some((char) => char.charCodeAt(0) < 0x20)
+  if (name.length === 0 || [...name].length > AGENT_NAME_CHARS || control) {
+    throw new SettingsError(`An agent's name must be 1 to ${AGENT_NAME_CHARS} characters`)
+  }
+  return name
+}
+
+/** Adds an agent. The caller checked that no other agent has the folder. */
+export function withAddedAgent(current: SettingsFile, agent: AddedAgent): SettingsFile {
+  if (isDefaultAgent(agent.id) || !MULTI_AGENT_HARNESSES.includes(harnessOf(agent.id))) {
+    throw new SettingsError(`"${agent.id}" is not an agent that can be added`)
+  }
+  if (current.addedAgents.some((other) => other.id === agent.id)) {
+    throw new SettingsError(`The agent "${agent.id}" exists already`)
   }
   const next = structuredClone(current)
-  next.agents[agentId] = { ...next.agents[agentId], configDir }
+  next.addedAgents.push({ ...agent, name: agentName(agent.name) })
+  return next
+}
+
+export function withRenamedAgent(
+  current: SettingsFile,
+  agentId: AgentId,
+  name: string,
+): SettingsFile {
+  const index = current.addedAgents.findIndex((agent) => agent.id === agentId)
+  if (index < 0) throw new SettingsError(`No added agent "${agentId}"`)
+  const next = structuredClone(current)
+  next.addedAgents[index] = { ...next.addedAgents[index]!, name: agentName(name) }
+  return next
+}
+
+/** Removes an added agent, and every setting that names it. */
+export function withoutAgent(current: SettingsFile, agentId: AgentId): SettingsFile {
+  if (!current.addedAgents.some((agent) => agent.id === agentId)) {
+    throw new SettingsError(`No added agent "${agentId}"`)
+  }
+  const next = structuredClone(current)
+  next.addedAgents = next.addedAgents.filter((agent) => agent.id !== agentId)
+  next.mcp.kettu.off = next.mcp.kettu.off.filter((id) => id !== agentId)
+  if (next.general.defaultAgent === agentId) next.general.defaultAgent = null
   return next
 }
 
@@ -325,34 +369,39 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
   if (raw.agents !== undefined) {
     if (!isRecord(raw.agents)) problems.push('"agents" must be an object')
     else {
-      for (const agentId of AGENT_IDS) {
-        const entry = raw.agents[agentId]
+      for (const harnessId of HARNESS_IDS) {
+        const entry = raw.agents[harnessId]
         if (entry === undefined) continue
         if (!isRecord(entry)) {
-          problems.push(`"agents.${agentId}" must be an object`)
+          problems.push(`"agents.${harnessId}" must be an object`)
           continue
         }
-        const stored: NonNullable<SettingsFile['agents'][AgentId]> = {}
+        // `cli`, the choice of a bundled CLI that no longer exists, is ignored like any unknown key.
+        const stored: NonNullable<SettingsFile['agents'][HarnessId]> = {}
         if (entry.binaryPath !== undefined) {
-          const problem = checkStoredPath(entry.binaryPath, `agents.${agentId}.binaryPath`)
+          const problem = checkStoredPath(entry.binaryPath, `agents.${harnessId}.binaryPath`)
           if (problem) problems.push(problem)
           else stored.binaryPath = entry.binaryPath as string
         }
-        if (entry.cli !== undefined) {
-          const problem = AGENT_CLI(entry.cli, `agents.${agentId}.cli`)
-          if (problem) problems.push(problem)
-          else stored.cli = entry.cli as 'installed' | 'bundled'
-        }
         if (entry.configDir !== undefined) {
-          const problem = !CONFIG_VARIABLES[agentId]
-            ? `"agents.${agentId}" has no configuration folder of its own`
-            : checkStoredPath(entry.configDir, `agents.${agentId}.configDir`)
+          const problem = !CONFIG_VARIABLES[harnessId]
+            ? `"agents.${harnessId}" has no configuration folder of its own`
+            : checkStoredPath(entry.configDir, `agents.${harnessId}.configDir`)
           if (problem) problems.push(problem)
           else stored.configDir = entry.configDir as string
         }
-        if (Object.keys(stored).length > 0) settings.agents[agentId] = stored
+        if (entry.hidden !== undefined) {
+          const problem = isBoolean(entry.hidden, `agents.${harnessId}.hidden`)
+          if (problem) problems.push(problem)
+          else if (entry.hidden) stored.hidden = true
+        }
+        if (Object.keys(stored).length > 0) settings.agents[harnessId] = stored
       }
     }
+  }
+  if (raw.addedAgents !== undefined) {
+    if (!Array.isArray(raw.addedAgents)) problems.push('"addedAgents" must be an array')
+    else settings.addedAgents = readAddedAgents(raw.addedAgents, problems)
   }
   if (raw.proxy !== undefined) {
     const problem = checkProxy(raw.proxy, 'proxy')
@@ -382,13 +431,49 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
   return { settings, problems, readOnly: version > SETTINGS_VERSION }
 }
 
+/** Reads the added agents, dropping each that is invalid or repeats an id or a folder. */
+function readAddedAgents(list: unknown[], problems: string[]): AddedAgent[] {
+  const agents: AddedAgent[] = []
+  for (const [index, entry] of list.entries()) {
+    const path = `addedAgents[${index}]`
+    if (!isRecord(entry)) {
+      problems.push(`"${path}" must be an object`)
+      continue
+    }
+    const { id, name, configDir, created } = entry
+    if (!isAgentId(id) || isDefaultAgent(id)) {
+      problems.push(`"${path}.id" must be an added agent's id`)
+      continue
+    }
+    let stored: string
+    try {
+      stored = agentName(name)
+    } catch (error) {
+      problems.push(`"${path}.name": ${(error as Error).message}`)
+      continue
+    }
+    const problem =
+      checkStoredPath(configDir, `${path}.configDir`) ?? isBoolean(created, `${path}.created`)
+    if (problem) {
+      problems.push(problem)
+      continue
+    }
+    if (agents.some((other) => other.id === id || other.configDir === configDir)) {
+      problems.push(`"${path}" repeats another agent's id or folder`)
+      continue
+    }
+    agents.push({ id, name: stored, configDir: configDir as string, created: created as boolean })
+  }
+  return agents
+}
+
 /** Reads the MCP section leniently: an unknown or repeated id is dropped and the rest kept. */
 function readMcp(raw: Record<string, unknown>): SettingsFile['mcp'] {
   const kettu = isRecord(raw.kettu) ? raw.kettu : {}
   const list = Array.isArray(kettu.off) ? kettu.off : []
   const off: AgentId[] = []
   for (const id of list) {
-    if (AGENT_IDS.includes(id as AgentId) && !off.includes(id as AgentId)) off.push(id as AgentId)
+    if (isAgentId(id) && !off.includes(id)) off.push(id)
   }
   return { kettu: { off } }
 }
@@ -397,6 +482,7 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
   return {
     locale: resolveLocale(settings.general.language, systemLocale),
     agents: structuredClone(settings.agents),
+    addedAgents: structuredClone(settings.addedAgents),
     proxy: structuredClone(settings.proxy),
     git: { ...settings.git },
     mcp: structuredClone(settings.mcp),
@@ -408,6 +494,7 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
 // The sections `hostSettings` reads, besides the language.
 const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
   'agents',
+  'addedAgents',
   'proxy',
   'git',
   'mcp',

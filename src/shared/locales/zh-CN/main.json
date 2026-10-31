@@ -41,14 +41,14 @@
   "dialogs": {
     "openProject": "打开项目",
     "chooseAgentProgram": "选择 Agent 程序",
-    "chooseAgentConfigFolder": "选择配置目录",
     "chooseShell": "选择 Shell",
     "exportDiagnostics": "导出诊断信息",
     "programs": "程序",
     "addFiles": "添加文件或照片",
     "addFolder": "添加文件夹",
     "installTheme": "安装主题",
-    "exportTheme": "导出主题"
+    "exportTheme": "导出主题",
+    "chooseAgentFolder": "选择 Agent 的配置目录"
   },
   "quit": {
     "titleQuit": "退出 {{name}}？",
@@ -84,5 +84,8 @@
     "waiting_other": "{{count}} 个需要批准",
     "open": "打开 {{name}}",
     "quit": "退出 {{name}}"
+  },
+  "agents": {
+    "folderTaken": "这个目录已经属于 {{agent}}。请换一个，或者让 Kettu 新建一个。"
   }
 }

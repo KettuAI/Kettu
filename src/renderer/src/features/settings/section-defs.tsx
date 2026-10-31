@@ -3,6 +3,7 @@ import {
   ArchiveIcon,
   BellIcon,
   BotIcon,
+  BoxesIcon,
   ChartNoAxesColumnIcon,
   GitBranchIcon,
   GlobeIcon,
@@ -17,7 +18,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus, SessionSummary } from '@shared/agent-host'
-import type { AgentId } from '@shared/thread'
+import type { AgentId, HarnessId } from '@shared/thread'
 import {
   Empty,
   EmptyDescription,
@@ -25,13 +26,18 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@renderer/components/ui/empty'
-import { listedInstalled } from '@renderer/features/agents/readiness'
 import { bugReportUrl } from '@renderer/lib/bug-report'
 import { basename, longAgo } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { formatShortcut, isMac, isWindows, platform } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
-import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import {
+  agentName,
+  harnessStatuses,
+  isInstalled,
+  usableAgents,
+  useAgentsStore,
+} from '@renderer/stores/agents'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { archivedSessions, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
@@ -40,9 +46,21 @@ import { useMcpStore } from '@renderer/stores/mcp'
 import { useSharingStore } from '@renderer/stores/sharing'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { useUsageStore } from '@renderer/stores/usage'
-import { openAgentSettings, openSettingsItem } from '@renderer/stores/view'
+import { openAgentSettings, openHarnessSettings, openSettingsItem } from '@renderer/stores/view'
 import { AboutHero, AutomaticUpdates, LinkRow, UpdateRow } from './about-section'
-import { AgentListItem, AgentPage, AgentsGroupActions, EnvironmentFooter } from './agents-section'
+import {
+  AddAgentRow,
+  AgentListItem,
+  AgentPage,
+  AgentsFooter,
+  AgentsGroupActions,
+} from './agents-section'
+import {
+  EnvironmentFooter,
+  HarnessGroupActions,
+  HarnessListItem,
+  HarnessPage,
+} from './harness-section'
 import { AgentPlaceRow, FailedRead, McpServerPage, PendingList, ServerRow } from './mcp-section'
 import { ArchivedRow } from './archived-section'
 import { GroupLabel } from './rows'
@@ -440,40 +458,84 @@ export function useUsageSection(): SectionDef {
 export function useAgentsSection(): SectionDef {
   const { t } = useTranslation('settings')
   const en = english()
-  const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
+  const agents = useAgentsStore(
+    useShallow((s) => usableAgents(s.order, s.byId).filter((a) => isInstalled(a))),
+  )
   const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
-  const environment = useAgentsStore((s) => s.environment)
-  const installed = agents.filter(listedInstalled)
-  const missing = agents.filter((a) => !listedInstalled(a))
-  const groups = {
-    installed: {
-      id: 'installed',
-      label: t('agents.groups.installed'),
-      count: installed.length,
-      actions: <AgentsGroupActions />,
-    },
-    missing: { id: 'missing', label: t('agents.groups.notInstalled'), count: missing.length },
+  const list: GroupDef = {
+    id: 'agents',
+    label: t('agents.groups.list'),
+    count: agents.length,
+    actions: <AgentsGroupActions />,
   }
-  const row = (status: AgentStatus, group: GroupDef): RowDef => ({
+  const row = (status: AgentStatus): RowDef => ({
     id: status.id,
     name: status.name,
     description: status.account?.label ?? undefined,
     // A hidden email stays out of search too, so a match cannot reveal it.
-    keywords: `${t('agents.keywords')} ${hidden ? '' : (status.account?.email ?? '')}`,
-    group,
+    keywords: `${t('agents.keywords')} ${status.harnessName} ${hidden ? '' : (status.account?.email ?? '')}`,
+    group: list,
     layout: 'custom',
     render: () => <AgentListItem status={status} />,
     open: () => openAgentSettings(status.id),
   })
-  const updates = agents.filter((a) => a.update)
   return {
     id: 'agents',
     title: t('sections.agents'),
     description: t('pages.agents'),
     icon: BotIcon,
     rows: [
-      ...installed.map((a) => row(a, groups.installed)),
-      ...missing.map((a) => row(a, groups.missing)),
+      ...agents.map(row),
+      {
+        id: 'add-agent',
+        name: t('agents.add.button'),
+        english: en('agents.add.button'),
+        keywords: t('agents.add.keywords'),
+        group: list,
+        layout: 'custom',
+        render: () => <AddAgentRow />,
+      },
+    ],
+    footer: <AgentsFooter />,
+    itemPage: (agentId) => <AgentPage agentId={agentId as AgentId} />,
+  }
+}
+
+export function useHarnessesSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
+  const harnesses = useAgentsStore(useShallow((s) => harnessStatuses(s.order, s.byId)))
+  const environment = useAgentsStore((s) => s.environment)
+  // Installed: its program is on the machine, even before Kettu's package for it installs.
+  const installed = harnesses.filter((h) => isInstalled(h) || !!h.cli?.installed)
+  const missing = harnesses.filter((h) => !installed.includes(h))
+  const groups = {
+    installed: {
+      id: 'installed',
+      label: t('harnesses.groups.installed'),
+      count: installed.length,
+      actions: <HarnessGroupActions />,
+    },
+    missing: { id: 'missing', label: t('harnesses.groups.notInstalled'), count: missing.length },
+  }
+  const row = (status: AgentStatus, group: GroupDef): RowDef => ({
+    id: status.harnessId,
+    name: status.harnessName,
+    keywords: t('harnesses.keywords'),
+    group,
+    layout: 'custom',
+    render: () => <HarnessListItem status={status} />,
+    open: () => openHarnessSettings(status.harnessId),
+  })
+  const updates = harnesses.filter((h) => h.update || h.cli?.update)
+  return {
+    id: 'harnesses',
+    title: t('sections.harnesses'),
+    description: t('pages.harnesses'),
+    icon: BoxesIcon,
+    rows: [
+      ...installed.map((h) => row(h, groups.installed)),
+      ...missing.map((h) => row(h, groups.missing)),
       {
         id: 'environment',
         name: t('agents.environment.reload'),
@@ -485,10 +547,10 @@ export function useAgentsSection(): SectionDef {
       },
     ],
     footer: <EnvironmentFooter />,
-    itemPage: (agentId) => <AgentPage agentId={agentId as AgentId} />,
+    itemPage: (harnessId) => <HarnessPage harnessId={harnessId as HarnessId} />,
     mark:
       updates.length > 0
-        ? t('agents.update.mark', { names: updates.map((a) => a.name).join(', ') })
+        ? t('agents.update.mark', { names: updates.map((h) => h.harnessName).join(', ') })
         : undefined,
   }
 }

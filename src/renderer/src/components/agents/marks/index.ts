@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import type { AgentId } from '@shared/thread'
+import type { HarnessId } from '@shared/thread'
 import * as agoragentic from './agoragentic'
 import * as amp from './amp'
 import * as antigravity from './antigravity'
@@ -59,7 +59,7 @@ export interface AgentMarkModule {
 }
 
 /** One line per agent; the agent's own colors stay in its module. */
-export const AGENT_MARKS: Record<AgentId, AgentMarkModule> = {
+export const AGENT_MARKS: Record<HarnessId, AgentMarkModule> = {
   'claude-code': claudeCode,
   cline,
   codex,

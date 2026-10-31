@@ -74,6 +74,9 @@ function onHostEvent(event: HostEvent): void {
     case 'agent.status':
       useAgentsStore.getState().setOne(event.status)
       break
+    case 'agent.removed':
+      useAgentsStore.getState().remove(event.agentId)
+      break
     case 'agent.options':
       receiveAgentOptions(event.options)
       break

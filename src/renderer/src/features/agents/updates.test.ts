@@ -9,12 +9,9 @@ const adapter = {
 }
 const installedCli = {
   command: 'claude',
-  prefer: 'installed' as const,
-  runs: 'installed' as const,
-  active: null,
-  needsCopy: false,
-  copyMegabytes: 256,
   installed: { path: '/usr/local/bin/claude', version: '2.1.304', variable: null, problem: null },
+  method: null,
+  update: null,
 }
 const status = (overrides: Partial<AgentStatus>): AgentStatus =>
   ({
@@ -29,11 +26,10 @@ describe('adapterOnlyUpdate', () => {
     expect(adapterOnlyUpdate(status({}))).toEqual(adapter)
   })
 
-  it('leaves the agent named when the update brings a CLI, or the bundled one runs', () => {
+  it('leaves the agent named when the update brings a CLI, or runs no CLI of the user', () => {
     expect(
       adapterOnlyUpdate(status({ update: { adapterVersion: '0.95.0', cliVersion: '2.1.310' } })),
     ).toBeNull()
-    expect(adapterOnlyUpdate(status({ cli: { ...installedCli, runs: 'bundled' } }))).toBeNull()
     expect(adapterOnlyUpdate(status({ cli: null }))).toBeNull()
   })
 

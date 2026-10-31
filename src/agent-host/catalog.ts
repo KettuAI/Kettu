@@ -1,12 +1,12 @@
 // What every built-in agent shares: the types, the launch and detection helpers, and the list of
 // one module per agent in agents/.
 
-import { realpath, stat } from 'node:fs/promises'
+import { stat } from 'node:fs/promises'
 import path from 'node:path'
-import type { AgentCliSource } from '@shared/agent-host'
+import type { InstalledCli } from '@shared/agent-host'
 import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
-import type { AgentId } from '@shared/thread'
+import { harnessOf, type AgentId, type HarnessId } from '@shared/thread'
 import { compareInstalls, listInstalled, type InstalledAdapter } from './adapter-install'
 import { AGORAGENTIC } from './agents/agoragentic'
 import { AMP } from './agents/amp'
@@ -57,17 +57,17 @@ import { STAKPAK } from './agents/stakpak'
 import { VTCODE } from './agents/vtcode'
 import { listArchiveInstalls, programPath, type InstalledArchive } from './archive-install'
 import type { BinaryInstalls } from './binary-install'
-import { codexBinary, npmCodexEnv, type AdapterLookup } from './codex-binary'
+import type { AdapterLookup } from './codex-binary'
 import { findCommand, needsShell, type Env } from './find-command'
 import { t, type HostKey } from './i18n'
 import {
   CLI_FILES,
-  decideCli,
+  checkCli,
   findInstalledCli,
   type AdapterCli,
-  type CliDecision,
   type CliFiles,
   type CliProbe,
+  type FoundCli,
 } from './installed-cli'
 import { satisfiesNode, type ConfigFolder, type NodeProbe } from './shell-env'
 import { compareVersions } from './versions'
@@ -108,7 +108,7 @@ export interface AgentRequires {
 }
 
 export interface AgentDefinition {
-  id: AgentId
+  id: HarnessId
   name: string
   registryId: string
   /** The protocol it speaks; ACP when not given. */
@@ -147,11 +147,11 @@ export interface AgentDefinition {
    * each tool call, so the artifacts service gives its process one token per folder.
    */
   mcpServersByName?: boolean
-  /** How Kettu can install a binary agent for the user. */
+  /** How Kettu can install the harness's program for the user, by its vendor's routes. */
   installs?: BinaryInstalls
-  /** The CLI a package agent's adapter runs, which the user may have installed themselves. */
+  /** The user's own CLI that runs: the SDK's for Claude Code, the program itself for Codex. */
   cli?: AdapterCli
-  /** The variable that moves its configuration folder, set to the folder picked in Settings. */
+  /** The variable that moves its configuration folder, which gives each agent a folder of its own. */
   configVariable?: string
   /**
    * The file in which it keeps MCP servers of its own, besides its settings file: `project` is a
@@ -269,16 +269,24 @@ export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
   return catalog
 }
 
-/** The configuration folder picked for each agent whose folder can be moved. */
+/**
+ * Each agent's own configuration folder: every added agent's, and the one a default agent was
+ * given before agents could be added. Other default agents use their harness's default folder.
+ */
 export function configFolders(
   catalog: readonly AgentDefinition[],
-  agents: HostSettings['agents'],
+  settings: Pick<HostSettings, 'agents' | 'addedAgents'>,
 ): Partial<Record<AgentId, ConfigFolder>> {
   const folders: Partial<Record<AgentId, ConfigFolder>> = {}
   for (const def of catalog) {
-    const folder = agents[def.id]?.configDir
+    const folder = settings.agents[def.id]?.configDir
     if (def.configVariable && folder)
       folders[def.id] = { variable: def.configVariable, path: folder }
+  }
+  for (const agent of settings.addedAgents) {
+    const def = catalog.find((candidate) => candidate.id === harnessOf(agent.id))
+    if (def?.configVariable)
+      folders[agent.id] = { variable: def.configVariable, path: agent.configDir }
   }
   return folders
 }
@@ -299,7 +307,7 @@ export interface LaunchSpec {
   /** True only for a resolved `.cmd` or `.bat` on Windows. */
   shell: boolean
   display: CommandWords
-  /** The user's own CLI this launch passes to the adapter; a start that fails with it runs the copy. */
+  /** The user's own CLI this launch passes to the SDK, or runs itself. */
   cli?: string
 }
 
@@ -320,14 +328,6 @@ export function displayCommand(
 ): CommandWords {
   switch (def.launch.kind) {
     case 'package': {
-      // An agent whose package is its CLI reads as that CLI's own command line.
-      if (def.cli?.isPackage) {
-        return {
-          command: def.cli.command,
-          args: def.launch.args ?? [],
-          env: { ...def.env, ...def.launch.env },
-        }
-      }
       const entry = packageDir(adaptersDir, def) ?? ''
       if (def.launch.library)
         return { command: entry, args: [], env: { ...def.env, ...def.launch.env } }
@@ -372,11 +372,6 @@ export interface AdapterPlan {
   npm: string | null
   /** The newest install below the pin, run when the pinned one cannot be installed. */
   fallback: { version: string; dir: string; spec: LaunchSpec } | null
-  /**
-   * Which CLI the adapter runs, for an agent with a `cli`. `needsCopy`: the install a start runs
-   * has no CLI of its own, which the copy needs, so the start installs it again with one.
-   */
-  cli: (CliDecision & { needsCopy: boolean }) | null
 }
 
 export type Detection =
@@ -387,8 +382,15 @@ export type Detection =
       adapter: AdapterPlan | null
       /** A `requires` program that was found, and the version it printed. */
       requires?: { program: string; version: string }
+      /** The user's CLI that runs, for a harness with a `cli`. */
+      cli?: InstalledCli
     }
-  | { state: 'not-installed' | 'node-missing' | 'node-outdated'; detail: string }
+  | {
+      state: 'not-installed' | 'node-missing' | 'node-outdated'
+      detail: string
+      /** The user's CLI when one was found that cannot run, such as one too old. */
+      cli?: InstalledCli
+    }
 
 /** `node <entry>`, or `node <router> node <entry>` for a per-session agent. */
 export function packageSpec(
@@ -465,9 +467,6 @@ export interface DetectContext {
   /** Asks a CLI its version; without it, no installed CLI is looked for. */
   probeCli?: CliProbe
   cliFiles?: CliFiles
-  cliPreference?: AgentCliSource
-  /** The installed CLI a start failed with, which is not used again until this is cleared. */
-  cliFailure?: { path: string; reason: string } | null
 }
 
 async function isFile(file: string): Promise<boolean> {
@@ -521,88 +520,52 @@ async function packageInstalls(
   }
 }
 
-/**
- * An agent whose package is its CLI, such as Codex: the user's own CLI runs when it may, with no
- * install at all, and otherwise the platform's binary from Kettu's install of the package. The
- * pinned version is the oldest that runs, the user's CLI too; Node.js and npm only install it.
- */
-async function detectCliPackage(
+/** Why the user's CLI cannot run, in the user's terms, or null when it can. */
+function cliDetail(def: AgentDefinition, cli: AdapterCli, installed: InstalledCli): string | null {
+  const problem = installed.problem
+  if (!problem) return null
+  const agent = def.name
+  switch (problem.kind) {
+    case 'unsupported':
+      return t('detect.cliUnsupported', { agent, path: installed.path })
+    case 'failed':
+      return t('detect.cliFailed', { agent, reason: problem.reason })
+    case 'too-old':
+      return t('detect.cliOutdated', {
+        agent,
+        command: cli.command,
+        required: problem.minimum,
+        installed: installed.version ?? '?',
+      })
+  }
+}
+
+/** The user's CLI, or the detection that says it is missing or cannot run. */
+async function userCli(
   def: AgentDefinition,
-  launch: PackageLaunch,
   cli: AdapterCli,
   ctx: DetectContext,
-): Promise<Detection> {
-  const { nodePath, nodeVersion, npmPath } = ctx.node
-  const { current, other } = await packageInstalls(def, launch, ctx)
+  minimum: string | null | undefined,
+): Promise<{ found: FoundCli } | { missing: Detection }> {
   const files = ctx.cliFiles ?? CLI_FILES
   const found = ctx.probeCli
     ? await findInstalledCli(cli, { ...ctx, files, probe: ctx.probeCli })
     : null
-  const decision = decideCli({
-    prefer: ctx.cliPreference ?? 'installed',
-    found: found?.installed ?? null,
-    minimum: launch.version,
-    failure: ctx.cliFailure ?? null,
-  })
-  const args = launch.args ?? []
-  const base = { ...def.env, ...launch.env }
-  const exists = ctx.isFile ?? isFile
-  const programSpec = (command: string, env: Record<string, string>): LaunchSpec => ({
-    command,
-    args,
-    env,
-    shell: needsShell(command, ctx.platform),
-    display: { command, args, env },
-  })
-  const copySpec = async (install: InstalledAdapter): Promise<LaunchSpec | null> => {
-    const p = ctx.platform === 'win32' ? path.win32 : path.posix
-    const root = p.dirname(p.dirname(install.entry))
-    const binary = await codexBinary(root, ctx.platform, install.dir, exists)
-    if (binary) {
-      const real = await (ctx.realpath ?? realpath)(root).catch(() => root)
-      return programSpec(binary, { ...base, ...npmCodexEnv(real) })
-    }
-    // Without its platform's binary the package's own script finds what is missing and says so.
-    return nodePath ? packageSpec(nodePath, install.entry, ctx.platform, base, [], args) : null
-  }
-  const plan = (spec: LaunchSpec | null, fallbackSpec: LaunchSpec | null): Detection => ({
-    state: 'available',
-    spec,
-    adapter: {
-      package: launch.package,
-      version: launch.version,
-      installed: !!current,
-      current,
-      node: nodePath,
-      nodeVersion,
-      npm: npmPath,
-      fallback:
-        other && fallbackSpec
-          ? { version: other.version, dir: other.dir, spec: fallbackSpec }
-          : null,
-      cli: { ...decision, needsCopy: false },
-    },
-  })
-  if (decision.runs === 'installed' && found) {
-    const program = found.installed.path
-    const spec = programSpec(program, { ...base, ...found.env })
-    // A program the environment names is the user's choice, so a failed start does not replace it.
-    return plan(found.installed.variable ? spec : { ...spec, cli: program }, null)
-  }
-  const spec = current ? await copySpec(current) : null
-  const fallbackSpec = other ? await copySpec(other) : null
-  if (!spec && !fallbackSpec) {
-    if (!nodePath || !nodeVersion) {
-      return { state: 'node-missing', detail: t('detect.nodeMissing', { agent: def.name }) }
-    }
-    if (!npmPath) {
-      return {
+  if (!found) {
+    return {
+      missing: {
         state: 'not-installed',
-        detail: t('detect.npmMissing', { agent: def.name, hint: t(def.install.hint) }),
-      }
+        detail: t('detect.cliMissing', { agent: def.name, command: cli.command }),
+      },
     }
   }
-  return plan(spec, fallbackSpec)
+  const installed = checkCli(found.installed, minimum)
+  const detail = cliDetail(def, cli, installed)
+  // A program the environment names is the user's choice, and runs whatever its version.
+  if (detail && !installed.variable) {
+    return { missing: { state: 'not-installed', detail, cli: installed } }
+  }
+  return { found: { ...found, installed } }
 }
 
 /** Finds what an agent needs without starting it, so it can run at startup and on demand. */
@@ -617,9 +580,22 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
   const launch = def.launch
   switch (launch.kind) {
     case 'package': {
-      if (def.cli?.isPackage) return detectCliPackage(def, launch, def.cli, ctx)
       const { nodePath, nodeVersion, npmPath } = ctx.node
       const { library } = launch
+      const { current, other } = await packageInstalls(def, launch, ctx)
+      const files = ctx.cliFiles ?? CLI_FILES
+      // Only the user's own CLI runs: one missing or too old is said before anything installs.
+      let cli: FoundCli | null = null
+      if (def.cli) {
+        // Until the pinned version is installed, the older install a start falls back to says it.
+        const runs = current ?? other
+        const minimum = runs
+          ? ((await def.cli.minimum?.(runs.dir, launch.package, files)) ?? null)
+          : undefined
+        const result = await userCli(def, def.cli, ctx, minimum)
+        if ('missing' in result) return result.missing
+        cli = result.found
+      }
       // A library runs in the host, so the user's Node.js only runs npm, to install it.
       if (!library && (!nodePath || !nodeVersion)) {
         return {
@@ -642,7 +618,6 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
           }),
         }
       }
-      const { current, other } = await packageInstalls(def, launch, ctx)
       if (!current && !other && (!nodePath || !nodeVersion)) {
         return {
           state: 'node-missing',
@@ -714,29 +689,8 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
         ...(ctx.isFile ? { isFile: ctx.isFile } : {}),
         ...(ctx.realpath ? { realpath: ctx.realpath } : {}),
       }
-      const files = ctx.cliFiles ?? CLI_FILES
-      const found =
-        def.cli && ctx.probeCli
-          ? await findInstalledCli(def.cli, { ...ctx, files, probe: ctx.probeCli })
-          : null
-      // Until the pinned version is installed, the older install a start falls back to says it.
-      const runs = current ?? other
-      const decision = def.cli
-        ? decideCli({
-            prefer: ctx.cliPreference ?? 'installed',
-            found: found?.installed ?? null,
-            minimum:
-              found && runs
-                ? ((await def.cli.minimum?.(runs.dir, launch.package, files)) ?? null)
-                : undefined,
-            failure: ctx.cliFailure ?? null,
-          })
-        : null
       // A program the environment names reaches the adapter by itself.
-      const passed =
-        def.cli && decision?.runs === 'installed' && found && !found.installed.variable
-          ? found
-          : null
+      const passed = cli && !cli.installed.variable ? cli : null
       const specFor = async (install: InstalledAdapter): Promise<LaunchSpec | null> => {
         if (passed && def.cli) {
           const env = {
@@ -762,7 +716,6 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
             cli: passed.installed.path,
           }
         }
-        if (install.withoutCli && decision?.runs !== 'installed') return null
         return installedSpec(
           def,
           nodePath,
@@ -789,13 +742,25 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
             other && fallbackSpec
               ? { version: other.version, dir: other.dir, spec: fallbackSpec }
               : null,
-          cli: decision ? { ...decision, needsCopy: !!current && !spec } : null,
         },
         ...(requires ? { requires } : {}),
+        ...(cli ? { cli: cli.installed } : {}),
       }
     }
     case 'binary': {
       const env = { ...def.env }
+      // A harness that runs the user's CLI itself, such as Codex, finds it as the SDK would.
+      if (def.cli && !ctx.binaryOverride) {
+        const result = await userCli(def, def.cli, ctx, def.cli.oldest ?? null)
+        if ('missing' in result) return result.missing
+        const { installed, env: cliEnv } = result.found
+        const program = installed.path
+        const runEnv = { ...env, ...cliEnv }
+        return {
+          ...binaryDetection(program, launch.args, ctx.platform, display, runEnv),
+          cli: installed,
+        }
+      }
       if (ctx.binaryOverride) {
         if (!(await ctx.isExecutable(ctx.binaryOverride))) {
           return {

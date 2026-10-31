@@ -6,8 +6,8 @@ import {
   CLAUDE_CLI,
   CLI_FILES,
   CliVersions,
+  checkCli,
   CODEX_CLI,
-  decideCli,
   findInstalledCli,
   parseCliVersion,
   shimTarget,
@@ -224,9 +224,9 @@ describe('the minimum an adapter names', () => {
     expect(await read({})).toBeNull()
   })
 
-  it('names none for Codex, whose package is the CLI and whose pin is the oldest that runs', () => {
-    expect(CODEX_CLI.isPackage).toBe(true)
+  it('names none for Codex, which runs from the oldest app-server protocol it is written for', () => {
     expect(CODEX_CLI.minimum).toBeUndefined()
+    expect(CODEX_CLI.oldest).toBe('0.166.0')
   })
 })
 
@@ -385,44 +385,29 @@ describe('findInstalledCli', () => {
   })
 })
 
-describe('decideCli', () => {
+describe('checkCli', () => {
   const found = { path: '/usr/local/bin/claude', version: '2.1.304', variable: null, problem: null }
-  const decide = (overrides: Partial<Parameters<typeof decideCli>[0]> = {}) =>
-    decideCli({ prefer: 'installed', found, minimum: '2.1.303', failure: null, ...overrides })
 
-  it('runs the installed program when it meets the minimum, or before the minimum is known', () => {
-    expect(decide()).toEqual({ runs: 'installed', installed: found })
-    expect(decide({ minimum: undefined })).toEqual({ runs: 'installed', installed: found })
+  it('passes a program that meets the minimum, or before the minimum is known', () => {
+    expect(checkCli(found, '2.1.303')).toEqual(found)
+    expect(checkCli(found, '2.1.304')).toEqual(found)
+    expect(checkCli(found, undefined)).toEqual(found)
+    expect(checkCli(found, null)).toEqual(found)
   })
 
-  it('runs the copy when none is found, or the user chose it', () => {
-    expect(decide({ found: null })).toEqual({ runs: 'bundled', installed: null })
-    expect(decide({ prefer: 'bundled' })).toEqual({ runs: 'bundled', installed: found })
+  it('says a program is too old for the minimum', () => {
+    expect(checkCli(found, '2.1.400')).toEqual({
+      ...found,
+      problem: { kind: 'too-old', minimum: '2.1.400' },
+    })
   })
 
-  it('runs the copy and says why when the program is too old, failed or names no minimum', () => {
-    expect(decide({ minimum: '2.1.400' })).toEqual({
-      runs: 'bundled',
-      installed: { ...found, problem: { kind: 'too-old', minimum: '2.1.400' } },
-    })
-    expect(decide({ minimum: null })).toMatchObject({
-      runs: 'bundled',
-      installed: { problem: { kind: 'no-minimum' } },
-    })
-    expect(decide({ failure: { path: found.path, reason: 'Codex exited.' } })).toMatchObject({
-      runs: 'bundled',
-      installed: { problem: { kind: 'failed', reason: 'Codex exited.' } },
-    })
-    expect(decide({ failure: { path: '/other/claude', reason: 'x' } }).runs).toBe('installed')
+  it('keeps a problem the program has already, and holds no version-less program to it', () => {
+    const failed = { ...found, version: null, problem: { kind: 'failed' as const, reason: 'x' } }
+    expect(checkCli(failed, '2.1.400')).toEqual(failed)
     const unsupported = { ...found, version: null, problem: { kind: 'unsupported' as const } }
-    expect(decide({ found: unsupported })).toEqual({ runs: 'bundled', installed: unsupported })
-  })
-
-  it('lets a variable in the environment decide, whatever the setting', () => {
-    const named = { ...found, variable: 'CLAUDE_CODE_EXECUTABLE', version: '2.1.1' }
-    expect(decide({ found: named, prefer: 'bundled' })).toEqual({
-      runs: 'installed',
-      installed: { ...named, problem: { kind: 'too-old', minimum: '2.1.303' } },
-    })
+    expect(checkCli(unsupported, '2.1.400')).toEqual(unsupported)
+    const silent = { ...found, version: null }
+    expect(checkCli(silent, '2.1.400')).toEqual(silent)
   })
 })

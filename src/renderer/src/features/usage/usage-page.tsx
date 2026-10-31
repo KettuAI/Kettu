@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ChartNoAxesColumnIcon, CircleAlertIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { AGENT_IDS, type AgentId } from '@shared/thread'
+import { sortAgentIds, type AgentId } from '@shared/thread'
 import type { UsageScope } from '@shared/usage'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { useRefresh } from '@renderer/components/refresh'
@@ -944,7 +944,14 @@ function TrendCard({
         : trend(days, page.range, page.firstDay, metric, scope),
     [hours, days, page.range, page.firstDay, metric, scope],
   )
-  const series = useMemo(() => seriesOf(bars, AGENT_IDS), [bars])
+  const series = useMemo(
+    () =>
+      seriesOf(
+        bars,
+        sortAgentIds(new Set(bars.flatMap((bar) => Object.keys(bar.byAgent))) as Set<AgentId>),
+      ),
+    [bars],
+  )
   // What the legend hides holds until any filter changes, even back to an earlier value: the agent
   // at once, the range or source once its figures arrive, so the chart still drawn while they load
   // keeps its series and scale.

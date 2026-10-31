@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type {
-  AgentCli,
-  AgentCliSource,
-  AgentOptions,
-  AgentStatus,
-  InstalledCli,
-} from '@shared/agent-host'
+import type { AgentCli, AgentOptions, AgentStatus, InstalledCli } from '@shared/agent-host'
 import type { ConfigOption } from '@shared/thread'
 import {
   agentNeed,
@@ -260,6 +254,11 @@ describe('menuGroups', () => {
 const status = (overrides: Partial<AgentStatus>): AgentStatus => ({
   id: 'codex',
   name: 'Codex',
+  harnessId: 'codex',
+  harnessName: 'Codex',
+  isDefault: true,
+  hidden: false,
+  apiKey: null,
   state: 'available',
   version: null,
   package: null,
@@ -320,32 +319,25 @@ describe('agentNeed', () => {
   })
 
   it('sets up a package agent without its adapter on first use when its own CLI runs', () => {
-    const cli = (runs: AgentCliSource, installed: Partial<InstalledCli> = {}): AgentCli => ({
-      command: 'codex',
-      prefer: 'installed',
-      runs,
-      active: null,
+    const cli = (installed: Partial<InstalledCli> = {}): AgentCli => ({
+      command: 'claude',
       installed: {
-        path: '/usr/local/bin/codex',
-        version: '0.163.0',
+        path: '/usr/local/bin/claude',
+        version: '2.1.304',
         variable: null,
         problem: null,
         ...installed,
       },
-      needsCopy: false,
-      copyMegabytes: 300,
+      method: null,
+      update: null,
     })
-    const codex = status({ package: adapter(false), cli: cli('installed') })
-    expect(agentNeed(codex)).toBe('setup')
-    expect(canStart(codex)).toBe(true)
-    // A program set by CODEX_PATH runs whether or not its version could be read.
-    const unread = cli('installed', { variable: 'CODEX_PATH', version: null })
+    const claude = status({ package: adapter(false), cli: cli() })
+    expect(agentNeed(claude)).toBe('setup')
+    expect(canStart(claude)).toBe(true)
+    // A program set by CLAUDE_CODE_EXECUTABLE runs whether or not its version could be read.
+    const unread = cli({ variable: 'CLAUDE_CODE_EXECUTABLE', version: null })
     expect(agentNeed(status({ package: adapter(false), cli: unread }))).toBe('setup')
-    // The copy is to run, so Codex is not on the machine yet and installs from Settings.
-    const bundled = status({ package: adapter(false), cli: cli('bundled') })
-    expect(agentNeed(bundled)).toBe('adapter')
-    expect(canStart(bundled)).toBe(false)
-    expect(agentNeed(status({ package: adapter(true), cli: cli('installed') }))).toBeNull()
+    expect(agentNeed(status({ package: adapter(true), cli: cli() }))).toBeNull()
   })
 
   it('cannot start an agent missing from PATH or without Node.js', () => {

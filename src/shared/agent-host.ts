@@ -28,6 +28,7 @@ import type {
 import type { UsageScope, UsageStatus, UsageSummary, UsageTotal } from './usage'
 import type {
   AgentId,
+  HarnessId,
   Attachment,
   ConfigOption,
   OlderPage,
@@ -125,35 +126,32 @@ export interface AgentTask {
   error: string | null // why it failed, in the user's terms
 }
 
-/** Which CLI a Claude Code or Codex adapter runs: the user's own, or the copy it brings. */
+/** The user's own Claude Code or Codex, the only CLI a start runs. */
 export interface AgentCli {
   command: string // looked up on PATH, such as claude
-  prefer: AgentCliSource // the setting: the installed program when it can run, or always the copy
-  runs: AgentCliSource // what a start runs now
-  active: AgentCliSource | null // what the running adapter process uses; null while none runs
   installed: InstalledCli | null // null: none found
-  needsCopy: boolean // the copy is to run but is not on disk: the next start downloads it
-  copyMegabytes: number // about how much that download is
+  // How it was installed, read from where it lives; null when Kettu cannot tell.
+  method: AgentInstallMethod['id'] | null
+  // A newer version, from the daily check, and the command that updates it the way it was
+  // installed; null when up to date, unchecked, or the way is unknown.
+  update: { version: string; command: string } | null
 }
-
-export type AgentCliSource = 'installed' | 'bundled'
 
 export interface InstalledCli {
   path: string // as the adapter runs it, after resolving shims
   version: string | null
   variable: string | null // set by this variable in the environment, which then decides alone
-  problem: InstalledCliProblem | null // why the copy runs instead
+  problem: InstalledCliProblem | null // why it cannot run
 }
 
 export type InstalledCliProblem =
   | { kind: 'unsupported' } // cannot run without a shell
-  | { kind: 'failed'; reason: string } // its version could not be read, or a start with it failed
+  | { kind: 'failed'; reason: string } // its version could not be read
   | { kind: 'too-old'; minimum: string }
-  | { kind: 'no-minimum' } // the adapter names no version it needs
 
-/** A way Kettu can install a binary agent such as OpenCode, in the order it prefers them. */
+/** A way Kettu can install a harness's program, such as OpenCode, in the order it prefers them. */
 export interface AgentInstallMethod {
-  id: 'brew' | 'npm' | 'script' | 'archive'
+  id: 'brew' | 'npm' | 'script' | 'winget' | 'archive'
   label: string // what the page shows for the route: its command, or the archive's file name
   command: string // quoted for the platform, as the page shows it
   available: boolean // the tool it needs was found on the agent environment's PATH
@@ -161,7 +159,13 @@ export interface AgentInstallMethod {
 
 export interface AgentStatus {
   id: AgentId
-  name: string
+  name: string // the agent's: the harness's own for its default agent
+  harnessId: HarnessId
+  harnessName: string
+  isDefault: boolean
+  hidden: boolean // a default agent hidden from the agent menu
+  // Whether Kettu handed this agent's harness an API key; null for a harness that takes none.
+  apiKey: { set: boolean; providers: boolean } | null
   state: AgentState
   // From `initialize`, a binary agent's `--version`, or the `requires` program's (Pi's `pi`).
   version: string | null
@@ -191,10 +195,10 @@ export interface AgentStatus {
   updateSkipped: boolean // the user dismissed this update in the sidebar's notice
   task: AgentTask | null
   installMethods: AgentInstallMethod[] // a binary agent's ways to install; empty for the others
-  cli: AgentCli | null // which CLI a Claude Code or Codex adapter runs; null for the others
+  cli: AgentCli | null // the user's Claude Code or Codex; null for the others
   // The configuration folder a start uses and the one the running process uses (null while none
-  // runs); null for an agent whose folder cannot be chosen.
-  configDir: { runs: string; active: string | null } | null
+  // runs); null for an agent whose folder cannot be chosen. `created`: Kettu made it.
+  configDir: { runs: string; active: string | null; created: boolean } | null
   // Whether a start gets Kettu's MCP server, and whether the running process got it (null
   // while none runs).
   kettuServer: { runs: boolean; active: boolean | null }
@@ -251,7 +255,7 @@ export interface AgentConfigItem {
   path: string
   exists: boolean
   env: string | null // the variable that moved it, such as CLAUDE_CONFIG_DIR; null at the default
-  chosen: boolean // the folder picked in Settings (agents.<id>.configDir), whose env is then null
+  chosen: boolean // the agent's own folder, set by Kettu, whose env is then null
 }
 
 /** For Settings › MCP servers: the servers Kettu gives agents, and where each agent keeps its own. */
@@ -269,7 +273,7 @@ export interface McpStatus {
     path: string // that file, found as the agent finds it
     exists: boolean
     env: string | null // the variable that moved it, such as CLAUDE_CONFIG_DIR; null at the default
-    chosen: boolean // in the folder picked in Settings (agents.<id>.configDir), whose env is then null
+    chosen: boolean // in the agent's own folder, set by Kettu, whose env is then null
     project: string // a project's own file, relative to its folder, such as .mcp.json
     listCommand: string | null // what lists them with their status in a session, /mcp, or null
   }[]
@@ -414,6 +418,14 @@ export interface HostContract {
   'agents.skipUpdate': { params: { agentId: AgentId }; result: void }
   // Both resolve once the task is done or cancelled, and reject with its error.
   'agents.update': { params: { agentId: AgentId }; result: void }
+  // Updates the user's own program (Claude Code, Codex, OpenCode) the way it was installed.
+  'agents.updateCli': { params: { agentId: AgentId }; result: void }
+  // Hands the agent's harness an API key to keep; Kettu keeps no copy and never reads it back.
+  'agents.setApiKey': {
+    params: { agentId: AgentId; key: string; baseUrl?: string; model?: string }
+    result: void
+  }
+  'agents.clearApiKey': { params: { agentId: AgentId }; result: void }
   'agents.install': {
     params: { agentId: AgentId; method?: AgentInstallMethod['id'] }
     result: void
@@ -669,6 +681,9 @@ export const HOST_METHODS = [
   'agents.checkUpdates',
   'agents.skipUpdate',
   'agents.update',
+  'agents.updateCli',
+  'agents.setApiKey',
+  'agents.clearApiKey',
   'agents.install',
   'agents.cancelTask',
   'agents.readOptions',
@@ -777,6 +792,7 @@ export type HostEvent =
   | { type: 'session.removed'; sessionId: string }
   | { type: 'session.returned'; sessionId: string | null }
   | { type: 'agent.status'; status: AgentStatus }
+  | { type: 'agent.removed'; agentId: AgentId }
   | { type: 'agent.options'; options: AgentOptions }
   | { type: 'projects.changed'; projects: Project[] }
   | { type: 'environment.changed'; info: EnvironmentInfo }

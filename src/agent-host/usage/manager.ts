@@ -2,7 +2,7 @@
 // computer is on, picks the source each agent counts from, and answers the page.
 
 import type { Platform } from '@shared/platform'
-import { AGENT_IDS, type AgentId } from '@shared/thread'
+import { sortAgentIds, type AgentId } from '@shared/thread'
 import {
   partsTotal,
   type ScanProgress,
@@ -255,7 +255,9 @@ export class UsageManager {
   /** The source each agent counts from in a scope. */
   sources(scope: UsageScope): SourceMap {
     const map: SourceMap = {}
-    for (const agentId of AGENT_IDS) {
+    // Every agent with usage, removed and added ones too, and those whose logs are read.
+    const agentIds = new Set<AgentId>([...this.stats.map((s) => s.agentId), ...this.logs.keys()])
+    for (const agentId of agentIds) {
       map[agentId] = scope === 'computer' && this.countsLogs(agentId) ? 'log' : 'kettu'
     }
     return map
@@ -305,10 +307,10 @@ export class UsageManager {
 
   private agentsWithUsage(): AgentId[] {
     const scopes = [this.sources('computer'), this.sources('kettu')]
-    return AGENT_IDS.filter((agentId) =>
-      this.stats.some(
-        (s) => s.agentId === agentId && scopes.some((sources) => sources[agentId] === s.source),
-      ),
+    return sortAgentIds(
+      this.stats
+        .filter((s) => scopes.some((sources) => sources[s.agentId] === s.source))
+        .map((s) => s.agentId),
     )
   }
 
