@@ -36,6 +36,20 @@ const DEFS = `
   <linearGradient id="edgeLight" x1="160" y1="160" x2="1033" y2="1091" gradientUnits="userSpaceOnUse">
     <stop offset="0" stop-color="#FFF1B9" stop-opacity=".68"/><stop offset=".25" stop-color="#FFFFFF" stop-opacity=".07"/><stop offset=".57" stop-color="#FFEA9A" stop-opacity="0"/><stop offset="1" stop-color="#FFF1D8" stop-opacity=".44"/>
   </linearGradient>
+  <linearGradient id="valleyGrad" x1="450" y1="0" x2="1111" y2="0" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#A80C00" stop-opacity="0"/><stop offset=".3" stop-color="#A80C00" stop-opacity="0.6"/><stop offset=".75" stop-color="#A80C00" stop-opacity="0.6"/><stop offset="1" stop-color="#A80C00" stop-opacity="0.21"/>
+  </linearGradient>
+  <filter id="valleyBlur" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="16"/></filter>
+  <filter id="foxHalo" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="50"/><feOffset dx="0" dy="0" result="s"/><feFlood flood-color="#E00800" flood-opacity="0.7"/><feComposite in2="s" operator="in"/></filter>
+  <filter id="foxAmbient" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="24"/><feOffset dx="0" dy="4" result="s"/><feFlood flood-color="#D00800" flood-opacity="0.75"/><feComposite in2="s" operator="in"/></filter>
+  <filter id="foxCast" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="26"/><feOffset dx="18" dy="22" result="s"/><feFlood flood-color="#B80600" flood-opacity="0.75"/><feComposite in2="s" operator="in"/></filter>
+  <filter id="foxContact" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="8"/><feOffset dx="0" dy="14" result="s"/><feFlood flood-color="#980400" flood-opacity="0.85"/><feComposite in2="s" operator="in"/></filter>
+  <filter id="recessBlur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5"/></filter>
+  <filter id="softWave" x="-15%" y="-15%" width="130%" height="140%"><feGaussianBlur stdDeviation="6"/></filter>
+`
+
+// What the fox itself is drawn with, which the glyph carries without the rest.
+const FOX_DEFS = `
   <!-- Light comes from the upper left, so the right-hand parts keep their own, slightly darker stops. -->
   <linearGradient id="earBase" x1="307" y1="336" x2="539" y2="536" gradientUnits="userSpaceOnUse">
     <stop offset="0" stop-color="#FFFDF2"/><stop offset=".2" stop-color="#FFE8BD"/><stop offset=".47" stop-color="#FFBD6C"/><stop offset=".75" stop-color="#FF8E24"/><stop offset="1" stop-color="#F45F12"/>
@@ -70,19 +84,9 @@ const DEFS = `
   <linearGradient id="domeEdgeLight" x1="360" y1="0" x2="880" y2="0" gradientUnits="userSpaceOnUse">
     <stop offset="0" stop-color="#FFF2C8" stop-opacity=".75"/><stop offset=".5" stop-color="#FFF2C8" stop-opacity=".45"/><stop offset="1" stop-color="#FFF2C8" stop-opacity=".08"/>
   </linearGradient>
-  <linearGradient id="valleyGrad" x1="450" y1="0" x2="1111" y2="0" gradientUnits="userSpaceOnUse">
-    <stop offset="0" stop-color="#A80C00" stop-opacity="0"/><stop offset=".3" stop-color="#A80C00" stop-opacity="0.6"/><stop offset=".75" stop-color="#A80C00" stop-opacity="0.6"/><stop offset="1" stop-color="#A80C00" stop-opacity="0.21"/>
-  </linearGradient>
-  <filter id="valleyBlur" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="16"/></filter>
-  <filter id="foxHalo" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="50"/><feOffset dx="0" dy="0" result="s"/><feFlood flood-color="#E00800" flood-opacity="0.7"/><feComposite in2="s" operator="in"/></filter>
-  <filter id="foxAmbient" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="24"/><feOffset dx="0" dy="4" result="s"/><feFlood flood-color="#D00800" flood-opacity="0.75"/><feComposite in2="s" operator="in"/></filter>
-  <filter id="foxCast" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="26"/><feOffset dx="18" dy="22" result="s"/><feFlood flood-color="#B80600" flood-opacity="0.75"/><feComposite in2="s" operator="in"/></filter>
-  <filter id="foxContact" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="8"/><feOffset dx="0" dy="14" result="s"/><feFlood flood-color="#980400" flood-opacity="0.85"/><feComposite in2="s" operator="in"/></filter>
   <filter id="earOccl" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="20"/><feOffset dx="0" dy="0" result="s"/><feFlood flood-color="#E01000" flood-opacity="0.8"/><feComposite in2="s" operator="in"/></filter>
-  <filter id="recessBlur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5"/></filter>
   <filter id="sharpGlow" x="-20%" y="-30%" width="140%" height="160%"><feGaussianBlur stdDeviation="2.3"/></filter>
   <filter id="hairGlow" x="-20%" y="-30%" width="140%" height="160%"><feGaussianBlur stdDeviation="1.1"/></filter>
-  <filter id="softWave" x="-15%" y="-15%" width="130%" height="140%"><feGaussianBlur stdDeviation="6"/></filter>
 `
 
 const BACKGROUND = `
@@ -106,7 +110,7 @@ const BACKGROUND = `
 const EDGE_LIGHT =
   '<use xlink:href="#badge" fill="none" stroke="url(#edgeLight)" stroke-width="6" opacity=".58" clip-path="url(#badgeClip)"/>'
 
-// The fox's own shapes, which the glyph fills in one color.
+// The outlines of the fox's parts; the glyph is sized to their bounds.
 const SHAPES = {
   'ear-left':
     'M 328 324.5 C 353 323.5 493.8 388.3 559.5 494.5 C 526 560.5 425 635.5 350.5 638.5 C 311.5 583.8 292.6 489.2 300 408 C 307.2 358.1 316.5 325.1 328 324.5 Z',
@@ -120,14 +124,17 @@ const SHAPES = {
     'M 879.5 624.5 C 826.9 605.5 764.6 636.9 727.5 675.5 C 650.6 755.3 645 844.1 620 922 L 616 925 L 613.1 928.8 C 617.1 929.5 617 929.5 620 929.5 C 649.4 929.5 671.5 890.1 700.5 860.5 C 742.5 817.6 796.9 769.4 856.5 735.5 C 880.1 722.1 900.5 712.3 916.5 700.5 C 933.3 688.1 930.2 670 920.5 657.5 C 909.9 643.8 894.2 629.8 879.5 624.5 Z',
 }
 
-const FOX = `
-  <clipPath id="earsClip"><use xlink:href="#ear-left"/><use xlink:href="#ear-right"/></clipPath>
+const FOX_SHADOW = `
   <g id="fox-shadow">
     <g filter="url(#foxHalo)"><use xlink:href="#ear-left"/><use xlink:href="#ear-right"/><use xlink:href="#forehead"/><use xlink:href="#cheek-left"/><use xlink:href="#cheek-right"/></g>
     <g filter="url(#foxAmbient)"><use xlink:href="#ear-left"/><use xlink:href="#ear-right"/><use xlink:href="#forehead"/><use xlink:href="#cheek-left"/><use xlink:href="#cheek-right"/></g>
     <g filter="url(#foxCast)"><use xlink:href="#ear-left"/><use xlink:href="#ear-right"/><use xlink:href="#forehead"/><use xlink:href="#cheek-left"/><use xlink:href="#cheek-right"/></g>
     <g filter="url(#foxContact)"><use xlink:href="#ear-left"/><use xlink:href="#ear-right"/><use xlink:href="#cheek-left"/><use xlink:href="#cheek-right"/></g>
   </g>
+`
+
+const FOX = `
+  <clipPath id="earsClip"><use xlink:href="#ear-left"/><use xlink:href="#ear-right"/></clipPath>
   <g id="ears">
     <path id="ear-left" d="${SHAPES['ear-left']}" fill="url(#earBase)"/>
     <path id="ear-left-inner" d="M 328 324.5 C 382 369.5 426 446.5 454.5 540.5 C 425 580 380 617 350.5 638.5 C 311.5 583.8 292.6 489.2 300 408 C 307.2 358.1 316.5 325.1 328 324.5 Z" fill="url(#earInner)"/>
@@ -188,11 +195,13 @@ export function foxSvg(framing = 'tile', { colors } = {}) {
   const parts = [
     framing !== 'fox' ? `<g id="background" clip-path="url(#badgeClip)">${BACKGROUND}</g>` : '',
     tile ? EDGE_LIGHT : '',
-    framing !== 'background' ? `<g id="fox" transform="translate(${FOX_DX} 0)">${FOX}</g>` : '',
+    framing !== 'background'
+      ? `<g id="fox" transform="translate(${FOX_DX} 0)">${FOX_SHADOW}${FOX}</g>`
+      : '',
   ]
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">\n` +
-    `<defs>\n<path id="badge" d="${badge(tile)}"/>${DEFS}</defs>\n` +
+    `<defs>\n<path id="badge" d="${badge(tile)}"/>${DEFS}${FOX_DEFS}</defs>\n` +
     `<g transform="translate(${inset} ${inset}) scale(${+scale.toFixed(6)}) translate(${-TILE.x} ${-TILE.y})">\n` +
     parts.filter(Boolean).join('\n') +
     '\n</g>\n</svg>\n'
@@ -201,11 +210,10 @@ export function foxSvg(framing = 'tile', { colors } = {}) {
   return svg.replace(/#[0-9A-Fa-f]{6}\b/g, (c) => map.get(c.toUpperCase()) ?? c)
 }
 
-// The glyph: the fox in one color for the macOS menu bar and the Windows and Linux trays. Its
-// ears, forehead and cheeks are filled, with a gap under the forehead's upper arc and under each
-// cheek's upper edge: a stroke GLYPH_GAP wide on the tile, laid under the shape above it, so half
-// of it shows.
-const GLYPH_GAP = 100
+// The glyph: the icon's fox without its shadow, for the macOS menu bar and the Windows and Linux
+// trays, in one color whose opacity follows the drawing's luminance, so the parts stay apart by
+// their shading. The opacity is lifted a little so the cheeks and ear tips come out solid.
+const GLYPH_SHADE = { slope: 1.25, intercept: -0.05 }
 // The menu bar's canvas in points, with the fox 16 pt wide and centred; a tray's square is cut
 // from it to the fox's width.
 export const GLYPH_CANVAS = 18
@@ -227,20 +235,12 @@ export function glyphSvg(framing = 'menubar', { size, color = '#000', dot = fals
   const scale = GLYPH_WIDTH / (x1 - x0)
   const c = GLYPH_CANVAS / 2
   const transform = `translate(${c} ${c}) scale(${+scale.toFixed(6)}) translate(${-(x0 + x1) / 2} ${-(y0 + y1) / 2})`
-  // The forehead's upper arc is its first two curves; a cheek's upper edge ends at its first line.
-  const arc = SHAPES.forehead.split(' C ').slice(0, 3).join(' C ')
-  const gap = (d) =>
-    `<path d="${d}" fill="none" stroke="#000" stroke-width="${GLYPH_GAP}" stroke-linecap="round"/>`
-  const fill = (id) => `<path d="${SHAPES[id]}" fill="#fff"/>`
-  const fox =
-    fill('ear-left') +
-    fill('ear-right') +
-    gap(arc) +
-    fill('forehead') +
-    gap(SHAPES['cheek-left'].split(' L ')[0]) +
-    gap(SHAPES['cheek-right'].split(' L ')[0]) +
-    fill('cheek-left') +
-    fill('cheek-right')
+  // The mask reads luminance, so the shade is white at the opacity the luminance gives.
+  const shade =
+    '<filter id="shade" color-interpolation-filters="sRGB"><feColorMatrix type="luminanceToAlpha"/>' +
+    `<feComponentTransfer><feFuncA type="linear" slope="${GLYPH_SHADE.slope}" intercept="${GLYPH_SHADE.intercept}"/></feComponentTransfer>` +
+    '<feComposite in2="SourceAlpha" operator="in" result="opacity"/>' +
+    '<feFlood flood-color="#fff"/><feComposite in2="opacity" operator="in"/></filter>'
   const badge = dot
     ? `<circle cx="${DOT.cx}" cy="${DOT.cy}" r="${DOT.r + DOT.gap}" fill="#000"/>` +
       `<circle cx="${DOT.cx}" cy="${DOT.cy}" r="${DOT.r}" fill="#fff"/>`
@@ -249,9 +249,10 @@ export function glyphSvg(framing = 'menubar', { size, color = '#000', dot = fals
   const side = GLYPH_CANVAS - 2 * m
   const px = size ?? side
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="${m} ${m} ${side} ${side}">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${px}" height="${px}" viewBox="${m} ${m} ${side} ${side}">` +
+    `<defs>${FOX_DEFS}${shade}</defs>` +
     `<mask id="glyph" maskUnits="userSpaceOnUse" x="0" y="0" width="${GLYPH_CANVAS}" height="${GLYPH_CANVAS}">` +
-    `<g transform="${transform}">${fox}</g>${badge}</mask>` +
+    `<g transform="${transform}" filter="url(#shade)">${FOX}</g>${badge}</mask>` +
     `<rect width="${GLYPH_CANVAS}" height="${GLYPH_CANVAS}" fill="${color}" mask="url(#glyph)"/></svg>\n`
   )
 }

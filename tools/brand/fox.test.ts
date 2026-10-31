@@ -53,13 +53,20 @@ describe('foxSvg', () => {
 })
 
 describe('glyphSvg', () => {
-  it('draws one color on transparent, from the fox and a mask', () => {
+  it("masks one color on transparent with the fox's own shading, without its shadow", () => {
     for (const framing of GLYPH_FRAMINGS) {
       for (const dot of [false, true]) {
         const svg = glyphSvg(framing, { color: '#fff', dot })
-        expect(svg).not.toMatch(/<image|data:|filter|Gradient/)
-        expect(svg).toContain('<rect width="18" height="18" fill="#fff" mask="url(#glyph)"/>')
-        for (const ref of refs(svg)) expect(ids(svg)).toContain(ref)
+        expect(svg).not.toMatch(/<image|data:/)
+        expect(svg).toContain('filter="url(#shade)"')
+        expect(svg).toContain('fill="url(#faceFront)"')
+        expect(svg).not.toContain('fox-shadow')
+        expect(svg.slice(svg.indexOf('</mask>'))).toBe(
+          '</mask><rect width="18" height="18" fill="#fff" mask="url(#glyph)"/></svg>\n',
+        )
+        const defined = ids(svg)
+        expect(new Set(defined).size).toBe(defined.length)
+        for (const ref of refs(svg)) expect(defined).toContain(ref)
         expect(svg.match(/<circle /g)?.length ?? 0).toBe(dot ? 2 : 0)
       }
     }
