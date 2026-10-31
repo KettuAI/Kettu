@@ -9,6 +9,7 @@ import type { PortChannel } from '@shared/port-channel'
 import { deviceId } from '@shared/remote/device'
 import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
 import { parsePairingLink, type PairingState } from '@shared/remote/pairing'
+import { PROTOCOL_VERSION } from '@shared/remote/protocol'
 import { startTestHost, type TestHost } from '../agent-host/testing/harness'
 import { ActivityLog } from './activity'
 import { DeviceStore } from './devices'
@@ -202,7 +203,7 @@ describe('a paired device', () => {
     ])
   })
 
-  it('has its sessions closed at once when it is removed, and is refused after', async () => {
+  it('has its sessions closed at once when it is removed, and hears why when it comes back', async () => {
     const t = await setup()
     const device = await t.connect()
     await device.first
@@ -218,8 +219,10 @@ describe('a paired device', () => {
     expect(file.devices).toEqual([])
 
     const again = await t.connect()
-    expect(await again.closing).toBeNull()
-    expect(t.server.refused).toBe(1)
+    expect(await again.first).toEqual({ type: 'closing', reason: 'removed' })
+    expect(await again.closing).toEqual({ type: 'closing', reason: 'removed' })
+    expect(t.server.refused).toBe(0)
+    expect(t.agentPorts).toHaveLength(1)
   })
 
   it('hears why when the host stops', async () => {
@@ -270,6 +273,58 @@ describe('the handshake', () => {
     expect(t.server.refused).toBe(1)
     expect(t.changes()).toBe(1)
     expect(t.agentPorts).toEqual([])
+    expect(t.logs).toEqual([])
+  })
+
+  it('lets a removed device finish it and tells it why after its hello, not counting it', async () => {
+    const t = await setup()
+    await t.server.removeDevice(t.phone.id)
+    const changes = t.changes()
+    const device = await t.connect()
+    expect(await device.first).toEqual({ type: 'closing', reason: 'removed' })
+    expect(await device.closing).toEqual({ type: 'closing', reason: 'removed' })
+    expect(t.server.refused).toBe(0)
+    expect(t.changes()).toBe(changes)
+    expect(t.agentPorts).toEqual([])
+    expect(t.server.online()).toEqual([])
+    expect(t.logs).toEqual([`info: Told device ${t.phone.id} that it was removed`])
+    expect(t.activity.list(t.phone.id).map((event) => event.kind)).toEqual(['removed'])
+
+    // A stranger is still dropped at its first message, and only counted.
+    const stranger = await t.connect(await generateKeyPair())
+    expect(await stranger.closing).toBeNull()
+    expect(t.server.refused).toBe(1)
+    expect(t.logs).toHaveLength(1)
+  })
+
+  it('tells a removed device nothing before its hello', async () => {
+    const t = await setup({ helloTimeoutMs: 50 })
+    await t.server.removeDevice(t.phone.id)
+    const device = await t.connect(undefined, null)
+    expect(await device.closing).toBeNull()
+    expect(t.server.refused).toBe(0)
+    expect(t.logs).toEqual([])
+  })
+
+  it('welcomes a removed device paired again between its handshake and its hello', async () => {
+    const t = await setup()
+    await t.server.removeDevice(t.phone.id)
+    const device = await t.connect(undefined, null)
+    expect(await device.answered).toBe(true)
+    await t.devices.add({
+      publicKey: base64(t.phoneKey.publicKey),
+      name: 'Phone',
+      kind: 'ios',
+      platform: 'ios',
+      model: 'iPhone 17 Pro',
+    })
+    await device.send({
+      type: 'hello',
+      protocol: { min: PROTOCOL_VERSION, max: PROTOCOL_VERSION },
+      client: { kind: 'ios', version: '1.0.0', platform: 'ios' },
+    })
+    expect(await device.first).toMatchObject({ type: 'welcome', device: { id: t.phone.id } })
+    expect(t.server.online()).toEqual([t.phone.id])
     expect(t.logs).toEqual([])
   })
 
@@ -498,6 +553,20 @@ describe('pairing', () => {
     ])
   })
 
+  it('pairs a removed device again, which then connects as any paired device does', async () => {
+    const t = await setup()
+    await t.server.removeDevice(t.phone.id)
+    const secret = t.openCode()
+    const phone = await t.pairWith(secret, t.phoneKey, 'Phone again')
+    expect(await t.until(1, 'confirm')).toMatchObject({ device: { known: false } })
+    t.pairing.answer(1, { add: true, name: 'Phone again' })
+    expect(await phone.first).toMatchObject({ type: 'welcome', device: { id: t.phone.id } })
+    phone.close()
+    const again = await t.connect()
+    expect(await again.first).toMatchObject({ type: 'welcome', device: { id: t.phone.id } })
+    expect(t.logs).toEqual([])
+  })
+
   it('closes a pairing device whose hello has no name, spending an attempt', async () => {
     const t = await setup()
     const secret = t.openCode()
@@ -565,6 +634,8 @@ describe('devices not seen for 90 days', () => {
     // The phone is online, so it was seen.
     expect(t.devices.list().map((device) => device.id)).toEqual([t.phone.id])
     expect(t.activity.list(tablet.id)[0]).toMatchObject({ kind: 'removed', by: 'unseen' })
+    const back = await t.connect(tabletKey)
+    expect(await back.first).toEqual({ type: 'closing', reason: 'removed' })
   })
 
   it('are looked for every hour', async () => {
@@ -592,6 +663,30 @@ describe('reset', () => {
     expect(t.devices.list()).toEqual([])
     expect(t.states()).toEqual(['waiting', 'void'])
     expect(t.activity.list(t.phone.id)[0]).toMatchObject({ kind: 'removed', by: 'reset' })
+  })
+
+  it('forgets the removed devices too, so each is dropped as a stranger after', async () => {
+    const t = await setup()
+    const tabletKey = await generateKeyPair()
+    const tablet = (await t.devices.add({
+      publicKey: base64(tabletKey.publicKey),
+      name: 'Tablet',
+      kind: 'ios',
+      platform: 'iPadOS 26.1',
+      model: 'iPad Air',
+    }))!
+    await t.server.removeDevice(tablet.id)
+    await t.server.reset()
+    for (const key of [t.phoneKey, tabletKey]) {
+      const device = await t.connect(key)
+      expect(await device.closing).toBeNull()
+    }
+    expect(t.server.refused).toBe(2)
+    expect(t.logs).toEqual([])
+    const file = JSON.parse(
+      await readFile(path.join(t.agent.dir, 'remote', 'devices.json'), 'utf8'),
+    )
+    expect(file).toEqual({ version: 1, devices: [], removed: [] })
   })
 })
 

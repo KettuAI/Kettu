@@ -99,6 +99,119 @@ describe('DeviceStore', () => {
     expect((await DeviceStore.load(dir, quiet)).list()).toEqual([{ ...entry, model: '' }])
   })
 
+  it('keeps the key of a device it removes, across loads', async () => {
+    const dir = await tempFolder('kettu-devices-')
+    let now = 1000
+    const store = await DeviceStore.load(dir, quiet, () => now)
+    const { key, device } = await newDevice()
+    const added = (await store.add(device))!
+    expect(store.removedWithKey(key.publicKey)).toBeNull()
+    now = 5000
+    expect(await store.remove(added.id)).toBe(true)
+    const removed = { id: added.id, publicKey: device.publicKey, removedAt: 5000 }
+    expect(store.removedWithKey(key.publicKey)).toEqual(removed)
+    expect(store.withKey(key.publicKey)).toBeNull()
+    expect(store.removedWithKey((await generateKeyPair()).publicKey)).toBeNull()
+
+    const reloaded = await DeviceStore.load(dir, quiet)
+    expect(reloaded.list()).toEqual([])
+    expect(reloaded.removedWithKey(key.publicKey)).toEqual(removed)
+    const file = JSON.parse(await readFile(path.join(dir, 'remote', 'devices.json'), 'utf8'))
+    expect(file).toEqual({ version: 1, devices: [], removed: [removed] })
+  })
+
+  it('takes a removed key off the list when it pairs again', async () => {
+    const dir = await tempFolder('kettu-devices-')
+    const store = await DeviceStore.load(dir, quiet)
+    const { key, device } = await newDevice()
+    await store.remove((await store.add(device))!.id)
+    const again = await store.add(device)
+    expect(store.withKey(key.publicKey)).toEqual(again)
+    expect(store.removedWithKey(key.publicKey)).toBeNull()
+    expect((await DeviceStore.load(dir, quiet)).removedWithKey(key.publicKey)).toBeNull()
+  })
+
+  it('empties the removed list for a reset', async () => {
+    const dir = await tempFolder('kettu-devices-')
+    const store = await DeviceStore.load(dir, quiet)
+    const { key, device } = await newDevice()
+    await store.remove((await store.add(device))!.id)
+    await store.clearRemoved()
+    expect(store.removedWithKey(key.publicKey)).toBeNull()
+    expect((await DeviceStore.load(dir, quiet)).removedWithKey(key.publicKey)).toBeNull()
+  })
+
+  it('keeps at most 1000 removed keys, dropping the oldest first', async () => {
+    const dir = await tempFolder('kettu-devices-')
+    const removed = await Promise.all(
+      Array.from({ length: 1000 }, async (_, index) => {
+        const publicKey = crypto.getRandomValues(new Uint8Array(32))
+        return { id: await deviceId(publicKey), publicKey: base64(publicKey), removedAt: index }
+      }),
+    )
+    await mkdir(path.join(dir, 'remote'))
+    const file = path.join(dir, 'remote', 'devices.json')
+    await writeFile(file, JSON.stringify({ version: 1, devices: [], removed }))
+    const store = await DeviceStore.load(dir, quiet, () => 2000)
+    expect(store.removedWithKey(Buffer.from(removed[0]!.publicKey, 'base64'))).toEqual(removed[0])
+
+    const { key, device } = await newDevice()
+    await store.remove((await store.add(device))!.id)
+    expect(store.removedWithKey(Buffer.from(removed[0]!.publicKey, 'base64'))).toBeNull()
+    expect(store.removedWithKey(Buffer.from(removed[1]!.publicKey, 'base64'))).toEqual(removed[1])
+    expect(store.removedWithKey(key.publicKey)).toMatchObject({ removedAt: 2000 })
+    const kept = JSON.parse(await readFile(file, 'utf8')).removed
+    expect(kept).toHaveLength(1000)
+    expect(kept[0]).toEqual(removed[1])
+    expect(kept.at(-1)).toMatchObject({ publicKey: device.publicKey, removedAt: 2000 })
+  })
+
+  it('reads a file kept before removed devices were, with none removed', async () => {
+    const dir = await tempFolder('kettu-devices-')
+    const { key, device } = await newDevice()
+    const entry = { ...device, id: await deviceId(key.publicKey), addedAt: 1, lastConnectedAt: 2 }
+    await mkdir(path.join(dir, 'remote'))
+    await writeFile(
+      path.join(dir, 'remote', 'devices.json'),
+      JSON.stringify({ version: 1, devices: [entry] }),
+    )
+    const store = await DeviceStore.load(dir, quiet)
+    expect(store.list()).toEqual([entry])
+    expect(store.removedWithKey(key.publicKey)).toBeNull()
+    await store.remove(entry.id)
+    expect(store.removedWithKey(key.publicKey)).toMatchObject({ id: entry.id })
+  })
+
+  it('drops a removed entry whose id is not its key', async () => {
+    const dir = await tempFolder('kettu-devices-')
+    const { key, device } = await newDevice()
+    const kept = { id: await deviceId(key.publicKey), publicKey: device.publicKey, removedAt: 1 }
+    const other = await newDevice('Other')
+    const forged = { id: kept.id, publicKey: other.device.publicKey, removedAt: 1 }
+    await mkdir(path.join(dir, 'remote'))
+    const file = path.join(dir, 'remote', 'devices.json')
+    await writeFile(file, JSON.stringify({ version: 1, devices: [], removed: [kept, forged] }))
+    const logs: string[] = []
+    const store = await DeviceStore.load(dir, (_, message) => logs.push(message))
+    expect(store.removedWithKey(key.publicKey)).toEqual(kept)
+    expect(store.removedWithKey(other.key.publicKey)).toBeNull()
+    expect(logs).toEqual(['Dropped devices whose id is not their key'])
+    await store.flush()
+    expect(JSON.parse(await readFile(file, 'utf8')).removed).toEqual([kept])
+  })
+
+  it('treats a removed list that is not one as a damaged file', async () => {
+    const dir = await tempFolder('kettu-devices-')
+    await mkdir(path.join(dir, 'remote'))
+    const file = path.join(dir, 'remote', 'devices.json')
+    for (const removed of [{}, [{ id: 'x', publicKey: 'not a key', removedAt: 1 }]]) {
+      await writeFile(file, JSON.stringify({ version: 1, devices: [], removed }))
+      const logs: string[] = []
+      await DeviceStore.load(dir, (level, message) => logs.push(`${level}: ${message}`))
+      expect(logs).toEqual([expect.stringMatching(/^error: devices\.json could not be read/)])
+    }
+  })
+
   it('drops an entry whose id is not its key', async () => {
     const dir = await tempFolder('kettu-devices-')
     const { key, device } = await newDevice()

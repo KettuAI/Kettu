@@ -18,6 +18,8 @@ export interface HostStream {
 }
 
 export interface TestDevice {
+  /** Whether the host answered the handshake, once it did or the connection ended first. */
+  answered: Promise<boolean>
   /** The host's first message after the handshake: its welcome, or why it closes. */
   first: Promise<unknown>
   /** The host protocol, once welcomed. */
@@ -132,6 +134,11 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
   port.onMessage((data) => void channel?.send(data))
 
   return {
+    // After the listener above, so the channel is up once this settles to true.
+    answered: opened.then(
+      () => true,
+      () => false,
+    ),
     first,
     port,
     closing,
