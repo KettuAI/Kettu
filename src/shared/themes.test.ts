@@ -143,6 +143,36 @@ describe('parseThemeFile', () => {
       })
     }
   })
+
+  it('reads the faces a theme chooses, which both variants share', () => {
+    const result = parseThemeFile(
+      file({ fonts: { ui: 'inter', prose: 'source-serif-4', code: 'system', size: 14 } }),
+    )
+    expect(result.ok && result.theme.fonts).toEqual({
+      ui: 'inter',
+      prose: 'source-serif-4',
+      code: 'system',
+    })
+    expect(result.ok && result.ignored).toEqual(['fonts.size'])
+    for (const plain of [parseThemeFile(file()), parseThemeFile(file({ fonts: {} }))]) {
+      expect(plain.ok && !('fonts' in plain.theme)).toBe(true)
+    }
+  })
+
+  it('refuses a face Kettu does not ship, or one the role cannot take', () => {
+    const cases: [unknown, string][] = [
+      [[], 'fonts'],
+      ['inter', 'fonts'],
+      [{ ui: 'Helvetica' }, 'fonts.ui'],
+      [{ prose: "url('x.woff2')" }, 'fonts.prose'],
+      [{ prose: 'Inter' }, 'fonts.prose'],
+      [{ code: 'inter' }, 'fonts.code'],
+      [{ code: 1 }, 'fonts.code'],
+    ]
+    for (const [fonts, path] of cases) {
+      expect(errorOf(parseThemeFile(file({ fonts })))).toEqual({ code: 'invalid-field', path })
+    }
+  })
 })
 
 describe('parseColor', () => {

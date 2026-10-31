@@ -33,12 +33,12 @@ describe('the built-in colors', () => {
     for (const colors of [BUILTIN_COLORS.light, BUILTIN_COLORS.dark]) {
       expect(Object.keys(colors)).toEqual([...THEME_TOKENS])
     }
-    expect(BUILTIN_COLORS.light['bg-app']).toBe('#fdfcf9')
-    expect(BUILTIN_COLORS.dark['bg-app']).toBe('#1c1b18')
+    expect(BUILTIN_COLORS.light['bg-app']).toBe('#ffffff')
+    expect(BUILTIN_COLORS.dark['bg-app']).toBe('#1e1e1e')
     // Tokens the dark block leaves alone, and roles, which point at other tokens.
-    expect(BUILTIN_COLORS.dark['viewer-scrim']).toBe('oklch(0.14 0.004 85 / 92%)')
-    expect(BUILTIN_COLORS.dark['primary-foreground']).toBe('#262521')
-    expect(BUILTIN_COLORS.light['terminal-background']).toBe('#fdfcf9')
+    expect(BUILTIN_COLORS.dark['viewer-scrim']).toBe('oklch(0.14 0 0 / 92%)')
+    expect(BUILTIN_COLORS.dark['primary-foreground']).toBe('#252525')
+    expect(BUILTIN_COLORS.light['terminal-background']).toBe('#ffffff')
   })
 
   it('deepen the heatmap from the secondary text color', () => {

@@ -1045,7 +1045,7 @@ function TrendCard({
         {late ? (
           <Skeleton className="min-h-49 flex-1" />
         ) : max === 0 ? (
-          <p className="flex min-h-49 flex-1 items-center justify-center font-serif text-prose text-tertiary shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-default)]">
+          <p className="flex min-h-49 flex-1 items-center justify-center font-prose text-prose text-tertiary shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-default)]">
             {kind === 'cost' && days.some((day) => day.total > 0) ? t('noCost') : t('noUsage')}
           </p>
         ) : (

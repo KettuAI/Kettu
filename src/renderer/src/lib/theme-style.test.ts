@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Theme } from '@shared/themes'
-import { themeCss } from './theme-style'
+import { themeCss, themeFontAttributes } from './theme-style'
 
 const theme = (light: Record<string, string>, dark: Record<string, string>): Theme => ({
   name: 'Nord',
@@ -47,5 +47,21 @@ html:root[data-theme='dark'],
   --link: #123456;
 }
 `)
+  })
+})
+
+describe('themeFontAttributes', () => {
+  it('names each role, with the face the theme chooses or none', () => {
+    expect(themeFontAttributes({ ...theme({}, {}), fonts: { prose: 'source-serif-4' } })).toEqual([
+      ['data-font-ui', null],
+      ['data-font-prose', 'source-serif-4'],
+      ['data-font-code', null],
+    ])
+    expect(themeFontAttributes(null).every(([, face]) => face === null)).toBe(true)
+  })
+
+  it('leaves out a face the role cannot take', () => {
+    const fonts = { ui: 'Comic Sans', code: 'inter' } as unknown as Theme['fonts']
+    expect(themeFontAttributes({ ...theme({}, {}), fonts }).every(([, face]) => !face)).toBe(true)
   })
 })

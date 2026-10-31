@@ -8,92 +8,94 @@
 [data-theme='light'] {
   color-scheme: light;
 
-  --bg-app: #fdfcf9;
-  --bg-sidebar: #efede6;
+  --bg-app: #ffffff;
+  --bg-sidebar: #fafafa;
   --bg-surface: #ffffff;
-  --bg-subtle: #f2f0e9;
-  --bg-code-inline: rgb(28 27 24 / 6.5%);
-  --bg-code-block: #f7f5ef;
-  --bg-hover: rgb(28 27 24 / 5%);
-  --bg-selected: rgb(28 27 24 / 7.5%);
+  --bg-subtle: #f4f4f4;
+  --bg-code-inline: #f4f4f4;
+  --bg-code-block: #fafafa;
+  --bg-hover: #eeeeee;
+  --bg-selected: #e1e1e1;
 
-  /* Lines are shares of the text color, so one line reads the same on every surface it crosses. */
-  --border-default: rgb(28 27 24 / 12%);
-  --border-subtle: rgb(28 27 24 / 7.5%);
-  /* One step past border-default: a hovered raised control, a hovered or focused field. */
-  --border-strong: rgb(28 27 24 / 20%);
+  --border-default: #e8e8e8;
+  --border-subtle: #f0f0f0;
+  /* One step past border-default: a hovered card, a hovered or focused field. */
+  --border-strong: #d4d4d4;
 
-  --text-primary: #1c1b18;
-  --text-secondary: #55534c;
-  --text-tertiary: #68655d;
-  --text-placeholder: #6e6b63;
-  --text-disabled: #a9a69d;
-  --icon-default: #68655d;
+  --text-primary: #222222;
+  /* Dark enough to read on a selected row, where the lighter grays fall under 4.5:1. */
+  --text-secondary: #5e5e5e;
+  --text-tertiary: #6b6b6b;
+  --text-placeholder: #737373;
+  --text-disabled: #9a9a9a;
+  --icon-default: #737373;
 
-  --attention: #a3441c;
-  --attention-dot: #d2622f;
-  --danger: #ac3b2d;
-  --success: #2e7550;
-  --merged: #6f4c8e;
+  /* Waiting: the fox orange, darkened for text; the dot keeps the brand's own. */
+  --attention: #bf4f18;
+  --attention-dot: #f2641e;
+  --danger: #c4352b;
+  --success: #2e7d4f;
+  --merged: #7053aa;
   /* Running work. Link's blue for now, a token of its own so the two can part. */
-  --info: #2d5e91;
-  --warning: #8a6212;
-  --link: #2d5e91;
-  --link-hover: #234a73;
-  --focus: rgb(45 94 145 / 55%);
-  --selection: rgb(45 94 145 / 18%);
+  --info: #2f5d9c;
+  --warning: #956700;
+  --link: #2f5d9c;
+  --link-hover: #244a7d;
+  --focus: #737373;
+  --selection: rgb(47 93 156 / 18%);
   /* An edit in place: macOS's own focus ring and text highlight. */
   --edit-ring: #2a79d7;
   --edit-selection: #b3d6fe;
 
   /* A turn that ended abnormally, and other failure notices. */
-  --danger-tint: #fbf6f6;
-  --danger-border: #eed8d5;
+  --danger-tint: #fbf3f2;
+  --danger-border: #f4dbd9;
   /* Status pills: each state's color at 6% over --bg-surface. */
-  --success-tint: #f2f7f5;
-  --info-tint: #f2f5f8;
-  --warning-tint: #f8f6f1;
+  --success-tint: #f2f7f4;
+  --info-tint: #f3f5f9;
+  --warning-tint: #f9f6f0;
   /* A hovered info pill that is a button: opaque, so the contrast check sees it. */
-  --info-tint-hover: #eaeff4;
+  --info-tint-hover: #eaeff5;
   /* What a queued message's card darkens toward as it sits further back in the stack. */
-  --queue-back: #f2f0ea;
+  --queue-back: #f2f2f2;
   /* The page under an SVG preview: white in both themes, the page an SVG is drawn for. */
   --canvas: #ffffff;
-  --scrollbar-thumb: rgb(28 27 24 / 20%);
+  --scrollbar-thumb: rgb(0 0 0 / 20%);
   /* The dimmed page behind a dialog or a sheet. */
-  --scrim: rgb(28 27 24 / 14%);
+  --scrim: rgb(0 0 0 / 18%);
   /* Behind the media viewer, dark in both themes, since pictures read best on dark; the dark
      blocks leave it to this one. */
-  --viewer-scrim: oklch(0.14 0.004 85 / 92%);
+  --viewer-scrim: oklch(0.14 0 0 / 92%);
   /* A search match marked in its text. */
   --mark: oklch(0.88 0.14 92 / 55%);
   /* The squares behind a transparent picture, so a dark or light one shows on either theme. */
-  --checker: rgb(28 27 24 / 5%);
+  --checker: rgb(0 0 0 / 5%);
 
-  --elevation-queue: 0 1px 6px rgb(20 20 19 / 5%);
-  --elevation-popover: 0 12px 32px -10px rgb(28 27 24 / 20%), 0 2px 6px -2px rgb(28 27 24 / 8%);
-  /* Quiet depth: the contact shadows under what you can press (control) and under cards. */
-  --elevation-control: 0 1px 0 rgb(28 27 24 / 6%);
-  --elevation-control-hover: 0 1px 0 rgb(28 27 24 / 8%), 0 2px 5px -1px rgb(28 27 24 / 7%);
-  --elevation-card: 0 1px 2px rgb(28 27 24 / 5%);
+  /* Flat: rows, cards and controls have no shadow, and lines and grays carry the layers. Only
+     what floats over the page casts one. */
+  --elevation-queue: 0 1px 6px rgb(0 0 0 / 5%);
+  --elevation-popover: 0 10px 28px -12px rgb(0 0 0 / 14%), 0 2px 6px -3px rgb(0 0 0 / 5%);
+  --elevation-control: 0 0 #0000;
+  --elevation-control-hover: 0 0 #0000;
+  --elevation-card: 0 0 #0000;
   /* The composer and a hovered card; used with the card tier. */
-  --elevation-float: 0 14px 34px -18px rgb(28 27 24 / 24%);
-  /* A pressed toggle button sunk into its bar. */
-  --elevation-sunk: inset 0 1px 2px rgb(28 27 24 / 7%);
-  --elevation-thumb: 0 1px 2px rgb(28 27 24 / 22%), 0 0 0 0.5px rgb(28 27 24 / 8%);
-  --elevation-segment: 0 1px 0 rgb(28 27 24 / 6%);
-  --elevation-dialog: 0 28px 70px -20px rgb(28 27 24 / 30%);
-  --elevation-primary: 0 1px 2px rgb(28 27 24 / 24%);
-  /* The top edge of a raised surface catching the light; dark theme only. */
+  --elevation-float: 0 1px 2px rgb(0 0 0 / 3%);
+  --elevation-sunk: 0 0 #0000;
+  --elevation-thumb: 0 1px 2px rgb(0 0 0 / 18%), 0 0 0 0.5px rgb(0 0 0 / 6%);
+  --elevation-segment: 0 0 #0000;
+  --elevation-dialog: 0 24px 48px -16px rgb(0 0 0 / 20%), 0 4px 12px -6px rgb(0 0 0 / 8%);
+  --elevation-primary: 0 0 #0000;
+  /* The top edge of a raised surface catching the light; none in the flat style. */
   --highlight: 0 0 #0000;
 
-  /* The primary button: its gradient's stops, a ring, and a highlight along its top edge. */
-  --primary-from: #2e2d29;
-  --primary-to: #1c1b18;
-  --primary-hover-from: #3b3934;
-  --primary-hover-to: #292824;
-  --primary-ring: #1c1b18;
-  --primary-highlight: rgb(255 255 255 / 12%);
+  /* The primary button: its fill as gradient stops, a ring, and a highlight along its top edge,
+     which a theme may set; the built-in one is a solid near-black. */
+  --primary-from: #222222;
+  --primary-to: #222222;
+  --primary-hover-from: #3a3a3a;
+  --primary-hover-to: #3a3a3a;
+  --primary-ring: #222222;
+  --primary-highlight: rgb(255 255 255 / 0%);
 
   /* Agent marks: with the Kettu icon, the only brand colors in the interface. */
   --brand-claude: #d97757;
@@ -115,291 +117,274 @@
   --brand-codewhale-2: #0b48bb;
 
   /* Usage charts: each agent's series, and the empty day the heatmap deepens from. */
-  --agent-opencode: oklch(0.6 0.008 85);
+  --agent-opencode: oklch(0.6 0 0);
   /* Pi's yellow mixed 86% with the light surface, as Claude Code's and Codex's series are. */
   --agent-pi: oklch(0.852 0.114 83.4);
-  --agent-other: oklch(0.8 0.008 85);
-  --heat-0: rgb(28 27 24 / 5.5%);
+  --agent-other: oklch(0.8 0 0);
+  --heat-0: rgb(0 0 0 / 5.5%);
 
-  /* What fills the context in the usage popover, by source. */
-  --context-1: oklch(0.52 0.09 250);
-  --context-2: oklch(0.56 0.07 190);
-  --context-3: oklch(0.52 0.09 310);
-  --context-4: oklch(0.68 0.11 75);
-  --context-5: oklch(0.56 0.09 155);
-  --context-6: oklch(0.56 0.1 25);
-  --context-7: oklch(0.6 0.02 85);
+  /* What fills the context in the usage popover, by source: a ramp of grays. */
+  --context-1: #222222;
+  --context-2: #444444;
+  --context-3: #666666;
+  --context-4: #858585;
+  --context-5: #a3a3a3;
+  --context-6: #c4c4c4;
+  --context-7: #d9d9d9;
 
-  /* Terminal, read by xterm.js: Paper's sixteen colors, toned to read on the sheet. */
-  --ansi-black: #1c1b18;
-  --ansi-red: #ac3b2d;
-  --ansi-green: #2e7550;
-  --ansi-yellow: #8a6212;
-  --ansi-blue: #2d5e91;
-  --ansi-magenta: #6f4c8e;
-  --ansi-cyan: #23707a;
-  --ansi-white: #6d6a62;
-  --ansi-bright-black: #75726a;
-  --ansi-bright-red: #c24e3b;
-  --ansi-bright-green: #3c8a5e;
-  --ansi-bright-yellow: #a0761a;
-  --ansi-bright-blue: #3b74ae;
-  --ansi-bright-magenta: #8660a6;
-  --ansi-bright-cyan: #2f8590;
-  --ansi-bright-white: #a9a69d;
+  /* Terminal, read by xterm.js: sixteen colors toned to read on white. */
+  --ansi-black: #222222;
+  --ansi-red: #c4352b;
+  --ansi-green: #2e7d4f;
+  --ansi-yellow: #956700;
+  --ansi-blue: #2f5d9c;
+  --ansi-magenta: #8d3d84;
+  --ansi-cyan: #2d6e7e;
+  --ansi-white: #737373;
+  --ansi-bright-black: #8a8a8a;
+  --ansi-bright-red: #d4473c;
+  --ansi-bright-green: #3a9160;
+  --ansi-bright-yellow: #b07c00;
+  --ansi-bright-blue: #3d72b8;
+  --ansi-bright-magenta: #a24f98;
+  --ansi-bright-cyan: #358597;
+  --ansi-bright-white: #9a9a9a;
 
-  /* The sheets laid on the desk: the thread, the side panes and the pages. */
-  --elevation-sheet:
-    0 0 0 1px rgb(28 27 24 / 7%), 0 1px 2px rgb(28 27 24 / 4%),
-    0 10px 30px -14px rgb(28 27 24 / 14%);
-  /* The sheet of a pane in focus in a split view: the sheet tier with its edge stronger. */
-  --elevation-sheet-focused:
-    0 0 0 1px var(--border-strong), 0 1px 2px rgb(28 27 24 / 4%),
-    0 10px 30px -14px rgb(28 27 24 / 14%);
-  /* A page lying on the desk, at rest and lifted: an artifact in its tray and on its canvas. */
-  --elevation-page:
-    0 0 0 1px rgb(28 27 24 / 7.5%), 0 1px 2px rgb(28 27 24 / 6%),
-    0 8px 18px -10px rgb(28 27 24 / 24%);
-  --elevation-page-lift:
-    0 0 0 1px rgb(28 27 24 / 7.5%), 0 3px 6px -2px rgb(28 27 24 / 8%),
-    0 16px 30px -14px rgb(28 27 24 / 34%);
+  /* The main area and the panes are flat columns divided by hairlines. */
+  --elevation-sheet: 0 0 #0000;
+  /* The pane in focus in a split view: an inset line in the strong border color. */
+  --elevation-sheet-focused: inset 0 0 0 1px var(--border-strong);
+  /* An artifact's page in its tray and on its canvas: a hairline, stronger when lifted. */
+  --elevation-page: 0 0 0 1px var(--border-default);
+  --elevation-page-lift: 0 0 0 1px var(--border-strong);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
 
-    --bg-app: #1c1b18;
-    --bg-sidebar: #121110;
-    --bg-surface: #262521;
-    --bg-subtle: #2a2925;
-    --bg-code-inline: rgb(244 243 238 / 8.5%);
-    --bg-code-block: #181715;
-    --bg-hover: rgb(244 243 238 / 5.5%);
-    --bg-selected: rgb(244 243 238 / 9%);
+    --bg-app: #1e1e1e;
+    --bg-sidebar: #171717;
+    /* What floats over the page sits a step lighter than it, since shadows barely show here. */
+    --bg-surface: #252525;
+    --bg-subtle: #2b2b2b;
+    --bg-code-inline: #2b2b2b;
+    --bg-code-block: #171717;
+    --bg-hover: #2f2f2f;
+    --bg-selected: #3a3a3a;
 
-    --border-default: rgb(244 243 238 / 10%);
-    --border-subtle: rgb(244 243 238 / 6.5%);
-    --border-strong: rgb(244 243 238 / 18%);
+    --border-default: #333333;
+    --border-subtle: #2a2a2a;
+    --border-strong: #4a4a4a;
 
-    --text-primary: #eceae3;
-    --text-secondary: #bab7ad;
-    --text-tertiary: #9a978f;
-    --text-placeholder: #95928a;
-    --text-disabled: #5e5c56;
-    --icon-default: #9a978f;
+    --text-primary: #ececec;
+    --text-secondary: #b8b8b8;
+    --text-tertiary: #a1a1a1;
+    --text-placeholder: #a1a1a1;
+    --text-disabled: #6b6b6b;
+    --icon-default: #a1a1a1;
 
-    --attention: #e8916a;
-    --attention-dot: #e8916a;
-    --danger: #ea8a7d;
-    --success: #7dc196;
-    --merged: #b798d4;
-    --info: #80aada;
-    --warning: #d9b463;
-    --link: #80aada;
-    --link-hover: #a6c4e8;
-    --focus: rgb(128 170 218 / 60%);
-    --selection: rgb(128 170 218 / 28%);
+    --attention: #f47a3e;
+    --attention-dot: #f2641e;
+    --danger: #f07167;
+    --success: #5bb98a;
+    --merged: #b197ed;
+    --info: #7fa8e8;
+    --warning: #d9a441;
+    --link: #7fa8e8;
+    --link-hover: #a3c1f0;
+    --focus: #a1a1a1;
+    --selection: rgb(127 168 232 / 28%);
     --edit-ring: #3a8ee6;
     --edit-selection: #3f638b;
 
-    --danger-tint: #3a2f2a;
-    --danger-border: #593f39;
-    --success-tint: #2f352d;
-    --info-tint: #2f3234;
-    --warning-tint: #383328;
-    --info-tint-hover: #34393d;
-    --queue-back: #201f1c;
+    --danger-tint: #392d2c;
+    --danger-border: #523634;
+    --success-tint: #2a342f;
+    --info-tint: #2e3239;
+    --warning-tint: #373228;
+    --info-tint-hover: #333a44;
+    --queue-back: #1b1b1b;
     --canvas: #ffffff;
-    --scrollbar-thumb: rgb(244 243 238 / 20%);
-    --scrim: rgb(0 0 0 / 32%);
+    --scrollbar-thumb: rgb(255 255 255 / 20%);
+    --scrim: rgb(0 0 0 / 50%);
     --mark: oklch(0.8 0.13 88 / 32%);
-    --checker: rgb(244 243 238 / 7%);
+    --checker: rgb(255 255 255 / 7%);
 
-    --elevation-queue: 0 1px 6px rgb(0 0 0 / 40%);
-    --elevation-popover: 0 16px 40px -12px rgb(0 0 0 / 60%), 0 2px 6px -2px rgb(0 0 0 / 30%);
-    --elevation-control: 0 1px 2px rgb(0 0 0 / 30%);
-    --elevation-control-hover: 0 2px 4px rgb(0 0 0 / 36%);
-    --elevation-card: 0 1px 2px rgb(0 0 0 / 30%);
-    --elevation-float: 0 14px 34px -16px rgb(0 0 0 / 70%);
-    --elevation-sunk: inset 0 1px 2px rgb(0 0 0 / 30%);
+    --elevation-queue: 0 1px 6px rgb(0 0 0 / 30%);
+    --elevation-popover: 0 10px 28px -12px rgb(0 0 0 / 42%), 0 2px 6px -3px rgb(0 0 0 / 15%);
+    --elevation-control: 0 0 #0000;
+    --elevation-control-hover: 0 0 #0000;
+    --elevation-card: 0 0 #0000;
+    --elevation-float: 0 1px 2px rgb(0 0 0 / 20%);
+    --elevation-sunk: 0 0 #0000;
     --elevation-thumb: 0 1px 2px rgb(0 0 0 / 50%);
-    --elevation-segment: 0 1px 2px rgb(0 0 0 / 30%);
-    --elevation-dialog: 0 28px 70px -20px rgb(0 0 0 / 65%);
-    --elevation-primary: 0 1px 2px rgb(0 0 0 / 40%);
-    --highlight: inset 0 1px 0 rgb(255 255 255 / 4%);
+    --elevation-segment: 0 0 #0000;
+    --elevation-dialog: 0 24px 48px -16px rgb(0 0 0 / 60%), 0 4px 12px -6px rgb(0 0 0 / 24%);
+    --elevation-primary: 0 0 #0000;
+    --highlight: 0 0 #0000;
 
-    --primary-from: #f4f3ee;
-    --primary-to: #e3e1d9;
+    /* Inverted: a near-white button with dark text. */
+    --primary-from: #ececec;
+    --primary-to: #ececec;
     --primary-hover-from: #ffffff;
-    --primary-hover-to: #eceae3;
-    --primary-ring: #d4d1c8;
-    --primary-highlight: rgb(255 255 255 / 60%);
+    --primary-hover-to: #ffffff;
+    --primary-ring: #ececec;
+    --primary-highlight: rgb(255 255 255 / 0%);
 
     --brand-opencode-frame: #ffffff;
     --brand-opencode-fill: #5a5858;
 
-    --agent-opencode: oklch(0.74 0.008 85);
+    --agent-opencode: oklch(0.74 0 0);
     /* Pi's yellow mixed 86% with the dark surface. */
     --agent-pi: oklch(0.749 0.115 84.2);
-    --agent-other: oklch(0.46 0.008 85);
-    --heat-0: rgb(244 243 238 / 6.5%);
+    --agent-other: oklch(0.46 0 0);
+    --heat-0: rgb(255 255 255 / 6.5%);
 
-    /* What fills the context in the usage popover, by source. */
-    --context-1: oklch(0.72 0.08 250);
-    --context-2: oklch(0.74 0.06 190);
-    --context-3: oklch(0.72 0.08 310);
-    --context-4: oklch(0.78 0.1 75);
-    --context-5: oklch(0.74 0.08 155);
-    --context-6: oklch(0.74 0.09 25);
-    --context-7: oklch(0.7 0.02 85);
+    /* What fills the context in the usage popover, by source: the ramp, light to dark. */
+    --context-1: #ececec;
+    --context-2: #c8c8c8;
+    --context-3: #a8a8a8;
+    --context-4: #8a8a8a;
+    --context-5: #6e6e6e;
+    --context-6: #545454;
+    --context-7: #454545;
 
-    --ansi-black: #3a3833;
-    --ansi-red: #ea8a7d;
-    --ansi-green: #7dc196;
-    --ansi-yellow: #d9b463;
-    --ansi-blue: #80aada;
-    --ansi-magenta: #b798d4;
-    --ansi-cyan: #79c2c2;
-    --ansi-white: #d9d6cd;
-    --ansi-bright-black: #6e6b63;
-    --ansi-bright-red: #f2a497;
-    --ansi-bright-green: #97d3ac;
-    --ansi-bright-yellow: #e8c77e;
-    --ansi-bright-blue: #9dc0e8;
-    --ansi-bright-magenta: #cbb0e2;
-    --ansi-bright-cyan: #97d6d6;
-    --ansi-bright-white: #f4f3ee;
+    --ansi-black: #3a3a3a;
+    --ansi-red: #f07167;
+    --ansi-green: #5bb98a;
+    --ansi-yellow: #d9a441;
+    --ansi-blue: #7fa8e8;
+    --ansi-magenta: #d88bd0;
+    --ansi-cyan: #6cc0d2;
+    --ansi-white: #d4d4d4;
+    --ansi-bright-black: #6b6b6b;
+    --ansi-bright-red: #f4948c;
+    --ansi-bright-green: #7fcca4;
+    --ansi-bright-yellow: #e5bd6a;
+    --ansi-bright-blue: #9fbff0;
+    --ansi-bright-magenta: #e3a9dd;
+    --ansi-bright-cyan: #90d2e0;
+    --ansi-bright-white: #ececec;
 
-    --elevation-sheet:
-      0 0 0 1px rgb(244 243 238 / 6.5%), 0 1px 2px rgb(0 0 0 / 30%),
-      0 10px 30px -12px rgb(0 0 0 / 60%);
-    --elevation-sheet-focused:
-      0 0 0 1px var(--border-strong), 0 1px 2px rgb(0 0 0 / 30%), 0 10px 30px -12px rgb(0 0 0 / 60%);
-    --elevation-page:
-      0 0 0 1px rgb(244 243 238 / 10%), 0 1px 2px rgb(0 0 0 / 40%),
-      0 8px 18px -10px rgb(0 0 0 / 85%);
-    --elevation-page-lift:
-      0 0 0 1px rgb(244 243 238 / 10%), 0 3px 6px -2px rgb(0 0 0 / 50%),
-      0 16px 30px -14px rgb(0 0 0 / 95%);
+    --elevation-sheet: 0 0 #0000;
+    --elevation-sheet-focused: inset 0 0 0 1px var(--border-strong);
+    --elevation-page: 0 0 0 1px var(--border-default);
+    --elevation-page-lift: 0 0 0 1px var(--border-strong);
   }
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --bg-app: #1c1b18;
-  --bg-sidebar: #121110;
-  --bg-surface: #262521;
-  --bg-subtle: #2a2925;
-  --bg-code-inline: rgb(244 243 238 / 8.5%);
-  --bg-code-block: #181715;
-  --bg-hover: rgb(244 243 238 / 5.5%);
-  --bg-selected: rgb(244 243 238 / 9%);
+  --bg-app: #1e1e1e;
+  --bg-sidebar: #171717;
+  /* What floats over the page sits a step lighter than it, since shadows barely show here. */
+  --bg-surface: #252525;
+  --bg-subtle: #2b2b2b;
+  --bg-code-inline: #2b2b2b;
+  --bg-code-block: #171717;
+  --bg-hover: #2f2f2f;
+  --bg-selected: #3a3a3a;
 
-  --border-default: rgb(244 243 238 / 10%);
-  --border-subtle: rgb(244 243 238 / 6.5%);
-  --border-strong: rgb(244 243 238 / 18%);
+  --border-default: #333333;
+  --border-subtle: #2a2a2a;
+  --border-strong: #4a4a4a;
 
-  --text-primary: #eceae3;
-  --text-secondary: #bab7ad;
-  --text-tertiary: #9a978f;
-  --text-placeholder: #95928a;
-  --text-disabled: #5e5c56;
-  --icon-default: #9a978f;
+  --text-primary: #ececec;
+  --text-secondary: #b8b8b8;
+  --text-tertiary: #a1a1a1;
+  --text-placeholder: #a1a1a1;
+  --text-disabled: #6b6b6b;
+  --icon-default: #a1a1a1;
 
-  --attention: #e8916a;
-  --attention-dot: #e8916a;
-  --danger: #ea8a7d;
-  --success: #7dc196;
-  --merged: #b798d4;
-  --info: #80aada;
-  --warning: #d9b463;
-  --link: #80aada;
-  --link-hover: #a6c4e8;
-  --focus: rgb(128 170 218 / 60%);
-  --selection: rgb(128 170 218 / 28%);
+  --attention: #f47a3e;
+  --attention-dot: #f2641e;
+  --danger: #f07167;
+  --success: #5bb98a;
+  --merged: #b197ed;
+  --info: #7fa8e8;
+  --warning: #d9a441;
+  --link: #7fa8e8;
+  --link-hover: #a3c1f0;
+  --focus: #a1a1a1;
+  --selection: rgb(127 168 232 / 28%);
   --edit-ring: #3a8ee6;
   --edit-selection: #3f638b;
 
-  --danger-tint: #3a2f2a;
-  --danger-border: #593f39;
-  --success-tint: #2f352d;
-  --info-tint: #2f3234;
-  --warning-tint: #383328;
-  --info-tint-hover: #34393d;
-  --queue-back: #201f1c;
+  --danger-tint: #392d2c;
+  --danger-border: #523634;
+  --success-tint: #2a342f;
+  --info-tint: #2e3239;
+  --warning-tint: #373228;
+  --info-tint-hover: #333a44;
+  --queue-back: #1b1b1b;
   --canvas: #ffffff;
-  --scrollbar-thumb: rgb(244 243 238 / 20%);
-  --scrim: rgb(0 0 0 / 32%);
+  --scrollbar-thumb: rgb(255 255 255 / 20%);
+  --scrim: rgb(0 0 0 / 50%);
   --mark: oklch(0.8 0.13 88 / 32%);
-  --checker: rgb(244 243 238 / 7%);
+  --checker: rgb(255 255 255 / 7%);
 
-  --elevation-queue: 0 1px 6px rgb(0 0 0 / 40%);
-  --elevation-popover: 0 16px 40px -12px rgb(0 0 0 / 60%), 0 2px 6px -2px rgb(0 0 0 / 30%);
-  --elevation-control: 0 1px 2px rgb(0 0 0 / 30%);
-  --elevation-control-hover: 0 2px 4px rgb(0 0 0 / 36%);
-  --elevation-card: 0 1px 2px rgb(0 0 0 / 30%);
-  --elevation-float: 0 14px 34px -16px rgb(0 0 0 / 70%);
-  --elevation-sunk: inset 0 1px 2px rgb(0 0 0 / 30%);
+  --elevation-queue: 0 1px 6px rgb(0 0 0 / 30%);
+  --elevation-popover: 0 10px 28px -12px rgb(0 0 0 / 42%), 0 2px 6px -3px rgb(0 0 0 / 15%);
+  --elevation-control: 0 0 #0000;
+  --elevation-control-hover: 0 0 #0000;
+  --elevation-card: 0 0 #0000;
+  --elevation-float: 0 1px 2px rgb(0 0 0 / 20%);
+  --elevation-sunk: 0 0 #0000;
   --elevation-thumb: 0 1px 2px rgb(0 0 0 / 50%);
-  --elevation-segment: 0 1px 2px rgb(0 0 0 / 30%);
-  --elevation-dialog: 0 28px 70px -20px rgb(0 0 0 / 65%);
-  --elevation-primary: 0 1px 2px rgb(0 0 0 / 40%);
-  --highlight: inset 0 1px 0 rgb(255 255 255 / 4%);
+  --elevation-segment: 0 0 #0000;
+  --elevation-dialog: 0 24px 48px -16px rgb(0 0 0 / 60%), 0 4px 12px -6px rgb(0 0 0 / 24%);
+  --elevation-primary: 0 0 #0000;
+  --highlight: 0 0 #0000;
 
-  --primary-from: #f4f3ee;
-  --primary-to: #e3e1d9;
+  /* Inverted: a near-white button with dark text. */
+  --primary-from: #ececec;
+  --primary-to: #ececec;
   --primary-hover-from: #ffffff;
-  --primary-hover-to: #eceae3;
-  --primary-ring: #d4d1c8;
-  --primary-highlight: rgb(255 255 255 / 60%);
+  --primary-hover-to: #ffffff;
+  --primary-ring: #ececec;
+  --primary-highlight: rgb(255 255 255 / 0%);
 
   --brand-opencode-frame: #ffffff;
   --brand-opencode-fill: #5a5858;
 
-  --agent-opencode: oklch(0.74 0.008 85);
+  --agent-opencode: oklch(0.74 0 0);
   /* Pi's yellow mixed 86% with the dark surface. */
   --agent-pi: oklch(0.749 0.115 84.2);
-  --agent-other: oklch(0.46 0.008 85);
-  --heat-0: rgb(244 243 238 / 6.5%);
+  --agent-other: oklch(0.46 0 0);
+  --heat-0: rgb(255 255 255 / 6.5%);
 
-  /* What fills the context in the usage popover, by source. */
-  --context-1: oklch(0.72 0.08 250);
-  --context-2: oklch(0.74 0.06 190);
-  --context-3: oklch(0.72 0.08 310);
-  --context-4: oklch(0.78 0.1 75);
-  --context-5: oklch(0.74 0.08 155);
-  --context-6: oklch(0.74 0.09 25);
-  --context-7: oklch(0.7 0.02 85);
+  /* What fills the context in the usage popover, by source: the ramp, light to dark. */
+  --context-1: #ececec;
+  --context-2: #c8c8c8;
+  --context-3: #a8a8a8;
+  --context-4: #8a8a8a;
+  --context-5: #6e6e6e;
+  --context-6: #545454;
+  --context-7: #454545;
 
-  --ansi-black: #3a3833;
-  --ansi-red: #ea8a7d;
-  --ansi-green: #7dc196;
-  --ansi-yellow: #d9b463;
-  --ansi-blue: #80aada;
-  --ansi-magenta: #b798d4;
-  --ansi-cyan: #79c2c2;
-  --ansi-white: #d9d6cd;
-  --ansi-bright-black: #6e6b63;
-  --ansi-bright-red: #f2a497;
-  --ansi-bright-green: #97d3ac;
-  --ansi-bright-yellow: #e8c77e;
-  --ansi-bright-blue: #9dc0e8;
-  --ansi-bright-magenta: #cbb0e2;
-  --ansi-bright-cyan: #97d6d6;
-  --ansi-bright-white: #f4f3ee;
+  --ansi-black: #3a3a3a;
+  --ansi-red: #f07167;
+  --ansi-green: #5bb98a;
+  --ansi-yellow: #d9a441;
+  --ansi-blue: #7fa8e8;
+  --ansi-magenta: #d88bd0;
+  --ansi-cyan: #6cc0d2;
+  --ansi-white: #d4d4d4;
+  --ansi-bright-black: #6b6b6b;
+  --ansi-bright-red: #f4948c;
+  --ansi-bright-green: #7fcca4;
+  --ansi-bright-yellow: #e5bd6a;
+  --ansi-bright-blue: #9fbff0;
+  --ansi-bright-magenta: #e3a9dd;
+  --ansi-bright-cyan: #90d2e0;
+  --ansi-bright-white: #ececec;
 
-  --elevation-sheet:
-    0 0 0 1px rgb(244 243 238 / 6.5%), 0 1px 2px rgb(0 0 0 / 30%),
-    0 10px 30px -12px rgb(0 0 0 / 60%);
-  --elevation-sheet-focused:
-    0 0 0 1px var(--border-strong), 0 1px 2px rgb(0 0 0 / 30%), 0 10px 30px -12px rgb(0 0 0 / 60%);
-  --elevation-page:
-    0 0 0 1px rgb(244 243 238 / 10%), 0 1px 2px rgb(0 0 0 / 40%), 0 8px 18px -10px rgb(0 0 0 / 85%);
-  --elevation-page-lift:
-    0 0 0 1px rgb(244 243 238 / 10%), 0 3px 6px -2px rgb(0 0 0 / 50%),
-    0 16px 30px -14px rgb(0 0 0 / 95%);
+  --elevation-sheet: 0 0 #0000;
+  --elevation-sheet-focused: inset 0 0 0 1px var(--border-strong);
+  --elevation-page: 0 0 0 1px var(--border-default);
+  --elevation-page-lift: 0 0 0 1px var(--border-strong);
 }
 
 /* Roles built from the tokens above. They sit on every theme scope, so a subtree with a theme of
@@ -444,7 +429,8 @@
   --tile: var(--bg-subtle);
   --track: var(--border-default);
   --segment-track: var(--bg-subtle);
-  --segment-thumb: var(--bg-surface);
+  /* The chosen segment is filled like a selected row. */
+  --segment-thumb: var(--bg-selected);
   --pressed: var(--bg-selected);
   --pressed-hover: color-mix(in srgb, var(--bg-selected), var(--text-primary) 5%);
 
@@ -508,8 +494,7 @@
   --primary-shadow:
     inset 0 0 0 var(--hairline) var(--primary-ring), inset 0 1px 0 var(--primary-highlight),
     var(--elevation-primary);
-  /* The solid danger button has no ring: a faint top highlight and the control tier's contact. */
-  --destructive-shadow: inset 0 1px 0 rgb(255 255 255 / 10%), var(--elevation-control);
+  --destructive-shadow: var(--elevation-control);
   --menu-ring:
     inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-popover), var(--highlight);
   --dialog-ring:

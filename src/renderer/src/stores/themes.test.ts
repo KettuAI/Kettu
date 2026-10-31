@@ -2,9 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InstalledTheme, ThemesState } from '@shared/themes'
 
 const style = { textContent: '' }
+const attributes = new Map<string, string>()
 const observed: { callback: () => void; options: MutationObserverInit }[] = []
 vi.stubGlobal('document', {
-  documentElement: {},
+  documentElement: {
+    setAttribute: (name: string, value: string) => attributes.set(name, value),
+    removeAttribute: (name: string) => attributes.delete(name),
+  },
   head: { append: () => {} },
   createElement: () => style,
 })
@@ -28,7 +32,12 @@ const nord: InstalledTheme = {
 }
 const ayu: InstalledTheme = {
   id: 'ayu',
-  theme: { name: 'Ayu', light: { colors: { 'bg-app': '#fcfcfc' } }, dark: { colors: {} } },
+  theme: {
+    name: 'Ayu',
+    fonts: { prose: 'source-serif-4' },
+    light: { colors: { 'bg-app': '#fcfcfc' } },
+    dark: { colors: {} },
+  },
   ignored: [],
 }
 const state = (chosen: string, installed = [ayu, nord]): ThemesState => ({
@@ -54,6 +63,13 @@ describe('receiveThemes', () => {
     receiveThemes({ ...state('nord'), failed: { id: 'nord', failure: { code: 'missing' } } })
     expect(useThemesStore.getState().shown).toBeNull()
     expect(style.textContent).toBe('')
+  })
+
+  it("sets the chosen theme's faces on <html>, and clears them for the built-in theme", () => {
+    receiveThemes(state('ayu'))
+    expect([...attributes]).toEqual([['data-font-prose', 'source-serif-4']])
+    receiveThemes(state('kettu'))
+    expect(attributes.size).toBe(0)
   })
 
   it('keeps the shown theme while only the list around it changes', () => {

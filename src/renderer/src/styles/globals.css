@@ -55,16 +55,11 @@
 }
 
 @theme inline {
-  --font-heading: var(--font-serif);
-  --font-sans:
-    'Inter Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC',
-    system-ui, sans-serif;
-  --font-mono:
-    'JetBrains Mono Variable', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
-  /* Titles and the agent's prose; Chinese falls through to the sans faces, as in the reference. */
-  --font-serif:
-    'Source Serif 4 Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
-    'Noto Sans CJK SC', ui-serif, Georgia, serif;
+  /* The faces the theme gives each kind of text, below; titles take the prose face. */
+  --font-sans: var(--ui-face);
+  --font-heading: var(--prose-face);
+  --font-prose: var(--prose-face);
+  --font-mono: var(--code-face);
 
   /* The palette's own names, from tokens.css: bg-app, text-secondary, border-subtle, ... */
   --background-color-app: var(--bg-app);
@@ -287,7 +282,27 @@
   --duration-slower: 450ms;
 
   /* Type. */
-  --prose-size: 15px;
+  --prose-size: 14px;
+  /* The faces a theme may name, each with Chinese in the platform's face. A face's files are
+     only fetched once text uses it, so the built-in theme never loads Inter or Source Serif 4. */
+  --face-system:
+    system-ui, 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  --face-inter:
+    'Inter Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC',
+    system-ui, sans-serif;
+  --face-source-serif-4:
+    'Source Serif 4 Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
+    'Noto Sans CJK SC', ui-serif, Georgia, serif;
+  --face-jetbrains-mono:
+    'JetBrains Mono Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
+    'Noto Sans CJK SC', ui-monospace, monospace;
+  --face-system-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+
+  --ui-face: var(--face-system);
+  --prose-face: var(--face-system);
+  --code-face: 'JetBrains Mono Variable', var(--face-system-mono);
+  /* The serif reads about a size smaller than the sans faces at the same pixel size. */
+  --prose-scale: 1;
   --weight-normal: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
@@ -299,6 +314,29 @@
   --diffs-header-font-family: var(--font-sans);
 }
 
+:root[data-font-ui='inter'] {
+  --ui-face: var(--face-inter);
+}
+:root[data-font-ui='source-serif-4'] {
+  --ui-face: var(--face-source-serif-4);
+}
+:root[data-font-ui='jetbrains-mono'] {
+  --ui-face: var(--face-jetbrains-mono);
+}
+:root[data-font-prose='inter'] {
+  --prose-face: var(--face-inter);
+}
+:root[data-font-prose='source-serif-4'] {
+  --prose-face: var(--face-source-serif-4);
+  --prose-scale: 1.1;
+}
+:root[data-font-prose='jetbrains-mono'] {
+  --prose-face: var(--face-jetbrains-mono);
+}
+:root[data-font-code='system'] {
+  --code-face: var(--face-system-mono);
+}
+
 /* Light text on a dark surface looks heavier than it is. */
 [data-theme='dark'] {
   --weight-normal: 360;
@@ -307,10 +345,10 @@
 }
 
 :root[data-text-size='small'] {
-  --prose-size: 14px;
+  --prose-size: 13px;
 }
 :root[data-text-size='large'] {
-  --prose-size: 16px;
+  --prose-size: 15px;
 }
 
 @layer base {
@@ -642,9 +680,8 @@
    classes Streamdown puts on each element. Sizes are in em of the prose size, so Text size
    scales them; the spec's pixel values are those of the default 16.5 px. */
 .markdown {
-  font-family: var(--font-serif);
-  /* The serif reads about a size smaller than Inter at the same pixel size. */
-  font-size: calc(var(--prose-size) * 1.1);
+  font-family: var(--font-prose);
+  font-size: calc(var(--prose-size) * var(--prose-scale));
   line-height: 1.56;
   letter-spacing: -0.002em;
   /* Italics are the serif's own; Chinese, which has none, stays upright. */
@@ -990,7 +1027,7 @@
 /* Thoughts, progress notes and summaries: the same structure, quieter. */
 .markdown-muted {
   color: var(--text-tertiary);
-  font-size: calc(var(--prose-size) * 1.1 * 0.88);
+  font-size: calc(var(--prose-size) * var(--prose-scale) * 0.88);
   line-height: 1.55;
 }
 /* A thought; notes and summaries stay upright, since they are messages. */
