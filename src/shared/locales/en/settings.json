@@ -591,7 +591,7 @@
     "general": "The interface language, how you type, and what new sessions and launches do.",
     "appearance": "Theme, color mode, zoom and text size. Changes apply at once.",
     "notifications": "They show only while no Kettu window is in front, so they never interrupt what you are reading.",
-    "agents": "Kettu drives these coding agents over ACP. Their accounts, plan usage and installs are here.",
+    "agents": "Kettu drives these coding agents. Their accounts, plan usage and installs are here.",
     "terminal": "Which shell the side panel's terminal runs, and its font size.",
     "git": "The top bar's branch and changes, pull requests and their checks all come from these two tools.",
     "advanced": "Network proxy, diagnostics and the data Kettu keeps on this computer.",
