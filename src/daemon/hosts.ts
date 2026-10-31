@@ -1,9 +1,11 @@
 // The daemon's side of the hosts, as main's AgentHost, TerminalHost and RemoteHost are the app's:
 // their init, what they ask of main, and what is left after a crash. The daemon has no windows,
-// notifications, tray or browser, so what serves those is not answered; remote access is always on.
+// notifications, tray or browser, so what serves those is not answered; remote access is always on,
+// and so are its direct connections.
 
 import path from 'node:path'
 import type {
+  DirectStatus,
   HostToMain,
   MainToHost,
   MainToRemoteHost,
@@ -13,8 +15,9 @@ import type {
   TerminalHostToMain,
 } from '@shared/host-control'
 import type { Locale } from '@shared/locale'
+import { isDirectStatus } from '@shared/remote/address'
 import { isPairingState, type PairingState } from '@shared/remote/pairing'
-import type { SettingsFile } from '@shared/settings'
+import type { DirectSettings, SettingsFile } from '@shared/settings'
 import { processControl, stopTrees, type ProcessId } from '../agent-host/process-tree'
 import { createLogger } from '../main/log'
 import { hostSettings, terminalSettings } from '../main/settings-schema'
@@ -30,6 +33,8 @@ const MAX_DEVICES = 1000
 const GRACE_MS = 2_000
 /** How long a removal waits for the remote host to report the device gone. */
 const REMOVE_TIMEOUT_MS = 10_000
+/** How long a change of the direct settings waits for the remote host to report what came of it. */
+const DIRECT_WAIT_MS = 2_000
 
 function isStringList(value: unknown): value is string[] {
   return (
@@ -41,7 +46,10 @@ function isStringList(value: unknown): value is string[] {
 
 function isRemoteStatus(value: unknown): value is RemoteHostStatus {
   if (typeof value !== 'object' || value === null) return false
-  const { publicKey, plainTextKey, devices, online, refused } = value as Record<string, unknown>
+  const { publicKey, plainTextKey, devices, online, refused, direct } = value as Record<
+    string,
+    unknown
+  >
   const isText = (item: unknown): boolean => typeof item === 'string' && item.length <= MAX_STRING
   return (
     typeof publicKey === 'string' &&
@@ -59,7 +67,8 @@ function isRemoteStatus(value: unknown): value is RemoteHostStatus {
     Array.isArray(online) &&
     online.length <= MAX_DEVICES &&
     online.every(isText) &&
-    Number.isSafeInteger(refused)
+    Number.isSafeInteger(refused) &&
+    isDirectStatus(direct)
   )
 }
 
@@ -88,11 +97,15 @@ export class Hosts {
   private authCommands: string[] = []
   private agentProcesses: ProcessId[] = []
   private remoteStatus: RemoteHostStatus | null = null
+  /** The direct settings the remote host was last given, as JSON. */
+  private sentDirect: string | null = null
+  private readonly settings: () => SettingsFile
   private readonly statusListeners = new Set<() => void>()
   private readonly askers = new Map<number, (pairing: PairingState) => void>()
   private nextCode = 1
 
   constructor(options: HostsOptions) {
+    this.settings = options.settings
     const bundle = (name: string): string => path.join(options.bundleDir, name)
     this.agent = new ForkedHost<MainToHost, HostToMain>({
       log: createLogger('agent-host'),
@@ -140,8 +153,7 @@ export class Hosts {
       stoppedType: 'terminal-host:stopped',
       onMessage: (message) => log.warn(`Ignored terminal host message "${message.type}"`),
     })
-    // Devices reach it through transports of their own, none of which is a socket here yet, as
-    // in the desktop app.
+    // Devices reach it through its direct connections, as in the desktop app, not a socket.
     this.remote = new ForkedHost<MainToRemoteHost, RemoteHostToMain>({
       log: createLogger('remote-host'),
       modulePath: bundle('remote-host.cjs'),
@@ -156,6 +168,7 @@ export class Hosts {
         hostName: options.hostName,
         privateKey: options.privateKey,
         plainTextKey: true,
+        direct: this.initDirect(),
         // The agent host's socket outlives its restarts, so a device's session finds it again.
         agentHostSocket: this.agent.socketPath ?? undefined,
       }),
@@ -265,6 +278,56 @@ export class Hosts {
   answerPairing(codeId: number, add: boolean, name: string): void {
     if (!this.askers.has(codeId)) throw new ControlError('not_found', 'The code is not open')
     this.remote.post({ type: 'remote-host:pair-answer', codeId, add, name })
+  }
+
+  /** Direct connections as the remote host last reported them, or null while it is not running. */
+  directStatus(): DirectStatus | null {
+    return this.remoteStatus?.direct ?? null
+  }
+
+  /** Passes the direct connections' settings on when they changed; each start reads them anew. */
+  directChanged(): void {
+    const { direct } = this.settings().remote
+    const sent = JSON.stringify(direct)
+    if (sent === this.sentDirect) return
+    if (this.remote.post({ type: 'remote-host:direct', direct })) this.sentDirect = sent
+  }
+
+  /** Passes the same settings on again, so a port that could not be opened is tried again. */
+  retryDirect(): void {
+    const { direct } = this.settings().remote
+    if (this.remote.post({ type: 'remote-host:direct', direct })) {
+      this.sentDirect = JSON.stringify(direct)
+    }
+  }
+
+  /**
+   * Settles once the remote host reports direct connections other than `before`, or stops, or
+   * after a while when they stay as they were, as when a port tried again fails the same way.
+   */
+  directSettled(before: DirectStatus | null): Promise<void> {
+    const was = JSON.stringify(before)
+    const settled = (): boolean =>
+      !this.remoteStatus || JSON.stringify(this.remoteStatus.direct) !== was
+    if (settled()) return Promise.resolve()
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => done(), DIRECT_WAIT_MS)
+      const listener = (): void => {
+        if (settled()) done()
+      }
+      const done = (): void => {
+        clearTimeout(timer)
+        this.statusListeners.delete(listener)
+        resolve()
+      }
+      this.statusListeners.add(listener)
+    })
+  }
+
+  private initDirect(): DirectSettings {
+    const { direct } = this.settings().remote
+    this.sentDirect = JSON.stringify(direct)
+    return direct
   }
 
   /** The remote host went, and every code with it. */

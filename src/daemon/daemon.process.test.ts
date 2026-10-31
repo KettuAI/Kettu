@@ -1,10 +1,12 @@
 // Process test: `kettu run` built as it ships, on a data folder and a home of its own. It runs a
 // turn of the fake agent through the agent host's socket, answers `kettu status` and
 // `kettu devices` with the remote host's devices, restarts a host that is killed, and stops
-// everything on SIGTERM.
+// everything on SIGTERM. A paired device connects to it directly while `kettu direct` moves the
+// port and adds and removes an address.
 
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,10 +16,13 @@ import type { HostEvent } from '@shared/agent-host'
 import type { PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
 import { deviceId, type PairedDevice } from '@shared/remote/device'
-import { generateKeyPair } from '@shared/remote/noise'
+import { generateKeyPair, importKeyPair, type KeyPair } from '@shared/remote/noise'
 import { parsePairingLink } from '@shared/remote/pairing'
+import type { DirectAddress } from '@shared/remote/protocol'
 import { connectPort } from '@shared/socket-port'
 import { FAKE_AGENT_MAIN, TestPort } from '../agent-host/testing/harness'
+import { connectTransport } from '../remote-host/direct'
+import { connectDevice, type TestDevice } from '../remote-host/testing/device'
 import { callControl, type DaemonStatus } from './control'
 
 const root = path.resolve(fileURLToPath(new URL('../..', import.meta.url)))
@@ -30,6 +35,7 @@ let env: NodeJS.ProcessEnv = {}
 let daemon: ChildProcess | null = null
 const daemons: ChildProcess[] = []
 const clients: PortChannel[] = []
+const devices: TestDevice[] = []
 
 interface Run {
   code: number
@@ -38,11 +44,15 @@ interface Run {
 }
 
 function kettu(...args: string[]): Promise<Run> {
+  return kettuOn(data, ...args)
+}
+
+function kettuOn(dataFolder: string, ...args: string[]): Promise<Run> {
   return new Promise((resolve) => {
     execFile(
       process.execPath,
       [path.join(bundle, 'main.cjs'), ...args],
-      { env },
+      { env: { ...env, KETTU_DAEMON_DATA: dataFolder } },
       (error, stdout, stderr) => resolve({ code: error ? Number(error.code) : 0, stdout, stderr }),
     )
   })
@@ -137,6 +147,7 @@ function run(dataFolder: string): Running {
 
 afterAll(async () => {
   for (const client of clients) client.close()
+  for (const device of devices) device.close()
   if (daemon && daemon.exitCode === null && daemon.signalCode === null) daemon.kill('SIGKILL')
   for (const child of daemons) {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
@@ -168,6 +179,18 @@ describeUnix('kettu', () => {
       code: 1,
       stderr: 'kettu: The daemon is not running\n',
     })
+    for (const args of [
+      ['direct'],
+      ['direct', 'port', '4567', '--yes'],
+      ['direct', 'add', 'frp.example.com:60021'],
+      ['direct', 'remove', 'frp.example.com:60021'],
+    ]) {
+      expect(await kettu(...args)).toEqual({
+        code: 3,
+        stdout: '',
+        stderr: 'kettu: The daemon is not running\n',
+      })
+    }
   })
 
   it('runs the hosts, restarts one that dies and stops them all on SIGTERM', async () => {
@@ -228,10 +251,14 @@ describeUnix('kettu', () => {
     expect(printed.stdout).toContain(
       `Kettu daemon 0.0.0 is running in the foreground (pid ${daemon.pid})`,
     )
-    expect(printed.stdout).toContain(`Private key:       in a file only you can read, ${keyFile}`)
-    expect(printed.stdout).toContain(`Agent host:        ready (pid ${ready.hosts.agent.pid})`)
-    expect(printed.stdout).toContain(`Remote host:       ready (pid ${ready.hosts.remote.pid})`)
-    expect(printed.stdout).toContain('Connected devices: 0')
+    expect(printed.stdout).toContain(`Private key:        in a file only you can read, ${keyFile}`)
+    expect(printed.stdout).toContain(`Agent host:         ready (pid ${ready.hosts.agent.pid})`)
+    expect(printed.stdout).toContain(`Remote host:        ready (pid ${ready.hosts.remote.pid})`)
+    expect(printed.stdout).toContain('Connected devices:  0')
+    expect(ready.direct).toMatchObject({ state: 'listening', port: expect.any(Number) })
+    expect(printed.stdout).toContain(
+      `Direct connections: listening on port ${(ready.direct as { port: number }).port}`,
+    )
     const listed = await kettu('devices')
     expect(listed).toMatchObject({ code: 0, stderr: '' })
     expect(listed.stdout.split('\n')[1]).toMatch(
@@ -271,7 +298,13 @@ describeUnix('kettu', () => {
       async () => /https:\/\/kettu\.sh\/pair#\S+/.exec(paired)?.[0] ?? null,
       `pairing link\n${paired}`,
     )
-    expect(parsePairingLink(link)).toMatchObject({ version: 1, addresses: [] })
+    // The code carries the addresses direct connections listen at.
+    const { direct } = await status()
+    expect(direct?.state).toBe('listening')
+    expect(parsePairingLink(link)).toMatchObject({
+      version: 1,
+      addresses: direct?.state === 'listening' ? direct.addresses : null,
+    })
     expect(paired).toContain('the code expires in 5:00.')
     pairing.kill('SIGINT')
     expect(await pairExit).toBe(130)
@@ -378,5 +411,134 @@ describeUnix('kettu', () => {
 
     daemonRun.child.kill('SIGTERM')
     expect(await daemonRun.exited).toBe(0)
+  }, 90_000)
+
+  it('takes direct connections, on a port and at addresses kettu direct changes', async () => {
+    const folder = path.join(dir, 'data-direct')
+    const phone = await generateKeyPair()
+    const paired: PairedDevice = {
+      id: await deviceId(phone.publicKey),
+      publicKey: Buffer.from(phone.publicKey).toString('base64'),
+      name: "Ada's iPhone",
+      kind: 'ios',
+      platform: 'ios',
+      model: 'iPhone 17 Pro',
+      addedAt: Date.now(),
+      lastConnectedAt: null,
+    }
+    await mkdir(path.join(folder, 'remote'), { recursive: true })
+    await writeFile(
+      path.join(folder, 'remote', 'devices.json'),
+      JSON.stringify({ version: 1, devices: [paired] }),
+    )
+    const daemonRun = run(folder)
+    const cli = (...args: string[]): Promise<Run> => kettuOn(folder, ...args)
+
+    // The first run turns direct connections on, on a port picked for it.
+    const shown = await until(async () => {
+      const printed = await cli('direct')
+      return (
+        printed.code === 0 && /^Direct connections listen on port (\d+)\.\n/.exec(printed.stdout)
+      )
+    }, `direct connections listening\n${daemonRun.output()}`)
+    const first = Number(shown[1])
+    expect(first).toBeGreaterThanOrEqual(49152)
+    // Saved shortly after, as every change to the settings is.
+    const saved = await until(
+      async () => JSON.parse(await readFile(path.join(folder, 'settings.json'), 'utf8')),
+      'the saved settings',
+    )
+    expect(saved.remote.direct).toEqual({ enabled: true, port: first, addresses: [] })
+
+    const identity = JSON.parse(
+      await readFile(path.join(folder, 'remote', 'identity.json'), 'utf8'),
+    )
+    const hostKey = (await importKeyPair(Buffer.from(identity.privateKey, 'base64'))).publicKey
+    const connect = async (port: number, key: KeyPair = phone): Promise<TestDevice> => {
+      const transport = await connectTransport({ host: '127.0.0.1', port })
+      const device = await connectDevice({ transport, hostKey, key })
+      devices.push(device)
+      return device
+    }
+    const ada = await connect(first)
+    expect(await ada.first).toMatchObject({ type: 'welcome', role: 'owner' })
+
+    // A new port needs --yes without a terminal to ask on, then listens instead of the old one.
+    const second = await new Promise<number>((resolve) => {
+      const probe = createServer().listen(0, '127.0.0.1', () => {
+        const { port } = probe.address() as { port: number }
+        probe.close(() => resolve(port))
+      })
+    })
+    const refused = await cli('direct', 'port', String(second))
+    expect(refused).toMatchObject({
+      code: 1,
+      stderr: 'kettu: Changing the port needs --yes when there is no terminal to ask on\n',
+    })
+    expect(refused.stdout).toMatch(/^Direct connections move to port \d+\. Devices online get/)
+    expect((await status(path.join(folder, 'control.sock'))).direct).toMatchObject({ port: first })
+    const moved = await cli('direct', 'port', String(second), '--yes')
+    expect(moved).toMatchObject({ code: 0, stderr: '' })
+    expect(moved.stdout).toContain(`Direct connections listen on port ${second}.\n`)
+    await expect(connectTransport({ host: '127.0.0.1', port: first })).rejects.toMatchObject({
+      code: 'ECONNREFUSED',
+    })
+    const again = await connect(second)
+    expect(await again.first).toMatchObject({ type: 'welcome', role: 'owner' })
+    expect((await cli('status')).stdout).toContain(
+      `Direct connections: listening on port ${second}`,
+    )
+
+    // An address of the owner's own reaches the devices connected on either port, first.
+    const latest = (device: TestDevice): DirectAddress[] | null =>
+      device.addresses.at(-1)?.addresses ?? null
+    const hasFrp = (device: TestDevice): boolean =>
+      latest(device)?.some((address) => address.host === 'frp.example.com') ?? false
+    expect(await cli('direct', 'add', 'frp.example.com:60021')).toEqual({
+      code: 0,
+      stdout: 'Added frp.example.com:60021, which devices try first.\n',
+      stderr: '',
+    })
+    for (const device of [ada, again]) {
+      await until(async () => latest(device)?.[0]?.host === 'frp.example.com', 'the address')
+      expect(latest(device)![0]).toEqual({ host: 'frp.example.com', port: 60021 })
+    }
+    // An address is passed on without waiting for the remote host, whose report follows.
+    await until(
+      async () => /^ {2}frp\.example\.com:60021 +yours$/m.test((await cli('direct')).stdout),
+      'the address listed',
+    )
+    expect(await cli('direct', 'add', 'FRP.example.com:60021')).toEqual({
+      code: 1,
+      stdout: '',
+      stderr: 'kettu: This address is already in the list\n',
+    })
+    expect((await cli('direct', 'add', 'https://frp.example.com')).code).toBe(2)
+    expect(await cli('direct', 'add', '[fd00::1]:4567')).toMatchObject({
+      code: 0,
+      stdout: 'Added [fd00::1]:4567, which devices try first.\n',
+    })
+    await until(
+      async () => /^ {2}\[fd00::1\]:4567 +yours$/m.test((await cli('direct')).stdout),
+      'the IPv6 address listed',
+    )
+    expect((await cli('direct', 'remove', '[fd00::1]:4567')).code).toBe(0)
+    const sentBefore = [ada.addresses.length, again.addresses.length]
+    expect(await cli('direct', 'remove', 'frp.example.com:60021')).toEqual({
+      code: 0,
+      stdout: 'Removed frp.example.com:60021.\n',
+      stderr: '',
+    })
+    for (const [index, device] of [ada, again].entries()) {
+      await until(
+        async () => device.addresses.length > sentBefore[index]! && !hasFrp(device),
+        'the address removed',
+      )
+    }
+
+    daemonRun.child.kill('SIGTERM')
+    expect(await daemonRun.exited).toBe(0)
+    const kept = JSON.parse(await readFile(path.join(folder, 'settings.json'), 'utf8'))
+    expect(kept.remote.direct).toEqual({ enabled: true, port: second, addresses: [] })
   }, 90_000)
 })
