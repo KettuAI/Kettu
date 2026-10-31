@@ -27,19 +27,18 @@ In [v0.0.1](https://github.com/KettuAI/Kettu/releases/tag/v0.0.1):
 - [ ] Parallel sessions in their own Git worktrees ([#618](https://github.com/KettuAI/Kettu/issues/618)), and the changes of a session or a turn reviewed in one place ([#619](https://github.com/KettuAI/Kettu/issues/619))
 - [ ] A session's pull request watched, with its agent woken when checks fail, conflicts appear or a review comes in ([#621](https://github.com/KettuAI/Kettu/issues/621))
 
-## v0.2.0: your sessions on your other devices
+## v0.2.0: your sessions on your other devices, over your own network
 
-- [ ] Control Kettu on your computer from a web client, which Android phones and tablets use too ([#377](https://github.com/KettuAI/Kettu/issues/377), [#382](https://github.com/KettuAI/Kettu/issues/382))
-- [ ] Pair devices and choose which can connect ([#380](https://github.com/KettuAI/Kettu/issues/380)), reach the computer from outside your home network ([#381](https://github.com/KettuAI/Kettu/issues/381)) or directly on the same network or a VPN ([#581](https://github.com/KettuAI/Kettu/issues/581)), with Kettu running without its window ([#378](https://github.com/KettuAI/Kettu/issues/378))
-- [ ] Answer permission requests ([#385](https://github.com/KettuAI/Kettu/issues/385)), see files, changes and artifacts ([#386](https://github.com/KettuAI/Kettu/issues/386)), open the terminal ([#387](https://github.com/KettuAI/Kettu/issues/387)) and get notifications ([#388](https://github.com/KettuAI/Kettu/issues/388)) on a remote device
-- [ ] Use another computer's Kettu from the desktop app ([#384](https://github.com/KettuAI/Kettu/issues/384)), and work in one session from several devices at once ([#389](https://github.com/KettuAI/Kettu/issues/389))
-- [ ] A Kettu account, needed only for the official relay, notifications and web client
+- [ ] Use your sessions from your other devices ([#377](https://github.com/KettuAI/Kettu/issues/377)): pair them and choose which can connect ([#380](https://github.com/KettuAI/Kettu/issues/380)), and connect directly over any network you set up, such as the same network, a VPN like Tailscale or a forwarded port ([#581](https://github.com/KettuAI/Kettu/issues/581)), with Kettu running without its window ([#378](https://github.com/KettuAI/Kettu/issues/378)); no account needed
+- [ ] Kettu as a daemon on Linux and macOS development machines, started with the system ([#649](https://github.com/KettuAI/Kettu/issues/649)), added from the desktop app by its SSH address, with Kettu installed or upgraded there for you ([#650](https://github.com/KettuAI/Kettu/issues/650))
+- [ ] Use another computer's Kettu from the desktop app ([#384](https://github.com/KettuAI/Kettu/issues/384)), with every host's sessions in one place and the ones that need you easy to spot
+- [ ] Answer permission requests ([#385](https://github.com/KettuAI/Kettu/issues/385)), see files, changes and artifacts ([#386](https://github.com/KettuAI/Kettu/issues/386)) and open the terminal ([#387](https://github.com/KettuAI/Kettu/issues/387)) on a remote device, work in one session from several devices at once ([#389](https://github.com/KettuAI/Kettu/issues/389)), and let an agent on another host use the browser ([#651](https://github.com/KettuAI/Kettu/issues/651))
 
-## v0.3.0: hosts on development machines
+## v0.3.0: the official cloud
 
-- [ ] Kettu as a daemon on Linux and macOS development machines, started with the system
-- [ ] Add a development machine from the desktop app by its SSH address, with Kettu installed or upgraded there for you
-- [ ] Every host's sessions in one place, with the ones that need you easy to spot
+- [ ] Reach your hosts from outside your network through the official relay ([#381](https://github.com/KettuAI/Kettu/issues/381)), with a Kettu account, which only the official services need
+- [ ] A web client, which Android phones and tablets use too ([#382](https://github.com/KettuAI/Kettu/issues/382))
+- [ ] Notifications on remote devices ([#388](https://github.com/KettuAI/Kettu/issues/388))
 
 ## v0.4.0: the iOS app
 
