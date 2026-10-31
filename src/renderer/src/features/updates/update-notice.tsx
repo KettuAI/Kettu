@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { cloneElement, type ReactElement, type ReactNode, type Ref } from 'react'
 import { CircleArrowUpIcon, CircleCheckIcon, ExternalLinkIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
@@ -8,10 +8,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { errorMessage } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { useUpdatesStore } from '@renderer/stores/updates'
-import { openSettings } from '@renderer/stores/view'
-import { appUpdateRow, type AppUpdateNotice } from './app-updates'
+import { appUpdateRow, cardAction, type AppUpdateAction, type AppUpdateNotice } from './app-updates'
 
 interface NoticeCardProps {
+  /** The card itself, which a popover beside it anchors to. */
+  ref?: Ref<HTMLDivElement>
   /** The 14 px icon or agent mark. */
   icon: ReactNode
   /** The words and the version; they wrap, never inside a version. */
@@ -22,6 +23,8 @@ interface NoticeCardProps {
   detail?: string | null
   /** Opens what the notice is about. */
   onOpen?: () => void
+  /** Wraps the card's button, such as the trigger of a popover beside the card. */
+  opener?: ReactElement<{ render?: ReactElement }>
   /** The card's one action, a small secondary button. */
   action?: ReactNode
   /** A line under the words, such as a download's progress. */
@@ -29,48 +32,57 @@ interface NoticeCardProps {
   onDismiss?: () => void
   /** Stops what the notice shows, in the dismiss button's place, which then always shows. */
   onCancel?: () => void
+  /** The cancel button's name; "Cancel update" by default. */
+  cancelLabel?: string
 }
 
 /** A notice in the sidebar footer: a raised card above Settings. */
 export function NoticeCard({
+  ref,
   icon,
   text,
   label,
   detail,
   onOpen,
+  opener,
   action,
   below,
   onDismiss,
   onCancel,
+  cancelLabel,
 }: NoticeCardProps) {
   const { t } = useTranslation('updates')
   const close = onCancel ?? onDismiss
-  const closeLabel = onCancel ? t('notice.cancel') : t('notice.dismiss')
+  const closeLabel = onCancel ? (cancelLabel ?? t('notice.cancel')) : t('notice.dismiss')
+  const opens = !!(onOpen || opener)
+  const hit = (
+    <button
+      type="button"
+      data-notice-hit=""
+      aria-label={label}
+      aria-description={detail ?? undefined}
+      onClick={onOpen}
+      className="absolute inset-0 rounded-xl outline-none focus-ring"
+    />
+  )
   return (
     <div
       data-notice=""
       className="group/notice relative animate-in fade-in slide-in-from-bottom-1 animation-duration-(--duration-slow) ease-out-quint"
     >
       <div
+        ref={ref}
         className={cn(
           'relative flex min-h-11 items-center gap-2 rounded-xl bg-surface py-1.5 pr-1.5 pl-3 shadow-card transition-shadow duration-(--duration-fast)',
-          onOpen && 'has-[>[data-notice-hit]:hover]:shadow-outline-hover',
+          opens &&
+            'has-[>[data-notice-hit]:hover]:shadow-outline-hover has-data-popup-open:shadow-outline-hover',
         )}
       >
         {/* Buttons cannot nest, so the card opens through a button laid under its content. */}
-        {onOpen && (
+        {opens && (
           <Tooltip disabled={!detail}>
             <TooltipTrigger
-              render={
-                <button
-                  type="button"
-                  data-notice-hit=""
-                  aria-label={label}
-                  aria-description={detail ?? undefined}
-                  onClick={onOpen}
-                  className="absolute inset-0 rounded-xl outline-none focus-ring"
-                />
-              }
+              render={opener ? cloneElement(opener, { render: hit }) : hit}
               delay={500}
             />
             <TooltipContent side="top" align="start" className="max-w-64">
@@ -78,7 +90,13 @@ export function NoticeCard({
             </TooltipContent>
           </Tooltip>
         )}
-        <span className="pointer-events-none relative grid size-3.5 shrink-0 place-items-center">
+        {/* Beside a second line the icon keeps to the first. */}
+        <span
+          className={cn(
+            'pointer-events-none relative grid size-3.5 shrink-0 place-items-center',
+            below && 'mt-0.75 self-start',
+          )}
+        >
           {icon}
         </span>
         <span className="pointer-events-none relative flex min-w-0 flex-1 flex-col gap-1 py-0.5">
@@ -129,8 +147,8 @@ export function UpdateNoticeCard({ notice }: { notice: AppUpdateNotice }) {
     else void window.kettu.updates.dismiss()
   }
 
-  const run = () => {
-    switch (row.action) {
+  const run = (action: AppUpdateAction | null) => {
+    switch (action) {
       case 'restart':
         void window.kettu.updates.restart()
         break
@@ -141,8 +159,13 @@ export function UpdateNoticeCard({ notice }: { notice: AppUpdateNotice }) {
             console.warn(`Could not download the update: ${errorMessage(error)}`),
           )
         break
+      case 'download':
+      case 'whats-new':
+        if (row.href) window.open(row.href, '_blank', 'noopener')
+        break
     }
   }
+  const hit = cardAction(row)
 
   // A download in progress is cancelled from the card's corner, so it has no action of its own.
   const action =
@@ -157,7 +180,7 @@ export function UpdateNoticeCard({ notice }: { notice: AppUpdateNotice }) {
         {row.actionLabel}
       </a>
     ) : (
-      <Button variant="outline" size="xs" onClick={run}>
+      <Button size="xs" onClick={() => run(row.action)}>
         {row.actionLabel}
       </Button>
     )
@@ -189,7 +212,7 @@ export function UpdateNoticeCard({ notice }: { notice: AppUpdateNotice }) {
       label={row.label}
       detail={row.detail}
       below={
-        notice.kind === 'downloading' && (
+        notice.kind === 'downloading' ? (
           <span className="flex items-center gap-2">
             <Progress
               value={notice.percent}
@@ -200,9 +223,11 @@ export function UpdateNoticeCard({ notice }: { notice: AppUpdateNotice }) {
               {notice.percent}%
             </span>
           </span>
+        ) : (
+          row.note && <span className="text-meta leading-4 text-tertiary">{row.note}</span>
         )
       }
-      onOpen={() => openSettings('about')}
+      onOpen={hit ? () => run(hit) : undefined}
       action={action}
       onDismiss={row.dismissible ? dismiss : undefined}
       onCancel={row.action === 'cancel' ? () => void window.kettu.updates.cancel() : undefined}
