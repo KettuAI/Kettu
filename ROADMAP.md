@@ -25,6 +25,7 @@ In [v0.0.1](https://github.com/KettuAI/Kettu/releases/tag/v0.0.1):
 - [ ] Take a session back to before any message, with the agent's file changes after it undone ([#615](https://github.com/KettuAI/Kettu/issues/615))
 - [ ] An agent's multiple-choice questions as cards you answer with a click ([#616](https://github.com/KettuAI/Kettu/issues/616)), and each session's MCP servers with their status ([#617](https://github.com/KettuAI/Kettu/issues/617))
 - [ ] Parallel sessions in their own Git worktrees ([#618](https://github.com/KettuAI/Kettu/issues/618)), and the changes of a session or a turn reviewed in one place ([#619](https://github.com/KettuAI/Kettu/issues/619))
+- [ ] A session's pull request watched, with its agent woken when checks fail, conflicts appear or a review comes in ([#621](https://github.com/KettuAI/Kettu/issues/621))
 
 ## v0.2.0: your sessions on your other devices
 
@@ -53,7 +54,7 @@ In [v0.0.1](https://github.com/KettuAI/Kettu/releases/tag/v0.0.1):
 ## Later
 
 - [ ] A native Android app
-- [ ] Search across sessions with a command palette
+- [ ] Search across all sessions by what was said in them ([#622](https://github.com/KettuAI/Kettu/issues/622))
 - [ ] Slide decks as artifacts ([#368](https://github.com/KettuAI/Kettu/issues/368)), exports to PDF, PNG and PowerPoint ([#367](https://github.com/KettuAI/Kettu/issues/367)), comments on part of an artifact ([#366](https://github.com/KettuAI/Kettu/issues/366)), and the data an artifact's page keeps reaching the agent ([#369](https://github.com/KettuAI/Kettu/issues/369))
 - [ ] Skills and plugins managed in Settings ([#488](https://github.com/KettuAI/Kettu/issues/488), [#489](https://github.com/KettuAI/Kettu/issues/489)), and a session's background tasks ([#495](https://github.com/KettuAI/Kettu/issues/495))
 - [ ] Artifacts built from a project's design system ([#370](https://github.com/KettuAI/Kettu/issues/370)), a canvas page edited directly ([#371](https://github.com/KettuAI/Kettu/issues/371)), and Word, PowerPoint and Excel files as artifacts ([#365](https://github.com/KettuAI/Kettu/issues/365))
