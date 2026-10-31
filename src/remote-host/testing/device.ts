@@ -3,7 +3,7 @@
 
 import { Channel } from '@shared/remote/channel'
 import { Handshake, type KeyPair } from '@shared/remote/noise'
-import { PROTOCOL_VERSION, type Closing, type Hello } from '@shared/remote/protocol'
+import { PROTOCOL_VERSION, type Addresses, type Closing, type Hello } from '@shared/remote/protocol'
 import type { Transport } from '@shared/remote/transport'
 import { TestPort } from '../../agent-host/testing/harness'
 
@@ -14,6 +14,8 @@ export interface TestDevice {
   port: TestPort
   /** The host's closing message, or null when the connection ended without one. */
   closing: Promise<Closing | null>
+  /** The host's addresses messages, as they came. */
+  addresses: Addresses[]
   /** Sends a JSON message on the channel as it is. */
   send(value: unknown): Promise<void>
   close(): void
@@ -39,6 +41,7 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
   let channel: Channel | null = null
   let welcomed = false
   let closingMessage: Closing | null = null
+  const addresses: Addresses[] = []
   let resolveFirst!: (value: unknown) => void
   let resolveClosing!: (closing: Closing | null) => void
   const first = new Promise<unknown>((resolve) => (resolveFirst = resolve))
@@ -51,6 +54,7 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
       resolveFirst(value)
     }
     if (type === 'closing') closingMessage = value as Closing
+    else if (type === 'addresses') addresses.push(value as Addresses)
     else if (type !== 'welcome') port.send(value as Parameters<TestPort['send']>[0])
   }
 
@@ -87,6 +91,7 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
     first,
     port,
     closing,
+    addresses,
     send: async (value) => {
       if (!channel) throw new Error('The handshake is not done')
       await channel.send({ kind: 'json', value })

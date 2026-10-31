@@ -13,6 +13,8 @@ import {
   ZOOM_LEVELS,
 } from '@shared/settings'
 import { LANGUAGE_SETTINGS, resolveLocale, type Locale } from '@shared/locale'
+import { addressKey, isPort, MAX_OWN_ADDRESSES, parseDirectAddress } from '@shared/remote/address'
+import type { DirectAddress } from '@shared/remote/protocol'
 import { THEME_ID } from '@shared/themes'
 import {
   HARNESS_IDS,
@@ -83,7 +85,6 @@ const SECTION_FIELDS = {
   updates: { automatic: oneOf('download', 'restart', 'notify', 'off') },
   privacy: { hideAccount: isBoolean },
   usage: { fromComputer: isBoolean, sidebar: oneOf('today', 'cost', 'limit', 'off') },
-  remote: { enabled: isBoolean },
 } as const satisfies Record<string, Record<string, Check>>
 
 type FieldSection = keyof typeof SECTION_FIELDS
@@ -153,6 +154,64 @@ function checkMcp(value: unknown, path: string): string | null {
   return checkMcpOff(kettu.off, `${path}.kettu.off`)
 }
 
+const ADDRESS_PROBLEM = 'must be a host name or IP address and a port from 1 to 65535'
+
+/** The owner's own direct addresses as a patch sets them: each valid, once, and few enough. */
+function checkOwnAddresses(value: unknown, path: string): string | null {
+  if (!Array.isArray(value)) return `"${path}" must be an array`
+  if (value.length > MAX_OWN_ADDRESSES) {
+    return `"${path}" may hold at most ${MAX_OWN_ADDRESSES} addresses`
+  }
+  const seen = new Set<string>()
+  for (const [index, entry] of value.entries()) {
+    const address = parseDirectAddress(entry)
+    if (!address) return `"${path}[${index}]" ${ADDRESS_PROBLEM}`
+    const extra = Object.keys(entry as object).find((key) => key !== 'host' && key !== 'port')
+    if (extra) return `Unknown setting "${path}[${index}].${extra}"`
+    const key = addressKey(address)
+    if (seen.has(key)) return `"${path}" names an address twice`
+    seen.add(key)
+  }
+  return null
+}
+
+/** A port the owner picks; whether it is free shows only when the remote host listens on it. */
+const isOwnPort: Check = (value, path) =>
+  isPort(value) && value >= 1024 ? null : `"${path}" must be a port from 1024 to 65535`
+
+/** `remote` in a patch. */
+function checkRemote(value: unknown, problems: string[]): void {
+  if (!isRecord(value)) {
+    problems.push('"remote" must be an object')
+    return
+  }
+  for (const [key, fieldValue] of Object.entries(value)) {
+    if (key === 'enabled') {
+      const problem = isBoolean(fieldValue, 'remote.enabled')
+      if (problem) problems.push(problem)
+    } else if (key === 'direct') {
+      if (!isRecord(fieldValue)) {
+        problems.push('"remote.direct" must be an object')
+        continue
+      }
+      for (const [directKey, directValue] of Object.entries(fieldValue)) {
+        const path = `remote.direct.${directKey}`
+        const problem =
+          directKey === 'enabled'
+            ? isBoolean(directValue, path)
+            : directKey === 'port'
+              ? isOwnPort(directValue, path)
+              : directKey === 'addresses'
+                ? checkOwnAddresses(directValue, path)
+                : `Unknown setting "${path}"`
+        if (problem) problems.push(problem)
+      }
+    } else {
+      problems.push(`Unknown setting "remote.${key}"`)
+    }
+  }
+}
+
 function normalizeProxy(proxy: ProxySettings): ProxySettings {
   if (proxy.mode === 'environment') return { mode: 'environment' }
   return { mode: 'custom', url: proxy.url.trim(), noProxy: proxy.noProxy.trim() }
@@ -212,6 +271,8 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
     } else if (section === 'mcp') {
       const problem = checkMcp(value, 'mcp')
       if (problem) problems.push(problem)
+    } else if (section === 'remote') {
+      checkRemote(value, problems)
     } else if (section === 'terminal') {
       if (!isRecord(value)) {
         problems.push('"terminal" must be an object')
@@ -264,6 +325,27 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
     if (patch.terminal.fontSize !== undefined) next.terminal.fontSize = patch.terminal.fontSize
     if (patch.terminal.shellPath === null) delete next.terminal.shellPath
   }
+  if (patch.remote) {
+    const { enabled, direct } = patch.remote
+    if (enabled !== undefined) next.remote.enabled = enabled
+    if (direct?.enabled !== undefined) next.remote.direct.enabled = direct.enabled
+    if (direct?.port !== undefined) next.remote.direct.port = direct.port
+    if (direct?.addresses) {
+      next.remote.direct.addresses = direct.addresses.map(({ host, port }) => ({ host, port }))
+    }
+  }
+  return next
+}
+
+/**
+ * Gives direct connections their port the first time they are on, from `pick`, and keeps it
+ * after; unchanged settings come back as they are.
+ */
+export function withDirectPort(current: SettingsFile, pick: () => number): SettingsFile {
+  const { direct } = current.remote
+  if (!direct.enabled || direct.port !== null) return current
+  const next = structuredClone(current)
+  next.remote.direct.port = pick()
   return next
 }
 
@@ -413,6 +495,10 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
     if (!isRecord(raw.mcp)) problems.push('"mcp" must be an object')
     else settings.mcp = readMcp(raw.mcp)
   }
+  if (raw.remote !== undefined) {
+    if (!isRecord(raw.remote)) problems.push('"remote" must be an object')
+    else settings.remote = readRemote(raw.remote, problems)
+  }
   if (raw.terminal !== undefined) {
     if (!isRecord(raw.terminal)) problems.push('"terminal" must be an object')
     else {
@@ -466,6 +552,53 @@ function readAddedAgents(list: unknown[], problems: string[]): AddedAgent[] {
     agents.push({ id, name: stored, configDir: configDir as string, created: created as boolean })
   }
   return agents
+}
+
+/** Reads the remote section, keeping each valid value and each valid address of the owner's. */
+function readRemote(raw: Record<string, unknown>, problems: string[]): SettingsFile['remote'] {
+  const remote = structuredClone(DEFAULT_SETTINGS.remote)
+  const read = (value: unknown, path: string, check: Check, keep: () => void): void => {
+    if (value === undefined) return
+    const problem = check(value, path)
+    if (problem) problems.push(problem)
+    else keep()
+  }
+  read(raw.enabled, 'remote.enabled', isBoolean, () => (remote.enabled = raw.enabled as boolean))
+  const direct = raw.direct
+  if (direct === undefined) return remote
+  if (!isRecord(direct)) {
+    problems.push('"remote.direct" must be an object')
+    return remote
+  }
+  read(direct.enabled, 'remote.direct.enabled', isBoolean, () => {
+    remote.direct.enabled = direct.enabled as boolean
+  })
+  const isStoredPort: Check = (value, path) =>
+    value === null || isPort(value) ? null : `"${path}" must be a port from 1 to 65535 or null`
+  read(direct.port, 'remote.direct.port', isStoredPort, () => {
+    remote.direct.port = direct.port as number | null
+  })
+  if (direct.addresses === undefined) return remote
+  if (!Array.isArray(direct.addresses)) {
+    problems.push('"remote.direct.addresses" must be an array')
+    return remote
+  }
+  const addresses: DirectAddress[] = []
+  const seen = new Set<string>()
+  for (const [index, entry] of direct.addresses.entries()) {
+    const path = `remote.direct.addresses[${index}]`
+    const address = parseDirectAddress(entry)
+    if (!address) problems.push(`"${path}" ${ADDRESS_PROBLEM}`)
+    else if (seen.has(addressKey(address))) problems.push(`"${path}" repeats another address`)
+    else if (addresses.length === MAX_OWN_ADDRESSES) {
+      problems.push(`"${path}" is beyond the ${MAX_OWN_ADDRESSES} addresses kept`)
+    } else {
+      seen.add(addressKey(address))
+      addresses.push(address)
+    }
+  }
+  remote.direct.addresses = addresses
+  return remote
 }
 
 /** Reads the MCP section leniently: an unknown or repeated id is dropped and the rest kept. */

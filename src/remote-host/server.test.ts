@@ -1,9 +1,10 @@
 // The remote host's side of device connections, against an in-process agent host running the
 // fake agent: handshake, hello and welcome, the session passed through, and what ends it.
 
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PortChannel } from '@shared/port-channel'
 import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
 import { startTestHost, type TestHost } from '../agent-host/testing/harness'
@@ -170,6 +171,28 @@ describe('a paired device', () => {
     await expect.poll(() => t.agentPorts[0]!.closed).toBe(true)
   })
 
+  it('is told the direct addresses in its welcome, and again when they change', async () => {
+    const t = await setup()
+    const home = { host: '192.168.1.20', port: 50123 }
+    t.server.setAddresses([home])
+    const device = await t.connect()
+    expect(await device.first).toMatchObject({ type: 'welcome', addresses: [home] })
+    t.server.setAddresses([{ ...home }])
+    const vpn = { host: '100.100.1.2', port: 50123 }
+    t.server.setAddresses([home, vpn])
+    t.server.setAddresses([])
+    await expect
+      .poll(() => device.addresses)
+      .toEqual([
+        { type: 'addresses', addresses: [home, vpn] },
+        { type: 'addresses', addresses: [] },
+      ])
+    // A device not yet welcomed hears them only in its welcome.
+    const later = await t.connect()
+    expect(await later.first).toMatchObject({ addresses: [] })
+    expect(later.addresses).toEqual([])
+  })
+
   it('hears that the host cannot run sessions while its agent host is down', async () => {
     const t = await setup({ agentDown: true })
     const device = await t.connect()
@@ -233,5 +256,43 @@ describe('hello and welcome', () => {
     const t = await setup()
     const device = await t.connect(undefined, { resume: 'token', model: 'iPhone' })
     expect(await device.first).toMatchObject({ type: 'welcome' })
+  })
+})
+
+describe('refusals', () => {
+  it('update the status at once, then at most once a second', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-refusals-'))
+    let changes = 0
+    const server = new RemoteServer({
+      staticKey: await generateKeyPair(),
+      devices: await DeviceStore.load(dir, () => {}),
+      host: { name: 'Studio', platform: process.platform, version: '0.0.0-test' },
+      openAgentPort: async () => null,
+      changed: () => changes++,
+      log: () => {},
+    })
+    vi.useFakeTimers()
+    try {
+      for (let i = 0; i < 50; i++) server.refusedOne()
+      expect(server.refused).toBe(50)
+      expect(changes).toBe(1)
+      vi.advanceTimersByTime(999)
+      expect(changes).toBe(1)
+      vi.advanceTimersByTime(1)
+      expect(changes).toBe(2)
+      // Nothing new to report, so the next second stays quiet.
+      vi.advanceTimersByTime(5_000)
+      expect(changes).toBe(2)
+      server.refusedOne()
+      expect(changes).toBe(3)
+      server.refusedOne()
+      await server.stop('stopping')
+      vi.advanceTimersByTime(5_000)
+      expect(changes).toBe(3)
+      expect(server.refused).toBe(52)
+    } finally {
+      vi.useRealTimers()
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })
