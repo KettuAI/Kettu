@@ -19,7 +19,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-24.04]
+        # The *_RUNNER repository variables, when set, replace GitHub's runners.
+        os:
+          - ${{ vars.MACOS_RUNNER || 'macos-latest' }}
+          - ${{ vars.WINDOWS_RUNNER || 'windows-latest' }}
+          - ${{ vars.LINUX_RUNNER || 'ubuntu-24.04' }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7

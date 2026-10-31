@@ -19,7 +19,8 @@ jobs:
   check:
     name: ${{ github.event.pull_request.draft && 'CI (draft)' || 'CI' }}
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: ubuntu-24.04
+    # The LINUX_RUNNER repository variable, when set, replaces GitHub's runner.
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-24.04' }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
