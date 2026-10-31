@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto'
 import { join } from 'node:path'
 import type { AddedAgent, SettingsFile } from '@shared/settings'
 import type { AgentId, HarnessId } from '@shared/thread'
@@ -12,12 +13,18 @@ import {
   validateSettingsPatch,
   withAddedAgent,
   withAgentBinary,
+  withDirectPort,
   withoutAgent,
   withRenamedAgent,
   withShellPath,
 } from './settings-schema'
 
 const log = createLogger('settings')
+
+/** A port from the dynamic range, which no service registers, for direct connections. */
+function randomDirectPort(): number {
+  return randomInt(49152, 65536)
+}
 
 export type SettingsListener = (settings: SettingsFile, changed: Set<SettingsSection>) => void
 
@@ -40,19 +47,23 @@ export class SettingsStore {
       read.kind === 'ok'
         ? parseSettingsFile(read.value)
         : { ...parseSettingsFile(null), problems: [read.reason], readOnly: false }
+    // A file that turns direct connections on by hand gets its port as a change would.
+    const settings = withDirectPort(loaded.settings, randomDirectPort)
     if (loaded.readOnly) {
       log.warn('settings.json comes from a newer version; changes this run are not saved')
-      return new SettingsStore(loaded.settings, null)
+      return new SettingsStore(settings, null)
     }
-    const store = new SettingsStore(loaded.settings, writer())
+    const store = new SettingsStore(settings, writer())
     if (loaded.problems.length > 0) {
       log.warn(`settings.json is invalid: ${loaded.problems.join('; ')}`)
       try {
         log.warn(`Moved the invalid file to ${await quarantineFile(path)}`)
       } catch (error) {
         log.error('Could not move the invalid settings.json aside', error)
-        return new SettingsStore(loaded.settings, null)
+        return new SettingsStore(settings, null)
       }
+      store.save()
+    } else if (settings !== loaded.settings) {
       store.save()
     }
     return store
@@ -68,7 +79,8 @@ export class SettingsStore {
 
   /** Applies a patch from the renderer; throws a `SettingsError` and changes nothing if invalid. */
   update(patch: unknown): SettingsFile {
-    return this.replace(mergeSettings(this.current, validateSettingsPatch(patch)))
+    const merged = mergeSettings(this.current, validateSettingsPatch(patch))
+    return this.replace(withDirectPort(merged, randomDirectPort))
   }
 
   setAgentBinary(harnessId: HarnessId, binaryPath: string): SettingsFile {

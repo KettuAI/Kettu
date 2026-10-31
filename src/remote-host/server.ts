@@ -9,16 +9,21 @@ import { Handshake, type KeyPair, type TransportCiphers } from '@shared/remote/n
 import {
   negotiate,
   parseHello,
+  type Addresses,
   type Closing,
   type ClosingReason,
+  type DirectAddress,
   type Welcome,
 } from '@shared/remote/protocol'
 import type { Transport } from '@shared/remote/transport'
 import type { LogFn } from '../agent-host/storage'
 import type { DeviceStore } from './devices'
 
-/** How long a connection has from its first message to its hello. */
+/** How long a connection has from being accepted to its hello. */
 const HELLO_TIMEOUT_MS = 10_000
+
+/** Refusals report at most once a second, so a flood of them does not flood main with statuses. */
+const REFUSED_REPORT_MS = 1_000
 
 export interface RemoteServerOptions {
   staticKey: KeyPair
@@ -26,7 +31,7 @@ export interface RemoteServerOptions {
   host: Welcome['host']
   /** A port to the agent host for a device's session, or null while the agent host is down. */
   openAgentPort(device: PortDevice): Promise<PortChannel | null>
-  /** The devices, the sessions open or the count of refusals changed. */
+  /** The devices or the sessions open changed, or refusals did, reported at most once a second. */
   changed(): void
   log: LogFn
   helloTimeoutMs?: number
@@ -36,6 +41,9 @@ export interface RemoteServerOptions {
 export class RemoteServer {
   private readonly connections = new Set<DeviceConnection>()
   private refusedCount = 0
+  private refusedTimer: ReturnType<typeof setTimeout> | null = null
+  private refusedUnreported = false
+  private directAddresses: DirectAddress[] = []
   private stopped = false
 
   constructor(readonly options: RemoteServerOptions) {}
@@ -46,9 +54,20 @@ export class RemoteServer {
     this.connections.add(new DeviceConnection(transport, this))
   }
 
-  /** Connections refused at their first message. */
+  /** Connections refused, at their first message or by the direct listener's limits. */
   get refused(): number {
     return this.refusedCount
+  }
+
+  /** Where devices may connect directly: in each welcome, and sent again when it changes. */
+  get addresses(): DirectAddress[] {
+    return this.directAddresses
+  }
+
+  setAddresses(addresses: DirectAddress[]): void {
+    if (JSON.stringify(addresses) === JSON.stringify(this.directAddresses)) return
+    this.directAddresses = addresses.map(({ host, port }) => ({ host, port }))
+    for (const connection of this.connections) connection.sendAddresses(this.directAddresses)
   }
 
   /** The ids of the devices with a session open now. */
@@ -82,13 +101,28 @@ export class RemoteServer {
   /** Tells every device why, ends every connection and writes the devices' last connections. */
   async stop(reason: 'remote_off' | 'stopping'): Promise<void> {
     this.stopped = true
+    if (this.refusedTimer) clearTimeout(this.refusedTimer)
+    this.refusedTimer = null
     await Promise.all([...this.connections].map((connection) => connection.close(reason)))
     await this.options.devices.flush()
   }
 
   refusedOne(): void {
     this.refusedCount++
+    if (this.refusedTimer) {
+      this.refusedUnreported = true
+      return
+    }
     this.options.changed()
+    this.refusedTimer = setTimeout(() => this.reportRefused(), REFUSED_REPORT_MS)
+  }
+
+  private reportRefused(): void {
+    this.refusedTimer = null
+    if (!this.refusedUnreported || this.stopped) return
+    this.refusedUnreported = false
+    this.options.changed()
+    this.refusedTimer = setTimeout(() => this.reportRefused(), REFUSED_REPORT_MS)
   }
 
   opened(device: PairedDevice): void {
@@ -142,6 +176,10 @@ class DeviceConnection {
 
   get open(): boolean {
     return this.state === 'open'
+  }
+
+  sendAddresses(addresses: DirectAddress[]): void {
+    if (this.state === 'open') this.send({ type: 'addresses', addresses } satisfies Addresses)
   }
 
   /** Ends the connection, after telling the device why once the channel is up. */
@@ -210,7 +248,7 @@ class DeviceConnection {
       features: [],
       role: 'owner',
       terminal: false,
-      addresses: [],
+      addresses: this.server.addresses,
     } satisfies Welcome)
     this.state = 'open'
     this.wasOpen = true

@@ -7,7 +7,8 @@ import type { BrowserOriginAnswer } from './browser'
 import type { MediaGrantRecord } from './media'
 import type { Platform } from './platform'
 import type { NewDevice, PairedDevice, PortDevice } from './remote/device'
-import type { HostSettings, TerminalSettings } from './settings'
+import type { DirectAddress } from './remote/protocol'
+import type { DirectSettings, HostSettings, TerminalSettings } from './settings'
 import type { AgentId } from './thread'
 
 export interface BusySession {
@@ -184,6 +185,8 @@ export type MainToRemoteHost =
       privateKey: string
       /** The key is kept in a file only the user can read, without the system's encryption. */
       plainTextKey: boolean
+      /** Direct connections on the same network or a VPN; off when absent. */
+      direct?: DirectSettings
       // Under Node.js: the agent host's socket, which each device's session connects to, and a
       // local socket devices may connect on, each connection a stream transport.
       agentHostSocket?: string
@@ -195,6 +198,10 @@ export type MainToRemoteHost =
   | { type: 'remote-host:add-device'; device: NewDevice }
   // Forgets the device and closes its sessions at once.
   | { type: 'remote-host:remove-device'; id: string }
+  // The direct connections' settings changed.
+  | { type: 'remote-host:direct'; direct: DirectSettings }
+  // The computer woke from sleep, maybe on another network: the direct addresses are read again.
+  | { type: 'remote-host:resume' }
   // Tells every device why, then stops.
   | { type: 'remote-host:shutdown'; reason: RemoteHostStopReason }
 
@@ -206,9 +213,21 @@ export interface RemoteHostStatus {
   devices: PairedDevice[]
   /** The ids of the devices with a session open now. */
   online: string[]
-  /** Connections refused at their first message since the remote host started. */
+  /**
+   * Connections refused since the remote host started: at their first message, or by the limits
+   * on direct connections' handshakes.
+   */
   refused: number
+  direct: DirectStatus
 }
+
+/** Direct connections, as the remote host runs them. */
+export type DirectStatus =
+  | { state: 'off' }
+  /** `port` is open on every interface; `addresses` are what devices are told, the owner's first. */
+  | { state: 'listening'; port: number; addresses: DirectAddress[] }
+  /** The port could not be opened; it is tried again only when the settings change. */
+  | { state: 'failed'; port: number; reason: 'port_in_use' | 'not_permitted' | 'other' }
 
 export type RemoteHostToMain =
   | { type: 'remote-host:ready' }

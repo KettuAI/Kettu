@@ -3,12 +3,15 @@
 
 import type { MessagePortMain } from 'electron'
 import type {
+  DirectStatus,
   MainToRemoteHost,
   RemoteHostStatus,
   RemoteHostStopReason,
   RemoteHostToMain,
 } from '@shared/host-control'
+import { isPort, parseDirectAddress } from '@shared/remote/address'
 import { parsePortDevice, type NewDevice, type PortDevice } from '@shared/remote/device'
+import type { DirectSettings } from '@shared/settings'
 import remoteHostPath from '../remote-host/index?modulePath'
 import { createLogger } from './log'
 import type { RemoteIdentity } from './remote-identity'
@@ -17,6 +20,7 @@ import { UtilityHost } from './utility-host'
 const log = createLogger('remote-host')
 
 const MAX_DEVICES = 1000
+const MAX_ADDRESSES = 64
 
 export interface RemoteHostDeps {
   userDataPath: string
@@ -25,13 +29,34 @@ export interface RemoteHostDeps {
   identity(): Promise<RemoteIdentity>
   /** The name devices show for this computer. */
   hostName(): string
+  /** The direct connections' settings now. */
+  direct(): DirectSettings
   /** A port to the agent host for a device's session, or null while it is not running. */
   openPort(device: PortDevice): MessagePortMain | null
 }
 
+function isDirectStatus(value: unknown): value is DirectStatus {
+  if (typeof value !== 'object' || value === null) return false
+  const { state, port, addresses, reason } = value as Record<string, unknown>
+  if (state === 'off') return true
+  if (state === 'failed') {
+    return isPort(port) && ['port_in_use', 'not_permitted', 'other'].includes(reason as string)
+  }
+  return (
+    state === 'listening' &&
+    isPort(port) &&
+    Array.isArray(addresses) &&
+    addresses.length <= MAX_ADDRESSES &&
+    addresses.every((address) => parseDirectAddress(address) !== null)
+  )
+}
+
 function isStatus(value: unknown): value is RemoteHostStatus {
   if (typeof value !== 'object' || value === null) return false
-  const { publicKey, plainTextKey, devices, online, refused } = value as Record<string, unknown>
+  const { publicKey, plainTextKey, devices, online, refused, direct } = value as Record<
+    string,
+    unknown
+  >
   return (
     typeof publicKey === 'string' &&
     typeof plainTextKey === 'boolean' &&
@@ -49,7 +74,8 @@ function isStatus(value: unknown): value is RemoteHostStatus {
     online.every((id) => typeof id === 'string') &&
     typeof refused === 'number' &&
     Number.isSafeInteger(refused) &&
-    refused >= 0
+    refused >= 0 &&
+    isDirectStatus(direct)
   )
 }
 
@@ -57,6 +83,7 @@ export class RemoteHost {
   private host: UtilityHost<MainToRemoteHost, RemoteHostToMain> | null = null
   private changes: Promise<void> = Promise.resolve()
   private latest: RemoteHostStatus | null = null
+  private direct: string | null = null
   private quitting = false
 
   constructor(private readonly deps: RemoteHostDeps) {}
@@ -89,6 +116,19 @@ export class RemoteHost {
     return this.host?.post({ type: 'remote-host:remove-device', id }) ?? false
   }
 
+  /** Passes the direct connections' settings on when they changed; each start reads them anew. */
+  directChanged(): void {
+    const direct = this.deps.direct()
+    const sent = JSON.stringify(direct)
+    if (!this.host || sent === this.direct) return
+    if (this.host.post({ type: 'remote-host:direct', direct })) this.direct = sent
+  }
+
+  /** The computer woke from sleep: the host reads its addresses again. */
+  resume(): void {
+    this.host?.post({ type: 'remote-host:resume' })
+  }
+
   private async begin(): Promise<void> {
     if (this.host || this.quitting) return
     let identity: RemoteIdentity
@@ -110,6 +150,7 @@ export class RemoteHost {
         hostName: this.deps.hostName(),
         privateKey: identity.privateKey,
         plainTextKey: identity.plainText,
+        direct: this.initDirect(),
       }),
       shutdownMessage: { type: 'remote-host:shutdown', reason: 'stopping' },
       readyType: 'remote-host:ready',
@@ -121,6 +162,12 @@ export class RemoteHost {
     })
     this.host = host
     host.start()
+  }
+
+  private initDirect(): DirectSettings {
+    const direct = this.deps.direct()
+    this.direct = JSON.stringify(direct)
+    return direct
   }
 
   private async end(reason: RemoteHostStopReason): Promise<void> {
