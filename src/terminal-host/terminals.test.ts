@@ -63,7 +63,7 @@ class FakePty implements PtyProcess {
 const PROJECT = '/work/app'
 const AUTH = 'npx -y @agentclientprotocol/claude-agent-acp@0.94.0 --cli auth login'
 
-function setup(platform: NodeJS.Platform = 'darwin') {
+function setup(platform: NodeJS.Platform = 'darwin', devicePorts: string[] = []) {
   const ptys: FakePty[] = []
   const events: { kind: string; value: unknown }[] = []
   const projects = new ProjectRegistry(platform, async (path) => path)
@@ -80,9 +80,11 @@ function setup(platform: NodeJS.Platform = 'darwin') {
       return pty
     },
     consoleProcesses: async () => [1, 2],
+    isDevicePort: (port) => devicePorts.includes(port),
     sink: {
       data: (id, data, ports) =>
         events.push({ kind: 'data', value: { id, data, ports: [...ports] } }),
+      replay: (id, port, replay) => events.push({ kind: 'replay', value: { id, port, replay } }),
       info: (info) => events.push({ kind: 'info', value: info }),
       removed: (id) => events.push({ kind: 'removed', value: id }),
     },
@@ -153,6 +155,66 @@ describe('TerminalManager', () => {
     expect(ptys[0].paused).toBe(true)
     manager.ack('p1', id, 96_000)
     expect(ptys[0].paused).toBe(false)
+  })
+
+  it("never pauses the pty for a device's port, which stops getting data once far behind", async () => {
+    const { manager, ptys, events } = setup('darwin', ['phone'])
+    const { id } = await manager.create('window', { projectPath: PROJECT, cols: 80, rows: 24 })
+    manager.attach('phone', id)
+    const sentTo = () =>
+      events
+        .filter((event) => event.kind === 'data')
+        .map((event) => (event.value as { ports: string[] }).ports)
+    ptys[0].emit('x'.repeat(60_000))
+    vi.advanceTimersByTime(5)
+    manager.ack('window', id, 60_000)
+    ptys[0].emit('y'.repeat(60_000))
+    vi.advanceTimersByTime(5)
+    manager.ack('window', id, 60_000)
+    ptys[0].emit('z'.repeat(60_000))
+    vi.advanceTimersByTime(5)
+    expect(ptys[0].paused).toBe(false)
+    expect(sentTo()).toEqual([['window', 'phone'], ['window', 'phone'], ['window']])
+  })
+
+  it("catches a device's port up with the replay once it acknowledges what it got", async () => {
+    const { manager, ptys, events } = setup('darwin', ['phone'])
+    const { id } = await manager.create('phone', { projectPath: PROJECT, cols: 80, rows: 24 })
+    ptys[0].emit('a'.repeat(100_001))
+    vi.advanceTimersByTime(5)
+    ptys[0].emit('missed\n')
+    vi.advanceTimersByTime(5)
+    ptys[0].emit('batched')
+    expect(events.filter((event) => event.kind === 'replay')).toEqual([])
+    manager.ack('phone', id, 95_000)
+    expect(events.filter((event) => event.kind === 'replay')).toEqual([])
+    manager.ack('phone', id, 2)
+    // The replay holds what was flushed; what was still batched follows as data.
+    expect(events.filter((event) => event.kind === 'replay')).toEqual([
+      { kind: 'replay', value: { id, port: 'phone', replay: `${'a'.repeat(100_001)}missed\n` } },
+    ])
+    vi.advanceTimersByTime(5)
+    expect(events.filter((event) => event.kind === 'data').at(-1)).toEqual({
+      kind: 'data',
+      value: { id, data: 'batched', ports: ['phone'] },
+    })
+    expect(ptys[0].paused).toBe(false)
+  })
+
+  it("starts a device's port over when it attaches again, and forgets it once gone", async () => {
+    const { manager, ptys, events } = setup('darwin', ['phone'])
+    const { id } = await manager.create('phone', { projectPath: PROJECT, cols: 80, rows: 24 })
+    ptys[0].emit('a'.repeat(100_001))
+    vi.advanceTimersByTime(5)
+    expect(manager.attach('phone', id)).toEqual({ replay: 'a'.repeat(100_001) })
+    ptys[0].emit('b')
+    vi.advanceTimersByTime(5)
+    expect(events.filter((event) => event.kind === 'data').at(-1)).toMatchObject({
+      value: { data: 'b', ports: ['phone'] },
+    })
+    manager.detach('phone')
+    manager.ack('phone', id, 1)
+    expect(events.filter((event) => event.kind === 'replay')).toEqual([])
   })
 
   it('resumes a paused pty when its only port closes', async () => {
@@ -314,7 +376,7 @@ describe('TerminalManager', () => {
       loadPty: async () => {
         throw new Error('pty.node: wrong ELF class')
       },
-      sink: { data: () => {}, info: () => {}, removed: () => {} },
+      sink: { data: () => {}, replay: () => {}, info: () => {}, removed: () => {} },
     })
     await expect(
       manager.create('p1', { projectPath: PROJECT, cols: 80, rows: 24 }),

@@ -20,6 +20,7 @@ import {
   type ControlServer,
   type DaemonStatus,
   type DirectReport,
+  type TerminalReport,
 } from './control'
 import { isUnavailable, type HostTimings } from './forked-host'
 import { Hosts } from './hosts'
@@ -167,6 +168,15 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       changeSettings({ remote: { direct: { addresses: kept } } })
       return directReport()
     },
+    'terminal.get': async () => {
+      starting()
+      return terminalReport()
+    },
+    'terminal.set': async ({ allowed }) => {
+      starting()
+      changeSettings({ remote: { terminal: allowed } })
+      return terminalReport()
+    },
   }
   const server = await claimControlSocket(options.controlSocket, () =>
     serveControl(options.controlSocket, handlers, (message) => log.warn(message)),
@@ -205,7 +215,9 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   })
   hosts = running
   settings.onChange((_, changed) => {
-    if (changed.has('remote')) running.directChanged()
+    if (!changed.has('remote')) return
+    running.directChanged()
+    running.terminalChanged()
   })
   running.start()
   log.info(
@@ -228,6 +240,10 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       connectedDevices: hosts?.connectedDevices() ?? null,
       direct: hosts?.directStatus() ?? null,
     }
+  }
+
+  function terminalReport(): TerminalReport {
+    return { allowed: settings.get().remote.terminal }
   }
 
   function directReport(): DirectReport {

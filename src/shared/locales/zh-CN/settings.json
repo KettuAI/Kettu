@@ -845,6 +845,11 @@
       },
       "note": "直连是裸 TCP，只转发 HTTPS 的隧道（比如 Cloudflare Tunnel）接不上。"
     },
+    "terminal": {
+      "name": "允许终端",
+      "description": "设备能在这台电脑上运行任何命令，超出 Agent 要授权的范围。关掉时断开设备上的终端，终端本身继续运行。",
+      "keywords": "终端 命令 命令行 terminal shell"
+    },
     "kinds": {
       "ios": "iOS 应用",
       "desktop": "桌面应用",
@@ -936,7 +941,9 @@
         "sessionArchived": "归档会话“{{title}}”",
         "sessionArchivedUnknown": "归档了一个会话",
         "sessionDeleted": "删除会话“{{title}}”",
-        "sessionDeletedUnknown": "删除了一个会话"
+        "sessionDeletedUnknown": "删除了一个会话",
+        "terminalOpened": "打开终端",
+        "terminalClosed": "关闭终端"
       },
       "remove": {
         "name": "移除这台设备",

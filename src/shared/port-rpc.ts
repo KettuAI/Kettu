@@ -8,6 +8,7 @@ export type PortErrorCode =
   | 'busy'
   | 'restricted'
   | 'forbidden' // a device asked for what only a window may do, or the other way round
+  | 'terminal_not_allowed' // a device asked for a terminal while the owner does not allow it
   | 'agent_unavailable'
   | 'auth_required'
   | 'agent_error'

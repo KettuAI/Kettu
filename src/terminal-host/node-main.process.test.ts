@@ -94,7 +94,7 @@ describe('the terminal host under Node.js', () => {
       type: 'terminal-host:init',
       platform: process.platform,
       appVersion: '0.0.0-test',
-      settings: { shellPath: shell, fontSize: 13 },
+      settings: { shellPath: shell, fontSize: 13, allowDevices: false },
       projects: [dir!],
       authCommands: [],
       socketPath: socket.path,

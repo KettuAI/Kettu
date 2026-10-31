@@ -5,14 +5,27 @@
 import type { MainToTerminalHost, TerminalHostToMain } from '@shared/host-control'
 import type { ControlChannel, PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
+import type { PortDevice } from '@shared/remote/device'
 import type { TerminalEvent } from '@shared/terminal-host'
 import { ProjectRegistry } from './projects'
 import { PortServer } from './server'
 import { type PtyProcess, type PtySpawn, TerminalManager } from './terminals'
 
 export interface StartedTerminalHost {
-  /** A client's port, from the window `windowId` names; closed if the host has not started. */
-  connect(port: PortChannel<FromPort<TerminalEvent>>, windowId: number): void
+  /**
+   * A client's port, from the window `windowId` names or for the paired device `device` names;
+   * closed if the host has not started.
+   */
+  connect(
+    port: PortChannel<FromPort<TerminalEvent>>,
+    windowId: number,
+    device?: PortDevice | null,
+  ): void
+}
+
+export interface TerminalHostOptions {
+  /** Loads node-pty; tests run the host with a fake pty instead. */
+  loadPty?: () => Promise<PtySpawn>
 }
 
 function warn(message: string): void {
@@ -36,6 +49,7 @@ function consoleProcesses(pty: PtyProcess): Promise<number[] | null> {
 
 export function startTerminalHost(
   control: ControlChannel<MainToTerminalHost, TerminalHostToMain>,
+  options: TerminalHostOptions = {},
 ): StartedTerminalHost {
   const send = (message: TerminalHostToMain): void => control.send(message)
   let manager: TerminalManager | null = null
@@ -50,13 +64,15 @@ export function startTerminalHost(
       appVersion: message.appVersion,
       env: process.env,
       projects,
-      loadPty,
+      loadPty: options.loadPty ?? loadPty,
       consoleProcesses,
       warn,
+      isDevicePort: (port) => server?.isDevice(port) ?? false,
       sink: {
         data: (id, data, ports) => {
           for (const port of ports) server?.send(port, { type: 'terminal.data', id, data })
         },
+        replay: (id, port, replay) => server?.send(port, { type: 'terminal.replay', id, replay }),
         info: (info) => server?.broadcast({ type: 'terminal.info', info }),
         removed: (id) => server?.broadcast({ type: 'terminal.removed', id }),
       },
@@ -78,6 +94,7 @@ export function startTerminalHost(
       (port) => terminals.detach(port),
       warn,
     )
+    server.setAllowDevices(message.settings.allowDevices === true)
     send({ type: 'terminal-host:ready' })
     // The host starts with the first terminal anyway, so loading node-pty now costs nothing and
     // reports a broken native module before anyone types.
@@ -94,6 +111,7 @@ export function startTerminalHost(
         break
       case 'terminal-host:settings':
         manager?.setShellPath(message.settings.shellPath)
+        server?.setAllowDevices(message.settings.allowDevices === true)
         break
       case 'terminal-host:projects':
         projects?.set(message.paths)
@@ -115,8 +133,8 @@ export function startTerminalHost(
   })
 
   return {
-    connect: (port, windowId) => {
-      if (server) server.attach(port, windowId)
+    connect: (port, windowId, device = null) => {
+      if (server) server.attach(port, windowId, device)
       else port.close()
     },
   }

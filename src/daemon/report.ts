@@ -1,4 +1,4 @@
-// What `kettu status` and `kettu devices` print.
+// What `kettu status`, `kettu devices` and `kettu terminal` print.
 
 import type { DaemonStatus, DeviceSummary, HostStatus } from './control'
 import { directLine } from './direct'
@@ -98,4 +98,12 @@ function since(at: number | null, now: number): string {
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours} h ago`
   return `${Math.floor(hours / 24)} d ago`
+}
+
+/** Whether devices may use the terminal, as Settings › Remote access says it in the app. */
+export function terminalReport(allowed: boolean): string {
+  return allowed
+    ? 'Devices may use the terminal: they can run any command on this computer, beyond what an\n' +
+        'agent asks to run. kettu terminal off closes their terminals, which keep running here.\n'
+    : 'Devices may not use the terminal. kettu terminal on lets them.\n'
 }

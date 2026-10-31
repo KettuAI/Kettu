@@ -55,6 +55,7 @@ export interface SettingsFile {
     enabled: boolean // paired devices may connect to this computer; keeps Kettu in the background
     name: string | null // the name devices show for this computer; null for the system's
     direct: DirectSettings // on while remote access is, since devices have no other way yet
+    terminal: boolean // devices may use this computer's terminals, which run any command
   }
 }
 
@@ -129,7 +130,12 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   updates: { automatic: 'download' },
   privacy: { hideAccount: false },
   usage: { fromComputer: false, sidebar: 'today' },
-  remote: { enabled: false, name: null, direct: { enabled: false, port: null, addresses: [] } },
+  remote: {
+    enabled: false,
+    name: null,
+    direct: { enabled: false, port: null, addresses: [] },
+    terminal: false,
+  },
 }
 
 /** The zoom one step in (1) or out (-1), held at the ends; 0 returns to the default. */
@@ -162,6 +168,7 @@ export interface SettingsPatch {
     name?: string | null
     // `port` from 1024: below it a port may need privileges; the list is replaced whole.
     direct?: { enabled?: boolean; port?: number; addresses?: DirectAddress[] }
+    terminal?: boolean
   }
 }
 
@@ -181,4 +188,5 @@ export interface HostSettings {
 export interface TerminalSettings {
   shellPath: string | null
   fontSize: SettingsFile['terminal']['fontSize']
+  allowDevices: boolean // `remote.terminal`: paired devices' ports may use the terminals
 }

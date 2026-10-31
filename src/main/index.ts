@@ -284,7 +284,9 @@ async function start(): Promise<void> {
     hostName,
     devices: () => loadStoredDevices(userDataPath, (level, message) => remoteLog[level](message)),
     direct: () => settings.get().remote.direct,
+    terminal: () => settings.get().remote.terminal,
     openPort: (device) => agentHost.connectDevice(device),
+    openTerminalPort: (device) => terminalHost.connectDevice(device),
     changed: remoteChanged,
     hostsChanged,
   })
@@ -364,13 +366,17 @@ async function start(): Promise<void> {
     if (reachesHost(changed) || localeChanged || changed.has('general')) {
       agentHost.pushSettings(hostSettings(next, systemLocale))
     }
-    if (changed.has('terminal')) terminalHost.pushSettings(terminalSettings(next))
     if (changed.has('remote')) {
       remoteHost.directChanged()
+      remoteHost.terminalChanged()
       void remoteHost.setEnabled(next.remote.enabled)
       remoteHost.setHostName(hostName())
       remoteChanged()
       hostsChanged()
+    }
+    // After the remote host, so devices hear why their terminals close; it reads `remote.terminal`.
+    if (changed.has('terminal') || changed.has('remote')) {
+      terminalHost.pushSettings(terminalSettings(next))
     }
     if (changed.has('appearance')) {
       applyTheme(next.appearance.theme)

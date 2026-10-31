@@ -55,7 +55,7 @@ export interface Welcome {
   role: 'owner'
   /** The device as the host knows it, with the name the owner may have given it when pairing. */
   device: { id: string; name: string }
-  /** Whether the device may use the host's terminal. */
+  /** Whether the device may use the host's terminal; a `terminal` message says when it changes. */
   terminal: boolean
   /** Where the device may also connect directly, the owner's own first; none while it is off. */
   addresses: DirectAddress[]
@@ -65,6 +65,15 @@ export interface Welcome {
 export interface Addresses {
   type: 'addresses'
   addresses: DirectAddress[]
+}
+
+/**
+ * The owner allowed devices the host's terminal or stopped allowing it, sent to each welcomed
+ * device. Once it is not allowed, the device's terminals are closed; they keep running on the host.
+ */
+export interface TerminalAccess {
+  type: 'terminal'
+  allowed: boolean
 }
 
 /** The device renames itself, once welcomed. */

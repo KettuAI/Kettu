@@ -1,5 +1,6 @@
-import { app, type WebContents } from 'electron'
+import { app, MessageChannelMain, type MessagePortMain, type WebContents } from 'electron'
 import type { BusyTerminal, MainToTerminalHost, TerminalHostToMain } from '@shared/host-control'
+import type { PortDevice } from '@shared/remote/device'
 import type { TerminalSettings } from '@shared/settings'
 import terminalHostPath from '../terminal-host/index?modulePath'
 import { createLogger } from './log'
@@ -17,7 +18,7 @@ function isBusyTerminal(value: unknown): value is BusyTerminal {
   return typeof id === 'string' && typeof projectPath === 'string' && typeof title === 'string'
 }
 
-/** Main's side of the terminal host, which starts on the first `terminal-host:connect`. */
+/** Main's side of the terminal host, which starts on the first window's or device's port. */
 export class TerminalHost {
   private readonly host: UtilityHost<MainToTerminalHost, TerminalHostToMain>
   private projects: string[] = []
@@ -65,6 +66,21 @@ export class TerminalHost {
 
   revoke(webContents: WebContents): void {
     this.host.revoke(webContents)
+  }
+
+  /**
+   * A port for a paired device's terminals, starting the host if it has not run yet; null while it
+   * cannot run.
+   */
+  connectDevice(device: PortDevice): MessagePortMain | null {
+    this.host.start()
+    const { port1, port2 } = new MessageChannelMain()
+    if (this.host.post({ type: 'terminal-host:connect', windowId: -1, device }, [port1])) {
+      return port2
+    }
+    port1.close()
+    port2.close()
+    return null
   }
 
   restart(): void {

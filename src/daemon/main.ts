@@ -20,7 +20,7 @@ import { changePort, directReport } from './direct'
 import { prepareDataFolder } from './key'
 import { pairDevice } from './pair'
 import { controlSocketPath, DATA_ENV, dataPath } from './paths'
-import { devicesReport, runningReport, stoppedReport } from './report'
+import { devicesReport, runningReport, stoppedReport, terminalReport } from './report'
 import {
   installService,
   serviceCommand,
@@ -154,6 +154,25 @@ async function direct(
   }
 }
 
+/** `kettu terminal`, with `on` or `off` to change it, through the running daemon. */
+async function terminal(
+  socket: string,
+  command: Extract<Command, { kind: 'terminal' | 'terminal-set' }>,
+): Promise<number> {
+  try {
+    const report =
+      command.kind === 'terminal'
+        ? await callControl(socket, 'terminal.get', undefined)
+        : await callControl(socket, 'terminal.set', { allowed: command.allowed })
+    out(terminalReport(report.allowed))
+    return 0
+  } catch (error) {
+    if (error instanceof NotRunning) throw new Failure(error.message, NOT_RUNNING)
+    if (error instanceof ControlError) throw new Failure(error.message)
+    throw error
+  }
+}
+
 async function until<T>(check: () => Promise<T | null>, ms: number): Promise<T | null> {
   const started = Date.now()
   for (;;) {
@@ -231,6 +250,10 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
     case 'direct-add':
     case 'direct-remove':
       return direct(socket, command)
+
+    case 'terminal':
+    case 'terminal-set':
+      return terminal(socket, command)
 
     case 'service-install': {
       const running = await statusOf(socket)

@@ -26,7 +26,7 @@ export interface TestDevice {
   closing: Promise<Closing | null>
   /** The host's addresses messages, as they came. */
   addresses: Addresses[]
-  /** Messages around the host protocol after the welcome, such as `renamed`. */
+  /** Messages around the host protocol after the welcome, such as `renamed` and `terminal`. */
   notices: unknown[]
   /** Sends a JSON message on the channel as it is. */
   send(value: unknown): Promise<void>
@@ -94,7 +94,7 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
     }
     if (type === 'closing') closingMessage = value as Closing
     else if (type === 'addresses') addresses.push(value as Addresses)
-    else if (type === 'renamed') notices.push(value)
+    else if (type === 'renamed' || type === 'terminal') notices.push(value)
     else if (type === 'stream.end') {
       streamOf((value as { stream: number }).stream).ended = true
       changed()

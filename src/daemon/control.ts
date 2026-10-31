@@ -95,6 +95,14 @@ export interface ControlCalls {
   /** Adds an address of the owner's own, which devices online get at once. */
   'direct.add': { params: DirectAddress; result: DirectReport }
   'direct.remove': { params: DirectAddress; result: DirectReport }
+  /** Whether devices may use this computer's terminal. */
+  'terminal.get': { params: undefined; result: TerminalReport }
+  /** Allows devices the terminal, or stops allowing it, which closes their terminals at once. */
+  'terminal.set': { params: { allowed: boolean }; result: TerminalReport }
+}
+
+export interface TerminalReport {
+  allowed: boolean
 }
 
 /** What the daemon tells a connection unasked. */
@@ -198,6 +206,14 @@ const validators: { [M in ControlMethod]: (raw: unknown) => Params<M> } = {
   },
   'direct.add': address,
   'direct.remove': address,
+  'terminal.get': none,
+  'terminal.set': (raw) => {
+    const { allowed } = record(raw)
+    if (typeof allowed !== 'boolean') {
+      throw new ControlError('invalid_params', 'allowed must be a boolean')
+    }
+    return { allowed }
+  },
 }
 
 export interface ControlServer {

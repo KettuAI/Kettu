@@ -1,7 +1,9 @@
 // Entry of the terminal host under Node.js, started with `child_process.fork`: control messages
-// over its IPC, and each port as a connection to the local socket that `terminal-host:init` names.
+// over its IPC, and each port as a connection to the local socket that `terminal-host:init` names,
+// a paired device's starting with the `terminal-host:connect` that names it.
 
 import type { MainToTerminalHost, TerminalHostToMain } from '@shared/host-control'
+import { identifyPort } from '@shared/remote/device'
 import { listenPorts } from '@shared/socket-port'
 import { startTerminalHost } from './start'
 
@@ -29,10 +31,11 @@ const host = startTerminalHost({
       if (message?.type === 'terminal-host:init' && !listening) {
         const socketPath = message.socketPath
         if (!socketPath) fail(new Error('terminal-host:init names no socket'))
-        listening = listenPorts(socketPath, (port) => host.connect(port, NO_WINDOW)).then(
-          () => listener(message),
-          fail,
-        )
+        listening = listenPorts(socketPath, (port) =>
+          identifyPort(port, 'terminal-host:connect', (rest, device) =>
+            host.connect(rest, NO_WINDOW, device),
+          ),
+        ).then(() => listener(message), fail)
       } else if (listening) {
         void listening.then(() => listener(message))
       } else {
