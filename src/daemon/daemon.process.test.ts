@@ -27,6 +27,7 @@ let data = ''
 let socket = ''
 let env: NodeJS.ProcessEnv = {}
 let daemon: ChildProcess | null = null
+const daemons: ChildProcess[] = []
 const clients: PortChannel[] = []
 
 interface Run {
@@ -71,10 +72,10 @@ async function until<T>(check: () => Promise<T | null | false>, what: string, ms
   }
 }
 
-const status = (): Promise<DaemonStatus> => callControl(socket, 'status', undefined)
+const status = (at = socket): Promise<DaemonStatus> => callControl(at, 'status', undefined)
 
-async function agentPort(): Promise<TestPort> {
-  const { path: agentSocket } = await callControl(socket, 'host.socket', { host: 'agent' })
+async function agentPort(at = socket): Promise<TestPort> {
+  const { path: agentSocket } = await callControl(at, 'host.socket', { host: 'agent' })
   const client = await connectPort(agentSocket)
   clients.push(client)
   const port = new TestPort()
@@ -113,9 +114,32 @@ beforeAll(async () => {
   delete env.KETTU_DAEMON_SERVICE
 }, 120_000)
 
+interface Running {
+  child: ChildProcess
+  exited: Promise<number | null>
+  output(): string
+}
+
+/** `kettu run` on a data folder of its own. */
+function run(dataFolder: string): Running {
+  let output = ''
+  const child = spawn(process.execPath, [path.join(bundle, 'main.cjs'), 'run'], {
+    env: { ...env, KETTU_DAEMON_DATA: dataFolder },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  daemons.push(child)
+  child.stdout!.on('data', (chunk: Buffer) => (output += chunk.toString()))
+  child.stderr!.on('data', (chunk: Buffer) => (output += chunk.toString()))
+  const exited = new Promise<number | null>((resolve) => child.once('exit', resolve))
+  return { child, exited, output: () => output }
+}
+
 afterAll(async () => {
   for (const client of clients) client.close()
   if (daemon && daemon.exitCode === null && daemon.signalCode === null) daemon.kill('SIGKILL')
+  for (const child of daemons) {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+  }
   if (dir) await rm(dir, { recursive: true, force: true, maxRetries: 5 })
 })
 
@@ -284,5 +308,54 @@ describeUnix('kettu', () => {
     )
     expect(output).toContain('[daemon] Stopped')
     expect((await kettu('status')).code).toBe(3)
+  }, 90_000)
+
+  it('lists a session it wrote after the agent host is killed and restarted', async () => {
+    const folder = path.join(dir, 'data-restart')
+    const control = path.join(folder, 'control.sock')
+    const daemonRun = run(folder)
+    const first = await until(async () => {
+      const { agent } = (await status(control)).hosts
+      return agent.state === 'ready' && agent
+    }, `ready agent host\n${daemonRun.output()}`)
+
+    const project = path.join(dir, 'project-restart')
+    await mkdir(project)
+    const port = await agentPort(control)
+    const session = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: project,
+    })
+    await port.open(session.id)
+    await port.request('sessions.prompt', {
+      sessionId: session.id,
+      content: [{ type: 'text', text: 'hello' }],
+    })
+    await port.untilEntry(session.id, (entry) => entry.kind === 'turn_end')
+    expect((await port.request('sessions.list', {})).map((s) => s.id)).toContain(session.id)
+
+    // A restarted host lists what its index holds, which it writes 500 ms after a change: a host
+    // killed sooner starts without the session, whichever process restarts it.
+    const index = path.join(folder, 'state', 'sessions.json')
+    await until(async () => {
+      const written = JSON.parse(await readFile(index, 'utf8')) as { sessions: { id: string }[] }
+      return written.sessions.some((record) => record.id === session.id)
+    }, 'the session in the index')
+
+    process.kill(first.pid!, 'SIGKILL')
+    await until(async () => {
+      const { agent } = (await status(control)).hosts
+      return agent.state === 'ready' && agent.pid !== null && agent.pid !== first.pid
+    }, `restarted agent host\n${daemonRun.output()}`)
+    const again = await agentPort(control)
+    const listed = await again.request('sessions.list', {})
+    expect(listed.map((summary) => summary.id)).toContain(session.id)
+    expect(listed.find((summary) => summary.id === session.id)).toMatchObject({
+      agentId: 'fake-agent',
+      projectPath: project,
+    })
+
+    daemonRun.child.kill('SIGTERM')
+    expect(await daemonRun.exited).toBe(0)
   }, 90_000)
 })
