@@ -213,9 +213,11 @@ describe('checkFile', () => {
     expect(checkFile('src/renderer/src/styles/tokens.css', ':root { --a: #fff; }')).toEqual([])
   })
 
-  it("skips the app icon's drawing", () => {
+  it("skips the brand's drawings", () => {
     const svg = '<svg><path fill="#FA5615"/></svg>'
     expect(checkFile('src/renderer/src/assets/kettu-icon.svg', svg)).toEqual([])
+    expect(checkFile('src/renderer/src/assets/kettu-glyph-on-dark.svg', svg)).toEqual([])
+    expect(checkFile('src/renderer/src/assets/kettu-glyph-on-light.svg', svg)).toEqual([])
     expect(checkFile('src/renderer/src/assets/other.svg', svg)).toHaveLength(1)
   })
 
