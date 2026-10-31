@@ -244,3 +244,8 @@ export function menuAgents(order: AgentId[], byId: AgentsStore['byId']): AgentSt
 export function isInstalled(status: AgentStatus): boolean {
   return !['not-installed', 'node-missing', 'node-outdated'].includes(status.state)
 }
+
+/** Its harness's program is on the machine, even one that cannot run yet, such as a too old one. */
+export function hasProgram(status: AgentStatus): boolean {
+  return isInstalled(status) || !!status.cli?.installed
+}

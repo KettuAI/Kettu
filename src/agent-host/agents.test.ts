@@ -1091,7 +1091,10 @@ function cliManager(
     cli?: string | null
     /** The program the environment names in FAKE_CLI_PATH. */
     named?: string
-    minimum?: string
+    /** The CLI version an adapter install needs, or a function of the install's folder. */
+    minimum?: string | ((dir: string) => string)
+    /** The adapter pins its CLI, as the Claude Agent SDK does. */
+    pinsVersion?: boolean
     /** The adapter exits with code 1 before it initializes when it runs the installed CLI. */
     failWithCli?: boolean
     /** Asks versions through the manager's own cache, with this one's stubbed runs. */
@@ -1101,7 +1104,12 @@ function cliManager(
   const def: AgentDefinition = {
     ...fakeAgent(FAKE_AGENT_MAIN),
     launch: { kind: 'package', package: 'fake-adapter', version: '2.0.0' },
-    cli: { ...FAKE_CLI, minimum: async () => options.minimum ?? '1.0.0' },
+    cli: {
+      ...FAKE_CLI,
+      pinsVersion: options.pinsVersion ?? false,
+      minimum: async (dir) =>
+        typeof options.minimum === 'function' ? options.minimum(dir) : (options.minimum ?? '1.0.0'),
+    },
   }
   const adapters = [...(options.installed ?? [])]
   const installs: InstallOptions[] = []
@@ -1318,6 +1326,23 @@ describe('the CLI the user installed', () => {
     ])
     expect(m.status()).toMatchObject({
       state: 'ready',
+      cli: { installed: { version: '2.0.0', problem: null } },
+    })
+    await m.agents.stopAll()
+  })
+
+  it('installs the pin beside a newer SDK the CLI does not fit, and runs it', async () => {
+    const m = cliManager({
+      installed: [installedAt('2.1.0', { withoutCli: true })],
+      pinsVersion: true,
+      minimum: (dir) => (dir.includes('2.1.0') ? '2.1.0' : '2.0.0'),
+    })
+    await m.agents.ensureReady('fake-agent')
+    expect(m.installs.map((i) => [i.version, i.withoutCli])).toEqual([['2.0.0', true]])
+    expect(m.launches.map((spec) => spec.args)).toEqual([['/a/2.0.0/index.js']])
+    expect(m.status()).toMatchObject({
+      state: 'ready',
+      package: { version: '2.0.0', installed: true },
       cli: { installed: { version: '2.0.0', problem: null } },
     })
     await m.agents.stopAll()
