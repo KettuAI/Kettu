@@ -255,6 +255,7 @@
       "signInAction": "登录…",
       "modelsOnStart": "{{agent}} 启动后，这里会列出它的模型。",
       "useAgent": "使用 {{agent}}",
+      "moreModels": "更多模型 ({{number}})",
       "noMatch": "没有匹配的 Agent 或模型",
       "checking": "正在检查 {{agent}} 的模型…",
       "prepareFailed": "{{agent}} 无法打开会话：{{error}}"

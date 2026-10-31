@@ -271,6 +271,23 @@ describe('parseAgentOptionsFile', () => {
     })
   })
 
+  it('keeps which models are older and which one a model is shown as', () => {
+    const marked: ConfigOption = {
+      ...model('default'),
+      choices: [
+        { value: 'default', name: 'Default', shownAs: 'opus' },
+        { value: 'opus', name: 'Opus' },
+        { value: 'claude-opus-5', name: 'Opus 5', older: true },
+      ],
+    }
+    const parsed = parseAgentOptionsFile({
+      agents: { 'claude-code': { config: [marked], levels: {}, remembered: {}, observedAt: 1 } },
+    })
+    expect(typeof parsed === 'string' ? parsed : parsed.agents['claude-code']?.config).toEqual([
+      marked,
+    ])
+  })
+
   it('rejects a file without agents', () => {
     expect(parseAgentOptionsFile({})).toBe('agents is not an object')
   })

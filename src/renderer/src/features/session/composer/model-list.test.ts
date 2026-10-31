@@ -1,11 +1,48 @@
 import { describe, expect, it } from 'vitest'
 import type { ConfigOption } from '@shared/thread'
-import { mainModels, numberedModel } from './model-list'
+import { mainModels, numberedModel, shownChoice, shownValue, splitModels } from './model-list'
 
 const choices = (count: number): NonNullable<ConfigOption['choices']> =>
   Array.from({ length: count }, (_, i) => ({ value: `m${i + 1}`, name: `Model ${i + 1}` }))
 
 const values = (list: NonNullable<ConfigOption['choices']>) => list.map((c) => c.value)
+
+// Claude Code's shape: Default stands for Opus, and the pinned versions are older.
+const marked: NonNullable<ConfigOption['choices']> = [
+  { value: 'default', name: 'Default (recommended)', shownAs: 'opus' },
+  { value: 'opus', name: 'Opus' },
+  { value: 'sonnet', name: 'Sonnet' },
+  { value: 'haiku', name: 'Haiku' },
+  { value: 'claude-opus-5', name: 'Opus 5', older: true },
+  { value: 'claude-sonnet-5', name: 'Sonnet 5', older: true },
+]
+
+describe('splitModels', () => {
+  it('puts the marked older models under More models and leaves out the ones shown as another', () => {
+    const { current, older } = splitModels(marked)
+    expect(values(current)).toEqual(['opus', 'sonnet', 'haiku'])
+    expect(values(older)).toEqual(['claude-opus-5', 'claude-sonnet-5'])
+  })
+
+  it('splits after the first four when the agent marks nothing', () => {
+    const { current, older } = splitModels(choices(6))
+    expect(values(current)).toEqual(['m1', 'm2', 'm3', 'm4'])
+    expect(values(older)).toEqual(['m5', 'm6'])
+  })
+})
+
+describe('shownValue', () => {
+  it('maps a model to the one it is shown as', () => {
+    expect(shownValue(marked, 'default')).toBe('opus')
+    expect(shownChoice(marked, 'default')?.name).toBe('Opus')
+  })
+
+  it('keeps any other value', () => {
+    expect(shownValue(marked, 'sonnet')).toBe('sonnet')
+    expect(shownValue(marked, 'gone')).toBe('gone')
+    expect(shownValue(marked, undefined)).toBeUndefined()
+  })
+})
 
 describe('mainModels', () => {
   it('shows the first four in the agent order', () => {
@@ -27,6 +64,16 @@ describe('mainModels', () => {
 
   it('shows the first four when nothing is chosen yet', () => {
     expect(values(mainModels(choices(6), undefined))).toEqual(['m1', 'm2', 'm3', 'm4'])
+  })
+
+  it('shows the current models, with an older chosen one after them', () => {
+    expect(values(mainModels(marked, 'default'))).toEqual(['opus', 'sonnet', 'haiku'])
+    expect(values(mainModels(marked, 'claude-opus-5'))).toEqual([
+      'opus',
+      'sonnet',
+      'haiku',
+      'claude-opus-5',
+    ])
   })
 })
 
