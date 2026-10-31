@@ -69,6 +69,7 @@ async function setup(
     activity,
     pairing,
     host: { name: 'Studio', platform: process.platform, version: '0.0.0-test' },
+    uploads: path.join(agent.dir, 'remote', 'uploads'),
     openAgentPort: async (device) => {
       if (options.agentDown) return null
       const [remoteEnd, agentEnd] = memoryPorts()
@@ -153,7 +154,7 @@ describe('a paired device', () => {
       type: 'welcome',
       protocol: 1,
       host: { name: 'Studio', platform: process.platform, version: '0.0.0-test' },
-      features: [],
+      features: ['bytes'],
       role: 'owner',
       device: { id: t.phone.id, name: 'Phone' },
       terminal: false,
@@ -333,6 +334,7 @@ describe('refusals', () => {
         send: () => {},
       }),
       host: { name: 'Studio', platform: process.platform, version: '0.0.0-test' },
+      uploads: path.join(dir, 'uploads'),
       openAgentPort: async () => null,
       changed: () => changes++,
       log: () => {},

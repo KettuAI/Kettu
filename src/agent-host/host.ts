@@ -1041,6 +1041,15 @@ export class AgentHost {
         if (!this.scratch.contains(root)) projects.match(root)
         return this.media.open(root, path, sessionId)
       },
+      'media.authorize': async ({ projectPath, path, sessionId }, { device }) => {
+        // A window has the media scheme; only a device's remote host streams from the path.
+        if (!device) {
+          throw new HostError('forbidden', 'Only a paired device may call "media.authorize"')
+        }
+        const root = await projects.resolveDirectory(projectPath)
+        if (!this.scratch.contains(root)) projects.match(root)
+        return this.media.authorize(root, path, sessionId)
+      },
       'usage.summary': ({ dayStarts, from, to, scope }) =>
         this.usage.summary(dayStarts, from, to, scope),
       'usage.total': ({ from, to }) => this.usage.total(from, to),

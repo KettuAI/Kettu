@@ -21,9 +21,12 @@ export interface DeviceChannelOptions {
 export interface DeviceChannel {
   /** Each JSON message from the host, in order; the ones before a listener is set wait for it. */
   onMessage(listener: (value: unknown) => void): void
+  /** Each part of the host's byte streams, in order with the JSON; dropped without a listener. */
+  onBytes(listener: (stream: number, data: Uint8Array) => void): void
   /** Settles once the connection has ended and every message that came before it is handled. */
   readonly closed: Promise<void>
   send(value: unknown): Promise<void>
+  sendBytes(stream: number, data: Uint8Array): Promise<void>
   close(): void
 }
 
@@ -51,6 +54,7 @@ export async function startDeviceChannel(
   })
   let channel: Channel | null = null
   let listener: ((value: unknown) => void) | null = null
+  let bytesListener: ((stream: number, data: Uint8Array) => void) | null = null
   const waiting: unknown[] = []
   let reading: Promise<void> = Promise.resolve()
   let resolveClosed!: () => void
@@ -72,10 +76,17 @@ export async function startDeviceChannel(
       listener = next
       for (const value of waiting.splice(0)) next(value)
     },
+    onBytes: (next) => {
+      bytesListener = next
+    },
     closed,
     send: async (value) => {
       if (!channel) throw new Error('The handshake is not done')
       await channel.send({ kind: 'json', value })
+    },
+    sendBytes: async (stream, data) => {
+      if (!channel) throw new Error('The handshake is not done')
+      await channel.send({ kind: 'bytes', stream, data })
     },
     close: () => transport.close(),
   }
@@ -95,10 +106,9 @@ export async function startDeviceChannel(
         await handshake.readMessage(message)
         channel = new Channel(await handshake.split(), {
           write: (frame) => transport.send(frame),
-          // Byte streams come with uploads and media; until then they are dropped.
           message: (received) => {
-            if (received.kind !== 'json') return
-            if (listener) listener(received.value)
+            if (received.kind === 'bytes') bytesListener?.(received.stream, received.data)
+            else if (listener) listener(received.value)
             else waiting.push(received.value)
           },
           end: () => transport.close(),

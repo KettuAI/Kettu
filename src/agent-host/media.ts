@@ -1,5 +1,5 @@
 // Grants for the media files a thread names or the Files pane opens, which main then serves on
-// the media scheme.
+// the media scheme, and the same files found for a device's remote host to stream.
 
 import { randomBytes } from 'node:crypto'
 import type { Stats } from 'node:fs'
@@ -10,6 +10,8 @@ import {
   mediaKindOfName,
   mediaUrl,
   type MediaAudioType,
+  type MediaAuthorization,
+  type MediaFile,
   type MediaGrant,
   type MediaGrantRecord,
   type MediaImageType,
@@ -256,6 +258,43 @@ export class MediaService {
    * looked at until it does.
    */
   async open(root: string, written: string, sessionId: string): Promise<MediaOpenResult> {
+    const found = await this.find(root, written, sessionId)
+    if (found.kind !== 'found') return found
+    const grant = await this.grantFile(found.real, found.info, sessionId)
+    return grant ? { kind: 'granted', grant } : { kind: 'not_media' }
+  }
+
+  /**
+   * The file `open` would grant, checked the same way, with its real path for a device's remote
+   * host to stream; main is granted nothing.
+   */
+  async authorize(root: string, written: string, sessionId: string): Promise<MediaAuthorization> {
+    const found = await this.find(root, written, sessionId)
+    if (found.kind !== 'found') return found
+    const file = await this.describe(found.real, found.info)
+    return file ? { kind: 'granted', file: { path: found.real, ...file } } : { kind: 'not_media' }
+  }
+
+  /**
+   * A grant for the regular file at `real`, a real path the caller has allowed, when its name
+   * nominates it as media and its first bytes say which kind; null when it is no media. The
+   * Files pane's grants have no session.
+   */
+  async grantFile(real: string, info: Stats, sessionId: string | null): Promise<MediaGrant | null> {
+    const file = await this.describe(real, info)
+    if (!file) return null
+    const { name, ...grant } = file
+    const token = mediaToken((this.deps.random ?? randomBytes)(16))
+    this.deps.grant({ token, path: real, mimeType: grant.mimeType, sessionId })
+    return { url: mediaUrl(token, name, info.mtimeMs), ...grant }
+  }
+
+  /** The regular file `written` names when the session may see it, or why there is none. */
+  private async find(
+    root: string,
+    written: string,
+    sessionId: string,
+  ): Promise<{ kind: 'found'; real: string; info: Stats } | { kind: 'forbidden' | 'not_found' }> {
     let named: boolean | undefined
     const allowed = async (file: string) =>
       this.inside(root, file) || (named ??= await this.deps.names(sessionId, written))
@@ -279,26 +318,19 @@ export class MediaService {
     if (!(await allowed(real))) return { kind: 'forbidden' }
     const info = await stat(real)
     if (!info.isFile()) return { kind: 'not_found' }
-    const grant = await this.grantFile(real, info, sessionId)
-    return grant ? { kind: 'granted', grant } : { kind: 'not_media' }
+    return { kind: 'found', real, info }
   }
 
-  /**
-   * A grant for the regular file at `real`, a real path the caller has allowed, when its name
-   * nominates it as media and its first bytes say which kind; null when it is no media. The
-   * Files pane's grants have no session.
-   */
-  async grantFile(real: string, info: Stats, sessionId: string | null): Promise<MediaGrant | null> {
+  /** The file at `real` as media, by its name and its first bytes; null when it is none. */
+  private async describe(real: string, info: Stats): Promise<Omit<MediaFile, 'path'> | null> {
     const name = this.paths.basename(real)
     const nominated = mediaKindOfName(name)
     if (!nominated) return null
     const head = await readHead(real, Math.min(info.size, HEAD_BYTES))
     const type = nominated === 'image' ? imageOf(head) : avType(head, name)
     if (!type) return null
-    const token = mediaToken((this.deps.random ?? randomBytes)(16))
-    this.deps.grant({ token, path: real, mimeType: type.mimeType, sessionId })
     return {
-      url: mediaUrl(token, name, info.mtimeMs),
+      name,
       ...type,
       size: info.size,
       ...(type.kind === 'image' ? (pixelSize(type.mimeType, head) ?? {}) : {}),

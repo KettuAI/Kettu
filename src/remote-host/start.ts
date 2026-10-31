@@ -3,6 +3,7 @@
 // over or taken by the direct listener; in the desktop app it also connects to other hosts as a
 // device. index.ts runs it in Electron's utility process, node-main.ts under Node.js.
 
+import path from 'node:path'
 import type { MainToRemoteHost, RemoteHostStatus, RemoteHostToMain } from '@shared/host-control'
 import type { ControlChannel, PortChannel } from '@shared/port-channel'
 import type { PortDevice } from '@shared/remote/device'
@@ -18,6 +19,7 @@ import { DirectListener } from './direct'
 import { HostStore, uniqueAddresses } from './hosts'
 import { PairingCodes } from './pairing'
 import { RemoteServer } from './server'
+import { clearUploads } from './uploads'
 
 export interface RemoteHostDeps {
   /** A port to the agent host for a device's session, or null while the agent host is down. */
@@ -65,9 +67,12 @@ export function startRemoteHost(
   async function serve(options: ServeOptions): Promise<Serving> {
     const { userDataPath, platform, appVersion } = init!
     const staticKey = await importKeyPair(Buffer.from(options.privateKey, 'base64'))
+    const uploads = path.join(userDataPath, 'remote', 'uploads')
     const [devices, activity] = await Promise.all([
       DeviceStore.load(userDataPath, log),
       ActivityLog.load(userDataPath, log),
+      // What a run before was sent and nobody claimed.
+      clearUploads(uploads),
     ])
     const publicKey = Buffer.from(staticKey.publicKey).toString('base64')
     const pairing = new PairingCodes({
@@ -93,6 +98,7 @@ export function startRemoteHost(
       activity,
       pairing,
       host: { name: hostName, platform, version: appVersion },
+      uploads,
       openAgentPort: (device) => deps.openAgentPort(device),
       changed,
       log,

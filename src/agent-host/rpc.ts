@@ -16,6 +16,8 @@ import { HostError, isHostError } from './errors'
 
 export interface RequestContext {
   portId: string
+  /** The paired device the port serves, or null for a window's. */
+  device: PortDevice | null
 }
 
 export type Handlers = {
@@ -124,7 +126,8 @@ export class PortHub {
       return
     }
     try {
-      const result = await this.dispatch(method as HostMethod, message.params, { portId })
+      const ctx = { portId, device: device ?? null }
+      const result = await this.dispatch(method as HostMethod, message.params, ctx)
       reply({ type: 'response', id, result })
     } catch (error) {
       const portError = toPortError(error)
