@@ -1,10 +1,16 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import type { AgentId } from '@shared/thread'
 import { i18n } from '@renderer/lib/i18n'
+import type { AgentUpdateOffer } from '@renderer/features/updates/agent-updates'
 import { noticeSummary, type Notices } from './notices'
 
 afterEach(() => i18n.changeLanguage('en'))
 
 const none: Notices = { signIn: [], agentUpdate: null, appUpdate: null }
+
+function offer(agentId: AgentId, name: string, to: string): AgentUpdateOffer {
+  return { agentId, name, from: null, to, command: null, method: null, package: null }
+}
 
 describe('noticeSummary', () => {
   it('has nothing to show without a notice', () => {
@@ -22,7 +28,13 @@ describe('noticeSummary', () => {
     expect(
       noticeSummary({
         ...none,
-        agentUpdate: { kind: 'many', agentIds: ['claude-code', 'codex'] },
+        agentUpdate: {
+          kind: 'many',
+          offers: [
+            offer('claude-code', 'Claude Code', '2.1.310'),
+            offer('codex', 'Codex', '2.2.3'),
+          ],
+        },
         appUpdate: { kind: 'ready', version: '0.3.0' },
       }),
     ).toEqual({
@@ -34,11 +46,11 @@ describe('noticeSummary', () => {
   it('lists all three in the footer order, the sign-in first', () => {
     const summary = noticeSummary({
       signIn: ['Codex', 'Claude Code'],
-      agentUpdate: { kind: 'one', agentId: 'claude-code', name: 'Claude Code', version: '2.1.310' },
+      agentUpdate: { kind: 'one', offer: offer('claude-code', 'Claude Code', '2.1.310') },
       appUpdate: { kind: 'available', version: '0.3.0', moves: false },
     })
     expect(summary).toMatchObject({
-      name: 'Notices: 2 agents need you to sign in, Claude Code update 2.1.310, 0.3.0 is out',
+      name: 'Notices: 2 agents need you to sign in, Claude Code can be updated to 2.1.310, 0.3.0 is out',
     })
   })
 
