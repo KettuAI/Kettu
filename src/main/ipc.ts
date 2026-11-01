@@ -13,7 +13,12 @@ import {
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import { addressKey, parseDirectAddress } from '@shared/remote/address'
 import { DEVICE_ID } from '@shared/remote/device'
-import { MAX_HOST_ADDRESSES, type HostPairStart, type HostsStatus } from '@shared/remote/hosts'
+import {
+  MAX_HOST_ADDRESSES,
+  parseSshTarget,
+  type HostPairStart,
+  type HostsStatus,
+} from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
 import type { DirectAddress } from '@shared/remote/protocol'
 import type { RemoteStatus } from '@shared/remote/status'
@@ -45,7 +50,7 @@ import { copyImage, revealMedia, saveMediaAs } from './media-actions'
 import { notifyTest } from './notifications'
 import type { QuitFlow } from './quit'
 import type { HostSessions } from './host-sessions'
-import type { RemoteHost } from './remote-host'
+import type { HostPairingListener, RemoteHost } from './remote-host'
 import { isRendererUrl } from './renderer'
 import type { SettingsStore } from './settings'
 import type { Sharing } from './sharing'
@@ -582,17 +587,14 @@ export function registerIpcHandlers({
   handle('remote:retry-direct', 0, () => remoteHost.retryDirect())
 
   handle('hosts:status', 0, () => hostsStatus())
-  // Each pairing belongs to the page that pasted its link, which alone hears it.
+  // Each pairing belongs to the page that pasted its link or typed the SSH address, which alone
+  // hears it.
   const pairOwners = new Map<number, WebContents>()
-  handle('hosts:pair', 1, async ({ event }, value): Promise<HostPairStart> => {
-    const link = typeof value === 'string' && value.length <= MAX_PAIRING_LINK ? value.trim() : ''
-    const payload = parsePairingLink(link)
-    if (!payload) return { kind: 'invalid' }
-    if (Buffer.from(payload.hostKey).toString('base64') === remoteHost.publicKey) {
-      return { kind: 'self' }
-    }
-    const page = event.sender
-    const pairId = await remoteHost.pairHost(link, await computerModel(), (id, pairing) => {
+  const pairFor = async (
+    page: WebContents,
+    start: (listener: HostPairingListener) => Promise<number | null>,
+  ): Promise<HostPairStart> => {
+    const pairId = await start((id, pairing) => {
       if (pairing.state === 'added' || pairing.state === 'failed') pairOwners.delete(id)
       sendEvent(page, 'hosts:pairing', { pairId: id, pairing })
     })
@@ -604,6 +606,22 @@ export function registerIpcHandlers({
       remoteHost.closeHostPairing(pairId)
     })
     return { kind: 'pairing', pairId }
+  }
+  handle('hosts:pair', 1, async ({ event }, value): Promise<HostPairStart> => {
+    const link = typeof value === 'string' && value.length <= MAX_PAIRING_LINK ? value.trim() : ''
+    const payload = parsePairingLink(link)
+    if (!payload) return { kind: 'invalid' }
+    if (Buffer.from(payload.hostKey).toString('base64') === remoteHost.publicKey) {
+      return { kind: 'self' }
+    }
+    const model = await computerModel()
+    return pairFor(event.sender, (listener) => remoteHost.pairHost(link, model, listener))
+  })
+  handle('hosts:add-ssh', 1, async ({ event }, value): Promise<HostPairStart> => {
+    const target = parseSshTarget(value)
+    if (!target) return { kind: 'invalid' }
+    const model = await computerModel()
+    return pairFor(event.sender, (listener) => remoteHost.addSshHost(target, model, listener))
   })
   handle('hosts:pair-close', 1, ({ event }, value) => {
     const pairId = pairingCode(value)

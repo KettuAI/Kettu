@@ -312,6 +312,26 @@ export class RemoteHost {
     return pairId
   }
 
+  /**
+   * Adds the machine at an SSH address the way `pairHost` pairs with a link, under the same ids;
+   * null when the device key cannot be read.
+   */
+  async addSshHost(
+    target: string,
+    model: string,
+    listener: HostPairingListener,
+  ): Promise<number | null> {
+    if (!(await this.loadDevice())) return null
+    const pairId = this.nextPair++
+    this.hostPairings.set(pairId, listener)
+    await this.reconcile()
+    if (!this.hostPairings.has(pairId)) return pairId
+    if (!this.host?.post({ type: 'remote-host:add-ssh-host', pairId, target, model })) {
+      this.finishPairing(pairId, { state: 'failed', reason: 'ssh_failed' })
+    }
+    return pairId
+  }
+
   /** Add host closed: its pairing ends unless the host was added. */
   closeHostPairing(pairId: number): void {
     if (!this.hostPairings.delete(pairId)) return

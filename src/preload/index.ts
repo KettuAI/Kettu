@@ -144,6 +144,7 @@ const api: KettuApi = {
   hosts: {
     status: () => invoke('hosts:status'),
     pair: (link) => invoke('hosts:pair', link),
+    addSsh: (target) => invoke('hosts:add-ssh', target),
     closePairing: (pairId) => invoke('hosts:pair-close', pairId),
     rename: (id, name) => invoke('hosts:rename', id, name),
     setAddresses: (id, addresses) => invoke('hosts:set-addresses', id, addresses),

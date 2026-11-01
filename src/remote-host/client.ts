@@ -1,8 +1,8 @@
 // The desktop app as a device of other hosts: one connection to each known host, kept up with
-// backoff, and pairing with the host of a pasted link. Each session's host protocol reaches main
-// through a port of its own. A host of version 2 keeps the session through a drop for a while: the
-// link acknowledges what it receives, resumes with the welcome's token, keeps main's port, and
-// sends again the requests the host did not read.
+// backoff, pairing with the host of a pasted link, and adding a machine over SSH. Each session's
+// host protocol reaches main through a port of its own. A host of version 2 keeps the session
+// through a drop for a while: the link acknowledges what it receives, resumes with the welcome's
+// token, keeps main's port, and sends again the requests the host did not read.
 
 import type { PortChannel } from '@shared/port-channel'
 import { Acknowledger } from '@shared/remote/acks'
@@ -16,6 +16,8 @@ import {
   type HostPairingState,
   type HostStatus,
   type KnownHost,
+  type SshAddFailure,
+  type SshRoute,
 } from '@shared/remote/hosts'
 import type { KeyPair } from '@shared/remote/noise'
 import type { PairingPayload } from '@shared/remote/pairing'
@@ -33,10 +35,30 @@ import {
   type Welcome,
 } from '@shared/remote/protocol'
 import type { LogFn } from '../agent-host/storage'
+import { compareVersions } from '../agent-host/versions'
 import { dial, type Connect } from './dial'
 import { publicKeyBytes } from './devices'
 import { connectTransport } from './direct'
 import type { HostStore } from './hosts'
+import {
+  INSTALL_TIMEOUT_MS,
+  installRun,
+  lastLines,
+  parseSetupReport,
+  runSsh,
+  SETUP_TIMEOUT_MS,
+  setupScript,
+  SSH_LOOPBACK,
+  SshForward,
+  SYSTEM_SSH,
+  unsupportedSystem,
+  type SshDevice,
+  type SshHostInfo,
+  type SshProblem,
+  type SshProgram,
+  type SshRun,
+  type SshSetupReport,
+} from './ssh'
 
 /** How long a known host has from the handshake to its welcome. */
 const WELCOME_TIMEOUT_MS = 15_000
@@ -46,6 +68,12 @@ const MAX_RETRY_MS = 60_000
 
 /** Host protocol messages kept for main's port while it is on its way; more are dropped. */
 const MAX_QUEUED = 1000
+
+/** How long a try through SSH has, which may log in through jump hosts first. */
+const SSH_TIMEOUT_MS = 45_000
+
+/** How `kettu ssh-setup` exits when the daemon is not running, as `kettu status` does. */
+const NOT_RUNNING = 3
 
 /** About 1 s after the first failure, doubling to a minute, give or take a fifth. */
 export function retryDelay(failures: number): number {
@@ -71,6 +99,12 @@ export interface HostClientOptions {
   connect?: Connect
   /** How long a try has to finish a handshake. */
   timeoutMs?: number
+  /** The same through SSH. */
+  sshTimeoutMs?: number
+  /** The ssh to run; the system's by default. */
+  ssh?: SshProgram
+  /** The script that installs the daemon's `version`; the release's own by default. */
+  installScript?: (version: string) => string
   retryDelay?: (failures: number) => number
   now?: () => number
 }
@@ -214,6 +248,8 @@ class HostLink {
   private keptUntil = 0
   /** Counts the host's sessions, so a port for one that went is closed when it comes. */
   private sessions = 0
+  /** A host reached over SSH was asked for its port since it was last online. */
+  private askedPort = false
   private readonly acks = new Acknowledger((ack) => this.session?.send(ack))
 
   constructor(
@@ -298,11 +334,13 @@ class HostLink {
       ? { token: this.resumeToken, received: this.acks.received }
       : null
     const hello = { ...this.client.hello(), ...(resume ? { resume } : {}) }
+    const route = host.ssh ?? null
+    const forward = route ? new SshForward(this.client.ssh, route.target) : null
     const result = await dial({
-      addresses: host.addresses,
-      connect: this.client.connect,
+      addresses: route ? [{ host: SSH_LOOPBACK, port: route.port }] : host.addresses,
+      connect: forward?.connect ?? this.client.connect,
       start: (transport) => startDeviceChannel({ transport, hostKey, key: options.key, hello }),
-      timeoutMs: this.client.timeoutMs,
+      timeoutMs: route ? this.client.sshTimeoutMs : this.client.timeoutMs,
       signal: trying.signal,
     })
     if (this.trying !== trying) {
@@ -311,10 +349,37 @@ class HostLink {
     }
     this.trying = null
     if (result.kind === 'aborted') return
-    if (result.kind !== 'open') return this.failed()
+    if (result.kind !== 'open') {
+      if (route && this.mayAskPort(forward!.problem())) return void this.askPort(route)
+      return this.failed()
+    }
     const session = new HostSession(result.channel, result.address, options.log)
     this.session = session
     session.start(this.handlersFor(session, resume !== null), WELCOME_TIMEOUT_MS)
+  }
+
+  /**
+   * Whether to ask the daemon for its port: once between two connections, when ssh got through
+   * but the channel did not, as when the daemon started again on another port.
+   */
+  private mayAskPort(problem: SshProblem | null): boolean {
+    return !this.askedPort && (problem === 'refused' || problem === null)
+  }
+
+  /** Runs the setup script for the port alone, and tries it at once when it changed. */
+  private async askPort(route: SshRoute): Promise<void> {
+    this.askedPort = true
+    const trying = (this.trying = new AbortController())
+    const setup = await this.client.sshSetup(route.target, null, trying.signal)
+    if (this.trying !== trying) return
+    this.trying = null
+    const info = setup?.report.host
+    const host = this.host
+    if (host?.ssh && info && info.publicKey === host.publicKey && info.port !== host.ssh.port) {
+      this.client.options.hosts.update(this.id, { ssh: { ...host.ssh, port: info.port } })
+      return void this.connect()
+    }
+    this.failed()
   }
 
   /** `askedResume`: the session's hello named the last one, which the host may have kept. */
@@ -351,12 +416,15 @@ class HostLink {
     // A new session: main's port for the last one goes, and with it what was in flight.
     if (!resumed) this.lose()
     this.resumeToken = welcome.resume ?? null
+    this.askedPort = false
+    // A host added over SSH is reached through it alone, whatever addresses it has.
+    const ssh = this.host?.ssh !== undefined
     hosts.update(this.id, {
       name: welcome.host.name,
       platform: welcome.host.platform,
       version: welcome.host.version,
       deviceName: welcome.device.name,
-      addresses: merged(session.address, welcome.addresses, this.host?.addresses ?? []),
+      addresses: ssh ? [] : merged(session.address, welcome.addresses, this.host?.addresses ?? []),
       lastOnlineAt: (now ?? Date.now)(),
       removed: false,
     })
@@ -403,7 +471,7 @@ class HostLink {
 
   private addresses(addresses: DirectAddress[], answered: DirectAddress): void {
     const host = this.host
-    if (!host) return
+    if (!host || host.ssh) return
     this.client.options.hosts.update(this.id, {
       addresses: merged(answered, addresses, host.addresses),
     })
@@ -606,17 +674,204 @@ class Pairing {
   }
 }
 
+/** What a failed ssh means for adding a machine. */
+const SSH_FAILURES: Record<SshProblem, SshAddFailure> = {
+  missing: 'ssh_missing',
+  unreachable: 'ssh_unreachable',
+  auth: 'ssh_auth',
+  host_unknown: 'ssh_host_unknown',
+  host_changed: 'ssh_host_changed',
+  forwarding: 'ssh_forwarding',
+  // The forward reached nothing, after the daemon said where it listens.
+  refused: 'ssh_not_running',
+}
+
+/**
+ * Adding a machine over SSH: the daemon is installed when missing and updated when older than
+ * this app, never moved back from a newer one; this computer's key is recorded on it, which the
+ * login proves the user may do, and the channel opens through ssh. The host is kept once it
+ * welcomes this computer.
+ */
+class SshAdding {
+  private readonly aborting = new AbortController()
+  private session: HostSession | null = null
+  private done = false
+
+  constructor(
+    private readonly client: HostClient,
+    readonly pairId: number,
+  ) {}
+
+  async run(target: string, model: string): Promise<void> {
+    const { options } = this.client
+    const wanted = options.client.version
+    const device: SshDevice = {
+      publicKey: Buffer.from(options.key.publicKey).toString('base64'),
+      name: normalizeDeviceName(options.name()) ?? 'Kettu',
+      kind: options.client.kind,
+      platform: options.client.platform,
+      model: isDeviceModel(model) ? model : '',
+    }
+    this.say({ state: 'ssh', step: 'connecting' })
+    let setup = await this.setup(target, device)
+    if (!setup) return
+    const unsupported = unsupportedSystem(setup.report.system)
+    if (unsupported) return this.fail('ssh_unsupported', unsupported)
+    const installed = setup.report.version
+    if (installed === null || compareVersions(installed, wanted) < 0) {
+      this.say(
+        installed === null
+          ? { state: 'ssh', step: 'installing', version: wanted }
+          : { state: 'ssh', step: 'updating', from: installed, to: wanted },
+      )
+      const install = await this.ssh(target, this.client.installScript(wanted), INSTALL_TIMEOUT_MS)
+      if (!install) return
+      if (install.code !== 0) {
+        return this.fail('ssh_install', lastLines(`${install.stdout}\n${install.stderr}`))
+      }
+      this.say({ state: 'ssh', step: 'adding' })
+      setup = await this.setup(target, device)
+      if (!setup) return
+    }
+    const info = setup.report.host
+    const hostKey = info ? publicKeyBytes(info.publicKey) : null
+    if (!info || !hostKey) {
+      if (setup.report.failed === NOT_RUNNING) return this.fail('ssh_not_running')
+      return this.fail('ssh_failed', lastLines(setup.run.stderr))
+    }
+    this.say({ state: 'ssh', step: 'opening' })
+    const forward = new SshForward(this.client.ssh, target)
+    const result = await dial({
+      addresses: [{ host: SSH_LOOPBACK, port: info.port }],
+      connect: forward.connect,
+      start: (transport) =>
+        startDeviceChannel({ transport, hostKey, key: options.key, hello: this.client.hello() }),
+      timeoutMs: this.client.sshTimeoutMs,
+      signal: this.aborting.signal,
+    })
+    if (result.kind === 'aborted') return
+    if (this.done) {
+      if (result.kind === 'open') result.channel.close()
+      return
+    }
+    if (result.kind !== 'open') {
+      const problem = forward.problem()
+      return this.fail(problem ? SSH_FAILURES[problem] : 'ssh_failed', forward.detail())
+    }
+    const session = new HostSession(result.channel, result.address, options.log)
+    this.session = session
+    session.start(
+      {
+        welcomed: (welcome) => void this.added(session, target, info, welcome),
+        addresses: () => {},
+        renamed: () => {},
+        ended: ({ reason }) =>
+          reason === 'update_client' || reason === 'update_host'
+            ? this.fail(reason)
+            : this.fail('ssh_failed', forward.detail()),
+      },
+      WELCOME_TIMEOUT_MS,
+    )
+  }
+
+  /** Add host closed: what runs over ssh stops, and a host not welcomed yet is not kept. */
+  close(): void {
+    if (this.done) return
+    this.done = true
+    this.aborting.abort()
+    if (!this.session?.welcome) this.session?.close()
+    this.client.ended(this)
+  }
+
+  /** The setup script's run and report, or null once adding failed or ended. */
+  private async setup(
+    target: string,
+    device: SshDevice,
+  ): Promise<{ run: SshRun; report: SshSetupReport } | null> {
+    const run = await this.ssh(target, setupScript(device), SETUP_TIMEOUT_MS)
+    if (!run) return null
+    const report = parseSetupReport(run.stdout)
+    // No POSIX shell answered, as on Windows.
+    if (!report.system) {
+      this.fail('ssh_unsupported')
+      return null
+    }
+    return { run, report }
+  }
+
+  /** A script's run once ssh got through, or null once adding failed for ssh or ended. */
+  private async ssh(target: string, script: string, timeoutMs: number): Promise<SshRun | null> {
+    const run = await runSsh(this.client.ssh, target, script, {
+      timeoutMs,
+      signal: this.aborting.signal,
+    })
+    if (!run || this.done) return null
+    if (run.problem) this.fail(SSH_FAILURES[run.problem], lastLines(run.stderr))
+    else if (run.code === 255 || run.code === null) this.fail('ssh_failed', lastLines(run.stderr))
+    else return run
+    return null
+  }
+
+  private async added(
+    session: HostSession,
+    target: string,
+    info: SshHostInfo,
+    welcome: Welcome,
+  ): Promise<void> {
+    session.handOver(IGNORED)
+    // The key the handshake was made to, as the daemon printed it over the login.
+    const host = await this.client.options.hosts.add({
+      publicKey: info.publicKey,
+      name: welcome.host.name,
+      platform: welcome.host.platform,
+      version: welcome.host.version,
+      addresses: [],
+      deviceName: welcome.device.name,
+      ssh: { target, port: info.port },
+    })
+    if (!host) {
+      this.client.options.log('warn', 'A host added over SSH could not be kept')
+      session.close()
+      return this.fail('ssh_failed')
+    }
+    const status = this.client.adopt(host, session)
+    if (this.done) return
+    this.done = true
+    this.client.ended(this)
+    this.say({ state: 'added', host: status })
+  }
+
+  private fail(reason: HostPairingFailure, detail?: string): void {
+    if (this.done) return
+    this.done = true
+    this.aborting.abort()
+    this.session?.close()
+    this.client.ended(this)
+    this.say({ state: 'failed', reason, ...(detail ? { detail } : {}) })
+  }
+
+  private say(state: HostPairingState): void {
+    this.client.options.pairing(this.pairId, state)
+  }
+}
+
 export class HostClient {
   readonly connect: Connect
   readonly timeoutMs: number
+  readonly sshTimeoutMs: number
+  readonly ssh: SshProgram
+  readonly installScript: (version: string) => string
   readonly retryDelay: (failures: number) => number
   private readonly links = new Map<string, HostLink>()
-  private readonly pairings = new Map<number, Pairing>()
+  private readonly pairings = new Map<number, Pairing | SshAdding>()
   private stopped = false
 
   constructor(readonly options: HostClientOptions) {
     this.connect = options.connect ?? connectTransport
     this.timeoutMs = options.timeoutMs ?? PAIR_HOST_TIMEOUT_MS
+    this.sshTimeoutMs = options.sshTimeoutMs ?? SSH_TIMEOUT_MS
+    this.ssh = options.ssh ?? SYSTEM_SSH
+    this.installScript = options.installScript ?? ((version) => installRun(version))
     this.retryDelay = options.retryDelay ?? retryDelay
   }
 
@@ -648,8 +903,29 @@ export class HostClient {
     void pairing.run(payload, model)
   }
 
+  /** Adds the machine at an SSH address; its progress goes to `options.pairing` under `pairId`. */
+  addSsh(pairId: number, target: string, model: string): void {
+    if (this.stopped || this.pairings.has(pairId)) return
+    const adding = new SshAdding(this, pairId)
+    this.pairings.set(pairId, adding)
+    void adding.run(target, model)
+  }
+
   closePairing(pairId: number): void {
     this.pairings.get(pairId)?.close()
+  }
+
+  /** Runs the setup script on a machine: its run, and what it printed; null once aborted. */
+  async sshSetup(
+    target: string,
+    device: SshDevice | null,
+    signal: AbortSignal,
+  ): Promise<{ run: SshRun; report: SshSetupReport } | null> {
+    const run = await runSsh(this.ssh, target, setupScript(device), {
+      timeoutMs: SETUP_TIMEOUT_MS,
+      signal,
+    })
+    return run && { run, report: parseSetupReport(run.stdout) }
   }
 
   /** Renames this computer on a host it is connected to; false when it is not. */
@@ -698,7 +974,7 @@ export class HostClient {
     return this.status(this.options.hosts.get(host.id) ?? host)
   }
 
-  ended(pairing: Pairing): void {
+  ended(pairing: { pairId: number }): void {
     this.pairings.delete(pairing.pairId)
   }
 

@@ -15,6 +15,7 @@ import { isPortError } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
 import { isHostAdminEvent, type HostAdminMethod } from '@shared/remote/host-admin'
 import { importKeyPair } from '@shared/remote/noise'
+import { parseSshTarget } from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
 import type { Transport } from '@shared/remote/transport'
 import type { DirectSettings } from '@shared/settings'
@@ -24,6 +25,7 @@ import { HostClient } from './client'
 import { DeviceStore } from './devices'
 import { DirectListener } from './direct'
 import { HostStore, uniqueAddresses } from './hosts'
+import { LoopbackListener } from './loopback'
 import { PairingCodes } from './pairing'
 import { RemoteServer } from './server'
 import { clearUploads } from './uploads'
@@ -54,6 +56,8 @@ export interface StartedRemoteHost {
 interface Serving {
   server: RemoteServer
   direct: DirectListener
+  /** Under the daemon, the channels through SSH. */
+  loopback: LoopbackListener | null
   /** Sends the first status and every change after it. */
   report(): void
 }
@@ -124,6 +128,7 @@ export function startRemoteHost(
       online: server.online(),
       refused: server.refused,
       direct: direct.status,
+      ...(loopback ? { sshPort: loopback.port } : {}),
     })
     let ready = false
     const changed = (): void => {
@@ -146,12 +151,15 @@ export function startRemoteHost(
     const direct = new DirectListener({ server, changed, log, webRoot: init!.webRoot ?? null })
     // Ready once direct connections listen or have failed, so the first status says which.
     await direct.apply(options.direct)
+    const sshPort = init!.sshPort
+    const loopback =
+      sshPort === undefined ? null : await LoopbackListener.start(server, sshPort, log)
     server.startSweeping()
     const report = (): void => {
       ready = true
       changed()
     }
-    return { server, direct, report }
+    return { server, direct, loopback, report }
   }
 
   async function stopServing(
@@ -160,6 +168,7 @@ export function startRemoteHost(
   ): Promise<null> {
     if (!current) return null
     current.direct.stop()
+    current.loopback?.stop()
     await current.server.stop(reason)
     return null
   }
@@ -409,6 +418,21 @@ export function startRemoteHost(
           break
         }
         withClient((c) => c.pair(pairId, payload, typeof model === 'string' ? model : ''))
+        break
+      }
+      case 'remote-host:add-ssh-host': {
+        const { pairId, model } = message
+        const target = parseSshTarget(message.target)
+        if (!Number.isSafeInteger(pairId)) break
+        if (!target) {
+          send({
+            type: 'remote-host:host-pairing',
+            pairId,
+            pairing: { state: 'failed', reason: 'ssh_failed' },
+          })
+          break
+        }
+        withClient((c) => c.addSsh(pairId, target, typeof model === 'string' ? model : ''))
         break
       }
       case 'remote-host:pair-host-close':

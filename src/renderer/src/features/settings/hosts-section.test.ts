@@ -21,7 +21,7 @@ vi.mock('@renderer/lib/use-now', () => ({ useNow: () => Date.now(), useSeconds: 
 const { i18n } = await import('@renderer/lib/i18n')
 const { Dialog } = await import('@renderer/components/ui/dialog')
 const { HostRow, HostsNote, SelfRow } = await import('./hosts-section')
-const { AddHostBody } = await import('./host-add')
+const { AddHostBody, SshAddBody } = await import('./host-add')
 const { HostPage } = await import('./host-page')
 const { changeHost } = await import('./host-text')
 
@@ -41,6 +41,13 @@ const devBox: HostStatus = {
   lastOnlineAt: now - 2 * HOUR,
   removed: false,
   connection: { state: 'online', address: LAN },
+}
+
+const sshBox: HostStatus = {
+  ...devBox,
+  addresses: [],
+  ssh: { target: 'lin@dev-box', port: 52001 },
+  connection: { state: 'online', address: { host: '127.0.0.1', port: 52001 } },
 }
 
 const self: HostsStatus['self'] = {
@@ -189,6 +196,138 @@ describe('Add host', () => {
   })
 })
 
+describe('Add host over SSH', () => {
+  const body = (step: Parameters<typeof SshAddBody>[0]['step'], draft = 'lin@dev-box') =>
+    text(
+      createElement(
+        Dialog,
+        { open: true },
+        createElement(SshAddBody, {
+          step,
+          draft,
+          target: 'lin@dev-box',
+          onDraft: () => {},
+          onSubmit: () => {},
+          onRetry: () => {},
+          onDone: () => {},
+        }),
+      ),
+    )
+  const failed = (reason: Parameters<typeof SshAddBody>[0]['step'] & { kind: 'failed' }) => reason
+
+  it('asks for the address, and that Kettu keeps no key', async () => {
+    expect(body({ kind: 'enter' }, '')).toBe(
+      'Add host Kettu uses your own SSH config and agent, so jump hosts, ports and aliases work as usual. If Kettu is not on that machine yet, it is installed. Kettu never reads or stores your SSH keys. Cancel Connect',
+    )
+    const markup = renderToStaticMarkup(
+      createElement(
+        Dialog,
+        { open: true },
+        createElement(SshAddBody, {
+          step: { kind: 'enter' },
+          draft: '-oProxyCommand=x',
+          target: '',
+          onDraft: () => {},
+          onSubmit: () => {},
+          onRetry: () => {},
+          onDone: () => {},
+        }),
+      ),
+    )
+    expect(markup).toContain('placeholder="lin@dev-box"')
+    expect(markup).toMatch(/disabled=""[^>]*>Connect</)
+    await i18n.changeLanguage('zh-CN')
+    expect(body({ kind: 'enter' }, '')).toBe(
+      '添加主机 用你自己的 SSH 配置和 agent，跳板机、端口和别名照常生效。那台机器上没装 Kettu 的，会自动装上。 Kettu 不读也不存你的 SSH 密钥。 取消 连接',
+    )
+  })
+
+  it('shows each step, with installing or updating once it is needed', async () => {
+    expect(body({ kind: 'working', steps: [{ step: 'connecting' }] })).toBe(
+      'Add host Kettu uses your own SSH config and agent, so jump hosts, ports and aliases work as usual. If Kettu is not on that machine yet, it is installed. Log in over SSH Add this computer Open the encrypted channel Cancel',
+    )
+    const updating = body({
+      kind: 'working',
+      steps: [{ step: 'connecting' }, { step: 'updating', from: '0.2.0', to: '0.3.0' }],
+    })
+    expect(updating).toContain(
+      'Log in over SSH done Update Kettu from 0.2.0 to 0.3.0 Add this computer Open the encrypted channel Cancel',
+    )
+    await i18n.changeLanguage('zh-CN')
+    expect(
+      body({
+        kind: 'working',
+        steps: [
+          { step: 'connecting' },
+          { step: 'installing', version: '0.3.0' },
+          { step: 'adding' },
+        ],
+      }),
+    ).toContain('经 SSH 登录 已完成 安装 Kettu 0.3.0 已完成 添加这台电脑 打开加密通道 取消')
+  })
+
+  it.each([
+    ['ssh_auth', 'did not accept the login.', 'check that ssh lin@dev-box logs in without one'],
+    ['ssh_host_unknown', "does not know lin@dev-box's host key yet.", 'ssh lin@dev-box'],
+    ['ssh_host_changed', 'someone may be intercepting the connection', 'known hosts'],
+    ['ssh_forwarding', 'does not forward connections', 'AllowTcpForwarding'],
+    ['ssh_not_running', 'its daemon is not running', 'kettu service install'],
+    ['ssh_missing', 'has no ssh program', 'OpenSSH client'],
+    ['ssh_unsupported', 'has no POSIX shell', 'Apple silicon'],
+    ['update_client', 'Kettu on this computer is too old for this host.', 'Update it'],
+  ] as const)('says why it added nothing: %s', (reason, words, more) => {
+    const shown = body(
+      failed({ kind: 'failed', steps: [{ step: 'connecting' }], reason, detail: null }),
+    )
+    expect(shown).toContain(words)
+    expect(shown).toContain(more)
+    expect(shown).toContain('Log in over SSH failed')
+    expect(shown).toMatch(/Close Retry$/)
+  })
+
+  it('names the system, and shows the last lines where they help', async () => {
+    expect(
+      body(
+        failed({ kind: 'failed', steps: [], reason: 'ssh_unsupported', detail: 'FreeBSD amd64' }),
+      ),
+    ).toContain('Kettu has no daemon for FreeBSD amd64, which lin@dev-box runs.')
+    const install = body(
+      failed({
+        kind: 'failed',
+        steps: [{ step: 'connecting' }, { step: 'installing', version: '0.3.0' }],
+        reason: 'ssh_install',
+        detail: 'kettu install: Could not download it',
+      }),
+    )
+    expect(install).toContain(
+      'Log in over SSH done Install Kettu 0.3.0 failed Add this computer Open the encrypted channel',
+    )
+    expect(install).toContain(
+      'Installing Kettu on lin@dev-box failed. kettu install: Could not download it Close Retry',
+    )
+    // What ssh said of a host key is the sentence's to say.
+    expect(
+      body(
+        failed({ kind: 'failed', steps: [], reason: 'ssh_host_changed', detail: '@@@ WARNING' }),
+      ),
+    ).not.toContain('@@@')
+    await i18n.changeLanguage('zh-CN')
+    expect(body(failed({ kind: 'failed', steps: [], reason: 'ssh_auth', detail: null }))).toContain(
+      'lin@dev-box 没有接受登录。',
+    )
+  })
+
+  it('names the host it added as reached over SSH', async () => {
+    expect(body({ kind: 'added', host: sshBox })).toContain(
+      'Added dev-box Linux · Kettu 0.2.0 · SSH',
+    )
+    await i18n.changeLanguage('zh-CN')
+    expect(body({ kind: 'added', host: sshBox })).toContain(
+      '已添加 dev-box Linux · Kettu 0.2.0 · SSH',
+    )
+  })
+})
+
 describe("a host's page", () => {
   it('says whether it is online, how it is reached and what this computer is called there', async () => {
     hosts.status = status()
@@ -241,6 +380,21 @@ describe("a host's page", () => {
     )
     expect(await changeHost(zh, devBox, async () => 'unknown_host')).toBe(
       '这台电脑的列表里已经没有 dev-box 了。',
+    )
+  })
+
+  it('says a host added over SSH is reached through it, at its address', async () => {
+    hosts.status = status({ hosts: [sshBox] })
+    const page = text(createElement(HostPage, { id: devBox.id }))
+    expect(page).toContain('Reached SSH SSH address lin@dev-box')
+    expect(page).toContain('Kettu reaches dev-box with your own SSH config and agent')
+    expect(page).not.toContain('Edit…')
+    expect(text(createElement(HostRow, { host: sshBox }))).toBe(
+      'dev-box Linux · Kettu 0.2.0 · SSH lin@dev-box Online',
+    )
+    await i18n.changeLanguage('zh-CN')
+    expect(text(createElement(HostPage, { id: devBox.id }))).toContain(
+      '怎么连 SSH SSH 地址 lin@dev-box',
     )
   })
 

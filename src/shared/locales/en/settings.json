@@ -745,7 +745,7 @@
     }
   },
   "hosts": {
-    "keywords": "hosts host computer computers connect pair pairing link remote other machine",
+    "keywords": "hosts host computer computers connect pair pairing link remote other machine ssh",
     "self": {
       "badge": "Local",
       "label": "This computer"
@@ -753,7 +753,9 @@
     "version": "Kettu {{version}}",
     "via": {
       "direct": "Direct",
-      "directAt": "Direct {{address}}"
+      "directAt": "Direct {{address}}",
+      "ssh": "SSH",
+      "sshAt": "SSH {{target}}"
     },
     "failed": {
       "not_connected": "{{name}} is not connected. Try again once it is online.",
@@ -794,7 +796,43 @@
       "added": "Added {{name}}",
       "nameLabel": "This computer's name on {{name}}",
       "nameHint": "{{name}} lists this computer under this name; change it later in Settings › Hosts › {{name}}.",
-      "done": "Done"
+      "done": "Done",
+      "tabs": {
+        "label": "How to connect",
+        "link": "Pairing link",
+        "ssh": "SSH"
+      },
+      "ssh": {
+        "hint": "Kettu uses your own SSH config and agent, so jump hosts, ports and aliases work as usual. If Kettu is not on that machine yet, it is installed.",
+        "label": "SSH address",
+        "placeholder": "lin@dev-box",
+        "note": "Kettu never reads or stores your SSH keys.",
+        "connect": "Connect",
+        "steps": {
+          "label": "Progress",
+          "connecting": "Log in over SSH",
+          "installing": "Install Kettu {{version}}",
+          "updating": "Update Kettu from {{from}} to {{to}}",
+          "adding": "Add this computer",
+          "opening": "Open the encrypted channel",
+          "done": "done",
+          "failed": "failed"
+        },
+        "output": "The last lines it printed",
+        "errors": {
+          "missing": "This computer has no ssh program. Install the OpenSSH client and try again.",
+          "unreachable": "Could not reach {{target}}. Check the address, and that this computer can reach the machine, such as over your VPN.",
+          "auth": "{{target}} did not accept the login. Kettu logs in with your ssh-agent or the key your SSH config names for this host, and cannot type a password; check that <code>ssh {{target}}</code> logs in without one in a terminal.",
+          "host_unknown": "This computer does not know {{target}}'s host key yet. Connect once in a terminal with <code>ssh {{target}}</code>, check the fingerprint and accept it, then try again.",
+          "host_changed": "{{target}}'s host key is not the one this computer knows: someone may be intercepting the connection, or the machine was set up again. Check with whoever runs it and fix your known hosts in a terminal before you try again.",
+          "forwarding": "{{target}}'s SSH server does not forward connections, which Kettu needs. Allow it there with <code>AllowTcpForwarding</code> in the server's config and try again.",
+          "unsupported": "Kettu has no daemon for {{system}}, which {{target}} runs. It runs on Linux on x64 and arm64, and on Macs with Apple silicon.",
+          "noShell": "{{target}} has no POSIX shell, so Kettu cannot be installed on it. The daemon runs on Linux on x64 and arm64, and on Macs with Apple silicon.",
+          "install": "Installing Kettu on {{target}} failed.",
+          "not_running": "Kettu is installed on {{target}}, but its daemon is not running. Run <code>kettu service install</code> there, or <code>kettu run</code>, and try again.",
+          "failed": "Could not add {{target}}."
+        }
+      }
     },
     "page": {
       "added": "Added {{date}}",
@@ -804,6 +842,8 @@
       "addresses": "Addresses",
       "edit": "Edit…",
       "addressesNote": "When {{name}} connects, it tells this computer its latest addresses; edit them here when it changed its port and has not connected since.",
+      "sshTarget": "SSH address",
+      "sshNote": "Kettu reaches {{name}} with your own SSH config and agent, as ssh {{target}} does in a terminal.",
       "self": "This computer on {{name}}",
       "name": "Name",
       "nameDescription": "{{name}} lists this computer under this name.",

@@ -23,7 +23,7 @@ import { SidebarMenu } from '@renderer/components/ui/sidebar'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { HostIcon, OnlineDot } from '@renderer/features/settings/remote-parts'
 import { deviceShape } from '@renderer/features/settings/remote-text'
-import { connectionText } from '@renderer/features/settings/host-text'
+import { connectionText, routeName } from '@renderer/features/settings/host-text'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import {
@@ -161,7 +161,7 @@ function HostStateText({ host }: { host: OtherHost }) {
     return (
       <span className="inline-flex shrink-0 items-center gap-[5px]">
         <OnlineDot />
-        <span>{t('hosts.via.direct')}</span>
+        <span>{routeName(t, host)}</span>
         <span className="sr-only">{t('hosts.state.online')}</span>
       </span>
     )

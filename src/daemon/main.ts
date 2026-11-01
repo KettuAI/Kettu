@@ -196,6 +196,40 @@ async function runInstallScript(script: string, args: string[]): Promise<number>
   }
 }
 
+/**
+ * `kettu ssh-setup`: what the desktop app connects with when it adds this computer over SSH, as
+ * one line of JSON, once the device its request names is added. The login it came over proves the
+ * device is the owner's, as pairing would.
+ */
+async function sshSetup(socket: string, request: string | null): Promise<number> {
+  let params: unknown = {}
+  if (request !== null) {
+    try {
+      params = JSON.parse(request)
+    } catch {
+      throw new Failure('The request is not JSON', 2)
+    }
+  }
+  const started = Date.now()
+  for (;;) {
+    try {
+      const setup = await callControl(socket, 'ssh.setup', params as { device: null })
+      out(`${JSON.stringify(setup)}\n`)
+      return 0
+    } catch (error) {
+      if (error instanceof NotRunning) throw new Failure(error.message, NOT_RUNNING)
+      // A daemon the install just started may not take channels yet.
+      const starting = error instanceof ControlError && error.code === 'unavailable'
+      if (starting && Date.now() - started < START_WAIT_MS) {
+        await delay(500)
+        continue
+      }
+      if (error instanceof ControlError) throw new Failure(error.message)
+      throw error
+    }
+  }
+}
+
 /** `kettu login` or `kettu logout`, which need no running daemon. */
 async function account(kind: 'login' | 'logout', data: string): Promise<number> {
   let base: string
@@ -319,6 +353,9 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
 
     case 'pair':
       return pair(socket)
+
+    case 'ssh-setup':
+      return sshSetup(socket, command.request)
 
     case 'login':
     case 'logout':
