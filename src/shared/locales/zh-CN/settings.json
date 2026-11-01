@@ -6,6 +6,7 @@
     "terminal": "终端",
     "git": "Git",
     "notifications": "通知",
+    "account": "账号",
     "advanced": "高级",
     "about": "关于",
     "archived": "已归档会话",
@@ -282,6 +283,41 @@
     "previewTitle": "Claude Code 需要授权",
     "previewBody": "kettu · 运行 {{command}}",
     "previewTime": "现在"
+  },
+  "account": {
+    "name": "Kettu 账号",
+    "description": "未登录。登录会打开浏览器。",
+    "keywords": "账号 登录 退出登录 注销 kettu 云服务 个人资料 邮箱",
+    "signIn": "登录",
+    "signOut": "退出登录",
+    "cancel": "取消",
+    "manage": "管理账号",
+    "waiting": "等待浏览器",
+    "waitingHint": "请在浏览器打开的页面中完成登录。",
+    "signedOut": "已退出登录",
+    "notSignedIn": "未能登录",
+    "reasons": {
+      "account-page": "这台电脑已在账号页面上被退出登录。",
+      "disabled": "你的 Kettu 账号已被停用。",
+      "reused": "登录凭据被使用了两次，为保护你的账号，Kettu 已退出登录。",
+      "expired": "登录已过期，请重新登录。",
+      "invalid": "登录已失效，比如账号已被删除。"
+    },
+    "failures": {
+      "timeout": "10 分钟内没有在浏览器中完成登录。",
+      "network": "Kettu 连不上账号服务。请检查网络或代理后重试。",
+      "service": "账号服务没能完成登录，请重试。",
+      "disabled": "这个 Kettu 账号已被停用。",
+      "local": "Kettu 没能在浏览器中打开登录页面。"
+    },
+    "plainText": "此系统没有钥匙串，登录信息会以不加密的方式保存。",
+    "subscription": {
+      "name": "订阅",
+      "description": "Kettu 的云服务将需要订阅，在官网购买和管理。",
+      "keywords": "订阅 套餐 付费",
+      "none": "未订阅",
+      "active": "已订阅"
+    }
   },
   "browser": {
     "clearData": {
@@ -622,6 +658,7 @@
     "appearance": "主题、颜色模式、缩放和文字大小。改动立即生效。",
     "notifications": "只在 Kettu 的所有窗口都不在前台时提醒你，免得打断正在看的内容。",
     "notifications_web": "只在这个页面不在前台时提醒你，免得打断正在看的内容。",
+    "account": "你的 Kettu 账号，用于 Kettu 的云服务。不登录也能使用其他所有功能。",
     "agents": "你选来干活的 Agent，每个有自己的账号和额度。同一个 Harness 能有几个 Agent，比如一个用订阅、一个用公司的 API key。",
     "terminal": "侧边面板里的终端用哪个 Shell，以及它的字号。",
     "git": "顶栏的分支与更改、Pull Request 和它的检查结果，都靠下面两个工具。",

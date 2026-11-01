@@ -6,6 +6,12 @@ import os from 'node:os'
 import path from 'node:path'
 import { addressText } from '@shared/remote/address'
 import { version } from '../../package.json'
+import { AccountApi, accountBaseUrl, clientInfo } from '../main/account/service'
+import { accountFile, readAccount } from '../main/account/store'
+import { readJsonFile } from '../main/json-file'
+import { parseSettingsFile } from '../main/settings-schema'
+import { nodeSystemReleaseForRun } from '../main/system-name'
+import { accountLine, login, logout } from './account'
 import { HELP, parseCommand, type Command } from './args'
 import {
   callControl,
@@ -17,8 +23,9 @@ import {
 } from './control'
 import { AlreadyRunning, SERVICE_ENV, startDaemon } from './daemon'
 import { changePort, directReport } from './direct'
-import { prepareDataFolder } from './key'
+import { NO_SYSTEM_ENCRYPTION, prepareDataFolder, privateFolder } from './key'
 import { pairDevice, sshTarget } from './pair'
+import { proxiedFetch } from './proxy'
 import { controlSocketPath, DATA_ENV, dataPath } from './paths'
 import { terminalQuestions } from './questions'
 import { devicesReport, runningReport, stoppedReport, terminalReport } from './report'
@@ -189,6 +196,57 @@ async function runInstallScript(script: string, args: string[]): Promise<number>
   }
 }
 
+/** `kettu login` or `kettu logout`, which need no running daemon. */
+async function account(kind: 'login' | 'logout', data: string): Promise<number> {
+  let base: string
+  try {
+    base = accountBaseUrl(process.env)
+  } catch (error) {
+    throw new Failure((error as Error).message)
+  }
+  // Read, never written: the running daemon alone writes its settings.
+  const read = await readJsonFile(path.join(data, 'settings.json'))
+  const settings = parseSettingsFile(read.kind === 'ok' ? read.value : { version: 1 }).settings
+  const file = accountFile(data)
+  await prepareDataFolder(data)
+  await privateFolder(path.dirname(file))
+  const stop = new AbortController()
+  const abort = (): void => stop.abort()
+  process.once('SIGINT', abort)
+  try {
+    const deps = {
+      api: new AccountApi(
+        base,
+        proxiedFetch(() => settings.proxy, process.env),
+      ),
+      file,
+      cipher: NO_SYSTEM_ENCRYPTION,
+      clientInfo: async () =>
+        clientInfo({
+          kind: 'daemon',
+          name: settings.remote.name ?? os.hostname(),
+          os: await nodeSystemReleaseForRun(),
+          arch: process.arch,
+          version,
+        }),
+      write: out,
+      error: (message: string) => void process.stderr.write(`kettu: ${message}\n`),
+      signal: stop.signal,
+    }
+    return await (kind === 'login' ? login(deps) : logout(deps))
+  } finally {
+    process.off('SIGINT', abort)
+  }
+}
+
+/** The account line of `kettu status`. */
+async function statusAccount(data: string): Promise<string> {
+  const stored = await readAccount(accountFile(data), (message) =>
+    process.stderr.write(`kettu: ${message}\n`),
+  )
+  return accountLine(stored)
+}
+
 async function until<T>(check: () => Promise<T | null>, ms: number): Promise<T | null> {
   const started = Date.now()
   for (;;) {
@@ -237,7 +295,8 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
 
     case 'status': {
       const status = await statusOf(socket)
-      out(status ? runningReport(status) : stoppedReport(version, data))
+      const signedIn = await statusAccount(data)
+      out(status ? runningReport(status, signedIn) : stoppedReport(version, data, signedIn))
       return status ? 0 : 3
     }
 
@@ -260,6 +319,10 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
 
     case 'pair':
       return pair(socket)
+
+    case 'login':
+    case 'logout':
+      return account(command.kind, data)
 
     case 'direct':
     case 'direct-port':

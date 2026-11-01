@@ -56,6 +56,7 @@ const onUpdateChanged = subscribe('update:changed')
 const onShortcut = subscribe('app:shortcut')
 const onArtifactBlocked = subscribe('artifact:blocked')
 const onArtifactStopped = subscribe('artifact:stopped')
+const onAccountChanged = subscribe('account:changed')
 const onSharingChanged = subscribe('sharing:changed')
 const onRemoteChanged = subscribe('remote:changed')
 const onRemotePairing = subscribe('remote:pairing')
@@ -138,6 +139,14 @@ const api: KettuApi = {
     remove: (id) => invoke('hosts:remove', id),
     onChanged: onHostsChanged,
     onPairing: onHostPairing,
+  },
+  account: {
+    status: () => invoke('account:status'),
+    check: () => invoke('account:check'),
+    signIn: () => invoke('account:sign-in'),
+    cancelSignIn: () => invoke('account:cancel-sign-in'),
+    signOut: () => invoke('account:sign-out'),
+    onChanged: onAccountChanged,
   },
   sharing: {
     status: () => invoke('sharing:status'),

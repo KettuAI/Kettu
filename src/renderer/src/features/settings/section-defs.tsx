@@ -5,6 +5,7 @@ import {
   BotIcon,
   BoxesIcon,
   ChartNoAxesColumnIcon,
+  CircleUserRoundIcon,
   GitBranchIcon,
   GlobeIcon,
   InfoIcon,
@@ -41,6 +42,7 @@ import {
   usableAgents,
   useAgentsStore,
 } from '@renderer/stores/agents'
+import { useAccountStore } from '@renderer/stores/account'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { archivedSessions, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
@@ -92,6 +94,7 @@ import { deviceLine } from './remote-text'
 import { NoSharing, PublishedRow, SharingAccount, SharingPending } from './sharing-section'
 import { useLoginItemStatus } from './use-login-item'
 import { environmentText } from './environment-text'
+import { AccountRow, SubscriptionState } from './account-section'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
 import {
   AllowedSitesList,
@@ -425,6 +428,48 @@ export function useNotificationsSection(): SectionDef {
     title: t('sections.notifications'),
     description: t('pages.notifications', onHost),
     icon: BellIcon,
+    rows,
+  }
+}
+
+export function useAccountSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
+  const status = useAccountStore((s) => s.status)
+  const signedIn = status?.state === 'signed-in' ? status : null
+  const card = group('account', t('account.name'), {
+    unlabeled: true,
+    note: signedIn?.plainText && <GroupNote>{t('account.plainText')}</GroupNote>,
+  })
+  const rows: RowDef[] = [
+    {
+      id: 'account',
+      name: t('account.name'),
+      english: en('account.name'),
+      // Not the email, which search results would show past Hide account.
+      description: signedIn ? undefined : t('account.description'),
+      keywords: t('account.keywords'),
+      group: card,
+      layout: 'custom',
+      render: () => <AccountRow />,
+    },
+  ]
+  if (signedIn) {
+    rows.push({
+      id: 'subscription',
+      name: t('account.subscription.name'),
+      english: en('account.subscription.name'),
+      description: t('account.subscription.description'),
+      keywords: t('account.subscription.keywords'),
+      group: card,
+      render: () => <SubscriptionState status={signedIn.subscription} />,
+    })
+  }
+  return {
+    id: 'account',
+    title: t('sections.account'),
+    description: t('pages.account'),
+    icon: CircleUserRoundIcon,
     rows,
   }
 }

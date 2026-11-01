@@ -261,6 +261,15 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       onBlocked: never,
       onStopped: never,
     },
+    // Only the desktop app signs in to a Kettu account so far.
+    account: {
+      status: () => unsupported('sign in to a Kettu account'),
+      check: () => unsupported('sign in to a Kettu account'),
+      signIn: () => unsupported('sign in to a Kettu account'),
+      cancelSignIn: () => unsupported('sign in to a Kettu account'),
+      signOut: () => unsupported('sign in to a Kettu account'),
+      onChanged: never,
+    },
     sharing: {
       status: () => admin('sharing.status'),
       connect: (token, accountId) => admin('sharing.connect', { token, accountId }),
