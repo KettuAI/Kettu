@@ -456,8 +456,9 @@
   /* Neutral fills of controls. */
   --tile: var(--bg-subtle);
   --track: var(--border-default);
-  /* A switch's keyboard focus: macOS's own ring, translucent and tight around the track. */
-  --switch-focus: color-mix(in srgb, var(--edit-ring) 60%, transparent);
+  /* A switch with keyboard focus draws no ring around it: its track goes a step toward the text. */
+  --switch-on-focus: color-mix(in oklch, var(--switch-on), var(--text-primary) 20%);
+  --switch-off-focus: color-mix(in oklch, var(--border-strong), var(--text-primary) 20%);
   --segment-track: var(--bg-subtle);
   /* The chosen segment is filled like a selected row. */
   --segment-thumb: var(--bg-selected);
