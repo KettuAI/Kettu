@@ -45,7 +45,7 @@ import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage, host } from '@renderer/lib/host'
 import { basename } from '@renderer/lib/format'
-import { fileManagerName, formatShortcut, isMac, isWindows } from '@renderer/lib/platform'
+import { fileManagerName, formatShortcut, isMac, isWeb, isWindows } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
 import { cn } from '@renderer/lib/utils'
 import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
@@ -969,16 +969,19 @@ function SavedTo({ path }: { path: string }) {
         <PathText path={path} />
         {after}
       </span>
-      <button
-        type="button"
-        className="rounded-sm font-medium text-primary underline decoration-border-strong underline-offset-2 outline-none hover:decoration-current focus-ring"
-        onClick={() => {
-          setError(null)
-          window.kettu.shell.showItem(path).catch((e: unknown) => setError(errorMessage(e)))
-        }}
-      >
-        {t('agents.showIn', { name: fileManagerName() })}
-      </button>
+      {/* A browser saves the file among its downloads, which it shows itself. */}
+      {!isWeb && (
+        <button
+          type="button"
+          className="rounded-sm font-medium text-primary underline decoration-border-strong underline-offset-2 outline-none hover:decoration-current focus-ring"
+          onClick={() => {
+            setError(null)
+            window.kettu.shell.showItem(path).catch((e: unknown) => setError(errorMessage(e)))
+          }}
+        >
+          {t('agents.showIn', { name: fileManagerName() })}
+        </button>
+      )}
       <ControlError error={error} />
     </div>
   )

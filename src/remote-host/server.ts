@@ -2,10 +2,12 @@
 // the open pairing code, then hello and welcome, then the device's session as a port to the agent
 // host, whose protocol passes through unchanged but for binary values: a request's come from the
 // device's uploads, a result's go as byte streams, and media is read from disk here. The device's
-// terminals go on a port of their own to the terminal host.
+// terminals go on a port of their own to the terminal host, and an owner's calls beyond its
+// sessions to the host's parent.
 
 import { open, realpath, type FileHandle } from 'node:fs/promises'
 import type { HostMethod, HostResult } from '@shared/agent-host'
+import type { AdminAnswer } from '@shared/host-control'
 import type { PortChannel } from '@shared/port-channel'
 import { isPortError, type PortError } from '@shared/port-rpc'
 import type { ActivityActor, NewActivity } from '@shared/remote/activity'
@@ -17,6 +19,11 @@ import {
   type PairedDevice,
   type PortDevice,
 } from '@shared/remote/device'
+import {
+  isHostAdminMethod,
+  type HostAdminEvent,
+  type HostAdminMethod,
+} from '@shared/remote/host-admin'
 import { Handshake, type KeyPair, type TransportCiphers } from '@shared/remote/noise'
 import { bytesOf, findPlaces, isBinary } from '@shared/remote/places'
 import {
@@ -97,6 +104,11 @@ export interface RemoteServerOptions {
   terminal?: boolean
   /** A port to the terminal host for a device's terminals, or null while it cannot have one. */
   openTerminalPort?(device: PortDevice): Promise<PortChannel | null>
+  /**
+   * Hands an owner's call beyond its sessions to the host's parent, which answers it; without it
+   * devices are refused these calls.
+   */
+  admin?(deviceId: string, method: HostAdminMethod, params: unknown): Promise<AdminAnswer>
   /** The devices or the sessions open changed, or refusals did, reported at most once a second. */
   changed(): void
   log: LogFn
@@ -211,6 +223,13 @@ export class RemoteServer {
     return renamed
   }
 
+  /** Tells the owner's devices something of the host: every one, or only `deviceId`. */
+  adminEvent(event: HostAdminEvent, deviceId: string | null): void {
+    for (const connection of this.connections) {
+      if (deviceId === null || connection.device?.id === deviceId) connection.adminEvent(event)
+    }
+  }
+
   /** The name the next welcomes carry. */
   setHostName(name: string): void {
     if (name.length > 0 && name.length <= MAX_HOST_NAME) {
@@ -298,6 +317,8 @@ type State = 'handshake' | 'hello' | 'confirming' | 'opening' | 'open' | 'closin
 
 class DeviceConnection {
   device: PairedDevice | null = null
+  /** What the device may do, as its welcome says: every paired device is its host's owner. */
+  private readonly role: Welcome['role'] = 'owner'
   /** The removed device whose key the handshake named, told why at its hello. */
   private removed: RemovedDevice | null = null
   private state: State = 'handshake'
@@ -369,6 +390,11 @@ class DeviceConnection {
     if (this.state !== 'open') return
     this.send({ type: 'terminal', allowed } satisfies TerminalAccess)
     if (!allowed) this.terminal?.close(NOT_ALLOWED)
+  }
+
+  /** Something of the host its owner hears, beside the agent host's events. */
+  adminEvent(event: HostAdminEvent): void {
+    if (this.state === 'open' && this.role === 'owner') this.send({ type: 'event', event })
   }
 
   /** The device's name changed: its sessions hear the new one. */
@@ -522,7 +548,7 @@ class DeviceConnection {
       protocol: version,
       host: this.server.options.host,
       features: [BYTES_FEATURE],
-      role: 'owner',
+      role: this.role,
       device: { id: device.id, name: device.name },
       terminal: this.server.terminal,
       addresses: this.server.addresses,
@@ -660,6 +686,9 @@ class DeviceConnection {
       }
       return
     }
+    if (typeof method === 'string' && isHostAdminMethod(method)) {
+      return void this.admin(id, method, params)
+    }
     if (isTerminalMethod(method)) {
       this.terminal?.request({ type, id, method, params })
       return
@@ -668,6 +697,28 @@ class DeviceConnection {
     const named = findPlaces(value as Record<string, unknown>, 'params', isUploadRef)
     if (named.length === 0) return this.forward(value)
     void this.withUploads(value, id, named)
+  }
+
+  /** An owner's call beyond its sessions, which the host's parent answers. */
+  private async admin(id: unknown, method: HostAdminMethod, params: unknown): Promise<void> {
+    if (typeof id !== 'number') return
+    const reply = (message: unknown): void => {
+      if (this.state === 'open') this.send(message)
+    }
+    const run = this.server.options.admin
+    if (this.role !== 'owner' || !run) {
+      this.server.options.log(
+        'warn',
+        `Device ${this.device!.id} asked for ${method}, which it may not call`,
+      )
+      const message = `A paired device may not call "${method}"`
+      return reply({ type: 'error', id, error: { code: 'forbidden', message } })
+    }
+    const answer = await run(this.device!.id, method, params).catch((): AdminAnswer => ({
+      error: { code: 'internal', message: 'The host could not answer' },
+    }))
+    if ('error' in answer) reply({ type: 'error', id, error: answer.error })
+    else reply({ type: 'response', id, result: answer.result })
   }
 
   /** Puts the bytes of the uploads a request names in their places, then passes it on. */

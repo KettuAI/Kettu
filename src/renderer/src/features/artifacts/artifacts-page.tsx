@@ -42,6 +42,7 @@ import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { CornerControls } from '@renderer/features/shell/top-bar'
 import { basename, longAgo } from '@renderer/lib/format'
+import { useHostContext } from '@renderer/lib/host-features'
 import { formatShortcut, hasBand, isMod, isWeb } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -990,11 +991,12 @@ function NoMatch({ onClear }: { onClear: () => void }) {
 
 function ListError({ error }: { error: string }) {
   const { t } = useTranslation(['artifacts', 'common'])
+  const onHost = useHostContext()
   return (
     <Alert variant="error" className="mt-8">
       <CircleAlertIcon />
       <AlertTitle>{t('page.errorTitle')}</AlertTitle>
-      <AlertDescription>{t('page.errorDescription', { error })}</AlertDescription>
+      <AlertDescription>{t('page.errorDescription', { error, ...onHost })}</AlertDescription>
       <AlertAction>
         <Button variant="outline" size="sm" onClick={retryArtifacts}>
           {t('common:actions.retry')}

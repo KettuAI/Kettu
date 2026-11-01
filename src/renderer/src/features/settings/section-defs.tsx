@@ -31,7 +31,8 @@ import {
 import { bugReportUrl } from '@renderer/lib/bug-report'
 import { basename, longAgo } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
-import { formatShortcut, isMac, isWindows, platform } from '@renderer/lib/platform'
+import { useHostContext, useHostHas } from '@renderer/lib/host-features'
+import { formatShortcut, isMac, isWeb, isWindows, platform } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
 import {
   agentName,
@@ -47,11 +48,12 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { useMcpStore } from '@renderer/stores/mcp'
 import { loadHosts, useHostsStore } from '@renderer/stores/hosts'
 import { useRemoteStore } from '@renderer/stores/remote'
+import { useWebHostStore } from '@renderer/stores/web-host'
 import { useSharingStore } from '@renderer/stores/sharing'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { useUsageStore } from '@renderer/stores/usage'
 import { openAgentSettings, openHarnessSettings, openSettingsItem } from '@renderer/stores/view'
-import { AboutHero, AutomaticUpdates, LinkRow, UpdateRow } from './about-section'
+import { AboutHero, AutomaticUpdates, LinkRow, NoUpdates, UpdateRow } from './about-section'
 import {
   AddAgentRow,
   AgentListItem,
@@ -70,7 +72,7 @@ import { ArchivedRow } from './archived-section'
 import { GroupLabel, GroupNote } from './rows'
 import { SettingSwitch } from './controls'
 import { HostPage } from './host-page'
-import { hostLine } from './host-text'
+import { hostLine, webHostLine } from './host-text'
 import { HostRow, HostsHeader, HostsLoading, HostsNote, SelfRow } from './hosts-section'
 import { DevicePage } from './remote-device'
 import { DirectPortField, FoundAddresses, OwnAddresses } from './remote-direct'
@@ -87,7 +89,7 @@ import {
   TerminalSwitch,
 } from './remote-section'
 import { deviceLine } from './remote-text'
-import { PublishedRow, SharingAccount } from './sharing-section'
+import { NoSharing, PublishedRow, SharingAccount, SharingPending } from './sharing-section'
 import { useLoginItemStatus } from './use-login-item'
 import { environmentText } from './environment-text'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
@@ -122,6 +124,7 @@ import {
 } from './sections'
 import { ThemeTiles } from './theme-section'
 import { ClearRecord, FromComputer, LogRow, SidebarEnd, SyncLogs } from './usage-section'
+import { BrowserNameField, ForgetHost, WebHostRow } from './web-host-section'
 
 // The sections of the Settings page as data, so search and the match counts read the same rows
 // the page draws.
@@ -425,6 +428,7 @@ export function useNotificationsSection(): SectionDef {
 
 export function useUsageSection(): SectionDef {
   const { t } = useTranslation('usage')
+  const onHost = useHostContext()
   const en = i18n.getFixedT('en', 'usage')
   const fromComputer = useSettingsStore((s) => s.settings.usage.fromComputer)
   // Strings only: the status is a new object at every step of a scan.
@@ -436,9 +440,9 @@ export function useUsageSection(): SectionDef {
   const rows: RowDef[] = [
     {
       id: 'from-computer',
-      name: t('settings.fromComputer.name'),
+      name: t('settings.fromComputer.name', onHost),
       english: en('settings.fromComputer.name'),
-      description: t('settings.fromComputer.description'),
+      description: t('settings.fromComputer.description', onHost),
       keywords: t('settings.fromComputer.keywords'),
       group: sources,
       render: () => <FromComputer />,
@@ -490,12 +494,13 @@ export function useUsageSection(): SectionDef {
 
 export function useAgentsSection(): SectionDef {
   const { t } = useTranslation('settings')
+  const onHost = useHostContext()
   const en = english()
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId).filter(hasProgram)))
   const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
   const list: GroupDef = {
     id: 'agents',
-    label: t('agents.groups.list'),
+    label: t('agents.groups.list', onHost),
     count: agents.length,
     actions: <AgentsGroupActions />,
   }
@@ -691,12 +696,13 @@ export function useBrowserSection(): SectionDef {
 
 export function useAdvancedSection(): SectionDef {
   const { t } = useTranslation('settings')
+  const onHost = useHostContext()
   const en = english()
   const data = group('data', t('advanced.groups.data'))
   return {
     id: 'advanced',
     title: t('sections.advanced'),
-    description: t('pages.advanced'),
+    description: t('pages.advanced', onHost),
     icon: WrenchIcon,
     rows: [
       {
@@ -746,6 +752,8 @@ export function useAboutSection(): SectionDef {
   const en = english()
   const status = useUpdatesStore((s) => s.status)
   const info = useAppInfo()
+  // A host whose Kettu Settings cannot update, as the daemon's, says so in the row.
+  const updatable = useHostHas('updates')
   const updates = group('updates', t('about.groups.updates'))
   const links = group('links', t('about.groups.links'))
   return {
@@ -762,9 +770,9 @@ export function useAboutSection(): SectionDef {
         keywords: t('about.updates.keywords'),
         group: updates,
         layout: 'block',
-        render: () => <UpdateRow status={status} />,
+        render: () => (updatable === false ? <NoUpdates /> : <UpdateRow status={status} />),
       },
-      ...(status?.state.kind === 'off'
+      ...(updatable === false || status?.state.kind === 'off'
         ? []
         : [
             {
@@ -912,7 +920,71 @@ export function useArchivedSection(): SectionDef {
   }
 }
 
+/**
+ * Settings > Hosts in the web client, which reaches only the host that served its page: that host,
+ * this browser's name on it, and forgetting it here.
+ */
+function useWebHostsSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
+  const host = useWebHostStore((s) => s.host)
+  const name = host?.name ?? ''
+  const online = host?.connection.state === 'online'
+  return {
+    id: 'hosts',
+    title: t('sections.hosts'),
+    description: t('pages.hostsWeb'),
+    icon: ServerIcon,
+    rows: [
+      {
+        id: 'hosts',
+        name: t('sections.hosts'),
+        english: en('sections.hosts'),
+        description: t('pages.hostsWeb'),
+        keywords: t('hosts.keywords'),
+        searchOnly: true,
+        render: () => null,
+      },
+      {
+        id: 'host',
+        name: name || t('sections.hosts'),
+        description: host ? webHostLine(t, host) : undefined,
+        keywords: t('hosts.keywords'),
+        group: group('host', t('sections.hosts'), { unlabeled: true }),
+        layout: 'custom',
+        render: () => (host ? <WebHostRow host={host} /> : <HostsLoading />),
+      },
+      {
+        id: 'device-name',
+        name: t('hosts.page.name'),
+        english: en('hosts.page.name'),
+        description: online
+          ? t('hosts.web.nameDescription', { name })
+          : t('hosts.web.nameOffline', { name }),
+        group: group('self', t('hosts.web.self', { name })),
+        render: () => <BrowserNameField />,
+      },
+      {
+        id: 'forget',
+        name: t('hosts.web.forget.name', { name }),
+        english: en('hosts.web.forget.name', { name }),
+        description: t('hosts.web.forget.description', { name }),
+        keywords: t('hosts.web.forget.keywords'),
+        group: group('forget', t('hosts.web.forget.name', { name }), { unlabeled: true }),
+        render: () => <ForgetHost />,
+      },
+    ],
+  }
+}
+
+/** Settings > Hosts: the hosts this computer connects to, or in a browser the one it does. */
 export function useHostsSection(): SectionDef {
+  const desktop = useDesktopHostsSection()
+  const web = useWebHostsSection()
+  return isWeb ? web : desktop
+}
+
+function useDesktopHostsSection(): SectionDef {
   const { t } = useTranslation('settings')
   const en = english()
   const status = useHostsStore((s) => s.status)
@@ -981,14 +1053,17 @@ export function useHostsSection(): SectionDef {
 
 export function useRemoteSection(): SectionDef {
   const { t } = useTranslation('settings')
+  const onHost = useHostContext()
   const en = english()
   const enabled = useSettingsStore((s) => s.settings.remote.enabled)
   const status = useRemoteStore((s) => s.status)
+  const switchable = useHostHas('remoteSwitch')
+  const resettable = useHostHas('remoteReset')
   const switchRow: RowDef = {
     id: 'remote',
     name: t('remote.switch'),
     english: en('remote.switch'),
-    description: t('pages.remote'),
+    description: t('pages.remote', onHost),
     keywords: t('remote.keywords'),
     searchOnly: true,
     render: () => null,
@@ -996,7 +1071,7 @@ export function useRemoteSection(): SectionDef {
   const base = {
     id: 'remote' as const,
     title: t('sections.remote'),
-    description: t('pages.remote'),
+    description: t('pages.remote', onHost),
     icon: MonitorSmartphoneIcon,
     hero: <RemoteHeader id="settings-remote" />,
     itemPage: (id: string) => <DevicePage id={id} />,
@@ -1043,7 +1118,8 @@ export function useRemoteSection(): SectionDef {
     note: (
       <>
         <PlainKeyNote />
-        <GroupNote>{t('remote.background')}</GroupNote>
+        {/* A host that always serves has no window to close. */}
+        {switchable !== false && <GroupNote>{t('remote.background', onHost)}</GroupNote>}
       </>
     ),
   })
@@ -1065,18 +1141,18 @@ export function useRemoteSection(): SectionDef {
     },
     {
       id: 'host-name',
-      name: t('remote.hostName.name'),
+      name: t('remote.hostName.name', onHost),
       english: en('remote.hostName.name'),
       description: t('remote.hostName.description'),
       group: state,
-      render: () => <HostNameField label={t('remote.hostName.name')} />,
+      render: () => <HostNameField label={t('remote.hostName.name', onHost)} />,
     },
     ...deviceRows,
     {
       id: 'direct',
       name: t('remote.direct.name'),
       english: en('remote.direct.name'),
-      description: t('remote.direct.description'),
+      description: t('remote.direct.description', onHost),
       keywords: t('remote.direct.keywords'),
       group: direct,
       render: () => (
@@ -1096,7 +1172,7 @@ export function useRemoteSection(): SectionDef {
       id: 'direct-found',
       name: t('remote.direct.found.name'),
       english: en('remote.direct.found.name'),
-      description: t('remote.direct.found.description'),
+      description: t('remote.direct.found.description', onHost),
       keywords: t('remote.direct.keywords'),
       group: direct,
       layout: 'block',
@@ -1116,21 +1192,23 @@ export function useRemoteSection(): SectionDef {
       id: 'terminal',
       name: t('remote.terminal.name'),
       english: en('remote.terminal.name'),
-      description: t('remote.terminal.description'),
+      description: t('remote.terminal.description', onHost),
       keywords: t('remote.terminal.keywords'),
       group: group('terminal', t('remote.terminal.name'), { unlabeled: true }),
       render: () => <TerminalSwitch label={t('remote.terminal.name')} />,
     },
-    {
+  ]
+  if (resettable !== false) {
+    rows.push({
       id: 'reset',
       name: t('remote.reset.name'),
       english: en('remote.reset.name'),
-      description: t('remote.reset.description'),
+      description: t('remote.reset.description', onHost),
       keywords: t('remote.reset.keywords'),
       group: group('reset', t('remote.reset.name'), { unlabeled: true }),
       render: () => <ResetRemote />,
-    },
-  ]
+    })
+  }
   return { ...base, rows }
 }
 
@@ -1155,6 +1233,31 @@ export function useSharingSection(): SectionDef {
   const account = useSharingStore((s) => s.status?.cloudflare ?? null)
   const pages = useSharingStore(useShallow((s) => s.status?.published ?? []))
   const titles = usePublishedTitles(pages.length > 0)
+  const shares = useHostHas('sharing')
+  const base = {
+    id: 'sharing' as const,
+    title: t('sections.sharing'),
+    description: t('pages.sharing'),
+    icon: ShareIcon,
+  }
+  // A host that publishes nothing, as the daemon, says so in place of the account and the pages.
+  if (shares !== true) {
+    return {
+      ...base,
+      rows: [
+        {
+          id: 'cloudflare',
+          name: t('sharing.account.name'),
+          english: en('sharing.account.name'),
+          description: shares === false ? t('sharing.none.title') : undefined,
+          keywords: t('sharing.account.keywords'),
+          searchOnly: true,
+          render: () => null,
+        },
+      ],
+      footer: shares === false ? <NoSharing /> : <SharingPending />,
+    }
+  }
   const rows: RowDef[] = [
     {
       id: 'cloudflare',
@@ -1190,10 +1293,7 @@ export function useSharingSection(): SectionDef {
     )
   }
   return {
-    id: 'sharing',
-    title: t('sections.sharing'),
-    description: t('pages.sharing'),
-    icon: ShareIcon,
+    ...base,
     rows,
     footer: pages.length === 0 && (
       <section aria-label={t('sharing.groups.published')} className="mt-7 flex flex-col">

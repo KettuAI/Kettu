@@ -13,6 +13,7 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { longAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
+import { useHostContext } from '@renderer/lib/host-features'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -186,6 +187,20 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
       </div>
       <ControlError error={error} />
       {action && <span className="flex shrink-0 items-center gap-1.5">{action}</span>}
+    </div>
+  )
+}
+
+/** The updates row on a host whose Kettu is not updated from Settings, as the daemon's. */
+export function NoUpdates() {
+  const { t } = useTranslation('settings')
+  const onHost = useHostContext()
+  return (
+    <div className="flex min-h-10 flex-col justify-center">
+      <span className="text-ui font-medium">{t('about.updates.none', onHost)}</span>
+      <span className="mt-0.5 text-xs leading-4 text-secondary">
+        {t('about.updates.noneDetail', onHost)}
+      </span>
     </div>
   )
 }

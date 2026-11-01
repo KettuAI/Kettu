@@ -6,6 +6,7 @@
 import { join } from 'node:path'
 import { MessageChannelMain, type MessagePortMain } from 'electron'
 import type {
+  AdminAnswer,
   MainToRemoteHost,
   RemoteHostStatus,
   RemoteHostStopReason,
@@ -26,6 +27,7 @@ import {
   type HostStatus,
 } from '@shared/remote/hosts'
 import { isPairingState, type PairingState } from '@shared/remote/pairing'
+import type { HostAdminEvent } from '@shared/remote/host-admin'
 import type { DirectAddress } from '@shared/remote/protocol'
 import type { DirectSettings } from '@shared/settings'
 import remoteHostPath from '../remote-host/index?modulePath'
@@ -73,6 +75,8 @@ export interface RemoteHostDeps {
    * it cannot run.
    */
   openTerminalPort(device: PortDevice): MessagePortMain | null
+  /** Answers an owner's call beyond its sessions, which a device made through the remote host. */
+  admin?(deviceId: unknown, method: unknown, params: unknown): Promise<AdminAnswer>
   /** The state or the report changed, for Settings and the tray. */
   changed?(): void
   /** The known hosts, their connections or the device key changed, for Settings › Hosts. */
@@ -248,6 +252,11 @@ export class RemoteHost {
       () => this.toServer({ type: 'remote-host:rename-device', id, name }),
       (stored) => stored.rename(id, name),
     )
+  }
+
+  /** Tells the owner's devices something of the host: every one, or only `deviceId`. */
+  adminEvent(event: HostAdminEvent, deviceId: string | null): void {
+    this.toServer({ type: 'remote-host:admin-event', event, deviceId })
   }
 
   /** The name the next welcomes carry, and the one pairing suggests to a host. */
@@ -610,6 +619,19 @@ export class RemoteHost {
     listener(pairId, pairing)
   }
 
+  /** Answers an owner's call, under its id, to the process that asked. */
+  private async answerAdmin(
+    host: UtilityHost<MainToRemoteHost, RemoteHostToMain>,
+    message: Extract<RemoteHostToMain, { type: 'remote-host:admin-call' }>,
+  ): Promise<void> {
+    const { requestId, deviceId, method, params } = message
+    if (!Number.isSafeInteger(requestId)) return
+    const answer: AdminAnswer = this.deps.admin
+      ? await this.deps.admin(deviceId, method, params)
+      : { error: { code: 'unavailable', message: 'This host takes no such calls' } }
+    if (this.host === host) host.post({ type: 'remote-host:admin-result', requestId, ...answer })
+  }
+
   /** Main's end of a host's session port: kept open for the sessions on other hosts. */
   private openHostPort(
     host: UtilityHost<MainToRemoteHost, RemoteHostToMain>,
@@ -713,6 +735,9 @@ export class RemoteHost {
       case 'remote-host:reset':
       case 'remote-host:stop-serving':
         if (this.host === host) this.requests.get(message.requestId)?.(message)
+        break
+      case 'remote-host:admin-call':
+        if (this.host === host) void this.answerAdmin(host, message)
         break
       case 'remote-host:log': {
         const text = typeof message.message === 'string' ? message.message : ''

@@ -2,14 +2,10 @@ import { mkdir, mkdtemp, rm, stat } from 'node:fs/promises'
 import os from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AgentFolders } from './agent-folders'
+import { SettingsStore } from './settings'
 
-const trashed = vi.hoisted(() => [] as string[])
-vi.mock('electron', () => ({
-  shell: { trashItem: async (folder: string) => void trashed.push(folder) },
-}))
-
-const { AgentFolders } = await import('./agent-folders')
-const { SettingsStore } = await import('./settings')
+const trashed: string[] = []
 
 let dir: string
 let root: string
@@ -28,7 +24,8 @@ afterEach(async () => {
 
 async function setup() {
   const settings = await SettingsStore.load(dir)
-  return { settings, folders: new AgentFolders(settings, root) }
+  const trash = async (folder: string) => void trashed.push(folder)
+  return { settings, folders: new AgentFolders(settings, root, trash) }
 }
 
 describe('AgentFolders', () => {

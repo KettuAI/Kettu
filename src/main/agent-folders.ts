@@ -1,11 +1,11 @@
 // The agents a user adds beside a harness's default one, each with a configuration folder of its
-// own: one Kettu makes in its data folder, or one picked in the folder dialog. A folder belongs to
-// one agent, and an agent keeps its folder; only main writes the paths into the settings.
+// own: one Kettu makes in its data folder, or one picked in the folder dialog or typed on a device.
+// A folder belongs to one agent, and an agent keeps its folder; only main, or the daemon, writes
+// the paths into the settings.
 
 import { mkdir, realpath } from 'node:fs/promises'
 import os from 'node:os'
 import { join, relative, isAbsolute } from 'node:path'
-import { shell } from 'electron'
 import type { AddedAgent } from '@shared/settings'
 import {
   addedAgentId,
@@ -31,16 +31,21 @@ async function resolved(folder: string): Promise<string> {
 }
 
 export class AgentFolders {
-  /** The folders the dialog returned this run, the only existing ones an agent may be given. */
+  /**
+   * The folders the dialog returned this run, or a device typed and the host found, the only
+   * existing ones an agent may be given.
+   */
   private readonly picked = new Set<string>()
 
   constructor(
     private readonly settings: SettingsStore,
     /** `<userData>/agent-config`, where Kettu makes the folders of the agents it creates. */
     private readonly root: string,
+    /** Moves a folder Kettu made out of the way: to the trash, or where the daemon keeps them. */
+    private readonly trash: (folder: string) => Promise<void>,
   ) {}
 
-  /** Records a folder the user picked in the dialog, which `add` may then take. */
+  /** Records a folder the user picked in the dialog or the host checked, which `add` may take. */
   remember(folder: string): void {
     this.picked.add(folder)
   }
@@ -95,7 +100,7 @@ export class AgentFolders {
     if (!agent) throw new SettingsError(`No added agent "${agentId}"`)
     this.settings.removeAgent(agentId)
     if (trash && agent.created && this.inRoot(agent.configDir)) {
-      await shell.trashItem(agent.configDir)
+      await this.trash(agent.configDir)
     }
   }
 

@@ -5,8 +5,10 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { HostMethod } from '@shared/agent-host'
 import type { PortChannel } from '@shared/port-channel'
 import { deviceId } from '@shared/remote/device'
+import type { HostAdminEvent } from '@shared/remote/host-admin'
 import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
 import { parsePairingLink, type PairingState } from '@shared/remote/pairing'
 import { PROTOCOL_VERSION } from '@shared/remote/protocol'
@@ -14,8 +16,8 @@ import { startTestHost, type TestHost } from '../agent-host/testing/harness'
 import { ActivityLog } from './activity'
 import { DeviceStore } from './devices'
 import { PairingCodes } from './pairing'
-import { RemoteServer } from './server'
-import { connectDevice, type TestDeviceOptions } from './testing/device'
+import { RemoteServer, type RemoteServerOptions } from './server'
+import { connectDevice, type TestDevice, type TestDeviceOptions } from './testing/device'
 import { memoryPorts, memoryTransports } from './testing/memory'
 
 const base64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64')
@@ -35,6 +37,7 @@ async function setup(
     helloTimeoutMs?: number
     ttlMs?: number
     now?: () => number
+    admin?: RemoteServerOptions['admin']
   } = {},
 ) {
   agent = await startTestHost()
@@ -90,6 +93,7 @@ async function setup(
     },
     changed: () => changes++,
     log,
+    ...(options.admin ? { admin: options.admin } : {}),
     ...(options.helloTimeoutMs ? { helloTimeoutMs: options.helloTimeoutMs } : {}),
     ...(options.now ? { now: options.now } : {}),
   })
@@ -189,7 +193,11 @@ describe('a paired device', () => {
     const device = await t.connect()
     await device.first
     await expect(
-      device.port.request('projects.add', { path: t.agent.project }),
+      device.port.request('media.open', {
+        projectPath: t.agent.project,
+        path: 'a.png',
+        sessionId: 'none',
+      }),
     ).rejects.toMatchObject({ code: 'forbidden' })
     await expect(
       device.port.request('attachments.add', { source: { grantId: 'grant' }, thumb: null }),
@@ -198,9 +206,21 @@ describe('a paired device', () => {
     const methods = t.forwarded.map((message) => (message as { method: string }).method)
     expect(methods).toEqual(['projects.list'])
     expect(t.logs).toEqual([
-      `warn: Device ${t.phone.id} asked for projects.add, which devices may not call`,
+      `warn: Device ${t.phone.id} asked for media.open, which devices may not call`,
       `warn: Device ${t.phone.id} asked for attachments.add, which devices may not call`,
     ])
+  })
+
+  it('adds a project by the folder it names', async () => {
+    const t = await setup()
+    const device = await t.connect()
+    await device.first
+    expect(await device.port.request('projects.add', { path: t.agent.project })).toMatchObject({
+      path: t.agent.project,
+    })
+    await expect(
+      device.port.request('projects.add', { path: path.join(t.agent.dir, 'missing') }),
+    ).rejects.toMatchObject({ code: 'invalid_params' })
   })
 
   it('has its sessions closed at once when it is removed, and hears why when it comes back', async () => {
@@ -727,5 +747,102 @@ describe("a device's activity", () => {
     const again = await t.connect()
     await again.first
     expect(t.activity.list(t.phone.id).map((event) => event.kind)).toEqual(['connected'])
+  })
+})
+
+/** A device's call of the host's parent, which the test port only knows the agent host's way. */
+function call(device: TestDevice) {
+  return (method: string, params?: unknown): Promise<unknown> =>
+    device.port.request(method as HostMethod, params as never)
+}
+
+describe("an owner's calls beyond its sessions", () => {
+  it("reach the host's parent with the device's id, and its answers come back", async () => {
+    const asked: { deviceId: string; method: string; params: unknown }[] = []
+    const t = await setup({
+      admin: async (deviceId, method, params) => {
+        asked.push({ deviceId, method, params })
+        return method === 'settings.get'
+          ? { result: { git: { backgroundFetch: true } } }
+          : { error: { code: 'invalid_params', message: 'A device keeps these settings itself' } }
+      },
+    })
+    const device = await t.connect()
+    await device.first
+    const admin = call(device)
+    expect(await admin('settings.get')).toEqual({ git: { backgroundFetch: true } })
+    await expect(
+      admin('settings.update', { patch: { appearance: { theme: 'dark' } } }),
+    ).rejects.toMatchObject({
+      code: 'invalid_params',
+      message: 'A device keeps these settings itself',
+    })
+    expect(asked).toEqual([
+      { deviceId: t.phone.id, method: 'settings.get', params: undefined },
+      {
+        deviceId: t.phone.id,
+        method: 'settings.update',
+        params: { patch: { appearance: { theme: 'dark' } } },
+      },
+    ])
+    // Neither reached the agent host, which still takes the rest.
+    expect(await device.port.request('projects.list', undefined)).toEqual([])
+    const methods = t.forwarded.map((message) => (message as { method: string }).method)
+    expect(methods).toEqual(['projects.list'])
+  })
+
+  it('are refused while nothing answers them', async () => {
+    const t = await setup()
+    const device = await t.connect()
+    await device.first
+    await expect(call(device)('host.info')).rejects.toMatchObject({ code: 'forbidden' })
+    expect(t.forwarded).toEqual([])
+    expect(t.logs).toEqual([
+      `warn: Device ${t.phone.id} asked for host.info, which it may not call`,
+    ])
+  })
+
+  it("answer a parent that fails with the host's own error", async () => {
+    const t = await setup({ admin: () => Promise.reject(new Error('gone')) })
+    const device = await t.connect()
+    await device.first
+    await expect(call(device)('host.info')).rejects.toMatchObject({ code: 'internal' })
+  })
+})
+
+describe("the host's events", () => {
+  it('reach every owner device that is welcomed, or the one they are for', async () => {
+    const t = await setup({ admin: async () => ({ result: null }) })
+    const tabletKey = await generateKeyPair()
+    const tablet = (await t.devices.add({
+      publicKey: base64(tabletKey.publicKey),
+      name: 'Tablet',
+      kind: 'ios',
+      platform: 'ios',
+      model: 'iPad Air',
+    }))!
+    const phone = await t.connect()
+    const pad = await t.connect(tabletKey)
+    await Promise.all([phone.first, pad.first])
+    const changed: HostAdminEvent = {
+      type: 'remote.changed',
+      status: {
+        state: 'on',
+        hostName: 'Studio',
+        systemName: 'studio',
+        devices: [],
+        online: [],
+        plainTextKey: false,
+        direct: { state: 'off' },
+      },
+    }
+    const pairing: HostAdminEvent = {
+      type: 'remote.pairing',
+      event: { codeId: 1, pairing: { state: 'void', reason: 'closed' } },
+    }
+    t.server.adminEvent(changed, null)
+    t.server.adminEvent(pairing, tablet.id)
+    await expect.poll(() => pad.port.events).toEqual([changed, pairing])
+    await expect.poll(() => phone.port.events).toEqual([changed])
   })
 })

@@ -208,9 +208,9 @@ describe('the remote host under Node.js', () => {
       device.port.entries(session.id).some((e) => e.kind === 'agent' && e.markdown.length > 0),
     ).toBe(true)
     // The agent host knows the port as the device's, so it refuses what needs main.
-    await expect(device.port.request('projects.add', { path: project })).rejects.toMatchObject({
-      code: 'forbidden',
-    })
+    await expect(
+      device.port.request('media.open', { projectPath: project, path: 'a.png', sessionId: 'x' }),
+    ).rejects.toMatchObject({ code: 'forbidden' })
     await remote.until(() => statuses().at(-1)!.online.length === 1, 'the device online')
 
     remote.child.send({

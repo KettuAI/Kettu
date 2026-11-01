@@ -1,11 +1,12 @@
 import { hostname } from 'node:os'
 import { join } from 'node:path'
-import { app, powerMonitor, protocol, safeStorage, session } from 'electron'
+import { app, powerMonitor, protocol, safeStorage, session, shell } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import { HOSTS_FILE, type HostsStatus } from '@shared/remote/hosts'
 import type { RemoteStatus } from '@shared/remote/status'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
+import { AgentFolders } from './agent-folders'
 import { AgentHost } from './agent-host'
 import { Artifacts, disableDnsPrefetching } from './artifacts'
 import { artifactScheme } from './artifacts/protocol'
@@ -16,8 +17,9 @@ import { BrowserViews } from './browser/views'
 import { BrowserTools } from './browser/tools'
 import { BrowserOriginStore } from './browser/origins'
 import { broadcast } from './events'
+import { HostAdmin } from './host-admin'
 import { locale as currentLocale, setLocale } from './i18n'
-import { registerIpcHandlers } from './ipc'
+import { appInfo, registerIpcHandlers } from './ipc'
 import { MediaGrants, mediaScheme, serveMedia } from './media'
 import { createLogger } from './log'
 import { installMenu } from './menu'
@@ -242,10 +244,13 @@ async function start(): Promise<void> {
       direct: status?.direct ?? { state: 'off' },
     }
   }
+  // Made once sharing and the updater are, before remote access starts and a device can ask.
+  let hostAdmin: HostAdmin | null = null
   const remoteChanged = (): void => {
     const status = remoteStatus()
     broadcast('remote:changed', status)
     tray.setRemote(status)
+    hostAdmin?.remoteChanged(status)
   }
   let computerModel = ''
   const hostsStatus = (): HostsStatus => ({
@@ -287,6 +292,10 @@ async function start(): Promise<void> {
     terminal: () => settings.get().remote.terminal,
     openPort: (device) => agentHost.connectDevice(device),
     openTerminalPort: (device) => terminalHost.connectDevice(device),
+    admin: async (deviceId, method, params) =>
+      hostAdmin
+        ? hostAdmin.answer(deviceId, method, params)
+        : { error: { code: 'unavailable', message: 'Kettu is starting' } },
     changed: remoteChanged,
     hostsChanged,
   })
@@ -318,7 +327,10 @@ async function start(): Promise<void> {
     plainText: () =>
       process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text',
     fetch: (url, init) => sharingSession.fetch(url, init) as unknown as Promise<Response>,
-    changed: (status) => broadcast('sharing:changed', status),
+    changed: (status) => {
+      broadcast('sharing:changed', status)
+      hostAdmin?.sharingChanged(status)
+    },
   })
   reconcileSharing = () => void sharing.reconcile()
   let quit: QuitFlow | null = null
@@ -327,6 +339,7 @@ async function start(): Promise<void> {
     settings: () => settings.get(),
     requestRestart: () => quit?.request('update'),
     requestMove: () => quit?.request('move'),
+    changed: (status) => hostAdmin?.updatesChanged(status),
   })
   quit = new QuitFlow({
     settings: () => settings.get(),
@@ -347,6 +360,27 @@ async function start(): Promise<void> {
     moveApp: () => updater.moveNow(),
   })
   const quitFlow = quit
+  const agentFolders = new AgentFolders(settings, join(userDataPath, 'agent-config'), (folder) =>
+    shell.trashItem(folder),
+  )
+  hostAdmin = new HostAdmin({
+    settings,
+    agentFolders,
+    platform: process.platform,
+    remote: remoteHost,
+    remoteStatus,
+    info: async () => ({
+      ...(await appInfo()),
+      sharing: true,
+      updates: updater.getStatus().state.kind !== 'off',
+      remoteSwitch: true,
+      remoteReset: true,
+    }),
+    restart: (which) => (which === 'agent' ? agentHost.restart() : terminalHost.restart()),
+    sharing,
+    updates: updater,
+    send: (event, deviceId) => remoteHost.adminEvent(event, deviceId),
+  })
 
   const menuDeps = {
     checkForUpdates: () => void updater.check(),
@@ -356,6 +390,7 @@ async function start(): Promise<void> {
   }
   settings.onChange((next, changed) => {
     broadcast('settings:changed', next)
+    hostAdmin?.settingsChanged(next)
     const localeChanged = localeOf(next) !== currentLocale()
     if (localeChanged) {
       setLocale(localeOf(next))
@@ -395,6 +430,7 @@ async function start(): Promise<void> {
 
   registerIpcHandlers({
     settings,
+    agentFolders,
     themes,
     avatars,
     agentHost,

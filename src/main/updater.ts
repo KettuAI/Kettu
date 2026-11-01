@@ -40,6 +40,8 @@ export interface UpdaterDeps {
   requestRestart(): void
   /** Moves the app through the quit flow, which confirms and then calls `moveNow`. */
   requestMove(): void
+  /** The status changed, which the windows hear too. */
+  changed?(status: UpdateStatus): void
 }
 
 /** Checks GitHub Releases through electron-updater, which loads only after the window shows. */
@@ -440,5 +442,6 @@ export class Updater {
   private publish(status: UpdateStatus): void {
     this.status = status
     broadcast('update:changed', status)
+    this.deps.changed?.(status)
   }
 }

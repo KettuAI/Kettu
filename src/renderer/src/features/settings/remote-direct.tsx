@@ -21,6 +21,7 @@ import {
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import { isWeb } from '@renderer/lib/platform'
 import { useRemoteStore } from '@renderer/stores/remote'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { CONFIRM, ControlError } from './controls'
@@ -83,7 +84,10 @@ export function DirectPortField({ label }: { label: string }) {
             <AlertDialogTitle>
               {t('remote.direct.port.confirmTitle', { port: asking ?? '' })}
             </AlertDialogTitle>
-            <AlertDialogDescription>{t('remote.direct.port.confirmBody')}</AlertDialogDescription>
+            <AlertDialogDescription>
+              {t('remote.direct.port.confirmBody')}
+              {isWeb && ` ${t('remote.web.portBody')}`}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>

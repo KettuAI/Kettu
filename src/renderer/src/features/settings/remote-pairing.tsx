@@ -33,6 +33,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { countdown } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
+import { useHostContext } from '@renderer/lib/host-features'
 import { useSeconds } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -362,13 +363,15 @@ function LinkBox({ link, disabled }: { link: string | null; disabled: boolean })
 
 function ExpiresIn({ expiresAt }: { expiresAt: number }) {
   const { t } = useTranslation('settings')
+  const onHost = useHostContext()
   const now = useSeconds()
   return (
     <p className="text-xs leading-4.5 text-tertiary">
       <Trans
         t={t}
         i18nKey="remote.pair.expires"
-        values={{ time: countdown(expiresAt - now) }}
+        context={onHost.context}
+        values={{ time: countdown(expiresAt - now), host: onHost.host }}
         components={{ time: <span className="text-primary tabular" /> }}
       />
     </p>

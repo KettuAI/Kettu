@@ -5,7 +5,7 @@ vi.stubGlobal('window', {
   matchMedia: () => ({ matches: false, addEventListener: () => {} }),
 })
 
-const { historyStep } = await import('./shortcuts')
+const { historyStep, pageHandlesMenuKeys, pageHandlesZoomKeys } = await import('./shortcuts')
 
 /** A key event whose target sits inside the elements `inside` names. */
 function key(code: string, modifiers: Partial<KeyboardEvent> = {}, inside: string[] = []) {
@@ -61,5 +61,20 @@ describe('historyStep', () => {
   it('takes a key passed on from a page, which has no target', () => {
     const forwarded = { ...key('ArrowLeft', { altKey: true }), target: null }
     expect(historyStep(forwarded, 'win32')).toBe('back')
+  })
+})
+
+describe('the keys the page handles itself', () => {
+  it('takes the app menu keys where no app menu has them: off macOS, and in a browser', () => {
+    expect(pageHandlesMenuKeys('darwin', 'desktop')).toBe(false)
+    expect(pageHandlesMenuKeys('win32', 'desktop')).toBe(true)
+    expect(pageHandlesMenuKeys('darwin', 'web')).toBe(true)
+    expect(pageHandlesMenuKeys('linux', 'web')).toBe(true)
+  })
+
+  it("leaves zoom to macOS's menu and to a browser's own zoom", () => {
+    expect(pageHandlesZoomKeys('darwin', 'desktop')).toBe(false)
+    expect(pageHandlesZoomKeys('win32', 'desktop')).toBe(true)
+    expect(pageHandlesZoomKeys('win32', 'web')).toBe(false)
   })
 })

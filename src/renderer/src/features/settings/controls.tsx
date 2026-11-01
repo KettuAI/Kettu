@@ -14,7 +14,7 @@ import {
 import { Switch } from '@renderer/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage } from '@renderer/lib/host'
-import { fileManagerName } from '@renderer/lib/platform'
+import { fileManagerName, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
 
@@ -131,10 +131,14 @@ export function SettingSelect<T extends string>({
   )
 }
 
-/** Shows a file or folder in the platform's file manager. */
+/**
+ * Shows a file or folder in the platform's file manager. A browser cannot show the host's files,
+ * and the copy action beside it already gives the path, so it shows nothing there.
+ */
 export function RevealAction({ path }: { path: string }) {
   const { t } = useTranslation('settings')
   const [error, setError] = useState<string | null>(null)
+  if (isWeb) return null
   return (
     <>
       <ControlError error={error} />

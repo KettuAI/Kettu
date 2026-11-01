@@ -4,9 +4,16 @@
 // device. index.ts runs it in Electron's utility process, node-main.ts under Node.js.
 
 import path from 'node:path'
-import type { MainToRemoteHost, RemoteHostStatus, RemoteHostToMain } from '@shared/host-control'
+import type {
+  AdminAnswer,
+  MainToRemoteHost,
+  RemoteHostStatus,
+  RemoteHostToMain,
+} from '@shared/host-control'
 import type { ControlChannel, PortChannel } from '@shared/port-channel'
+import { isPortError } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
+import { isHostAdminEvent, type HostAdminMethod } from '@shared/remote/host-admin'
 import { importKeyPair } from '@shared/remote/noise'
 import { parsePairingLink } from '@shared/remote/pairing'
 import type { Transport } from '@shared/remote/transport'
@@ -20,6 +27,9 @@ import { HostStore, uniqueAddresses } from './hosts'
 import { PairingCodes } from './pairing'
 import { RemoteServer } from './server'
 import { clearUploads } from './uploads'
+
+/** How long an owner's call may wait for the parent, which may reach the network for it. */
+const ADMIN_TIMEOUT_MS = 60_000
 
 export interface RemoteHostDeps {
   /** A port to the agent host for a device's session, or null while the agent host is down. */
@@ -70,6 +80,26 @@ export function startRemoteHost(
   let hostName = ''
   // Whether devices may use the terminal; each server starts with it and hears when it changes.
   let terminal = false
+  const adminCalls = new Map<number, (answer: AdminAnswer) => void>()
+  let nextAdminCall = 1
+
+  /** Asks the parent to run an owner's call; answered with an error when it does not in time. */
+  function admin(deviceId: string, method: HostAdminMethod, params: unknown): Promise<AdminAnswer> {
+    const requestId = nextAdminCall++
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        const message = `The host did not answer "${method}" in time`
+        answer({ error: { code: 'internal', message } })
+      }, ADMIN_TIMEOUT_MS)
+      const answer = (reply: AdminAnswer): void => {
+        clearTimeout(timer)
+        adminCalls.delete(requestId)
+        resolve(reply)
+      }
+      adminCalls.set(requestId, answer)
+      send({ type: 'remote-host:admin-call', requestId, deviceId, method, params })
+    })
+  }
 
   async function serve(options: ServeOptions): Promise<Serving> {
     const { userDataPath, platform, appVersion } = init!
@@ -109,6 +139,7 @@ export function startRemoteHost(
       openAgentPort: (device) => deps.openAgentPort(device),
       terminal,
       openTerminalPort: (device) => deps.openTerminalPort(device),
+      admin,
       changed,
       log,
     })
@@ -319,6 +350,33 @@ export function startRemoteHost(
           none,
         )
         if (!answered) none()
+        break
+      }
+      case 'remote-host:admin-result': {
+        const answer = adminCalls.get(message.requestId)
+        if (!answer) break
+        if ('error' in message) {
+          const { error } = message
+          answer({
+            error: isPortError(error)
+              ? { code: error.code, message: error.message }
+              : { code: 'internal', message: 'The host could not answer' },
+          })
+        } else answer({ result: message.result })
+        break
+      }
+      case 'remote-host:admin-event': {
+        const { event, deviceId } = message
+        const valid =
+          typeof event === 'object' &&
+          event !== null &&
+          isHostAdminEvent(event) &&
+          (deviceId === null || typeof deviceId === 'string')
+        if (!valid) {
+          log('warn', 'Ignored an event for devices that is not one')
+          break
+        }
+        withServing(({ server: s }) => s.adminEvent(event, deviceId))
         break
       }
       case 'remote-host:host-name':

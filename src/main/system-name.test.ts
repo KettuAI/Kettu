@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { systemName, systemRelease } from './system-name'
+import { productVersion, systemName, systemRelease } from './system-name'
 
 describe('systemName', () => {
   it('names macOS and Windows with the versions they report', () => {
@@ -34,5 +34,20 @@ describe('systemRelease', () => {
     expect(systemRelease('linux', '6.8.0', 'PRETTY_NAME="Ubuntu 24.04.1 LTS"\n')).toBe(
       'Ubuntu 24.04.1 LTS',
     )
+  })
+})
+
+describe('productVersion', () => {
+  it("reads macOS's version from its SystemVersion.plist", () => {
+    const plist = [
+      '<dict>',
+      '\t<key>ProductName</key>',
+      '\t<string>macOS</string>',
+      '\t<key>ProductVersion</key>',
+      '\t<string>26.1</string>',
+      '</dict>',
+    ].join('\n')
+    expect(productVersion(plist)).toBe('26.1')
+    expect(productVersion('')).toBeNull()
   })
 })

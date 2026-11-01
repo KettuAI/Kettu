@@ -1,7 +1,7 @@
 // Settings › Sharing: the Cloudflare account main publishes with, and the pages it has published.
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { CheckIcon, CircleAlertIcon, GlobeIcon, LockIcon } from 'lucide-react'
+import { CheckIcon, CircleAlertIcon, GlobeIcon, LockIcon, ShareIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   CLOUDFLARE_DASHBOARD_URL,
@@ -24,6 +24,13 @@ import {
 } from '@renderer/components/ui/alert-dialog'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@renderer/components/ui/empty'
 import { Input } from '@renderer/components/ui/input'
 import {
   Select,
@@ -33,11 +40,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@renderer/components/ui/select'
+import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { longAgo } from '@renderer/lib/format'
-import { isMac, isWindows } from '@renderer/lib/platform'
+import { useHostContext } from '@renderer/lib/host-features'
+import { hostPlatform } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -47,6 +56,7 @@ import {
   unpublishArtifact,
   useSharingStore,
 } from '@renderer/stores/sharing'
+import { useWebHostStore } from '@renderer/stores/web-host'
 import { CONFIRM, ControlError, FIELD_LABEL, Masked } from './controls'
 import { RowLine, RowText } from './rows'
 
@@ -57,6 +67,28 @@ const LINK =
 
 /** A token pasted into the empty field connects by itself when it carries Cloudflare's prefix. */
 const PASTED_TOKEN = /^cf(?:ut|at)_/
+
+/** In place of the account and the pages, on a host that publishes nothing, as the daemon. */
+export function NoSharing() {
+  const { t } = useTranslation('settings')
+  const host = useWebHostStore((s) => s.host?.name ?? '')
+  return (
+    <Empty className="px-6 py-14">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <ShareIcon />
+        </EmptyMedia>
+        <EmptyTitle>{t('sharing.none.title')}</EmptyTitle>
+        <EmptyDescription>{t('sharing.none.body', { host })}</EmptyDescription>
+      </EmptyHeader>
+    </Empty>
+  )
+}
+
+/** The account's place while the web client has not heard whether its host publishes. */
+export function SharingPending() {
+  return <Skeleton className="h-15 w-full rounded-xl" />
+}
 
 /** The connected account: its ID, its subdomain, and Remove; the form to connect one without it. */
 export function SharingAccount() {
@@ -156,6 +188,9 @@ export function SharingAccount() {
 /** The API token, checked with Cloudflare before the account it reaches is kept. */
 function ConnectForm({ focus }: { focus: boolean }) {
   const { t } = useTranslation(['settings', 'artifacts'])
+  const onHost = useHostContext()
+  // The token is kept on the host, encrypted where its system has a keyring.
+  const keyring = ['darwin', 'win32'].includes(hostPlatform())
   const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
   const [token, setToken] = useState('')
   const [checking, setChecking] = useState(false)
@@ -329,10 +364,10 @@ function ConnectForm({ focus }: { focus: boolean }) {
         {failure && <FailureBox failure={failure} />}
       </div>
       <div className="relative flex min-h-13 items-center gap-4 before:absolute before:top-0 before:-right-3 before:left-0 before:h-(--hairline) before:bg-border-soft">
-        {(isMac || isWindows) && (
+        {keyring && (
           <span className="flex min-w-0 items-center gap-1.5 text-xs text-tertiary">
             <LockIcon className="size-3.5 shrink-0" />
-            {t('sharing.account.kept')}
+            {t('sharing.account.kept', onHost)}
           </span>
         )}
         <Button

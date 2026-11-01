@@ -3,6 +3,7 @@ import type { Platform } from '@shared/platform'
 import { addressText } from '@shared/remote/address'
 import type { HostConnection, HostStatus } from '@shared/remote/hosts'
 import { longAgo } from '@renderer/lib/format'
+import type { WebHost } from '@renderer/stores/web-host'
 
 /** "iOS", "macOS", "Windows": what a host or device runs, by the platform it sent. */
 export function platformName(platform: Platform | string): string {
@@ -49,4 +50,15 @@ export function connectionText(
     case 'stopped':
       return t(`hosts.state.${connection.reason}`)
   }
+}
+
+/** The line under the host's name: its system, Kettu's version, and the page's address. */
+export function webHostLine(t: TFunction<'settings'>, host: WebHost): string {
+  return [
+    host.platform && platformName(host.platform),
+    host.version && t('hosts.version', { version: host.version }),
+    t('hosts.via.directAt', { address: addressText(host.address) }),
+  ]
+    .filter((part): part is string => !!part)
+    .join(' · ')
 }

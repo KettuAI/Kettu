@@ -7,6 +7,7 @@ import type { PairedDevice, PortDevice } from '@shared/remote/device'
 import type { HostPairingState, HostStatus } from '@shared/remote/hosts'
 import type { DirectSettings } from '@shared/settings'
 import type { PairingState } from '@shared/remote/pairing'
+import type { RemoteHostDeps } from './remote-host'
 
 const electron = vi.hoisted(() => ({
   fork: (): unknown => null,
@@ -85,6 +86,7 @@ function makeHost(
     deviceKey?: () => Promise<{ privateKey: string; plainText: boolean }>
     hostsKnown?: boolean
     dataPath?: string
+    admin?: RemoteHostDeps['admin']
   } = {},
 ) {
   const opened: PortDevice[] = []
@@ -118,6 +120,7 @@ function makeHost(
     },
     changed: () => changes++,
     hostsChanged: () => hostsChanges++,
+    ...(options.admin ? { admin: options.admin } : {}),
   })
   return {
     host,
@@ -160,8 +163,8 @@ const status: RemoteHostStatus = {
   direct: { state: 'listening', port: 50123, addresses: [{ host: '192.168.1.5', port: 50123 }] },
 }
 
-async function running() {
-  const made = makeHost()
+async function running(options: Parameters<typeof makeHost>[0] = {}) {
+  const made = makeHost(options)
   await made.host.setEnabled(true)
   const child = children.at(-1)!
   child.emit('message', { type: 'remote-host:ready' })
@@ -422,6 +425,57 @@ describe('RemoteHost', () => {
     const unanswered = host.activity(device.id)
     await host.setEnabled(false)
     expect(await unanswered).toEqual([])
+  })
+
+  it("hands an owner's call to its handler and posts the answer under the call's id", async () => {
+    const asked: unknown[][] = []
+    const { host, child } = await running({
+      admin: async (...call) => {
+        asked.push(call)
+        return call[1] === 'remote.status'
+          ? { result: 'on' }
+          : { error: { code: 'busy', message: 'x' } }
+      },
+    })
+    const admin = (requestId: unknown, method: string) =>
+      child.emit('message', {
+        type: 'remote-host:admin-call',
+        requestId,
+        deviceId: device.id,
+        method,
+        params: { a: 1 },
+      })
+    admin(7, 'remote.status')
+    admin(8, 'host.info')
+    // A call it could not answer under its id is dropped.
+    admin('nine', 'host.info')
+    await vi.waitFor(() =>
+      expect(child.types().filter((type) => type === 'remote-host:admin-result')).toHaveLength(2),
+    )
+    const results = child.posted.flatMap(({ message }) =>
+      message.type === 'remote-host:admin-result' ? [message] : [],
+    )
+    expect(results).toEqual([
+      { type: 'remote-host:admin-result', requestId: 7, result: 'on' },
+      { type: 'remote-host:admin-result', requestId: 8, error: { code: 'busy', message: 'x' } },
+    ])
+    expect(asked).toEqual([
+      [device.id, 'remote.status', { a: 1 }],
+      [device.id, 'host.info', { a: 1 }],
+    ])
+
+    // Events go to the devices only while the process serves them.
+    const event = { type: 'sharing.changed', status: {} } as Parameters<typeof host.adminEvent>[0]
+    host.adminEvent(event, device.id)
+    expect(child.posted.at(-1)!.message).toEqual({
+      type: 'remote-host:admin-event',
+      event,
+      deviceId: device.id,
+    })
+    await host.setEnabled(false)
+    const posted = child.posted.length
+    host.adminEvent(event, null)
+    expect(child.posted).toHaveLength(posted)
   })
 
   it('resets: every device removed, then a new identity in the same process', async () => {

@@ -19,7 +19,7 @@ import { DESK, SHEET_PANEL } from '@renderer/features/shell/sheet'
 import { TitleBand } from '@renderer/features/shell/top-bar'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
 import { AppSidebar } from '@renderer/features/sidebar/app-sidebar'
-import { hasBand } from '@renderer/lib/platform'
+import { hasBand, isWeb } from '@renderer/lib/platform'
 import { layoutStorage, readJson, writeJson } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
 import { prefersReducedMotion } from '@renderer/stores/settings'
@@ -28,6 +28,8 @@ import { useKeyboardShortcuts } from './shortcuts'
 import { useAppCommands } from './commands'
 
 const SettingsPage = lazy(() => import('@renderer/features/settings/settings-page'))
+// The web client's picker for a folder or a program on the host, in place of a system dialog.
+const HostPathDialog = isWeb ? lazy(() => import('@renderer/web/host-path-dialog')) : null
 
 export function App() {
   const settingsOpen = useViewStore((s) => s.settings.open)
@@ -66,6 +68,11 @@ export function App() {
         <ArtifactDialogs />
         <MediaViewer />
         <ShortcutsDialog />
+        {HostPathDialog && (
+          <Suspense fallback={null}>
+            <HostPathDialog />
+          </Suspense>
+        )}
         <Toaster />
         <ReportInteractive />
       </SidebarProvider>

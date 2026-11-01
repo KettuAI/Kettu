@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import os from 'node:os'
 import type { Platform } from '@shared/platform'
 
 /** A `PRETTY_NAME` line's value, quoted or bare. */
@@ -49,6 +50,25 @@ export async function systemNameForRun(): Promise<string> {
 export async function systemReleaseForRun(): Promise<string> {
   osReleaseForRun ??= readOsRelease()
   return systemRelease(process.platform, process.getSystemVersion(), await osReleaseForRun)
+}
+
+/** The macOS version in a SystemVersion.plist, or null when it names none. */
+export function productVersion(plist: string): string | null {
+  return /<key>ProductVersion<\/key>\s*<string>([^<]+)<\/string>/.exec(plist)?.[1]?.trim() || null
+}
+
+/**
+ * `systemNameForRun` under Node.js, which has no `process.getSystemVersion`: macOS's version from
+ * its SystemVersion.plist, and the kernel's elsewhere, where a distribution names its own.
+ */
+export async function nodeSystemNameForRun(): Promise<string> {
+  osReleaseForRun ??= readOsRelease()
+  const plist =
+    process.platform === 'darwin'
+      ? await readFile('/System/Library/CoreServices/SystemVersion.plist', 'utf8').catch(() => '')
+      : ''
+  const version = productVersion(plist) ?? os.release()
+  return systemName(process.platform, version, process.arch, await osReleaseForRun)
 }
 
 async function readOsRelease(): Promise<string | null> {

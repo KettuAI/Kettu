@@ -34,6 +34,7 @@ import {
   usd,
 } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
+import { useHostContext } from '@renderer/lib/host-features'
 import { currentLocale } from '@renderer/lib/i18n'
 import { hasBand } from '@renderer/lib/platform'
 import { useClock, useNow } from '@renderer/lib/use-now'
@@ -370,6 +371,7 @@ function LoadingState() {
 /** Nothing recorded yet: what will appear, and the offer to read the logs already there. */
 function FirstRun() {
   const { t } = useTranslation('usage')
+  const onHost = useHostContext()
   const fromComputer = useSettingsStore((s) => s.settings.usage.fromComputer)
   return (
     <Empty className="py-18">
@@ -379,7 +381,7 @@ function FirstRun() {
         </EmptyMedia>
         <EmptyTitle>{t('empty.title')}</EmptyTitle>
         <EmptyDescription>
-          {fromComputer ? t('empty.waiting') : t('empty.description')}
+          {fromComputer ? t('empty.waiting') : t('empty.description', onHost)}
         </EmptyDescription>
       </EmptyHeader>
       {!fromComputer && (
@@ -390,7 +392,7 @@ function FirstRun() {
               void useSettingsStore.getState().update({ usage: { fromComputer: true } })
             }
           >
-            {t('empty.fromComputer')}
+            {t('empty.fromComputer', onHost)}
           </Button>
         </EmptyContent>
       )}
@@ -410,6 +412,7 @@ const MARK_SEGMENT = 'min-w-7 px-1.75 text-command'
  */
 function Filters({ page, used }: { page: PageData | null; used: ReadonlySet<number> }) {
   const { t } = useTranslation('usage')
+  const onHost = useHostContext()
   const filters = useUsageStore((s) => s.filters)
   const fromComputer = useUsageStore((s) => s.status?.fromComputer ?? false)
   const rangeText = useRangeText()
@@ -458,7 +461,7 @@ function Filters({ page, used }: { page: PageData | null; used: ReadonlySet<numb
             onChange={(next) => setUsageFilters({ scope: next })}
             itemClassName={SEGMENT}
             segments={[
-              { value: 'computer', label: t('page.scopes.computer') },
+              { value: 'computer', label: t('page.scopes.computer', onHost) },
               { value: 'kettu', label: t('page.scopes.kettu') },
             ]}
           />

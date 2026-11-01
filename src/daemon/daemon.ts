@@ -6,10 +6,12 @@ import { chmod, rm } from 'node:fs/promises'
 import os from 'node:os'
 import { matchLocale } from '@shared/locale'
 import { addressKey, MAX_OWN_ADDRESSES } from '@shared/remote/address'
+import type { HostAdmin } from '../main/host-admin'
 import { createLogger } from '../main/log'
 import type { RemoteIdentity } from '../main/remote-identity'
 import { SettingsStore } from '../main/settings'
 import { SettingsError } from '../main/settings-schema'
+import { startDaemonAdmin } from './admin'
 import {
   callControl,
   ControlError,
@@ -202,6 +204,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   // not taken for the service.
   const hostEnv = { ...options.env }
   delete hostEnv[SERVICE_ENV]
+  let admin: HostAdmin | null = null
   const running = new Hosts({
     bundleDir: options.bundleDir,
     dataPath: options.dataPath,
@@ -212,12 +215,17 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     hostName: os.hostname(),
     env: hostEnv,
     timings: options.timings,
+    admin: async (deviceId, method, params) =>
+      admin
+        ? admin.answer(deviceId, method, params)
+        : { error: { code: 'unavailable', message: 'The daemon is starting' } },
   })
   hosts = running
-  settings.onChange((_, changed) => {
-    if (!changed.has('remote')) return
-    running.directChanged()
-    running.terminalChanged()
+  admin = startDaemonAdmin({
+    dataPath: options.dataPath,
+    version: options.version,
+    settings,
+    hosts: running,
   })
   running.start()
   log.info(

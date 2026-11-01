@@ -107,6 +107,15 @@ export class ForkedHost<ToChild, FromChild extends { type: string }> {
     void this.spawn()
   }
 
+  /** A restart the owner asked for after the host failed, as main's; ignored in any other state. */
+  restart(): boolean {
+    if (this.shutDown || this.status !== 'failed') return false
+    this.policy.reset()
+    this.config.log.info('Restarting, as the owner asked')
+    void this.spawn()
+    return true
+  }
+
   /** Settles once the host is ready, starting it if it never ran; rejects once it cannot run. */
   ready(): Promise<void> {
     if (this.status === 'ready') return Promise.resolve()

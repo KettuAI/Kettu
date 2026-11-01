@@ -26,14 +26,17 @@ import { Field, FieldError, FieldLabel } from '@renderer/components/ui/field'
 import { Input } from '@renderer/components/ui/input'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { basename, monthDay } from '@renderer/lib/format'
+import { useHostContext } from '@renderer/lib/host-features'
 import { useNow } from '@renderer/lib/use-now'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useRemoteStore } from '@renderer/stores/remote'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { openSettingsItem } from '@renderer/stores/view'
+import { useWebHostStore } from '@renderer/stores/web-host'
 import { Fact } from './agent-parts'
 import { CONFIRM, ControlError } from './controls'
 import { DeviceIcon, DeviceTile, OnlineDot } from './remote-parts'
+import { ThisBrowserBadge } from './remote-section'
 import { changeDevice, deviceLine, whenAt } from './remote-text'
 import { GroupLabel, ItemPageHeader, RowFrame, RowGroup, RowText } from './rows'
 
@@ -63,6 +66,7 @@ export function DevicePage({ id }: { id: string }) {
 
 function DevicePageBody({ device, online }: { device: PairedDevice; online: boolean }) {
   const { t } = useTranslation('settings')
+  const onHost = useHostContext()
   const now = useNow()
   const [renaming, setRenaming] = useState(false)
   const joined = t(
@@ -97,6 +101,7 @@ function DevicePageBody({ device, online }: { device: PairedDevice; online: bool
             >
               <PencilIcon />
             </Button>
+            <ThisBrowserBadge deviceId={device.id} className="shrink-0 font-sans font-normal" />
             {online && (
               <span className="flex shrink-0 items-center gap-1.5 font-sans text-xs font-normal text-tertiary">
                 <OnlineDot />
@@ -124,7 +129,7 @@ function DevicePageBody({ device, online }: { device: PairedDevice; online: bool
               text={
                 <RowText
                   name={t('remote.device.remove.name')}
-                  description={t('remote.device.remove.description')}
+                  description={t('remote.device.remove.description', onHost)}
                 />
               }
             >
@@ -186,6 +191,7 @@ function Activity({ device }: { device: PairedDevice }) {
 
 export function ActivityRow({ event, kind }: { event: DeviceActivity; kind: string }) {
   const { t } = useTranslation('settings')
+  const onHost = useHostContext()
   const now = useNow()
   const sessionId = 'sessionId' in event ? event.sessionId : null
   const summary = useSessionsStore((s) => (sessionId ? s.byId[sessionId] : undefined))
@@ -208,7 +214,9 @@ export function ActivityRow({ event, kind }: { event: DeviceActivity; kind: stri
       <span className="w-28 shrink-0 truncate text-xs text-tertiary tabular">
         {whenAt(t, event.at, now)}
       </span>
-      <span className="min-w-0 flex-1 truncate text-ui">{eventText(t, event, kind, title)}</span>
+      <span className="min-w-0 flex-1 truncate text-ui">
+        {eventText(t, event, kind, title, onHost)}
+      </span>
       {project && <span className="shrink-0 text-xs text-tertiary">{project}</span>}
     </li>
   )
@@ -219,11 +227,13 @@ function eventText(
   event: DeviceActivity,
   kind: string,
   title: string | null,
+  onHost: ReturnType<typeof useHostContext>,
 ): string {
   switch (event.kind) {
     case 'paired':
       return t(
         kind === 'desktop' ? 'remote.device.events.pairedLink' : 'remote.device.events.paired',
+        onHost,
       )
     case 'connected':
       return t('remote.device.events.connected')
@@ -335,6 +345,9 @@ function RenameDialog({
 
 function RemoveDevice({ device }: { device: PairedDevice }) {
   const { t } = useTranslation(['settings', 'common'])
+  const onHost = useHostContext()
+  // The web client removing its own browser ends this page's connection for good.
+  const own = useWebHostStore((s) => s.host?.device.id === device.id)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -360,9 +373,13 @@ function RemoveDevice({ device }: { device: PairedDevice }) {
         <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {t('remote.device.remove.title', { name: device.name })}
+              {own
+                ? t('remote.web.removeTitle')
+                : t('remote.device.remove.title', { name: device.name })}
             </AlertDialogTitle>
-            <AlertDialogDescription>{t('remote.device.remove.body')}</AlertDialogDescription>
+            <AlertDialogDescription>
+              {own ? t('remote.web.removeBody') : t('remote.device.remove.body', onHost)}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           {error && <p className="text-xs text-danger">{error}</p>}
           <AlertDialogFooter>

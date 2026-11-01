@@ -52,7 +52,7 @@ async function setup() {
   const host = agent.host
   const uploads = path.join(agent.dir, 'remote', 'uploads')
   await clearUploads(uploads)
-  // A device cannot add a project; the window does.
+  // In the list before the browser connects, as the window would have added it.
   await agent.connect().request('projects.add', { path: agent.project })
   const project = await realpath(agent.project)
   const server = new RemoteServer({
@@ -191,10 +191,14 @@ describe('the host link', () => {
     })) as { id: string }
     await expect.poll(() => events.some((e) => e.type === 'session.summary')).toBe(true)
     expect(session.id).toEqual(expect.any(String))
-    await expect(link.request('projects.add', { path: t.agent.project })).rejects.toMatchObject({
-      name: 'PortRequestError',
-      code: 'forbidden',
+    // A device adds a project by typing its folder, as the web client's Open project does; a path
+    // that is no folder there is refused.
+    await expect(link.request('projects.add', { path: t.agent.project })).resolves.toMatchObject({
+      path: t.project,
     })
+    await expect(
+      link.request('projects.add', { path: path.join(t.agent.project, 'missing') }),
+    ).rejects.toMatchObject({ name: 'PortRequestError' })
   })
 
   it('uploads binary values in requests and downloads them in results', async () => {
@@ -249,6 +253,57 @@ describe('the host link', () => {
     await expect.poll(() => states.at(-1)).toEqual({ kind: 'stopped', reason: 'removed' })
     await expect(link.request('agents.list', undefined)).rejects.toMatchObject({
       code: 'host_restarted',
+    })
+  })
+})
+
+describe('HostLink events', () => {
+  it("keeps the host's own events for its owner apart from the agent and terminal hosts'", async () => {
+    const fromHost = [
+      { type: 'event', event: { type: 'sessions.changed' } },
+      { type: 'event', event: { type: 'settings.changed', settings: {} } },
+      { type: 'event', event: { type: 'terminal.output', id: 't1' } },
+      { type: 'event', event: { type: 'remote.pairing', event: { codeId: 1 } } },
+    ]
+    const channel = {
+      onMessage: () => {},
+      onBytes: () => {},
+      closed: new Promise<void>(() => {}),
+      send: async () => {},
+      sendBytes: async () => {},
+      close: () => {},
+    }
+    const welcome = {
+      type: 'welcome' as const,
+      protocol: 1,
+      host: { name: 'Studio', platform: 'darwin' as const, version: '0.0.0-test' },
+      features: [],
+      role: 'owner' as const,
+      device: { id: 'c'.repeat(32), name: 'Safari · Mac' },
+      terminal: true,
+      addresses: [],
+    }
+    const link = new HostLink({
+      dial: () => Promise.reject(new Error('Not dialed')),
+      hostKey: new Uint8Array(32),
+      key: await generateKeyPair(),
+      hello: hello(CLIENT),
+      adopt: { opened: { channel, transport: {} as Transport }, welcome, later: fromHost },
+    })
+    links.push(link)
+    const heard: Record<'host' | 'terminal' | 'admin', string[]> = {
+      host: [],
+      terminal: [],
+      admin: [],
+    }
+    link.onHostEvent((event) => heard.host.push((event as { type: string }).type))
+    link.onTerminalEvent((event) => heard.terminal.push((event as { type: string }).type))
+    link.onAdminEvent((event) => heard.admin.push(event.type))
+    link.start()
+    expect(heard).toEqual({
+      host: ['sessions.changed'],
+      terminal: ['terminal.output'],
+      admin: ['settings.changed', 'remote.pairing'],
     })
   })
 })

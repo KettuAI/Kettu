@@ -1,18 +1,18 @@
 {
   "pair": {
     "title": "在这个浏览器里用 Kettu",
-    "intro": "在电脑上打开 设置 › 远程访问 › 添加设备，选“浏览器”，用这台设备的相机扫它的二维码，或者把它的链接粘贴到这里。",
+    "intro": "在电脑上的 Kettu 里，或在已经添加到它的设备上，打开 设置 › 远程访问 › 添加设备，选“浏览器”，用这台设备的相机扫它的二维码，或者把它的链接粘贴到这里。",
     "linkLabel": "配对链接",
     "linkPlaceholder": "http://…/pair#…",
-    "notLink": "这不是 Kettu 的配对链接。从电脑上的“添加设备”里复制链接。",
+    "notLink": "这不是 Kettu 的配对链接。从“添加设备”里复制链接。",
     "submit": "配对",
     "connecting": "正在连接电脑…",
-    "waiting": "在电脑上确认",
-    "waitingHint": "电脑上的 Kettu 在问要不要添加“{{name}}”，在那里点添加。",
+    "waiting": "在显示这个码的地方确认",
+    "waitingHint": "那里的 Kettu 在问要不要添加“{{name}}”，在那里点添加。",
     "added": "已添加，正在打开 Kettu…",
     "again": "重试",
     "failed": {
-      "void": "这个码已经不能用了：过期了、被关掉了，或者给别的设备用过了。在电脑上重新打开“添加设备”拿一个新的。",
+      "void": "这个码已经不能用了：过期了、被关掉了，或者给别的设备用过了。重新打开“添加设备”拿一个新的。",
       "rejected": "电脑的主人没有添加这个浏览器。",
       "unreachable": "连不上电脑。看看它是否开着、Kettu 是否在运行并打开了远程访问、这台设备是否在同一个网络或 VPN 里。",
       "update_client": "这个页面比电脑上的 Kettu 旧，刷新一下页面。",
@@ -28,5 +28,36 @@
   "connection": {
     "updated": "电脑上的 Kettu 更新了。",
     "reload": "刷新"
+  },
+  "copiedPath": "已复制 {{path}}",
+  "path": {
+    "project": {
+      "title": "打开项目",
+      "description": "输入 {{host}} 上一个文件夹的路径。"
+    },
+    "agentFolder": {
+      "title": "选择 Agent 的配置目录",
+      "description": "输入 {{host}} 上 Agent 配置目录的路径。"
+    },
+    "shell": {
+      "title": "选择 Shell",
+      "description": "输入 {{host}} 上 Shell 程序的路径。"
+    },
+    "agentProgram": {
+      "title": "选择 Agent 程序",
+      "description": "输入 {{host}} 上 Agent 程序的路径。"
+    },
+    "label": "{{host}} 上的路径",
+    "start": "输入完整路径，或以 ~ 开头表示你的主目录。",
+    "keys": "Tab 补全名字；↑ 和 ↓ 在列表里移动，Enter 选中当前那一项。",
+    "list": "这里的文件夹和文件",
+    "notFolder": "这是一个文件，请选文件夹。",
+    "folderNotProgram": "这是一个文件夹，请选其中的程序。",
+    "notRunnable": "{{host}} 不能运行这个文件。",
+    "noMatch": "这里没有以“{{name}}”开头的。",
+    "empty": "这个文件夹里没有可选的。",
+    "missing": "{{host}} 上没有这个文件夹。",
+    "open": "打开",
+    "choose": "选择"
   }
 }

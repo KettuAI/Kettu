@@ -59,8 +59,8 @@ describe('the pairing page', () => {
   it('waits for the owner to add the browser under its name', () => {
     expect(text({ progress: { state: 'connecting' } })).toContain('Connecting to the computer…')
     const waiting = text({ progress: { state: 'waiting' } })
-    expect(waiting).toContain('Confirm on the computer')
-    expect(waiting).toContain('asks whether to add “Safari · iPhone”')
+    expect(waiting).toContain('Confirm where the code is shown')
+    expect(waiting).toContain('whether to add “Safari · iPhone”')
     expect(waiting).not.toContain('Pairing link')
     expect(text({ added: true })).toContain('Added. Opening Kettu…')
   })

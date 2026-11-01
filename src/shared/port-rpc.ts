@@ -15,6 +15,7 @@ export type PortErrorCode =
   | 'git_error'
   | 'conflict'
   | 'host_restarted'
+  | 'unavailable' // the host has no such service, as the daemon publishes nothing, or not now
   | 'internal'
 
 export interface PortError {

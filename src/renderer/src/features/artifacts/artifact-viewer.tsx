@@ -18,7 +18,7 @@ import {
 } from '@renderer/components/ui/empty'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
-import { isWeb } from '@renderer/lib/platform'
+import { useHostHas } from '@renderer/lib/host-features'
 import { restoreArtifact, restoreVersion } from '@renderer/stores/artifacts'
 import { closeArtifact, useViewStore } from '@renderer/stores/view'
 import { ArtifactMenuItems } from './artifact-menu'
@@ -68,6 +68,8 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
   const states = useArtifactStates(artifact, listsRead)
   const earlier = picked !== null && head !== null && picked < head ? picked : null
   const title = summary?.title ?? shown?.title ?? ''
+  // Publishing takes the account the host keeps, which the daemon has none of.
+  const shares = useHostHas('sharing') === true
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -209,8 +211,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
           <NoDrag className="min-w-0 shrink-0 gap-0.5">
             <Presence id={id} presence={artifact.presence} deleted={summary?.deletedAt != null} />
             {pageName && <CanvasBarControls controls={controls} pageName={pageName} />}
-            {/* Publishing takes the account main keeps on the host. */}
-            {shown && !isWeb && (
+            {shown && shares && (
               <ShareButton
                 id={id}
                 title={title}
