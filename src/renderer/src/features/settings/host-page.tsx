@@ -33,7 +33,7 @@ import { openSettingsItem } from '@renderer/stores/view'
 import { Fact } from './agent-parts'
 import { CONFIRM, ControlError } from './controls'
 import { AddHostDialog } from './host-add'
-import { changeHost, platformName, routeText } from './host-text'
+import { changeHost, platformName, routeName, routeText } from './host-text'
 import { HostState } from './hosts-section'
 import { DeviceTile, HostIcon } from './remote-parts'
 import { GroupLabel, GroupNote, ItemPageHeader, Notice, RowFrame, RowGroup, RowText } from './rows'
@@ -98,24 +98,37 @@ function HostPageBody({ host }: { host: HostStatus }) {
         <section aria-label={t('hosts.page.connection')} className="flex flex-col">
           <GroupLabel group={{ id: 'connection', label: t('hosts.page.connection') }} />
           <RowGroup>
-            <Fact name={t('hosts.page.route')}>{routeText(t, host.connection)}</Fact>
-            <RowFrame
-              compact
-              text={
-                <RowText
-                  name={t('hosts.page.addresses')}
-                  description={
-                    <span data-selectable="" className="font-mono text-code text-secondary">
-                      {host.addresses.map(addressText).join('　')}
-                    </span>
-                  }
-                />
-              }
-            >
-              <EditAddresses host={host} />
-            </RowFrame>
+            {/* The SSH address has a row of its own. */}
+            <Fact name={t('hosts.page.route')}>
+              {host.ssh ? routeName(t, host) : routeText(t, host)}
+            </Fact>
+            {host.ssh ? (
+              <Fact name={t('hosts.page.sshTarget')} mono>
+                <span data-selectable="">{host.ssh.target}</span>
+              </Fact>
+            ) : (
+              <RowFrame
+                compact
+                text={
+                  <RowText
+                    name={t('hosts.page.addresses')}
+                    description={
+                      <span data-selectable="" className="font-mono text-code text-secondary">
+                        {host.addresses.map(addressText).join('　')}
+                      </span>
+                    }
+                  />
+                }
+              >
+                <EditAddresses host={host} />
+              </RowFrame>
+            )}
           </RowGroup>
-          <GroupNote>{t('hosts.page.addressesNote', { name })}</GroupNote>
+          <GroupNote>
+            {host.ssh
+              ? t('hosts.page.sshNote', { name, target: host.ssh.target })
+              : t('hosts.page.addressesNote', { name })}
+          </GroupNote>
         </section>
         <section aria-label={t('hosts.page.self', { name })} className="flex flex-col">
           <GroupLabel group={{ id: 'self', label: t('hosts.page.self', { name }) }} />

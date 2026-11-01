@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RemoteHostStatus } from '@shared/host-control'
+import { deviceId } from '@shared/remote/device'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { ForkedHostConfig } from './forked-host'
 import { Hosts, type HostsOptions } from './hosts'
@@ -42,6 +43,7 @@ function hosts(options: Partial<HostsOptions> = {}): Hosts {
     hostName: 'devbox',
     env: {},
     newIdentity: async () => '',
+    sshPort: null,
     ...options,
   })
 }
@@ -141,5 +143,66 @@ describe('Hosts', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('starts the remote host on the kept SSH port and keeps the one it reports', () => {
+    const kept: number[] = []
+    hosts({ sshPort: 52001, sshPortChanged: (port) => kept.push(port) })
+    const remote = fake('remote-host.cjs')
+    expect(remote.config.initMessage(null)).toMatchObject({ sshPort: 52001 })
+    const report = (sshPort: number | null): void =>
+      remote.config.onMessage({ type: 'remote-host:status', status: { ...STATUS, sshPort } } as {
+        type: string
+      })
+    report(52001)
+    expect(kept).toEqual([])
+    // The kept port was taken, so it listens on another one, which the next start asks for.
+    report(52777)
+    report(null)
+    expect(kept).toEqual([52777])
+    expect(remote.config.initMessage(null)).toMatchObject({ sshPort: 52777 })
+  })
+
+  it('adds a device from SSH once the remote host reports it, and says where to connect', async () => {
+    const running = hosts()
+    const remote = fake('remote-host.cjs')
+    const device = {
+      publicKey: Buffer.alloc(32, 7).toString('base64'),
+      name: 'Lin MacBook',
+      kind: 'desktop',
+      platform: 'macOS 26.1',
+      model: '',
+    }
+    await expect(running.addDevice(device)).rejects.toMatchObject({ code: 'unavailable' })
+    expect(() => running.sshInfo()).toThrow('Remote access is not running')
+
+    const status = { ...STATUS, sshPort: 52001 }
+    remote.config.onMessage({ type: 'remote-host:status', status } as { type: string })
+    expect(running.sshInfo()).toEqual({ publicKey: 'old key', port: 52001 })
+    let added = false
+    const adding = running.addDevice(device).then(() => (added = true))
+    await expect
+      .poll(() => remote.posted.some((m) => m.type === 'remote-host:add-device'))
+      .toBe(true)
+    expect(remote.posted.at(-1)).toEqual({ type: 'remote-host:add-device', device })
+    expect(added).toBe(false)
+    const id = await deviceId(Buffer.from(device.publicKey, 'base64'))
+    const paired = { ...device, id, addedAt: 1, lastConnectedAt: null }
+    remote.config.onMessage({
+      type: 'remote-host:status',
+      status: { ...status, devices: [paired] },
+    } as { type: string })
+    await adding
+    expect(added).toBe(true)
+  })
+
+  it('says when nothing listens for SSH', () => {
+    const running = hosts()
+    const remote = fake('remote-host.cjs')
+    remote.config.onMessage({
+      type: 'remote-host:status',
+      status: { ...STATUS, sshPort: null },
+    } as { type: string })
+    expect(() => running.sshInfo()).toThrow('Channels through SSH cannot listen on this computer')
   })
 })

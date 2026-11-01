@@ -215,6 +215,11 @@ export type MainToRemoteHost =
       // local socket devices may connect on, each connection a stream transport.
       agentHostSocket?: string
       socketPath?: string
+      /**
+       * Under the daemon: the port to take channels from SSH on, on 127.0.0.1 alone, as the last
+       * run listened; null for any free one. Absent in the desktop app, which takes none.
+       */
+      sshPort?: number | null
     }
   // The answer to remote-host:open-port: the agent host's port travels in the transfer list, and
   // none comes while the agent host is not running. It answers remote-host:open-terminal-port the
@@ -242,6 +247,8 @@ export type MainToRemoteHost =
   // Pairs with the host of a pairing link, suggesting this computer's model; its progress comes
   // back as remote-host:host-pairing under the same id.
   | { type: 'remote-host:pair-host'; pairId: number; link: string; model: string }
+  // Adds the machine at an SSH address, the same way, and is closed as a pairing is.
+  | { type: 'remote-host:add-ssh-host'; pairId: number; target: string; model: string }
   // Add host closed: the pairing connection ends, unless it was added.
   | { type: 'remote-host:pair-host-close'; pairId: number }
   // Renames this computer on a host it is connected to; the host's `renamed` answers.
@@ -288,6 +295,11 @@ export interface RemoteHostStatus {
    */
   refused: number
   direct: DirectStatus
+  /**
+   * The port channels from SSH reach, on 127.0.0.1 alone; null when none could listen. Absent
+   * in the desktop app.
+   */
+  sshPort?: number | null
 }
 
 /** Direct connections, as the remote host runs them. */

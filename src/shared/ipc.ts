@@ -217,6 +217,8 @@ export interface IpcInvokeContract {
   'hosts:status': { args: []; result: HostsStatus }
   // Pairs with the host of a pasted link, its progress as `hosts:pairing` under the id.
   'hosts:pair': { args: [link: string]; result: HostPairStart }
+  // Adds the machine at an SSH address, its progress as `hosts:pairing` under the id.
+  'hosts:add-ssh': { args: [target: string]; result: HostPairStart }
   'hosts:pair-close': { args: [pairId: number]; result: void }
   // This computer's name on a connected host. Each change answers null once done, else a code
   // the page words in the user's language.
@@ -425,6 +427,8 @@ export interface KettuApi {
     status(): Promise<HostsStatus>
     /** Pairs with the host of a pasted link, unless it is no link or this computer's own. */
     pair(link: string): Promise<HostPairStart>
+    /** Adds the machine at an SSH address over the system's ssh, unless it is no SSH address. */
+    addSsh(target: string): Promise<HostPairStart>
     /** Add host closed: a pairing not yet added ends. */
     closePairing(pairId: number): Promise<void>
     /** Renames this computer on a connected host; null once renamed, else why not. */

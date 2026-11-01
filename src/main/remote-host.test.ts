@@ -745,6 +745,34 @@ describe('RemoteHost', () => {
     await host.stop()
   })
 
+  it('starts for adding a machine over SSH, and passes each step on', async () => {
+    const { host } = makeHost()
+    const heard: HostPairingState[] = []
+    const pairId = await host.addSshHost('lin@dev-box', 'MacBook Pro', (_, pairing) =>
+      heard.push(pairing),
+    )
+    const child = children[0]!
+    expect(child.posted.at(-1)!.message).toEqual({
+      type: 'remote-host:add-ssh-host',
+      pairId,
+      target: 'lin@dev-box',
+      model: 'MacBook Pro',
+    })
+    child.emit('message', { type: 'remote-host:ready' })
+    for (const pairing of [
+      { state: 'ssh', step: 'installing', version: '0.3.0' },
+      { state: 'ssh', step: 'installing' },
+      { state: 'failed', reason: 'ssh_install', detail: 'Could not download it' },
+    ]) {
+      child.emit('message', { type: 'remote-host:host-pairing', pairId, pairing })
+    }
+    expect(heard).toEqual([
+      { state: 'ssh', step: 'installing', version: '0.3.0' },
+      { state: 'failed', reason: 'ssh_install', detail: 'Could not download it' },
+    ])
+    await vi.waitFor(() => expect(child.types().at(-1)).toBe('remote-host:shutdown'))
+  })
+
   it('stops again when a pairing ends with nothing added and nothing else needs it', async () => {
     const { host } = makeHost()
     const failed = await host.pairHost(link, '', () => {})
