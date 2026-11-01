@@ -9,6 +9,7 @@ import {
   ATTACHMENT_MAX_AGE_MS,
   Attachments,
   parseAttachmentsFile,
+  sendAttachment,
   toArrayBuffer,
   type AttachmentRecord,
 } from './attachments'
@@ -36,6 +37,12 @@ const sha = (data: Uint8Array) => createHash('sha256').update(data).digest('hex'
 const image = (data = PNG, name = 'Image 1') => ({
   bytes: toArrayBuffer(data),
   mimeType: 'image/png',
+  name,
+})
+const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x0a, 0, 0xff])
+const pdf = (name = 'Report.PDF') => ({
+  bytes: toArrayBuffer(PDF),
+  mimeType: 'application/pdf',
   name,
 })
 
@@ -77,14 +84,93 @@ describe('Attachments', () => {
     expect(reopened.view(added.id)).toEqual(added)
   })
 
-  it('takes only the image types every model takes', async () => {
+  it('keeps the bytes of any other type as a file record, named by its extension', async () => {
     const attachments = store()
-    await expect(
-      attachments.add({ ...image(), mimeType: 'image/tiff' }, null),
-    ).rejects.toMatchObject({ code: 'invalid_params' })
-    await expect(
-      attachments.add({ ...image(), mimeType: 'application/pdf' }, null),
-    ).rejects.toMatchObject({ code: 'invalid_params' })
+    await attachments.load()
+    const added = await attachments.add(pdf(), THUMB)
+    expect(added).toEqual({
+      id: expect.any(String),
+      type: 'file',
+      name: 'Report.PDF',
+      uri: null,
+      mimeType: 'application/pdf',
+      size: PDF.byteLength,
+      sent: null,
+      thumb: null,
+      blob: null,
+    })
+    expect(attachments.get(added.id)).toMatchObject({ hash: sha(PDF), path: null })
+    const saved = path.join(dir, 'attachments', `${sha(PDF)}.pdf`)
+    expect(new Uint8Array(await readFile(saved))).toEqual(PDF)
+    const read = await attachments.read(added.id)
+    expect(read.mimeType).toBe('application/pdf')
+    expect(new Uint8Array(read.bytes)).toEqual(PDF)
+
+    await attachments.flush()
+    const reopened = store()
+    await reopened.load()
+    expect(reopened.view(added.id)).toEqual(added)
+    expect(new Uint8Array(await readFile(saved))).toEqual(PDF)
+  })
+
+  it('keeps an image no model takes, an archive and unknown bytes as files', async () => {
+    const attachments = store()
+    const add = (mimeType: string, name: string) =>
+      attachments.add({ bytes: toArrayBuffer(PDF), mimeType, name }, null)
+    expect(await add('image/heic', 'IMG_0001.HEIC')).toMatchObject({
+      type: 'file',
+      mimeType: 'image/heic',
+    })
+    expect(await add('image/tiff', 'scan.tiff')).toMatchObject({ type: 'file' })
+    expect(await add('application/zip', 'site.zip')).toMatchObject({ type: 'file' })
+    expect(await add('application/octet-stream', 'blob')).toMatchObject({
+      type: 'file',
+      mimeType: 'application/octet-stream',
+    })
+    // Only a plain extension is kept from a name.
+    expect(await add('application/octet-stream', 'odd.not an extension')).toMatchObject({
+      type: 'file',
+    })
+    const hash = sha(PDF)
+    expect((await readdir(path.join(dir, 'attachments'))).sort()).toEqual(
+      [hash, `${hash}.heic`, `${hash}.tiff`, `${hash}.zip`].sort(),
+    )
+  })
+
+  it('sends a file whose bytes it holds as a link to a copy of its own', async () => {
+    const attachments = store()
+    const capabilities = [null, { image: true, audio: false, embeddedContext: true }]
+    for (const prompt of capabilities) {
+      const added = await attachments.add(pdf('report.pdf'), null)
+      const sent = await sendAttachment(attachments, attachments.get(added.id), prompt)
+      const copy = path.join(dir, 'attachments', 'sent', `${sha(PDF)}.pdf`)
+      const uri = pathToFileURL(copy).href
+      expect(sent).toEqual({
+        block: {
+          type: 'resource_link',
+          uri,
+          name: 'report.pdf',
+          mimeType: 'application/pdf',
+          size: PDF.byteLength,
+        },
+        changes: { uri, sent: 'linked', size: PDF.byteLength, blob: null },
+        blob: null,
+      })
+      // The draft's record and bytes go once it is sent; the copy the link opens stays.
+      await attachments.release([added.id])
+      expect(new Uint8Array(await readFile(copy))).toEqual(PDF)
+      expect(await readdir(path.join(dir, 'attachments'))).toEqual(['sent'])
+    }
+  })
+
+  it("removes a file's bytes with the last record that holds them", async () => {
+    const attachments = store()
+    const first = await attachments.add(pdf(), null)
+    const second = await attachments.add(pdf('Copy.pdf'), null)
+    await attachments.remove(first.id)
+    expect(await readdir(path.join(dir, 'attachments'))).toEqual([`${sha(PDF)}.pdf`])
+    await attachments.remove(second.id)
+    expect(await readdir(path.join(dir, 'attachments'))).toEqual([])
   })
 
   it('keeps a pasted text as a text record, its bytes by hash, and its first lines', async () => {
@@ -466,5 +552,19 @@ describe('parseAttachmentsFile', () => {
         { ...record, id: 't1', type: 'text', mimeType: 'text/plain' },
       ],
     })
+  })
+
+  it('reads a file whose bytes were handed over, which has a hash and no path', () => {
+    const saved = { ...record, id: 'f1', type: 'file', mimeType: 'application/pdf' }
+    expect(
+      parseAttachmentsFile({
+        attachments: [
+          saved,
+          { ...saved, id: 'f2', mimeType: null },
+          { ...saved, id: 'f3', size: null },
+          { ...saved, id: 'f4', path: '/p/a.pdf' },
+        ],
+      }),
+    ).toEqual({ version: 1, attachments: [saved] })
   })
 })
