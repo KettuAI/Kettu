@@ -55,6 +55,8 @@ export interface AttachmentRecord {
   addedAt: number
   /** When a draft last named it, as the renderer checks its drafts at launch; the age counts from here. */
   heldAt?: number
+  /** A text's saved extension, from its type; a text saved before texts took one is `.txt`. */
+  extension?: string
 }
 
 export interface AttachmentsFile {
@@ -116,6 +118,18 @@ const TEXT_TYPES: Record<string, string> = {
   '.svg': 'image/svg+xml',
 }
 
+// A text's extension by its type: the first one `TEXT_TYPES` gives it.
+const TEXT_EXTENSIONS = new Map<string, string>()
+for (const [extension, type] of Object.entries(TEXT_TYPES)) {
+  if (!TEXT_EXTENSIONS.has(type)) TEXT_EXTENSIONS.set(type, extension)
+}
+
+// Other names devices send text types by, as a phone names Markdown and Python.
+const TYPE_ALIASES: Record<string, string> = {
+  'text/x-markdown': 'text/markdown',
+  'text/x-python-script': 'text/x-python',
+}
+
 // The types of other files, for the links an agent gets to them.
 const OTHER_TYPES: Record<string, string> = {
   '.pdf': 'application/pdf',
@@ -168,7 +182,7 @@ function modelImageType(data: Uint8Array): string | null {
 
 const PLAIN_EXTENSION = /^\.[a-z0-9]{1,16}$/
 
-type Named = Pick<AttachmentRecord, 'type' | 'name' | 'hash' | 'mimeType'>
+type Named = Pick<AttachmentRecord, 'type' | 'name' | 'hash' | 'mimeType' | 'extension'>
 
 function fileName(record: Named): string {
   if (record.type === 'file') {
@@ -176,6 +190,7 @@ function fileName(record: Named): string {
     const extension = path.extname(record.name).toLowerCase()
     return `${record.hash}${PLAIN_EXTENSION.test(extension) ? extension : ''}`
   }
+  if (record.type === 'text' && record.extension) return `${record.hash}${record.extension}`
   const mimeType = record.mimeType ?? ''
   return `${record.hash}${EXTENSIONS[mimeType] ?? (isTextType(mimeType) ? '.txt' : '')}`
 }
@@ -203,7 +218,11 @@ function attachmentRecord(value: unknown): AttachmentRecord | null {
     (value.size !== null && typeof value.size !== 'number') ||
     !isStringOrNull(value.thumb) ||
     typeof value.addedAt !== 'number' ||
-    (value.heldAt !== undefined && typeof value.heldAt !== 'number')
+    (value.heldAt !== undefined && typeof value.heldAt !== 'number') ||
+    (value.extension !== undefined &&
+      (value.type !== 'text' ||
+        typeof value.extension !== 'string' ||
+        !PLAIN_EXTENSION.test(value.extension)))
   ) {
     return null
   }
@@ -235,6 +254,7 @@ function attachmentRecord(value: unknown): AttachmentRecord | null {
     thumb: value.thumb,
     addedAt: value.addedAt,
     ...(value.heldAt !== undefined ? { heldAt: value.heldAt as number } : {}),
+    ...(value.extension !== undefined ? { extension: value.extension as string } : {}),
   }
 }
 
@@ -311,13 +331,14 @@ export class Attachments {
    */
   async add(source: AttachmentSource, thumb: string | null): Promise<Attachment> {
     if ('grantId' in source) return this.addGranted(source.grantId, thumb)
-    if (isTextType(source.mimeType)) return this.addText(source)
+    const mimeType = TYPE_ALIASES[source.mimeType] ?? source.mimeType
+    if (isTextType(mimeType)) return this.addText({ ...source, mimeType })
     const data = new Uint8Array(source.bytes)
-    const image = MODEL_IMAGE_TYPES.includes(source.mimeType)
+    const image = MODEL_IMAGE_TYPES.includes(mimeType)
     const named: Omit<Named, 'hash'> = {
       type: image ? 'image' : 'file',
       name: source.name,
-      mimeType: source.mimeType,
+      mimeType,
     }
     const record: AttachmentRecord = {
       id: randomUUID(),
@@ -342,17 +363,17 @@ export class Attachments {
     const data = new Uint8Array(source.bytes)
     const text = textOf(data)
     if (text === null) throw invalidParams(`${source.name} is not UTF-8 text`)
-    const record: AttachmentRecord = {
-      id: randomUUID(),
+    const named = {
       type: 'text',
       name: source.name,
       mimeType: source.mimeType,
+      extension: TEXT_EXTENSIONS.get(source.mimeType) ?? '.txt',
+    } as const
+    const record: AttachmentRecord = {
+      id: randomUUID(),
+      ...named,
       size: data.byteLength,
-      hash: await this.saveBytes(data, {
-        type: 'text',
-        name: source.name,
-        mimeType: source.mimeType,
-      }),
+      hash: await this.saveBytes(data, named),
       path: null,
       thumb: textThumb(text),
       addedAt: this.now(),
