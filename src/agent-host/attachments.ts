@@ -1,7 +1,7 @@
 // The attachments of drafts and queued prompts: their records in state/attachments.json, the
-// paths main granted for picked and dropped files or an `@` mention named, and the image and
-// pasted text bytes they were read as or the renderer handed over in attachments/, named by
-// SHA-256 and extension,
+// paths main granted for picked and dropped files or an `@` mention named, and the image, pasted
+// text and other file bytes they were read as or a window or device handed over in attachments/,
+// named by SHA-256 and extension,
 // until a prompt sends them or the user removes them; and in attachments/sent/, the copies that
 // links sent to an agent point to.
 
@@ -39,11 +39,17 @@ export interface AttachmentRecord {
   type: 'image' | 'file' | 'folder' | 'text'
   name: string
   mimeType: string | null
-  /** Bytes: an image's or a pasted text's saved copy, or a file's when added; null for a folder. */
+  /** Bytes: what was saved, or a granted file's when added; null for a folder. */
   size: number | null
-  /** SHA-256 of the saved bytes: an image's, as pasted, read when added or scaled, or a text's. */
+  /**
+   * SHA-256 of the saved bytes: an image's, as pasted, read when added or scaled, a text's, or a
+   * file's handed over as bytes.
+   */
   hash: string | null
-  /** What main granted, or a mention named, for a file or folder; the only path a record reads. */
+  /**
+   * What main granted, or a mention named, for a file or folder; the only path a record reads.
+   * Null for one whose bytes are saved.
+   */
   path: string | null
   thumb: string | null
   addedAt: number
@@ -160,7 +166,16 @@ function modelImageType(data: Uint8Array): string | null {
   return null
 }
 
-function fileName(record: Pick<AttachmentRecord, 'hash' | 'mimeType'>): string {
+const PLAIN_EXTENSION = /^\.[a-z0-9]{1,16}$/
+
+type Named = Pick<AttachmentRecord, 'type' | 'name' | 'hash' | 'mimeType'>
+
+function fileName(record: Named): string {
+  if (record.type === 'file') {
+    // An agent's tools tell what a file is by its name, so it keeps the extension it was given.
+    const extension = path.extname(record.name).toLowerCase()
+    return `${record.hash}${PLAIN_EXTENSION.test(extension) ? extension : ''}`
+  }
   const mimeType = record.mimeType ?? ''
   return `${record.hash}${EXTENSIONS[mimeType] ?? (isTextType(mimeType) ? '.txt' : '')}`
 }
@@ -204,7 +219,9 @@ function attachmentRecord(value: unknown): AttachmentRecord | null {
       : value.type === 'text'
         ? saved && granted === null
         : value.type === 'file'
-          ? granted !== null && hash === null && typeof value.size === 'number'
+          ? granted !== null
+            ? hash === null && typeof value.size === 'number'
+            : saved
           : value.type === 'folder' && granted !== null && hash === null && value.size === null
   if (!valid) return null
   return {
@@ -288,22 +305,27 @@ export class Attachments {
     for (const grant of grants) this.grants.set(grant.grantId, { ...grant, at: now })
   }
 
+  /**
+   * Bytes of an image type a model takes become an image, of a text type a pasted text, and of any
+   * other type, such as a PDF or an archive a device sends, a file the agent gets a link to.
+   */
   async add(source: AttachmentSource, thumb: string | null): Promise<Attachment> {
     if ('grantId' in source) return this.addGranted(source.grantId, thumb)
     if (isTextType(source.mimeType)) return this.addText(source)
-    if (!MODEL_IMAGE_TYPES.includes(source.mimeType)) {
-      throw invalidParams(`${source.mimeType} is not an image type a model takes`)
-    }
     const data = new Uint8Array(source.bytes)
-    const record: AttachmentRecord = {
-      id: randomUUID(),
-      type: 'image',
+    const image = MODEL_IMAGE_TYPES.includes(source.mimeType)
+    const named: Omit<Named, 'hash'> = {
+      type: image ? 'image' : 'file',
       name: source.name,
       mimeType: source.mimeType,
+    }
+    const record: AttachmentRecord = {
+      id: randomUUID(),
+      ...named,
       size: data.byteLength,
-      hash: await this.saveBytes(data, source.mimeType),
+      hash: await this.saveBytes(data, named),
       path: null,
-      thumb,
+      thumb: image ? thumb : null,
       addedAt: this.now(),
     }
     this.records.set(record.id, record)
@@ -326,7 +348,11 @@ export class Attachments {
       name: source.name,
       mimeType: source.mimeType,
       size: data.byteLength,
-      hash: await this.saveBytes(data, source.mimeType),
+      hash: await this.saveBytes(data, {
+        type: 'text',
+        name: source.name,
+        mimeType: source.mimeType,
+      }),
       path: null,
       thumb: textThumb(text),
       addedAt: this.now(),
@@ -371,7 +397,7 @@ export class Attachments {
           type: 'image',
           mimeType: image,
           size: read.byteLength,
-          hash: await this.saveBytes(read, image),
+          hash: await this.saveBytes(read, { type: 'image', name, mimeType: image }),
           thumb,
         }
       } else {
@@ -407,7 +433,8 @@ export class Attachments {
         throw invalidParams(`${scaled.mimeType} is not an image type a model takes`)
       }
       const data = new Uint8Array(scaled.bytes)
-      const hash = await this.saveBytes(data, scaled.mimeType)
+      const named = { type: 'image', name: record.name, mimeType: scaled.mimeType } as const
+      const hash = await this.saveBytes(data, named)
       next = { ...next, mimeType: scaled.mimeType, size: data.byteLength, hash }
     }
     // Removed while the bytes were written: the new copy goes too.
@@ -451,7 +478,7 @@ export class Attachments {
     return attachmentOf(this.get(id))
   }
 
-  /** An image's or a pasted text's saved bytes. */
+  /** The saved bytes of an image, a pasted text or a file handed over as bytes. */
   async bytes(record: AttachmentRecord): Promise<Buffer> {
     if (!record.hash) throw invalidParams(`${record.name} has no saved bytes`)
     try {
@@ -515,14 +542,14 @@ export class Attachments {
     return path.join(this.dir, 'sent')
   }
 
-  private bytesPath(record: Pick<AttachmentRecord, 'hash' | 'mimeType'>): string {
+  private bytesPath(record: Named): string {
     return path.join(this.dir, fileName(record))
   }
 
-  private async saveBytes(data: Uint8Array, mimeType: string): Promise<string> {
+  private async saveBytes(data: Uint8Array, named: Omit<Named, 'hash'>): Promise<string> {
     const hash = createHash('sha256').update(data).digest('hex')
     await mkdir(this.dir, { recursive: true, mode: 0o700 })
-    await writeFile(this.bytesPath({ hash, mimeType }), data, { mode: 0o600 })
+    await writeFile(this.bytesPath({ ...named, hash }), data, { mode: 0o600 })
     return hash
   }
 
@@ -601,7 +628,7 @@ export interface SentAttachment {
 /**
  * Builds what goes to the agent for one attachment, from what its prompt capabilities allow: an
  * image as an image or a link, a text file with its contents or as a link, a folder as a link, a
- * pasted text embedded or as text after the message's.
+ * pasted text embedded or as text after the message's, and a file handed over as bytes as a link.
  */
 export async function sendAttachment(
   store: Attachments,
@@ -649,6 +676,15 @@ export async function sendAttachment(
       block: linkBlock(uri, record.name, record.mimeType, record.size),
       changes: { uri, sent: 'linked', size: record.size, blob: blob.hash },
       blob,
+    }
+  }
+  if (record.type === 'file' && record.hash) {
+    // Handed over as bytes, it has no file of its own, so the link goes to a copy.
+    const uri = await store.sentLink(record, await store.bytes(record))
+    return {
+      block: linkBlock(uri, record.name, record.mimeType, record.size),
+      changes: { uri, sent: 'linked', size: record.size, blob: null },
+      blob: null,
     }
   }
   const uri = grantedUri(record)!
