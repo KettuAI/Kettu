@@ -44,12 +44,6 @@ In [v0.0.1](https://github.com/KettuAI/Kettu/releases/tag/v0.0.1):
 
 - [ ] A native app for iPhone and iPad ([#383](https://github.com/KettuAI/Kettu/issues/383)): your sessions, permission requests answered from the lock screen and notifications, a share extension and a usage widget
 
-## v1.0.0: teams
-
-- [ ] Share a session, a project or a whole host with your team: teammates watch it live, suggest messages or carry on in the same session
-- [ ] Hand work over and assign it to people
-- [ ] Limits per member on what they can run and how much they use
-
 ## Later
 
 - [ ] A native Android app
