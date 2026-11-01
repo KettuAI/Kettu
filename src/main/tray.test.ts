@@ -9,8 +9,18 @@ const electron = vi.hoisted(() => {
     update: () => listeners.forEach((listener) => listener()),
     reset: () => listeners.clear(),
   }
+  const macos = {
+    style: '',
+    notifications: new Map<string, () => void>(),
+    getUserDefault: (key: string) => (key === 'AppleInterfaceStyle' ? macos.style : undefined),
+    subscribeNotification: (event: string, listener: () => void) => {
+      macos.notifications.set(event, listener)
+      return 0
+    },
+  }
   return {
     theme,
+    macos,
     trays: [] as FakeTrayShape[],
     portal: new Map<string, string | null>(),
     templated: [] as string[],
@@ -56,6 +66,7 @@ vi.mock('electron', async () => {
       }),
     },
     nativeTheme: electron.theme,
+    systemPreferences: electron.macos,
     Tray,
   }
 })
@@ -94,6 +105,8 @@ beforeEach(() => {
   electron.trays.length = 0
   electron.portal.clear()
   electron.templated.length = 0
+  electron.macos.style = ''
+  electron.macos.notifications.clear()
   electron.theme.shouldUseDarkColorsForSystemIntegratedUI = false
   electron.theme.reset()
 })
@@ -106,9 +119,9 @@ afterEach(() => {
 })
 
 describe('trayImageName', () => {
-  it('takes the white menu bar image on macOS, whatever the theme', () => {
-    expect(trayImageName('darwin', true, false)).toBe('tray-menubar.png')
-    expect(trayImageName('darwin', false, true)).toBe('tray-menubar-dot.png')
+  it('takes the menu bar image shaded for the system appearance on macOS', () => {
+    expect(trayImageName('darwin', true, false)).toBe('tray-menubar-on-dark.png')
+    expect(trayImageName('darwin', false, true)).toBe('tray-menubar-on-light-dot.png')
   })
 
   it('takes the .ico on Windows and a PNG on Linux, in black or white', () => {
@@ -179,7 +192,7 @@ describe('KettuTray', () => {
 
   it('shows its menu and puts the dot on while a request waits', () => {
     const { tray, deps, fake } = start('darwin')
-    expect(imageOf(fake)).toBe('tray-menubar.png')
+    expect(imageOf(fake)).toBe('tray-menubar-on-light.png')
     expect(fake.tooltip).toBe('Kettu')
     expect(fake.menu.map((item) => item.label ?? item.type)).toEqual([
       'No sessions running',
@@ -193,10 +206,22 @@ describe('KettuTray', () => {
     expect(deps.open).toHaveBeenCalledOnce()
     expect(deps.quit).toHaveBeenCalledOnce()
     tray.setDot(true)
-    expect(imageOf(fake)).toBe('tray-menubar-dot.png')
-    expect(electron.templated).toEqual([])
+    expect(imageOf(fake)).toBe('tray-menubar-on-light-dot.png')
     tray.setBusy({ running: 2, waiting: 1 })
     expect(fake.menu[0]!.label).toBe('2 sessions running · 1 needs approval')
+  })
+
+  it('is a template on macOS, shaded for the system appearance as it changes', () => {
+    electron.macos.style = 'Dark'
+    const { fake } = start('darwin')
+    expect(imageOf(fake)).toBe('tray-menubar-on-dark.png')
+    electron.macos.style = ''
+    electron.macos.notifications.get('AppleInterfaceThemeChangedNotification')!()
+    expect(imageOf(fake)).toBe('tray-menubar-on-light.png')
+    expect(electron.templated.map((file) => path.basename(file))).toEqual([
+      'tray-menubar-on-dark.png',
+      'tray-menubar-on-light.png',
+    ])
   })
 
   it('follows the taskbar on Windows, and opens the window on a click', () => {
@@ -206,6 +231,7 @@ describe('KettuTray', () => {
     electron.theme.shouldUseDarkColorsForSystemIntegratedUI = false
     electron.theme.update()
     expect(imageOf(fake)).toBe('tray-black.ico')
+    expect(electron.templated).toEqual([])
     fake.emit('click')
     expect(deps.open).toHaveBeenCalledOnce()
   })
