@@ -223,20 +223,26 @@ async function main() {
   }
   writeFileSync(join(build, 'icon.ico'), ico(pngs))
 
-  // The tray's images, read by src/main/tray.ts: the white glyph for the macOS menu bar, named so
-  // Electron does not take it for a template image, and the glyph filling a square in black and in
-  // white for Windows (.ico) and Linux (PNG), each with the dot.
+  // The tray's images, read by src/main/tray.ts: the macOS menu bar's template images, shaded for
+  // a dark and a light ground, which macOS tints itself, and the glyph filling a square in black
+  // and in white for Windows (.ico) and Linux (PNG), each with the dot.
   const tray = join(root, 'resources', 'tray')
   rmSync(tray, { recursive: true, force: true })
   mkdirSync(tray, { recursive: true })
   for (const dot of [false, true]) {
-    for (const [scale, suffix] of [
-      [1, ''],
-      [2, '@2x'],
-    ]) {
-      const size = GLYPH_CANVAS * scale
-      const png = await render(glyphSvg('menubar', { size, color: '#fff', dot }), size, size)
-      writeFileSync(join(tray, `tray-menubar${dot ? '-dot' : ''}${suffix}.png`), png)
+    for (const ground of ['dark', 'light']) {
+      for (const [scale, suffix] of [
+        [1, ''],
+        [2, '@2x'],
+      ]) {
+        const size = GLYPH_CANVAS * scale
+        const png = await render(
+          glyphSvg('menubar', { size, color: '#000', dot, ground }),
+          size,
+          size,
+        )
+        writeFileSync(join(tray, `tray-menubar-on-${ground}${dot ? '-dot' : ''}${suffix}.png`), png)
+      }
     }
     for (const [name, color] of [
       ['black', '#000'],
