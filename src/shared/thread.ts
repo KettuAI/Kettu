@@ -323,6 +323,8 @@ export type Patch =
 export interface PatchBatch {
   sessionId: string
   seq: number
+  /** The seq of the first batch, when this one merges several up to `seq`, as a slow device gets. */
+  from?: number
   patches: Patch[]
 }
 

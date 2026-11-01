@@ -7,6 +7,7 @@
   },
   "hostBanner": {
     "restarting": "Restarting the agent host. Your sessions come back by themselves.",
+    "reconnecting": "Reconnecting to the host…",
     "stopped": "The agent host stopped and could not be restarted.",
     "restart": "Restart",
     "exportDiagnostics": "Export diagnostics"

@@ -6,7 +6,7 @@ import { HandshakeDropped } from '@shared/remote/device-channel'
 import type { KeyPair } from '@shared/remote/noise'
 import type { PairingPayload } from '@shared/remote/pairing'
 import type { Hello, Welcome } from '@shared/remote/protocol'
-import { awaitWelcome, hello, openChannel, type Dial, type Opened } from './link'
+import { awaitWelcome, hello, openChannel, type Dial, type Later, type Opened } from './link'
 
 export type PairFailure = 'void' | 'rejected' | 'unreachable' | 'update_client' | 'update_host'
 
@@ -19,7 +19,7 @@ export type PairProgress =
 export interface Paired {
   opened: Opened
   welcome: Welcome
-  later: unknown[]
+  later: Later[]
 }
 
 export interface PairOptions {

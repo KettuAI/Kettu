@@ -1,8 +1,12 @@
 // The desktop app as a device of other hosts: one connection to each known host, kept up with
-// backoff, and pairing with the host of a pasted link. Each welcomed connection's host protocol
-// reaches main through a port of its own.
+// backoff, and pairing with the host of a pasted link. Each session's host protocol reaches main
+// through a port of its own. A host of version 2 keeps the session through a drop for a while: the
+// link acknowledges what it receives, resumes with the welcome's token, keeps main's port, and
+// sends again the requests the host did not read.
 
 import type { PortChannel } from '@shared/port-channel'
+import { Acknowledger } from '@shared/remote/acks'
+import type { ChannelMessage } from '@shared/remote/channel'
 import { normalizeDeviceName, isDeviceModel } from '@shared/remote/device'
 import { startDeviceChannel, type DeviceChannel } from '@shared/remote/device-channel'
 import {
@@ -18,6 +22,8 @@ import type { PairingPayload } from '@shared/remote/pairing'
 import {
   MIN_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
+  RESUME_MS,
+  RESUME_VERSION,
   parseAddresses,
   parseClosing,
   parseWelcome,
@@ -75,6 +81,11 @@ interface SessionHandlers {
   welcomed(welcome: Welcome): void
   addresses(addresses: DirectAddress[]): void
   renamed(name: string): void
+  /**
+   * The host protocol's messages and stream bytes, and the channel's own the session does not
+   * read itself; until a handler takes them they wait, as while a pairing is being added.
+   */
+  message?(message: ChannelMessage): void
   ended(end: SessionEnd): void
 }
 
@@ -83,8 +94,7 @@ class HostSession {
   welcome: Welcome | null = null
   private handlers: SessionHandlers = IGNORED
   private reason: ClosingReason | null = null
-  private port: PortChannel | null = null
-  private readonly queued: unknown[] = []
+  private readonly waiting: ChannelMessage[] = []
   private over = false
   private timer: ReturnType<typeof setTimeout> | null = null
 
@@ -111,28 +121,21 @@ class HostSession {
       }, welcomeTimeoutMs)
     }
     this.channel.onMessage((value) => this.receive(value))
+    this.channel.onBytes((stream, data) => this.pass({ kind: 'bytes', stream, data }))
     void this.channel.closed.then(() => this.end())
   }
 
   /** Hands the session to whoever takes it from here, as a link takes a pairing's. */
   handOver(handlers: SessionHandlers): void {
     this.handlers = handlers
-  }
-
-  /** Main's port for the host protocol; what came before it goes first. */
-  connectPort(port: PortChannel): void {
-    if (this.over) return port.close()
-    this.port = port
-    port.onMessage((data) => {
-      this.channel.send(data).catch((error: unknown) => {
-        this.log('warn', `A message for a host could not be sent: ${(error as Error).message}`)
-      })
-    })
-    for (const value of this.queued.splice(0)) port.send(value)
+    if (!handlers.message) return
+    for (const message of this.waiting.splice(0)) handlers.message(message)
   }
 
   send(value: unknown): void {
-    this.channel.send(value).catch(() => {})
+    this.channel.send(value).catch((error: unknown) => {
+      this.log('warn', `A message for a host could not be sent: ${(error as Error).message}`)
+    })
   }
 
   close(): void {
@@ -157,23 +160,26 @@ class HostSession {
       return this.handlers.welcomed(welcome)
     }
     const fields = value as Record<string, unknown>
-    if (type === 'addresses') return this.handlers.addresses(parseAddresses(fields.addresses))
-    if (type === 'renamed') {
+    if (type === 'addresses') this.handlers.addresses(parseAddresses(fields.addresses))
+    else if (type === 'renamed') {
       const name = normalizeDeviceName(fields.name)
       if (name) this.handlers.renamed(name)
-      return
     }
-    if (this.port) this.port.send(value)
-    else if (this.queued.length < MAX_QUEUED) this.queued.push(value)
+    // The link counts these too, and keeps the session's own from main.
+    this.pass({ kind: 'json', value })
+  }
+
+  private pass(message: ChannelMessage): void {
+    if (this.over || !this.welcome) return
+    if (this.handlers.message) this.handlers.message(message)
+    else if (this.waiting.length < MAX_QUEUED) this.waiting.push(message)
   }
 
   private end(): void {
     if (this.over) return
     this.over = true
     if (this.timer) clearTimeout(this.timer)
-    this.port?.close()
-    this.port = null
-    this.queued.length = 0
+    this.waiting.length = 0
     this.handlers.ended({ welcomed: this.welcome !== null, reason: this.reason })
   }
 }
@@ -185,6 +191,9 @@ const IGNORED: SessionHandlers = {
   ended: () => {},
 }
 
+/** The session's own messages, which main never hears. */
+const OWN: ReadonlySet<unknown> = new Set(['addresses', 'renamed'])
+
 /** The connection to one known host, tried again with backoff until it is forgotten. */
 class HostLink {
   connection: HostConnection = { state: 'connecting' }
@@ -193,6 +202,19 @@ class HostLink {
   private timer: ReturnType<typeof setTimeout> | null = null
   private failures = 0
   private closed = false
+  /** Main's port for the host's session, kept while the host keeps the session. */
+  private port: PortChannel | null = null
+  /** What came for main before its port did. */
+  private readonly queued: unknown[] = []
+  /** Main's requests not answered yet, by id, sent again when the host did not read them. */
+  private readonly requests = new Map<number, unknown>()
+  /** The token of the last welcome, while the host keeps the session for this link to resume. */
+  private resumeToken: string | null = null
+  private keptTimer: ReturnType<typeof setTimeout> | null = null
+  private keptUntil = 0
+  /** Counts the host's sessions, so a port for one that went is closed when it comes. */
+  private sessions = 0
+  private readonly acks = new Acknowledger((ack) => this.session?.send(ack))
 
   constructor(
     private readonly client: HostClient,
@@ -222,9 +244,10 @@ class HostLink {
     this.cancel()
     this.drop()
     this.session = session
-    session.handOver(this.handlersFor(session))
-    if (session.open) this.welcomed(session, session.welcome!)
-    else this.ended({ welcomed: true, reason: null })
+    // Welcomed first, so what came after the welcome counts on the new session.
+    if (session.open) this.welcomed(session, session.welcome!, false)
+    session.handOver(this.handlersFor(session, false))
+    if (!session.open) this.ended(session, { welcomed: true, reason: null })
   }
 
   /** The owner changed the addresses here: a host not reached is tried at them at once. */
@@ -243,6 +266,7 @@ class HostLink {
     this.closed = true
     this.cancel()
     this.drop()
+    this.lose()
   }
 
   private stoppedFor(...reasons: string[]): boolean {
@@ -260,6 +284,7 @@ class HostLink {
   private drop(): void {
     const session = this.session
     this.session = null
+    this.acks.pause()
     session?.close()
   }
 
@@ -269,11 +294,14 @@ class HostLink {
     const { options } = this.client
     const trying = (this.trying = new AbortController())
     const hostKey = publicKeyBytes(host.publicKey)!
+    const resume = this.resumeToken
+      ? { token: this.resumeToken, received: this.acks.received }
+      : null
+    const hello = { ...this.client.hello(), ...(resume ? { resume } : {}) }
     const result = await dial({
       addresses: host.addresses,
       connect: this.client.connect,
-      start: (transport) =>
-        startDeviceChannel({ transport, hostKey, key: options.key, hello: this.client.hello() }),
+      start: (transport) => startDeviceChannel({ transport, hostKey, key: options.key, hello }),
       timeoutMs: this.client.timeoutMs,
       signal: trying.signal,
     })
@@ -286,14 +314,15 @@ class HostLink {
     if (result.kind !== 'open') return this.failed()
     const session = new HostSession(result.channel, result.address, options.log)
     this.session = session
-    session.start(this.handlersFor(session), WELCOME_TIMEOUT_MS)
+    session.start(this.handlersFor(session, resume !== null), WELCOME_TIMEOUT_MS)
   }
 
-  private handlersFor(session: HostSession): SessionHandlers {
+  /** `askedResume`: the session's hello named the last one, which the host may have kept. */
+  private handlersFor(session: HostSession, askedResume: boolean): SessionHandlers {
     const mine = (): boolean => this.session === session
     return {
       welcomed: (welcome) => {
-        if (mine()) this.welcomed(session, welcome)
+        if (mine()) this.welcomed(session, welcome, askedResume)
       },
       addresses: (addresses) => {
         if (mine()) this.addresses(addresses, session.address)
@@ -303,16 +332,25 @@ class HostLink {
         this.client.options.hosts.update(this.id, { deviceName: name })
         this.client.options.changed()
       },
+      message: (message) => {
+        if (mine()) this.message(session, message)
+      },
       ended: (end) => {
         if (!mine()) return
         this.session = null
-        this.ended(end)
+        this.ended(session, end)
       },
     }
   }
 
-  private welcomed(session: HostSession, welcome: Welcome): void {
+  private welcomed(session: HostSession, welcome: Welcome, askedResume: boolean): void {
     const { hosts, now } = this.client.options
+    const resumed = askedResume && welcome.resumed !== undefined
+    if (this.keptTimer) clearTimeout(this.keptTimer)
+    this.keptTimer = null
+    // A new session: main's port for the last one goes, and with it what was in flight.
+    if (!resumed) this.lose()
+    this.resumeToken = welcome.resume ?? null
     hosts.update(this.id, {
       name: welcome.host.name,
       platform: welcome.host.platform,
@@ -324,14 +362,43 @@ class HostLink {
     })
     this.failures = 0
     this.set({ state: 'online', address: session.address })
-    void this.openPort(session)
+    if (!resumed) return void this.openPort(session, ++this.sessions)
+    // The host read main's requests up to the one it names; the rest go again.
+    const read = welcome.resumed!.request
+    for (const [id, request] of this.requests) if (id > read) session.send(request)
   }
 
-  private async openPort(session: HostSession): Promise<void> {
+  private async openPort(session: HostSession, sessions: number): Promise<void> {
     const port = (await this.client.options.openMainPort?.(this.id).catch(() => null)) ?? null
     if (!port) return
-    if (this.session === session && session.open) session.connectPort(port)
-    else port.close()
+    if (this.sessions !== sessions || this.port || !session.welcome) return port.close()
+    this.port = port
+    port.onMessage((data) => this.fromMain(data))
+    for (const value of this.queued.splice(0)) port.send(value)
+  }
+
+  /** A request from main goes now, or once the host is back; it is kept until answered. */
+  private fromMain(data: unknown): void {
+    const { type, id } = (data ?? {}) as { type?: unknown; id?: unknown }
+    const request = type === 'request' && typeof id === 'number' && Number.isSafeInteger(id)
+    if (request) this.requests.set(id, data)
+    if (this.session?.open) this.session.send(data)
+  }
+
+  private message(session: HostSession, message: ChannelMessage): void {
+    if (session.welcome!.protocol >= RESUME_VERSION) {
+      this.acks.counted(message.kind === 'bytes' ? message.data.length : 0)
+    }
+    // Main reads no streams yet.
+    if (message.kind === 'bytes') return
+    const value = message.value
+    const { type, id } = (value ?? {}) as { type?: unknown; id?: unknown }
+    if (OWN.has(type)) return
+    if ((type === 'response' || type === 'error') && typeof id === 'number') {
+      this.requests.delete(id)
+    }
+    if (this.port) this.port.send(value)
+    else if (this.queued.length < MAX_QUEUED) this.queued.push(value)
   }
 
   private addresses(addresses: DirectAddress[], answered: DirectAddress): void {
@@ -343,10 +410,27 @@ class HostLink {
     this.client.options.changed()
   }
 
-  private ended({ welcomed, reason }: SessionEnd): void {
+  private ended(session: HostSession, { welcomed, reason }: SessionEnd): void {
     if (this.closed) return
+    this.acks.pause()
     const { hosts } = this.client.options
     if (welcomed) hosts.online(this.id)
+    // A host that says why ends the session; one that just went keeps it for a while.
+    const kept =
+      welcomed &&
+      reason === null &&
+      this.resumeToken !== null &&
+      (session.welcome?.protocol ?? 0) >= RESUME_VERSION
+    if (kept) {
+      this.keptUntil = Date.now() + RESUME_MS
+      if (this.keptTimer) clearTimeout(this.keptTimer)
+      this.keptTimer = setTimeout(() => {
+        this.keptTimer = null
+        this.expireKept()
+      }, RESUME_MS)
+    } else if (welcomed) {
+      this.lose()
+    }
     if (reason === 'removed') {
       hosts.update(this.id, { removed: true })
       return this.set({ state: 'stopped', reason: 'removed' })
@@ -363,8 +447,29 @@ class HostLink {
     this.schedule(this.client.retryDelay(1))
   }
 
+  /** The host's session is gone, or no longer to be resumed: main's port for it closes. */
+  private lose(): void {
+    this.sessions++
+    if (this.keptTimer) clearTimeout(this.keptTimer)
+    this.keptTimer = null
+    this.resumeToken = null
+    this.acks.reset()
+    this.requests.clear()
+    this.queued.length = 0
+    const port = this.port
+    this.port = null
+    port?.close()
+  }
+
+  /** Gives up the session the host kept once it would keep it no longer, between tries. */
+  private expireKept(): void {
+    if (this.resumeToken === null || this.session || this.trying) return
+    if (Date.now() >= this.keptUntil) this.lose()
+  }
+
   private failed(): void {
     this.failures++
+    this.expireKept()
     // A host that needs an update keeps saying so, and waits the longest, between its tries.
     if (this.stoppedFor('update_host')) return this.schedule(MAX_RETRY_MS)
     this.set({ state: 'offline' })

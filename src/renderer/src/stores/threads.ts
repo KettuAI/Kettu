@@ -101,6 +101,11 @@ function fetchSnapshot(
   return run
 }
 
+/** The first seq a batch covers: its own, or the first of those it merges. */
+function firstSeq(batch: PatchBatch): number {
+  return batch.from ?? batch.seq
+}
+
 function receiveSnapshot(sessionId: string, snapshot: SessionSnapshot): void {
   let state = threadFromSnapshot(snapshot)
   let seq = snapshot.seq
@@ -109,7 +114,7 @@ function receiveSnapshot(sessionId: string, snapshot: SessionSnapshot): void {
   const partial = snapshot.older !== null
   for (const batch of buffered) {
     if (batch.seq <= seq) continue
-    if (batch.seq !== seq + 1) break
+    if (firstSeq(batch) !== seq + 1) break
     state = applyPatches(state, batch.patches, { partial })
     seq = batch.seq
   }
@@ -142,7 +147,7 @@ function flush(): void {
       continue
     }
     if (batch.seq <= replica.seq) continue
-    if (batch.seq !== replica.seq + 1) {
+    if (firstSeq(batch) !== replica.seq + 1) {
       refetch.add(batch.sessionId)
       continue
     }
