@@ -4,8 +4,9 @@
 // wait for the disk.
 
 import { createHash, randomBytes } from 'node:crypto'
-import { mkdir, readdir, realpath, truncate, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, realpath, truncate, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { HostMethod } from '@shared/agent-host'
 import type { PortChannel } from '@shared/port-channel'
@@ -19,6 +20,7 @@ import {
   type MediaReadResult,
   type StreamRef,
 } from '@shared/remote/streams'
+import type { Attachment } from '@shared/thread'
 import { startTestHost, type TestHost } from '../agent-host/testing/harness'
 import { ActivityLog } from './activity'
 import { DeviceStore } from './devices'
@@ -212,6 +214,44 @@ describe('uploads', () => {
     expect(await update).toMatchObject({ id: added.id, size: smaller.length })
     const again = await device.port.request('attachments.read', { id: added.id })
     expect(await device.download((again.bytes as unknown as StreamRef).$stream)).toEqual(smaller)
+  })
+
+  it('carry a file of any type, which the agent gets as a link to a copy', async () => {
+    const t = await setup()
+    const device = await t.connect()
+    const pdf = new Uint8Array([...Buffer.from('%PDF-1.7\n', 'latin1'), 0, 0xff, 0xfe])
+    const stream = await device.upload(pdf)
+    const added = await device.port.request('attachments.add', {
+      source: { bytes: upload(stream), mimeType: 'application/pdf', name: 'report.pdf' },
+      thumb: null,
+    })
+    expect(added).toMatchObject({
+      type: 'file',
+      name: 'report.pdf',
+      mimeType: 'application/pdf',
+      size: pdf.length,
+      uri: null,
+    })
+    await expect.poll(() => t.uploadsLeft()).toEqual([])
+
+    const sessionId = await newSession(device, t.agent.project)
+    await device.port.request('sessions.prompt', {
+      sessionId,
+      content: [
+        { type: 'text', text: '/attachments' },
+        { type: 'ref', ref: { kind: 'attachment', attachment: { id: added.id } as Attachment } },
+      ],
+    })
+    await device.port.untilEntry(sessionId, (entry) => entry.kind === 'turn_end')
+    const copy = path.join(t.agent.dir, 'attachments', 'sent', `${sha(pdf)}.pdf`)
+    const reply = device.port
+      .entries(sessionId)
+      .flatMap((entry) => (entry.kind === 'agent' ? [entry.markdown] : []))
+      .join('\n')
+    expect(reply).toContain(
+      `- resource_link report.pdf ${pathToFileURL(copy).href} (application/pdf, ${pdf.length} bytes)`,
+    )
+    expect(new Uint8Array(await readFile(copy))).toEqual(pdf)
   })
 
   it('are refused when cancelled, unknown or named twice, and their files go', async () => {
