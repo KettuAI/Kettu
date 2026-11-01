@@ -217,6 +217,42 @@ describeUnix('ForkedHost', () => {
     expect(healthy.host.state).toBe('ready')
   })
 
+  it('renews a running host with a new init, on the socket it had, as no crash', async () => {
+    let inits = 0
+    const { host, received, exits, lines } = make('normal', {
+      initMessage: (socketPath) => {
+        inits++
+        return { type: 'init', socketPath }
+      },
+    })
+    await host.ready()
+    const socketPath = host.socketPath!
+    const pid = host.pid
+    const renewed = host.renew()
+    expect(host.state).toBe('stopping')
+    // Who waits meanwhile gets the new process.
+    const ready = host.ready()
+    await renewed
+    await ready
+    expect(host.state).toBe('ready')
+    expect(host.pid).not.toBe(pid)
+    expect(inits).toBe(2)
+    expect(exits).toEqual([true])
+    expect(host.restarts).toBe(0)
+    expect(lines).toContain('Renewing it')
+    expect(host.socketPath).toBe(socketPath)
+    expect(await listening(socketPath)).toBe(true)
+    host.post({ type: 'echo', value: 2 })
+    await until(() => received.length > 0, 'echo')
+    expect(received).toEqual([{ type: 'echo', value: 2, socketPath }])
+
+    // Once stopped, nothing renews it.
+    await host.stop()
+    await host.renew()
+    expect(host.state).toBe('stopped')
+    expect(inits).toBe(2)
+  })
+
   it('kills and restarts a host that never reports ready', async () => {
     const { host, lines } = make('never-ready', {
       timings: { readyMs: 100, stopMs: 300, killGraceMs: 300 },

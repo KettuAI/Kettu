@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/pr
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { keyIsPrivate, loadHostKey, prepareDataFolder } from './key'
+import { keyIsPrivate, loadHostKey, newHostKey, prepareDataFolder } from './key'
 
 // Unix modes mean nothing on Windows, which the daemon does not run on.
 const describeUnix = describe.skipIf(process.platform === 'win32')
@@ -76,5 +76,17 @@ describeUnix('loadHostKey', () => {
 
   it('reports no file before the first start', async () => {
     expect(await keyIsPrivate(keyFile())).toBeNull()
+  })
+})
+
+describeUnix('newHostKey', () => {
+  it('replaces the key, kept as the first was, for the next start too', async () => {
+    const first = await loadHostKey(dir, () => {})
+    const renewed = await newHostKey(dir)
+    expect(renewed.privateKey).not.toBe(first.privateKey)
+    expect(Buffer.from(renewed.privateKey, 'base64')).toHaveLength(32)
+    expect(renewed.plainText).toBe(true)
+    expect(await mode(keyFile())).toBe(0o600)
+    expect((await loadHostKey(dir, () => {})).privateKey).toBe(renewed.privateKey)
   })
 })

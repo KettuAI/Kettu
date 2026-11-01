@@ -145,13 +145,30 @@ export class ForkedHost<ToChild, FromChild extends { type: string }> {
     if (this.restartTimer) clearTimeout(this.restartTimer)
     this.restartTimer = null
     this.rejectWaiters(STOPPING)
+    if (!(await this.end())) this.status = 'stopped'
+    await this.removeFolder()
+  }
+
+  /**
+   * Stops the process as stop() does and starts a new one at once, with a new init message, on
+   * the socket it had; it counts as no crash. A no-op once stopped or failed.
+   */
+  async renew(): Promise<void> {
+    if (this.shutDown || this.status === 'failed') return
+    this.config.log.info('Renewing it')
+    if (this.restartTimer) clearTimeout(this.restartTimer)
+    this.restartTimer = null
+    await this.end()
+    // stop() came while the process ended.
+    if (this.shutDown) return
+    await this.spawn()
+  }
+
+  /** Asks the process to exit and waits for it, killing it if it does not; false without one. */
+  private async end(): Promise<boolean> {
     const child = this.child
     const exited = this.exited
-    if (!child || !exited) {
-      this.status = 'stopped'
-      await this.removeFolder()
-      return
-    }
+    if (!child || !exited) return false
     this.status = 'stopping'
     if (child.connected) child.send(this.config.shutdownMessage as object)
     if (!(await settles(exited, this.timings.stopMs))) {
@@ -162,7 +179,7 @@ export class ForkedHost<ToChild, FromChild extends { type: string }> {
         await exited
       }
     }
-    await this.removeFolder()
+    return true
   }
 
   private async spawn(): Promise<void> {

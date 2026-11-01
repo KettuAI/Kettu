@@ -98,6 +98,8 @@ export interface HostsOptions {
   settings(): SettingsFile
   /** The host's X25519 private key, in base64, for the remote host alone. */
   privateKey: string
+  /** Replaces the host's identity with a new key, as resetting remote access does; its private key. */
+  newIdentity(): Promise<string>
   /** The system's name for this computer, which devices show unless the owner names it. */
   hostName: string
   env: NodeJS.ProcessEnv
@@ -116,6 +118,8 @@ export class Hosts {
   private authCommands: string[] = []
   private agentProcesses: ProcessId[] = []
   private remoteStatus: RemoteHostStatus | null = null
+  private privateKey: string
+  private resetting: Promise<void> | null = null
   /** The direct settings the remote host was last given, as JSON. */
   private sentDirect: string | null = null
   /** Whether devices may use the terminal, as the remote host was last told. */
@@ -131,6 +135,7 @@ export class Hosts {
 
   constructor(private readonly options: HostsOptions) {
     this.settings = options.settings
+    this.privateKey = options.privateKey
     const bundle = (name: string): string => path.join(options.bundleDir, name)
     this.agent = new ForkedHost<MainToHost, HostToMain>({
       log: agentLog,
@@ -191,7 +196,7 @@ export class Hosts {
         appVersion: options.version,
         platform: process.platform,
         hostName: this.initHostName(),
-        privateKey: options.privateKey,
+        privateKey: this.privateKey,
         plainTextKey: true,
         direct: this.initDirect(),
         // out/web, beside the daemon's build in out/daemon.
@@ -285,6 +290,27 @@ export class Hosts {
   renameDevice(id: string, name: string): boolean {
     if (!this.remoteStatus?.devices.some((device) => device.id === id)) return false
     return this.remote.post({ type: 'remote-host:rename-device', id, name })
+  }
+
+  /**
+   * Removes every device, telling each, and gives the host a new identity, which the remote host
+   * restarts on, so every device has to pair again, as main's reset. Rejects while remote access
+   * is not running.
+   */
+  resetRemote(): Promise<void> {
+    this.resetting ??= this.reset().finally(() => (this.resetting = null))
+    return this.resetting
+  }
+
+  private async reset(): Promise<void> {
+    if (!this.remoteStatus) throw new ControlError('unavailable', 'Remote access is not running')
+    const answer = await this.request((requestId) => ({ type: 'remote-host:reset', requestId }))
+    if (answer?.type !== 'remote-host:reset') {
+      throw new ControlError('unavailable', 'The remote host did not reset')
+    }
+    this.privateKey = await this.options.newIdentity()
+    log.info('Reset remote access to a new identity')
+    await this.remote.renew()
   }
 
   /** A device's activity, newest first; none when it cannot be read. */
@@ -547,6 +573,7 @@ export class Hosts {
         if (Number.isSafeInteger(message.requestId)) void this.openTerminal(message.requestId)
         break
       case 'remote-host:activity':
+      case 'remote-host:reset':
         this.requests.get(message.requestId)?.(message)
         break
       case 'remote-host:admin-call':

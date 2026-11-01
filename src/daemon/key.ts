@@ -5,7 +5,12 @@
 
 import { chmod, mkdir, stat } from 'node:fs/promises'
 import path from 'node:path'
-import { loadIdentity, type IdentityCipher, type RemoteIdentity } from '../main/remote-identity'
+import {
+  loadIdentity,
+  newIdentity,
+  type IdentityCipher,
+  type RemoteIdentity,
+} from '../main/remote-identity'
 import { keyPath } from './paths'
 
 const PRIVATE_FOLDER = 0o700
@@ -46,6 +51,11 @@ export async function loadHostKey(
     warn(`Others could read ${file}; it is readable only by you again`)
   }
   return identity
+}
+
+/** A new identity in place of the old, as resetting remote access makes, kept as the first. */
+export function newHostKey(data: string): Promise<RemoteIdentity> {
+  return newIdentity(data, NO_SYSTEM_ENCRYPTION)
 }
 
 /** Whether only the user can read the key file, for `kettu status`; null when it is missing. */

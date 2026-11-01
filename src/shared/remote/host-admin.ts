@@ -122,7 +122,7 @@ export interface HostInfo extends AppInfo {
    * it, so it always serves it.
    */
   remoteSwitch: boolean
-  /** Resetting remote access to a new identity, which the desktop app has and the daemon not yet. */
+  /** Resetting remote access to a new identity, which both hosts have; false from older daemons. */
   remoteReset: boolean
   /** Capturing artifact previews, which the desktop app does and the daemon cannot. */
   thumbnails: boolean

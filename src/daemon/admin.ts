@@ -26,6 +26,7 @@ export type DaemonHosts = Pick<
   | 'renameDevice'
   | 'removeDevice'
   | 'activity'
+  | 'resetRemote'
   | 'retryDirect'
   | 'restart'
   | 'adminEvent'
@@ -107,7 +108,12 @@ export async function startDaemonAdmin({
       },
       activity: (id) => hosts.activity(id),
       reset: async () => {
-        throw new AdminError('unavailable', 'The daemon cannot reset remote access')
+        try {
+          await hosts.resetRemote()
+        } catch (error) {
+          if (error instanceof ControlError) throw new AdminError('unavailable', error.message)
+          throw error
+        }
       },
       retryDirect: () => hosts.retryDirect(),
     },
@@ -121,7 +127,7 @@ export async function startDaemonAdmin({
       sharing: false,
       updates: false,
       remoteSwitch: false,
-      remoteReset: false,
+      remoteReset: true,
       thumbnails: false,
     }),
     restart: (which) => void hosts.restart(which),

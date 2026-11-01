@@ -3,7 +3,8 @@
 // `kettu devices` with the remote host's devices, restarts a host that is killed, and stops
 // everything on SIGTERM. A paired device connects to it directly while `kettu direct` moves the
 // port and adds and removes an address, uploads an image the fake agent gets, then reads it and a
-// project's file back as byte streams, and uses a shell once `kettu terminal on` allows it.
+// project's file back as byte streams, and uses a shell once `kettu terminal on` allows it. An
+// owner's device resets remote access, and the remote host serves on a new key.
 
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import {
@@ -14,6 +15,7 @@ import {
   readFile,
   realpath,
   rm,
+  stat,
   symlink,
   writeFile,
 } from 'node:fs/promises'
@@ -603,7 +605,7 @@ describeUnix('kettu', () => {
       sharing: false,
       updates: false,
       remoteSwitch: false,
-      remoteReset: false,
+      remoteReset: true,
       thumbnails: false,
     })
     await expect(admin('sharing.status')).rejects.toMatchObject({ code: 'unavailable' })
@@ -643,6 +645,86 @@ describeUnix('kettu', () => {
     expect(await daemonRun.exited).toBe(0)
     const kept = JSON.parse(await readFile(path.join(folder, 'settings.json'), 'utf8'))
     expect(kept.usage.fromComputer).toBe(true)
+  }, 90_000)
+
+  it("resets remote access for an owner's device, then serves on a new key", async () => {
+    const folder = path.join(dir, 'data-reset')
+    const phone = await generateKeyPair()
+    const laptop = await generateKeyPair()
+    const paired = async (key: KeyPair, name: string): Promise<PairedDevice> => ({
+      id: await deviceId(key.publicKey),
+      publicKey: Buffer.from(key.publicKey).toString('base64'),
+      name,
+      kind: 'desktop',
+      platform: 'darwin',
+      model: '',
+      addedAt: Date.now(),
+      lastConnectedAt: null,
+    })
+    await mkdir(path.join(folder, 'remote'), { recursive: true })
+    await writeFile(
+      path.join(folder, 'remote', 'devices.json'),
+      JSON.stringify({
+        version: 1,
+        devices: [await paired(phone, 'Phone'), await paired(laptop, 'Laptop')],
+      }),
+    )
+    const daemonRun = run(folder)
+    const control = path.join(folder, 'control.sock')
+    const before = await until(async () => {
+      const running = await status(control)
+      return (
+        running.hosts.remote.state === 'ready' && running.direct?.state === 'listening' && running
+      )
+    }, `direct connections listening\n${daemonRun.output()}`)
+    const keyFile = path.join(folder, 'remote', 'identity.json')
+    const hostKeyIn = async (): Promise<Uint8Array> => {
+      const { privateKey } = JSON.parse(await readFile(keyFile, 'utf8'))
+      return (await importKeyPair(Buffer.from(privateKey, 'base64'))).publicKey
+    }
+    const port = (before.direct as { port: number }).port
+    const dial = async (hostKey: Uint8Array, key: KeyPair): Promise<TestDevice> => {
+      const device = await connectDevice({
+        transport: await connectTransport({ host: '127.0.0.1', port }),
+        hostKey,
+        key,
+      })
+      devices.push(device)
+      return device
+    }
+    const oldKey = await hostKeyIn()
+    const device = await dial(oldKey, phone)
+    expect(await device.first).toMatchObject({ type: 'welcome', role: 'owner' })
+
+    // The device asking goes with the others, so it may hear no answer.
+    void device.port.request('remote.reset' as HostMethod, undefined as never).catch(() => {})
+    expect(await device.closing).toEqual({ type: 'closing', reason: 'removed' })
+    const after = await until(async () => {
+      const running = await status(control)
+      return (
+        running.hosts.remote.state === 'ready' &&
+        running.hosts.remote.pid !== before.hosts.remote.pid &&
+        running.direct?.state === 'listening' &&
+        running
+      )
+    }, `the remote host on its new key\n${daemonRun.output()}`)
+    expect(after.direct).toMatchObject({ port })
+    expect(after.hosts.agent.pid).toBe(before.hosts.agent.pid)
+    expect(after.hosts.remote.restarts).toBe(0)
+    const newKey = await hostKeyIn()
+    expect(Buffer.from(newKey).equals(Buffer.from(oldKey))).toBe(false)
+    expect((await stat(keyFile)).mode & 0o777).toBe(0o600)
+    expect((await kettuOn(folder, 'devices')).stdout).toBe(
+      'No devices are paired with this computer.\n',
+    )
+    expect(daemonRun.output()).toContain('[daemon] Reset remote access to a new identity')
+
+    // Neither the old identity nor a device it knew gets in.
+    expect(await (await dial(oldKey, laptop)).answered).toBe(false)
+    expect(await (await dial(newKey, laptop)).answered).toBe(false)
+
+    daemonRun.child.kill('SIGTERM')
+    expect(await daemonRun.exited).toBe(0)
   }, 90_000)
 
   it("carries a device's upload to the agent and its image and media back", async () => {
