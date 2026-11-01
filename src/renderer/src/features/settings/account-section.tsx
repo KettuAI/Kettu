@@ -19,6 +19,7 @@ import {
 } from '@renderer/stores/account'
 import { Masked } from './controls'
 import { DeviceTile } from './remote-parts'
+import { subscriptionLabel } from './subscription-label'
 
 type SignedIn = Extract<AccountStatus, { state: 'signed-in' }>
 
@@ -180,14 +181,9 @@ function SignedInRow({ status, onSignOut }: { status: SignedIn; onSignOut: () =>
   )
 }
 
-/** The subscription's status, as the service names it. */
+/** The subscription's status in words; one this version does not know shows as the service names it. */
 export function SubscriptionState({ status }: { status: string }) {
   const { t } = useTranslation('settings')
-  const text =
-    status === 'none'
-      ? t('account.subscription.none')
-      : status === 'active'
-        ? t('account.subscription.active')
-        : status
-  return <span className="text-small text-secondary">{text}</span>
+  const label = subscriptionLabel(status)
+  return <span className="text-small text-secondary">{label ? t(label) : status}</span>
 }

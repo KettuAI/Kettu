@@ -317,7 +317,11 @@
       "description": "Kettu’s cloud services will need one. You buy and manage it on the website.",
       "keywords": "subscription plan billing",
       "none": "Not subscribed",
-      "active": "Subscribed"
+      "trialing": "Trial",
+      "active": "Subscribed",
+      "pastDue": "Payment failed",
+      "paused": "Paused",
+      "canceled": "Ended"
     }
   },
   "browser": {

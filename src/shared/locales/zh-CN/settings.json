@@ -316,7 +316,11 @@
       "description": "Kettu 的云服务将需要订阅，在官网购买和管理。",
       "keywords": "订阅 套餐 付费",
       "none": "未订阅",
-      "active": "已订阅"
+      "trialing": "试用中",
+      "active": "已订阅",
+      "pastDue": "付款失败",
+      "paused": "已暂停",
+      "canceled": "已结束"
     }
   },
   "browser": {
