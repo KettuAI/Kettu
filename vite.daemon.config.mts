@@ -47,8 +47,6 @@ export default defineConfig({
         format: 'cjs',
         entryFileNames: '[name].cjs',
         chunkFileNames: 'chunks/[name]-[hash].cjs',
-        // The terminal host loads node-pty with import(), which must stay a require() here.
-        dynamicImportInCjs: false,
       },
     },
   },
