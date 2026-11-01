@@ -13,6 +13,7 @@ import { ThemeCatalog } from '../main/theme-catalog'
 import { readThemeFolder, readThemeSources, ThemeStore } from '../main/themes'
 import { ControlError } from './control'
 import type { Hosts } from './hosts'
+import { proxiedFetch } from './proxy'
 
 /** What of the hosts the owner's calls and the settings reach. */
 export type DaemonHosts = Pick<
@@ -37,6 +38,8 @@ export interface DaemonAdminOptions {
   version: string
   settings: SettingsStore
   hosts: DaemonHosts
+  /** The daemon's environment, whose proxy variables apply unless the settings name a proxy. */
+  env: NodeJS.ProcessEnv
 }
 
 /** A server has no trash, so a folder Kettu made moves into one of the daemon's own. */
@@ -61,6 +64,7 @@ export async function startDaemonAdmin({
   version,
   settings,
   hosts,
+  env,
 }: DaemonAdminOptions): Promise<HostAdmin> {
   const themesDir = path.join(dataPath, 'themes')
   const sourcesFile = path.join(dataPath, 'theme-sources.json')
@@ -72,7 +76,7 @@ export async function startDaemonAdmin({
     {
       dir: themesDir,
       sourcesFile,
-      catalog: new ThemeCatalog((url, init) => fetch(url, init)),
+      catalog: new ThemeCatalog(proxiedFetch(() => settings.get().proxy, env)),
       // The daemon has no window to show a theme in; each device shows the one it chose.
       select: () => {},
       changed: () => admin?.themesChanged(themes.hostThemes()),
