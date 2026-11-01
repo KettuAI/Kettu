@@ -60,7 +60,6 @@ describe('the port envelope', () => {
     await writeFile(path.join(t.project, 'a.txt'), 'x')
     const refused = [
       ['media.open', { projectPath: t.project, path: 'a.txt', sessionId: 'none' }],
-      ['projects.add', { path: t.project }],
       ['attachments.add', { source: { grantId: 'grant' }, thumb: null }],
     ] as const
     for (const [method, params] of refused) {
@@ -85,6 +84,46 @@ describe('the port envelope', () => {
         ([method]) => `Device ${'a'.repeat(32)} asked for ${method}, which devices may not call`,
       ),
     )
+  })
+
+  it('lets a paired device add a project by its folder, which must be one', async () => {
+    const { t } = await setup()
+    const device = t.connect({ id: 'a'.repeat(32), name: 'Phone' })
+    await writeFile(path.join(t.project, 'a.txt'), 'x')
+    for (const folder of [path.join(t.project, 'a.txt'), path.join(t.dir, 'missing'), 'relative']) {
+      await expect(device.request('projects.add', { path: folder })).rejects.toMatchObject({
+        code: 'invalid_params',
+      })
+    }
+    expect(await device.request('projects.list', undefined)).toEqual([])
+    expect(await device.request('projects.add', { path: t.project })).toMatchObject({
+      path: t.project,
+    })
+    expect(await device.request('projects.list', undefined)).toHaveLength(1)
+  })
+
+  it('completes a path a paired device types, absolute or from the home folder', async () => {
+    const { t } = await setup()
+    const device = t.connect({ id: 'a'.repeat(32), name: 'Phone' })
+    await writeFile(path.join(t.project, 'a.txt'), 'x')
+    const done = await device.request('paths.complete', { path: path.join(t.project, 'a') })
+    expect(done).toEqual({
+      folder: t.project,
+      entries: [{ name: 'a.txt', kind: 'file', executable: false }],
+      exact: null,
+    })
+    // The harness's home is its data folder, which holds the project.
+    const home = await device.request('paths.complete', { path: '~/' })
+    expect(home.entries).toContainEqual({
+      name: path.basename(t.project),
+      kind: 'folder',
+      executable: false,
+    })
+    for (const typed of ['relative', '~ada/x', '']) {
+      await expect(device.request('paths.complete', { path: typed })).rejects.toMatchObject({
+        code: 'invalid_params',
+      })
+    }
   })
 
   it('answers not_found for sessions that do not exist', async () => {

@@ -16,6 +16,7 @@ import type {
   RepositoryVisibility,
 } from './git'
 import type { PortConnectionState } from './port-rpc'
+import type { PathCompletion } from './remote/host-admin'
 import type {
   RoutineChanges,
   RoutineDraft,
@@ -454,6 +455,9 @@ export interface HostContract {
   'projects.add': { params: { path: string }; result: Project }
   'projects.remove': { params: { path: string }; result: void }
   'projects.touch': { params: { path: string }; result: void }
+  // The entries of a folder on the host that start as `path`'s last part does, for a path being
+  // typed: absolute, or `~` for the home folder. It only reads; a folder it cannot read lists none.
+  'paths.complete': { params: { path: string }; result: PathCompletion }
   'sessions.list': { params: { projectPath?: string }; result: SessionSummary[] }
   'sessions.create': {
     // projectPath null: No project, in a new scratch folder.
@@ -711,6 +715,7 @@ export const HOST_METHODS = [
   'projects.add',
   'projects.remove',
   'projects.touch',
+  'paths.complete',
   'sessions.list',
   'sessions.create',
   'sessions.prepare',

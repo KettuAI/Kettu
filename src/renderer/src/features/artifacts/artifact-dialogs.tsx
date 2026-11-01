@@ -25,6 +25,7 @@ import {
 import { Field, FieldError, FieldLabel } from '@renderer/components/ui/field'
 import { Input } from '@renderer/components/ui/input'
 import { errorMessage } from '@renderer/lib/host'
+import { useHostContext } from '@renderer/lib/host-features'
 import {
   askArtifactDialog,
   deleteArtifact,
@@ -208,6 +209,7 @@ function EraseDialog({
   onClose: () => void
 }) {
   const { t } = useTranslation(['artifacts', 'common'])
+  const onHost = useHostContext()
   // Kept while the dialog closes, so its text does not empty during the exit.
   const [shown, setShown] = useState(dialog)
   const [unpublish, setUnpublish] = useState(true)
@@ -247,7 +249,7 @@ function EraseDialog({
             {t('dialog.eraseTitle', { title: shown?.title ?? '' })}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {t('dialog.eraseDescription', { count: shown?.versions ?? 1 })}
+            {t('dialog.eraseDescription', { count: shown?.versions ?? 1, ...onHost })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {shown?.published && <UnpublishToo checked={unpublish} onChange={setUnpublish} />}

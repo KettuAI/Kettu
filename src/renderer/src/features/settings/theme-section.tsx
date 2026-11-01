@@ -36,7 +36,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { isCodeTheme } from '@renderer/features/session/markdown/code-themes'
 import { basename, dirname } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
-import { fileManagerName } from '@renderer/lib/platform'
+import { fileManagerName, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { receiveThemes, useThemesStore } from '@renderer/stores/themes'
 import { CONFIRM, ControlError } from './controls'
@@ -97,25 +97,26 @@ export function ThemeTiles() {
     }
   }
   const install = () => run(async () => answered(await window.kettu.themes.install()))
+  const exportTheme = (theme: Theme | null) =>
+    run(async () => {
+      const saved = await window.kettu.themes.export(themeFile(theme))
+      if (saved) {
+        toast(
+          t('appearance.theme.exported', {
+            file: basename(saved),
+            folder: basename(dirname(saved)),
+          }),
+        )
+      }
+    })
+  // The web client has the built-in theme alone for now, with nothing to export or add.
   const tile = (id: string, theme: Theme | null, item?: InstalledTheme) => (
     <ThemeTile
       key={id}
       id={id}
       theme={theme}
       source={item?.catalog ? 'catalog' : item ? 'file' : 'builtIn'}
-      onExport={() =>
-        run(async () => {
-          const saved = await window.kettu.themes.export(themeFile(theme))
-          if (saved) {
-            toast(
-              t('appearance.theme.exported', {
-                file: basename(saved),
-                folder: basename(dirname(saved)),
-              }),
-            )
-          }
-        })
-      }
+      onExport={isWeb ? undefined : () => exportTheme(theme)}
       {...(item && {
         onReveal: () => run(() => window.kettu.themes.reveal(item.id)),
         onRemove: (from: HTMLElement | null) => {
@@ -151,7 +152,7 @@ export function ThemeTiles() {
       >
         {tile(BUILTIN_THEME_ID, null)}
         {installed.map((item) => tile(item.id, item.theme, item))}
-        <MoreThemes bar={installed.length % 2 === 1} onInstall={install} />
+        {!isWeb && <MoreThemes bar={installed.length % 2 === 1} onInstall={install} />}
       </ToggleGroup>
       <ControlError error={applyError} />
       {notice && (
@@ -211,7 +212,8 @@ function ThemeTile({
   theme: Theme | null
   /** Where it came from, which the tile names. */
   source: 'builtIn' | 'file' | 'catalog'
-  onExport: () => void
+  /** Without it, and without the others, the tile has no menu. */
+  onExport?: () => void
   onReveal?: () => void
   /** Gets the menu's button, which focus returns to once the question is answered. */
   onRemove?: (from: HTMLElement | null) => void
@@ -237,42 +239,46 @@ function ThemeTile({
           </span>
         </span>
       </ToggleGroupItem>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              ref={more}
-              variant="quiet"
-              size="icon-xs"
-              aria-label={t('appearance.theme.more', { name })}
-              className="absolute right-2 bottom-2 opacity-0 transition-opacity duration-(--duration-fast) group-hover/tile:opacity-100 group-has-focus-visible/tile:opacity-100 data-popup-open:opacity-100"
-            />
-          }
-        >
-          <EllipsisIcon />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-47.5">
-          <DropdownMenuItem onClick={onExport}>
-            <FileDownIcon />
-            {t('appearance.theme.export')}
-          </DropdownMenuItem>
-          {onReveal && (
-            <DropdownMenuItem onClick={onReveal}>
-              <FolderIcon />
-              {t('agents.showIn', { name: fileManagerName() })}
-            </DropdownMenuItem>
-          )}
-          {onRemove && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={() => onRemove(more.current)}>
-                <TrashIcon />
-                {t('appearance.theme.remove')}
+      {(onExport ?? onReveal ?? onRemove) && (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                ref={more}
+                variant="quiet"
+                size="icon-xs"
+                aria-label={t('appearance.theme.more', { name })}
+                className="absolute right-2 bottom-2 opacity-0 transition-opacity duration-(--duration-fast) group-hover/tile:opacity-100 group-has-focus-visible/tile:opacity-100 data-popup-open:opacity-100"
+              />
+            }
+          >
+            <EllipsisIcon />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-47.5">
+            {onExport && (
+              <DropdownMenuItem onClick={onExport}>
+                <FileDownIcon />
+                {t('appearance.theme.export')}
               </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+            )}
+            {onReveal && (
+              <DropdownMenuItem onClick={onReveal}>
+                <FolderIcon />
+                {t('agents.showIn', { name: fileManagerName() })}
+              </DropdownMenuItem>
+            )}
+            {onRemove && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onClick={() => onRemove(more.current)}>
+                  <TrashIcon />
+                  {t('appearance.theme.remove')}
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   )
 }

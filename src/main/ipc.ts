@@ -12,7 +12,7 @@ import {
 } from 'electron'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import { addressKey, parseDirectAddress } from '@shared/remote/address'
-import { DEVICE_ID, normalizeDeviceName } from '@shared/remote/device'
+import { DEVICE_ID } from '@shared/remote/device'
 import { MAX_HOST_ADDRESSES, type HostPairStart, type HostsStatus } from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
 import type { DirectAddress } from '@shared/remote/protocol'
@@ -26,7 +26,7 @@ import type {
   UnsavedFile,
 } from '@shared/ipc'
 import { isHarnessId, type HarnessId } from '@shared/thread'
-import { AgentFolders } from './agent-folders'
+import type { AgentFolders } from './agent-folders'
 import type { AgentHost } from './agent-host'
 import { grantClipboardFiles, grantPaths } from './attachments'
 import type { Artifacts } from './artifacts'
@@ -35,7 +35,7 @@ import type { BrowserViews } from './browser/views'
 import { originOf } from './browser/origins'
 import { mainDiagnostics, saveDiagnostics } from './diagnostics'
 import { sendEvent } from './events'
-import { isExecutableFile } from './executable'
+import { deviceIdArg, deviceName, pairingCode, runnableProgram } from './host-admin'
 import { t } from './i18n'
 import { loginItemStatus } from './login-item'
 import { createLogger } from './log'
@@ -57,6 +57,7 @@ const log = createLogger('ipc')
 
 export interface IpcDeps {
   settings: SettingsStore
+  agentFolders: AgentFolders
   themes: ThemeStore
   avatars: Avatars
   agentHost: AgentHost
@@ -209,19 +210,6 @@ function browserOrigin(value: unknown): string {
   return value
 }
 
-/** A paired device's id: untrusted input from the renderer. */
-function deviceIdArg(value: unknown): string {
-  if (typeof value !== 'string' || !DEVICE_ID.test(value)) throw new Error('Not a device id')
-  return value
-}
-
-/** A device's name as the owner typed it, cleaned up as the remote host keeps it. */
-function deviceName(value: unknown): string {
-  const name = normalizeDeviceName(value)
-  if (!name) throw new Error('A device needs a name')
-  return name
-}
-
 /** A known host's id: untrusted input from the renderer. */
 function hostIdArg(value: unknown): string {
   if (typeof value !== 'string' || !DEVICE_ID.test(value)) throw new Error('Not a host id')
@@ -242,11 +230,6 @@ function hostAddresses(value: unknown): DirectAddress[] {
 
 /** The longest text a pairing link may be: its version, keys and every address it may carry. */
 const MAX_PAIRING_LINK = 4096
-
-function pairingCode(value: unknown): number {
-  if (!Number.isSafeInteger(value)) throw new Error('A pairing code id must be an integer')
-  return value as number
-}
 
 /** A request id main handed out for a new origin. */
 function originRequestId(value: unknown): number {
@@ -331,16 +314,25 @@ async function chooseProgram(window: BrowserWindow | null, title: string): Promi
     : await dialog.showOpenDialog(options)
   const [path] = result.filePaths
   if (result.canceled || !path) return null
-  if (!(await isExecutableFile(path, process.platform))) {
-    throw new Error(`"${path}" is not a program that can be run`)
+  return runnableProgram(path, process.platform)
+}
+
+/** `app:get-info`, which a device's `host.info` carries too. */
+export async function appInfo(): Promise<AppInfo> {
+  return {
+    name: app.getName(),
+    version: app.getVersion(),
+    system: await systemNameForRun(),
+    userDataPath: app.getPath('userData'),
+    isPackaged: app.isPackaged,
   }
-  return path
 }
 
 let launchToInteractiveMs: number | null = null
 
 export function registerIpcHandlers({
   settings,
+  agentFolders,
   themes,
   avatars,
   agentHost,
@@ -357,13 +349,7 @@ export function registerIpcHandlers({
   quit,
   perf,
 }: IpcDeps): void {
-  handle('app:get-info', 0, async (): Promise<AppInfo> => ({
-    name: app.getName(),
-    version: app.getVersion(),
-    system: await systemNameForRun(),
-    userDataPath: app.getPath('userData'),
-    isPackaged: app.isPackaged,
-  }))
+  handle('app:get-info', 0, () => appInfo())
 
   handle('app:respond-quit', 2, (_, id, confirmed) => {
     if (!Number.isSafeInteger(id) || typeof confirmed !== 'boolean') {
@@ -374,7 +360,6 @@ export function registerIpcHandlers({
 
   handle('settings:get', 0, () => settings.get())
   handle('settings:update', 1, (_, patch) => settings.update(patch))
-  const agentFolders = new AgentFolders(settings, join(app.getPath('userData'), 'agent-config'))
   handle('settings:add-agent', 3, (_, harness, name, folder) =>
     agentFolders.add(harness, name, folder),
   )

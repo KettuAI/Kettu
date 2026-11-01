@@ -20,9 +20,25 @@ import { newSession, openProjectDialog } from './actions'
 import { emitAppEvent } from './events'
 import { back, forward } from './history'
 
+const client = window.kettu.client
+
+/**
+ * Whether the page handles Mod+O, Mod+N, Mod+, and Mod+B: the desktop app's menu has them on
+ * macOS, and a browser has no such menu.
+ */
+export function pageHandlesMenuKeys(platform: string, client: 'desktop' | 'web'): boolean {
+  return client === 'web' || platform !== 'darwin'
+}
+
+/** Whether the page zooms on Mod and +, - or 0: not under macOS's menu, nor in a browser's zoom. */
+export function pageHandlesZoomKeys(platform: string, client: 'desktop' | 'web'): boolean {
+  return client === 'desktop' && platform !== 'darwin'
+}
+
 /**
  * App-wide shortcuts. On macOS, Cmd+O, Cmd+N, Cmd+, and Cmd+B are menu accelerators that arrive as
- * app commands, and the zoom keys are menu items, so they are not handled here. While a terminal
+ * app commands, and the zoom keys are menu items, so they are not handled here; a browser has no
+ * menu, so the web client handles the first four and leaves zoom to the browser. While a terminal
  * has focus on Windows and Linux, only the terminal and zoom shortcuts reach the app, since
  * Ctrl+B, Ctrl+L and Ctrl+N mean something to the shell.
  */
@@ -61,7 +77,7 @@ export function useKeyboardShortcuts(): void {
       }
 
       if (!isMod(event) || event.altKey) return
-      const zoom = isMac ? null : zoomStep(event.key)
+      const zoom = pageHandlesZoomKeys(platform, client) ? zoomStep(event.key) : null
       if (zoom !== null) return run(event, () => zoomBy(zoom))
       if (inTerminal && !isMac) {
         const selection = window.getSelection()?.toString() ?? ''
@@ -84,7 +100,7 @@ export function useKeyboardShortcuts(): void {
       }
 
       const key = event.key.toLowerCase()
-      if (!isMac && !event.shiftKey) {
+      if (pageHandlesMenuKeys(platform, client) && !event.shiftKey) {
         if (key === 'o') return run(event, () => void openProjectDialog())
         if (key === 'n') return run(event, newSession)
         if (key === ',') return run(event, () => openSettings())

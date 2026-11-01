@@ -560,6 +560,89 @@ describeUnix('kettu', () => {
     expect(kept.remote.direct).toEqual({ enabled: true, port: second, addresses: [] })
   }, 90_000)
 
+  it("answers an owner's device for the host, whose settings reach the agent host", async () => {
+    const folder = path.join(dir, 'data-admin')
+    const phone = await generateKeyPair()
+    const paired: PairedDevice = {
+      id: await deviceId(phone.publicKey),
+      publicKey: Buffer.from(phone.publicKey).toString('base64'),
+      name: "Ada's iPhone",
+      kind: 'ios',
+      platform: 'ios',
+      model: 'iPhone 17 Pro',
+      addedAt: Date.now(),
+      lastConnectedAt: null,
+    }
+    await mkdir(path.join(folder, 'remote'), { recursive: true })
+    await writeFile(
+      path.join(folder, 'remote', 'devices.json'),
+      JSON.stringify({ version: 1, devices: [paired] }),
+    )
+    const daemonRun = run(folder)
+    const control = path.join(folder, 'control.sock')
+    const listening = await until(async () => {
+      const { direct, hosts } = await status(control)
+      return hosts.remote.state === 'ready' && direct?.state === 'listening' && direct
+    }, `direct connections listening\n${daemonRun.output()}`)
+    const identity = JSON.parse(
+      await readFile(path.join(folder, 'remote', 'identity.json'), 'utf8'),
+    )
+    const hostKey = (await importKeyPair(Buffer.from(identity.privateKey, 'base64'))).publicKey
+    const transport = await connectTransport({ host: '127.0.0.1', port: listening.port })
+    const device = await connectDevice({ transport, hostKey, key: phone })
+    devices.push(device)
+    expect(await device.first).toMatchObject({ type: 'welcome', role: 'owner' })
+    const admin = (method: string, params?: unknown): Promise<unknown> =>
+      device.port.request(method as HostMethod, params as never)
+
+    expect(await admin('host.info')).toMatchObject({
+      name: 'Kettu',
+      version: '0.0.0',
+      userDataPath: folder,
+      sharing: false,
+      updates: false,
+      remoteSwitch: false,
+      remoteReset: false,
+    })
+    await expect(admin('sharing.status')).rejects.toMatchObject({ code: 'unavailable' })
+    await expect(
+      admin('settings.update', { patch: { appearance: { theme: 'dark' } } }),
+    ).rejects.toMatchObject({ code: 'invalid_params' })
+    expect(await admin('remote.status')).toMatchObject({ state: 'on', online: [paired.id] })
+
+    // A setting the agent host reads changes there at once, and every device hears it.
+    expect((await device.port.request('usage.status', undefined)).fromComputer).toBe(false)
+    expect(
+      await admin('settings.update', { patch: { usage: { fromComputer: true } } }),
+    ).toMatchObject({ usage: { fromComputer: true } })
+    await until(
+      async () => (await device.port.request('usage.status', undefined)).fromComputer,
+      'the setting in the agent host',
+    )
+    expect(device.port.events).toContainEqual({
+      type: 'settings.changed',
+      settings: expect.objectContaining({ usage: { fromComputer: true } }),
+    })
+
+    // The device types a folder: the host completes it, and adds it as a project.
+    const project = path.join(dir, 'project-admin')
+    await mkdir(project)
+    const completed = await device.port.request('paths.complete', {
+      path: path.join(dir, 'project-ad'),
+    })
+    expect(completed.entries).toEqual([
+      { name: 'project-admin', kind: 'folder', executable: false },
+    ])
+    expect(await device.port.request('projects.add', { path: project })).toMatchObject({
+      path: project,
+    })
+
+    daemonRun.child.kill('SIGTERM')
+    expect(await daemonRun.exited).toBe(0)
+    const kept = JSON.parse(await readFile(path.join(folder, 'settings.json'), 'utf8'))
+    expect(kept.usage.fromComputer).toBe(true)
+  }, 90_000)
+
   it("carries a device's upload to the agent and its image and media back", async () => {
     const folder = path.join(dir, 'data-bytes')
     const phone = await generateKeyPair()

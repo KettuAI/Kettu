@@ -13,7 +13,7 @@ import {
   type PairingPayload,
 } from '@shared/remote/pairing'
 import { loadPlatformPrimitives } from '@shared/remote/primitives'
-import { devicePlatform, webApi } from './api'
+import { devicePlatform, pageAddress, webApi } from './api'
 import { browserDevice, deviceName } from './device-name'
 import { serveFrames } from './frames'
 import { channelUrl, dialWebSocket, hello, HostLink } from './link'
@@ -95,7 +95,7 @@ async function showPairing(
 }
 
 async function showApp(device: WebDevice, paired: Paired | null): Promise<void> {
-  const host = device.host!
+  let host = device.host!
   const link = new HostLink({
     dial,
     hostKey: host.hostKey,
@@ -104,27 +104,48 @@ async function showApp(device: WebDevice, paired: Paired | null): Promise<void> 
     ...(paired ? { adopt: paired } : {}),
     visible: () => document.visibilityState === 'visible',
   })
-  Object.assign(window.kettu, webApi(link, settings))
+  settings.attach(link)
+  Object.assign(
+    window.kettu,
+    webApi(link, settings, {
+      address: pageAddress(location),
+      known: { name: host.name, deviceName: host.deviceName },
+      forget: async () => {
+        link.stop()
+        await saveDevice({ key: device.key, host: null })
+        location.replace('/')
+      },
+    }),
+  )
   serveFrames(link)
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') link.wake()
   })
   window.addEventListener('online', () => link.wake())
 
+  // The names the next start shows until the host's welcome says them again.
+  const remember = (name: string, deviceName: string): void => {
+    if (name === host.name && deviceName === host.deviceName) return
+    host = { ...host, name, deviceName }
+    void saveDevice({ ...device, host })
+  }
   let version: string | null = null
   link.onState((state) => {
     if (state.kind === 'connected') {
       const now = state.welcome.host.version
       if (version !== null && now !== version) void offerReload()
       version ??= now
-      if (state.welcome.device.name !== host.deviceName) {
-        void saveDevice({ ...device, host: { ...host, deviceName: state.welcome.device.name } })
-      }
+      remember(state.welcome.host.name, state.welcome.device.name)
     } else if (state.kind === 'stopped' && state.reason === 'removed') {
       void saveDevice({ key: device.key, host: null }).finally(() => {
         storage('sessionStorage')?.setItem(NOTICE_KEY, 'removed')
         location.replace('/')
       })
+    }
+  })
+  link.onMessage((message) => {
+    if (message.type === 'renamed' && typeof message.name === 'string') {
+      remember(host.name, message.name)
     }
   })
   link.start()

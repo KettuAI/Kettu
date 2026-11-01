@@ -382,7 +382,8 @@
       "unsupported": "Your {{command}} cannot run without a shell."
     },
     "groups": {
-      "list": "On this computer"
+      "list": "On this computer",
+      "list_web": "On {{host}}"
     },
     "search": "Search agents",
     "noMatch": "No matching agents",
@@ -585,7 +586,11 @@
       "restart": "Restart to update",
       "update": "Update",
       "download": "Download",
-      "whatsNew": "What's new"
+      "whatsNew": "What's new",
+      "none": "Kettu on this computer is not updated from here",
+      "none_web": "Kettu on {{host}} is not updated from here",
+      "noneDetail": "Kettu on this computer is updated the way it was installed.",
+      "noneDetail_web": "Kettu on {{host}} is updated the way it was installed."
     },
     "automatic": {
       "name": "Automatic updates",
@@ -624,14 +629,17 @@
     "terminal": "Which shell the side panel's terminal runs, and its font size.",
     "git": "The top bar's branch and changes, pull requests and their checks all come from these two tools.",
     "advanced": "Network proxy, diagnostics and the data Kettu keeps on this computer.",
+    "advanced_web": "Network proxy, diagnostics and the data Kettu keeps on {{host}}.",
     "about": "Kettu's version, updates and links.",
     "archived": "Sessions you archived, off the sidebar but kept. Restore one to put it back in its project.",
     "sharing": "Publish artifacts to links anyone can open, through your own Cloudflare account.",
     "remote": "Use this computer's sessions in Kettu on an iPhone, an iPad or another computer; everything stays on this computer.",
+    "remote_web": "Use {{host}}'s sessions in Kettu on an iPhone, an iPad or another computer; everything stays on {{host}}.",
     "browser": "The browser in the side panel keeps one profile for every session: sign-ins, site data and cache.",
     "mcp": "Agents reach tools through these MCP servers. Kettu's own is here, and where each agent keeps its own.",
     "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Install and update them here; accounts are in Agents.",
-    "hosts": "The hosts Kettu on this computer connects to. Sessions, projects and agents stay on each host; this is only how to reach them."
+    "hosts": "The hosts Kettu on this computer connects to. Sessions, projects and agents stay on each host; this is only how to reach them.",
+    "hostsWeb": "The computer this page connects to. Its sessions, projects and agents stay on it; here is only how this browser reaches it."
   },
   "footer": {
     "about": "About Kettu",
@@ -666,6 +674,7 @@
       "connect": "Connect",
       "checking": "Checking…",
       "kept": "Kept encrypted by the system, only on this computer.",
+      "kept_web": "Kept encrypted by the system, only on {{host}}.",
       "refused": "Cloudflare refused the API token. Check that it has Workers Scripts Edit and hasn't expired.",
       "account": "Account",
       "choose": "Choose an account",
@@ -687,6 +696,10 @@
       "unpublished": "Unpublished",
       "otherAccount": "Published with another Cloudflare account. Connect that account to change it.",
       "empty": "Nothing is published yet."
+    },
+    "none": {
+      "title": "Sharing needs the desktop app",
+      "body": "Kettu’s desktop app publishes artifacts, and {{host}} runs Kettu without it."
     }
   },
   "hosts": {
@@ -773,6 +786,20 @@
         "title": "Update Kettu on {{name}}",
         "body": "Kettu on {{name}} is too old for this computer. It connects once Kettu there is updated."
       }
+    },
+    "web": {
+      "self": "This browser on {{name}}",
+      "nameDescription": "{{name}} lists this browser under this name.",
+      "nameOffline": "{{name}} lists this browser under this name, which can be changed while this page is connected.",
+      "forget": {
+        "name": "Forget {{name}} in this browser",
+        "description": "Clears what this browser keeps to connect to {{name}} and goes back to pairing; the sessions and projects on {{name}} stay as they are.",
+        "keywords": "forget remove disconnect pair again",
+        "button": "Forget…",
+        "title": "Forget “{{name}}” in this browser?",
+        "body": "This page disconnects and goes back to pairing. Nothing changes on {{name}}, which lists this browser among its devices until it is removed there.",
+        "confirm": "Forget"
+      }
     }
   },
   "remote": {
@@ -796,13 +823,16 @@
       },
       "changePort": "Change port",
       "retry": "Retry",
-      "plainTextKey": "This computer's key is kept in a file only your user can read, because the system has no keyring."
+      "plainTextKey": "This computer's key is kept in a file only your user can read, because the system has no keyring.",
+      "plainTextKey_web": "{{host}}'s key is kept in a file only its user can read, because the system has no keyring."
     },
     "hostName": {
       "name": "This computer's name",
+      "name_web": "The host's name",
       "description": "The name devices show, the computer's own name until you change it."
     },
     "background": "While remote access is on, Kettu keeps running in the background after you close its window, so devices can connect; Run in the background in General stays on.",
+    "background_web": "While remote access is on, Kettu on {{host}} keeps running after its window is closed, so devices can connect.",
     "devices": {
       "group": "Devices",
       "emptyTitle": "No devices yet",
@@ -825,6 +855,7 @@
       "group": "Direct",
       "name": "Direct connections",
       "description": "Without a Kettu relay, direct connections are the only way devices reach this computer, so they turn on with remote access.",
+      "description_web": "Without a Kettu relay, direct connections are the only way devices reach {{host}}, so they turn on with remote access.",
       "keywords": "direct connection port address lan network vpn tailscale frp forward forwarding",
       "port": {
         "name": "Port",
@@ -837,6 +868,7 @@
       "found": {
         "name": "Addresses devices try",
         "description": "The private and VPN addresses this computer found, updated when the network changes.",
+        "description_web": "The private and VPN addresses {{host}} found, updated when the network changes.",
         "none": "No private or VPN address found yet.",
         "notListening": "Shown once the port is listening."
       },
@@ -857,6 +889,7 @@
     "terminal": {
       "name": "Allow terminal",
       "description": "Devices can run any command on this computer, beyond what an agent asks to run. Turning it off closes devices' terminals; the terminals keep running here.",
+      "description_web": "Devices can run any command on {{host}}, beyond what an agent asks to run. Turning it off closes devices' terminals; the terminals keep running on {{host}}.",
       "keywords": "terminal shell command console"
     },
     "kinds": {
@@ -867,12 +900,16 @@
     "reset": {
       "name": "Reset remote access",
       "description": "Removes every device and gives this computer a new identity; every device has to be added again.",
+      "description_web": "Removes every device and gives {{host}} a new identity; every device has to be added again.",
       "keywords": "identity key forget devices",
       "button": "Reset…",
       "title": "Reset remote access?",
       "body_one": "{{count}} device disconnects and is removed at once, and this computer gets a new identity. Every device then has to scan a code to be added again.",
+      "body_web_one": "{{count}} device disconnects and is removed at once, and {{host}} gets a new identity. Every device then has to scan a code to be added again.",
       "body_other": "{{count}} devices disconnect and are removed at once, and this computer gets a new identity. Every device then has to scan a code to be added again.",
+      "body_web_other": "{{count}} devices disconnect and are removed at once, and {{host}} gets a new identity. Every device then has to scan a code to be added again.",
       "bodyNone": "This computer gets a new identity. Every device then has to scan a code to be added.",
+      "bodyNone_web": "{{host}} gets a new identity. Every device then has to scan a code to be added.",
       "confirm": "Reset"
     },
     "pair": {
@@ -890,6 +927,7 @@
       "copy": "Copy",
       "copied": "Copied",
       "expires": "It adds one device and expires in <time>{{time}}</time>. The device has to reach this computer directly: on the same network, the same VPN, or through an address you added.",
+      "expires_web": "It adds one device and expires in <time>{{time}}</time>. The device has to reach {{host}} directly: on the same network, the same VPN, or through an address you added.",
       "waiting": "Waiting for a device to scan…",
       "qr": "Pairing QR code",
       "failed": "Kettu could not make a code: {{message}}",
@@ -955,7 +993,9 @@
       },
       "events": {
         "paired": "Added to this computer from a scanned code",
+        "paired_web": "Added to {{host}} from a scanned code",
         "pairedLink": "Added to this computer from a pasted link",
+        "pairedLink_web": "Added to {{host}} from a pasted link",
         "connected": "Connected",
         "renamed": "Renamed: {{from}} → {{to}}",
         "renamedOnDevice": "Renamed on the device: {{from}} → {{to}}",
@@ -974,9 +1014,11 @@
       "remove": {
         "name": "Remove this device",
         "description": "Its key stops working and it disconnects at once; what it cached of this computer is cleared the next time it connects. To use it again, add it again.",
+        "description_web": "Its key stops working and it disconnects at once; what it cached of {{host}} is cleared the next time it connects. To use it again, add it again.",
         "button": "Remove…",
         "title": "Remove “{{name}}”?",
         "body": "It disconnects at once and can no longer reach this computer; the session list it cached is cleared the next time it connects. To use it again, scan a code to add it again.",
+        "body_web": "It disconnects at once and can no longer reach {{host}}; the session list it cached is cleared the next time it connects. To use it again, scan a code to add it again.",
         "confirm": "Remove"
       }
     },
@@ -984,6 +1026,16 @@
       "today": "Today {{time}}",
       "yesterday": "Yesterday {{time}}",
       "date": "{{date}}, {{time}}"
+    },
+    "web": {
+      "thisBrowser": "This browser",
+      "offTitle": "Turn off remote access?",
+      "offBody": "Every device disconnects at once, this page too. It connects again only once remote access is turned on again on {{host}}.",
+      "offConfirm": "Turn off",
+      "resetBody": "This browser is one of them, so this page goes back to pairing.",
+      "portBody": "This page uses the old port, so it disconnects, and a browser keeps its pairing per address: add this browser again at the new port.",
+      "removeTitle": "Remove this browser?",
+      "removeBody": "This page disconnects at once and goes back to pairing. To use Kettu in this browser again, add it again from Add device."
     }
   },
   "usage": {

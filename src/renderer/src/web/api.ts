@@ -1,5 +1,6 @@
-// `window.kettu` for the web client: the agent and terminal hosts over the encrypted channel, and
-// in place of main what a browser can do itself. What needs the desktop app is never offered: the
+// `window.kettu` for the web client: the agent and terminal hosts over the encrypted channel, the
+// host's settings and host-level actions as its owner's calls to the host, and in place of main
+// what a browser can do itself. What needs the desktop app's own window is never offered: the
 // page hides it, and a call that comes anyway is refused.
 
 import type { HostEvent } from '@shared/agent-host'
@@ -7,12 +8,23 @@ import type { KettuApi } from '@shared/ipc'
 import { matchLocale } from '@shared/locale'
 import type { PortConnectionState } from '@shared/port-rpc'
 import type { Platform } from '@shared/platform'
+import type { DirectAddress } from '@shared/remote/protocol'
+import type {
+  HostAdminEvent,
+  HostAdminMethod,
+  HostAdminParams,
+  HostAdminResult,
+  HostInfo,
+} from '@shared/remote/host-admin'
 import type { TerminalEvent } from '@shared/terminal-host'
 import { BUILTIN_THEME_ID } from '@shared/themes'
+import { useWebHostStore, type WebHost } from '@renderer/stores/web-host'
 import { frameArtifact } from './frames'
-import type { HostLink, LinkError } from './link'
+import { folderOf, homeStart } from './host-path'
+import { askHostPath, type HostPathPurpose } from './host-path-request'
+import type { HostLink, LinkError, LinkState } from './link'
 import { downloadFile, mediaRequest } from './media'
-import { WebSettings } from './settings'
+import type { WebSettings } from './settings'
 
 function unsupported(what: string): Promise<never> {
   const error: LinkError = {
@@ -24,6 +36,11 @@ function unsupported(what: string): Promise<never> {
 }
 
 const never = (): (() => void) => () => {}
+
+/** A call whose answer means nothing beyond having come. */
+async function done(call: Promise<unknown>): Promise<void> {
+  await call
+}
 
 /** The device's own system, which picks the shortcuts' modifier. */
 export function devicePlatform(agent: Pick<Navigator, 'userAgent'>): Platform {
@@ -38,12 +55,136 @@ function portState(link: HostLink): PortConnectionState {
   return kind === 'connected' ? 'connected' : kind === 'stopped' ? 'failed' : 'reconnecting'
 }
 
-export function webApi(link: HostLink, settings: WebSettings): KettuApi {
+/** What the web client knows of the host it connects to beyond the link. */
+export interface WebHostContext {
+  /** The page's own address, which this browser reaches the host at. */
+  address: DirectAddress
+  /** The names this browser kept from the last welcome, shown until the next one. */
+  known: { name: string; deviceName: string }
+  /** Clears what this browser keeps for the host and goes back to pairing. */
+  forget(): Promise<void>
+}
+
+/** The page's address as a direct one, with the port its scheme implies when it names none. */
+export function pageAddress(
+  location: Pick<Location, 'hostname' | 'port' | 'protocol'>,
+): DirectAddress {
+  return {
+    host: location.hostname.replace(/^\[(.*)\]$/, '$1'),
+    port: Number(location.port) || (location.protocol === 'https:' ? 443 : 80),
+  }
+}
+
+/** The host as Settings shows it, once the link's state changed to `state` at `now`. */
+export function webHost(previous: WebHost, state: LinkState, now: number): WebHost {
+  switch (state.kind) {
+    case 'connecting':
+      return previous
+    case 'connected': {
+      const { host, device } = state.welcome
+      return {
+        ...previous,
+        name: host.name,
+        platform: host.platform,
+        version: host.version,
+        connection: { state: 'online', address: previous.address },
+        lastOnlineAt: now,
+        device: { id: device.id, name: device.name },
+      }
+    }
+    case 'reconnecting':
+      return {
+        ...previous,
+        connection: { state: 'offline' },
+        lastOnlineAt: previous.connection.state === 'online' ? now : previous.lastOnlineAt,
+      }
+    case 'stopped':
+      return { ...previous, connection: { state: 'stopped', reason: state.reason } }
+  }
+}
+
+/** Copies the path and says so, where the desktop app shows the item in the file manager. */
+async function copyPath(path: string): Promise<void> {
+  await navigator.clipboard.writeText(path)
+  const [{ toast }, { i18n }] = await Promise.all([
+    import('@renderer/components/ui/toast'),
+    import('@renderer/lib/i18n'),
+  ])
+  toast(i18n.t('web:copiedPath', { path }))
+}
+
+function askPath(
+  purpose: HostPathPurpose,
+  initial: string | null,
+  commit?: (path: string) => Promise<void>,
+): Promise<string | null> {
+  const platform = window.kettu.hostPlatform()
+  return askHostPath({
+    purpose,
+    initial: initial === null ? homeStart(platform) : folderOf(initial, platform),
+    ...(commit ? { commit } : {}),
+  })
+}
+
+export function webApi(link: HostLink, settings: WebSettings, context: WebHostContext): KettuApi {
   // The last welcome's, kept while the link reconnects.
   let hostSystem: Platform | null = null
+  const admin = <M extends HostAdminMethod>(
+    method: M,
+    ...params: HostAdminParams<M> extends undefined ? [] : [HostAdminParams<M>]
+  ): Promise<HostAdminResult<M>> => link.request(method, params[0]) as Promise<HostAdminResult<M>>
+  const adminEvent = <T extends HostAdminEvent['type']>(
+    type: T,
+    listener: (event: Extract<HostAdminEvent, { type: T }>) => void,
+  ): (() => void) =>
+    link.onAdminEvent((event) => {
+      if (event.type === type) listener(event as Extract<HostAdminEvent, { type: T }>)
+    })
+
+  // The host's facts, read again at each connection, as the host may have been updated.
+  let info: Promise<HostInfo> | null = null
+  const hostInfo = (): Promise<HostInfo> =>
+    (info ??= admin('host.info').then(
+      (read) => {
+        useWebHostStore.setState({ info: read })
+        return read
+      },
+      (error: unknown) => {
+        info = null
+        throw error
+      },
+    ))
+
+  useWebHostStore.setState({
+    host: {
+      name: context.known.name,
+      platform: null,
+      version: null,
+      address: context.address,
+      connection: { state: 'connecting' },
+      lastOnlineAt: null,
+      device: { id: null, name: context.known.deviceName },
+    },
+    actions: {
+      rename: (name) => link.send({ type: 'rename', name }),
+      forget: () => context.forget(),
+    },
+  })
   link.onState((state) => {
     if (state.kind === 'connected') hostSystem = state.welcome.host.platform
+    const { host } = useWebHostStore.getState()
+    if (host) useWebHostStore.setState({ host: webHost(host, state, Date.now()) })
+    if (state.kind === 'connected') {
+      info = null
+      hostInfo().catch((error: unknown) => console.error('Could not read the host', error))
+    }
   })
+  link.onMessage((message) => {
+    const { host } = useWebHostStore.getState()
+    if (message.type !== 'renamed' || typeof message.name !== 'string' || !host) return
+    useWebHostStore.setState({ host: { ...host, device: { ...host.device, name: message.name } } })
+  })
+
   const connectionListener = (listener: (state: PortConnectionState) => void): (() => void) => {
     let last: PortConnectionState | null = null
     return link.onState(() => {
@@ -61,16 +202,8 @@ export function webApi(link: HostLink, settings: WebSettings): KettuApi {
     perf: false,
     systemLocale: matchLocale(navigator.languages),
     app: {
-      getInfo: async () => {
-        const welcome = link.state.kind === 'connected' ? link.state.welcome : null
-        return {
-          name: 'Kettu',
-          version: welcome?.host.version ?? '',
-          system: navigator.userAgent,
-          userDataPath: '',
-          isPackaged: true,
-        }
-      },
+      // The web client is the host's own build, so its version is the host's.
+      getInfo: () => hostInfo(),
       respondQuit: async () => {},
       onConfirmQuit: never,
       setUnsaved: () => {},
@@ -97,27 +230,30 @@ export function webApi(link: HostLink, settings: WebSettings): KettuApi {
       onStopped: never,
     },
     sharing: {
-      status: () => unsupported('publish artifacts'),
-      connect: () => unsupported('publish artifacts'),
-      remove: () => unsupported('publish artifacts'),
-      publish: () => unsupported('publish artifacts'),
-      update: () => unsupported('publish artifacts'),
-      unpublish: () => unsupported('publish artifacts'),
-      onChanged: never,
+      status: () => admin('sharing.status'),
+      connect: (token, accountId) => admin('sharing.connect', { token, accountId }),
+      remove: () => admin('sharing.remove'),
+      publish: (id, version) => admin('sharing.publish', { id, version }),
+      update: (id, version) => admin('sharing.update', { id, version }),
+      unpublish: (id) => admin('sharing.unpublish', { id }),
+      onChanged: (listener) => adminEvent('sharing.changed', (event) => listener(event.status)),
     },
     remote: {
-      status: () => unsupported('manage remote access'),
-      pair: () => unsupported('manage remote access'),
-      closePairing: () => unsupported('manage remote access'),
-      answerPairing: () => unsupported('manage remote access'),
-      renameDevice: () => unsupported('manage remote access'),
-      removeDevice: () => unsupported('manage remote access'),
-      activity: () => unsupported('manage remote access'),
-      reset: () => unsupported('manage remote access'),
-      retryDirect: () => unsupported('manage remote access'),
-      onChanged: never,
-      onPairing: never,
+      status: () => admin('remote.status'),
+      pair: () => admin('remote.pair'),
+      closePairing: (codeId) => done(admin('remote.closePairing', { codeId })),
+      answerPairing: (codeId, add, name) =>
+        done(admin('remote.answerPairing', { codeId, add, name })),
+      renameDevice: (id, name) => admin('remote.renameDevice', { id, name }),
+      removeDevice: (id) => admin('remote.removeDevice', { id }),
+      activity: (id) => admin('remote.activity', { id }),
+      reset: () => done(admin('remote.reset')),
+      retryDirect: () => done(admin('remote.retryDirect')),
+      onChanged: (listener) => adminEvent('remote.changed', (event) => listener(event.status)),
+      onPairing: (listener) => adminEvent('remote.pairing', (event) => listener(event.event)),
     },
+    // This page reaches only the host that served it, which Settings > Hosts shows from the
+    // connection itself.
     hosts: {
       status: () => unsupported('connect to other hosts'),
       pair: () => unsupported('connect to other hosts'),
@@ -129,12 +265,13 @@ export function webApi(link: HostLink, settings: WebSettings): KettuApi {
       onPairing: never,
     },
     settings: {
-      get: async () => settings.get(),
-      update: async (patch) => settings.update(patch),
+      get: () => settings.get(),
+      update: (patch) => settings.update(patch),
       onChanged: (listener) => settings.onChanged(listener),
-      addAgent: () => unsupported('add agents'),
-      renameAgent: () => unsupported('rename agents'),
-      removeAgent: () => unsupported('remove agents'),
+      addAgent: (harnessId, name, folder) =>
+        admin('settings.addAgent', { harnessId, name, folder }),
+      renameAgent: (agentId, name) => done(admin('settings.renameAgent', { agentId, name })),
+      removeAgent: (agentId, trash) => done(admin('settings.removeAgent', { agentId, trash })),
     },
     themes: {
       get: async () => ({ installed: [], chosen: BUILTIN_THEME_ID, failed: null }),
@@ -149,11 +286,25 @@ export function webApi(link: HostLink, settings: WebSettings): KettuApi {
     },
     avatars: { load: async () => null },
     loginItem: { getStatus: async () => ({ available: false, requiresApproval: false }) },
+    // A browser has no system dialog for the host's files, so the path is typed in the page.
     dialogs: {
-      openProject: async () => null,
-      chooseAgentBinary: async () => null,
-      chooseAgentFolder: async () => null,
-      chooseShell: async () => null,
+      // Beside the project opened last, as projects tend to share a folder.
+      openProject: async () => {
+        const { useProjectsStore } = await import('@renderer/stores/projects')
+        return askPath('project', useProjectsStore.getState().projects[0]?.path ?? null)
+      },
+      chooseAgentFolder: () => askPath('agentFolder', null),
+      chooseAgentBinary: (harnessId) =>
+        askPath(
+          'agentProgram',
+          settings.current().agents[harnessId]?.binaryPath ?? null,
+          async (path) =>
+            settings.takeHost(await admin('settings.setAgentBinary', { harnessId, path })),
+        ),
+      chooseShell: () =>
+        askPath('shell', settings.current().terminal.shellPath ?? null, async (path) =>
+          settings.takeHost(await admin('settings.setShellPath', { path })),
+        ),
     },
     diagnostics: {
       save: async (bundle) => {
@@ -166,8 +317,8 @@ export function webApi(link: HostLink, settings: WebSettings): KettuApi {
       },
     },
     shell: {
-      showDataFolder: () => unsupported('show files'),
-      showItem: () => unsupported('show files'),
+      showDataFolder: async () => copyPath((await hostInfo()).userDataPath),
+      showItem: (path) => copyPath(path),
       openNotices: () => unsupported('show files'),
     },
     media: {
@@ -194,13 +345,13 @@ export function webApi(link: HostLink, settings: WebSettings): KettuApi {
     },
     notifications: { test: async () => false },
     updates: {
-      getStatus: () => unsupported('update Kettu'),
-      check: () => unsupported('update Kettu'),
-      download: () => unsupported('update Kettu'),
-      cancel: () => unsupported('update Kettu'),
-      restart: () => unsupported('update Kettu'),
-      dismiss: () => unsupported('update Kettu'),
-      onChanged: never,
+      getStatus: () => admin('updates.status'),
+      check: () => admin('updates.check'),
+      download: () => done(admin('updates.download')),
+      cancel: () => done(admin('updates.cancel')),
+      restart: () => done(admin('updates.restart')),
+      dismiss: () => done(admin('updates.dismiss')),
+      onChanged: (listener) => adminEvent('updates.changed', (event) => listener(event.status)),
     },
     browser: {
       show: () => unsupported('show the browser'),
@@ -236,14 +387,21 @@ export function webApi(link: HostLink, settings: WebSettings): KettuApi {
         link.request(method, params)) as KettuApi['agents']['request'],
       onEvent: (listener) => link.onHostEvent((event) => listener(event as HostEvent)),
       onConnection: connectionListener,
-      restart: async () => link.wake(),
+      // The link connects again by itself; a host that stopped its agent host starts it here.
+      restart: async () => {
+        link.wake()
+        await admin('host.restart', { process: 'agent' })
+      },
     },
     terminals: {
       request: ((method: string, params: unknown) =>
         link.request(method, params)) as KettuApi['terminals']['request'],
       onEvent: (listener) => link.onTerminalEvent((event) => listener(event as TerminalEvent)),
       onConnection: connectionListener,
-      restart: async () => link.wake(),
+      restart: async () => {
+        link.wake()
+        await admin('host.restart', { process: 'terminal' })
+      },
     },
   }
 }

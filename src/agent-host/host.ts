@@ -42,6 +42,7 @@ import { MediaService } from './media'
 import type { Env } from './find-command'
 import type { GitServiceApi, GitServiceDeps } from './git/api'
 import { createExec, type ExecRunner } from './git/exec'
+import { completePath } from './path-completion'
 import { pathKey } from './paths'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
@@ -916,6 +917,8 @@ export class AgentHost {
         this.options.send({ type: 'host:media-revoke', sessionId: null })
       },
       'projects.touch': ({ path }) => projects.touch(projects.match(path)),
+      'paths.complete': ({ path }) =>
+        completePath(path, this.options.platform, this.options.homeDir ?? os.homedir()),
       'sessions.list': ({ projectPath }) => sessions.list(projectPath),
       'sessions.create': (params, { portId }) => sessions.create(params, portId),
       'sessions.prepare': (params, { portId }) => sessions.prepare(params, portId),

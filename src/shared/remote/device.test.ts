@@ -51,7 +51,7 @@ describe('parsePortDevice', () => {
 describe('forbiddenToDevices', () => {
   it('refuses what needs main and nothing else', () => {
     expect(forbiddenToDevices('media.open', {})).toBe(true)
-    expect(forbiddenToDevices('projects.add', { path: '/p' })).toBe(true)
+    expect(forbiddenToDevices('projects.add', { path: '/p' })).toBe(false)
     expect(forbiddenToDevices('attachments.add', { source: { grantId: 'g' } })).toBe(true)
     expect(
       forbiddenToDevices('attachments.add', { source: { projectPath: '/p', path: 'a' } }),

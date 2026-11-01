@@ -22,6 +22,7 @@ import {
 import { ATTACHMENT_BYTES, ATTACHMENT_LIMIT, PROMPT_BYTES, THUMB_CHARS } from '@shared/attachments'
 import { isAgentId, type AgentId, type ContentRef, type UserContent } from '@shared/thread'
 import { invalidParams } from './errors'
+import { isCompletablePath } from './path-completion'
 import { isAbsolutePath } from './paths'
 
 const ID_CHARS = 256
@@ -526,6 +527,14 @@ export function createValidators(platform: Platform): Validators {
     'projects.add': folder,
     'projects.remove': folder,
     'projects.touch': folder,
+    'paths.complete': (params) => {
+      const value = string(fields(params), 'path', PATH_CHARS)
+      if (value.includes('\0')) throw invalidParams('path contains a NUL character')
+      if (!isCompletablePath(value, platform)) {
+        throw invalidParams('path must be an absolute path or start with ~')
+      }
+      return { path: value }
+    },
     'sessions.list': (params) => {
       const o = params === undefined || params === null ? {} : fields(params)
       return o.projectPath === undefined

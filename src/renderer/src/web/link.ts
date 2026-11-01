@@ -10,6 +10,7 @@ import {
   startDeviceChannel,
   type DeviceChannel,
 } from '@shared/remote/device-channel'
+import { isHostAdminEvent, type HostAdminEvent } from '@shared/remote/host-admin'
 import type { KeyPair } from '@shared/remote/noise'
 import { bytesOf, isBinary } from '@shared/remote/places'
 import {
@@ -188,6 +189,7 @@ export class HostLink {
   private queued: { message: Record<string, unknown>; pending: Pending }[] = []
   private readonly hostListeners = new Set<(event: unknown) => void>()
   private readonly terminalListeners = new Set<(event: unknown) => void>()
+  private readonly adminListeners = new Set<(event: HostAdminEvent) => void>()
   private readonly stateListeners = new Set<(state: LinkState) => void>()
   private readonly messageListeners = new Set<(message: Record<string, unknown>) => void>()
 
@@ -230,6 +232,14 @@ export class HostLink {
     this.hostListeners.add(listener)
     return () => {
       this.hostListeners.delete(listener)
+    }
+  }
+
+  /** The host's own events for its owner, such as its settings changing; kept from the others. */
+  onAdminEvent(listener: (event: HostAdminEvent) => void): () => void {
+    this.adminListeners.add(listener)
+    return () => {
+      this.adminListeners.delete(listener)
     }
   }
 
@@ -441,17 +451,9 @@ export class HostLink {
       case 'event': {
         const event = message.event as { type?: unknown } | undefined
         if (typeof event?.type !== 'string') return
-        const listeners = event.type.startsWith('terminal.')
-          ? this.terminalListeners
-          : this.hostListeners
-        for (const listener of listeners) {
-          try {
-            listener(event)
-          } catch (error) {
-            console.error('A host event listener failed', error)
-          }
-        }
-        return
+        if (isHostAdminEvent(event)) return emit(this.adminListeners, event)
+        const terminal = event.type.startsWith('terminal.')
+        return emit(terminal ? this.terminalListeners : this.hostListeners, event)
       }
       case 'stream.end': {
         const stream = message.stream as number
@@ -518,6 +520,16 @@ export class HostLink {
       if (Array.isArray(value)) return done.map(([, item]) => item)
       return Object.fromEntries(done)
     })
+  }
+}
+
+function emit<T>(listeners: ReadonlySet<(event: T) => void>, event: T): void {
+  for (const listener of listeners) {
+    try {
+      listener(event)
+    } catch (error) {
+      console.error('A host event listener failed', error)
+    }
   }
 }
 

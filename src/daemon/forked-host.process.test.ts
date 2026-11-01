@@ -199,6 +199,24 @@ describeUnix('ForkedHost', () => {
     expect(host.state).toBe('failed')
   })
 
+  it('starts a host it gave up on again when the owner asks, and only then', async () => {
+    const { host, lines } = make('crash-at-init')
+    expect(host.restart()).toBe(false)
+    await expect(host.ready()).rejects.toSatisfy(isUnavailable)
+    expect(host.restart()).toBe(true)
+    expect(host.state).toBe('starting')
+    expect(lines).toContain('Restarting, as the owner asked')
+    // It gets as many tries as at first before it is given up on again.
+    await expect(host.ready()).rejects.toSatisfy(isUnavailable)
+    expect(host.state).toBe('failed')
+    expect(host.restarts).toBe(4)
+
+    const healthy = make('normal')
+    await healthy.host.ready()
+    expect(healthy.host.restart()).toBe(false)
+    expect(healthy.host.state).toBe('ready')
+  })
+
   it('kills and restarts a host that never reports ready', async () => {
     const { host, lines } = make('never-ready', {
       timings: { readyMs: 100, stopMs: 300, killGraceMs: 300 },
