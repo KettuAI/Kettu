@@ -309,7 +309,12 @@ export interface PreloadEventContract {
 
 /** API the preload script exposes to the renderer as `window.kettu`. */
 export interface KettuApi {
+  /** The system of the device the page runs on, which picks the shortcuts' modifier. */
   platform: Platform
+  /** The desktop app's window, or the web client in a browser, which has no main process. */
+  client: 'desktop' | 'web'
+  /** The system of the host whose paths the page shows: this computer's, or the one connected. */
+  hostPlatform(): Platform
   /** Whether the app runs with --kettu-perf, which turns on the renderer's frame counters. */
   perf: boolean
   /** The interface language the system's preferred languages pick, for Language › System. */

@@ -16,8 +16,8 @@ import {
   RotateCwIcon,
 } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
-import type { PairingEnd, PairingState } from '@shared/remote/pairing'
 import { DEVICE_NAME_CHARS } from '@shared/remote/device'
+import type { PairingEnd, PairingState } from '@shared/remote/pairing'
 import { Button } from '@renderer/components/ui/button'
 import {
   Dialog,
@@ -35,7 +35,10 @@ import { countdown } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useSeconds } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
+import { useSettingsStore } from '@renderer/stores/settings'
+import { Segmented, SettingSelect } from './controls'
 import { closeRequest } from './pair-close'
+import { browserLinks } from './pair-links'
 import { QrCode } from './qr-code'
 import { DeviceIcon, DeviceTile } from './remote-parts'
 import { deviceLine } from './remote-text'
@@ -208,12 +211,21 @@ function PairFlow({
   )
 }
 
-/** The QR code and the link beside what to do with them, or why the code is void. */
-export function CodeBody({ shown, link }: { shown: Shown; link: string | null }) {
+/**
+ * The QR code and the link beside what to do with them, or why the code is void: for Kettu's apps,
+ * or for a browser, which opens the web client at one of this computer's addresses.
+ */
+export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string | null }) {
   const { t } = useTranslation('settings')
   const pairing = shown.kind === 'pairing' ? shown.pairing : null
   const end = pairing?.state === 'void' ? pairing.reason : null
   const waiting = pairing?.state === 'waiting' ? pairing : null
+  const [target, setTarget] = useState<'app' | 'browser'>('app')
+  const [chosen, setChosen] = useState<string | null>(null)
+  const own = useSettingsStore((s) => s.settings.remote.direct.addresses)
+  const browsers = browserLinks(appLink, own)
+  const browser = browsers.find((b) => b.address === chosen) ?? browsers[0] ?? null
+  const link = target === 'browser' ? (browser?.link ?? null) : appLink
   return (
     <div className="flex min-w-0 items-start gap-5 px-5 pt-4">
       <div className="relative size-50.75 shrink-0 rounded-xl bg-canvas p-3.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]">
@@ -235,12 +247,43 @@ export function CodeBody({ shown, link }: { shown: Shown; link: string | null })
         )}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-3">
+        {!end && shown.kind !== 'failed' && browsers.length > 0 && (
+          <div className="self-start">
+            <Segmented
+              label={t('remote.pair.target')}
+              value={target}
+              options={[
+                { value: 'app', label: t('remote.pair.targets.app') },
+                { value: 'browser', label: t('remote.pair.targets.browser') },
+              ]}
+              onChange={setTarget}
+            />
+          </div>
+        )}
         {shown.kind === 'failed' ? (
           <p className="text-ui text-danger">
             {t('remote.pair.failed', { message: shown.message })}
           </p>
         ) : end ? (
           <EndText end={end} />
+        ) : target === 'browser' ? (
+          <div className="flex flex-col gap-1">
+            <p className="text-ui font-medium">{t('remote.pair.browserScan')}</p>
+            <p className="text-xs leading-4.5 text-pretty text-tertiary">
+              {t('remote.pair.browserHint')}
+            </p>
+            {browsers.length > 1 && browser && (
+              <div className="flex items-center justify-between gap-2 pt-1 text-ui">
+                <span className="text-secondary">{t('remote.pair.address')}</span>
+                <SettingSelect
+                  label={t('remote.pair.address')}
+                  value={browser.address}
+                  options={browsers.map((b) => ({ value: b.address, label: b.address }))}
+                  onChange={setChosen}
+                />
+              </div>
+            )}
+          </div>
         ) : (
           <div className="flex flex-col gap-1">
             <p className="text-ui font-medium">{t('remote.pair.scan')}</p>

@@ -1,8 +1,9 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { animate, type AnimationPlaybackControls } from 'motion/react'
 import { useTranslation } from 'react-i18next'
-import { ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
+import { ARTIFACT_FRAME_SANDBOX, WEB_ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
 import { glide } from '@renderer/lib/motion'
+import { isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { prefersReducedMotion } from '@renderer/stores/settings'
 import {
@@ -528,7 +529,7 @@ function CanvasFrame({
       src={src}
       title={title}
       tabIndex={-1}
-      sandbox={ARTIFACT_FRAME_SANDBOX}
+      sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
       allow=""
       referrerPolicy="no-referrer"
       onLoad={() => setLoaded(true)}
@@ -611,7 +612,7 @@ function FocusedPage({
             ref={frame}
             src={src}
             title={name}
-            sandbox={ARTIFACT_FRAME_SANDBOX}
+            sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
             allow=""
             referrerPolicy="no-referrer"
             onLoad={() => setLoaded(true)}

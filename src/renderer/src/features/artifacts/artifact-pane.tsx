@@ -27,7 +27,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { SHEET } from '@renderer/features/shell/sheet'
 import { CornerControls } from '@renderer/features/shell/top-bar'
-import { isMac } from '@renderer/lib/platform'
+import { hasBand } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { restoreArtifact } from '@renderer/stores/artifacts'
 import { openArtifact, toggleSidePane, useViewStore } from '@renderer/stores/view'
@@ -56,7 +56,7 @@ export default function ArtifactPane({
   const listsRead = useListsRead()
   const states = useArtifactStates(artifact, listsRead)
   const controls = useMemo(() => new CanvasControls(), [])
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && isMac
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && !hasBand
   const { summary, shown, url } = artifact
   const title = summary?.title ?? shown?.title ?? ''
   const close = (): void => toggleSidePane(projectPath, 'artifact', false)

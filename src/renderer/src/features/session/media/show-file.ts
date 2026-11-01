@@ -1,9 +1,14 @@
 import { parseFileRef } from '@renderer/features/files/file-refs'
+import { isWeb } from '@renderer/lib/platform'
 import { openFile } from '@renderer/stores/files'
 
-/** Shows a project file in the Files pane, any other in the file manager, by its media URL. */
+/**
+ * Shows a project file in the Files pane, any other in the file manager, by its media URL; null
+ * for a file outside the project in the web client, which has no file manager of the host's.
+ */
 export function showFileAction(path: string, projectPath: string | null, url: string) {
   const ref = projectPath ? parseFileRef(path, projectPath) : null
+  if (!ref && isWeb) return null
   return {
     inFiles: !!ref,
     show: (): Promise<void> => {

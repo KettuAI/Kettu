@@ -112,7 +112,7 @@ export function startRemoteHost(
       changed,
       log,
     })
-    const direct = new DirectListener({ server, changed, log })
+    const direct = new DirectListener({ server, changed, log, webRoot: init!.webRoot ?? null })
     // Ready once direct connections listen or have failed, so the first status says which.
     await direct.apply(options.direct)
     server.startSweeping()

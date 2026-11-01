@@ -20,11 +20,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { AgentUpdateCard } from '@renderer/features/updates/agent-update-notice'
 import { NoticeCard, UpdateNoticeCard } from '@renderer/features/updates/update-notice'
 import { bugReportUrl } from '@renderer/lib/bug-report'
-import { formatShortcut } from '@renderer/lib/platform'
+import { formatShortcut, isWeb } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { openSettings, showShortcuts } from '@renderer/stores/view'
 import { NavRow } from './app-sidebar'
+import { InsecureCard } from './insecure-card'
 import { signInLabel, useNotices } from './notices'
 
 const README_URL = 'https://github.com/KettuAI/Kettu#readme'
@@ -38,6 +39,7 @@ export function SidebarFooterContent() {
   const notices = useNotices()
   return (
     <>
+      {isWeb && !window.isSecureContext && <InsecureCard />}
       {notices.signIn.length > 0 && <SignInCard names={notices.signIn} />}
       {notices.agentUpdate && <AgentUpdateCard notice={notices.agentUpdate} />}
       {notices.appUpdate && <UpdateNoticeCard notice={notices.appUpdate} />}

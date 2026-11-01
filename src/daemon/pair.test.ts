@@ -2,9 +2,9 @@
 // with the name to edit, and each way the code ends.
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { PairingState } from '@shared/remote/pairing'
+import { pairingLink, parseBrowserPairingLink, type PairingState } from '@shared/remote/pairing'
 import type { ControlClient, ControlEvent } from './control'
-import { pairDevice, terminalQr, type PairTerminal } from './pair'
+import { browserText, pairDevice, sshTarget, terminalQr, type PairTerminal } from './pair'
 
 const LINK = 'https://kettu.sh/pair#AQ'
 const NOW = 1_000_000
@@ -62,7 +62,7 @@ describe('kettu pair', () => {
   it('shows the code, then adds the device under the name the owner typed', async () => {
     const c = connection()
     const t = terminal(['y', 'My iPad'])
-    const done = pairDevice(c.client, t.io, new AbortController().signal, () => NOW)
+    const done = pairDevice(c.client, t.io, new AbortController().signal, { now: () => NOW })
     await settle()
     expect(c.calls).toEqual([{ method: 'pair.open', params: undefined }])
     c.send({ state: 'waiting', link: LINK, expiresAt: NOW + 5 * 60_000 })
@@ -100,6 +100,42 @@ describe('kettu pair', () => {
     expect(await done).toBe(0)
     expect(t.written()).toMatch(/Added My iPad; it can connect now\.\n$/)
     expect(c.closed()).toBe(true)
+  })
+
+  it('gives a browser link for each address, and the SSH forward with its localhost link', async () => {
+    const payload = {
+      version: 1,
+      hostKey: new Uint8Array(32).fill(1),
+      secret: new Uint8Array(32).fill(2),
+      addresses: [
+        { host: '192.168.1.8', port: 47821 },
+        { host: 'fd7a:115c::1', port: 47821 },
+      ],
+    }
+    const link = pairingLink(payload)
+    const c = connection()
+    const t = terminal([])
+    void pairDevice(c.client, t.io, new AbortController().signal, {
+      now: () => NOW,
+      ssh: { port: 47821, target: 'lin@192.168.1.8' },
+    })
+    c.send({ state: 'waiting', link, expiresAt: NOW + 5 * 60_000 })
+    const written = t.written()
+    const code = link.slice(link.indexOf('#'))
+    expect(written).toContain(`\n  http://192.168.1.8:47821/pair${code}\n`)
+    expect(written).toContain(`\n  http://[fd7a:115c::1]:47821/pair${code}\n`)
+    expect(written).toContain(
+      `\n  ssh -L 47821:localhost:47821 lin@192.168.1.8\n  http://localhost:47821/pair${code}\n`,
+    )
+    expect(parseBrowserPairingLink(`http://localhost:47821/pair${code}`)).toEqual(payload)
+    // Without addresses or a listening port there is no browser link to give.
+    expect(browserText({ ...payload, addresses: [] }, null)).toBe('')
+  })
+
+  it('names the address an SSH session came in on, else the computer', () => {
+    const env = { SSH_CONNECTION: '192.168.1.20 52144 192.168.1.8 22' }
+    expect(sshTarget(env, 'lin', 'studio.local')).toBe('lin@192.168.1.8')
+    expect(sshTarget({}, 'lin', 'studio.local')).toBe('lin@studio.local')
   })
 
   it("keeps the device's own name when the owner clears it", async () => {
@@ -141,7 +177,7 @@ describe('kettu pair', () => {
     let now = NOW
     const c = connection()
     const t = terminal([], true)
-    void pairDevice(c.client, t.io, new AbortController().signal, () => now)
+    void pairDevice(c.client, t.io, new AbortController().signal, { now: () => now })
     c.send({ state: 'waiting', link: LINK, expiresAt: NOW + 5 * 60_000 })
     now += 61_000
     vi.advanceTimersByTime(1000)

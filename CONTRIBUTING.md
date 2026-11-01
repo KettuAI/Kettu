@@ -25,6 +25,7 @@ Development builds also list a **Fake agent**, which needs no account or network
 | Command                                               | What it does                                         |
 | ----------------------------------------------------- | ---------------------------------------------------- |
 | `pnpm dev`                                            | Start the app in development mode with hot reload    |
+| `pnpm dev:web`                                        | Serve the web client with hot reload                 |
 | `pnpm test`                                           | Run the unit, integration and process tests          |
 | `pnpm lint` / `pnpm typecheck` / `pnpm format`        | Lint, type-check and format the code                 |
 | `pnpm build`                                          | Type-check and build the app into `out/`             |
@@ -34,6 +35,8 @@ Development builds also list a **Fake agent**, which needs no account or network
 Packaging on macOS also needs Xcode 26 or later, whose `actool` compiles the app icon.
 
 `pnpm build` also builds the daemon into `out/daemon/`: the `kettu` CLI and the hosts it runs under Node.js, without Electron. Give it a data folder of its own and run it in the foreground, such as `KETTU_DAEMON_DATA=/tmp/kettu-daemon node out/daemon/main.cjs run`; `status` with the same folder asks the running daemon, `direct` shows the port and the addresses devices connect to directly, which `direct port`, `direct add` and `direct remove` change, `terminal` says whether devices may use the terminal, which `terminal on` and `terminal off` change, and `KETTU_FAKE_AGENT=tools/fake-agent/main.ts` adds the Fake agent. `kettu service install` sets up a real system service, so it runs only on the Release workflow's macOS runners, never on a contributor's computer.
+
+It builds the web client into `out/web/` as well, which the app and the daemon serve on the direct port while remote access is on: a browser pairs from the link in Settings › Remote access › Add device › Browser or from `kettu pair`. `pnpm dev:web` serves it with hot reload; `KETTU_WEB_HOST=http://localhost:<direct port> pnpm dev:web` passes its channel on to a running host.
 
 What is planned next is in the [roadmap](./ROADMAP.md).
 

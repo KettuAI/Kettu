@@ -7,7 +7,8 @@ import { ARTIFACT_CSP } from './policy'
 
 vi.mock('electron', () => ({ protocol: {} }))
 
-const { CONTENT_WAIT_MS, pageStyle, parseRequest, respond, withStyle } = await import('./protocol')
+const { CONTENT_WAIT_MS, parseRequest, respond } = await import('./protocol')
+const { pageStyle, withStyle } = await import('@shared/artifact-page')
 const { COMMIT_TIMEOUT_MS } = await import('../subframes')
 
 const HOST = '0123456789abcdef0123456789'

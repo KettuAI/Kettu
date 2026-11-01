@@ -194,6 +194,11 @@ export type MainToRemoteHost =
       plainTextKey: boolean
       /** Direct connections on the same network or a VPN; off when absent. */
       direct?: DirectSettings
+      /**
+       * The folder of the web client's built files the direct port serves; absent in a build
+       * without one.
+       */
+      webRoot?: string
       /** Whether devices may use the terminal; `remote-host:terminal` says when it changes. */
       terminal: boolean
       /**

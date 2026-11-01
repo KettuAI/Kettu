@@ -83,6 +83,7 @@ function ShowFileButton({
   const { t } = useTranslation('session')
   const projectPath = useContext(ProjectPathContext)
   const action = showFileAction(path, projectPath, grant.url)
+  if (!action) return null
   return (
     <CaptionButton
       label={

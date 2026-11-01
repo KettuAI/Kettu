@@ -21,7 +21,7 @@ import {
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { SHEET } from '@renderer/features/shell/sheet'
 import { CornerControls } from '@renderer/features/shell/top-bar'
-import { isMac } from '@renderer/lib/platform'
+import { hasBand, isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import { useSessionsStore } from '@renderer/stores/sessions'
@@ -48,7 +48,7 @@ export function BrowserPane({
   const hidden = useBrowserStore((s) => (sessionId ? !!s.unseen[sessionId] : false))
   const agentId = useSessionsStore((s) => (sessionId ? s.byId[sessionId]?.agentId : null))
   const overlayOpen = useOverlayOpen()
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && isMac
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && !hasBand
   const zoom = useSettingsStore((s) => s.settings.appearance.zoom)
   const sheet = useRef<HTMLDivElement>(null)
   // The area the page fills; the 2 px info frame around it sits outside this box.

@@ -42,7 +42,7 @@ import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { CornerControls } from '@renderer/features/shell/top-bar'
 import { basename, longAgo } from '@renderer/lib/format'
-import { formatShortcut, isMac, isMod } from '@renderer/lib/platform'
+import { formatShortcut, hasBand, isMod, isWeb } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import {
@@ -405,26 +405,28 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                     ))}
                   {any && <FilterMenu list={list} />}
                   {any && <DisplayMenu group={group} sort={sort} />}
-                  <ImportMenu align="end">
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <DropdownMenuTrigger
-                            render={
-                              <Button
-                                variant="quiet"
-                                size="icon-sm"
-                                aria-label={t('page.import')}
-                              />
-                            }
-                          />
-                        }
-                      >
-                        <FileUpIcon />
-                      </TooltipTrigger>
-                      <TooltipContent>{t('page.import')}</TooltipContent>
-                    </Tooltip>
-                  </ImportMenu>
+                  {!isWeb && (
+                    <ImportMenu align="end">
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <DropdownMenuTrigger
+                              render={
+                                <Button
+                                  variant="quiet"
+                                  size="icon-sm"
+                                  aria-label={t('page.import')}
+                                />
+                              }
+                            />
+                          }
+                        >
+                          <FileUpIcon />
+                        </TooltipTrigger>
+                        <TooltipContent>{t('page.import')}</TooltipContent>
+                      </Tooltip>
+                    </ImportMenu>
+                  )}
                 </div>
               </header>
               <KindTiles />
@@ -455,7 +457,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
  * macOS with the sidebar collapsed it holds the sidebar toggle, level with the traffic lights.
  */
 function DragStrip() {
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && isMac
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && !hasBand
   return (
     <div
       className={cn(
@@ -887,12 +889,14 @@ function NoArtifacts() {
         <EmptyDescription className="max-w-none">{t('page.emptyDescription')}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
-        <ImportMenu align="center">
-          <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
-            <FileUpIcon data-icon="inline-start" />
-            {t('page.importEllipsis')}
-          </DropdownMenuTrigger>
-        </ImportMenu>
+        {!isWeb && (
+          <ImportMenu align="center">
+            <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
+              <FileUpIcon data-icon="inline-start" />
+              {t('page.importEllipsis')}
+            </DropdownMenuTrigger>
+          </ImportMenu>
+        )}
       </EmptyContent>
     </Empty>
   )

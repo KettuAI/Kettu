@@ -32,7 +32,7 @@ import { PanelButton } from '@renderer/features/shell/panel-button'
 import { SHEET } from '@renderer/features/shell/sheet'
 import { CornerControls } from '@renderer/features/shell/top-bar'
 import { errorMessage, host } from '@renderer/lib/host'
-import { isMac } from '@renderer/lib/platform'
+import { hasBand } from '@renderer/lib/platform'
 import { layoutStorage } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
 import { loadFiles, openFile, refreshFiles, useFilesStore } from '@renderer/stores/files'
@@ -67,7 +67,7 @@ export default function FilesPanel({
   maximized: boolean
 }) {
   const { t } = useTranslation(['files', 'common'])
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && isMac
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && !hasBand
   const open = useFilesStore((s) => s.open[projectPath] ?? null)
   const diff = useFilesStore((s) => s.diffs[projectPath] ?? null)
   const [query, setQuery] = useState('')

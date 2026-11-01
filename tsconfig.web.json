@@ -21,6 +21,12 @@
     }
   },
   "include": ["src/renderer/src/**/*", "src/preload/*.d.ts", "src/shared/**/*"],
-  // Node.js only: the socket a host listens on outside Electron.
-  "exclude": ["src/shared/socket-port.ts", "src/shared/socket-port.test.ts"]
+  // Node.js only: the socket a host listens on outside Electron, and the tests that run the web
+  // client's transport and link against a host in process.
+  "exclude": [
+    "src/shared/socket-port.ts",
+    "src/shared/socket-port.test.ts",
+    "src/shared/remote/websocket-transport.test.ts",
+    "src/renderer/src/web/link.test.ts"
+  ]
 }

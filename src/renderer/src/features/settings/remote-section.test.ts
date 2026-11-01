@@ -7,6 +7,7 @@ import { addressText, parseAddress, parsePort } from '@shared/remote/address'
 import type { DeviceActivity } from '@shared/remote/activity'
 import type { PairedDevice } from '@shared/remote/device'
 import type { DirectAddress } from '@shared/remote/protocol'
+import { pairingLink, parseBrowserPairingLink, parsePairingLink } from '@shared/remote/pairing'
 import type { RemoteStatus } from '@shared/remote/status'
 import { DEFAULT_SETTINGS, type SettingsFile } from '@shared/settings'
 
@@ -53,6 +54,7 @@ const {
   TerminalSwitch,
 } = await import('./remote-section')
 const { CodeBody, Confirm } = await import('./remote-pairing')
+const { browserLinks } = await import('./pair-links')
 const { closeRequest } = await import('./pair-close')
 const { changeDevice, deviceLine } = await import('./remote-text')
 const { platformName } = await import('./host-text')
@@ -391,6 +393,33 @@ describe('Add device', () => {
     )
     expect(body).toContain(link)
     expect(body).toMatch(/expires in 4:3[12] ?\./)
+  })
+
+  it('offers a browser link for each address a browser can open', () => {
+    const real = pairingLink({
+      version: 1,
+      hostKey: new Uint8Array(32).fill(1),
+      secret: new Uint8Array(32).fill(2),
+      addresses: [WIFI, { host: 'fd7a:115c::1', port: 47821 }],
+    })
+    const links = browserLinks(real, [])
+    expect(links.map((l) => l.address)).toEqual(['192.168.1.8:47821', '[fd7a:115c::1]:47821'])
+    // The owner's own addresses come after the ones this computer found.
+    expect(browserLinks(real, [WIFI]).map((l) => l.address)).toEqual([
+      '[fd7a:115c::1]:47821',
+      '192.168.1.8:47821',
+    ])
+    expect(links[0]!.link).toMatch(/^http:\/\/192\.168\.1\.8:47821\/pair#/)
+    expect(parseBrowserPairingLink(links[1]!.link)).toEqual(parsePairingLink(real))
+    const body = text(
+      createElement(CodeBody, { shown: { kind: 'pairing', pairing: waiting }, link: real }),
+    )
+    expect(body).toMatch(/^App Browser /)
+    // A code without addresses has no browser link to offer.
+    expect(browserLinks(link, [])).toEqual([])
+    expect(
+      text(createElement(CodeBody, { shown: { kind: 'pairing', pairing: waiting }, link })),
+    ).not.toContain('Browser')
   })
 
   it.each([

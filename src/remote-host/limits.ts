@@ -13,6 +13,9 @@ export const TOTAL_REFILL_MS = 2_000
 /** Handshakes waiting at once; one that never finishes holds its slot only until the hello timeout. */
 export const MAX_IN_FLIGHT = 16
 
+/** How long a connection the host ends waits for the device to end its side before it is cut. */
+export const CLOSE_GRACE_MS = 5_000
+
 interface Bucket {
   tokens: number
   at: number

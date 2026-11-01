@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import path from 'node:path'
 import type { MessagePortMain } from 'electron'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RemoteHostStatus } from '@shared/host-control'
@@ -144,6 +145,9 @@ async function pairedPhone(dir: string): Promise<PairedDevice> {
   return added!
 }
 
+/** The web client's build beside main's bundle, here beside the module's own folder. */
+const WEB_ROOT = path.join(import.meta.dirname, '../web')
+
 const namedIn = async (dir: string, id: string) =>
   (await DeviceStore.load(dir, () => {})).get(id)?.name
 
@@ -200,6 +204,7 @@ describe('RemoteHost', () => {
       privateKey: 'key',
       plainTextKey: true,
       direct: { enabled: false, port: null, addresses: [] },
+      webRoot: WEB_ROOT,
       terminal: false,
       device: { privateKey: 'device key', platform: 'macOS 26.1' },
     })
@@ -537,6 +542,7 @@ describe('RemoteHost', () => {
       hostName: 'Studio',
       plainTextKey: false,
       direct: { enabled: false, port: null, addresses: [] },
+      webRoot: WEB_ROOT,
       terminal: false,
       device: { privateKey: 'device key', platform: 'macOS 26.1' },
     })

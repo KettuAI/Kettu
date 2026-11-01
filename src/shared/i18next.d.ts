@@ -19,6 +19,7 @@ import type sidebar from './locales/en/sidebar.json'
 import type terminal from './locales/en/terminal.json'
 import type updates from './locales/en/updates.json'
 import type usage from './locales/en/usage.json'
+import type web from './locales/en/web.json'
 
 declare module 'i18next' {
   interface CustomTypeOptions {
@@ -43,6 +44,7 @@ declare module 'i18next' {
       terminal: typeof terminal
       updates: typeof updates
       usage: typeof usage
+      web: typeof web
     }
   }
 }

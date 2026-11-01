@@ -14,7 +14,7 @@ import {
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { DESK, ON_DESK, SHEET } from '@renderer/features/shell/sheet'
-import { formatShortcut, isMac, isMod } from '@renderer/lib/platform'
+import { formatShortcut, hasBand, isMod, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { loadMcpStatus } from '@renderer/stores/mcp'
@@ -28,6 +28,7 @@ import {
 import { footerLabel } from './footer-label'
 import { excerpt, FlashContext, highlight, matches, type RowDef, type SectionDef } from './model'
 import { GroupLabel, RowGroup, SectionBody } from './rows'
+import { webSections } from './web-sections'
 import {
   useAboutSection,
   useArchivedSection,
@@ -78,7 +79,7 @@ export default function SettingsPage() {
     [useRemoteSection()],
     [useAdvancedSection(), useAboutSection()],
   ]
-  const sections = clusters.flat()
+  const sections = isWeb ? webSections(clusters.flat()) : clusters.flat()
   const [query, setQuery] = useState('')
   const needle = query.trim()
   const searching = needle.length > 0
@@ -174,10 +175,12 @@ export default function SettingsPage() {
         <div
           className={cn(
             'app-region-drag flex shrink-0 items-center px-2',
-            isMac ? 'h-top-bar' : 'h-(--title-bar)',
+            hasBand ? 'h-(--title-bar)' : 'h-top-bar',
           )}
         >
-          {isMac && <span aria-hidden className="w-[calc(26px+var(--traffic-lights))] shrink-0" />}
+          {!hasBand && (
+            <span aria-hidden className="w-[calc(26px+var(--traffic-lights))] shrink-0" />
+          )}
           <BackButton />
         </div>
         <h1 className="mx-4.5 mt-1.5 mb-3 font-heading text-subheading font-medium">
@@ -217,7 +220,7 @@ export default function SettingsPage() {
         <AppFooter />
       </aside>
 
-      <main className={cn('flex min-w-0 flex-1 flex-col', !isMac && 'mt-(--title-bar)', SHEET)}>
+      <main className={cn('flex min-w-0 flex-1 flex-col', hasBand && 'mt-(--title-bar)', SHEET)}>
         <div className="app-region-drag h-top-bar shrink-0" />
         <div
           ref={scroller}

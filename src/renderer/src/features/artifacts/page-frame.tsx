@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { XIcon } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
-import { ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
+import { ARTIFACT_FRAME_SANDBOX, WEB_ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 
 /** The page shows once it has loaded, or after this long when a CDN never answers. */
@@ -69,7 +70,7 @@ export function PageFrame({
         ref={frame}
         src={src}
         title={title}
-        sandbox={ARTIFACT_FRAME_SANDBOX}
+        sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
         allow=""
         referrerPolicy="no-referrer"
         onLoad={() => setLoaded(true)}

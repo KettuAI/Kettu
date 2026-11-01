@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { HostsStatus } from '@shared/remote/hosts'
+import { isWeb } from '@renderer/lib/platform'
 
 interface HostsStore {
   /** Other hosts this computer connects to, and this computer; null until the first read. */
@@ -15,6 +16,8 @@ export function initHosts(): void {
 
 /** Reads the status, as Settings does when it opens, which also reads the computer's model. */
 export async function loadHosts(): Promise<void> {
+  // The web client reaches only the host that served it.
+  if (isWeb) return
   try {
     useHostsStore.setState({ status: await window.kettu.hosts.status() })
   } catch (error) {

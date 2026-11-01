@@ -32,7 +32,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { SHEET } from '@renderer/features/shell/sheet'
 import { CornerControls } from '@renderer/features/shell/top-bar'
-import { isMac } from '@renderer/lib/platform'
+import { hasBand } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import {
   createTerminal,
@@ -75,7 +75,7 @@ export function TerminalPanel({
 }) {
   const { t } = useTranslation(['terminal', 'common'])
   // On macOS, maximized with the sidebar collapsed, the header is the window's top left corner.
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && isMac
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && !hasBand
   const list = useTerminalsStore(
     useShallow((s) => terminalsOf(s.byId, projectPath, s.order[projectPath])),
   )

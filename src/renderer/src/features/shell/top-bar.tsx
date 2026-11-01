@@ -6,7 +6,7 @@ import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { BackForward } from '@renderer/features/shell/back-forward'
 import { useNotices } from '@renderer/features/sidebar/notices'
-import { formatShortcut, isMac } from '@renderer/lib/platform'
+import { formatShortcut, hasBand } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { toggleSidebar, useViewStore } from '@renderer/stores/view'
 
@@ -26,7 +26,7 @@ export function TopBar({
   cornered?: boolean
 }) {
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
-  const cornered = (given ?? true) && collapsed && isMac
+  const cornered = (given ?? true) && collapsed && !hasBand
   return (
     <header
       className={cn(
@@ -48,7 +48,7 @@ export function TopBar({
  */
 export function TitleBand() {
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
-  if (isMac) return null
+  if (!hasBand) return null
   return (
     <div className="app-region-drag absolute inset-x-0 top-0 flex h-(--title-bar) items-center pl-2">
       {collapsed && <CornerControls />}

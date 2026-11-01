@@ -879,6 +879,14 @@
       "title": "Add device",
       "scan": "Scan this code with Kettu on an iPhone or iPad.",
       "otherComputer": "On another computer, open Settings › Hosts › Add host… in its Kettu and paste this link.",
+      "target": "Open with",
+      "targets": {
+        "app": "App",
+        "browser": "Browser"
+      },
+      "browserScan": "Scan this code with the device’s camera to open Kettu in its browser.",
+      "browserHint": "Or open the link in a browser on a device on the same network or VPN.",
+      "address": "Address",
       "copy": "Copy",
       "copied": "Copied",
       "expires": "It adds one device and expires in <time>{{time}}</time>. The device has to reach this computer directly: on the same network, the same VPN, or through an address you added.",

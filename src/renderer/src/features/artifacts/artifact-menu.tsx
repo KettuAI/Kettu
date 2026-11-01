@@ -18,6 +18,7 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { askArtifactDialog, deleteArtifact, restoreArtifact } from '@renderer/stores/artifacts'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { isWeb } from '@renderer/lib/platform'
 import { isPublished, useSharingStore } from '@renderer/stores/sharing'
 import { openSessionWithArtifact } from '@renderer/stores/view'
 
@@ -104,16 +105,19 @@ export function ArtifactMenuItems({
             {t('menu.open')}
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem
-          onClick={() =>
-            void window.kettu.artifacts
-              .openExternal(target.id, target.version)
-              .catch(failed('open in the browser'))
-          }
-        >
-          <ExternalLinkIcon />
-          {t('menu.openInBrowser')}
-        </DropdownMenuItem>
+        {/* The web client shows it in a browser already. */}
+        {!isWeb && (
+          <DropdownMenuItem
+            onClick={() =>
+              void window.kettu.artifacts
+                .openExternal(target.id, target.version)
+                .catch(failed('open in the browser'))
+            }
+          >
+            <ExternalLinkIcon />
+            {t('menu.openInBrowser')}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           onClick={() =>
             void window.kettu.artifacts.export(target.id, target.version).catch(failed('export'))

@@ -869,6 +869,14 @@
       "title": "添加设备",
       "scan": "用 iPhone 或 iPad 上的 Kettu 扫这个码。",
       "otherComputer": "另一台电脑：在它的 Kettu 里打开 设置 › 主机 › 添加主机…，粘贴这个链接。",
+      "target": "打开方式",
+      "targets": {
+        "app": "App",
+        "browser": "浏览器"
+      },
+      "browserScan": "用设备的相机扫这个码，在它的浏览器里打开 Kettu。",
+      "browserHint": "也可以在同一网络或 VPN 里的设备上用浏览器打开这个链接。",
+      "address": "地址",
       "copy": "复制",
       "copied": "已复制",
       "expires": "只能添加一台设备，<time>{{time}}</time> 后失效。设备要能直连这台电脑：同一网络、同一个 VPN，或连得到你加的地址。",

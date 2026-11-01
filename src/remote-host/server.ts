@@ -18,6 +18,7 @@ import {
   type PortDevice,
 } from '@shared/remote/device'
 import { Handshake, type KeyPair, type TransportCiphers } from '@shared/remote/noise'
+import { bytesOf, findPlaces, isBinary } from '@shared/remote/places'
 import {
   negotiate,
   parseHello,
@@ -48,7 +49,6 @@ import { DeviceTerminal, isTerminalMethod, NOT_ALLOWED } from './device-terminal
 import type { DeviceStore, RemovedDevice } from './devices'
 import { bytesSource, Downloads, fileSource } from './downloads'
 import type { PairingCode, PairingCodes } from './pairing'
-import { bytesOf, findPlaces, isBinary } from './places'
 import { SessionTitles } from './titles'
 import { UploadCounts, UploadError, Uploads } from './uploads'
 

@@ -1,6 +1,8 @@
 // Direct connections on the same network or a VPN: TCP on every interface, IPv4 and IPv6, each
 // connection a stream transport the remote host answers as any other. No TLS: the channel inside
-// is the encryption. connectTransport is the other side, for a device or the desktop app.
+// is the encryption. Browsers reach the same port: a connection that starts with an HTTP request
+// goes to the web server, which serves the web client and its channel as a WebSocket.
+// connectTransport is the other side, for a device or the desktop app.
 
 import { connect, createServer, type Server, type Socket } from 'node:net'
 import { networkInterfaces } from 'node:os'
@@ -10,9 +12,10 @@ import type { Transport } from '@shared/remote/transport'
 import type { DirectSettings } from '@shared/settings'
 import type { LogFn } from '../agent-host/storage'
 import { directAddresses, findAddresses, type Interfaces } from './addresses'
-import { HandshakeLimits } from './limits'
+import { CLOSE_GRACE_MS, HandshakeLimits } from './limits'
 import type { RemoteServer } from './server'
 import { streamTransport } from './stream-transport'
+import { WebServer } from './web'
 
 /** How often the interfaces are read again, as when the computer joins another network. */
 export const CHECK_ADDRESSES_MS = 30_000
@@ -20,8 +23,11 @@ export const CHECK_ADDRESSES_MS = 30_000
 /** TCP keepalive, so the session of a device that left the network without a word ends. */
 const KEEPALIVE_MS = 30_000
 
-/** How long a connection the host ends waits for the device to end its side before it is cut. */
-const CLOSE_GRACE_MS = 5_000
+/** How long a connection has for its first bytes, which tell a channel from a browser's request. */
+const FIRST_BYTES_TIMEOUT_MS = 10_000
+
+/** Connections waiting for their first bytes at once; more are cut. */
+export const MAX_UNREAD = 64
 
 const SOCKET_OPTIONS = { noDelay: true, keepAlive: true, keepAliveInitialDelay: KEEPALIVE_MS }
 
@@ -34,6 +40,9 @@ export interface DirectListenerOptions {
   host?: string
   interfaces?: () => Interfaces
   limits?: HandshakeLimits
+  /** The folder of the web client's built files, for browsers; null in a build without one. */
+  webRoot?: string | null
+  firstBytesTimeoutMs?: number
 }
 
 /** The listener for direct connections, which follows its settings. */
@@ -46,13 +55,22 @@ export class DirectListener {
   private failure: Extract<DirectStatus, { state: 'failed' }> | null = null
   private current: DirectStatus = { state: 'off' }
   private readonly sockets = new Set<Socket>()
+  /** Connections that have sent nothing yet. */
+  private readonly unread = new Set<Socket>()
   private readonly limits: HandshakeLimits
+  private readonly web: WebServer
   private timer: ReturnType<typeof setInterval> | null = null
   private changes: Promise<void> = Promise.resolve()
   private stopped = false
 
   constructor(private readonly options: DirectListenerOptions) {
     this.limits = options.limits ?? new HandshakeLimits()
+    this.web = new WebServer({
+      root: options.webRoot ?? null,
+      server: options.server,
+      limits: this.limits,
+      log: options.log,
+    })
   }
 
   get status(): DirectStatus {
@@ -70,10 +88,14 @@ export class DirectListener {
     if (!this.stopped) this.refresh()
   }
 
-  /** Stops listening; the connections stay for the remote host to end with a reason. */
+  /**
+   * Stops listening; the channels stay for the remote host to end with a reason, and the browsers'
+   * requests end.
+   */
   stop(): void {
     this.stopped = true
     this.closeListener()
+    this.endUnclaimed()
   }
 
   private async applyNow(settings: DirectSettings | undefined): Promise<void> {
@@ -90,6 +112,7 @@ export class DirectListener {
     this.own = Array.isArray(settings.addresses) ? settings.addresses : []
     if (this.listener && this.port === port) return this.refresh()
     this.closeListener()
+    this.endUnclaimed()
     this.port = port
     this.failure = null
     let listener: Server
@@ -141,8 +164,48 @@ export class DirectListener {
     this.listener = null
   }
 
+  /** Ends the connections no channel has: those that sent nothing yet and the HTTP ones. */
+  private endUnclaimed(): void {
+    for (const socket of this.unread) socket.destroy()
+    this.web.endAll()
+  }
+
+  /** Waits for a connection's first bytes, which say whether it is a channel or a browser's. */
   private take(socket: Socket): void {
     socket.on('error', () => {})
+    this.sockets.add(socket)
+    socket.once('close', () => this.sockets.delete(socket))
+    if (this.unread.size >= MAX_UNREAD) {
+      socket.destroy()
+      this.options.server.refusedOne()
+      return
+    }
+    this.unread.add(socket)
+    const timeout = this.options.firstBytesTimeoutMs ?? FIRST_BYTES_TIMEOUT_MS
+    const timer = setTimeout(() => socket.destroy(), timeout)
+    const read = (): void => {
+      clearTimeout(timer)
+      this.unread.delete(socket)
+      socket.off('data', first)
+      socket.off('close', read)
+    }
+    const first = (chunk: Buffer): void => {
+      read()
+      socket.pause()
+      socket.unshift(chunk)
+      // A channel starts with the 2-byte big-endian length of the device's first handshake
+      // message, about a hundred bytes and far below the 0x4100 an uppercase first byte would
+      // mean, so only an HTTP request starts with a method's letter.
+      const byte = chunk[0]!
+      if (byte >= 0x41 && byte <= 0x5a) this.web.take(socket)
+      else this.channel(socket)
+      socket.resume()
+    }
+    socket.on('data', first)
+    socket.once('close', read)
+  }
+
+  private channel(socket: Socket): void {
     const address = socket.remoteAddress
     const settle = address ? this.limits.admit(address) : null
     if (!settle) {
@@ -150,11 +213,7 @@ export class DirectListener {
       if (address) this.options.server.refusedOne()
       return
     }
-    this.sockets.add(socket)
-    socket.once('close', () => {
-      this.sockets.delete(socket)
-      settle()
-    })
+    socket.once('close', settle)
     this.options.server.accept(directTransport(socket, settle))
   }
 

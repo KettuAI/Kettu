@@ -1,0 +1,32 @@
+{
+  "pair": {
+    "title": "Use Kettu in this browser",
+    "intro": "On the computer, open Settings › Remote access › Add device, choose Browser and scan its QR code with this device's camera, or paste its link here.",
+    "linkLabel": "Pairing link",
+    "linkPlaceholder": "http://…/pair#…",
+    "notLink": "This is not a Kettu pairing link. Copy the link from Add device on the computer.",
+    "submit": "Pair",
+    "connecting": "Connecting to the computer…",
+    "waiting": "Confirm on the computer",
+    "waitingHint": "Kettu on the computer asks whether to add “{{name}}”. Choose Add there.",
+    "added": "Added. Opening Kettu…",
+    "again": "Try again",
+    "failed": {
+      "void": "This code no longer works: it expired, was closed or was used for another device. Open Add device on the computer for a new one.",
+      "rejected": "The computer’s owner did not add this browser.",
+      "unreachable": "Could not reach the computer. Check that it is on, Kettu is running with remote access on, and this device is on the same network or VPN.",
+      "update_client": "This page is older than Kettu on the computer. Reload the page.",
+      "update_host": "Kettu on the computer is too old for this page. Update Kettu on the computer.",
+      "failed": "Pairing did not finish. Try again."
+    },
+    "removed": "This browser was removed from the computer. Pair it again to use it here."
+  },
+  "insecure": {
+    "title": "This page is not protected on the network",
+    "body": "Your conversation stays encrypted, but someone on this network could change the page itself. On a network you do not trust, use an SSH tunnel or HTTPS, such as Tailscale’s. Notifications need one of those too."
+  },
+  "connection": {
+    "updated": "Kettu on the computer was updated.",
+    "reload": "Reload"
+  }
+}
