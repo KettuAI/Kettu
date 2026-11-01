@@ -26,7 +26,7 @@ import {
 } from './control'
 import { isUnavailable, type HostTimings } from './forked-host'
 import { Hosts } from './hosts'
-import { keyIsPrivate, loadHostKey, prepareDataFolder } from './key'
+import { keyIsPrivate, loadHostKey, newHostKey, prepareDataFolder } from './key'
 import { keyPath } from './paths'
 
 const log = createLogger('daemon')
@@ -212,6 +212,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     systemLocale: matchLocale([Intl.DateTimeFormat().resolvedOptions().locale]),
     settings: () => settings.get(),
     privateKey: identity.privateKey,
+    newIdentity: async () => (await newHostKey(options.dataPath)).privateKey,
     hostName: os.hostname(),
     env: hostEnv,
     timings: options.timings,

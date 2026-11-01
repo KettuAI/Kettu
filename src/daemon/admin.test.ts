@@ -18,6 +18,7 @@ class FakeHosts implements DaemonHosts {
   readonly changes: SettingsSection[][] = []
   readonly events: { event: HostAdminEvent; deviceId: string | null }[] = []
   readonly restarted: string[] = []
+  resets = 0
   running = true
   online: string[] = [PHONE]
   private readonly listeners = new Set<() => void>()
@@ -61,6 +62,10 @@ class FakeHosts implements DaemonHosts {
   }
   async activity() {
     return []
+  }
+  async resetRemote(): Promise<void> {
+    if (!this.running) throw new ControlError('unavailable', 'Remote access is not running')
+    this.resets++
   }
   retryDirect(): void {}
   restart(name: 'agent' | 'terminal'): boolean {
@@ -122,7 +127,7 @@ describe("the daemon's answers to its owner's devices", () => {
     await t.settings.flush()
   })
 
-  it('says what it is, and that it neither publishes nor updates from Settings', async () => {
+  it('says what it is, that it neither publishes nor updates from Settings, and resets', async () => {
     const t = await setup()
     expect(await t.call('host.info')).toEqual({
       result: {
@@ -134,13 +139,20 @@ describe("the daemon's answers to its owner's devices", () => {
         sharing: false,
         updates: false,
         remoteSwitch: false,
-        remoteReset: false,
+        remoteReset: true,
         thumbnails: false,
       },
     })
-    for (const method of ['sharing.status', 'sharing.connect', 'updates.check', 'remote.reset']) {
+    for (const method of ['sharing.status', 'sharing.connect', 'updates.check']) {
       expect(await t.call(method, {})).toMatchObject({ error: { code: 'unavailable' } })
     }
+    expect(await t.call('remote.reset')).toEqual({ result: null })
+    expect(t.hosts.resets).toBe(1)
+    t.hosts.running = false
+    expect(await t.call('remote.reset')).toEqual({
+      error: { code: 'unavailable', message: 'Remote access is not running' },
+    })
+    t.hosts.running = true
     expect(await t.call('host.restart', { process: 'agent' })).toEqual({ result: null })
     expect(t.hosts.restarted).toEqual(['agent'])
   })
