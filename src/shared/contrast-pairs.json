@@ -78,6 +78,7 @@
     { "fg": "--warning", "on": ["--bg-app", "--bg-sidebar", "--bg-surface", "--warning-tint"] },
     { "fg": "--link", "on": ["--bg-app", "--bg-surface", "--bg-subtle"] },
     { "fg": "--link-hover", "on": ["--bg-app", "--bg-surface", "--bg-subtle"] },
+    { "fg": "--switch-on", "on": ["--bg-app", "--bg-surface"], "minRatio": 3 },
     { "fg": "--bg-surface", "on": ["--text-primary", "--attention"] },
     { "fg": "--bg-app", "on": ["--text-primary"] }
   ]

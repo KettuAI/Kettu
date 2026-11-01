@@ -110,7 +110,7 @@
       "contrastMore": "and {{count}} more",
       "installed": "Installed “{{name}}” and switched to it.",
       "unused": "This version doesn't use: {{list}}.",
-      "lowContrastNotice": "Some text is under 4.5:1 contrast with its background and may be hard to read.",
+      "lowContrastNotice": "Some text or controls don't stand out enough from their background and may be hard to see.",
       "gotIt": "Got it",
       "installFailed": "Couldn't install {{file}}: {{reason}}.",
       "replaceTitle": "Replace the theme “{{name}}”?",

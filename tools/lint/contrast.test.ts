@@ -162,6 +162,14 @@ describe('checkContrast', () => {
     expect(missing).toMatchObject({ ratio: null, ok: false, note: 'missing --nope' })
   })
 
+  it('holds a pair to the ratio its group sets, 4.5:1 when it sets none', () => {
+    const low = parseTokens(SAMPLE.replace('--text-primary: #000;', '--text-primary: #777;'))
+    const [fill] = checkContrast(low, [{ fg: '--text-primary', bg: '--bg-app', min: 3 }])
+    expect(fill).toMatchObject({ ok: true, min: 3 })
+    const [text] = checkContrast(low, [{ fg: '--text-primary', bg: '--bg-app' }])
+    expect(text).toMatchObject({ ok: false, min: MIN_RATIO })
+  })
+
   it('skips a pair whose foreground is not an opaque color', () => {
     const [skipped] = checkContrast(blocks, [{ fg: '--focus', bg: '--bg-app' }])
     expect(skipped).toMatchObject({ ratio: null, ok: true })
@@ -207,7 +215,15 @@ describe('the real token file', () => {
     const { rows, problems } = checkTokens(css)
     expect(problems).toEqual([])
     expect(rows).toHaveLength(PAIRS.length * 2)
-    expect(rows.every((row) => row.ratio !== null && row.ratio >= MIN_RATIO)).toBe(true)
+    expect(rows.every((row) => row.ratio !== null && row.ratio >= row.min)).toBe(true)
+  })
+
+  it("checks a switch's fill at 3:1 on the page and on its thumb, text at 4.5:1", () => {
+    expect(PAIRS.filter(({ fg }) => fg === '--switch-on')).toEqual([
+      { fg: '--switch-on', bg: '--bg-app', min: 3 },
+      { fg: '--switch-on', bg: '--bg-surface', min: 3 },
+    ])
+    expect(PAIRS.find(({ fg }) => fg === '--text-primary')?.min).toBe(MIN_RATIO)
   })
 
   it('keeps the exempt token out of the pairs', () => {

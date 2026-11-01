@@ -56,6 +56,7 @@ export const THEME_TOKENS = [
   'primary-ring',
   'primary-highlight',
   'primary-foreground',
+  'switch-on',
   'scrollbar-thumb',
   'scrim',
   'viewer-scrim',
@@ -507,6 +508,10 @@ export function contrastRatio(fg: Rgba, bg: Rgba): number {
 
 export const MIN_CONTRAST: number = contrastPairs.minRatio
 
+// A group's own minRatio, such as 3:1 for a control's fill, replaces MIN_CONTRAST for its pairs.
+const PAIR_GROUPS: readonly { fg: string; on: readonly string[]; minRatio?: number }[] =
+  contrastPairs.groups
+
 export interface ContrastIssue {
   mode: ThemeMode
   fg: string
@@ -518,7 +523,7 @@ export interface ContrastIssue {
 const BASES = ['bg-app', 'bg-sidebar', 'bg-surface']
 
 /**
- * The pairs `tools/lint/contrast.mjs` checks in tokens.css that fall under MIN_CONTRAST, for colors
+ * The pairs `tools/lint/contrast.mjs` checks in tokens.css that fall under their ratio, for colors
  * that hold every token of both modes. A translucent surface is laid over each opaque base, as
  * there, and its weakest ratio counts.
  */
@@ -530,7 +535,7 @@ export function contrastIssues(colors: Record<ThemeMode, Record<string, string>>
       return value === undefined ? null : parseColor(value)
     }
     const bases = BASES.map(read).filter((base): base is Rgba => base !== null && base.a === 1)
-    for (const { fg: fgToken, on } of contrastPairs.groups) {
+    for (const { fg: fgToken, on, minRatio = MIN_CONTRAST } of PAIR_GROUPS) {
       const fg = fgToken.slice(2)
       const fgColor = read(fg)
       if (!fgColor) continue
@@ -541,7 +546,7 @@ export function contrastIssues(colors: Record<ThemeMode, Record<string, string>>
         const unders = bgColor.a < 1 ? bases.map((base) => composite(bgColor, base)) : [bgColor]
         if (unders.length === 0) continue
         const ratio = Math.min(...unders.map((under) => contrastRatio(fgColor, under)))
-        if (ratio < MIN_CONTRAST) issues.push({ mode, fg, bg, ratio })
+        if (ratio < minRatio) issues.push({ mode, fg, bg, ratio })
       }
     }
   }
