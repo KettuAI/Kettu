@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { EllipsisIcon, FileDownIcon, FolderIcon, TrashIcon, TriangleAlertIcon } from 'lucide-react'
+import {
+  CopyIcon,
+  EllipsisIcon,
+  FileDownIcon,
+  FolderIcon,
+  TrashIcon,
+  TriangleAlertIcon,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   BUILTIN_THEME_ID,
@@ -109,14 +116,13 @@ export function ThemeTiles() {
         )
       }
     })
-  // The web client has the built-in theme alone for now, with nothing to export or add.
   const tile = (id: string, theme: Theme | null, item?: InstalledTheme) => (
     <ThemeTile
       key={id}
       id={id}
       theme={theme}
       source={item?.catalog ? 'catalog' : item ? 'file' : 'builtIn'}
-      onExport={isWeb ? undefined : () => exportTheme(theme)}
+      onExport={() => exportTheme(theme)}
       {...(item && {
         onReveal: () => run(() => window.kettu.themes.reveal(item.id)),
         onRemove: (from: HTMLElement | null) => {
@@ -152,7 +158,7 @@ export function ThemeTiles() {
       >
         {tile(BUILTIN_THEME_ID, null)}
         {installed.map((item) => tile(item.id, item.theme, item))}
-        {!isWeb && <MoreThemes bar={installed.length % 2 === 1} onInstall={install} />}
+        <MoreThemes bar={installed.length % 2 === 1} onInstall={install} />
       </ToggleGroup>
       <ControlError error={applyError} />
       {notice && (
@@ -218,7 +224,7 @@ function ThemeTile({
   /** Gets the menu's button, which focus returns to once the question is answered. */
   onRemove?: (from: HTMLElement | null) => void
 }) {
-  const { t } = useTranslation('settings')
+  const { t } = useTranslation(['settings', 'files'])
   const name = theme?.name ?? 'Kettu'
   const issues = useMemo(() => themeContrast(theme), [theme])
   const more = useRef<HTMLButtonElement>(null)
@@ -261,10 +267,13 @@ function ThemeTile({
                 {t('appearance.theme.export')}
               </DropdownMenuItem>
             )}
+            {/* A browser cannot show the host's files, so it copies the file's path there. */}
             {onReveal && (
               <DropdownMenuItem onClick={onReveal}>
-                <FolderIcon />
-                {t('agents.showIn', { name: fileManagerName() })}
+                {isWeb ? <CopyIcon /> : <FolderIcon />}
+                {isWeb
+                  ? t('files:preview.copyPath')
+                  : t('agents.showIn', { name: fileManagerName() })}
               </DropdownMenuItem>
             )}
             {onRemove && (

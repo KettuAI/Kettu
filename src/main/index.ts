@@ -148,6 +148,8 @@ async function start(): Promise<void> {
     await avatarsProxy
     return avatarsSession.fetch(url, init) as unknown as Promise<Response>
   })
+  // Made once sharing and the updater are, before remote access starts and a device can ask.
+  let hostAdmin: HostAdmin | null = null
   const themes = new ThemeStore(themeFolder, themeSources, settings.get().appearance.colorTheme, {
     dir: themesDir,
     sourcesFile: themeSourcesFile,
@@ -156,6 +158,7 @@ async function start(): Promise<void> {
     changed: (state, chosen) => {
       applyWindowTheme(chosen)
       broadcast('themes:changed', state)
+      hostAdmin?.themesChanged(themes.hostThemes())
     },
   })
   applyWindowTheme(themes.chosenTheme())
@@ -201,7 +204,10 @@ async function start(): Promise<void> {
   let reconcileSharing: (() => void) | null = null
   const agentHost = new AgentHost({
     settings: () => hostSettings(settings.get(), systemLocale),
-    onAttention: (message) => notifyAttention(message, settings.get()),
+    onAttention: (message) => {
+      notifyAttention(message, settings.get())
+      hostAdmin?.attention(message)
+    },
     onBadge: (count) => {
       setBadgeCount(count)
       tray.setDot(count > 0)
@@ -244,8 +250,6 @@ async function start(): Promise<void> {
       direct: status?.direct ?? { state: 'off' },
     }
   }
-  // Made once sharing and the updater are, before remote access starts and a device can ask.
-  let hostAdmin: HostAdmin | null = null
   const remoteChanged = (): void => {
     const status = remoteStatus()
     broadcast('remote:changed', status)
@@ -375,10 +379,13 @@ async function start(): Promise<void> {
       updates: updater.getStatus().state.kind !== 'off',
       remoteSwitch: true,
       remoteReset: true,
+      thumbnails: true,
     }),
     restart: (which) => (which === 'agent' ? agentHost.restart() : terminalHost.restart()),
     sharing,
     updates: updater,
+    themes,
+    thumbnail: (id, version, layout) => artifacts.thumbnail(id, version, layout),
     send: (event, deviceId) => remoteHost.adminEvent(event, deviceId),
   })
 

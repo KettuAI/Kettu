@@ -17,9 +17,10 @@ vi.mock('electron', () => ({
   protocol: {},
 }))
 
-const { readThemeFolder, readThemeSources, themeId, ThemeStore, windowColors } =
+const { checkThemeText, readThemeFolder, readThemeSources, themeId, ThemeStore, windowColors } =
   await import('./themes')
 const { CATALOG_URL, ThemeCatalog } = await import('./theme-catalog')
+const { exportThemeFile, installThemeFile, revealThemeFile } = await import('./theme-dialogs')
 
 const WINDOW = {} as Electron.BrowserWindow
 
@@ -157,7 +158,7 @@ describe('ThemeStore', () => {
     chooseFile(await put('downloads/rose.json', source))
     const themes = await store()
 
-    expect(await themes.install(WINDOW)).toEqual({
+    expect(await installThemeFile(themes, WINDOW)).toEqual({
       status: 'installed',
       id: 'rose-pine',
       ignored: ['dark.colors.bg-ap'],
@@ -177,19 +178,19 @@ describe('ThemeStore', () => {
   it('writes nothing for a file that fails the check, or when the user cancels', async () => {
     chooseFile(await put('downloads/x.json', theme('X', { 'bg-app': '#fff;}html{color:red' })))
     const themes = await store()
-    expect(await themes.install(null)).toEqual({
+    expect(await installThemeFile(themes, null)).toEqual({
       status: 'failed',
       file: 'x.json',
       error: { code: 'invalid-color', path: 'dark.colors.bg-app' },
     })
     chooseFile(path.join(dir, 'gone.json'))
-    expect(await themes.install(null)).toEqual({
+    expect(await installThemeFile(themes, null)).toEqual({
       status: 'failed',
       file: 'gone.json',
       error: { code: 'unreadable' },
     })
     chooseFile(null)
-    expect(await themes.install(null)).toEqual({ status: 'cancelled' })
+    expect(await installThemeFile(themes, null)).toEqual({ status: 'cancelled' })
     expect(await readdir(themesDir)).toEqual([])
     expect(changed).not.toHaveBeenCalled()
   })
@@ -200,7 +201,7 @@ describe('ThemeStore', () => {
     chooseFile(await put('downloads/nord.json', newer))
     const themes = await store('nord')
 
-    const answer = await themes.install(null)
+    const answer = await installThemeFile(themes, null)
     expect(answer).toEqual({
       status: 'conflict',
       token: expect.any(String),
@@ -217,6 +218,42 @@ describe('ThemeStore', () => {
     expect(changed).toHaveBeenCalledTimes(1)
     expect(changed.mock.calls[0]![1]).toMatchObject({ name: 'NORD' })
     await expect(themes.replace(token)).rejects.toThrow('No theme is waiting')
+  })
+
+  it("installs a device's file for that device, leaving the theme this host shows", async () => {
+    await put('themes/broken.json', '{')
+    const themes = await store()
+    const device = vi.fn<(id: string) => void>()
+    expect(await themes.add('nord.json', checkThemeText(theme('Nord')), device)).toEqual({
+      status: 'installed',
+      id: 'nord',
+      ignored: [],
+    })
+    expect(device).toHaveBeenCalledWith('nord')
+    expect(themes.state().chosen).toBe('kettu')
+    expect(changed).toHaveBeenLastCalledWith(expect.objectContaining({ chosen: 'kettu' }), null)
+    const answer = await themes.add(
+      'nord.json',
+      checkThemeText(theme('Nord', { fg: '#fff' })),
+      device,
+    )
+    expect(answer).toMatchObject({ status: 'conflict', name: 'Nord', installedName: 'Nord' })
+    device.mockClear()
+    await themes.replace((answer as { token: string }).token)
+    expect(device).toHaveBeenCalledWith('nord')
+    expect(themes.state().chosen).toBe('kettu')
+    expect(themes.hostThemes()).toEqual({
+      installed: [expect.objectContaining({ id: 'nord' })],
+      failed: [{ id: 'broken', failure: { code: 'invalid', error: { code: 'not-json' } } }],
+    })
+  })
+
+  it("holds a device's text to a theme file's size", () => {
+    expect(checkThemeText(' '.repeat(256 * 1024 + 1))).toEqual({
+      ok: false,
+      error: { code: 'too-large' },
+    })
+    expect(checkThemeText(theme('Nord'))).toMatchObject({ ok: true, theme: { name: 'Nord' } })
   })
 
   it('removes a theme, and brings back the built-in one for the chosen theme', async () => {
@@ -238,14 +275,14 @@ describe('ThemeStore', () => {
     const themes = await store()
     for (const id of ['../settings', 'nord', 'kettu', 7]) {
       await expect(themes.remove(id)).rejects.toThrow('Not an installed theme')
-      expect(() => themes.reveal(id)).toThrow('Not an installed theme')
+      expect(() => revealThemeFile(themes, id)).toThrow('Not an installed theme')
     }
     expect(await readFile(path.join(dir, 'settings.json'), 'utf8')).toBe('{}')
   })
 
   it('reveals a theme file, a broken one too', async () => {
     await put('themes/broken.json', '{')
-    ;(await store()).reveal('broken')
+    revealThemeFile(await store(), 'broken')
     expect(electron.showItemInFolder).toHaveBeenCalledWith(path.join(themesDir, 'broken.json'))
   })
 
@@ -269,7 +306,7 @@ describe('ThemeStore', () => {
     const target = path.join(dir, 'out.json')
     electron.save.mockResolvedValue({ canceled: false, filePath: target })
     const source = theme('My Theme')
-    expect(await themes.export(WINDOW, source)).toBe(target)
+    expect(await exportThemeFile(themes, WINDOW, source)).toBe(target)
     expect(await readFile(target, 'utf8')).toBe(source)
     expect(electron.save).toHaveBeenCalledWith(WINDOW, {
       title: 'Export Theme',
@@ -278,9 +315,9 @@ describe('ThemeStore', () => {
     })
 
     electron.save.mockResolvedValue({ canceled: true, filePath: '' })
-    expect(await themes.export(null, source)).toBeNull()
-    await expect(themes.export(null, '{"name": "x"}')).rejects.toThrow('Not a theme file')
-    await expect(themes.export(null, 5)).rejects.toThrow('must be text')
+    expect(await exportThemeFile(themes, null, source)).toBeNull()
+    await expect(exportThemeFile(themes, null, '{"name": "x"}')).rejects.toThrow('Not a theme file')
+    await expect(exportThemeFile(themes, null, 5)).rejects.toThrow('must be text')
     expect(electron.save).toHaveBeenCalledTimes(2)
   })
 
@@ -414,7 +451,7 @@ describe('ThemeStore', () => {
       )
       chooseFile(await put('downloads/nord.json', theme('Nord', { 'bg-app': '#000' })))
       const themes = await store()
-      const answer = await themes.install(null)
+      const answer = await installThemeFile(themes, null)
       expect(answer.status).toBe('conflict')
       await themes.replace(answer.status === 'conflict' ? answer.token : '')
       expect(await sources()).toEqual({ version: 1, catalog: { ayu: '1.0.0' } })

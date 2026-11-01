@@ -59,5 +59,12 @@
     "missing": "{{host}} 上没有这个文件夹。",
     "open": "打开",
     "choose": "选择"
+  },
+  "notifications": {
+    "testTitle": "Kettu",
+    "testBody": "通知已打开。这个页面开着时，需要你的 Agent 会这样找到你。",
+    "openOnly": "这个页面要在浏览器里开着才有通知，放在后台标签页也行；关掉的页面收不到。",
+    "insecure": "浏览器只给 https 或 localhost 上的页面发通知。经 SSH 隧道用 localhost 打开这个页面，或者用 HTTPS（比如 Tailscale 的）打开，才收得到。",
+    "denied": "这个浏览器屏蔽了这个页面的通知。在浏览器里这个网站的设置中允许后再试。"
   }
 }

@@ -1,6 +1,7 @@
 import { readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import type { HostToMain } from '@shared/host-control'
 import type { HostAdminEvent } from '@shared/remote/host-admin'
 import type { PairingState } from '@shared/remote/pairing'
 import type { RemoteStatus } from '@shared/remote/status'
@@ -20,6 +21,7 @@ class FakeHosts implements DaemonHosts {
   running = true
   online: string[] = [PHONE]
   private readonly listeners = new Set<() => void>()
+  private readonly attention = new Set<(message: Attention) => void>()
   pairings = new Map<number, (pairing: PairingState) => void>()
 
   remoteAccess(): RemoteStatus {
@@ -71,13 +73,23 @@ class FakeHosts implements DaemonHosts {
   settingsChanged(changed: ReadonlySet<SettingsSection>): void {
     this.changes.push([...changed])
   }
+  onAttention(listener: (message: Attention) => void): () => void {
+    this.attention.add(listener)
+    return () => this.attention.delete(listener)
+  }
+  /** What the agent host says needs the user. */
+  attend(message: Attention): void {
+    for (const listener of this.attention) listener(message)
+  }
 }
+
+type Attention = Extract<HostToMain, { type: 'host:attention' }>
 
 async function setup() {
   const dataPath = await tempFolder('kettu-daemon-admin-')
   const settings = await SettingsStore.load(dataPath)
   const hosts = new FakeHosts()
-  const admin = startDaemonAdmin({ dataPath, version: '1.2.3', settings, hosts })
+  const admin = await startDaemonAdmin({ dataPath, version: '1.2.3', settings, hosts })
   const call = (method: string, params?: unknown) => admin.answer(PHONE, method, params)
   return { dataPath, settings, hosts, admin, call }
 }
@@ -123,6 +135,7 @@ describe("the daemon's answers to its owner's devices", () => {
         updates: false,
         remoteSwitch: false,
         remoteReset: false,
+        thumbnails: false,
       },
     })
     for (const method of ['sharing.status', 'sharing.connect', 'updates.check', 'remote.reset']) {
@@ -161,6 +174,54 @@ describe("the daemon's answers to its owner's devices", () => {
     expect(t.hosts.events.at(-1)?.event.type).toBe('remote.changed')
     t.hosts.running = false
     expect(await t.call('remote.pair')).toEqual({ result: null })
+  })
+
+  it('keeps themes in its data folder, which a device installs and shows on its own', async () => {
+    const t = await setup()
+    const text = JSON.stringify({ kettuTheme: 1, name: 'Nord', light: {}, dark: {} })
+    expect(await t.call('themes.add', { file: 'nord.json', text })).toEqual({
+      result: { status: 'installed', id: 'nord', ignored: [], show: true },
+    })
+    expect(await readdir(path.join(t.dataPath, 'themes'))).toEqual(['nord.json'])
+    expect(t.hosts.events.at(-1)).toEqual({
+      event: {
+        type: 'themes.changed',
+        themes: { installed: [expect.objectContaining({ id: 'nord' })], failed: [] },
+      },
+      deviceId: null,
+    })
+    expect(await t.call('themes.get')).toMatchObject({
+      result: { installed: [{ id: 'nord', theme: { name: 'Nord' } }] },
+    })
+    expect(await t.call('themes.path', { id: 'nord' })).toEqual({
+      result: path.join(t.dataPath, 'themes', 'nord.json'),
+    })
+    expect(await t.call('themes.add', { file: 'x.json', text: '{' })).toEqual({
+      result: { status: 'failed', file: 'x.json', error: { code: 'not-json' } },
+    })
+    expect(await t.call('themes.remove', { id: 'nord' })).toEqual({ result: null })
+    expect(await readdir(path.join(t.dataPath, 'themes'))).toEqual([])
+  })
+
+  it('tells the devices what needs the user, and has no previews to give', async () => {
+    const t = await setup()
+    t.hosts.attend({
+      type: 'host:attention',
+      kind: 'turn-ended',
+      sessionId: 's1',
+      title: 'Fix the build',
+      body: 'Done',
+    })
+    expect(t.hosts.events.at(-1)).toEqual({
+      event: {
+        type: 'attention',
+        attention: { kind: 'turn-ended', sessionId: 's1', title: 'Fix the build', body: 'Done' },
+      },
+      deviceId: null,
+    })
+    expect(
+      await t.call('artifacts.thumbnail', { id: 'a', version: 1, layout: null }),
+    ).toMatchObject({ error: { code: 'unavailable' } })
   })
 
   it('moves a folder it made aside, since a server has no trash', async () => {

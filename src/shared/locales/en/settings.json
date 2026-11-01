@@ -625,6 +625,7 @@
     "general": "The interface language, how you type, and what new sessions and launches do.",
     "appearance": "Theme, color mode, zoom and text size. Changes apply at once.",
     "notifications": "They show only while no Kettu window is in front, so they never interrupt what you are reading.",
+    "notifications_web": "They show only while this page is not in front, so they never interrupt what you are reading.",
     "agents": "The agents you pick to work with, each with its own account and limits. One harness can have several agents, such as one on a subscription and one on a company API key.",
     "terminal": "Which shell the side panel's terminal runs, and its font size.",
     "git": "The top bar's branch and changes, pull requests and their checks all come from these two tools.",
