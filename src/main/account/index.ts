@@ -59,6 +59,8 @@ export function signedOutReason(reason: string | null): SignedOutReason {
   switch (reason) {
     case 'signed_out_from_account_page':
       return 'account-page'
+    case 'signed_out_by_admin':
+      return 'admin'
     case 'account_disabled':
       return 'disabled'
     case 'refresh_token_reused':

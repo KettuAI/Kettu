@@ -299,7 +299,8 @@
     "notSignedIn": "Not signed in",
     "reasons": {
       "account-page": "This computer was signed out from your account page.",
-      "disabled": "Your Kettu account is disabled.",
+      "admin": "Kettu’s support team ended this computer’s sign-in.",
+      "disabled": "Your Kettu account is disabled. Contact hello@kettu.sh for help.",
       "reused": "A sign-in token was used twice, so Kettu was signed out to protect your account.",
       "expired": "The sign-in expired. Sign in again to go on.",
       "invalid": "The sign-in is no longer valid, for example because the account was deleted."
@@ -308,7 +309,7 @@
       "timeout": "The sign-in wasn’t finished in the browser within 10 minutes.",
       "network": "Kettu couldn’t reach the account service. Check your connection or proxy, then try again.",
       "service": "The account service couldn’t finish the sign-in. Try again.",
-      "disabled": "This Kettu account is disabled.",
+      "disabled": "This Kettu account is disabled. Contact hello@kettu.sh for help.",
       "local": "Kettu couldn’t open the sign-in page in your browser."
     },
     "plainText": "This system has no keyring, so the sign-in is stored without the system’s encryption.",
