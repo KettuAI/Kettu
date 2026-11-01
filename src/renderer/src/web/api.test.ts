@@ -54,6 +54,7 @@ const INFO: HostInfo = {
   updates: false,
   remoteSwitch: false,
   remoteReset: false,
+  thumbnails: false,
 }
 
 /** A link that records every call and answers each method with `answers[method]`. */
@@ -118,6 +119,7 @@ function setup(answers: Record<string, unknown> = {}) {
     address: { host: '192.168.1.8', port: 47821 },
     known: { name: 'Studio', deviceName: 'Firefox · Linux' },
     forget,
+    storage: null,
   })
   return { ...fake, api, settings, forget }
 }

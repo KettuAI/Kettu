@@ -1,10 +1,11 @@
 // The themes folder in the data folder: every file read and checked in full, installing from a
-// file or the catalog, replacing, removing, exporting and revealing them, and the chosen theme.
+// file or the catalog, replacing and removing them, and the chosen theme. The desktop app's dialogs
+// for it are in theme-dialogs.ts, so the daemon keeps themes too.
 
 import { createHash, randomUUID } from 'node:crypto'
-import { open, readdir, rm, writeFile } from 'node:fs/promises'
+import { open, readdir, rm } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import { app, type BrowserWindow, dialog, shell } from 'electron'
+import type { HostThemes } from '@shared/remote/host-admin'
 import {
   BUILTIN_THEME_ID,
   parseColor,
@@ -27,8 +28,6 @@ import {
   type ThemeMode,
   type ThemesState,
 } from '@shared/themes'
-import { safeName } from './artifacts/files'
-import { t } from './i18n'
 import { readJsonFile, writeFileAtomic } from './json-file'
 import { createLogger, describeError } from './log'
 import type { ThemeCatalog } from './theme-catalog'
@@ -36,7 +35,6 @@ import { compareVersions } from './update-state'
 
 const log = createLogger('themes')
 
-const JSON_FILTER = { name: 'JSON', extensions: ['json'] }
 // Fatal, so a file that is not UTF-8 is refused rather than read with replacement characters.
 const UTF8 = new TextDecoder('utf-8', { fatal: true })
 
@@ -76,6 +74,13 @@ export async function readThemeFile(path: string): Promise<ThemeReadResult> {
     return { ok: false, error: { code: 'unreadable' } }
   }
   if (!data) return { ok: false, error: { code: 'too-large' } }
+  return checkThemeBytes(data)
+}
+
+/** Checks a theme file's text as a device sent it, held to a file's size. */
+export function checkThemeText(text: string): ThemeReadResult {
+  const data = Buffer.from(text, 'utf8')
+  if (data.length > THEME_MAX_BYTES) return { ok: false, error: { code: 'too-large' } }
   return checkThemeBytes(data)
 }
 
@@ -184,6 +189,9 @@ export interface ThemeStoreDeps {
   changed(state: ThemesState, chosen: Theme | null): void
 }
 
+/** Makes an installed theme the one that shows: the setting's, or a device's own. */
+export type ThemeSelect = (id: string) => void
+
 /** Owns the themes folder; the setting, `appearance.colorTheme`, says which theme shows. */
 export class ThemeStore {
   // A checked file that an install answer offered to put in place of an installed theme, with the
@@ -194,6 +202,7 @@ export class ThemeStore {
     text: string
     ignored: string[]
     catalog?: string
+    select: ThemeSelect
   } | null = null
   // Changes to the folder, one at a time, so two installs never write the same file at once.
   private queue: Promise<unknown> = Promise.resolve()
@@ -220,6 +229,12 @@ export class ThemeStore {
     return { installed, chosen, failed: failure && { id: chosen, failure } }
   }
 
+  /** What a device lists: every theme the folder holds, whichever one this host shows. */
+  hostThemes(): HostThemes {
+    const failed = [...this.folder.failed].map(([id, failure]) => ({ id, failure }))
+    return { installed: this.state().installed, failed }
+  }
+
   /** The chosen theme, or null while the built-in one shows. */
   chosenTheme(): Theme | null {
     return this.find(this.chosen)?.theme ?? null
@@ -241,27 +256,23 @@ export class ThemeStore {
     return this.state()
   }
 
-  /** `themes:install`: asks for a file, checks it and installs it, or names what it would replace. */
-  async install(window: BrowserWindow | null): Promise<ThemeInstallResult> {
+  /**
+   * Installs a checked file, or names the installed theme it would replace; `file` names it in a
+   * failure. Installing shows the theme through `select`, a device's own when a device installs it.
+   */
+  async add(
+    file: string,
+    read: ThemeReadResult,
+    select: ThemeSelect = this.deps.select,
+  ): Promise<ThemeInstallResult> {
     this.pending = null
-    const options: Electron.OpenDialogOptions = {
-      title: t('dialogs.installTheme'),
-      properties: ['openFile', 'dontAddToRecent'],
-      filters: [JSON_FILTER],
-    }
-    const result = window
-      ? await dialog.showOpenDialog(window, options)
-      : await dialog.showOpenDialog(options)
-    const [path] = result.filePaths
-    if (result.canceled || !path) return { status: 'cancelled' }
-    const read = await readThemeFile(path)
-    if (!read.ok) return { status: 'failed', file: basename(path), error: read.error }
+    if (!read.ok) return { status: 'failed', file, error: read.error }
     const id = themeId(read.theme.name)
     this.folder = await readThemeFolder(this.deps.dir)
     const installed = this.find(id)
     if (installed || this.folder.failed.has(id)) {
       const token = randomUUID()
-      this.pending = { token, id, text: read.text, ignored: read.ignored }
+      this.pending = { token, id, text: read.text, ignored: read.ignored, select }
       return {
         status: 'conflict',
         token,
@@ -269,7 +280,7 @@ export class ThemeStore {
         installedName: installed?.theme.name ?? id,
       }
     }
-    return this.write(id, read.text, read.ignored)
+    return this.write(id, read.text, read.ignored, undefined, true, select)
   }
 
   /** `themes:replace`: installs the file the last install answer named. */
@@ -277,7 +288,14 @@ export class ThemeStore {
     const pending = this.pending
     if (!pending || token !== pending.token) throw new Error('No theme is waiting to be installed')
     this.pending = null
-    return this.write(pending.id, pending.text, pending.ignored, pending.catalog)
+    return this.write(
+      pending.id,
+      pending.text,
+      pending.ignored,
+      pending.catalog,
+      true,
+      pending.select,
+    )
   }
 
   /**
@@ -305,7 +323,10 @@ export class ThemeStore {
    * installed from the catalog is replaced without asking, and an update keeps the chosen theme;
    * one installed from a file is named for `themes:replace` first.
    */
-  async installCatalog(id: unknown): Promise<CatalogInstallResult> {
+  async installCatalog(
+    id: unknown,
+    select: ThemeSelect = this.deps.select,
+  ): Promise<CatalogInstallResult> {
     this.pending = null
     const entry = typeof id === 'string' ? this.deps.catalog.find(id) : undefined
     if (!entry) throw new Error('Not a theme in the catalog')
@@ -326,6 +347,7 @@ export class ThemeStore {
         text: read.text,
         ignored: read.ignored,
         catalog: entry.version,
+        select,
       }
       return {
         status: 'conflict',
@@ -334,7 +356,7 @@ export class ThemeStore {
         installedName: installed?.theme.name ?? entry.id,
       }
     }
-    return this.write(entry.id, read.text, read.ignored, entry.version, !fromCatalog)
+    return this.write(entry.id, read.text, read.ignored, entry.version, !fromCatalog, select)
   }
 
   /** `themes:remove`: deletes the file; removing the chosen theme brings back the built-in one. */
@@ -349,35 +371,20 @@ export class ThemeStore {
     else this.publish()
   }
 
-  /** `themes:export`: checks the file the renderer built, then saves it where the user says. */
-  async export(window: BrowserWindow | null, text: unknown): Promise<string | null> {
+  /** The name of the theme in a file the renderer built to export, checked in full. */
+  exportName(text: unknown): string {
     if (typeof text !== 'string') throw new Error('A theme file must be text')
     const parsed = parseThemeFile(text)
     if (!parsed.ok) throw new Error(`Not a theme file: ${parsed.error.code}`)
-    const options: Electron.SaveDialogOptions = {
-      title: t('dialogs.exportTheme'),
-      defaultPath: join(app.getPath('downloads'), `${safeName(parsed.theme.name, 'theme')}.json`),
-      filters: [JSON_FILTER],
-    }
-    const result = window
-      ? await dialog.showSaveDialog(window, options)
-      : await dialog.showSaveDialog(options)
-    if (result.canceled || !result.filePath) return null
-    await writeFile(result.filePath, text, 'utf8')
-    return result.filePath
-  }
-
-  /** `themes:reveal`: selects the theme's file in the file manager. */
-  reveal(id: unknown): void {
-    shell.showItemInFolder(this.fileOf(id))
+    return parsed.theme.name
   }
 
   private find(id: string): InstalledTheme | undefined {
     return this.folder.installed.find((theme) => theme.id === id)
   }
 
-  /** The file of a theme the folder holds, for an id from the renderer. */
-  private fileOf(id: unknown): string {
+  /** The file of a theme the folder holds, for an id from a window or a device. */
+  fileOf(id: unknown): string {
     if (typeof id !== 'string' || !(this.find(id) || this.folder.failed.has(id))) {
       throw new Error('Not an installed theme')
     }
@@ -394,15 +401,20 @@ export class ThemeStore {
     ignored: string[],
     catalog?: string,
     choose = true,
+    select: ThemeSelect = this.deps.select,
   ): Promise<{ status: 'installed'; id: string; ignored: string[] }> {
     await this.serial(async () => {
       await writeFileAtomic(join(this.deps.dir, `${id}.json`), text)
       this.folder = await readThemeFolder(this.deps.dir)
       await this.record(id, catalog)
     })
-    // Through the setting, unless the theme is the chosen one already.
-    if (choose && id !== this.chosen) this.deps.select(id)
-    else this.publish()
+    if (choose && select !== this.deps.select) {
+      select(id)
+      this.publish()
+    } else if (choose && id !== this.chosen) {
+      // Through the setting, unless the theme is the chosen one already.
+      select(id)
+    } else this.publish()
     return { status: 'installed', id, ignored }
   }
 

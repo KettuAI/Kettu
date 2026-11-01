@@ -53,6 +53,7 @@ import { loadGitTools, useGitStore } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { browserNotifications, notificationsProblem } from '@renderer/web/notifications'
 import {
   CONFIRM,
   ControlError,
@@ -66,7 +67,7 @@ import {
   SettingSelect,
   SettingSwitch,
 } from './controls'
-import { FlashMark } from './rows'
+import { FlashMark, GroupNote } from './rows'
 import { useApply } from './use-apply'
 
 const useSettings = () => useSettingsStore((s) => s.settings)
@@ -734,14 +735,31 @@ export function NotificationPreview() {
 // How long the test button shows that the notification went out.
 const SENT_MS = 2000
 
+/** In a browser: why it shows no notifications, if it shows none, and that they need the page open. */
+export function WebNotificationsNote() {
+  const { t } = useTranslation('web')
+  const problem = notificationsProblem(browserNotifications())
+  return (
+    <>
+      {problem && <GroupNote>{t(`notifications.${problem}`)}</GroupNote>}
+      <GroupNote>{t('notifications.openOnly')}</GroupNote>
+    </>
+  )
+}
+
 export function TestNotification() {
-  const { t } = useTranslation('settings')
+  const { t } = useTranslation(['settings', 'web'])
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
   const [unsupported, setUnsupported] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(timer.current), [])
+  // A browser says why: the page is on plain http, or its notifications are blocked.
+  const unsupportedText = (): string => {
+    const problem = isWeb ? notificationsProblem(browserNotifications()) : null
+    return problem ? t(`web:notifications.${problem}`) : t('notifications.testUnsupported')
+  }
   const run = async () => {
     setBusy(true)
     setSent(false)
@@ -765,7 +783,7 @@ export function TestNotification() {
     <>
       {unsupported && (
         <span role="status" className="text-xs text-secondary">
-          {t('notifications.testUnsupported')}
+          {unsupportedText()}
         </span>
       )}
       <span role="status" className="sr-only">
@@ -776,7 +794,7 @@ export function TestNotification() {
         variant="quiet"
         size="sm"
         disabled={busy}
-        title={unsupported ? t('notifications.testUnsupported') : undefined}
+        title={unsupported ? unsupportedText() : undefined}
         onClick={() => void run()}
         className={GROUP_ACTION}
       >

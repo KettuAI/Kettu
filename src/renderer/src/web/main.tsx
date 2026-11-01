@@ -115,6 +115,7 @@ async function showApp(device: WebDevice, paired: Paired | null): Promise<void> 
         await saveDevice({ key: device.key, host: null })
         location.replace('/')
       },
+      storage: storage('localStorage'),
     }),
   )
   serveFrames(link)

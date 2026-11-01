@@ -221,7 +221,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
         : { error: { code: 'unavailable', message: 'The daemon is starting' } },
   })
   hosts = running
-  admin = startDaemonAdmin({
+  admin = await startDaemonAdmin({
     dataPath: options.dataPath,
     version: options.version,
     settings,

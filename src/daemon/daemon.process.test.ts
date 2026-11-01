@@ -603,6 +603,7 @@ describeUnix('kettu', () => {
       updates: false,
       remoteSwitch: false,
       remoteReset: false,
+      thumbnails: false,
     })
     await expect(admin('sharing.status')).rejects.toMatchObject({ code: 'unavailable' })
     await expect(

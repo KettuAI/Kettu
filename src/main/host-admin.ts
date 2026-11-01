@@ -4,7 +4,7 @@
 
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
-import type { AdminAnswer } from '@shared/host-control'
+import type { AdminAnswer, HostToMain } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { PortErrorCode } from '@shared/port-rpc'
 import type { DeviceActivity } from '@shared/remote/activity'
@@ -16,12 +16,15 @@ import {
   type HostAdminEvent,
   type HostAdminMethod,
   type HostAdminResult,
+  type HostAttention,
   type HostInfo,
+  type HostThemes,
 } from '@shared/remote/host-admin'
 import type { PairingState } from '@shared/remote/pairing'
 import type { RemoteStatus } from '@shared/remote/status'
 import type { SettingsFile, SettingsPatch } from '@shared/settings'
 import type { SharingConnectResult, SharingResult, SharingStatus } from '@shared/sharing'
+import type { CatalogInstallResult, CatalogState, ThemeInstallResult } from '@shared/themes'
 import { isHarnessId } from '@shared/thread'
 import type { UpdateStatus } from '@shared/updates'
 import { isAbsolutePath } from '../agent-host/paths'
@@ -29,9 +32,11 @@ import type { AgentFolders } from './agent-folders'
 import { isExecutableFile } from './executable'
 import type { SettingsStore } from './settings'
 import { SettingsError } from './settings-schema'
+import { checkThemeText, type ThemeReadResult, type ThemeSelect } from './themes'
 
 // Windows extended-length paths go up to 32,767 characters.
 const PATH_CHARS = 32_767
+const FILE_NAME_CHARS = 255
 
 /** A call refused with the code its caller is answered, such as `invalid_params`. */
 export class AdminError extends Error {
@@ -122,6 +127,19 @@ export interface AdminSharing {
   unpublish(id: unknown): Promise<SharingResult>
 }
 
+/** The themes folder, as main's and the daemon's theme stores keep it. */
+export interface AdminThemes {
+  hostThemes(): HostThemes
+  /** Reads the folder again, so a file changed by hand shows. */
+  refresh(): Promise<unknown>
+  add(file: string, read: ThemeReadResult, select: ThemeSelect): Promise<ThemeInstallResult>
+  replace(token: unknown): Promise<ThemeInstallResult>
+  remove(id: unknown): Promise<void>
+  fileOf(id: unknown): string
+  catalog(refresh: unknown): Promise<CatalogState>
+  installCatalog(id: unknown, select: ThemeSelect): Promise<CatalogInstallResult>
+}
+
 export interface AdminUpdates {
   getStatus(): UpdateStatus
   check(): Promise<UpdateStatus>
@@ -144,6 +162,9 @@ export interface HostAdminDeps {
   sharing: AdminSharing | null
   /** Null where Kettu is not updated from Settings, as under the daemon. */
   updates: AdminUpdates | null
+  themes: AdminThemes
+  /** An artifact version's preview as a data URL; null where the host cannot capture, as the daemon. */
+  thumbnail: ((id: unknown, version: unknown, layout: unknown) => Promise<string | null>) | null
   /** Remote access is always on, as under the daemon, so a device may not turn it off. */
   remoteAlwaysOn?: boolean
   /** Tells every owner's device, or only `deviceId`. */
@@ -158,6 +179,9 @@ export class HostAdmin {
   private sentRemote: string | null = null
   /** Calls waiting for the updater to say what it does next. */
   private updateWaiters: (() => void)[] = []
+  /** Themes a device's install showed, which its answer tells it to show. */
+  private readonly shown = new Set<string>()
+  private readonly showOnDevice: ThemeSelect = (id) => void this.shown.add(id)
 
   constructor(private readonly deps: HostAdminDeps) {
     this.sentSettings = JSON.stringify(this.part(deps.settings.get()))
@@ -219,6 +243,28 @@ export class HostAdmin {
   updatesChanged(status: UpdateStatus): void {
     for (const resolve of this.updateWaiters.splice(0)) resolve()
     this.deps.send({ type: 'updates.changed', status }, null)
+  }
+
+  themesChanged(themes: HostThemes): void {
+    this.deps.send({ type: 'themes.changed', themes }, null)
+  }
+
+  /** What needs the user, which the devices notify about as the host's own window does. */
+  attention(message: Extract<HostToMain, { type: 'host:attention' }>): void {
+    const { title, body } = message
+    const attention: HostAttention =
+      message.kind === 'routine-paused'
+        ? { kind: message.kind, agentId: message.agentId, title, body }
+        : { kind: message.kind, sessionId: message.sessionId, title, body }
+    this.deps.send({ type: 'attention', attention }, null)
+  }
+
+  /** An install's answer, telling the device to show the theme when its install showed it. */
+  private answered<R extends { status: string; id?: string }>(
+    result: R,
+  ): R | (R & { show: boolean }) {
+    if (result.status !== 'installed' || result.id === undefined) return result
+    return { ...result, show: this.shown.delete(result.id) }
   }
 
   private hostPart(): HostAdminResult<'settings.get'> {
@@ -388,6 +434,44 @@ export class HostAdmin {
       case 'updates.dismiss':
         this.updates().dismiss()
         return null
+      case 'themes.get':
+        await this.deps.themes.refresh()
+        return this.deps.themes.hostThemes()
+      case 'themes.add': {
+        const { file, text } = fields(params)
+        if (
+          typeof file !== 'string' ||
+          file.length === 0 ||
+          file.length > FILE_NAME_CHARS ||
+          file.includes('\0')
+        ) {
+          throw invalid(`"file" must be a name of 1 to ${FILE_NAME_CHARS} characters`)
+        }
+        if (typeof text !== 'string') throw invalid('"text" must be a theme file\'s text')
+        return this.answered(
+          await this.deps.themes.add(file, checkThemeText(text), this.showOnDevice),
+        )
+      }
+      case 'themes.replace':
+        return this.answered(await this.deps.themes.replace(fields(params).token))
+      case 'themes.remove':
+        await this.deps.themes.remove(fields(params).id)
+        return null
+      case 'themes.path':
+        return this.deps.themes.fileOf(fields(params).id)
+      case 'themes.catalog':
+        return this.deps.themes.catalog(fields(params).refresh === true)
+      case 'themes.installCatalog':
+        return this.answered(
+          await this.deps.themes.installCatalog(fields(params).id, this.showOnDevice),
+        )
+      case 'artifacts.thumbnail': {
+        if (!this.deps.thumbnail) {
+          throw new AdminError('unavailable', 'This host does not capture previews')
+        }
+        const { id, version, layout } = fields(params)
+        return this.deps.thumbnail(id, version, layout)
+      }
     }
   }
 }

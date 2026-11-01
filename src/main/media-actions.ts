@@ -13,7 +13,7 @@ import {
   shell,
 } from 'electron'
 import { CARRIED_MEDIA_BYTES, type CarriedMedia, type MediaType } from '@shared/media'
-import { safeName } from './artifacts/files'
+import { safeName } from '@shared/file-name'
 import { grantedFile, type MediaGrants } from './media'
 
 const MIME_TYPE = /^(?:image|audio|video)\/[\w.+-]{1,100}$/

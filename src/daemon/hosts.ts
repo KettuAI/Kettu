@@ -33,6 +33,8 @@ import {
 import { ControlError, type DeviceSummary, type HostName, type HostStatus } from './control'
 import { ForkedHost, type HostTimings } from './forked-host'
 
+type Attention = Extract<HostToMain, { type: 'host:attention' }>
+
 const log = createLogger('daemon')
 
 const MAX_LIST = 10_000
@@ -120,6 +122,7 @@ export class Hosts {
   private nextRequest = 1
   private readonly settings: () => SettingsFile
   private readonly statusListeners = new Set<() => void>()
+  private readonly attentionListeners = new Set<(message: Attention) => void>()
   private readonly askers = new Map<number, (pairing: PairingState) => void>()
   private nextCode = 1
 
@@ -267,6 +270,12 @@ export class Hosts {
   onRemoteChanged(listener: () => void): () => void {
     this.statusListeners.add(listener)
     return () => this.statusListeners.delete(listener)
+  }
+
+  /** Calls `listener` with what the agent host says needs the user; returns how to stop. */
+  onAttention(listener: (message: Attention) => void): () => void {
+    this.attentionListeners.add(listener)
+    return () => this.attentionListeners.delete(listener)
   }
 
   /** Renames a device, which its sessions hear; false when it is not paired or not running. */
@@ -591,9 +600,11 @@ export class Hosts {
         else log.info(text)
         break
       }
-      // The app's notifications, badge, tray, power saving, media and artifacts; the answers to
-      // requests only main sends.
       case 'host:attention':
+        for (const listener of this.attentionListeners) listener(message)
+        break
+      // The app's badge, tray, power saving, media and artifacts; the answers to requests only
+      // main sends.
       case 'host:badge':
       case 'host:busy-changed':
       case 'host:routines-working':
