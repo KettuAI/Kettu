@@ -36,6 +36,9 @@ export interface KnownHost {
   removed: boolean
 }
 
+/** Why main could not change a host: renaming needs it online, and the rest need it listed. */
+export type HostChangeFailure = 'not_connected' | 'unknown_host'
+
 /** Why a host is not tried again: removed for good, or until one side's Kettu is updated. */
 export type HostStop = 'removed' | 'update_client' | 'update_host'
 

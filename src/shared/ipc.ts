@@ -209,11 +209,15 @@ export interface IpcInvokeContract {
   // Pairs with the host of a pasted link, its progress as `hosts:pairing` under the id.
   'hosts:pair': { args: [link: string]; result: HostPairStart }
   'hosts:pair-close': { args: [pairId: number]; result: void }
-  // This computer's name on a connected host.
-  'hosts:rename': { args: [id: string, name: string]; result: void }
-  'hosts:set-addresses': { args: [id: string, addresses: DirectAddress[]]; result: void }
+  // This computer's name on a connected host. Each change answers null once done, else a code
+  // the page words in the user's language.
+  'hosts:rename': { args: [id: string, name: string]; result: 'not_connected' | null }
+  'hosts:set-addresses': {
+    args: [id: string, addresses: DirectAddress[]]
+    result: 'unknown_host' | null
+  }
   // Forgets the host here; nothing changes on it.
-  'hosts:remove': { args: [id: string]; result: void }
+  'hosts:remove': { args: [id: string]; result: 'unknown_host' | null }
   'browser:show': { args: [sessionId: string]; result: void }
   'browser:hide': { args: [sessionId: string]; result: void }
   'browser:bounds': { args: [sessionId: string, bounds: BrowserBounds]; result: void }
@@ -398,11 +402,11 @@ export interface KettuApi {
     pair(link: string): Promise<HostPairStart>
     /** Add host closed: a pairing not yet added ends. */
     closePairing(pairId: number): Promise<void>
-    /** Renames this computer on a connected host. */
-    rename(id: string, name: string): Promise<void>
-    setAddresses(id: string, addresses: DirectAddress[]): Promise<void>
-    /** Forgets the host here; nothing changes on it. */
-    remove(id: string): Promise<void>
+    /** Renames this computer on a connected host; null once renamed, else why not. */
+    rename(id: string, name: string): Promise<'not_connected' | null>
+    setAddresses(id: string, addresses: DirectAddress[]): Promise<'unknown_host' | null>
+    /** Forgets the host here; nothing changes on it. Null once forgotten, else why not. */
+    remove(id: string): Promise<'unknown_host' | null>
     onChanged(listener: (status: HostsStatus) => void): () => void
     onPairing(listener: (event: HostPairingEvent) => void): () => void
   }

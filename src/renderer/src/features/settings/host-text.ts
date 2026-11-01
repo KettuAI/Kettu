@@ -1,8 +1,9 @@
 import type { TFunction } from 'i18next'
 import type { Platform } from '@shared/platform'
 import { addressText } from '@shared/remote/address'
-import type { HostConnection, HostStatus } from '@shared/remote/hosts'
+import type { HostChangeFailure, HostConnection, HostStatus } from '@shared/remote/hosts'
 import { longAgo } from '@renderer/lib/format'
+import { errorMessage } from '@renderer/lib/host'
 import type { WebHost } from '@renderer/stores/web-host'
 
 /** "iOS", "macOS", "Windows": what a host or device runs, by the platform it sent. */
@@ -49,6 +50,20 @@ export function connectionText(
         : t('hosts.state.offlineSince', { ago: longAgo(host.lastOnlineAt, now) })
     case 'stopped':
       return t(`hosts.state.${connection.reason}`)
+  }
+}
+
+/** Changes a host through main: null once done, else what to show for it. */
+export async function changeHost(
+  t: TFunction<'settings'>,
+  host: Pick<HostStatus, 'name'>,
+  change: () => Promise<HostChangeFailure | null>,
+): Promise<string | null> {
+  try {
+    const failure = await change()
+    return failure === null ? null : t(`hosts.failed.${failure}`, { name: host.name })
+  } catch (error) {
+    return errorMessage(error)
   }
 }
 

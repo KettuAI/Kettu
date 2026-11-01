@@ -710,6 +710,10 @@
       "direct": "直连",
       "directAt": "直连 {{address}}"
     },
+    "failed": {
+      "not_connected": "{{name}} 没有连上，等它在线后再试。",
+      "unknown_host": "这台电脑的列表里已经没有 {{name}} 了。"
+    },
     "state": {
       "online": "在线",
       "connecting": "正在连接…",

@@ -23,6 +23,7 @@ const { Dialog } = await import('@renderer/components/ui/dialog')
 const { HostRow, HostsNote, SelfRow } = await import('./hosts-section')
 const { AddHostBody } = await import('./host-add')
 const { HostPage } = await import('./host-page')
+const { changeHost } = await import('./host-text')
 
 const HOUR = 60 * 60 * 1000
 const now = Date.now()
@@ -217,6 +218,29 @@ describe("a host's page", () => {
     // Its name can be changed only while it is online.
     expect(renderToStaticMarkup(createElement(HostPage, { id: devBox.id }))).toMatch(
       /disabled=""[^>]*value="Lin MacBook"|value="Lin MacBook"[^>]*disabled=""/,
+    )
+  })
+
+  it("words main's codes when a change to a host fails", async () => {
+    const t = i18n.getFixedT(null, 'settings')
+    const failed = (code: 'not_connected' | 'unknown_host') =>
+      changeHost(t, devBox, async () => code)
+    expect(await failed('not_connected')).toBe(
+      'dev-box is not connected. Try again once it is online.',
+    )
+    expect(await failed('unknown_host')).toBe("dev-box is no longer in this computer's list.")
+    expect(await changeHost(t, devBox, async () => null)).toBeNull()
+    // A call main refused outright still says why.
+    expect(await changeHost(t, devBox, () => Promise.reject(new Error('Not a host id')))).toBe(
+      'Not a host id',
+    )
+    await i18n.changeLanguage('zh-CN')
+    const zh = i18n.getFixedT(null, 'settings')
+    expect(await changeHost(zh, devBox, async () => 'not_connected')).toBe(
+      'dev-box 没有连上，等它在线后再试。',
+    )
+    expect(await changeHost(zh, devBox, async () => 'unknown_host')).toBe(
+      '这台电脑的列表里已经没有 dev-box 了。',
     )
   })
 

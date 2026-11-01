@@ -28,13 +28,12 @@ import {
 import { Input } from '@renderer/components/ui/input'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { monthDay } from '@renderer/lib/format'
-import { errorMessage } from '@renderer/lib/host'
 import { useHostsStore } from '@renderer/stores/hosts'
 import { openSettingsItem } from '@renderer/stores/view'
 import { Fact } from './agent-parts'
 import { CONFIRM, ControlError } from './controls'
 import { AddHostDialog } from './host-add'
-import { platformName, routeText } from './host-text'
+import { changeHost, platformName, routeText } from './host-text'
 import { HostState } from './hosts-section'
 import { DeviceTile, HostIcon } from './remote-parts'
 import { GroupLabel, GroupNote, ItemPageHeader, Notice, RowFrame, RowGroup, RowText } from './rows'
@@ -194,7 +193,7 @@ function DeviceNameField({ host }: { host: HostStatus }) {
     const next = draft.trim()
     setDraft(null)
     if (next === '' || next === host.deviceName || [...next].length > DEVICE_NAME_CHARS) return
-    window.kettu.hosts.rename(host.id, next).catch((e: unknown) => setError(errorMessage(e)))
+    void changeHost(t, host, () => window.kettu.hosts.rename(host.id, next)).then(setError)
   }
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
     if (isComposing(event)) return
@@ -254,14 +253,10 @@ function EditAddresses({ host }: { host: HostStatus }) {
   const save = async (): Promise<void> => {
     setBusy(true)
     setError(null)
-    try {
-      await window.kettu.hosts.setAddresses(host.id, list)
-      setOpen(false)
-    } catch (e) {
-      setError(errorMessage(e))
-    } finally {
-      setBusy(false)
-    }
+    const failed = await changeHost(t, host, () => window.kettu.hosts.setAddresses(host.id, list))
+    setBusy(false)
+    if (failed) setError(failed)
+    else setOpen(false)
   }
   return (
     <>
@@ -376,14 +371,14 @@ function RemoveHost({ host }: { host: HostStatus }) {
   const remove = async (): Promise<void> => {
     setBusy(true)
     setError(null)
-    try {
-      await window.kettu.hosts.remove(host.id)
-      setOpen(false)
-      back()
-    } catch (e) {
-      setError(errorMessage(e))
+    const failed = await changeHost(t, host, () => window.kettu.hosts.remove(host.id))
+    if (failed) {
+      setError(failed)
       setBusy(false)
+      return
     }
+    setOpen(false)
+    back()
   }
   return (
     <>

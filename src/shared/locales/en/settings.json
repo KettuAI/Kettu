@@ -714,6 +714,10 @@
       "direct": "Direct",
       "directAt": "Direct {{address}}"
     },
+    "failed": {
+      "not_connected": "{{name}} is not connected. Try again once it is online.",
+      "unknown_host": "{{name}} is no longer in this computer's list."
+    },
     "state": {
       "online": "Online",
       "connecting": "Connecting…",

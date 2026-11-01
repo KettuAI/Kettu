@@ -25,8 +25,7 @@ import {
 import { Field, FieldDescription, FieldError, FieldLabel } from '@renderer/components/ui/field'
 import { Input } from '@renderer/components/ui/input'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { errorMessage } from '@renderer/lib/host'
-import { platformName } from './host-text'
+import { changeHost, platformName } from './host-text'
 import { DeviceTile, HostIcon } from './remote-parts'
 
 /** Why Add host shows no host: what pairing said, or what kept it from starting. */
@@ -312,13 +311,10 @@ function Added({ host, onDone }: { host: HostStatus; onDone: () => void }) {
     if (!valid || busy) return
     if (trimmed === host.deviceName) return onDone()
     setBusy(true)
-    try {
-      await window.kettu.hosts.rename(host.id, trimmed)
-      onDone()
-    } catch (e) {
-      setError(errorMessage(e))
-      setBusy(false)
-    }
+    const failed = await changeHost(t, host, () => window.kettu.hosts.rename(host.id, trimmed))
+    if (!failed) return onDone()
+    setError(failed)
+    setBusy(false)
   }
   return (
     <form className="contents" onSubmit={(event) => void submit(event)}>
