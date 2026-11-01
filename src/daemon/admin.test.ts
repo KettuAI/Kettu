@@ -89,7 +89,7 @@ async function setup() {
   const dataPath = await tempFolder('kettu-daemon-admin-')
   const settings = await SettingsStore.load(dataPath)
   const hosts = new FakeHosts()
-  const admin = await startDaemonAdmin({ dataPath, version: '1.2.3', settings, hosts })
+  const admin = await startDaemonAdmin({ dataPath, version: '1.2.3', settings, hosts, env: {} })
   const call = (method: string, params?: unknown) => admin.answer(PHONE, method, params)
   return { dataPath, settings, hosts, admin, call }
 }
