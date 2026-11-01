@@ -143,6 +143,7 @@
   --color-background: var(--background);
   --color-tile: var(--tile);
   --color-track: var(--track);
+  --color-switch-on: var(--switch-on);
   --color-segment-track: var(--segment-track);
   --color-segment-thumb: var(--segment-thumb);
   --color-canvas: var(--canvas);

@@ -270,6 +270,20 @@ describe('contrast', () => {
     })
     expect(issues.some((issue) => issue.fg === 'text-primary')).toBe(false)
   })
+
+  it("holds a group to the ratio it sets, 3:1 for a switch's fill", () => {
+    const issues = (fill: string) =>
+      contrastIssues({
+        light: { 'switch-on': fill, 'bg-app': '#ffffff', 'bg-surface': '#ffffff' },
+        dark: {},
+      })
+    // Under 4.5:1, which text needs, but over 3:1.
+    expect(issues('#1d9442')).toEqual([])
+    expect(issues('#34c759')).toEqual([
+      { mode: 'light', fg: 'switch-on', bg: 'bg-app', ratio: expect.closeTo(2.22, 2) },
+      { mode: 'light', fg: 'switch-on', bg: 'bg-surface', ratio: expect.closeTo(2.22, 2) },
+    ])
+  })
 })
 
 describe('themeSlug', () => {

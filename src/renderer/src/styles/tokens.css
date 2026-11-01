@@ -100,6 +100,10 @@
   --primary-ring: #222222;
   --primary-highlight: rgb(255 255 255 / 0%);
 
+  /* A switch that is on, green as on Apple's platforms. It reaches 3:1 on the page and on the
+     thumb, which is bg-surface. */
+  --switch-on: #1d9442;
+
   /* Agent marks: with the Kettu icon, the only brand colors in the interface. */
   --brand-claude: #d97757;
   --brand-codex-1: #b1a7ff;
@@ -242,6 +246,8 @@
     --primary-ring: #ececec;
     --primary-highlight: rgb(255 255 255 / 0%);
 
+    --switch-on: #30d158;
+
     --brand-opencode-frame: #ffffff;
     --brand-opencode-fill: #5a5858;
 
@@ -360,6 +366,8 @@
   --primary-hover-to: #ffffff;
   --primary-ring: #ececec;
   --primary-highlight: rgb(255 255 255 / 0%);
+
+  --switch-on: #30d158;
 
   --brand-opencode-frame: #ffffff;
   --brand-opencode-fill: #5a5858;
