@@ -36,6 +36,9 @@ import { ForkedHost, type HostTimings } from './forked-host'
 type Attention = Extract<HostToMain, { type: 'host:attention' }>
 
 const log = createLogger('daemon')
+// What each host logs carries its own name, as in the app's log.
+const agentLog = createLogger('agent-host')
+const remoteLog = createLogger('remote-host')
 
 const MAX_LIST = 10_000
 const MAX_STRING = 8192
@@ -130,7 +133,7 @@ export class Hosts {
     this.settings = options.settings
     const bundle = (name: string): string => path.join(options.bundleDir, name)
     this.agent = new ForkedHost<MainToHost, HostToMain>({
-      log: createLogger('agent-host'),
+      log: agentLog,
       modulePath: bundle('agent-host.cjs'),
       socketName: 'agent-host',
       env: options.env,
@@ -177,7 +180,7 @@ export class Hosts {
     })
     // Devices reach it through its direct connections, as in the desktop app, not a socket.
     this.remote = new ForkedHost<MainToRemoteHost, RemoteHostToMain>({
-      log: createLogger('remote-host'),
+      log: remoteLog,
       modulePath: bundle('remote-host.cjs'),
       socketName: null,
       env: options.env,
@@ -551,9 +554,9 @@ export class Hosts {
         break
       case 'remote-host:log': {
         const text = typeof message.message === 'string' ? message.message : ''
-        if (message.level === 'error') log.error(text)
-        else if (message.level === 'warn') log.warn(text)
-        else log.info(text)
+        if (message.level === 'error') remoteLog.error(text)
+        else if (message.level === 'warn') remoteLog.warn(text)
+        else remoteLog.info(text)
         break
       }
       default:
@@ -595,9 +598,9 @@ export class Hosts {
         break
       case 'host:log': {
         const text = typeof message.message === 'string' ? message.message : ''
-        if (message.level === 'error') log.error(text)
-        else if (message.level === 'warn') log.warn(text)
-        else log.info(text)
+        if (message.level === 'error') agentLog.error(text)
+        else if (message.level === 'warn') agentLog.warn(text)
+        else agentLog.info(text)
         break
       }
       case 'host:attention':
