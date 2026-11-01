@@ -596,21 +596,15 @@ export function registerIpcHandlers({
     pairOwners.delete(pairId)
     remoteHost.closeHostPairing(pairId)
   })
-  handle('hosts:rename', 2, (_, id, name) => {
-    if (!remoteHost.renameOnHost(hostIdArg(id), deviceName(name))) {
-      throw new Error('The host is not connected')
-    }
-  })
-  handle('hosts:set-addresses', 2, (_, id, addresses) => {
-    if (!remoteHost.setHostAddresses(hostIdArg(id), hostAddresses(addresses))) {
-      throw new Error('This computer does not know that host')
-    }
-  })
-  handle('hosts:remove', 1, (_, id) => {
-    if (!remoteHost.removeHost(hostIdArg(id))) {
-      throw new Error('This computer does not know that host')
-    }
-  })
+  handle('hosts:rename', 2, (_, id, name) =>
+    remoteHost.renameOnHost(hostIdArg(id), deviceName(name)) ? null : 'not_connected',
+  )
+  handle('hosts:set-addresses', 2, (_, id, addresses) =>
+    remoteHost.setHostAddresses(hostIdArg(id), hostAddresses(addresses)) ? null : 'unknown_host',
+  )
+  handle('hosts:remove', 1, (_, id) =>
+    remoteHost.removeHost(hostIdArg(id)) ? null : 'unknown_host',
+  )
 
   handle('browser:show', 1, (_, id) => browserViews.show(sessionId(id)))
   handle('browser:hide', 1, (_, id) => browserViews.hide(sessionId(id)))
