@@ -27,11 +27,20 @@ function ipv6Head(address: string): number {
   return address.startsWith('::') ? 0 : parseInt(address.split(':')[0]!, 16)
 }
 
-/** Loopback, link-local, unspecified and multicast: never reachable from another device. */
+/**
+ * Loopback, link-local, unspecified and multicast, and the benchmarking range 198.18/15 that proxy
+ * tools hand out as fake IPs on their TUN interfaces: never reachable from another device.
+ */
 function unreachable(address: string): boolean {
   if (isIPv4(address)) {
-    const [a, b] = ipv4Octets(address)
-    return a === 0 || a === 127 || (a === 169 && b === 254) || a! >= 224
+    const [a, b] = ipv4Octets(address) as [number, number]
+    return (
+      a === 0 ||
+      a === 127 ||
+      (a === 169 && b === 254) ||
+      (a === 198 && (b === 18 || b === 19)) ||
+      a >= 224
+    )
   }
   const head = ipv6Head(address)
   return (

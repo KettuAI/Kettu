@@ -45,6 +45,12 @@ describe('findAddresses', () => {
     ['wg0', '0.0.0.0', false],
     ['wg0', '239.1.1.1', false],
     ['wg0', 'ff02::1', false],
+    // Never the fake IPs a proxy tool's TUN interface hands out, in 198.18.0.0/15
+    ['utun4', '198.18.0.1', false],
+    ['utun5', '198.19.255.254', false],
+    ['en0', '198.18.0.1', false],
+    ['utun4', '198.17.255.254', true],
+    ['utun4', '198.20.0.1', true],
     // Never a bridge to containers or virtual machines
     ['docker0', '172.17.0.1', false],
     ['br-3f9a2c1d7e60', '172.18.0.1', false],
