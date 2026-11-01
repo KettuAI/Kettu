@@ -263,6 +263,7 @@ describe('Account tokens', () => {
 
   it.each([
     ['signed_out_from_account_page', 'account-page'],
+    ['signed_out_by_admin', 'admin'],
     ['account_disabled', 'disabled'],
     ['refresh_token_reused', 'reused'],
     ['authorization_code_reused', 'reused'],

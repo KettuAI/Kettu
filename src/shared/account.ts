@@ -5,6 +5,8 @@
 export type SignedOutReason =
   /** This computer was signed out from the account page. */
   | 'account-page'
+  /** Kettu's support team ended this computer's sign-in. */
+  | 'admin'
   | 'disabled'
   /** A token was used twice, so the service signed the client out to protect the account. */
   | 'reused'

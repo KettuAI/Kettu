@@ -298,7 +298,8 @@
     "notSignedIn": "未能登录",
     "reasons": {
       "account-page": "这台电脑已在账号页面上被退出登录。",
-      "disabled": "你的 Kettu 账号已被停用。",
+      "admin": "Kettu 支持团队结束了这台电脑上的登录。",
+      "disabled": "你的 Kettu 账号已被停用。如需帮助，请联系 hello@kettu.sh。",
       "reused": "登录凭据被使用了两次，为保护你的账号，Kettu 已退出登录。",
       "expired": "登录已过期，请重新登录。",
       "invalid": "登录已失效，比如账号已被删除。"
@@ -307,7 +308,7 @@
       "timeout": "10 分钟内没有在浏览器中完成登录。",
       "network": "Kettu 连不上账号服务。请检查网络或代理后重试。",
       "service": "账号服务没能完成登录，请重试。",
-      "disabled": "这个 Kettu 账号已被停用。",
+      "disabled": "这个 Kettu 账号已被停用。如需帮助，请联系 hello@kettu.sh。",
       "local": "Kettu 没能在浏览器中打开登录页面。"
     },
     "plainText": "此系统没有钥匙串，登录信息会以不加密的方式保存。",
