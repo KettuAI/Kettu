@@ -22,6 +22,7 @@ export type Command =
   | { kind: 'terminal-set'; allowed: boolean }
   | { kind: 'service-install' }
   | { kind: 'service-uninstall' }
+  | { kind: 'update' }
   /** What was wrong with the command line, in a short sentence. */
   | { kind: 'usage'; message: string }
 
@@ -44,6 +45,7 @@ Commands:
   terminal off                 Stop it; devices' terminals close but keep running here
   service install              Run the daemon as a service that starts with the computer
   service uninstall            Stop the service and remove it
+  update                       Update to the latest release, and the service with it
 
 Options:
   -y, --yes                    Change the port without asking
@@ -114,6 +116,8 @@ function parseWords(words: string[], yes: boolean): Command {
       return extra(0) ?? { kind: 'run' }
     case 'status':
       return extra(0) ?? { kind: 'status' }
+    case 'update':
+      return extra(0) ?? { kind: 'update' }
     case 'pair':
       return extra(0) ?? { kind: 'pair' }
     case 'devices':
