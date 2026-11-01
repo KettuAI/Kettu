@@ -17,7 +17,8 @@ import type {
 } from '@shared/host-control'
 import type { Locale } from '@shared/locale'
 import type { DeviceActivity } from '@shared/remote/activity'
-import { isDirectStatus } from '@shared/remote/address'
+import { isDirectStatus, isPort } from '@shared/remote/address'
+import { deviceId, type NewDevice } from '@shared/remote/device'
 import type { HostAdminEvent } from '@shared/remote/host-admin'
 import { isPairingState, type PairingState } from '@shared/remote/pairing'
 import type { RemoteStatus } from '@shared/remote/status'
@@ -45,7 +46,7 @@ const MAX_STRING = 8192
 const MAX_DEVICES = 1000
 /** How long an agent's tree gets between SIGTERM and SIGKILL after its host died, as in main. */
 const GRACE_MS = 2_000
-/** How long a removal waits for the remote host to report the device gone. */
+/** How long a removal waits for the remote host to report the device gone, or an addition added. */
 const REMOVE_TIMEOUT_MS = 10_000
 /** How long a change of the direct settings waits for the remote host to report what came of it. */
 const DIRECT_WAIT_MS = 2_000
@@ -63,7 +64,7 @@ function isStringList(value: unknown): value is string[] {
 
 function isRemoteStatus(value: unknown): value is RemoteHostStatus {
   if (typeof value !== 'object' || value === null) return false
-  const { publicKey, plainTextKey, devices, online, refused, direct } = value as Record<
+  const { publicKey, plainTextKey, devices, online, refused, direct, sshPort } = value as Record<
     string,
     unknown
   >
@@ -85,7 +86,8 @@ function isRemoteStatus(value: unknown): value is RemoteHostStatus {
     online.length <= MAX_DEVICES &&
     online.every(isText) &&
     Number.isSafeInteger(refused) &&
-    isDirectStatus(direct)
+    isDirectStatus(direct) &&
+    (sshPort === undefined || sshPort === null || isPort(sshPort))
   )
 }
 
@@ -106,6 +108,10 @@ export interface HostsOptions {
   timings?: HostTimings
   /** Answers an owner's call beyond its sessions, which a device made through the remote host. */
   admin?(deviceId: unknown, method: unknown, params: unknown): Promise<AdminAnswer>
+  /** The port the last run took channels from SSH on, or null for any free one. */
+  sshPort: number | null
+  /** The remote host listens for SSH on another port, to keep for the next run. */
+  sshPortChanged?(port: number): void
 }
 
 type AnyHost = ForkedHost<unknown, { type: string }>
@@ -120,6 +126,7 @@ export class Hosts {
   private remoteStatus: RemoteHostStatus | null = null
   private privateKey: string
   private resetting: Promise<void> | null = null
+  private sshPort: number | null
   /** The direct settings the remote host was last given, as JSON. */
   private sentDirect: string | null = null
   /** Whether devices may use the terminal, as the remote host was last told. */
@@ -136,6 +143,7 @@ export class Hosts {
   constructor(private readonly options: HostsOptions) {
     this.settings = options.settings
     this.privateKey = options.privateKey
+    this.sshPort = options.sshPort
     const bundle = (name: string): string => path.join(options.bundleDir, name)
     this.agent = new ForkedHost<MainToHost, HostToMain>({
       log: agentLog,
@@ -204,6 +212,7 @@ export class Hosts {
         terminal: this.initTerminal(),
         // The agent host's socket outlives its restarts, so a device's session finds it again.
         agentHostSocket: this.agent.socketPath ?? undefined,
+        sshPort: this.sshPort,
       }),
       shutdownMessage: { type: 'remote-host:shutdown', reason: 'stopping' },
       readyType: 'remote-host:ready',
@@ -356,6 +365,57 @@ export class Hosts {
     if (changed.has('terminal') || changed.has('remote')) {
       this.terminal.post({ type: 'terminal-host:settings', settings: terminalSettings(settings) })
     }
+  }
+
+  /**
+   * Adds a device whose key came over an SSH login, which proves it is the owner's, settled once
+   * the remote host reports it added.
+   */
+  async addDevice(device: NewDevice): Promise<void> {
+    const id = await deviceId(Buffer.from(device.publicKey, 'base64'))
+    await this.untilRemote(
+      () => this.remoteStatus?.devices.some((paired) => paired.id === id) === true,
+      () => this.remote.post({ type: 'remote-host:add-device', device }),
+      'The remote host did not report it added',
+    )
+  }
+
+  /** What a computer adding this one over SSH connects with; throws while it cannot. */
+  sshInfo(): { publicKey: string; port: number } {
+    const status = this.remoteStatus
+    if (!status) throw new ControlError('unavailable', 'Remote access is not running')
+    if (status.sshPort === undefined || status.sshPort === null) {
+      throw new ControlError('unavailable', 'Channels through SSH cannot listen on this computer')
+    }
+    return { publicKey: status.publicKey, port: status.sshPort }
+  }
+
+  /**
+   * Posts what `post` sends and settles once a report makes `done` true; rejects when the remote
+   * host does not run, stops or does not report it in time.
+   */
+  private untilRemote(done: () => boolean, post: () => boolean, late: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(
+        () => settle(new ControlError('unavailable', late)),
+        REMOVE_TIMEOUT_MS,
+      )
+      const listener = (): void => {
+        if (done()) settle(null)
+        else if (!this.remoteStatus)
+          settle(new ControlError('unavailable', 'Remote access stopped'))
+      }
+      const settle = (error: Error | null): void => {
+        clearTimeout(timer)
+        this.statusListeners.delete(listener)
+        if (error) reject(error)
+        else resolve()
+      }
+      this.statusListeners.add(listener)
+      if (!this.remoteStatus || !post()) {
+        settle(new ControlError('unavailable', 'Remote access is not running'))
+      }
+    })
   }
 
   /** Forgets a device and closes its sessions, settled once the remote host reports it gone. */
@@ -536,6 +596,13 @@ export class Hosts {
     for (const listener of askers) listener({ state: 'void', reason: 'stopped' })
   }
 
+  /** Keeps the port the remote host listens for SSH on, so its next start takes it again. */
+  private keepSshPort(port: number | null | undefined): void {
+    if (typeof port !== 'number' || port === this.sshPort) return
+    this.sshPort = port
+    this.options.sshPortChanged?.(port)
+  }
+
   /** Stops the hosts as main does when the app quits: devices hear why before the agent host goes. */
   async stop(): Promise<void> {
     await Promise.all([this.remote.stop().then(() => this.agent.stop()), this.terminal.stop()])
@@ -549,7 +616,9 @@ export class Hosts {
   private receiveRemote(message: RemoteHostToMain): void {
     switch (message.type) {
       case 'remote-host:status':
-        if (isRemoteStatus(message.status)) this.setRemoteStatus(message.status)
+        if (!isRemoteStatus(message.status)) break
+        this.keepSshPort(message.status.sshPort)
+        this.setRemoteStatus(message.status)
         break
       case 'remote-host:pairing': {
         const listener = this.askers.get(message.codeId)

@@ -15,6 +15,7 @@ import {
   type ControlServer,
   type DaemonStatus,
   type DirectReport,
+  type SshSetup,
 } from './control'
 
 // The control socket is a Unix socket, which the daemon has only on macOS and Linux.
@@ -37,6 +38,13 @@ afterEach(async () => {
 
 const status = { version: '1.2.3', pid: 1 } as DaemonStatus
 const report: DirectReport = { port: 51234, own: [], status: null }
+const SSH_SETUP: SshSetup = {
+  publicKey: Buffer.alloc(32, 1).toString('base64'),
+  name: 'devbox',
+  platform: 'linux',
+  version: '1.2.3',
+  port: 52001,
+}
 
 function handlers(overrides: Partial<ControlHandlers> = {}): ControlHandlers {
   return {
@@ -54,6 +62,7 @@ function handlers(overrides: Partial<ControlHandlers> = {}): ControlHandlers {
     'direct.remove': async () => report,
     'terminal.get': async () => ({ allowed: false }),
     'terminal.set': async ({ allowed }) => ({ allowed }),
+    'ssh.setup': async () => SSH_SETUP,
     ...overrides,
   }
 }
@@ -227,6 +236,42 @@ describeUnix('the control socket', () => {
       { host: 'fd00::1', port: 4567 },
       { host: 'frp.example.com', port: 60021 },
     ])
+  })
+
+  it('takes a device from SSH as pairing would add it, or none', async () => {
+    const calls: unknown[] = []
+    server = await serveControl(
+      socket,
+      handlers({
+        'ssh.setup': async (params) => {
+          calls.push(params)
+          return SSH_SETUP
+        },
+      }),
+      () => {},
+    )
+    const client = await connectControl(socket)
+    const device = {
+      publicKey: Buffer.alloc(32, 9).toString('base64'),
+      name: ' Lin\u0007 MacBook ',
+      kind: 'desktop',
+      platform: 'macOS 26.1',
+      model: 'Mac16,1',
+    }
+    expect(await client.call('ssh.setup', { device })).toEqual(SSH_SETUP)
+    await client.call('ssh.setup', {} as never)
+    for (const bad of [
+      { ...device, publicKey: 'short' },
+      { ...device, name: ' ' },
+      { ...device, model: 'a\nb' },
+      'device',
+    ]) {
+      await expect(client.call('ssh.setup', { device: bad } as never)).rejects.toMatchObject({
+        code: 'invalid_params',
+      })
+    }
+    client.close()
+    expect(calls).toEqual([{ device: { ...device, name: 'Lin MacBook' } }, { device: null }])
   })
 
   it('throws NotRunning when nothing listens', async () => {

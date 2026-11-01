@@ -1,14 +1,16 @@
-// A transport over a stream socket, as the local socket a host run under Node.js listens on: each
-// Noise message is a 2-byte big-endian length and the message, as Noise frames it over TCP.
+// A transport over a stream socket, as the local socket a host run under Node.js listens on, or
+// another byte stream, as ssh's standard input and output: each Noise message is a 2-byte
+// big-endian length and the message, as Noise frames it over TCP.
 
-import { createServer, type Server, type Socket } from 'node:net'
+import { createServer, type Server } from 'node:net'
+import type { Duplex } from 'node:stream'
 import { MAX_NOISE_MESSAGE } from '@shared/remote/noise'
 import type { Transport } from '@shared/remote/transport'
 
 const HEADER_BYTES = 2
 
-/** The transport on one end of a connected socket. */
-export function streamTransport(socket: Socket): Transport {
+/** The transport on one end of a connected socket or stream. */
+export function streamTransport(socket: Duplex): Transport {
   let pending: Buffer = Buffer.alloc(0)
   let open = true
   let closed = false

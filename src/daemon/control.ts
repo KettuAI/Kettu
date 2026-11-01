@@ -6,10 +6,18 @@ import type { Server } from 'node:net'
 import type { DirectStatus } from '@shared/host-control'
 import type { PortChannel } from '@shared/port-channel'
 import { isPort, MIN_OWN_PORT, parseDirectAddress } from '@shared/remote/address'
-import { DEVICE_ID, normalizeDeviceName } from '@shared/remote/device'
+import {
+  DEVICE_ID,
+  isDeviceField,
+  isDeviceModel,
+  normalizeDeviceName,
+  type NewDevice,
+} from '@shared/remote/device'
+import type { Platform } from '@shared/platform'
 import type { PairingState } from '@shared/remote/pairing'
 import type { DirectAddress } from '@shared/remote/protocol'
 import { connectPort, listenPorts } from '@shared/socket-port'
+import { publicKeyBytes } from '../remote-host/devices'
 import type { HostState } from './forked-host'
 
 /** A host that takes ports; the remote host takes devices' connections instead. */
@@ -99,10 +107,26 @@ export interface ControlCalls {
   'terminal.get': { params: undefined; result: TerminalReport }
   /** Allows devices the terminal, or stops allowing it, which closes their terminals at once. */
   'terminal.set': { params: { allowed: boolean }; result: TerminalReport }
+  /**
+   * What a computer adding this one over SSH connects with, after adding its `device`, whose key
+   * came over the login, as a device of the owner's.
+   */
+  'ssh.setup': { params: { device: NewDevice | null }; result: SshSetup }
 }
 
 export interface TerminalReport {
   allowed: boolean
+}
+
+/** What a computer adding this one over SSH connects with. */
+export interface SshSetup {
+  /** The host's X25519 public key, in base64, which the channel's handshake is made to. */
+  publicKey: string
+  name: string
+  platform: Platform
+  version: string
+  /** The port it takes channels from SSH on, on 127.0.0.1 alone. */
+  port: number
 }
 
 /** What the daemon tells a connection unasked. */
@@ -170,6 +194,19 @@ function address(raw: unknown): DirectAddress {
   return parsed
 }
 
+function newDevice(raw: unknown): NewDevice {
+  const { publicKey, name, kind, platform, model } = record(raw)
+  if (typeof publicKey !== 'string' || !publicKeyBytes(publicKey)) {
+    throw new ControlError('invalid_params', "A device's key is 32 bytes in base64")
+  }
+  const kept = normalizeDeviceName(name)
+  if (kept === null) throw new ControlError('invalid_params', 'The name must not be empty')
+  if (!isDeviceField(kind) || !isDeviceField(platform) || !isDeviceModel(model)) {
+    throw new ControlError('invalid_params', "The device's kind, platform or model is not one")
+  }
+  return { publicKey, name: kept, kind, platform, model }
+}
+
 const validators: { [M in ControlMethod]: (raw: unknown) => Params<M> } = {
   status: none,
   'host.socket': (raw) => {
@@ -213,6 +250,10 @@ const validators: { [M in ControlMethod]: (raw: unknown) => Params<M> } = {
       throw new ControlError('invalid_params', 'allowed must be a boolean')
     }
     return { allowed }
+  },
+  'ssh.setup': (raw) => {
+    const { device } = record(raw)
+    return { device: device === undefined || device === null ? null : newDevice(device) }
   },
 }
 

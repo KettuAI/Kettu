@@ -1,7 +1,7 @@
 import type { TFunction } from 'i18next'
 import type { Platform } from '@shared/platform'
 import { addressText } from '@shared/remote/address'
-import type { HostChangeFailure, HostConnection, HostStatus } from '@shared/remote/hosts'
+import type { HostChangeFailure, HostStatus } from '@shared/remote/hosts'
 import { longAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import type { WebHost } from '@renderer/stores/web-host'
@@ -16,11 +16,23 @@ export function platformName(platform: Platform | string): string {
   return platform
 }
 
-/** How a host is reached: direct, with the address that answered while it is online. */
-export function routeText(t: TFunction<'settings'>, connection: HostConnection): string {
-  return connection.state === 'online'
-    ? t('hosts.via.directAt', { address: addressText(connection.address) })
+/**
+ * How a host is reached: over SSH at the address the user typed, or direct, with the address that
+ * answered while it is online.
+ */
+export function routeText(
+  t: TFunction<'settings'>,
+  host: Pick<HostStatus, 'connection' | 'ssh'>,
+): string {
+  if (host.ssh) return t('hosts.via.sshAt', { target: host.ssh.target })
+  return host.connection.state === 'online'
+    ? t('hosts.via.directAt', { address: addressText(host.connection.address) })
     : t('hosts.via.direct')
+}
+
+/** The route alone, as the sidebar names it beside a host online. */
+export function routeName(t: TFunction<'settings'>, host: Pick<HostStatus, 'ssh'>): string {
+  return host.ssh ? t('hosts.via.ssh') : t('hosts.via.direct')
 }
 
 /** The line under a host's name: its system, Kettu's version and how it is reached. */
@@ -28,7 +40,7 @@ export function hostLine(t: TFunction<'settings'>, host: HostStatus): string {
   return [
     platformName(host.platform),
     t('hosts.version', { version: host.version }),
-    routeText(t, host.connection),
+    routeText(t, host),
   ].join(' · ')
 }
 

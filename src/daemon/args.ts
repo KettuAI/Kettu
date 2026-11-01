@@ -25,6 +25,8 @@ export type Command =
   | { kind: 'update' }
   | { kind: 'login' }
   | { kind: 'logout' }
+  /** `request`: the JSON the desktop app sends, or null for none. */
+  | { kind: 'ssh-setup'; request: string | null }
   /** What was wrong with the command line, in a short sentence. */
   | { kind: 'usage'; message: string }
 
@@ -50,6 +52,7 @@ Commands:
   update                       Update to the latest release, and the service with it
   login                        Sign in to a Kettu account, confirmed in a browser on any device
   logout                       Sign out of the Kettu account
+  ssh-setup [<request>]        Run by Kettu's desktop app when it adds this computer over SSH
 
 Options:
   -y, --yes                    Change the port without asking
@@ -129,6 +132,8 @@ function parseWords(words: string[], yes: boolean): Command {
       return extra(0) ?? { kind: 'logout' }
     case 'pair':
       return extra(0) ?? { kind: 'pair' }
+    case 'ssh-setup':
+      return extra(1) ?? { kind: 'ssh-setup', request: rest[0] ?? null }
     case 'devices':
       if (rest.length === 0) return { kind: 'devices' }
       if (rest[0] !== 'remove') {

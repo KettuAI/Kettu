@@ -565,6 +565,61 @@ describeUnix('kettu', () => {
     expect(kept.remote.direct).toEqual({ enabled: true, port: second, addresses: [] })
   }, 90_000)
 
+  it('adds a device from SSH and takes its channel on 127.0.0.1, on the same port again', async () => {
+    const folder = path.join(dir, 'data-ssh')
+    const laptop = await generateKeyPair()
+    const device = {
+      publicKey: Buffer.from(laptop.publicKey).toString('base64'),
+      name: 'Lin MacBook',
+      kind: 'desktop',
+      platform: 'macOS 26.1',
+      model: 'Mac16,1',
+    }
+    const cli = (...args: string[]): Promise<Run> => kettuOn(folder, ...args)
+    const setup = async (request: object) => {
+      const printed = await until(async () => {
+        const done = await cli('ssh-setup', JSON.stringify(request))
+        return done.code === 0 && done
+      }, 'ssh-setup to answer')
+      return JSON.parse(printed.stdout) as { publicKey: string; port: number; version: string }
+    }
+    let daemonRun = run(folder)
+    const first = await setup({ device })
+    const identity = JSON.parse(
+      await readFile(path.join(folder, 'remote', 'identity.json'), 'utf8'),
+    )
+    const hostKey = (await importKeyPair(Buffer.from(identity.privateKey, 'base64'))).publicKey
+    expect(first).toEqual({
+      publicKey: Buffer.from(hostKey).toString('base64'),
+      name: os.hostname(),
+      platform: process.platform,
+      version: '0.0.0',
+      port: expect.any(Number),
+    })
+    // The login proved it, so the device connects as the owner's with no pairing.
+    const transport = await connectTransport({ host: '127.0.0.1', port: first.port })
+    const connected = await connectDevice({ transport, hostKey, key: laptop })
+    devices.push(connected)
+    expect(await connected.first).toMatchObject({ type: 'welcome', role: 'owner' })
+    expect((await cli('devices')).stdout).toContain('Lin MacBook')
+    // A request it cannot take, or none, changes nothing.
+    expect(await cli('ssh-setup', '{"device":{"publicKey":"x"}}')).toMatchObject({ code: 1 })
+    expect(await cli('ssh-setup', 'not json')).toMatchObject({ code: 2 })
+    expect((await setup({})).port).toBe(first.port)
+
+    const kept = await until(
+      async () => JSON.parse(await readFile(path.join(folder, 'remote', 'ssh.json'), 'utf8')),
+      'the kept port',
+    )
+    expect(kept).toEqual({ version: 1, port: first.port })
+    daemonRun.child.kill('SIGTERM')
+    expect(await daemonRun.exited).toBe(0)
+    daemonRun = run(folder)
+    expect((await setup({})).port).toBe(first.port)
+    daemonRun.child.kill('SIGTERM')
+    expect(await daemonRun.exited).toBe(0)
+  }, 90_000)
+
   it("answers an owner's device for the host, whose settings reach the agent host", async () => {
     const folder = path.join(dir, 'data-admin')
     const phone = await generateKeyPair()

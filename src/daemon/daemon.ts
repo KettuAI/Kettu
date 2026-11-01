@@ -28,6 +28,7 @@ import { isUnavailable, type HostTimings } from './forked-host'
 import { Hosts } from './hosts'
 import { keyIsPrivate, loadHostKey, newHostKey, prepareDataFolder } from './key'
 import { keyPath } from './paths'
+import { readSshPort, writeSshPort } from './ssh-port'
 
 const log = createLogger('daemon')
 
@@ -179,6 +180,18 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       changeSettings({ remote: { terminal: allowed } })
       return terminalReport()
     },
+    'ssh.setup': async ({ device }) => {
+      const running = starting()
+      // Throws while nothing listens, before the device is added.
+      const info = running.sshInfo()
+      if (device) await running.addDevice(device)
+      return {
+        ...info,
+        name: settings.get().remote.name ?? os.hostname(),
+        platform: process.platform,
+        version: options.version,
+      }
+    },
   }
   const server = await claimControlSocket(options.controlSocket, () =>
     serveControl(options.controlSocket, handlers, (message) => log.warn(message)),
@@ -186,10 +199,12 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
 
   let settings: SettingsStore
   let identity: RemoteIdentity
+  let sshPort: number | null
   try {
     await chmod(options.controlSocket, 0o600)
     identity = await loadHostKey(options.dataPath, (message) => log.warn(message))
     settings = await SettingsStore.load(options.dataPath)
+    sshPort = await readSshPort(options.dataPath)
     // Without the relay devices reach the daemon only directly, as the app without it; turning
     // them on the first time picks their port.
     if (!settings.get().remote.direct.enabled) {
@@ -216,6 +231,12 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     hostName: os.hostname(),
     env: hostEnv,
     timings: options.timings,
+    sshPort,
+    sshPortChanged: (port) => {
+      writeSshPort(options.dataPath, port).catch((error: unknown) => {
+        log.warn(`Could not keep the port for SSH: ${(error as Error).message}`)
+      })
+    },
     admin: async (deviceId, method, params) =>
       admin
         ? admin.answer(deviceId, method, params)

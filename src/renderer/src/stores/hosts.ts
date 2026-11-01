@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import type { Platform } from '@shared/platform'
-import type { HostConnection, HostsStatus } from '@shared/remote/hosts'
+import type { HostConnection, HostsStatus, SshRoute } from '@shared/remote/hosts'
 import { isWeb } from '@renderer/lib/platform'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { THIS_COMPUTER, useViewStore } from './view'
@@ -14,6 +14,8 @@ export interface OtherHost {
   connection: HostConnection
   /** When a connection last opened or ended; while one is open, when it opened. */
   lastOnlineAt: number | null
+  /** Added over SSH, and reached through it. */
+  ssh?: SshRoute
 }
 
 interface HostsStore {

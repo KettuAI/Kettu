@@ -741,7 +741,7 @@
     }
   },
   "hosts": {
-    "keywords": "主机 电脑 连接 配对 链接 远程 别的电脑 开发机 hosts host computer connect pair link",
+    "keywords": "主机 电脑 连接 配对 链接 远程 别的电脑 开发机 hosts host computer connect pair link ssh",
     "self": {
       "badge": "本机",
       "label": "这台电脑"
@@ -749,7 +749,9 @@
     "version": "Kettu {{version}}",
     "via": {
       "direct": "直连",
-      "directAt": "直连 {{address}}"
+      "directAt": "直连 {{address}}",
+      "ssh": "SSH",
+      "sshAt": "SSH {{target}}"
     },
     "failed": {
       "not_connected": "{{name}} 没有连上，等它在线后再试。",
@@ -790,7 +792,43 @@
       "added": "已添加 {{name}}",
       "nameLabel": "这台电脑在 {{name}} 上的名字",
       "nameHint": "{{name}} 的设备列表里显示这个名字，以后在 设置 › 主机 › {{name}} 里改。",
-      "done": "完成"
+      "done": "完成",
+      "tabs": {
+        "label": "怎么连",
+        "link": "配对链接",
+        "ssh": "SSH"
+      },
+      "ssh": {
+        "hint": "用你自己的 SSH 配置和 agent，跳板机、端口和别名照常生效。那台机器上没装 Kettu 的，会自动装上。",
+        "label": "SSH 地址",
+        "placeholder": "lin@dev-box",
+        "note": "Kettu 不读也不存你的 SSH 密钥。",
+        "connect": "连接",
+        "steps": {
+          "label": "进度",
+          "connecting": "经 SSH 登录",
+          "installing": "安装 Kettu {{version}}",
+          "updating": "把 Kettu 从 {{from}} 更新到 {{to}}",
+          "adding": "添加这台电脑",
+          "opening": "打开加密通道",
+          "done": "已完成",
+          "failed": "失败"
+        },
+        "output": "最后几行输出",
+        "errors": {
+          "missing": "这台电脑上没有 ssh 程序。装上 OpenSSH 客户端后再试。",
+          "unreachable": "连不上 {{target}}。检查地址，并确认这台电脑能连到那台机器，比如 VPN 已经连上。",
+          "auth": "{{target}} 没有接受登录。Kettu 用你的 ssh-agent 或 SSH 配置里给这台主机指定的密钥登录，不能输入密码；在终端里确认 <code>ssh {{target}}</code> 不用密码就能登录。",
+          "host_unknown": "这台电脑还不认识 {{target}} 的主机密钥。先在终端里用 <code>ssh {{target}}</code> 连一次，核对指纹并接受，再回来重试。",
+          "host_changed": "{{target}} 的主机密钥和这台电脑记下的不一样：可能有人在截取连接，也可能那台机器重装过。先问清楚，在终端里改好 known_hosts 再试。",
+          "forwarding": "{{target}} 的 SSH 服务器不转发连接，而 Kettu 需要它。在那台机器的服务器配置里用 <code>AllowTcpForwarding</code> 允许后再试。",
+          "unsupported": "{{target}} 运行的是 {{system}}，Kettu 没有它的 daemon。daemon 支持 x64 和 arm64 的 Linux，以及 Apple 芯片的 Mac。",
+          "noShell": "{{target}} 上没有 POSIX shell，装不了 Kettu。daemon 支持 x64 和 arm64 的 Linux，以及 Apple 芯片的 Mac。",
+          "install": "在 {{target}} 上安装 Kettu 失败。",
+          "not_running": "{{target}} 上装了 Kettu，但它的 daemon 没在运行。在那台机器上运行 <code>kettu service install</code> 或 <code>kettu run</code> 后再试。",
+          "failed": "没能添加 {{target}}。"
+        }
+      }
     },
     "page": {
       "added": "{{date}} 添加",
@@ -800,6 +838,8 @@
       "addresses": "地址",
       "edit": "编辑…",
       "addressesNote": "{{name}} 连上时会告诉这台电脑最新的地址；它换了端口又一直没连上时，在这里改。",
+      "sshTarget": "SSH 地址",
+      "sshNote": "Kettu 用你自己的 SSH 配置和 agent 连 {{name}}，和在终端里运行 ssh {{target}} 一样。",
       "self": "这台电脑在 {{name}} 上",
       "name": "名字",
       "nameDescription": "{{name}} 的设备列表里显示这个名字。",
