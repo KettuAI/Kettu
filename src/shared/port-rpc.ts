@@ -31,7 +31,12 @@ export type FromPort<Event> =
   | { type: 'error'; id: number; error: PortError }
   | { type: 'event'; event: Event }
 
-export type PortConnectionState = 'connected' | 'reconnecting' | 'failed'
+/**
+ * `reconnecting`: the host restarted, or its session is lost, so what the window shows is read
+ * again once connected. `resuming`: a remote client's connection dropped while the host keeps its
+ * session, which goes on where it was once connected.
+ */
+export type PortConnectionState = 'connected' | 'reconnecting' | 'resuming' | 'failed'
 
 /** A port error as it reaches the renderer: an `Error` that keeps its code. */
 export class PortRequestError extends Error {

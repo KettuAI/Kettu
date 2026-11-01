@@ -224,6 +224,17 @@ export class Uploads {
     }
   }
 
+  /**
+   * The connection dropped while its session stays: the uploads it had not finished go, as their
+   * bytes on the way are lost, and the finished ones wait for the requests that name them.
+   */
+  dropUnfinished(): void {
+    const error = { code: 'invalid_params' as const, message: 'The connection ended' }
+    for (const upload of [...this.uploads.values()]) {
+      if (!upload.complete) this.drop(upload, error)
+    }
+  }
+
   /** The connection ended: every upload goes. */
   closeAll(): void {
     this.closed = true

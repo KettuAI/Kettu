@@ -370,12 +370,13 @@ describe('hello and welcome', () => {
   it('agrees on the newest version both sides speak', async () => {
     const t = await setup()
     const device = await t.connect(undefined, { protocol: { min: 1, max: 7 } })
-    expect(await device.first).toMatchObject({ type: 'welcome', protocol: 1 })
+    expect(await device.first).toMatchObject({ type: 'welcome', protocol: PROTOCOL_VERSION })
   })
 
   it('says to update the host when the device speaks only newer versions, then closes', async () => {
     const t = await setup()
-    const device = await t.connect(undefined, { protocol: { min: 2, max: 3 } })
+    const newer = { min: PROTOCOL_VERSION + 1, max: PROTOCOL_VERSION + 2 }
+    const device = await t.connect(undefined, { protocol: newer })
     expect(await device.first).toEqual({ type: 'closing', reason: 'update_host' })
     expect(await device.closing).toEqual({ type: 'closing', reason: 'update_host' })
     expect(t.agentPorts).toEqual([])

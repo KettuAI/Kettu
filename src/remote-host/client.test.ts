@@ -1,6 +1,6 @@
 // The desktop app's side as a device of other hosts, against the real remote host in-process:
 // pairing through IKpsk1 and the owner's answer, the welcome saving the host, reconnecting with IK,
-// addresses, renames, removal and the timeout.
+// resuming the session the host kept, addresses, renames, removal and the timeout.
 
 import { createServer } from 'node:net'
 import path from 'node:path'
@@ -34,7 +34,7 @@ afterEach(async () => {
 })
 
 /** A host as the remote host runs it, whose agent host answers `ping` with `pong`. */
-async function startHost(dir: string, hostKey: KeyPair) {
+async function startHost(dir: string, hostKey: KeyPair, resumeMs?: number) {
   const devices = await DeviceStore.load(dir, quiet)
   const activity = await ActivityLog.load(dir, quiet)
   const heard = new Map<number, PairingState[]>()
@@ -62,6 +62,7 @@ async function startHost(dir: string, hostKey: KeyPair) {
     },
     changed: quiet,
     log: quiet,
+    ...(resumeMs ? { resumeMs } : {}),
   })
   const last = (codeId: number) => heard.get(codeId)?.at(-1)
   const until = async (codeId: number, state: PairingState['state']) => {
@@ -79,19 +80,24 @@ async function startHost(dir: string, hostKey: KeyPair) {
   return { server, devices, pairing, openCode, until }
 }
 
-async function setup(options: { timeoutMs?: number; retryMs?: number; lateMs?: number } = {}) {
+async function setup(
+  options: { timeoutMs?: number; retryMs?: number; lateMs?: number; resumeMs?: number } = {},
+) {
   const dir = await tempFolder('kettu-client-')
   const hostKey = await generateKeyPair()
   const deviceKey = await generateKeyPair()
-  const host = await startHost(dir, hostKey)
+  const host = await startHost(dir, hostKey, options.resumeMs)
   // Whether the host's address answers, and how many connections each address was asked for.
   let reachable = true
   const dialed: string[] = []
+  // The host's end of each connection it took, to cut it.
+  const hostEnds: Transport[] = []
   const connect = (address: DirectAddress, signal: AbortSignal): Promise<Transport> => {
     dialed.push(`${address.host}:${address.port}`)
     if (address.host === STUDIO.host && reachable) {
       const open = (): Transport => {
         const [deviceEnd, hostEnd] = memoryTransports()
+        hostEnds.push(hostEnd)
         host.server.accept(hostEnd)
         return deviceEnd
       }
@@ -108,6 +114,7 @@ async function setup(options: { timeoutMs?: number; retryMs?: number; lateMs?: n
   }
   const pairings = new Map<number, HostPairingState[]>()
   const mainPorts: PortChannel[] = []
+  const closedPorts = new Set<PortChannel>()
   const store = await HostStore.load(dir, quiet)
   let changes = 0
   const makeClient = (hosts: HostStore): HostClient => {
@@ -119,6 +126,7 @@ async function setup(options: { timeoutMs?: number; retryMs?: number; lateMs?: n
       openMainPort: async () => {
         const [clientEnd, mainEnd] = memoryPorts()
         mainPorts.push(mainEnd)
+        mainEnd.onClose(() => closedPorts.add(mainEnd))
         return clientEnd
       },
       changed: () => changes++,
@@ -160,7 +168,9 @@ async function setup(options: { timeoutMs?: number; retryMs?: number; lateMs?: n
     store,
     makeClient,
     dialed,
+    hostEnds,
     mainPorts,
+    closedPorts,
     states,
     pairingEnd,
     paired,
@@ -284,6 +294,46 @@ describe('a known host', () => {
     port.onMessage((data) => answers.push(data))
     port.send({ type: 'request', id: 1, method: 'ping' })
     await expect.poll(() => answers).toEqual([{ type: 'response', id: 1, result: 'pong' }])
+  })
+
+  it("keeps main's port through a drop the host keeps the session through", async () => {
+    const t = await setup({ timeoutMs: 100 })
+    await t.paired()
+    await expect.poll(() => t.mainPorts.length).toBe(1)
+    const port = t.mainPorts[0]!
+    const answers: unknown[] = []
+    port.onMessage((data) => answers.push(data))
+    port.send({ type: 'request', id: 1, method: 'ping' })
+    await expect.poll(() => answers).toHaveLength(1)
+
+    t.setReachable(false)
+    t.hostEnds.at(-1)!.close()
+    await expect.poll(() => t.connection()).toEqual({ state: 'offline' })
+    // Asked while the host is out of reach: it goes once the session is resumed.
+    port.send({ type: 'request', id: 2, method: 'ping' })
+    t.setReachable(true)
+    await expect
+      .poll(() => answers)
+      .toEqual([
+        { type: 'response', id: 1, result: 'pong' },
+        { type: 'response', id: 2, result: 'pong' },
+      ])
+    expect(t.connection()).toEqual({ state: 'online', address: STUDIO })
+    expect(t.mainPorts).toHaveLength(1)
+    expect(t.closedPorts.has(port)).toBe(false)
+  })
+
+  it('opens a new port for main once the host no longer keeps the session', async () => {
+    const t = await setup({ timeoutMs: 100, resumeMs: 30 })
+    await t.paired()
+    await expect.poll(() => t.mainPorts.length).toBe(1)
+    t.setReachable(false)
+    t.hostEnds.at(-1)!.close()
+    await expect.poll(() => t.connection()).toEqual({ state: 'offline' })
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    t.setReachable(true)
+    await expect.poll(() => t.mainPorts.length).toBe(2)
+    expect(t.closedPorts.has(t.mainPorts[0]!)).toBe(true)
   })
 
   it('connects again with IK when the app starts again', async () => {

@@ -174,7 +174,7 @@ describe('WebSettings', () => {
       settings: { ...HOST_PART, git: { backgroundFetch: true } },
     })
     expect(changed).toHaveLength(1)
-    fake.setState({ kind: 'reconnecting', reason: null })
+    fake.setState({ kind: 'reconnecting', reason: null, kept: false })
     fake.setState(CONNECTED)
     await vi.waitFor(() => expect(changed).toHaveLength(2))
     expect(fake.requests.filter((r) => r.method === 'settings.get')).toHaveLength(2)

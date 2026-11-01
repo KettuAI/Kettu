@@ -55,10 +55,12 @@ export function HostBanner() {
             exit={fadeExit}
             className="app-region-no-drag pointer-events-auto flex h-[26px] items-center gap-1.5 rounded-full bg-popover pr-1 pl-3 text-xs text-secondary shadow-menu"
           >
-            {state === 'reconnecting' ? (
+            {state === 'reconnecting' || state === 'resuming' ? (
               <>
                 <Spinner className="size-3" />
-                <span className="pr-2">{t('hostBanner.restarting')}</span>
+                <span className="pr-2">
+                  {t(state === 'resuming' ? 'hostBanner.reconnecting' : 'hostBanner.restarting')}
+                </span>
               </>
             ) : (
               <>

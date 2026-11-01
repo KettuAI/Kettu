@@ -7,6 +7,7 @@
   },
   "hostBanner": {
     "restarting": "正在重启 Agent 后台进程，会话会自动恢复。",
+    "reconnecting": "正在重连主机…",
     "stopped": "Agent 后台进程已停止，且无法重启。",
     "restart": "重启",
     "exportDiagnostics": "导出诊断信息"

@@ -2,9 +2,12 @@
 // carrying the encrypted channel, then hello and welcome, then the host protocol as a window's
 // port carries it, with binary values going as byte streams both ways. It reconnects with backoff
 // while the page is visible, and stops for good once the host says this browser may not connect.
+// A host of version 2 keeps the session through a drop for a while: the link acknowledges what it
+// receives, resumes with the welcome's token, and sends again the requests the host did not read.
 
 import type { PortError, PortErrorCode } from '@shared/port-rpc'
-import { BYTES_PER_FRAME } from '@shared/remote/channel'
+import { Acknowledger } from '@shared/remote/acks'
+import { BYTES_PER_FRAME, type ChannelMessage } from '@shared/remote/channel'
 import {
   HandshakeDropped,
   startDeviceChannel,
@@ -16,10 +19,13 @@ import { bytesOf, isBinary } from '@shared/remote/places'
 import {
   MIN_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
+  RESUME_MS,
+  RESUME_VERSION,
   parseClosing,
   parseWelcome,
   type ClosingReason,
   type Hello,
+  type Pace,
   type Welcome,
 } from '@shared/remote/protocol'
 import type { Transport } from '@shared/remote/transport'
@@ -51,8 +57,11 @@ export type LinkStop = 'removed' | 'update_client' | 'update_host'
 export type LinkState =
   | { kind: 'connecting' }
   | { kind: 'connected'; welcome: Welcome }
-  /** Connected before; `reason` is what the host said as it ended, if it said anything. */
-  | { kind: 'reconnecting'; reason: ClosingReason | null }
+  /**
+   * Connected before; `reason` is what the host said as it ended, if it said anything. `kept`
+   * while the host keeps the session for the link to resume, so nothing in flight is lost yet.
+   */
+  | { kind: 'reconnecting'; reason: ClosingReason | null; kept: boolean }
   | { kind: 'stopped'; reason: LinkStop }
 
 /** A request's failure as the renderer reads a port's: a plain object with the code. */
@@ -87,6 +96,14 @@ interface Pending {
   reject(error: LinkError): void
 }
 
+/** A request not answered yet; its id once its message went, on the session it went on. */
+interface Outgoing {
+  method: string
+  params: unknown
+  pending: Pending
+  id: number | null
+}
+
 interface Download {
   chunks: Uint8Array[]
   size: number
@@ -107,6 +124,9 @@ export interface Opened {
   channel: DeviceChannel
   transport: Transport
 }
+
+/** What came after the welcome before its taker listened, JSON and stream bytes in order. */
+export type Later = ChannelMessage
 
 /**
  * Starts the device's side of a connection and resolves once the host answered the handshake;
@@ -130,7 +150,7 @@ export function awaitWelcome(opened: Opened, timeoutMs: number | null): Promise<
   return new Promise((resolve) => {
     let closing: ClosingReason | null = null
     let done = false
-    const later: unknown[] = []
+    const later: Later[] = []
     const timer = timeoutMs === null ? null : setTimeout(() => opened.channel.close(), timeoutMs)
     const settle = (value: Answer): void => {
       if (done) return
@@ -140,16 +160,19 @@ export function awaitWelcome(opened: Opened, timeoutMs: number | null): Promise<
     }
     opened.channel.onMessage((value) => {
       // What follows the welcome before its taker listens, for the taker.
-      if (done) return void later.push(value)
+      if (done) return void later.push({ kind: 'json', value })
       const welcome = parseWelcome(value)
       if (welcome) return settle({ welcome, later })
       closing = parseClosing(value)?.reason ?? closing
+    })
+    opened.channel.onBytes((stream, data) => {
+      if (done) later.push({ kind: 'bytes', stream, data: data.slice() })
     })
     void opened.channel.closed.then(() => settle({ closing }))
   })
 }
 
-export type Answer = { welcome: Welcome; later: unknown[] } | { closing: ClosingReason | null }
+export type Answer = { welcome: Welcome; later: Later[] } | { closing: ClosingReason | null }
 
 export function hello(client: Hello['client'], device?: Hello['device']): Hello {
   return {
@@ -166,7 +189,7 @@ export interface HostLinkOptions {
   key: KeyPair
   hello: Hello
   /** A connection pairing left open and welcomed, which the link takes as its first. */
-  adopt?: { opened: Opened; welcome: Welcome; later: unknown[] }
+  adopt?: { opened: Opened; welcome: Welcome; later: Later[] }
   /** Whether the page is in front; a link in the back waits to reconnect until it is. */
   visible?: () => boolean
   retryDelay?: (failures: number) => number
@@ -181,12 +204,22 @@ export class HostLink {
   private failures = 0
   private drops = 0
   private timer: ReturnType<typeof setTimeout> | null = null
+  // Rising in the order the requests go, so the host's last one read says which went before it.
   private nextId = 1
   // Odd and rising, as the host takes a device's stream ids.
   private nextUpload = 1
-  private readonly inFlight = new Map<number, Pending>()
+  /** Every request not answered yet, in the order it was made. */
+  private readonly outgoing = new Set<Outgoing>()
+  private readonly inFlight = new Map<number, Outgoing>()
   private readonly downloads = new Map<number, Download>()
-  private queued: { message: Record<string, unknown>; pending: Pending }[] = []
+  /** The token of the last welcome, while the host keeps the session for the link to resume. */
+  private resumeToken: string | null = null
+  /** What the host sent on the session, which a host of version 2 hears of. */
+  private readonly acks = new Acknowledger((ack) => this.send({ ...ack }))
+  /** Gives up a session the host keeps once it would no longer, while the link cannot reach it. */
+  private keptTimer: ReturnType<typeof setTimeout> | null = null
+  private keptUntil = 0
+  private paceMs = 0
   private readonly hostListeners = new Set<(event: unknown) => void>()
   private readonly terminalListeners = new Set<(event: unknown) => void>()
   private readonly adminListeners = new Set<(event: HostAdminEvent) => void>()
@@ -201,7 +234,7 @@ export class HostLink {
 
   start(): void {
     const adopted = this.options.adopt
-    if (adopted) this.welcomed(adopted.opened, adopted.welcome, adopted.later)
+    if (adopted) this.welcomed(adopted.opened, adopted.welcome, adopted.later, false)
     else void this.connect()
   }
 
@@ -216,7 +249,17 @@ export class HostLink {
   stop(): void {
     this.stopped = true
     if (this.timer) clearTimeout(this.timer)
+    this.acks.pause()
+    if (this.keptTimer) clearTimeout(this.keptTimer)
     this.session?.channel.close()
+  }
+
+  /** How often the host may send patches, in milliseconds; 0 as they come. */
+  setPace(ms: number): void {
+    if (ms === this.paceMs) return
+    this.paceMs = ms
+    const session = this.session
+    if (session && resumable(session)) this.send({ type: 'pace', ms } satisfies Pace)
   }
 
   onState(listener: (state: LinkState) => void): () => void {
@@ -271,10 +314,9 @@ export class HostLink {
       )
     }
     return new Promise((resolve, reject) => {
-      const message = { type: 'request', method, params }
-      const pending = { resolve, reject }
-      if (this.session) void this.post(this.session, message, pending)
-      else this.queued.push({ message, pending })
+      const outgoing: Outgoing = { method, params, pending: { resolve, reject }, id: null }
+      this.outgoing.add(outgoing)
+      if (this.session) void this.post(this.session, outgoing)
     })
   }
 
@@ -293,11 +335,14 @@ export class HostLink {
     if (this.stopped || this.session || this.connecting) return
     this.connecting = true
     let opened: Opened
+    const resume = this.resumeToken
+      ? { token: this.resumeToken, received: this.acks.received }
+      : null
     try {
       opened = await openChannel(this.options.dial, {
         hostKey: this.options.hostKey,
         key: this.options.key,
-        hello: this.options.hello,
+        hello: resume ? { ...this.options.hello, resume } : this.options.hello,
       })
     } catch (error) {
       this.connecting = false
@@ -305,23 +350,27 @@ export class HostLink {
       if (error instanceof HandshakeDropped && ++this.drops >= DROPS_UNKNOWN) {
         return this.end('removed')
       }
+      this.expireKept()
       return this.retry()
     }
     this.drops = 0
     const answer = await awaitWelcome(opened, WELCOME_TIMEOUT_MS)
     this.connecting = false
-    if ('welcome' in answer) return this.welcomed(opened, answer.welcome, answer.later)
+    if ('welcome' in answer) {
+      return this.welcomed(opened, answer.welcome, answer.later, resume !== null)
+    }
     const reason = answer.closing
     if (reason === 'removed' || reason === 'update_client' || reason === 'update_host') {
       return this.end(reason)
     }
+    this.expireKept()
     this.retry(reason)
   }
 
   private retry(reason: ClosingReason | null = null): void {
     if (this.stopped) return
     if (this.current.kind === 'connected' || this.current.kind === 'reconnecting') {
-      this.setState({ kind: 'reconnecting', reason })
+      this.setState({ kind: 'reconnecting', reason, kept: this.resumeToken !== null })
     }
     if (this.options.visible && !this.options.visible()) return
     const delay = (this.options.retryDelay ?? retryDelay)(++this.failures)
@@ -333,62 +382,119 @@ export class HostLink {
 
   private end(reason: LinkStop): void {
     this.stopped = true
-    this.failQueued(linkError('host_restarted', 'This browser no longer connects to the host'))
+    if (this.keptTimer) clearTimeout(this.keptTimer)
+    this.resumeToken = null
+    const ended = linkError('host_restarted', 'This browser no longer connects to the host')
+    this.lose(ended)
+    for (const outgoing of [...this.outgoing]) this.settle(outgoing).reject(ended)
     this.setState({ kind: 'stopped', reason })
   }
 
-  private welcomed(opened: Opened, welcome: Welcome, later: unknown[]): void {
+  /** `askedResume`: the hello named the last session, which the host may have kept. */
+  private welcomed(opened: Opened, welcome: Welcome, later: Later[], askedResume: boolean): void {
     const session: Session = { ...opened, welcome, closing: null }
+    const resumed = askedResume && welcome.resumed !== undefined
+    if (this.keptTimer) clearTimeout(this.keptTimer)
+    this.keptTimer = null
+    if (!resumed) {
+      // The host has none of the last session, so what was in flight on it is lost.
+      this.lose(linkError('host_restarted', 'The connection to the host ended'))
+      this.nextId = 1
+      if (this.current.kind === 'reconnecting' && this.current.kept) {
+        this.setState({ ...this.current, kept: false })
+      }
+    }
+    this.resumeToken = welcome.resume ?? null
     this.session = session
     this.failures = 0
-    this.nextId = 1
-    for (const value of later.splice(0)) this.receive(session, value)
+    for (const message of later.splice(0)) {
+      if (message.kind === 'json') this.receive(session, message.value)
+      else this.receiveBytes(session, message.stream, message.data)
+    }
     opened.channel.onMessage((value) => this.receive(session, value))
-    opened.channel.onBytes((stream, data) => this.receiveBytes(stream, data))
+    opened.channel.onBytes((stream, data) => this.receiveBytes(session, stream, data))
     void opened.channel.closed.then(() => this.ended(session))
+    if (resumable(session) && this.paceMs !== 0) {
+      this.send({ type: 'pace', ms: this.paceMs } satisfies Pace)
+    }
     this.setState({ kind: 'connected', welcome })
-    const queued = this.queued
-    this.queued = []
-    for (const { message, pending } of queued) void this.post(session, message, pending)
+    // The host read the requests up to the one it names; the rest go again, as new ones.
+    const read = resumed ? welcome.resumed!.request : 0
+    for (const outgoing of this.outgoing) {
+      if (outgoing.id !== null && outgoing.id <= read) continue
+      if (outgoing.id !== null) this.inFlight.delete(outgoing.id)
+      outgoing.id = null
+      void this.post(session, outgoing)
+    }
   }
 
   private ended(session: Session): void {
     if (this.session !== session) return
     this.session = null
-    const lost = linkError('host_restarted', 'The connection to the host ended')
-    const inFlight = [...this.inFlight.values()]
-    this.inFlight.clear()
-    for (const { reject } of inFlight) reject(lost)
-    const downloads = [...this.downloads.values()]
-    this.downloads.clear()
-    for (const { reject } of downloads) reject(lost)
+    this.acks.pause()
     const reason = session.closing
     if (reason === 'removed' || reason === 'update_client' || reason === 'update_host') {
       return this.end(reason)
     }
+    // A host that says why ends the session; one that just went keeps it for a while.
+    if (reason !== null || !resumable(session)) this.resumeToken = null
+    if (this.resumeToken === null) {
+      this.lose(linkError('host_restarted', 'The connection to the host ended'))
+    } else {
+      this.keptUntil = Date.now() + RESUME_MS
+      this.keptTimer = setTimeout(() => {
+        this.keptTimer = null
+        this.expireKept()
+      }, RESUME_MS)
+    }
     this.retry(reason)
   }
 
-  private failQueued(error: LinkError): void {
-    const queued = this.queued
-    this.queued = []
-    for (const { pending } of queued) pending.reject(error)
+  /**
+   * Gives up the session the host kept once it would keep it no longer, unless a try that names
+   * it is under way, whose welcome says.
+   */
+  private expireKept(): void {
+    if (this.resumeToken === null || this.session || this.connecting) return
+    if (Date.now() < this.keptUntil) return
+    this.resumeToken = null
+    this.lose(linkError('host_restarted', 'The connection to the host ended'))
+    if (this.current.kind === 'reconnecting') this.setState({ ...this.current, kept: false })
   }
 
-  private async post(
-    session: Session,
-    message: Record<string, unknown>,
-    pending: Pending,
-  ): Promise<void> {
-    const id = this.nextId++
-    this.inFlight.set(id, pending)
+  /**
+   * The session is gone: the requests that went on it fail, as do the downloads; the ones that
+   * never went wait for the next.
+   */
+  private lose(error: LinkError): void {
+    this.acks.reset()
+    for (const outgoing of [...this.outgoing]) {
+      if (outgoing.id !== null) this.settle(outgoing).reject(error)
+    }
+    const downloads = [...this.downloads.values()]
+    this.downloads.clear()
+    for (const { reject } of downloads) reject(error)
+  }
+
+  /** Forgets an answered or failed request, for its caller to hear. */
+  private settle(outgoing: Outgoing): Pending {
+    this.outgoing.delete(outgoing)
+    if (outgoing.id !== null) this.inFlight.delete(outgoing.id)
+    return outgoing.pending
+  }
+
+  private async post(session: Session, outgoing: Outgoing): Promise<void> {
     try {
-      const params = await this.withUploads(session, message.params, 0)
-      if (this.session !== session) return
-      await session.channel.send({ ...message, id, params })
+      const params = await this.withUploads(session, outgoing.params, 0)
+      // The connection went while uploading: the request goes again on the next one.
+      if (this.session !== session || !this.outgoing.has(outgoing)) return
+      const id = this.nextId++
+      outgoing.id = id
+      this.inFlight.set(id, outgoing)
+      await session.channel.send({ type: 'request', id, method: outgoing.method, params })
     } catch (error) {
-      if (!this.inFlight.delete(id)) return
-      pending.reject(
+      if (this.session !== session || !this.outgoing.has(outgoing)) return
+      this.settle(outgoing).reject(
         typeof error === 'object' && error !== null && 'code' in error
           ? (error as LinkError)
           : linkError('internal', (error as Error).message),
@@ -429,6 +535,7 @@ export class HostLink {
   private receive(session: Session, value: unknown): void {
     if (this.session !== session || typeof value !== 'object' || value === null) return
     const message = value as Record<string, unknown>
+    if (message.type !== 'closing' && resumable(session)) this.acks.counted()
     switch (message.type) {
       case 'response': {
         const pending = this.takePending(message.id)
@@ -485,7 +592,9 @@ export class HostLink {
     for (const listener of this.messageListeners) listener(message)
   }
 
-  private receiveBytes(stream: number, data: Uint8Array): void {
+  private receiveBytes(session: Session, stream: number, data: Uint8Array): void {
+    if (this.session !== session) return
+    if (resumable(session)) this.acks.counted(data.length)
     const download = this.downloads.get(stream)
     if (!download) return
     download.chunks.push(data.slice())
@@ -494,10 +603,9 @@ export class HostLink {
 
   private takePending(id: unknown): Pending | null {
     if (typeof id !== 'number') return null
-    const pending = this.inFlight.get(id)
-    if (!pending) return null
-    this.inFlight.delete(id)
-    return pending
+    const outgoing = this.inFlight.get(id)
+    if (!outgoing) return null
+    return this.settle(outgoing)
   }
 
   /** `value` with each stream it names replaced by that stream's bytes, once they all came. */
@@ -521,6 +629,11 @@ export class HostLink {
       return Object.fromEntries(done)
     })
   }
+}
+
+/** Whether the host keeps this session through a drop and hears acknowledgements. */
+function resumable(session: Session): boolean {
+  return session.welcome.protocol >= RESUME_VERSION
 }
 
 function emit<T>(listeners: ReadonlySet<(event: T) => void>, event: T): void {

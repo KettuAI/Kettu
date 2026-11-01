@@ -13,6 +13,7 @@ import {
   type PairingPayload,
 } from '@shared/remote/pairing'
 import { loadPlatformPrimitives } from '@shared/remote/primitives'
+import { BACKGROUND_PACE_MS } from '@shared/remote/protocol'
 import { devicePlatform, pageAddress, webApi } from './api'
 import { browserDevice, deviceName } from './device-name'
 import { serveFrames } from './frames'
@@ -119,7 +120,12 @@ async function showApp(device: WebDevice, paired: Paired | null): Promise<void> 
     }),
   )
   serveFrames(link)
+  // A page in the back takes patches a batch a second, which the host merges meanwhile.
+  const pace = (): void =>
+    link.setPace(document.visibilityState === 'visible' ? 0 : BACKGROUND_PACE_MS)
+  pace()
   document.addEventListener('visibilitychange', () => {
+    pace()
     if (document.visibilityState === 'visible') link.wake()
   })
   window.addEventListener('online', () => link.wake())

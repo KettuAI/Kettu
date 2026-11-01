@@ -52,8 +52,10 @@ export function devicePlatform(agent: Pick<Navigator, 'userAgent'>): Platform {
 
 /** A host's connection state as a window's port reports it. */
 function portState(link: HostLink): PortConnectionState {
-  const { kind } = link.state
-  return kind === 'connected' ? 'connected' : kind === 'stopped' ? 'failed' : 'reconnecting'
+  const { state } = link
+  if (state.kind === 'connected') return 'connected'
+  if (state.kind === 'stopped') return 'failed'
+  return state.kind === 'reconnecting' && state.kept ? 'resuming' : 'reconnecting'
 }
 
 /** What the web client knows of the host it connects to beyond the link. */
@@ -183,6 +185,11 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
     }
   })
   link.onMessage((message) => {
+    // The host dropped patches for this browser, which fell behind: the sessions shown read again.
+    if (message.type === 'resync') {
+      void import('@renderer/stores/threads').then(({ rewatchAll }) => rewatchAll())
+      return
+    }
     const { host } = useWebHostStore.getState()
     if (message.type !== 'renamed' || typeof message.name !== 'string' || !host) return
     useWebHostStore.setState({ host: { ...host, device: { ...host.device, name: message.name } } })

@@ -1,10 +1,10 @@
 // Test helper: a device's side of a connection, paired or pairing. It runs the shared device
 // channel, says hello and speaks the host protocol through a TestPort, uploading and downloading
-// byte streams as a device does.
+// byte streams as a device does. It speaks version 1 unless its hello says otherwise.
 
 import { startDeviceChannel, type DeviceChannel } from '@shared/remote/device-channel'
 import type { KeyPair } from '@shared/remote/noise'
-import { PROTOCOL_VERSION, type Addresses, type Closing, type Hello } from '@shared/remote/protocol'
+import { type Addresses, type Closing, type Hello } from '@shared/remote/protocol'
 import type { StreamCancel } from '@shared/remote/streams'
 import type { Transport } from '@shared/remote/transport'
 import { TestPort } from '../../agent-host/testing/harness'
@@ -30,6 +30,8 @@ export interface TestDevice {
   addresses: Addresses[]
   /** Messages around the host protocol after the welcome, such as `renamed` and `terminal`. */
   notices: unknown[]
+  /** Every JSON message after the welcome, in order. */
+  messages: unknown[]
   /** Sends a JSON message on the channel as it is. */
   send(value: unknown): Promise<void>
   sendBytes(stream: number, data: Uint8Array): Promise<void>
@@ -47,6 +49,10 @@ export interface TestDevice {
   download(stream: number): Promise<Uint8Array>
   /** The host's stream.cancel messages, as they came. */
   cancels: StreamCancel[]
+  /** The host's messages after the welcome, JSON and stream bytes, as a version 2 device counts. */
+  received(): number
+  /** Acknowledges every message received so far. */
+  ack(): Promise<void>
   close(): void
 }
 
@@ -58,6 +64,10 @@ export interface TestDeviceOptions {
   hello?: Partial<Hello> | Record<string, unknown> | null
   /** A pairing code's secret: the handshake is IKpsk1 with it. */
   psk?: Uint8Array
+  /** Acknowledges each message as it comes, as a version 2 device that keeps up does. */
+  acks?: boolean
+  /** The messages its session sent before this connection, for a device that resumes it. */
+  received?: number
 }
 
 export async function connectDevice(options: TestDeviceOptions): Promise<TestDevice> {
@@ -72,10 +82,19 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
   const first = new Promise<unknown>((resolve) => (resolveFirst = resolve))
   const closing = new Promise<Closing | null>((resolve) => (resolveClosing = resolve))
   const notices: unknown[] = []
+  const messages: unknown[] = []
   const streams = new Map<number, HostStream>()
   const cancels: StreamCancel[] = []
   const waiting = new Set<() => void>()
   let nextUpload = 1
+  let count = options.received ?? 0
+  const ack = async (): Promise<void> => {
+    await channel?.send({ type: 'ack', received: count })
+  }
+  const counted = (): void => {
+    count++
+    if (options.acks) void ack().catch(() => {})
+  }
   const changed = (): void => {
     for (const check of [...waiting]) check()
   }
@@ -93,6 +112,9 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
     if (!welcomed) {
       welcomed = true
       resolveFirst(value)
+    } else {
+      messages.push(value)
+      if (type !== 'closing') counted()
     }
     if (type === 'closing') closingMessage = value as Closing
     else if (type === 'addresses') addresses.push(value as Addresses)
@@ -114,7 +136,7 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
       ? null
       : {
           type: 'hello',
-          protocol: { min: PROTOCOL_VERSION, max: PROTOCOL_VERSION },
+          protocol: { min: 1, max: 1 },
           client: { kind: 'ios', version: '1.0.0', platform: 'ios' },
           ...options.hello,
         }
@@ -127,6 +149,7 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
         const stream = streamOf(id)
         stream.parts.push(data.slice())
         stream.received += data.length
+        counted()
       })
       void open.closed.then(() => resolveClosing(closingMessage))
     },
@@ -145,6 +168,7 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
     closing,
     addresses,
     notices,
+    messages,
     send: async (value) => {
       if (!channel) throw new Error('The handshake is not done')
       await channel.send(value)
@@ -182,6 +206,8 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
         check()
       }),
     cancels,
+    received: () => count,
+    ack,
     close: () => transport.close(),
   }
 }

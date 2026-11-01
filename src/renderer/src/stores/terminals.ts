@@ -151,7 +151,9 @@ export function initTerminals(): void {
     const was = useTerminalsStore.getState().connection
     useTerminalsStore.setState({ connection })
     if (connection === 'failed') markStale(() => true)
-    if (connection === 'connected' && was !== 'connected') void reconcileTerminals()
+    if (connection === 'connected' && was !== 'connected' && was !== 'resuming') {
+      void reconcileTerminals()
+    }
   })
 }
 
