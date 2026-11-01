@@ -1,18 +1,18 @@
 {
   "pair": {
     "title": "Use Kettu in this browser",
-    "intro": "On the computer, open Settings › Remote access › Add device, choose Browser and scan its QR code with this device's camera, or paste its link here.",
+    "intro": "In Kettu on the computer, or on a device already added to it, open Settings › Remote access › Add device, choose Browser and scan its QR code with this device's camera, or paste its link here.",
     "linkLabel": "Pairing link",
     "linkPlaceholder": "http://…/pair#…",
-    "notLink": "This is not a Kettu pairing link. Copy the link from Add device on the computer.",
+    "notLink": "This is not a Kettu pairing link. Copy the link from Add device.",
     "submit": "Pair",
     "connecting": "Connecting to the computer…",
-    "waiting": "Confirm on the computer",
-    "waitingHint": "Kettu on the computer asks whether to add “{{name}}”. Choose Add there.",
+    "waiting": "Confirm where the code is shown",
+    "waitingHint": "Kettu asks there whether to add “{{name}}”. Choose Add.",
     "added": "Added. Opening Kettu…",
     "again": "Try again",
     "failed": {
-      "void": "This code no longer works: it expired, was closed or was used for another device. Open Add device on the computer for a new one.",
+      "void": "This code no longer works: it expired, was closed or was used for another device. Open Add device again for a new one.",
       "rejected": "The computer’s owner did not add this browser.",
       "unreachable": "Could not reach the computer. Check that it is on, Kettu is running with remote access on, and this device is on the same network or VPN.",
       "update_client": "This page is older than Kettu on the computer. Reload the page.",
@@ -28,5 +28,36 @@
   "connection": {
     "updated": "Kettu on the computer was updated.",
     "reload": "Reload"
+  },
+  "copiedPath": "Copied {{path}}",
+  "path": {
+    "project": {
+      "title": "Open project",
+      "description": "Type the path of a folder on {{host}}."
+    },
+    "agentFolder": {
+      "title": "Choose agent folder",
+      "description": "Type the path of the agent's configuration folder on {{host}}."
+    },
+    "shell": {
+      "title": "Choose shell",
+      "description": "Type the path of the shell program on {{host}}."
+    },
+    "agentProgram": {
+      "title": "Choose agent program",
+      "description": "Type the path of the agent's program on {{host}}."
+    },
+    "label": "Path on {{host}}",
+    "start": "Type a full path, or start with ~ for your home folder.",
+    "keys": "Tab completes a name; ↑ and ↓ move through the list, and Enter takes the one picked.",
+    "list": "Folders and files here",
+    "notFolder": "This is a file. Choose a folder.",
+    "folderNotProgram": "This is a folder. Choose a program in it.",
+    "notRunnable": "{{host}} cannot run this file.",
+    "noMatch": "Nothing here starts with “{{name}}”.",
+    "empty": "Nothing to choose in this folder.",
+    "missing": "There is no such folder on {{host}}.",
+    "open": "Open",
+    "choose": "Choose"
   }
 }

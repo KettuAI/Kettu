@@ -29,6 +29,7 @@
     "scope": "统计来源",
     "scopes": {
       "computer": "本机",
+      "computer_web": "{{host}}",
       "kettu": "仅 Kettu"
     },
     "importing": "正在读取 Agent 的日志：{{done}} / {{total}}",
@@ -142,7 +143,9 @@
   "empty": {
     "title": "还没有用量",
     "description": "从现在起，Kettu 会记下它运行的每一轮对话的 token。要算上安装前和在终端里的使用，可以从本机的 Agent 日志统计。",
+    "description_web": "从现在起，Kettu 会记下它运行的每一轮对话的 token。要算上安装前和在终端里的使用，可以从 {{host}} 上的 Agent 日志统计。",
     "fromComputer": "统计本机用量",
+    "fromComputer_web": "统计 {{host}} 上的用量",
     "waiting": "从现在起，Kettu 会记下它运行的每一轮对话的 token。"
   },
   "error": {
@@ -188,7 +191,9 @@
     },
     "fromComputer": {
       "name": "统计本机用量",
+      "name_web": "统计 {{host}} 上的用量",
       "description": "同时统计 Claude Code、Codex 和 OpenCode 在这台电脑上自己记录的日志，包括安装 Kettu 之前和在终端里的使用。只读取 token 数、模型和时间，不读对话内容，数据不离开这台电脑。无论是否开启，Kettu 都会读取它运行的每个 Claude Code 会话记录的末尾，以显示提示缓存何时过期。",
+      "description_web": "同时统计 Claude Code、Codex 和 OpenCode 在 {{host}} 上自己记录的日志，包括安装 Kettu 之前和在终端里的使用。只读取 token 数、模型和时间，不读对话内容。无论是否开启，Kettu 都会读取它运行的每个 Claude Code 会话记录的末尾，以显示提示缓存何时过期。",
       "keywords": "日志 历史 导入 token 统计"
     },
     "notFound": "没有找到日志",

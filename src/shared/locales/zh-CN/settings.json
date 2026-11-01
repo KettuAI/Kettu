@@ -380,7 +380,8 @@
       "unsupported": "你的 {{command}} 需要通过 Shell 才能运行。"
     },
     "groups": {
-      "list": "这台电脑上的"
+      "list": "这台电脑上的",
+      "list_web": "{{host}} 上的"
     },
     "search": "搜索 Agent",
     "noMatch": "没有匹配的 Agent",
@@ -581,7 +582,11 @@
       "restart": "重启以更新",
       "update": "更新",
       "download": "下载",
-      "whatsNew": "更新内容"
+      "whatsNew": "更新内容",
+      "none": "这台电脑上的 Kettu 不在这里更新",
+      "none_web": "{{host}} 上的 Kettu 不在这里更新",
+      "noneDetail": "这台电脑上的 Kettu 按安装它的方式更新。",
+      "noneDetail_web": "{{host}} 上的 Kettu 按安装它的方式更新。"
     },
     "automatic": {
       "name": "自动更新",
@@ -620,14 +625,17 @@
     "terminal": "侧边面板里的终端用哪个 Shell，以及它的字号。",
     "git": "顶栏的分支与更改、Pull Request 和它的检查结果，都靠下面两个工具。",
     "advanced": "网络代理、诊断信息，以及 Kettu 保存在这台电脑上的数据。",
+    "advanced_web": "网络代理、诊断信息，以及 Kettu 保存在 {{host}} 上的数据。",
     "about": "Kettu 的版本、更新和链接。",
     "archived": "你归档的会话，不在侧边栏里但都保留着。恢复后会回到原来的项目里。",
     "sharing": "通过你自己的 Cloudflare 账号，把 artifact 发布为任何人都能打开的链接。",
     "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑上的会话，东西都留在这台电脑上。",
+    "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 上的会话，东西都留在 {{host}} 上。",
     "browser": "侧边面板里的浏览器让所有会话共用一个配置：登录状态、网站数据和缓存都在这里。",
     "mcp": "Agent 通过这些 MCP 服务器使用工具。这里有 Kettu 自带的服务器，以及各 Agent 自己的服务器所在的位置。",
     "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。在这里安装和更新；账号在 Agent 里。",
-    "hosts": "这台电脑上的 Kettu 连着的主机。会话、项目和 Agent 都在各自的主机上，这里只管怎么连。"
+    "hosts": "这台电脑上的 Kettu 连着的主机。会话、项目和 Agent 都在各自的主机上，这里只管怎么连。",
+    "hostsWeb": "这个页面连着的电脑。会话、项目和 Agent 都在那台电脑上，这里只管这个浏览器怎么连它。"
   },
   "footer": {
     "about": "关于 Kettu",
@@ -662,6 +670,7 @@
       "connect": "连接",
       "checking": "正在检查…",
       "kept": "由系统加密保存，只存放在这台电脑上。",
+      "kept_web": "由系统加密保存，只存放在 {{host}} 上。",
       "refused": "Cloudflare 拒绝了 API token。请检查它是否有 Workers Scripts Edit 权限、是否已过期。",
       "account": "账号",
       "choose": "选择账号",
@@ -683,6 +692,10 @@
       "unpublished": "已取消发布",
       "otherAccount": "此页面是用另一个 Cloudflare 账号发布的。连接该账号后才能修改。",
       "empty": "还没有发布任何 artifact。"
+    },
+    "none": {
+      "title": "分享要用桌面应用",
+      "body": "发布 artifact 由 Kettu 桌面应用来做，而 {{host}} 上运行的 Kettu 不带桌面应用。"
     }
   },
   "hosts": {
@@ -769,6 +782,20 @@
         "title": "要更新 {{name}} 上的 Kettu",
         "body": "{{name}} 上的 Kettu 太旧，读不懂这台电脑说的。在它上面更新 Kettu 后会自动连上。"
       }
+    },
+    "web": {
+      "self": "这个浏览器在 {{name}} 上",
+      "nameDescription": "{{name}} 的设备列表里显示这个名字。",
+      "nameOffline": "{{name}} 的设备列表里显示这个名字，页面连着时才能改。",
+      "forget": {
+        "name": "在这个浏览器里忘记 {{name}}",
+        "description": "清掉这个浏览器连 {{name}} 用的东西，回到配对页；{{name}} 上的会话和项目不受影响。",
+        "keywords": "忘记 移除 断开 重新配对 forget remove disconnect",
+        "button": "忘记…",
+        "title": "在这个浏览器里忘记“{{name}}”？",
+        "body": "这个页面马上断开，回到配对页。{{name}} 上什么都不变，这个浏览器仍在它的设备列表里，直到它那边移除。",
+        "confirm": "忘记"
+      }
     }
   },
   "remote": {
@@ -791,13 +818,16 @@
       },
       "changePort": "换个端口",
       "retry": "重试",
-      "plainTextKey": "这台电脑的密钥存在只有当前用户能读的文件里，因为系统没有钥匙串。"
+      "plainTextKey": "这台电脑的密钥存在只有当前用户能读的文件里，因为系统没有钥匙串。",
+      "plainTextKey_web": "{{host}} 的密钥存在只有它的用户能读的文件里，因为系统没有钥匙串。"
     },
     "hostName": {
       "name": "这台电脑的名字",
+      "name_web": "主机的名字",
       "description": "设备上显示的名字，默认是系统里的电脑名。"
     },
     "background": "远程访问开着时，关掉窗口 Kettu 也在后台运行，设备才连得上；通用里的“在后台运行”这时关不掉。",
+    "background_web": "远程访问开着时，{{host}} 上的 Kettu 关掉窗口也继续运行，设备才连得上。",
     "devices": {
       "group": "设备",
       "emptyTitle": "还没有设备",
@@ -817,6 +847,7 @@
       "group": "直连",
       "name": "直连",
       "description": "没用 Kettu 中继，直连是设备唯一的路，所以随远程访问一起打开。",
+      "description_web": "没用 Kettu 中继，直连是设备连到 {{host}} 唯一的路，所以随远程访问一起打开。",
       "keywords": "直连 端口 地址 局域网 网络 VPN tailscale frp 转发 direct port address",
       "port": {
         "name": "端口",
@@ -829,6 +860,7 @@
       "found": {
         "name": "设备会试的地址",
         "description": "这台电脑找到的私有地址和 VPN 地址，网络变了自动更新。",
+        "description_web": "{{host}} 找到的私有地址和 VPN 地址，网络变了自动更新。",
         "none": "还没找到私有地址或 VPN 地址。",
         "notListening": "端口监听上之后才有。"
       },
@@ -848,6 +880,7 @@
     "terminal": {
       "name": "允许终端",
       "description": "设备能在这台电脑上运行任何命令，超出 Agent 要授权的范围。关掉时断开设备上的终端，终端本身继续运行。",
+      "description_web": "设备能在 {{host}} 上运行任何命令，超出 Agent 要授权的范围。关掉时断开设备上的终端，终端本身继续在 {{host}} 上运行。",
       "keywords": "终端 命令 命令行 terminal shell"
     },
     "kinds": {
@@ -858,11 +891,14 @@
     "reset": {
       "name": "重置远程访问",
       "description": "移除所有设备，换一个新的身份；之后每台设备都要重新添加。",
+      "description_web": "移除所有设备，给 {{host}} 换一个新的身份；之后每台设备都要重新添加。",
       "keywords": "身份 密钥 忘记 设备 reset identity",
       "button": "重置…",
       "title": "重置远程访问？",
       "body_other": "{{count}} 台设备马上断开并被移除，这台电脑换一个新的身份。之后每台设备都要重新扫码添加。",
+      "body_web_other": "{{count}} 台设备马上断开并被移除，{{host}} 换一个新的身份。之后每台设备都要重新扫码添加。",
       "bodyNone": "这台电脑换一个新的身份。之后每台设备都要重新扫码添加。",
+      "bodyNone_web": "{{host}} 换一个新的身份。之后每台设备都要重新扫码添加。",
       "confirm": "重置"
     },
     "pair": {
@@ -880,6 +916,7 @@
       "copy": "复制",
       "copied": "已复制",
       "expires": "只能添加一台设备，<time>{{time}}</time> 后失效。设备要能直连这台电脑：同一网络、同一个 VPN，或连得到你加的地址。",
+      "expires_web": "只能添加一台设备，<time>{{time}}</time> 后失效。设备要能直连 {{host}}：同一网络、同一个 VPN，或连得到你加的地址。",
       "waiting": "正在等设备扫码…",
       "qr": "配对二维码",
       "failed": "没能生成配对码：{{message}}",
@@ -945,7 +982,9 @@
       },
       "events": {
         "paired": "扫码添加，加入这台电脑",
+        "paired_web": "扫码添加，加入 {{host}}",
         "pairedLink": "粘贴链接添加，加入这台电脑",
+        "pairedLink_web": "粘贴链接添加，加入 {{host}}",
         "connected": "连接",
         "renamed": "改名：{{from}} → {{to}}",
         "renamedOnDevice": "在设备上改名：{{from}} → {{to}}",
@@ -964,9 +1003,11 @@
       "remove": {
         "name": "移除这台设备",
         "description": "它的密钥马上失效、连接断开；它缓存的这台电脑的内容，下次连上时清掉。要再用，得重新添加。",
+        "description_web": "它的密钥马上失效、连接断开；它缓存的 {{host}} 的内容，下次连上时清掉。要再用，得重新添加。",
         "button": "移除…",
         "title": "移除“{{name}}”？",
         "body": "它马上断开，之后连不上这台电脑；它缓存的会话列表，等它下次连上时清掉。要再用，得重新扫码添加。",
+        "body_web": "它马上断开，之后连不上 {{host}}；它缓存的会话列表，等它下次连上时清掉。要再用，得重新扫码添加。",
         "confirm": "移除"
       }
     },
@@ -974,6 +1015,16 @@
       "today": "今天 {{time}}",
       "yesterday": "昨天 {{time}}",
       "date": "{{date}} {{time}}"
+    },
+    "web": {
+      "thisBrowser": "这个浏览器",
+      "offTitle": "关闭远程访问？",
+      "offBody": "所有设备马上断开，这个页面也一样。要等 {{host}} 上重新打开远程访问，才能再连上。",
+      "offConfirm": "关闭",
+      "resetBody": "这个浏览器也在其中，所以这个页面会回到配对页。",
+      "portBody": "这个页面用的是旧端口，会断开；浏览器按地址分别保存配对，所以要在新端口上重新添加这个浏览器。",
+      "removeTitle": "移除这个浏览器？",
+      "removeBody": "这个页面马上断开，回到配对页。要在这个浏览器里再用 Kettu，得在“添加设备”里重新添加。"
     }
   },
   "usage": {

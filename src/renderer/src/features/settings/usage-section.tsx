@@ -21,6 +21,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { bytes, longAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
+import { useHostContext } from '@renderer/lib/host-features'
 import { currentLocale } from '@renderer/lib/i18n'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -40,13 +41,14 @@ import { useApply } from './use-apply'
 
 export function FromComputer() {
   const { t } = useTranslation('usage')
+  const onHost = useHostContext()
   const checked = useSettingsStore((s) => s.settings.usage.fromComputer)
   const [apply, error] = useApply()
   return (
     <>
       <ControlError error={error} />
       <SettingSwitch
-        label={t('settings.fromComputer.name')}
+        label={t('settings.fromComputer.name', onHost)}
         checked={checked}
         onChange={(v) => apply({ usage: { fromComputer: v } })}
       />

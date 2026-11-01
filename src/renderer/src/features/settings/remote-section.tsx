@@ -24,13 +24,17 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@renderer/components/ui/empty'
+import { Badge } from '@renderer/components/ui/badge'
 import { Input } from '@renderer/components/ui/input'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage } from '@renderer/lib/host'
+import { useHostContext, useHostHas } from '@renderer/lib/host-features'
+import { isWeb } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { useRemoteStore } from '@renderer/stores/remote'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { openSettingsItem } from '@renderer/stores/view'
+import { useWebHostStore } from '@renderer/stores/web-host'
 import { CONFIRM, ControlError, SettingSwitch } from './controls'
 import { PairDialog } from './remote-pairing'
 import { DeviceIcon, DeviceTile, OnlineDot } from './remote-parts'
@@ -40,24 +44,69 @@ import { useApply } from './use-apply'
 
 /** The page's title and line, with remote access's switch at their end. */
 export function RemoteHeader({ id }: { id: string }) {
-  const { t } = useTranslation('settings')
+  const { t } = useTranslation(['settings', 'common'])
+  const onHost = useHostContext()
   const enabled = useSettingsStore((s) => s.settings.remote.enabled)
   const [apply, error] = useApply()
+  const [asking, setAsking] = useState(false)
+  // A daemon is reached only through remote access, so it has no switch to turn it off.
+  const switchable = useHostHas('remoteSwitch')
+  // In a browser, turning it off ends this page's own connection, so it asks first.
+  const change = (on: boolean): void => {
+    if (!on && isWeb) setAsking(true)
+    else apply({ remote: { enabled: on } })
+  }
   return (
     <header className="flex items-center gap-3.5 pb-7">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <h2 id={id} className="font-heading text-title font-medium text-balance">
           {t('sections.remote')}
         </h2>
-        <p className="text-small text-pretty text-tertiary">{t('pages.remote')}</p>
+        <p className="text-small text-pretty text-tertiary">{t('pages.remote', onHost)}</p>
       </div>
       <ControlError error={error} />
-      <SettingSwitch
-        label={t('remote.switch')}
-        checked={enabled}
-        onChange={(on) => apply({ remote: { enabled: on } })}
-      />
+      {switchable !== false && (
+        <SettingSwitch label={t('remote.switch')} checked={enabled} onChange={change} />
+      )}
+      <AlertDialog open={asking} onOpenChange={setAsking}>
+        <AlertDialogContent className={CONFIRM}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('remote.web.offTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('remote.web.offBody', onHost)}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                setAsking(false)
+                apply({ remote: { enabled: false } })
+              }}
+            >
+              {t('remote.web.offConfirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </header>
+  )
+}
+
+/** "This browser" after the name of the device the web client is, in the list and on its page. */
+export function ThisBrowserBadge({
+  deviceId,
+  className,
+}: {
+  deviceId: string
+  className?: string
+}) {
+  const { t } = useTranslation('settings')
+  const own = useWebHostStore((s) => s.host?.device.id === deviceId)
+  if (!own) return null
+  return (
+    <Badge variant="neutral" className={className}>
+      {t('remote.web.thisBrowser')}
+    </Badge>
   )
 }
 
@@ -214,7 +263,12 @@ export function DeviceRow({ device, online }: { device: PairedDevice; online: bo
       label={device.name}
       onOpen={() => openSettingsItem('remote', device.id)}
       tile={<DeviceTile icon={<DeviceIcon device={device} className="size-4" />} />}
-      name={device.name}
+      name={
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate">{device.name}</span>
+          <ThisBrowserBadge deviceId={device.id} />
+        </span>
+      }
       right={
         online ? (
           <span className="flex items-center gap-1.5 text-xs text-tertiary">
@@ -291,8 +345,9 @@ export function NoDevices() {
 /** Under the status, when the key is in a file because the system has no keyring. */
 export function PlainKeyNote() {
   const { t } = useTranslation('settings')
+  const onHost = useHostContext()
   const plain = useRemoteStore((s) => s.status?.plainTextKey === true)
-  return plain ? <GroupNote>{t('remote.status.plainTextKey')}</GroupNote> : null
+  return plain ? <GroupNote>{t('remote.status.plainTextKey', onHost)}</GroupNote> : null
 }
 
 /** Under the list, while a device is in its last days before it is removed. */
@@ -339,6 +394,7 @@ export function TerminalSwitch({ label }: { label: string }) {
 /** Reset remote access, after a confirm naming how many devices go. */
 export function ResetRemote() {
   const { t } = useTranslation(['settings', 'common'])
+  const onHost = useHostContext()
   const count = useRemoteStore((s) => s.status?.devices.length ?? 0)
   const on = useRemoteStore((s) => s.status?.state === 'on')
   const [open, setOpen] = useState(false)
@@ -373,7 +429,11 @@ export function ResetRemote() {
           <AlertDialogHeader>
             <AlertDialogTitle>{t('remote.reset.title')}</AlertDialogTitle>
             <AlertDialogDescription>
-              {count > 0 ? t('remote.reset.body', { count }) : t('remote.reset.bodyNone')}
+              {count > 0
+                ? t('remote.reset.body', { count, ...onHost })
+                : t('remote.reset.bodyNone', onHost)}
+              {/* This browser is one of the devices, so its page goes back to pairing. */}
+              {isWeb && ` ${t('remote.web.resetBody')}`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {error && <p className="text-xs text-danger">{error}</p>}

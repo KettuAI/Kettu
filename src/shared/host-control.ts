@@ -6,8 +6,10 @@ import type { AttachmentGrant } from './attachments'
 import type { BrowserOriginAnswer } from './browser'
 import type { MediaGrantRecord } from './media'
 import type { Platform } from './platform'
+import type { PortError } from './port-rpc'
 import type { DeviceActivity } from './remote/activity'
 import type { NewDevice, PairedDevice, PortDevice } from './remote/device'
+import type { HostAdminEvent, HostAdminMethod } from './remote/host-admin'
 import type { HostPairingState, HostStatus } from './remote/hosts'
 import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
@@ -177,6 +179,9 @@ export type TerminalHostToMain =
 
 export type RemoteHostStopReason = 'remote_off' | 'stopping'
 
+/** How the host's parent answers an owner's call: the result, or the error that refused it. */
+export type AdminAnswer = { result: unknown } | { error: PortError }
+
 export type MainToRemoteHost =
   | {
       type: 'remote-host:init'
@@ -262,6 +267,10 @@ export type MainToRemoteHost =
   // Removes every device and voids the code, before main makes a new identity; answered by
   // remote-host:reset.
   | { type: 'remote-host:reset'; requestId: number }
+  // The answer to remote-host:admin-call under the same id.
+  | ({ type: 'remote-host:admin-result'; requestId: number } & AdminAnswer)
+  // Something the owner's devices hear of the host: every one, or only `deviceId`'s sessions.
+  | { type: 'remote-host:admin-event'; event: HostAdminEvent; deviceId: string | null }
   // Tells every device why, then stops.
   | { type: 'remote-host:shutdown'; reason: RemoteHostStopReason }
 
@@ -307,6 +316,15 @@ export type RemoteHostToMain =
   | { type: 'remote-host:open-host-port'; requestId: number; hostId: string }
   // Newest first.
   | { type: 'remote-host:activity'; requestId: number; events: DeviceActivity[] }
+  // A call an owner's device makes of the host beyond its sessions; answered by
+  // remote-host:admin-result.
+  | {
+      type: 'remote-host:admin-call'
+      requestId: number
+      deviceId: string
+      method: HostAdminMethod
+      params: unknown
+    }
   | { type: 'remote-host:reset'; requestId: number }
   | { type: 'remote-host:stop-serving'; requestId: number }
   | { type: 'remote-host:stopped' }

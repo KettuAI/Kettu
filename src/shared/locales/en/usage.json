@@ -29,6 +29,7 @@
     "scope": "Count from",
     "scopes": {
       "computer": "This computer",
+      "computer_web": "{{host}}",
       "kettu": "Kettu only"
     },
     "importing": "Reading the agents' logs: {{done}} of {{total}}",
@@ -147,7 +148,9 @@
   "empty": {
     "title": "No usage yet",
     "description": "Kettu counts the tokens of every turn it runs from now on. To include what the agents used before, and in a terminal, count from their logs on this computer.",
+    "description_web": "Kettu counts the tokens of every turn it runs from now on. To include what the agents used before, and in a terminal, count from their logs on {{host}}.",
     "fromComputer": "Count usage on this computer",
+    "fromComputer_web": "Count usage on {{host}}",
     "waiting": "Kettu counts the tokens of every turn it runs from now on."
   },
   "error": {
@@ -194,7 +197,9 @@
     },
     "fromComputer": {
       "name": "Usage on this computer",
+      "name_web": "Usage on {{host}}",
       "description": "Also count what Claude Code, Codex and OpenCode recorded in their own logs on this computer, before Kettu and in a terminal. Only token counts, models and times are read, never what was said, and nothing leaves this computer. Either way, Kettu reads the end of the transcript of each Claude Code session it runs, to show when its prompt cache expires.",
+      "description_web": "Also count what Claude Code, Codex and OpenCode recorded in their own logs on {{host}}, before Kettu and in a terminal. Only token counts, models and times are read, never what was said. Either way, Kettu reads the end of the transcript of each Claude Code session it runs, to show when its prompt cache expires.",
       "keywords": "logs history import tokens statistics"
     },
     "notFound": "No logs found",

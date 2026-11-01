@@ -9,6 +9,7 @@ import {
 import { launchTarget } from '@renderer/app/restore'
 import { restoreDraftAttachments } from '@renderer/features/session/composer/attachments'
 import { host } from '@renderer/lib/host'
+import { whenHostHas } from '@renderer/lib/host-features'
 import { isWeb, platform } from '@renderer/lib/platform'
 import { loadAgentOptions, receiveAgentOptions } from '@renderer/stores/agent-options'
 import { initBrowser } from '@renderer/stores/browser'
@@ -218,11 +219,14 @@ export function bootstrap(): Promise<unknown> {
 
   const settingsReady = initSettings()
   const themesReady = initThemes()
-  // What main does for the desktop app; the web client has none of it.
+  void initRemote()
+  // A host without them, as the daemon, is never asked.
+  whenHostHas('sharing', () => void initSharing())
+  whenHostHas('updates', () => {
+    initUpdates().catch((error: unknown) => console.error('Could not read the updates', error))
+  })
+  // What the desktop app's main does for its windows; the web client has none of it.
   if (!isWeb) {
-    void initUpdates()
-    void initSharing()
-    void initRemote()
     initHosts()
     initBrowser()
   }

@@ -5,6 +5,7 @@
 
 import path from 'node:path'
 import type {
+  AdminAnswer,
   DirectStatus,
   HostToMain,
   MainToHost,
@@ -15,12 +16,20 @@ import type {
   TerminalHostToMain,
 } from '@shared/host-control'
 import type { Locale } from '@shared/locale'
+import type { DeviceActivity } from '@shared/remote/activity'
 import { isDirectStatus } from '@shared/remote/address'
+import type { HostAdminEvent } from '@shared/remote/host-admin'
 import { isPairingState, type PairingState } from '@shared/remote/pairing'
+import type { RemoteStatus } from '@shared/remote/status'
 import type { DirectSettings, SettingsFile } from '@shared/settings'
 import { processControl, stopTrees, type ProcessId } from '../agent-host/process-tree'
 import { createLogger } from '../main/log'
-import { hostSettings, terminalSettings } from '../main/settings-schema'
+import {
+  hostSettings,
+  reachesHost,
+  terminalSettings,
+  type SettingsSection,
+} from '../main/settings-schema'
 import { ControlError, type DeviceSummary, type HostName, type HostStatus } from './control'
 import { ForkedHost, type HostTimings } from './forked-host'
 
@@ -35,6 +44,9 @@ const GRACE_MS = 2_000
 const REMOVE_TIMEOUT_MS = 10_000
 /** How long a change of the direct settings waits for the remote host to report what came of it. */
 const DIRECT_WAIT_MS = 2_000
+/** How long a request to the remote host may take before it is answered with nothing, as in main. */
+const REQUEST_TIMEOUT_MS = 10_000
+const MAX_ACTIVITY = 500
 
 function isStringList(value: unknown): value is string[] {
   return (
@@ -81,10 +93,12 @@ export interface HostsOptions {
   settings(): SettingsFile
   /** The host's X25519 private key, in base64, for the remote host alone. */
   privateKey: string
-  /** The name devices show for this computer. */
+  /** The system's name for this computer, which devices show unless the owner names it. */
   hostName: string
   env: NodeJS.ProcessEnv
   timings?: HostTimings
+  /** Answers an owner's call beyond its sessions, which a device made through the remote host. */
+  admin?(deviceId: unknown, method: unknown, params: unknown): Promise<AdminAnswer>
 }
 
 type AnyHost = ForkedHost<unknown, { type: string }>
@@ -101,12 +115,15 @@ export class Hosts {
   private sentDirect: string | null = null
   /** Whether devices may use the terminal, as the remote host was last told. */
   private sentTerminal: boolean | null = null
+  private sentHostName: string | null = null
+  private readonly requests = new Map<number, (message: RemoteHostToMain | null) => void>()
+  private nextRequest = 1
   private readonly settings: () => SettingsFile
   private readonly statusListeners = new Set<() => void>()
   private readonly askers = new Map<number, (pairing: PairingState) => void>()
   private nextCode = 1
 
-  constructor(options: HostsOptions) {
+  constructor(private readonly options: HostsOptions) {
     this.settings = options.settings
     const bundle = (name: string): string => path.join(options.bundleDir, name)
     this.agent = new ForkedHost<MainToHost, HostToMain>({
@@ -167,7 +184,7 @@ export class Hosts {
         userDataPath: options.dataPath,
         appVersion: options.version,
         platform: process.platform,
-        hostName: options.hostName,
+        hostName: this.initHostName(),
         privateKey: options.privateKey,
         plainTextKey: true,
         direct: this.initDirect(),
@@ -184,6 +201,7 @@ export class Hosts {
       onExit: () => {
         this.setRemoteStatus(null)
         this.voidCodes()
+        for (const answer of [...this.requests.values()]) answer(null)
       },
     })
   }
@@ -229,6 +247,77 @@ export class Hosts {
       connected: status.online.includes(device.id),
       lastConnectedAt: device.lastConnectedAt,
     }))
+  }
+
+  /** Remote access as Settings shows it, which is on while the remote host runs. */
+  remoteAccess(): RemoteStatus {
+    const status = this.remoteStatus
+    return {
+      state: status ? 'on' : this.remote.state === 'failed' ? 'failed' : 'starting',
+      hostName: this.hostName(),
+      systemName: this.options.hostName,
+      devices: status?.devices ?? [],
+      online: status?.online ?? [],
+      plainTextKey: true,
+      direct: status?.direct ?? { state: 'off' },
+    }
+  }
+
+  /** Calls `listener` whenever the remote host reports, or goes; returns how to stop. */
+  onRemoteChanged(listener: () => void): () => void {
+    this.statusListeners.add(listener)
+    return () => this.statusListeners.delete(listener)
+  }
+
+  /** Renames a device, which its sessions hear; false when it is not paired or not running. */
+  renameDevice(id: string, name: string): boolean {
+    if (!this.remoteStatus?.devices.some((device) => device.id === id)) return false
+    return this.remote.post({ type: 'remote-host:rename-device', id, name })
+  }
+
+  /** A device's activity, newest first; none when it cannot be read. */
+  async activity(id: string): Promise<DeviceActivity[]> {
+    const answer = await this.request((requestId) => ({
+      type: 'remote-host:activity',
+      requestId,
+      id,
+    }))
+    if (answer?.type !== 'remote-host:activity' || !Array.isArray(answer.events)) return []
+    return answer.events.slice(0, MAX_ACTIVITY)
+  }
+
+  /** Starts the agent or terminal host again once it failed; false in any other state. */
+  restart(name: HostName): boolean {
+    return (name === 'agent' ? this.agent : this.terminal).restart()
+  }
+
+  /** Tells the owner's devices something of the host: every one, or only `deviceId`. */
+  adminEvent(event: HostAdminEvent, deviceId: string | null): void {
+    this.remote.post({ type: 'remote-host:admin-event', event, deviceId })
+  }
+
+  /** Passes a change of the settings to the hosts that read it, as main does. */
+  settingsChanged(changed: ReadonlySet<SettingsSection>): void {
+    const settings = this.settings()
+    // The agent host reads `general.sessionTitles` and the language, which `reachesHost` leaves.
+    if (reachesHost(changed) || changed.has('general')) {
+      this.agent.post({
+        type: 'host:settings',
+        settings: hostSettings(settings, this.options.systemLocale),
+      })
+    }
+    if (changed.has('remote')) {
+      this.directChanged()
+      this.terminalChanged()
+      const name = this.hostName()
+      if (name !== this.sentHostName && this.remote.post({ type: 'remote-host:host-name', name })) {
+        this.sentHostName = name
+      }
+    }
+    // After the remote host, so devices hear why their terminals close.
+    if (changed.has('terminal') || changed.has('remote')) {
+      this.terminal.post({ type: 'terminal-host:settings', settings: terminalSettings(settings) })
+    }
   }
 
   /** Forgets a device and closes its sessions, settled once the remote host reports it gone. */
@@ -329,19 +418,49 @@ export class Hosts {
     })
   }
 
-  /**
-   * Tells the remote host and the terminal host when devices may use the terminal or no longer
-   * may; each start reads it.
-   */
-  terminalChanged(): void {
+  /** Tells the remote host when devices may use the terminal or no longer may; each start reads it. */
+  private terminalChanged(): void {
     const allowed = this.settings().remote.terminal
     if (allowed === this.sentTerminal) return
     if (this.remote.post({ type: 'remote-host:terminal', allowed })) this.sentTerminal = allowed
-    // After the remote host, so devices hear why their terminals close.
-    this.terminal.post({
-      type: 'terminal-host:settings',
-      settings: terminalSettings(this.settings()),
+  }
+
+  /** The name devices show for this computer: the owner's, or the system's. */
+  private hostName(): string {
+    return this.settings().remote.name ?? this.options.hostName
+  }
+
+  private initHostName(): string {
+    this.sentHostName = this.hostName()
+    return this.sentHostName
+  }
+
+  private request(
+    message: (requestId: number) => MainToRemoteHost,
+  ): Promise<RemoteHostToMain | null> {
+    const requestId = this.nextRequest++
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => answer(null), REQUEST_TIMEOUT_MS)
+      const answer = (reply: RemoteHostToMain | null): void => {
+        clearTimeout(timer)
+        this.requests.delete(requestId)
+        resolve(reply)
+      }
+      this.requests.set(requestId, answer)
+      if (!this.remote.post(message(requestId))) answer(null)
     })
+  }
+
+  /** Answers an owner's call under its id. */
+  private async answerAdmin(
+    message: Extract<RemoteHostToMain, { type: 'remote-host:admin-call' }>,
+  ): Promise<void> {
+    const { requestId, deviceId, method, params } = message
+    if (!Number.isSafeInteger(requestId)) return
+    const answer: AdminAnswer = this.options.admin
+      ? await this.options.admin(deviceId, method, params)
+      : { error: { code: 'unavailable', message: 'This host takes no such calls' } }
+    this.remote.post({ type: 'remote-host:admin-result', requestId, ...answer })
   }
 
   private initTerminal(): boolean {
@@ -414,6 +533,12 @@ export class Hosts {
       // The terminal host starts on the first device that asks, so its socket is named then.
       case 'remote-host:open-terminal-port':
         if (Number.isSafeInteger(message.requestId)) void this.openTerminal(message.requestId)
+        break
+      case 'remote-host:activity':
+        this.requests.get(message.requestId)?.(message)
+        break
+      case 'remote-host:admin-call':
+        void this.answerAdmin(message)
         break
       case 'remote-host:log': {
         const text = typeof message.message === 'string' ? message.message : ''
