@@ -175,8 +175,11 @@ export interface SessionEvents {
   /** To every port, or to `portIds` alone for a prepared session. */
   summary(summary: SessionSummary, portIds?: readonly string[]): void
   removed(sessionId: string, portIds?: readonly string[]): void
-  /** A message waits in the host for a window to take back; null for New session. */
-  returned(sessionId: string | null): void
+  /**
+   * A message waits in the host for a window to take back; null for New session. To every port,
+   * or to `portIds` alone, the one that sent it.
+   */
+  returned(sessionId: string | null, portIds?: readonly string[]): void
   attention(
     sessionId: string,
     kind: 'permission' | 'turn-ended' | 'error',
@@ -255,6 +258,8 @@ interface Turn {
   attachments: string[]
   /** The user entry the turn started with, which shows how its attachments went. */
   entryId: string | null
+  /** The window or device that sent the message, which a failed turn gives it back to. */
+  portId: string | null
   ended: boolean
   cancelRequested: boolean
   fallback: ReturnType<typeof setTimeout> | null
@@ -351,7 +356,14 @@ interface Live {
   /** Something was sent or set since it went live; one only opened to read is let go sooner. */
   used: boolean
   /** A new session's first message, in its thread already, to send once the session has started. */
-  first: { content: UserContent[]; entryId: string; from?: FromSession } | null
+  first: {
+    content: UserContent[]
+    entryId: string
+    from?: FromSession
+    portId?: string
+  } | null
+  /** Who queued each waiting prompt, by item id; apart from the queue, which every client sees. */
+  queuedBy: Map<string, string>
   /** The message that gave the session its first title, for a written title, and its tries. */
   titlePrompt: UserContent[] | null
   titleWriting: boolean
@@ -535,8 +547,11 @@ export class SessionManager {
   private readonly atLaunch = new Set<string>()
   /** When `removeEmpty` ran, kept in the index; null before that. */
   private emptySessionsRemovedAt: number | null = null
-  /** Messages no session took, oldest first, until a window takes them back. */
-  private returned: ReturnedFile['messages'] = []
+  /**
+   * Messages no session took, oldest first, until a window takes them back; one with a `portId`
+   * is that port's while it is open, which no file keeps.
+   */
+  private returned: (ReturnedFile['messages'][number] & { portId?: string })[] = []
   /** Each window's prepared sessions, by port. */
   private readonly preparedSlots = new Map<string, PreparedSlot>()
   private emptyRemoval: Promise<void> | null = null
@@ -1353,6 +1368,7 @@ export class SessionManager {
       checkpointTimer: null,
       used: false,
       first: null,
+      queuedBy: new Map(),
       titlePrompt: null,
       titleWriting: false,
       titleFailedAt: null,
@@ -1763,6 +1779,19 @@ export class SessionManager {
     for (const [sessionId, ports] of this.watchers) {
       if (ports.delete(portId) && ports.size === 0) this.watchers.delete(sessionId)
     }
+    // What was given back to the port goes to whichever window or device asks next.
+    const orphaned = new Set<string | null>()
+    for (const message of this.returned) {
+      if (message.portId !== portId) continue
+      delete message.portId
+      orphaned.add(message.sessionId)
+    }
+    for (const sessionId of orphaned) this.deps.events.returned(sessionId)
+    for (const live of this.live.values()) {
+      for (const [itemId, queuedBy] of live.queuedBy) {
+        if (queuedBy === portId) live.queuedBy.delete(itemId)
+      }
+    }
   }
 
   private markViewed(sessionId: string, record: SessionRecord): void {
@@ -1856,6 +1885,7 @@ export class SessionManager {
         content: prompt,
         entryId: this.addPrompt(live, prompt, now, params.from),
         ...(params.from ? { from: params.from } : {}),
+        ...(portId === undefined ? {} : { portId }),
       }
     }
     this.touch(live.id)
@@ -1938,11 +1968,12 @@ export class SessionManager {
 
   /**
    * Removes and returns the messages kept for a session, or for every one when `sessionId` is
-   * undefined, oldest first; a taken one is gone.
+   * undefined, oldest first, but those held for another port; a taken one is gone.
    */
-  takeReturned(sessionId?: string | null): ReturnedMessage[] {
-    const taken = (message: ReturnedFile['messages'][number]) =>
-      sessionId === undefined || message.sessionId === sessionId
+  takeReturned(sessionId?: string | null, portId?: string): ReturnedMessage[] {
+    const taken = (message: (typeof this.returned)[number]) =>
+      (sessionId === undefined || message.sessionId === sessionId) &&
+      (message.portId === undefined || message.portId === portId)
     const messages = this.returned.filter(taken)
     if (messages.length === 0) return []
     this.returned = this.returned.filter((message) => !taken(message))
@@ -1951,7 +1982,8 @@ export class SessionManager {
   }
 
   private saveReturned(): void {
-    this.deps.returned.save({ version: 1, messages: this.returned })
+    const messages = this.returned.map(({ sessionId, content, at }) => ({ sessionId, content, at }))
+    this.deps.returned.save({ version: 1, messages })
   }
 
   // Prepared sessions: the session New session's first message will use, opened ahead of it so
@@ -2243,7 +2275,7 @@ export class SessionManager {
     const entryId = prompt ? this.addPrompt(live, prompt, now) : null
     this.save(live)
     this.touch(live.id)
-    if (prompt && entryId) this.startTurn(live, prompt, now, entryId)
+    if (prompt && entryId) this.startTurn(live, prompt, now, entryId, portId)
     return this.summary(live.id)
   }
 
@@ -2341,7 +2373,7 @@ export class SessionManager {
       this.touch(live.id)
       const first = live.first
       live.first = null
-      if (first) this.startTurn(live, first.content, this.now(), first.entryId)
+      if (first) this.startTurn(live, first.content, this.now(), first.entryId, first.portId)
       return
     }
     // A run starts in the strictest mode that still asks, before anything is sent.
@@ -2359,7 +2391,7 @@ export class SessionManager {
     })
     const notice = lostValuesNotice(lostValues(wanted, config), { subject: 'start', held: true })
     if (!notice) {
-      this.startTurn(live, first.content, this.now(), first.entryId)
+      this.startTurn(live, first.content, this.now(), first.entryId, first.portId)
       return
     }
     this.emit(live, [
@@ -2836,7 +2868,7 @@ export class SessionManager {
    * Re-runs what failed: the sign-in retry, a resume, a load after a failed resume, or a turn the
    * model provider refused for want of credit.
    */
-  async retry(sessionId: string): Promise<void> {
+  async retry(sessionId: string, portId?: string): Promise<void> {
     let live = this.live.get(sessionId)
     if (!live) {
       const snapshot = await this.open(sessionId)
@@ -2857,7 +2889,7 @@ export class SessionManager {
     if (unpaid) {
       // The same prompt again, under its own entry; the turn attaches the session if it has to.
       live.used = true
-      this.startTurn(live, unpaid.prompt.content, this.now(), unpaid.prompt.id)
+      this.startTurn(live, unpaid.prompt.content, this.now(), unpaid.prompt.id, portId)
       return
     }
     const failure = live.failure
@@ -2877,7 +2909,7 @@ export class SessionManager {
       case 'prompt':
         // The turn attaches the session again if it has to.
         this.update(live, { status: 'ready', error: null })
-        this.startTurn(live, failure.content, this.now(), failure.entryId)
+        this.startTurn(live, failure.content, this.now(), failure.entryId, portId)
         return
       case 'load':
       case 'resume':
@@ -3401,7 +3433,7 @@ export class SessionManager {
   }
 
   /** Sends a prompt; a session that is not attached attaches to its agent as the turn starts. */
-  async prompt(sessionId: string, content: UserContent[]): Promise<void> {
+  async prompt(sessionId: string, content: UserContent[], portId?: string): Promise<void> {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
@@ -3409,13 +3441,18 @@ export class SessionManager {
     const hydrated = this.hydrate(content)
     const live = await this.revive(sessionId)
     if (!canSend(live.thread.session.status)) throw busyError(live.thread.session.status)
-    this.sendPrompt(live, hydrated)
+    this.sendPrompt(live, hydrated, undefined, portId)
   }
 
-  private sendPrompt(live: Live, content: UserContent[], from?: FromSession): void {
+  private sendPrompt(
+    live: Live,
+    content: UserContent[],
+    from?: FromSession,
+    portId?: string,
+  ): void {
     live.used = true
     const now = this.now()
-    this.startTurn(live, content, now, this.addPrompt(live, content, now, from))
+    this.startTurn(live, content, now, this.addPrompt(live, content, now, from), portId)
   }
 
   /** The user entry of a prompt, and the title it gives a session that has none; its entry id. */
@@ -3613,7 +3650,11 @@ export class SessionManager {
    * nothing waits, or only a paused queue does. The composer always sends through here, so a
    * prompt sent before it heard that a turn started is queued, not refused.
    */
-  async queue(sessionId: string, input: UserContent[]): Promise<{ itemId: string | null }> {
+  async queue(
+    sessionId: string,
+    input: UserContent[],
+    portId?: string,
+  ): Promise<{ itemId: string | null }> {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
@@ -3623,13 +3664,14 @@ export class SessionManager {
     const { status, queue, queuePaused } = live.thread.session
     if (canSend(status) && (queue.length === 0 || queuePaused)) {
       // At once: another prompt waiting on the same revive must see this turn running.
-      this.sendPrompt(live, content)
+      this.sendPrompt(live, content, undefined, portId)
       return { itemId: null }
     }
     if (!canSend(status) && status !== 'running' && status !== 'awaiting_permission') {
       throw busyError(status)
     }
     const item = { id: randomUUID(), content, at: this.now() }
+    if (portId !== undefined) live.queuedBy.set(item.id, portId)
     this.update(live, { queue: [...queue, item] })
     this.persist(live)
     this.touch(live.id)
@@ -3640,6 +3682,7 @@ export class SessionManager {
     const live = await this.revive(sessionId)
     const { queue } = live.thread.session
     if (!queue.some((item) => item.id === itemId)) throw notFound(`No queued prompt ${itemId}`)
+    live.queuedBy.delete(itemId)
     const rest = queue.filter((item) => item.id !== itemId)
     this.update(live, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
     this.persist(live)
@@ -3691,6 +3734,7 @@ export class SessionManager {
     ])
     this.commitAttachments(live, resolved)
     if (resolved.ids.length > 0) void this.deps.attachments?.release(resolved.ids)
+    live.queuedBy.delete(itemId)
     this.update(live, { queue: queue.filter((i) => i.id !== itemId) })
     this.persist(live)
     this.touch(live.id)
@@ -3739,7 +3783,9 @@ export class SessionManager {
     const [next, ...rest] = queue
     if (!next || (queuePaused && !chosen) || !canSend(status)) return
     this.update(live, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
-    this.sendPrompt(live, next.content, next.from)
+    const queuedBy = live.queuedBy.get(next.id)
+    live.queuedBy.delete(next.id)
+    this.sendPrompt(live, next.content, next.from, queuedBy)
   }
 
   private pauseQueue(live: Live): void {
@@ -3751,6 +3797,7 @@ export class SessionManager {
     content: UserContent[],
     now: number,
     entryId: string | null = null,
+    portId: string | null = null,
   ): void {
     const turn: Turn = {
       startedAt: now,
@@ -3758,6 +3805,7 @@ export class SessionManager {
       written: content,
       attachments: [],
       entryId,
+      portId,
       ended: false,
       cancelRequested: false,
       fallback: null,
@@ -4409,9 +4457,16 @@ export class SessionManager {
       (item) =>
         item.type !== 'ref' || item.ref.kind !== 'attachment' || held.has(item.ref.attachment.id),
     )
-    this.returned.push({ sessionId: live.id, content, at: this.now() })
+    // The sender takes it back while it is there; once it has gone, whoever asks next.
+    const sender = turn.portId !== null && this.deps.portOpen(turn.portId) ? turn.portId : null
+    this.returned.push({
+      sessionId: live.id,
+      content,
+      at: this.now(),
+      ...(sender === null ? {} : { portId: sender }),
+    })
     this.saveReturned()
-    this.deps.events.returned(live.id)
+    this.deps.events.returned(live.id, sender === null ? undefined : [sender])
   }
 
   /** The session could not attach for the turn: it fails as a start does, and Retry sends again. */

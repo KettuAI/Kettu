@@ -429,7 +429,10 @@ export class AgentHost {
           this.hub.broadcast({ type: 'session.removed', sessionId })
           this.sendFolders()
         },
-        returned: (sessionId) => this.hub.broadcast({ type: 'session.returned', sessionId }),
+        returned: (sessionId, portIds) => {
+          if (portIds) this.hub.send(portIds, { type: 'session.returned', sessionId })
+          else this.hub.broadcast({ type: 'session.returned', sessionId })
+        },
         attention: (sessionId, kind, title, body) =>
           options.send({ type: 'host:attention', sessionId, kind, title, body }),
         badge: (count) => options.send({ type: 'host:badge', count }),
@@ -932,12 +935,14 @@ export class AgentHost {
       'sessions.watch': ({ sessionId }, { portId }) => sessions.watch(sessionId, portId),
       'sessions.unwatch': ({ sessionId }, { portId }) => sessions.unwatch(sessionId, portId),
       'sessions.show': ({ sessionIds }, { portId }) => sessions.show(sessionIds, portId),
-      'sessions.prompt': ({ sessionId, content }) => sessions.prompt(sessionId, content),
+      'sessions.prompt': ({ sessionId, content }, { portId }) =>
+        sessions.prompt(sessionId, content, portId),
       'sessions.cancel': ({ sessionId }) => sessions.cancel(sessionId),
-      'sessions.retry': ({ sessionId }) => sessions.retry(sessionId),
+      'sessions.retry': ({ sessionId }, { portId }) => sessions.retry(sessionId, portId),
       'sessions.fork': ({ sessionId, entryId }) => sessions.fork(sessionId, entryId),
       'sessions.context': ({ sessionId }) => sessions.context(sessionId),
-      'sessions.queue': ({ sessionId, content }) => sessions.queue(sessionId, content),
+      'sessions.queue': ({ sessionId, content }, { portId }) =>
+        sessions.queue(sessionId, content, portId),
       'sessions.unqueue': ({ sessionId, itemId }) => sessions.unqueue(sessionId, itemId),
       'sessions.steer': ({ sessionId, itemId }) => sessions.steer(sessionId, itemId),
       'sessions.sendNow': ({ sessionId, itemId }) => sessions.sendNow(sessionId, itemId),
@@ -956,7 +961,8 @@ export class AgentHost {
         this.options.send({ type: 'host:media-revoke', sessionId })
       },
       'sessions.removeEmpty': ({ keep }) => sessions.removeEmptyOnce(keep),
-      'sessions.takeReturned': ({ sessionId }) => sessions.takeReturned(sessionId),
+      'sessions.takeReturned': ({ sessionId }, { portId }) =>
+        sessions.takeReturned(sessionId, portId),
       'routines.list': () => routines.list(),
       'routines.create': (draft) => routines.create(draft),
       'routines.update': ({ routineId, changes }) => routines.update(routineId, changes),
