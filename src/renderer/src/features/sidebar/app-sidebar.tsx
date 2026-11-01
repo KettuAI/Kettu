@@ -53,8 +53,12 @@ import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useRoutinesStore } from '@renderer/stores/routines'
+import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
+import { isAway, shownHosts, useOtherHost, useOtherHosts } from '@renderer/stores/hosts'
 import {
+  hostOfSession,
   inPinnedTree,
+  noProjectGroup,
   pinnedTree,
   sessionTree,
   sidebarTabStop,
@@ -64,13 +68,14 @@ import {
 import { useSettingsStore } from '@renderer/stores/settings'
 import { loadToday, useUsageStore } from '@renderer/stores/usage'
 import {
-  NO_PROJECT_GROUP,
   openArtifacts,
   openRoutines,
   openUsage,
   PINNED_GROUP,
   useViewStore,
 } from '@renderer/stores/view'
+import { HostEmpty, HostFilter, HostHeading, NeedsYouGroup } from './host-groups'
+import { useHostLabel } from './host-label'
 import { ImportSessionsDialog } from './import-sessions'
 import { tightestLimit, USAGE_TONE_TEXT, usageTone } from './plan-usage'
 import { visibleProjects } from './project-group'
@@ -90,9 +95,20 @@ export function AppSidebar() {
   const main = useViewStore((s) => s.main)
   const collapsedProjects = useViewStore((s) => s.collapsedProjects)
   const expandedParents = useViewStore((s) => s.expandedParents)
+  const others = useOtherHosts()
+  const hostFilter = useViewStore((s) => s.hostFilter)
+  // With other hosts, the list groups by host; with none, it is as it always was.
+  const hosts = useMemo(
+    () => (others.length > 0 ? shownHosts(others, hostFilter) : null),
+    [others, hostFilter],
+  )
+  const away = useMemo(
+    () => others.filter((host) => isAway(host.connection)).map((host) => host.id),
+    [others],
+  )
   // The list has one Tab stop, chosen from the store so a hidden shown row leaves it to a header.
   const stop = sidebarTabStop(
-    { main, collapsedProjects, expandedParents },
+    { main, collapsedProjects, expandedParents, hosts, away },
     sessionsById,
     shownProjects,
   )
@@ -173,6 +189,21 @@ export function AppSidebar() {
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>
+            </>
+          ) : hosts ? (
+            <>
+              <HostFilter />
+              <NeedsYouGroup hosts={hosts} away={away} />
+              <PinnedGroup stop={stop} hosts={hosts} />
+              {hosts.map((hostId) => (
+                <HostSection
+                  key={hostId ?? 'this-computer'}
+                  hostId={hostId}
+                  projects={shownProjects}
+                  stop={stop}
+                  onImport={importSessions}
+                />
+              ))}
             </>
           ) : (
             <>
@@ -425,32 +456,91 @@ function TightestLimit() {
   )
 }
 
-/** A project's sessions, or with a null project those started with No project, if any. */
+/** A host's heading, its projects' groups and its No project group. */
+function HostSection({
+  hostId,
+  projects,
+  stop,
+  onImport,
+}: {
+  hostId: string | null
+  projects: readonly Project[]
+  stop: SidebarTabStop | null
+  onImport: (project: Project) => void
+}) {
+  const away = isAway(useOtherHost(hostId)?.connection ?? null)
+  const own = projects.filter((project) => hostOfPath(project.path) === hostId)
+  const scratch = useSessionsStore((s) =>
+    Object.values(s.byId).some(
+      (x) => x.scratch && x.origin !== 'routine' && !x.archivedAt && hostOfSession(x) === hostId,
+    ),
+  )
+  return (
+    <section aria-label={useHostLabel(hostId)} className="flex flex-col gap-0.5">
+      <HostHeading hostId={hostId} />
+      {own.map((project, i) => (
+        <ProjectGroup
+          key={project.path}
+          project={project}
+          stop={stop}
+          onImport={onImport}
+          hostId={hostId}
+          first={i === 0}
+          away={away}
+        />
+      ))}
+      <ProjectGroup
+        project={null}
+        stop={stop}
+        onImport={onImport}
+        hostId={hostId}
+        first={own.length === 0}
+        away={away}
+      />
+      {own.length === 0 && !scratch && <HostEmpty />}
+    </section>
+  )
+}
+
+/**
+ * A project's sessions, or with a null project those started with No project on `hostId`, if any.
+ * Under a host's heading, the first sits close to it; an offline host's offer nothing to start.
+ */
 function ProjectGroup({
   project,
   stop,
   onImport,
+  hostId = null,
+  first = false,
+  away = false,
 }: {
   project: Project | null
   stop: SidebarTabStop | null
   onImport: (project: Project) => void
+  hostId?: string | null
+  first?: boolean
+  away?: boolean
 }) {
-  const key = project?.path ?? NO_PROJECT_GROUP
+  const key = project?.path ?? noProjectGroup(hostId)
   const { t } = useTranslation('sidebar')
   const name = project?.name ?? t('project.noProject')
   const open = useViewStore((s) => !s.collapsedProjects[key])
   const [moreOpen, setMoreOpen] = useState(false)
   const summaries = useSessionsStore(
     useShallow((s) =>
-      Object.values(s.byId).filter((x) => (project ? x.projectPath === project.path : x.scratch)),
+      Object.values(s.byId).filter((x) =>
+        project ? x.projectPath === project.path : x.scratch && hostOfSession(x) === hostId,
+      ),
     ),
   )
   const projectPath = project?.path ?? null
   const tree = useMemo(
-    () => sessionTree(Object.fromEntries(summaries.map((x) => [x.id, x])), projectPath),
-    [summaries, projectPath],
+    () => sessionTree(Object.fromEntries(summaries.map((x) => [x.id, x])), projectPath, hostId),
+    [summaries, projectPath, hostId],
   )
   if (!project && tree.length === 0) return null
+  // Importing reads the agents' own lists, which only this computer's do.
+  const local = hostId === null
 
   const toggle = () => toggleGroup(key)
   const groupStop = stop?.kind === 'group' && stop.key === key
@@ -471,7 +561,10 @@ function ProjectGroup({
         } else if (event.key === 'ArrowRight' && !open) toggle()
         else if (event.key === 'ArrowLeft' && open) toggle()
       }}
-      className={cn(GROUP_LABEL, project?.missing ? 'text-disabled' : 'hover:text-secondary')}
+      className={cn(
+        GROUP_LABEL,
+        project?.missing ? 'text-disabled' : away ? 'text-tertiary' : 'hover:text-secondary',
+      )}
     >
       <span className="min-w-0 truncate font-heading text-group font-medium">{name}</span>
       <FoldChevron open={open} />
@@ -479,17 +572,17 @@ function ProjectGroup({
   )
   const tooltip = project ? (
     <TooltipContent side="right" className="max-w-sm font-mono break-all">
-      {project.path}
+      {hostPath(project.path)}
     </TooltipContent>
   ) : (
     <TooltipContent side="right">{t('project.noProjectTooltip')}</TooltipContent>
   )
-  const menuItems = project && <ProjectMenuItems onImport={() => onImport(project)} />
+  const menuItems = project && local && <ProjectMenuItems onImport={() => onImport(project)} />
 
   return (
     <div className="flex flex-col gap-0.5">
-      <div className={cn('group/menu-item', GROUP_ROW)}>
-        {project ? (
+      <div className={cn('group/menu-item', GROUP_ROW, first && 'mt-1')}>
+        {project && local ? (
           <ContextMenu>
             {/* A trigger's render must take its props, so the tooltip Root wraps the menu trigger. */}
             <Tooltip>
@@ -509,7 +602,7 @@ function ProjectGroup({
         )}
         {/* Room for the More button and the +, so the name never runs under them. */}
         <span className="min-w-13 flex-1" />
-        {project && (
+        {project && local && (
           <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
             <Tooltip>
               <TooltipTrigger
@@ -533,7 +626,8 @@ function ProjectGroup({
             <DropdownMenuContent align="start">{menuItems}</DropdownMenuContent>
           </DropdownMenu>
         )}
-        {!project?.missing && (
+        {/* New session starts No project sessions on this computer only. */}
+        {!project?.missing && !away && (project || local) && (
           <Tooltip>
             <TooltipTrigger
               render={
@@ -590,16 +684,28 @@ function toggleGroup(key: string): void {
   })
 }
 
-/** The pinned sessions across the projects, above them, while there are any. */
-function PinnedGroup({ stop }: { stop: SidebarTabStop | null }) {
+/**
+ * The pinned sessions across the projects, above them, while there are any; with other hosts, of
+ * the hosts shown, each row naming its host.
+ */
+function PinnedGroup({
+  stop,
+  hosts,
+}: {
+  stop: SidebarTabStop | null
+  hosts?: readonly (string | null)[]
+}) {
   const { t } = useTranslation('sidebar')
   const open = useViewStore((s) => !s.collapsedProjects[PINNED_GROUP])
   const summaries = useSessionsStore(
     useShallow((s) => Object.values(s.byId).filter((x) => inPinnedTree(s.byId, x))),
   )
   const tree = useMemo(
-    () => pinnedTree(Object.fromEntries(summaries.map((x) => [x.id, x]))),
-    [summaries],
+    () =>
+      pinnedTree(Object.fromEntries(summaries.map((x) => [x.id, x]))).filter(
+        (node) => !hosts || hosts.includes(hostOfSession(node.summary)),
+      ),
+    [summaries, hosts],
   )
   if (tree.length === 0) return null
   const toggle = () => toggleGroup(PINNED_GROUP)
@@ -626,7 +732,12 @@ function PinnedGroup({ stop }: { stop: SidebarTabStop | null }) {
       {open && (
         <SidebarMenu className="gap-0.5">
           {tree.map((node) => (
-            <SessionRow key={node.summary.id} node={node} tabStopId={tabStopId} />
+            <SessionRow
+              key={node.summary.id}
+              node={node}
+              tabStopId={tabStopId}
+              showHost={!!hosts}
+            />
           ))}
         </SidebarMenu>
       )}

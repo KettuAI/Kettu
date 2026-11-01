@@ -23,7 +23,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { PrIcon } from '@renderer/features/git/pr-icon'
 import { prStateText } from '@renderer/features/git/pr-text'
 import { cn } from '@renderer/lib/utils'
-import { sessionTitle, type SessionNode } from '@renderer/stores/sessions'
+import { isAway, useOtherHost } from '@renderer/stores/hosts'
+import { hostOfSession, sessionTitle, type SessionNode } from '@renderer/stores/sessions'
 import { useSessionDragSource } from '@renderer/features/split/session-drag-model'
 import { allPanes, paneWithSession } from '@renderer/features/split/layout'
 import { openSession, useViewStore } from '@renderer/stores/view'
@@ -44,14 +45,22 @@ export const SessionRow = memo(function SessionRow({
   node,
   depth = 0,
   tabStopId,
+  showHost = false,
 }: {
   node: SessionNode
   depth?: number
   /** The id of the list's one Tab stop, which the row it names takes. */
   tabStopId: string | null
+  /** The row ends with its host's name, as in a list across the hosts. */
+  showHost?: boolean
 }) {
   const { t } = useTranslation('sidebar')
   const { summary, children } = node
+  const hostId = hostOfSession(summary)
+  const otherHost = useOtherHost(hostId)
+  // What an offline host's session last said is not known to hold, so it shows no state.
+  const away = isAway(otherHost?.connection ?? null)
+  const hostName = hostId === null ? t('hosts.thisComputer') : (otherHost?.name ?? '')
   const current = useViewStore(
     (s) => s.main.kind === 'session' && s.main.sessionId === summary.id && !s.settings.open,
   )
@@ -139,7 +148,11 @@ export const SessionRow = memo(function SessionRow({
       isActive={current}
       aria-description={inSplit ? t('row.inSplitView') : undefined}
       // The other panes' rows take the current row's fill, without its surface or its edge.
-      className={cn('gap-[9px] data-active:font-medium', inSplit && 'bg-selected font-medium')}
+      className={cn(
+        'gap-[9px] data-active:font-medium',
+        inSplit && 'bg-selected font-medium',
+        away && 'text-tertiary',
+      )}
       data-sidebar-row=""
       data-session-id={summary.id}
       tabIndex={tabStop ? 0 : -1}
@@ -186,16 +199,28 @@ export const SessionRow = memo(function SessionRow({
         </span>
       )}
       {gone && <span className="sr-only">{gone}</span>}
-      <SessionIndicator
-        summary={summary}
-        permissionCount={node.permissionCount}
-        running={node.running}
-        expiring={expiring}
-        className={cn(
-          'group-hover/session:opacity-0 group-has-focus-visible/session:opacity-0',
-          moreOpen && 'opacity-0',
-        )}
-      />
+      {showHost && hostName && (
+        <span
+          className={cn(
+            'max-w-24 shrink-0 truncate text-xs font-normal text-tertiary group-hover/session:opacity-0 group-has-focus-visible/session:opacity-0',
+            moreOpen && 'opacity-0',
+          )}
+        >
+          {hostName}
+        </span>
+      )}
+      {!away && (
+        <SessionIndicator
+          summary={summary}
+          permissionCount={node.permissionCount}
+          running={node.running}
+          expiring={expiring}
+          className={cn(
+            'group-hover/session:opacity-0 group-has-focus-visible/session:opacity-0',
+            moreOpen && 'opacity-0',
+          )}
+        />
+      )}
     </SidebarMenuButton>
   )
 

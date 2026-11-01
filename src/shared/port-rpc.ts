@@ -16,6 +16,7 @@ export type PortErrorCode =
   | 'conflict'
   | 'host_restarted'
   | 'unavailable' // the host has no such service, as the daemon publishes nothing, or not now
+  | 'host_offline' // another host this computer connects to is not connected now
   | 'internal'
 
 export interface PortError {

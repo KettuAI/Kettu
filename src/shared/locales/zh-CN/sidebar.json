@@ -105,5 +105,15 @@
   },
   "pinned": {
     "label": "已置顶"
+  },
+  "needsYou": {
+    "label": "需要你的"
+  },
+  "hosts": {
+    "all": "全部主机",
+    "thisComputer": "本机",
+    "unknown": "另一台主机",
+    "filterLabel": "只看一台主机：现在是{{shown}}",
+    "empty": "这台主机上还没有会话。"
   }
 }

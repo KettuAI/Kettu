@@ -142,7 +142,8 @@
     "dropHint": "Files, photos or folders · up to 20",
     "slashNeedsEmpty": "In an empty message",
     "notOnDisk": "It isn't a file on disk, so it can't be attached.",
-    "theAgent": "The agent"
+    "theAgent": "The agent",
+    "otherHost": "Files and images from this computer cannot be attached to a session on another host yet. Mention the host's files with @."
   },
   "mentions": {
     "label": "Files and folders",

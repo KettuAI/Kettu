@@ -3,6 +3,7 @@ import { stepZoom, type ZoomStep } from '@shared/settings'
 import { errorMessage } from '@renderer/lib/host'
 import { isMac, isMod, platform } from '@renderer/lib/platform'
 import { useProjectsStore } from '@renderer/stores/projects'
+import { awayHosts, sidebarHosts } from '@renderer/stores/hosts'
 import { useSessionsStore, visibleOrder } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
@@ -227,7 +228,11 @@ function layerOpen(): boolean {
 function stepSession(delta: -1 | 1): void {
   const view = useViewStore.getState()
   const { byId } = useSessionsStore.getState()
-  const order = visibleOrder(view, byId, useProjectsStore.getState().projects)
+  const order = visibleOrder(
+    { ...view, hosts: sidebarHosts(), away: awayHosts() },
+    byId,
+    useProjectsStore.getState().projects,
+  )
   if (!order.length) return
   const currentId = view.main.kind === 'session' ? view.main.sessionId : null
   const at = currentId ? order.indexOf(currentId) : -1

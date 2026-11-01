@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import type { Project, SessionSummary } from '@shared/agent-host'
+import { onHost } from '@renderer/lib/host-paths'
 import { NO_PROJECT_GROUP, PINNED_GROUP, type MainView } from '@renderer/stores/view'
 import {
   archivedSessions,
   inPinnedTree,
   isScratchFolder,
+  needsYouTree,
+  noProjectGroup,
   pinnedTree,
   sessionTree,
   sidebarTabStop,
+  useSessionsStore,
+  visibleOrder,
   type SidebarView,
 } from './sessions'
 
@@ -178,5 +183,100 @@ describe('sidebarTabStop', () => {
         projects,
       ),
     ).toBeNull()
+  })
+})
+
+describe('sessions on other hosts', () => {
+  const devBox = 'a'.repeat(32)
+  const api = onHost(devBox, '/home/lin/api')
+  const project = (path: string): Project => ({ path, name: 'x', missing: false, lastOpenedAt: 0 })
+  const projects = [project('/repo'), project(api)]
+  const sessions = Object.fromEntries(
+    [
+      session('mine', '/repo', { updatedAt: 1 }),
+      session('mine-scratch', '/data/scratch/a', { scratch: true }),
+      session('theirs', api, { updatedAt: 2, attention: 'error' }),
+      session('theirs-scratch', onHost(devBox, '/home/lin/.kettu/scratch/b'), { scratch: true }),
+      session('waiting', '/repo', { updatedAt: 3 }),
+      session('waiting-child', '/repo', { parentId: 'waiting', permissionCount: 1 }),
+      session('archived', api, { archivedAt: 1, attention: 'error' }),
+    ].map((s) => [s.id, s]),
+  )
+
+  it("keeps each host's No project sessions to it", () => {
+    expect(sessionTree(sessions, null).map((n) => n.summary.id)).toEqual(['mine-scratch'])
+    expect(sessionTree(sessions, null, devBox).map((n) => n.summary.id)).toEqual(['theirs-scratch'])
+    expect(noProjectGroup(null)).toBe(NO_PROJECT_GROUP)
+    expect(noProjectGroup(devBox)).not.toBe(NO_PROJECT_GROUP)
+  })
+
+  it('gathers what needs you across the hosts, a sub-session under its root', () => {
+    const tree = needsYouTree(sessions)
+    expect(tree.map((n) => [n.summary.id, n.permissionCount])).toEqual([
+      ['waiting', 1],
+      ['theirs', 0],
+    ])
+    expect(tree.every((n) => n.children.length === 0)).toBe(true)
+  })
+
+  it('orders the list by host, Needs you first, and visits a session once', () => {
+    const view: SidebarView = {
+      main: { kind: 'new', agentId: null, noProject: false },
+      collapsedProjects: {},
+      expandedParents: {},
+      hosts: [null, devBox],
+    }
+    expect(visibleOrder(view, sessions, projects)).toEqual([
+      'waiting',
+      'theirs',
+      'mine',
+      'mine-scratch',
+      'theirs-scratch',
+    ])
+    expect(visibleOrder({ ...view, hosts: [devBox] }, sessions, projects)).toEqual([
+      'theirs',
+      'theirs-scratch',
+    ])
+    expect(sidebarTabStop({ ...view, hosts: [devBox] }, sessions, projects)).toEqual({
+      kind: 'group',
+      key: api,
+    })
+  })
+
+  it("leaves a host's sessions out of Needs you while it is not connected, and keeps them in its section", () => {
+    const view: SidebarView = {
+      main: { kind: 'new', agentId: null, noProject: false },
+      collapsedProjects: {},
+      expandedParents: {},
+      hosts: [null, devBox],
+      away: [devBox],
+    }
+    expect(visibleOrder(view, sessions, projects)).toEqual([
+      'waiting',
+      'mine',
+      'mine-scratch',
+      'theirs',
+      'theirs-scratch',
+    ])
+  })
+
+  it("lists only this computer's archived sessions, which its settings show", () => {
+    expect(archivedSessions(sessions)).toEqual([])
+  })
+
+  it("replaces one host's sessions and leaves the others'", () => {
+    useSessionsStore.setState({ byId: sessions, loaded: false })
+    useSessionsStore.getState().setAll([session('new', api)], devBox)
+    expect(Object.keys(useSessionsStore.getState().byId).sort()).toEqual([
+      'mine',
+      'mine-scratch',
+      'new',
+      'waiting',
+      'waiting-child',
+    ])
+    expect(useSessionsStore.getState().loaded).toBe(false)
+    useSessionsStore.getState().setAll([])
+    expect(Object.keys(useSessionsStore.getState().byId)).toEqual(['new'])
+    expect(useSessionsStore.getState().loaded).toBe(true)
   })
 })

@@ -9,8 +9,10 @@ import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { usePane } from '@renderer/features/split/pane-context'
 import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { errorMessage, host } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import { ensureFiles } from '@renderer/stores/files'
+import { isAway, useOtherHost } from '@renderer/stores/hosts'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { focusSession, reloadSession, useThreadsStore } from '@renderer/stores/threads'
 import { openSettings } from '@renderer/stores/view'
@@ -26,6 +28,7 @@ import {
   ColumnScroller,
   ComposerPlaceholder,
   FailedState,
+  HostAway,
   StartingAgent,
   ThreadSkeleton,
 } from './session-states'
@@ -53,6 +56,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const progressNotes = useAgentsStore(
     (s) => s.byId[summary.agentId]?.capabilities.progressNotes ?? false,
   )
+  const otherHost = useOtherHost(hostOfPath(summary.projectPath))
+  // Its host is offline: what the thread showed stays, and nothing goes to it.
+  const away = otherHost && isAway(otherHost.connection) ? otherHost : null
 
   useEffect(() => {
     preloadRenderers()
@@ -86,7 +92,13 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
 
   let body
   let showsThread = false
-  if (!session) {
+  if (!session && away) {
+    body = (
+      <ColumnScroller className="flex items-center justify-center px-6 pb-16">
+        <HostAway host={away} />
+      </ColumnScroller>
+    )
+  } else if (!session) {
     body =
       replicaStatus === 'error' ? (
         <ColumnScroller>
@@ -199,7 +211,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
               {session && summary.origin !== 'subagent' && session.queue.length > 0 && (
                 <QueueStack session={session} onOpenChange={setQueueOpen} onError={setQueueError} />
               )}
-              {summary.origin === 'subagent' ? (
+              {away ? (
+                session && <HostAway host={away} inline />
+              ) : summary.origin === 'subagent' ? (
                 <SubagentBar summary={summary} session={session} />
               ) : session ? (
                 <div className="relative z-10">

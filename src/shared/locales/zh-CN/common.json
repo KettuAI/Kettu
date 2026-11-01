@@ -25,7 +25,8 @@
     "hoursMinutes": "{{h}} 小时 {{m}} 分"
   },
   "errors": {
-    "hostRestarted": "Kettu 的后台进程已重启，请重试。"
+    "hostRestarted": "Kettu 的后台进程已重启，请重试。",
+    "hostOffline": "这台主机没有连上，等它回来后再试。"
   },
   "planWindow": {
     "five_hour": "5 小时",
@@ -41,5 +42,8 @@
     "mac": "访达",
     "windows": "资源管理器",
     "linux": "文件管理器"
+  },
+  "windowTitle": {
+    "onHost": "{{host}} — Kettu"
   }
 }

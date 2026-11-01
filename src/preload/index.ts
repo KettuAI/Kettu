@@ -5,14 +5,25 @@ import type { AppCommand, KettuApi, QuitRequest } from '@shared/ipc'
 import { isLocale, type Locale } from '@shared/locale'
 import { TERMINAL_METHODS, type TerminalEvent, type TerminalsApi } from '@shared/terminal-host'
 import { filePaths } from './attachments'
+import { HostsClient } from './hosts-client'
 import { hostTransport, invoke, send, subscribe } from './ipc'
-import { PortClient } from './port-client'
+import { PortClient, type ClientPort } from './port-client'
 
 const agents = new PortClient<HostEvent>({
   label: 'agent host',
   methods: HOST_METHODS,
   transport: hostTransport('agent-host'),
   lazy: false,
+})
+
+const otherHosts = new HostsClient({
+  requestPort: () => ipcRenderer.send('host-sessions:connect'),
+  onPort: (listener) => {
+    ipcRenderer.on('host-sessions:port', (event) => {
+      const [port] = event.ports as unknown as ClientPort[]
+      if (port) listener(port)
+    })
+  },
 })
 
 const terminals = new PortClient<TerminalEvent>({
@@ -139,6 +150,8 @@ const api: KettuApi = {
     remove: (id) => invoke('hosts:remove', id),
     onChanged: onHostsChanged,
     onPairing: onHostPairing,
+    request: (hostId, method, params) => otherHosts.request(hostId, method, params),
+    onSession: (listener) => otherHosts.onSession(listener),
   },
   account: {
     status: () => invoke('account:status'),

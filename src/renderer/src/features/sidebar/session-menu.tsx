@@ -52,6 +52,7 @@ import {
 import { toast } from '@renderer/components/ui/toast'
 import { PrIcon } from '@renderer/features/git/pr-icon'
 import { errorMessage, host } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { fileManagerName, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
@@ -205,7 +206,8 @@ export function SessionMenuItems({
           )
         )
       case 'showInFolder':
-        if (isWeb) return null
+        // Only this computer's folders open in its file manager.
+        if (isWeb || hostOfPath(summary.projectPath) !== null) return null
         return (
           <DropdownMenuItem
             {...props}

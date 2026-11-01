@@ -87,6 +87,8 @@ function makeHost(
     hostsKnown?: boolean
     dataPath?: string
     admin?: RemoteHostDeps['admin']
+    hostOpened?: RemoteHostDeps['hostOpened']
+    hostClosed?: RemoteHostDeps['hostClosed']
   } = {},
 ) {
   const opened: PortDevice[] = []
@@ -121,6 +123,8 @@ function makeHost(
     changed: () => changes++,
     hostsChanged: () => hostsChanges++,
     ...(options.admin ? { admin: options.admin } : {}),
+    ...(options.hostOpened ? { hostOpened: options.hostOpened } : {}),
+    ...(options.hostClosed ? { hostClosed: options.hostClosed } : {}),
   })
   return {
     host,
@@ -680,6 +684,25 @@ describe('RemoteHost', () => {
     expect(channel!.port2.started).toBe(true)
     child.emit('exit', 1)
     expect(channel!.port2.closed).toBe(true)
+    await host.stop()
+  })
+
+  it("hands a host's port to whoever relays it, and says when it closed", async () => {
+    const heard: string[] = []
+    const { host } = makeHost({
+      hostsKnown: true,
+      hostOpened: (hostId) => heard.push(`opened ${hostId}`),
+      hostClosed: (hostId) => heard.push(`closed ${hostId}`),
+    })
+    await host.setEnabled(false)
+    const child = children[0]!
+    child.emit('message', { type: 'remote-host:ready' })
+    child.emit('message', { type: 'remote-host:open-host-port', requestId: 5, hostId: devBox.id })
+    // A new session's port replaces the last one.
+    child.emit('message', { type: 'remote-host:open-host-port', requestId: 6, hostId: devBox.id })
+    expect(heard).toEqual([`opened ${devBox.id}`, `closed ${devBox.id}`, `opened ${devBox.id}`])
+    child.emit('exit', 1)
+    expect(heard.at(-1)).toBe(`closed ${devBox.id}`)
     await host.stop()
   })
 

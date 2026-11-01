@@ -63,7 +63,26 @@ describe('completePath', () => {
     await symlink(path.join(root, 'src'), path.join(root, 'linked'))
     await symlink(path.join(root, 'gone'), path.join(root, 'lost'))
     const done = await completePath(path.join(root, 'l'), platform, root)
-    expect(done.entries).toEqual([{ name: 'linked', kind: 'folder', executable: false }])
+    expect(done.entries).toEqual([
+      { name: 'linked', kind: 'folder', executable: false, repo: false },
+    ])
+  })
+
+  it('marks the folders that hold a Git repository, a worktree included', async () => {
+    const root = await tree()
+    await mkdir(path.join(root, 'src', '.git'))
+    await mkdir(path.join(root, 'scripts', 'nested', '.git'), { recursive: true })
+    await mkdir(path.join(root, 'linked-tree'))
+    await writeFile(path.join(root, 'linked-tree', '.git'), 'gitdir: /elsewhere\n')
+    const done = await completePath(root + path.sep, platform, root)
+    expect(
+      done.entries.filter((entry) => entry.kind === 'folder').map(({ name, repo }) => [name, repo]),
+    ).toEqual([
+      ['linked-tree', true],
+      ['scripts', false],
+      ['src', true],
+    ])
+    expect(done.entries.find((entry) => entry.kind === 'file')).not.toHaveProperty('repo')
   })
 
   it('reads `~` as the home folder', async () => {

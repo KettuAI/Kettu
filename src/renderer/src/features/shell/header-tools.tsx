@@ -6,6 +6,7 @@ import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { GitStatusCluster } from '@renderer/features/git/git-status'
 import { usePane } from '@renderer/features/split/pane-context'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { formatShortcut, isWeb } from '@renderer/lib/platform'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { useGitStore } from '@renderer/stores/git'
@@ -28,6 +29,7 @@ import { NoDrag } from './top-bar'
 export function HeaderTools({ projectPath }: { projectPath: string }) {
   const { t } = useTranslation('shell')
   const pane = usePane()
+  const remote = hostOfPath(projectPath) !== null
   const isRepo = useGitStore((s) => !!s.status[projectPath]?.repo)
   // An agent opened a session's page while another pane showed: a dot says to look.
   const unseen = useBrowserStore((s) => s.unseen)
@@ -47,16 +49,19 @@ export function HeaderTools({ projectPath }: { projectPath: string }) {
         <PaneToggle projectPath={projectPath} pane="files" label={t('headerTools.files')}>
           <FolderIcon />
         </PaneToggle>
-        <PaneToggle
-          projectPath={projectPath}
-          pane="terminal"
-          label={t('headerTools.terminal')}
-          shortcut="Ctrl+`"
-        >
-          <SquareTerminalIcon />
-        </PaneToggle>
+        {/* Another host's project offers its files alone through its connection. */}
+        {!remote && (
+          <PaneToggle
+            projectPath={projectPath}
+            pane="terminal"
+            label={t('headerTools.terminal')}
+            shortcut="Ctrl+`"
+          >
+            <SquareTerminalIcon />
+          </PaneToggle>
+        )}
         {/* The browser runs in the desktop app; a web page has no such view. */}
-        {!isWeb && (
+        {!isWeb && !remote && (
           <PaneToggle
             projectPath={projectPath}
             pane="browser"

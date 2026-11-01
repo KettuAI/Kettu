@@ -1,9 +1,10 @@
 import type { AccountStatus } from './account'
-import type { AgentsApi, DiagnosticsBundle } from './agent-host'
+import type { AgentsApi, DiagnosticsBundle, HostMethod } from './agent-host'
 import type { ArtifactImportResult, ThumbnailPage } from './artifacts'
 import type { GrantedAttachment } from './attachments'
 import type { BrowserBounds, BrowserOriginDecision, BrowserState } from './browser'
 import type { BusySession, BusyTerminal } from './host-control'
+import type { HostSessionChange } from './host-sessions'
 import type { Locale } from './locale'
 import type { CarriedMedia } from './media'
 import type { Platform } from './platform'
@@ -297,6 +298,8 @@ export interface RemotePairingEvent {
 export interface IpcSendContract {
   'agent-host:connect': []
   'terminal-host:connect': []
+  /** The window's port to the sessions on other hosts, as `host-sessions:port`. */
+  'host-sessions:connect': []
   'perf:interactive': []
   /** The page has no `onConfirmQuit` listener, so main asks with a native dialog instead. */
   'app:confirm-quit-unhandled': [id: number]
@@ -318,6 +321,7 @@ export interface PreloadEventContract {
   'agent-host:reset': HostResetEvent
   'terminal-host:port': []
   'terminal-host:reset': HostResetEvent
+  'host-sessions:port': []
 }
 
 /** API the preload script exposes to the renderer as `window.kettu`. */
@@ -430,6 +434,13 @@ export interface KettuApi {
     remove(id: string): Promise<'unknown_host' | null>
     onChanged(listener: (status: HostsStatus) => void): () => void
     onPairing(listener: (event: HostPairingEvent) => void): () => void
+    /**
+     * A request to a connected host's agent host, which rejects as `agents.request` does; one for a
+     * host whose first connection is under way waits for it a while.
+     */
+    request(hostId: string, method: HostMethod, params: unknown): Promise<unknown>
+    /** Each host's events, and whether its session opened, ended or must be read again. */
+    onSession(listener: (hostId: string, change: HostSessionChange) => void): () => void
   }
   settings: {
     get(): Promise<SettingsFile>

@@ -118,6 +118,7 @@ describe('the port envelope', () => {
       name: path.basename(t.project),
       kind: 'folder',
       executable: false,
+      repo: false,
     })
     for (const typed of ['relative', '~ada/x', '']) {
       await expect(device.request('paths.complete', { path: typed })).rejects.toMatchObject({

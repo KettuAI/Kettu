@@ -290,7 +290,23 @@
       "switchOff": "{{agent}} starts with {{option}} off, not on.",
       "switchOn": "{{agent}} starts with {{option}} on, not off."
     },
-    "installHarness": "Install a harness…"
+    "installHarness": "Install a harness…",
+    "thisComputer": "This computer",
+    "hostOffline": "Offline",
+    "openProjectHere": "Open project on this computer…",
+    "openProjectOn": "Open project on {{host}}…",
+    "projectOnHost": "Project: {{name}} on {{host}}",
+    "hostFolders": {
+      "title": "Open project on {{host}}",
+      "description": "The folders on {{host}}. The project stays on {{host}} and is not copied to this computer; the agent reads and writes it there.",
+      "up": "Up one folder",
+      "location": "Location",
+      "list": "Folders in {{folder}}",
+      "empty": "No folders here.",
+      "repo": "Git repository",
+      "note": "Only folders are listed, with paths as {{host}} writes them:",
+      "open": "Open"
+    }
   },
   "signIn": {
     "title": "Sign in to {{agent}}",
@@ -388,5 +404,10 @@
     "saveAs": "Save as…",
     "previous": "Previous",
     "next": "Next"
+  },
+  "host": {
+    "away": "{{name}} is not connected",
+    "awayBody": "{{state}}. Its sessions open here again once it is back.",
+    "awayComposer": "{{name}} is not connected: {{state}}. You can send messages again once it is back."
   }
 }

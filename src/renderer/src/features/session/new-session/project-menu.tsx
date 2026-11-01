@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import { FolderIcon, SearchIcon } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { FolderIcon, LaptopIcon, SearchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Project } from '@shared/agent-host'
 import { addProjectFromDialog } from '@renderer/app/actions'
@@ -18,19 +18,55 @@ import {
   useComboboxFilter,
 } from '@renderer/components/ui/combobox'
 import { InputGroupAddon } from '@renderer/components/ui/input-group'
+import { HostIcon } from '@renderer/features/settings/remote-parts'
 import { errorMessage } from '@renderer/lib/host'
+import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { formatShortcut } from '@renderer/lib/platform'
+import { isAway, useOtherHost, useOtherHosts, type OtherHost } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { chooseNewSessionProject } from '@renderer/stores/view'
 import { nameHints } from '../project-names'
+import { HostFolderDialog } from './host-folder-dialog'
 
 // The values of the No project and Open project… items, which no project's path can take.
 const NO_PROJECT = '\0no-project'
 const OPEN_PROJECT = '\0open-project'
+// Open project on <host>..., followed by the host's id.
+const OPEN_ON = '\0open-on:'
 
 interface ProjectGroup {
-  value: 'none' | 'recent' | 'open'
+  value: 'none' | 'recent' | 'open' | `host:${string}`
+  /** With other hosts added, the host of a group of projects, null being this computer. */
+  hostId?: string | null
   items: string[]
+}
+
+/** The groups of the menu: No project, the projects, by host once there are others, and Open. */
+function projectGroups(projects: readonly Project[], hosts: readonly OtherHost[]): ProjectGroup[] {
+  if (hosts.length === 0) {
+    return [
+      { value: 'none', items: [NO_PROJECT] },
+      { value: 'recent', items: projects.map((p) => p.path) },
+      { value: 'open', items: [OPEN_PROJECT] },
+    ]
+  }
+  const of = (hostId: string | null) =>
+    projects.filter((p) => hostOfPath(p.path) === hostId).map((p) => p.path)
+  const byHost: ProjectGroup[] = [
+    { value: 'host:', hostId: null, items: of(null) },
+    ...hosts.map((h): ProjectGroup => ({ value: `host:${h.id}`, hostId: h.id, items: of(h.id) })),
+  ]
+  return [
+    { value: 'none', items: [NO_PROJECT] },
+    ...byHost.filter((group) => group.items.length > 0),
+    {
+      value: 'open',
+      items: [
+        OPEN_PROJECT,
+        ...hosts.filter((h) => h.connection.state === 'online').map((h) => `${OPEN_ON}${h.id}`),
+      ],
+    },
+  ]
 }
 
 /**
@@ -53,19 +89,37 @@ export function ProjectMenu({
   const { t } = useTranslation('session')
   const choose = onChoose ?? chooseNewSessionProject
   const projects = useProjectsStore((s) => s.projects)
+  const hosts = useOtherHosts()
   const { contains } = useComboboxFilter()
   const byPath = useMemo(() => new Map(projects.map((p) => [p.path, p])), [projects])
-  const hints = useMemo(() => nameHints(projects.map((p) => p.path)), [projects])
-  const groups = useMemo<ProjectGroup[]>(
-    () => [
-      { value: 'none', items: [NO_PROJECT] },
-      { value: 'recent', items: projects.map((p) => p.path) },
-      { value: 'open', items: [OPEN_PROJECT] },
-    ],
-    [projects],
-  )
+  // Each host tells its own projects of one name apart, by the paths it writes.
+  const hints = useMemo(() => {
+    const hosted = new Map<string, string>()
+    for (const hostId of new Set(projects.map((p) => hostOfPath(p.path)))) {
+      const paths = projects.map((p) => p.path).filter((path) => hostOfPath(path) === hostId)
+      const found = nameHints(paths.map(hostPath))
+      for (const path of paths) {
+        const hint = found.get(hostPath(path))
+        if (hint) hosted.set(path, hint)
+      }
+    }
+    return hosted
+  }, [projects])
+  const groups = useMemo(() => projectGroups(projects, hosts), [projects, hosts])
+  const [browsing, setBrowsing] = useState<{ hostId: string; open: boolean } | null>(null)
+  const hostName = (hostId: string | null) =>
+    hostId === null
+      ? t('newSession.thisComputer')
+      : (hosts.find((h) => h.id === hostId)?.name ?? hostId)
+  const projectHost = project ? hostOfPath(project.path) : null
   const label = (value: string) =>
-    value === NO_PROJECT ? t('newSession.noProject') : (byPath.get(value)?.name ?? value)
+    value === NO_PROJECT
+      ? t('newSession.noProject')
+      : value === OPEN_PROJECT
+        ? t(hosts.length > 0 ? 'newSession.openProjectHere' : 'newSession.openProject')
+        : value.startsWith(OPEN_ON)
+          ? t('newSession.openProjectOn', { host: hostName(value.slice(OPEN_ON.length)) })
+          : (byPath.get(value)?.name ?? value)
   const add = async () => {
     onError(null)
     try {
@@ -82,12 +136,20 @@ export function ProjectMenu({
       value={noProject ? NO_PROJECT : (project?.path ?? null)}
       onValueChange={(value: string | null) => {
         if (value === OPEN_PROJECT) void add()
-        else if (value === NO_PROJECT) choose(null)
+        else if (value?.startsWith(OPEN_ON)) {
+          onError(null)
+          setBrowsing({ hostId: value.slice(OPEN_ON.length), open: true })
+        } else if (value === NO_PROJECT) choose(null)
         else if (value) choose(value)
       }}
       itemToStringLabel={label}
       filter={(value: string, query: string) =>
-        value === OPEN_PROJECT || contains(`${label(value)} ${hints.get(value) ?? ''}`, query)
+        value === OPEN_PROJECT ||
+        value.startsWith(OPEN_ON) ||
+        contains(
+          `${label(value)} ${hints.get(value) ?? ''} ${hosts.length > 0 ? hostName(hostOfPath(value)) : ''}`,
+          query,
+        )
       }
     >
       <ComboboxTrigger
@@ -95,8 +157,12 @@ export function ProjectMenu({
           <Button
             variant="quiet"
             size="sm"
-            aria-label={t('newSession.project')}
-            title={noProject ? undefined : project?.path}
+            aria-label={
+              !noProject && project && projectHost
+                ? t('newSession.projectOnHost', { name: project.name, host: hostName(projectHost) })
+                : t('newSession.project')
+            }
+            title={noProject || !project ? undefined : hostPath(project.path)}
             className="min-w-13 shrink-10 gap-1 px-2.25 text-control font-normal has-data-[icon=inline-end]:pr-2.25"
           />
         }
@@ -107,6 +173,11 @@ export function ProjectMenu({
             ? t('newSession.noProject')
             : (project?.name ?? t('newSession.chooseProjectShort'))}
         </span>
+        {!noProject && projectHost && (
+          <span className="min-w-0 shrink-5 truncate text-muted-foreground">
+            {hostName(projectHost)}
+          </span>
+        )}
         {project?.missing && !noProject && (
           <span className="shrink-0 text-danger">{t('newSession.missing')}</span>
         )}
@@ -134,6 +205,8 @@ export function ProjectMenu({
                   )}
                 </ComboboxCollection>
               </ComboboxGroup>
+            ) : group.value.startsWith('host:') ? (
+              <HostProjects key={group.value} group={group} byPath={byPath} hints={hints} />
             ) : group.value === 'recent' ? (
               <ComboboxGroup key={group.value} items={group.items}>
                 {index > 0 && <ComboboxSeparator />}
@@ -173,10 +246,12 @@ export function ProjectMenu({
                 <ComboboxCollection>
                   {(value: string) => (
                     <ComboboxItem key={value} value={value} className="pr-2">
-                      {t('newSession.openProject')}
-                      <span className="ml-auto pl-4 text-xs text-muted-foreground tabular">
-                        {formatShortcut('Mod+O')}
-                      </span>
+                      {label(value)}
+                      {value === OPEN_PROJECT && (
+                        <span className="ml-auto pl-4 text-xs text-muted-foreground tabular">
+                          {formatShortcut('Mod+O')}
+                        </span>
+                      )}
                     </ComboboxItem>
                   )}
                 </ComboboxCollection>
@@ -193,7 +268,72 @@ export function ProjectMenu({
           ))}
         </div>
       </ComboboxContent>
+      <HostFolderDialog
+        hostId={browsing?.hostId ?? null}
+        open={browsing?.open ?? false}
+        onOpenChange={(open) => setBrowsing((b) => (b ? { ...b, open } : b))}
+        onOpened={(path) => {
+          setBrowsing((b) => (b ? { ...b, open: false } : b))
+          choose(path)
+        }}
+      />
     </Combobox>
+  )
+}
+
+/** One host's projects under its name; an offline host's are listed but cannot be chosen. */
+function HostProjects({
+  group,
+  byPath,
+  hints,
+}: {
+  group: ProjectGroup
+  byPath: Map<string, Project>
+  hints: Map<string, string>
+}) {
+  const { t } = useTranslation('session')
+  const host = useOtherHost(group.hostId ?? null)
+  const away = isAway(host?.connection ?? null)
+  const name = group.hostId === null ? t('newSession.thisComputer') : (host?.name ?? '')
+  const Icon = group.hostId === null ? LaptopIcon : null
+  return (
+    <ComboboxGroup items={group.items}>
+      <ComboboxSeparator />
+      <ComboboxLabel className="flex items-center gap-1.5">
+        {Icon ? (
+          <Icon aria-hidden className="size-3" />
+        ) : (
+          <HostIcon platform={host?.platform ?? 'linux'} className="size-3" />
+        )}
+        <span className="min-w-0 flex-1 truncate">{name}</span>
+        {away && <span className="shrink-0">{t('newSession.hostOffline')}</span>}
+      </ComboboxLabel>
+      {/* Only the projects scroll, a host's at a time. */}
+      <div className="relative -mx-1.5 max-h-[min(--spacing(56),calc(var(--available-height)---spacing(28)))] scroll-fade-y overflow-y-auto overscroll-contain px-1.5">
+        <ComboboxCollection>
+          {(path: string) => {
+            const p = byPath.get(path)
+            return (
+              p && (
+                <ComboboxItem
+                  key={path}
+                  value={path}
+                  disabled={p.missing || away}
+                  title={hostPath(path)}
+                >
+                  <ProjectName name={p.name} hint={hints.get(path)} />
+                  {p.missing && (
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {t('newSession.missing')}
+                    </span>
+                  )}
+                </ComboboxItem>
+              )
+            )
+          }}
+        </ComboboxCollection>
+      </div>
+    </ComboboxGroup>
   )
 }
 

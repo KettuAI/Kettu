@@ -46,7 +46,7 @@ interface Queued extends Pending {
   params: unknown
 }
 
-function portError(code: PortErrorCode, message: string, data?: unknown): PortRejection {
+export function portError(code: PortErrorCode, message: string, data?: unknown): PortRejection {
   return { name: 'PortRequestError', code, message, ...(data === undefined ? {} : { data }) }
 }
 
@@ -193,7 +193,7 @@ export class PortClient<Event> {
   }
 }
 
-function toError(error: PortError | undefined): PortRejection {
+export function toError(error: PortError | undefined): PortRejection {
   if (!error || typeof error.message !== 'string' || typeof error.code !== 'string') {
     return portError('internal', 'The host sent a malformed error')
   }

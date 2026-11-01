@@ -15,6 +15,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { CacheChip } from '@renderer/features/prompt-cache/cache-chip'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
+import { HostChip } from './host-chip'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import {
   DeleteSessionDialog,
@@ -99,6 +100,7 @@ export function SessionHeader({
             <AgentMark agent={summary.agentId} size={14} />
           )}
         </span>
+        <HostChip projectPath={summary.projectPath} />
         {rename.renaming ? (
           <SessionTitleField
             summary={summary}

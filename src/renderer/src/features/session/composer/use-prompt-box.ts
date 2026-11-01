@@ -4,6 +4,7 @@ import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import { onAppEvent, type AppEvent } from '@renderer/app/events'
 import { usePane } from '@renderer/features/split/pane-context'
 import { errorMessage } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import {
   selectDraft,
   setDraftAttachments,
@@ -70,12 +71,19 @@ export function usePromptBox({
   useEffect(() => () => flushDraft(draft), [draft])
 
   const limitError = (left: number) => setError(left > 0 ? t('attachments.limit') : null)
+  // Another host's session takes the files its own project holds, as `@` names them, and no
+  // files or images from this computer yet.
+  const remote = projectPath !== null && hostOfPath(projectPath) !== null
 
   // A pick that is still open, or waiting for its grants, makes a second one a no-op.
   const picking = useRef(false)
   const full = attachments.length >= ATTACHMENT_LIMIT
   const pick = (kind: 'files' | 'folder') => {
     if (disabled || picking.current) return
+    if (remote) {
+      setError(t('attachments.otherHost'))
+      return
+    }
     if (full) {
       setError(t('attachments.limit'))
       return
@@ -91,6 +99,7 @@ export function usePromptBox({
   const onEvent = useEffectEvent((event: AppEvent) => {
     if (event.kind === 'add-attachments' && focused.current) pick('files')
     if (event.kind === 'drop-attachments' && event.draft === draft && !disabled) {
+      if (remote) return setError(t('attachments.otherHost'))
       onActivity?.()
       attachFiles(draft, event.files).then(limitError, (e: unknown) => setError(errorMessage(e)))
     }
@@ -165,6 +174,13 @@ export function usePromptBox({
   const onPaste = (event: ClipboardEvent): boolean => {
     const data = event.clipboardData
     if (!data) return false
+    if (remote) {
+      // A long text goes in as it is; files and images have no way there yet.
+      if (data.files.length === 0) return false
+      event.preventDefault()
+      setError(t('attachments.otherHost'))
+      return true
+    }
     const files = attachPastedFiles(draft, data)
     if (files) {
       event.preventDefault()
@@ -208,6 +224,7 @@ export function usePromptBox({
     caret,
     setCaret,
     full,
+    remote,
     pick,
     onPaste,
     pasteAsText: pasteBack,
