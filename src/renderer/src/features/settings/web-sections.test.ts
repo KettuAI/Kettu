@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SectionDef } from './model'
-import { webSections } from './web-sections'
+import { webClusters } from './web-sections'
 
 const section = (id: SectionDef['id'], rows: string[]): SectionDef =>
   ({
@@ -11,16 +11,25 @@ const section = (id: SectionDef['id'], rows: string[]): SectionDef =>
     rows: rows.map((r) => ({ id: r })),
   }) as never
 
-describe('webSections', () => {
-  it("keeps the device's own rows and leaves out the host's", () => {
-    const kept = webSections([
-      section('general', ['language', 'background', 'open-at-login', 'send-key']),
-      section('remote', ['switch']),
-      section('archived', ['a', 'b']),
+const ids = (clusters: SectionDef[][]) =>
+  clusters.map((cluster) => cluster.map((s) => [s.id, s.rows.map((r) => r.id)]))
+
+describe('webClusters', () => {
+  it("keeps the device's own rows and leaves out the host's, in the groups the list shows", () => {
+    const kept = webClusters([
+      [
+        section('general', ['language', 'background', 'open-at-login', 'send-key']),
+        section('hosts', ['list']),
+      ],
+      [section('agents', ['list']), section('terminal', ['font-size', 'shell'])],
+      [section('archived', ['a', 'b']), section('sharing', ['account'])],
+      // A group with nothing the web client keeps leaves no gap in the list.
+      [section('remote', ['switch'])],
     ])
-    expect(kept.map((s) => [s.id, s.rows.map((r) => r.id)])).toEqual([
-      ['general', ['language', 'send-key']],
-      ['archived', ['a', 'b']],
+    expect(ids(kept)).toEqual([
+      [['general', ['language', 'send-key']]],
+      [['terminal', ['font-size']]],
+      [['archived', ['a', 'b']]],
     ])
   })
 })

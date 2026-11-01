@@ -13,11 +13,16 @@ const WEB_ROWS: Partial<Record<SectionDef['id'], readonly string[] | 'all'>> = {
   about: ['source', 'license', 'issues'],
 }
 
-export function webSections(sections: SectionDef[]): SectionDef[] {
-  return sections.flatMap((section) => {
-    const rows = WEB_ROWS[section.id]
-    if (!rows) return []
-    if (rows === 'all') return [section]
-    return [{ ...section, rows: section.rows.filter((row) => rows.includes(row.id)) }]
-  })
+/** The list's groups with only what the web client keeps; a group left empty goes. */
+export function webClusters(clusters: SectionDef[][]): SectionDef[][] {
+  return clusters
+    .map((cluster) =>
+      cluster.flatMap((section) => {
+        const rows = WEB_ROWS[section.id]
+        if (!rows) return []
+        if (rows === 'all') return [section]
+        return [{ ...section, rows: section.rows.filter((row) => rows.includes(row.id)) }]
+      }),
+    )
+    .filter((cluster) => cluster.length > 0)
 }
