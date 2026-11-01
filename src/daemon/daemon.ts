@@ -226,6 +226,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     version: options.version,
     settings,
     hosts: running,
+    env: options.env,
   })
   running.start()
   log.info(
