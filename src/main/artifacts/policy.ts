@@ -2,52 +2,12 @@
 // policy goes out as a header, and main's request filter holds the same line on its own.
 
 import type { ProxyConfig } from 'electron'
+import { ARTIFACT_CDNS, ARTIFACT_CSP, ARTIFACT_PERMISSIONS_POLICY } from '@shared/artifact-policy'
 import { ARTIFACT_SCHEME, artifactHost } from './origins'
 
-/** The service's instructions name the same list. */
-export const ARTIFACT_CDNS = [
-  'https://cdnjs.cloudflare.com',
-  'https://cdn.jsdelivr.net',
-  'https://unpkg.com',
-  'https://esm.sh',
-  'https://cdn.tailwindcss.com',
-  'https://fonts.googleapis.com',
-  'https://fonts.gstatic.com',
-] as const
+export { ARTIFACT_CDNS, ARTIFACT_CSP }
 
 const CDN_HOSTS: ReadonlySet<string> = new Set(ARTIFACT_CDNS.map((origin) => new URL(origin).host))
-
-const CDNS = ARTIFACT_CDNS.join(' ')
-
-export const ARTIFACT_CSP = [
-  "default-src 'none'",
-  `script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: ${CDNS}`,
-  `style-src 'self' 'unsafe-inline' ${CDNS}`,
-  `font-src 'self' data: ${CDNS}`,
-  `img-src 'self' data: blob: ${CDNS}`,
-  "media-src 'self' data: blob:",
-  `connect-src 'self' ${CDNS}`,
-  "worker-src 'self' blob:",
-  "frame-src 'self'",
-  "form-action 'none'",
-  "base-uri 'self'",
-].join('; ')
-
-const POWERFUL_FEATURES = [
-  'camera',
-  'microphone',
-  'geolocation',
-  'display-capture',
-  'usb',
-  'serial',
-  'hid',
-  'bluetooth',
-  'midi',
-  'payment',
-  'clipboard-read',
-  'clipboard-write',
-  'fullscreen',
-]
 
 /**
  * The proxy of the session the windows use. Main's request filter stops a page's requests to other
@@ -66,7 +26,7 @@ export function artifactHeaders(): Record<string, string> {
   return {
     'Content-Type': 'text/html; charset=utf-8',
     'Content-Security-Policy': ARTIFACT_CSP,
-    'Permissions-Policy': POWERFUL_FEATURES.map((feature) => `${feature}=()`).join(', '),
+    'Permissions-Policy': ARTIFACT_PERMISSIONS_POLICY,
     'Cross-Origin-Resource-Policy': 'same-origin',
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',

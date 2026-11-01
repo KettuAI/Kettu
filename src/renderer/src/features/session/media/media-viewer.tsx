@@ -16,7 +16,14 @@ import { Dialog, DialogPortal, DialogTitle } from '@renderer/components/ui/dialo
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { bytes as formatBytes, fileUrlPath, relativePath } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
-import { fileManagerName, formatShortcut, isMac, isMod } from '@renderer/lib/platform'
+import {
+  fileManagerName,
+  formatShortcut,
+  hasBand,
+  hostPlatform,
+  isMod,
+  isWeb,
+} from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { selectDraft, useAttachmentsStore } from '@renderer/stores/attachments'
 import { useThreadsStore } from '@renderer/stores/threads'
@@ -363,11 +370,13 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
       return ready?.url ? showFileAction(item.source.path, request.projectPath, ready.url) : null
     }
     const uri = item.source.kind === 'attachment' ? item.source.attachment.uri : null
-    const path = uri ? fileUrlPath(uri, window.kettu.platform) : null
+    const path = uri ? fileUrlPath(uri, hostPlatform()) : null
     if (!path) return null
     const { projectPath } = request
+    const inFiles = !!projectPath && relativePath(path, projectPath) !== path
+    if (!inFiles && isWeb) return null
     return {
-      inFiles: !!projectPath && relativePath(path, projectPath) !== path,
+      inFiles,
       show: () => openAttachmentPath({ type: 'file', uri }, projectPath),
     }
   })()
@@ -468,9 +477,9 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
           // sheets, as the sidebar header's do; elsewhere it is as tall as the band.
           className={cn(
             'flex shrink-0 items-center gap-1 pr-2.5 pl-5 app-region-drag',
-            isMac
-              ? 'h-top-bar pl-[calc(36px+var(--traffic-lights))]'
-              : 'h-(--title-bar) pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+10px)]',
+            hasBand
+              ? 'h-(--title-bar) pr-[calc(100vw-env(titlebar-area-x,0px)-env(titlebar-area-width,100vw)+10px)]'
+              : 'h-top-bar pl-[calc(36px+var(--traffic-lights))]',
           )}
         >
           <DialogTitle className="min-w-0 truncate font-sans text-ui leading-normal font-medium">

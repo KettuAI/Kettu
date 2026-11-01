@@ -22,7 +22,7 @@ import {
 import { InputGroup, InputGroupAddon, InputGroupButton } from '@renderer/components/ui/input-group'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { formatShortcut } from '@renderer/lib/platform'
+import { formatShortcut, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
 import { AttachmentTray } from './attachment-tray'
@@ -495,11 +495,14 @@ function AddMenu({
           {t('attachments.addFiles')}
           <DropdownMenuShortcut>{full ? t('attachments.atMost') : shortcut}</DropdownMenuShortcut>
         </DropdownMenuItem>
-        <DropdownMenuItem disabled={full} onClick={() => onPick('folder')}>
-          <FolderIcon />
-          {t('attachments.addFolder')}
-          {full && <DropdownMenuShortcut>{t('attachments.atMost')}</DropdownMenuShortcut>}
-        </DropdownMenuItem>
+        {/* A browser's folder means nothing on the host. */}
+        {!isWeb && (
+          <DropdownMenuItem disabled={full} onClick={() => onPick('folder')}>
+            <FolderIcon />
+            {t('attachments.addFolder')}
+            {full && <DropdownMenuShortcut>{t('attachments.atMost')}</DropdownMenuShortcut>}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onMention}>
           <AtSignIcon />

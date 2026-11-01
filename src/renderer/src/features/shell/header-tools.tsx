@@ -6,7 +6,7 @@ import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { GitStatusCluster } from '@renderer/features/git/git-status'
 import { usePane } from '@renderer/features/split/pane-context'
-import { formatShortcut } from '@renderer/lib/platform'
+import { formatShortcut, isWeb } from '@renderer/lib/platform'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { useGitStore } from '@renderer/stores/git'
 import { useSessionsStore } from '@renderer/stores/sessions'
@@ -55,14 +55,17 @@ export function HeaderTools({ projectPath }: { projectPath: string }) {
         >
           <SquareTerminalIcon />
         </PaneToggle>
-        <PaneToggle
-          projectPath={projectPath}
-          pane="browser"
-          label={t('headerTools.browser')}
-          dot={dot}
-        >
-          <GlobeIcon />
-        </PaneToggle>
+        {/* The browser runs in the desktop app; a web page has no such view. */}
+        {!isWeb && (
+          <PaneToggle
+            projectPath={projectPath}
+            pane="browser"
+            label={t('headerTools.browser')}
+            dot={dot}
+          >
+            <GlobeIcon />
+          </PaneToggle>
+        )}
         {pane?.split && (
           <ClosePaneButton
             paneId={pane.paneId}

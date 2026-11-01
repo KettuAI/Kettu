@@ -19,7 +19,7 @@ import {
 } from '@renderer/components/ui/combobox'
 import { InputGroupAddon } from '@renderer/components/ui/input-group'
 import { errorMessage } from '@renderer/lib/host'
-import { formatShortcut } from '@renderer/lib/platform'
+import { formatShortcut, isWeb } from '@renderer/lib/platform'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { chooseNewSessionProject } from '@renderer/stores/view'
 import { nameHints } from '../project-names'
@@ -60,7 +60,8 @@ export function ProjectMenu({
     () => [
       { value: 'none', items: [NO_PROJECT] },
       { value: 'recent', items: projects.map((p) => p.path) },
-      { value: 'open', items: [OPEN_PROJECT] },
+      // Adding a folder takes the desktop app's folder dialog.
+      ...(isWeb ? [] : [{ value: 'open' as const, items: [OPEN_PROJECT] }]),
     ],
     [projects],
   )

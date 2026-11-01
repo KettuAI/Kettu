@@ -1,5 +1,11 @@
 import { useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { CircleAlertIcon, ExternalLinkIcon, FolderIcon, RotateCwIcon } from 'lucide-react'
+import {
+  CircleAlertIcon,
+  DownloadIcon,
+  ExternalLinkIcon,
+  FolderIcon,
+  RotateCwIcon,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { mediaKindOfName, type MediaGrant, type MediaKind } from '@shared/media'
 import { Button } from '@renderer/components/ui/button'
@@ -7,7 +13,7 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { errorMessage } from '@renderer/lib/host'
-import { fileManagerName } from '@renderer/lib/platform'
+import { fileManagerName, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { openViewer } from '@renderer/stores/viewer'
 import { VIDEO_BOX } from './boxes'
@@ -261,9 +267,18 @@ export function PlayElsewhere({
   onError: (message: string | null) => void
 }) {
   const { t } = useTranslation('session')
-  const act = (action: (url: string) => Promise<void>) => () => {
+  const act = (action: (url: string) => Promise<unknown>) => () => {
     onError(null)
     action(url).catch((e: unknown) => onError(errorMessage(e)))
+  }
+  // A browser has no app or file manager of the host's; the file can only be saved.
+  if (isWeb) {
+    return (
+      <Button variant="outline" size="xs" onClick={act(window.kettu.media.saveAs)}>
+        <DownloadIcon />
+        {t('media.saveAs')}
+      </Button>
+    )
   }
   return (
     <>

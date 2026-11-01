@@ -123,6 +123,33 @@ export function parsePairingLink(link: string): PairingPayload | null {
   return decodePairing(link.slice(at + 1))
 }
 
+/** The path of the web client's pairing page on a host, the code in its fragment. */
+export const BROWSER_PAIRING_PATH = '/pair'
+
+/**
+ * The link a browser opens a code with: the web client the host serves at one of its addresses.
+ * Null for an address a browser cannot open, such as an IPv6 one with a zone.
+ */
+export function browserPairingLink(address: DirectAddress, payload: PairingPayload): string | null {
+  if (address.host.includes('%')) return null
+  const host = address.host.includes(':') ? `[${address.host}]` : address.host
+  return `http://${host}:${address.port}${BROWSER_PAIRING_PATH}#${encodePairing(payload)}`
+}
+
+/**
+ * The payload of a link a browser was given: a browser link to any host's web client, or the
+ * app's link, which carries the same code.
+ */
+export function parseBrowserPairingLink(link: string): PairingPayload | null {
+  const text = link.trim()
+  const app = parsePairingLink(text)
+  if (app) return app
+  const url = URL.parse(text)
+  if (!url || (url.protocol !== 'http:' && url.protocol !== 'https:')) return null
+  if (url.pathname !== BROWSER_PAIRING_PATH || url.hash.length < 2) return null
+  return decodePairing(url.hash.slice(1))
+}
+
 /**
  * Why a code no longer takes devices: its five minutes ran out, five handshakes failed, the owner
  * rejected the device, Add device closed, another Add device opened, or remote access stopped.

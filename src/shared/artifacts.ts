@@ -21,6 +21,12 @@ export type ArtifactImportResult =
  */
 export const ARTIFACT_FRAME_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-downloads'
 
+/**
+ * The web client's frames: its artifacts all load on the page's own origin, so a frame never has
+ * same-origin, and the host serves them on an opaque origin besides.
+ */
+export const WEB_ARTIFACT_FRAME_SANDBOX = 'allow-scripts allow-forms allow-downloads'
+
 /** Longer than `max` as JSON Schema counts length: in code points, not UTF-16 units. */
 export function longer(text: string, max: number): boolean {
   if (text.length <= max) return false

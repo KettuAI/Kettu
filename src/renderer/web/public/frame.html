@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      // An artifact's page in the web client: an opaque origin under the host's sandbox and policy.
+      // The parent sends the page's HTML once, from what it read over the encrypted channel, and it
+      // replaces this document; nothing else is taken.
+      addEventListener('message', function take(event) {
+        if (event.source !== parent || !event.data || event.data.type !== 'kettu:frame-html') return
+        removeEventListener('message', take)
+        document.open()
+        document.write(String(event.data.html))
+        document.close()
+      })
+      parent.postMessage(
+        { type: 'kettu:frame-ready', path: location.pathname + location.search },
+        '*',
+      )
+    </script>
+  </head>
+  <body></body>
+</html>

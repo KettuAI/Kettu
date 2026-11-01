@@ -24,6 +24,7 @@ export default defineConfig([
       'electron.vite.config.ts',
       'vitest.config.mts',
       'vite.daemon.config.mts',
+      'vite.web.config.mts',
       'src/main/**/*.ts',
       'src/preload/**/*.ts',
       'src/agent-host/**/*.ts',

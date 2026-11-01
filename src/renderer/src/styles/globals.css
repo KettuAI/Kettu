@@ -554,6 +554,11 @@
   }
 }
 
+/* The web client: no traffic lights to leave room for. */
+:root[data-client='web'] {
+  --traffic-lights: 0px;
+}
+
 /* Chromium on Windows draws Fluent scrollbars with arrow buttons whenever scrollbar-width or
    scrollbar-color is set, and its overlay scrollbars cannot be switched on from the app there.
    The scrollbar pseudo-elements draw thin ones instead; they apply only while both are auto. */

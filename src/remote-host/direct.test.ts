@@ -1,7 +1,9 @@
 // Direct connections over TCP on localhost: the listener following its settings, a device through
-// the whole handshake into a session, the addresses it is told, a port in use and the limits.
+// the whole handshake into a session, the addresses it is told, a port in use and the limits; and
+// browsers on the same port, for the web client's files and its channel as a WebSocket.
 
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { get } from 'node:http'
 import { connect, createServer, type Server, type Socket } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -10,13 +12,15 @@ import type { DirectStatus } from '@shared/host-control'
 import type { PortChannel } from '@shared/port-channel'
 import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
 import { parsePairingLink, type PairingState } from '@shared/remote/pairing'
+import type { Transport } from '@shared/remote/transport'
+import { webSocketTransport } from '@shared/remote/websocket-transport'
 import type { DirectSettings } from '@shared/settings'
 import { startTestHost, type TestHost } from '../agent-host/testing/harness'
 import { ActivityLog } from './activity'
 import type { Interfaces } from './addresses'
-import { CHECK_ADDRESSES_MS, connectTransport, DirectListener } from './direct'
+import { CHECK_ADDRESSES_MS, connectTransport, DirectListener, MAX_UNREAD } from './direct'
 import { DeviceStore } from './devices'
-import { SOURCE_BURST } from './limits'
+import { HandshakeLimits, SOURCE_BURST } from './limits'
 import { PairingCodes } from './pairing'
 import { RemoteServer } from './server'
 import { connectDevice } from './testing/device'
@@ -45,7 +49,7 @@ function nic(address: string): Interfaces[string] {
   ]
 }
 
-async function setup(options: { agent?: boolean } = {}) {
+async function setup(options: { agent?: boolean; webRoot?: string; firstBytesMs?: number } = {}) {
   let agent: TestHost | null = null
   let dir: string
   if (options.agent) {
@@ -91,12 +95,16 @@ async function setup(options: { agent?: boolean } = {}) {
   })
   let interfaces: Interfaces = { en0: nic('192.168.1.20'), lo0: [] }
   const statuses: DirectStatus[] = []
+  const limits = new HandshakeLimits()
   const direct = new DirectListener({
     server,
     changed: () => statuses.push(direct.status),
     log,
     host: LOCALHOST,
     interfaces: () => interfaces,
+    limits,
+    webRoot: options.webRoot,
+    firstBytesTimeoutMs: options.firstBytesMs,
   })
   cleanups.push(async () => {
     direct.stop()
@@ -107,24 +115,24 @@ async function setup(options: { agent?: boolean } = {}) {
     if (status.state !== 'listening') throw new Error(`Not listening: ${JSON.stringify(status)}`)
     return status
   }
-  const connectPhone = async (port = listening().port, key: KeyPair = phoneKey) => {
-    const device = await connectDevice({
-      transport: await connectTransport({ host: LOCALHOST, port }),
-      hostKey: hostKey.publicKey,
-      key,
-    })
+  const connectOver = async (transport: Transport, key: KeyPair = phoneKey) => {
+    const device = await connectDevice({ transport, hostKey: hostKey.publicKey, key })
     cleanups.push(() => device.close())
     return device
   }
+  const connectPhone = async (port = listening().port, key: KeyPair = phoneKey) =>
+    connectOver(await connectTransport({ host: LOCALHOST, port }), key)
   return {
     agent,
     server,
     direct,
+    limits,
     codes,
     pairing,
     logs,
     statuses,
     listening,
+    connectOver,
     connectPhone,
     setInterfaces: (next: Interfaces) => (interfaces = next),
   }
@@ -146,13 +154,43 @@ async function freePort(): Promise<number> {
   return port
 }
 
-/** A raw TCP connection, open once the host took it. */
-function rawSocket(port: number): Promise<Socket> {
+/** A raw TCP connection, open once the host took it, which sends `first` if given. */
+function rawSocket(port: number, first?: Uint8Array): Promise<Socket> {
   return new Promise((resolve, reject) => {
     const socket = connect({ host: LOCALHOST, port })
     socket.once('error', reject)
-    socket.once('connect', () => resolve(socket))
+    socket.once('connect', () => {
+      if (first) socket.write(first)
+      resolve(socket)
+    })
     cleanups.push(() => void socket.destroy())
+  })
+}
+
+/** The high byte of a channel's first length, which tells the host it is one. */
+const CHANNEL_START = new Uint8Array([0])
+
+const INDEX = '<!doctype html><title>Kettu</title>'
+
+/** A web client build of only its page. */
+async function webRoot(): Promise<string> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-web-'))
+  cleanups.push(() => rm(dir, { recursive: true, force: true }))
+  await writeFile(path.join(dir, 'index.html'), INDEX)
+  return dir
+}
+
+/** A GET on a connection of its own, as a browser opens new ones. */
+function httpGet(port: number, pathname: string): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const request = get({ host: LOCALHOST, port, path: pathname, agent: false }, (response) => {
+      const chunks: Buffer[] = []
+      response.on('data', (chunk: Buffer) => chunks.push(chunk))
+      response.on('end', () => {
+        resolve({ status: response.statusCode!, body: Buffer.concat(chunks).toString() })
+      })
+    })
+    request.once('error', reject)
   })
 }
 
@@ -327,13 +365,76 @@ describe('direct connections', () => {
     await t.direct.apply(on())
     const { port } = t.listening()
     const admitted: Socket[] = []
-    for (let i = 0; i < SOURCE_BURST; i++) admitted.push(await rawSocket(port))
-    const limited = await rawSocket(port)
+    for (let i = 0; i < SOURCE_BURST; i++) admitted.push(await rawSocket(port, CHANNEL_START))
+    await expect.poll(() => t.limits.inFlight).toBe(SOURCE_BURST)
+    const limited = await rawSocket(port, CHANNEL_START)
     await new Promise<void>((resolve) => limited.once('close', () => resolve()))
     expect(t.server.refused).toBe(1)
     expect(admitted.every((socket) => !socket.destroyed)).toBe(true)
     // The paired device is held back too until the source's bucket refills.
     await expect(t.connectPhone(port).then((device) => device.closing)).resolves.toBeNull()
     expect(t.server.refused).toBe(2)
+  })
+
+  it("serve browsers the web client on the devices' port, spending no handshakes", async () => {
+    const t = await setup({ webRoot: await webRoot() })
+    await t.direct.apply(on())
+    const { port } = t.listening()
+    // More connections than a source may start handshakes in a row.
+    for (let i = 0; i < SOURCE_BURST + 5; i++) {
+      expect(await httpGet(port, '/')).toEqual({ status: 200, body: INDEX })
+    }
+    expect(t.limits.inFlight).toBe(0)
+    const device = await t.connectPhone(port)
+    expect(await device.first).toMatchObject({ type: 'welcome' })
+    expect(t.server.refused).toBe(0)
+  })
+
+  it('take a device through the handshake into a session over a WebSocket', async () => {
+    const t = await setup({ agent: true })
+    await t.direct.apply(on())
+    const { port, addresses } = t.listening()
+    const socket = new WebSocket(`ws://${LOCALHOST}:${port}/channel`)
+    const device = await t.connectOver(await webSocketTransport(socket))
+    expect(await device.first).toMatchObject({
+      type: 'welcome',
+      role: 'owner',
+      device: { name: 'Phone' },
+      addresses,
+    })
+    const session = await device.port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.agent!.project,
+    })
+    await device.port.open(session.id)
+    expect(device.port.summary(session.id)).toMatchObject({ id: session.id, agentId: 'fake-agent' })
+    expect(t.server.online()).toHaveLength(1)
+
+    // Turned off, it ends as a TCP connection does.
+    await t.direct.apply(off)
+    expect(await device.closing).toBeNull()
+    await expect.poll(() => t.server.online()).toEqual([])
+  })
+
+  it('cut a connection that sends nothing in time, without spending a handshake', async () => {
+    const t = await setup({ firstBytesMs: 100 })
+    await t.direct.apply(on())
+    const silent = await rawSocket(t.listening().port)
+    await new Promise<void>((resolve) => silent.once('close', () => resolve()))
+    expect(t.limits.inFlight).toBe(0)
+    expect(t.server.refused).toBe(0)
+  })
+
+  it('cut connections past the ones still waiting for their first bytes', async () => {
+    const t = await setup()
+    await t.direct.apply(on())
+    const { port } = t.listening()
+    const waiting = await Promise.all(Array.from({ length: MAX_UNREAD }, () => rawSocket(port)))
+    // The host takes each connection on a later turn than its client sees it connected.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const over = await rawSocket(port)
+    await new Promise<void>((resolve) => over.once('close', () => resolve()))
+    expect(t.server.refused).toBe(1)
+    expect(waiting.every((socket) => !socket.destroyed)).toBe(true)
   })
 })

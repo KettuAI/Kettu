@@ -19,7 +19,7 @@ import { DESK, SHEET_PANEL } from '@renderer/features/shell/sheet'
 import { TitleBand } from '@renderer/features/shell/top-bar'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
 import { AppSidebar } from '@renderer/features/sidebar/app-sidebar'
-import { isMac } from '@renderer/lib/platform'
+import { hasBand } from '@renderer/lib/platform'
 import { layoutStorage, readJson, writeJson } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
 import { prefersReducedMotion } from '@renderer/stores/settings'
@@ -207,7 +207,7 @@ function Workbench() {
       <ResizablePanel id="main" minSize="560px" className={SLIDING_PANEL} style={SHEET_PANEL}>
         {/* Under the main area's columns, which drags the window. On Windows and Linux the band
             above them holds the window controls. */}
-        <main ref={desk} className={cn(PANEL_CONTENT, DESK, !isMac && 'pt-(--title-bar)')}>
+        <main ref={desk} className={cn(PANEL_CONTENT, DESK, hasBand && 'pt-(--title-bar)')}>
           <TitleBand />
           <div ref={frame} className="relative flex h-full justify-end">
             <div ref={mainContent} className="isolate h-full w-full min-w-0 shrink-0">

@@ -18,7 +18,7 @@ import {
 import { AlreadyRunning, SERVICE_ENV, startDaemon } from './daemon'
 import { changePort, directReport } from './direct'
 import { prepareDataFolder } from './key'
-import { pairDevice } from './pair'
+import { pairDevice, sshTarget } from './pair'
 import { controlSocketPath, DATA_ENV, dataPath } from './paths'
 import { devicesReport, runningReport, stoppedReport, terminalReport } from './report'
 import {
@@ -97,10 +97,19 @@ async function pair(socket: string): Promise<number> {
   const abort = (): void => stop.abort()
   process.once('SIGINT', abort)
   try {
+    const { status } = await client.call('direct.get', undefined)
+    const ssh =
+      status?.state === 'listening'
+        ? {
+            port: status.port,
+            target: sshTarget(process.env, os.userInfo().username, os.hostname()),
+          }
+        : null
     return await pairDevice(
       client,
       { write: out, live: process.stdout.isTTY === true, ask },
       stop.signal,
+      { ssh },
     )
   } catch (error) {
     if (error instanceof ControlError) throw new Failure(error.message)

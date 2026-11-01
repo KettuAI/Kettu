@@ -47,7 +47,7 @@ import { strongestSignal, signalText } from '@renderer/features/routines/model'
 import { RunningDot } from '@renderer/features/routines/run-mark'
 import { dayOf } from '@renderer/features/usage/model'
 import { limitLabel, tokens } from '@renderer/lib/format'
-import { formatShortcut, isMac } from '@renderer/lib/platform'
+import { formatShortcut, hasBand } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
@@ -119,11 +119,11 @@ export function AppSidebar() {
       <div
         className={cn(
           'app-region-drag flex shrink-0 items-center pr-2.5 pl-5',
-          isMac ? 'h-top-bar' : 'h-(--title-bar)',
+          hasBand ? 'h-(--title-bar)' : 'h-top-bar',
         )}
       >
-        {isMac && <span aria-hidden className="w-(--traffic-lights)" />}
-        <BackForward className={cn(isMac && 'ml-2')} />
+        {!hasBand && <span aria-hidden className="w-(--traffic-lights)" />}
+        <BackForward className={cn(!hasBand && 'ml-2')} />
         {/* The window's drag region, 18 px of it at the sidebar's narrowest. */}
         <span className="flex-1" />
         <SidebarToggle />
