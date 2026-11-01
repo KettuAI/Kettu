@@ -3,7 +3,7 @@
 
 import { execFile } from 'node:child_process'
 import { join } from 'node:path'
-import { app, Menu, nativeImage, nativeTheme, Tray } from 'electron'
+import { app, Menu, nativeImage, nativeTheme, systemPreferences, Tray } from 'electron'
 import type { BusyCounts } from '@shared/host-control'
 import type { RemoteStatus } from '@shared/remote/status'
 import { t } from './i18n'
@@ -16,12 +16,14 @@ const PORTAL_TIMEOUT_MS = 2000
 const PREFERS_LIGHT = 2
 
 /**
- * Which of resources/tray's images the icon shows. The macOS menu bar always takes the white
- * glyph untinted: a template image carries one opacity map, and the shading that reads right in
- * white turns a murky black on light bars.
+ * Which of resources/tray's images the icon shows. On macOS it is a template image the system
+ * tints for each menu bar; a template carries one opacity map, and the shading that reads right in
+ * white turns a murky black, so the map follows the system appearance, the nearest guess at the
+ * bar's color.
  */
 export function trayImageName(platform: NodeJS.Platform, white: boolean, dot: boolean): string {
-  if (platform === 'darwin') return dot ? 'tray-menubar-dot.png' : 'tray-menubar.png'
+  if (platform === 'darwin')
+    return `tray-menubar-on-${white ? 'dark' : 'light'}${dot ? '-dot' : ''}.png`
   const name = `tray-${white ? 'white' : 'black'}${dot ? '-dot' : ''}`
   return platform === 'win32' ? `${name}.ico` : `${name}.png`
 }
@@ -95,10 +97,15 @@ async function readColorScheme(): Promise<number | null> {
   return reply === null ? null : parseColorScheme(reply)
 }
 
-/** Windows follows the taskbar's mode, the system's rather than the apps'; macOS tints it itself. */
+/**
+ * Windows follows the taskbar's mode, the system's rather than the apps'. macOS follows the
+ * system's mode, which Kettu's own theme hides from `nativeTheme`.
+ */
 function whiteGlyph(platform: NodeJS.Platform, scheme: number | null): boolean {
   if (platform === 'win32') return nativeTheme.shouldUseDarkColorsForSystemIntegratedUI
   if (platform === 'linux') return linuxTrayIsWhite(process.env['XDG_CURRENT_DESKTOP'], scheme)
+  if (platform === 'darwin')
+    return systemPreferences.getUserDefault('AppleInterfaceStyle', 'string') === 'Dark'
   return false
 }
 
@@ -135,6 +142,12 @@ export class KettuTray {
     if (process.platform === 'win32') this.tray.on('click', () => this.deps.open())
     this.updateMenu()
     nativeTheme.on('updated', () => void this.readTheme())
+    if (process.platform === 'darwin') {
+      systemPreferences.subscribeNotification(
+        'AppleInterfaceThemeChangedNotification',
+        () => void this.readTheme(),
+      )
+    }
     void this.readTheme()
   }
 
@@ -175,11 +188,11 @@ export class KettuTray {
       join(imagesDir(), trayImageName(process.platform, this.white, this.dot)),
     )
     if (image.isEmpty()) log.warn('The tray image is missing')
+    if (process.platform === 'darwin') image.setTemplateImage(true)
     return image
   }
 
   private async readTheme(): Promise<void> {
-    if (process.platform === 'darwin') return
     const reading = ++this.reading
     const scheme = process.platform === 'linux' ? await readColorScheme() : null
     const white = whiteGlyph(process.platform, scheme)
