@@ -205,6 +205,89 @@ describe('Attachments', () => {
     expect(await readdir(path.join(dir, 'attachments'))).toEqual([])
   })
 
+  it("saves a text a device sends under its type's usual extension", async () => {
+    const attachments = store()
+    await attachments.load()
+    const encode = (text: string) => new TextEncoder().encode(text)
+    const add = (text: string, mimeType: string, name: string) =>
+      attachments.add({ bytes: toArrayBuffer(encode(text)), mimeType, name }, null)
+    const named = (text: string, extension: string) => `${sha(encode(text))}${extension}`
+    const markdown = await add('# Notes\n', 'text/x-markdown', 'notes.md')
+    // An alias is kept as the type it stands for.
+    expect(markdown).toMatchObject({ type: 'text', name: 'notes.md', mimeType: 'text/markdown' })
+    await add('# Plan\n', 'text/markdown', 'plan.md')
+    await add('a,b\n1,2\n', 'text/csv', 'data.csv')
+    await add('{"a":1}\n', 'application/json', 'data.json')
+    expect(await add('print(1)\n', 'text/x-python-script', 'run.py')).toMatchObject({
+      mimeType: 'text/x-python',
+    })
+    await add('plain\n', 'text/plain', 'notes.txt')
+    await add('{\\rtf1}\n', 'text/rtf', 'letter.rtf')
+    expect((await readdir(path.join(dir, 'attachments'))).sort()).toEqual(
+      [
+        named('# Notes\n', '.md'),
+        named('# Plan\n', '.md'),
+        named('a,b\n1,2\n', '.csv'),
+        named('{"a":1}\n', '.json'),
+        named('print(1)\n', '.py'),
+        named('plain\n', '.txt'),
+        named('{\\rtf1}\n', '.txt'),
+      ].sort(),
+    )
+
+    const prompt = { image: true, audio: false, embeddedContext: true }
+    const sent = await sendAttachment(attachments, attachments.get(markdown.id), prompt)
+    const copy = path.join(dir, 'attachments', 'sent', named('# Notes\n', '.md'))
+    expect(sent.changes.uri).toBe(pathToFileURL(copy).href)
+
+    await attachments.flush()
+    const reopened = store()
+    await reopened.load()
+    expect(new TextDecoder().decode((await reopened.read(markdown.id)).bytes)).toBe('# Notes\n')
+    expect(await readdir(path.join(dir, 'attachments'))).toHaveLength(8)
+  })
+
+  it('keeps finding a text saved as .txt before texts took their type extension', async () => {
+    const text = '# Notes\n'
+    const data = new TextEncoder().encode(text)
+    const hash = sha(data)
+    const older = (id: string, mimeType: string) => ({
+      id,
+      type: 'text',
+      name: 'notes.md',
+      mimeType,
+      size: data.byteLength,
+      hash,
+      path: null,
+      thumb: textThumb(text),
+      addedAt: now,
+    })
+    await mkdir(path.join(dir, 'state'), { recursive: true })
+    await writeFile(
+      path.join(dir, 'state', 'attachments.json'),
+      JSON.stringify({
+        version: 1,
+        attachments: [older('t1', 'text/x-markdown'), older('t2', 'text/markdown')],
+      }),
+    )
+    await mkdir(path.join(dir, 'attachments'))
+    await writeFile(path.join(dir, 'attachments', `${hash}.txt`), data)
+
+    const attachments = store()
+    await attachments.load()
+    expect(await readdir(path.join(dir, 'attachments'))).toEqual([`${hash}.txt`])
+    for (const id of ['t1', 't2']) {
+      expect(new TextDecoder().decode((await attachments.read(id)).bytes)).toBe(text)
+    }
+    // The same text sent again goes under its own name, and each copy goes with its own records.
+    await attachments.add(
+      { bytes: toArrayBuffer(data), mimeType: 'text/x-markdown', name: 'notes.md' },
+      null,
+    )
+    await attachments.release(['t1', 't2'])
+    expect(await readdir(path.join(dir, 'attachments'))).toEqual([`${hash}.md`])
+  })
+
   it('refuses a pasted text that is not UTF-8', async () => {
     const attachments = store()
     const source = { bytes: toArrayBuffer(PNG), mimeType: 'text/plain', name: 'Pasted text 1' }
@@ -566,5 +649,19 @@ describe('parseAttachmentsFile', () => {
         ],
       }),
     ).toEqual({ version: 1, attachments: [saved] })
+  })
+
+  it("reads a text's saved extension, and drops a record whose extension is not plain", () => {
+    const text = { ...record, id: 't1', type: 'text', mimeType: 'text/markdown', extension: '.md' }
+    expect(
+      parseAttachmentsFile({
+        attachments: [
+          text,
+          { ...text, id: 't2', extension: '/../escape' },
+          { ...text, id: 't3', extension: 5 },
+          { ...record, id: 'a2', extension: '.png' },
+        ],
+      }),
+    ).toEqual({ version: 1, attachments: [text] })
   })
 })
