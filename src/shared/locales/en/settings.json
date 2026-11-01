@@ -846,6 +846,10 @@
         "body": "This page disconnects and goes back to pairing. Nothing changes on {{name}}, which lists this browser among its devices until it is removed there.",
         "confirm": "Forget"
       }
+    },
+    "chip": {
+      "label": "Host {{name}}, {{state}}",
+      "tooltip": "{{name}} · {{state}}. Click to open it in Settings."
     }
   },
   "remote": {

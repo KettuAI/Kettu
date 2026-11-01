@@ -637,7 +637,7 @@ describeUnix('kettu', () => {
       path: path.join(dir, 'project-ad'),
     })
     expect(completed.entries).toEqual([
-      { name: 'project-admin', kind: 'folder', executable: false },
+      { name: 'project-admin', kind: 'folder', executable: false, repo: false },
     ])
     expect(await device.port.request('projects.add', { path: project })).toMatchObject({
       path: project,

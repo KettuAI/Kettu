@@ -1,5 +1,11 @@
 import { useState, type ReactNode } from 'react'
-import { ArrowUpIcon, CircleAlertIcon, FileDownIcon, RotateCwIcon } from 'lucide-react'
+import {
+  ArrowUpIcon,
+  CircleAlertIcon,
+  CloudOffIcon,
+  FileDownIcon,
+  RotateCwIcon,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId, UserContent } from '@shared/thread'
 import { exportDiagnostics } from '@renderer/app/actions'
@@ -9,9 +15,12 @@ import { InputGroup, InputGroupAddon, InputGroupButton } from '@renderer/compone
 import { Message } from '@renderer/components/ui/message'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { connectionText } from '@renderer/features/settings/host-text'
 import { errorMessage } from '@renderer/lib/host'
+import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
+import type { OtherHost } from '@renderer/stores/hosts'
 import { contentAttachments } from './composer/attachments'
 import { SentAttachments, UserContentView } from './entries/user-content'
 
@@ -274,6 +283,42 @@ export function FailedState({
         </Button>
         {note && <span className="min-w-0 truncate text-xs text-muted-foreground">{note}</span>}
       </div>
+    </div>
+  )
+}
+
+/**
+ * A session whose host is offline: in place of the thread while none was read, or of the composer
+ * under the one that was. It opens again by itself once the host is back.
+ */
+export function HostAway({ host, inline = false }: { host: OtherHost; inline?: boolean }) {
+  const { t } = useTranslation('session')
+  const { t: ts } = useTranslation('settings')
+  const now = useNow()
+  const state = connectionText(ts, host, now)
+  if (inline) {
+    return (
+      <div
+        role="status"
+        className="flex min-h-13 items-center gap-2 rounded-2xl bg-card px-4 py-3 text-ui text-secondary shadow-card"
+      >
+        <CloudOffIcon aria-hidden className="size-4 shrink-0 text-icon" />
+        <span className="min-w-0 flex-1 text-pretty">
+          {t('host.awayComposer', { name: host.name, state })}
+        </span>
+      </div>
+    )
+  }
+  return (
+    <div
+      role="status"
+      className="flex max-w-sm animate-in flex-col items-center gap-1.5 text-center fade-in animation-duration-(--duration-slow)"
+    >
+      <CloudOffIcon aria-hidden className="mb-1 size-5 text-icon" />
+      <span className="text-ui font-medium text-primary">
+        {t('host.away', { name: host.name })}
+      </span>
+      <span className="text-ui text-pretty text-tertiary">{t('host.awayBody', { state })}</span>
     </div>
   )
 }

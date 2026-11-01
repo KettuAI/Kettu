@@ -1,5 +1,6 @@
 import type { PlanLimit } from '@shared/agent-host'
 import { currentLocale, i18n } from './i18n'
+import { hostPath } from './host-paths'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -209,9 +210,9 @@ export function fileUrlPath(uri: string, platform: string): string | null {
   return path.length > 1 ? path.replace(/\/+$/, '') : path
 }
 
-/** A path relative to the project when it is inside it. */
+/** A path relative to the project when it is inside it; another host's as that host writes it. */
 export function relativePath(path: string, projectPath: string): string {
-  const root = projectPath.replace(/[\\/]+$/, '')
+  const root = hostPath(projectPath).replace(/[\\/]+$/, '')
   if (path === root) return basename(path)
   if (path.startsWith(root + '/') || path.startsWith(root + '\\'))
     return path.slice(root.length + 1)

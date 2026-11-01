@@ -304,9 +304,13 @@ export function focusSession(sessionId: string): Promise<void> {
     .then(() => fetchSnapshot(sessionId, 'sessions.open'))
 }
 
-/** After the agent host restarts, every watched session is watched again from a new snapshot. */
-export function rewatchAll(): void {
+/**
+ * After the agent host restarts, every watched session is watched again from a new snapshot; with
+ * `only`, the sessions it picks, as those on a host whose connection opened again.
+ */
+export function rewatchAll(only?: (sessionId: string) => boolean): void {
   for (const sessionId of watched) {
+    if (only && !only(sessionId)) continue
     void host('sessions.watch', { sessionId })
       .catch(() => {})
       .then(() => fetchSnapshot(sessionId, 'sessions.snapshot'))

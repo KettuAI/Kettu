@@ -8,7 +8,7 @@ import {
 } from '@renderer/app/actions'
 import { launchTarget } from '@renderer/app/restore'
 import { restoreDraftAttachments } from '@renderer/features/session/composer/attachments'
-import { host } from '@renderer/lib/host'
+import { forgetSessionHost, host, sessionHost } from '@renderer/lib/host'
 import { whenHostHas } from '@renderer/lib/host-features'
 import { isWeb, platform } from '@renderer/lib/platform'
 import { initAccount } from '@renderer/stores/account'
@@ -34,7 +34,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { initSettings, useSettingsStore } from '@renderer/stores/settings'
-import { initHosts } from '@renderer/stores/hosts'
+import { initHosts, loadHosts } from '@renderer/stores/hosts'
 import { initRemote } from '@renderer/stores/remote'
 import { initSharing } from '@renderer/stores/sharing'
 import { initTerminals } from '@renderer/stores/terminals'
@@ -57,24 +57,41 @@ import {
   shownLayoutSessions,
   useViewStore,
 } from '@renderer/stores/view'
+import { initHostSessions } from './host-sessions'
+import { followWindowTitle } from './window-title'
 import { installPerfCounters } from './perf'
 
-function onHostEvent(event: HostEvent): void {
+/** An event of this computer's agent host, or with `hostId` of another host's. */
+function onHostEvent(event: HostEvent, hostId: string | null = null): void {
   switch (event.type) {
     case 'session.patches':
       receiveBatch(event.batch)
-      break
+      return
     case 'session.summary':
       // A prepared session is New session's alone until its first message.
       if (event.summary.prepared) receivePrepared(event.summary)
       else useSessionsStore.getState().upsert(event.summary)
-      break
+      return
     case 'session.removed':
       if (!preparedRemoved(event.sessionId)) sessionRemoved(event.sessionId)
-      break
+      if (hostId !== null) forgetSessionHost(event.sessionId)
+      return
     case 'session.returned':
-      void takeReturnedMessages(event.sessionId)
-      break
+      void takeReturnedMessages(event.sessionId, hostId)
+      return
+    case 'projects.changed':
+      useProjectsStore.getState().setAll(event.projects, hostId)
+      return
+    case 'git.changed':
+      receiveGitStatus(event.status)
+      return
+    case 'git.pr':
+      receiveCurrentPr(event.projectPath, event.pr)
+      return
+  }
+  // The rest is this computer's alone: its agents, usage, artifacts and routines.
+  if (hostId !== null) return
+  switch (event.type) {
     case 'agent.status':
       useAgentsStore.getState().setOne(event.status)
       break
@@ -84,17 +101,8 @@ function onHostEvent(event: HostEvent): void {
     case 'agent.options':
       receiveAgentOptions(event.options)
       break
-    case 'projects.changed':
-      useProjectsStore.getState().setAll(event.projects)
-      break
     case 'environment.changed':
       useAgentsStore.setState({ environment: event.info })
-      break
-    case 'git.changed':
-      receiveGitStatus(event.status)
-      break
-    case 'git.pr':
-      receiveCurrentPr(event.projectPath, event.pr)
       break
     case 'git.tools':
       useGitStore.setState({ tools: event.tools })
@@ -193,7 +201,7 @@ export function bootstrap(): Promise<unknown> {
   document.documentElement.dataset.client = window.kettu.client
   installPerfCounters()
   const agents = window.kettu.agents
-  agents.onEvent(onHostEvent)
+  agents.onEvent((event) => onHostEvent(event))
   agents.onConnection((state) => {
     useConnectionStore.setState({ agentHost: state })
     // The host keeps the session through the drop: nothing is read again.
@@ -208,10 +216,10 @@ export function bootstrap(): Promise<unknown> {
     void removeEmptySessions()
     void loadHostState()
     artifactsChanged()
-    hostRestarted()
-    rewatchAll()
+    hostRestarted(null)
+    rewatchAll((sessionId) => sessionHost(sessionId) === null)
     showFront(true)
-    rewatchGit()
+    rewatchGit(null)
   })
   useViewStore.subscribe(() => showFront())
   followShownSession()
@@ -231,8 +239,20 @@ export function bootstrap(): Promise<unknown> {
   // What the desktop app's main does for its windows; the web client has none of it.
   if (!isWeb) {
     initHosts()
+    void loadHosts()
+    initHostSessions({
+      event: (hostId, event) => onHostEvent(event, hostId),
+      opened: (hostId) => {
+        hostRestarted(hostId)
+        rewatchAll((sessionId) => sessionHost(sessionId) === hostId)
+        showFront(true)
+        rewatchGit(hostId)
+      },
+      resync: (hostId) => rewatchAll((sessionId) => sessionHost(sessionId) === hostId),
+    })
     initBrowser()
     void initAccount()
+    followWindowTitle()
   }
   initTerminals()
   // Before any composer shows, so each finds its draft's attachments.

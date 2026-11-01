@@ -44,6 +44,7 @@ import { grantedPath, type MediaGrants } from './media'
 import { copyImage, revealMedia, saveMediaAs } from './media-actions'
 import { notifyTest } from './notifications'
 import type { QuitFlow } from './quit'
+import type { HostSessions } from './host-sessions'
 import type { RemoteHost } from './remote-host'
 import { isRendererUrl } from './renderer'
 import type { SettingsStore } from './settings'
@@ -70,6 +71,7 @@ export interface IpcDeps {
   mediaGrants: MediaGrants
   sharing: Sharing
   remoteHost: RemoteHost
+  hostSessions: HostSessions
   remoteStatus(): RemoteStatus
   /** Settings › Hosts; it reads the computer's model the first time, then says it changed. */
   hostsStatus(): HostsStatus
@@ -346,6 +348,7 @@ export function registerIpcHandlers({
   mediaGrants,
   sharing,
   remoteHost,
+  hostSessions,
   remoteStatus,
   hostsStatus,
   computerModel,
@@ -658,6 +661,7 @@ export function registerIpcHandlers({
 
   on('agent-host:connect', (event) => agentHost.connect(event.sender))
   on('terminal-host:connect', (event) => terminalHost.connect(event.sender))
+  on('host-sessions:connect', (event) => hostSessions.connect(event.sender))
 
   on('app:confirm-quit-unhandled', (event, id) => {
     if (Number.isSafeInteger(id)) quit.unhandled(id as number, event.sender)
