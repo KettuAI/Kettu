@@ -143,17 +143,58 @@ jobs:
       - run: pnpm build
         env:
           MAIN_VITE_UPDATE_MODE: ${{ matrix.update_mode }}
-      # The daemon as a real LaunchAgent, which is never installed on a developer's computer: it is
-      # installed from an SSH session that then ends, must run as a service, come back after it is
-      # killed, and stop when the service is removed.
+      - name: Package the daemon
+        if: runner.os != 'Windows'
+        run: node tools/daemon/package.mjs --out daemon-package
+      # The package as users install it, from a release laid out as GitHub's: the CLI, its hosts and
+      # node-pty run on the Node.js inside it, and kettu run stops on SIGTERM.
+      - name: Check the daemon's package
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p 'require("./package.json").version')"
+          release="$RUNNER_TEMP/release/download/v$version"
+          mkdir -p "$release"
+          cp daemon-package/*.tar.gz "$release/"
+          cat daemon-package/*.sha256 > "$release/kettu-daemon-sha256sums.txt"
+          KETTU_RELEASES_URL="file://$RUNNER_TEMP/release" \
+            sh tools/daemon/install.sh --version "$version" --no-service
+          kettu="$HOME/.local/bin/kettu"
+          test "$("$kettu" --version)" = "$version"
+
+          package="$(dirname "$(dirname "$(readlink "$kettu")")")"
+          "$package/node/bin/node" -e '
+            const pty = require(process.argv[1]).spawn("/bin/sh", ["-c", "echo from-pty"], {})
+            let out = ""
+            pty.onData((data) => (out += data))
+            pty.onExit(() => {
+              if (!out.includes("from-pty")) throw new Error(`The shell wrote: ${out}`)
+            })
+          ' "$package/daemon/node_modules/node-pty"
+
+          export KETTU_DAEMON_DATA="$RUNNER_TEMP/kd"
+          "$kettu" run > "$RUNNER_TEMP/daemon-run.log" 2>&1 &
+          pid=$!
+          trap 'cat "$RUNNER_TEMP/daemon-run.log"' EXIT
+          for _ in $(seq 30); do
+            if "$kettu" status 2> /dev/null | grep -q 'Agent host: *ready'; then break; fi
+            sleep 1
+          done
+          "$kettu" status | tee "$RUNNER_TEMP/daemon-status.txt"
+          grep -q 'Agent host: *ready' "$RUNNER_TEMP/daemon-status.txt"
+          kill -TERM "$pid"
+          wait "$pid"
+      # The installed package as a real LaunchAgent, which is never installed on a developer's
+      # computer: it is installed from an SSH session that then ends, must run as a service, come
+      # back after it is killed, and stop when the service is removed.
       - name: Check the daemon's service
         if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
-          node="$(command -v node)"
-          main="$PWD/out/daemon/main.cjs"
-          kettu() { "$node" "$main" "$@"; }
+          main="$HOME/.local/bin/kettu"
+          kettu() { "$main" "$@"; }
           # The first line names the daemon's own pid.
           daemon_pid() { sed -n '1s/.*(pid \([0-9]*\))$/\1/p' "$1"; }
           status="$RUNNER_TEMP/daemon-status.txt"
@@ -168,7 +209,7 @@ jobs:
           ssh_to_self=(ssh -i "$RUNNER_TEMP/ssh-key" -o BatchMode=yes -o ConnectTimeout=10
             -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$(id -un)@localhost")
           if "${ssh_to_self[@]}" true; then
-            "${ssh_to_self[@]}" "'$node' '$main' service install"
+            "${ssh_to_self[@]}" "'$main' service install"
             echo "Installed from an SSH session, which has ended"
             sleep 5
           else
@@ -295,6 +336,13 @@ jobs:
             dist/*.AppImage
             dist/latest*.yml
           if-no-files-found: error
+      # An artifact of its own, so the installers' keeps dist/ as its root.
+      - if: runner.os != 'Windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-daemon-${{ matrix.os }}
+          path: daemon-package/kettu-daemon-*
+          if-no-files-found: error
 
   screenshots:
     needs: version
@@ -308,6 +356,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      # The install script goes up with the release, which the daemon's update runs.
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: tools/daemon
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
@@ -318,6 +370,14 @@ jobs:
         run: |
           mkdir release
           cp artifacts/*/*.dmg artifacts/*/*-setup.exe artifacts/*/*.AppImage release/
+          # The daemon's packages, with one list of their checksums for the install script.
+          cp artifacts/*/kettu-daemon-*.tar.gz tools/daemon/install.sh release/
+          cat artifacts/*/kettu-daemon-*.tar.gz.sha256 > release/kettu-daemon-sha256sums.txt
+          packages="$(wc -l < release/kettu-daemon-sha256sums.txt)"
+          if [ "$packages" != 3 ]; then
+            echo "The checksums list $packages daemon packages, expected 3" >&2
+            exit 1
+          fi
           # A signed macOS build lists its zip next to its dmg and ships the zip's blockmap.
           mac_files=1
           if [ "$MAC_SIGNED" = true ]; then

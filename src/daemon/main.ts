@@ -1,8 +1,9 @@
 // Entry of the `kettu` CLI under Node.js, built into out/daemon/main.cjs beside the hosts' bundles.
 
-import { execFile } from 'node:child_process'
-import { realpath } from 'node:fs/promises'
+import { execFile, spawn } from 'node:child_process'
+import { access, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
+import path from 'node:path'
 import { createInterface } from 'node:readline'
 import { addressText } from '@shared/remote/address'
 import { version } from '../../package.json'
@@ -25,10 +26,12 @@ import {
   installService,
   serviceCommand,
   ServiceError,
+  serviceFile,
   uninstallService,
   type CommandResult,
   type ServiceDeps,
 } from './service'
+import { RELEASES, RELEASES_ENV, update, UpdateError } from './update'
 
 const SUPPORTED: readonly NodeJS.Platform[] = ['darwin', 'linux']
 const START_WAIT_MS = 20_000
@@ -182,6 +185,22 @@ async function terminal(
   }
 }
 
+/** Runs an install script with its output on this terminal, and resolves to its exit code. */
+async function runInstallScript(script: string, args: string[]): Promise<number> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-update-'))
+  try {
+    const file = path.join(dir, 'install.sh')
+    await writeFile(file, script)
+    return await new Promise<number>((resolve, reject) => {
+      spawn('/bin/sh', [file, ...args], { stdio: 'inherit' })
+        .once('error', reject)
+        .once('exit', (code, signal) => resolve(code ?? (signal ? 128 : 1)))
+    })
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
 async function until<T>(check: () => Promise<T | null>, ms: number): Promise<T | null> {
   const started = Date.now()
   for (;;) {
@@ -310,6 +329,23 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
       out('Removed the service; its daemon has stopped.\n')
       return 0
     }
+
+    case 'update': {
+      const running = await statusOf(socket)
+      return update({
+        version,
+        bundleDir: __dirname,
+        releases: process.env[RELEASES_ENV]?.trim() || RELEASES,
+        fetch,
+        service: await access(serviceFile(service)).then(
+          () => true,
+          () => false,
+        ),
+        foreground: running !== null && !running.service,
+        install: runInstallScript,
+        write: out,
+      })
+    }
   }
 }
 
@@ -335,7 +371,10 @@ async function main(argv: string[]): Promise<number> {
     return await run(command)
   } catch (error) {
     const known =
-      error instanceof Failure || error instanceof AlreadyRunning || error instanceof ServiceError
+      error instanceof Failure ||
+      error instanceof AlreadyRunning ||
+      error instanceof ServiceError ||
+      error instanceof UpdateError
     process.stderr.write(
       `kettu: ${known ? (error as Error).message : ((error as Error)?.stack ?? String(error))}\n`,
     )

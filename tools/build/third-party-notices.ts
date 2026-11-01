@@ -2,7 +2,8 @@
 // each once, with its version, its license and the text of the license and notice files it ships.
 // The packages are the ones with code in the main, preload and renderer bundles, the bundles main
 // imports with `?modulePath`, which electron-vite builds with main's plugins, the runtime
-// dependencies electron-builder packs, and Electron.
+// dependencies electron-builder packs, and Electron. A build that ships on its own, as the daemon and
+// the web client do in the daemon's package, writes its own file with its own packages.
 
 import {
   existsSync,
@@ -167,6 +168,24 @@ export function collectNotices(root: string, bundled: Iterable<string>): Notice[
   return notices
 }
 
+/**
+ * The notices for a build that ships outside the app: its bundled packages and the `external` ones
+ * it loads from beside the bundle, each package once.
+ */
+export function standaloneNotices(
+  root: string,
+  bundled: Iterable<string>,
+  external: readonly string[],
+): Notice[] {
+  const dirs = new Set([...bundled].map((dir) => realpathSync(dir)))
+  for (const name of external) {
+    const dir = locate(root, name)
+    if (!dir) throw new Error(`${name}, which the build loads from beside it, is not installed`)
+    dirs.add(dir)
+  }
+  return [...dirs].map(readNotice)
+}
+
 /** The text of out/third-party-notices.txt: the notices sorted by name, each package once. */
 export function renderNotices(notices: Notice[]): string {
   const unique = new Map(notices.map((notice) => [`${notice.name}@${notice.version}`, notice]))
@@ -220,5 +239,30 @@ export function thirdPartyNotices(root: string): () => Plugin {
         )
       },
     }
+  }
+}
+
+/**
+ * The plugin for a build that ships outside the app, as in the daemon's package: it writes
+ * third-party-notices.txt into the build's own folder.
+ */
+export function standaloneThirdPartyNotices(root: string, external: string[] = []): Plugin {
+  const bundled = new Set<string>()
+  let outDir = ''
+  return {
+    name: 'kettu:standalone-third-party-notices',
+    apply: 'build',
+    configResolved(config) {
+      outDir = path.resolve(config.root, config.build.outDir)
+    },
+    generateBundle(_, bundle) {
+      for (const dir of bundledPackages(bundle)) bundled.add(dir)
+    },
+    closeBundle() {
+      writeFileSync(
+        path.join(outDir, 'third-party-notices.txt'),
+        renderNotices(standaloneNotices(root, bundled, external)),
+      )
+    },
   }
 }
