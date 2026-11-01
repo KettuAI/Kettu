@@ -4,7 +4,6 @@ import { execFile, spawn } from 'node:child_process'
 import { access, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { createInterface } from 'node:readline'
 import { addressText } from '@shared/remote/address'
 import { version } from '../../package.json'
 import { HELP, parseCommand, type Command } from './args'
@@ -21,6 +20,7 @@ import { changePort, directReport } from './direct'
 import { prepareDataFolder } from './key'
 import { pairDevice, sshTarget } from './pair'
 import { controlSocketPath, DATA_ENV, dataPath } from './paths'
+import { terminalQuestions } from './questions'
 import { devicesReport, runningReport, stoppedReport, terminalReport } from './report'
 import {
   installService,
@@ -72,22 +72,6 @@ async function statusOf(socket: string): Promise<DaemonStatus | null> {
   }
 }
 
-/** A question on the terminal with `initial` typed for the owner to edit; null once input ends. */
-function ask(question: string, initial?: string): Promise<string | null> {
-  // Typed ahead only on a terminal; piped input would be read after it on the same line.
-  const typed = process.stdin.isTTY === true
-  const lines = createInterface({ input: process.stdin, output: process.stdout })
-  return new Promise<string | null>((resolve) => {
-    lines.once('close', () => resolve(null))
-    lines.once('SIGINT', () => lines.close())
-    lines.question(initial && !typed ? `${question}[${initial}] ` : question, (answer) => {
-      resolve(answer)
-      lines.close()
-    })
-    if (initial && typed) lines.write(initial)
-  })
-}
-
 async function pair(socket: string): Promise<number> {
   let client: ControlClient
   try {
@@ -99,6 +83,7 @@ async function pair(socket: string): Promise<number> {
   const stop = new AbortController()
   const abort = (): void => stop.abort()
   process.once('SIGINT', abort)
+  const questions = terminalQuestions(process.stdin, process.stdout)
   try {
     const { status } = await client.call('direct.get', undefined)
     const ssh =
@@ -110,7 +95,7 @@ async function pair(socket: string): Promise<number> {
         : null
     return await pairDevice(
       client,
-      { write: out, live: process.stdout.isTTY === true, ask },
+      { write: out, live: process.stdout.isTTY === true, ask: questions.ask },
       stop.signal,
       { ssh },
     )
@@ -118,6 +103,7 @@ async function pair(socket: string): Promise<number> {
     if (error instanceof ControlError) throw new Failure(error.message)
     throw error
   } finally {
+    questions.close()
     process.off('SIGINT', abort)
   }
 }
@@ -134,6 +120,7 @@ async function direct(
         return 0
       case 'direct-port': {
         const client = await connectControl(socket)
+        const questions = terminalQuestions(process.stdin, process.stdout)
         try {
           return await changePort(
             client,
@@ -141,12 +128,13 @@ async function direct(
               write: out,
               error: (message) => void process.stderr.write(`kettu: ${message}\n`),
               interactive: process.stdin.isTTY === true,
-              ask: (question) => ask(question),
+              ask: (question) => questions.ask(question),
             },
             command.port,
             command.yes,
           )
         } finally {
+          questions.close()
           client.close()
         }
       }
