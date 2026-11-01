@@ -8,10 +8,26 @@ import { parseDirectAddress } from './address'
 import { DEVICE_ID, isDeviceModel, normalizeDeviceName } from './device'
 
 /** The newest protocol version this side speaks; one number covers every change on the channel. */
-export const PROTOCOL_VERSION = 1
+export const PROTOCOL_VERSION = 2
 
 /** The oldest version this side still speaks, raised only by a change an older side cannot read. */
 export const MIN_PROTOCOL_VERSION = 1
+
+/**
+ * The first version whose device sessions outlive their connection: the hello may resume one, the
+ * device acknowledges what it applies and asks for a pace, the host may ask it to resync, and a
+ * `session.patches` batch may merge several, saying the first seq it covers in `from`.
+ */
+export const RESUME_VERSION = 2
+
+/** How long the host keeps a device session after its connection drops, for the device to resume. */
+export const RESUME_MS = 60_000
+
+/** The pace a device in the background asks for: a batch of patches a second. */
+export const BACKGROUND_PACE_MS = 1000
+
+/** The longest pace a device may ask for. */
+export const MAX_PACE_MS = 10_000
 
 export interface ProtocolRange {
   min: number
@@ -35,6 +51,16 @@ export interface Hello {
   }
   /** While pairing: the name the device suggests for itself and its model, as "iPhone 17 Pro". */
   device?: { name: string; model: string }
+  /**
+   * From version 2, the session to take over: the token of the welcome that started or last
+   * resumed it, and how many of the host's messages the device received on it since.
+   */
+  resume?: ResumeRequest
+}
+
+export interface ResumeRequest {
+  token: string
+  received: number
 }
 
 /** A direct address the device may also try. */
@@ -59,6 +85,40 @@ export interface Welcome {
   terminal: boolean
   /** Where the device may also connect directly, the owner's own first; none while it is off. */
   addresses: DirectAddress[]
+  /**
+   * From version 2, the token the device's next hello names to resume this session: it works once,
+   * while the session lasts, which is up to RESUME_MS after its connection drops.
+   */
+  resume?: string
+  /**
+   * From version 2, present when the hello's session was resumed: the id of the last request the
+   * host read on it. The device sends again the requests it sent after that one; anything else
+   * the host sent and the device did not receive follows the welcome.
+   */
+  resumed?: { request: number }
+}
+
+/**
+ * From version 2, the device has applied the first `received` of the host's messages on its
+ * session, its JSON and its stream bytes alike; the host keeps the rest until it says so.
+ */
+export interface Ack {
+  type: 'ack'
+  received: number
+}
+
+/** From version 2, how many milliseconds the host waits between batches of patches it sends. */
+export interface Pace {
+  type: 'pace'
+  ms: number
+}
+
+/**
+ * From version 2, the host dropped session patches for the device, which fell too far behind: the
+ * device fetches the snapshots of the sessions it shows again.
+ */
+export interface Resync {
+  type: 'resync'
 }
 
 /** The host's direct addresses again, sent to each welcomed device whenever they change. */
@@ -129,6 +189,13 @@ function isVersion(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1
 }
 
+function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+}
+
+/** A resume token: base64url, no longer than this. */
+const TOKEN = /^[A-Za-z0-9_-]{1,64}$/
+
 function isClientField(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= MAX_CLIENT_FIELD
 }
@@ -136,7 +203,7 @@ function isClientField(value: unknown): value is string {
 /** A hello as the host reads it, or null when it is not one. */
 export function parseHello(value: unknown): Hello | null {
   if (typeof value !== 'object' || value === null) return null
-  const { type, protocol, client, device } = value as Record<string, unknown>
+  const { type, protocol, client, device, resume } = value as Record<string, unknown>
   if (type !== 'hello' || typeof protocol !== 'object' || protocol === null) return null
   const { min, max } = protocol as Record<string, unknown>
   if (!isVersion(min) || !isVersion(max) || min > max) return null
@@ -146,7 +213,17 @@ export function parseHello(value: unknown): Hello | null {
   const hello: Hello = { type, protocol: { min, max }, client: { kind, version, platform } }
   const pairing = parsePairingDevice(device)
   if (pairing) hello.device = pairing
+  const resuming = parseResume(resume)
+  if (resuming) hello.resume = resuming
   return hello
+}
+
+function parseResume(value: unknown): ResumeRequest | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { token, received } = value as Record<string, unknown>
+  return typeof token === 'string' && TOKEN.test(token) && isCount(received)
+    ? { token, received }
+    : null
 }
 
 /** The name and model a pairing device sends, or null when they are not there or not valid. */
@@ -199,10 +276,8 @@ export function parseAddresses(value: unknown): DirectAddress[] {
  */
 export function parseWelcome(value: unknown): Welcome | null {
   if (typeof value !== 'object' || value === null) return null
-  const { type, protocol, host, features, device, terminal, addresses } = value as Record<
-    string,
-    unknown
-  >
+  const { type, protocol, host, features, device, terminal, addresses, resume, resumed } =
+    value as Record<string, unknown>
   if (type !== 'welcome' || !isVersion(protocol)) return null
   if (protocol < MIN_PROTOCOL_VERSION || protocol > PROTOCOL_VERSION) return null
   if (typeof host !== 'object' || host === null) return null
@@ -212,7 +287,7 @@ export function parseWelcome(value: unknown): Welcome | null {
   const { id, name: deviceName } = device as Record<string, unknown>
   const kept = normalizeDeviceName(deviceName)
   if (typeof id !== 'string' || !DEVICE_ID.test(id) || !kept) return null
-  return {
+  const welcome: Welcome = {
     type,
     protocol,
     host: { name, platform: platform as Platform, version },
@@ -224,6 +299,11 @@ export function parseWelcome(value: unknown): Welcome | null {
     terminal: terminal === true,
     addresses: parseAddresses(addresses),
   }
+  if (protocol < RESUME_VERSION) return welcome
+  if (typeof resume === 'string' && TOKEN.test(resume)) welcome.resume = resume
+  const request = (resumed as { request?: unknown } | null | undefined)?.request
+  if (isCount(request)) welcome.resumed = { request }
+  return welcome
 }
 
 /** The newest version both sides speak, or which side has to be updated when there is none. */

@@ -195,6 +195,8 @@ export function bootstrap(): Promise<unknown> {
   agents.onEvent(onHostEvent)
   agents.onConnection((state) => {
     useConnectionStore.setState({ agentHost: state })
+    // The host keeps the session through the drop: nothing is read again.
+    if (state === 'resuming') return
     if (state !== 'connected') {
       wasDisconnected = true
       return

@@ -192,7 +192,7 @@ describe('webApi', () => {
     expect(await api.app.getInfo()).toEqual(INFO)
     expect(calls.filter((c) => c.method === 'host.info')).toHaveLength(1)
     expect(useWebHostStore.getState().info).toEqual(INFO)
-    setState({ kind: 'reconnecting', reason: null })
+    setState({ kind: 'reconnecting', reason: null, kept: false })
     setState(CONNECTED)
     expect(calls.filter((c) => c.method === 'host.info')).toHaveLength(2)
   })
@@ -293,11 +293,13 @@ describe('webHost', () => {
   it('goes offline since the connection ended, and stays stopped with the reason', () => {
     const online = webHost(start, CONNECTED, 100)
     expect(online.lastOnlineAt).toBe(100)
-    const offline = webHost(online, { kind: 'reconnecting', reason: null }, 250)
+    const offline = webHost(online, { kind: 'reconnecting', reason: null, kept: false }, 250)
     expect(offline.connection).toEqual({ state: 'offline' })
     expect(offline.lastOnlineAt).toBe(250)
     // Still offline later, it was last online at the same time.
-    expect(webHost(offline, { kind: 'reconnecting', reason: null }, 900).lastOnlineAt).toBe(250)
+    expect(
+      webHost(offline, { kind: 'reconnecting', reason: null, kept: false }, 900).lastOnlineAt,
+    ).toBe(250)
     expect(webHost(offline, { kind: 'stopped', reason: 'update_host' }, 950).connection).toEqual({
       state: 'stopped',
       reason: 'update_host',

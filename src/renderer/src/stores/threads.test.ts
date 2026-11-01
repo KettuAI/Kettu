@@ -100,6 +100,38 @@ describe('older pages', () => {
   })
 })
 
+describe('merged batches', () => {
+  it('applies a batch that merges the next ones, as a slow device gets them', async () => {
+    answer({ 'sessions.open': () => snapshot([user('e:3')], null) })
+    await focusSession('s1')
+    receiveBatch({
+      sessionId: 's1',
+      seq: 4,
+      from: 2,
+      patches: [{ op: 'entry.add', entry: agent('e:4', 'merged') }],
+    })
+    frames.shift()!(0)
+    expect(order()).toEqual(['e:3', 'e:4'])
+    expect(replica().seq).toBe(4)
+  })
+
+  it('refetches when a merged batch starts past the next one', async () => {
+    answer({ 'sessions.open': () => snapshot([user('e:3')], null) })
+    await focusSession('s1')
+    answer({
+      'sessions.snapshot': () => ({ ...snapshot([user('e:3'), agent('e:4')], null), seq: 5 }),
+    })
+    receiveBatch({ sessionId: 's1', seq: 5, from: 3, patches: [] })
+    frames.shift()!(0)
+    await settle()
+    expect(request).toHaveBeenCalledWith(
+      'sessions.snapshot',
+      expect.objectContaining({ sessionId: 's1' }),
+    )
+    expect(replica().seq).toBe(5)
+  })
+})
+
 describe('the sessions of the split', () => {
   it('keeps nine of them watched beside the four recent others', async () => {
     const { keepWatched } = await import('./threads')

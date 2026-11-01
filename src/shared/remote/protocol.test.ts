@@ -75,7 +75,7 @@ describe('parseWelcome', () => {
   it.each([
     null,
     { ...welcome, type: 'hello' },
-    { ...welcome, protocol: 2 },
+    { ...welcome, protocol: 3 },
     { ...welcome, host: { name: '', platform: 'linux', version: '0.2.0' } },
     { ...welcome, host: null },
     { ...welcome, device: { id: 'x', name: 'Lin MacBook' } },

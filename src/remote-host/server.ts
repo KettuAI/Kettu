@@ -3,8 +3,10 @@
 // host, whose protocol passes through unchanged but for binary values: a request's come from the
 // device's uploads, a result's go as byte streams, and media is read from disk here. The device's
 // terminals go on a port of their own to the terminal host, and an owner's calls beyond its
-// sessions to the host's parent.
+// sessions to the host's parent. From protocol version 2 a session outlives its connection for a
+// while, what it sends waiting in its outbox, and the device's next connection may take it over.
 
+import { randomBytes } from 'node:crypto'
 import { open, realpath, type FileHandle } from 'node:fs/promises'
 import type { HostMethod, HostResult } from '@shared/agent-host'
 import type { AdminAnswer } from '@shared/host-control'
@@ -29,6 +31,8 @@ import { bytesOf, findPlaces, isBinary } from '@shared/remote/places'
 import {
   negotiate,
   parseHello,
+  RESUME_MS,
+  RESUME_VERSION,
   type Addresses,
   type Closing,
   type ClosingReason,
@@ -55,6 +59,7 @@ import type { ActivityLog } from './activity'
 import { DeviceTerminal, isTerminalMethod, NOT_ALLOWED } from './device-terminal'
 import type { DeviceStore, RemovedDevice } from './devices'
 import { bytesSource, Downloads, fileSource } from './downloads'
+import { IN_FLIGHT_BYTES, Outbox, type OutboxLimits } from './outbox'
 import type { PairingCode, PairingCodes } from './pairing'
 import { SessionTitles } from './titles'
 import { UploadCounts, UploadError, Uploads } from './uploads'
@@ -113,12 +118,20 @@ export interface RemoteServerOptions {
   changed(): void
   log: LogFn
   helloTimeoutMs?: number
+  /** How long a session waits for its device to resume it, RESUME_MS unless a test shortens it. */
+  resumeMs?: number
+  /** What a device's outbox holds, OUTBOX_LIMITS unless a test lowers them. */
+  outboxLimits?: Partial<OutboxLimits>
   now?: () => number
 }
 
 /** The host's side of every device connection. */
 export class RemoteServer {
+  /** Connections that have no session yet: in their handshake, hello or pairing. */
   private readonly connections = new Set<DeviceConnection>()
+  private readonly sessions = new Set<DeviceSession>()
+  /** Each session's token for its device's next hello to resume it, used once. */
+  private readonly tokens = new Map<string, DeviceSession>()
   private refusedCount = 0
   private refusedTimer: ReturnType<typeof setTimeout> | null = null
   private refusedUnreported = false
@@ -155,7 +168,7 @@ export class RemoteServer {
   setAddresses(addresses: DirectAddress[]): void {
     if (JSON.stringify(addresses) === JSON.stringify(this.directAddresses)) return
     this.directAddresses = addresses.map(({ host, port }) => ({ host, port }))
-    for (const connection of this.connections) connection.sendAddresses(this.directAddresses)
+    for (const session of this.sessions) session.sendAddresses(this.directAddresses)
   }
 
   /** Whether devices may use the terminal: in each welcome, and sent again when it changes. */
@@ -167,14 +180,14 @@ export class RemoteServer {
   setTerminal(allowed: boolean): void {
     if (allowed === this.terminalAllowed) return
     this.terminalAllowed = allowed
-    for (const connection of this.connections) connection.terminalChanged(allowed)
+    for (const session of this.sessions) session.terminalChanged(allowed)
   }
 
-  /** The ids of the devices with a session open now. */
+  /** The ids of the devices connected to a session now. */
   online(): string[] {
     const ids = new Set<string>()
-    for (const connection of this.connections) {
-      if (connection.open && connection.device) ids.add(connection.device.id)
+    for (const session of this.sessions) {
+      if (session.connected) ids.add(session.device.id)
     }
     return [...ids]
   }
@@ -192,9 +205,14 @@ export class RemoteServer {
   async removeDevice(id: string, by: 'owner' | 'unseen' | 'reset' = 'owner'): Promise<boolean> {
     // The store forgets the device before its write, so a handshake meanwhile finds it removed.
     const removing = this.options.devices.remove(id)
-    const closing = [...this.connections]
-      .filter((connection) => connection.device?.id === id)
-      .map((connection) => connection.close('removed'))
+    const closing = [
+      ...[...this.connections]
+        .filter((connection) => connection.device?.id === id)
+        .map((connection) => connection.close('removed')),
+      ...[...this.sessions]
+        .filter((session) => session.device.id === id)
+        .map((session) => session.close('removed')),
+    ]
     const removed = await removing
     await Promise.all(closing)
     if (removed) {
@@ -216,8 +234,8 @@ export class RemoteServer {
     const renamed = await this.options.devices.rename(id, kept)
     if (!renamed) return null
     this.options.activity.record(id, { kind: 'renamed', from: before.name, to: kept, by })
-    for (const connection of this.connections) {
-      if (connection.device?.id === id) connection.renamed(kept)
+    for (const session of this.sessions) {
+      if (session.device.id === id) session.renamed(kept)
     }
     this.options.changed()
     return renamed
@@ -225,8 +243,8 @@ export class RemoteServer {
 
   /** Tells the owner's devices something of the host: every one, or only `deviceId`. */
   adminEvent(event: HostAdminEvent, deviceId: string | null): void {
-    for (const connection of this.connections) {
-      if (deviceId === null || connection.device?.id === deviceId) connection.adminEvent(event)
+    for (const session of this.sessions) {
+      if (deviceId === null || session.device.id === deviceId) session.adminEvent(event)
     }
   }
 
@@ -246,10 +264,10 @@ export class RemoteServer {
 
   /** Removes the devices not seen for 90 days; one with a session open now is seen. */
   async sweep(): Promise<void> {
-    const online = new Set(this.online())
+    const open = new Set([...this.sessions].map((session) => session.device.id))
     const now = this.now()
     for (const device of this.options.devices.list()) {
-      if (!online.has(device.id) && removalAt(device) <= now) {
+      if (!open.has(device.id) && removalAt(device) <= now) {
         await this.removeDevice(device.id, 'unseen')
       }
     }
@@ -271,7 +289,10 @@ export class RemoteServer {
     if (this.sweeper) clearInterval(this.sweeper)
     this.sweeper = null
     this.options.pairing.stop()
-    await Promise.all([...this.connections].map((connection) => connection.close(reason)))
+    await Promise.all([
+      ...[...this.connections].map((connection) => connection.close(reason)),
+      ...[...this.sessions].map((session) => session.close(reason)),
+    ])
     await Promise.all([this.options.devices.flush(), this.options.activity.flush()])
   }
 
@@ -297,35 +318,64 @@ export class RemoteServer {
     this.refusedTimer = setTimeout(() => this.reportRefused(), REFUSED_REPORT_MS)
   }
 
-  opened(device: PairedDevice): void {
-    this.options.devices.connected(device.id)
-    this.options.activity.opened(device.id)
+  /** A new token for `session`, in place of the one it had. */
+  issueToken(session: DeviceSession, previous: string | null): string {
+    if (previous) this.tokens.delete(previous)
+    const token = randomBytes(32).toString('base64url')
+    this.tokens.set(token, session)
+    return token
+  }
+
+  forgetToken(token: string | null): void {
+    if (token) this.tokens.delete(token)
+  }
+
+  /** The session a hello's token names, when it is `deviceId`'s and still kept; the token is spent. */
+  takeSession(token: string, deviceId: string): DeviceSession | null {
+    const session = this.tokens.get(token)
+    this.tokens.delete(token)
+    return session?.live && session.device.id === deviceId ? session : null
+  }
+
+  /** A connection's hello opened a session, which it now belongs to. */
+  started(connection: DeviceConnection, session: DeviceSession): void {
+    this.connections.delete(connection)
+    this.sessions.add(session)
+    this.options.devices.connected(session.device.id)
+    this.options.activity.opened(session.device.id)
     this.options.changed()
   }
 
-  ended(connection: DeviceConnection, device: PairedDevice | null): void {
+  /** A connection took over a session whose device came back. */
+  resumed(connection: DeviceConnection): void {
     this.connections.delete(connection)
-    if (!device) return
+    this.options.changed()
+  }
+
+  connectionEnded(connection: DeviceConnection): void {
+    this.connections.delete(connection)
+  }
+
+  sessionEnded(session: DeviceSession): void {
+    this.sessions.delete(session)
     // Last connected is when the session ended, so a device online for months is not unseen.
-    this.options.devices.connected(device.id)
-    this.options.activity.closed(device.id)
+    this.options.devices.connected(session.device.id)
+    this.options.activity.closed(session.device.id)
     this.options.changed()
   }
 }
 
-type State = 'handshake' | 'hello' | 'confirming' | 'opening' | 'open' | 'closing' | 'closed'
+type ConnectionState =
+  'handshake' | 'hello' | 'confirming' | 'opening' | 'session' | 'closing' | 'closed'
 
+/** One connection of a device: its handshake and hello, then the session it opened or resumed. */
 class DeviceConnection {
   device: PairedDevice | null = null
-  /** What the device may do, as its welcome says: every paired device is its host's owner. */
-  private readonly role: Welcome['role'] = 'owner'
   /** The removed device whose key the handshake named, told why at its hello. */
   private removed: RemovedDevice | null = null
-  private state: State = 'handshake'
-  private channel: Channel | null = null
-  private port: PortChannel | null = null
-  private terminal: DeviceTerminal | null = null
-  private wasOpen = false
+  private state: ConnectionState = 'handshake'
+  channel: Channel | null = null
+  private session: DeviceSession | null = null
   private closing: Promise<void> | null = null
   private received = 0
   private readonly timer: ReturnType<typeof setTimeout>
@@ -333,25 +383,9 @@ class DeviceConnection {
   private pairing: { code: PairingCode; publicKey: Uint8Array } | null = null
   /** False once the first message named a key, so it was no attempt at the pairing code. */
   private mayPair = true
-  /** Requests to note in the device's activity once they succeed, by id, with the title then. */
-  private readonly noted = new Map<
-    number,
-    { kind: NotedKind; sessionId: unknown; title: string | null }
-  >()
-  private readonly titles = new SessionTitles()
-  private uploads: Uploads | null = null
-  private downloads: Downloads | null = null
-  /** The remote host's own requests on the port, by their ids, which are negative. */
-  private readonly asking = new Map<
-    number,
-    { resolve: (result: unknown) => void; reject: (error: PortError) => void }
-  >()
-  private asked = 0
-  /** Media reads being authorized or streamed. */
-  private mediaReads = 0
 
   constructor(
-    private readonly transport: Transport,
+    readonly transport: Transport,
     private readonly server: RemoteServer,
   ) {
     const { options } = server
@@ -367,41 +401,31 @@ class DeviceConnection {
     })
   }
 
-  get open(): boolean {
-    return this.state === 'open'
-  }
-
-  sendAddresses(addresses: DirectAddress[]): void {
-    if (this.state === 'open') this.send({ type: 'addresses', addresses } satisfies Addresses)
-  }
-
   /** Ends the connection, after telling the device why once the channel is up. */
   close(reason: ClosingReason): Promise<void> {
+    if (this.session) return this.session.close(reason)
+    return this.sayClosing(reason)
+  }
+
+  /** Tells the device why its connection ends, then ends it. */
+  sayClosing(reason: ClosingReason): Promise<void> {
     if (this.state === 'closing' || this.state === 'closed') {
       return this.closing ?? Promise.resolve()
     }
     this.state = 'closing'
-    this.closing = this.sayClosing(reason)
+    this.closing = (async () => {
+      if (this.channel) {
+        const closing: Closing = { type: 'closing', reason }
+        await this.channel.send({ kind: 'json', value: closing }).catch(() => {})
+      }
+      this.end()
+    })()
     return this.closing
   }
 
-  /** Tells the device whether it may use the terminal; once it may not, its terminals close. */
-  terminalChanged(allowed: boolean): void {
-    if (this.state !== 'open') return
-    this.send({ type: 'terminal', allowed } satisfies TerminalAccess)
-    if (!allowed) this.terminal?.close(NOT_ALLOWED)
-  }
-
-  /** Something of the host its owner hears, beside the agent host's events. */
-  adminEvent(event: HostAdminEvent): void {
-    if (this.state === 'open' && this.role === 'owner') this.send({ type: 'event', event })
-  }
-
-  /** The device's name changed: its sessions hear the new one. */
-  renamed(name: string): void {
-    if (!this.device) return
-    this.device = { ...this.device, name }
-    if (this.state === 'open') this.send({ type: 'renamed', name } satisfies Renamed)
+  /** Ends the connection without a word, as when another one took its session over. */
+  drop(): void {
+    this.end()
   }
 
   private async answer(message: Uint8Array): Promise<void> {
@@ -489,15 +513,13 @@ class DeviceConnection {
   }
 
   private receive(message: ChannelMessage): void {
-    if (message.kind === 'bytes') {
-      // A device has nothing to upload before its welcome.
-      if (this.state === 'open') this.uploads!.bytes(message.stream, message.data)
-      return
-    }
+    if (this.state === 'closed') return
+    if (this.session) return this.session.receive(this, message)
+    // A device has nothing to upload before its welcome.
+    if (message.kind === 'bytes') return
     if (this.state === 'hello') void this.hello(message.value)
     // Nothing but the hello comes before the welcome.
     else if (this.state === 'confirming' || this.state === 'opening') void this.close('invalid')
-    else if (this.state === 'open') this.fromDevice(message.value)
   }
 
   private async hello(value: unknown): Promise<void> {
@@ -519,50 +541,25 @@ class DeviceConnection {
       return this.close('removed')
     }
     this.device = device
+    if (hello.resume && version >= RESUME_VERSION && !this.pairing) {
+      const kept = this.server.takeSession(hello.resume.token, device.id)
+      if (kept?.resume(this, hello.resume.received)) {
+        this.session = kept
+        this.state = 'session'
+        return this.server.resumed(this)
+      }
+      // Its device received what the host never sent: that session cannot go on.
+      kept?.end()
+    }
     this.state = 'opening'
     const port = await this.server.options.openAgentPort({ id: device.id, name: device.name })
     if (this.state !== 'opening') return port?.close()
     if (!port) return this.close('unavailable')
-    this.port = port
-    this.uploads = new Uploads({
-      folder: this.server.options.uploads,
-      deviceId: device.id,
-      counts: this.server.uploads,
-      transport: this.transport,
-      ...(this.server.options.uploadIdleMs ? { idleMs: this.server.options.uploadIdleMs } : {}),
-      cancelled: (stream, error) => {
-        this.server.options.log('warn', `Device ${device.id}'s upload failed: ${error.message}`)
-        this.send({ type: 'stream.cancel', stream, error } satisfies StreamCancel)
-      },
-    })
-    this.downloads = new Downloads({
-      channel: this.channel!,
-      transport: this.transport,
-      send: (message) => this.send(message),
-      failed: (reason) =>
-        this.server.options.log('warn', `Device ${device.id}'s download failed: ${reason}`),
-    })
-    // Sent before the port's listener is set, so nothing from the agent host comes before it.
-    this.send({
-      type: 'welcome',
-      protocol: version,
-      host: this.server.options.host,
-      features: [BYTES_FEATURE],
-      role: this.role,
-      device: { id: device.id, name: device.name },
-      terminal: this.server.terminal,
-      addresses: this.server.addresses,
-    } satisfies Welcome)
-    this.state = 'open'
-    this.wasOpen = true
-    this.terminal = this.deviceTerminal(device)
-    port.onMessage((data) => {
-      if (this.answered(data)) return
-      this.fromHost(data)
-      this.toDevice(data)
-    })
-    port.onClose(() => void this.close('unavailable'))
-    this.server.opened(device)
+    const session = new DeviceSession(this.server, device, version, port)
+    this.session = session
+    this.state = 'session'
+    session.start(this)
+    this.server.started(this, session)
   }
 
   /**
@@ -612,17 +609,271 @@ class DeviceConnection {
     return closed.then(() => this.server.options.pairing.failed(code))
   }
 
+  private end(): void {
+    if (this.state === 'closed') return
+    this.state = 'closed'
+    clearTimeout(this.timer)
+    this.transport.close()
+    if (this.pairing) this.server.options.pairing.release(this.pairing.code)
+    if (this.session) this.session.detached(this)
+    else this.server.connectionEnded(this)
+  }
+}
+
+type SessionState = 'open' | 'away' | 'closing' | 'closed'
+
+/**
+ * A device's session: its port to the agent host, its terminals, uploads and downloads. It runs on
+ * one connection at a time; from version 2 it waits a while for its device once that one drops.
+ */
+class DeviceSession {
+  /** What the device may do, as its welcome says: every paired device is its host's owner. */
+  private readonly role: Welcome['role'] = 'owner'
+  private state: SessionState = 'open'
+  private connection: DeviceConnection | null = null
+  private readonly outbox: Outbox
+  private readonly resumable: boolean
+  private token: string | null = null
+  private awayTimer: ReturnType<typeof setTimeout> | null = null
+  private closing: Promise<void> | null = null
+  /** The id of the last request the device sent that was read here, which a resume reports. */
+  private lastRequest = 0
+  private port: PortChannel | null
+  private terminal: DeviceTerminal | null = null
+  /** Requests to note in the device's activity once they succeed, by id, with the title then. */
+  private readonly noted = new Map<
+    number,
+    { kind: NotedKind; sessionId: unknown; title: string | null }
+  >()
+  private readonly titles = new SessionTitles()
+  private readonly uploads: Uploads
+  private readonly downloads: Downloads
+  /** The remote host's own requests on the port, by their ids, which are negative. */
+  private readonly asking = new Map<
+    number,
+    { resolve: (result: unknown) => void; reject: (error: PortError) => void }
+  >()
+  private asked = 0
+  /** Media reads being authorized or streamed. */
+  private mediaReads = 0
+  /** Whether uploads stopped reading the device until the disk catches up, on any connection. */
+  private readingPaused = false
+
+  constructor(
+    private readonly server: RemoteServer,
+    public device: PairedDevice,
+    private readonly version: number,
+    port: PortChannel,
+  ) {
+    const { options } = server
+    this.port = port
+    this.resumable = version >= RESUME_VERSION
+    this.outbox = new Outbox({
+      acks: this.resumable,
+      limits: options.outboxLimits,
+      dropped: (count) =>
+        options.log('info', `Dropped ${count} messages for device ${device.id}, which is behind`),
+      overflowed: () => {
+        options.log('warn', `Device ${device.id} fell too far behind, so its session ended`)
+        this.end()
+      },
+    })
+    this.uploads = new Uploads({
+      folder: options.uploads,
+      deviceId: device.id,
+      counts: server.uploads,
+      transport: {
+        pause: () => {
+          this.readingPaused = true
+          this.connection?.transport.pause()
+        },
+        resume: () => {
+          this.readingPaused = false
+          this.connection?.transport.resume()
+        },
+      },
+      ...(options.uploadIdleMs ? { idleMs: options.uploadIdleMs } : {}),
+      cancelled: (stream, error) => {
+        options.log('warn', `Device ${device.id}'s upload failed: ${error.message}`)
+        this.send({ type: 'stream.cancel', stream, error } satisfies StreamCancel)
+      },
+    })
+    this.downloads = new Downloads({
+      channel: { send: (message) => this.outbox.push(message) },
+      transport: { buffered: () => this.outbox.buffered(), drained: () => this.outbox.drained() },
+      send: (message) => this.send(message),
+      failed: (reason) => options.log('warn', `Device ${device.id}'s download failed: ${reason}`),
+      ...(this.resumable ? { highWater: IN_FLIGHT_BYTES } : {}),
+    })
+  }
+
+  /** Whether the session runs on a connection now. */
+  get connected(): boolean {
+    return this.state === 'open'
+  }
+
+  /** Whether the session goes on, connected or waiting for its device. */
+  get live(): boolean {
+    return this.state === 'open' || this.state === 'away'
+  }
+
+  /** Runs on the connection whose hello opened it. */
+  start(connection: DeviceConnection): void {
+    this.connection = connection
+    const port = this.port!
+    // Sent before the port's listener is set, so nothing from the agent host comes before it.
+    this.welcome(connection, null)
+    this.outbox.attach({ channel: connection.channel!, transport: connection.transport }, 0)
+    this.terminal = this.deviceTerminal(this.device)
+    port.onMessage((data) => {
+      if (this.answered(data)) return
+      this.fromHost(data)
+      this.toDevice(data)
+    })
+    port.onClose(() => void this.close('unavailable'))
+  }
+
+  /**
+   * Goes on on `connection`, whose device received the first `received` of the messages sent
+   * here; false when it cannot have, and the session cannot go on.
+   */
+  resume(connection: DeviceConnection, received: number): boolean {
+    if (!this.live || !this.resumable || !this.outbox.canResume(received)) return false
+    if (this.awayTimer) clearTimeout(this.awayTimer)
+    this.awayTimer = null
+    const previous = this.connection
+    this.connection = connection
+    this.state = 'open'
+    // After the switch, so its end is not taken for this session's.
+    if (previous) {
+      previous.drop()
+      this.uploads.dropUnfinished()
+    }
+    this.welcome(connection, { request: this.lastRequest })
+    this.outbox.attach({ channel: connection.channel!, transport: connection.transport }, received)
+    if (this.readingPaused) connection.transport.pause()
+    return true
+  }
+
+  /** A connection of the session ended: the session waits for its device, or ends with it. */
+  detached(connection: DeviceConnection): void {
+    if (connection !== this.connection) return
+    this.connection = null
+    this.outbox.detach()
+    if (this.state !== 'open') return
+    if (!this.resumable) return this.end()
+    this.state = 'away'
+    // Their bytes on the way are lost; the device sends them again in uploads of their own.
+    this.uploads.dropUnfinished()
+    this.awayTimer = setTimeout(() => this.end(), this.server.options.resumeMs ?? RESUME_MS)
+    this.server.options.changed()
+  }
+
+  /** Ends the session, after telling its device why when it is connected. */
+  close(reason: ClosingReason): Promise<void> {
+    if (this.state === 'closing' || this.state === 'closed') {
+      return this.closing ?? Promise.resolve()
+    }
+    this.state = 'closing'
+    const port = this.port
+    this.port = null
+    port?.close()
+    this.terminal?.close(null)
+    const connection = this.connection
+    this.closing = (connection ? connection.sayClosing(reason) : Promise.resolve()).then(() =>
+      this.end(),
+    )
+    return this.closing
+  }
+
+  /** Ends the session at once: its device's next hello finds no session to resume. */
+  end(): void {
+    if (this.state === 'closed') return
+    this.state = 'closed'
+    if (this.awayTimer) clearTimeout(this.awayTimer)
+    this.awayTimer = null
+    this.server.forgetToken(this.token)
+    this.token = null
+    this.outbox.close()
+    this.uploads.closeAll()
+    this.downloads.closeAll()
+    for (const asked of this.asking.values()) asked.reject(ENDED)
+    this.asking.clear()
+    const port = this.port
+    this.port = null
+    port?.close()
+    this.terminal?.close(null)
+    const connection = this.connection
+    this.connection = null
+    connection?.drop()
+    this.server.sessionEnded(this)
+  }
+
+  sendAddresses(addresses: DirectAddress[]): void {
+    if (this.live) this.send({ type: 'addresses', addresses } satisfies Addresses)
+  }
+
+  /** Tells the device whether it may use the terminal; once it may not, its terminals close. */
+  terminalChanged(allowed: boolean): void {
+    if (!this.live) return
+    this.send({ type: 'terminal', allowed } satisfies TerminalAccess)
+    if (!allowed) this.terminal?.close(NOT_ALLOWED)
+  }
+
+  /** Something of the host its owner hears, beside the agent host's events. */
+  adminEvent(event: HostAdminEvent): void {
+    if (this.live && this.role === 'owner') this.send({ type: 'event', event })
+  }
+
+  /** The device's name changed: its sessions hear the new one. */
+  renamed(name: string): void {
+    this.device = { ...this.device, name }
+    if (this.live) this.send({ type: 'renamed', name } satisfies Renamed)
+  }
+
+  /** A message from the device on `connection`, which only the current one may send. */
+  receive(connection: DeviceConnection, message: ChannelMessage): void {
+    if (connection !== this.connection || this.state !== 'open') return
+    if (message.kind === 'bytes') return this.uploads.bytes(message.stream, message.data)
+    this.fromDevice(message.value)
+  }
+
+  /** The welcome, straight on the channel ahead of everything the outbox sends again. */
+  private welcome(connection: DeviceConnection, resumed: Welcome['resumed'] | null): void {
+    if (this.resumable) this.token = this.server.issueToken(this, this.token)
+    const welcome: Welcome = {
+      type: 'welcome',
+      protocol: this.version,
+      host: this.server.options.host,
+      features: [BYTES_FEATURE],
+      role: this.role,
+      device: { id: this.device.id, name: this.device.name },
+      terminal: this.server.terminal,
+      addresses: this.server.addresses,
+      ...(this.token ? { resume: this.token } : {}),
+      ...(resumed ? { resumed } : {}),
+    }
+    connection.channel!.send({ kind: 'json', value: welcome }).catch(() => {})
+  }
+
   /** A message from the device once welcomed. */
   private fromDevice(value: unknown): void {
     if (typeof value !== 'object' || value === null) return
-    const { type, name, stream, size } = value as Record<string, unknown>
+    const { type, id, name, stream, size, received, ms } = value as Record<string, unknown>
+    if (type === 'request' && typeof id === 'number' && Number.isSafeInteger(id)) {
+      this.lastRequest = Math.max(this.lastRequest, id)
+    }
     switch (type) {
+      case 'ack':
+        return this.outbox.ack(received)
+      case 'pace':
+        return this.outbox.pace(ms)
       case 'rename':
-        void this.server.renameDevice(this.device!.id, name, 'device').then((renamed) => {
+        void this.server.renameDevice(this.device.id, name, 'device').then((renamed) => {
           if (!renamed) {
             this.server.options.log(
               'warn',
-              `Device ${this.device?.id} asked for a name that is none`,
+              `Device ${this.device.id} asked for a name that is none`,
             )
           }
         })
@@ -630,14 +881,14 @@ class DeviceConnection {
       case 'stream.open':
         // An id it may not open, or one it opened before, would make every later word on it
         // mean either stream.
-        if (!this.uploads!.open(stream, size)) void this.close('invalid')
+        if (!this.uploads.open(stream, size)) void this.close('invalid')
         return
       case 'stream.end':
-        if (typeof stream === 'number') this.uploads!.end(stream)
+        if (typeof stream === 'number') this.uploads.end(stream)
         return
       case 'stream.cancel':
-        if (isDeviceStream(stream)) this.uploads!.cancel(stream)
-        else if (typeof stream === 'number') this.downloads!.cancel(stream)
+        if (isDeviceStream(stream)) this.uploads.cancel(stream)
+        else if (typeof stream === 'number') this.downloads.cancel(stream)
         return
     }
     this.toHost(value)
@@ -666,7 +917,7 @@ class DeviceConnection {
     if (type !== 'request') return
     // The remote host's own requests on the port have negative ids, and their answers stay here.
     if (typeof id === 'number' && id < 0) {
-      this.server.options.log('warn', `Device ${this.device!.id} sent a request with a negative id`)
+      this.server.options.log('warn', `Device ${this.device.id} sent a request with a negative id`)
       return
     }
     const refused =
@@ -675,7 +926,7 @@ class DeviceConnection {
     if (refused) {
       this.server.options.log(
         'warn',
-        `Device ${this.device!.id} asked for ${method}, which devices may not call`,
+        `Device ${this.device.id} asked for ${method}, which devices may not call`,
       )
       if (typeof id === 'number') {
         this.send({
@@ -703,18 +954,18 @@ class DeviceConnection {
   private async admin(id: unknown, method: HostAdminMethod, params: unknown): Promise<void> {
     if (typeof id !== 'number') return
     const reply = (message: unknown): void => {
-      if (this.state === 'open') this.send(message)
+      if (this.live) this.send(message)
     }
     const run = this.server.options.admin
     if (this.role !== 'owner' || !run) {
       this.server.options.log(
         'warn',
-        `Device ${this.device!.id} asked for ${method}, which it may not call`,
+        `Device ${this.device.id} asked for ${method}, which it may not call`,
       )
       const message = `A paired device may not call "${method}"`
       return reply({ type: 'error', id, error: { code: 'forbidden', message } })
     }
-    const answer = await run(this.device!.id, method, params).catch((): AdminAnswer => ({
+    const answer = await run(this.device.id, method, params).catch((): AdminAnswer => ({
       error: { code: 'internal', message: 'The host could not answer' },
     }))
     if ('error' in answer) reply({ type: 'error', id, error: answer.error })
@@ -729,10 +980,10 @@ class DeviceConnection {
   ): Promise<void> {
     // Each upload is claimed at once, so one named twice fails here and not later.
     const claims = named.map(({ holder, key }) =>
-      this.uploads!.claim((holder[key] as { $stream: unknown }).$stream),
+      this.uploads.claim((holder[key] as { $stream: unknown }).$stream),
     )
     const settled = await Promise.allSettled(claims)
-    if (this.state !== 'open') return
+    if (!this.live) return
     const failed = settled.find((result) => result.status === 'rejected')
     if (failed) {
       const reason = failed.reason
@@ -769,7 +1020,7 @@ class DeviceConnection {
   private async readMedia(id: unknown, params: unknown): Promise<void> {
     if (typeof id !== 'number') return
     const reply = (message: unknown): void => {
-      if (this.state === 'open') this.send(message)
+      if (this.live) this.send(message)
     }
     const fail = (error: PortError): void => reply({ type: 'error', id, error })
     const range = mediaRange(params)
@@ -794,7 +1045,7 @@ class DeviceConnection {
       }
       const { path: real, ...media } = answer.file
       const opened = await openMedia(real)
-      if (!opened || this.state !== 'open') {
+      if (!opened || !this.live) {
         await opened?.handle.close()
         return reply({ type: 'response', id, result: { kind: 'not_found' } })
       }
@@ -804,7 +1055,7 @@ class DeviceConnection {
         return fail({ code: 'invalid_params', message: 'offset is past the end of the file' })
       }
       const length = Math.min(range.length ?? size, size - range.offset)
-      const { stream, finished } = this.downloads!.open(fileSource(handle, range.offset, length))
+      const { stream, finished } = this.downloads.open(fileSource(handle, range.offset, length))
       streaming = true
       void finished.then(() => this.mediaReads--)
       const result: MediaReadResult = {
@@ -815,7 +1066,7 @@ class DeviceConnection {
         bytes: { $stream: stream, size: length },
       }
       reply({ type: 'response', id, result })
-      this.downloads!.start(stream)
+      this.downloads.start(stream)
     } catch (error) {
       fail(isPortError(error) ? error : { code: 'internal', message: 'The file could not be read' })
     } finally {
@@ -858,12 +1109,12 @@ class DeviceConnection {
     if (binary.length === 0) return this.send(data)
     const streams = binary.map(({ holder, key }) => {
       const bytes = bytesOf(holder[key] as ArrayBuffer | ArrayBufferView)
-      const { stream } = this.downloads!.open(bytesSource(bytes))
+      const { stream } = this.downloads.open(bytesSource(bytes))
       holder[key] = { $stream: stream, size: bytes.length } satisfies StreamRef
       return stream
     })
     this.send(data)
-    for (const stream of streams) this.downloads!.start(stream)
+    for (const stream of streams) this.downloads.start(stream)
   }
 
   /**
@@ -883,57 +1134,27 @@ class DeviceConnection {
     const created = noted.kind === 'session-created' ? (result as Summary | null) : null
     const sessionId = created ? created.id : noted.sessionId
     const title = created ? (typeof created.title === 'string' ? created.title : null) : noted.title
-    if (type === 'response' && typeof sessionId === 'string' && this.device) {
+    if (type === 'response' && typeof sessionId === 'string') {
       this.server.note(this.device.id, { kind: noted.kind, sessionId, title })
     }
   }
 
   private send(value: unknown): void {
-    const channel = this.channel
-    if (!channel) return
-    channel.send({ kind: 'json', value }).catch((error: unknown) => {
-      if (this.state === 'closed') return
+    if (!this.live) return
+    this.outbox.push({ kind: 'json', value }).catch((error: unknown) => {
+      if (!this.live) return
       const { type, id } = value as { type?: unknown; id?: unknown }
       this.server.options.log(
         'warn',
-        `A message for device ${this.device?.id} could not be sent: ${(error as Error).message}`,
+        `A message for device ${this.device.id} could not be sent: ${(error as Error).message}`,
       )
       // A response too long for the channel still tells the device its request failed.
       if ((type === 'response' || type === 'error') && typeof id === 'number') {
         const message = 'The answer is too long for the connection'
         const failed = { type: 'error', id, error: { code: 'internal', message } }
-        channel.send({ kind: 'json', value: failed }).catch(() => {})
+        this.outbox.push({ kind: 'json', value: failed }).catch(() => {})
       }
     })
-  }
-
-  private async sayClosing(reason: ClosingReason): Promise<void> {
-    const port = this.port
-    this.port = null
-    port?.close()
-    this.terminal?.close(null)
-    if (this.channel) {
-      const closing: Closing = { type: 'closing', reason }
-      await this.channel.send({ kind: 'json', value: closing }).catch(() => {})
-    }
-    this.end()
-  }
-
-  private end(): void {
-    if (this.state === 'closed') return
-    this.state = 'closed'
-    clearTimeout(this.timer)
-    this.uploads?.closeAll()
-    this.downloads?.closeAll()
-    for (const asked of this.asking.values()) asked.reject(ENDED)
-    this.asking.clear()
-    const port = this.port
-    this.port = null
-    port?.close()
-    this.terminal?.close(null)
-    this.transport.close()
-    if (this.pairing) this.server.options.pairing.release(this.pairing.code)
-    this.server.ended(this, this.wasOpen ? this.device : null)
   }
 }
 
