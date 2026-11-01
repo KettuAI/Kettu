@@ -54,7 +54,7 @@ describe('the built-in colors', () => {
     expect(unlisted).toEqual([])
   })
 
-  it('have no pair under 4.5:1', () => {
+  it('have no pair under its ratio', () => {
     expect(themeContrast(null)).toEqual([])
   })
 })

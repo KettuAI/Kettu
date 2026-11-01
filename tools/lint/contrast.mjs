@@ -1,6 +1,7 @@
 // @ts-check
 // Checks the token file: the two dark blocks must match, and text and meaning colors must reach
-// WCAG 2.x AA contrast (4.5:1) on the surfaces they are drawn on. No dependencies.
+// WCAG 2.x AA contrast (4.5:1) on the surfaces they are drawn on, a control's fill 3:1. No
+// dependencies.
 import { readFileSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import contrast from '../../src/shared/contrast-pairs.json' with { type: 'json' }
@@ -9,12 +10,17 @@ import contrast from '../../src/shared/contrast-pairs.json' with { type: 'json' 
 export const MIN_RATIO = contrast.minRatio
 
 /**
- * Foreground tokens and the background tokens each is drawn on, in both themes. The last two are
- * inverted fills: the send button's icon, tooltips, and a count on the attention fill.
+ * Foreground tokens and the background tokens each is drawn on, in both themes, and the ratio a
+ * group needs when it is not MIN_RATIO. The last two are inverted fills: the send button's icon,
+ * tooltips, and a count on the attention fill.
+ *
+ * @type {{ fg: string, on: string[], minRatio?: number }[]}
  */
 export const PAIR_GROUPS = contrast.groups
 
-export const PAIRS = PAIR_GROUPS.flatMap(({ fg, on }) => on.map((bg) => ({ fg, bg })))
+export const PAIRS = PAIR_GROUPS.flatMap(({ fg, on, minRatio = MIN_RATIO }) =>
+  on.map((bg) => ({ fg, bg, min: minRatio })),
+)
 
 /** Disabled controls are exempt from contrast by WCAG, and the design keeps them faint. */
 export const EXEMPT = contrast.exempt
@@ -169,6 +175,7 @@ export function contrastRatio(a, b) {
  * @property {string} fg
  * @property {string} bg
  * @property {number | null} ratio null when a color could not be resolved
+ * @property {number} min the ratio the pair needs
  * @property {boolean} ok
  * @property {string} [note] why the pair is skipped or failed outright
  */
@@ -202,7 +209,7 @@ function surfaces(value, tokens) {
  * Checks every pair in both themes. The dark theme is the light block with the dark block on top.
  *
  * @param {Blocks} blocks
- * @param {{ fg: string, bg: string }[]} [pairs]
+ * @param {{ fg: string, bg: string, min?: number }[]} [pairs] min is MIN_RATIO when left out
  * @returns {Row[]}
  */
 export function checkContrast(blocks, pairs = PAIRS) {
@@ -213,21 +220,37 @@ export function checkContrast(blocks, pairs = PAIRS) {
     ['dark', new Map([...blocks.light, ...blocks.dark])],
   ])
   for (const [theme, tokens] of themes) {
-    for (const { fg, bg } of pairs) {
+    for (const { fg, bg, min = MIN_RATIO } of pairs) {
       const values = [fg, bg].map((name) => tokens.get(name))
       const missing = [fg, bg].filter((_, i) => values[i] === undefined)
       if (missing.length > 0) {
-        rows.push({ theme, fg, bg, ratio: null, ok: false, note: `missing ${missing.join(', ')}` })
+        rows.push({
+          theme,
+          fg,
+          bg,
+          ratio: null,
+          min,
+          ok: false,
+          note: `missing ${missing.join(', ')}`,
+        })
         continue
       }
       const fgColor = parseColor(/** @type {string} */ (values[0]))
       const unders = surfaces(/** @type {string} */ (values[1]), tokens)
       if (!fgColor || unders.length === 0) {
-        rows.push({ theme, fg, bg, ratio: null, ok: true, note: 'skipped: not an opaque color' })
+        rows.push({
+          theme,
+          fg,
+          bg,
+          ratio: null,
+          min,
+          ok: true,
+          note: 'skipped: not an opaque color',
+        })
         continue
       }
       const ratio = Math.min(...unders.map((under) => contrastRatio(fgColor, under)))
-      rows.push({ theme, fg, bg, ratio, ok: ratio >= MIN_RATIO })
+      rows.push({ theme, fg, bg, ratio, min, ok: ratio >= min })
     }
   }
   return rows
@@ -269,7 +292,7 @@ export function checkTokens(css) {
     problems.push(
       row.ratio === null
         ? `${row.theme}: ${row.fg} on ${row.bg}: ${row.note}`
-        : `${row.theme}: ${row.fg} on ${row.bg} is ${formatRatio(row.ratio)}:1, below ${MIN_RATIO}:1`,
+        : `${row.theme}: ${row.fg} on ${row.bg} is ${formatRatio(row.ratio)}:1, below ${row.min}:1`,
     )
   }
   return { rows, problems }

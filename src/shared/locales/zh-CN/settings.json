@@ -109,7 +109,7 @@
       "contrastMore": "另有 {{count}} 处",
       "installed": "已安装“{{name}}”，并已切换到它。",
       "unused": "当前版本不使用：{{list}}。",
-      "lowContrastNotice": "部分文字和背景的对比度低于 4.5:1，可能不易阅读。",
+      "lowContrastNotice": "部分文字或控件和背景的对比度不够，可能不易看清。",
       "gotIt": "知道了",
       "installFailed": "无法安装 {{file}}：{{reason}}。",
       "replaceTitle": "替换主题“{{name}}”？",
