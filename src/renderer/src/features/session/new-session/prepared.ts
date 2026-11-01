@@ -5,6 +5,7 @@
 import type { SessionSummary } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { errorMessage, host } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import {
   pickOption,
   settlePick,
@@ -214,7 +215,10 @@ export function refreshOnMenu(runningAgents: readonly AgentId[]): void {
 }
 
 /** The host came back: what it held went with it, so New session in front prepares again. */
-export function hostRestarted(): void {
+export function hostRestarted(hostId: string | null = null): void {
+  // Only the host New session's folder is on lost the prepared session.
+  const on = target?.projectPath ? hostOfPath(target.projectPath) : null
+  if (on !== hostId) return
   setPrepared(null)
   discarded.clear()
   if (shown && target && !idle) void prepare(target)

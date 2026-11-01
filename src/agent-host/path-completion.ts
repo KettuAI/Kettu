@@ -81,12 +81,15 @@ export async function completePath(
     .slice(0, MAX_COMPLETIONS)
   const runnable = (name: string): Promise<boolean> =>
     isExecutableFile(p.join(folder, name), platform)
+  // A repository's `.git` is a folder, or a file in a worktree or a submodule.
+  const repo = async (name: string): Promise<boolean> =>
+    (await kindOf(p.join(folder, name, '.git'))) !== null
   const entries = await Promise.all(
-    listed.map(async ({ name, kind }) => ({
-      name,
-      kind,
-      executable: kind === 'file' && (await runnable(name)),
-    })),
+    listed.map(async ({ name, kind }) =>
+      kind === 'folder'
+        ? { name, kind, executable: false, repo: await repo(name) }
+        : { name, kind, executable: await runnable(name) },
+    ),
   )
 
   const exactKind = await kindOf(p.resolve(written))

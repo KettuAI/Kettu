@@ -27,7 +27,8 @@
     "hoursMinutes": "{{h}} h {{m}} m"
   },
   "errors": {
-    "hostRestarted": "A background process of Kettu restarted. Try again."
+    "hostRestarted": "A background process of Kettu restarted. Try again.",
+    "hostOffline": "The host is not connected. Try again once it is back."
   },
   "planWindow": {
     "five_hour": "5-hour",
@@ -43,5 +44,8 @@
     "mac": "Finder",
     "windows": "Explorer",
     "linux": "the file manager"
+  },
+  "windowTitle": {
+    "onHost": "{{host}} — Kettu"
   }
 }

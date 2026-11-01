@@ -44,7 +44,9 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { basename, dirname, relativePath } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { cn } from '@renderer/lib/utils'
+import { isAway, useOtherHost } from '@renderer/stores/hosts'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { Clamp } from '../clamp'
@@ -501,6 +503,9 @@ function PermissionPrompt({
   const level = useRoutinesStore((s) =>
     routine ? (s.byId[routine.routineId]?.scope.level ?? null) : null,
   )
+  // An answer cannot reach a host that is not connected; the card waits for it to come back.
+  const hostId = useSessionsStore((s) => hostOfPath(s.byId[sessionId]?.projectPath ?? ''))
+  const away = isAway(useOtherHost(hostId)?.connection ?? null)
   const permission = entry.permission!
   const primary = primaryOption(permission.options)
   const [highlight, setHighlight] = useState(primary)
@@ -569,7 +574,7 @@ function PermissionPrompt({
           <button
             key={option.id}
             type="button"
-            disabled={answering !== null}
+            disabled={answering !== null || away}
             data-permission-option={i + 1}
             data-highlighted={i === highlight ? '' : undefined}
             aria-keyshortcuts={i < 4 ? String(i + 1) : undefined}
@@ -590,7 +595,7 @@ function PermissionPrompt({
               <span aria-hidden className="size-5 shrink-0" />
             )}
             <span className="min-w-0 flex-1 truncate">{option.name}</span>
-            {i === highlight && answering === null && (
+            {i === highlight && answering === null && !away && (
               <span aria-hidden className="shrink-0 text-tertiary">
                 ↵
               </span>

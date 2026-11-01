@@ -137,7 +137,8 @@
     "dropHint": "文件、照片或文件夹 · 最多 20 个",
     "slashNeedsEmpty": "仅限空消息",
     "notOnDisk": "它不是磁盘上的文件，无法添加。",
-    "theAgent": "Agent"
+    "theAgent": "Agent",
+    "otherHost": "另一台主机上的会话暂时不能附加这台电脑的文件和图片。可以用 @ 提到那台主机上的文件。"
   },
   "mentions": {
     "label": "文件和文件夹",

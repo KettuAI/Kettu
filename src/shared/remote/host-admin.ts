@@ -297,7 +297,8 @@ export function isHostAdminEvent(event: { type?: unknown }): event is HostAdminE
 export interface PathCompletion {
   /** The folder the typed path's last part is looked up in, absolute and normalized. */
   folder: string
-  entries: { name: string; kind: 'folder' | 'file'; executable: boolean }[]
+  /** `repo`: a folder that holds a Git repository; hosts before it was added leave it out. */
+  entries: { name: string; kind: 'folder' | 'file'; executable: boolean; repo?: boolean }[]
   /** Whether the typed path itself exists, and what it is. */
   exact: { kind: 'folder' | 'file'; executable: boolean } | null
 }

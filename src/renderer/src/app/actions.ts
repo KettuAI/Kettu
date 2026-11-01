@@ -18,7 +18,7 @@ import {
   restoreAttachments,
 } from '@renderer/features/session/composer/attachments'
 import { loadMarkdown, preloadRenderers } from '@renderer/features/session/markdown/preload'
-import { errorCode, errorMessage, host } from '@renderer/lib/host'
+import { errorCode, errorMessage, host, hostAt } from '@renderer/lib/host'
 import { adoptedPrepared } from '@renderer/features/session/new-session/prepared'
 import { clearPicks, type OptionValues } from '@renderer/stores/agent-options'
 import {
@@ -215,10 +215,16 @@ export async function createSession(
  * one when `sessionId` is undefined, into its draft: an empty one gets the text and attachments,
  * one written since gets the text after a blank line and the attachments after its own.
  */
-export async function takeReturnedMessages(sessionId?: string | null): Promise<void> {
+export async function takeReturnedMessages(
+  sessionId?: string | null,
+  hostId: string | null = null,
+): Promise<void> {
   let messages: ReturnedMessage[]
   try {
-    messages = await host('sessions.takeReturned', sessionId === undefined ? {} : { sessionId })
+    // New session's (null) are the host's that sent them back.
+    messages = await (sessionId
+      ? host('sessions.takeReturned', { sessionId })
+      : hostAt(hostId, 'sessions.takeReturned', sessionId === undefined ? {} : { sessionId }))
   } catch (error) {
     console.warn(`Could not take the returned messages: ${errorMessage(error)}`)
     return

@@ -276,7 +276,23 @@
       "switchOff": "{{agent}} 启动时 {{option}} 为关闭，而不是开启。",
       "switchOn": "{{agent}} 启动时 {{option}} 为开启，而不是关闭。"
     },
-    "installHarness": "安装 Harness…"
+    "installHarness": "安装 Harness…",
+    "thisComputer": "本机",
+    "hostOffline": "离线",
+    "openProjectHere": "在本机打开项目…",
+    "openProjectOn": "在 {{host}} 上打开项目…",
+    "projectOnHost": "项目：{{host}} 上的 {{name}}",
+    "hostFolders": {
+      "title": "在 {{host}} 上打开项目",
+      "description": "{{host}} 上的文件夹。项目留在 {{host}} 上，不会复制到这台电脑；Agent 在那里读写它。",
+      "up": "上一级",
+      "location": "位置",
+      "list": "{{folder}} 里的文件夹",
+      "empty": "这里没有文件夹。",
+      "repo": "Git 仓库",
+      "note": "只列文件夹。路径按 {{host}} 的格式：",
+      "open": "打开"
+    }
   },
   "signIn": {
     "title": "登录 {{agent}}",
@@ -368,5 +384,10 @@
     "saveAs": "另存为…",
     "previous": "上一个",
     "next": "下一个"
+  },
+  "host": {
+    "away": "{{name}} 没有连上",
+    "awayBody": "{{state}}。它回来后，这里的会话会自动接上。",
+    "awayComposer": "{{name}} 没有连上：{{state}}。它回来后才能接着发消息。"
   }
 }

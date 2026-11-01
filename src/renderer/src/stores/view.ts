@@ -73,6 +73,9 @@ export interface Step {
 export const NO_PROJECT_GROUP = 'no-project'
 export const PINNED_GROUP = 'pinned'
 
+/** This computer as the host the sidebar is narrowed to, which has no id of its own. */
+export const THIS_COMPUTER = 'this-computer'
+
 /** What the side panel shows; one pane at a time. An artifact's pane opens from the thread. */
 export type SidePane = 'terminal' | 'files' | 'browser' | 'artifact'
 
@@ -118,6 +121,8 @@ interface ViewStore {
   sidebarCollapsed: boolean
   /** Groups the user collapsed, by path, `NO_PROJECT_GROUP` or `PINNED_GROUP`; open by default. */
   collapsedProjects: Record<string, true>
+  /** The one host the sidebar lists, by id or `THIS_COMPUTER`; null lists every host. */
+  hostFilter: string | null
   /** Parent sessions the user collapsed or expanded; others follow activity. */
   expandedParents: Record<string, boolean>
   /** The open side pane per project; none when the panel is closed. */
@@ -134,6 +139,7 @@ interface Persisted {
   lastSessionId: string | null
   sidebarCollapsed: boolean
   collapsedProjects: Record<string, true>
+  hostFilter?: string | null
   expandedParents: Record<string, boolean>
   sidePane: Record<string, SidePane>
   splitSidePane?: SidePane | null
@@ -165,6 +171,7 @@ export const useViewStore = create<ViewStore>()(() => ({
   history: { back: [], forward: [] },
   sidebarCollapsed: saved.sidebarCollapsed ?? false,
   collapsedProjects: saved.collapsedProjects ?? {},
+  hostFilter: typeof saved.hostFilter === 'string' ? saved.hostFilter : null,
   expandedParents: saved.expandedParents ?? {},
   sidePane:
     saved.sidePane ??
@@ -194,6 +201,7 @@ useViewStore.subscribe((state) => {
       lastSessionId: state.main.kind === 'session' ? state.main.sessionId : null,
       sidebarCollapsed: state.sidebarCollapsed,
       collapsedProjects: state.collapsedProjects,
+      hostFilter: state.hostFilter,
       expandedParents: state.expandedParents,
       // An artifact's pane is not remembered: it opens from the thread, for the work at hand.
       sidePane: Object.fromEntries(

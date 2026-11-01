@@ -8,6 +8,7 @@ import {
   type RepositoryVisibility,
 } from '@shared/git'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 
 export type GitOperationKind = 'fetch' | 'pull' | 'push' | 'publishBranch' | 'publishRepo'
 
@@ -112,10 +113,13 @@ export function refreshShownProject(): void {
   }
 }
 
-/** Re-subscribes after the agent host restarts. */
-export function rewatchGit(): void {
+/**
+ * Re-subscribes after a host restarts, or a new connection to another host opens: this
+ * computer's projects for null, that host's for its id.
+ */
+export function rewatchGit(hostId: string | null = null): void {
   const paths = livePaths
-  livePaths = []
+  livePaths = paths.filter((path) => hostOfPath(path) !== hostId)
   showProjects(paths)
 }
 

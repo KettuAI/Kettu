@@ -304,6 +304,8 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       remove: () => unsupported('connect to other hosts'),
       onChanged: never,
       onPairing: never,
+      request: () => unsupported('connect to other hosts'),
+      onSession: never,
     },
     settings: {
       get: () => settings.get(),

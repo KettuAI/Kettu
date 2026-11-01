@@ -21,6 +21,7 @@ import { BrowserTools } from './browser/tools'
 import { BrowserOriginStore } from './browser/origins'
 import { broadcast } from './events'
 import { HostAdmin } from './host-admin'
+import { HostSessions } from './host-sessions'
 import { locale as currentLocale, setLocale, t } from './i18n'
 import { appInfo, registerIpcHandlers } from './ipc'
 import { MediaGrants, mediaScheme, serveMedia } from './media'
@@ -309,7 +310,11 @@ async function start(): Promise<void> {
     plainTextKey: remoteHost.plainTextDeviceKey,
     keyFailed: remoteHost.deviceKeyFailed,
   })
-  const hostsChanged = (): void => broadcast('hosts:changed', hostsStatus())
+  const hostSessions = new HostSessions()
+  const hostsChanged = (): void => {
+    hostSessions.connections(remoteHost.hosts)
+    broadcast('hosts:changed', hostsStatus())
+  }
   const readComputerModel = async (): Promise<string> => {
     const model = await computerModelForRun()
     if (model !== computerModel) {
@@ -343,6 +348,8 @@ async function start(): Promise<void> {
         : { error: { code: 'unavailable', message: 'Kettu is starting' } },
     changed: remoteChanged,
     hostsChanged,
+    hostOpened: (hostId, port) => hostSessions.opened(hostId, port),
+    hostClosed: (hostId, port) => hostSessions.closed(hostId, port),
   })
   const artifacts = new Artifacts({
     content: (id, version) => agentHost.artifactContent(id, version),
@@ -394,6 +401,7 @@ async function start(): Promise<void> {
       account.stop()
       // Devices hear that Kettu is stopping before their sessions' agent host goes.
       await Promise.all([remoteHost.stop().then(() => agentHost.stop()), terminalHost.stop()])
+      hostSessions.close()
       await Promise.all([
         settings.flush(),
         windowState.flush(),
@@ -491,6 +499,7 @@ async function start(): Promise<void> {
     mediaGrants,
     sharing,
     remoteHost,
+    hostSessions,
     remoteStatus,
     hostsStatus: () => {
       void readComputerModel()

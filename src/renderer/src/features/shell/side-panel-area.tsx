@@ -7,6 +7,7 @@ import {
   ResizablePanelGroup,
 } from '@renderer/components/ui/resizable'
 import { TerminalPanel } from '@renderer/features/terminal/terminal-panel'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { layoutStorage } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
 import {
@@ -47,7 +48,12 @@ export function SidePanelArea({
   projectPath: string
   children: ReactNode
 }) {
-  const pane = useViewStore(shownSidePane)
+  const remote = hostOfPath(projectPath) !== null
+  // Only the files of another host's project come through its connection.
+  const pane = useViewStore((s) => {
+    const shown = shownSidePane(s)
+    return remote && shown !== 'files' ? undefined : shown
+  })
   const artifact = useViewStore((s) => s.sideArtifact[projectPath])
   const splitArtifact = useViewStore((s) => s.splitSideArtifact)
   const maximized = useViewStore((s) => s.sidePaneMaximized) && !!pane
@@ -77,6 +83,7 @@ export function SidePanelArea({
   useEffect(
     () =>
       onAppEvent((event) => {
+        if (remote) return
         if (event.kind === 'new-terminal') {
           toggleTerminal(projectPath, true)
           void createTerminal(projectPath)
@@ -92,7 +99,7 @@ export function SidePanelArea({
           })
         }
       }),
-    [projectPath],
+    [projectPath, remote],
   )
 
   return (

@@ -114,5 +114,15 @@
   },
   "pinned": {
     "label": "Pinned"
+  },
+  "needsYou": {
+    "label": "Needs you"
+  },
+  "hosts": {
+    "all": "All hosts",
+    "thisComputer": "This computer",
+    "unknown": "Another host",
+    "filterLabel": "Show one host: {{shown}} now",
+    "empty": "No sessions on this host yet."
   }
 }

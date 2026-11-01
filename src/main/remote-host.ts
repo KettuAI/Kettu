@@ -81,6 +81,10 @@ export interface RemoteHostDeps {
   changed?(): void
   /** The known hosts, their connections or the device key changed, for Settings › Hosts. */
   hostsChanged?(): void
+  /** A new session with another host opened, on main's end of its port. */
+  hostOpened?(hostId: string, port: MessagePortMain): void
+  /** That session ended, or the process went; the port is closed. */
+  hostClosed?(hostId: string, port: MessagePortMain): void
 }
 
 /** Whoever opened Add device hears its code's progress. */
@@ -594,8 +598,12 @@ export class RemoteHost {
     for (const pairId of [...this.hostPairings.keys()]) {
       this.finishPairing(pairId, { state: 'failed', reason: 'unreachable' })
     }
-    for (const port of this.hostPorts.values()) port.close()
+    const ports = [...this.hostPorts]
     this.hostPorts.clear()
+    for (const [hostId, port] of ports) {
+      port.close()
+      this.deps.hostClosed?.(hostId, port)
+    }
     this.hostList =
       this.hostList?.map((entry) =>
         entry.connection.state === 'online'
@@ -644,14 +652,23 @@ export class RemoteHost {
       port2.close()
       return
     }
-    this.hostPorts.get(hostId)?.close()
+    const previous = this.hostPorts.get(hostId)
     this.hostPorts.set(hostId, port2)
+    if (previous) {
+      previous.close()
+      this.deps.hostClosed?.(hostId, previous)
+    }
     port2.on('close', () => {
-      if (this.hostPorts.get(hostId) === port2) this.hostPorts.delete(hostId)
+      if (this.hostPorts.get(hostId) !== port2) return
+      this.hostPorts.delete(hostId)
+      this.deps.hostClosed?.(hostId, port2)
     })
-    // Nothing reads the host protocol here yet; started, so nothing piles up unread.
-    port2.on('message', () => {})
-    port2.start()
+    if (this.deps.hostOpened) this.deps.hostOpened(hostId, port2)
+    else {
+      // Nothing reads the host protocol; started, so nothing piles up unread.
+      port2.on('message', () => {})
+      port2.start()
+    }
   }
 
   private receive(

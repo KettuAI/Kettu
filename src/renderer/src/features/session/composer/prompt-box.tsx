@@ -192,6 +192,7 @@ export function PromptBox({
       agentName={agentName}
       disabled={disabled}
       full={box.full}
+      remote={box.remote}
       commands={commands.length > 0}
       emptyDraft={text === ''}
       onFocusBox={box.focus}
@@ -431,6 +432,7 @@ function AddMenu({
   agentName,
   disabled,
   full,
+  remote,
   commands,
   emptyDraft,
   onFocusBox,
@@ -441,6 +443,8 @@ function AddMenu({
   agentName: string
   disabled: boolean
   full: boolean
+  /** The session is on another host, whose files `@` names and no pick reaches. */
+  remote: boolean
   commands: boolean
   emptyDraft: boolean
   onFocusBox: () => void
@@ -490,13 +494,16 @@ function AddMenu({
           return false
         }}
       >
-        <DropdownMenuItem disabled={full} onClick={() => onPick('files')}>
-          <FileIcon />
-          {t('attachments.addFiles')}
-          <DropdownMenuShortcut>{full ? t('attachments.atMost') : shortcut}</DropdownMenuShortcut>
-        </DropdownMenuItem>
+        {/* Another host's session takes only its own project's files, through `@`. */}
+        {!remote && (
+          <DropdownMenuItem disabled={full} onClick={() => onPick('files')}>
+            <FileIcon />
+            {t('attachments.addFiles')}
+            <DropdownMenuShortcut>{full ? t('attachments.atMost') : shortcut}</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
         {/* A browser's folder means nothing on the host. */}
-        {!isWeb && (
+        {!isWeb && !remote && (
           <DropdownMenuItem disabled={full} onClick={() => onPick('folder')}>
             <FolderIcon />
             {t('attachments.addFolder')}
