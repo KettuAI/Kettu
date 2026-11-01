@@ -28,7 +28,7 @@ import {
 import { footerLabel } from './footer-label'
 import { excerpt, FlashContext, highlight, matches, type RowDef, type SectionDef } from './model'
 import { GroupLabel, RowGroup, SectionBody } from './rows'
-import { webSections } from './web-sections'
+import { webClusters } from './web-sections'
 import {
   useAboutSection,
   useArchivedSection,
@@ -59,7 +59,7 @@ export default function SettingsPage() {
   const { t } = useTranslation('settings')
   // The list in clusters: what belongs to this client first, then the agents and their tools,
   // then the rest.
-  const clusters: SectionDef[][] = [
+  const all: SectionDef[][] = [
     [
       useGeneralSection(),
       useAppearanceSection(),
@@ -79,7 +79,9 @@ export default function SettingsPage() {
     [useRemoteSection()],
     [useAdvancedSection(), useAboutSection()],
   ]
-  const sections = isWeb ? webSections(clusters.flat()) : clusters.flat()
+  // The list and the page come from the same sections, so the web client lists only its own.
+  const clusters = isWeb ? webClusters(all) : all
+  const sections = clusters.flat()
   const [query, setQuery] = useState('')
   const needle = query.trim()
   const searching = needle.length > 0
@@ -207,7 +209,7 @@ export default function SettingsPage() {
                   <NavRow
                     key={section.id}
                     section={section}
-                    selected={!searching && section.id === active}
+                    selected={!searching && section.id === page.id}
                     dim={searching && count === 0}
                     count={searching && count > 0 ? count : null}
                     onChoose={() => choose(section.id)}
