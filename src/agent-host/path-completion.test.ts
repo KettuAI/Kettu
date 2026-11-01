@@ -26,6 +26,8 @@ describe('completePath', () => {
     expect(done.entries.map(({ name, kind }) => [name, kind])).toEqual([
       ['scripts', 'folder'],
       ['src', 'folder'],
+      // Windows matches names in any case, as its paths do.
+      ...(platform === 'win32' ? [['Sample.txt', 'file']] : []),
       ['setup.sh', 'file'],
     ])
     expect(done.exact).toBeNull()
