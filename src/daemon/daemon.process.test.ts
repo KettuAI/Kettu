@@ -14,6 +14,7 @@ import {
   readFile,
   realpath,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises'
 import { createServer } from 'node:net'
@@ -124,6 +125,8 @@ beforeAll(async () => {
   data = path.join(dir, 'data')
   socket = path.join(data, 'control.sock')
   await mkdir(path.join(dir, 'home'))
+  // node-pty is native, so the bundle outside the checkout loads it from there.
+  await symlink(path.join(root, 'node_modules'), path.join(dir, 'node_modules'))
   await build({
     configFile: path.join(root, 'vite.daemon.config.mts'),
     logLevel: 'silent',
@@ -137,8 +140,6 @@ beforeAll(async () => {
     KETTU_DAEMON_DATA: data,
     KETTU_FAKE_AGENT: FAKE_AGENT_MAIN,
     FAKE_AGENT_DELAY_SCALE: '0',
-    // node-pty is native, so the bundle outside the checkout loads it from there.
-    NODE_PATH: path.join(root, 'node_modules'),
   }
   delete env.KETTU_DAEMON_SERVICE
 }, 120_000)
