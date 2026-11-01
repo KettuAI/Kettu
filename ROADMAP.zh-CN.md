@@ -30,7 +30,7 @@ Kettu 现在有什么、接下来做什么，按版本列出。版本没有固�
 ## v0.2.0：在你自己的网络里，从其他设备使用会话
 
 - [ ] 从其他设备使用你的会话（[#377](https://github.com/KettuAI/Kettu/issues/377)）：配对设备并选择哪些可以连接（[#380](https://github.com/KettuAI/Kettu/issues/380)），在你自己组好的任何网络上直接连接，比如同一网络、Tailscale 这类 VPN 或转发出来的端口（[#581](https://github.com/KettuAI/Kettu/issues/581)），不打开窗口 Kettu 也保持运行（[#378](https://github.com/KettuAI/Kettu/issues/378)）；不需要账号
-- [ ] 在 Linux 和 macOS 开发机上以 daemon 运行 Kettu，开机就启动（[#649](https://github.com/KettuAI/Kettu/issues/649)）；在桌面应用里填 SSH 地址就能添加它，没装的替你装好，版本旧的替你升级（[#650](https://github.com/KettuAI/Kettu/issues/650)）
+- [ ] 在 Linux 和 macOS 开发机上以 daemon 运行 Kettu，开机就启动（[#649](https://github.com/KettuAI/Kettu/issues/649)），一行命令就能装好（[#658](https://github.com/KettuAI/Kettu/issues/658)）；在桌面应用里填 SSH 地址就能添加它，没装的替你装好，版本旧的替你升级（[#650](https://github.com/KettuAI/Kettu/issues/650)）
 - [ ] 在桌面应用中操作另一台电脑上的 Kettu（[#384](https://github.com/KettuAI/Kettu/issues/384)），所有主机的会话放在一起看，需要你的一眼就能看到
 - [ ] 在远程设备上回答授权请求（[#385](https://github.com/KettuAI/Kettu/issues/385)）、查看文件、改动和 Artifacts（[#386](https://github.com/KettuAI/Kettu/issues/386)）、打开终端（[#387](https://github.com/KettuAI/Kettu/issues/387)），在多台设备上同时使用一个会话（[#389](https://github.com/KettuAI/Kettu/issues/389)），另一台主机上的 Agent 也能用浏览器（[#651](https://github.com/KettuAI/Kettu/issues/651)）
 

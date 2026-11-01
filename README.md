@@ -68,6 +68,14 @@ Download the installer for your system from [Releases](https://github.com/KettuA
 
 New versions download in the background and install when Kettu restarts.
 
+On a server or a development machine without a desktop, on Linux (x64 or Arm, with glibc 2.28 or later) or a Mac with Apple silicon, install Kettu as a daemon instead, which your other devices connect to:
+
+```sh
+curl -fsSL https://kettu.sh/install | sh
+```
+
+It installs into your home without root and needs no Node.js, checks the download against the release's checksum, links `~/.local/bin/kettu` and starts the daemon as a service with the system. `kettu pair` adds a device, and `kettu update` moves to a new release. In a container, pass `sh -s -- --no-service` and run `kettu run` instead.
+
 ### Agents
 
 Install at least one of these agents first; Kettu finds it on your system.

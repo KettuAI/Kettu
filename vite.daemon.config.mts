@@ -4,6 +4,7 @@
 
 import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
+import { standaloneThirdPartyNotices } from './tools/build/third-party-notices'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
 const source = (file: string): string => fileURLToPath(new URL(file, import.meta.url))
@@ -26,7 +27,7 @@ export default defineConfig({
   root,
   resolve: { alias: { '@shared': source('src/shared') } },
   ssr: { noExternal: true },
-  plugins: [noElectron()],
+  plugins: [noElectron(), standaloneThirdPartyNotices(root, ['node-pty'])],
   build: {
     ssr: true,
     outDir: source('out/daemon'),

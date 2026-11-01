@@ -68,6 +68,14 @@ Kettu 为这些工作提供了一个桌面上的家。你用的每个 Agent 都�
 
 新版本会在后台下载，并在 Kettu 重启时安装。
 
+在没有桌面的服务器或开发机上，Linux（x64 或 Arm，glibc 2.28 及以上）或 Apple 芯片的 Mac，改装 Kettu 的 daemon，让你的其他设备连上来：
+
+```sh
+curl -fsSL https://kettu.sh/install | sh
+```
+
+它装在你的用户目录里，不需要 root，也不需要 Node.js；下载的包会对照发布里的校验和检查，再链接 `~/.local/bin/kettu`，并把 daemon 装成开机启动的系统服务。`kettu pair` 添加设备，`kettu update` 升到新版本。在容器里用 `sh -s -- --no-service`，改用 `kettu run` 运行。
+
 ### Agent
 
 请先安装下面至少一个 Agent，Kettu 会在你的系统里找到它。

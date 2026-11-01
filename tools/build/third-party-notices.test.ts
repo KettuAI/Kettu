@@ -9,6 +9,7 @@ import {
   packedPackages,
   readNotice,
   renderNotices,
+  standaloneNotices,
   type Notice,
 } from './third-party-notices.ts'
 
@@ -176,6 +177,13 @@ describe('the notices', () => {
       { name: 'LICENSE', text: 'MIT License for node-pty' },
       { name: 'deps/winpty/LICENSE', text: 'winpty license' },
     ])
+  })
+
+  it("lists a standalone build's bundled packages and the ones beside it, without Electron", () => {
+    const c = path.join(root, 'node_modules', '.pnpm', 'c@1.0.0', 'node_modules', 'c')
+    const notices = standaloneNotices(root, [c, c], ['node-pty'])
+    expect(notices.map((notice) => notice.name)).toEqual(['c', 'node-pty'])
+    expect(() => standaloneNotices(root, [], ['gone'])).toThrow('gone')
   })
 })
 

@@ -7,6 +7,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { cn } from 'cn/vite'
+import { standaloneThirdPartyNotices } from './tools/build/third-party-notices'
 
 const source = (file: string): string => fileURLToPath(new URL(file, import.meta.url))
 
@@ -29,6 +30,8 @@ export default defineConfig({
     react(),
     tailwindcss(),
     cn({ full: true, out: 'src/lib/cn-tables.ts', cwd: source('src/renderer') }),
+    // The daemon's package ships the web client too.
+    standaloneThirdPartyNotices(source('.')),
   ],
   server: {
     // A dev server beside the app: the channel goes on to the host's direct port. The page's
