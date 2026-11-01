@@ -171,6 +171,8 @@ export class Hosts {
         privateKey: options.privateKey,
         plainTextKey: true,
         direct: this.initDirect(),
+        // out/web, beside the daemon's build in out/daemon.
+        webRoot: path.join(options.bundleDir, '../web'),
         terminal: this.initTerminal(),
         // The agent host's socket outlives its restarts, so a device's session finds it again.
         agentHostSocket: this.agent.socketPath ?? undefined,

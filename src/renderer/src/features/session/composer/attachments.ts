@@ -152,10 +152,20 @@ export function pasteAsText(
   removeAttachment(draft, key)
 }
 
-async function addText(draft: string, item: DraftAttachment, bytes: Uint8Array): Promise<void> {
+function addText(draft: string, item: DraftAttachment, bytes: Uint8Array): Promise<void> {
+  return addBytes(draft, item, bytes.buffer as ArrayBuffer, 'text/plain')
+}
+
+/** Adds a file from its bytes, as the web client sends every file, having none on the host's disk. */
+async function addBytes(
+  draft: string,
+  item: DraftAttachment,
+  bytes: ArrayBuffer | Promise<ArrayBuffer>,
+  mimeType: string,
+): Promise<void> {
   try {
     const attachment = await host('attachments.add', {
-      source: { bytes: bytes.buffer as ArrayBuffer, mimeType: 'text/plain', name: item.name },
+      source: { bytes: await bytes, mimeType, name: item.name },
       thumb: null,
     })
     // Removed while it was being added: the host's record goes too.
@@ -203,7 +213,23 @@ export async function pickAttachments(
   kind: 'files' | 'folder',
   folder: string | null,
 ): Promise<number> {
+  if (onWeb()) return attachFiles(draft, await chooseFiles())
   return addAllGranted(draft, await window.kettu.attachments.pick(kind, folder))
+}
+
+// Read when called rather than from lib/platform, so this module loads without a window.
+const onWeb = (): boolean => window.kettu.client === 'web'
+
+/** The browser's own file picker, for the web client; opened while the click that asked lasts. */
+function chooseFiles(): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.multiple = true
+    input.addEventListener('change', () => resolve([...(input.files ?? [])]), { once: true })
+    input.addEventListener('cancel', () => resolve([]), { once: true })
+    input.click()
+  })
 }
 
 /**
@@ -263,6 +289,8 @@ export async function attachFiles(draft: string, files: readonly File[]): Promis
       // An image dragged out of a page has no file on disk; it is added as a pasted one is.
       patchDraftAttachment(draft, item.key, { kind: 'image' })
       void addImage(draft, item, file)
+    } else if (onWeb()) {
+      void addBytes(draft, item, file.arrayBuffer(), file.type || 'application/octet-stream')
     } else {
       const error = i18n.t('composer:attachments.notOnDisk')
       patchDraftAttachment(draft, item.key, { status: 'failed', error })

@@ -1,9 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { forbiddenToDevices } from './allow-list'
 import { deviceId, normalizeDeviceName, parsePortDevice } from './device'
+import { noblePrimitives } from './noble-primitives'
+import { setPrimitives, webCryptoPrimitives } from './primitives'
 
-describe('deviceId', () => {
+describe.each([webCryptoPrimitives, noblePrimitives])('deviceId on $name', (primitives) => {
+  afterEach(() => {
+    setPrimitives(webCryptoPrimitives)
+  })
+
   it("is the hex of the first 16 bytes of the key's SHA-256", async () => {
+    setPrimitives(primitives)
     // SHA-256 of 32 zero bytes is 66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925.
     expect(await deviceId(new Uint8Array(32))).toBe('66687aadf862bd776c8fc18b8e9f8e20')
   })

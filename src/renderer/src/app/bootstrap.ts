@@ -9,7 +9,7 @@ import {
 import { launchTarget } from '@renderer/app/restore'
 import { restoreDraftAttachments } from '@renderer/features/session/composer/attachments'
 import { host } from '@renderer/lib/host'
-import { platform } from '@renderer/lib/platform'
+import { isWeb, platform } from '@renderer/lib/platform'
 import { loadAgentOptions, receiveAgentOptions } from '@renderer/stores/agent-options'
 import { initBrowser } from '@renderer/stores/browser'
 import {
@@ -186,8 +186,9 @@ let wasDisconnected = false
  * failed to load.
  */
 export function bootstrap(): Promise<unknown> {
-  // Platform styles, such as the Windows scrollbars, key off this.
+  // Platform styles, such as the Windows scrollbars, key off these.
   document.documentElement.dataset.platform = platform
+  document.documentElement.dataset.client = window.kettu.client
   installPerfCounters()
   const agents = window.kettu.agents
   agents.onEvent(onHostEvent)
@@ -217,12 +218,15 @@ export function bootstrap(): Promise<unknown> {
 
   const settingsReady = initSettings()
   const themesReady = initThemes()
-  void initUpdates()
-  void initSharing()
-  void initRemote()
-  initHosts()
+  // What main does for the desktop app; the web client has none of it.
+  if (!isWeb) {
+    void initUpdates()
+    void initSharing()
+    void initRemote()
+    initHosts()
+    initBrowser()
+  }
   initTerminals()
-  initBrowser()
   // Before any composer shows, so each finds its draft's attachments.
   void restoreDraftAttachments()
   void takeReturnedMessages()

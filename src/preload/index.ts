@@ -79,6 +79,8 @@ async function fromFiles(files: File[]): Promise<(GrantedAttachment | null)[]> {
 
 const api: KettuApi = {
   platform: process.platform,
+  client: 'desktop',
+  hostPlatform: () => process.platform,
   perf: process.argv.includes('--kettu-perf'),
   systemLocale: systemLocale(),
   app: {

@@ -1,8 +1,16 @@
-// `kettu pair`: a pairing code in the terminal, as Add device shows it in the app, and the
-// question whether to add the device that used it, with its name to edit.
+// `kettu pair`: a pairing code in the terminal, as Add device shows it in the app, with the links
+// a browser opens it with, and the question whether to add the device that used it, with its name
+// to edit.
 
 import { renderUnicodeCompact } from 'uqr'
-import type { PairingDevice, PairingEnd, PairingState } from '@shared/remote/pairing'
+import {
+  browserPairingLink,
+  parsePairingLink,
+  type PairingDevice,
+  type PairingEnd,
+  type PairingPayload,
+  type PairingState,
+} from '@shared/remote/pairing'
 import { normalizeDeviceName } from '@shared/remote/device'
 import type { ControlClient } from './control'
 
@@ -24,6 +32,19 @@ const ENDS: Record<PairingEnd, string> = {
   stopped: 'Remote access stopped, and the code with it.',
 }
 
+/** Where a browser on the owner's own computer reaches this one through an SSH forward. */
+export interface SshForward {
+  /** The direct port, forwarded to the same port on the owner's computer. */
+  port: number
+  /** What the owner types after `ssh`, such as lin@192.168.1.8. */
+  target: string
+}
+
+export interface PairOptions {
+  now?: () => number
+  ssh?: SshForward | null
+}
+
 const KINDS: Record<string, string> = { ios: 'iOS app', desktop: 'Desktop app', web: 'Web' }
 
 /** The QR code black on white whatever the terminal's colors, so a camera reads it. */
@@ -40,6 +61,39 @@ function timeLeft(ms: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
+/**
+ * How the owner reaches this computer over SSH: the address their session came in on when the
+ * command runs in one, else this computer's name.
+ */
+export function sshTarget(
+  env: Record<string, string | undefined>,
+  user: string,
+  name: string,
+): string {
+  // SSH_CONNECTION is "client-ip client-port server-ip server-port".
+  const server = env.SSH_CONNECTION?.trim().split(/\s+/)[2]
+  return `${user}@${server || name}`
+}
+
+/** The browser links for the code's addresses, then the SSH forward and its localhost link. */
+export function browserText(payload: PairingPayload, ssh: SshForward | null): string {
+  const links = payload.addresses.flatMap((address) => browserPairingLink(address, payload) ?? [])
+  let text = ''
+  if (links.length > 0) {
+    text +=
+      'Or open one of these links in a browser on a device on the same network or VPN:\n\n' +
+      links.map((link) => `  ${link}\n`).join('') +
+      '\n'
+  }
+  if (ssh) {
+    const local = browserPairingLink({ host: 'localhost', port: ssh.port }, payload)
+    text +=
+      'Over SSH, run this on your own computer, then open the link below in its browser:\n\n' +
+      `  ssh -L ${ssh.port}:localhost:${ssh.port} ${ssh.target}\n  ${local}\n\n`
+  }
+  return text
+}
+
 function deviceLine(device: PairingDevice): string {
   return [KINDS[device.kind] ?? device.kind, device.model, device.platform]
     .filter(Boolean)
@@ -54,7 +108,7 @@ export function pairDevice(
   client: ControlClient,
   terminal: PairTerminal,
   signal: AbortSignal,
-  now: () => number = Date.now,
+  { now = Date.now, ssh = null }: PairOptions = {},
 ): Promise<number> {
   return new Promise((resolve, reject) => {
     let codeId: number | null = null
@@ -85,10 +139,12 @@ export function pairDevice(
     }
 
     const waiting = (pairing: Extract<PairingState, { state: 'waiting' }>): void => {
+      const payload = parsePairingLink(pairing.link)
       terminal.write(
         `${terminalQr(pairing.link)}\n\n` +
           'Scan it with Kettu on an iPhone or iPad. The same code as a link, which another computer\n' +
           `pastes in Kettu's Settings › Hosts › Add host…:\n\n  ${pairing.link}\n\n` +
+          (payload ? browserText(payload, ssh) : '') +
           'It adds one device, which must reach this computer directly: on the same network, the\n' +
           'same VPN, or at an address of your own.\n\n',
       )

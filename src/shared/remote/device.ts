@@ -2,6 +2,7 @@
 // device's port.
 
 import type { PortChannel } from '../port-channel'
+import { currentPrimitives } from './primitives'
 
 /** A device's id: the first 16 bytes of its X25519 public key's SHA-256, in hex. */
 export const DEVICE_ID = /^[0-9a-f]{32}$/
@@ -41,9 +42,7 @@ export interface PortDevice {
 }
 
 export async function deviceId(publicKey: Uint8Array): Promise<string> {
-  const digest = new Uint8Array(
-    await crypto.subtle.digest('SHA-256', publicKey as Uint8Array<ArrayBuffer>),
-  )
+  const digest = await currentPrimitives().sha256(publicKey)
   return Array.from(digest.subarray(0, 16), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 

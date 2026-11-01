@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  browserPairingLink,
   decodePairing,
   encodePairing,
   MAX_PAIRING_ADDRESSES,
   pairingLink,
+  parseBrowserPairingLink,
   parsePairingLink,
   PAIRING_VERSION,
   type PairingPayload,
@@ -66,5 +68,36 @@ describe('pairing codes', () => {
       encodePairing({ ...payload, addresses: [{ host: 'https://x', port: 1 }] }),
     ).toThrow()
     expect(() => encodePairing({ ...payload, addresses: [{ host: 'x', port: 0 }] })).toThrow()
+  })
+})
+
+describe('browser pairing links', () => {
+  it('open the web client at a host address, the code in the fragment', () => {
+    const link = browserPairingLink({ host: '192.168.1.8', port: 47821 }, payload)!
+    expect(link.startsWith('http://192.168.1.8:47821/pair#')).toBe(true)
+    expect(parseBrowserPairingLink(link)).toEqual(payload)
+  })
+
+  it('put an IPv6 address in brackets and leave out one with a zone', () => {
+    const link = browserPairingLink({ host: 'fd3c:9a1e:5b20::8', port: 47821 }, payload)!
+    expect(new URL(link).host).toBe('[fd3c:9a1e:5b20::8]:47821')
+    expect(parseBrowserPairingLink(link)).toEqual(payload)
+    expect(browserPairingLink({ host: 'fe80::1%en0', port: 47821 }, payload)).toBeNull()
+  })
+
+  it("take the app's link and a link through another address or https", () => {
+    expect(parseBrowserPairingLink(`  ${pairingLink(payload)} `)).toEqual(payload)
+    const code = encodePairing(payload)
+    expect(parseBrowserPairingLink(`http://localhost:47821/pair#${code}`)).toEqual(payload)
+    expect(parseBrowserPairingLink(`https://mac.tail1.ts.net/pair#${code}`)).toEqual(payload)
+  })
+
+  it('refuse other pages, schemes and broken codes', () => {
+    const code = encodePairing(payload)
+    expect(parseBrowserPairingLink(`http://localhost:47821/#${code}`)).toBeNull()
+    expect(parseBrowserPairingLink(`ftp://localhost/pair#${code}`)).toBeNull()
+    expect(parseBrowserPairingLink('http://localhost:47821/pair#')).toBeNull()
+    expect(parseBrowserPairingLink('http://localhost:47821/pair#abc')).toBeNull()
+    expect(parseBrowserPairingLink('not a link')).toBeNull()
   })
 })

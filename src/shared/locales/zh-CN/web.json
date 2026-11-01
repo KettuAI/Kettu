@@ -1,0 +1,32 @@
+{
+  "pair": {
+    "title": "在这个浏览器里用 Kettu",
+    "intro": "在电脑上打开 设置 › 远程访问 › 添加设备，选“浏览器”，用这台设备的相机扫它的二维码，或者把它的链接粘贴到这里。",
+    "linkLabel": "配对链接",
+    "linkPlaceholder": "http://…/pair#…",
+    "notLink": "这不是 Kettu 的配对链接。从电脑上的“添加设备”里复制链接。",
+    "submit": "配对",
+    "connecting": "正在连接电脑…",
+    "waiting": "在电脑上确认",
+    "waitingHint": "电脑上的 Kettu 在问要不要添加“{{name}}”，在那里点添加。",
+    "added": "已添加，正在打开 Kettu…",
+    "again": "重试",
+    "failed": {
+      "void": "这个码已经不能用了：过期了、被关掉了，或者给别的设备用过了。在电脑上重新打开“添加设备”拿一个新的。",
+      "rejected": "电脑的主人没有添加这个浏览器。",
+      "unreachable": "连不上电脑。看看它是否开着、Kettu 是否在运行并打开了远程访问、这台设备是否在同一个网络或 VPN 里。",
+      "update_client": "这个页面比电脑上的 Kettu 旧，刷新一下页面。",
+      "update_host": "电脑上的 Kettu 太旧了，更新电脑上的 Kettu。",
+      "failed": "配对没有完成，再试一次。"
+    },
+    "removed": "这个浏览器已经从电脑上移除了，要在这里用就重新配对。"
+  },
+  "insecure": {
+    "title": "这个页面在网络上没有保护",
+    "body": "对话仍是加密的，但同一网络里的人能改这个页面本身。在不信任的网络里，改用 SSH 转发或 HTTPS（比如 Tailscale 的）。通知也要这两种方式之一才有。"
+  },
+  "connection": {
+    "updated": "电脑上的 Kettu 更新了。",
+    "reload": "刷新"
+  }
+}

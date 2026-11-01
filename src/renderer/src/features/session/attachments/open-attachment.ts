@@ -1,5 +1,6 @@
 import type { Attachment } from '@shared/thread'
 import { fileUrlPath, relativePath } from '@renderer/lib/format'
+import { hostPlatform } from '@renderer/lib/platform'
 import { openFile } from '@renderer/stores/files'
 
 /**
@@ -10,7 +11,7 @@ export async function openAttachmentPath(
   attachment: Pick<Attachment, 'type' | 'uri'>,
   projectPath: string | null,
 ): Promise<void> {
-  const path = attachment.uri ? fileUrlPath(attachment.uri, window.kettu.platform) : null
+  const path = attachment.uri ? fileUrlPath(attachment.uri, hostPlatform()) : null
   if (!path) return
   if (attachment.type === 'file' && projectPath) {
     const inside = relativePath(path, projectPath)

@@ -7,7 +7,7 @@ import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage } from '@renderer/lib/host'
 import { fadeExit } from '@renderer/lib/motion'
-import { isMac } from '@renderer/lib/platform'
+import { hasBand } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useConnectionStore } from '@renderer/stores/connection'
 
@@ -42,7 +42,7 @@ export function HostBanner() {
     <div
       className={cn(
         'pointer-events-none absolute inset-x-0 z-50 flex justify-center',
-        isMac ? 'top-[calc((var(--top-bar)-26px)/2)]' : 'top-[calc((var(--title-bar)-26px)/2)]',
+        hasBand ? 'top-[calc((var(--title-bar)-26px)/2)]' : 'top-[calc((var(--top-bar)-26px)/2)]',
       )}
     >
       <AnimatePresence initial={false}>

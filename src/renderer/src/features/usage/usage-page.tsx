@@ -35,7 +35,7 @@ import {
 } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
-import { isMac } from '@renderer/lib/platform'
+import { hasBand } from '@renderer/lib/platform'
 import { useClock, useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
@@ -172,7 +172,7 @@ export default function UsagePage() {
  * it is a top bar's height, beside the traffic lights, and holds the sidebar toggle.
  */
 function PageBar() {
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && isMac
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && !hasBand
   return (
     <div
       className={cn(

@@ -26,7 +26,7 @@ import { ActivityLog } from './activity'
 import { DeviceStore } from './devices'
 import { HIGH_WATER } from './downloads'
 import { PairingCodes } from './pairing'
-import { findPlaces, isBinary } from './places'
+import { findPlaces, isBinary } from '@shared/remote/places'
 import { RemoteServer } from './server'
 import { connectDevice, type TestDevice } from './testing/device'
 import {

@@ -23,12 +23,15 @@
     "tools/build/third-party-notices.ts",
     "vitest.config.mts",
     "vite.daemon.config.mts",
+    "vite.web.config.mts",
     "src/main/**/*",
     "src/preload/**/*",
     "src/shared/**/*",
     "src/agent-host/**/*",
     "src/terminal-host/**/*",
     "src/remote-host/**/*",
-    "src/daemon/**/*"
+    "src/daemon/**/*",
+    // Runs the web client's link against a host in process.
+    "src/renderer/src/web/link.test.ts"
   ]
 }

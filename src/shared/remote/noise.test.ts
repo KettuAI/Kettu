@@ -1,5 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { noblePrimitives } from './noble-primitives'
 import {
+  CipherState,
   Handshake,
   PROLOGUE,
   generateKeyPair,
@@ -9,6 +11,13 @@ import {
   type NoisePattern,
   type TransportCiphers,
 } from './noise'
+import {
+  currentPrimitives,
+  loadPlatformPrimitives,
+  setPrimitives,
+  webCryptoPrimitives,
+  type Primitives,
+} from './primitives'
 // Cacophony's test vectors (https://github.com/haskell-cryptography/cacophony, vectors/,
 // public domain), only the two protocols the channel runs.
 import vectorFile from './noise-vectors.json'
@@ -44,56 +53,7 @@ function flip(bytes: Uint8Array, index: number): Uint8Array {
 
 afterEach(() => {
   vi.restoreAllMocks()
-})
-
-describe.each(VECTORS)('$protocol_name', (vector) => {
-  const pattern: NoisePattern = vector.protocol_name.includes('psk1') ? 'IKpsk1' : 'IK'
-
-  async function handshakeAs(role: 'initiator' | 'responder'): Promise<Handshake> {
-    const initiatorStatic = await importKeyPair(fromHex(vector.init_static))
-    if (role === 'initiator') {
-      return Handshake.create({
-        role,
-        pattern,
-        staticKey: initiatorStatic,
-        remoteStaticKey: fromHex(vector.init_remote_static),
-        psk: vector.init_psks && fromHex(vector.init_psks[0]),
-        prologue: fromHex(vector.init_prologue),
-        ephemeral: await importKeyPair(fromHex(vector.init_ephemeral)),
-      })
-    }
-    return Handshake.create({
-      role,
-      pattern,
-      staticKey: await importKeyPair(fromHex(vector.resp_static)),
-      accept: (key) => toHex(key) === toHex(initiatorStatic.publicKey),
-      psk: vector.resp_psks && fromHex(vector.resp_psks[0]),
-      prologue: fromHex(vector.resp_prologue),
-      ephemeral: await importKeyPair(fromHex(vector.resp_ephemeral)),
-    })
-  }
-
-  it.each(['initiator', 'responder'] as const)(
-    'reproduces every message and the handshake hash as the %s',
-    async (role) => {
-      const handshake = await handshakeAs(role)
-      let ciphers: TransportCiphers | null = null
-      for (const [index, { payload, ciphertext }] of vector.messages.entries()) {
-        const sending = (index % 2 === 0) === (role === 'initiator')
-        if (!handshake.finished) {
-          if (sending)
-            expect(toHex(await handshake.writeMessage(fromHex(payload)))).toBe(ciphertext)
-          else expect(toHex(await handshake.readMessage(fromHex(ciphertext)))).toBe(payload)
-          continue
-        }
-        ciphers ??= await handshake.split()
-        if (sending) expect(toHex(await ciphers.send.encrypt(fromHex(payload)))).toBe(ciphertext)
-        else expect(toHex(await ciphers.receive.decrypt(fromHex(ciphertext)))).toBe(payload)
-      }
-      expect(ciphers).not.toBeNull()
-      expect(toHex(handshake.handshakeHash)).toBe(vector.handshake_hash)
-    },
-  )
+  setPrimitives(webCryptoPrimitives)
 })
 
 interface Sides {
@@ -140,175 +100,361 @@ async function connect(
   return [await initiator.split(), await responder.split()]
 }
 
-describe('Handshake', () => {
-  it.each(['IK', 'IKpsk1'] as const)('connects two generated keys with %s', async (pattern) => {
-    const { device, initiator, responder } = await sides(pattern)
-    const hello = await responder.readMessage(await initiator.writeMessage(text('hello')))
-    expect(responder.remoteStaticKey).toEqual(device.publicKey)
-    const welcome = await initiator.readMessage(await responder.writeMessage(text('welcome')))
-    expect([hello, welcome]).toEqual([text('hello'), text('welcome')])
-    expect(initiator.handshakeHash).toEqual(responder.handshakeHash)
+const IMPLEMENTATIONS: Primitives[] = [webCryptoPrimitives, noblePrimitives]
 
-    const [toHost, toDevice] = [await initiator.split(), await responder.split()]
-    expect(await toDevice.receive.decrypt(await toHost.send.encrypt(text('up')))).toEqual(
-      text('up'),
-    )
-    expect(await toHost.receive.decrypt(await toDevice.send.encrypt(text('down')))).toEqual(
-      text('down'),
-    )
+describe.each(IMPLEMENTATIONS)('on $name', (primitives) => {
+  beforeEach(() => {
+    setPrimitives(primitives)
   })
 
-  it('binds both sides to the channel prologue', async () => {
-    const host = await generateKeyPair()
-    const initiator = await Handshake.create({
-      role: 'initiator',
-      pattern: 'IK',
-      staticKey: await generateKeyPair(),
-      remoteStaticKey: host.publicKey,
-      prologue: text('kettu-channel/2'),
-    })
-    const responder = await Handshake.create({
-      role: 'responder',
-      pattern: 'IK',
-      staticKey: host,
-      accept: () => true,
-    })
-    expect(new TextDecoder().decode(PROLOGUE)).toBe('kettu-channel/1')
-    await expect(responder.readMessage(await initiator.writeMessage())).rejects.toThrow(
-      'failed to decrypt',
-    )
-  })
+  describe.each(VECTORS)('$protocol_name', (vector) => {
+    const pattern: NoisePattern = vector.protocol_name.includes('psk1') ? 'IKpsk1' : 'IK'
 
-  it('shows the responder the static key before anything after it is decrypted', async () => {
-    const decrypt = vi.spyOn(crypto.subtle, 'decrypt')
-    const seen: { key: string; decrypted: number }[] = []
-    const { device, initiator, responder } = await sides('IK', {
-      accept: async (key) => {
-        seen.push({ key: toHex(key), decrypted: decrypt.mock.calls.length })
-        return false
+    async function handshakeAs(role: 'initiator' | 'responder'): Promise<Handshake> {
+      const initiatorStatic = await importKeyPair(fromHex(vector.init_static))
+      if (role === 'initiator') {
+        return Handshake.create({
+          role,
+          pattern,
+          staticKey: initiatorStatic,
+          remoteStaticKey: fromHex(vector.init_remote_static),
+          psk: vector.init_psks && fromHex(vector.init_psks[0]),
+          prologue: fromHex(vector.init_prologue),
+          ephemeral: await importKeyPair(fromHex(vector.init_ephemeral)),
+        })
+      }
+      return Handshake.create({
+        role,
+        pattern,
+        staticKey: await importKeyPair(fromHex(vector.resp_static)),
+        accept: (key) => toHex(key) === toHex(initiatorStatic.publicKey),
+        psk: vector.resp_psks && fromHex(vector.resp_psks[0]),
+        prologue: fromHex(vector.resp_prologue),
+        ephemeral: await importKeyPair(fromHex(vector.resp_ephemeral)),
+      })
+    }
+
+    it.each(['initiator', 'responder'] as const)(
+      'reproduces every message and the handshake hash as the %s',
+      async (role) => {
+        const handshake = await handshakeAs(role)
+        let ciphers: TransportCiphers | null = null
+        for (const [index, { payload, ciphertext }] of vector.messages.entries()) {
+          const sending = (index % 2 === 0) === (role === 'initiator')
+          if (!handshake.finished) {
+            if (sending)
+              expect(toHex(await handshake.writeMessage(fromHex(payload)))).toBe(ciphertext)
+            else expect(toHex(await handshake.readMessage(fromHex(ciphertext)))).toBe(payload)
+            continue
+          }
+          ciphers ??= await handshake.split()
+          if (sending) expect(toHex(await ciphers.send.encrypt(fromHex(payload)))).toBe(ciphertext)
+          else expect(toHex(await ciphers.receive.decrypt(fromHex(ciphertext)))).toBe(payload)
+        }
+        expect(ciphers).not.toBeNull()
+        expect(toHex(handshake.handshakeHash)).toBe(vector.handshake_hash)
       },
+    )
+  })
+
+  describe('Handshake', () => {
+    it.each(['IK', 'IKpsk1'] as const)('connects two generated keys with %s', async (pattern) => {
+      const { device, initiator, responder } = await sides(pattern)
+      const hello = await responder.readMessage(await initiator.writeMessage(text('hello')))
+      expect(responder.remoteStaticKey).toEqual(device.publicKey)
+      const welcome = await initiator.readMessage(await responder.writeMessage(text('welcome')))
+      expect([hello, welcome]).toEqual([text('hello'), text('welcome')])
+      expect(initiator.handshakeHash).toEqual(responder.handshakeHash)
+
+      const [toHost, toDevice] = [await initiator.split(), await responder.split()]
+      expect(await toDevice.receive.decrypt(await toHost.send.encrypt(text('up')))).toEqual(
+        text('up'),
+      )
+      expect(await toHost.receive.decrypt(await toDevice.send.encrypt(text('down')))).toEqual(
+        text('down'),
+      )
     })
-    const message = await initiator.writeMessage(text('hello'))
-    await expect(responder.readMessage(message)).rejects.toThrow('refused')
-    expect(seen).toEqual([{ key: toHex(device.publicKey), decrypted: 1 }])
-    expect(decrypt).toHaveBeenCalledTimes(1)
-    expect(responder.remoteStaticKey).toBeNull()
-    await expect(responder.writeMessage()).rejects.toThrow('failed')
-    await expect(responder.readMessage(message)).rejects.toThrow('failed')
+
+    it('connects with structured clones of the key pairs, as a page keeps them', async () => {
+      const host = structuredClone(await generateKeyPair())
+      const initiator = await Handshake.create({
+        role: 'initiator',
+        pattern: 'IK',
+        staticKey: structuredClone(await generateKeyPair()),
+        remoteStaticKey: host.publicKey,
+      })
+      const responder = await Handshake.create({
+        role: 'responder',
+        pattern: 'IK',
+        staticKey: host,
+        accept: () => true,
+      })
+      await responder.readMessage(await initiator.writeMessage())
+      await initiator.readMessage(await responder.writeMessage())
+      expect(initiator.handshakeHash).toEqual(responder.handshakeHash)
+    })
+
+    it('binds both sides to the channel prologue', async () => {
+      const host = await generateKeyPair()
+      const initiator = await Handshake.create({
+        role: 'initiator',
+        pattern: 'IK',
+        staticKey: await generateKeyPair(),
+        remoteStaticKey: host.publicKey,
+        prologue: text('kettu-channel/2'),
+      })
+      const responder = await Handshake.create({
+        role: 'responder',
+        pattern: 'IK',
+        staticKey: host,
+        accept: () => true,
+      })
+      expect(new TextDecoder().decode(PROLOGUE)).toBe('kettu-channel/1')
+      await expect(responder.readMessage(await initiator.writeMessage())).rejects.toThrow(
+        'failed to decrypt',
+      )
+    })
+
+    it('shows the responder the static key before anything after it is decrypted', async () => {
+      const decrypt = vi.spyOn(CipherState.prototype, 'decrypt')
+      const seen: { key: string; decrypted: number }[] = []
+      const { device, initiator, responder } = await sides('IK', {
+        accept: async (key) => {
+          seen.push({ key: toHex(key), decrypted: decrypt.mock.calls.length })
+          return false
+        },
+      })
+      const message = await initiator.writeMessage(text('hello'))
+      await expect(responder.readMessage(message)).rejects.toThrow('refused')
+      expect(seen).toEqual([{ key: toHex(device.publicKey), decrypted: 1 }])
+      expect(decrypt).toHaveBeenCalledTimes(1)
+      expect(responder.remoteStaticKey).toBeNull()
+      await expect(responder.writeMessage()).rejects.toThrow('failed')
+      await expect(responder.readMessage(message)).rejects.toThrow('failed')
+    })
+
+    it('fails the first message with a wrong pairing secret', async () => {
+      const { initiator, responder } = await sides('IKpsk1', { psk: new Uint8Array(32).fill(8) })
+      await expect(responder.readMessage(await initiator.writeMessage())).rejects.toThrow(
+        'failed to decrypt',
+      )
+    })
+
+    it('fails on a changed byte in either message', async () => {
+      const first = await sides('IK')
+      const message = await first.initiator.writeMessage(text('hello'))
+      await expect(first.responder.readMessage(flip(message, message.length - 1))).rejects.toThrow(
+        'failed to decrypt',
+      )
+
+      const second = await sides('IK')
+      await second.responder.readMessage(await second.initiator.writeMessage())
+      const answer = await second.responder.writeMessage()
+      await expect(second.initiator.readMessage(flip(answer, 40))).rejects.toThrow(
+        'failed to decrypt',
+      )
+    })
+
+    it('refuses a message that is too short or out of turn', async () => {
+      const { initiator, responder } = await sides('IK')
+      await expect(initiator.readMessage(new Uint8Array(48))).rejects.toThrow('waiting to write')
+      await expect(responder.readMessage(new Uint8Array(40).fill(9))).rejects.toThrow('too short')
+    })
+
+    it('refuses a low-order ephemeral key', async () => {
+      const { initiator, responder } = await sides('IK')
+      const message = await initiator.writeMessage()
+      message.fill(0, 0, 32)
+      await expect(responder.readMessage(message)).rejects.toThrow('key exchange failed')
+    })
+
+    it('checks its options', async () => {
+      const staticKey = await generateKeyPair()
+      const base = { role: 'responder', staticKey, accept: () => true } as const
+      await expect(Handshake.create({ ...base, pattern: 'IKpsk1' })).rejects.toThrow('needs')
+      await expect(
+        Handshake.create({ ...base, pattern: 'IK', psk: new Uint8Array(32) }),
+      ).rejects.toThrow('takes no')
+      await expect(
+        Handshake.create({ ...base, pattern: 'IKpsk1', psk: new Uint8Array(16) }),
+      ).rejects.toThrow('32 bytes')
+    })
+
+    it('splits only once, after the last message', async () => {
+      const { initiator, responder } = await sides('IK')
+      await expect(initiator.split()).rejects.toThrow('not finished')
+      await responder.readMessage(await initiator.writeMessage())
+      await initiator.readMessage(await responder.writeMessage())
+      await initiator.split()
+      await expect(initiator.split()).rejects.toThrow('already split')
+    })
   })
 
-  it('fails the first message with a wrong pairing secret', async () => {
-    const { initiator, responder } = await sides('IKpsk1', { psk: new Uint8Array(32).fill(8) })
-    await expect(responder.readMessage(await initiator.writeMessage())).rejects.toThrow(
-      'failed to decrypt',
-    )
-  })
+  describe('CipherState', () => {
+    it('fails on a changed byte', async () => {
+      const [device, host] = await connect()
+      const sealed = await device.send.encrypt(text('hello'))
+      await expect(host.receive.decrypt(flip(sealed, 2))).rejects.toThrow('failed to decrypt')
+    })
 
-  it('fails on a changed byte in either message', async () => {
-    const first = await sides('IK')
-    const message = await first.initiator.writeMessage(text('hello'))
-    await expect(first.responder.readMessage(flip(message, message.length - 1))).rejects.toThrow(
-      'failed to decrypt',
-    )
+    it('refuses a message past the Noise limit', async () => {
+      const [device, host] = await connect()
+      await expect(device.send.encrypt(new Uint8Array(65520))).rejects.toThrow('too long')
+      await expect(host.receive.decrypt(new Uint8Array(65536))).rejects.toThrow('too long')
+      const sealed = await device.send.encrypt(new Uint8Array(65519))
+      expect(sealed).toHaveLength(65535)
+      expect(await host.receive.decrypt(sealed)).toEqual(new Uint8Array(65519))
+    })
 
-    const second = await sides('IK')
-    await second.responder.readMessage(await second.initiator.writeMessage())
-    const answer = await second.responder.writeMessage()
-    await expect(second.initiator.readMessage(flip(answer, 40))).rejects.toThrow(
-      'failed to decrypt',
-    )
-  })
+    it('fails on a replayed message', async () => {
+      const [device, host] = await connect()
+      const sealed = await device.send.encrypt(text('once'))
+      expect(await host.receive.decrypt(sealed)).toEqual(text('once'))
+      await expect(host.receive.decrypt(sealed)).rejects.toThrow('failed to decrypt')
+    })
 
-  it('refuses a message that is too short or out of turn', async () => {
-    const { initiator, responder } = await sides('IK')
-    await expect(initiator.readMessage(new Uint8Array(48))).rejects.toThrow('waiting to write')
-    await expect(responder.readMessage(new Uint8Array(40).fill(9))).rejects.toThrow('too short')
-  })
+    it('fails on a skipped message', async () => {
+      const [device, host] = await connect()
+      await device.send.encrypt(text('first'))
+      const second = await device.send.encrypt(text('second'))
+      await expect(host.receive.decrypt(second)).rejects.toThrow('failed to decrypt')
+    })
 
-  it('refuses a low-order ephemeral key', async () => {
-    const { initiator, responder } = await sides('IK')
-    const message = await initiator.writeMessage()
-    message.fill(0, 0, 32)
-    await expect(responder.readMessage(message)).rejects.toThrow('key exchange failed')
-  })
+    it('takes nonces in the order calls are made', async () => {
+      const [device, host] = await connect()
+      const words = ['one', 'two', 'three', 'four']
+      const sealed = await Promise.all(words.map((word) => device.send.encrypt(text(word))))
+      for (const [index, word] of words.entries()) {
+        expect(await host.receive.decrypt(sealed[index])).toEqual(text(word))
+      }
+    })
 
-  it('checks its options', async () => {
-    const staticKey = await generateKeyPair()
-    const base = { role: 'responder', staticKey, accept: () => true } as const
-    await expect(Handshake.create({ ...base, pattern: 'IKpsk1' })).rejects.toThrow('needs')
-    await expect(
-      Handshake.create({ ...base, pattern: 'IK', psk: new Uint8Array(32) }),
-    ).rejects.toThrow('takes no')
-    await expect(
-      Handshake.create({ ...base, pattern: 'IKpsk1', psk: new Uint8Array(16) }),
-    ).rejects.toThrow('32 bytes')
-  })
+    it('keeps working once both sides rekey', async () => {
+      const [device, host] = await connect()
+      await host.receive.decrypt(await device.send.encrypt(text('before')))
+      const rekeyed = device.send.rekey()
+      // A call made right after rekey() uses the new key, though it is still being derived.
+      const sealed = device.send.encrypt(text('after'))
+      await rekeyed
+      await host.receive.rekey()
+      expect(await host.receive.decrypt(await sealed)).toEqual(text('after'))
+    })
 
-  it('splits only once, after the last message', async () => {
-    const { initiator, responder } = await sides('IK')
-    await expect(initiator.split()).rejects.toThrow('not finished')
-    await responder.readMessage(await initiator.writeMessage())
-    await initiator.readMessage(await responder.writeMessage())
-    await initiator.split()
-    await expect(initiator.split()).rejects.toThrow('already split')
+    it('fails when only one side rekeys', async () => {
+      const [device, host] = await connect()
+      await device.send.rekey()
+      await expect(host.receive.decrypt(await device.send.encrypt(text('after')))).rejects.toThrow(
+        'failed to decrypt',
+      )
+    })
   })
 })
 
-describe('CipherState', () => {
-  it('fails on a changed byte', async () => {
-    const [device, host] = await connect()
-    const sealed = await device.send.encrypt(text('hello'))
-    await expect(host.receive.decrypt(flip(sealed, 2))).rejects.toThrow('failed to decrypt')
+describe('WebCrypto and noble', () => {
+  const pairs = [
+    { initiator: webCryptoPrimitives, responder: noblePrimitives },
+    { initiator: noblePrimitives, responder: webCryptoPrimitives },
+  ]
+  const cases = pairs.flatMap((pair) =>
+    (['IK', 'IKpsk1'] as const).map((pattern) => ({ ...pair, pattern })),
+  )
+
+  it.each(cases)(
+    'connect a $initiator.name initiator to a $responder.name responder with $pattern',
+    async ({ initiator, responder, pattern }) => {
+      const psk = pattern === 'IKpsk1' ? new Uint8Array(32).fill(7) : undefined
+      setPrimitives(responder)
+      const host = await generateKeyPair()
+      setPrimitives(initiator)
+      const device = await generateKeyPair()
+      const first = await Handshake.create({
+        role: 'initiator',
+        pattern,
+        staticKey: device,
+        remoteStaticKey: host.publicKey,
+        psk,
+      })
+      // The initiator keeps to its own primitives from here on.
+      setPrimitives(responder)
+      const second = await Handshake.create({
+        role: 'responder',
+        pattern,
+        staticKey: host,
+        accept: (key) => toHex(key) === toHex(device.publicKey),
+        psk,
+      })
+      expect(await second.readMessage(await first.writeMessage(text('hello')))).toEqual(
+        text('hello'),
+      )
+      expect(await first.readMessage(await second.writeMessage(text('welcome')))).toEqual(
+        text('welcome'),
+      )
+      expect(first.handshakeHash).toEqual(second.handshakeHash)
+
+      const [toHost, toDevice] = [await first.split(), await second.split()]
+      for (const word of ['up', 'again']) {
+        expect(await toDevice.receive.decrypt(await toHost.send.encrypt(text(word)))).toEqual(
+          text(word),
+        )
+      }
+      expect(await toHost.receive.decrypt(await toDevice.send.encrypt(text('down')))).toEqual(
+        text('down'),
+      )
+      await Promise.all([toHost.send.rekey(), toDevice.receive.rekey()])
+      expect(await toDevice.receive.decrypt(await toHost.send.encrypt(text('rekeyed')))).toEqual(
+        text('rekeyed'),
+      )
+    },
+  )
+
+  it('refuses a key pair the other primitives made', async () => {
+    setPrimitives(noblePrimitives)
+    const raw = await generateKeyPair()
+    setPrimitives(webCryptoPrimitives)
+    const native = await generateKeyPair()
+    const responder = (staticKey: KeyPair) =>
+      Handshake.create({ role: 'responder', pattern: 'IK', staticKey, accept: () => true })
+    await expect(responder(raw)).rejects.toThrow('not a WebCrypto key')
+    setPrimitives(noblePrimitives)
+    await expect(responder(native)).rejects.toThrow('not a noble key')
+    const ephemeral = Handshake.create({
+      role: 'initiator',
+      pattern: 'IK',
+      staticKey: raw,
+      remoteStaticKey: native.publicKey,
+      ephemeral: native,
+    })
+    await expect(ephemeral).rejects.toThrow('not a noble key')
   })
 
-  it('refuses a message past the Noise limit', async () => {
-    const [device, host] = await connect()
-    await expect(device.send.encrypt(new Uint8Array(65520))).rejects.toThrow('too long')
-    await expect(host.receive.decrypt(new Uint8Array(65536))).rejects.toThrow('too long')
-    const sealed = await device.send.encrypt(new Uint8Array(65519))
-    expect(sealed).toHaveLength(65535)
-    expect(await host.receive.decrypt(sealed)).toEqual(new Uint8Array(65519))
+  it('makes an extractable key only on WebCrypto', async () => {
+    const { privateKey } = await generateKeyPair(true)
+    expect(new Uint8Array(await crypto.subtle.exportKey('pkcs8', privateKey))).toHaveLength(48)
+    setPrimitives(noblePrimitives)
+    await expect(generateKeyPair(true)).rejects.toThrow('extractable')
+    await expect(importKeyPair(new Uint8Array(32).fill(7), true)).rejects.toThrow('extractable')
+  })
+})
+
+describe('loadPlatformPrimitives', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
-  it('fails on a replayed message', async () => {
-    const [device, host] = await connect()
-    const sealed = await device.send.encrypt(text('once'))
-    expect(await host.receive.decrypt(sealed)).toEqual(text('once'))
-    await expect(host.receive.decrypt(sealed)).rejects.toThrow('failed to decrypt')
+  it('keeps WebCrypto where crypto.subtle exists', async () => {
+    await loadPlatformPrimitives()
+    expect(currentPrimitives()).toBe(webCryptoPrimitives)
   })
 
-  it('fails on a skipped message', async () => {
-    const [device, host] = await connect()
-    await device.send.encrypt(text('first'))
-    const second = await device.send.encrypt(text('second'))
-    await expect(host.receive.decrypt(second)).rejects.toThrow('failed to decrypt')
-  })
-
-  it('takes nonces in the order calls are made', async () => {
-    const [device, host] = await connect()
-    const words = ['one', 'two', 'three', 'four']
-    const sealed = await Promise.all(words.map((word) => device.send.encrypt(text(word))))
-    for (const [index, word] of words.entries()) {
-      expect(await host.receive.decrypt(sealed[index])).toEqual(text(word))
-    }
-  })
-
-  it('keeps working once both sides rekey', async () => {
-    const [device, host] = await connect()
-    await host.receive.decrypt(await device.send.encrypt(text('before')))
-    const rekeyed = device.send.rekey()
-    // A call made right after rekey() uses the new key, though it is still being derived.
-    const sealed = device.send.encrypt(text('after'))
-    await rekeyed
-    await host.receive.rekey()
-    expect(await host.receive.decrypt(await sealed)).toEqual(text('after'))
-  })
-
-  it('fails when only one side rekeys', async () => {
-    const [device, host] = await connect()
-    await device.send.rekey()
-    await expect(host.receive.decrypt(await device.send.encrypt(text('after')))).rejects.toThrow(
-      'failed to decrypt',
+  it('loads noble where crypto.subtle is missing, as on a page over plain http', async () => {
+    const platform = globalThis.crypto
+    vi.stubGlobal('crypto', { getRandomValues: platform.getRandomValues.bind(platform) })
+    expect(globalThis.crypto.subtle).toBeUndefined()
+    await loadPlatformPrimitives()
+    expect(currentPrimitives()).toBe(noblePrimitives)
+    const [device, host] = await connect('IKpsk1')
+    expect(await host.receive.decrypt(await device.send.encrypt(text('hello')))).toEqual(
+      text('hello'),
     )
   })
 })

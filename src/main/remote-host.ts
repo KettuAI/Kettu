@@ -3,6 +3,7 @@
 // agent host, takes each other host's session on a port of its own, and relays a pairing's
 // progress to whoever opened Add device or Add host.
 
+import { join } from 'node:path'
 import { MessageChannelMain, type MessagePortMain } from 'electron'
 import type {
   MainToRemoteHost,
@@ -34,6 +35,9 @@ import type { RemoteIdentity } from './remote-identity'
 import { UtilityHost } from './utility-host'
 
 const log = createLogger('remote-host')
+
+/** The web client's build, beside main's bundle in out/. */
+const WEB_ROOT = join(__dirname, '../web')
 
 const MAX_DEVICES = 1000
 const MAX_HOSTS = 100
@@ -513,6 +517,7 @@ export class RemoteHost {
       ...(identity ? { privateKey: identity.privateKey } : {}),
       plainTextKey: identity?.plainText ?? false,
       direct: this.initDirect(),
+      webRoot: WEB_ROOT,
       terminal: this.initTerminal(),
       ...(this.device
         ? { device: { privateKey: this.device.privateKey, platform: this.platform } }
