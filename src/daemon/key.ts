@@ -17,7 +17,7 @@ const PRIVATE_FOLDER = 0o700
 const PRIVATE_FILE = 0o600
 
 /** Creates a folder, or narrows an existing one, so only the user can open it. */
-async function privateFolder(folder: string): Promise<void> {
+export async function privateFolder(folder: string): Promise<void> {
   await mkdir(folder, { recursive: true, mode: PRIVATE_FOLDER })
   if (((await stat(folder)).mode & 0o777) !== PRIVATE_FOLDER) await chmod(folder, PRIVATE_FOLDER)
 }
@@ -27,7 +27,7 @@ export function prepareDataFolder(data: string): Promise<void> {
   return privateFolder(data)
 }
 
-const NO_SYSTEM_ENCRYPTION: IdentityCipher = {
+export const NO_SYSTEM_ENCRYPTION: IdentityCipher = {
   available: async () => false,
   encrypt: () => Promise.reject(new Error('The daemon keeps its key without system encryption')),
   // A key the desktop app encrypted, in a data folder copied from it.

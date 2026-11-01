@@ -90,5 +90,8 @@
   },
   "agents": {
     "folderTaken": "这个目录已经属于 {{agent}}。请换一个，或者让 Kettu 新建一个。"
+  },
+  "account": {
+    "browserFailed": "Kettu 没能完成登录。请回到 Kettu 查看原因并重试。"
   }
 }

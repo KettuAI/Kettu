@@ -4,10 +4,11 @@ import type { SectionDef } from './model'
  * What the web client's Settings leave out, by section and row: only what a browser cannot do.
  * The built-in browser runs in the desktop app; a page neither holds the app open nor starts at
  * login, has no badge on a Dock or taskbar, and the browser zooms it itself. Third-party notices
- * ship with the desktop app only.
+ * ship with the desktop app only, and only the desktop app signs in to a Kettu account so far.
  */
 const LEFT_OUT: Partial<Record<SectionDef['id'], readonly string[] | 'all'>> = {
   browser: 'all',
+  account: 'all',
   general: ['confirm-quit', 'background', 'open-at-login'],
   appearance: ['zoom'],
   notifications: ['badge'],

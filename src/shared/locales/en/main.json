@@ -96,5 +96,8 @@
   },
   "agents": {
     "folderTaken": "This folder already belongs to {{agent}}. Choose another one, or let Kettu make a new one."
+  },
+  "account": {
+    "browserFailed": "Kettu couldn’t finish signing in. Go back to Kettu to see why and try again."
   }
 }

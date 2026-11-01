@@ -1,5 +1,5 @@
-// Pull request authors' avatars. The CSP blocks remote images, so main fetches each picture from
-// GitHub's avatar host alone and hands it to the renderer as a data: URL.
+// Pull request authors' and the Kettu account's avatars. The CSP blocks remote images, so main
+// fetches each picture from the avatar hosts alone and hands it to the renderer as a data: URL.
 
 import { createLogger, describeError } from './log'
 import { readBody } from './theme-catalog'
@@ -31,15 +31,36 @@ export function avatarRequestUrl(raw: string): string | null {
   return url.href
 }
 
+// Where GitHub and Google keep the pictures of the identities a Kettu account signs in with.
+const GOOGLE_AVATAR_HOST = /^lh[3-6]\.googleusercontent\.com$/
+// The account row draws a 30 px avatar.
+const ACCOUNT_AVATAR_SIZE = '96'
+
+/** What main fetches for a Kettu account's avatar; null when it is not on GitHub's or Google's host. */
+export function accountAvatarRequestUrl(raw: string): string | null {
+  const github = avatarRequestUrl(raw)
+  if (github) {
+    const url = new URL(github)
+    url.searchParams.set('s', ACCOUNT_AVATAR_SIZE)
+    return url.href
+  }
+  const url = URL.parse(raw)
+  if (!url || url.protocol !== 'https:' || url.username || url.password) return null
+  return GOOGLE_AVATAR_HOST.test(url.host) ? url.href : null
+}
+
 export class Avatars {
   private readonly pictures = new Map<string, string>()
   private readonly loads = new Map<string, Promise<string | null>>()
 
-  constructor(private readonly fetch: AvatarFetch) {}
+  constructor(
+    private readonly fetch: AvatarFetch,
+    private readonly requestUrl: (raw: string) => string | null = avatarRequestUrl,
+  ) {}
 
   /** The picture at an avatar URL as a data: URL; null when it is none or did not load. */
   load(raw: string): Promise<string | null> {
-    const url = avatarRequestUrl(raw)
+    const url = this.requestUrl(raw)
     if (!url) return Promise.resolve(null)
     const picture = this.pictures.get(url)
     if (picture) return Promise.resolve(picture)

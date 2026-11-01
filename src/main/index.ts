@@ -6,19 +6,22 @@ import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import { HOSTS_FILE, type HostsStatus } from '@shared/remote/hosts'
 import type { RemoteStatus } from '@shared/remote/status'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
+import { Account } from './account'
+import { ACCOUNT_URL, AccountApi, accountBaseUrl, clientInfo } from './account/service'
+import { accountFile } from './account/store'
 import { AgentFolders } from './agent-folders'
 import { AgentHost } from './agent-host'
 import { Artifacts, disableDnsPrefetching } from './artifacts'
 import { artifactScheme } from './artifacts/protocol'
 import { AppStateStore } from './app-state'
-import { Avatars } from './avatars'
+import { accountAvatarRequestUrl, Avatars } from './avatars'
 import { applyBadgeTo, setBadgeCount, setBadgeEnabled } from './badge'
 import { BrowserViews } from './browser/views'
 import { BrowserTools } from './browser/tools'
 import { BrowserOriginStore } from './browser/origins'
 import { broadcast } from './events'
 import { HostAdmin } from './host-admin'
-import { locale as currentLocale, setLocale } from './i18n'
+import { locale as currentLocale, setLocale, t } from './i18n'
 import { appInfo, registerIpcHandlers } from './ipc'
 import { MediaGrants, mediaScheme, serveMedia } from './media'
 import { createLogger } from './log'
@@ -148,6 +151,14 @@ async function start(): Promise<void> {
     await avatarsProxy
     return avatarsSession.fetch(url, init) as unknown as Promise<Response>
   })
+  // The Kettu account's requests and avatars, on a session of their own for the same reasons.
+  const accountSession = session.fromPartition('kettu-account')
+  let accountProxy = accountSession.setProxy(sessionProxy(settings.get().proxy))
+  const accountFetch = async (url: string, init: RequestInit): Promise<Response> => {
+    await accountProxy
+    return accountSession.fetch(url, init) as unknown as Promise<Response>
+  }
+  const accountAvatars = new Avatars(accountFetch, accountAvatarRequestUrl)
   // Made once sharing and the updater are, before remote access starts and a device can ask.
   let hostAdmin: HostAdmin | null = null
   const themes = new ThemeStore(themeFolder, themeSources, settings.get().appearance.colorTheme, {
@@ -238,6 +249,36 @@ async function start(): Promise<void> {
       process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text',
   }
   const hostName = (): string => settings.get().remote.name ?? hostname()
+  let accountBase = ACCOUNT_URL
+  try {
+    accountBase = accountBaseUrl(process.env)
+  } catch (error) {
+    log.error(`Signing in to ${ACCOUNT_URL} instead`, error)
+  }
+  const account = await Account.load({
+    file: accountFile(userDataPath),
+    api: new AccountApi(accountBase, accountFetch),
+    cipher: identityCipher,
+    clientInfo: async () =>
+      clientInfo({
+        kind: 'desktop',
+        name: hostName(),
+        os: await systemReleaseForRun(),
+        arch: process.arch,
+        version: app.getVersion(),
+      }),
+    locale: currentLocale,
+    openBrowser: (url) => shell.openExternal(url),
+    bringToFront: () => {
+      showMainWindow()
+      // A window's focus alone leaves the app behind the browser on macOS.
+      if (process.platform === 'darwin') app.focus({ steal: true })
+    },
+    avatar: (url) => accountAvatars.load(url),
+    failureText: () => t('account.browserFailed'),
+    changed: (status) => broadcast('account:changed', status),
+    log: createLogger('account'),
+  })
   const remoteStatus = (): RemoteStatus => {
     const status = remoteHost.status
     return {
@@ -350,6 +391,7 @@ async function start(): Promise<void> {
     busySessions: (timeoutMs) => agentHost.busy(timeoutMs),
     busyTerminals: (timeoutMs) => terminalHost.busy(timeoutMs),
     shutDown: async () => {
+      account.stop()
       // Devices hear that Kettu is stopping before their sessions' agent host goes.
       await Promise.all([remoteHost.stop().then(() => agentHost.stop()), terminalHost.stop()])
       await Promise.all([
@@ -431,12 +473,14 @@ async function start(): Promise<void> {
       void sharingSession.setProxy(sessionProxy(next.proxy))
       themesProxy = themesSession.setProxy(sessionProxy(next.proxy))
       avatarsProxy = avatarsSession.setProxy(sessionProxy(next.proxy))
+      accountProxy = accountSession.setProxy(sessionProxy(next.proxy))
     }
     updater.settingsChanged(next, changed)
   })
 
   registerIpcHandlers({
     settings,
+    account,
     agentFolders,
     themes,
     avatars,

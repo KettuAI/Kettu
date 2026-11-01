@@ -26,6 +26,7 @@ import type {
   UnsavedFile,
 } from '@shared/ipc'
 import { isHarnessId, type HarnessId } from '@shared/thread'
+import type { Account } from './account'
 import type { AgentFolders } from './agent-folders'
 import type { AgentHost } from './agent-host'
 import { grantClipboardFiles, grantPaths } from './attachments'
@@ -58,6 +59,7 @@ const log = createLogger('ipc')
 
 export interface IpcDeps {
   settings: SettingsStore
+  account: Account
   agentFolders: AgentFolders
   themes: ThemeStore
   avatars: Avatars
@@ -333,6 +335,7 @@ let launchToInteractiveMs: number | null = null
 
 export function registerIpcHandlers({
   settings,
+  account,
   agentFolders,
   themes,
   avatars,
@@ -515,6 +518,15 @@ export function registerIpcHandlers({
   handle('artifact:open-external', 2, (_, id, version) => artifacts.openExternal(id, version))
   handle('artifact:export', 2, ({ window }, id, version) => artifacts.export(window, id, version))
   handle('artifact:import', 1, ({ window }, project) => artifacts.import(window, project))
+
+  handle('account:status', 0, () => account.status())
+  handle('account:check', 0, () => account.check())
+  handle('account:sign-in', 0, () => account.signIn())
+  handle('account:cancel-sign-in', 0, () => {
+    account.cancelSignIn()
+    return account.status()
+  })
+  handle('account:sign-out', 0, () => account.signOut())
 
   handle('sharing:status', 0, () => sharing.status())
   handle('sharing:connect', 2, (_, token, accountId) => sharing.connect(token, accountId))

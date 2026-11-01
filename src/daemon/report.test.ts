@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DaemonStatus } from './control'
+import { accountLine } from './account'
 import { devicesReport, runningReport, stoppedReport, terminalReport } from './report'
 
 const status: DaemonStatus = {
@@ -26,9 +27,18 @@ const status: DaemonStatus = {
   },
 }
 
+const ACCOUNT = accountLine({
+  profile: { id: 'acc_1', email: 'ada@example.com', name: 'Ada', avatarUrl: null },
+  subscription: 'none',
+  token: 'refresh',
+  encrypted: false,
+  plainText: true,
+})
+
 describe('runningReport', () => {
   it('says the daemon runs, where its data and key are, and how its hosts are', () => {
-    expect(runningReport(status)).toBe(`Kettu daemon 0.1.0 is running as a service (pid 4242)
+    expect(runningReport(status, ACCOUNT))
+      .toBe(`Kettu daemon 0.1.0 is running as a service (pid 4242)
 Data folder:        /home/ada/.local/share/kettu
 Private key:        in a file only you can read, /home/ada/.local/share/kettu/host.key
 Agent host:         ready (pid 4243)
@@ -36,22 +46,26 @@ Terminal host:      not started
 Remote host:        ready (pid 4244)
 Connected devices:  0
 Direct connections: listening on port 51234 at 192.0.2.10:51234, [fd00::1]:51234
+Account:            signed in as ada@example.com, not subscribed
 `)
   })
 
   it('says how a host fared and how many devices are connected', () => {
-    const report = runningReport({
-      ...status,
-      service: false,
-      key: { ...status.key, private: false },
-      hosts: {
-        agent: { state: 'ready', pid: 7, restarts: 1 },
-        terminal: { state: 'failed', pid: null, restarts: 4 },
-        remote: { state: 'waiting', pid: null, restarts: 1 },
+    const report = runningReport(
+      {
+        ...status,
+        service: false,
+        key: { ...status.key, private: false },
+        hosts: {
+          agent: { state: 'ready', pid: 7, restarts: 1 },
+          terminal: { state: 'failed', pid: null, restarts: 4 },
+          remote: { state: 'waiting', pid: null, restarts: 1 },
+        },
+        connectedDevices: null,
+        direct: null,
       },
-      connectedDevices: null,
-      direct: null,
-    })
+      ACCOUNT,
+    )
     expect(report).toContain('is running in the foreground (pid 4242)')
     expect(report).toContain('Private key:        in a file others can read too, ')
     expect(report).toContain('Agent host:         ready (pid 7, restarted 1 time)')
@@ -63,7 +77,7 @@ Direct connections: listening on port 51234 at 192.0.2.10:51234, [fd00::1]:51234
 
   it('says why direct connections cannot listen, or that they found no address', () => {
     const line = (direct: DaemonStatus['direct']): string | undefined =>
-      runningReport({ ...status, direct })
+      runningReport({ ...status, direct }, ACCOUNT)
         .split('\n')
         .find((row) => row.startsWith('Direct connections:'))
     expect(line({ state: 'failed', port: 51234, reason: 'port_in_use' })).toBe(
@@ -79,14 +93,17 @@ Direct connections: listening on port 51234 at 192.0.2.10:51234, [fd00::1]:51234
   })
 
   it('says when it is stopping', () => {
-    expect(runningReport({ ...status, stopping: true })).toMatch(/^Kettu daemon 0.1.0 is stopping/)
+    expect(runningReport({ ...status, stopping: true }, ACCOUNT)).toMatch(
+      /^Kettu daemon 0.1.0 is stopping/,
+    )
   })
 })
 
 describe('stoppedReport', () => {
-  it('names the version and the data folder', () => {
-    expect(stoppedReport('0.1.0', '/data')).toBe(
-      'Kettu daemon is not running\nVersion:     0.1.0\nData folder: /data\n',
+  it('names the version, the data folder and the account', () => {
+    expect(stoppedReport('0.1.0', '/data', accountLine(null))).toBe(
+      'Kettu daemon is not running\nVersion:     0.1.0\nData folder: /data\n' +
+        'Account:     not signed in; kettu login signs in\n',
     )
   })
 })

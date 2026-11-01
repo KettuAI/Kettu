@@ -1,3 +1,4 @@
+import type { AccountStatus } from './account'
 import type { AgentsApi, DiagnosticsBundle } from './agent-host'
 import type { ArtifactImportResult, ThumbnailPage } from './artifacts'
 import type { GrantedAttachment } from './attachments'
@@ -181,6 +182,13 @@ export interface IpcInvokeContract {
   'artifact:export': { args: [id: string, version: number]; result: boolean }
   // `project`: a registered project's folder, or null for No project.
   'artifact:import': { args: [project: string | null]; result: ArtifactImportResult }
+  'account:status': { args: []; result: AccountStatus }
+  // Reads the account again, refreshing the tokens when needed.
+  'account:check': { args: []; result: AccountStatus }
+  // Opens the browser at the sign-in page; the rest follows as `account:changed`.
+  'account:sign-in': { args: []; result: AccountStatus }
+  'account:cancel-sign-in': { args: []; result: AccountStatus }
+  'account:sign-out': { args: []; result: AccountStatus }
   'sharing:status': { args: []; result: SharingStatus }
   // `accountId`: the account the user chose, or null to use the one the token reaches.
   'sharing:connect': {
@@ -260,6 +268,7 @@ export interface IpcEventContract {
   'app:shortcut': ForwardedKey
   'artifact:blocked': ArtifactBlockedEvent
   'artifact:stopped': ArtifactStoppedEvent
+  'account:changed': AccountStatus
   'sharing:changed': SharingStatus
   'remote:changed': RemoteStatus
   /** Sent only to the page that opened the code. */
@@ -356,6 +365,18 @@ export interface KettuApi {
     import(project: string | null): Promise<ArtifactImportResult>
     onBlocked(listener: (event: ArtifactBlockedEvent) => void): () => void
     onStopped(listener: (event: ArtifactStoppedEvent) => void): () => void
+  }
+  /** The Kettu account; main holds its tokens and makes every request. */
+  account: {
+    /** What main knows, without the network. */
+    status(): Promise<AccountStatus>
+    /** Reads the account again; a sign-in the service ended comes back signed out, saying why. */
+    check(): Promise<AccountStatus>
+    signIn(): Promise<AccountStatus>
+    cancelSignIn(): Promise<AccountStatus>
+    /** Signs out at the service and forgets the sign-in here. */
+    signOut(): Promise<AccountStatus>
+    onChanged(listener: (status: AccountStatus) => void): () => void
   }
   /** Publishing artifacts online; main holds the account's token and makes every request. */
   sharing: {

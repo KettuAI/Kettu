@@ -38,6 +38,8 @@ Packaging on macOS also needs Xcode 26 or later, whose `actool` compiles the app
 
 It builds the web client into `out/web/` as well, which the app and the daemon serve on the direct port while remote access is on: a browser pairs from the link in Settings › Remote access › Add device › Browser or from `kettu pair`. `pnpm dev:web` serves it with hot reload; `KETTU_WEB_HOST=http://localhost:<direct port> pnpm dev:web` passes its channel on to a running host.
 
+Settings › Account and `kettu login` sign in to a Kettu account on `https://www.kettu.sh`, whose pages and `/api/` speak OAuth 2.0 for native apps: the app through the system browser and a loopback redirect, the daemon with a device code. `KETTU_ACCOUNT_URL` points either at another copy of the site and its API, such as `KETTU_ACCOUNT_URL=http://localhost:4321` for one running locally.
+
 After `pnpm build`, `node tools/daemon/package.mjs --out dist/daemon` packages the daemon for this computer as a release does: the pinned Node.js, the daemon, the web client, node-pty as this checkout built it, and `bin/kettu`; `--node <folder>` takes an unpacked Node.js release instead of downloading it. `tools/daemon/install.sh`, which `https://kettu.sh/install` serves, installs a release's package. `KETTU_RELEASES_URL` points it at another place laid out as GitHub's releases, such as a `file://` folder whose `download/v<version>/` holds the package and `kettu-daemon-sha256sums.txt`, for `HOME=<folder> sh tools/daemon/install.sh --version <version> --no-service`; `kettu update` reads the same variable, from a server laid out that way.
 
 What is planned next is in the [roadmap](./ROADMAP.md).
