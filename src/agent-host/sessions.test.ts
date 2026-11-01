@@ -2764,6 +2764,66 @@ describe("a failed turn's message", () => {
     expect(port.entries(sessionId).map((entry) => entry.kind)).toEqual(['user', 'notice'])
   })
 
+  it('goes back to the port that sent it alone, then to the next once that one has gone', async () => {
+    const { t, port } = await setup()
+    const other = t.connect()
+    const sessionId = await newSession(t, port)
+    await other.open(sessionId)
+    await failing(port, sessionId, '/error --silent')
+    await port.until(() => returned(port).length > 0)
+    expect(returned(other)).toEqual([])
+    expect(await other.request('sessions.takeReturned', { sessionId })).toEqual([])
+    expect(await other.request('sessions.takeReturned', {})).toEqual([])
+
+    port.disconnect()
+    await other.until(() => returned(other).length > 0)
+    expect(returned(other)).toEqual([{ type: 'session.returned', sessionId }])
+    expect(await other.request('sessions.takeReturned', { sessionId })).toEqual([
+      { sessionId, content: text('/error --silent') },
+    ])
+    expect(await other.request('sessions.takeReturned', { sessionId })).toEqual([])
+  })
+
+  it('goes back to the port that queued it', async () => {
+    const { t, port } = await setup()
+    const other = t.connect()
+    const sessionId = await newSession(t, port)
+    await other.open(sessionId)
+    await turn(port, sessionId, '/permission')
+    await port.until(() => tools(port, sessionId).some((tool) => tool.permission !== null))
+    const { itemId } = await other.request('sessions.queue', {
+      sessionId,
+      content: text('/error --silent'),
+    })
+    expect(itemId).not.toBeNull()
+    const { requestId, options } = tools(port, sessionId).find(
+      (tool) => tool.permission,
+    )!.permission!
+    await port.request('permissions.respond', { sessionId, requestId, optionId: options[0]!.id })
+    await other.until(() => returned(other).length > 0)
+    expect(returned(port)).toEqual([])
+    expect(await port.request('sessions.takeReturned', {})).toEqual([])
+    expect(await other.request('sessions.takeReturned', { sessionId })).toEqual([
+      { sessionId, content: text('/error --silent') },
+    ])
+  })
+
+  it("goes back to the port that sent a new session's first message", async () => {
+    const { t, port } = await setup()
+    const other = t.connect()
+    const { id: sessionId } = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+      prompt: text('/error --silent'),
+    })
+    await port.until(() => returned(port).length > 0)
+    expect(returned(other)).toEqual([])
+    expect(await other.request('sessions.takeReturned', {})).toEqual([])
+    expect(await port.request('sessions.takeReturned', { sessionId })).toEqual([
+      { sessionId, content: text('/error --silent') },
+    ])
+  })
+
   it('keeps its attachments held until a composer takes it', async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)
