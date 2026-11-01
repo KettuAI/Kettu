@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { avatarRequestUrl, Avatars, type AvatarFetch } from './avatars'
+import { accountAvatarRequestUrl, avatarRequestUrl, Avatars, type AvatarFetch } from './avatars'
 
 const AVATAR = 'https://avatars.githubusercontent.com/u/266790742?v=4'
 const REQUEST = 'https://avatars.githubusercontent.com/u/266790742?v=4&s=64'
@@ -32,6 +32,26 @@ describe('avatarRequestUrl', () => {
     '',
   ])('refuses %j', (url) => {
     expect(avatarRequestUrl(url)).toBeNull()
+  })
+})
+
+describe('accountAvatarRequestUrl', () => {
+  it("takes GitHub's avatars at 96 px and Google's as they are", () => {
+    expect(accountAvatarRequestUrl(AVATAR)).toBe(
+      'https://avatars.githubusercontent.com/u/266790742?v=4&s=96',
+    )
+    const google = 'https://lh3.googleusercontent.com/a/ACg8ocK=s96-c'
+    expect(accountAvatarRequestUrl(google)).toBe(google)
+  })
+
+  it.each([
+    'http://lh3.googleusercontent.com/a/x',
+    'https://lh3.googleusercontent.com.example.com/a/x',
+    'https://drive.googleusercontent.com/x',
+    'https://example.com/avatar.png',
+    'not a url',
+  ])('refuses %j', (url) => {
+    expect(accountAvatarRequestUrl(url)).toBeNull()
   })
 })
 

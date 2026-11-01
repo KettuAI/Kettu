@@ -11,6 +11,8 @@ describe('parseCommand', () => {
     [['service', 'install'], { kind: 'service-install' }],
     [['service', 'uninstall'], { kind: 'service-uninstall' }],
     [['update'], { kind: 'update' }],
+    [['login'], { kind: 'login' }],
+    [['logout'], { kind: 'logout' }],
     [[], { kind: 'help' }],
     [['help'], { kind: 'help' }],
     [['--help'], { kind: 'help' }],

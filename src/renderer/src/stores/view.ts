@@ -84,6 +84,7 @@ export type SettingsSection =
   | 'terminal'
   | 'git'
   | 'notifications'
+  | 'account'
   | 'usage'
   | 'mcp'
   | 'archived'

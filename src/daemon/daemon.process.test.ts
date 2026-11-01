@@ -193,7 +193,9 @@ describeUnix('kettu', () => {
   it('says the daemon is not running before it starts', async () => {
     expect(await kettu('status')).toEqual({
       code: 3,
-      stdout: `Kettu daemon is not running\nVersion:     0.0.0\nData folder: ${data}\n`,
+      stdout:
+        `Kettu daemon is not running\nVersion:     0.0.0\nData folder: ${data}\n` +
+        'Account:     not signed in; kettu login signs in\n',
       stderr: '',
     })
     expect(await kettu('devices')).toMatchObject({

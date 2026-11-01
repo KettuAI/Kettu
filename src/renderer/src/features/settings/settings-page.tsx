@@ -31,6 +31,7 @@ import { GroupLabel, RowGroup, SectionBody } from './rows'
 import { webClusters } from './web-sections'
 import {
   useAboutSection,
+  useAccountSection,
   useArchivedSection,
   useAdvancedSection,
   useAgentsSection,
@@ -64,6 +65,7 @@ export default function SettingsPage() {
       useGeneralSection(),
       useAppearanceSection(),
       useNotificationsSection(),
+      useAccountSection(),
       useHostsSection(),
       useBrowserSection(),
     ],

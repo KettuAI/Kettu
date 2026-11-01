@@ -63,12 +63,26 @@ export function productVersion(plist: string): string | null {
  */
 export async function nodeSystemNameForRun(): Promise<string> {
   osReleaseForRun ??= readOsRelease()
+  return systemName(
+    process.platform,
+    await nodeSystemVersion(),
+    process.arch,
+    await osReleaseForRun,
+  )
+}
+
+/** `systemReleaseForRun` under Node.js, read the same way as `nodeSystemNameForRun`. */
+export async function nodeSystemReleaseForRun(): Promise<string> {
+  osReleaseForRun ??= readOsRelease()
+  return systemRelease(process.platform, await nodeSystemVersion(), await osReleaseForRun)
+}
+
+async function nodeSystemVersion(): Promise<string> {
   const plist =
     process.platform === 'darwin'
       ? await readFile('/System/Library/CoreServices/SystemVersion.plist', 'utf8').catch(() => '')
       : ''
-  const version = productVersion(plist) ?? os.release()
-  return systemName(process.platform, version, process.arch, await osReleaseForRun)
+  return productVersion(plist) ?? os.release()
 }
 
 async function readOsRelease(): Promise<string | null> {

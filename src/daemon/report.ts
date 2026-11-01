@@ -31,7 +31,8 @@ function rows(entries: [string, string][]): string {
   return entries.map(([label, value]) => `${`${label}:`.padEnd(width)} ${value}`).join('\n')
 }
 
-export function runningReport(status: DaemonStatus): string {
+/** `account`: the line `accountLine` gives. */
+export function runningReport(status: DaemonStatus, account: string): string {
   const how = status.service ? 'as a service' : 'in the foreground'
   const state = status.stopping ? 'is stopping' : `is running ${how}`
   const key =
@@ -53,15 +54,17 @@ ${rows([
   ['Remote host', host(status.hosts.remote)],
   ['Connected devices', devices],
   ['Direct connections', directLine(status.direct)],
+  ['Account', account],
 ])}
 `
 }
 
-export function stoppedReport(version: string, dataPath: string): string {
+export function stoppedReport(version: string, dataPath: string, account: string): string {
   return `Kettu daemon is not running
 ${rows([
   ['Version', version],
   ['Data folder', dataPath],
+  ['Account', account],
 ])}
 `
 }

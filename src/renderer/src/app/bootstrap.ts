@@ -11,6 +11,7 @@ import { restoreDraftAttachments } from '@renderer/features/session/composer/att
 import { host } from '@renderer/lib/host'
 import { whenHostHas } from '@renderer/lib/host-features'
 import { isWeb, platform } from '@renderer/lib/platform'
+import { initAccount } from '@renderer/stores/account'
 import { loadAgentOptions, receiveAgentOptions } from '@renderer/stores/agent-options'
 import { initBrowser } from '@renderer/stores/browser'
 import {
@@ -231,6 +232,7 @@ export function bootstrap(): Promise<unknown> {
   if (!isWeb) {
     initHosts()
     initBrowser()
+    void initAccount()
   }
   initTerminals()
   // Before any composer shows, so each finds its draft's attachments.

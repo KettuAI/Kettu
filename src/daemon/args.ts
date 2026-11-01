@@ -23,6 +23,8 @@ export type Command =
   | { kind: 'service-install' }
   | { kind: 'service-uninstall' }
   | { kind: 'update' }
+  | { kind: 'login' }
+  | { kind: 'logout' }
   /** What was wrong with the command line, in a short sentence. */
   | { kind: 'usage'; message: string }
 
@@ -46,6 +48,8 @@ Commands:
   service install              Run the daemon as a service that starts with the computer
   service uninstall            Stop the service and remove it
   update                       Update to the latest release, and the service with it
+  login                        Sign in to a Kettu account, confirmed in a browser on any device
+  logout                       Sign out of the Kettu account
 
 Options:
   -y, --yes                    Change the port without asking
@@ -54,6 +58,7 @@ Options:
 
 Environment:
   KETTU_DAEMON_DATA            The data folder to use instead of the default
+  KETTU_ACCOUNT_URL            The account service to sign in to instead of https://www.kettu.sh
 
 Write an IPv6 address in brackets, as [fd00::1]:4567.
 kettu status and the direct and terminal commands exit with 3 when the daemon is not running.
@@ -118,6 +123,10 @@ function parseWords(words: string[], yes: boolean): Command {
       return extra(0) ?? { kind: 'status' }
     case 'update':
       return extra(0) ?? { kind: 'update' }
+    case 'login':
+      return extra(0) ?? { kind: 'login' }
+    case 'logout':
+      return extra(0) ?? { kind: 'logout' }
     case 'pair':
       return extra(0) ?? { kind: 'pair' }
     case 'devices':

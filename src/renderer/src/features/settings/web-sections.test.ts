@@ -28,6 +28,7 @@ describe('webClusters', () => {
         ]),
         section('appearance', ['theme', 'color-mode', 'zoom', 'text-size']),
         section('notifications', ['preview', 'permission', 'sound', 'badge']),
+        section('account', ['account', 'subscription']),
         section('hosts', ['list']),
       ],
       // A group with nothing the web client keeps leaves no gap in the list.
