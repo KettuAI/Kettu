@@ -4,7 +4,7 @@
 // page hides it, and a call that comes anyway is refused.
 
 import type { HostEvent } from '@shared/agent-host'
-import type { KettuApi } from '@shared/ipc'
+import type { AppCommand, KettuApi } from '@shared/ipc'
 import { matchLocale } from '@shared/locale'
 import type { PortConnectionState } from '@shared/port-rpc'
 import type { Platform } from '@shared/platform'
@@ -17,14 +17,15 @@ import type {
   HostInfo,
 } from '@shared/remote/host-admin'
 import type { TerminalEvent } from '@shared/terminal-host'
-import { BUILTIN_THEME_ID } from '@shared/themes'
 import { useWebHostStore, type WebHost } from '@renderer/stores/web-host'
 import { frameArtifact } from './frames'
 import { folderOf, homeStart } from './host-path'
 import { askHostPath, type HostPathPurpose } from './host-path-request'
 import type { HostLink, LinkError, LinkState } from './link'
 import { downloadFile, mediaRequest } from './media'
+import { browserNotifications, notifyAttention, notifyTest } from './notifications'
 import type { WebSettings } from './settings'
+import { pickThemeFile, webThemes, type AdminCall } from './themes'
 
 function unsupported(what: string): Promise<never> {
   const error: LinkError = {
@@ -63,6 +64,8 @@ export interface WebHostContext {
   known: { name: string; deviceName: string }
   /** Clears what this browser keeps for the host and goes back to pairing. */
   forget(): Promise<void>
+  /** This browser's storage for the host, which serves the page from its own origin. */
+  storage: Pick<Storage, 'getItem' | 'setItem'> | null
 }
 
 /** The page's address as a direct one, with the port its scheme implies when it names none. */
@@ -129,7 +132,7 @@ function askPath(
 export function webApi(link: HostLink, settings: WebSettings, context: WebHostContext): KettuApi {
   // The last welcome's, kept while the link reconnects.
   let hostSystem: Platform | null = null
-  const admin = <M extends HostAdminMethod>(
+  const admin: AdminCall = <M extends HostAdminMethod>(
     method: M,
     ...params: HostAdminParams<M> extends undefined ? [] : [HostAdminParams<M>]
   ): Promise<HostAdminResult<M>> => link.request(method, params[0]) as Promise<HostAdminResult<M>>
@@ -185,6 +188,20 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
     useWebHostStore.setState({ host: { ...host, device: { ...host.device, name: message.name } } })
   })
 
+  // What a notification's click opens, as main sends a window its menu's commands.
+  const commands = new Set<(command: AppCommand) => void>()
+  adminEvent('attention', ({ attention }) => {
+    notifyAttention(attention, {
+      notifications: browserNotifications(),
+      settings: () => settings.current(),
+      inFront: () => document.visibilityState === 'visible' && document.hasFocus(),
+      open: (command) => {
+        window.focus()
+        for (const listener of commands) listener(command)
+      },
+    })
+  })
+
   const connectionListener = (listener: (state: PortConnectionState) => void): (() => void) => {
     let last: PortConnectionState | null = null
     return link.onState(() => {
@@ -207,7 +224,10 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       respondQuit: async () => {},
       onConfirmQuit: never,
       setUnsaved: () => {},
-      onCommand: never,
+      onCommand: (listener) => {
+        commands.add(listener)
+        return () => commands.delete(listener)
+      },
       reportInteractive: () => {},
       perfMetrics: () => unsupported('measure performance'),
       onShortcut: never,
@@ -215,7 +235,12 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
     artifacts: {
       open: async (id) => ({ url: frameArtifact(id) }),
       close: async () => {},
-      thumbnail: async () => null,
+      // Only a desktop host captures previews; the daemon's artifacts show none.
+      thumbnail: async (id, version, layout) => {
+        const known = useWebHostStore.getState().info
+        if (known && !known.thumbnails) return null
+        return admin('artifacts.thumbnail', { id, version, layout }).catch(() => null)
+      },
       openExternal: () => unsupported('open an artifact outside the app'),
       export: async (id, version) => {
         const read = (await link.request('artifacts.read', { id, version })) as {
@@ -273,17 +298,19 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       renameAgent: (agentId, name) => done(admin('settings.renameAgent', { agentId, name })),
       removeAgent: (agentId, trash) => done(admin('settings.removeAgent', { agentId, trash })),
     },
-    themes: {
-      get: async () => ({ installed: [], chosen: BUILTIN_THEME_ID, failed: null }),
-      install: () => unsupported('install themes'),
-      replace: () => unsupported('install themes'),
-      remove: () => unsupported('remove themes'),
-      export: () => unsupported('export themes'),
-      reveal: () => unsupported('show files'),
-      catalog: async () => ({ status: 'unreachable' }),
-      installCatalog: () => unsupported('install themes'),
-      onChanged: never,
-    },
+    themes: webThemes({
+      admin,
+      onHostChanged: (listener) => adminEvent('themes.changed', ({ themes }) => listener(themes)),
+      onConnected: (listener) =>
+        link.onState((state) => {
+          if (state.kind === 'connected') listener()
+        }),
+      settings,
+      storage: context.storage,
+      pickFile: pickThemeFile,
+      download: downloadFile,
+      copyPath,
+    }),
     avatars: { load: async () => null },
     loginItem: { getStatus: async () => ({ available: false, requiresApproval: false }) },
     // A browser has no system dialog for the host's files, so the path is typed in the page.
@@ -343,7 +370,18 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       reveal: () => unsupported('show files'),
       openExternal: () => unsupported('open files in another app'),
     },
-    notifications: { test: async () => false },
+    notifications: {
+      test: async () => {
+        const { i18n } = await import('@renderer/lib/i18n')
+        return notifyTest(
+          { notifications: browserNotifications(), settings: () => settings.current() },
+          {
+            title: i18n.t('web:notifications.testTitle'),
+            body: i18n.t('web:notifications.testBody'),
+          },
+        )
+      },
+    },
     updates: {
       getStatus: () => admin('updates.status'),
       check: () => admin('updates.check'),

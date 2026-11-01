@@ -118,6 +118,7 @@ import {
   SendKey,
   ShellPicker,
   TestNotification,
+  WebNotificationsNote,
   TextSize,
   WithKeys,
   Zoom,
@@ -340,6 +341,7 @@ export function useAppearanceSection(): SectionDef {
 
 export function useNotificationsSection(): SectionDef {
   const { t } = useTranslation('settings')
+  const onHost = useHostContext()
   const en = english()
   const when = group('when', t('notifications.groups.when'))
   const how = group('how', t('notifications.groups.how'))
@@ -352,6 +354,7 @@ export function useNotificationsSection(): SectionDef {
       group: group('preview', t('notifications.groups.preview'), {
         actions: <TestNotification />,
         plain: true,
+        ...(isWeb && { note: <WebNotificationsNote /> }),
       }),
       layout: 'custom',
       render: () => <NotificationPreview />,
@@ -420,7 +423,7 @@ export function useNotificationsSection(): SectionDef {
   return {
     id: 'notifications',
     title: t('sections.notifications'),
-    description: t('pages.notifications'),
+    description: t('pages.notifications', onHost),
     icon: BellIcon,
     rows,
   }

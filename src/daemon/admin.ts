@@ -1,13 +1,16 @@
 // The daemon's answers to its owner's devices beyond their sessions, as main's, from its own
-// settings and hosts. It publishes no artifacts and is not updated from Settings, and every change
-// of the settings reaches the hosts that read them.
+// settings, hosts and themes folder. It publishes no artifacts, captures no previews and is not
+// updated from Settings, and every change of the settings reaches the hosts that read them.
 
 import { mkdir, rename } from 'node:fs/promises'
 import path from 'node:path'
+import { BUILTIN_THEME_ID } from '@shared/themes'
 import { AgentFolders } from '../main/agent-folders'
 import { AdminError, HostAdmin } from '../main/host-admin'
 import type { SettingsStore } from '../main/settings'
 import { nodeSystemNameForRun } from '../main/system-name'
+import { ThemeCatalog } from '../main/theme-catalog'
+import { readThemeFolder, readThemeSources, ThemeStore } from '../main/themes'
 import { ControlError } from './control'
 import type { Hosts } from './hosts'
 
@@ -26,6 +29,7 @@ export type DaemonHosts = Pick<
   | 'restart'
   | 'adminEvent'
   | 'settingsChanged'
+  | 'onAttention'
 >
 
 export interface DaemonAdminOptions {
@@ -52,17 +56,33 @@ function unlessStopped<T>(run: () => T): T | null {
 }
 
 /** Answers the owner's devices, and passes every change of the settings to the hosts. */
-export function startDaemonAdmin({
+export async function startDaemonAdmin({
   dataPath,
   version,
   settings,
   hosts,
-}: DaemonAdminOptions): HostAdmin {
+}: DaemonAdminOptions): Promise<HostAdmin> {
+  const themesDir = path.join(dataPath, 'themes')
+  const sourcesFile = path.join(dataPath, 'theme-sources.json')
+  let admin: HostAdmin | null = null
+  const themes = new ThemeStore(
+    await readThemeFolder(themesDir),
+    await readThemeSources(sourcesFile),
+    BUILTIN_THEME_ID,
+    {
+      dir: themesDir,
+      sourcesFile,
+      catalog: new ThemeCatalog((url, init) => fetch(url, init)),
+      // The daemon has no window to show a theme in; each device shows the one it chose.
+      select: () => {},
+      changed: () => admin?.themesChanged(themes.hostThemes()),
+    },
+  )
   const removed = path.join(dataPath, 'removed-agent-config')
   const agentFolders = new AgentFolders(settings, path.join(dataPath, 'agent-config'), (folder) =>
     setAside(folder, removed),
   )
-  const admin = new HostAdmin({
+  admin = new HostAdmin({
     settings,
     agentFolders,
     platform: process.platform,
@@ -98,10 +118,13 @@ export function startDaemonAdmin({
       updates: false,
       remoteSwitch: false,
       remoteReset: false,
+      thumbnails: false,
     }),
     restart: (which) => void hosts.restart(which),
     sharing: null,
     updates: null,
+    themes,
+    thumbnail: null,
     remoteAlwaysOn: true,
     send: (event, deviceId) => hosts.adminEvent(event, deviceId),
   })
@@ -112,5 +135,6 @@ export function startDaemonAdmin({
     if (changed.has('remote')) admin.remoteChanged(hosts.remoteAccess())
   })
   hosts.onRemoteChanged(() => admin.remoteChanged(hosts.remoteAccess()))
+  hosts.onAttention((message) => admin.attention(message))
   return admin
 }

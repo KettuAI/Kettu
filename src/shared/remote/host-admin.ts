@@ -2,10 +2,19 @@
 // host-level actions of the Settings page. The remote host hands each call to its parent, the
 // desktop app's main process or the daemon, which runs it with the checks of the local page.
 
+import type { ThumbnailPage } from '../artifacts'
+import type { HostToMain } from '../host-control'
 import type { AppInfo, RemotePairingEvent } from '../ipc'
 import type { SettingsFile, SettingsPatch } from '../settings'
 import type { SharingConnectResult, SharingResult, SharingStatus } from '../sharing'
 import type { AgentId, HarnessId } from '../thread'
+import type {
+  CatalogInstallResult,
+  CatalogState,
+  InstalledTheme,
+  ThemeInstallResult,
+  ThemeLoadFailure,
+} from '../themes'
 import type { UpdateStatus } from '../updates'
 import type { DeviceActivity } from './activity'
 import type { RemoteStatus } from './status'
@@ -115,7 +124,30 @@ export interface HostInfo extends AppInfo {
   remoteSwitch: boolean
   /** Resetting remote access to a new identity, which the desktop app has and the daemon not yet. */
   remoteReset: boolean
+  /** Capturing artifact previews, which the desktop app does and the daemon cannot. */
+  thumbnails: boolean
 }
+
+/** The host's themes folder: the themes it holds, and why the others fail. */
+export interface HostThemes {
+  installed: InstalledTheme[]
+  failed: { id: string; failure: ThemeLoadFailure }[]
+}
+
+/**
+ * An install's answer to a device: whether the device now shows the theme, as a window does after
+ * installing one, and not after updating it from the catalog.
+ */
+export type DeviceThemeInstall<R> = R extends { status: 'installed' } ? R & { show: boolean } : R
+
+type AttentionMessage = Extract<HostToMain, { type: 'host:attention' }>
+
+/** What the host would notify its own window about, sent to its owner's devices. */
+export type HostAttention = AttentionMessage extends infer M
+  ? M extends unknown
+    ? Omit<M, 'type'>
+    : never
+  : never
 
 /** The calls an owner's device makes of the host's parent, by method. */
 export interface HostAdminContract {
@@ -163,6 +195,26 @@ export interface HostAdminContract {
   'updates.cancel': { params: undefined; result: null }
   'updates.restart': { params: undefined; result: null }
   'updates.dismiss': { params: undefined; result: null }
+  'themes.get': { params: undefined; result: HostThemes }
+  /** Installs a theme file the device read, named `file`, or names the theme it would replace. */
+  'themes.add': {
+    params: { file: string; text: string }
+    result: DeviceThemeInstall<ThemeInstallResult>
+  }
+  'themes.replace': { params: { token: string }; result: DeviceThemeInstall<ThemeInstallResult> }
+  'themes.remove': { params: { id: string }; result: null }
+  /** Where an installed theme's file is on the host. */
+  'themes.path': { params: { id: string }; result: string }
+  'themes.catalog': { params: { refresh: boolean }; result: CatalogState }
+  'themes.installCatalog': {
+    params: { id: string }
+    result: DeviceThemeInstall<CatalogInstallResult>
+  }
+  /** An artifact version's preview as a data URL; null when it cannot be captured. */
+  'artifacts.thumbnail': {
+    params: { id: string; version: number; layout: ThumbnailPage[] | null }
+    result: string | null
+  }
 }
 
 export type HostAdminMethod = keyof HostAdminContract
@@ -200,6 +252,14 @@ const METHODS: Record<HostAdminMethod, true> = {
   'updates.cancel': true,
   'updates.restart': true,
   'updates.dismiss': true,
+  'themes.get': true,
+  'themes.add': true,
+  'themes.replace': true,
+  'themes.remove': true,
+  'themes.path': true,
+  'themes.catalog': true,
+  'themes.installCatalog': true,
+  'artifacts.thumbnail': true,
 }
 
 export function isHostAdminMethod(method: string): method is HostAdminMethod {
@@ -216,6 +276,8 @@ export type HostAdminEvent =
   | { type: 'remote.pairing'; event: RemotePairingEvent }
   | { type: 'sharing.changed'; status: SharingStatus }
   | { type: 'updates.changed'; status: UpdateStatus }
+  | { type: 'themes.changed'; themes: HostThemes }
+  | { type: 'attention'; attention: HostAttention }
 
 const EVENTS: Record<HostAdminEvent['type'], true> = {
   'settings.changed': true,
@@ -223,6 +285,8 @@ const EVENTS: Record<HostAdminEvent['type'], true> = {
   'remote.pairing': true,
   'sharing.changed': true,
   'updates.changed': true,
+  'themes.changed': true,
+  attention: true,
 }
 
 export function isHostAdminEvent(event: { type?: unknown }): event is HostAdminEvent {

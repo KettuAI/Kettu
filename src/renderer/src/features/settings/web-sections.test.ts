@@ -27,6 +27,7 @@ describe('webClusters', () => {
           'send-key',
         ]),
         section('appearance', ['theme', 'color-mode', 'zoom', 'text-size']),
+        section('notifications', ['preview', 'permission', 'sound', 'badge']),
         section('hosts', ['list']),
       ],
       // A group with nothing the web client keeps leaves no gap in the list.
@@ -39,6 +40,7 @@ describe('webClusters', () => {
       [
         ['general', ['language', 'session-titles', 'send-key']],
         ['appearance', ['theme', 'color-mode', 'text-size']],
+        ['notifications', ['preview', 'permission', 'sound']],
         ['hosts', ['list']],
       ],
       [

@@ -50,6 +50,7 @@ import type { Sharing } from './sharing'
 import { framesSettled, isRevoked } from './subframes'
 import { systemNameForRun } from './system-name'
 import type { TerminalHost } from './terminal-host'
+import { exportThemeFile, installThemeFile, revealThemeFile } from './theme-dialogs'
 import type { ThemeStore } from './themes'
 import type { Updater } from './updater'
 
@@ -368,11 +369,11 @@ export function registerIpcHandlers({
   handle('login-item:status', 0, () => loginItemStatus())
 
   handle('themes:get', 0, () => themes.refresh())
-  handle('themes:install', 0, ({ window }) => themes.install(window))
+  handle('themes:install', 0, ({ window }) => installThemeFile(themes, window))
   handle('themes:replace', 1, (_, token) => themes.replace(token))
   handle('themes:remove', 1, (_, id) => themes.remove(id))
-  handle('themes:export', 1, ({ window }, text) => themes.export(window, text))
-  handle('themes:reveal', 1, (_, id) => themes.reveal(id))
+  handle('themes:export', 1, ({ window }, text) => exportThemeFile(themes, window, text))
+  handle('themes:reveal', 1, (_, id) => revealThemeFile(themes, id))
   handle('themes:catalog', 1, (_, refresh) => themes.catalog(refresh))
   handle('themes:install-catalog', 1, (_, id) => themes.installCatalog(id))
   handle('avatars:load', 1, (_, url) => {

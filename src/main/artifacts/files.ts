@@ -7,10 +7,10 @@ import { pathToFileURL } from 'node:url'
 import { app, type BrowserWindow, dialog, shell } from 'electron'
 import { ARTIFACT_ID, type ArtifactImportResult } from '@shared/artifacts'
 import type { ArtifactContentResult } from '@shared/host-control'
+import { safeName } from '@shared/file-name'
 import { isInside } from './protocol'
 
 const MAX_PROJECT_CHARS = 4_096
-const MAX_NAME_CHARS = 100
 const HTML_FILTER = { name: 'HTML', extensions: ['html', 'htm'] }
 
 /** An artifact id and a version number from the renderer, checked. */
@@ -18,14 +18,6 @@ export function parseVersion(id: unknown, version: unknown): { id: string; versi
   if (typeof id !== 'string' || !ARTIFACT_ID.test(id)) throw new Error('Not an artifact id')
   if (!Number.isSafeInteger(version) || (version as number) < 1) throw new Error('Not a version')
   return { id, version: version as number }
-}
-
-/** A file name from a title: nothing a file system on any platform refuses, never empty. */
-export function safeName(title: string, fallback: string): string {
-  const cleaned = title.replace(/[<>:"/\\|?*\p{Cc}]/gu, '-')
-  const capped = Array.from(cleaned.replace(/^[. ]+|[. ]+$/g, '')).slice(0, MAX_NAME_CHARS)
-  const name = capped.join('').replace(/[. ]+$/, '')
-  return name === '' ? fallback : name
 }
 
 export interface ArtifactFilesDeps {

@@ -621,6 +621,7 @@
     "general": "界面语言、输入方式，以及新会话和启动时的行为。",
     "appearance": "主题、颜色模式、缩放和文字大小。改动立即生效。",
     "notifications": "只在 Kettu 的所有窗口都不在前台时提醒你，免得打断正在看的内容。",
+    "notifications_web": "只在这个页面不在前台时提醒你，免得打断正在看的内容。",
     "agents": "你选来干活的 Agent，每个有自己的账号和额度。同一个 Harness 能有几个 Agent，比如一个用订阅、一个用公司的 API key。",
     "terminal": "侧边面板里的终端用哪个 Shell，以及它的字号。",
     "git": "顶栏的分支与更改、Pull Request 和它的检查结果，都靠下面两个工具。",

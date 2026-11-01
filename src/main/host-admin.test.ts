@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import { join } from 'node:path'
@@ -9,6 +10,8 @@ import type { UpdateStatus } from '@shared/updates'
 import { AgentFolders } from './agent-folders'
 import { HostAdmin, type AdminRemote, type AdminUpdates, type HostAdminDeps } from './host-admin'
 import { SettingsStore } from './settings'
+import { CATALOG_URL, ThemeCatalog } from './theme-catalog'
+import { ThemeStore } from './themes'
 
 const PHONE = 'a'.repeat(32)
 const TABLET = 'b'.repeat(32)
@@ -16,6 +19,8 @@ const posixIt = it.skipIf(process.platform === 'win32')
 
 let dir: string
 let settings: SettingsStore
+// What the theme catalog's fake fetch answers, by path under CATALOG_URL.
+let served: Record<string, string> = {}
 
 beforeEach(async () => {
   dir = await mkdtemp(join(os.tmpdir(), 'kettu-host-admin-'))
@@ -63,6 +68,22 @@ function setup(overrides: Partial<HostAdminDeps> = {}) {
     retryDirect: () => {},
   }
   const trashed: string[] = []
+  const hostSelect = vi.fn<(id: string) => void>()
+  const themes: ThemeStore = new ThemeStore(
+    { installed: [], failed: new Map() },
+    new Map(),
+    'kettu',
+    {
+      dir: join(dir, 'themes'),
+      sourcesFile: join(dir, 'theme-sources.json'),
+      catalog: new ThemeCatalog(async (url) => {
+        const body = served[url.slice(CATALOG_URL.length)]
+        return body === undefined ? new Response(null, { status: 404 }) : new Response(body)
+      }),
+      select: hostSelect,
+      changed: () => admin.themesChanged(themes.hostThemes()),
+    },
+  )
   const agentFolders = new AgentFolders(settings, join(dir, 'agent-config'), async (folder) => {
     trashed.push(folder)
   })
@@ -82,17 +103,20 @@ function setup(overrides: Partial<HostAdminDeps> = {}) {
       updates: false,
       remoteSwitch: true,
       remoteReset: true,
+      thumbnails: true,
     }),
     restart: (which) => void restarted.push(which),
     sharing: null,
     updates: null,
+    themes,
+    thumbnail: null,
     send: (event, deviceId) => void sent.push({ event, deviceId }),
     ...overrides,
   })
   settings.onChange((next) => admin.settingsChanged(next))
   const call = (method: string, params?: unknown, deviceId = PHONE) =>
     admin.answer(deviceId, method, params)
-  return { admin, call, sent, restarted, closed, answered, listeners, trashed }
+  return { admin, call, sent, restarted, closed, answered, listeners, trashed, hostSelect }
 }
 
 describe("HostAdmin's settings", () => {
@@ -338,6 +362,118 @@ describe("HostAdmin's remote access switch", () => {
       type: 'settings.changed',
       settings: { remote: { enabled: true } },
     })
+  })
+})
+
+describe("HostAdmin's themes", () => {
+  const theme = (name: string, dark: Record<string, string> = {}) =>
+    JSON.stringify({ kettuTheme: 1, name, light: {}, dark: { colors: dark } })
+
+  function serveCatalog(text: string, version: string) {
+    const { name } = JSON.parse(text) as { name: string }
+    const entry = {
+      id: 'nord',
+      name,
+      author: 'Someone',
+      version,
+      license: 'MIT',
+      file: 'themes/nord.json',
+      sha256: createHash('sha256').update(text).digest('hex'),
+      preview: { light: {}, dark: {} },
+    }
+    served = {
+      'index.json': JSON.stringify({ kettuCatalog: 1, themes: [entry] }),
+      'themes/nord.json': text,
+    }
+  }
+
+  it("installs a device's theme for that device, leaving the host's own window", async () => {
+    const { call, sent, hostSelect } = setup()
+    expect(await call('themes.add', { file: 'nord.json', text: theme('Nord') })).toEqual({
+      result: { status: 'installed', id: 'nord', ignored: [], show: true },
+    })
+    expect(hostSelect).not.toHaveBeenCalled()
+    expect(sent.at(-1)).toEqual({
+      event: {
+        type: 'themes.changed',
+        themes: { installed: [expect.objectContaining({ id: 'nord' })], failed: [] },
+      },
+      deviceId: null,
+    })
+    const conflict = await call('themes.add', {
+      file: 'nord.json',
+      text: theme('Nord', { 'bg-app': '#000' }),
+    })
+    expect(conflict).toMatchObject({ result: { status: 'conflict', installedName: 'Nord' } })
+    const { token } = (conflict as { result: { token: string } }).result
+    expect(await call('themes.replace', { token })).toMatchObject({
+      result: { status: 'installed', id: 'nord', show: true },
+    })
+    expect(hostSelect).not.toHaveBeenCalled()
+    expect(await call('themes.add', { file: 5, text: '' })).toMatchObject({
+      error: { code: 'invalid_params' },
+    })
+    expect(await call('themes.add', { file: 'x.json', text: null })).toMatchObject({
+      error: { code: 'invalid_params' },
+    })
+  })
+
+  it('shows a catalog theme on the device that installs it, but not after an update', async () => {
+    const { call } = setup()
+    serveCatalog(theme('Nord'), '1.0.0')
+    expect(await call('themes.catalog', { refresh: true })).toMatchObject({
+      result: { status: 'ok', themes: [{ id: 'nord', action: 'install' }] },
+    })
+    expect(await call('themes.installCatalog', { id: 'nord' })).toMatchObject({
+      result: { status: 'installed', id: 'nord', show: true },
+    })
+    serveCatalog(theme('Nord', { 'bg-app': '#111' }), '1.1.0')
+    expect(await call('themes.catalog', { refresh: true })).toMatchObject({
+      result: { status: 'ok', themes: [{ id: 'nord', action: 'update' }] },
+    })
+    expect(await call('themes.installCatalog', { id: 'nord' })).toMatchObject({
+      result: { status: 'installed', id: 'nord', show: false },
+    })
+  })
+})
+
+describe("HostAdmin's previews and attention", () => {
+  it("gives a desktop host's preview, and says when the host has none", async () => {
+    const thumbnail = vi.fn(async () => 'data:image/png;base64,AAAA')
+    const desktop = setup({ thumbnail })
+    const layout = [{ x: 0, y: 0, width: 10, height: 10 }]
+    expect(await desktop.call('artifacts.thumbnail', { id: 'a1', version: 2, layout })).toEqual({
+      result: 'data:image/png;base64,AAAA',
+    })
+    expect(thumbnail).toHaveBeenCalledWith('a1', 2, layout)
+    expect(
+      await setup().call('artifacts.thumbnail', { id: 'a1', version: 2, layout: null }),
+    ).toMatchObject({ error: { code: 'unavailable' } })
+  })
+
+  it('tells every device what needs the user, as its own window is told', () => {
+    const { admin, sent } = setup()
+    admin.attention({
+      type: 'host:attention',
+      kind: 'routine-paused',
+      agentId: 'claude-code',
+      title: 'Routines paused',
+      body: 'Near the plan limit',
+    })
+    expect(sent).toEqual([
+      {
+        event: {
+          type: 'attention',
+          attention: {
+            kind: 'routine-paused',
+            agentId: 'claude-code',
+            title: 'Routines paused',
+            body: 'Near the plan limit',
+          },
+        },
+        deviceId: null,
+      },
+    ])
   })
 })
 
