@@ -125,16 +125,18 @@ describe('host', () => {
     expect(remote).not.toHaveBeenCalled()
   })
 
-  it("describes another host's media file as a binary one, whose bytes do not come through", async () => {
-    remote.mockResolvedValueOnce({
-      kind: 'media',
-      path: 'logo.png',
-      media: { kind: 'image', mimeType: 'image/png', size: 2048 },
-    })
+  it("takes another host's media file as main granted it", async () => {
+    const grant = {
+      url: 'kettu-media://x/logo.png?v=2048',
+      kind: 'image',
+      mimeType: 'image/png',
+      size: 2048,
+    }
+    remote.mockResolvedValueOnce({ kind: 'media', path: 'logo.png', grant })
     const read = await host('files.read', {
       projectPath: onHost(devBox, '/home/lin/api'),
       path: 'logo.png',
     })
-    expect(read).toEqual({ kind: 'binary', path: 'logo.png', size: 2048 })
+    expect(read).toEqual({ kind: 'media', path: 'logo.png', grant })
   })
 })

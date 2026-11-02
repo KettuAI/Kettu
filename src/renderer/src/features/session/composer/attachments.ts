@@ -1,9 +1,11 @@
 // A composer's attachments: adding pasted images and long pasted texts, picked, pasted or dropped
 // files and folders, and the project's files and folders an `@` mention names, through the host,
 // removing them, keeping them with the draft across a restart, and the content refs a message
-// carries.
+// carries. In another host's session, what comes from this computer goes up as bytes, as the web
+// client sends it, since that host reads nothing on this disk.
 
 import {
+  ATTACHMENT_BYTES,
   ATTACHMENT_LIMIT,
   PASTED_TEXT_CHARS,
   PROMPT_BYTES,
@@ -12,7 +14,7 @@ import {
   type GrantedAttachment,
 } from '@shared/attachments'
 import type { Attachment, UserContent } from '@shared/thread'
-import { errorMessage, host } from '@renderer/lib/host'
+import { attachmentHost, errorMessage, host, hostAt, learnAttachmentHost } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import {
   draftAttachments,
@@ -31,6 +33,10 @@ import { prepareImage } from './image-work'
 
 let nextKey = 1
 
+/** A request on the host named, null being this computer's, which `host` routes to. */
+const on: typeof hostAt = (hostId, method, params) =>
+  hostId === null ? host(method, params) : hostAt(hostId, method, params)
+
 /** The images a paste carries, unless it is table or multi-line text that also has a picture. */
 export function pastedImages(data: DataTransfer): File[] {
   const images = [...data.files].filter((file) => file.type.startsWith('image/'))
@@ -41,10 +47,10 @@ export function pastedImages(data: DataTransfer): File[] {
 }
 
 /**
- * Adds pasted images to a composer, as "Image 1", "Image 2", in the order pasted. Returns how many
- * did not fit under the limit.
+ * Adds pasted images to a composer, as "Image 1", "Image 2", in the order pasted, on the host
+ * `hostId` names, null being this computer. Returns how many did not fit under the limit.
  */
-export function attachImages(draft: string, files: readonly File[]): number {
+export function attachImages(draft: string, files: readonly File[], hostId: string | null): number {
   const items = draftAttachments(draft)
   const room = Math.max(0, ATTACHMENT_LIMIT - items.length)
   const taken = files.slice(0, room)
@@ -62,7 +68,7 @@ export function attachImages(draft: string, files: readonly File[]): number {
     error: null,
   }))
   setDraftAttachments(draft, [...items, ...added])
-  added.forEach((item, i) => void addImage(draft, item, taken[i]!))
+  added.forEach((item, i) => void addImage(draft, item, taken[i]!, hostId))
   return files.length - taken.length
 }
 
@@ -82,7 +88,12 @@ function nextNumber(
   return highest + 1
 }
 
-async function addImage(draft: string, item: DraftAttachment, file: File): Promise<void> {
+async function addImage(
+  draft: string,
+  item: DraftAttachment,
+  file: File,
+  hostId: string | null,
+): Promise<void> {
   try {
     const image = await prepareImage(file)
     if (!isHeld(draft, item.key)) return
@@ -92,7 +103,7 @@ async function addImage(draft: string, item: DraftAttachment, file: File): Promi
       pixels: { width: image.width, height: image.height },
       scaled: image.scaled,
     })
-    const attachment = await host('attachments.add', {
+    const attachment = await on(hostId, 'attachments.add', {
       source: { bytes: image.bytes, mimeType: image.mimeType, name: item.name },
       thumb: image.thumb,
     })
@@ -118,7 +129,7 @@ export function pastedText(data: DataTransfer): string | null {
  * Adds a long paste as "Pasted text 1", "Pasted text 2", in the order pasted. Returns 1 when the
  * composer is full, and nothing is added.
  */
-export function attachPastedText(draft: string, text: string): number {
+export function attachPastedText(draft: string, text: string, hostId: string | null): number {
   const items = draftAttachments(draft)
   if (items.length >= ATTACHMENT_LIMIT) return 1
   const bytes = new TextEncoder().encode(text)
@@ -137,7 +148,7 @@ export function attachPastedText(draft: string, text: string): number {
     error: null,
   }
   setDraftAttachments(draft, [...items, item])
-  void addText(draft, item, bytes)
+  void addText(draft, item, bytes, hostId)
   return 0
 }
 
@@ -152,8 +163,13 @@ export function pasteAsText(
   removeAttachment(draft, key)
 }
 
-function addText(draft: string, item: DraftAttachment, bytes: Uint8Array): Promise<void> {
-  return addBytes(draft, item, bytes.buffer as ArrayBuffer, 'text/plain')
+function addText(
+  draft: string,
+  item: DraftAttachment,
+  bytes: Uint8Array,
+  hostId: string | null,
+): Promise<void> {
+  return addBytes(draft, item, bytes.buffer as ArrayBuffer, 'text/plain', hostId)
 }
 
 /** Adds a file from its bytes, as the web client sends every file, having none on the host's disk. */
@@ -162,9 +178,10 @@ async function addBytes(
   item: DraftAttachment,
   bytes: ArrayBuffer | Promise<ArrayBuffer>,
   mimeType: string,
+  hostId: string | null,
 ): Promise<void> {
   try {
-    const attachment = await host('attachments.add', {
+    const attachment = await on(hostId, 'attachments.add', {
       source: { bytes: await bytes, mimeType, name: item.name },
       thumb: null,
     })
@@ -206,14 +223,17 @@ export function attachmentRoom(draft: string): number {
 
 /**
  * Shows the system's file or folder dialog, opening in the session's folder, and adds what was
- * chosen. Returns how many did not fit under the limit.
+ * chosen. Returns how many did not fit under the limit. Another host's session takes files alone,
+ * which the page's own picker reads.
  */
 export async function pickAttachments(
   draft: string,
   kind: 'files' | 'folder',
   folder: string | null,
+  hostId: string | null,
 ): Promise<number> {
-  if (onWeb()) return attachFiles(draft, await chooseFiles())
+  if (onWeb()) return attachFiles(draft, await chooseFiles(), null)
+  if (hostId !== null) return attachFiles(draft, await chooseFiles(), hostId)
   return addAllGranted(draft, await window.kettu.attachments.pick(kind, folder))
 }
 
@@ -236,13 +256,19 @@ function chooseFiles(): Promise<File[]> {
  * Adds the files and folders a paste carries when they were copied in the file manager: every one
  * copied, granted by main, not only those the paste event holds, and none of the image or text the
  * file manager puts beside them. Null when the paste has no file on disk, so it is an image or
- * text. Resolves to how many did not fit under the limit.
+ * text. Resolves to how many did not fit under the limit. For another host, whose bytes come from
+ * the page, only the files the paste event holds go.
  */
-export function attachPastedFiles(draft: string, data: DataTransfer): Promise<number> | null {
+export function attachPastedFiles(
+  draft: string,
+  data: DataTransfer,
+  hostId: string | null,
+): Promise<number> | null {
   const files = [...data.files]
   if (files.length === 0) return null
   const pending = window.kettu.attachments.fromClipboard(files.slice(0, ATTACHMENT_LIMIT))
   if (!pending) return null
+  if (hostId !== null) return pending.then(() => attachFiles(draft, files, hostId))
   return pending.then((granted) =>
     // More than fit in a message were copied, whichever of them main could grant.
     Math.max(
@@ -262,10 +288,14 @@ function addAllGranted(draft: string, granted: readonly GrantedAttachment[]): nu
 }
 
 /**
- * Adds dropped files and folders: their tiles at once, then each through main's grant. Returns
- * how many did not fit under the limit.
+ * Adds dropped files and folders: their tiles at once, then each through main's grant, or for
+ * another host from its bytes. Returns how many did not fit under the limit.
  */
-export async function attachFiles(draft: string, files: readonly File[]): Promise<number> {
+export async function attachFiles(
+  draft: string,
+  files: readonly File[],
+  hostId: string | null,
+): Promise<number> {
   const taken = files.slice(0, attachmentRoom(draft))
   if (taken.length === 0) return files.length
   // A folder is a File too, which only its grant tells apart.
@@ -283,14 +313,23 @@ export async function attachFiles(draft: string, files: readonly File[]): Promis
   added.forEach((item, i) => {
     const grant = granted[i]
     const file = taken[i]!
-    if (grant) {
+    if (hostId !== null && grant?.kind === 'folder') {
+      const error = i18n.t('composer:attachments.folderOtherHost')
+      patchDraftAttachment(draft, item.key, { kind: 'folder', status: 'failed', error })
+    } else if (grant && hostId === null) {
       void addGranted(draft, item, grant, file)
     } else if (file.type.startsWith('image/')) {
       // An image dragged out of a page has no file on disk; it is added as a pasted one is.
       patchDraftAttachment(draft, item.key, { kind: 'image' })
-      void addImage(draft, item, file)
-    } else if (onWeb()) {
-      void addBytes(draft, item, file.arrayBuffer(), file.type || 'application/octet-stream')
+      void addImage(draft, item, file, hostId)
+    } else if (hostId !== null && file.size > ATTACHMENT_BYTES) {
+      const error = i18n.t('composer:attachments.tooLargeOtherHost', {
+        limit: `${ATTACHMENT_BYTES / 1024 / 1024} MB`,
+      })
+      patchDraftAttachment(draft, item.key, { status: 'failed', error })
+    } else if (onWeb() || hostId !== null) {
+      const type = file.type || 'application/octet-stream'
+      void addBytes(draft, item, file.arrayBuffer(), type, hostId)
     } else {
       const error = i18n.t('composer:attachments.notOnDisk')
       patchDraftAttachment(draft, item.key, { status: 'failed', error })
@@ -450,7 +489,8 @@ export function attachmentContent(items: readonly DraftAttachment[]): UserConten
 }
 
 /** An attachment the host holds, as a ready tile. */
-function readyTile({ attachment, pixels, scaled }: SavedAttachment): DraftAttachment {
+function readyTile({ attachment, pixels, scaled, hostId }: SavedAttachment): DraftAttachment {
+  if (hostId) learnAttachmentHost(attachment.id, hostId)
   return {
     key: `a${nextKey++}`,
     name: attachment.name,
@@ -497,13 +537,14 @@ export function dropAttachments(draft: string): void {
   for (const item of items) removeRecord(item)
 }
 
-/** What a draft keeps of its attachments: the added ones, in order. */
+/** What a draft keeps of its attachments: the added ones, in order, with another host's named. */
 function savedOf(items: readonly DraftAttachment[]): SavedAttachment[] {
-  return items.flatMap((item) =>
-    item.status === 'ready' && item.attachment
-      ? [{ attachment: item.attachment, pixels: item.pixels, scaled: item.scaled }]
-      : [],
-  )
+  return items.flatMap((item) => {
+    if (item.status !== 'ready' || !item.attachment) return []
+    const hostId = attachmentHost(item.attachment.id)
+    const saved = { attachment: item.attachment, pixels: item.pixels, scaled: item.scaled }
+    return [hostId === null ? saved : { ...saved, hostId }]
+  })
 }
 
 const idsOf = (saved: readonly SavedAttachment[]) => saved.map((s) => s.attachment.id).join('\n')
@@ -519,13 +560,18 @@ export async function restoreDraftAttachments(): Promise<void> {
   if (keeping) return
   keeping = true
   const written = new Map<string, string>()
-  const ids: string[] = []
+  // The ids of each host's records, null being this computer's.
+  const byHost = new Map<string | null, string[]>()
   for (const draft of draftIds()) {
     const saved = readDraftAttachments(draft)
     if (saved.length === 0 || draftAttachments(draft).length > 0) continue
     setDraftAttachments(draft, saved.map(readyTile))
     written.set(draft, idsOf(saved))
-    ids.push(...saved.map((s) => s.attachment.id))
+    for (const { attachment, hostId } of saved) {
+      const ids = byHost.get(hostId ?? null) ?? []
+      ids.push(attachment.id)
+      byHost.set(hostId ?? null, ids)
+    }
   }
   useAttachmentsStore.subscribe((state, previous) => {
     if (state.byDraft === previous.byDraft) return
@@ -543,10 +589,14 @@ export async function restoreDraftAttachments(): Promise<void> {
       writeDraftAttachments(draft, saved)
     }
   })
-  if (ids.length === 0) return
+  await Promise.all([...byHost].map(([hostId, ids]) => checkHeld(hostId, ids)))
+}
+
+/** Fails the restored tiles whose records the host no longer holds. */
+async function checkHeld(hostId: string | null, ids: string[]): Promise<void> {
   let held: Set<string>
   try {
-    held = new Set(await host('attachments.held', { ids }))
+    held = new Set(await on(hostId, 'attachments.held', { ids }))
   } catch (error) {
     // Sending then names the missing one, as the host refuses it.
     console.warn(`Could not check the drafts' attachments: ${errorMessage(error)}`)

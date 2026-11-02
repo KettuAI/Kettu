@@ -27,6 +27,9 @@ export interface DeviceChannel {
   readonly closed: Promise<void>
   send(value: unknown): Promise<void>
   sendBytes(stream: number, data: Uint8Array): Promise<void>
+  /** What the transport holds that has not left yet, and when it has, as `Transport` says. */
+  buffered(): number
+  drained(): Promise<void>
   close(): void
 }
 
@@ -88,6 +91,8 @@ export async function startDeviceChannel(
       if (!channel) throw new Error('The handshake is not done')
       await channel.send({ kind: 'bytes', stream, data })
     },
+    buffered: () => transport.buffered(),
+    drained: () => transport.drained(),
     close: () => transport.close(),
   }
 

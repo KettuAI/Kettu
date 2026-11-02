@@ -46,9 +46,10 @@ import { t } from './i18n'
 import { loginItemStatus } from './login-item'
 import { createLogger } from './log'
 import { grantedPath, type MediaGrants } from './media'
-import { copyImage, revealMedia, saveMediaAs } from './media-actions'
+import { copyImage, ON_HOST, revealMedia, saveMediaAs } from './media-actions'
 import { notifyTest } from './notifications'
 import type { QuitFlow } from './quit'
+import type { HostMedia } from './host-media'
 import type { HostSessions } from './host-sessions'
 import type { HostPairingListener, RemoteHost } from './remote-host'
 import { isRendererUrl } from './renderer'
@@ -77,6 +78,7 @@ export interface IpcDeps {
   sharing: Sharing
   remoteHost: RemoteHost
   hostSessions: HostSessions
+  hostMedia: HostMedia
   remoteStatus(): RemoteStatus
   /** Settings › Hosts; it reads the computer's model the first time, then says it changed. */
   hostsStatus(): HostsStatus
@@ -365,6 +367,7 @@ export function registerIpcHandlers({
   sharing,
   remoteHost,
   hostSessions,
+  hostMedia,
   remoteStatus,
   hostsStatus,
   computerModel,
@@ -491,11 +494,14 @@ export function registerIpcHandlers({
 
   handle('shell:open-notices', 0, () => openNotices())
 
-  handle('media:copy-image', 1, (_, source) => copyImage(source, mediaGrants))
-  handle('media:save-as', 1, ({ window }, source) => saveMediaAs(window, source, mediaGrants))
-  handle('media:reveal', 1, (_, url) => revealMedia(url, mediaGrants))
+  handle('media:copy-image', 1, (_, source) => copyImage(source, mediaGrants, hostMedia))
+  handle('media:save-as', 1, ({ window }, source) =>
+    saveMediaAs(window, source, mediaGrants, hostMedia),
+  )
+  handle('media:reveal', 1, (_, url) => revealMedia(url, mediaGrants, hostMedia))
 
   handle('media:open-external', 1, async (_, url) => {
+    if (hostMedia.byUrl(url)) throw new Error(ON_HOST)
     const error = await shell.openPath(await grantedPath(url, mediaGrants))
     if (error) throw new Error(error)
   })

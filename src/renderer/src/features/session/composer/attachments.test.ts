@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Attachment, UserContent } from '@shared/thread'
-import { host } from '@renderer/lib/host'
+import { host, hostAt } from '@renderer/lib/host'
 import {
   draftAttachments,
   setDraftAttachments,
@@ -29,10 +29,13 @@ vi.mock('./image-work', () => ({ prepareImage: vi.fn() }))
 vi.mock('@renderer/lib/host', async (original) => ({
   ...(await original<typeof import('@renderer/lib/host')>()),
   host: vi.fn(),
+  hostAt: vi.fn(),
 }))
 
 const prepare = vi.mocked(prepareImage)
 const request = vi.mocked(host)
+const requestAt = vi.mocked(hostAt)
+const STUDIO = 'c'.repeat(32)
 const DRAFT = 's1'
 
 const png = (name = 'shot.png') =>
@@ -85,6 +88,14 @@ beforeEach(() => {
     if (method === 'attachments.add') return record(`a${++added}`, params.source!.name)
     return undefined
   }) as typeof host)
+  requestAt.mockImplementation((async (
+    _: string | null,
+    method: string,
+    params: { source?: { name: string } },
+  ) => {
+    if (method === 'attachments.add') return record(`a${++added}`, params.source!.name)
+    return undefined
+  }) as typeof hostAt)
 })
 afterEach(() => {
   setDraftAttachments(DRAFT, [])
@@ -121,7 +132,7 @@ describe('attachPastedText', () => {
       if (method !== 'attachments.add') return undefined
       return { ...record(`a${++added}`, params.source!.name, 41), type: 'text' }
     }) as typeof host)
-    expect(attachPastedText(DRAFT, text(5))).toBe(0)
+    expect(attachPastedText(DRAFT, text(5), null)).toBe(0)
     const [adding] = draftAttachments(DRAFT)
     expect(adding).toMatchObject({
       name: 'Pasted text 1',
@@ -144,17 +155,17 @@ describe('attachPastedText', () => {
   })
 
   it('numbers pastes in the order pasted, past the highest left after removals', async () => {
-    attachPastedText(DRAFT, text(2))
-    attachImages(DRAFT, [png()])
-    attachPastedText(DRAFT, text(2))
-    attachPastedText(DRAFT, text(2))
+    attachPastedText(DRAFT, text(2), null)
+    attachImages(DRAFT, [png()], null)
+    attachPastedText(DRAFT, text(2), null)
+    attachPastedText(DRAFT, text(2), null)
     await settled()
     const names = () => draftAttachments(DRAFT).map((i) => i.name)
     expect(names()).toEqual(['Pasted text 1', 'Image 1', 'Pasted text 2', 'Pasted text 3'])
     const key = (name: string) => draftAttachments(DRAFT).find((i) => i.name === name)!.key
     removeAttachment(DRAFT, key('Pasted text 3'))
     removeAttachment(DRAFT, key('Pasted text 1'))
-    attachPastedText(DRAFT, text(2))
+    attachPastedText(DRAFT, text(2), null)
     expect(names()).toEqual(['Image 1', 'Pasted text 2', 'Pasted text 3'])
   })
 
@@ -163,14 +174,14 @@ describe('attachPastedText', () => {
       DRAFT,
       Array.from({ length: 20 }, (_, i) => item({ key: `k${i}` })),
     )
-    expect(attachPastedText(DRAFT, text(2))).toBe(1)
+    expect(attachPastedText(DRAFT, text(2), null)).toBe(1)
     expect(draftAttachments(DRAFT)).toHaveLength(20)
     expect(request).not.toHaveBeenCalled()
   })
 
   it('pastes the text back through the editor and removes its tile and record', async () => {
-    attachPastedText(DRAFT, text(3))
-    attachPastedText(DRAFT, text(4))
+    attachPastedText(DRAFT, text(3), null)
+    attachPastedText(DRAFT, text(4), null)
     await settled()
     const [first, second] = draftAttachments(DRAFT)
     const inserted: string[] = []
@@ -183,7 +194,7 @@ describe('attachPastedText', () => {
 
 describe('attachImages', () => {
   it('names pasted images in order and adds them through the host', async () => {
-    expect(attachImages(DRAFT, [png(), png()])).toBe(0)
+    expect(attachImages(DRAFT, [png(), png()], null)).toBe(0)
     expect(draftAttachments(DRAFT).map((i) => [i.name, i.status])).toEqual([
       ['Image 1', 'adding'],
       ['Image 2', 'adding'],
@@ -204,7 +215,7 @@ describe('attachImages', () => {
 
     // Numbering goes on after the highest, not the count.
     removeAttachment(DRAFT, first!.key)
-    attachImages(DRAFT, [png()])
+    attachImages(DRAFT, [png()], null)
     expect(draftAttachments(DRAFT).map((i) => i.name)).toEqual(['Image 2', 'Image 3'])
     expect(request).toHaveBeenCalledWith('attachments.remove', { id: 'a1' })
   })
@@ -214,16 +225,17 @@ describe('attachImages', () => {
       attachImages(
         DRAFT,
         Array.from({ length: 18 }, () => png()),
+        null,
       ),
     ).toBe(0)
-    expect(attachImages(DRAFT, [png(), png(), png(), png()])).toBe(2)
+    expect(attachImages(DRAFT, [png(), png(), png(), png()], null)).toBe(2)
     expect(draftAttachments(DRAFT)).toHaveLength(20)
   })
 
   it('marks an image that cannot be read as failed, with the reason', async () => {
     prepare.mockRejectedValueOnce(new Error('The image could not be decoded'))
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    attachImages(DRAFT, [png()])
+    attachImages(DRAFT, [png()], null)
     await settled()
     expect(draftAttachments(DRAFT)[0]).toMatchObject({
       status: 'failed',
@@ -233,7 +245,7 @@ describe('attachImages', () => {
   })
 
   it('removes the host record of an image removed while it was being added', async () => {
-    attachImages(DRAFT, [png()])
+    attachImages(DRAFT, [png()], null)
     removeAttachment(DRAFT, draftAttachments(DRAFT)[0]!.key)
     await settled()
     expect(request).not.toHaveBeenCalledWith('attachments.add', expect.anything())
@@ -242,7 +254,7 @@ describe('attachImages', () => {
     request.mockImplementationOnce(
       (() => new Promise<Attachment>((resolve) => (finish = resolve))) as typeof host,
     )
-    attachImages(DRAFT, [png()])
+    attachImages(DRAFT, [png()], null)
     await settled()
     removeAttachment(DRAFT, draftAttachments(DRAFT)[0]!.key)
     finish(record('late', 'Image 1'))
@@ -348,7 +360,7 @@ describe('picked and dropped files', () => {
 
   it('adds what the dialog granted, opening it in the session folder', async () => {
     pick.mockResolvedValue([grant('notes.md'), grant('src', 'folder', null)])
-    await expect(pickAttachments(DRAFT, 'files', '/p')).resolves.toBe(0)
+    await expect(pickAttachments(DRAFT, 'files', '/p', null)).resolves.toBe(0)
     expect(pick).toHaveBeenCalledWith('files', '/p')
     await settled()
     expect(draftAttachments(DRAFT).map((i) => [i.kind, i.status, i.attachment?.uri])).toEqual([
@@ -364,7 +376,7 @@ describe('picked and dropped files', () => {
 
   it('makes a picked image its thumbnail from the bytes the host read, and hands back a scaled copy', async () => {
     pick.mockResolvedValue([grant('shot.png')])
-    await pickAttachments(DRAFT, 'files', '/p')
+    await pickAttachments(DRAFT, 'files', '/p', null)
     await vi.waitFor(() => expect(draftAttachments(DRAFT)[0]?.status).toBe('ready'))
     expect(request).toHaveBeenCalledWith('attachments.read', { id: 'r-shot.png' })
     expect(request).toHaveBeenCalledWith('attachments.update', {
@@ -387,7 +399,7 @@ describe('picked and dropped files', () => {
       scaled: null,
     }))
     pick.mockResolvedValue([grant('shot.png')])
-    await pickAttachments(DRAFT, 'files', '/p')
+    await pickAttachments(DRAFT, 'files', '/p', null)
     await vi.waitFor(() => expect(draftAttachments(DRAFT)[0]?.status).toBe('ready'))
     expect(request).toHaveBeenCalledWith('attachments.update', {
       id: 'r-shot.png',
@@ -399,7 +411,7 @@ describe('picked and dropped files', () => {
   it('makes a dropped image its thumbnail from the File, not from the host', async () => {
     const file = png('shot.png')
     fromFiles.mockResolvedValue([grant('shot.png')])
-    await attachFiles(DRAFT, [file])
+    await attachFiles(DRAFT, [file], null)
     await vi.waitFor(() => expect(draftAttachments(DRAFT)[0]?.status).toBe('ready'))
     expect(prepare).toHaveBeenCalledWith(file)
     expect(request).not.toHaveBeenCalledWith('attachments.read', expect.anything())
@@ -407,7 +419,11 @@ describe('picked and dropped files', () => {
 
   it('shows dropped files at once, and fails one with nothing on disk behind it', async () => {
     fromFiles.mockResolvedValue([grant('notes.md'), null])
-    const adding = attachFiles(DRAFT, [new File(['# x'], 'notes.md'), new File(['x'], 'blob')])
+    const adding = attachFiles(
+      DRAFT,
+      [new File(['# x'], 'notes.md'), new File(['x'], 'blob')],
+      null,
+    )
     expect(draftAttachments(DRAFT).map((i) => [i.name, i.status])).toEqual([
       ['notes.md', 'adding'],
       ['blob', 'adding'],
@@ -423,7 +439,7 @@ describe('picked and dropped files', () => {
   it('adds an image dragged out of a page, with no file on disk, as a pasted one', async () => {
     fromFiles.mockResolvedValue([null])
     const image = png('photo.png')
-    await attachFiles(DRAFT, [image])
+    await attachFiles(DRAFT, [image], null)
     await vi.waitFor(() => expect(draftAttachments(DRAFT)[0]?.status).toBe('ready'))
     expect(prepare).toHaveBeenCalledWith(image)
     expect(request).toHaveBeenCalledWith('attachments.add', {
@@ -436,14 +452,15 @@ describe('picked and dropped files', () => {
     attachImages(
       DRAFT,
       Array.from({ length: 19 }, () => png()),
+      null,
     )
     fromFiles.mockResolvedValue([grant('a.md')])
     const files = [new File(['a'], 'a.md'), new File(['b'], 'b.md'), new File(['c'], 'c.md')]
-    await expect(attachFiles(DRAFT, files)).resolves.toBe(2)
+    await expect(attachFiles(DRAFT, files, null)).resolves.toBe(2)
     expect(fromFiles).toHaveBeenCalledWith([files[0]])
     expect(draftAttachments(DRAFT)).toHaveLength(20)
     pick.mockResolvedValue([grant('x.md'), grant('y.md')])
-    await expect(pickAttachments(DRAFT, 'files', null)).resolves.toBe(2)
+    await expect(pickAttachments(DRAFT, 'files', null, null)).resolves.toBe(2)
   })
 
   it('adds every file and folder copied in the file manager, and none of its icon or names', async () => {
@@ -451,7 +468,7 @@ describe('picked and dropped files', () => {
       Promise.resolve([grant('b.md'), grant('src', 'folder', null), grant('a.txt')]),
     )
     const icon = png('b.md')
-    const pasting = attachPastedFiles(DRAFT, clipboard([icon], 'b.md\rsrc\ra.txt'))
+    const pasting = attachPastedFiles(DRAFT, clipboard([icon], 'b.md\rsrc\ra.txt'), null)
     expect(pasting).not.toBeNull()
     expect(fromClipboard).toHaveBeenCalledWith([icon])
     await expect(pasting).resolves.toBe(0)
@@ -466,17 +483,17 @@ describe('picked and dropped files', () => {
 
   it('leaves a paste with no file on disk to the image paste', () => {
     fromClipboard.mockReturnValue(null)
-    expect(attachPastedFiles(DRAFT, clipboard([png()]))).toBeNull()
+    expect(attachPastedFiles(DRAFT, clipboard([png()]), null)).toBeNull()
     expect(draftAttachments(DRAFT)).toEqual([])
   })
 
   it('adds no more than 20 pasted files, and says how many did not fit', async () => {
-    attachImages(DRAFT, [png()])
+    attachImages(DRAFT, [png()], null)
     fromClipboard.mockReturnValue(
       Promise.resolve(Array.from({ length: 25 }, (_, i) => grant(`f${i}.md`))),
     )
     const files = Array.from({ length: 25 }, (_, i) => new File(['x'], `f${i}.md`))
-    await expect(attachPastedFiles(DRAFT, clipboard(files))).resolves.toBe(6)
+    await expect(attachPastedFiles(DRAFT, clipboard(files), null)).resolves.toBe(6)
     expect(fromClipboard.mock.calls[0]![0]).toHaveLength(20)
     expect(draftAttachments(DRAFT)).toHaveLength(20)
   })
@@ -484,7 +501,7 @@ describe('picked and dropped files', () => {
   it('fails the tiles when main cannot grant them', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     fromFiles.mockRejectedValue(new Error("The agent host isn't running."))
-    await attachFiles(DRAFT, [new File(['a'], 'a.md')])
+    await attachFiles(DRAFT, [new File(['a'], 'a.md')], null)
     expect(draftAttachments(DRAFT)[0]).toMatchObject({
       status: 'failed',
       error: "The agent host isn't running.",
@@ -529,9 +546,58 @@ describe('picked and dropped files', () => {
     expect(request).not.toHaveBeenCalled()
   })
 
+  it("sends another host's session what it is given as bytes, and refuses a folder", async () => {
+    fromFiles.mockResolvedValue([grant('notes.md'), grant('src', 'folder', null)])
+    const notes = new File(['# x'], 'notes.md', { type: 'text/markdown' })
+    await attachFiles(DRAFT, [notes, new File([], 'src')], STUDIO)
+    await settled()
+    expect(requestAt).toHaveBeenCalledWith(STUDIO, 'attachments.add', {
+      source: { bytes: expect.any(ArrayBuffer), mimeType: 'text/markdown', name: 'notes.md' },
+      thumb: null,
+    })
+    expect(request).not.toHaveBeenCalledWith('attachments.add', expect.anything())
+    expect(draftAttachments(DRAFT).map((i) => [i.name, i.kind, i.status, i.error])).toEqual([
+      ['notes.md', 'file', 'ready', null],
+      [
+        'src',
+        'folder',
+        'failed',
+        "A folder on this computer can't go to a session on another host. Attach the files in it instead.",
+      ],
+    ])
+  })
+
+  it("sends another host's session images as pasted ones, and refuses a file over 20 MB", async () => {
+    const big = new File(['x'], 'movie.mov')
+    Object.defineProperty(big, 'size', { value: 20 * 1024 * 1024 + 1 })
+    fromFiles.mockResolvedValue([grant('shot.png'), grant('movie.mov')])
+    await attachFiles(DRAFT, [png('shot.png'), big], STUDIO)
+    await vi.waitFor(() => expect(draftAttachments(DRAFT)[0]?.status).toBe('ready'))
+    expect(requestAt).toHaveBeenCalledWith(STUDIO, 'attachments.add', {
+      source: { bytes: expect.any(ArrayBuffer), mimeType: 'image/jpeg', name: 'shot.png' },
+      thumb: 'data:image/webp;base64,AAAA',
+    })
+    expect(draftAttachments(DRAFT)[1]).toMatchObject({
+      status: 'failed',
+      error: 'Over 20 MB, too large to send to another host.',
+    })
+  })
+
+  it("sends another host's session the files a paste from the file manager holds", async () => {
+    fromClipboard.mockReturnValue(Promise.resolve([grant('a.txt'), grant('b.txt')]))
+    const a = new File(['a'], 'a.txt', { type: 'text/plain' })
+    await attachPastedFiles(DRAFT, clipboard([a], 'a.txt\rb.txt'), STUDIO)
+    await settled()
+    expect(draftAttachments(DRAFT).map((i) => i.name)).toEqual(['a.txt'])
+    expect(requestAt).toHaveBeenCalledWith(STUDIO, 'attachments.add', {
+      source: { bytes: expect.any(ArrayBuffer), mimeType: 'text/plain', name: 'a.txt' },
+      thumb: null,
+    })
+  })
+
   it('removes the record of a file removed while it was being added', async () => {
     pick.mockResolvedValue([grant('notes.md')])
-    await pickAttachments(DRAFT, 'files', '/p')
+    await pickAttachments(DRAFT, 'files', '/p', null)
     removeAttachment(DRAFT, draftAttachments(DRAFT)[0]!.key)
     await settled()
     expect(request).toHaveBeenCalledWith('attachments.remove', { id: 'r-notes.md' })

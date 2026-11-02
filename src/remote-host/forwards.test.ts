@@ -61,6 +61,7 @@ function wired(options: { linked?: () => boolean } = {}) {
     transport: { buffered: () => 0, drained: () => Promise.resolve() },
     log: () => {},
   })
+  let nextStream = 1
   const client = new ClientForwards({
     send: (message) => {
       if (!linked()) return false
@@ -76,6 +77,11 @@ function wired(options: { linked?: () => boolean } = {}) {
       const copy = data.slice()
       queueMicrotask(() => host.bytes(stream, copy))
       return Promise.resolve()
+    },
+    nextStream: () => {
+      const stream = nextStream
+      nextStream += 2
+      return stream
     },
     log: () => {},
   })
