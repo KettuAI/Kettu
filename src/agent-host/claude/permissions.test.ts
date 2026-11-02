@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { setLocale } from '../i18n'
 import {
   alwaysAllowName,
   OPTION,
@@ -11,24 +12,51 @@ import {
 import type { PermissionUpdate } from './sdk'
 
 describe('alwaysAllowName', () => {
+  afterEach(() => {
+    setLocale('en')
+  })
+
+  const changes: PermissionUpdate[] = [
+    {
+      type: 'addRules',
+      rules: [{ toolName: 'Bash', ruleContent: 'npm test:*' }, { toolName: 'Read' }],
+      behavior: 'allow',
+      destination: 'projectSettings',
+    },
+    { type: 'addDirectories', directories: ['/tmp/x', '/tmp/y'], destination: 'session' },
+    { type: 'setMode', mode: 'acceptEdits', destination: 'session' },
+  ]
+
   it('names each change the suggestions make, and where', () => {
+    expect(alwaysAllowName(changes)).toBe(
+      "Always allow `npm test`, `Read` in this project's shared settings; access to `/tmp/x`, `/tmp/y` for this session; switch to Accept edits",
+    )
+  })
+
+  it('separates the changes as the language does', () => {
+    setLocale('zh-CN')
+    expect(alwaysAllowName(changes)).toMatch(
+      /^始终允许本项目的共享设置中的 `npm test`、`Read`；在本会话中访问 `\/tmp\/x`、`\/tmp\/y`；/,
+    )
+  })
+
+  it('names none for a rule or folder a backtick would show wrongly', () => {
     expect(
       alwaysAllowName([
         {
           type: 'addRules',
-          rules: [{ toolName: 'Bash', ruleContent: 'npm test:*' }, { toolName: 'Read' }],
+          rules: [{ toolName: 'Read', ruleContent: '/a`b/**' }],
           behavior: 'allow',
-          destination: 'projectSettings',
+          destination: 'localSettings',
         },
-        { type: 'addDirectories', directories: ['/tmp/x'], destination: 'session' },
-        { type: 'setMode', mode: 'acceptEdits', destination: 'session' },
       ]),
-    ).toBe(
-      'Always allow `npm test`, `Read` in this project; access to `/tmp/x` for this session; switch to Accept edits',
-    )
+    ).toBeNull()
+    expect(
+      alwaysAllowName([{ type: 'addDirectories', directories: ['/a`b'], destination: 'session' }]),
+    ).toBeNull()
   })
 
-  it('names a command rule by its command, in this project', () => {
+  it('names a command rule by its command, in this project for local settings', () => {
     expect(
       alwaysAllowName([
         {
@@ -82,9 +110,72 @@ describe('unsafeRule', () => {
     expect(unsafeRule(bash('*'))).toBe(true)
   })
 
+  it('flags rules that hide a destructive command', () => {
+    for (const content of [
+      'git:*',
+      'git *',
+      'git -C repo reset --hard',
+      'git -c x=y clean -fd',
+      'git checkout -- .',
+      'git restore .',
+      'git push --force',
+      'git branch -D main',
+      'git stash clear',
+      'git rm -rf .',
+      'git branch:*',
+      'git * --force',
+      'git st*',
+      'env rm -rf x',
+      'command rm',
+      'exec rm',
+      'nohup rm',
+      'time rm',
+      'timeout 5 rm',
+      'nice rm',
+      'busybox rm',
+      '"rm" -rf x',
+      "'rm' -rf x",
+      '(rm -rf x)',
+      '{ rm -rf x; }',
+      '$(rm -rf x)',
+      '`rm -rf x`',
+      'echo `rm -rf x`',
+      'true & rm -rf x',
+      '! rm x',
+      'if true; then rm -rf x; fi',
+      'xargs -I {} rm {}',
+      'xargs -n 1 rm',
+      'xargs:*',
+      'find . -delete',
+      'find . -exec rm {} ;',
+      'find:*',
+      'bash -c "rm -rf x"',
+      'sh:*',
+      'eval rm x',
+      'npx rimraf:*',
+      'pnpm exec rm:*',
+    ]) {
+      expect(unsafeRule(bash(content)), content).toBe(true)
+    }
+    expect(unsafeRule({ toolName: 'PowerShell', ruleContent: 'ri x' })).toBe(true)
+    expect(unsafeRule({ toolName: 'PowerShell', ruleContent: 'Remove-Item:*' })).toBe(true)
+  })
+
   it('passes other commands and other tools', () => {
-    expect(unsafeRule(bash('pnpm dev:*'))).toBe(false)
-    expect(unsafeRule(bash('git status'))).toBe(false)
+    for (const content of [
+      'pnpm dev:*',
+      'pnpm dev *',
+      'pnpm vitest run:*',
+      'npm test',
+      'git status',
+      'git diff:*',
+      'git -C repo log',
+      'ls -la',
+      'cat package.json',
+    ]) {
+      expect(unsafeRule(bash(content)), content).toBe(false)
+    }
+    expect(unsafeRule({ toolName: 'PowerShell', ruleContent: 'Get-ChildItem:*' })).toBe(false)
     expect(unsafeRule({ toolName: 'Read', ruleContent: '//tmp/**' })).toBe(false)
     expect(unsafeRule({ toolName: 'WebFetch' })).toBe(false)
   })
@@ -132,6 +223,41 @@ describe('safeSuggestions', () => {
       behavior: 'allow',
       updatedPermissions: safeSuggestions(suggestions),
     })
+  })
+
+  it('leaves unsafe rules out of a replacement too', () => {
+    expect(
+      safeSuggestions([
+        {
+          type: 'replaceRules',
+          rules: [
+            { toolName: 'Bash', ruleContent: 'git:*' },
+            { toolName: 'Bash', ruleContent: 'git status' },
+          ],
+          behavior: 'allow',
+          destination: 'localSettings',
+        },
+        {
+          type: 'addRules',
+          rules: [{ toolName: 'Bash', ruleContent: 'rm:*' }],
+          behavior: 'deny',
+          destination: 'localSettings',
+        },
+      ]),
+    ).toEqual([
+      {
+        type: 'replaceRules',
+        rules: [{ toolName: 'Bash', ruleContent: 'git status' }],
+        behavior: 'allow',
+        destination: 'localSettings',
+      },
+      {
+        type: 'addRules',
+        rules: [{ toolName: 'Bash', ruleContent: 'rm:*' }],
+        behavior: 'deny',
+        destination: 'localSettings',
+      },
+    ])
   })
 
   it('offers no always-allow when nothing safe is left', () => {

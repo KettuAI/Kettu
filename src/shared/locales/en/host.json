@@ -259,8 +259,11 @@
     "place": {
       "user": "in every project",
       "project": "in this project",
+      "shared": "in this project's shared settings",
       "session": "for this session"
     },
+    "listSeparator": ", ",
+    "changeSeparator": "; ",
     "exitPlan": {
       "auto": "Yes, and use Auto mode",
       "acceptEdits": "Yes, and accept edits",
@@ -348,6 +351,7 @@
       "denyHost": "Always block {{host}}",
       "decline": "Deny, and keep going",
       "cancel": "Deny, and say what to do instead",
+      "dismiss": "Dismiss without answering",
       "accept": "Continue",
       "network": "Network access",
       "networkHost": "{{protocol}} access to {{host}}",

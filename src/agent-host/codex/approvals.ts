@@ -2,6 +2,7 @@
 // each option is a decision the request lists, under the option ids codex-acp used.
 
 import type { PendingPermission, PermissionKind, ToolContent } from '@shared/thread'
+import { commandSteps, unsafeArgvPrefix, unsafeCommand } from '../command-safety'
 import type { PermissionAnswer, PermissionRequest } from '../connection'
 import { t } from '../i18n'
 import type { MapperContext, MapperOutput } from '../session-updates'
@@ -61,9 +62,31 @@ function permissionsText(permissions: AdditionalPermissions | null | undefined):
     : []
 }
 
+/**
+ * Whether a command is one never to allow for the session: the script inside the shell Codex runs
+ * it in, as it reports `/bin/zsh -lc '...'`, or the command itself. Unsafe when there is none.
+ */
+export function unsafeSessionCommand(command: string | null | undefined): boolean {
+  if (!command) return true
+  const steps = commandSteps(command)
+  const [shell, flag, script, ...more] = steps?.length === 1 ? steps[0]! : []
+  if (
+    shell !== undefined &&
+    /(?:^|\/)(?:bash|zsh|sh)$/.test(shell) &&
+    (flag === '-c' || flag === '-lc') &&
+    script !== undefined &&
+    more.length === 0
+  ) {
+    return unsafeCommand(script)
+  }
+  return unsafeCommand(command)
+}
+
+/** An option for a decision; null for one to leave out, such as remembering an unsafe command. */
 function commandOption(
   decision: CommandExecutionApprovalDecision,
   index: number,
+  unsafe: boolean,
 ): { option: Option; decision: CommandExecutionApprovalDecision } | null {
   if (decision === 'accept') {
     return {
@@ -72,6 +95,7 @@ function commandOption(
     }
   }
   if (decision === 'acceptForSession') {
+    if (unsafe) return null
     return {
       option: {
         id: 'allow_for_session',
@@ -95,6 +119,7 @@ function commandOption(
   }
   if ('acceptWithExecpolicyAmendment' in decision) {
     const words = decision.acceptWithExecpolicyAmendment.execpolicy_amendment
+    if (unsafeArgvPrefix(words)) return null
     return {
       option: {
         id: 'accept_execpolicy_amendment',
@@ -172,8 +197,9 @@ export function commandApproval(
     ...(content.length > 0 ? { content } : {}),
     ...(params.reason ? { description: params.reason } : {}),
   })
+  const unsafe = unsafeSessionCommand(params.command)
   const choices = commandDecisions(params)
-    .map((decision, index) => commandOption(decision, index))
+    .map((decision, index) => commandOption(decision, index, unsafe))
     .filter((choice) => choice !== null)
   const options = ordered(choices.map((choice) => choice.option))
   return {
@@ -255,10 +281,14 @@ export function permissionsApproval(
   }
 }
 
+/** What Something else answers, so Codex stops to read the user's own words. */
+export const ANSWER_IN_REPLY =
+  'The user will answer this question in their own words in their next message. Stop here and wait for it.'
+
 /**
- * A question with choices, as a question card: the choices, then Something else, which answers
- * nothing so the user can say it in their next message. Null for anything else, which Kettu
- * cannot ask: several questions, free text or a secret.
+ * A question with choices, as a question card: the choices, then Something else, which tells
+ * Codex to wait for the user's next message. Null for anything else, which Kettu cannot ask:
+ * several questions, free text or a secret.
  */
 export function userInputApproval(
   params: ToolRequestUserInputParams,
@@ -287,9 +317,11 @@ export function userInputApproval(
   return {
     request: { toolCallId: params.itemId, toolEntryId: entryId, output: out, options },
     respond: (answer) => {
-      const id = answer === 'cancelled' ? 'other' : answer.optionId
+      if (answer === 'cancelled') return { answers: {} }
+      const id = answer.optionId
       const choice = id.startsWith('answer:') ? choices[Number(id.slice('answer:'.length))] : null
-      return choice ? { answers: { [question.id]: { answers: [choice.label] } } } : { answers: {} }
+      const text = choice ? choice.label : id === 'other' ? ANSWER_IN_REPLY : null
+      return text === null ? { answers: {} } : { answers: { [question.id]: { answers: [text] } } }
     },
   }
 }
@@ -314,15 +346,16 @@ export function elicitationApproval(
     status: 'pending',
     content: message ? [{ type: 'markdown', markdown: message }] : [],
   })
-  const options: Option[] = [
+  // An MCP cancel dismisses the request without stopping the turn, so it is not ranked as a stop.
+  const options: Option[] = ordered([
     { id: 'allow_once', name: t('codex.approval.accept'), kind: 'allow_once' },
     { id: 'decline', name: t('codex.approval.decline'), kind: 'reject_once' },
-    { id: 'cancel', name: t('codex.approval.cancel'), kind: 'reject_once' },
-  ]
+    { id: 'dismiss', name: t('codex.approval.dismiss'), kind: 'reject_once' },
+  ])
   return {
     request: { toolCallId, toolEntryId: entryId, output: out, options },
     respond: (answer) => {
-      const id = answer === 'cancelled' ? 'cancel' : answer.optionId
+      const id = answer === 'cancelled' ? 'dismiss' : answer.optionId
       const action = id === 'allow_once' ? 'accept' : id === 'decline' ? 'decline' : 'cancel'
       return { action, content: action === 'accept' ? {} : null, _meta: null }
     },

@@ -257,8 +257,11 @@
     "place": {
       "user": "所有项目",
       "project": "本项目",
+      "shared": "本项目的共享设置",
       "session": "本会话"
     },
+    "listSeparator": "、",
+    "changeSeparator": "；",
     "exitPlan": {
       "auto": "是，并使用 Auto 模式",
       "acceptEdits": "是，并自动接受编辑",
@@ -346,6 +349,7 @@
       "denyHost": "始终拦截 {{host}}",
       "decline": "拒绝，并继续",
       "cancel": "拒绝，并说明该怎么做",
+      "dismiss": "不作回答，直接关闭",
       "accept": "继续",
       "network": "网络访问",
       "networkHost": "{{protocol}} 访问 {{host}}",

@@ -2,6 +2,7 @@
 // Code takes it. The option ids are the ACP adapter's, so answers stored with a thread still read.
 
 import type { PendingPermission } from '@shared/thread'
+import { unsafeCommand, unsafeCommandPrefix } from '../command-safety'
 import { t } from '../i18n'
 import { modeName } from './config'
 import type { AskedQuestion } from './tools'
@@ -34,67 +35,28 @@ const EXIT_PLAN_MODES: Record<string, PermissionMode> = {
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell'])
 
-/** Commands "always allow" never covers, since one bad call cannot be undone or gains rights. */
-const UNSAFE_COMMANDS = new Set([
-  'rm',
-  'rmdir',
-  'unlink',
-  'shred',
-  'dd',
-  'mkfs',
-  'format',
-  'del',
-  'erase',
-  'rd',
-  'remove-item',
-  'sudo',
-  'su',
-  'doas',
-  'chmod',
-  'chown',
-  'chgrp',
-  'kill',
-  'killall',
-  'pkill',
-  'stop-process',
-  'shutdown',
-  'reboot',
-  'halt',
-  'poweroff',
-])
-const UNSAFE_GIT = new Set(['clean', 'reset'])
+/** `pnpm dev:*` and `pnpm dev *` allow `pnpm dev` and what follows it. */
+const PREFIX_RULE = /(?::\*|\s+\*)$/
 
-/** A rule's command as it reads: `pnpm dev:*` and `pnpm dev *` allow `pnpm dev` and what follows. */
+/** A rule's command as it reads, without the `*` that lets anything follow it. */
 function ruleCommand(content: string): string {
-  return content.replace(/(?::\*|\s+\*)$/, '').trim()
+  return content.replace(PREFIX_RULE, '').trim()
 }
 
-/** The first word of each step of a command line, past variable assignments and `xargs`. */
-function commandHeads(command: string): string[][] {
-  return command
-    .split(/&&|\|\||[;|\n]/)
-    .map((step) => {
-      const words = step.trim().split(/\s+/).filter(Boolean)
-      while (words.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]!)) words.shift()
-      if (words[0] === 'xargs') {
-        words.shift()
-        while (words[0]?.startsWith('-')) words.shift()
-      }
-      return words.map((word) => word.toLowerCase().replace(/^.*[\\/]/, ''))
-    })
-    .filter((words) => words.length > 0)
-}
-
-/** Whether a rule would let a shell run anything, or a command that deletes or gains rights. */
+/**
+ * Whether a rule would let a shell run anything, or a command that deletes, gains rights or
+ * runs another that its text does not show.
+ */
 export function unsafeRule(rule: PermissionRule): boolean {
   if (!SHELL_TOOLS.has(rule.toolName)) return false
-  const command = ruleCommand(rule.ruleContent ?? '')
-  if (command === '' || command === '*') return true
-  return commandHeads(command).some(([head, sub]) => {
-    if (head === undefined) return false
-    if (UNSAFE_COMMANDS.has(head) || head.startsWith('mkfs.')) return true
-    return head === 'git' && sub !== undefined && UNSAFE_GIT.has(sub)
-  })
+  const content = rule.ruleContent ?? ''
+  const command = ruleCommand(content)
+  // Claude Code reads a `*` anywhere in a rule as a wildcard.
+  if (command === '' || command.includes('*')) return true
+  const shell = rule.toolName === 'PowerShell' ? 'powershell' : 'posix'
+  return PREFIX_RULE.test(content)
+    ? unsafeCommandPrefix(command, shell)
+    : unsafeCommand(command, shell)
 }
 
 /**
@@ -104,7 +66,10 @@ export function unsafeRule(rule: PermissionRule): boolean {
 export function safeSuggestions(suggestions: readonly PermissionUpdate[]): PermissionUpdate[] {
   const safe: PermissionUpdate[] = []
   for (const update of suggestions) {
-    if (update.type !== 'addRules' || update.behavior !== 'allow') {
+    if (
+      (update.type !== 'addRules' && update.type !== 'replaceRules') ||
+      update.behavior !== 'allow'
+    ) {
       safe.push(update)
       continue
     }
@@ -114,19 +79,24 @@ export function safeSuggestions(suggestions: readonly PermissionUpdate[]): Permi
   return safe
 }
 
-/** A rule as the option shows it, in backticks: a command as typed, another tool as Claude Code writes it. */
-function ruleText(rule: PermissionRule): string {
-  if (SHELL_TOOLS.has(rule.toolName) && rule.ruleContent) {
-    return `\`${ruleCommand(rule.ruleContent)}\``
-  }
-  return `\`${rule.ruleContent ? `${rule.toolName}(${rule.ruleContent})` : rule.toolName}\``
+/** Text in backticks, which the option shows as code; null when a backtick in it would end that. */
+function code(text: string): string | null {
+  return text.includes('`') ? null : `\`${text}\``
+}
+
+/** A rule as the option shows it: a command as typed, another tool as Claude Code writes it. */
+function ruleText(rule: PermissionRule): string | null {
+  if (SHELL_TOOLS.has(rule.toolName) && rule.ruleContent) return code(ruleCommand(rule.ruleContent))
+  return code(rule.ruleContent ? `${rule.toolName}(${rule.ruleContent})` : rule.toolName)
 }
 
 function place(destination: RuleDestination): string {
   switch (destination) {
     case 'userSettings':
       return t('permission.place.user')
+    // The settings file committed with the project, which everyone working on it shares.
     case 'projectSettings':
+      return t('permission.place.shared')
     case 'localSettings':
       return t('permission.place.project')
     default:
@@ -144,18 +114,23 @@ export function alwaysAllowName(suggestions: readonly PermissionUpdate[]): strin
     return t('permission.acceptEdits')
   }
   const parts: string[] = []
+  const separator = t('permission.listSeparator')
   for (const update of suggestions) {
     if (update.type === 'addRules' && update.behavior === 'allow' && update.rules.length > 0) {
+      const rules = update.rules.map(ruleText)
+      if (!rules.every((rule) => rule !== null)) return null
       parts.push(
         t('permission.addRules', {
-          rules: update.rules.map(ruleText).join(', '),
+          rules: rules.join(separator),
           place: place(update.destination),
         }),
       )
     } else if (update.type === 'addDirectories' && update.directories.length > 0) {
+      const directories = update.directories.map(code)
+      if (!directories.every((directory) => directory !== null)) return null
       parts.push(
         t('permission.addDirectories', {
-          directories: update.directories.map((directory) => `\`${directory}\``).join(', '),
+          directories: directories.join(separator),
           place: place(update.destination),
         }),
       )
@@ -165,7 +140,9 @@ export function alwaysAllowName(suggestions: readonly PermissionUpdate[]): strin
       return null
     }
   }
-  return parts.length > 0 ? t('permission.allowAlways', { changes: parts.join('; ') }) : null
+  return parts.length > 0
+    ? t('permission.allowAlways', { changes: parts.join(t('permission.changeSeparator')) })
+    : null
 }
 
 /** The options of one request, in the order Claude Code offers them. */
