@@ -82,6 +82,11 @@
   /* A toast, dark in both themes; the dark blocks leave it to this one. */
   --toast: #161c24;
   --toast-foreground: #e9edf2;
+  /* A toast's icon by what it reports, and its quiet dismiss button. */
+  --toast-success: #7fd1a1;
+  --toast-warning: #f0a27f;
+  --toast-info: #9ab8da;
+  --toast-muted: #8a94a3;
   --elevation-toast: 0 0 0 1px rgb(255 255 255 / 6%), 0 12px 30px -10px rgb(10 16 24 / 50%);
 
   /* Lightly raised: each layer is a 1 px ring (in the roles below) and a soft drop, which these

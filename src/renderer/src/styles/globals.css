@@ -165,6 +165,10 @@
   --color-mark: var(--mark);
   --color-toast: var(--toast);
   --color-toast-foreground: var(--toast-foreground);
+  --color-toast-success: var(--toast-success);
+  --color-toast-warning: var(--toast-warning);
+  --color-toast-info: var(--toast-info);
+  --color-toast-muted: var(--toast-muted);
   --color-diff-add: var(--diff-add);
   --color-diff-add-word: var(--diff-add-word);
   --color-diff-del: var(--diff-del);
@@ -305,6 +309,12 @@
   /* Tooltips and a menu item's shortcut. */
   --text-caption: 11.5px;
   --text-caption--line-height: 16px;
+  /* Mono beside interface text: commit ids, line counts, a worktree's path. */
+  --text-code-sm: 11px;
+  --text-code-sm--line-height: 16px;
+  /* The letter in a file's change tile. */
+  --text-badge: 9.5px;
+  --text-badge--line-height: 1;
 }
 
 :root {
@@ -1193,4 +1203,21 @@
 .file-preview {
   --diffs-light-bg: var(--background);
   --diffs-dark-bg: var(--background);
+}
+
+/* The Files pane's diff sits on the code surface with roomier lines, and lines picked to mention
+   take the selection's fox tint. */
+.files-diff {
+  --diffs-light-bg: var(--bg-code-block);
+  --diffs-dark-bg: var(--bg-code-block);
+  --diffs-addition-color-override: var(--success);
+  --diffs-deletion-color-override: var(--danger);
+  --diffs-bg-addition-override: var(--diff-add);
+  --diffs-bg-addition-emphasis-override: var(--diff-add-word);
+  --diffs-bg-deletion-override: var(--diff-del);
+  --diffs-bg-deletion-emphasis-override: var(--diff-del-word);
+  --diffs-bg-selection-override: var(--selection);
+  --diffs-bg-selection-number-override: var(--selection);
+  --diffs-line-height: 21px;
+  font-variant-ligatures: none;
 }

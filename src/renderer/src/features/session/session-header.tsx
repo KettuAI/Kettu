@@ -14,6 +14,7 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { CacheChip } from '@renderer/features/prompt-cache/cache-chip'
+import { SessionGitChips } from '@renderer/features/git/git-status'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { HostChip } from './host-chip'
 import { ViewersChip } from './viewers-chip'
@@ -76,7 +77,7 @@ export function SessionHeader({
 
   return (
     <TopBar cornered={pane?.cornered}>
-      {/* The title gives way last: the git status shrinks first (see HeaderTools). What is left
+      {/* The title gives way last: the git chips shrink first (see SessionGitChips). What is left
           once the title reaches its least width is cut at the group's edge, not under the tools. */}
       <NoDrag className="min-w-0 gap-0.5 overflow-clip">
         {routine && summary.routine && (
@@ -163,6 +164,7 @@ export function SessionHeader({
         {session && <CacheChip session={session} />}
         <ViewersChip sessionId={summary.id} projectPath={summary.projectPath} />
       </NoDrag>
+      <SessionGitChips projectPath={summary.projectPath} />
       <span className="flex-1" />
       <HeaderTools projectPath={summary.projectPath} />
       <DeleteSessionDialog

@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
+  ChevronRightIcon,
   FolderIcon,
-  FolderTreeIcon,
-  ListIcon,
-  ListTreeIcon,
   Maximize2Icon,
   Minimize2Icon,
   SearchIcon,
   XIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useDefaultLayout, usePanelRef } from 'react-resizable-panels'
+import { useDefaultLayout } from 'react-resizable-panels'
 import type { FileSearch } from '@shared/files'
 import type { ChangeStatus } from '@shared/git'
+import { SegmentedControl } from '@renderer/components/segmented-control'
+import { Button } from '@renderer/components/ui/button'
 import {
   Empty,
   EmptyDescription,
@@ -28,17 +28,20 @@ import {
 } from '@renderer/components/ui/resizable'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { LineCounts } from '@renderer/features/git/rows'
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { SHEET } from '@renderer/features/shell/sheet'
 import { CornerControls } from '@renderer/features/shell/top-bar'
 import { errorMessage, host } from '@renderer/lib/host'
-import { hasBand } from '@renderer/lib/platform'
+import { formatShortcut, hasBand, isMod } from '@renderer/lib/platform'
 import { layoutStorage } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
-import { loadFiles, openFile, refreshFiles, useFilesStore } from '@renderer/stores/files'
+import { loadFiles, openDiff, openFile, refreshFiles, useFilesStore } from '@renderer/stores/files'
+import { openGitDialog, useGitStore } from '@renderer/stores/git'
 import { toggleSidePane, useViewStore } from '@renderer/stores/view'
 import { ChangeBadge } from './change-badge'
-import { useFileChanges } from './changes'
+import { useFileChanges, type FileChanges } from './changes'
 import { DiffPreview } from './diff-preview'
 import { FilePreview } from './file-preview'
 import { FileTypeIcon } from './file-type-icon'
@@ -58,7 +61,7 @@ import { VirtualRows } from './virtual-rows'
 const FILTER_LIMIT = 1000
 const SEARCH_DELAY_MS = 250
 
-/** The side panel's Files pane: the project's files beside the one that is open. */
+/** The side panel's Files pane: the changes or the project's files, beside the one that is open. */
 export default function FilesPanel({
   projectPath,
   maximized,
@@ -70,13 +73,15 @@ export default function FilesPanel({
   const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && !hasBand
   const open = useFilesStore((s) => s.open[projectPath] ?? null)
   const diff = useFilesStore((s) => s.diffs[projectPath] ?? null)
+  const isRepo = useGitStore((s) => !!s.status[projectPath]?.repo)
   const [query, setQuery] = useState('')
-  const [flat, setFlat] = useState(false)
+  const [searching, setSearching] = useState(false)
   const changes = useFileChanges(projectPath)
+  const changed = changes.list?.length ?? 0
+  // The changes first while there are any; a folder without git has only its files.
+  const [chosenMode, setMode] = useState<'changes' | 'all' | null>(null)
+  const mode = !isRepo || searching ? 'all' : (chosenMode ?? (changed > 0 ? 'changes' : 'all'))
   const layout = useDefaultLayout({ id: 'files-pane', storage: layoutStorage })
-  // The list folds away to read a file undisturbed; the saved layout keeps it folded.
-  const list = usePanelRef()
-  const [listHidden, setListHidden] = useState(false)
   // A folder with no files yet, as a new scratch session's, has nothing to list or open, so the
   // pane says so once, in its middle, instead of in each half.
   const bare = useFilesStore((s) => {
@@ -89,7 +94,6 @@ export default function FilesPanel({
       !s.diffs[projectPath]
     )
   })
-  const listShown = !listHidden && !bare
 
   useEffect(() => {
     void loadFiles(projectPath)
@@ -98,6 +102,11 @@ export default function FilesPanel({
     return () => window.removeEventListener('focus', onFocus)
   }, [projectPath])
 
+  const stopSearching = (): void => {
+    setQuery('')
+    setSearching(false)
+  }
+
   return (
     <div
       className={cn(
@@ -105,46 +114,72 @@ export default function FilesPanel({
         SHEET,
         maximized && 'absolute inset-0 z-10',
       )}
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return
+        if (isMod(event) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'p') {
+          event.preventDefault()
+          setSearching(true)
+        }
+      }}
     >
       {/* A window drag region, as the terminal's header; its controls opt out. */}
       <div
         className={cn(
-          'app-region-drag flex h-top-bar shrink-0 items-center gap-1 pr-2 pl-2.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
+          'app-region-drag flex h-11 shrink-0 items-center gap-1 pr-2 pl-2.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
           cornered && 'pl-(--corner-inset)',
         )}
       >
         {cornered && <CornerControls className="mr-1" />}
-        {!bare && (
-          <PanelButton
-            label={listHidden ? t('panel.showFiles') : t('panel.hideFiles')}
-            onClick={() => (listHidden ? list.current?.expand() : list.current?.collapse())}
-          >
-            <FolderTreeIcon className="size-3.5" />
-          </PanelButton>
-        )}
-        {listShown && (
+        {searching ? (
           <InputGroup className="app-region-no-drag h-7 w-80 min-w-0">
             <InputGroupAddon>
               <SearchIcon />
             </InputGroupAddon>
             <InputGroupInput
               value={query}
+              autoFocus
               onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => event.key === 'Escape' && query && setQuery('')}
+              onKeyDown={(event) => event.key === 'Escape' && stopSearching()}
+              onBlur={() => query === '' && setSearching(false)}
               placeholder={t('panel.filterPlaceholder')}
               aria-label={t('panel.filterLabel')}
               spellCheck={false}
               className="text-ui"
             />
           </InputGroup>
+        ) : (
+          isRepo && (
+            <SegmentedControl
+              aria-label={t('panel.show')}
+              value={mode}
+              onChange={setMode}
+              className="app-region-no-drag shrink-0"
+              itemClassName="h-6 px-2.25 text-hint"
+              segments={[
+                {
+                  value: 'changes',
+                  label: (
+                    <span className="inline-flex items-center gap-1.5">
+                      {t('panel.changes')}
+                      {changed > 0 && (
+                        <span className="font-normal text-tertiary tabular">{changed}</span>
+                      )}
+                    </span>
+                  ),
+                },
+                { value: 'all', label: t('panel.allFiles') },
+              ]}
+            />
+          )
         )}
         <span className="flex-1" />
-        {listShown && (
+        {!bare && !searching && (
           <PanelButton
-            label={flat ? t('panel.showTree') : t('panel.showList')}
-            onClick={() => setFlat(!flat)}
+            label={t('panel.findFile')}
+            shortcut={formatShortcut('Mod+P')}
+            onClick={() => setSearching(true)}
           >
-            {flat ? <ListTreeIcon className="size-3.5" /> : <ListIcon className="size-3.5" />}
+            <SearchIcon className="size-3.5" />
           </PanelButton>
         )}
         <PanelButton
@@ -158,7 +193,7 @@ export default function FilesPanel({
           )}
         </PanelButton>
         <PanelButton
-          label={t('common:actions.close')}
+          label={t('panel.close')}
           onClick={() => toggleSidePane(projectPath, 'files', false)}
         >
           <XIcon className="size-3.5" />
@@ -183,23 +218,24 @@ export default function FilesPanel({
         >
           <ResizablePanel
             id="files-tree"
-            panelRef={list}
             defaultSize="220px"
             minSize="160px"
             collapsible
             collapsedSize="0px"
-            onResize={(size) => setListHidden(size.inPixels === 0)}
-            className="min-w-0"
+            className="min-w-0 shadow-[inset_calc(-1*var(--hairline))_0_0_var(--border-subtle)]"
           >
-            <Browser
-              projectPath={projectPath}
-              query={query}
-              flat={flat}
-              openPath={open?.path}
-              changes={changes}
-            />
+            {mode === 'changes' ? (
+              <ChangesList projectPath={projectPath} changes={changes} />
+            ) : (
+              <Browser
+                projectPath={projectPath}
+                query={query}
+                openPath={open?.path}
+                changes={changes.byPath}
+              />
+            )}
           </ResizablePanel>
-          <ResizableHandle />
+          <ResizableHandle className="bg-transparent" />
           <ResizablePanel id="files-preview" minSize="200px" className="min-w-0">
             {diff ? (
               <DiffPreview projectPath={projectPath} diff={diff} />
@@ -207,7 +243,12 @@ export default function FilesPanel({
               <FilePreview
                 projectPath={projectPath}
                 file={open}
-                change={open ? changes.get(open.path) : undefined}
+                change={open ? changes.byPath.get(open.path) : undefined}
+                onShowDiff={
+                  open && changes.byPath.has(open.path)
+                    ? () => showChange(projectPath, changes, open.path)
+                    : undefined
+                }
               />
             )}
           </ResizablePanel>
@@ -218,17 +259,150 @@ export default function FilesPanel({
   )
 }
 
-/** The tree, the full list, the filter's matches or the search's lines, by what is typed. */
+/** Opens the working tree's change to a listed file in the preview's place. */
+function showChange(projectPath: string, changes: FileChanges, path: string): void {
+  const change = changes.list?.find((c) => c.path === path)
+  if (!change) return
+  openDiff(projectPath, {
+    path: change.file.path,
+    oldPath: change.file.oldPath,
+    ref: null,
+    projectFile: change.file.status === 'deleted' ? null : change.path,
+  })
+}
+
+/** The uncommitted changes as a tree, with their totals, Commit… and Discard under it. */
+function ChangesList({ projectPath, changes }: { projectPath: string; changes: FileChanges }) {
+  const { t } = useTranslation('files')
+  const diff = useFilesStore((s) => s.diffs[projectPath] ?? null)
+  const openPath = useFilesStore((s) => s.open[projectPath]?.path ?? null)
+  const totals = useGitStore((s) => s.status[projectPath]?.changes ?? null)
+  const blocked = useGitStore(
+    (s) =>
+      !!s.status[projectPath]?.operation || (s.status[projectPath]?.changes.conflicted ?? 0) > 0,
+  )
+  const list = changes.list
+  const index = useMemo(() => indexFolders((list ?? []).map((c) => c.path)), [list])
+  const [closed, setClosed] = useState<ReadonlySet<string>>(() => new Set())
+  const rows = useMemo(() => {
+    const folders = new Set([...index.keys()].filter((path) => path !== '' && !closed.has(path)))
+    return treeRows(index, folders)
+  }, [index, closed])
+  const byPath = useMemo(() => new Map((list ?? []).map((c) => [c.path, c])), [list])
+  // The working tree's change shown in the preview, or the open file's when it is one.
+  const selectedPath =
+    diff && diff.ref === null
+      ? ((list ?? []).find((c) => c.file.path === diff.path)?.path ?? null)
+      : !diff && openPath && byPath.has(openPath)
+        ? openPath
+        : null
+  const selected = selectedPath ? byPath.get(selectedPath) : undefined
+
+  if (!list) {
+    return changes.error ? <Message tone="error">{changes.error}</Message> : <LoadingRows />
+  }
+  if (list.length === 0) {
+    return (
+      <Empty className="h-full p-4">
+        <EmptyHeader>
+          <EmptyTitle className="text-control">{t('changes.emptyTitle')}</EmptyTitle>
+          <EmptyDescription className="text-small">
+            {t('changes.emptyDescription')}
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    )
+  }
+
+  const toggle = (folder: string): void => {
+    const next = new Set(closed)
+    if (next.has(folder)) next.delete(folder)
+    else next.add(folder)
+    setClosed(next)
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <VirtualRows count={rows.length} className="flex-1 py-2">
+        {(i) => {
+          const row = rows[i]!
+          const change = row.folder ? undefined : byPath.get(row.path)
+          const isOpen = row.folder && !closed.has(row.path)
+          return (
+            <Row
+              key={row.path}
+              depth={row.depth}
+              folder={row.folder}
+              open={isOpen}
+              selected={row.path === selectedPath}
+              title={change?.file.oldPath ? `${change.file.oldPath} → ${row.path}` : row.path}
+              aria-expanded={row.folder ? isOpen : undefined}
+              onClick={() =>
+                row.folder ? toggle(row.path) : showChange(projectPath, changes, row.path)
+              }
+            >
+              <FileTypeIcon path={row.path} folder={row.folder} open={isOpen} className="size-4" />
+              <span className="min-w-0 flex-1 truncate">{nameOf(row.path)}</span>
+              {change && <ChangeBadge status={change.file.status} />}
+            </Row>
+          )
+        }}
+      </VirtualRows>
+      <div className="mx-2.5 flex shrink-0 flex-col gap-2 px-0.5 pt-2.5 pb-2.5 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
+        <div className="flex items-center text-small text-tertiary">
+          <span className="flex-1 tabular">{t('changes.files', { count: list.length })}</span>
+          {totals && <LineCounts insertions={totals.insertions} deletions={totals.deletions} />}
+        </div>
+        <div className="flex gap-1.5">
+          <Button
+            size="sm"
+            className="flex-1"
+            disabled={blocked}
+            onClick={() =>
+              openGitDialog(projectPath, {
+                kind: 'commit',
+                paths: list.map((c) => c.file.path),
+                push: false,
+              })
+            }
+          >
+            {t('changes.commit')}
+          </Button>
+          <Tooltip>
+            <TooltipTrigger render={<span className="inline-flex" />}>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={!selected || selected.file.status === 'conflicted' || blocked}
+                onClick={() =>
+                  selected &&
+                  openGitDialog(projectPath, { kind: 'discard', paths: [selected.file.path] })
+                }
+              >
+                {t('changes.discard')}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {selected
+                ? t('changes.discardFile', { name: nameOf(selected.path) })
+                : t('changes.discardPick')}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** The tree, the filter's matches or the search's lines, by what is typed. */
 function Browser({
   projectPath,
   query,
-  flat,
   openPath,
   changes,
 }: {
   projectPath: string
   query: string
-  flat: boolean
   openPath: string | undefined
   changes: ReadonlyMap<string, ChangeStatus>
 }) {
@@ -253,9 +427,7 @@ function Browser({
     )
   }
   if (files.paths.length === 0) return <Message>{t('browser.empty')}</Message>
-  return flat ? (
-    <FlatList projectPath={projectPath} paths={files.paths} openPath={openPath} changes={changes} />
-  ) : (
+  return (
     <Tree projectPath={projectPath} paths={files.paths} openPath={openPath} changes={changes} />
   )
 }
@@ -293,7 +465,7 @@ function Tree({
     <VirtualRows
       count={rows.length}
       scrollTo={openIndex < 0 ? null : openIndex}
-      className="h-full p-1.5"
+      className="h-full py-2"
     >
       {(i) => {
         const row = rows[i]!
@@ -303,6 +475,8 @@ function Tree({
           <Row
             key={row.path}
             depth={row.depth}
+            folder={row.folder}
+            open={isOpen}
             selected={row.path === openPath}
             title={row.path}
             aria-expanded={row.folder ? isOpen : undefined}
@@ -314,37 +488,6 @@ function Tree({
           </Row>
         )
       }}
-    </VirtualRows>
-  )
-}
-
-function FlatList({
-  projectPath,
-  paths,
-  openPath,
-  changes,
-}: {
-  projectPath: string
-  paths: string[]
-  openPath: string | undefined
-  changes: ReadonlyMap<string, ChangeStatus>
-}) {
-  const openIndex = openPath ? paths.indexOf(openPath) : -1
-  return (
-    <VirtualRows
-      count={paths.length}
-      scrollTo={openIndex < 0 ? null : openIndex}
-      className="h-full p-1.5"
-    >
-      {(i) => (
-        <FileRow
-          key={paths[i]}
-          projectPath={projectPath}
-          match={{ path: paths[i]!, score: 0, positions: [] }}
-          selected={paths[i] === openPath}
-          change={changes.get(paths[i]!)}
-        />
-      )}
     </VirtualRows>
   )
 }
@@ -368,7 +511,7 @@ function FilteredList({
   const more = total - matches.length
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <VirtualRows count={matches.length} className="flex-1 p-1.5">
+      <VirtualRows count={matches.length} className="flex-1 py-2">
         {(i) => (
           <FileRow
             key={matches[i]!.path}
@@ -484,7 +627,7 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
   if (rows.length === 0) return <Message>{t('browser.noLine', { query })}</Message>
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <VirtualRows count={rows.length} className="flex-1 p-1.5">
+      <VirtualRows count={rows.length} className="flex-1 py-2">
         {(i) => {
           const row = rows[i]!
           if (row.kind === 'file') {
@@ -492,7 +635,7 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
               <div
                 key={`f:${row.path}`}
                 title={row.path}
-                className="flex h-control-sm items-center gap-2 truncate px-2 text-xs font-medium text-primary"
+                className="mx-1.5 flex h-7 items-center gap-2 truncate px-2 text-xs font-medium text-primary"
               >
                 <FileTypeIcon path={row.path} className="size-4" />
                 <span className="truncate">{row.path}</span>
@@ -539,6 +682,8 @@ function Highlight({ text, query }: { text: string; query: string }) {
 
 function Row({
   depth = 0,
+  folder = false,
+  open = false,
   selected = false,
   title,
   onClick,
@@ -546,6 +691,9 @@ function Row({
   ...aria
 }: {
   depth?: number
+  /** A folder's row leads with its chevron; a file's keeps the chevron's room. */
+  folder?: boolean
+  open?: boolean
   selected?: boolean
   title: string
   onClick: () => void
@@ -558,12 +706,24 @@ function Row({
       title={title}
       onClick={onClick}
       {...aria}
-      style={{ paddingLeft: 8 + depth * 16 }}
+      style={{ paddingLeft: 8 + depth * 14 }}
       className={cn(
-        'flex h-control-sm w-full min-w-0 items-center gap-2 rounded-md pr-2 text-left text-ui outline-none transition-colors duration-(--duration-fast) focus-ring',
-        selected ? 'bg-selected text-primary' : 'text-secondary hover:bg-hover hover:text-primary',
+        'mx-1.5 flex h-7 w-[calc(100%-var(--spacing)*3)] min-w-0 items-center gap-1.5 rounded-lg pr-2 text-left text-ui text-primary outline-none transition-colors duration-(--duration-fast) focus-ring',
+        selected ? 'bg-selected' : 'hover:bg-hover',
       )}
     >
+      <span className="flex w-2.75 shrink-0 text-tertiary">
+        {folder && (
+          <ChevronRightIcon
+            aria-hidden
+            strokeWidth={2}
+            className={cn(
+              'size-2.75 transition-transform duration-(--duration-fast) motion-reduce:transition-none',
+              open && 'rotate-90',
+            )}
+          />
+        )}
+      </span>
       {children}
     </button>
   )

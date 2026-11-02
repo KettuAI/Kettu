@@ -4,11 +4,9 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { GitStatusCluster } from '@renderer/features/git/git-status'
 import { usePane } from '@renderer/features/split/pane-context'
 import { formatShortcut, isWeb } from '@renderer/lib/platform'
 import { useBrowserStore } from '@renderer/stores/browser'
-import { useGitStore } from '@renderer/stores/git'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import {
@@ -21,16 +19,11 @@ import {
 } from '@renderer/stores/view'
 import { NoDrag } from './top-bar'
 
-/**
- * The right end of the top bar: the project's git status, the side panel's panes and, in a split,
- * **Close pane**. The git status shrinks a thousand times faster than the session title, so in a
- * crowded bar the branch gives way first, down to its icon, and the title keeps its room.
- */
+/** The right end of the top bar: the side panel's panes and, in a split, **Close pane**. */
 export function HeaderTools({ projectPath }: { projectPath: string }) {
   const { t } = useTranslation('shell')
   const pane = usePane()
   const terminal = useTerminalAllowed(projectPath)
-  const isRepo = useGitStore((s) => !!s.status[projectPath]?.repo)
   // An agent opened a session's page while another pane showed: a dot says to look.
   const unseen = useBrowserStore((s) => s.unseen)
   const sessions = useSessionsStore((s) => s.byId)
@@ -40,11 +33,6 @@ export function HeaderTools({ projectPath }: { projectPath: string }) {
     : Object.keys(unseen).some((id) => sessions[id]?.projectPath === projectPath)
   return (
     <>
-      {isRepo && (
-        <NoDrag className="min-w-8 shrink-1000 overflow-clip [overflow-clip-margin:3px]">
-          <GitStatusCluster projectPath={projectPath} />
-        </NoDrag>
-      )}
       <NoDrag className="shrink-0 gap-0.5">
         <PaneToggle projectPath={projectPath} pane="files" label={t('headerTools.files')}>
           <FolderIcon />
