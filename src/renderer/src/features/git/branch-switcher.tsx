@@ -257,8 +257,5 @@ function openWorktree(branch: BranchInfo, projectPath: string, t: TFunction<'git
     openSession(session.id, session.projectPath)
     return
   }
-  toast(t('switcher.checkedOutIn', { branch: branch.name, folder }), undefined, {
-    tone: 'info',
-    dismissible: true,
-  })
+  toast(t('switcher.checkedOutIn', { branch: branch.name, folder }), undefined, { tone: 'info' })
 }

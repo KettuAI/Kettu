@@ -32,7 +32,7 @@ export function PanelButton({
             aria-pressed={pressed}
             disabled={disabled}
             onClick={onClick}
-            className="app-region-no-drag"
+            className="app-region-no-drag text-secondary"
           />
         }
       >
