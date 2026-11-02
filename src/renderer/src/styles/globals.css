@@ -242,7 +242,6 @@
   --shadow-composer: var(--composer-ring);
   --shadow-composer-hover: var(--composer-hover);
   --shadow-composer-focus: var(--composer-focus);
-  --shadow-queue: var(--queue-ring);
   --shadow-attention: var(--attention-ring-shadow);
   --shadow-segment: var(--segment-ring);
   --shadow-raised: var(--raised-ring);
