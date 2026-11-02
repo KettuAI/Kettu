@@ -427,9 +427,7 @@ function AddAgentDialog({
               <RadioGroup
                 aria-label={t('agents.add.folder')}
                 value={folder}
-                onValueChange={(next) =>
-                  next === 'existing' && !picked ? void pick() : setFolder(next as typeof folder)
-                }
+                onValueChange={(next) => setFolder(next as typeof folder)}
                 className="gap-1.5"
               >
                 <Choice

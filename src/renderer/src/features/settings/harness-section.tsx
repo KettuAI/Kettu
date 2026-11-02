@@ -237,7 +237,7 @@ function HarnessState({ status }: { status: AgentStatus }) {
             cliUpdate ? openHarnessSettings(harness) : startUpdate(useAgentsStore, harness)
           }
         >
-          {t('agents.update.available')}
+          {t('agents.update.button')}
         </Button>
       </>
     )
@@ -292,7 +292,7 @@ function InstallDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const { api, useAgentsStore } = useHostScope()
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const [picked, setPicked] = useState<AgentInstallMethod['id'] | undefined>(undefined)
   const method = installMethod(status, picked)
@@ -354,18 +354,7 @@ function InstallDialog({
             </SettingsField>
           )}
           {status.binaryCommand && (
-            <button
-              type="button"
-              onClick={() =>
-                void api.dialogs
-                  .chooseAgentBinary(status.harnessId)
-                  .then((path) => path && onOpenChange(false))
-                  .catch((e: unknown) => console.warn(errorMessage(e)))
-              }
-              className="self-start rounded-sm text-control text-secondary underline decoration-border-strong underline-offset-3 outline-none hover:text-primary focus-ring"
-            >
-              {t('agents.install.elsewhere')}
-            </button>
+            <ChooseElsewhere harness={status.harnessId} onChosen={() => onOpenChange(false)} />
           )}
         </SettingsDialogBody>
         <SettingsDialogFooter>
@@ -385,6 +374,30 @@ function InstallDialog({
         </SettingsDialogFooter>
       </SettingsDialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * The install dialog's link to a program installed elsewhere, and why main refused the one chosen.
+ * It mounts with the dialog's content, so a refusal is gone when the dialog opens again.
+ */
+function ChooseElsewhere({ harness, onChosen }: { harness: HarnessId; onChosen: () => void }) {
+  const { api } = useHostScope()
+  const { t } = useTranslation('settings')
+  const [act, , error] = useAction()
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() =>
+          act(() => api.dialogs.chooseAgentBinary(harness).then((path) => path && onChosen()))
+        }
+        className="self-start rounded-sm text-control text-secondary underline decoration-border-strong underline-offset-3 outline-none hover:text-primary focus-ring"
+      >
+        {t('agents.install.elsewhere')}
+      </button>
+      {error && <p className="text-hint text-danger">{error}</p>}
+    </>
   )
 }
 
@@ -903,6 +916,7 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: 'program' 
   const { api, useAgentsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const [open, setOpen] = useState(false)
+  const [act, , error] = useAction()
   const task = status.task?.kind === 'install' ? status.task : null
   const name = status.harnessName
   if (task?.state === 'running' || status.state === 'installing') {
@@ -964,19 +978,15 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: 'program' 
       }
       more={
         status.binaryCommand && (
-          <span>
+          <span className="flex min-w-0 items-center gap-2">
             <Button
               variant="ghost"
-
               className={cn(ROW_BUTTON, '-ml-2 text-secondary')}
-              onClick={() =>
-                void api.dialogs
-                  .chooseAgentBinary(status.harnessId)
-                  .catch((e: unknown) => console.warn(errorMessage(e)))
-              }
+              onClick={() => act(() => api.dialogs.chooseAgentBinary(status.harnessId))}
             >
               {t('agents.install.elsewhere')}
             </Button>
+            <ControlError error={error} />
           </span>
         )
       }

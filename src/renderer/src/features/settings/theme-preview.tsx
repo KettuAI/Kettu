@@ -1,16 +1,15 @@
 import { useMemo, type CSSProperties } from 'react'
 import type { ThemeColors, ThemeMode } from '@shared/themes'
-import { useSettingsStore } from '@renderer/stores/settings'
+import { useDark } from '@renderer/hooks/use-dark'
 import { previewColors } from './theme-colors'
 
 /**
  * A theme as a small window: the desk with the sidebar's rows, and a sheet with a title, two lines
  * of text and a button. It draws only the tokens a catalog entry carries, so a theme looks the
- * same in the catalog as once installed. Dark shows the dark window; Light and System the light.
+ * same in the catalog as once installed. It shows the mode the app shows, System resolved.
  */
 export function ThemePreview({ light, dark }: { light?: ThemeColors; dark?: ThemeColors }) {
-  const colorMode = useSettingsStore((s) => s.settings.appearance.theme)
-  const mode: ThemeMode = colorMode === 'dark' ? 'dark' : 'light'
+  const mode: ThemeMode = useDark() ? 'dark' : 'light'
   const colors = mode === 'dark' ? dark : light
   const style = useMemo(
     () =>
