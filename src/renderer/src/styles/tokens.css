@@ -41,7 +41,7 @@
   --merged: #6f4c8e;
   /* Running work, in the ink's grays: blue is kept for data and code. */
   --info: #48525f;
-  /* A step darker than the reference amber so it reads on the desk. */
+  /* Amber, dark enough to read at 4.5:1 on the desk and on its tint. */
   --warning: #936600;
   /* Links are ink with a gray underline (thread-link), which darkens on hover. */
   --link: #10161e;
@@ -510,7 +510,7 @@
   --border: var(--border-default);
   --border-soft: var(--border-subtle);
   --input: var(--border-default);
-  --ring: var(--focus);
+  --ring: var(--focus-ring-color);
   --sidebar: var(--bg-sidebar);
   --sidebar-foreground: var(--text-primary);
   --sidebar-primary: var(--text-primary);
@@ -518,7 +518,7 @@
   --sidebar-accent: var(--bg-hover);
   --sidebar-accent-foreground: var(--text-primary);
   --sidebar-border: var(--border-subtle);
-  --sidebar-ring: var(--focus);
+  --sidebar-ring: var(--focus-ring-color);
   --chart-1: var(--text-disabled);
   --chart-2: var(--text-tertiary);
   --chart-3: var(--text-secondary);
