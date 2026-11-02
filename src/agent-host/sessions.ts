@@ -63,7 +63,7 @@ import {
   writePatch,
   type ArtifactWrite,
 } from './artifacts/entries'
-import { allowOnceOption, replySummary, requestText } from './attention'
+import { allowOnceOption, changedFiles, replySummary, requestText } from './attention'
 import { parseContextReport } from './acp/claude-reports'
 import { isValueOf, startOrder, type AgentOptionsStore, type ReplacedValue } from './agent-options'
 import {
@@ -925,6 +925,9 @@ export class SessionManager {
     live.origins.set(key, entry.id)
     this.originRequests.set(key, { sessionId, entryId: entry.id, owner, requestId, answer: null })
     this.emit(live, [{ op: 'entry.add', entry }])
+    const status = live.thread.session.status
+    if (status === 'running' || status === 'ready')
+      this.update(live, { status: 'awaiting_permission' })
     this.touch(live.id)
     this.updateBadge()
     this.deps.events.attention(
@@ -975,6 +978,7 @@ export class SessionManager {
         },
       ])
     }
+    this.stopWaiting(live)
     this.touch(live.id)
     this.updateBadge()
   }
@@ -4384,13 +4388,15 @@ export class SessionManager {
     // A run's end notifies as the routine's, once, so its session sends nothing here.
     if (!routineTurn) {
       const reply = stopReason === 'end_turn' ? replySummary(live.thread) : null
+      const changed = stopReason === 'end_turn' ? changedFiles(live.thread) : 0
+      const text = reply ?? turnEndText(stopReason)
       this.deps.events.attention(
         live.id,
         'turn-ended',
         stopReason === 'end_turn'
           ? t('attention.done', { title: this.titleOf(live) })
           : this.titleOf(live),
-        reply ?? turnEndText(stopReason),
+        changed > 0 ? t('attention.withChanges', { text, count: changed }) : text,
       )
     }
     if (stopReason === 'end_turn' || chosen) this.drainQueue(live, chosen)
@@ -4837,9 +4843,7 @@ export class SessionManager {
         },
       ])
     }
-    if (live.permissions.size === 0 && live.thread.session.status === 'awaiting_permission') {
-      this.update(live, { status: live.turn || live.childRunning ? 'running' : 'ready' })
-    }
+    this.stopWaiting(live)
     if (live.permissions.size === 0 && live.record.origin === 'routine') {
       this.deps.routine?.current?.waiting(live.id, false)
     }
@@ -4861,6 +4865,14 @@ export class SessionManager {
         this.emit(live, [{ op: 'entry.update', id: entryId, changes: { decision: 'timeout' } }])
       }
     }
+    this.stopWaiting(live)
+  }
+
+  /** Once no request or new site waits for the user, the session goes back to its turn or rests. */
+  private stopWaiting(live: Live): void {
+    if (live.permissions.size > 0 || live.origins.size > 0) return
+    if (live.thread.session.status !== 'awaiting_permission') return
+    this.update(live, { status: live.turn || live.childRunning ? 'running' : 'ready' })
   }
 
   respond(sessionId: string, requestId: string, optionId: string, device?: FromDevice): void {

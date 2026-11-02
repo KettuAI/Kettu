@@ -101,7 +101,8 @@
     "wantsToMove": "想移动 {{target}}",
     "wantsToUse": "想使用 {{tool}}",
     "asks": "在问：{{question}}",
-    "done": "{{title}} · 已完成"
+    "done": "{{title}} · 已完成",
+    "withChanges_other": "{{text}}改动了 {{count}} 个文件。"
   },
   "routines": {
     "busy": "此例程已经有一个运行正在工作",

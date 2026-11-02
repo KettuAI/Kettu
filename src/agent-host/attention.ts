@@ -1,5 +1,5 @@
 // What a notification says about a session: what a waiting request asks for, and what a finished
-// turn's reply says.
+// turn's reply says and changed.
 
 import path from 'node:path'
 import type { PendingPermission, ThreadState, ToolEntry } from '@shared/thread'
@@ -68,4 +68,16 @@ export function replySummary(thread: ThreadState): string | null {
     return text || null
   }
   return null
+}
+
+/** How many files the turn's finished edits changed, each counted once. */
+export function changedFiles(thread: ThreadState): number {
+  const paths = new Set<string>()
+  for (let i = thread.order.length - 1; i >= 0; i--) {
+    const entry = thread.byId[thread.order[i]!]
+    if (entry?.kind === 'user') break
+    if (entry?.kind !== 'tool' || entry.status !== 'completed') continue
+    for (const item of entry.content) if (item.type === 'diff') paths.add(item.path)
+  }
+  return paths.size
 }

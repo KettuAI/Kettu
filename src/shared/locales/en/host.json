@@ -101,7 +101,9 @@
     "wantsToMove": "Wants to move {{target}}",
     "wantsToUse": "Wants to use {{tool}}",
     "asks": "Asks: {{question}}",
-    "done": "{{title}} · done"
+    "done": "{{title}} · done",
+    "withChanges_one": "{{text}} {{count}} file changed.",
+    "withChanges_other": "{{text}} {{count}} files changed."
   },
   "routines": {
     "busy": "This routine already has a run working",

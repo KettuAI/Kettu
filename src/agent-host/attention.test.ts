@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ThreadEntry, ThreadState, ToolEntry } from '@shared/thread'
-import { allowOnceOption, replySummary, requestText } from './attention'
+import { allowOnceOption, changedFiles, replySummary, requestText } from './attention'
 
 function tool(changes: Partial<ToolEntry>): ToolEntry {
   return {
@@ -93,5 +93,31 @@ describe('replySummary', () => {
       replySummary(thread([agent('a', 'Earlier.'), { kind: 'user', id: 'u', content: [] }])),
     ).toBeNull()
     expect(replySummary(thread([agent('a', '```\ncode\n```')]))).toBeNull()
+  })
+})
+
+describe('changedFiles', () => {
+  const diff = (path: string) => ({ type: 'diff' as const, path, oldText: 'a', newText: 'b' })
+
+  it("counts the files the turn's finished edits changed, each once", () => {
+    expect(
+      changedFiles(
+        thread([
+          tool({ id: 'old', status: 'completed', content: [diff('/p/earlier.ts')] }),
+          { kind: 'user', id: 'u', content: [] },
+          tool({ id: 'e1', status: 'completed', content: [diff('/p/a.ts')] }),
+          tool({ id: 'e2', status: 'completed', content: [diff('/p/a.ts'), diff('/p/b.ts')] }),
+          tool({ id: 'e3', status: 'failed', content: [diff('/p/c.ts')] }),
+          tool({ id: 'e4', status: 'pending', content: [diff('/p/d.ts')] }),
+          agent('a', 'Done.'),
+        ]),
+      ),
+    ).toBe(2)
+  })
+
+  it('finds none in a turn without edits', () => {
+    expect(changedFiles(thread([{ kind: 'user', id: 'u', content: [] }, agent('a', 'Hi.')]))).toBe(
+      0,
+    )
   })
 })
