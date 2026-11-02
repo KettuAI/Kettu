@@ -10,13 +10,13 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/compone
 import { RingSpinner } from '@renderer/components/ui/spinner'
 import { Switch } from '@renderer/components/ui/switch'
 import { revealSubagent } from '@renderer/features/session/reveal-subagent'
-import { useSubagentProgress } from '@renderer/features/session/subagent/progress'
+import { subagentRunning, useSubagentProgress } from '@renderer/features/session/subagent/progress'
 import { duration } from '@renderer/lib/format'
 import { sessionTitle } from '@renderer/stores/sessions'
 import { setShowFinishedSubagents, useViewStore } from '@renderer/stores/view'
 import { SessionMenuItems } from './session-menu'
 import { runSessionMenuAccelerator } from './session-menu-model'
-import { listedSubagents, subagentRunning } from './subagents'
+import { listedSubagents } from './subagents'
 
 const nothing = () => {}
 
@@ -53,7 +53,11 @@ export function SubagentBadge({
         onPointerEnter={() => onHover(true)}
         onPointerLeave={() => onHover(false)}
         render={
-          <span className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-full bg-subtle pr-[5px] pl-1 text-[11px] font-medium text-secondary tabular-nums shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]" />
+          // As an image, its label goes into the name of the row's button around it.
+          <span
+            role="img"
+            className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-full bg-subtle pr-[5px] pl-1 text-[11px] font-medium text-secondary tabular-nums shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] hover:bg-selected data-popup-open:bg-selected"
+          />
         }
       >
         <BotIcon aria-hidden strokeWidth={1.4} className="size-[11px]! text-tertiary" />
@@ -78,7 +82,7 @@ export function SubagentBadge({
             </li>
           ))}
         </ul>
-        <div role="separator" className="mx-[3px] my-[5px] h-px bg-border-subtle" />
+        <div role="separator" className="mx-[3px] my-[5px] h-px bg-(--border-subtle)" />
         <label className="flex h-[30px] items-center gap-[9px] rounded-tile px-2 text-[13.5px] text-primary">
           <span className="min-w-0 flex-1 truncate">{t('subagents.showFinished')}</span>
           <Switch size="sm" checked={showFinished} onCheckedChange={setShowFinishedSubagents} />

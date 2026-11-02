@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent, useSyncExternalStore } from 'react'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { prefersReducedMotion } from '@renderer/stores/settings'
 import { loadThrough, useThreadsStore, type Replica } from '@renderer/stores/threads'
 import { openSession, shownLayoutSessions, useViewStore } from '@renderer/stores/view'
 
@@ -93,14 +94,6 @@ async function loadEntry(parentId: string, entryId: string): Promise<void> {
   await loadThrough(parentId, 0)
 }
 
-/** Whether reduce-motion is on, from the system or from Settings › Appearance. */
-export function reducedMotion(): boolean {
-  return (
-    document.documentElement.dataset.reduceMotion === 'always' ||
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  )
-}
-
 // A scroll that sends no scrollend, as one already in place, counts as ended after this.
 const SCROLL_END_MS = 1000
 
@@ -141,7 +134,7 @@ export function useRevealScroll(
     }
     for (const name of events) view.addEventListener(name, stop, { passive: true })
     void (async () => {
-      place(reducedMotion() ? 'auto' : 'smooth')
+      place(prefersReducedMotion() ? 'auto' : 'smooth')
       onRevealed()
       for (let pass = 0; pass < 2 && !stopped; pass++) {
         await scrollEnd(view)

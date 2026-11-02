@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type RefObject } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { BotIcon, CheckIcon, ChevronRightIcon, CircleAlertIcon, SquareIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
@@ -81,7 +81,8 @@ function SubagentBlock({
   className?: string
 }) {
   const { t } = useTranslation('session')
-  const root = useRef<HTMLDivElement>(null)
+  // State, not a ref: the root is a new element once the context menu wraps it.
+  const [root, setRoot] = useState<HTMLDivElement | null>(null)
   const header = useRef<HTMLButtonElement>(null)
   const waiting = !!child && (child.permissionCount > 0 || child.attention === 'permission')
   // Closed until the reader opens it, except while it waits for an answer the reader must give.
@@ -98,7 +99,7 @@ function SubagentBlock({
   const reveal = useRevealRequest(entryId)
   useRevealScroll(
     reveal,
-    () => root.current,
+    () => root,
     (behavior) => scrollToMessage(entryId, { align: 'center', behavior }),
     () => setHighlight((n) => n + 1),
   )
@@ -123,7 +124,7 @@ function SubagentBlock({
 
   const block = (
     <div
-      ref={root}
+      ref={setRoot}
       className={cn(
         'relative overflow-hidden rounded-xl bg-card text-ui text-card-foreground shadow-card',
         // Open, the request's own card carries the ring.
@@ -164,7 +165,7 @@ function SubagentBlock({
                 <span
                   role="img"
                   aria-label={t('status.needsApproval')}
-                  className="size-2 rounded-full bg-attention-dot shadow-[0_0_0_3px_color-mix(in_srgb,var(--attention-dot)_16%,transparent)]"
+                  className="size-2 rounded-full bg-attention-dot shadow-[0_0_0_3px_var(--attention-halo)]"
                 />
               ) : failed ? (
                 <CircleAlertIcon
@@ -210,7 +211,7 @@ function SubagentBlock({
         <span
           key={highlight}
           aria-hidden
-          className="pointer-events-none absolute inset-0 animate-out rounded-[inherit] ring-[1.5px] ring-focus ring-inset fade-out fill-mode-forwards animation-delay-(--duration-slower) animation-duration-(--duration-slower)"
+          className="pointer-events-none absolute inset-0 animate-out rounded-[inherit] ring-[1.5px] ring-focus ring-inset fade-out fill-mode-forwards delay-(--duration-slower) animation-duration-(--duration-slower)"
         />
       )}
     </div>
@@ -312,14 +313,17 @@ function SubagentSteps({
           <Button
             variant="outline"
             size="sm"
-            className="h-6.5 px-3"
+            className="h-6.5 rounded-xl px-3 has-data-[icon=inline-start]:pl-3"
             disabled={stopping}
             onClick={() => void stop()}
           >
             {stopping ? (
               <Spinner data-icon="inline-start" className="size-3.5" />
             ) : (
-              <SquareIcon data-icon="inline-start" strokeWidth={1.5} className="size-3.5" />
+              // The spinner's 14 px box around a 7 px square, so the label stays put.
+              <span data-icon="inline-start" className="grid size-3.5 place-items-center">
+                <SquareIcon aria-hidden fill="currentColor" className="size-[8.4px]" />
+              </span>
             )}
             {t('subagent.stop')}
           </Button>
@@ -406,10 +410,9 @@ function Step({
 }
 
 /** Whether the element is in its scroller's view, or within a screen's reach of it. */
-function useInView(ref: RefObject<HTMLElement | null>): boolean {
+function useInView(element: HTMLElement | null): boolean {
   const [inView, setInView] = useState(false)
   useEffect(() => {
-    const element = ref.current
     if (!element) return
     const observer = new IntersectionObserver(
       (entries) => setInView(entries.at(-1)?.isIntersecting ?? false),
@@ -420,6 +423,6 @@ function useInView(ref: RefObject<HTMLElement | null>): boolean {
     )
     observer.observe(element)
     return () => observer.disconnect()
-  }, [ref])
+  }, [element])
   return inView
 }

@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionSummary } from '@shared/agent-host'
 import type { ThreadState } from '@shared/thread'
 
-vi.stubGlobal('window', { kettu: { agents: { request: vi.fn() } } })
+vi.stubGlobal('window', {
+  kettu: { agents: { request: vi.fn() } },
+  matchMedia: () => ({ matches: false, addEventListener: () => {} }),
+})
 
 let shown: string[] = []
 vi.mock('@renderer/stores/view', async (original) => ({

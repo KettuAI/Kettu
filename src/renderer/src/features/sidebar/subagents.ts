@@ -1,12 +1,5 @@
 import type { SessionSummary } from '@shared/agent-host'
-
-export function subagentRunning(subagent: SessionSummary): boolean {
-  return (
-    subagent.status === 'running' ||
-    subagent.status === 'awaiting_permission' ||
-    subagent.status === 'starting'
-  )
-}
+import { subagentRunning } from '@renderer/features/session/subagent/progress'
 
 /**
  * The sub-agents a session's badge lists: those running, the latest started first, then with
