@@ -180,6 +180,8 @@ export interface SessionEvents {
    * or to `portIds` alone, the one that sent it.
    */
   returned(sessionId: string | null, portIds?: readonly string[]): void
+  /** Who shows the session in front changed, or a port began to watch it: `showing` are their ports. */
+  viewers(sessionId: string, showing: readonly string[], to: readonly string[]): void
   attention(
     sessionId: string,
     kind: 'permission' | 'turn-ended' | 'error',
@@ -1730,13 +1732,27 @@ export class SessionManager {
   }
 
   watch(sessionId: string, portId: string): void {
-    this.recordOf(sessionId) // rejects an unknown session
+    const { id } = this.recordOf(sessionId) // rejects an unknown session
     let ports = this.watchers.get(sessionId)
     if (!ports) {
       ports = new Set()
       this.watchers.set(sessionId, ports)
     }
     ports.add(portId)
+    this.tellViewers(id, [portId])
+  }
+
+  private showing(sessionId: string): string[] {
+    const ports: string[] = []
+    for (const [portId, shown] of this.shown) if (shown.has(sessionId)) ports.push(portId)
+    return ports
+  }
+
+  /** Tells the ports that watch a session, or `to`, who has it in front. */
+  private tellViewers(sessionId: string, to?: readonly string[]): void {
+    const showing = this.showing(sessionId)
+    const ports = to ?? [...new Set([...(this.watchers.get(sessionId) ?? []), ...showing])]
+    if (ports.length > 0) this.deps.events.viewers(sessionId, showing, ports)
   }
 
   unwatch(sessionId: string, portId: string): void {
@@ -1764,6 +1780,7 @@ export class SessionManager {
       if (!this.has(id)) continue
       const record = this.recordOf(id)
       if (previous?.has(id) && next.has(id)) continue
+      this.tellViewers(id)
       this.markViewed(id, record)
       const live = this.live.get(id)
       if (!live) continue
@@ -1775,10 +1792,12 @@ export class SessionManager {
   portClosed(portId: string): void {
     const slot = this.preparedSlots.get(portId)
     for (const live of [slot?.current, slot?.next]) if (live) void this.dropPrepared(live)
+    const shown = this.shown.get(portId)
     this.shown.delete(portId)
     for (const [sessionId, ports] of this.watchers) {
       if (ports.delete(portId) && ports.size === 0) this.watchers.delete(sessionId)
     }
+    for (const sessionId of shown ?? []) if (this.has(sessionId)) this.tellViewers(sessionId)
     // What was given back to the port goes to whichever window or device asks next.
     const orphaned = new Set<string | null>()
     for (const message of this.returned) {

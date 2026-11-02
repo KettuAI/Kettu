@@ -433,6 +433,12 @@ export class AgentHost {
           if (portIds) this.hub.send(portIds, { type: 'session.returned', sessionId })
           else this.hub.broadcast({ type: 'session.returned', sessionId })
         },
+        viewers: (sessionId, showing, to) => {
+          for (const portId of to) {
+            const viewers = this.hub.viewers(showing, portId)
+            this.hub.send([portId], { type: 'session.viewers', sessionId, viewers })
+          }
+        },
         attention: (sessionId, kind, title, body) =>
           options.send({ type: 'host:attention', sessionId, kind, title, body }),
         badge: (count) => options.send({ type: 'host:badge', count }),

@@ -115,6 +115,10 @@
     "from": "来自 {{title}}",
     "fromParent": "来自父会话"
   },
+  "viewers": {
+    "more": "{{name}} +{{count}}",
+    "label": "{{names, list(style: narrow)}} 上也开着这个会话"
+  },
   "userEntry": {
     "from": "来自 {{title}}"
   },
