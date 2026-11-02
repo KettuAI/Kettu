@@ -172,7 +172,12 @@ export function QuitConfirm() {
           <span aria-hidden className="hidden flex-1 sm:block" />
           {unsaved.length > 0 ? (
             <>
-              <Button variant="outline" disabled={saving} onClick={() => answer(true)}>
+              <Button
+                variant="outline"
+                size="dialog"
+                disabled={saving}
+                onClick={() => answer(true)}
+              >
                 {t('quit.dontSave')}
               </Button>
               <AlertDialogAction disabled={saving} onClick={() => void saveThenAnswer()}>
@@ -186,7 +191,7 @@ export function QuitConfirm() {
             </>
           ) : keepRunning ? (
             <>
-              <Button variant="outline" onClick={() => answer(true)}>
+              <Button variant="outline" size="dialog" onClick={() => answer(true)}>
                 {t('quit.stopAndQuit')}
               </Button>
               <AlertDialogAction ref={keep} onClick={() => answer('background')}>
