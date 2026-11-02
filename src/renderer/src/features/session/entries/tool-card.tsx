@@ -46,9 +46,11 @@ import { basename, dirname, relativePath } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { cn } from '@renderer/lib/utils'
+import { toast } from '@renderer/components/ui/toast'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { useWebHostStore } from '@renderer/stores/web-host'
 import { Clamp } from '../clamp'
 import { Diff, Markdown } from '../markdown'
 import { CarriedImage } from '../media/carried-image'
@@ -57,7 +59,14 @@ import { EntryIdContext, SessionIdContext } from '../media/grants'
 import { LocalMedia } from '../media/local-media'
 import { toolMedia } from '../media/named'
 import { useEntry, useEntryAnimation } from '../use-thread'
-import { commandOutput, primaryOption, PANEL, respondToPermission, toolLabel } from './helpers'
+import {
+  answeredBy,
+  commandOutput,
+  primaryOption,
+  PANEL,
+  respondToPermission,
+  toolLabel,
+} from './helpers'
 import { useDiffStats } from './use-diff-stats'
 
 const KIND_ICON: Record<ToolKind, LucideIcon> = {
@@ -505,7 +514,9 @@ function PermissionPrompt({
   )
   // An answer cannot reach a host that is not connected; the card waits for it to come back.
   const hostId = useSessionsStore((s) => hostOfPath(s.byId[sessionId]?.projectPath ?? ''))
-  const away = isAway(useOtherHost(hostId)?.connection ?? null)
+  const other = useOtherHost(hostId)
+  const away = isAway(other?.connection ?? null)
+  const served = useWebHostStore((s) => s.host?.name ?? null)
   const permission = entry.permission!
   const primary = primaryOption(permission.options)
   const [highlight, setHighlight] = useState(primary)
@@ -522,7 +533,20 @@ function PermissionPrompt({
       await respondToPermission(sessionId, permission.requestId, option.id)
       if (focused) emitAppEvent({ kind: 'focus-composer' })
     } catch (e) {
-      setError(errorMessage(e))
+      const by = answeredBy(e)
+      if (by !== undefined) {
+        // The card turns into the first answer as its patch lands, so the note goes in a toast.
+        const host = hostId !== null ? (other?.name ?? null) : served
+        toast(
+          by
+            ? t('permission.answeredOn', { device: by.name })
+            : host
+              ? t('permission.answeredOn', { device: host })
+              : t('permission.answeredInWindow'),
+        )
+      } else {
+        setError(errorMessage(e))
+      }
       setAnswering(null)
     }
   }
@@ -610,7 +634,7 @@ function PermissionPrompt({
 
 function PermissionAnswer({ result }: { result: NonNullable<ToolEntry['permissionResult']> }) {
   const { t } = useTranslation('session')
-  const text =
+  const answer =
     result === 'cancelled'
       ? t('permission.answer.cancelled')
       : result === 'withdrawn'
@@ -618,6 +642,8 @@ function PermissionAnswer({ result }: { result: NonNullable<ToolEntry['permissio
         : result.by === 'routine'
           ? t('permission.answer.allowedByRoutine')
           : t(`permission.answer.${ANSWER_KEY[result.kind]}`)
+  const device = typeof result === 'object' ? result.device : undefined
+  const text = device ? t('permission.answer.onDevice', { answer, device: device.name }) : answer
   return (
     <span className="shrink-0 animate-in text-xs text-tertiary animation-duration-(--duration-base) fade-in">
       {text}

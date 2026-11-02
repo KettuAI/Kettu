@@ -89,9 +89,12 @@
       "rejectAlways": "Always rejected",
       "allowedByRoutine": "Allowed by the routine",
       "cancelled": "Cancelled",
-      "withdrawn": "No longer needed"
+      "withdrawn": "No longer needed",
+      "onDevice": "{{answer}} · {{device}}"
     },
-    "label": "Permission request"
+    "label": "Permission request",
+    "answeredOn": "Already answered on {{device}}.",
+    "answeredInWindow": "Already answered in another window."
   },
   "browserOrigin": {
     "label": "New site",
@@ -129,7 +132,8 @@
     "label": "Also open on {{names, list}}"
   },
   "userEntry": {
-    "from": "From {{title}}"
+    "from": "From {{title}}",
+    "device": "Sent from {{device}}"
   },
   "sessionStarted": {
     "label": "Started <title>{{title}}</title>",
@@ -194,6 +198,7 @@
     "position": "{{number}} / {{count}}",
     "resume": "Resume",
     "attachment": "Attachment",
+    "from": "From {{device}}",
     "attachments_one": "{{count}} attachment",
     "attachments_other": "{{count}} attachments",
     "sendNow": "Send now",

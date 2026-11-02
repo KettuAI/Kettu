@@ -1,5 +1,7 @@
+import { ALREADY_ANSWERED } from '@shared/agent-host'
 import {
   entryMessageId,
+  type FromDevice,
   type PermissionKind,
   type SessionStatus,
   type StopReason,
@@ -8,7 +10,7 @@ import {
   type ToolKind,
 } from '@shared/thread'
 import { basename, duration, relativePath } from '@renderer/lib/format'
-import { host } from '@renderer/lib/host'
+import { errorCode, host } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { nameHints } from '../project-names'
 
@@ -49,6 +51,20 @@ export function toolLabel(
 
 export function respondToPermission(sessionId: string, requestId: string, optionId: string) {
   return host('permissions.respond', { sessionId, requestId, optionId })
+}
+
+/**
+ * Where the request a late answer went to was answered first: that device, or null for one of the
+ * host's windows; undefined when the error says something else.
+ */
+export function answeredBy(error: unknown): FromDevice | null | undefined {
+  if (errorCode(error) !== 'not_found') return undefined
+  const data = (error as { data?: { reason?: unknown; device?: unknown } }).data
+  if (data?.reason !== ALREADY_ANSWERED) return undefined
+  const device = data.device as Partial<FromDevice> | null | undefined
+  return typeof device?.id === 'string' && typeof device.name === 'string'
+    ? { id: device.id, name: device.name }
+    : null
 }
 
 /** The usual answer to a request: allowing it once, else the agent's first option. */

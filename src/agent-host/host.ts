@@ -20,6 +20,7 @@ import type { PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
 import type { HostSettings } from '@shared/settings'
+import type { FromDevice } from '@shared/thread'
 import { agentOptionsFile, AgentOptionsStore } from './agent-options'
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
@@ -87,6 +88,11 @@ const ERROR_CODES = new Set([
   'no_page',
   'invalid',
 ])
+
+/** What a message or answer from a paired device's port keeps of it; none from a window. */
+function fromDevice(device: PortDevice | null): FromDevice | undefined {
+  return device ? { id: device.id, name: device.name } : undefined
+}
 
 /** What main answered a browser call: its result, or the error that refused it. */
 function answerOf(result: unknown, problem: unknown): BrowserCallAnswer {
@@ -929,7 +935,8 @@ export class AgentHost {
       'paths.complete': ({ path }) =>
         completePath(path, this.options.platform, this.options.homeDir ?? os.homedir()),
       'sessions.list': ({ projectPath }) => sessions.list(projectPath),
-      'sessions.create': (params, { portId }) => sessions.create(params, portId),
+      'sessions.create': (params, { portId, device }) =>
+        sessions.create(device ? { ...params, device: fromDevice(device) } : params, portId),
       'sessions.prepare': (params, { portId }) => sessions.prepare(params, portId),
       'sessions.discard': ({ sessionId }) => sessions.discard(sessionId),
       'sessions.import': (params) => sessions.importSession(params),
@@ -941,14 +948,14 @@ export class AgentHost {
       'sessions.watch': ({ sessionId }, { portId }) => sessions.watch(sessionId, portId),
       'sessions.unwatch': ({ sessionId }, { portId }) => sessions.unwatch(sessionId, portId),
       'sessions.show': ({ sessionIds }, { portId }) => sessions.show(sessionIds, portId),
-      'sessions.prompt': ({ sessionId, content }, { portId }) =>
-        sessions.prompt(sessionId, content, portId),
+      'sessions.prompt': ({ sessionId, content }, { portId, device }) =>
+        sessions.prompt(sessionId, content, portId, fromDevice(device)),
       'sessions.cancel': ({ sessionId }) => sessions.cancel(sessionId),
       'sessions.retry': ({ sessionId }, { portId }) => sessions.retry(sessionId, portId),
       'sessions.fork': ({ sessionId, entryId }) => sessions.fork(sessionId, entryId),
       'sessions.context': ({ sessionId }) => sessions.context(sessionId),
-      'sessions.queue': ({ sessionId, content }, { portId }) =>
-        sessions.queue(sessionId, content, portId),
+      'sessions.queue': ({ sessionId, content }, { portId, device }) =>
+        sessions.queue(sessionId, content, portId, fromDevice(device)),
       'sessions.unqueue': ({ sessionId, itemId }) => sessions.unqueue(sessionId, itemId),
       'sessions.steer': ({ sessionId, itemId }) => sessions.steer(sessionId, itemId),
       'sessions.sendNow': ({ sessionId, itemId }) => sessions.sendNow(sessionId, itemId),
@@ -981,8 +988,8 @@ export class AgentHost {
         await sessions.removeAll()
         this.options.send({ type: 'host:media-revoke', sessionId: null })
       },
-      'permissions.respond': ({ sessionId, requestId, optionId }) =>
-        sessions.respond(sessionId, requestId, optionId),
+      'permissions.respond': ({ sessionId, requestId, optionId }, { device }) =>
+        sessions.respond(sessionId, requestId, optionId, fromDevice(device)),
       'diagnostics.collect': () => this.collectDiagnostics(),
       'git.status': async ({ projectPath }, { portId }) => {
         const git = this.requireGit()

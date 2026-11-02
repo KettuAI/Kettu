@@ -411,6 +411,11 @@ function QueueCard({
             </span>
           )}
         </span>
+        {item.device && (
+          <span className="max-w-28 shrink-0 truncate text-tertiary">
+            {t('queue.from', { device: item.device.name })}
+          </span>
+        )}
         {count && <span className="shrink-0 text-tertiary tabular">{count}</span>}
       </div>
       <span

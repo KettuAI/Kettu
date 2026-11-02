@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ToolEntry } from '@shared/thread'
 import {
+  answeredBy,
   commandOutput,
   forkBlocked,
   forkEntry,
@@ -392,5 +393,26 @@ describe('commandOutput', () => {
     expect(commandOutput([md('```\na\n```\n\n```\nb\n```')])).toBeNull()
     expect(commandOutput([{ type: 'diff', path: 'a.ts', oldText: null, newText: 'x' }])).toBeNull()
     expect(commandOutput([])).toBeNull()
+  })
+})
+
+describe('answeredBy', () => {
+  const late = (device: unknown) => ({
+    code: 'not_found',
+    message: 'Request p1 was already answered',
+    data: { reason: 'already_answered', device },
+  })
+
+  it('names the device or the window that answered first', () => {
+    const phone = { id: 'a'.repeat(32), name: 'Phone' }
+    expect(answeredBy(late(phone))).toEqual(phone)
+    expect(answeredBy(late(null))).toBeNull()
+  })
+
+  it('leaves any other error alone', () => {
+    expect(answeredBy({ code: 'not_found', message: 'No pending permission request p1' })).toBe(
+      undefined,
+    )
+    expect(answeredBy(new Error('offline'))).toBe(undefined)
   })
 })

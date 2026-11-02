@@ -6,6 +6,7 @@ import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  ALREADY_ANSWERED,
   REMOVED_WHILE_STARTING,
   type AttachmentBytes,
   type ContextBreakdown,
@@ -34,6 +35,7 @@ import {
   UnknownEntryError,
   type AgentId,
   type ConfigOption,
+  type FromDevice,
   type FromSession,
   type OlderPage,
   type Patch,
@@ -324,6 +326,8 @@ interface Live {
   childStartedAt: number | null
   mentioned: boolean
   permissions: Map<string, PendingRequest>
+  /** Who answered the latest requests, by request id: a device, or null for a window. */
+  answered: Map<string, FromDevice | null>
   /** Each waiting new origin's entry, by the id main gave its request. */
   origins: Map<number, string>
   failure: Failure | null
@@ -362,6 +366,7 @@ interface Live {
     content: UserContent[]
     entryId: string
     from?: FromSession
+    device?: FromDevice
     portId?: string
   } | null
   /** Who queued each waiting prompt, by item id; apart from the queue, which every client sees. */
@@ -398,6 +403,8 @@ interface Live {
 const TITLE_LENGTH = 60
 // Titles from `session/list`, kept for an import that follows; bounded like every cache here.
 const LISTED_SESSIONS = 1_000
+// Requests whose answerer a session remembers, so a late answer hears where it was answered.
+const ANSWERS_KEPT = 50
 
 /** The first line of the first text, cut to 60 characters: the title until the agent sends one. */
 export function fallbackTitle(content: readonly UserContent[]): string | null {
@@ -1349,6 +1356,7 @@ export class SessionManager {
       childStartedAt: null,
       mentioned: false,
       permissions: new Map(),
+      answered: new Map(),
       origins: new Map(),
       failure: null,
       unread: this.persistedUnread(record),
@@ -1844,6 +1852,8 @@ export class SessionManager {
       startedBy?: string
       /** Whose prompt the first message is, when another session's agent sends it. */
       from?: FromSession
+      /** The paired device that sent the first message. */
+      device?: FromDevice
       /** Its title, when another session's agent starts it; the prompt's first line otherwise. */
       title?: string
     },
@@ -1858,6 +1868,7 @@ export class SessionManager {
         agentId: params.agentId,
         preparedId: params.preparedId,
         prompt,
+        device: params.device,
       })
       if (adopted) return adopted
     }
@@ -1902,8 +1913,9 @@ export class SessionManager {
     if (prompt) {
       live.first = {
         content: prompt,
-        entryId: this.addPrompt(live, prompt, now, params.from),
+        entryId: this.addPrompt(live, prompt, now, params.from, params.device),
         ...(params.from ? { from: params.from } : {}),
+        ...(params.device ? { device: params.device } : {}),
         ...(portId === undefined ? {} : { portId }),
       }
     }
@@ -2261,6 +2273,7 @@ export class SessionManager {
     agentId: AgentId
     preparedId: string
     prompt: UserContent[] | undefined
+    device?: FromDevice
   }): Promise<SessionSummary | null> {
     const asked = this.live.get(params.preparedId)
     if (!asked?.prepared || asked.record.agentId !== params.agentId) return null
@@ -2291,7 +2304,7 @@ export class SessionManager {
     live.used = true
     live.hiddenSince = this.inFront(live.id) ? null : now
     const { prompt } = params
-    const entryId = prompt ? this.addPrompt(live, prompt, now) : null
+    const entryId = prompt ? this.addPrompt(live, prompt, now, undefined, params.device) : null
     this.save(live)
     this.touch(live.id)
     if (prompt && entryId) this.startTurn(live, prompt, now, entryId, portId)
@@ -2431,6 +2444,7 @@ export class SessionManager {
           content: first.content,
           at: this.now(),
           ...(first.from ? { from: first.from } : {}),
+          ...(first.device ? { device: first.device } : {}),
         },
         ...live.thread.session.queue,
       ],
@@ -3452,7 +3466,12 @@ export class SessionManager {
   }
 
   /** Sends a prompt; a session that is not attached attaches to its agent as the turn starts. */
-  async prompt(sessionId: string, content: UserContent[], portId?: string): Promise<void> {
+  async prompt(
+    sessionId: string,
+    content: UserContent[],
+    portId?: string,
+    device?: FromDevice,
+  ): Promise<void> {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
@@ -3460,7 +3479,7 @@ export class SessionManager {
     const hydrated = this.hydrate(content)
     const live = await this.revive(sessionId)
     if (!canSend(live.thread.session.status)) throw busyError(live.thread.session.status)
-    this.sendPrompt(live, hydrated, undefined, portId)
+    this.sendPrompt(live, hydrated, undefined, portId, device)
   }
 
   private sendPrompt(
@@ -3468,19 +3487,33 @@ export class SessionManager {
     content: UserContent[],
     from?: FromSession,
     portId?: string,
+    device?: FromDevice,
   ): void {
     live.used = true
     const now = this.now()
-    this.startTurn(live, content, now, this.addPrompt(live, content, now, from), portId)
+    this.startTurn(live, content, now, this.addPrompt(live, content, now, from, device), portId)
   }
 
   /** The user entry of a prompt, and the title it gives a session that has none; its entry id. */
-  private addPrompt(live: Live, content: UserContent[], now: number, from?: FromSession): string {
+  private addPrompt(
+    live: Live,
+    content: UserContent[],
+    now: number,
+    from?: FromSession,
+    device?: FromDevice,
+  ): string {
     const entryId = this.nextId(live)
     this.emit(live, [
       {
         op: 'entry.add',
-        entry: { kind: 'user', id: entryId, content, at: now, ...(from ? { from } : {}) },
+        entry: {
+          kind: 'user',
+          id: entryId,
+          content,
+          at: now,
+          ...(from ? { from } : {}),
+          ...(device ? { device } : {}),
+        },
       },
     ])
     if (live.thread.session.title === null) {
@@ -3673,6 +3706,7 @@ export class SessionManager {
     sessionId: string,
     input: UserContent[],
     portId?: string,
+    device?: FromDevice,
   ): Promise<{ itemId: string | null }> {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
@@ -3683,13 +3717,13 @@ export class SessionManager {
     const { status, queue, queuePaused } = live.thread.session
     if (canSend(status) && (queue.length === 0 || queuePaused)) {
       // At once: another prompt waiting on the same revive must see this turn running.
-      this.sendPrompt(live, content, undefined, portId)
+      this.sendPrompt(live, content, undefined, portId, device)
       return { itemId: null }
     }
     if (!canSend(status) && status !== 'running' && status !== 'awaiting_permission') {
       throw busyError(status)
     }
-    const item = { id: randomUUID(), content, at: this.now() }
+    const item = { id: randomUUID(), content, at: this.now(), ...(device ? { device } : {}) }
     if (portId !== undefined) live.queuedBy.set(item.id, portId)
     this.update(live, { queue: [...queue, item] })
     this.persist(live)
@@ -3748,6 +3782,7 @@ export class SessionManager {
           content: resolved.shown,
           at: this.now(),
           steered: true,
+          ...(item.device ? { device: item.device } : {}),
         },
       },
     ])
@@ -3804,7 +3839,7 @@ export class SessionManager {
     this.update(live, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
     const queuedBy = live.queuedBy.get(next.id)
     live.queuedBy.delete(next.id)
-    this.sendPrompt(live, next.content, next.from, queuedBy)
+    this.sendPrompt(live, next.content, next.from, queuedBy, next.device)
   }
 
   private pauseQueue(live: Live): void {
@@ -4657,7 +4692,8 @@ export class SessionManager {
   private settlePermission(
     live: Live,
     requestId: string,
-    result: { optionId: string; kind: PermissionKind } | 'cancelled' | 'withdrawn',
+    result:
+      { optionId: string; kind: PermissionKind; device?: FromDevice } | 'cancelled' | 'withdrawn',
   ): void {
     const pending = live.permissions.get(requestId)
     if (!pending) return
@@ -4697,14 +4733,28 @@ export class SessionManager {
     }
   }
 
-  respond(sessionId: string, requestId: string, optionId: string): void {
+  respond(sessionId: string, requestId: string, optionId: string, device?: FromDevice): void {
     this.recordOf(sessionId)
     const live = this.live.get(sessionId)
     const pending = live?.permissions.get(requestId)
+    if (live && !pending && live.answered.has(requestId)) {
+      throw new HostError('not_found', `Request ${requestId} was already answered`, {
+        reason: ALREADY_ANSWERED,
+        device: live.answered.get(requestId) ?? null,
+      })
+    }
     if (!live || !pending) throw notFound(`No pending permission request ${requestId}`)
     const option = pending.options.find((o) => o.id === optionId)
     if (!option) throw invalidParams(`${optionId} is not an option of request ${requestId}`)
-    this.settlePermission(live, requestId, { optionId, kind: option.kind })
+    this.settlePermission(live, requestId, {
+      optionId,
+      kind: option.kind,
+      ...(device ? { device } : {}),
+    })
+    live.answered.set(requestId, device ?? null)
+    if (live.answered.size > ANSWERS_KEPT) {
+      live.answered.delete(live.answered.keys().next().value!)
+    }
     pending.answer({ optionId })
     this.touch(live.id)
   }
