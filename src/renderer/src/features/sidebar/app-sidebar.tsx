@@ -43,7 +43,7 @@ import { RunningDot } from '@renderer/features/routines/run-mark'
 import { dayOf } from '@renderer/features/usage/model'
 import { limitLabel, tokens } from '@renderer/lib/format'
 import { LIMIT_TEXT, limitLevel } from '@renderer/lib/plan-limit'
-import { formatShortcut } from '@renderer/lib/platform'
+import { formatShortcut, isMac } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
@@ -78,6 +78,8 @@ import { ProjectMenuItems } from './project-menu'
 import { tightestLimit } from './plan-usage'
 import { visibleProjects } from './project-group'
 import { keepInSight, limitRows, ROWS_SHOWN } from './row-limit'
+import { GroupRenameHints } from './rename-hints'
+import { RenameScope } from './rename-scope'
 import { SessionRow } from './session-row'
 import { SidebarFooterContent } from './sidebar-footer'
 import { costText } from './usage-row'
@@ -252,7 +254,7 @@ export function NavRow({
       isActive={current}
       onClick={onClick}
       aria-label={ariaLabel}
-      aria-keyshortcuts={shortcut}
+      aria-keyshortcuts={shortcut?.replace('Mod', isMac ? 'Meta' : 'Control')}
       className="gap-2.5 pr-2.5 text-row [&_svg]:size-[18px]"
     >
       {icon}
@@ -598,7 +600,11 @@ function ProjectGroup({
                         showOnHover
                         tabIndex={-1}
                         aria-label={t('row.more')}
-                        className={cn(GROUP_ACTION, !project.missing && 'right-7.5')}
+                        className={cn(
+                          GROUP_ACTION,
+                          'data-popup-open:bg-selected data-popup-open:text-primary',
+                          !project.missing && !moreOpen && 'right-7.5',
+                        )}
                       />
                     }
                   />
@@ -614,7 +620,7 @@ function ProjectGroup({
           </DropdownMenu>
         )}
         {/* New session starts No project sessions on this computer only. */}
-        {!project?.missing && !away && (project || local) && (
+        {!project?.missing && !away && (project || local) && !moreOpen && (
           <Tooltip>
             <TooltipTrigger
               render={
@@ -638,9 +644,11 @@ function ProjectGroup({
       </div>
       {open && tree.length > 0 && (
         <SidebarMenu className="gap-0.5">
-          {limited.rows.map((node) => (
-            <SessionRow key={node.summary.id} node={node} tabStopId={tabStopId} />
-          ))}
+          <RenameScope value={key}>
+            {limited.rows.map((node) => (
+              <SessionRow key={node.summary.id} node={node} tabStopId={tabStopId} />
+            ))}
+          </RenameScope>
           {(limited.hidden > 0 || allShown) && tree.length > ROWS_SHOWN && (
             <SidebarMenuItem>
               <SidebarMenuButton
@@ -653,6 +661,7 @@ function ProjectGroup({
               </SidebarMenuButton>
             </SidebarMenuItem>
           )}
+          <GroupRenameHints scope={key} />
         </SidebarMenu>
       )}
     </div>
@@ -742,14 +751,17 @@ function PinnedGroup({
       </div>
       {open && (
         <SidebarMenu className="gap-0.5">
-          {tree.map((node) => (
-            <SessionRow
-              key={node.summary.id}
-              node={node}
-              tabStopId={tabStopId}
-              showHost={!!hosts}
-            />
-          ))}
+          <RenameScope value={PINNED_GROUP}>
+            {tree.map((node) => (
+              <SessionRow
+                key={node.summary.id}
+                node={node}
+                tabStopId={tabStopId}
+                showHost={!!hosts}
+              />
+            ))}
+          </RenameScope>
+          <GroupRenameHints scope={PINNED_GROUP} />
         </SidebarMenu>
       )}
     </div>

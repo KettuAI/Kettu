@@ -36,6 +36,8 @@ import {
 import { hostOfSession, needsYouTree, useSessionsStore } from '@renderer/stores/sessions'
 import { THIS_COMPUTER, useViewStore } from '@renderer/stores/view'
 import { useHostLabel } from './host-label'
+import { GroupRenameHints } from './rename-hints'
+import { RenameScope } from './rename-scope'
 import { SessionRow } from './session-row'
 
 /** All hosts, which narrows the list to one host. */
@@ -82,6 +84,9 @@ export function HostFilter() {
 }
 
 /** The sessions on the hosts shown that wait for you or failed, each naming its host. */
+// Its rows' group, for the rename keys at its end; no project path looks like it.
+const NEEDS_YOU_GROUP = 'needs-you'
+
 export function NeedsYouGroup({
   hosts,
   away,
@@ -122,9 +127,12 @@ export function NeedsYouGroup({
         <span className="text-xs text-tertiary tabular-nums">{tree.length}</span>
       </div>
       <SidebarMenu className="gap-0.5">
-        {tree.map((node) => (
-          <SessionRow key={node.summary.id} node={node} tabStopId={null} showHost />
-        ))}
+        <RenameScope value={NEEDS_YOU_GROUP}>
+          {tree.map((node) => (
+            <SessionRow key={node.summary.id} node={node} tabStopId={null} showHost />
+          ))}
+        </RenameScope>
+        <GroupRenameHints scope={NEEDS_YOU_GROUP} />
       </SidebarMenu>
     </section>
   )

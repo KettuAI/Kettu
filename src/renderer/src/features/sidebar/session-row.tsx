@@ -13,17 +13,17 @@ import {
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
-import { Kbd } from '@renderer/components/ui/kbd'
 import { SidebarMenuButton, SidebarMenuItem } from '@renderer/components/ui/sidebar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { PrIcon } from '@renderer/features/git/pr-icon'
-import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
 import { hostOfSession, sessionTitle, type SessionNode } from '@renderer/stores/sessions'
 import { useSessionDragSource } from '@renderer/features/split/session-drag-model'
 import { allPanes, paneWithSession } from '@renderer/features/split/layout'
 import { openSession, useViewStore } from '@renderer/stores/view'
+import { RenameHints } from './rename-hints'
+import { useRenameHints } from './rename-scope'
 import { rowStatus } from './row-status'
 import { cacheGone, useGoneLabel, useSessionCache } from './session-cache'
 import { SessionCard } from './session-card'
@@ -105,9 +105,11 @@ export const SessionRow = memo(function SessionRow({
   const [cardOpen, setCardOpen] = useState(false)
   // The badge lists the sub-agents on its own hover, which the row's card leaves to it.
   const overBadge = useRef(false)
+  const [badgeHovered, setBadgeHovered] = useState(false)
   const row = useRef<HTMLDivElement>(null)
   const rename = useRenaming(() => row.current?.querySelector<HTMLElement>('[data-sidebar-row]'))
   const drag = useSessionDragSource(summary.id, rename.renaming)
+  const ownHints = useRenameHints(rename.renaming)
   const pad = branch ? NESTED_PAD : ROW_PAD
   const cache = useSessionCache(summary)
   const gone = useGoneLabel(cache)
@@ -125,7 +127,7 @@ export const SessionRow = memo(function SessionRow({
         event.stopPropagation()
         setExpanded(!expanded)
       }}
-      className="-mr-px -ml-1 grid size-3.5 shrink-0 place-items-center rounded-sm text-tertiary hover:text-primary"
+      className="-ml-1 grid size-3.5 shrink-0 place-items-center rounded-sm text-tertiary hover:text-primary"
     >
       {expanded ? (
         <ChevronDownIcon strokeWidth={1.6} className="size-[11px]!" />
@@ -201,6 +203,7 @@ export const SessionRow = memo(function SessionRow({
           subagents={node.subagents}
           onHover={(over) => {
             overBadge.current = over
+            setBadgeHovered(over)
             if (over) setCardOpen(false)
           }}
         />
@@ -218,7 +221,7 @@ export const SessionRow = memo(function SessionRow({
       {showHost && hostName && (
         <span
           className={cn(
-            'max-w-24 shrink-0 truncate text-xs font-normal text-tertiary group-hover/session:opacity-0 group-has-focus-visible/session:opacity-0',
+            'max-w-24 shrink-0 truncate text-xs font-normal text-tertiary group-hover/session:opacity-0 group-has-focus-visible/session:opacity-0 group-data-over-badge/session:opacity-100!',
             moreOpen && 'opacity-0',
           )}
         >
@@ -230,7 +233,7 @@ export const SessionRow = memo(function SessionRow({
           status={status}
           expiring={expiring}
           className={cn(
-            'group-hover/session:opacity-0 group-has-focus-visible/session:opacity-0',
+            'group-hover/session:opacity-0 group-has-focus-visible/session:opacity-0 group-data-over-badge/session:opacity-100!',
             moreOpen && 'opacity-0',
           )}
         />
@@ -249,7 +252,7 @@ export const SessionRow = memo(function SessionRow({
 
   return (
     <SidebarMenuItem>
-      <div ref={row} className="group/session relative">
+      <div ref={row} data-over-badge={badgeHovered || undefined} className="group/session relative">
         {branch && <TreeLine last={branch === 'last'} />}
         {rename.renaming ? (
           <>
@@ -266,7 +269,7 @@ export const SessionRow = memo(function SessionRow({
                 className="h-full flex-1 bg-transparent selection:bg-edit-selection aria-invalid:text-danger"
               />
             </div>
-            <RenameHints />
+            {ownHints && <RenameHints />}
           </>
         ) : (
           <>
@@ -316,7 +319,7 @@ export const SessionRow = memo(function SessionRow({
                           type="button"
                           tabIndex={-1}
                           aria-label={t('row.moreFor', { title })}
-                          className="absolute top-1 right-1.5 grid size-6 place-items-center rounded-md bg-selected text-primary opacity-0 outline-none transition-opacity duration-(--duration-fast) group-hover/session:opacity-100 group-has-focus-visible/session:opacity-100 data-popup-open:opacity-100 [&_svg]:size-[15px]"
+                          className="absolute top-1 right-1.5 grid size-6 place-items-center rounded-md bg-selected text-primary opacity-0 outline-none transition-opacity duration-(--duration-fast) group-hover/session:opacity-100 group-has-focus-visible/session:opacity-100 group-data-over-badge/session:opacity-0! data-popup-open:opacity-100 [&_svg]:size-[15px]"
                         />
                       }
                     />
@@ -368,32 +371,11 @@ function TreeLine({ last }: { last: boolean }) {
     <span
       aria-hidden
       className={cn(
-        'pointer-events-none absolute left-[17px] w-[9px] border-l border-border-default',
+        'pointer-events-none absolute left-[17px] w-[9px] border-l border-default',
         last
-          ? 'top-[-2px] h-[18px] rounded-bl-[4px] border-b'
-          : 'top-[-2px] bottom-[-2px] before:absolute before:top-[18px] before:left-0 before:w-[9px] before:border-t before:border-border-default',
+          ? 'top-[-2px] h-[19px] rounded-bl-[4px] border-b'
+          : 'top-[-2px] bottom-[-2px] before:absolute before:top-[18px] before:-left-px before:w-[9px] before:border-t before:border-default',
       )}
     />
-  )
-}
-
-/** Under a row being renamed: the keys that save, cancel and undo. */
-function RenameHints() {
-  const { t } = useTranslation('sidebar')
-  return (
-    <div aria-hidden className="flex gap-3.5 px-2.5 pt-2.5 pb-1 text-meta text-tertiary">
-      <span className="inline-flex items-center gap-1">
-        <Kbd>↵</Kbd>
-        {t('rename.save')}
-      </span>
-      <span className="inline-flex items-center gap-1">
-        <Kbd>esc</Kbd>
-        {t('rename.cancel')}
-      </span>
-      <span className="inline-flex items-center gap-1">
-        <Kbd>{formatShortcut('Mod+Z')}</Kbd>
-        {t('rename.undo')}
-      </span>
-    </div>
   )
 }
