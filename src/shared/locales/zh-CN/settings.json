@@ -1022,7 +1022,7 @@
     "pair": {
       "title": "添加设备",
       "scan": "用 iPhone 或 iPad 上的 Kettu 扫这个码。",
-      "otherComputer": "另一台电脑：在它的 Kettu 里打开 设置 › 主机 › 添加主机…，粘贴这个链接。",
+      "otherComputer": "在另一台电脑上，打开 设置 › 主机 › 添加主机 并粘贴链接。",
       "target": "打开方式",
       "targets": {
         "app": "App",
@@ -1033,8 +1033,6 @@
       "address": "地址",
       "copy": "复制",
       "copied": "已复制",
-      "expires": "只能添加一台设备，<time>{{time}}</time> 后失效。设备要能直连这台电脑：同一网络、同一个 VPN，或连得到你加的地址。",
-      "expires_web": "只能添加一台设备，<time>{{time}}</time> 后失效。设备要能直连 {{host}}：同一网络、同一个 VPN，或连得到你加的地址。",
       "waiting": "正在等设备扫码…",
       "qr": "配对二维码",
       "failed": "没能生成配对码：{{message}}",
@@ -1076,7 +1074,10 @@
         "reject": "拒绝",
         "add": "添加"
       },
-      "added": "已添加“{{name}}”"
+      "added": "已添加“{{name}}”",
+      "description": "添加一台设备。设备要能直接连到这台电脑：同一个网络、同一个 VPN，或通过你添加的地址。",
+      "description_web": "添加一台设备。设备要能直接连到 {{host}}：同一个网络、同一个 VPN，或通过你添加的地址。",
+      "expiresIn": "{{time}} 后过期"
     },
     "device": {
       "rename": "改名",

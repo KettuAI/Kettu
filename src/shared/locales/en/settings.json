@@ -1033,7 +1033,7 @@
     "pair": {
       "title": "Add device",
       "scan": "Scan this code with Kettu on an iPhone or iPad.",
-      "otherComputer": "On another computer, open Settings › Hosts › Add host… in its Kettu and paste this link.",
+      "otherComputer": "On another computer, open Settings › Hosts › Add host and paste the link.",
       "target": "Open with",
       "targets": {
         "app": "App",
@@ -1044,8 +1044,6 @@
       "address": "Address",
       "copy": "Copy",
       "copied": "Copied",
-      "expires": "It adds one device and expires in <time>{{time}}</time>. The device has to reach this computer directly: on the same network, the same VPN, or through an address you added.",
-      "expires_web": "It adds one device and expires in <time>{{time}}</time>. The device has to reach {{host}} directly: on the same network, the same VPN, or through an address you added.",
       "waiting": "Waiting for a device to scan…",
       "qr": "Pairing QR code",
       "failed": "Kettu could not make a code: {{message}}",
@@ -1087,7 +1085,10 @@
         "reject": "Reject",
         "add": "Add"
       },
-      "added": "“{{name}}” is added"
+      "added": "“{{name}}” is added",
+      "description": "It adds one device. The device has to reach this computer directly: on the same network, the same VPN, or through an address you added.",
+      "description_web": "It adds one device. The device has to reach {{host}} directly: on the same network, the same VPN, or through an address you added.",
+      "expiresIn": "Expires in {{time}}"
     },
     "device": {
       "rename": "Rename",

@@ -395,10 +395,10 @@ describe('Add device', () => {
     expect(body).toContain('Scan this code with Kettu on an iPhone or iPad.')
     // Another computer pastes the link where it adds hosts.
     expect(body).toContain(
-      'On another computer, open Settings › Hosts › Add host… in its Kettu and paste this link.',
+      'On another computer, open Settings › Hosts › Add host and paste the link.',
     )
     expect(body).toContain(link)
-    expect(body).toMatch(/expires in 4:3[12] ?\./)
+    expect(body).toMatch(/Expires in 4:3[12]$/)
   })
 
   it('offers a browser link for each address a browser can open', () => {
@@ -439,7 +439,7 @@ describe('Add device', () => {
     const body = text(createElement(CodeBody, { shown, link }))
     // The QR code's overlay names the reason, then the text beside it says more.
     expect(body).toMatch(new RegExp(`^${label} ${title} `))
-    expect(body).not.toContain('expires in')
+    expect(body).not.toContain('Expires in')
     // The link stays, greyed out, and copies no more.
     expect(renderToStaticMarkup(createElement(CodeBody, { shown, link }))).toMatch(
       /text-disabled[^>]*>https:\/\/kettu\.sh\/pair#AQID/,
