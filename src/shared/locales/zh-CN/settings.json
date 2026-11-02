@@ -165,7 +165,8 @@
         "unreachable": "无法连接主题库。请检查网络或代理后重试。",
         "invalid": "无法读取主题库。",
         "newer-format": "主题库需要更新版本的 Kettu。"
-      }
+      },
+      "done": "完成"
     },
     "colorMode": {
       "name": "颜色模式",

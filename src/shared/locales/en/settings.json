@@ -166,7 +166,8 @@
         "unreachable": "Couldn't reach the theme catalog. Check your connection or proxy, then try again.",
         "invalid": "The theme catalog couldn't be read.",
         "newer-format": "The theme catalog needs a newer version of Kettu."
-      }
+      },
+      "done": "Done"
     },
     "colorMode": {
       "name": "Color mode",
