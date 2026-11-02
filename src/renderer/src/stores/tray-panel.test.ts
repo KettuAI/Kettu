@@ -49,6 +49,7 @@ function session(id: string, patch: Partial<SessionSummary> = {}): SessionSummar
     model: null,
     pinnedAt: null,
     archivedAt: null,
+    acpSessionId: null,
     ...patch,
   }
 }
