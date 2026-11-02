@@ -70,12 +70,15 @@ export function ImportSessionsDialog({
 
   // Requests only: the loading marker is set by whoever starts a load, never inside an effect.
   const request = (agentId: AgentId, cursor?: string) => {
+    // A page for an earlier opening, maybe of another project, is dropped.
+    const at = run.current
     host('agents.listSessions', {
       agentId,
       projectPath: project.path,
       ...(cursor ? { cursor } : {}),
     })
-      .then((page) =>
+      .then((page) => {
+        if (run.current !== at) return
         setLists((l) => ({
           ...l,
           [agentId]: {
@@ -84,9 +87,10 @@ export function ImportSessionsDialog({
             loading: false,
             error: null,
           },
-        })),
-      )
-      .catch((error: unknown) =>
+        }))
+      })
+      .catch((error: unknown) => {
+        if (run.current !== at) return
         setLists((l) => ({
           ...l,
           [agentId]: {
@@ -95,8 +99,8 @@ export function ImportSessionsDialog({
             loading: false,
             error: errorMessage(error),
           },
-        })),
-      )
+        }))
+      })
   }
 
   const loadMore = (agentId: AgentId, cursor: string) => {
@@ -203,7 +207,7 @@ export function ImportSessionsDialog({
                     key={agent.id}
                     value={agent.id}
                     disabled={empty && agent.id !== shown}
-                    className="h-7 flex-none rounded-lg px-3 text-control font-medium text-secondary not-data-active:hover:bg-hover data-active:bg-subtle data-active:text-foreground group-data-[variant=default]/tabs-list:data-active:shadow-none dark:text-secondary"
+                    className="h-7 flex-none rounded-xl px-3 text-control font-medium text-secondary not-data-active:hover:bg-hover data-active:bg-subtle data-active:text-foreground group-data-[variant=default]/tabs-list:data-active:shadow-none dark:text-secondary"
                   >
                     {known
                       ? t(list.nextCursor ? 'import.tabMore' : 'import.tab', {
@@ -324,7 +328,7 @@ function SessionList({
               <AgentMark agent={agentId} size={16} />
               <span
                 className={cn(
-                  'min-w-0 flex-1 truncate text-ui',
+                  'min-w-0 flex-1 truncate text-[13.5px]',
                   s.imported ? 'text-secondary' : 'text-foreground',
                 )}
               >
