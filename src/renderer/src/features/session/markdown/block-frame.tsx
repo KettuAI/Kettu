@@ -98,7 +98,7 @@ export function PreviewSourceSwitch({
         { value: 'preview', label: labels.preview },
         { value: 'source', label: labels.source },
       ]}
-      className="shadow-none"
+      size="small"
       itemClassName="h-5.5 px-2 text-xs font-medium"
     />
   )

@@ -541,7 +541,7 @@ function MenuRow({
       onMouseMove={onHover}
       onClick={() => open(target)}
       className={cn(
-        'flex h-7.5 w-full items-center gap-2.25 rounded-tile px-2 text-left text-[13.5px] whitespace-nowrap text-primary outline-none focus-ring',
+        'flex h-7.5 w-full items-center gap-2.25 rounded-tile px-2 text-left text-menu whitespace-nowrap text-primary outline-none focus-ring',
         highlighted && 'bg-selected',
       )}
     >

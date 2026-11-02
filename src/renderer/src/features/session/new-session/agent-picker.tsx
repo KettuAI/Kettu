@@ -162,7 +162,7 @@ export function AgentPicker({
                       >
                         <AgentMark agent={id} size={20} className="shrink-0" />
                         <span className="flex min-w-0 flex-1 flex-col gap-px">
-                          <span className="truncate text-[13.5px] text-primary">{status.name}</span>
+                          <span className="truncate text-menu text-primary">{status.name}</span>
                           {line && (
                             <span className={cn('truncate text-small', LINE_TONE[line.tone])}>
                               {line.text}

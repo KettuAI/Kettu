@@ -21,6 +21,7 @@ export function DiffFileToggle({
         aria-label={t('diff.view')}
         value={value}
         onChange={onChange}
+        size="small"
         className="app-region-no-drag"
         itemClassName="h-5.5 px-2 text-small"
         segments={[

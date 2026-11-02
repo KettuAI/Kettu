@@ -143,7 +143,7 @@ function Profile({ identity }: { identity: Identity }) {
     <div className="flex items-center gap-2.5 px-2 pt-2 pb-2.5">
       <AccountAvatar identity={identity} size={32} />
       <div className="flex min-w-0 flex-1 flex-col leading-[1.3]">
-        <span className="truncate text-[13.5px] font-semibold text-primary">
+        <span className="truncate text-menu font-semibold text-primary">
           <IdentityName identity={identity} />
         </span>
         <span className="truncate text-small text-tertiary">
