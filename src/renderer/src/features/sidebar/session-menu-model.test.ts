@@ -138,7 +138,17 @@ describe('resumeCommand', () => {
 
   it('quotes for cmd when the folder is a Windows one', () => {
     expect(resumeCommand(session('codex', 'abc'), 'C:\\Users\\me\\my repo')).toBe(
-      'cd "C:\\Users\\me\\my repo" && codex resume abc',
+      'pushd "C:\\Users\\me\\my repo" && codex resume abc',
+    )
+  })
+
+  // cmd's cd stays on the shell's drive and takes no network path; pushd does both.
+  it('changes drive, and reaches a network folder, on Windows', () => {
+    expect(resumeCommand(session('codex', 'abc'), 'D:\\work')).toBe(
+      'pushd D:\\work && codex resume abc',
+    )
+    expect(resumeCommand(session('codex', 'abc'), '\\\\server\\share\\app')).toBe(
+      'pushd \\\\server\\share\\app && codex resume abc',
     )
   })
 
@@ -176,6 +186,17 @@ describe('matchesShortcut', () => {
     expect(matchesShortcut(key({ key: '.', code: 'Period', ctrlKey: true }), 'Mod+.', true)).toBe(
       false,
     )
+  })
+
+  it("reads a letter as the layout types it, not by the key's place", () => {
+    // AZERTY's A sits where QWERTY's Q does, and Dvorak's L where QWERTY's P does.
+    expect(matchesShortcut(key({ key: 'q', code: 'KeyA' }), 'A', true)).toBe(false)
+    expect(matchesShortcut(key({ key: 'a', code: 'KeyQ' }), 'A', true)).toBe(true)
+    expect(matchesShortcut(key({ key: 'l', code: 'KeyP' }), 'P', true)).toBe(false)
+  })
+
+  it('takes the physical key where the layout types no Latin letter', () => {
+    expect(matchesShortcut(key({ key: 'з', code: 'KeyP' }), 'P', true)).toBe(true)
   })
 
   it('takes the physical key when Alt changes the character', () => {
