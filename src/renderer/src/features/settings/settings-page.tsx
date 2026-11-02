@@ -1,4 +1,12 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  Fragment,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { ArrowLeftIcon, ChevronRightIcon, SearchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { SearchField } from '@renderer/components/search-field'
@@ -16,8 +24,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { DESK, ON_DESK, SHEET } from '@renderer/features/shell/sheet'
 import { formatShortcut, hasBand, isMod, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
+import {
+  hostScope,
+  HostScopeContext,
+  LOCAL_SCOPE,
+  useSettingsHostStore,
+  type HostScope,
+} from '@renderer/stores/host-scope'
+import { isAway, useOtherHost, useOtherHosts } from '@renderer/stores/hosts'
 import { useSessionsStore } from '@renderer/stores/sessions'
-import { loadMcpStatus } from '@renderer/stores/mcp'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import {
   closeSettings,
@@ -26,6 +41,8 @@ import {
   type SettingsSection,
 } from '@renderer/stores/view'
 import { footerLabel } from './footer-label'
+import { HostPicker } from './host-picker'
+import { HOST_SECTIONS } from './host-sections'
 import { excerpt, FlashContext, highlight, matches, type RowDef, type SectionDef } from './model'
 import { GroupLabel, RowGroup, SectionBody } from './rows'
 import { webClusters } from './web-sections'
@@ -54,35 +71,72 @@ const FLASH_MS = 1200
 /**
  * Settings take the whole window: a list of sections and search on the left, the selected section
  * as a page of its own on the right. While searching, the page gives way to the matching rows,
- * each of which opens its page at the row.
+ * each of which opens its page at the row. The client's own sections are this computer's; the
+ * host's show the host the picker chose.
  */
 export default function SettingsPage() {
+  const client = [
+    useGeneralSection(),
+    useAppearanceSection(),
+    useNotificationsSection(),
+    useAccountSection(),
+    useHostsSection(),
+    useBrowserSection(),
+  ]
+  const about = useAboutSection()
+  const hostId = useShownHost()
+  const scope = useMemo(() => (hostId === null ? LOCAL_SCOPE : hostScope(hostId)), [hostId])
+  // Opened again, Settings starts at this computer, as every way into it means this computer.
+  useEffect(() => () => useSettingsHostStore.setState({ hostId: null }), [])
+  return (
+    <HostScopeContext.Provider value={scope}>
+      <SettingsLayout client={client} about={about} scope={scope} />
+    </HostScopeContext.Provider>
+  )
+}
+
+/**
+ * The host the picker chose while it can be shown: known here, and not away. One that goes away
+ * leaves the picker at this computer, so it does not come back by itself later.
+ */
+function useShownHost(): string | null {
+  const chosen = useSettingsHostStore((s) => s.hostId)
+  const host = useOtherHost(chosen)
+  const shown = host && !isAway(host.connection) ? host.id : null
+  useEffect(() => {
+    if (chosen !== null && shown === null) useSettingsHostStore.setState({ hostId: null })
+  }, [chosen, shown])
+  return shown
+}
+
+function SettingsLayout({
+  client,
+  about,
+  scope,
+}: {
+  client: SectionDef[]
+  about: SectionDef
+  scope: HostScope
+}) {
   const { t } = useTranslation('settings')
-  // The list in clusters: what belongs to this client first, then the agents and their tools,
-  // then the rest.
+  // The list in clusters: what belongs to this client first, then the host's, then About.
   const all: SectionDef[][] = [
-    [
-      useGeneralSection(),
-      useAppearanceSection(),
-      useNotificationsSection(),
-      useAccountSection(),
-      useHostsSection(),
-      useBrowserSection(),
-    ],
+    client,
     [
       useAgentsSection(),
       useHarnessesSection(),
       useUsageSection(),
-      useTerminalSection(),
       useGitSection(),
+      useMcpSection(),
     ],
-    [useMcpSection()],
-    [useArchivedSection(), useSharingSection()],
-    [useRemoteSection()],
-    [useAdvancedSection(), useAboutSection()],
+    [useArchivedSection(), useSharingSection(), useTerminalSection()],
+    [useRemoteSection(), useAdvancedSection()],
+    [about],
   ]
   // The list and the page come from the same sections, so the web client lists only its own.
   const clusters = isWeb ? webClusters(all) : all
+  const others = useOtherHosts()
+  const picker = !isWeb && others.length > 0
   const sections = clusters.flat()
   const [query, setQuery] = useState('')
   const needle = query.trim()
@@ -93,12 +147,13 @@ export default function SettingsPage() {
   const page = sections.find((s) => s.id === active) ?? sections[0]!
   const item = useViewStore((s) => (s.settings.section === active ? s.settings.item : null))
   // Read when Settings opens, so search finds every row, and again when its section shows.
+  const loadMcp = scope.useMcpStore((s) => s.load)
   useEffect(() => {
-    loadMcpStatus()
-  }, [])
+    void loadMcp()
+  }, [loadMcp])
   useEffect(() => {
-    if (active === 'mcp') loadMcpStatus()
-  }, [active, item])
+    if (active === 'mcp') void loadMcp()
+  }, [active, item, loadMcp])
   const scroller = useRef<HTMLDivElement>(null)
   const search = useRef<HTMLInputElement>(null)
   const [jump, setJump] = useState<string | null>(null)
@@ -204,21 +259,24 @@ export default function SettingsPage() {
           className="-my-1 flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-2 py-1"
         >
           {clusters.map((cluster, i) => (
-            <div key={i} className="flex flex-col gap-0.5">
-              {cluster.map((section) => {
-                const count = hits.find((h) => h.id === section.id)?.rows.length ?? 0
-                return (
-                  <NavRow
-                    key={section.id}
-                    section={section}
-                    selected={!searching && section.id === page.id}
-                    dim={searching && count === 0}
-                    count={searching && count > 0 ? count : null}
-                    onChoose={() => choose(section.id)}
-                  />
-                )
-              })}
-            </div>
+            <Fragment key={i}>
+              {picker && i === 1 && <HostPicker hostId={scope.hostId} />}
+              <div className="flex flex-col gap-0.5">
+                {cluster.map((section) => {
+                  const count = hits.find((h) => h.id === section.id)?.rows.length ?? 0
+                  return (
+                    <NavRow
+                      key={section.id}
+                      section={section}
+                      selected={!searching && section.id === page.id}
+                      dim={searching && count === 0}
+                      count={searching && count > 0 ? count : null}
+                      onChoose={() => choose(section.id)}
+                    />
+                  )
+                })}
+              </div>
+            </Fragment>
           ))}
         </nav>
         <AppFooter />
@@ -231,26 +289,32 @@ export default function SettingsPage() {
           className="min-h-0 flex-1 overflow-y-auto px-8 [scrollbar-gutter:stable_both-edges]"
         >
           <FlashContext.Provider value={flash}>
-            <div
-              key={searching ? 'results' : item ? `${page.id}/${item}` : page.id}
-              className="mx-auto flex w-full max-w-[560px] animate-in flex-col pt-1 pb-24 fade-in slide-in-from-bottom-1 animation-duration-(--duration-base)"
-            >
-              {searching ? (
-                <SearchResults query={needle} hits={hits} count={hitCount} onGo={go} />
-              ) : item && page.itemPage ? (
-                page.itemPage(item)
-              ) : (
-                <section aria-labelledby={`settings-${page.id}`} className="flex flex-col">
-                  {page.hero ?? (
-                    <PageHeader id={`settings-${page.id}`} title={page.title}>
-                      {page.description}
-                    </PageHeader>
-                  )}
-                  <SectionBody section={page} />
-                  {page.footer}
-                </section>
-              )}
-            </div>
+            {/* A client's section shows this computer's own, whichever host the picker chose. */}
+            <HostScopeContext.Provider value={HOST_SECTIONS.has(page.id) ? scope : LOCAL_SCOPE}>
+              <div
+                key={
+                  (searching ? 'results' : item ? `${page.id}/${item}` : page.id) +
+                  (HOST_SECTIONS.has(page.id) ? `@${scope.hostId ?? ''}` : '')
+                }
+                className="mx-auto flex w-full max-w-[560px] animate-in flex-col pt-1 pb-24 fade-in slide-in-from-bottom-1 animation-duration-(--duration-base)"
+              >
+                {searching ? (
+                  <SearchResults query={needle} hits={hits} count={hitCount} onGo={go} />
+                ) : item && page.itemPage ? (
+                  page.itemPage(item)
+                ) : (
+                  <section aria-labelledby={`settings-${page.id}`} className="flex flex-col">
+                    {page.hero ?? (
+                      <PageHeader id={`settings-${page.id}`} title={page.title}>
+                        {page.description}
+                      </PageHeader>
+                    )}
+                    <SectionBody section={page} />
+                    {page.footer}
+                  </section>
+                )}
+              </div>
+            </HostScopeContext.Provider>
           </FlashContext.Provider>
         </div>
       </main>

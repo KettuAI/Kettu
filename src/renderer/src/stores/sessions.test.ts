@@ -260,8 +260,9 @@ describe('sessions on other hosts', () => {
     ])
   })
 
-  it("lists only this computer's archived sessions, which its settings show", () => {
+  it("lists each host's archived sessions apart, as its settings show them", () => {
     expect(archivedSessions(sessions)).toEqual([])
+    expect(archivedSessions(sessions, devBox).map((s) => s.id)).toEqual(['archived'])
   })
 
   it("replaces one host's sessions and leaves the others'", () => {

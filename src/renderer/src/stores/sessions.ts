@@ -122,15 +122,18 @@ export function inPinnedTree(byId: Record<string, SessionSummary>, s: SessionSum
   return !!root.pinnedAt && !root.archivedAt
 }
 
-/** This computer's archived top-level sessions, the most recently archived first. */
-export function archivedSessions(byId: Record<string, SessionSummary>): SessionSummary[] {
+/** A host's archived top-level sessions, this computer's by default, latest archived first. */
+export function archivedSessions(
+  byId: Record<string, SessionSummary>,
+  hostId: string | null = null,
+): SessionSummary[] {
   return Object.values(byId)
     .filter(
       (s) =>
         s.origin !== 'routine' &&
         s.parentId === null &&
         !!s.archivedAt &&
-        hostOfSession(s) === null,
+        hostOfSession(s) === hostId,
     )
     .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0))
 }

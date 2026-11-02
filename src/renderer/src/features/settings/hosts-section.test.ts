@@ -15,6 +15,8 @@ vi.mock('@renderer/stores/hosts', () => ({
   useHostsStore: (select: (state: { status: HostsStatus | null }) => unknown) =>
     select({ status: hosts.status }),
   loadHosts: async () => {},
+  isAway: (connection: { state: string }) =>
+    connection.state !== 'online' && connection.state !== 'connecting',
 }))
 vi.mock('@renderer/lib/use-now', () => ({ useNow: () => Date.now(), useSeconds: () => Date.now() }))
 
@@ -336,6 +338,8 @@ describe("a host's page", () => {
     expect(page).toContain('Reached Direct 192.168.1.42:51234')
     expect(page).toContain('Addresses 192.168.1.42:51234 dev.example.com:7000 Edit…')
     expect(page).toContain('This computer on dev-box Name dev-box lists this computer under')
+    expect(page).toContain("dev-box's settings Agents, harnesses, usage, the terminal")
+    expect(page).toContain("Open dev-box's settings")
     expect(page).toContain('Remove from this computer')
     expect(renderToStaticMarkup(createElement(HostPage, { id: devBox.id }))).toContain(
       'value="Lin MacBook"',
@@ -344,6 +348,7 @@ describe("a host's page", () => {
     const zh = text(createElement(HostPage, { id: devBox.id }))
     expect(zh).toContain('怎么连 直连 192.168.1.42:51234')
     expect(zh).toContain('这台电脑在 dev-box 上 名字')
+    expect(zh).toContain('打开 dev-box 的设置')
     expect(zh).toContain('从这台电脑移除')
   })
 
@@ -354,6 +359,10 @@ describe("a host's page", () => {
     const page = text(createElement(HostPage, { id: devBox.id }))
     expect(page).toContain('dev-box removed this computer')
     expect(page).toContain('Add again…')
+    // A host it cannot reach has no settings to open.
+    expect(renderToStaticMarkup(createElement(HostPage, { id: devBox.id }))).toMatch(
+      /disabled=""[^>]*>Open dev-box&#x27;s settings/,
+    )
     // Its name can be changed only while it is online.
     expect(renderToStaticMarkup(createElement(HostPage, { id: devBox.id }))).toMatch(
       /disabled=""[^>]*value="Lin MacBook"|value="Lin MacBook"[^>]*disabled=""/,

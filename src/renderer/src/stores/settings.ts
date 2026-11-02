@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { DEFAULT_SETTINGS, type SettingsFile, type SettingsPatch } from '@shared/settings'
 import { applyLanguage } from '@renderer/lib/i18n'
 
-interface SettingsStore {
+export interface SettingsStore {
   settings: SettingsFile
   loaded: boolean
   update(patch: SettingsPatch): Promise<void>

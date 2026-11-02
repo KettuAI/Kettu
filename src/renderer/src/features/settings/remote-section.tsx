@@ -31,8 +31,7 @@ import { errorMessage } from '@renderer/lib/host'
 import { useHostContext, useHostHas } from '@renderer/lib/host-features'
 import { isWeb } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
-import { useRemoteStore } from '@renderer/stores/remote'
-import { useSettingsStore } from '@renderer/stores/settings'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { openSettingsItem } from '@renderer/stores/view'
 import { useWebHostStore } from '@renderer/stores/web-host'
 import { CONFIRM, ControlError, SettingSwitch } from './controls'
@@ -44,6 +43,7 @@ import { useApply } from './use-apply'
 
 /** The page's title and line, with remote access's switch at their end. */
 export function RemoteHeader({ id }: { id: string }) {
+  const { hostId, useSettingsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const onHost = useHostContext()
   const enabled = useSettingsStore((s) => s.settings.remote.enabled)
@@ -51,9 +51,10 @@ export function RemoteHeader({ id }: { id: string }) {
   const [asking, setAsking] = useState(false)
   // A daemon is reached only through remote access, so it has no switch to turn it off.
   const switchable = useHostHas('remoteSwitch')
-  // In a browser, turning it off ends this page's own connection, so it asks first.
+  // From a browser or another computer, turning it off ends this device's own connection, so it
+  // asks first.
   const change = (on: boolean): void => {
-    if (!on && isWeb) setAsking(true)
+    if (!on && (isWeb || hostId !== null)) setAsking(true)
     else apply({ remote: { enabled: on } })
   }
   return (
@@ -72,7 +73,9 @@ export function RemoteHeader({ id }: { id: string }) {
         <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('remote.web.offTitle')}</AlertDialogTitle>
-            <AlertDialogDescription>{t('remote.web.offBody', onHost)}</AlertDialogDescription>
+            <AlertDialogDescription>
+              {t(isWeb ? 'remote.web.offBody' : 'remote.other.offBody', onHost)}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
@@ -160,6 +163,7 @@ export function RemoteStatusRow({ status }: { status: RemoteStatus | null }) {
 
 /** Change port and Retry, when the direct connections' port could not be opened. */
 function RetryDirect() {
+  const { api } = useHostScope()
   const { t } = useTranslation('settings')
   const refresh = useRefresh()
   const [error, setError] = useState<string | null>(null)
@@ -177,7 +181,7 @@ function RetryDirect() {
         onClick={() => {
           setError(null)
           void refresh
-            .run(() => window.kettu.remote.retryDirect())
+            .run(() => api.remote.retryDirect())
             .catch((e: unknown) => setError(errorMessage(e)))
         }}
       >
@@ -210,6 +214,7 @@ function StatusLine({
 
 /** The name devices show; emptied, it goes back to the system's. */
 export function HostNameField({ label }: { label: string }) {
+  const { useSettingsStore, useRemoteStore } = useHostScope()
   const status = useRemoteStore((s) => s.status)
   const name = useSettingsStore((s) => s.settings.remote.name)
   const systemName = status?.systemName ?? ''
@@ -344,6 +349,7 @@ export function NoDevices() {
 
 /** Under the status, when the key is in a file because the system has no keyring. */
 export function PlainKeyNote() {
+  const { useRemoteStore } = useHostScope()
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
   const plain = useRemoteStore((s) => s.status?.plainTextKey === true)
@@ -352,6 +358,7 @@ export function PlainKeyNote() {
 
 /** Under the list, while a device is in its last days before it is removed. */
 export function StaleNote() {
+  const { useRemoteStore } = useHostScope()
   const { t } = useTranslation('settings')
   const status = useRemoteStore((s) => s.status)
   const now = useNow()
@@ -377,6 +384,7 @@ export function StaleNote() {
 
 /** Allow terminal: whether devices may use this computer's terminal. */
 export function TerminalSwitch({ label }: { label: string }) {
+  const { useSettingsStore } = useHostScope()
   const checked = useSettingsStore((s) => s.settings.remote.terminal)
   const [apply, error] = useApply()
   return (
@@ -393,6 +401,7 @@ export function TerminalSwitch({ label }: { label: string }) {
 
 /** Reset remote access, after a confirm naming how many devices go. */
 export function ResetRemote() {
+  const { hostId, api, useRemoteStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const onHost = useHostContext()
   const count = useRemoteStore((s) => s.status?.devices.length ?? 0)
@@ -404,7 +413,7 @@ export function ResetRemote() {
     setBusy(true)
     setError(null)
     try {
-      await window.kettu.remote.reset()
+      await api.remote.reset()
       setOpen(false)
     } catch (e) {
       setError(errorMessage(e))
@@ -432,8 +441,9 @@ export function ResetRemote() {
               {count > 0
                 ? t('remote.reset.body', { count, ...onHost })
                 : t('remote.reset.bodyNone', onHost)}
-              {/* This browser is one of the devices, so its page goes back to pairing. */}
+              {/* This device is one of them, so it has to be added again. */}
               {isWeb && ` ${t('remote.web.resetBody')}`}
+              {hostId !== null && ` ${t('remote.other.resetBody', onHost)}`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {error && <p className="text-xs text-danger">{error}</p>}

@@ -19,20 +19,25 @@ import { DESK, SHEET_PANEL } from '@renderer/features/shell/sheet'
 import { TitleBand } from '@renderer/features/shell/top-bar'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
 import { AppSidebar } from '@renderer/features/sidebar/app-sidebar'
-import { hasBand, isWeb } from '@renderer/lib/platform'
+import { hasBand } from '@renderer/lib/platform'
 import { layoutStorage, readJson, writeJson } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
 import { prefersReducedMotion } from '@renderer/stores/settings'
 import { useViewStore } from '@renderer/stores/view'
+import { usePathRequest } from '@renderer/web/host-path-request'
 import { useKeyboardShortcuts } from './shortcuts'
 import { useAppCommands } from './commands'
 
 const SettingsPage = lazy(() => import('@renderer/features/settings/settings-page'))
-// The web client's picker for a folder or a program on the host, in place of a system dialog.
-const HostPathDialog = isWeb ? lazy(() => import('@renderer/web/host-path-dialog')) : null
+// The picker for a folder or a program on a host reached over the channel, in place of a system
+// dialog; loaded once first asked for.
+const HostPathDialog = lazy(() => import('@renderer/web/host-path-dialog'))
 
 export function App() {
   const settingsOpen = useViewStore((s) => s.settings.open)
+  const pathAsked = usePathRequest((s) => s.asked !== null)
+  const [pathPicker, setPathPicker] = useState(false)
+  if (pathAsked && !pathPicker) setPathPicker(true)
   useKeyboardShortcuts()
   useAppCommands()
 
@@ -68,7 +73,7 @@ export function App() {
         <ArtifactDialogs />
         <MediaViewer />
         <ShortcutsDialog />
-        {HostPathDialog && (
+        {pathPicker && (
           <Suspense fallback={null}>
             <HostPathDialog />
           </Suspense>

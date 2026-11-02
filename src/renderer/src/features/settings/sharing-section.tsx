@@ -49,14 +49,7 @@ import { useHostContext } from '@renderer/lib/host-features'
 import { hostPlatform } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { useSettingsStore } from '@renderer/stores/settings'
-import {
-  connectSharing,
-  removeSharing,
-  unpublishArtifact,
-  useSharingStore,
-} from '@renderer/stores/sharing'
-import { useWebHostStore } from '@renderer/stores/web-host'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { CONFIRM, ControlError, FIELD_LABEL, Masked } from './controls'
 import { RowLine, RowText } from './rows'
 
@@ -71,7 +64,7 @@ const PASTED_TOKEN = /^cf(?:ut|at)_/
 /** In place of the account and the pages, on a host that publishes nothing, as the daemon. */
 export function NoSharing() {
   const { t } = useTranslation('settings')
-  const host = useWebHostStore((s) => s.host?.name ?? '')
+  const host = useHostContext().host ?? ''
   return (
     <Empty className="px-6 py-14">
       <EmptyHeader>
@@ -92,8 +85,9 @@ export function SharingPending() {
 
 /** The connected account: its ID, its subdomain, and Remove; the form to connect one without it. */
 export function SharingAccount() {
+  const { sharing, useSettingsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common', 'artifacts'])
-  const account = useSharingStore((s) => s.status?.cloudflare ?? null)
+  const account = sharing.useSharingStore((s) => s.status?.cloudflare ?? null)
   const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
   const [asking, setAsking] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -103,7 +97,7 @@ export function SharingAccount() {
   const remove = async (): Promise<void> => {
     setBusy(true)
     setFailure(null)
-    const result = await removeSharing()
+    const result = await sharing.remove()
     setBusy(false)
     if ('failed' in result) {
       setFailure(result)
@@ -187,6 +181,7 @@ export function SharingAccount() {
 
 /** The API token, checked with Cloudflare before the account it reaches is kept. */
 function ConnectForm({ focus }: { focus: boolean }) {
+  const { sharing, useSettingsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'artifacts'])
   const onHost = useHostContext()
   // The token is kept on the host, encrypted where its system has a keyring.
@@ -226,7 +221,7 @@ function ConnectForm({ focus }: { focus: boolean }) {
     }
     setChecking(true)
     setFailure(null)
-    const result = await connectSharing(value, accountId)
+    const result = await sharing.connect(value, accountId)
     setChecking(false)
     if ('failed' in result) {
       setFailure(result)
@@ -412,6 +407,7 @@ function FailureBox({ failure }: { failure: Failure }) {
 
 /** One published page: its artifact, its URL, the version it shows, and Unpublish. */
 export function PublishedRow({ page, title }: { page: PublishedArtifact; title?: string }) {
+  const { sharing } = useHostScope()
   const { t } = useTranslation(['settings', 'artifacts', 'common'])
   const now = useNow()
   const [asking, setAsking] = useState(false)
@@ -420,7 +416,7 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
   const unpublish = async (): Promise<void> => {
     setBusy(true)
     setFailure(null)
-    const result = await unpublishArtifact(page.id)
+    const result = await sharing.unpublish(page.id)
     setBusy(false)
     if ('failed' in result) setFailure(result)
     else toast(t('sharing.published.unpublished'))

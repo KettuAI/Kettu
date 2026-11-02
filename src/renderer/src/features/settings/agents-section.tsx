@@ -58,12 +58,17 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { AgentStateLine } from '@renderer/features/agents/agent-state'
 import { readiness } from '@renderer/features/agents/readiness'
-import { errorMessage, host } from '@renderer/lib/host'
+import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { hasProgram, isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import {
+  hasProgram,
+  isInstalled,
+  usableAgents,
+  type AgentsStoreHook,
+} from '@renderer/stores/agents'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { useSettingsStore } from '@renderer/stores/settings'
 import {
   closeSettings,
   openAgentSettings,
@@ -96,14 +101,14 @@ import { useApply } from './use-apply'
 const ADDED_WAIT_MS = 10_000
 
 /** Resolves once the host lists the agent, which follows the settings change that added it. */
-function listed(agentId: AgentId): Promise<void> {
+function listed(agents: AgentsStoreHook, agentId: AgentId): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (useAgentsStore.getState().byId[agentId]) return resolve()
+    if (agents.getState().byId[agentId]) return resolve()
     const timer = setTimeout(() => {
       stop()
       reject(new Error(`${agentId} did not appear`))
     }, ADDED_WAIT_MS)
-    const stop = useAgentsStore.subscribe((state) => {
+    const stop = agents.subscribe((state) => {
       if (!state.byId[agentId]) return
       clearTimeout(timer)
       stop()
@@ -124,6 +129,7 @@ function signInTerminal(status: AgentStatus, command: string): void {
 
 /** The harnesses agents can be added to, that are installed. */
 function useAddable(): AgentStatus[] {
+  const { useAgentsStore } = useHostScope()
   return useAgentsStore(
     useShallow((s) =>
       MULTI_AGENT_HARNESSES.flatMap((id) => {
@@ -136,6 +142,7 @@ function useAddable(): AgentStatus[] {
 
 /** One agent in the list: its harness's mark, its name, who it is signed in as, its usage. */
 export function AgentListItem({ status }: { status: AgentStatus }) {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const hasOthers = useHasOtherAgents(status)
   const details = useAgentsStore((s) => s.details[status.id])
@@ -214,6 +221,7 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
 
 /** The list's own actions: add an agent, and hide the account details. */
 export function AgentsGroupActions() {
+  const { useSettingsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
   const [apply, error] = useApply()
@@ -313,6 +321,7 @@ function AddAgentDialog({
   onOpenChange: (open: boolean) => void
   harnesses: AgentStatus[]
 }) {
+  const { api, request, useAgentsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const [harness, setHarness] = useState<HarnessId>(harnesses[0]?.harnessId ?? 'claude-code')
   const [name, setName] = useState('')
@@ -344,7 +353,7 @@ function AddAgentDialog({
 
   const pick = async (): Promise<void> => {
     try {
-      const path = await window.kettu.dialogs.chooseAgentFolder()
+      const path = await api.dialogs.chooseAgentFolder()
       if (path) {
         setPicked(path)
         setFolder('existing')
@@ -360,14 +369,14 @@ function AddAgentDialog({
     setBusy(true)
     setError(null)
     try {
-      const id = await window.kettu.settings.addAgent(
+      const id = await api.settings.addAgent(
         chosen.harnessId,
         trimmed,
         folder === 'new' ? null : picked,
       )
-      await listed(id)
+      await listed(useAgentsStore, id)
       if (login === 'api-key') {
-        await host('agents.setApiKey', {
+        await request('agents.setApiKey', {
           agentId: id,
           key: key.key.trim(),
           ...(providers && key.baseUrl.trim() ? { baseUrl: key.baseUrl.trim() } : {}),
@@ -612,6 +621,7 @@ function ApiKeyFields({
 
 /** An agent's own page: its account, API key, usage and configuration. */
 export function AgentPage({ agentId }: { agentId: AgentId }) {
+  const { useAgentsStore } = useHostScope()
   const status = useAgentsStore((s) => s.byId[agentId])
   if (!status) return <AgentPageHeader status={null} />
   return <AgentPageBody status={status} />
@@ -688,6 +698,7 @@ function AgentPageLine({ status }: { status: AgentStatus }) {
 }
 
 function AgentPageBody({ status }: { status: AgentStatus }) {
+  const { hostId, request } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const [act, busy, error] = useAction()
   const r = readiness(status)
@@ -702,7 +713,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           size="sm"
           variant="outline"
           disabled={busy}
-          onClick={() => act(() => host('agents.retry', { agentId: status.id }))}
+          onClick={() => act(() => request('agents.retry', { agentId: status.id }))}
         >
           {busy ? <Spinner data-icon="inline-start" /> : <RotateCwIcon data-icon="inline-start" />}
           {t('common:actions.retry')}
@@ -740,9 +751,11 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           <SignInNotice
             status={status}
             busy={busy}
-            onTerminal={(command) => signInTerminal(status, command)}
+            {...(hostId === null && {
+              onTerminal: (command: string) => signInTerminal(status, command),
+            })}
             onAuthenticate={(methodId) =>
-              act(() => host('agents.authenticate', { agentId: status.id, methodId }))
+              act(() => request('agents.authenticate', { agentId: status.id, methodId }))
             }
           />
         )}
@@ -763,7 +776,8 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
               </Fact>
             )}
             {status.apiKey && <ApiKeyRow status={status} />}
-            {(terminalSignIn || (status.canLogout && status.signIn === 'signed-in')) && (
+            {((terminalSignIn && hostId === null) ||
+              (status.canLogout && status.signIn === 'signed-in')) && (
               <RowFrame
                 text={
                   <RowText name={t('agents.signInRow')} description={t('agents.signInRowHint')} />
@@ -775,12 +789,12 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
                     variant="quiet"
                     className="text-secondary"
                     disabled={busy}
-                    onClick={() => act(() => host('agents.logout', { agentId: status.id }))}
+                    onClick={() => act(() => request('agents.logout', { agentId: status.id }))}
                   >
                     {t('agents.signOut')}
                   </Button>
                 )}
-                {terminalSignIn?.command && (
+                {terminalSignIn?.command && hostId === null && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -807,6 +821,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
 
 /** Whether Kettu handed the harness a key, and setting, replacing or clearing it. */
 function ApiKeyRow({ status }: { status: AgentStatus }) {
+  const { request } = useHostScope()
   const { t } = useTranslation('settings')
   const [open, setOpen] = useState(false)
   const [act, busy, error] = useAction()
@@ -831,7 +846,7 @@ function ApiKeyRow({ status }: { status: AgentStatus }) {
           variant="quiet"
           className="text-secondary"
           disabled={busy}
-          onClick={() => act(() => host('agents.clearApiKey', { agentId: status.id }))}
+          onClick={() => act(() => request('agents.clearApiKey', { agentId: status.id }))}
         >
           {t('agents.key.clear')}
         </Button>
@@ -854,6 +869,7 @@ function ApiKeyDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { request } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const [value, setValue] = useState<KeyValue>({ baseUrl: '', key: '', model: '' })
   const [busy, setBusy] = useState(false)
@@ -871,7 +887,7 @@ function ApiKeyDialog({
     setBusy(true)
     setError(null)
     try {
-      await host('agents.setApiKey', {
+      await request('agents.setApiKey', {
         agentId: status.id,
         key: value.key.trim(),
         ...(providers && value.baseUrl.trim() ? { baseUrl: value.baseUrl.trim() } : {}),
@@ -917,6 +933,7 @@ function ApiKeyDialog({
 
 /** Where the agent reads its configuration, and the harness it runs on. */
 function ConfigurationGroup({ status }: { status: AgentStatus }) {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const details = useAgentsStore((s) => s.details[status.id])
   const version = harnessVersion(status)
@@ -1029,6 +1046,7 @@ function RemoveDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { api } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const created = !!status.configDir?.created
   const [trash, setTrash] = useState(false)
@@ -1039,7 +1057,7 @@ function RemoveDialog({
     setBusy(true)
     setError(null)
     try {
-      await window.kettu.settings.removeAgent(status.id, created && trash)
+      await api.settings.removeAgent(status.id, created && trash)
       onOpenChange(false)
       openAgentSettings(null)
     } catch (e) {
@@ -1090,6 +1108,7 @@ function RenameDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { api } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const [name, setName] = useState(status.name)
   const [busy, setBusy] = useState(false)
@@ -1103,7 +1122,7 @@ function RenameDialog({
     if (trimmed === status.name) return onOpenChange(false)
     setBusy(true)
     try {
-      await window.kettu.settings.renameAgent(status.id, trimmed)
+      await api.settings.renameAgent(status.id, trimmed)
       onOpenChange(false)
     } catch (e) {
       setError(errorMessage(e))
@@ -1163,6 +1182,7 @@ function RenameDialog({
 
 /** The agent's name as the page's title, opening a searchable list of the agents. */
 function AgentPicker({ status }: { status: AgentStatus }) {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId).filter(hasProgram)))
   const { contains } = useComboboxFilter()

@@ -1,8 +1,16 @@
 // A window's one port to the sessions on the other hosts this computer connects to. Main relays
 // it: every message names its host, so the one port carries each connected host's protocol.
 
-import type { HostEvent } from './agent-host'
+import { HOST_METHODS, type HostEvent } from './agent-host'
 import type { FromPort, ToPort } from './port-rpc'
+import { isHostAdminMethod } from './remote/host-admin'
+
+const METHODS: ReadonlySet<string> = new Set(HOST_METHODS)
+
+/** What a window may ask another host: its agent host's methods and its owner's calls to it. */
+export function isOtherHostMethod(method: unknown): method is string {
+  return typeof method === 'string' && (METHODS.has(method) || isHostAdminMethod(method))
+}
 
 /** What a window sends: a request for the host it names. */
 export interface ToHosts {
