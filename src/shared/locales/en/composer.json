@@ -164,7 +164,7 @@
     "sentAsFileLink": "Sent as a link. {{agent}} reads it with its own tools.",
     "sentLinkedFolder": "Sent as a link to the folder",
     "dropTitle": "Drop to attach",
-    "dropHint": "Images, files and folders · up to {{megabytes}} MB each",
+    "dropHint": "Images, files and folders · up to {{count}} at once",
     "slashNeedsEmpty": "In an empty message",
     "notOnDisk": "It isn't a file on disk, so it can't be attached.",
     "theAgent": "The agent",

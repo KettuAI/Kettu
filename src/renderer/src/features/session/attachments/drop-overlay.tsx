@@ -1,6 +1,6 @@
 import { ArrowDownToLineIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { ATTACHMENT_BYTES } from '@shared/attachments'
+import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import { cn } from '@renderer/lib/utils'
 
 /** Says what a drop does while files are dragged over the column; it never takes the pointer. */
@@ -38,7 +38,7 @@ export function DropOverlay({
         </div>
         {!starting && (
           <div className="text-small text-tertiary">
-            {t('attachments.dropHint', { megabytes: ATTACHMENT_BYTES / 1024 / 1024 })}
+            {t('attachments.dropHint', { count: ATTACHMENT_LIMIT })}
           </div>
         )}
       </div>
