@@ -409,7 +409,7 @@ function EffortMenu({
         <span className="flex-1">{t('controls.effort')}</span>
         <span className="shrink-0 pl-4 text-hint text-tertiary">{current}</span>
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="w-65">
+      <DropdownMenuSubContent side="left" align="end" sideOffset={9} className="w-65">
         <ScrollToChosen>
           <DropdownMenuRadioGroup value={value} onValueChange={(v) => onPick(String(v))}>
             {rows.map((row) => (
@@ -466,7 +466,7 @@ function MoreModelsMenu({
         <SparkleIcon strokeWidth={1.4} />
         <span className="flex-1">{t('controls.moreModels')}</span>
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="w-66">
+      <DropdownMenuSubContent side="left" align="end" sideOffset={9} className="w-66">
         <SearchModels choices={choices} value={value} onPick={onPick} onClose={onClose} />
         {source && (
           <>
