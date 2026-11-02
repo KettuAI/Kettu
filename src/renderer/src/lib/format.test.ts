@@ -8,6 +8,7 @@ import {
   fileUrlPath,
   limitLabel,
   longAgo,
+  mediumAgo,
   percent,
   resetTime,
   shortAgo,
@@ -29,10 +30,21 @@ describe('format in the interface language', () => {
     expect(duration(133_000)).toBe('2 m 13 s')
   })
 
+  it('writes a status line time in minutes, hours, days, then the date', () => {
+    const DAY = 24 * 60 * MINUTE
+    expect(mediumAgo(NOW - 20_000, NOW)).toBe('just now')
+    expect(mediumAgo(NOW - 12 * MINUTE, NOW)).toBe('12 min ago')
+    expect(mediumAgo(NOW - 2 * 60 * MINUTE, NOW)).toBe('2 h ago')
+    expect(mediumAgo(NOW - DAY, NOW)).toBe('1 day ago')
+    expect(mediumAgo(NOW - 3 * DAY, NOW)).toBe('3 days ago')
+    expect(mediumAgo(NOW - 9 * DAY, NOW)).toBe('Oct 12')
+  })
+
   it('switches to Chinese with the language', async () => {
     await i18n.changeLanguage('zh-CN')
     expect(shortAgo(NOW - 4 * MINUTE, NOW)).toBe('4 分钟')
     expect(longAgo(NOW - 5 * MINUTE, NOW)).toBe('5 分钟前')
+    expect(mediumAgo(NOW - 3 * 24 * 60 * MINUTE, NOW)).toBe('3 天前')
     expect(duration(133_000)).toBe('2 分 13 秒')
   })
 

@@ -7,7 +7,7 @@ import { Button } from '@renderer/components/ui/button'
 import { toast } from '@renderer/components/ui/toast'
 import { DeleteSessionDialog } from '@renderer/features/sidebar/session-menu'
 import { errorMessage } from '@renderer/lib/host'
-import { longAgo } from '@renderer/lib/format'
+import { mediumAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { sessionTitle } from '@renderer/stores/sessions'
 import { ItemLine } from './rows'
@@ -36,7 +36,7 @@ export function ArchivedRow({ summary, where }: { summary: SessionSummary; where
         <ItemLine>
           {t('archived.description', {
             project: where,
-            when: summary.archivedAt ? longAgo(summary.archivedAt, now) : '',
+            when: summary.archivedAt ? mediumAgo(summary.archivedAt, now) : '',
           })}
         </ItemLine>
       </div>

@@ -104,7 +104,7 @@ export default function SettingsPage() {
           }
           data-overlay-layer=""
           data-settings-dialog=""
-          className="fixed top-14 left-1/2 z-50 flex h-[calc(100%-112px)] w-[calc(100%-48px)] max-w-265 -translate-x-1/2 flex-col overflow-hidden rounded-modal bg-surface text-primary shadow-dialog outline-none duration-(--duration-fast) after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:bg-scrim after:opacity-0 after:transition-opacity after:duration-(--duration-fast) data-nested-dialog-open:after:opacity-100 data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-bottom-1 data-closed:animate-out data-closed:fade-out-0"
+          className="fixed top-14 left-1/2 z-50 flex h-[calc(100%-112px)] w-[calc(100%-48px)] max-w-265 -translate-x-1/2 flex-col overflow-hidden rounded-modal bg-surface text-primary shadow-dialog outline-none duration-(--duration-fast) [--segment-thumb:var(--bg-surface)] data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-bottom-1 data-closed:animate-out data-closed:fade-out-0"
         >
           <header className="flex h-13.5 shrink-0 items-center pr-3 pl-5.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]">
             <DialogTitle className="flex-1 font-sans text-label font-semibold tracking-normal">

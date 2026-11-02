@@ -1,7 +1,7 @@
 // What the Agent and Harness sections of Settings both draw: reading an agent's account and
 // usage, its plan meters, sign-in, task logs and the rows of its configuration.
 
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { CheckIcon, CopyIcon, LogInIcon, SquareTerminalIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentStatus, AgentTask, PlanLimit } from '@shared/agent-host'
@@ -11,7 +11,8 @@ import { Button } from '@renderer/components/ui/button'
 import { Progress } from '@renderer/components/ui/progress'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { countdown } from '@renderer/features/sidebar/plan-usage'
-import { limitLabel, longAgo, resetTime } from '@renderer/lib/format'
+import { addDays, dayOf, monthStartOf } from '@renderer/features/usage/model'
+import { limitLabel, mediumAgo, money, resetTime } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { LIMIT_TEXT, limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
@@ -20,6 +21,7 @@ import { useHostScope } from '@renderer/stores/host-scope'
 import { limitsReadable, percent, useAction } from './agent-helpers'
 import { ControlError, CopyAction, IconAction, ROW_BUTTON } from './controls'
 import { GroupLabel, Notice, RowFrame, RowGroup, RowShell, RowText } from './rows'
+import { agentCost } from './spend'
 
 /** The window nearest its limit as a list row's end: its label and percent over a 4 px bar. */
 export function ListMeter({ limits }: { limits: PlanLimit[] }) {
@@ -203,6 +205,59 @@ export function LogCopyButton({ task }: { task: AgentTask }) {
 }
 
 /** Plan usage, one row per window, read afresh while the page shows. */
+/**
+ * What Kettu sent through an agent signed in with an API key this month, by its own record: an
+ * API key has no plan limits to read.
+ */
+export function SpendGroup({ status }: { status: AgentStatus }) {
+  const { request } = useHostScope()
+  const { t } = useTranslation('settings')
+  // undefined while it is read; null when no model it used has a price.
+  const [cost, setCost] = useState<number | null | undefined>(undefined)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    const today = dayOf(Date.now())
+    const from = monthStartOf(today)
+    const to = addDays(today, 1)
+    request('usage.summary', { dayStarts: [from, to], from, to, scope: 'kettu' }).then(
+      (summary) => {
+        if (!cancelled) setCost(agentCost(summary.days, status.id))
+      },
+      (e: unknown) => {
+        if (!cancelled) setError(errorMessage(e))
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [request, status.id])
+  return (
+    <section className="flex flex-col">
+      <GroupLabel group={{ id: 'spend', label: t('agents.spend.group') }} />
+      <RowGroup>
+        <RowFrame
+          text={
+            <RowText
+              name={t('agents.spend.month')}
+              description={t('agents.spend.description', { name: status.harnessName })}
+            />
+          }
+        >
+          <ControlError error={error} />
+          {cost === undefined ? (
+            !error && <Spinner className="size-3.5 text-tertiary" />
+          ) : (
+            <span className="font-display text-sheet-title font-bold tabular">
+              {cost === null ? t('agents.spend.unpriced') : money(cost, 'USD')}
+            </span>
+          )}
+        </RowFrame>
+      </RowGroup>
+    </section>
+  )
+}
+
 export function UsageGroup({
   status,
   reading,
@@ -224,7 +279,7 @@ export function UsageGroup({
       <>
         {observed && (
           <span className="text-tertiary">
-            {t('agents.usageUpdated', { ago: longAgo(observed, now) })}
+            {t('agents.usageUpdated', { ago: mediumAgo(observed, now) })}
           </span>
         )}
         <IconAction

@@ -148,7 +148,7 @@ function CatalogDialog({
               label={t('appearance.catalog.search')}
               clearLabel={t('page.clearSearch')}
               inputRef={search}
-              className="rounded-segments border-0 bg-subtle text-tertiary shadow-none [&_[data-slot=input-group-addon]]:pl-2.5 [&_[data-slot=input-group-addon]_svg]:size-3.75 [&_input]:pl-2 [&_input]:text-lede"
+              className="rounded-segments border-0 bg-subtle text-tertiary shadow-none [&_[data-slot=input-group-addon]]:pl-2.5 [&_[data-slot=input-group-addon]_svg]:size-3.75 [&_input]:pl-2 [&_input]:text-lede [&_[data-slot=kbd]]:hidden"
             />
           </div>
         )}

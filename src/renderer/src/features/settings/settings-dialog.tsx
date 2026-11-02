@@ -24,7 +24,7 @@ export function SettingsDialogContent({
       showCloseButton={false}
       forceOverlay
       className={cn(
-        'top-33 max-h-[calc(100%-164px)] max-w-[calc(100%-64px)] translate-y-0 grid-cols-1 gap-0 overflow-hidden overflow-y-auto rounded-dialog p-0 data-open:slide-in-from-bottom-1 data-open:zoom-in-100 sm:max-w-130',
+        'top-33 max-h-[calc(100%-164px)] [--segment-thumb:var(--bg-surface)] max-w-[calc(100%-64px)] translate-y-0 grid-cols-1 gap-0 overflow-hidden overflow-y-auto rounded-dialog p-0 data-open:slide-in-from-bottom-1 data-open:zoom-in-100 sm:max-w-130',
         className,
       )}
       {...props}

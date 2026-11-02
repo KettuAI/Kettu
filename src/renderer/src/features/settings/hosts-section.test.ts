@@ -90,9 +90,7 @@ describe('the list', () => {
       'dev-box Direct · 192.168.1.42:51234 Online',
     )
     const offline: HostStatus = { ...devBox, connection: { state: 'offline' } }
-    expect(text(createElement(HostRow, { host: offline }))).toBe(
-      'dev-box Direct Offline · 2 hours ago',
-    )
+    expect(text(createElement(HostRow, { host: offline }))).toBe('dev-box Direct Offline · 2 h ago')
     const connecting: HostStatus = { ...devBox, connection: { state: 'connecting' } }
     expect(text(createElement(HostRow, { host: connecting }))).toContain('Connecting…')
     const removed: HostStatus = {

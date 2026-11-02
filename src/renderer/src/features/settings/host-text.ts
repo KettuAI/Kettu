@@ -2,7 +2,7 @@ import type { TFunction } from 'i18next'
 import type { Platform } from '@shared/platform'
 import { addressText } from '@shared/remote/address'
 import type { HostChangeFailure, HostStatus } from '@shared/remote/hosts'
-import { longAgo } from '@renderer/lib/format'
+import { mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import type { WebHost } from '@renderer/stores/web-host'
 
@@ -59,7 +59,7 @@ export function connectionText(
     case 'offline':
       return host.lastOnlineAt === null
         ? t('hosts.state.offline')
-        : t('hosts.state.offlineSince', { ago: longAgo(host.lastOnlineAt, now) })
+        : t('hosts.state.offlineSince', { ago: mediumAgo(host.lastOnlineAt, now) })
     case 'stopped':
       return t(`hosts.state.${connection.reason}`)
   }

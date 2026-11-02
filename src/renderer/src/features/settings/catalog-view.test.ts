@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CatalogTheme } from '@shared/themes'
-import { catalogView, matchingThemes } from './catalog-view'
+import { catalogView, installedFirst, matchingThemes } from './catalog-view'
 
 const theme = (name: string, id = name.toLowerCase()): CatalogTheme => ({
   id,
@@ -19,6 +19,23 @@ describe('matchingThemes', () => {
     expect(matchingThemes(themes, 'ROSE').map((t) => t.id)).toEqual(['rose-pine'])
     expect(matchingThemes(themes, ' night ').map((t) => t.id)).toEqual(['tokyo-night'])
     expect(matchingThemes(themes, '')).toEqual(themes)
+  })
+})
+
+describe('installedFirst', () => {
+  it('puts installed themes and updates first, each run in catalog order', () => {
+    const list = [
+      theme('Nord'),
+      { ...theme('Rosé Pine', 'rose-pine'), action: 'update' as const },
+      theme('Tokyo Night', 'tokyo-night'),
+      { ...theme('Gruvbox'), action: 'installed' as const },
+    ]
+    expect(installedFirst(list).map((t) => t.id)).toEqual([
+      'rose-pine',
+      'gruvbox',
+      'nord',
+      'tokyo-night',
+    ])
   })
 })
 

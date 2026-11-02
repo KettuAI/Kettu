@@ -57,7 +57,7 @@ import {
   toggleTerminal,
   useViewStore,
 } from '@renderer/stores/view'
-import { Fact, ListMeter, SignInNotice, UsageGroup } from './agent-parts'
+import { Fact, ListMeter, SignInNotice, SpendGroup, UsageGroup } from './agent-parts'
 import {
   currentLimits,
   harnessVersion,
@@ -804,7 +804,11 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           </RowGroup>
         </section>
 
-        <UsageGroup status={status} reading={reading} running={running} />
+        {status.account?.kind === 'api_key' ? (
+          <SpendGroup status={status} />
+        ) : (
+          <UsageGroup status={status} reading={reading} running={running} />
+        )}
 
         <ConfigurationGroup status={status} />
 

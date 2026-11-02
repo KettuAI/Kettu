@@ -60,6 +60,16 @@ export function longAgo(at: number, now = Date.now()): string {
   return i18n.t('time.onDate', { date: format().monthDay.format(at) })
 }
 
+/** A relative time for a status line: "just now", "12 min ago", "2 h ago", "3 days ago", "Oct 18". */
+export function mediumAgo(at: number, now = Date.now()): string {
+  const delta = Math.max(0, now - at)
+  if (delta < MINUTE) return i18n.t('time.justNow')
+  if (delta < HOUR) return i18n.t('time.minAgo', { count: Math.floor(delta / MINUTE) })
+  if (delta < DAY) return i18n.t('time.hAgo', { count: Math.floor(delta / HOUR) })
+  if (delta < 7 * DAY) return i18n.t('time.daysAgo', { count: Math.floor(delta / DAY) })
+  return format().monthDay.format(at)
+}
+
 /** When a limit resets: the clock time today, the weekday within six days, the date beyond. */
 export function resetTime(at: number, now = Date.now()): string {
   const day = (t: number): number => new Date(t).setHours(0, 0, 0, 0)

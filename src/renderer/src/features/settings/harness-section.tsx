@@ -34,7 +34,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { listedInstalled, readiness } from '@renderer/features/agents/readiness'
 import { adapterOnlyUpdate } from '@renderer/features/agents/updates'
 import { PANEL } from '@renderer/features/session/entries/helpers'
-import { longAgo } from '@renderer/lib/format'
+import { mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -488,9 +488,9 @@ export function HarnessGroupActions() {
       )
     ) : lastAt ? (
       pending > 0 ? (
-        t('agents.update.checkedAgoUpdates', { ago: longAgo(lastAt, now), count: pending })
+        t('agents.update.checkedAgoUpdates', { ago: mediumAgo(lastAt, now), count: pending })
       ) : (
-        t('agents.update.checkedAgo', { ago: longAgo(lastAt, now) })
+        t('agents.update.checkedAgo', { ago: mediumAgo(lastAt, now) })
       )
     ) : null
   return (
@@ -701,7 +701,7 @@ function VersionGroup({ status }: { status: AgentStatus }) {
       <span className="text-tertiary">
         {' · '}
         {checkedAt
-          ? t('agents.update.checkedAgo', { ago: longAgo(checkedAt, now) })
+          ? t('agents.update.checkedAgo', { ago: mediumAgo(checkedAt, now) })
           : t('agents.update.notChecked')}
       </span>
     </>

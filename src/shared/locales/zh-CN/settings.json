@@ -460,6 +460,12 @@
     "notReported": "未提供",
     "planLimits": "套餐限额",
     "usageNotReported": "{{name}} 不提供套餐用量。",
+    "spend": {
+      "group": "花费",
+      "month": "本月",
+      "description": "{{name}} 不为 API key 报告套餐额度。这里是 Kettu 统计的、它发出的请求。",
+      "unpriced": "无价格"
+    },
     "configuration": "配置",
     "config": {
       "folder": "目录",
@@ -719,7 +725,7 @@
     "browser": "侧边面板里的浏览器为所有会话保留同一个配置，网站只需登录一次。",
     "browserWeb": "Agent 回复中的链接会在新标签页中打开。",
     "mcp": "Agent 通过这些 MCP 服务器使用工具：Kettu 自带的，以及各 Agent 自己配置的。",
-    "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。在这里安装和更新；账号在 Agent 里。",
+    "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。Kettu 会替你安装和更新它们。",
     "hosts": "这台电脑连接的、运行 Kettu 的其他电脑。它们的会话会显示在侧边栏中。",
     "hostsWeb": "这个页面连着的电脑。会话、项目和 Agent 都在那台电脑上，这里只管这个浏览器怎么连它。"
   },
@@ -1094,8 +1100,8 @@
         "add": "添加"
       },
       "added": "已添加“{{name}}”",
-      "description": "添加一台设备。设备要能直接连到这台电脑：同一个网络、同一个 VPN，或通过你添加的地址。",
-      "description_web": "添加一台设备。设备要能直接连到 {{host}}：同一个网络、同一个 VPN，或通过你添加的地址。",
+      "description": "只添加一台设备。码过期前，任何看到它的人都能用它。",
+      "description_web": "只添加一台设备。码过期前，任何看到它的人都能用它。",
       "expiresIn": "{{time}} 后过期"
     },
     "device": {

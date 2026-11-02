@@ -21,11 +21,19 @@ export function matchingThemes(themes: CatalogTheme[], query: string): CatalogTh
   return needle ? themes.filter((theme) => fold(theme.name).includes(needle)) : themes
 }
 
+/** The themes already installed, updates included, ahead of the rest, each run in catalog order. */
+export function installedFirst(themes: CatalogTheme[]): CatalogTheme[] {
+  return [
+    ...themes.filter((theme) => theme.action !== 'install'),
+    ...themes.filter((theme) => theme.action === 'install'),
+  ]
+}
+
 export function catalogView(answer: CatalogAnswer, query: string): CatalogView {
   if (answer === null) return { kind: 'loading' }
   if (answer.status === 'error') return { kind: 'error', message: answer.message }
   if (answer.status !== 'ok') return { kind: 'failed', error: answer.status }
   if (answer.themes.length === 0) return { kind: 'none' }
-  const themes = matchingThemes(answer.themes, query)
+  const themes = installedFirst(matchingThemes(answer.themes, query))
   return themes.length > 0 ? { kind: 'themes', themes } : { kind: 'no-match', query: query.trim() }
 }

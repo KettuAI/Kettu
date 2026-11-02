@@ -11,7 +11,7 @@ import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Progress } from '@renderer/components/ui/progress'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { longAgo } from '@renderer/lib/format'
+import { mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext } from '@renderer/lib/host-features'
 import { useNow } from '@renderer/lib/use-now'
@@ -121,7 +121,7 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
           </>
         )
         if (state.checkedAt) {
-          detail = t('about.updates.checkedAgo', { ago: longAgo(state.checkedAt, now) })
+          detail = t('about.updates.checkedAgo', { ago: mediumAgo(state.checkedAt, now) })
         }
       } else title = t('about.updates.notChecked')
       action = check

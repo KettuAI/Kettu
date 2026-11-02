@@ -30,7 +30,7 @@ import {
   EmptyTitle,
 } from '@renderer/components/ui/empty'
 import { bugReportUrl } from '@renderer/lib/bug-report'
-import { basename, longAgo } from '@renderer/lib/format'
+import { basename, mediumAgo } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { useHostContext, useHostHas } from '@renderer/lib/host-features'
 import { formatShortcut, isMac, isWeb, isWindows, platform } from '@renderer/lib/platform'
@@ -1370,7 +1370,7 @@ export function useSharingSection(): SectionDef {
             ? page.url
             : t('sharing.published.version', {
                 version: page.version,
-                ago: longAgo(page.publishedAt),
+                ago: mediumAgo(page.publishedAt),
               }),
           keywords: t('sharing.published.keywords'),
           group: published,

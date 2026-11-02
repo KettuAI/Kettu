@@ -46,7 +46,11 @@ export function SectionBody({ section }: { section: SectionDef }) {
     <div className="flex flex-col">
       {groups.map(({ group, rows }, i) => (
         <section key={group?.id ?? i} aria-label={group?.label} className="flex flex-col">
-          {group && !group.unlabeled ? <GroupLabel group={group} /> : <div className="h-4" />}
+          {group && !group.unlabeled ? (
+            <GroupLabel group={group} first={i === 0} />
+          ) : (
+            <div className="h-4" />
+          )}
           {group?.plain ? (
             rows.map((row) => (
               <RowShell key={row.id} id={row.id} bare>
@@ -83,9 +87,10 @@ export function GroupNote({ children }: { children: ReactNode }) {
 }
 
 /** A group's heading, with its count after it and its actions at the end. */
-export function GroupLabel({ group }: { group: GroupDef }) {
+/** `first`: right under the page's description, whose 4 px below it count toward the 32 above. */
+export function GroupLabel({ group, first }: { group: GroupDef; first?: boolean }) {
   return (
-    <div className="mt-8 mb-1 flex min-h-7.5 items-center gap-2">
+    <div className={cn('mb-1 flex min-h-7.5 items-center gap-2', first ? 'mt-7' : 'mt-8')}>
       <h3 className="text-subheading font-semibold">{group.label}</h3>
       {group.count !== undefined && (
         <span className="text-group text-tertiary tabular">{group.count}</span>

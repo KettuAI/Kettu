@@ -462,6 +462,12 @@
     "notReported": "Not reported",
     "planLimits": "Plan limits",
     "usageNotReported": "{{name}} does not report plan usage.",
+    "spend": {
+      "group": "Spend",
+      "month": "This month",
+      "description": "{{name}} doesn’t report plan limits for API keys. Kettu counts what it sent.",
+      "unpriced": "Not priced"
+    },
     "configuration": "Configuration",
     "config": {
       "folder": "Folder",
@@ -723,7 +729,7 @@
     "browser": "The browser in the side panel keeps one profile for every session, so you sign in to a site once.",
     "browserWeb": "Links in agents’ replies open in a new tab.",
     "mcp": "Agents reach tools through these MCP servers: Kettu's own, and the ones each agent keeps.",
-    "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Install and update them here; accounts are in Agents.",
+    "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Kettu installs and updates them for you.",
     "hosts": "Other computers running Kettu that this one connects to. Their sessions show up in your sidebar.",
     "hostsWeb": "The computer this page connects to. Its sessions, projects and agents stay on it; here is only how this browser reaches it."
   },
@@ -1105,8 +1111,8 @@
         "add": "Add"
       },
       "added": "“{{name}}” is added",
-      "description": "It adds one device. The device has to reach this computer directly: on the same network, the same VPN, or through an address you added.",
-      "description_web": "It adds one device. The device has to reach {{host}} directly: on the same network, the same VPN, or through an address you added.",
+      "description": "It adds one device. Anyone who sees the code before then could use it.",
+      "description_web": "It adds one device. Anyone who sees the code before then could use it.",
       "expiresIn": "Expires in {{time}}"
     },
     "device": {

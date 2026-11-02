@@ -43,7 +43,7 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { longAgo } from '@renderer/lib/format'
+import { mediumAgo } from '@renderer/lib/format'
 import { useHostContext } from '@renderer/lib/host-features'
 import { hostPlatform } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
@@ -439,7 +439,7 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
   )
   const version = t('sharing.published.version', {
     version: page.version,
-    ago: longAgo(page.publishedAt, now),
+    ago: mediumAgo(page.publishedAt, now),
   })
   return (
     <div className="flex items-center gap-3.5 py-3.25">

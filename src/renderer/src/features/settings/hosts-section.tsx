@@ -21,11 +21,11 @@ export function HostsHeader({ id }: { id: string }) {
   const keyFailed = useHostsStore((s) => s.status?.keyFailed === true)
   const [open, setOpen] = useState(false)
   return (
-    <header className="flex flex-col [&_p]:pr-36">
+    <header className="flex flex-col [&_p]:pr-28">
       <PageHeader id={id} title={t('sections.hosts')}>
         {t('pages.hosts')}
       </PageHeader>
-      {/* Up beside the line under the title, which stops short of it. */}
+      {/* Up beside the description's last line, which stops short of it. */}
       <div className="-mt-9.5 flex justify-end">
         <Button className={ROW_BUTTON} disabled={keyFailed} onClick={() => setOpen(true)}>
           <PlusIcon data-icon="inline-start" className="size-3.5" />

@@ -19,7 +19,7 @@ import {
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
-import { bytes, longAgo } from '@renderer/lib/format'
+import { bytes, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext } from '@renderer/lib/host-features'
 import { currentLocale } from '@renderer/lib/i18n'
@@ -135,7 +135,7 @@ export function LogRow({ agentId }: { agentId: AgentId }) {
       }),
     )
   } else facts.push(t('settings.coversNone'))
-  if (log.syncedAt !== null) facts.push(t('settings.synced', { ago: longAgo(log.syncedAt, now) }))
+  if (log.syncedAt !== null) facts.push(t('settings.synced', { ago: mediumAgo(log.syncedAt, now) }))
   const shownError = error ?? log.error
 
   const reimport = async () => {

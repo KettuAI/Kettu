@@ -30,7 +30,7 @@ export function HostPicker({ hostId }: { hostId: string | null }) {
   ]
   return (
     <div className="mx-0.5 mt-3.5 mb-1.5 flex flex-col px-2 pt-2.5 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-      <div id={label} className="mb-1.5 text-caption font-medium text-tertiary">
+      <div id={label} className="mb-1.5 text-caption leading-[normal] font-medium text-tertiary">
         {t('hostPicker.label')}
       </div>
       <Select
