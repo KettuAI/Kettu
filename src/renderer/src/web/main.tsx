@@ -13,7 +13,7 @@ import {
   type PairingPayload,
 } from '@shared/remote/pairing'
 import { loadPlatformPrimitives } from '@shared/remote/primitives'
-import { BACKGROUND_PACE_MS } from '@shared/remote/protocol'
+import { BACKGROUND_PACE_MS, parseHostRenamed } from '@shared/remote/protocol'
 import { devicePlatform, pageAddress, webApi } from './api'
 import { browserDevice, deviceName } from './device-name'
 import { serveFrames } from './frames'
@@ -154,6 +154,8 @@ async function showApp(device: WebDevice, paired: Paired | null): Promise<void> 
     if (message.type === 'renamed' && typeof message.name === 'string') {
       remember(host.name, message.name)
     }
+    const name = parseHostRenamed(message)
+    if (name) remember(name, host.deviceName)
   })
   link.start()
 

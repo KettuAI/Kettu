@@ -524,6 +524,14 @@ describe('a known host', () => {
     await expect.poll(() => t.store.get(t.hostId)!.deviceName).toBe('Desk')
   })
 
+  it("follows the host's new name while connected", async () => {
+    const t = await setup()
+    await t.paired()
+    t.host.server.setHostName('Desk')
+    await expect.poll(() => t.store.get(t.hostId)!.name).toBe('Desk')
+    expect(t.client.list().find((host) => host.id === t.hostId)?.name).toBe('Desk')
+  })
+
   it('forgets a host here only', async () => {
     const t = await setup()
     await t.paired()

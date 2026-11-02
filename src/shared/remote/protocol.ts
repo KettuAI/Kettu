@@ -1,5 +1,5 @@
 // What a device and the host say on the channel around the host protocol: the device's hello, the
-// host's welcome, the device's name, and why the host ends a connection. After the welcome, the
+// host's welcome, the device's and the host's names, and why the host ends a connection. After the welcome, the
 // channel's other JSON messages are the host protocol's requests, responses and events, as a
 // window's port carries them.
 
@@ -170,6 +170,12 @@ export interface Renamed {
   name: string
 }
 
+/** The host's name changed, sent to each welcomed device; the welcomes after it carry it too. */
+export interface HostRenamed {
+  type: 'host.renamed'
+  name: string
+}
+
 export type ClosingReason =
   /** The device speaks only versions older than the host's oldest: update the app. */
   | 'update_client'
@@ -274,6 +280,13 @@ export const MAX_WELCOME_ADDRESSES = 64
 
 function isHostField(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= MAX_HOST_FIELD
+}
+
+/** The name a `host.renamed` message gives, or null when it is no name a welcome could carry. */
+export function parseHostRenamed(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { type, name } = value as Record<string, unknown>
+  return type === 'host.renamed' && isHostField(name) ? name : null
 }
 
 /** The addresses of a welcome or addresses message that are ones, the rest dropped. */

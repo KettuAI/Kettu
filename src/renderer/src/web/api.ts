@@ -8,7 +8,7 @@ import type { AppCommand, KettuApi } from '@shared/ipc'
 import { matchLocale } from '@shared/locale'
 import type { PortConnectionState } from '@shared/port-rpc'
 import type { Platform } from '@shared/platform'
-import type { DirectAddress } from '@shared/remote/protocol'
+import { parseHostRenamed, type DirectAddress } from '@shared/remote/protocol'
 import type {
   HostAdminEvent,
   HostAdminMethod,
@@ -182,7 +182,10 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       return
     }
     const { host } = useWebHostStore.getState()
-    if (message.type !== 'renamed' || typeof message.name !== 'string' || !host) return
+    if (!host) return
+    const name = parseHostRenamed(message)
+    if (name) useWebHostStore.setState({ host: { ...host, name } })
+    if (message.type !== 'renamed' || typeof message.name !== 'string') return
     useWebHostStore.setState({ host: { ...host, device: { ...host.device, name: message.name } } })
   })
 

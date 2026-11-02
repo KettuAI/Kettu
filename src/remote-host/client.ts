@@ -40,6 +40,7 @@ import {
   RESUME_VERSION,
   parseAddresses,
   parseClosing,
+  parseHostRenamed,
   parseWelcome,
   type ClosingReason,
   type DirectAddress,
@@ -132,6 +133,7 @@ interface SessionHandlers {
   welcomed(welcome: Welcome): void
   addresses(addresses: DirectAddress[]): void
   renamed(name: string): void
+  hostRenamed(name: string): void
   /**
    * The host protocol's messages and stream bytes, and the channel's own the session does not
    * read itself; until a handler takes them they wait, as while a pairing is being added.
@@ -252,6 +254,9 @@ class HostSession {
     else if (type === 'renamed') {
       const name = normalizeDeviceName(fields.name)
       if (name) this.handlers.renamed(name)
+    } else if (type === 'host.renamed') {
+      const name = parseHostRenamed(value)
+      if (name) this.handlers.hostRenamed(name)
     }
     // The link counts these too, and keeps the session's own from main.
     this.pass({ kind: 'json', value })
@@ -277,11 +282,12 @@ const IGNORED: SessionHandlers = {
   welcomed: () => {},
   addresses: () => {},
   renamed: () => {},
+  hostRenamed: () => {},
   ended: () => {},
 }
 
 /** The session's own messages, which main never hears. */
-const OWN: ReadonlySet<unknown> = new Set(['addresses', 'renamed', 'terminal'])
+const OWN: ReadonlySet<unknown> = new Set(['addresses', 'renamed', 'host.renamed', 'terminal'])
 
 /** The connection to one known host, tried again with backoff until it is forgotten. */
 class HostLink {
@@ -489,6 +495,11 @@ class HostLink {
       renamed: (name) => {
         if (!mine()) return
         this.client.options.hosts.update(this.id, { deviceName: name })
+        this.client.options.changed()
+      },
+      hostRenamed: (name) => {
+        if (!mine()) return
+        this.client.options.hosts.update(this.id, { name })
         this.client.options.changed()
       },
       message: (message) => {
@@ -721,6 +732,7 @@ class Pairing {
         welcomed: (welcome) => void this.added(session, publicKey, payload, welcome),
         addresses: () => {},
         renamed: () => {},
+        hostRenamed: () => {},
         ended: ({ reason }) =>
           this.fail(
             reason === 'rejected' || reason === 'update_client' || reason === 'update_host'
@@ -874,6 +886,7 @@ class SshAdding {
         welcomed: (welcome) => void this.added(session, target, info, welcome),
         addresses: () => {},
         renamed: () => {},
+        hostRenamed: () => {},
         ended: ({ reason }) =>
           reason === 'update_client' || reason === 'update_host'
             ? this.fail(reason)
