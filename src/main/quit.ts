@@ -98,6 +98,8 @@ export class QuitFlow {
    * asks first.
    */
   watchWindow(window: BrowserWindow): void {
+    // Coming back to a window ends a choice to keep running: closing it goes as the setting says.
+    this.background = false
     const confirmUnsaved = (event: Electron.Event): void => {
       if (this.unsaved.get(window.webContents.id)?.length) {
         event.preventDefault()

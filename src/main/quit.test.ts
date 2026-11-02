@@ -215,6 +215,27 @@ describe('QuitFlow', () => {
     restart.flow.respond(1, 'background')
     await settle()
     expect(restart.window.closed).toBe(false)
+
+    const edited = setup({ busy: true })
+    edited.flow.setUnsaved(edited.window.webContents as never, [unsaved])
+    edited.beforeQuit()
+    await settle()
+    expect(edited.question()).toMatchObject({ reason: 'quit', keepRunning: false })
+    edited.flow.respond(1, 'background')
+    await settle()
+    expect(edited.window.closed).toBe(false)
+    expect(edited.flow.staysInBackground).toBe(false)
+  })
+
+  it('asks again as the setting says once a window opens after keeping running', async () => {
+    const { flow, beforeQuit } = setup({ busy: true })
+    beforeQuit()
+    await settle()
+    flow.respond(1, 'background')
+    await settle()
+    expect(flow.staysInBackground).toBe(true)
+    flow.watchWindow(new FakeWindow() as never)
+    expect(flow.staysInBackground).toBe(false)
   })
 
   it('ignores a second quit while it is asking, and stale answers', async () => {
