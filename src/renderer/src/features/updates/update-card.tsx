@@ -1,4 +1,11 @@
-import { useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from 'react'
+import {
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+  type Ref,
+  type RefObject,
+} from 'react'
 import { Progress as ProgressPrimitive } from '@base-ui/react/progress'
 import { XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -45,7 +52,7 @@ import { CARD_BUTTON, runAppAction } from './update-actions'
 import { UpdateReview } from './update-review'
 
 // From the card's edge past the footer's padding and the sidebar's border, to sit beside it.
-const BESIDE_SIDEBAR = 10
+const BESIDE_SIDEBAR = 18
 
 /** What one entry of the stack names on hover: "Claude Code 2.4.1 → 2.5.0". */
 function itemVersions(item: UpdateItem): { name: string; versions: string } {
@@ -147,8 +154,8 @@ function CardFrame({
       <div className="pointer-events-none relative flex min-h-11 items-center gap-2.5 py-1.75 pr-1.75 pl-2.5">
         <span className="pointer-events-auto relative flex shrink-0">{icon}</span>
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-hint leading-4 font-medium text-primary">{title}</span>
-          <span className="mt-px truncate text-caption leading-3.75 text-tertiary">{note}</span>
+          <span className="truncate text-hint leading-3.75 font-medium text-primary">{title}</span>
+          <span className="mt-px truncate text-caption leading-3.5 text-tertiary">{note}</span>
         </span>
         {action && <span className="pointer-events-auto relative flex shrink-0">{action}</span>}
       </div>
@@ -412,8 +419,10 @@ function InstallingCard({
 function FailedCard({ failure, label }: { failure: HarnessFailure; label: string }) {
   const { t } = useTranslation('updates')
   const retry = () => retryHarnessUpdate(failure.agentId, failure.retry)
+  const card = useRef<HTMLDivElement>(null)
   return (
     <CardFrame
+      ref={card}
       failed
       label={label}
       icon={
@@ -432,7 +441,7 @@ function FailedCard({ failure, label }: { failure: HarnessFailure; label: string
       action={<CardButton onClick={retry}>{t('harness.retry')}</CardButton>}
       below={
         <div className="text-caption text-tertiary">
-          <UpdateLog failure={failure} /> ·{' '}
+          <UpdateLog failure={failure} anchor={card} /> ·{' '}
           <button
             type="button"
             onClick={() => openHarnessSettings(failure.harnessId)}
@@ -448,7 +457,13 @@ function FailedCard({ failure, label }: { failure: HarnessFailure; label: string
 }
 
 /** The failed update's command and the last lines it printed. */
-function UpdateLog({ failure }: { failure: HarnessFailure }) {
+function UpdateLog({
+  failure,
+  anchor,
+}: {
+  failure: HarnessFailure
+  anchor: RefObject<HTMLDivElement | null>
+}) {
   const { t } = useTranslation('updates')
   return (
     <Popover>
@@ -463,10 +478,11 @@ function UpdateLog({ failure }: { failure: HarnessFailure }) {
         {t('harness.viewLog')}
       </PopoverTrigger>
       <PopoverContent
+        anchor={anchor}
         side="right"
         align="end"
-        sideOffset={BESIDE_SIDEBAR + 14}
-        className="w-100 gap-2 p-3"
+        sideOffset={BESIDE_SIDEBAR}
+        className="w-100 max-w-[calc(100vw-2rem)] gap-2 p-3"
       >
         <PopoverTitle className="text-control font-semibold">
           {t('harness.logTitle', { name: failure.name })}

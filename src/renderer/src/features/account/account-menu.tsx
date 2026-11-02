@@ -21,6 +21,7 @@ import { RELEASES_URL, releaseUrl } from '@shared/updates'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -92,6 +93,7 @@ export function AccountMenuContent({
       side="top"
       align="start"
       sideOffset={6}
+      alignOffset={6}
       onKeyDown={onKeyDown}
       className="w-75 max-w-[calc(100vw-2rem)] p-1.5"
     >
@@ -195,7 +197,7 @@ function HostChoices({ hosts }: { hosts: OtherHost[] }) {
         ) ?? 'all')
   const laptop = deviceShape({ kind: 'desktop', model }) === 'laptop'
   return (
-    <>
+    <DropdownMenuGroup>
       <GroupLabel>{t('account.controls')}</GroupLabel>
       <MenuPrimitive.RadioGroup
         value={value}
@@ -242,7 +244,10 @@ function HostChoices({ hosts }: { hosts: OtherHost[] }) {
               name={host.name}
               line={line}
               away={isAway(host.connection)}
-              shortcut={index < 8 ? formatShortcut(`Mod+${index + 2}`) : null}
+              // Mod+N still picks a host away; the row only stops advertising it.
+              shortcut={
+                index < 8 && !isAway(host.connection) ? formatShortcut(`Mod+${index + 2}`) : null
+              }
             />
           )
         })}
@@ -260,7 +265,7 @@ function HostChoices({ hosts }: { hosts: OtherHost[] }) {
         <PlusIcon />
         {t('account.addHost')}
       </DropdownMenuItem>
-    </>
+    </DropdownMenuGroup>
   )
 }
 
@@ -327,27 +332,29 @@ function PlanLimits() {
   if (rows.length === 0) return null
   return (
     <>
-      <GroupLabel>{t('account.limits')}</GroupLabel>
-      <div className="px-2 pb-1">
-        {rows.map((row) => (
-          <div key={row.agentId} className="flex h-6.5 items-center gap-2">
-            <AgentMark agent={row.agentId} size={14} />
-            <span className="min-w-0 flex-1 truncate text-hint text-secondary">{row.label}</span>
-            <span
-              aria-hidden
-              className="h-1 w-16 shrink-0 overflow-hidden rounded-xs bg-border-soft"
-            >
+      <DropdownMenuGroup>
+        <GroupLabel>{t('account.limits')}</GroupLabel>
+        <div className="px-2 pb-1">
+          {rows.map((row) => (
+            <div key={row.agentId} className="flex h-6.5 items-center gap-2">
+              <AgentMark agent={row.agentId} size={14} />
+              <span className="min-w-0 flex-1 truncate text-hint text-secondary">{row.label}</span>
               <span
-                className={cn('block h-full', LIMIT_FILL[row.level])}
-                style={{ width: `${Math.min(100, row.percent)}%` }}
-              />
-            </span>
-            <span className="w-7.5 shrink-0 text-right text-caption text-primary tabular">
-              {row.percent}%
-            </span>
-          </div>
-        ))}
-      </div>
+                aria-hidden
+                className="h-1 w-16 shrink-0 overflow-hidden rounded-xs bg-border-soft"
+              >
+                <span
+                  className={cn('block h-full', LIMIT_FILL[row.level])}
+                  style={{ width: `${Math.min(100, row.percent)}%` }}
+                />
+              </span>
+              <span className="w-7.5 shrink-0 text-right text-caption text-primary tabular">
+                {row.percent}%
+              </span>
+            </div>
+          ))}
+        </div>
+      </DropdownMenuGroup>
       <DropdownMenuSeparator className={SEPARATOR} />
     </>
   )
