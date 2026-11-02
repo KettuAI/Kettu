@@ -74,6 +74,10 @@ function warningLimit(limits: PlanLimit[]): PlanLimit | null {
 }
 
 const RING_TONE = {
+  // A plan limit's pie, in the color of its level (lib/plan-limit.ts).
+  'limit-ok': ['stroke-track', 'stroke-limit-ok'],
+  'limit-warn': ['stroke-track', 'stroke-limit-warn'],
+  'limit-bad': ['stroke-track', 'stroke-limit-bad'],
   muted: ['stroke-track', 'stroke-muted-foreground'],
   success: ['stroke-track', 'stroke-muted-foreground'],
   attention: ['stroke-warning/45', 'stroke-warning'],
