@@ -24,6 +24,13 @@ import {
   CLOCK_TEST,
   COMMANDS,
   SVG_REPLY,
+  CONTENT_BLOCKS,
+  CONTENT_FAILING,
+  CONTENT_NEW,
+  CONTENT_OLD,
+  CONTENT_PASSING,
+  CONTENT_TEXT,
+  MEDIA_REPLY,
   TABLES_REPLY,
   THINKING_ANSWER,
   THOUGHT_TEXT,
@@ -1339,6 +1346,51 @@ const report: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+const content: Scenario = async (turn) => {
+  let n = 0
+  const id = () => `content-${turn.id}-${n++}`
+  const say = (text: string) =>
+    stream(turn, text, { messageId: turn.messageId(), chunks: [text], delayMs: 0 })
+  const command = async (command: string, output: string, failed: boolean) => {
+    const toolCallId = id()
+    await turn.send({
+      sessionUpdate: 'tool_call',
+      toolCallId,
+      title: command,
+      kind: 'execute',
+      status: 'pending',
+      rawInput: { command },
+    })
+    await turn.send({
+      sessionUpdate: 'tool_call_update',
+      toolCallId,
+      status: failed ? 'failed' : 'completed',
+      content: [{ type: 'content', content: { type: 'text', text: '```\n' + output + '```' } }],
+    })
+  }
+  if (!(await say(CONTENT_TEXT))) return 'cancelled'
+  await command('pnpm vitest run src/usage', CONTENT_PASSING, false)
+  await command('pnpm e2e usage', CONTENT_FAILING, true)
+  const path = filePath(turn, 'src/usage/usage-store.ts')
+  await turn.send({
+    sessionUpdate: 'tool_call',
+    toolCallId: id(),
+    title: 'Edit src/usage/usage-store.ts',
+    kind: 'edit',
+    status: 'completed',
+    locations: [{ path }],
+    rawInput: { path },
+    content: [{ type: 'diff', path, oldText: CONTENT_OLD, newText: CONTENT_NEW }],
+  })
+  if (!(await say(CONTENT_BLOCKS))) return 'cancelled'
+  return 'end_turn'
+}
+
+const media: Scenario = async (turn) => {
+  if (!(await stream(turn, MEDIA_REPLY, { messageId: turn.messageId() }))) return 'cancelled'
+  return 'end_turn'
+}
+
 export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   'basic-turn': basicTurn,
   'long-stream': longStream,
@@ -1371,6 +1423,8 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   report,
   tables,
   'open-site': openSite,
+  content,
+  media,
 }
 
 export const compact: Scenario = async (turn) => {
