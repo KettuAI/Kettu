@@ -12,6 +12,11 @@ import type { DiffProps } from './index'
 const TINTS_AS_GIVEN =
   '[data-line],[data-no-newline],[data-gutter-buffer],[data-column-number]{--mix-light:0%;--mix-dark:0%}'
 
+// A removed line's sign is a minus, as the header's count is, and a changed word's tint keeps
+// tight corners.
+const MARKS =
+  "[data-line-type=change-deletion]:is([data-line],[data-no-newline])::before{content:'\\2212'}[data-diff-span]{border-radius:2px}"
+
 // Inside the diff's shadow root, where outer CSS cannot reach: in a reply's block frame a fold is
 // one plain row of code type, its chevron beside its text.
 const FRAMED_FOLDS = `
@@ -57,13 +62,12 @@ function DiffImpl({ path, oldText, newText, className, framed = false }: DiffPro
       themeType: dark ? ('dark' as const) : ('light' as const),
       diffStyle: 'unified' as const,
       overflow: 'wrap' as const,
-      // A reply's block shows + and - signs.
-      diffIndicators: framed ? ('classic' as const) : ('bars' as const),
+      diffIndicators: 'classic' as const,
       hunkSeparators: 'line-info-basic' as const,
       lineDiffType: 'word' as const,
       disableFileHeader: true,
       preferredHighlighter: 'shiki-js' as const,
-      unsafeCSS: framed ? TINTS_AS_GIVEN + FRAMED_FOLDS : TINTS_AS_GIVEN,
+      unsafeCSS: TINTS_AS_GIVEN + MARKS + (framed ? FRAMED_FOLDS : ''),
     }),
     [dark, theme, framed],
   )
