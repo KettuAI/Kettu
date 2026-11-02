@@ -2,12 +2,11 @@
 // folder and a name, with its account, sign-in, API key, usage and configuration. Installs and
 // updates are Settings > Harnesses'.
 
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import {
   EyeIcon,
   EyeOffIcon,
   FolderIcon,
-  KeyRoundIcon,
   PencilIcon,
   PlusIcon,
   RotateCwIcon,
@@ -16,7 +15,13 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
-import { AGENT_NAME_CHARS } from '@shared/settings'
+import {
+  AGENT_COLORS,
+  AGENT_NAME_CHARS,
+  agentColor,
+  isAgentColor,
+  type AgentColor,
+} from '@shared/settings'
 import { MULTI_AGENT_HARNESSES, type AgentId, type HarnessId } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
@@ -30,30 +35,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
-import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { Checkbox } from '@renderer/components/ui/checkbox'
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-  ComboboxTrigger,
-  useComboboxFilter,
-} from '@renderer/components/ui/combobox'
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@renderer/components/ui/dialog'
-import { Field, FieldDescription, FieldError, FieldLabel } from '@renderer/components/ui/field'
+import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
+import { RadioGroup, RadioGroupItem } from '@renderer/components/ui/radio-group'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { AgentStateLine } from '@renderer/features/agents/agent-state'
@@ -61,12 +47,7 @@ import { readiness } from '@renderer/features/agents/readiness'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import {
-  hasProgram,
-  isInstalled,
-  usableAgents,
-  type AgentsStoreHook,
-} from '@renderer/stores/agents'
+import { isInstalled, type AgentsStoreHook } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
 import {
@@ -76,7 +57,7 @@ import {
   toggleTerminal,
   useViewStore,
 } from '@renderer/stores/view'
-import { ConfigFrame, ConfigRow, Fact, SignInNotice, UsageGroup, UsageMeters } from './agent-parts'
+import { Fact, ListMeter, SignInNotice, SpendGroup, UsageGroup } from './agent-parts'
 import {
   currentLimits,
   harnessVersion,
@@ -87,14 +68,34 @@ import {
 import {
   CONFIRM,
   ControlError,
-  GROUP_ACTION,
   Masked,
+  GROUP_ACTION,
   PathText,
-  Segmented,
+  Pill,
+  ROW_BUTTON,
+  SettingSelect,
   SettingSwitch,
 } from './controls'
-import { ConfigNote, ConfigPath } from './places'
-import { GroupLabel, ItemPageHeader, ItemRow, RowFrame, RowGroup, RowShell, RowText } from './rows'
+import { PlaceRow } from './places'
+import {
+  DIALOG_FIELD,
+  DIALOG_MONO_FIELD,
+  SettingsDialogBody,
+  SettingsDialogContent,
+  SettingsDialogFooter,
+  SettingsDialogHeader,
+  SettingsField,
+} from './settings-dialog'
+import {
+  GroupLabel,
+  ItemLine,
+  ItemPageHeader,
+  ItemRow,
+  RowFrame,
+  RowGroup,
+  RowShell,
+  RowText,
+} from './rows'
 import { useApply } from './use-apply'
 
 /** How long the dialog waits for the host to list an agent it just added, before giving up. */
@@ -140,10 +141,11 @@ function useAddable(): AgentStatus[] {
   )
 }
 
-/** One agent in the list: its harness's mark, its name, who it is signed in as, its usage. */
+/** One agent in the list: its harness's mark, its name, its harness and account, its usage. */
 export function AgentListItem({ status }: { status: AgentStatus }) {
   const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
+  const dot = useScopedDot(status)
   const hasOthers = useHasOtherAgents(status)
   const details = useAgentsStore((s) => s.details[status.id])
   const now = useNow()
@@ -152,69 +154,49 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
   const account = status.account?.kind === 'none' ? null : status.account
   const limits = currentLimits(status.limits, now)
   const folder = details?.config.find((item) => item.id === 'folder')?.path
-  // What it needs first; then who it is signed in as; else where it keeps its configuration.
+  // What it needs first; then what it is signed in with; else where it keeps its configuration.
   const summary: ReactNode =
-    r.kind === 'missing' || r.kind === 'failed' ? (
-      r.message
-    ) : r.kind === 'sign-in' ? (
-      t('agents.needsSignIn', { name: status.name })
-    ) : account ? (
-      <>
-        {account.label}
-        {account.email && (
-          <>
-            {' · '}
-            <span className="text-primary">
-              <Masked>{account.email}</Masked>
-            </span>
-          </>
-        )}
-      </>
-    ) : reading && status.capabilities.account ? (
-      t('agents.readingAccount')
-    ) : folder ? (
-      <PathText path={folder} />
-    ) : null
-  const usage =
-    limits.length > 0 ? (
-      <UsageMeters limits={limits} />
+    r.kind === 'missing' || r.kind === 'failed'
+      ? r.message
+      : r.kind === 'sign-in'
+        ? t('agents.needsSignInLine')
+        : account
+          ? account.label
+          : reading && status.capabilities.account
+            ? t('agents.readingAccount')
+            : (folder ?? null)
+  const end: ReactNode =
+    r.kind === 'sign-in' ? (
+      <Pill tone="attention">{t('agents.signInPill')}</Pill>
+    ) : limits.length > 0 ? (
+      <ListMeter limits={limits} />
     ) : status.capabilities.reports ? (
-      <span className="text-xs text-tertiary">
+      <span className="text-group text-tertiary">
         {t(reading ? 'agents.readingUsage' : 'agents.usageOnceRunning')}
       </span>
     ) : (
-      <span className="text-xs text-tertiary">{t('agents.noUsage')}</span>
+      <span className="text-group text-tertiary">{t('agents.noUsage')}</span>
     )
   return (
     <ItemRow
       item={status.id}
       label={status.name}
       onOpen={() => openAgentSettings(status.id)}
-      tile={<AgentTile agent={status.id} size={30} glyph={16} />}
+      tile={<AgentTile agent={status.id} size={30} glyph={16} dot={dot} />}
       name={
-        <span className="flex min-w-0 items-center gap-1.5">
+        <>
           <span className="truncate">{status.name}</span>
-          {!status.isDefault && (
-            <span className="shrink-0 text-xs font-normal text-tertiary">{status.harnessName}</span>
-          )}
-          {status.isDefault && hasOthers && (
-            <Badge variant="secondary">{t('agents.default')}</Badge>
-          )}
-          {status.hidden && <Badge variant="outline">{t('agents.hiddenTag')}</Badge>}
-        </span>
+          {status.isDefault && hasOthers && <Pill>{t('agents.default')}</Pill>}
+          {status.hidden && <Pill>{t('agents.hiddenTag')}</Pill>}
+        </>
       }
-      right={
-        <span className="pointer-events-auto flex">
-          <AgentStateLine status={status} className="text-command" />
-        </span>
-      }
+      right={<span className="pointer-events-auto flex items-center">{end}</span>}
     >
-      {summary && (
-        <span className="flex min-h-4.5 min-w-0 items-center text-command leading-4.5 text-secondary">
-          <span className="min-w-0 truncate">{summary}</span>
-        </span>
-      )}
-      <div className="mt-1.25 flex flex-wrap gap-x-5.5 gap-y-1">{usage}</div>
+      <ItemLine>
+        {status.harnessName}
+        {summary && ' · '}
+        {summary}
+      </ItemLine>
     </ItemRow>
   )
 }
@@ -228,23 +210,18 @@ export function AgentsGroupActions() {
   return (
     <>
       <ControlError error={error} />
-      <AddAgentButton className={GROUP_ACTION} />
       <Tooltip>
         <TooltipTrigger
           render={
             <Button
-              variant="quiet"
-              size="sm"
+              variant="ghost"
               aria-pressed={hidden}
               onClick={() => apply({ privacy: { hideAccount: !hidden } })}
-              className={cn(
-                GROUP_ACTION,
-                'aria-pressed:bg-transparent aria-pressed:text-primary aria-pressed:shadow-none aria-pressed:hover:bg-hover',
-              )}
+              className="h-7 gap-1.5 rounded-segment px-2 text-hint font-normal has-data-[icon=inline-start]:pl-2 text-secondary aria-pressed:text-primary [&_svg:not([class*='size-'])]:size-3.5"
             />
           }
         >
-          {hidden ? <EyeIcon data-icon="inline-start" /> : <EyeOffIcon data-icon="inline-start" />}
+          {hidden ? <EyeOffIcon data-icon="inline-start" /> : <EyeIcon data-icon="inline-start" />}
           {t(hidden ? 'agents.showAccounts' : 'agents.hideAccounts')}
         </TooltipTrigger>
         <TooltipContent>{t('agents.hideAccountsHint')}</TooltipContent>
@@ -265,15 +242,15 @@ function AddAgentButton({ className, row }: { className?: string; row?: boolean 
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="-mx-3 flex w-[calc(100%+1.5rem)] items-center gap-3 rounded-[inherit] py-3 pr-3 pl-4 text-left text-ui text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-visible:shadow-[inset_0_0_0_2px_var(--focus)]"
+          className="group/add flex w-full items-center gap-3.5 rounded-lg py-3.25 text-left text-row text-secondary outline-none transition-colors duration-(--duration-fast) hover:text-primary focus-ring"
         >
-          <span className="grid size-7.5 shrink-0 place-items-center rounded-lg border border-dashed border-strong">
-            <PlusIcon className="size-4" />
+          <span className="grid size-7.5 shrink-0 place-items-center rounded-xl shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] transition-shadow duration-(--duration-fast) group-hover/add:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)]">
+            <PlusIcon className="size-3.75" />
           </span>
           {t('agents.add.button')}
         </button>
       ) : (
-        <Button variant="quiet" size="sm" className={className} onClick={() => setOpen(true)}>
+        <Button variant="ghost" className={className} onClick={() => setOpen(true)}>
           <PlusIcon data-icon="inline-start" />
           {t('agents.add.button')}
         </Button>
@@ -292,12 +269,12 @@ export function AddAgentRow() {
 export function AgentsFooter() {
   const { t } = useTranslation('settings')
   return (
-    <p className="mt-3.5 px-1 text-command text-tertiary">
+    <p className="mt-2.5 text-hint text-tertiary">
       {t('agents.footerBefore')}
       <button
         type="button"
         onClick={() => openHarnessSettings(null)}
-        className="rounded-sm text-secondary underline-offset-2 outline-none hover:text-primary hover:underline focus-ring"
+        className="rounded-sm outline-none hover:text-primary focus-ring"
       >
         {t('sections.harnesses')}
       </button>
@@ -400,31 +377,40 @@ function AddAgentDialog({
         if (!next) reset()
       }}
     >
-      <DialogContent className="sm:max-w-lg">
+      <SettingsDialogContent className="sm:max-w-135">
         <form className="contents" onSubmit={(event) => void submit(event)}>
-          <DialogHeader>
-            <DialogTitle>{t('agents.add.title')}</DialogTitle>
-            <DialogDescription>{t('agents.add.description')}</DialogDescription>
-          </DialogHeader>
-          <div className="flex min-w-0 flex-col gap-4">
-            <Field>
-              <FieldLabel>{t('agents.add.harness')}</FieldLabel>
-              <div>
-                <Segmented
-                  label={t('agents.add.harness')}
-                  value={chosen?.harnessId ?? harness}
-                  options={harnesses.map((h) => ({ value: h.harnessId, label: h.harnessName }))}
-                  onChange={(next) => {
-                    setHarness(next)
-                    setPicked(null)
-                    setFolder('new')
-                  }}
-                />
-              </div>
-              <FieldDescription>{t('agents.add.harnessHint')}</FieldDescription>
-            </Field>
-            <Field data-invalid={tooLong || undefined}>
-              <FieldLabel htmlFor="agent-name">{t('agents.add.name')}</FieldLabel>
+          <SettingsDialogHeader title={t('agents.add.title')}>
+            {t('agents.add.description')}
+          </SettingsDialogHeader>
+          <SettingsDialogBody className="gap-4">
+            <SettingsField label={t('agents.add.harness')}>
+              <SettingSelect
+                label={t('agents.add.harness')}
+                className="w-full"
+                value={chosen?.harnessId ?? harness}
+                options={harnesses.map((h) => ({
+                  value: h.harnessId,
+                  label: h.harnessName,
+                  icon: <AgentMark agent={h.harnessId} size={15} />,
+                }))}
+                onChange={(next) => {
+                  setHarness(next)
+                  setPicked(null)
+                  setFolder('new')
+                }}
+              />
+            </SettingsField>
+            <SettingsField
+              label={t('agents.add.name')}
+              htmlFor="agent-name"
+              hint={
+                tooLong && (
+                  <span className="text-danger">
+                    {t('agents.add.nameTooLong', { count: AGENT_NAME_CHARS })}
+                  </span>
+                )
+              }
+            >
               <Input
                 id="agent-name"
                 value={name}
@@ -433,118 +419,125 @@ function AddAgentDialog({
                 spellCheck={false}
                 placeholder={t('agents.add.namePlaceholder')}
                 aria-invalid={tooLong || undefined}
+                className={DIALOG_FIELD}
                 onChange={(event) => setName(event.target.value)}
               />
-              {tooLong && (
-                <FieldError>{t('agents.add.nameTooLong', { count: AGENT_NAME_CHARS })}</FieldError>
-              )}
-            </Field>
-            <Field>
-              <FieldLabel>{t('agents.add.folder')}</FieldLabel>
-              <Choice
-                checked={folder === 'new'}
-                onSelect={() => setFolder('new')}
-                title={t('agents.add.folderNew')}
-                description={t('agents.add.folderNewHint')}
-              />
-              <Choice
-                checked={folder === 'existing'}
-                onSelect={() => (picked ? setFolder('existing') : void pick())}
-                title={t('agents.add.folderExisting')}
-                description={t('agents.add.folderExistingHint', {
-                  variable: chosen?.harnessId === 'codex' ? 'CODEX_HOME' : 'CLAUDE_CONFIG_DIR',
-                })}
-                extra={
-                  <span className="flex min-w-0 items-center gap-2">
-                    {picked && <PathText path={picked} />}
-                    <Button type="button" variant="outline" size="xs" onClick={() => void pick()}>
-                      <FolderIcon data-icon="inline-start" />
-                      {t('agents.add.choose')}
-                    </Button>
-                  </span>
-                }
-              />
-            </Field>
-            <Field>
-              <FieldLabel>{t('agents.add.login')}</FieldLabel>
-              <Choice
-                checked={login === 'terminal'}
-                onSelect={() => setLogin('terminal')}
-                title={t('agents.add.loginTerminal')}
-                description={t('agents.add.loginTerminalHint')}
-              />
-              <Choice
-                checked={login === 'api-key'}
-                onSelect={() => setLogin('api-key')}
-                title={t('agents.add.loginKey')}
-                description={t(
-                  providers ? 'agents.add.loginKeyHint' : 'agents.add.loginKeyHintOpenAi',
-                )}
-              />
-              {login === 'api-key' && chosen && (
-                <ApiKeyFields status={chosen} value={key} onChange={setKey} />
-              )}
-            </Field>
-            {error && <p className="text-xs text-danger">{error}</p>}
-          </div>
-          <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" />}>
+            </SettingsField>
+            <SettingsField label={t('agents.add.folder')}>
+              <RadioGroup
+                aria-label={t('agents.add.folder')}
+                value={folder}
+                onValueChange={(next) => setFolder(next as typeof folder)}
+                className="gap-5"
+              >
+                <Choice
+                  value="new"
+                  checked={folder === 'new'}
+                  title={t('agents.add.folderNew')}
+                  description={t('agents.add.folderNewHint')}
+                />
+                <Choice
+                  value="existing"
+                  checked={folder === 'existing'}
+                  title={t('agents.add.folderExisting')}
+                  description={t('agents.add.folderExistingHint')}
+                  extra={
+                    folder === 'existing' && (
+                      <span className="flex min-w-0 items-center gap-2">
+                        {picked && <PathText path={picked} />}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={ROW_BUTTON}
+                          onClick={() => void pick()}
+                        >
+                          <FolderIcon data-icon="inline-start" className="size-3.5" />
+                          {t('agents.add.choose')}
+                        </Button>
+                      </span>
+                    )
+                  }
+                />
+              </RadioGroup>
+            </SettingsField>
+            <SettingsField label={t('agents.add.login')}>
+              <RadioGroup
+                aria-label={t('agents.add.login')}
+                value={login}
+                onValueChange={(next) => setLogin(next as Login)}
+                className="gap-5"
+              >
+                <Choice
+                  value="terminal"
+                  checked={login === 'terminal'}
+                  title={t('agents.add.loginTerminal')}
+                  description={t('agents.add.loginTerminalHint', {
+                    name: chosen?.harnessName ?? '',
+                  })}
+                />
+                <Choice
+                  value="api-key"
+                  checked={login === 'api-key'}
+                  title={t('agents.add.loginKey')}
+                  description={t(
+                    providers ? 'agents.add.loginKeyHint' : 'agents.add.loginKeyHintOpenAi',
+                  )}
+                  extra={
+                    login === 'api-key' &&
+                    chosen && <ApiKeyFields status={chosen} value={key} onChange={setKey} />
+                  }
+                />
+              </RadioGroup>
+            </SettingsField>
+            {error && <p className="text-hint text-danger">{error}</p>}
+          </SettingsDialogBody>
+          <SettingsDialogFooter>
+            <DialogClose render={<Button type="button" variant="ghost" className={ROW_BUTTON} />}>
               {t('common:actions.cancel')}
             </DialogClose>
-            <Button type="submit" disabled={!valid || busy}>
+            <Button type="submit" className={ROW_BUTTON} disabled={!valid || busy}>
               {busy && <Spinner data-icon="inline-start" />}
               {t('agents.add.submit')}
             </Button>
-          </DialogFooter>
+          </SettingsDialogFooter>
         </form>
-      </DialogContent>
+      </SettingsDialogContent>
     </Dialog>
   )
 }
 
-/** One choice of a few, with what it does under it and anything it needs beside it. */
+/** One choice of a few as a tile, with what it does under it and anything it needs inside. */
 function Choice({
+  value,
   checked,
-  onSelect,
   title,
   description,
   extra,
 }: {
+  value: string
   checked: boolean
-  onSelect: () => void
   title: string
   description: string
   extra?: ReactNode
 }) {
+  const id = useId()
   return (
     <div
       className={cn(
-        'flex flex-col gap-1.5 rounded-lg px-2.5 py-2 transition-colors duration-(--duration-fast)',
-        checked ? 'bg-selected' : 'hover:bg-hover',
+        'flex flex-col gap-2.5 rounded-2xl px-3 py-2.75 transition-[background-color,box-shadow] duration-(--duration-fast)',
+        checked
+          ? 'bg-subtle shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]'
+          : 'shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] hover:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]',
       )}
     >
-      <button
-        type="button"
-        role="radio"
-        aria-checked={checked}
-        onClick={onSelect}
-        className="flex items-start gap-2.5 rounded-sm text-left outline-none focus-ring"
-      >
-        <span
-          aria-hidden
-          className={cn(
-            'mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-full border',
-            checked ? 'border-primary' : 'border-strong',
-          )}
-        >
-          {checked && <span className="size-1.75 rounded-full bg-primary" />}
+      <label htmlFor={id} className="flex items-start gap-2.5 text-left">
+        <RadioGroupItem id={id} value={value} className="mt-0.5" />
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-lede leading-[normal] text-primary">{title}</span>
+          <span className="text-hint text-tertiary">{description}</span>
         </span>
-        <span className="flex min-w-0 flex-col gap-px">
-          <span className="text-ui font-medium text-primary">{title}</span>
-          <span className="text-xs text-secondary">{description}</span>
-        </span>
-      </button>
-      {extra && <div className="pl-6">{extra}</div>}
+      </label>
+      {extra && <div className="pl-6.5">{extra}</div>}
     </div>
   )
 }
@@ -568,49 +561,43 @@ function ApiKeyFields({
   const { t } = useTranslation('settings')
   const providers = status.apiKey?.providers ?? false
   return (
-    <div className="flex flex-col gap-3 rounded-lg bg-subtle px-3 py-3">
+    <div className="flex flex-col gap-2">
+      <Input
+        id="agent-key"
+        type="password"
+        value={value.key}
+        autoComplete="off"
+        spellCheck={false}
+        aria-label={t('agents.key.key')}
+        placeholder={t('agents.key.key')}
+        className={DIALOG_MONO_FIELD}
+        onChange={(event) => onChange({ ...value, key: event.target.value })}
+      />
       {providers && (
-        <Field>
-          <FieldLabel htmlFor="agent-base-url">{t('agents.key.baseUrl')}</FieldLabel>
+        <>
           <Input
             id="agent-base-url"
             value={value.baseUrl}
             autoComplete="off"
             spellCheck={false}
-            className="font-mono"
-            placeholder="https://api.anthropic.com"
+            aria-label={t('agents.key.baseUrl')}
+            placeholder={t('agents.key.baseUrlOptional')}
+            className={DIALOG_MONO_FIELD}
             onChange={(event) => onChange({ ...value, baseUrl: event.target.value })}
           />
-          <FieldDescription>{t('agents.key.baseUrlHint')}</FieldDescription>
-        </Field>
-      )}
-      <Field>
-        <FieldLabel htmlFor="agent-key">{t('agents.key.key')}</FieldLabel>
-        <Input
-          id="agent-key"
-          type="password"
-          value={value.key}
-          autoComplete="off"
-          spellCheck={false}
-          className="font-mono"
-          onChange={(event) => onChange({ ...value, key: event.target.value })}
-        />
-      </Field>
-      {providers && (
-        <Field>
-          <FieldLabel htmlFor="agent-model">{t('agents.key.model')}</FieldLabel>
           <Input
             id="agent-model"
             value={value.model}
             autoComplete="off"
             spellCheck={false}
-            className="font-mono"
-            placeholder={t('agents.key.modelPlaceholder', { name: status.harnessName })}
+            aria-label={t('agents.key.model')}
+            placeholder={t('agents.key.modelOptional')}
+            className={DIALOG_MONO_FIELD}
             onChange={(event) => onChange({ ...value, model: event.target.value })}
           />
-        </Field>
+        </>
       )}
-      <p className="text-xs text-tertiary">
+      <p className="text-hint text-tertiary">
         {t(providers ? 'agents.key.noteClaude' : 'agents.key.noteCodex', {
           command: status.cli?.command ?? '',
         })}
@@ -630,13 +617,15 @@ export function AgentPage({ agentId }: { agentId: AgentId }) {
 /** The page's header, without an agent once it is gone from the list. */
 function AgentPageHeader({ status, actions }: { status: AgentStatus | null; actions?: ReactNode }) {
   const { t } = useTranslation('settings')
+  const dot = useScopedDot(status ?? null)
   return (
     <ItemPageHeader
       back={t('sections.agents')}
       onBack={() => openAgentSettings(null)}
       item={status?.id ?? 'agent'}
-      icon={status && <AgentMark agent={status.id} size={22} />}
-      title={status ? <AgentTitle status={status} /> : null}
+      icon={status && <AgentTile agent={status.id} size={40} glyph={22} dot={dot} />}
+      title={status?.name ?? null}
+      subtitle={status && <AgentSubtitle status={status} />}
       actions={actions}
     >
       {status && <AgentPageLine status={status} />}
@@ -644,56 +633,59 @@ function AgentPageHeader({ status, actions }: { status: AgentStatus | null; acti
   )
 }
 
-/** The agent's name, which an added agent can change, and whether it is the default one. */
-function AgentTitle({ status }: { status: AgentStatus }) {
+/** Beside the mark: the harness and how the agent signs in, and renaming an added agent. */
+function AgentSubtitle({ status }: { status: AgentStatus }) {
   const { t } = useTranslation('settings')
   const hasOthers = useHasOtherAgents(status)
   const [renaming, setRenaming] = useState(false)
+  const account = status.account?.kind === 'none' ? null : status.account
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <AgentPicker status={status} />
+    <>
+      <span className="truncate">
+        {status.harnessName}
+        {account && ` · ${account.label}`}
+      </span>
       {status.isDefault ? (
-        hasOthers && (
-          <Badge variant="secondary" className="font-sans">
-            {t('agents.default')}
-          </Badge>
-        )
+        hasOthers && <Pill>{t('agents.default')}</Pill>
       ) : (
-        <Button
-          variant="quiet"
-          size="icon-sm"
-          aria-label={t('agents.rename.button')}
-          title={t('agents.rename.button')}
-          className="text-tertiary"
-          onClick={() => setRenaming(true)}
-        >
-          <PencilIcon />
-        </Button>
+        <>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t('agents.rename.button')}
+            title={t('agents.rename.button')}
+            className="size-6.5 rounded-segment text-tertiary"
+            onClick={() => setRenaming(true)}
+          >
+            <PencilIcon className="size-3.5" />
+          </Button>
+          <RenameDialog status={status} open={renaming} onOpenChange={setRenaming} />
+        </>
       )}
-      {!status.isDefault && (
-        <RenameDialog status={status} open={renaming} onOpenChange={setRenaming} />
-      )}
-    </span>
+    </>
   )
 }
 
-/** The line under an agent's title: its state and its harness. */
+/** The line under it: the agent's state and the harness it runs on. */
 function AgentPageLine({ status }: { status: AgentStatus }) {
   const { t } = useTranslation(['settings', 'agents'])
   const ready = readiness(status).kind === 'ready'
-  return (
-    <p className="flex min-w-0 items-center gap-1.75 text-command leading-4.5 text-tertiary">
-      {ready ? (
-        <span className="inline-flex shrink-0 items-center gap-1.5 font-medium text-secondary">
-          <span aria-hidden className="size-1.5 rounded-full bg-success" />
-          {t('agents:state.ready')}
-        </span>
-      ) : (
-        <AgentStateLine status={status} className="text-command" />
-      )}
-      <span aria-hidden>·</span>
-      <span className="truncate">{t('agents.onHarness', { harness: status.harnessName })}</span>
-    </p>
+  const version = harnessVersion(status)
+  const harness = t('agents.onHarness', {
+    harness: version ? `${status.harnessName} ${version}` : status.harnessName,
+  })
+  return ready ? (
+    <span className="mt-1.25 flex min-w-0 items-center gap-1.5 leading-[normal]">
+      <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-success" />
+      <span className="truncate">
+        {t('agents:state.ready')} · {harness}
+      </span>
+    </span>
+  ) : (
+    <span className="mt-1.25 flex min-w-0 items-center gap-1 leading-[normal]">
+      <AgentStateLine status={status} className="text-hint leading-[normal]" />
+      <span className="truncate">· {harness}</span>
+    </span>
   )
 }
 
@@ -710,7 +702,8 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
     <>
       {r.kind === 'failed' && (
         <Button
-          size="sm"
+          className={ROW_BUTTON}
+
           variant="outline"
           disabled={busy}
           onClick={() => act(() => request('agents.retry', { agentId: status.id }))}
@@ -726,11 +719,11 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
     <div className="flex flex-col">
       <AgentPageHeader status={status} actions={actions} />
 
-      <div className="flex flex-col gap-7">
+      <div className="flex flex-col">
         {(r.kind === 'failed' || r.kind === 'missing') && (
           <p
             className={cn(
-              '-mt-4 px-1 text-xs',
+              'mt-4 text-group',
               r.kind === 'failed' ? 'text-danger' : 'text-secondary',
             )}
             data-selectable=""
@@ -748,18 +741,20 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           </p>
         )}
         {r.kind === 'sign-in' && status.authMethods.length > 0 && (
-          <SignInNotice
-            status={status}
-            busy={busy}
-            {...(hostId === null && {
-              onTerminal: (command: string) => signInTerminal(status, command),
-            })}
-            onAuthenticate={(methodId) =>
-              act(() => request('agents.authenticate', { agentId: status.id, methodId }))
-            }
-          />
+          <div className="mt-5">
+            <SignInNotice
+              status={status}
+              busy={busy}
+              {...(hostId === null && {
+                onTerminal: (command: string) => signInTerminal(status, command),
+              })}
+              onAuthenticate={(methodId) =>
+                act(() => request('agents.authenticate', { agentId: status.id, methodId }))
+              }
+            />
+          </div>
         )}
-        {error && <p className="-mt-4 px-1 text-xs text-danger">{error}</p>}
+        {error && <p className="mt-4 text-group text-danger">{error}</p>}
 
         <section className="flex flex-col">
           <GroupLabel group={{ id: 'account', label: t('agents.account') }} />
@@ -785,9 +780,8 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
               >
                 {status.canLogout && status.signIn === 'signed-in' && (
                   <Button
-                    size="sm"
-                    variant="quiet"
-                    className="text-secondary"
+                    variant="ghost"
+                    className={cn(ROW_BUTTON, 'text-secondary')}
                     disabled={busy}
                     onClick={() => act(() => request('agents.logout', { agentId: status.id }))}
                   >
@@ -796,7 +790,8 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
                 )}
                 {terminalSignIn?.command && hostId === null && (
                   <Button
-                    size="sm"
+                    className={ROW_BUTTON}
+
                     variant="outline"
                     onClick={() => signInTerminal(status, terminalSignIn.command!)}
                   >
@@ -809,7 +804,11 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           </RowGroup>
         </section>
 
-        <UsageGroup status={status} reading={reading} running={running} />
+        {status.account?.kind === 'api_key' ? (
+          <SpendGroup status={status} />
+        ) : (
+          <UsageGroup status={status} reading={reading} running={running} />
+        )}
 
         <ConfigurationGroup status={status} />
 
@@ -840,21 +839,19 @@ function ApiKeyRow({ status }: { status: AgentStatus }) {
       }
     >
       <ControlError error={error} />
+      <Button className={ROW_BUTTON} variant="outline" onClick={() => setOpen(true)}>
+        {t(set ? 'agents.key.replace' : 'agents.key.setButton')}
+      </Button>
       {set && (
         <Button
-          size="sm"
-          variant="quiet"
-          className="text-secondary"
+          variant="ghost"
+          className={GROUP_ACTION}
           disabled={busy}
           onClick={() => act(() => request('agents.clearApiKey', { agentId: status.id }))}
         >
           {t('agents.key.clear')}
         </Button>
       )}
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-        <KeyRoundIcon data-icon="inline-start" />
-        {t(set ? 'agents.key.replace' : 'agents.key.setButton')}
-      </Button>
       <ApiKeyDialog status={status} open={open} onOpenChange={setOpen} />
     </RowFrame>
   )
@@ -901,32 +898,30 @@ function ApiKeyDialog({
   }
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
-      <DialogContent className="sm:max-w-md">
+      <SettingsDialogContent>
         <form className="contents" onSubmit={(event) => void submit(event)}>
-          <DialogHeader>
-            <DialogTitle>{t('agents.key.title', { name: status.name })}</DialogTitle>
-            {status.isDefault && (
-              <DialogDescription>
-                {t('agents.key.defaultWarning', {
-                  name: status.harnessName,
-                  command: status.cli?.command ?? '',
-                })}
-              </DialogDescription>
-            )}
-          </DialogHeader>
-          <ApiKeyFields status={status} value={value} onChange={setValue} />
-          {error && <p className="text-xs text-danger">{error}</p>}
-          <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" />}>
+          <SettingsDialogHeader title={t('agents.key.title', { name: status.name })}>
+            {status.isDefault &&
+              t('agents.key.defaultWarning', {
+                name: status.harnessName,
+                command: status.cli?.command ?? '',
+              })}
+          </SettingsDialogHeader>
+          <SettingsDialogBody>
+            <ApiKeyFields status={status} value={value} onChange={setValue} />
+            {error && <p className="text-hint text-danger">{error}</p>}
+          </SettingsDialogBody>
+          <SettingsDialogFooter>
+            <DialogClose render={<Button type="button" variant="ghost" className={ROW_BUTTON} />}>
               {t('common:actions.cancel')}
             </DialogClose>
-            <Button type="submit" disabled={!value.key.trim() || busy}>
+            <Button type="submit" className={ROW_BUTTON} disabled={!value.key.trim() || busy}>
               {busy && <Spinner data-icon="inline-start" />}
               {t('agents.key.save')}
             </Button>
-          </DialogFooter>
+          </SettingsDialogFooter>
         </form>
-      </DialogContent>
+      </SettingsDialogContent>
     </Dialog>
   )
 }
@@ -941,49 +936,29 @@ function ConfigurationGroup({ status }: { status: AgentStatus }) {
     <section className="flex flex-col">
       <GroupLabel group={{ id: 'configuration', label: t('agents.configuration') }} />
       <RowGroup>
-        <RowFrame
-          text={
-            <RowText
-              name={t('agents.harness')}
-              description={
-                <span className="flex items-center gap-1.5">
-                  <AgentMark agent={status.harnessId} size={12} />
-                  {status.harnessName}
-                  {version && <span className="font-mono text-tertiary">{version}</span>}
-                </span>
-              }
-            />
-          }
-        >
-          <Button size="sm" variant="outline" onClick={() => openHarnessSettings(status.harnessId)}>
+        <RowFrame text={<RowText name={t('agents.harness')} />}>
+          <span className="text-lede text-secondary">
+            {version ? `${status.harnessName} ${version}` : status.harnessName}
+          </span>
+          <Button
+            variant="ghost"
+            className={GROUP_ACTION}
+            onClick={() => openHarnessSettings(status.harnessId)}
+          >
             {t('agents.openHarnessButton')}
           </Button>
         </RowFrame>
-        {details?.config.map((item) =>
-          item.id === 'folder' ? (
-            <ConfigFrame
-              key={item.id}
-              name={t('agents.config.folder')}
-              description={t(
-                status.configDir?.created
-                  ? 'agents.folderCreated'
-                  : status.isDefault
-                    ? 'agents.folderDefault'
-                    : 'agents.folderOwn',
-                { name: status.harnessName },
-              )}
-            >
-              <ConfigPath item={item} />
-              {/* An added agent's line already says whose folder it is. */}
-              {status.isDefault && <ConfigNote item={item} />}
-            </ConfigFrame>
-          ) : (
-            <ConfigRow key={item.id} item={item} status={status} />
-          ),
-        )}
+        {details?.config.map((item) => (
+          <PlaceRow
+            key={item.id}
+            name={t(`agents.config.${item.id}`)}
+            item={item}
+            note={item.id === 'folder' && status.configDir?.created && t('agents.createdByKettu')}
+          />
+        ))}
         {details && details.config.length === 0 && (
           <RowShell>
-            <p className="py-3 text-xs text-secondary">{t('agents.noConfig')}</p>
+            <p className="py-3.75 text-group text-tertiary">{t('agents.noConfig')}</p>
           </RowShell>
         )}
       </RowGroup>
@@ -998,7 +973,7 @@ function DangerGroup({ status }: { status: AgentStatus }) {
   const [removing, setRemoving] = useState(false)
   if (status.isDefault) {
     return (
-      <section className="flex flex-col">
+      <section className="flex flex-col pt-4">
         <RowGroup>
           <RowFrame
             text={
@@ -1020,21 +995,71 @@ function DangerGroup({ status }: { status: AgentStatus }) {
     )
   }
   return (
-    <section className="flex flex-col">
+    <section className="flex flex-col pt-4">
       <RowGroup>
+        {status.color && <ColorRow status={status} />}
         <RowFrame
           text={
             <RowText name={t('agents.remove.name')} description={t('agents.remove.description')} />
           }
         >
-          <Button size="sm" variant="destructive" onClick={() => setRemoving(true)}>
-            {t('agents.remove.button')}
+          <Button
+            variant="destructive-outline"
+            className={ROW_BUTTON}
+            onClick={() => setRemoving(true)}
+          >
+            {t('agents.remove.buttonEllipsis')}
           </Button>
         </RowFrame>
       </RowGroup>
       <RemoveDialog status={status} open={removing} onOpenChange={setRemoving} />
     </section>
   )
+}
+
+/** The dot an added agent's mark carries, chosen from the palette. */
+function ColorRow({ status }: { status: AgentStatus }) {
+  const { api } = useHostScope()
+  const { t } = useTranslation('settings')
+  const color = useScopedDot(status)
+  const [act, busy, error] = useAction()
+  return (
+    <RowFrame
+      text={<RowText name={t('agents.color.name')} description={t('agents.color.description')} />}
+    >
+      <ControlError error={error} />
+      <RadioGroup
+        aria-label={t('agents.color.name')}
+        value={color}
+        disabled={busy}
+        onValueChange={(next) => {
+          if (isAgentColor(next)) act(() => api.settings.setAgentColor(status.id, next))
+        }}
+        className="flex w-auto gap-2.5"
+      >
+        {AGENT_COLORS.map((option) => (
+          <RadioGroupItem
+            key={option}
+            value={option}
+            aria-label={t(`agents.color.${option}`)}
+            title={t(`agents.color.${option}`)}
+            style={{ backgroundColor: `var(--agent-${option})` }}
+            className="size-4.5 shadow-none data-checked:border-0 data-checked:shadow-[0_0_0_2px_var(--bg-surface),0_0_0_3.5px_var(--control-on)]"
+          />
+        ))}
+      </RadioGroup>
+    </RowFrame>
+  )
+}
+
+/**
+ * An added agent's dot as the scoped host's settings have it, so a choice shows at once. A host
+ * from before colors reports none and has no dot to choose.
+ */
+function useScopedDot(status: AgentStatus | null): AgentColor | null {
+  const { useSettingsStore } = useHostScope()
+  const id = status?.color ? status.id : null
+  return useSettingsStore((s) => (id ? agentColor(s.settings.addedAgents, id) : null))
 }
 
 function RemoveDialog({
@@ -1139,90 +1164,47 @@ function RenameDialog({
         onOpenChange(next)
       }}
     >
-      <DialogContent className="sm:max-w-md">
+      <SettingsDialogContent className="sm:max-w-110">
         <form className="contents" onSubmit={(event) => void submit(event)}>
-          <DialogHeader>
-            <DialogTitle>{t('agents.rename.title')}</DialogTitle>
-          </DialogHeader>
-          <Field data-invalid={tooLong || error !== null || undefined}>
-            <FieldLabel htmlFor="agent-rename" className="sr-only">
-              {t('agents.add.name')}
-            </FieldLabel>
-            <Input
-              id="agent-rename"
-              value={name}
-              autoFocus
-              autoComplete="off"
-              spellCheck={false}
-              aria-invalid={tooLong || error !== null || undefined}
-              onFocus={(event) => event.currentTarget.select()}
-              onChange={(event) => {
-                setName(event.target.value)
-                setError(null)
-              }}
-            />
-            {tooLong && (
-              <FieldError>{t('agents.add.nameTooLong', { count: AGENT_NAME_CHARS })}</FieldError>
-            )}
-            {error && <FieldError>{error}</FieldError>}
-          </Field>
-          <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" />}>
+          <SettingsDialogHeader title={t('agents.rename.title')} />
+          <SettingsDialogBody>
+            <SettingsField
+              label={t('agents.add.name')}
+              htmlFor="agent-rename"
+              hint={
+                (tooLong || error) && (
+                  <span className="text-danger">
+                    {tooLong ? t('agents.add.nameTooLong', { count: AGENT_NAME_CHARS }) : error}
+                  </span>
+                )
+              }
+            >
+              <Input
+                id="agent-rename"
+                value={name}
+                autoFocus
+                autoComplete="off"
+                spellCheck={false}
+                className={DIALOG_FIELD}
+                aria-invalid={tooLong || error !== null || undefined}
+                onFocus={(event) => event.currentTarget.select()}
+                onChange={(event) => {
+                  setName(event.target.value)
+                  setError(null)
+                }}
+              />
+            </SettingsField>
+          </SettingsDialogBody>
+          <SettingsDialogFooter>
+            <DialogClose render={<Button type="button" variant="ghost" className={ROW_BUTTON} />}>
               {t('common:actions.cancel')}
             </DialogClose>
-            <Button type="submit" disabled={!valid || busy}>
+            <Button type="submit" className={ROW_BUTTON} disabled={!valid || busy}>
               {t('agents.rename.save')}
             </Button>
-          </DialogFooter>
+          </SettingsDialogFooter>
         </form>
-      </DialogContent>
+      </SettingsDialogContent>
     </Dialog>
-  )
-}
-
-/** The agent's name as the page's title, opening a searchable list of the agents. */
-function AgentPicker({ status }: { status: AgentStatus }) {
-  const { useAgentsStore } = useHostScope()
-  const { t } = useTranslation('settings')
-  const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId).filter(hasProgram)))
-  const { contains } = useComboboxFilter()
-  const name = (id: AgentId) => agents.find((a) => a.id === id)?.name ?? id
-  return (
-    <Combobox
-      items={agents.map((a) => a.id)}
-      value={status.id}
-      onValueChange={(id: AgentId | null) => {
-        if (id) openAgentSettings(id)
-      }}
-      itemToStringLabel={name}
-      filter={(id: AgentId, query: string) => contains(name(id), query)}
-    >
-      <ComboboxTrigger className="-mx-1.5 flex min-w-0 items-center gap-1.25 rounded-lg pr-1.25 pl-1.5 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring data-popup-open:bg-hover [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:transition-transform [&>svg]:duration-(--duration-base) data-popup-open:[&>svg]:rotate-180">
-        <span className="truncate">{status.name}</span>
-      </ComboboxTrigger>
-      <ComboboxContent className="w-72">
-        <ComboboxInput
-          showTrigger={false}
-          placeholder={t('agents.search')}
-          aria-label={t('agents.search')}
-          spellCheck={false}
-        />
-        <ComboboxEmpty>{t('agents.noMatch')}</ComboboxEmpty>
-        <ComboboxList>
-          {(id: AgentId) => {
-            const agent = agents.find((a) => a.id === id)
-            return (
-              agent && (
-                <ComboboxItem key={id} value={id}>
-                  <AgentMark agent={id} size={14} />
-                  <span className="min-w-0 flex-1 truncate">{agent.name}</span>
-                  <AgentStateLine status={agent} className="shrink-0 text-tertiary" />
-                </ComboboxItem>
-              )
-            )
-          }}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
   )
 }

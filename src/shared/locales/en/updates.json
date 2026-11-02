@@ -9,7 +9,7 @@
     "updateNote": "Downloads, then restarts",
     "moveNote": "Moves to Applications, then restarts",
     "downloadNote": "From the release page",
-    "updated": "Updated to Kettu {{version}}",
+    "updated": "Kettu {{version}}",
     "updatedNote": "Updated from {{version}}",
     "installing": "Updating Kettu",
     "downloading": "Downloading {{version}}",

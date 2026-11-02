@@ -1953,6 +1953,15 @@ describe('agents added to a harness', () => {
     await m.agents.stopAll()
   })
 
+  it("reports an added agent's dot color, and follows a change of it", async () => {
+    const m = addedManager(settingsWith([{ ...WORK, color: 'rose' }]))
+    await m.agents.list()
+    expect(m.agents.status('claude-code~work').color).toBe('rose')
+    expect(m.agents.status('claude-code').color).toBeUndefined()
+    await m.change(settingsWith([{ ...WORK, color: 'green' }]))
+    expect(m.agents.status('claude-code~work').color).toBe('green')
+  })
+
   it('hides a default agent the settings hide, and only that one', async () => {
     const m = addedManager(settingsWith([WORK], { 'claude-code': { hidden: true } }))
     await m.agents.list()

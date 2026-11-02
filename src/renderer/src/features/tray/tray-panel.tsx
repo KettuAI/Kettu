@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { AnimatePresence, MotionConfig, motion, type Variants } from 'motion/react'
 import { useTranslation } from 'react-i18next'
+import type { AgentId } from '@shared/thread'
 import type { SessionSummary } from '@shared/agent-host'
 import type { BrowserOriginDecision } from '@shared/browser'
 import type { RemoteStatus } from '@shared/remote/status'
@@ -430,6 +431,12 @@ function IconButton({
   )
 }
 
+/** A session's agent mark; the panel never loads the agents store, so the dot comes from its own. */
+function SessionMark({ agent }: { agent: AgentId }) {
+  const dot = useTrayPanelStore((s) => s.agents.find((a) => a.id === agent)?.color ?? null)
+  return <AgentMark agent={agent} size={16} dot={dot} />
+}
+
 function GroupLabel({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-6 items-center px-3.5 text-caption font-medium text-tertiary">
@@ -471,7 +478,7 @@ function SessionRow({
         onClick={() => open({ kind: 'session', sessionId: summary.id })}
         className="flex min-w-0 flex-1 items-center gap-2.25 rounded-md text-left outline-none focus-ring"
       >
-        <AgentMark agent={summary.agentId} size={16} />
+        <SessionMark agent={summary.agentId} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-control/[1.3] text-primary">
             {summary.title ?? t('untitled')}
@@ -541,7 +548,7 @@ function MenuRow({
       onMouseMove={onHover}
       onClick={() => open(target)}
       className={cn(
-        'flex h-7.5 w-full items-center gap-2.25 rounded-tile px-2 text-left text-[13.5px] whitespace-nowrap text-primary outline-none focus-ring',
+        'flex h-7.5 w-full items-center gap-2.25 rounded-tile px-2 text-left text-menu whitespace-nowrap text-primary outline-none focus-ring',
         highlighted && 'bg-selected',
       )}
     >
@@ -568,7 +575,7 @@ function Limits() {
         const used = Math.round(limit.usedPercent ?? 0)
         return (
           <div key={agent.id} className="flex h-6 items-center gap-2 px-3.5">
-            <AgentMark agent={agent.id} size={14} />
+            <AgentMark agent={agent.id} size={14} dot={agent.color ?? null} />
             <span className="min-w-0 flex-1 truncate text-small text-secondary">
               {plan ? t('limitLabel', { agent: agent.name, plan }) : agent.name}
             </span>
@@ -704,7 +711,7 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
         <IconButton label={t('back')} onClick={() => review(null)} className="size-6">
           <ChevronLeftIcon className="size-3.5" />
         </IconButton>
-        <AgentMark agent={summary.agentId} size={16} />
+        <SessionMark agent={summary.agentId} />
         <span className="min-w-0 flex-1 truncate text-control font-semibold text-primary">
           {summary.title ?? t('untitled')}
         </span>

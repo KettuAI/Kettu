@@ -33,6 +33,7 @@ import type {
   RunPage,
   RoutinesProblem,
 } from './routines'
+import type { AgentColor } from './settings'
 import type { UsageScope, UsageStatus, UsageSummary, UsageTotal } from './usage'
 import type {
   AgentId,
@@ -172,6 +173,7 @@ export interface AgentStatus {
   harnessName: string
   isDefault: boolean
   hidden: boolean // a default agent hidden from the agent menu
+  color?: AgentColor // an added agent's dot on its mark; absent for a harness's default agent
   // Whether Kettu handed this agent's harness an API key; null for a harness that takes none.
   apiKey: { set: boolean; providers: boolean } | null
   state: AgentState

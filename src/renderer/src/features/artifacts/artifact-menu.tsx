@@ -4,7 +4,7 @@ import {
   HistoryIcon,
   MessageSquareIcon,
   PencilIcon,
-  RefreshCwIcon,
+  RotateCwIcon,
   ShapesIcon,
   TrashIcon,
   Undo2Icon,
@@ -111,7 +111,7 @@ export function ArtifactMenuItems({
         )}
         {onReload && (
           <DropdownMenuItem onClick={onReload}>
-            <RefreshCwIcon />
+            <RotateCwIcon />
             {t('viewer.reload')}
           </DropdownMenuItem>
         )}

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentId } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { Button } from '@renderer/components/ui/button'
 import {
   Combobox,
@@ -79,134 +80,136 @@ export function AgentPicker({
   }
 
   return (
-    <Combobox
-      items={groups.map((g) => ({ ...g, items: g.agents.map((a) => a.id) }))}
-      value={agentId}
-      open={open}
-      onOpenChange={onOpenChange}
-      onValueChange={(id: AgentId | null) => {
-        if (id) onChoose(id)
-      }}
-      itemToStringLabel={(id: AgentId) => agentName(id, hostId)}
-      filter={(id: AgentId, query: string) => {
-        const status = byId.get(id)
-        return !!status && contains(`${status.name} ${status.harnessName}`, query)
-      }}
-      autoHighlight
-    >
-      <ComboboxTrigger
-        render={
-          <Button
-            variant="quiet"
-            size="sm"
-            aria-label={t('newSession.agent')}
-            className="h-7.5 min-w-0 shrink gap-1.5 overflow-hidden rounded-xl bg-subtle px-2.25 text-control font-normal text-primary hover:bg-selected aria-expanded:bg-selected [&>[data-icon=inline-end]]:text-tertiary"
-          />
-        }
+    // Marks inside show this host's agents, the second-account dots included.
+    <AgentMarkHost.Provider value={hostId}>
+      <Combobox
+        items={groups.map((g) => ({ ...g, items: g.agents.map((a) => a.id) }))}
+        value={agentId}
+        open={open}
+        onOpenChange={onOpenChange}
+        onValueChange={(id: AgentId | null) => {
+          if (id) onChoose(id)
+        }}
+        itemToStringLabel={(id: AgentId) => agentName(id, hostId)}
+        filter={(id: AgentId, query: string) => {
+          const status = byId.get(id)
+          return !!status && contains(`${status.name} ${status.harnessName}`, query)
+        }}
+        autoHighlight
       >
-        {agentId ? (
-          <>
-            <AgentMark agent={agentId} size={15} className="shrink-0" />
-            <span className="min-w-0 truncate" title={agentName(agentId, hostId)}>
-              {agentName(agentId, hostId)}
-            </span>
-          </>
-        ) : (
-          <span className="truncate">{t('newSession.chooseAgentShort')}</span>
-        )}
-      </ComboboxTrigger>
-      {/* Below the composer's edge, its marks in line with the chip's. */}
-      <ComboboxContent
-        align="start"
-        sideOffset={20}
-        alignOffset={-14}
-        className="flex w-85 flex-col"
-      >
-        <ComboboxInput
-          showTrigger={false}
-          placeholder={t('newSession.picker.search')}
-          aria-label={t('newSession.picker.search')}
-          spellCheck={false}
-          // A menu's search keeps its bottom line when focused, not a field's focus ring.
-          className="h-10.5! px-2 has-[[data-slot=input-group-control]:focus-visible]:shadow-[inset_0_calc(var(--hairline)*-1)_0_var(--border-soft)]!"
+        <ComboboxTrigger
+          render={
+            <Button
+              variant="quiet"
+              size="sm"
+              aria-label={t('newSession.agent')}
+              className="h-7.5 min-w-0 shrink gap-1.5 overflow-hidden rounded-xl bg-subtle px-2.25 text-control font-normal text-primary hover:bg-selected aria-expanded:bg-selected [&>[data-icon=inline-end]]:text-tertiary"
+            />
+          }
         >
-          <InputGroupAddon>
-            <SearchIcon className="size-3.5" />
-          </InputGroupAddon>
-        </ComboboxInput>
-        {statuses.length === 0 ? (
-          <p className="px-3.5 py-3 text-ui text-muted-foreground">
-            {hostId === null
-              ? t('newSession.noAgent')
-              : t('newSession.noAgentOnHost', { host: hostLabel })}
-          </p>
-        ) : (
-          <ComboboxList className="max-h-[min(--spacing(110),calc(var(--available-height)---spacing(24)))] scroll-fade-y px-1.5 pt-0.5 pb-1.5">
-            {(group: AgentGroup & { items: AgentId[] }) => (
-              <ComboboxGroup key={group.key} items={group.items}>
-                <ComboboxLabel className="h-auto px-2 pt-2 pb-1 text-small font-medium text-tertiary">
-                  {group.harness ??
-                    (groups.length > 1
-                      ? t('newSession.picker.other')
-                      : t('newSession.picker.agents'))}
-                </ComboboxLabel>
-                <ComboboxCollection>
-                  {(id: AgentId) => {
-                    const status = byId.get(id)
-                    if (!status) return null
-                    const line = agentLine(status, now)
-                    return (
-                      <ComboboxItem
-                        key={id}
-                        value={id}
-                        className="group/agent h-11 gap-2.5 rounded-xl py-1 pr-2 pl-2 data-highlighted:bg-hover [&>span.absolute]:hidden"
-                      >
-                        <AgentMark agent={id} size={20} className="shrink-0" />
-                        <span className="flex min-w-0 flex-1 flex-col gap-px">
-                          <span className="truncate text-[13.5px] text-primary">{status.name}</span>
-                          {line && (
-                            <span className={cn('truncate text-small', LINE_TONE[line.tone])}>
-                              {line.text}
-                            </span>
+          {agentId ? (
+            <>
+              <AgentMark agent={agentId} size={15} className="shrink-0" />
+              <span className="min-w-0 truncate" title={agentName(agentId, hostId)}>
+                {agentName(agentId, hostId)}
+              </span>
+            </>
+          ) : (
+            <span className="truncate">{t('newSession.chooseAgentShort')}</span>
+          )}
+        </ComboboxTrigger>
+        {/* Below the composer's edge, its marks in line with the chip's. */}
+        <ComboboxContent
+          align="start"
+          sideOffset={20}
+          alignOffset={-14}
+          className="flex w-85 flex-col"
+        >
+          <ComboboxInput
+            showTrigger={false}
+            placeholder={t('newSession.picker.search')}
+            aria-label={t('newSession.picker.search')}
+            spellCheck={false}
+            className="h-10.5! px-2"
+          >
+            <InputGroupAddon>
+              <SearchIcon className="size-3.5" />
+            </InputGroupAddon>
+          </ComboboxInput>
+          {statuses.length === 0 ? (
+            <p className="px-3.5 py-3 text-ui text-muted-foreground">
+              {hostId === null
+                ? t('newSession.noAgent')
+                : t('newSession.noAgentOnHost', { host: hostLabel })}
+            </p>
+          ) : (
+            <ComboboxList className="max-h-[min(--spacing(110),calc(var(--available-height)---spacing(24)))] scroll-fade-y px-1.5 pt-0.5 pb-1.5">
+              {(group: AgentGroup & { items: AgentId[] }) => (
+                <ComboboxGroup key={group.key} items={group.items}>
+                  <ComboboxLabel className="h-auto px-2 pt-2 pb-1 text-small font-medium text-tertiary">
+                    {group.harness ??
+                      (groups.length > 1
+                        ? t('newSession.picker.other')
+                        : t('newSession.picker.agents'))}
+                  </ComboboxLabel>
+                  <ComboboxCollection>
+                    {(id: AgentId) => {
+                      const status = byId.get(id)
+                      if (!status) return null
+                      const line = agentLine(status, now)
+                      return (
+                        <ComboboxItem
+                          key={id}
+                          value={id}
+                          className="group/agent h-11 gap-2.5 rounded-xl py-1 pr-2 pl-2 data-highlighted:bg-hover [&>span.absolute]:hidden"
+                        >
+                          <AgentMark agent={id} size={20} className="shrink-0" />
+                          <span className="flex min-w-0 flex-1 flex-col gap-px">
+                            <span className="truncate text-menu text-primary">{status.name}</span>
+                            {line && (
+                              <span className={cn('truncate text-small', LINE_TONE[line.tone])}>
+                                {line.text}
+                              </span>
+                            )}
+                          </span>
+                          {id === agentId && (
+                            <CheckIcon
+                              aria-hidden
+                              strokeWidth={1.75}
+                              className="size-3.75 shrink-0 text-control-on"
+                            />
                           )}
-                        </span>
-                        {id === agentId && (
-                          <CheckIcon
-                            aria-hidden
-                            strokeWidth={1.75}
-                            className="size-3.75 shrink-0 text-control-on"
-                          />
-                        )}
-                      </ComboboxItem>
-                    )
+                        </ComboboxItem>
+                      )
+                    }}
+                  </ComboboxCollection>
+                </ComboboxGroup>
+              )}
+            </ComboboxList>
+          )}
+          <ComboboxEmpty>{t('newSession.picker.noMatch')}</ComboboxEmpty>
+          {/* Settings set up this computer's agents, not another host's. */}
+          {hostId === null && (
+            <>
+              <ComboboxSeparator className="mx-0 my-0" />
+              <div className="p-1.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8.5 w-full justify-start gap-2.5 rounded-xl px-2 text-control font-normal text-secondary"
+                  onClick={() => {
+                    setOpen(false)
+                    openAgentSettings(null)
                   }}
-                </ComboboxCollection>
-              </ComboboxGroup>
-            )}
-          </ComboboxList>
-        )}
-        <ComboboxEmpty>{t('newSession.picker.noMatch')}</ComboboxEmpty>
-        {/* Settings set up this computer's agents, not another host's. */}
-        {hostId === null && (
-          <>
-            <ComboboxSeparator className="mx-0 my-0" />
-            <div className="p-1.5">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8.5 w-full justify-start gap-2.5 rounded-xl px-2 text-control font-normal text-secondary"
-                onClick={() => {
-                  setOpen(false)
-                  openAgentSettings(null)
-                }}
-              >
-                <SlidersHorizontalIcon className="size-4" />
-                {t('newSession.picker.manage')}
-              </Button>
-            </div>
-          </>
-        )}
-      </ComboboxContent>
-    </Combobox>
+                >
+                  <SlidersHorizontalIcon className="size-4" />
+                  {t('newSession.picker.manage')}
+                </Button>
+              </div>
+            </>
+          )}
+        </ComboboxContent>
+      </Combobox>
+    </AgentMarkHost.Provider>
   )
 }

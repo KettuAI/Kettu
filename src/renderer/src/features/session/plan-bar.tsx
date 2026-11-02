@@ -14,18 +14,9 @@ import { PANEL } from './entries/helpers'
 
 /**
  * The row above the composer: the latest plan, as a segment per step, the count and the current
- * step, which opens to the whole list under it. It steps aside while the queue fans out over it
- * (`hidden`).
+ * step, which opens to the whole list under it.
  */
-export function PlanBar({
-  sessionId,
-  running,
-  hidden,
-}: {
-  sessionId: string
-  running: boolean
-  hidden: boolean
-}) {
+export function PlanBar({ sessionId, running }: { sessionId: string; running: boolean }) {
   const { t } = useTranslation('session')
   const [open, setOpen] = useState(false)
   const plan = useThreadsStore((s) => {
@@ -44,21 +35,11 @@ export function PlanBar({
   const showsPlan = !!items && (running || done < items.length)
   if (!showsPlan) return null
 
-  const shell = cn(
-    'transition-[opacity,translate] duration-(--duration-fast) ease-out-quart',
-    hidden && '-translate-y-1 opacity-0 motion-reduce:translate-y-0',
-  )
   const row = 'flex min-h-7.5 min-w-0 items-center gap-2 px-1 pb-1'
   const current = items.find((i) => i.status === 'in_progress')
 
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      inert={hidden}
-      aria-hidden={hidden || undefined}
-      className={shell}
-    >
+    <Collapsible open={open} onOpenChange={setOpen}>
       <div className={row}>
         <CollapsibleTrigger className="-ml-2 flex h-7 min-w-0 items-center gap-2 rounded-lg px-2 text-left text-ui text-tertiary outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring">
           <ChevronRightIcon

@@ -153,6 +153,7 @@ export default function FilesPanel({
               aria-label={t('panel.show')}
               value={mode}
               onChange={setMode}
+              size="small"
               className="app-region-no-drag shrink-0"
               itemClassName="h-6 px-2.25 text-hint"
               segments={[

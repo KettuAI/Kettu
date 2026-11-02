@@ -1,53 +1,51 @@
 // What the Agent and Harness sections of Settings both draw: reading an agent's account and
 // usage, its plan meters, sign-in, task logs and the rows of its configuration.
 
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { CheckIcon, CopyIcon, LogInIcon, SquareTerminalIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { AgentConfigItem, AgentStatus, AgentTask, PlanLimit } from '@shared/agent-host'
+import type { AgentStatus, AgentTask, PlanLimit } from '@shared/agent-host'
 import { useRefresh } from '@renderer/components/refresh'
 import { RefreshIcon } from '@renderer/components/refresh-icon'
 import { Button } from '@renderer/components/ui/button'
 import { Progress } from '@renderer/components/ui/progress'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { countdown } from '@renderer/features/sidebar/plan-usage'
-import { limitLabel, longAgo, resetTime } from '@renderer/lib/format'
+import { addDays, dayOf, monthStartOf } from '@renderer/features/usage/model'
+import { limitLabel, mediumAgo, money, resetTime } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { LIMIT_TEXT, limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { limitsReadable, percent, useAction } from './agent-helpers'
-import { ControlError, CopyAction, IconAction } from './controls'
-import { ConfigNote, ConfigPath } from './places'
+import { ControlError, CopyAction, IconAction, ROW_BUTTON } from './controls'
 import { GroupLabel, Notice, RowFrame, RowGroup, RowShell, RowText } from './rows'
+import { agentCost } from './spend'
 
-/** Up to two current windows, each its label, a short bar, its percentage and the time left. */
-export function UsageMeters({ limits }: { limits: PlanLimit[] }) {
+/** The window nearest its limit as a list row's end: its label and percent over a 4 px bar. */
+export function ListMeter({ limits }: { limits: PlanLimit[] }) {
   const { t } = useTranslation(['settings', 'composer'])
-  const now = useNow()
-  return limits.slice(0, 2).map((limit) => {
-    const left = limit.resetsAt ? countdown(limit.resetsAt - now) : null
-    const level = limitLevel(limit)
-    return (
-      <span
-        key={limit.window}
-        className="inline-flex items-center gap-1.75 text-xs leading-4 text-tertiary tabular"
-      >
-        <span className="text-secondary">{limitLabel(limit)}</span>
-        <Progress
-          value={limit.usedPercent ?? 0}
-          tone={`limit-${level}`}
-          className="w-13"
-          aria-label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
-        />
-        <span className={cn('min-w-6.5', level !== 'ok' && 'font-medium', LIMIT_TEXT[level])}>
+  const limit = limits.reduce((most, next) =>
+    (next.usedPercent ?? 0) > (most.usedPercent ?? 0) ? next : most,
+  )
+  const level = limitLevel(limit)
+  return (
+    <span className="flex w-37.5 flex-col gap-1.25 tabular">
+      <span className="flex justify-between text-meta leading-[normal] text-tertiary">
+        <span>{limitLabel(limit)}</span>
+        <span className={cn('text-primary', level !== 'ok' && LIMIT_TEXT[level])}>
           {percent(limit)}
         </span>
-        {left && <span title={t('agents.resetsIn', { time: left })}>{left}</span>}
       </span>
-    )
-  })
+      <Progress
+        value={limit.usedPercent ?? 0}
+        tone={`limit-${level}`}
+        className="w-full [&_[data-slot=progress-indicator]]:rounded-full [&_[data-slot=progress-track]]:h-1 [&_[data-slot=progress-track]]:bg-border"
+        aria-label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
+      />
+    </span>
+  )
 }
 
 /** The small x at a notice's end that puts it away. */
@@ -90,7 +88,7 @@ export function SignInNotice({
       action={
         first?.command &&
         onTerminal && (
-          <Button size="sm" onClick={() => onTerminal(first.command!)}>
+          <Button className={ROW_BUTTON} onClick={() => onTerminal(first.command!)}>
             <SquareTerminalIcon data-icon="inline-start" />
             {t('session:signIn.inTerminal')}
           </Button>
@@ -116,8 +114,9 @@ export function SignInNotice({
                 {others.map((method) =>
                   method.type === 'terminal' && method.command ? (
                     <Button
+                      className={ROW_BUTTON}
                       key={method.id}
-                      size="sm"
+
                       variant="outline"
                       onClick={() => onTerminal?.(method.command!)}
                     >
@@ -125,8 +124,9 @@ export function SignInNotice({
                     </Button>
                   ) : (
                     <Button
+                      className={ROW_BUTTON}
                       key={method.id}
-                      size="sm"
+
                       variant={first ? 'outline' : 'default'}
                       disabled={busy}
                       title={method.description}
@@ -187,9 +187,9 @@ export function LogCopyButton({ task }: { task: AgentTask }) {
   const [copied, setCopied] = useState(false)
   return (
     <Button
-      variant="quiet"
-      size="sm"
-      className="text-secondary"
+      variant="ghost"
+
+      className={cn(ROW_BUTTON, 'text-secondary')}
       onClick={() => {
         const text = [`$ ${task.command}`, ...task.progress, task.error ?? ''].join('\n')
         void navigator.clipboard.writeText(text).then(() => {
@@ -205,6 +205,59 @@ export function LogCopyButton({ task }: { task: AgentTask }) {
 }
 
 /** Plan usage, one row per window, read afresh while the page shows. */
+/**
+ * What Kettu sent through an agent signed in with an API key this month, by its own record: an
+ * API key has no plan limits to read.
+ */
+export function SpendGroup({ status }: { status: AgentStatus }) {
+  const { request } = useHostScope()
+  const { t } = useTranslation('settings')
+  // undefined while it is read; null when no model it used has a price.
+  const [cost, setCost] = useState<number | null | undefined>(undefined)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    const today = dayOf(Date.now())
+    const from = monthStartOf(today)
+    const to = addDays(today, 1)
+    request('usage.summary', { dayStarts: [from, to], from, to, scope: 'kettu' }).then(
+      (summary) => {
+        if (!cancelled) setCost(agentCost(summary.days, status.id))
+      },
+      (e: unknown) => {
+        if (!cancelled) setError(errorMessage(e))
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [request, status.id])
+  return (
+    <section className="flex flex-col">
+      <GroupLabel group={{ id: 'spend', label: t('agents.spend.group') }} />
+      <RowGroup>
+        <RowFrame
+          text={
+            <RowText
+              name={t('agents.spend.month')}
+              description={t('agents.spend.description', { name: status.harnessName })}
+            />
+          }
+        >
+          <ControlError error={error} />
+          {cost === undefined ? (
+            !error && <Spinner className="size-3.5 text-tertiary" />
+          ) : (
+            <span className="font-display text-sheet-title font-bold tabular">
+              {cost === null ? t('agents.spend.unpriced') : money(cost, 'USD')}
+            </span>
+          )}
+        </RowFrame>
+      </RowGroup>
+    </section>
+  )
+}
+
 export function UsageGroup({
   status,
   reading,
@@ -226,7 +279,7 @@ export function UsageGroup({
       <>
         {observed && (
           <span className="text-tertiary">
-            {t('agents.usageUpdated', { ago: longAgo(observed, now) })}
+            {t('agents.usageUpdated', { ago: mediumAgo(observed, now) })}
           </span>
         )}
         <IconAction
@@ -290,14 +343,15 @@ export function UsageGroup({
           })}
         </RowGroup>
       ) : reading && status.capabilities.reports ? (
-        <p className="px-1 py-0.5 text-small text-tertiary">{t('agents.readingUsage')}</p>
+        <p className="py-1 text-group text-tertiary">{t('agents.readingUsage')}</p>
       ) : limitsReadable(status) && !running ? (
         <RowGroup>
           <RowFrame text={<RowText name={t('agents.planLimits')} />}>
             <ControlError error={error} />
             <Button
+              className={ROW_BUTTON}
               variant="outline"
-              size="sm"
+
               disabled={busy}
               onClick={() => act(() => request('agents.refreshLimits', { agentId: status.id }))}
             >
@@ -307,12 +361,12 @@ export function UsageGroup({
           </RowFrame>
         </RowGroup>
       ) : (
-        <p className="px-1 py-0.5 text-small text-tertiary">
+        <p className="py-1 text-group text-tertiary">
           {t('agents.usageNotReported', { name: status.name })}
         </p>
       )}
       {(error ?? refreshError) && status.limits.length > 0 && (
-        <p className="px-1 pt-1 text-xs text-danger">{error ?? refreshError}</p>
+        <p className="pt-2 text-hint text-danger">{error ?? refreshError}</p>
       )}
     </section>
   )
@@ -330,17 +384,21 @@ export function Fact({
 }) {
   const { t } = useTranslation('settings')
   return (
-    <RowFrame compact text={<RowText name={name} />}>
+    <RowFrame text={<RowText name={name} />}>
       {children ? (
         // A mask's box reaches past the column, so its blur ends where the text above does.
         <span
-          className={cn('text-small has-data-[slot=masked]:-me-1.5', mono && 'font-mono text-code')}
+          className={cn(
+            'has-data-[slot=masked]:-me-1.5',
+            mono ? 'font-mono text-code text-tertiary' : 'text-lede text-secondary',
+            'leading-[normal]',
+          )}
           data-selectable=""
         >
           {children}
         </span>
       ) : (
-        <span className="text-small text-tertiary">{t('agents.notReported')}</span>
+        <span className="text-lede leading-[normal] text-tertiary">{t('agents.notReported')}</span>
       )}
     </RowFrame>
   )
@@ -360,28 +418,13 @@ export function ConfigFrame({
 }) {
   return (
     <RowShell>
-      <div className="flex flex-col gap-1.5 py-2.5">
-        <div className="flex min-h-7 items-center gap-4">
+      <div className="flex flex-col gap-1.5 py-3.75">
+        <div className="flex min-h-7 items-center gap-7">
           <RowText name={name} description={description} />
           {control && <div className="ml-auto flex shrink-0 items-center gap-2">{control}</div>}
         </div>
         {children}
       </div>
     </RowShell>
-  )
-}
-
-export function ConfigRow({ item, status }: { item: AgentConfigItem; status: AgentStatus }) {
-  const { t } = useTranslation('settings')
-  return (
-    <ConfigFrame
-      name={t(`agents.config.${item.id}`)}
-      description={
-        item.id === 'folder' ? t('agents.configFolder.description', { name: status.name }) : null
-      }
-    >
-      <ConfigPath item={item} />
-      <ConfigNote item={item} />
-    </ConfigFrame>
   )
 }

@@ -28,9 +28,25 @@ export function hostPlatform(): Platform {
 /** The label of the platform's main modifier, as shown in menus and tooltips. */
 export const modLabel = isMac ? '⌘' : 'Ctrl+'
 
-/** Formats a shortcut such as `Mod+Shift+[` for the platform: `⌘⇧[` or `Ctrl+Shift+[`. */
+const MAC_MODIFIERS = ['Ctrl', 'Alt', 'Shift', 'Mod']
+
+/**
+ * A shortcut's keys, split on `+` (a trailing `+` is the plus key), with macOS's modifiers in the
+ * order its menus write them: Control, Option, Shift, Command.
+ */
+export function shortcutKeys(shortcut: string): string[] {
+  const keys = shortcut.split(/\+(?=.)/)
+  if (!isMac) return keys
+  const rank = (key: string) => {
+    const index = MAC_MODIFIERS.indexOf(key)
+    return index < 0 ? MAC_MODIFIERS.length : index
+  }
+  return keys.sort((a, b) => rank(a) - rank(b))
+}
+
+/** Formats a shortcut such as `Mod+Shift+[` for the platform: `⇧⌘[` or `Ctrl+Shift+[`. */
 export function formatShortcut(shortcut: string): string {
-  const parts = shortcut.split('+')
+  const parts = shortcutKeys(shortcut)
   if (isMac) {
     return parts
       .map((part) => {

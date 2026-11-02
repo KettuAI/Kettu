@@ -4,7 +4,7 @@ import {
   EllipsisIcon,
   Maximize2Icon,
   Minimize2Icon,
-  RefreshCwIcon,
+  RotateCwIcon,
   TrashIcon,
   XIcon,
 } from 'lucide-react'
@@ -172,7 +172,7 @@ export default function ArtifactPane({
               />
             )}
             <PanelButton label={t('viewer.reload')} onClick={artifact.reload}>
-              <RefreshCwIcon />
+              <RotateCwIcon />
             </PanelButton>
             {summary && (
               <DropdownMenu>

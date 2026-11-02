@@ -15,7 +15,7 @@ import type { HostPairingState, HostPairStart, HostsStatus } from './remote/host
 import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { RemoteStatus } from './remote/status'
-import type { SettingsFile, SettingsPatch } from './settings'
+import type { AgentColor, SettingsFile, SettingsPatch } from './settings'
 import type { SharingConnectResult, SharingResult, SharingStatus } from './sharing'
 import type { TerminalMethod, TerminalsApi } from './terminal-host'
 import type { CatalogInstallResult, CatalogState, ThemeInstallResult, ThemesState } from './themes'
@@ -31,6 +31,21 @@ export interface AppInfo {
   userDataPath: string
   isPackaged: boolean
 }
+
+/** The system's default browser: its name and a small PNG of its icon; null where unknown. */
+export interface DefaultBrowser {
+  name: string | null
+  icon: string | null // a `data:image/png` URL
+}
+
+/** The icon of each site opened from Kettu, as a `data:` URL by origin; null for none. */
+export type SiteIconMap = Record<string, string | null>
+
+/** A change to the sites' icons. */
+export type SiteIconEvent =
+  | { kind: 'set'; origin: string; icon: string | null }
+  | { kind: 'removed'; origin: string }
+  | { kind: 'cleared' }
 
 /** Whether the app can register a login item, and whether macOS waits for the user's approval. */
 export interface LoginItemStatus {
@@ -116,6 +131,7 @@ export interface ForwardedKey {
 /** Request/response contract of every `ipcRenderer.invoke` channel, keyed by channel name. */
 export interface IpcInvokeContract {
   'app:get-info': { args: []; result: AppInfo }
+  'app:default-browser': { args: []; result: DefaultBrowser }
   // true stops the work and goes on, false stays, 'background' closes the windows and keeps it running.
   'app:respond-quit': { args: [id: number, answer: boolean | 'background']; result: void }
   'settings:get': { args: []; result: SettingsFile }
@@ -145,6 +161,7 @@ export interface IpcInvokeContract {
     result: AgentId
   }
   'settings:rename-agent': { args: [agentId: AgentId, name: string]; result: void }
+  'settings:set-agent-color': { args: [agentId: AgentId, color: AgentColor]; result: void }
   // `trash`: move the folder Kettu made for the agent to the trash.
   'settings:remove-agent': { args: [agentId: AgentId, trash: boolean]; result: void }
   'dialog:choose-shell': { args: []; result: string | null }
@@ -255,6 +272,7 @@ export interface IpcInvokeContract {
   'browser:open-external': { args: [sessionId: string]; result: void }
   // The page as it looks now, for the pane to show while an overlay would cover the view.
   'browser:freeze': { args: [sessionId: string]; result: string | null }
+  'browser:capture': { args: [sessionId: string]; result: Uint8Array | null }
   'browser:thaw': { args: [sessionId: string]; result: void }
   /** The user hands the page back to the agent, after taking control. */
   'browser:hand-back': { args: [sessionId: string]; result: void }
@@ -269,6 +287,9 @@ export interface IpcInvokeContract {
   'browser:allowed-sites': { args: []; result: AllowedSites[] }
   'browser:remove-allowed-site': { args: [projectPath: string, origin: string]; result: void }
   'browser:clear-data': { args: []; result: void }
+  'browser:site-icons': { args: []; result: SiteIconMap }
+  /** A link in Kettu opened the address, in either place, so its site counts as opened. */
+  'browser:site-opened': { args: [url: string]; result: void }
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeContract
@@ -296,6 +317,7 @@ export interface IpcEventContract {
   'browser:state': BrowserState
   /** An agent's first navigation opened a session's page, so the pane may show it. */
   'browser:opened': { sessionId: string }
+  'browser:site-icon': SiteIconEvent
   /** To the menu bar panel: it came forward. */
   'tray:shown': null
 }
@@ -361,6 +383,8 @@ export interface KettuApi {
   systemLocale: Locale
   app: {
     getInfo(): Promise<AppInfo>
+    /** The browser links open in outside Kettu, read once per run. */
+    defaultBrowser(): Promise<DefaultBrowser>
     respondQuit(id: number, answer: boolean | 'background'): Promise<void>
     onConfirmQuit(listener: (request: QuitRequest) => void): () => void
     setUnsaved(files: UnsavedFile[]): void
@@ -479,6 +503,8 @@ export interface KettuApi {
     /** Adds an agent to Claude Code or Codex, in a folder from `chooseAgentFolder` or a new one. */
     addAgent(harnessId: HarnessId, name: string, folder: string | null): Promise<AgentId>
     renameAgent(agentId: AgentId, name: string): Promise<void>
+    /** The dot on an added agent's mark. */
+    setAgentColor(agentId: AgentId, color: AgentColor): Promise<void>
     removeAgent(agentId: AgentId, trash: boolean): Promise<void>
   }
   /** The themes folder, which main reads and checks; the page never names a path. */
@@ -579,6 +605,8 @@ export interface KettuApi {
     /** A still of the page for the pane to show, after which main hides the view. */
     freeze(sessionId: string): Promise<string | null>
     thaw(sessionId: string): Promise<void>
+    /** The page as PNG bytes, for attaching to a message; null when there is none to capture. */
+    capture(sessionId: string): Promise<Uint8Array | null>
     /** Takes the page back from the user, so the agent may drive it again. */
     handBack(sessionId: string): Promise<void>
     /** The driving bar's Stop: the user takes control, and the running call fails. */
@@ -592,8 +620,13 @@ export interface KettuApi {
     /** The sites each project always lets agents open. */
     allowedSites(): Promise<AllowedSites[]>
     removeAllowedSite(projectPath: string, origin: string): Promise<void>
-    /** Clears the profile's cookies, site storage and cache. */
+    /** Clears the profile's cookies, site storage and cache, and the sites' icons. */
     clearData(): Promise<void>
+    /** The icons of the sites the pages opened, which links in replies show. */
+    siteIcons(): Promise<SiteIconMap>
+    onSiteIcon(listener: (event: SiteIconEvent) => void): () => void
+    /** A link in Kettu opened `url`, in either place: its site is recorded, without an icon. */
+    siteOpened(url: string): Promise<void>
     /** The sessions that still exist; a page whose session does not is closed. */
     setSessions(sessionIds: string[]): void
     onState(listener: (state: BrowserState) => void): () => void

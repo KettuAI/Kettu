@@ -17,6 +17,7 @@ import {
 import { useMessageScroller } from '@renderer/components/ui/message-scroller'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
+import { prefersReducedMotion } from '@renderer/stores/settings'
 import { loadThrough, useThreadsStore } from '@renderer/stores/threads'
 import type { ThreadJumps } from '../thread'
 import { dashCount, dashOf, ReadingTracker } from './rail'
@@ -46,10 +47,6 @@ const scrollEnd = (view: HTMLElement): Promise<void> =>
     const timer = setTimeout(done, SCROLL_END_MS)
     view.addEventListener('scrollend', done)
   })
-
-const reducedMotion = (): boolean =>
-  document.documentElement.dataset.reduceMotion === 'always' ||
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /** The viewport's height, and whether the column leaves the rail its room. */
 function useRailBox(
@@ -192,7 +189,7 @@ export const MessageOutline = memo(function MessageOutline({
     const events = ['wheel', 'touchmove', 'pointerdown', 'keydown'] as const
     for (const name of events) view.addEventListener(name, intent, { passive: true })
     try {
-      place(reducedMotion() ? 'auto' : 'smooth')
+      place(prefersReducedMotion() ? 'auto' : 'smooth')
       for (let pass = 0; pass < SETTLE_PASSES && off(); pass++) {
         await scrollEnd(view)
         if (reader || !current()) return

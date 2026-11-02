@@ -13,6 +13,8 @@
   --bg-sidebar: #f1f3f6;
   --bg-surface: #ffffff;
   --bg-subtle: #f2f4f7;
+  /* A system notification in Settings › Notifications, as the menu bar draws one. */
+  --bg-tray: #f7f8fa;
   --bg-code-inline: rgb(20 26 34 / 6%);
   --bg-code-block: #f6f7f9;
   --bg-hover: rgb(20 26 34 / 5%);
@@ -36,9 +38,21 @@
   /* Waiting: the fox orange, darkened for text; the dot keeps the brand's own. */
   --attention: #c2410c;
   --attention-dot: #fa5615;
+  /* How strongly a card waiting on the user draws its fox ring and halo. */
+  --attention-ring-strength: 50%;
+  --attention-halo-strength: 9%;
   --danger: #ac3b2d;
   --success: #2e7550;
   --merged: #6f4c8e;
+  /* The dot on an added agent's mark, in the color chosen for it in Settings › Agents. */
+  --agent-teal: #2f8f83;
+  --agent-violet: #7a5cc0;
+  --agent-amber: #b07a12;
+  --agent-rose: #c0466c;
+  --agent-green: #4b8a39;
+  --agent-slate: #66707e;
+  /* Kettu's own MCP server's tile in Settings, in the fox's orange. */
+  --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
   /* Running work, in the ink's grays: blue is kept for data and code. */
   --info: #48525f;
   /* Amber, dark enough to read at 4.5:1 on the desk and on its tint. */
@@ -81,6 +95,15 @@
   --mark: oklch(0.88 0.14 92 / 55%);
   /* The squares behind a transparent picture, so a dark or light one shows on either theme. */
   --checker: rgb(20 26 34 / 5%);
+  /* Drawn over a picture or a clip, the same in both themes: a clip's play button and its glyph,
+     the white of its time and bar, the shade under them, a grid's +N and a preview's Open pill. */
+  --media-control: rgb(255 255 255 / 92%);
+  --media-control-ink: #10161e;
+  --media-foreground: #ffffff;
+  --media-track: rgb(255 255 255 / 30%);
+  --media-shade: rgb(10 14 20 / 55%);
+  --media-badge: rgb(16 22 30 / 65%);
+  --media-overlay: rgb(16 22 30 / 72%);
   /* A toast, dark in both themes; the dark blocks leave it to this one. */
   --toast: #161c24;
   --toast-foreground: #e9edf2;
@@ -93,7 +116,6 @@
 
   /* Lightly raised: each layer is a 1 px ring (in the roles below) and a soft drop, which these
      hold. */
-  --elevation-queue: 0 1px 6px rgb(20 26 34 / 5%);
   --elevation-popover: 0 14px 34px -12px rgb(30 45 70 / 25%), 0 2px 6px -2px rgb(20 26 34 / 8%);
   /* Secondary buttons, fields and key caps. */
   --elevation-control: 0 1px 0 rgb(20 26 34 / 10%);
@@ -101,12 +123,17 @@
   --elevation-card: 0 1px 0 rgb(20 26 34 / 3%);
   /* The composer and a hovered card; used with the card tier. */
   --elevation-float: 0 1px 0 rgb(20 26 34 / 4%), 0 16px 36px -20px rgb(30 45 70 / 30%);
+  /* Under a card waiting on the user; in dark its ring alone sets it apart. */
+  --elevation-attention: 0 16px 36px -22px rgb(30 45 70 / 25%);
   --elevation-sunk: 0 0 #0000;
   --elevation-thumb: 0 1px 3px rgb(0 0 0 / 22%);
   /* A selected row and the chosen segment. */
   --elevation-raised: 0 1px 1px rgb(30 45 70 / 6%);
   --elevation-dialog: 0 28px 70px -20px rgb(30 45 70 / 35%), 0 8px 20px -8px rgb(20 26 34 / 12%);
   --elevation-primary: 0 1px 2px rgb(16 22 30 / 18%);
+  /* A picture's faint drop under its ring, and a clip's play button over its picture. */
+  --elevation-media: 0 1px 2px rgb(16 22 30 / 5%);
+  --elevation-media-control: 0 4px 14px rgb(0 0 0 / 25%);
   /* The top edge of a raised surface catching the light; only the primary button has one. */
   --highlight: 0 0 #0000;
 
@@ -116,7 +143,8 @@
   --primary-to: #141a22;
   --primary-hover-from: #232b36;
   --primary-hover-to: #232b36;
-  --primary-ring: #06090d;
+  /* The built-in primary button draws no edge; a theme may give it one. */
+  --primary-ring: transparent;
   --primary-highlight: rgb(255 255 255 / 12%);
   --primary-foreground: #ffffff;
 
@@ -167,6 +195,8 @@
   --brand-codex-2: #7a9dff;
   --brand-codex-3: #3941ff;
   --brand-opencode-frame: #17181c;
+  /* Cloudflare's orange, on the account's tile in Settings › Sharing. */
+  --brand-cloudflare: #f48120;
   --brand-opencode-fill: #e6e5e6;
   /* Pi keeps its three colors in both variants. */
   --brand-pi-coral: #f09082;
@@ -230,8 +260,10 @@
 
   /* The main area and the panes are sheets on the desk: a ring and a long, soft drop. */
   --elevation-sheet: 0 1px 0 rgb(20 26 34 / 3%), 0 18px 44px -26px rgb(30 45 70 / 28%);
-  /* An artifact's page in its tray and on its canvas: a hairline, stronger when lifted. */
-  --elevation-page: 0 0 0 1px var(--border-default);
+  /* An artifact's page in its tray and on its canvas: a hairline, stronger when lifted, over a
+     soft drop; the canvas draws its own hairline at every zoom, so it takes the drop alone. */
+  --elevation-page-drop: 0 4px 14px -6px rgb(0 0 0 / 12%);
+  --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
 }
 
@@ -244,6 +276,7 @@
     /* What floats over the page sits a step lighter than it, since shadows barely show here. */
     --bg-surface: #1c222a;
     --bg-subtle: #20262f;
+    --bg-tray: #1a2029;
     --bg-code-inline: rgb(230 236 245 / 8%);
     --bg-code-block: #12161c;
     --bg-hover: rgb(230 236 245 / 5%);
@@ -263,9 +296,19 @@
 
     --attention: #fb8a55;
     --attention-dot: #fa6e28;
+    --attention-ring-strength: 55%;
+    --attention-halo-strength: 10%;
     --danger: #ea8a7d;
     --success: #6fbf8f;
     --merged: #b798d4;
+    /* The dot on an added agent's mark. */
+    --agent-teal: #45a99a;
+    --agent-violet: #9a80dc;
+    --agent-amber: #d29a32;
+    --agent-rose: #da6489;
+    --agent-green: #6aac55;
+    --agent-slate: #8d96a4;
+    --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
     --info: #aeb6c1;
     --warning: #d9b463;
     --link: #e8ecf1;
@@ -288,18 +331,27 @@
     --scrim: rgb(0 0 0 / 50%);
     --mark: oklch(0.8 0.13 88 / 32%);
     --checker: rgb(230 236 245 / 7%);
+    --media-control: rgb(255 255 255 / 92%);
+    --media-control-ink: #10161e;
+    --media-foreground: #ffffff;
+    --media-track: rgb(255 255 255 / 30%);
+    --media-shade: rgb(10 14 20 / 55%);
+    --media-badge: rgb(16 22 30 / 65%);
+    --media-overlay: rgb(16 22 30 / 72%);
 
-    --elevation-queue: 0 1px 6px rgb(0 0 0 / 30%);
     --elevation-popover: 0 16px 40px -12px rgb(0 0 0 / 65%);
     --elevation-control: 0 0 #0000;
     --elevation-control-hover: 0 0 #0000;
     --elevation-card: 0 1px 2px rgb(0 0 0 / 30%);
     --elevation-float: 0 16px 36px -16px rgb(0 0 0 / 70%);
+    --elevation-attention: 0 0 #0000;
     --elevation-sunk: 0 0 #0000;
     --elevation-thumb: 0 1px 3px rgb(0 0 0 / 22%);
     --elevation-raised: 0 1px 2px rgb(0 0 0 / 40%);
     --elevation-dialog: 0 28px 70px -20px rgb(0 0 0 / 70%);
     --elevation-primary: 0 1px 2px rgb(0 0 0 / 30%);
+    --elevation-media: 0 1px 2px rgb(16 22 30 / 5%);
+    --elevation-media-control: 0 4px 14px rgb(0 0 0 / 25%);
     --highlight: 0 0 #0000;
 
     /* Inverted: a near-white button with dark text. */
@@ -307,7 +359,7 @@
     --primary-to: #e8ecf1;
     --primary-hover-from: #ffffff;
     --primary-hover-to: #ffffff;
-    --primary-ring: #c9d0d9;
+    --primary-ring: transparent;
     --primary-highlight: rgb(255 255 255 / 12%);
     --primary-foreground: #10161e;
 
@@ -342,6 +394,7 @@
     --code-danger: #ff7b72;
 
     --brand-opencode-frame: #ffffff;
+    --brand-cloudflare: #f48120;
     --brand-opencode-fill: #5a5858;
 
     --kind-web: #6cc0d2;
@@ -353,7 +406,7 @@
     /* Pi's yellow mixed 86% with the dark surface. */
     --agent-pi: oklch(0.749 0.115 84.2);
     --agent-other: oklch(0.46 0 0);
-    --heat-0: rgb(230 236 245 / 6.5%);
+    --heat-0: var(--bg-subtle);
     --heat-step-1: 20%;
     --heat-step-2: 40%;
     --heat-step-3: 66%;
@@ -385,7 +438,7 @@
     --ansi-bright-white: #ececec;
 
     --elevation-sheet: 0 12px 32px -14px rgb(0 0 0 / 60%);
-    --elevation-page: 0 0 0 1px var(--border-default);
+    --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
     --elevation-page-lift: 0 0 0 1px var(--border-strong);
   }
 }
@@ -398,6 +451,7 @@
   /* What floats over the page sits a step lighter than it, since shadows barely show here. */
   --bg-surface: #1c222a;
   --bg-subtle: #20262f;
+  --bg-tray: #1a2029;
   --bg-code-inline: rgb(230 236 245 / 8%);
   --bg-code-block: #12161c;
   --bg-hover: rgb(230 236 245 / 5%);
@@ -417,9 +471,19 @@
 
   --attention: #fb8a55;
   --attention-dot: #fa6e28;
+  --attention-ring-strength: 55%;
+  --attention-halo-strength: 10%;
   --danger: #ea8a7d;
   --success: #6fbf8f;
   --merged: #b798d4;
+  /* The dot on an added agent's mark. */
+  --agent-teal: #45a99a;
+  --agent-violet: #9a80dc;
+  --agent-amber: #d29a32;
+  --agent-rose: #da6489;
+  --agent-green: #6aac55;
+  --agent-slate: #8d96a4;
+  --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
   --info: #aeb6c1;
   --warning: #d9b463;
   --link: #e8ecf1;
@@ -442,18 +506,27 @@
   --scrim: rgb(0 0 0 / 50%);
   --mark: oklch(0.8 0.13 88 / 32%);
   --checker: rgb(230 236 245 / 7%);
+  --media-control: rgb(255 255 255 / 92%);
+  --media-control-ink: #10161e;
+  --media-foreground: #ffffff;
+  --media-track: rgb(255 255 255 / 30%);
+  --media-shade: rgb(10 14 20 / 55%);
+  --media-badge: rgb(16 22 30 / 65%);
+  --media-overlay: rgb(16 22 30 / 72%);
 
-  --elevation-queue: 0 1px 6px rgb(0 0 0 / 30%);
   --elevation-popover: 0 16px 40px -12px rgb(0 0 0 / 65%);
   --elevation-control: 0 0 #0000;
   --elevation-control-hover: 0 0 #0000;
   --elevation-card: 0 1px 2px rgb(0 0 0 / 30%);
   --elevation-float: 0 16px 36px -16px rgb(0 0 0 / 70%);
+  --elevation-attention: 0 0 #0000;
   --elevation-sunk: 0 0 #0000;
   --elevation-thumb: 0 1px 3px rgb(0 0 0 / 22%);
   --elevation-raised: 0 1px 2px rgb(0 0 0 / 40%);
   --elevation-dialog: 0 28px 70px -20px rgb(0 0 0 / 70%);
   --elevation-primary: 0 1px 2px rgb(0 0 0 / 30%);
+  --elevation-media: 0 1px 2px rgb(16 22 30 / 5%);
+  --elevation-media-control: 0 4px 14px rgb(0 0 0 / 25%);
   --highlight: 0 0 #0000;
 
   /* Inverted: a near-white button with dark text. */
@@ -461,7 +534,7 @@
   --primary-to: #e8ecf1;
   --primary-hover-from: #ffffff;
   --primary-hover-to: #ffffff;
-  --primary-ring: #c9d0d9;
+  --primary-ring: transparent;
   --primary-highlight: rgb(255 255 255 / 12%);
   --primary-foreground: #10161e;
 
@@ -496,6 +569,7 @@
   --code-danger: #ff7b72;
 
   --brand-opencode-frame: #ffffff;
+  --brand-cloudflare: #f48120;
   --brand-opencode-fill: #5a5858;
 
   --kind-web: #6cc0d2;
@@ -507,7 +581,7 @@
   /* Pi's yellow mixed 86% with the dark surface. */
   --agent-pi: oklch(0.749 0.115 84.2);
   --agent-other: oklch(0.46 0 0);
-  --heat-0: rgb(230 236 245 / 6.5%);
+  --heat-0: var(--bg-subtle);
   --heat-step-1: 20%;
   --heat-step-2: 40%;
   --heat-step-3: 66%;
@@ -539,7 +613,7 @@
   --ansi-bright-white: #ececec;
 
   --elevation-sheet: 0 12px 32px -14px rgb(0 0 0 / 60%);
-  --elevation-page: 0 0 0 1px var(--border-default);
+  --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
 }
 
@@ -586,6 +660,8 @@
   --segment-thumb: var(--bg-raised);
   --pressed: var(--bg-selected);
   --pressed-hover: color-mix(in srgb, var(--bg-selected), var(--text-primary) 5%);
+  /* The edge of the queued card right behind the front one, halfway there. */
+  --queue-back-near: color-mix(in oklab, var(--bg-surface), var(--queue-back) 50%);
   /* Sidebar rows picked together with Mod-click or Shift-click, for a menu that acts on all. */
   --row-picked: color-mix(in srgb, var(--control-on) 12%, transparent);
 
@@ -604,6 +680,8 @@
   /* The line a reference points at, in the Files pane's editor. */
   --marked-line: color-mix(in srgb, var(--info) 7%, transparent);
   --sheen: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  /* What a typed filter matched in a menu's rows: the fox, faint. */
+  --match: color-mix(in srgb, var(--attention-dot) 16%, transparent);
 
   /* A chart's series: the brand colors, a shade toward the card they are drawn on. */
   --agent-claude-code: color-mix(in oklch, var(--brand-claude) 86%, var(--bg-surface));
@@ -630,6 +708,8 @@
 
   /* The autocompact buffer in the context bar: the reserved gray, hatched. */
   --context-hatch: repeating-linear-gradient(135deg, var(--context-7) 0 2px, transparent 2px 4px);
+  /* The tile after the themes in Settings › Appearance, which offers more: faint diagonal lines. */
+  --tile-hatch: repeating-linear-gradient(135deg, transparent 0 6px, var(--bg-hover) 6px 7px);
 
   --terminal-background: var(--bg-code-block);
   /* As drawn: output in the secondary ink, the cursor in the primary. */
@@ -677,9 +757,7 @@
   --composer-hover:
     0 0 0 var(--hairline) var(--border-strong), var(--elevation-float), var(--highlight);
   /* The composer while typed in: the fox caret marks it, so the frame stays as it is. */
-  --composer-focus: var(--composer-hover);
-  --queue-ring:
-    0 0 0 var(--hairline) var(--border-subtle), var(--elevation-queue), var(--highlight);
+  --composer-focus: var(--composer-ring);
   /* The menu bar panel's inner edge, a faint light line over the system's material, and the ink
      tile with its fox, the same in both modes. */
   --panel-highlight: rgb(255 255 255 / 8%);
@@ -687,8 +765,10 @@
   --app-mark: #fa5615;
   /* A card waiting on the user: a fox ring with a faint halo. */
   --attention-ring-shadow:
-    0 0 0 var(--hairline) color-mix(in srgb, var(--attention-dot) 50%, transparent),
-    0 0 0 4px color-mix(in srgb, var(--attention-dot) 9%, transparent), var(--elevation-float);
+    0 0 0 var(--hairline)
+      color-mix(in srgb, var(--attention-dot) var(--attention-ring-strength), transparent),
+    0 0 0 4px color-mix(in srgb, var(--attention-dot) var(--attention-halo-strength), transparent),
+    var(--elevation-attention);
   /* The sidebar's update card under the pointer, while its list is open, and after a failed
      update: red only on the edge. */
   --card-lift: var(--card-ring), 0 4px 14px -6px rgb(16 22 30 / 18%);

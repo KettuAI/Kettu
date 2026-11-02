@@ -70,7 +70,6 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   useEffect(() => ensureFiles(summary.projectPath), [summary.projectPath])
 
   const [actionError, setActionError] = useState<string | null>(null)
-  const [queueOpen, setQueueOpen] = useState(false)
   // A queued message's failed action; the stack clears it with its next action or its last item.
   const [queueError, setQueueError] = useState<string | null>(null)
   const gutter = useScrollbarGutter()
@@ -166,7 +165,11 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
     <div className="relative flex h-full min-h-0 flex-col" {...drop.handlers}>
       <SessionHeader summary={summary} session={session} />
       <ProjectPathContext value={summary.projectPath}>
-        <div className="flex min-h-0 flex-1 flex-col">{body}</div>
+        {/* The drop zone covers the thread and leaves the composer in view. */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {body}
+          <DropOverlay shown={drop.over} starting={status === 'starting'} agentName={name} />
+        </div>
       </ProjectPathContext>
       {/* Leaves the width the column's scrollbar takes, so the composer centres on the column. */}
       <div style={{ paddingRight: gutter }}>
@@ -202,15 +205,11 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
             )}
             <div className="flex flex-col">
               {session && summary.origin !== 'subagent' && (
-                <PlanBar
-                  sessionId={sessionId}
-                  running={running}
-                  hidden={queueOpen && session.queue.length > 0}
-                />
+                <PlanBar sessionId={sessionId} running={running} />
               )}
               {/* Mounted only while something waits; its cards sit behind the composer. */}
               {session && summary.origin !== 'subagent' && session.queue.length > 0 && (
-                <QueueStack session={session} onOpenChange={setQueueOpen} onError={setQueueError} />
+                <QueueStack session={session} onError={setQueueError} />
               )}
               {away ? (
                 session && <HostAway host={away} inline />
@@ -228,7 +227,6 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
         </div>
       </div>
       <Announcer summary={summary} name={name} />
-      <DropOverlay shown={drop.over} starting={status === 'starting'} agentName={name} />
     </div>
   )
 }

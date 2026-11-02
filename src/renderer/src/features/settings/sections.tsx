@@ -1,18 +1,15 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import {
-  BellIcon,
   CheckIcon,
-  CircleHelpIcon,
-  FileDownIcon,
+  CircleAlertIcon,
   GlobeIcon,
-  ListIcon,
   MinusIcon,
   PlusIcon,
+  RotateCwIcon,
 } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { originLabel } from '@shared/browser'
-import type { AllowedSites } from '@shared/ipc'
 import { LOCALES, LOCALE_NAMES, type LanguageSetting } from '@shared/locale'
 import {
   DEFAULT_SETTINGS,
@@ -34,15 +31,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
-import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/components/ui/input-group'
+import { Input } from '@renderer/components/ui/input'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { forgetSite } from '@renderer/features/session/link-open'
 import { errorMessage } from '@renderer/lib/host'
+import { systemLocale } from '@renderer/lib/i18n'
 import { basename } from '@renderer/lib/format'
 import { fileManagerName, formatShortcut, isMac, isWeb, isWindows } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
@@ -51,31 +49,33 @@ import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agen
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
+import { loadSiteIcons, useDefaultBrowser } from '@renderer/stores/site-icons'
 import { browserNotifications, notificationsProblem } from '@renderer/web/notifications'
 import {
   CONFIRM,
   ControlError,
   CopyAction,
-  FIELD_LABEL,
-  GROUP_ACTION,
   Masked,
+  GROUP_ACTION,
   PathText,
-  RevealAction,
+  Pill,
+  RevealButton,
+  ROW_BUTTON,
+  ROW_FIELD,
   Segmented,
   SettingSelect,
   SettingSwitch,
 } from './controls'
-import { FlashMark, GroupNote } from './rows'
+import type { AllowedSite } from './allowed-sites'
+import { DeviceTile } from './remote-parts'
+import { FlashMark, GroupNote, ItemLine, Notice } from './rows'
 import { useApply } from './use-apply'
 
 /** The settings of the host the section shows, this computer's own keys among them. */
 const useSettings = () => useHostScope().useSettingsStore((s) => s.settings)
 
-// The panel behind a live preview: text size, terminal font, notification banner.
-const PREVIEW_BOX = 'rounded-code bg-app shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]'
-
 // A block row's first line: the row's text on the left, its control on the right.
-const BLOCK_LINE = 'flex min-h-10 items-center gap-4'
+const BLOCK_LINE = 'flex items-center gap-x-7 gap-y-3'
 
 // ---- General
 
@@ -84,7 +84,10 @@ export function Language() {
   const value = useSettings().general.language
   const [apply, error] = useApply()
   const options: { value: LanguageSetting; label: string }[] = [
-    { value: 'system', label: t('general.language.system') },
+    {
+      value: 'system',
+      label: t('general.language.systemNamed', { name: LOCALE_NAMES[systemLocale] }),
+    },
     ...LOCALES.map((locale) => ({ value: locale, label: LOCALE_NAMES[locale] })),
   ]
   return (
@@ -113,11 +116,7 @@ export function DefaultAgent() {
   )
   const [apply, error] = useApply()
   const options = [
-    {
-      value: 'ask',
-      label: t('general.defaultAgent.askEachTime'),
-      icon: <CircleHelpIcon className="size-3.5 text-icon" />,
-    },
+    { value: 'ask', label: t('general.defaultAgent.askEachTime') },
     ...agents.map((agent) => {
       const absent = !isInstalled(agent)
       return {
@@ -176,6 +175,29 @@ export function ConfirmLinks({ label }: { label: string }) {
         label={label}
         checked={checked}
         onChange={(v) => apply({ thread: { confirmLinks: v } })}
+      />
+    </>
+  )
+}
+
+export function OpenLinksIn({ label }: { label: string }) {
+  const { t } = useTranslation('settings')
+  const value = useSettings().thread.openLinksIn
+  const browser = useDefaultBrowser()
+  const [apply, error] = useApply()
+  useEffect(loadSiteIcons, [])
+  return (
+    <>
+      <ControlError error={error} />
+      <Segmented
+        label={label}
+        value={value}
+        options={[
+          { value: 'browser', label: browser.name ?? t('browser.openLinksIn.defaultBrowser') },
+          { value: 'session', label: t('browser.openLinksIn.session') },
+          { value: 'ask', label: t('browser.openLinksIn.ask') },
+        ]}
+        onChange={(v) => apply({ thread: { openLinksIn: v } })}
       />
     </>
   )
@@ -263,18 +285,6 @@ export function ColorMode() {
   )
 }
 
-// Reads the toggle it sits in: a thick ring around a light center while that toggle is pressed.
-export function RadioDot() {
-  return (
-    <span
-      aria-hidden
-      className="grid size-3.5 shrink-0 place-items-center rounded-full bg-surface ring-1 ring-border-strong transition-colors duration-(--duration-fast) ring-inset group-aria-pressed/toggle:bg-primary group-aria-pressed/toggle:ring-0"
-    >
-      <span className="size-1.25 scale-0 rounded-full bg-surface transition-transform duration-(--duration-fast) group-aria-pressed/toggle:scale-100" />
-    </span>
-  )
-}
-
 function StepButton({
   label,
   shortcut,
@@ -298,7 +308,7 @@ function StepButton({
             aria-label={label}
             disabled={disabled}
             onClick={onClick}
-            className="h-6.5 w-7.5 text-secondary hover:bg-transparent hover:text-primary disabled:opacity-40 [&_svg:not([class*='size-'])]:size-3.5"
+            className="size-7 rounded-segment text-secondary hover:bg-hover hover:text-primary disabled:opacity-40 [&_svg:not([class*='size-'])]:size-3.5"
           />
         }
       >
@@ -318,17 +328,12 @@ export function Zoom() {
   const [apply, error] = useApply()
   const step = (by: ZoomStep) => apply({ appearance: { zoom: stepZoom(zoom, by) } })
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-2">
       <ControlError error={error} />
-      {zoom !== DEFAULT_SETTINGS.appearance.zoom && (
-        <Button variant="quiet" size="sm" className="text-secondary" onClick={() => step(0)}>
-          {t('appearance.zoom.reset')}
-        </Button>
-      )}
       <div
         role="group"
         aria-label={t('appearance.zoom.name')}
-        className="inline-flex items-center gap-0.5 rounded-lg bg-segment-track p-0.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
+        className="inline-flex items-center gap-0.5 rounded-segments bg-surface p-0.5 shadow-outline"
       >
         <StepButton
           label={t('appearance.zoom.zoomOut')}
@@ -340,7 +345,7 @@ export function Zoom() {
         </StepButton>
         <span
           aria-live="polite"
-          className="min-w-11.5 text-center text-small font-medium text-primary tabular-nums"
+          className="min-w-12 text-center text-control text-primary tabular-nums"
         >{`${Math.round(zoom * 100)}%`}</span>
         <StepButton
           label={t('appearance.zoom.zoomIn')}
@@ -351,34 +356,31 @@ export function Zoom() {
           <PlusIcon />
         </StepButton>
       </div>
+      <Button
+        variant="ghost"
+        className={ROW_BUTTON}
+        disabled={zoom === DEFAULT_SETTINGS.appearance.zoom}
+        onClick={() => step(0)}
+      >
+        {t('appearance.zoom.reset')}
+      </Button>
     </div>
   )
 }
 
-/** The text with each of `keys` in it shown as a keycap, as a row's description names shortcuts. */
-export function WithKeys({ text, keys }: { text: string; keys: readonly string[] }) {
-  const parts: ReactNode[] = []
-  let rest = text
-  for (;;) {
-    const next = keys
-      .map((key) => ({ key, at: rest.indexOf(key) }))
-      .filter((found) => found.at >= 0)
-      .sort((a, b) => a.at - b.at)[0]
-    if (!next) break
-    parts.push(rest.slice(0, next.at), <Kbd key={parts.length}>{next.key}</Kbd>)
-    rest = rest.slice(next.at + next.key.length)
-  }
-  parts.push(rest)
-  return parts
-}
-
+/** The row draws its own line, then a paragraph of the thread at the chosen size under it. */
 export function TextSize({ label }: { label: ReactNode }) {
   const { t } = useTranslation('settings')
   const value = useSettings().appearance.textSize
   const [apply, error] = useApply()
   return (
-    <div className="flex w-full flex-col gap-3">
-      <div className={BLOCK_LINE}>
+    <>
+      <div
+        className={cn(
+          BLOCK_LINE,
+          'py-3.75 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
+        )}
+      >
         <div className="min-w-0 flex-1">{label}</div>
         <ControlError error={error} />
         <Segmented
@@ -392,20 +394,15 @@ export function TextSize({ label }: { label: ReactNode }) {
           onChange={(v) => apply({ appearance: { textSize: v } })}
         />
       </div>
-      <div aria-hidden className={cn(PREVIEW_BOX, 'flex flex-col gap-2.5 p-4 text-prose')}>
-        <div className="max-w-4/5 self-end rounded-2xl bg-subtle px-3.25 py-2 leading-normal">
-          {t('appearance.textSize.previewUser')}
-        </div>
-        {/* The thread's own prose rules, its inline code included. */}
-        <p className="markdown">
-          <Trans
-            t={t}
-            i18nKey="appearance.textSize.previewAgent"
-            components={{ code: <code data-streamdown="inline-code" /> }}
-          />
-        </p>
-      </div>
-    </div>
+      {/* The thread's own prose rules, its inline code included. */}
+      <p aria-hidden className="markdown mb-3.75 rounded-2xl bg-subtle px-3.5 py-3 text-prose">
+        <Trans
+          t={t}
+          i18nKey="appearance.textSize.previewAgent"
+          components={{ code: <code data-streamdown="inline-code" /> }}
+        />
+      </p>
+    </>
   )
 }
 
@@ -447,77 +444,32 @@ export function ShellPicker() {
   }
   // A program's name is mono; "Login shell" is a label and stays in the interface font.
   const isProgram = !!shellPath || isWindows
-  const program = shellPath
-    ? basename(shellPath)
-    : isWindows
-      ? 'PowerShell'
-      : t('terminal.shell.loginShell')
+  const program = isWindows ? 'PowerShell' : t('terminal.shell.loginShell')
   return (
-    <div className="flex min-w-0 items-center gap-2">
+    <>
       <ControlError error={error ?? pickError} />
-      <Badge
-        variant="neutral"
+      <span
         title={shellPath ?? undefined}
         className={cn(
-          'max-w-48 min-w-0 shrink text-primary shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
-          isProgram && 'font-mono text-meta',
+          'max-w-56 min-w-0 truncate text-tertiary',
+          isProgram ? 'font-mono text-code' : 'text-lede',
         )}
       >
-        <span className="truncate">{program}</span>
-      </Badge>
+        {shellPath ?? program}
+      </span>
+      <Button className={ROW_BUTTON} variant="outline" onClick={() => void choose()}>
+        {t('terminal.shell.choose')}
+      </Button>
       {shellPath && (
         <Button
-          variant="quiet"
-          size="sm"
-          className="text-secondary"
+          variant="ghost"
+          className={GROUP_ACTION}
           onClick={() => apply({ terminal: { shellPath: null } })}
         >
           {t('terminal.shell.reset')}
         </Button>
       )}
-      <Button variant="outline" size="sm" onClick={() => void choose()}>
-        {t('terminal.shell.choose')}
-      </Button>
-    </div>
-  )
-}
-
-const ANSI_COLOR = {
-  green: 'text-(color:--ansi-green)',
-  blue: 'text-(color:--ansi-blue)',
-  cyan: 'text-(color:--ansi-cyan)',
-  magenta: 'text-(color:--ansi-magenta)',
-}
-
-function Ansi({ color, children }: { color: keyof typeof ANSI_COLOR; children: ReactNode }) {
-  return <span className={ANSI_COLOR[color]}>{children}</span>
-}
-
-function PromptLine({ children }: { children?: ReactNode }) {
-  return (
-    <div className="whitespace-pre">
-      <Ansi color="blue">~/projects/kettu</Ansi> <Ansi color="magenta">main</Ansi>{' '}
-      <Ansi color="green">{'\u276F'}</Ansi> {children}
-    </div>
-  )
-}
-
-function TestFile({ name, detail }: { name: string; detail: string }) {
-  return (
-    <div className="whitespace-pre">
-      {' '}
-      <Ansi color="green">{'\u2713'}</Ansi> {name} <span className="text-tertiary">{detail}</span>
-    </div>
-  )
-}
-
-function TestTotal({ name, count }: { name: string; count: number }) {
-  return (
-    <div className="whitespace-pre">
-      <Ansi color="cyan">{name}</Ansi>
-      {'  '}
-      <Ansi color="green">{count} passed</Ansi> <span className="text-tertiary">({count})</span>
-    </div>
+    </>
   )
 }
 
@@ -526,7 +478,7 @@ export function FontSize({ label }: { label: ReactNode }) {
   const value = useSettings().terminal.fontSize
   const [apply, error] = useApply()
   return (
-    <div className="flex w-full flex-col gap-3">
+    <div className="flex w-full flex-col gap-3 py-3.75">
       <div className={BLOCK_LINE}>
         <div className="min-w-0 flex-1">{label}</div>
         <ControlError error={error} />
@@ -543,28 +495,23 @@ export function FontSize({ label }: { label: ReactNode }) {
       </div>
       <div
         aria-hidden
-        className={cn(PREVIEW_BOX, 'overflow-hidden px-3.5 py-3 font-mono leading-normal')}
+        className="overflow-hidden rounded-segments bg-code-block px-3.5 py-3 font-mono leading-[1.6] shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
         style={{ fontSize: value }}
       >
-        <PromptLine>pnpm test</PromptLine>
-        <TestFile name="src/shared/settings.test.ts" detail="(12 tests) 8ms" />
-        <TestFile name="src/main/menu.test.ts" detail="(9 tests) 14ms" />
-        <div className="whitespace-pre"> </div>
-        <TestTotal name=" Test Files" count={2} />
-        <TestTotal name="      Tests" count={21} />
-        <PromptLine>
-          <span className="inline-block h-[1.2em] w-[0.6em] bg-foreground/75 align-[-0.2em]" />
-        </PromptLine>
+        <div className="whitespace-pre">
+          <span className="text-(--control-on)">~/code/kettu</span>{' '}
+          <span className="text-merged">main</span> $ pnpm vitest run src/usage
+        </div>
+        <div className="whitespace-pre">
+          <span className="text-success">{'\u2713'}</span> 29 passed{' '}
+          <span className="text-tertiary">(1.18s)</span>
+        </div>
       </div>
     </div>
   )
 }
 
 // ---- Git
-
-function StatusDot() {
-  return <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current" />
-}
 
 function ToolsPending() {
   const { t } = useTranslation()
@@ -574,7 +521,7 @@ function ToolsPending() {
   return (
     <span className="flex items-center gap-2">
       <ControlError error={error} />
-      <Button variant="outline" size="compact" onClick={() => void loadGitTools()}>
+      <Button className={ROW_BUTTON} variant="outline" onClick={() => void loadGitTools()}>
         {t('actions.retry')}
       </Button>
     </span>
@@ -587,19 +534,16 @@ export function GitTool() {
   const tools = useGitStore((s) => s.tools)
   if (!tools) return <ToolsPending />
   const { found, version } = tools.git
-  if (!found) return <Badge variant="neutral">{t('git.git.notFound')}</Badge>
+  if (!found) return <Pill>{t('git.git.notFound')}</Pill>
   return (
-    <Badge variant="success">
-      <CheckIcon data-icon="inline-start" />
-      {version ? (
-        <>
-          <span className="sr-only">{t('git.git.found')}</span>
-          <span className="font-mono text-meta font-normal">{version}</span>
-        </>
-      ) : (
-        t('git.git.found')
+    <>
+      {version && (
+        <span className="font-mono text-code text-tertiary" data-selectable="">
+          {version}
+        </span>
       )}
-    </Badge>
+      <Pill tone="success">{t('git.git.found')}</Pill>
+    </>
   )
 }
 
@@ -618,7 +562,7 @@ export function GhTool() {
         href="https://cli.github.com"
         target="_blank"
         rel="noreferrer"
-        className="text-xs text-tertiary underline underline-offset-2 hover:text-primary"
+        className="rounded-sm text-lede text-secondary underline decoration-border-strong underline-offset-3 outline-none hover:text-primary focus-ring"
       >
         {t('git.gh.install')}
       </a>
@@ -626,15 +570,12 @@ export function GhTool() {
   }
   if (gh.state === 'signed-out') {
     return (
-      <span className="flex items-center gap-1.5">
-        <Badge variant="warning" className="gap-1.5">
-          <StatusDot />
-          {t('git.gh.signedOut')}
-        </Badge>
-        <code className="rounded-md bg-subtle px-1.5 py-0.5 font-mono text-meta">
+      <span className="flex items-center gap-2">
+        <code className="rounded-md bg-subtle px-1.5 py-0.5 font-mono text-code">
           gh auth login
         </code>
         <CopyAction text="gh auth login" label={t('git.gh.copyCommand')} />
+        <Pill tone="warning">{t('git.gh.signedOut')}</Pill>
       </span>
     )
   }
@@ -642,21 +583,17 @@ export function GhTool() {
     ? t('git.gh.signedInAs', { account: SLOT }).split(SLOT)
     : [t('git.gh.signedIn')]
   return (
-    <Badge
-      variant="success"
-      title={gh.version ? `gh ${gh.version}` : undefined}
-      // A mask that ends the pill brings its own padding, so its hover fill is concentric.
-      className={cn(!after && 'has-data-[slot=masked]:pr-0.5')}
-    >
-      <CheckIcon data-icon="inline-start" />
-      {before}
-      {gh.account && (
-        <span className="font-normal text-primary">
-          <Masked>{gh.account}</Masked>
-        </span>
-      )}
-      {after}
-    </Badge>
+    <>
+      <span
+        className="text-lede text-secondary has-data-[slot=masked]:-me-1.5"
+        title={gh.version ? `gh ${gh.version}` : undefined}
+      >
+        {before}
+        {gh.account && <Masked>{gh.account}</Masked>}
+        {after}
+      </span>
+      <Pill tone="success">{t('git.gh.ready')}</Pill>
+    </>
   )
 }
 
@@ -707,15 +644,14 @@ export function NotificationPreview() {
   const [before = '', after = ''] = t('notifications.previewBody', {
     command: COMMAND_MARK,
   }).split(COMMAND_MARK)
-  // A system banner over the desktop, which a tint of the desk stands for.
   return (
-    <div
-      aria-hidden
-      className="grid place-items-center rounded-xl bg-[linear-gradient(135deg,color-mix(in_srgb,var(--bg-sidebar),var(--info)_10%),var(--bg-sidebar))] px-4 py-5.5 shadow-card"
-    >
-      <div className="flex w-87.5 max-w-full gap-2.5 rounded-3xl bg-surface/88 px-3 py-2.5 shadow-menu backdrop-blur-xl">
-        <BrandIcon size={32} />
-        <div className="flex min-w-0 flex-1 flex-col gap-px text-command">
+    <div className="flex items-center gap-6 py-4.5">
+      <div
+        aria-hidden
+        className="flex w-90 max-w-full shrink-0 gap-3 rounded-dialog bg-tray px-3.5 py-3 shadow-[0_0_0_var(--hairline)_var(--border-subtle),var(--elevation-float)]"
+      >
+        <BrandIcon size={34} />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-control leading-[normal]">
           <div className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate font-semibold">
               {t('notifications.previewTitle')}
@@ -726,11 +662,14 @@ export function NotificationPreview() {
           </div>
           <span className="truncate text-secondary">
             {before}
-            <code className="font-mono text-meta">pnpm vitest run src/usage</code>
+            pnpm vitest run src/usage
             {after}
           </span>
         </div>
       </div>
+      <span className="text-group leading-normal text-tertiary">
+        {t(isWeb ? 'notifications.footerWeb' : 'notifications.footer')}
+      </span>
     </div>
   )
 }
@@ -794,19 +733,16 @@ export function TestNotification() {
       </span>
       <ControlError error={error} />
       <Button
-        variant="quiet"
-        size="sm"
+        variant="outline"
         disabled={busy}
         title={unsupported ? unsupportedText() : undefined}
         onClick={() => void run()}
-        className={GROUP_ACTION}
+        className={ROW_BUTTON}
       >
         {busy ? (
           <Spinner data-icon="inline-start" className="size-3.5" />
-        ) : sent ? (
-          <CheckIcon data-icon="inline-start" className="text-success" />
         ) : (
-          <BellIcon data-icon="inline-start" />
+          sent && <CheckIcon data-icon="inline-start" className="text-success" />
         )}
         {t('notifications.test')}
       </Button>
@@ -815,6 +751,13 @@ export function TestNotification() {
 }
 
 // ---- Advanced
+
+// A custom proxy's field, as a row of its own under Proxy.
+const PROXY_ROW =
+  'flex min-h-15.5 items-center gap-7 pl-8 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]'
+
+const isComposing = (event: KeyboardEvent<HTMLInputElement>): boolean =>
+  event.nativeEvent.isComposing || event.keyCode === 229
 
 export function Proxy({ label }: { label: ReactNode }) {
   const { t } = useTranslation('settings')
@@ -841,86 +784,73 @@ export function Proxy({ label }: { label: ReactNode }) {
     apply({ proxy: { mode: 'custom', url: trimmed, noProxy: noProxy.trim() } })
   }
 
+  const choose = (mode: 'environment' | 'custom') => {
+    if (mode === 'environment') {
+      setChoosing(false)
+      setInvalid(false)
+      if (proxy.mode !== 'environment') apply({ proxy: { mode: 'environment' } })
+    } else if (url.trim()) save()
+    else {
+      setChoosing(true)
+      requestAnimationFrame(() => urlInput.current?.focus())
+    }
+  }
+  const note = invalid ? 'advanced.proxy.invalid' : inUse ? null : 'advanced.proxy.environmentNote'
   return (
-    <div className="flex w-full flex-col gap-3">
+    <div className="flex w-full flex-col">
       <div className={BLOCK_LINE}>
         <div className="min-w-0 flex-1">{label}</div>
         <ControlError error={error} />
-        <SettingSelect
+        <Segmented
           label={t('advanced.proxy.name')}
           value={custom ? 'custom' : 'environment'}
           options={[
             { value: 'environment', label: t('advanced.proxy.useEnvironment') },
             { value: 'custom', label: t('advanced.proxy.custom') },
           ]}
-          onChange={(mode) => {
-            if (mode === 'environment') {
-              setChoosing(false)
-              setInvalid(false)
-              if (proxy.mode !== 'environment') apply({ proxy: { mode: 'environment' } })
-            } else if (url.trim()) save()
-            else {
-              setChoosing(true)
-              requestAnimationFrame(() => urlInput.current?.focus())
-            }
-          }}
+          onChange={choose}
         />
       </div>
       {custom && (
-        <div className="grid animate-in grid-cols-2 gap-x-3 gap-y-2.5 fade-in animation-duration-(--duration-base)">
-          <label className={FIELD_LABEL}>
-            {t('advanced.proxy.url')}
-            <InputGroup>
-              <InputGroupAddon>
-                <GlobeIcon className="size-3.5 text-icon" />
-              </InputGroupAddon>
-              <InputGroupInput
-                ref={urlInput}
-                value={url}
-                placeholder="http://proxy.example.com:8080"
-                spellCheck={false}
-                aria-invalid={invalid || undefined}
-                aria-describedby={noteId}
-                onChange={(e) => setUrl(e.target.value)}
-                onBlur={() => (url.trim() || proxy.mode === 'custom') && save()}
-                onKeyDown={(e) => e.key === 'Enter' && save()}
-                className="text-small font-normal md:text-small"
-              />
-            </InputGroup>
+        <div className="-mb-3.75 mt-3.75 flex animate-in flex-col fade-in animation-duration-(--duration-base)">
+          <label className={PROXY_ROW}>
+            <span className="flex-1 text-label">{t('advanced.proxy.url')}</span>
+            <Input
+              ref={urlInput}
+              value={url}
+              placeholder="http://proxy.example.com:8080"
+              spellCheck={false}
+              aria-invalid={invalid || undefined}
+              aria-describedby={note ? noteId : undefined}
+              onChange={(e) => setUrl(e.target.value)}
+              onBlur={() => (url.trim() || proxy.mode === 'custom') && save()}
+              onKeyDown={(e) => e.key === 'Enter' && !isComposing(e) && save()}
+              className={cn(ROW_FIELD, 'w-65 md:text-lede')}
+            />
           </label>
-          <label className={FIELD_LABEL}>
-            {t('advanced.proxy.noProxyFor')}
-            <InputGroup>
-              <InputGroupAddon>
-                <ListIcon className="size-3.5 text-icon" />
-              </InputGroupAddon>
-              <InputGroupInput
-                value={noProxy}
-                placeholder="localhost, 127.0.0.1, .internal"
-                spellCheck={false}
-                onChange={(e) => setNoProxy(e.target.value)}
-                onBlur={() => url.trim() && save()}
-                onKeyDown={(e) => e.key === 'Enter' && save()}
-                className="text-small font-normal md:text-small"
-              />
-            </InputGroup>
+          <label className={PROXY_ROW}>
+            <span className="flex-1 text-label">{t('advanced.proxy.noProxyFor')}</span>
+            <Input
+              value={noProxy}
+              placeholder="localhost, 127.0.0.1, .internal"
+              spellCheck={false}
+              onChange={(e) => setNoProxy(e.target.value)}
+              onBlur={() => url.trim() && save()}
+              onKeyDown={(e) => e.key === 'Enter' && !isComposing(e) && save()}
+              className={cn(ROW_FIELD, 'w-65 md:text-lede')}
+            />
           </label>
+          {/* Mounted while the fields show, so a screen reader hears each change of its text. */}
           <p
             id={noteId}
             role="status"
             className={cn(
-              'col-span-2 flex items-center gap-1.5 text-xs',
-              invalid ? 'text-danger' : inUse ? 'text-success' : 'text-tertiary',
+              'pl-8 text-hint',
+              note && 'pb-3.75',
+              invalid ? 'text-danger' : 'text-tertiary',
             )}
           >
-            {!invalid && inUse && <CheckIcon className="size-3.5 shrink-0" />}
-            {t(
-              invalid
-                ? 'advanced.proxy.invalid'
-                : inUse
-                  ? 'advanced.proxy.inUse'
-                  : 'advanced.proxy.environmentNote',
-            )}
+            {note && t(note)}
           </p>
         </div>
       )}
@@ -954,7 +884,7 @@ export function Diagnostics({ label }: { label: ReactNode }) {
         {label}
         {note &&
           ('error' in note ? (
-            <p role="alert" className="mt-1.5 text-xs text-danger">
+            <p role="alert" className="mt-1.5 text-hint text-danger">
               {note.error}
             </p>
           ) : (
@@ -962,17 +892,14 @@ export function Diagnostics({ label }: { label: ReactNode }) {
           ))}
       </div>
       <Button
+        className={ROW_BUTTON}
         variant="outline"
-        size="sm"
+
         disabled={busy}
         aria-label={t('advanced.diagnostics.export')}
         onClick={() => void run()}
       >
-        {busy ? (
-          <Spinner data-icon="inline-start" className="size-3.5" />
-        ) : (
-          <FileDownIcon data-icon="inline-start" />
-        )}
+        {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
         {t('advanced.diagnostics.exportShort')}
       </Button>
     </div>
@@ -987,7 +914,7 @@ function SavedTo({ path }: { path: string }) {
   return (
     <div
       role="status"
-      className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-secondary"
+      className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-hint text-secondary"
     >
       <span className="flex max-w-full min-w-0 items-center whitespace-pre">
         {before}
@@ -1012,16 +939,21 @@ function SavedTo({ path }: { path: string }) {
   )
 }
 
-/** The data folder's description, with the folder itself under it. */
-export function DataFolderText({ text }: { text: string }) {
+/** The data folder's line: the folder itself, in mono. */
+export function DataFolderText() {
   const path = useAppInfo()?.userDataPath
-  return (
-    <>
-      {text}
-      <span className="mt-0.5 flex">
-        {path ? <PathText path={path} /> : <Skeleton className="my-0.5 h-3.5 w-48" />}
-      </span>
-    </>
+  return path ? (
+    <span
+      title={path}
+      data-selectable=""
+      className="block truncate text-left font-mono text-code [direction:rtl]"
+    >
+      {'\u200E'}
+      {path}
+      {'\u200E'}
+    </span>
+  ) : (
+    <Skeleton className="my-0.5 h-3.5 w-48" />
   )
 }
 
@@ -1030,10 +962,10 @@ export function DataFolderActions() {
   const path = useAppInfo()?.userDataPath
   if (!path) return null
   return (
-    <span className="flex items-center gap-0.5">
+    <>
+      <RevealButton path={path} outline />
       <CopyAction text={path} label={t('advanced.dataFolder.copy')} />
-      <RevealAction path={path} />
-    </span>
+    </>
   )
 }
 
@@ -1057,7 +989,12 @@ export function ClearBrowsingData() {
   return (
     <>
       <ControlError error={error} />
-      <Button variant="outline" size="sm" disabled={busy} onClick={() => setOpen(true)}>
+      <Button
+        variant="outline"
+        className={ROW_BUTTON}
+        disabled={busy}
+        onClick={() => setOpen(true)}
+      >
         {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
         {t('browser.clearData.button')}
       </Button>
@@ -1087,45 +1024,91 @@ export function ClearBrowsingData() {
   )
 }
 
-export function AllowedSitesList() {
-  const { t } = useTranslation(['settings', 'common'])
+/** A site in Always allowed: its address, the projects that allow it, and Remove. */
+export function AllowedSiteRow({ site, onRemove }: { site: AllowedSite; onRemove: () => void }) {
+  const { t } = useTranslation('settings')
   const projects = useProjectsStore((s) => s.projects)
-  const [sites, setSites] = useState<AllowedSites[] | null>(null)
+  const names = site.projects.map(
+    (path) => projects.find((project) => project.path === path)?.name ?? basename(path),
+  )
+  const removing = site.removing
+  return (
+    <div className="flex items-center gap-3.5 py-3.25">
+      <DeviceTile icon={<GlobeIcon className="size-4" />} />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-label leading-[normal]">{originLabel(site.origin)}</span>
+        <ItemLine>{t('browser.allowedSites.in', { projects: names.join(', ') })}</ItemLine>
+      </div>
+      <Button variant="ghost" className={ROW_BUTTON} disabled={removing} onClick={onRemove}>
+        {removing && <Spinner data-icon="inline-start" className="size-3.5" />}
+        {t('browser.allowedSites.remove')}
+      </Button>
+    </div>
+  )
+}
+
+/** In place of the sites while they are read, when reading them failed, or when there are none. */
+export function AllowedSitesState({
+  loading,
+  error,
+  onRetry,
+}: {
+  loading: boolean
+  error?: string | null
+  onRetry?: () => void
+}) {
+  const { t } = useTranslation(['settings', 'common'])
+  if (error) {
+    return (
+      <div className="py-3.75">
+        <Notice
+          variant="error"
+          icon={<CircleAlertIcon />}
+          title={t('browser.allowedSites.readFailed')}
+          action={
+            onRetry && (
+              <Button className={ROW_BUTTON} variant="outline" onClick={onRetry}>
+                <RotateCwIcon data-icon="inline-start" />
+                {t('common:actions.retry')}
+              </Button>
+            )
+          }
+        >
+          <span className="font-mono text-code break-words" data-selectable="">
+            {error}
+          </span>
+        </Notice>
+      </div>
+    )
+  }
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-2 py-3.75">
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-5 w-32" />
+      </div>
+    )
+  }
+  return <p className="py-3.75 text-group text-tertiary">{t('browser.allowedSites.empty')}</p>
+}
+
+/** The sites the "Open link?" dialog was told to always open in one place, and where. */
+export function RememberedSitesList({ label }: { label: ReactNode }) {
+  const { t } = useTranslation('settings')
+  const { useSettingsStore } = useHostScope()
+  const sites = useSettings().thread.alwaysOpenIn
+  const browser = useDefaultBrowser()
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  useEffect(loadSiteIcons, [])
 
-  useEffect(() => {
-    let cancelled = false
-    void window.kettu.browser
-      .allowedSites()
-      .then((list) => {
-        if (!cancelled) setSites(list)
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(errorMessage(e))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const remove = async (projectPath: string, origin: string) => {
-    const key = `${projectPath}\n${origin}`
-    setBusy(key)
+  const remove = async (site: string) => {
+    setBusy(site)
     setError(null)
     try {
-      await window.kettu.browser.removeAllowedSite(projectPath, origin)
-      setSites(
-        (list) =>
-          list
-            ?.map((site) =>
-              site.projectPath === projectPath
-                ? { ...site, origins: site.origins.filter((known) => known !== origin) }
-                : site,
-            )
-            .filter((site) => site.origins.length > 0) ?? null,
-      )
-      toast(t('browser.allowedSites.removed', { origin: labelOf(origin) }))
+      const { settings, update } = useSettingsStore.getState()
+      await update({ thread: { alwaysOpenIn: forgetSite(settings.thread.alwaysOpenIn, site) } })
+      toast(t('browser.rememberedSites.removed', { site }))
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -1133,54 +1116,41 @@ export function AllowedSitesList() {
     }
   }
 
-  if (sites === null && error === null) {
-    return (
-      <div className="flex flex-col gap-2">
-        <Skeleton className="h-5 w-40" />
-        <Skeleton className="h-5 w-32" />
-      </div>
-    )
-  }
+  const entries = Object.entries(sites)
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex w-full flex-col gap-2">
+      <div className={BLOCK_LINE}>
+        <div className="min-w-0 flex-1">{label}</div>
+      </div>
       <ControlError error={error} />
-      {sites && sites.length === 0 && (
-        <p className="text-ui text-tertiary">{t('browser.allowedSites.empty')}</p>
+      {entries.length === 0 && (
+        <p className="text-ui text-tertiary">{t('browser.rememberedSites.empty')}</p>
       )}
-      {sites?.map((site) => (
-        <div key={site.projectPath} className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-tertiary">
-            {projects.find((project) => project.path === site.projectPath)?.name ??
-              basename(site.projectPath)}
-          </span>
-          {site.origins.map((origin) => {
-            const key = `${site.projectPath}\n${origin}`
-            return (
-              <div key={origin} className="flex items-center gap-2 py-0.5">
-                <span className="min-w-0 flex-1 truncate text-ui text-primary">
-                  {labelOf(origin)}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy !== null}
-                  onClick={() => void remove(site.projectPath, origin)}
-                >
-                  {busy === key && <Spinner data-icon="inline-start" className="size-3.5" />}
-                  {t('browser.allowedSites.remove')}
-                </Button>
-              </div>
-            )
-          })}
+      {entries.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {entries.map(([site, destination]) => (
+            <div key={site} className="flex items-center gap-2 py-0.5">
+              <span className="min-w-0 flex-1 truncate text-ui text-primary">{site}</span>
+              <span className="shrink-0 text-ui text-tertiary">
+                {destination === 'session'
+                  ? t('browser.openLinksIn.session')
+                  : (browser.name ?? t('browser.openLinksIn.defaultBrowser'))}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy !== null}
+                onClick={() => void remove(site)}
+              >
+                {busy === site && <Spinner data-icon="inline-start" className="size-3.5" />}
+                {t('browser.rememberedSites.remove')}
+              </Button>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   )
-}
-
-/** An origin as the list shows it: its host and port, without the scheme. */
-function labelOf(origin: string): string {
-  return originLabel(origin)
 }
 
 export function RemoveAll() {
@@ -1209,8 +1179,9 @@ export function RemoveAll() {
     <>
       <ControlError error={error} />
       <Button
+        className={ROW_BUTTON}
         variant="destructive-outline"
-        size="sm"
+
         disabled={count === 0 || busy}
         onClick={() => setOpen(true)}
       >

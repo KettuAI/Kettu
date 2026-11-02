@@ -28,7 +28,7 @@ import {
   type MetricKind,
   type TrendBar,
 } from './model'
-import { Panel, PanelTitle, SEGMENT } from './panel'
+import { Panel, PanelTitle } from './panel'
 import { dayText, useHourText, useMetricText, useRangeText } from './text'
 
 /** A one-day range's totals per hour, and the hour starts they were summed over. */
@@ -211,7 +211,6 @@ export function OverTime({
           aria-label={t('page.metric')}
           value={metric}
           onChange={(value) => setUsageFilters({ metric: value as Metric })}
-          itemClassName={SEGMENT}
           segments={[
             { value: 'tokens', label: t('metrics.tokens') },
             { value: 'requests', label: t(`metrics.${metricKind('requests', scope)}`) },

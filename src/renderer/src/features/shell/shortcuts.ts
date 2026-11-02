@@ -1,7 +1,7 @@
 // The keyboard shortcuts the dialog lists, and their key caps.
 
 import { HISTORY_SHORTCUTS } from '@renderer/app/history'
-import { formatShortcut } from '@renderer/lib/platform'
+import { formatShortcut, shortcutKeys } from '@renderer/lib/platform'
 
 export type ShortcutGroupName = 'general' | 'sessions' | 'composer' | 'terminal'
 
@@ -74,7 +74,7 @@ const KEY_RANGE = /^(\d)-(\d)$/
 
 /** One key cap per key: the platform's symbols on macOS, words elsewhere. */
 export function keyCaps(keys: string): string[] {
-  return keys.split(/\+(?=.)/).flatMap((key) => {
+  return shortcutKeys(keys).flatMap((key) => {
     const range = KEY_RANGE.exec(key)
     if (range) return [`${range[1]}–${range[2]}`]
     if (key === 'Enter') return ['↵']

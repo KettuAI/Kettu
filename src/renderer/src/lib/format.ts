@@ -5,6 +5,7 @@ import { hostPath } from './host-paths'
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
+const WEEK = 7 * DAY
 
 // Formatters are costly to build, so each is made once per language. A component that shows
 // their output re-renders on a language change through its own `useTranslation()`.
@@ -40,24 +41,39 @@ function format(): ReturnType<typeof makeFormatters> {
   return made
 }
 
-/** A compact relative time for lists: "now", "4m", "2h", "Mon", "Oct 3". */
+/** A compact relative time for lists: "now", "4 min", "2 h", "3 d", "1 w", "Oct 3". */
 export function shortAgo(at: number, now = Date.now()): string {
   const delta = Math.max(0, now - at)
   if (delta < MINUTE) return i18n.t('time.now')
   if (delta < HOUR) return i18n.t('time.minutesShort', { count: Math.floor(delta / MINUTE) })
   if (delta < DAY) return i18n.t('time.hoursShort', { count: Math.floor(delta / HOUR) })
-  if (delta < 7 * DAY) return format().weekday.format(at)
+  if (delta < WEEK) return i18n.t('time.daysShort', { count: Math.floor(delta / DAY) })
+  if (delta < 4 * WEEK) return i18n.t('time.weeksShort', { count: Math.floor(delta / WEEK) })
   return format().monthDay.format(at)
 }
 
-/** A relative time for sentences: "just now", "5 minutes ago", "2 hours ago", "on Oct 3". */
-export function longAgo(at: number, now = Date.now()): string {
+/**
+ * The relative time of a sentence and of a status line: "just now", "12 min ago", "2 h ago",
+ * "yesterday", "3 days ago", then the date.
+ */
+function ago(at: number, now: number): string | null {
   const delta = Math.max(0, now - at)
   if (delta < MINUTE) return i18n.t('time.justNow')
-  if (delta < HOUR) return i18n.t('time.minutesAgo', { count: Math.floor(delta / MINUTE) })
-  if (delta < DAY) return i18n.t('time.hoursAgo', { count: Math.floor(delta / HOUR) })
+  if (delta < HOUR) return i18n.t('time.minAgo', { count: Math.floor(delta / MINUTE) })
+  if (delta < DAY) return i18n.t('time.hAgo', { count: Math.floor(delta / HOUR) })
   if (delta < 2 * DAY) return i18n.t('time.yesterday')
-  return i18n.t('time.onDate', { date: format().monthDay.format(at) })
+  if (delta < WEEK) return i18n.t('time.daysAgo', { count: Math.floor(delta / DAY) })
+  return null
+}
+
+/** A relative time for sentences, with "on Oct 3" past a week. */
+export function longAgo(at: number, now = Date.now()): string {
+  return ago(at, now) ?? i18n.t('time.onDate', { date: format().monthDay.format(at) })
+}
+
+/** A relative time for a status line, with the date alone past a week: "Oct 18". */
+export function mediumAgo(at: number, now = Date.now()): string {
+  return ago(at, now) ?? format().monthDay.format(at)
 }
 
 /** When a limit resets: the clock time today, the weekday within six days, the date beyond. */
@@ -90,13 +106,22 @@ export function daysBefore(at: number, now = Date.now()): number {
   return Math.round((day(now) - day(at)) / DAY)
 }
 
-/** "2 m 13 s", "48 s", "1 h 5 m". */
+/** "2 m 13 s", "48 s", "1 h 5 m", in a sentence or a status line. */
 export function duration(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000))
   if (s < 60) return i18n.t('time.seconds', { s })
   const m = Math.floor(s / 60)
   if (m < 60) return i18n.t('time.minutesSeconds', { m, s: s % 60 })
   return i18n.t('time.hoursMinutes', { h: Math.floor(m / 60), m: m % 60 })
+}
+
+/** "2m 13s", "48s", "1h 5m", for a column of durations such as a pull request's checks. */
+export function shortDuration(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000))
+  if (s < 60) return i18n.t('time.secondsShort', { s })
+  const m = Math.floor(s / 60)
+  if (m < 60) return i18n.t('time.minutesSecondsShort', { m, s: s % 60 })
+  return i18n.t('time.hoursMinutesShort', { h: Math.floor(m / 60), m: m % 60 })
 }
 
 /** How long a turn has run, to the minute once it passes one: "45 s", "4 m", "1 h 20 m". */
@@ -166,16 +191,17 @@ export function percent(share: number): string {
   return format().percent.format(share)
 }
 
-/** "812 B", "41 kB", "1.2 MB", in the locale's number format. */
+/**
+ * "812 B", "41 KB", "1.2 MB", with the number in the locale's format. The unit is written out,
+ * since Intl's short byte unit reads "byte" and its kilobyte "kB".
+ */
 export function bytes(n: number): string {
   const [value, unit] =
-    n < 1000 ? [n, 'byte'] : n < 1_000_000 ? [n / 1000, 'kilobyte'] : [n / 1_000_000, 'megabyte']
-  return new Intl.NumberFormat(currentLocale(), {
-    style: 'unit',
-    unit,
-    unitDisplay: 'short',
+    n < 1000 ? [n, 'B'] : n < 1_000_000 ? [n / 1000, 'KB'] : [n / 1_000_000, 'MB']
+  const number = new Intl.NumberFormat(currentLocale(), {
     maximumFractionDigits: n < 1000 ? 0 : 1,
   }).format(value)
+  return `${number} ${unit}`
 }
 
 export function money(amount: number, currency: string): string {

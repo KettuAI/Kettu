@@ -412,10 +412,10 @@ export const CanvasView = memo(function CanvasView({
                 'absolute overflow-hidden rounded-[calc(6px*var(--unscale))] bg-canvas',
                 i === ringed
                   ? // A gap of the desk first, so the ring shows beside a page of any color.
-                    'shadow-[0_0_0_calc(2px*var(--unscale))_var(--bg-sidebar),0_0_0_calc(4px*var(--unscale))_var(--text-primary),var(--elevation-page),var(--elevation-queue)]'
+                    'shadow-[0_0_0_calc(2px*var(--unscale))_var(--bg-sidebar),0_0_0_calc(4px*var(--unscale))_var(--text-primary),var(--elevation-page-drop)]'
                   : i === hovered
-                    ? 'shadow-[0_0_0_calc(var(--hairline)*var(--unscale))_var(--border-strong),var(--elevation-page),var(--elevation-queue)]'
-                    : 'shadow-[0_0_0_calc(var(--hairline)*var(--unscale))_var(--border-default),var(--elevation-page),var(--elevation-queue)]',
+                    ? 'shadow-[0_0_0_calc(var(--hairline)*var(--unscale))_var(--border-strong),var(--elevation-page-drop)]'
+                    : 'shadow-[0_0_0_calc(var(--hairline)*var(--unscale))_var(--border-default),var(--elevation-page-drop)]',
               )}
               style={{ left: p.x, top: p.y, width: p.width, height: p.height }}
             >

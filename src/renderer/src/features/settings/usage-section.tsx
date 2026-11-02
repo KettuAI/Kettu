@@ -19,7 +19,7 @@ import {
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
-import { bytes, longAgo } from '@renderer/lib/format'
+import { bytes, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext } from '@renderer/lib/host-features'
 import { currentLocale } from '@renderer/lib/i18n'
@@ -31,11 +31,11 @@ import {
   CONFIRM,
   ControlError,
   GROUP_ACTION,
-  PathText,
+  ROW_BUTTON,
   SettingSelect,
   SettingSwitch,
 } from './controls'
-import { RowLine, RowText } from './rows'
+import { ItemLine } from './rows'
 import { useApply } from './use-apply'
 
 export function FromComputer() {
@@ -73,8 +73,8 @@ export function SyncLogs() {
       )}
       <ControlError error={error} />
       <Button
-        variant="quiet"
-        size="sm"
+        variant="ghost"
+
         aria-busy={running}
         disabled={running}
         onClick={() => {
@@ -83,7 +83,7 @@ export function SyncLogs() {
             .run(() => request('usage.sync', undefined))
             .catch((e: unknown) => setError(errorMessage(e)))
         }}
-        className={GROUP_ACTION}
+        className={cn(ROW_BUTTON, GROUP_ACTION)}
       >
         <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
         {t('page.sync')}
@@ -135,7 +135,7 @@ export function LogRow({ agentId }: { agentId: AgentId }) {
       }),
     )
   } else facts.push(t('settings.coversNone'))
-  if (log.syncedAt !== null) facts.push(t('settings.synced', { ago: longAgo(log.syncedAt, now) }))
+  if (log.syncedAt !== null) facts.push(t('settings.synced', { ago: mediumAgo(log.syncedAt, now) }))
   const shownError = error ?? log.error
 
   const reimport = async () => {
@@ -149,36 +149,42 @@ export function LogRow({ agentId }: { agentId: AgentId }) {
 
   return (
     <>
-      <RowLine
-        text={
-          <div className="flex min-w-0 items-center gap-3">
-            <AgentTile agent={agentId} size={30} glyph={16} />
-            <div className="flex min-w-0 flex-1 flex-col">
-              <RowText
-                name={name}
-                description={
-                  <span className={cn(shownError && 'text-danger')}>
-                    {shownError ?? facts.join(' · ')}
+      <div className="flex items-center gap-3.5 py-3.25">
+        <AgentTile agent={agentId} size={30} glyph={16} />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="truncate text-label leading-[normal]">{name}</span>
+          <ItemLine>
+            {shownError ? (
+              <span className="text-danger">{shownError}</span>
+            ) : (
+              <>
+                {locations.length > 0 && (
+                  <span
+                    title={locations.join('\n')}
+                    data-selectable=""
+                    className={cn(
+                      'font-mono text-code leading-[normal]',
+                      log.found === false && 'text-tertiary',
+                    )}
+                  >
+                    {locations.join(', ')}
                   </span>
-                }
-              />
-              {locations.map((location) => (
-                <PathText key={location} path={location} missing={log.found === false} />
-              ))}
-            </div>
-          </div>
-        }
-      >
+                )}
+                {locations.length > 0 && ' · '}
+                {facts.join(' · ')}
+              </>
+            )}
+          </ItemLine>
+        </div>
         <Button
-          variant="quiet"
-          size="sm"
-          className="text-secondary"
+          variant="ghost"
+          className={GROUP_ACTION}
           disabled={!log.found || scanning}
           onClick={() => setOpen(true)}
         >
           {t('settings.reimport.button')}
         </Button>
-      </RowLine>
+      </div>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>
@@ -251,8 +257,9 @@ export function ClearRecord() {
     <>
       <ControlError error={error} />
       <Button
+        className={ROW_BUTTON}
         variant="destructive-outline"
-        size="sm"
+
         disabled={empty || busy}
         onClick={() => setOpen(true)}
       >

@@ -484,7 +484,8 @@ function ParentProject({ project, scratch }: { project: Project | null; scratch:
 
 /**
  * The branch the session starts on, shown and not chosen: the top bar's git status owns it, so a
- * narrow composer leaves it out before its pickers run short.
+ * narrow composer leaves it out before its pickers run short. It sizes from the room left on the
+ * row rather than its name, so it truncates instead of pushing the controls onto a second line.
  */
 function BranchLabel({ projectPath }: { projectPath: string }) {
   const { t } = useTranslation('session')
@@ -499,7 +500,7 @@ function BranchLabel({ projectPath }: { projectPath: string }) {
     <Tooltip>
       <TooltipTrigger
         render={
-          <span className="flex h-7.5 max-w-44 min-w-7.75 shrink-1000 items-center gap-1.5 overflow-hidden px-2.25 text-control text-primary @max-[34rem]/draft:hidden" />
+          <span className="flex h-7.5 max-w-44 min-w-7.75 shrink-1000 grow items-center gap-1.5 overflow-hidden px-2.25 text-control text-primary contain-inline-size @max-[34rem]/draft:hidden" />
         }
       >
         <GitBranchIcon className="size-3.75 shrink-0 text-secondary" />
@@ -568,7 +569,7 @@ function PickUp({ hidden }: { hidden: boolean }) {
             {sessionTitle(session)}
           </span>
           <PickupStatus session={session} now={now} />
-          <span className="w-16 shrink-0 truncate text-right text-control text-tertiary">
+          <span className="w-24 shrink-0 truncate text-right text-control text-tertiary">
             {session.scratch
               ? t('newSession.noProject')
               : (projects.find((p) => p.path === session.projectPath)?.name ??

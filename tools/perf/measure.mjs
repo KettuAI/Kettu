@@ -119,21 +119,24 @@ const commandKey = platform === 'darwin' ? 4 : 2
 if (!(await evaluate('Boolean(window.kettu.perf && window.__kettuPerf)'))) {
   throw new Error('Start Kettu with --kettu-perf')
 }
+// The launch cover lies over the window, taking its clicks, until it has faded out.
+await waitFor(`!document.querySelector('[role=status].fixed.inset-0')`, {
+  what: 'the launch cover to lift',
+})
 
 const shownSession = () =>
   evaluate(`document.querySelector('[data-session-id][aria-current=page]')?.dataset.sessionId`)
 const sessionRow = (sessionId) =>
   `return document.querySelector('[data-session-id=${JSON.stringify(sessionId)}]')`
 
-const agentButton = `document.querySelector('button[aria-label="Agent and model"]')`
-const fakeAgentTab = `[...document.querySelectorAll('[role=tab]')].find((t) => t.textContent.includes('Fake agent'))`
-// Before its first session the fake agent's pane offers the agent; after it, its models.
-const fakeAgentChoice = `[...document.querySelectorAll('[role=option]')].find((o) => /Use Fake agent|Fake Balanced/.test(o.textContent))`
+const agentButton = `document.querySelector('button[aria-label="Agent"]')`
+const agentPicker = `document.querySelector('[data-slot=combobox-content]')`
+const fakeAgentOption = `[...(${agentPicker}?.querySelectorAll('[role=option]') ?? [])].find((o) => o.textContent.includes('Fake agent'))`
 
 const projectButton = `document.querySelector('button[aria-label="Project"]')`
 
 // From the sidebar's New session row, which is there before any session, with the first project
-// chosen in the route line and the fake agent in the agent menu. The session is created with its
+// chosen in the route line and the fake agent in the agent picker. The session is created with its
 // first message, so a short /status turn makes it ready before anything is measured.
 async function newFakeSession() {
   await click(
@@ -158,18 +161,15 @@ async function newFakeSession() {
     await waitFor(showsProject, { what: 'the scratch project on the New session screen' })
   }
   if (!(await evaluate(`Boolean(${agentButton}?.textContent.includes('Fake agent'))`))) {
-    await click(`return ${agentButton}`, 'the agent menu')
-    // Right after launch the menu can open before the agents are listed.
-    await waitFor(`Boolean(${fakeAgentTab})`, {
-      what: 'the fake agent in the agent menu (packaged builds need KETTU_FAKE_AGENT)',
+    await click(`return ${agentButton}`, 'the agent picker')
+    // Right after launch the picker can open before the agents are listed.
+    await waitFor(`Boolean(${fakeAgentOption})`, {
+      what: 'the fake agent in the agent picker (packaged builds need KETTU_FAKE_AGENT)',
     })
-    await click(`return ${fakeAgentTab}`, 'the fake agent in the agent menu')
-    await waitFor(`Boolean(${fakeAgentChoice})`, { what: "the fake agent's pane" })
-    await click(`return ${fakeAgentChoice}`, 'the fake agent')
-    await waitFor(
-      `${agentButton}?.textContent.includes('Fake agent') && !document.querySelector('[role=tablist]')`,
-      { what: 'the fake agent on the New session screen' },
-    )
+    await click(`return ${fakeAgentOption}`, 'the fake agent')
+    await waitFor(`${agentButton}?.textContent.includes('Fake agent') && !${agentPicker}`, {
+      what: 'the fake agent on the New session screen',
+    })
   }
   await clearComposer()
   await send('Input.insertText', { text: '/status ' })

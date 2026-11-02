@@ -5,7 +5,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import type { CheckRun, GitStatus, PullRequest, PullRequestState } from '@shared/git'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { duration, longAgo } from '@renderer/lib/format'
+import { longAgo, shortDuration } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { openGitDialog, useGitStore } from '@renderer/stores/git'
@@ -294,10 +294,10 @@ function CheckRow({ run, now }: { run: CheckRun; now: number }) {
   const took =
     run.outcome === 'pending'
       ? run.startedAt
-        ? duration(now - run.startedAt)
+        ? shortDuration(now - run.startedAt)
         : t('prPart.queued')
       : run.startedAt && run.completedAt
-        ? duration(run.completedAt - run.startedAt)
+        ? shortDuration(run.completedAt - run.startedAt)
         : null
   const body = (
     <>

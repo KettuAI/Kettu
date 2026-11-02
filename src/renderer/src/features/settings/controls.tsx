@@ -11,6 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@renderer/components/ui/select'
+import { Badge } from '@renderer/components/ui/badge'
+import { Button } from '@renderer/components/ui/button'
 import { Switch } from '@renderer/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage } from '@renderer/lib/host'
@@ -23,9 +25,6 @@ export { CopyAction, IconAction } from '@renderer/components/copy-action'
 
 /** The width of Settings' confirmations, whose sentences run longer than most. */
 export const CONFIRM = 'data-[size=default]:sm:max-w-105'
-
-/** A quiet button at a group label's end, such as Send a test notification. */
-export const GROUP_ACTION = 'px-2.25 text-xs text-secondary'
 
 /** A field's label above it, as the Cloudflare account and a custom proxy take them. */
 export const FIELD_LABEL = 'flex min-w-0 flex-col gap-1.5 text-xs font-medium text-secondary'
@@ -74,6 +73,9 @@ export function Segmented<T extends string | number>({
   return (
     <SegmentedControl
       aria-label={label}
+      className="h-8 rounded-segments"
+      itemClassName="h-7 rounded-segment px-3 text-control font-medium"
+      thumbClassName={() => 'rounded-segment'}
       value={String(value)}
       segments={options.map((o) => ({ value: String(o.value), label: o.label }))}
       onChange={(next) => {
@@ -84,17 +86,53 @@ export function Segmented<T extends string | number>({
   )
 }
 
-/** A choice from a list: quiet at rest, so a page of rows does not read as a form. */
+/** The buttons in a row: 30 px, as a row's controls are. */
+export const ROW_BUTTON =
+  "h-7.5 gap-1.5 rounded-xl px-3 text-control [&_svg:not([class*='size-'])]:size-3.5"
+
+/** A state as a 20 px pill: neutral, or tinted by what it means. */
+export function Pill({
+  tone = 'neutral',
+  className,
+  children,
+}: {
+  tone?: 'neutral' | 'attention' | 'success' | 'warning'
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <Badge
+      variant={tone}
+      className={cn(
+        'rounded-tile border-0',
+        tone === 'neutral' && 'font-medium shadow-none',
+        className,
+      )}
+    >
+      {children}
+    </Badge>
+  )
+}
+
+/** A quiet button at a group heading's end, such as Check for updates. */
+export const GROUP_ACTION = `${ROW_BUTTON} text-secondary`
+
+/** A field in a row, as wide as the board draws each, with the row's 13.5 px text. */
+export const ROW_FIELD = 'h-8 rounded-xl px-2.75 text-lede'
+
+/** A choice from a list, framed as a field, 200 px wide unless `className` says otherwise. */
 export function SettingSelect<T extends string>({
   label,
   value,
   options,
   onChange,
+  className,
 }: {
   label: string
   value: T
   options: { value: T; label: string; icon?: ReactNode; hint?: string; disabled?: boolean }[]
   onChange: (value: T) => void
+  className?: string
 }) {
   return (
     <Select
@@ -104,7 +142,13 @@ export function SettingSelect<T extends string>({
         if (next !== null && next !== value) onChange(next as T)
       }}
     >
-      <SelectTrigger aria-label={label} variant="quiet" className="-mr-2 text-ui">
+      <SelectTrigger
+        aria-label={label}
+        className={cn(
+          'h-8 w-50 shrink-0 gap-2 rounded-xl pr-2.5 pl-3 text-lede *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate [&>svg]:size-3.25 [&>svg]:text-tertiary',
+          className,
+        )}
+      >
         <SelectValue>
           {(current: T) => {
             const chosen = options.find((o) => o.value === current)
@@ -154,6 +198,29 @@ export function RevealAction({ path }: { path: string }) {
       >
         <FolderIcon />
       </IconAction>
+    </>
+  )
+}
+
+/** Show in Finder as a row's text button, quiet unless `outline`, where the path is the row's line. */
+export function RevealButton({ path, outline }: { path: string; outline?: boolean }) {
+  const { t } = useTranslation('settings')
+  const { hostId } = useHostScope()
+  const [error, setError] = useState<string | null>(null)
+  if (isWeb || hostId !== null) return null
+  return (
+    <>
+      <ControlError error={error} />
+      <Button
+        variant={outline ? 'outline' : 'ghost'}
+        className={outline ? ROW_BUTTON : GROUP_ACTION}
+        onClick={() => {
+          setError(null)
+          window.kettu.shell.showItem(path).catch((e: unknown) => setError(errorMessage(e)))
+        }}
+      >
+        {t('agents.showIn', { name: fileManagerName() })}
+      </Button>
     </>
   )
 }

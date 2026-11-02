@@ -13,6 +13,7 @@ import {
   validateSettingsPatch,
   withAddedAgent,
   withAgentBinary,
+  withAgentColor,
   withDirectPort,
   withoutAgent,
   withRenamedAgent,
@@ -93,6 +94,10 @@ export class SettingsStore {
 
   renameAgent(agentId: AgentId, name: string): SettingsFile {
     return this.replace(withRenamedAgent(this.current, agentId, name))
+  }
+
+  colorAgent(agentId: unknown, color: unknown): SettingsFile {
+    return this.replace(withAgentColor(this.current, agentId, color))
   }
 
   removeAgent(agentId: AgentId): SettingsFile {

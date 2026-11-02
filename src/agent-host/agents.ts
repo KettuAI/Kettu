@@ -19,7 +19,7 @@ import type {
 } from '@shared/agent-host'
 import type { AgentProcess, NodeRuntime } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
-import type { AddedAgent, HostSettings } from '@shared/settings'
+import { agentColor, type AddedAgent, type HostSettings } from '@shared/settings'
 import { harnessOf, type AgentId, type ConfigOption, type HarnessId } from '@shared/thread'
 import {
   installAdapter,
@@ -2693,6 +2693,7 @@ export class AgentManager {
     const adapter = detection?.state === 'available' ? detection.adapter : null
     const update = this.updateOf(h)
     const harnessSettings = this.deps.settings().agents[slot.def.id]
+    const color = slot.added ? agentColor(this.deps.settings().addedAgents, slot.id) : null
     const cliVersion = this.cliUpdateVersion(h)
     const cliCommand = cliVersion ? (this.cliCommands.get(h) ?? null) : null
     return {
@@ -2702,6 +2703,7 @@ export class AgentManager {
       harnessName: slot.def.name,
       isDefault: !slot.added,
       hidden: !slot.added && harnessSettings?.hidden === true,
+      ...(color ? { color } : {}),
       apiKey:
         slot.def.id === 'claude-code' || slot.def.id === 'codex'
           ? { set: slot.apiKey, providers: slot.def.id === 'claude-code' }

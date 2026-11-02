@@ -15,6 +15,7 @@ import {
   withDirectPort,
   withoutAgent,
   withRenamedAgent,
+  withAgentColor,
   withShellPath,
 } from './settings-schema'
 
@@ -67,6 +68,30 @@ describe('validateSettingsPatch', () => {
     })
   })
 
+  it('accepts where links open, and the sites that always open in one place', () => {
+    const patch = {
+      thread: {
+        openLinksIn: 'ask',
+        alwaysOpenIn: {
+          'kettu.sh': 'browser',
+          'kettu-preview.vercel.app': 'session',
+          '127.0.0.1': 'session',
+          '[::1]': 'browser',
+        },
+      },
+    }
+    expect(validateSettingsPatch(patch)).toEqual(patch)
+  })
+
+  it('replaces the remembered sites whole', () => {
+    const current = mergeSettings(DEFAULT_SETTINGS, {
+      thread: { alwaysOpenIn: { 'kettu.sh': 'browser', 'github.com': 'session' } },
+    })
+    const next = mergeSettings(current, { thread: { alwaysOpenIn: { 'github.com': 'browser' } } })
+    expect(next.thread.alwaysOpenIn).toEqual({ 'github.com': 'browser' })
+    expect(next.thread.openLinksIn).toBe('browser')
+  })
+
   it("accepts today's cost as what the sidebar shows", () => {
     expect(validateSettingsPatch({ usage: { sidebar: 'cost' } })).toEqual({
       usage: { sidebar: 'cost' },
@@ -100,6 +125,16 @@ describe('validateSettingsPatch', () => {
     [{ general: { background: 'on' } }, '"general.background" must be a boolean'],
     [{ general: 'enter' }, '"general" must be an object'],
     [{ thread: { confirmLinks: 'no' } }, '"thread.confirmLinks" must be a boolean'],
+    [{ thread: { openLinksIn: 'chrome' } }, '"thread.openLinksIn" must be one of'],
+    [{ thread: { alwaysOpenIn: [] } }, '"thread.alwaysOpenIn" must be an object'],
+    [{ thread: { alwaysOpenIn: { 'kettu.sh': 'ask' } } }, '"thread.alwaysOpenIn.kettu.sh" must be'],
+    [{ thread: { alwaysOpenIn: { 'Kettu.sh': 'browser' } } }, 'names a site that is not a host'],
+    [
+      { thread: { alwaysOpenIn: { 'https://kettu.sh': 'browser' } } },
+      'names a site that is not a host',
+    ],
+    [{ thread: { alwaysOpenIn: { '': 'browser' } } }, 'names a site that is not a host'],
+    [{ thread: { alwaysOpenIn: { ['__proto__']: 'browser' } } }, 'names a site that is not a host'],
     [{ appearance: { theme: 'sepia' } }, '"appearance.theme" must be one of'],
     [{ appearance: { colorTheme: '../nord' } }, '"appearance.colorTheme" must be a theme id'],
     [{ appearance: { colorTheme: 'Nord' } }, '"appearance.colorTheme" must be a theme id'],
@@ -401,10 +436,45 @@ describe('parseSettingsFile', () => {
     expect(loaded.settings.appearance.colorTheme).toBe('kettu')
   })
 
-  it('reads a stored thread setting without the link one as asking', () => {
+  it('reads a stored thread setting without the link ones as asking, in the default browser', () => {
     const loaded = parseSettingsFile({ version: 1, thread: { outlineSummaries: false } })
     expect(loaded.problems).toEqual([])
-    expect(loaded.settings.thread).toEqual({ outlineSummaries: false, confirmLinks: true })
+    expect(loaded.settings.thread).toEqual({
+      outlineSummaries: false,
+      confirmLinks: true,
+      openLinksIn: 'browser',
+      alwaysOpenIn: {},
+    })
+  })
+
+  it('reads where links open and the remembered sites', () => {
+    const loaded = parseSettingsFile({
+      version: 1,
+      thread: { openLinksIn: 'session', alwaysOpenIn: { 'kettu.sh': 'browser' } },
+    })
+    expect(loaded.problems).toEqual([])
+    expect(loaded.settings.thread.openLinksIn).toBe('session')
+    expect(loaded.settings.thread.alwaysOpenIn).toEqual({ 'kettu.sh': 'browser' })
+  })
+
+  it('keeps no remembered sites when one of them is not valid', () => {
+    const loaded = parseSettingsFile({
+      version: 1,
+      thread: { alwaysOpenIn: { 'kettu.sh': 'browser', 'github.com': 'chrome' } },
+    })
+    expect(loaded.problems).toEqual([
+      '"thread.alwaysOpenIn.github.com" must be one of "browser", "session"',
+    ])
+    expect(loaded.settings.thread.alwaysOpenIn).toEqual({})
+  })
+
+  it('refuses more remembered sites than it keeps', () => {
+    const many = Object.fromEntries(
+      Array.from({ length: 501 }, (_, i) => [`site${i}.example`, 'browser']),
+    )
+    expect(() => validateSettingsPatch({ thread: { alwaysOpenIn: many } })).toThrow(
+      'may hold at most 500 sites',
+    )
   })
 
   it('reads the chosen theme, keeping the built-in one for an id that is not one', () => {
@@ -597,7 +667,7 @@ describe('added agents', () => {
 
   it('adds an agent to a harness that has them, once', () => {
     const added = withAddedAgent(defaults(), { ...work, name: ' Work ' })
-    expect(added.addedAgents).toEqual([work])
+    expect(added.addedAgents).toEqual([{ ...work, color: 'teal' }])
     expect(() => withAddedAgent(added, work)).toThrow('exists already')
     expect(() => withAddedAgent(defaults(), { ...work, id: 'claude-code' })).toThrow(
       'not an agent that can be added',
@@ -610,10 +680,60 @@ describe('added agents', () => {
   it('renames an added agent, and no other', () => {
     const added = withAddedAgent(defaults(), work)
     expect(withRenamedAgent(added, 'claude-code~work', ' Client ').addedAgents).toEqual([
-      { ...work, name: 'Client' },
+      { ...work, name: 'Client', color: 'teal' },
     ])
     expect(() => withRenamedAgent(added, 'claude-code', 'X')).toThrow('No added agent')
     expect(() => withRenamedAgent(added, 'claude-code~work', '')).toThrow(SettingsError)
+  })
+
+  it('gives a new agent the first color no other added agent has', () => {
+    const first = withAddedAgent(defaults(), work)
+    const second = withAddedAgent(first, { ...work, id: 'codex~two', configDir: '/srv/two' })
+    expect(second.addedAgents.map((agent) => agent.color)).toEqual(['teal', 'violet'])
+    const chosen = withAddedAgent(defaults(), { ...work, color: 'rose' })
+    expect(chosen.addedAgents[0]!.color).toBe('rose')
+  })
+
+  it("sets an added agent's color, and only a known one", () => {
+    const added = withAddedAgent(defaults(), work)
+    expect(withAgentColor(added, 'claude-code~work', 'amber').addedAgents[0]!.color).toBe('amber')
+    expect(() => withAgentColor(added, 'claude-code', 'amber')).toThrow('No added agent')
+    expect(() => withAgentColor(added, 'claude-code~work', 'blue')).toThrow('Unknown agent color')
+    expect(() => withAgentColor(added, 'claude-code~work', null)).toThrow(SettingsError)
+  })
+
+  it("reads a stored color, and gives one it does not know its place's color without a problem", () => {
+    const loaded = parseSettingsFile({
+      version: 1,
+      addedAgents: [
+        { ...work, color: 'green' },
+        { id: 'codex~e', name: 'E', configDir: '/srv/e', created: false, color: 'mauve' },
+      ],
+    })
+    expect(loaded.settings.addedAgents).toEqual([
+      { ...work, color: 'green' },
+      { id: 'codex~e', name: 'E', configDir: '/srv/e', created: false, color: 'violet' },
+    ])
+    expect(loaded.problems).toEqual([])
+  })
+
+  it('keeps the colors agents from before colors showed once others change', () => {
+    const two = { id: 'codex~two', name: 'Two', configDir: '/srv/two', created: false }
+    const loaded = parseSettingsFile({ version: 1, addedAgents: [work, two] }).settings
+    const before = loaded.addedAgents.map((agent) => agent.color)
+    expect(before).toEqual(['teal', 'violet'])
+    const recolored = withAgentColor(loaded, 'claude-code~work', 'amber')
+    const third = withAddedAgent(recolored, {
+      id: 'codex~three',
+      name: 'Three',
+      configDir: '/srv/three',
+      created: true,
+    })
+    const removed = withoutAgent(third, 'claude-code~work')
+    expect(removed.addedAgents.map((agent) => [agent.id, agent.color])).toEqual([
+      ['codex~two', 'violet'],
+      ['codex~three', 'teal'],
+    ])
   })
 
   it('removes an added agent with the settings that name it', () => {
@@ -644,8 +764,8 @@ describe('added agents', () => {
       ],
     })
     expect(loaded.settings.addedAgents).toEqual([
-      work,
-      { id: 'codex~e', name: 'E', configDir: '/srv/e', created: false },
+      { ...work, color: 'teal' },
+      { id: 'codex~e', name: 'E', configDir: '/srv/e', created: false, color: 'violet' },
     ])
     expect(loaded.problems).toHaveLength(7)
     expect(parseSettingsFile({ version: 1, addedAgents: {} }).problems).toEqual([

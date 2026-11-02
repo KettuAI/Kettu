@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
 import { ULTRACODE_OPTION_ID, type AgentId, type ConfigOption } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { Button } from '@renderer/components/ui/button'
 import {
   Combobox,
@@ -241,160 +242,167 @@ export function AgentMenu({
   }
 
   return (
-    <Combobox
-      items={allGroups}
-      filteredItems={groups}
-      filter={null}
-      value={value}
-      onValueChange={(key: string | null, details) => {
-        if (!key) return
-        if (isMoreKey(key)) {
-          // The row only shows or hides the older models, so the menu stays open.
-          details.cancel()
-          const { agentId: id } = parseItemKey(key)
-          setExpanded((current) => (current === id ? null : id))
-          return
-        }
-        const choice = parseItemKey(key)
-        onChoose(choice.agentId, choice.model)
-      }}
-      open={open}
-      onOpenChange={onOpenChange}
-      inputValue={query}
-      onInputValueChange={onQuery}
-      itemToStringLabel={label}
-      autoHighlight
-    >
-      {modelOnly ? (
-        <ComboboxTrigger
-          render={
-            <Button
-              variant="quiet"
-              size="sm"
-              aria-label={t('newSession.modelMenu.label')}
-              className="h-7.5 min-w-0 shrink gap-1.25 overflow-hidden rounded-tile px-2 text-control font-normal text-tertiary"
-            />
+    // Marks inside show this host's agents, the second-account dots included.
+    <AgentMarkHost.Provider value={hostId}>
+      <Combobox
+        items={allGroups}
+        filteredItems={groups}
+        filter={null}
+        value={value}
+        onValueChange={(key: string | null, details) => {
+          if (!key) return
+          if (isMoreKey(key)) {
+            // The row only shows or hides the older models, so the menu stays open.
+            details.cancel()
+            const { agentId: id } = parseItemKey(key)
+            setExpanded((current) => (current === id ? null : id))
+            return
           }
-        >
-          <ModelButtonLabel agentId={agentId} values={values} hostId={hostId} />
-        </ComboboxTrigger>
-      ) : (
-        <ComboboxTrigger
-          render={
-            <Button
-              variant="quiet"
-              size="sm"
-              aria-label={t('newSession.agentMenu.label')}
-              className="min-w-0 shrink gap-1 overflow-hidden px-2.25 text-control font-normal has-data-[icon=inline-end]:pr-2.25"
-            />
-          }
-        >
-          <AgentButtonLabel agentId={agentId} values={values} hostId={hostId} />
-        </ComboboxTrigger>
-      )}
-      <ComboboxContent
-        align="end"
-        sideOffset={6}
-        className="flex min-h-[min(--spacing(75),var(--available-height))] flex-col"
+          const choice = parseItemKey(key)
+          onChoose(choice.agentId, choice.model)
+        }}
+        open={open}
+        onOpenChange={onOpenChange}
+        inputValue={query}
+        onInputValueChange={onQuery}
+        itemToStringLabel={label}
+        autoHighlight
       >
-        <ComboboxInput
-          showTrigger={false}
-          placeholder={t(modelOnly ? 'newSession.modelMenu.search' : 'newSession.agentMenu.search')}
-          aria-label={t(modelOnly ? 'newSession.modelMenu.search' : 'newSession.agentMenu.search')}
-          spellCheck={false}
-        >
-          <InputGroupAddon>
-            <SearchIcon className="size-3.5" />
-          </InputGroupAddon>
-        </ComboboxInput>
-        {statuses.length === 0 ? (
-          <p className="flex-1 px-3.5 py-3 text-ui text-muted-foreground">
-            {hostId === null
-              ? t('newSession.noAgent')
-              : t('newSession.noAgentOnHost', { host: hostLabel })}
-          </p>
-        ) : (
-          <Tabs
-            orientation="vertical"
-            value={shown}
-            onValueChange={(next: AgentId) => {
-              setShown(next)
-              setQuery('')
-            }}
-            className="min-h-0 flex-1 flex-row gap-0"
-          >
-            <div
-              ref={body}
-              className="flex min-h-0 flex-1 p-1.5"
-              style={searching && size ? { minHeight: size.height } : undefined}
-            >
-              {/* With the models alone the rail is one agent, so only its pane shows. */}
-              {!modelOnly && (
-                <TabsList
-                  ref={rail}
-                  style={searching && size ? { minWidth: size.rail } : undefined}
-                  variant="rail"
-                  activateOnFocus
-                  aria-label={t('newSession.agentMenu.agents')}
-                  className="max-h-[min(--spacing(96),calc(var(--available-height)---spacing(12)))] w-auto min-w-49 shrink-0 scroll-fade-y justify-start overflow-y-auto overscroll-contain pr-1.5"
-                >
-                  {visibleRail.map((status) => (
-                    <RailRow key={status.id} status={status} />
-                  ))}
-                </TabsList>
-              )}
-              {!modelOnly && <Separator orientation="vertical" className="bg-border-soft" />}
-              <TabsContent
-                value={shown ?? undefined}
-                tabIndex={-1}
-                keepMounted={false}
-                className={cn('flex w-80 min-w-0 flex-col', !modelOnly && 'ml-1.5')}
-              >
-                <Pane
-                  status={shownStatus ?? null}
-                  hostId={hostId}
-                  hostLabel={hostLabel}
-                  config={shown ? (configs.get(shown) ?? null) : null}
-                  loaded={loaded}
-                  opening={shownPrepared ? shownPrepared.opening : (firstRead?.reading ?? false)}
-                  failure={shownPrepared ? shownPrepared.error : (firstRead?.error ?? null)}
-                  onRetry={
-                    shownPrepared || !shown
-                      ? retryPrepare
-                      : () => void readFirstOptions(shown, true)
-                  }
-                  searching={searching}
-                  expanded={expanded}
-                  groups={groups}
-                  agents={agents}
-                  onLeave={close}
-                  onOption={pickOption}
-                />
-              </TabsContent>
-            </div>
-          </Tabs>
-        )}
-        {/* Settings set up this computer's agents, not another host's. */}
-        {hostId === null && !modelOnly && (
-          <>
-            <Separator className="bg-border-soft" />
-            <div className="p-1.5">
+        {modelOnly ? (
+          <ComboboxTrigger
+            render={
               <Button
-                variant="ghost"
+                variant="quiet"
                 size="sm"
-                className="w-full justify-start px-2 text-ui font-normal"
-                onClick={() => {
-                  close()
-                  openAgentSettings(null)
-                }}
-              >
-                {t('newSession.setUpAgents')}
-              </Button>
-            </div>
-          </>
+                aria-label={t('newSession.modelMenu.label')}
+                className="h-7.5 min-w-0 shrink gap-1.25 overflow-hidden rounded-tile px-2 text-control font-normal text-tertiary"
+              />
+            }
+          >
+            <ModelButtonLabel agentId={agentId} values={values} hostId={hostId} />
+          </ComboboxTrigger>
+        ) : (
+          <ComboboxTrigger
+            render={
+              <Button
+                variant="quiet"
+                size="sm"
+                aria-label={t('newSession.agentMenu.label')}
+                className="min-w-0 shrink gap-1 overflow-hidden px-2.25 text-control font-normal has-data-[icon=inline-end]:pr-2.25"
+              />
+            }
+          >
+            <AgentButtonLabel agentId={agentId} values={values} hostId={hostId} />
+          </ComboboxTrigger>
         )}
-      </ComboboxContent>
-    </Combobox>
+        <ComboboxContent
+          align="end"
+          sideOffset={6}
+          className="flex min-h-[min(--spacing(75),var(--available-height))] flex-col"
+        >
+          <ComboboxInput
+            showTrigger={false}
+            placeholder={t(
+              modelOnly ? 'newSession.modelMenu.search' : 'newSession.agentMenu.search',
+            )}
+            aria-label={t(
+              modelOnly ? 'newSession.modelMenu.search' : 'newSession.agentMenu.search',
+            )}
+            spellCheck={false}
+          >
+            <InputGroupAddon>
+              <SearchIcon className="size-3.5" />
+            </InputGroupAddon>
+          </ComboboxInput>
+          {statuses.length === 0 ? (
+            <p className="flex-1 px-3.5 py-3 text-ui text-muted-foreground">
+              {hostId === null
+                ? t('newSession.noAgent')
+                : t('newSession.noAgentOnHost', { host: hostLabel })}
+            </p>
+          ) : (
+            <Tabs
+              orientation="vertical"
+              value={shown}
+              onValueChange={(next: AgentId) => {
+                setShown(next)
+                setQuery('')
+              }}
+              className="min-h-0 flex-1 flex-row gap-0"
+            >
+              <div
+                ref={body}
+                className="flex min-h-0 flex-1 p-1.5"
+                style={searching && size ? { minHeight: size.height } : undefined}
+              >
+                {/* With the models alone the rail is one agent, so only its pane shows. */}
+                {!modelOnly && (
+                  <TabsList
+                    ref={rail}
+                    style={searching && size ? { minWidth: size.rail } : undefined}
+                    variant="rail"
+                    activateOnFocus
+                    aria-label={t('newSession.agentMenu.agents')}
+                    className="max-h-[min(--spacing(96),calc(var(--available-height)---spacing(12)))] w-auto min-w-49 shrink-0 scroll-fade-y justify-start overflow-y-auto overscroll-contain pr-1.5"
+                  >
+                    {visibleRail.map((status) => (
+                      <RailRow key={status.id} status={status} />
+                    ))}
+                  </TabsList>
+                )}
+                {!modelOnly && <Separator orientation="vertical" className="bg-border-soft" />}
+                <TabsContent
+                  value={shown ?? undefined}
+                  tabIndex={-1}
+                  keepMounted={false}
+                  className={cn('flex w-80 min-w-0 flex-col', !modelOnly && 'ml-1.5')}
+                >
+                  <Pane
+                    status={shownStatus ?? null}
+                    hostId={hostId}
+                    hostLabel={hostLabel}
+                    config={shown ? (configs.get(shown) ?? null) : null}
+                    loaded={loaded}
+                    opening={shownPrepared ? shownPrepared.opening : (firstRead?.reading ?? false)}
+                    failure={shownPrepared ? shownPrepared.error : (firstRead?.error ?? null)}
+                    onRetry={
+                      shownPrepared || !shown
+                        ? retryPrepare
+                        : () => void readFirstOptions(shown, true)
+                    }
+                    searching={searching}
+                    expanded={expanded}
+                    groups={groups}
+                    agents={agents}
+                    onLeave={close}
+                    onOption={pickOption}
+                  />
+                </TabsContent>
+              </div>
+            </Tabs>
+          )}
+          {/* Settings set up this computer's agents, not another host's. */}
+          {hostId === null && !modelOnly && (
+            <>
+              <Separator className="bg-border-soft" />
+              <div className="p-1.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start px-2 text-ui font-normal"
+                  onClick={() => {
+                    close()
+                    openAgentSettings(null)
+                  }}
+                >
+                  {t('newSession.setUpAgents')}
+                </Button>
+              </div>
+            </>
+          )}
+        </ComboboxContent>
+      </Combobox>
+    </AgentMarkHost.Provider>
   )
 }
 
@@ -936,7 +944,7 @@ function SwitchRow({
           <span className="text-xs text-muted-foreground">{option.description}</span>
         )}
       </span>
-      <Switch id={id} checked={option.value === true} onCheckedChange={onChange} />
+      <Switch id={id} size="sm" checked={option.value === true} onCheckedChange={onChange} />
     </label>
   )
 }

@@ -8,7 +8,6 @@ import { useSessionsStore, visibleOrder } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
   focusPaneAt,
-  settingsBack,
   openSession,
   openSettings,
   toggleShortcuts,
@@ -71,7 +70,7 @@ export function useKeyboardShortcuts(): void {
 
       const step = historyStep(event, platform)
       if (step) {
-        if (layerOpen()) return
+        if (popupOpen()) return
         return run(event, step === 'back' ? back : forward)
       }
 
@@ -85,7 +84,7 @@ export function useKeyboardShortcuts(): void {
 
       // The Files pane's editor keeps this key, which comments the selected lines there.
       if (event.key === '/' && !inCodeEditor(event.target)) {
-        return run(event, () => toggleShortcuts(layerOpen()))
+        return run(event, () => toggleShortcuts(popupOpen()))
       }
 
       // Mod+1 to Mod+9 focus a pane of the split, unless Settings covers it, no pane is there, or a
@@ -119,37 +118,27 @@ export function useKeyboardShortcuts(): void {
         return run(event, () => stepSession(event.code === 'BracketLeft' ? -1 : 1))
       }
     }
-    // In the bubble phase, after the page: a popup that closes on Esc stops the key on its way.
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return
-      if (!useViewStore.getState().settings.open || isEditable(event.target) || layerOpen()) return
-      event.preventDefault()
-      settingsBack()
-    }
-    // In the bubble phase too, once the Files pane's editor has used the key or left it.
+    // In the bubble phase, once the Files pane's editor has used the key or left it.
     const onHistoryKey = (event: KeyboardEvent) => {
       if (keepHistoryKey(event, platform)) event.preventDefault()
     }
     // The mouse's back and forward buttons.
     const onMouseUp = (event: MouseEvent) => {
-      if ((event.button !== 3 && event.button !== 4) || layerOpen()) return
+      if ((event.button !== 3 && event.button !== 4) || popupOpen()) return
       event.preventDefault()
       if (event.button === 3) back()
       else forward()
     }
     window.addEventListener('keydown', onKeyDown, true)
-    window.addEventListener('keydown', onEscape)
     window.addEventListener('keydown', onHistoryKey)
     window.addEventListener('mouseup', onMouseUp)
     // An artifact's page keeps the keys typed in it; main passes on the app's own shortcuts.
     const offForwarded = window.kettu.app.onShortcut((key) => {
       const event = new KeyboardEvent('keydown', { ...key, cancelable: true })
       onKeyDown(event)
-      onEscape(event)
     })
     return () => {
       window.removeEventListener('keydown', onKeyDown, true)
-      window.removeEventListener('keydown', onEscape)
       window.removeEventListener('keydown', onHistoryKey)
       window.removeEventListener('mouseup', onMouseUp)
       offForwarded()
@@ -240,17 +229,6 @@ function zoomBy(step: ZoomStep): void {
   )
 }
 
-function isEditable(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null
-  if (!el) return false
-  return (
-    el.isContentEditable ||
-    el.tagName === 'INPUT' ||
-    el.tagName === 'TEXTAREA' ||
-    el.tagName === 'SELECT'
-  )
-}
-
 function inCodeEditor(target: EventTarget | null): boolean {
   return !!(target as HTMLElement | null)?.closest('[data-code-editor]')
 }
@@ -263,6 +241,13 @@ const MENU_OPENS_TERMINAL = '[role=menu] [data-accelerator="Ctrl+`"]:not([data-d
  */
 export function layerOpen(): boolean {
   return !!document.querySelector('[role=dialog], [role=alertdialog], [role=menu]')
+}
+
+/** A dialog or menu other than the Settings modal, which keeps Back and the shortcuts list. */
+export function popupOpen(): boolean {
+  return !!document.querySelector(
+    '[role=dialog]:not([data-settings-dialog]), [role=alertdialog], [role=menu]',
+  )
 }
 
 /** Previous or next session in sidebar order, across Pinned, the projects and No project. */

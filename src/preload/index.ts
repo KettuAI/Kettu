@@ -75,6 +75,7 @@ const onHostsChanged = subscribe('hosts:changed')
 const onHostPairing = subscribe('hosts:pairing')
 const onBrowserState = subscribe('browser:state')
 const onBrowserOpened = subscribe('browser:opened')
+const onSiteIcon = subscribe('browser:site-icon')
 
 const pathOf = (file: File) => webUtils.getPathForFile(file)
 
@@ -97,6 +98,7 @@ const api: KettuApi = {
   systemLocale: systemLocale(),
   app: {
     getInfo: () => invoke('app:get-info'),
+    defaultBrowser: () => invoke('app:default-browser'),
     respondQuit: (id, answer) => invoke('app:respond-quit', id, answer),
     onConfirmQuit: (listener) => {
       quitListeners.add(listener)
@@ -177,6 +179,7 @@ const api: KettuApi = {
     onChanged: onSettingsChanged,
     addAgent: (harnessId, name, folder) => invoke('settings:add-agent', harnessId, name, folder),
     renameAgent: (agentId, name) => invoke('settings:rename-agent', agentId, name),
+    setAgentColor: (agentId, color) => invoke('settings:set-agent-color', agentId, color),
     removeAgent: (agentId, trash) => invoke('settings:remove-agent', agentId, trash),
   },
   themes: {
@@ -236,6 +239,7 @@ const api: KettuApi = {
     openExternal: (id) => invoke('browser:open-external', id),
     freeze: (id) => invoke('browser:freeze', id),
     thaw: (id) => invoke('browser:thaw', id),
+    capture: (id) => invoke('browser:capture', id),
     handBack: (id) => invoke('browser:hand-back', id),
     stopDriving: (id) => invoke('browser:stop-driving', id),
     answerOrigin: (id, requestId, decision) =>
@@ -244,6 +248,9 @@ const api: KettuApi = {
     removeAllowedSite: (projectPath, origin) =>
       invoke('browser:remove-allowed-site', projectPath, origin),
     clearData: () => invoke('browser:clear-data'),
+    siteIcons: () => invoke('browser:site-icons'),
+    onSiteIcon,
+    siteOpened: (url) => invoke('browser:site-opened', url),
     setSessions: (ids) => send('browser:sessions', ids),
     onState: onBrowserState,
     onOpened: onBrowserOpened,

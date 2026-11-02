@@ -34,7 +34,9 @@ describe('AgentFolders', () => {
     const id = await folders.add('claude-code', ' Work ', null)
     expect(id).toBe('claude-code~work')
     const configDir = join(root, 'claude-code~work')
-    expect(settings.get().addedAgents).toEqual([{ id, name: 'Work', configDir, created: true }])
+    expect(settings.get().addedAgents).toEqual([
+      { id, name: 'Work', configDir, created: true, color: 'teal' },
+    ])
     const info = await stat(configDir)
     expect(info.isDirectory()).toBe(true)
     if (process.platform !== 'win32') expect(info.mode & 0o777).toBe(0o700)
@@ -50,7 +52,7 @@ describe('AgentFolders', () => {
     folders.remember(picked)
     const id = await folders.add('codex', 'Client', picked)
     expect(settings.get().addedAgents).toEqual([
-      { id, name: 'Client', configDir: picked, created: false },
+      { id, name: 'Client', configDir: picked, created: false, color: 'teal' },
     ])
   })
 

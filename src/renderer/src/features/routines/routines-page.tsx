@@ -382,7 +382,7 @@ function RoutineRow({
           id={`${id}-schedule`}
           data-dims=""
           className={cn(
-            'pointer-events-none relative truncate text-[13.5px] text-secondary',
+            'pointer-events-none relative truncate text-lede text-secondary',
             WIDE_ONLY,
           )}
         >
@@ -391,7 +391,7 @@ function RoutineRow({
         <span
           data-dims=""
           className={cn(
-            'pointer-events-none relative flex min-w-0 items-center gap-2 text-[13.5px] text-secondary',
+            'pointer-events-none relative flex min-w-0 items-center gap-2 text-lede text-secondary',
             WIDE_ONLY,
           )}
         >
@@ -406,6 +406,7 @@ function RoutineRow({
         </span>
         <span data-dims="" className="pointer-events-none relative flex justify-end">
           <Switch
+            size="md"
             className="pointer-events-auto"
             checked={routine.enabled}
             onCheckedChange={toggle}
