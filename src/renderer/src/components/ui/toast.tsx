@@ -1,19 +1,24 @@
 import { useEffect, useId } from 'react'
 import { Toast } from '@base-ui/react/toast'
-import { CheckIcon, InfoIcon, TriangleAlertIcon, XIcon } from 'lucide-react'
+import { CheckIcon, InfoIcon, TriangleAlertIcon, XIcon, type LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@renderer/lib/utils'
 import { useOverlayStore } from '@renderer/stores/overlays'
 
 const manager = Toast.createToastManager()
 
-/** What a toast reports, which picks its icon. */
+/** What a toast reports, which picks its icon and its color. */
 export type ToastTone = 'success' | 'warning' | 'info'
 
 export interface ToastOptions {
   tone?: ToastTone
-  /** Shows a close button, for a result the user may want gone before it times out. */
-  dismissible?: boolean
+  /** The icon of a toast without a tone, such as an archive box for "Archived". */
+  icon?: LucideIcon
+}
+
+interface ToastData {
+  icon?: LucideIcon
+  lasting?: boolean
 }
 
 /**
@@ -25,15 +30,16 @@ export function toast(
   action?: { label: string; onClick: () => void },
   options: ToastOptions = {},
 ) {
-  const { tone, dismissible = false } = options
+  const { tone, icon } = options
+  const data: ToastData = { icon }
   if (!action) {
-    manager.add({ title, type: tone, data: { dismissible } })
+    manager.add({ title, type: tone, data })
     return
   }
   const id: string = manager.add({
     title,
     type: tone,
-    data: { dismissible },
+    data,
     timeout: 6000,
     actionProps: {
       children: action.label,
@@ -53,6 +59,7 @@ export function lastingToast(title: string, action: { label: string; onClick: ()
   const id: string = manager.add({
     title,
     timeout: 0,
+    data: { lasting: true } satisfies ToastData,
     actionProps: {
       children: action.label,
       onClick: () => {
@@ -97,29 +104,30 @@ function ToastList() {
     return () => useOverlayStore.getState().set(id, false)
   }, [id, shown])
   return toasts.map((item) => {
+    const data = (item.data ?? {}) as ToastData
     const tone = item.type && item.type in TONE ? TONE[item.type as ToastTone] : null
-    const dismissible = (item.data as { dismissible?: boolean } | undefined)?.dismissible === true
+    const Icon = tone?.Icon ?? data.icon ?? InfoIcon
     return (
       <Toast.Root
         key={item.id}
         toast={item}
         swipeDirection={[]}
         data-overlay-layer=""
-        className="col-start-1 row-start-1 flex min-h-10 min-w-0 items-center gap-2.5 justify-self-center rounded-[11px] bg-toast px-3 py-1.5 text-control text-toast-foreground shadow-toast has-[button]:pr-1.5 transition-[opacity,translate] duration-(--duration-base) ease-standard data-ending-style:opacity-0 data-limited:hidden data-starting-style:opacity-0 motion-safe:data-starting-style:translate-y-1"
+        className="col-start-1 row-start-1 flex min-h-10 min-w-0 items-center gap-2.5 justify-self-center rounded-[11px] bg-toast py-1.5 pr-1.5 pl-3 text-control text-toast-foreground shadow-toast transition-[opacity,translate] duration-(--duration-base) ease-standard data-ending-style:opacity-0 data-limited:hidden data-starting-style:opacity-0 motion-safe:data-starting-style:translate-y-1"
       >
-        {tone && (
-          <span className={cn('flex shrink-0', tone.color)}>
-            <tone.Icon aria-hidden className="size-3.5" />
-          </span>
-        )}
+        <span className={cn('flex shrink-0', tone?.color ?? 'text-toast-muted')}>
+          <Icon aria-hidden className="size-3.75" />
+        </span>
         <Toast.Title className="min-w-0 flex-1 truncate" />
         <Toast.Action className="h-6.5 shrink-0 rounded-[7px] bg-toast-foreground/12 px-2.25 text-hint font-semibold text-toast-foreground outline-none hover:bg-toast-foreground/20 focus-ring" />
-        {dismissible && (
+        {/* A lasting toast's own action, such as Cancel, is how it closes; hiding it would leave
+            the work running with no way to stop it. */}
+        {!data.lasting && (
           <Toast.Close
             aria-label={t('actions.dismiss')}
-            className="-ml-1 flex size-6 shrink-0 items-center justify-center rounded-tile text-toast-muted outline-none hover:bg-toast-foreground/12 hover:text-toast-foreground focus-ring"
+            className="flex size-6 shrink-0 items-center justify-center rounded-tile text-toast-muted outline-none hover:bg-toast-foreground/12 hover:text-toast-foreground focus-ring"
           >
-            <XIcon aria-hidden className="size-3.5" />
+            <XIcon aria-hidden className="size-3.25" />
           </Toast.Close>
         )}
       </Toast.Root>

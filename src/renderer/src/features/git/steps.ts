@@ -91,7 +91,7 @@ function show(projectPath: string, result: ResultNote): void {
   toast(
     title,
     next ? { label: i18n.t(LABEL[next]), onClick: () => runNext(projectPath, next) } : undefined,
-    { tone: result.tone, dismissible: true },
+    { tone: result.tone },
   )
 }
 
@@ -127,6 +127,6 @@ export function showCreatedPr(projectPath: string, number: number): void {
   toast(
     i18n.t('git:result.prCreated', { number }),
     { label: i18n.t(LABEL.openPr), onClick: () => runNext(projectPath, 'openPr') },
-    { tone: 'success', dismissible: true },
+    { tone: 'success' },
   )
 }
