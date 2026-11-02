@@ -7,7 +7,7 @@ import type { Locale } from '@shared/locale'
 import { TRAY_PANEL_HEIGHT, type TrayTarget } from '@shared/tray'
 import { sendCommand } from './events'
 import { createLogger } from './log'
-import { loadRenderer } from './renderer'
+import { loadRenderer, rendererPage } from './renderer'
 import { markPanel, showMainWindow } from './window'
 
 const log = createLogger('tray-panel')
@@ -19,8 +19,8 @@ const MARGIN = 8
 // A click on the icon blurs the open panel before the click arrives, so a click this soon after
 // the blur closed it leaves it closed instead of opening it again.
 const REOPEN_AFTER_BLUR_MS = 300
-// How long the first opening waits for the page to say its height before it shows anyway.
-const FIRST_SIZE_MS = 3000
+// How long an opening waits for the page to say its height before it shows anyway.
+const SIZE_WAIT_MS = 3000
 
 /**
  * Where the panel goes: centred under the icon, or over it when the icon sits low on its screen,
@@ -73,9 +73,12 @@ export class TrayPanel {
   private window: BrowserWindow | null = null
   private icon: Rectangle | null = null
   private height: number = TRAY_PANEL_HEIGHT.min
-  // The page has not said how tall it is yet, so the first show waits for it.
-  private sized = false
-  private showing = false
+  // The page has said its height once, so it is up and answers 'tray:shown' with it.
+  private reported = false
+  // The page let an opening run out without saying its height; the next one starts a fresh page.
+  private failed = false
+  // An opening that waits for the page's height, so it shows the page's new content at its size.
+  private pending: ReturnType<typeof setTimeout> | null = null
   private blurredAt = 0
 
   constructor(private readonly deps: TrayPanelDeps) {}
@@ -86,7 +89,8 @@ export class TrayPanel {
   }
 
   toggle(icon: Rectangle): void {
-    if (this.window?.isVisible()) {
+    // A click while an opening waits cancels it, so a slow page never pops up after the user left.
+    if (this.pending || this.window?.isVisible()) {
       this.hide()
       return
     }
@@ -96,7 +100,7 @@ export class TrayPanel {
   }
 
   hide(): void {
-    this.showing = false
+    this.stopWaiting()
     if (this.window && !this.window.isDestroyed() && this.window.isVisible()) this.window.hide()
   }
 
@@ -114,27 +118,35 @@ export class TrayPanel {
     const height = panelHeight(value)
     if (height === null) return
     this.height = height
-    this.sized = true
-    if (this.showing) this.place()
+    this.reported = true
+    this.failed = false
+    if (this.pending || this.window?.isVisible()) this.place()
   }
 
   private show(): void {
-    const window = this.window && !this.window.isDestroyed() ? this.window : this.create()
-    this.showing = true
-    if (!this.sized) {
-      // A page that never reports, such as one that failed to start, still opens, to be seen.
-      setTimeout(() => {
-        if (this.sized || window !== this.window) return
-        log.warn('The panel did not report its height')
-        this.resize(this.height)
-      }, FIRST_SIZE_MS)
-      return
+    let window = this.window && !this.window.isDestroyed() ? this.window : null
+    // A page that let the last opening run out may be dead, so it makes way for a fresh one.
+    if (window && this.failed) {
+      window.destroy()
+      window = null
     }
-    window.webContents.send('tray:shown', null)
-    this.place()
+    window ??= this.create()
+    // A page that never reports, such as one that failed to start, still opens, to be seen.
+    this.pending = setTimeout(() => {
+      log.warn('The panel did not report its height')
+      this.failed = true
+      this.place()
+    }, SIZE_WAIT_MS)
+    if (this.reported) window.webContents.send('tray:shown', null)
+  }
+
+  private stopWaiting(): void {
+    if (this.pending) clearTimeout(this.pending)
+    this.pending = null
   }
 
   private place(): void {
+    this.stopWaiting()
     const window = this.window
     if (!window || window.isDestroyed() || !this.icon) return
     const { workArea } = screen.getDisplayMatching(this.icon)
@@ -146,6 +158,8 @@ export class TrayPanel {
   }
 
   private create(): BrowserWindow {
+    this.reported = false
+    this.failed = false
     const window = new BrowserWindow({
       width: PANEL_WIDTH,
       height: this.height,
@@ -185,12 +199,16 @@ export class TrayPanel {
       this.hide()
     })
     window.on('closed', () => {
-      if (this.window === window) this.window = null
-      this.sized = false
-      this.showing = false
+      // A failed window closing after its replacement opened leaves the replacement alone.
+      if (this.window !== window) return
+      this.window = null
+      this.stopWaiting()
     })
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-    window.webContents.on('will-navigate', (event) => event.preventDefault())
+    // Its own page may reload, as the dev server asks after some changes; it goes nowhere else.
+    window.webContents.on('will-navigate', (event, url) => {
+      if (rendererPage(url) !== 'tray') event.preventDefault()
+    })
     window.webContents.on('render-process-gone', () => window.destroy())
     window.webContents.on('did-fail-load', (_event, code, description) =>
       log.error(`The panel did not load: ${code} ${description}`),

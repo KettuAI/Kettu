@@ -170,8 +170,11 @@ export interface TrayDeps {
   setRemoteEnabled(enabled: boolean): void
   /** Whether motion is reduced, by the setting or the system; the running dot then holds still. */
   reducedMotion(): boolean
-  /** Opens or closes the menu bar panel under the icon, on macOS. */
-  togglePanel?(bounds: Electron.Rectangle): void
+  /**
+   * Opens or closes the menu bar panel under the icon, on macOS; false while it cannot open yet,
+   * and the short menu opens instead.
+   */
+  togglePanel?(bounds: Electron.Rectangle): boolean
   /** Closes the panel, so the short menu never opens over it. */
   hidePanel?(): void
 }
@@ -199,8 +202,7 @@ export class KettuTray {
     if (process.platform === 'darwin') {
       // No context menu is set, since macOS would open it on a left click as well.
       this.tray.on('click', (event, bounds) => {
-        if (event.altKey || event.ctrlKey || !this.deps.togglePanel) this.popUpMenu()
-        else this.deps.togglePanel(bounds)
+        if (event.altKey || event.ctrlKey || !this.deps.togglePanel?.(bounds)) this.popUpMenu()
       })
       this.tray.on('right-click', () => this.popUpMenu())
       systemPreferences.subscribeNotification(

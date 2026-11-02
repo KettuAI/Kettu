@@ -104,10 +104,10 @@ const FIRST_LAUNCH_LINES = [
   },
   { y: 286.6, text: '首次打开被阻止？系统设置 › 隐私与安全性 › 仍要打开' },
 ]
-// The running dot's opacity at each step of its breath, and the waiting dot's fox orange, the
-// attention dot's token in each theme.
+// The running dot's opacity at each step of its breath, and the waiting dot's fox orange on
+// either bar.
 const TRAY_BREATH = [1, 0.85, 0.69, 0.53, 0.38, 0.25]
-const TRAY_ATTENTION = { light: '#fa5615', dark: '#fa6e28' }
+const TRAY_ATTENTION = '#fa5615'
 // Ink at 22%, 50% and 100%, so the arrows grow toward the Applications folder.
 const CHEVRON_OPACITY = [0.22, 0.5, 1]
 
@@ -249,7 +249,7 @@ async function main() {
         color: ground === 'dark' ? '#fff' : '#000',
         opacity: 0.85,
         dot: true,
-        dotColor: TRAY_ATTENTION[ground],
+        dotColor: TRAY_ATTENTION,
       },
     }
     for (const [variant, options] of Object.entries(variants)) {

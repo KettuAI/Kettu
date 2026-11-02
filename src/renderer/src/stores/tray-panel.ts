@@ -8,6 +8,7 @@ import {
   groupSessions,
   needsYou,
   readDetail,
+  stale,
   type PendingRequest,
   type SessionDetail,
 } from '@renderer/features/tray/model'
@@ -32,12 +33,17 @@ interface TrayPanelStore {
   details: Record<string, SessionDetail>
   agents: AgentStatus[]
   remote: RemoteStatus | null
-  /** The session whose request the panel answers, null while it lists. */
-  reviewing: string | null
+  /** The request the panel answers, null while it lists. */
+  reviewing: Reviewed | null
   /** Counts the panel's openings, so each one starts afresh. */
   shown: number
-  /** The request the user was reviewing was answered somewhere else first. */
-  answeredElsewhere: boolean
+  /** The session whose request under review was settled somewhere else first. */
+  answeredElsewhere: string | null
+}
+
+export interface Reviewed {
+  sessionId: string
+  entryId: string
 }
 
 export const useTrayPanelStore = create<TrayPanelStore>()(() => ({
@@ -49,12 +55,15 @@ export const useTrayPanelStore = create<TrayPanelStore>()(() => ({
   remote: null,
   reviewing: null,
   shown: 0,
-  answeredElsewhere: false,
+  answeredElsewhere: null,
 }))
 
 const lastRead = new Map<string, number>()
 const reading = new Set<string>()
 const timers = new Map<string, ReturnType<typeof setTimeout>>()
+// The request the panel itself is answering: its session's summary can arrive before the answer's
+// result does, and must not read as settled elsewhere.
+let answering: string | null = null
 
 function visible(): boolean {
   return document.visibilityState === 'visible'
@@ -67,10 +76,12 @@ async function readThread(sessionId: string): Promise<void> {
   lastRead.set(sessionId, Date.now())
   try {
     const snapshot = await trayApi().agents.request('sessions.snapshot', { sessionId })
-    const detail = readDetail(snapshot.entries, snapshot.session.turnStartedAt, summary.updatedAt)
-    useTrayPanelStore.setState((state) =>
-      state.sessions[sessionId] ? { details: { ...state.details, [sessionId]: detail } } : {},
-    )
+    const detail = readDetail(snapshot.entries, snapshot.session.turnStartedAt, summary)
+    useTrayPanelStore.setState((state) => {
+      if (!state.sessions[sessionId]) return {}
+      const details = { ...state.details, [sessionId]: detail }
+      return { details, ...settledElsewhere(state, state.sessions, details) }
+    })
   } catch (error) {
     console.warn(`Could not read session ${sessionId}`, error)
   } finally {
@@ -78,7 +89,8 @@ async function readThread(sessionId: string): Promise<void> {
   }
   // The session moved on while it was read.
   const now = useTrayPanelStore.getState()
-  if (now.sessions[sessionId]?.updatedAt !== now.details[sessionId]?.readAt) schedule(sessionId)
+  const latest = now.sessions[sessionId]
+  if (latest && stale(latest, now.details[sessionId])) schedule(sessionId)
 }
 
 function schedule(sessionId: string): void {
@@ -98,11 +110,12 @@ function readListed(running = false): void {
   if (!visible()) return
   const { sessions, details, reviewing } = useTrayPanelStore.getState()
   const groups = groupSessions(Object.values(sessions))
-  const reviewed = reviewing ? sessions[reviewing] : undefined
+  const reviewed = reviewing ? sessions[reviewing.sessionId] : undefined
   const listed = [...groups.needsYou, ...groups.running, ...groups.finished]
   for (const summary of reviewed ? [reviewed, ...listed] : listed) {
-    const moved = details[summary.id]?.readAt !== summary.updatedAt
-    if (moved || (running && summary.status === 'running')) schedule(summary.id)
+    if (stale(summary, details[summary.id]) || (running && summary.status === 'running')) {
+      schedule(summary.id)
+    }
   }
 }
 
@@ -117,15 +130,31 @@ function followVisibility(): void {
   runningTimer = setInterval(() => readListed(true), RUNNING_INTERVAL_MS)
 }
 
+/**
+ * Lists again, and says so, once another window, a device or a timeout settled the request under
+ * review, so a key meant for it never answers the next one.
+ */
+function settledElsewhere(
+  state: TrayPanelStore,
+  sessions: TrayPanelStore['sessions'],
+  details: TrayPanelStore['details'],
+): Partial<TrayPanelStore> {
+  const { reviewing } = state
+  if (!reviewing || reviewing.entryId === answering) return {}
+  const summary = sessions[reviewing.sessionId]
+  const requests = details[reviewing.sessionId]?.requests
+  const pending =
+    summary !== undefined &&
+    needsYou(summary) &&
+    (requests?.some((r) => r.entryId === reviewing.entryId) ?? true)
+  return pending ? {} : { reviewing: null, answeredElsewhere: reviewing.sessionId }
+}
+
 function receiveSummary(summary: SessionSummary): void {
   if (summary.prepared) return
   useTrayPanelStore.setState((state) => {
     const sessions = { ...state.sessions, [summary.id]: summary }
-    // Another window, a device or a timeout settled the request under review.
-    if (state.reviewing === summary.id && !needsYou(summary)) {
-      return { sessions, reviewing: null, answeredElsewhere: true }
-    }
-    return { sessions }
+    return { sessions, ...settledElsewhere(state, sessions, state.details) }
   })
   readListed()
 }
@@ -136,7 +165,8 @@ function removeSession(sessionId: string): void {
     const details = { ...state.details }
     delete sessions[sessionId]
     delete details[sessionId]
-    return { sessions, details, reviewing: state.reviewing === sessionId ? null : state.reviewing }
+    const reviewing = state.reviewing?.sessionId === sessionId ? null : state.reviewing
+    return { sessions, details, reviewing }
   })
 }
 
@@ -187,7 +217,7 @@ export async function initTrayPanel(): Promise<void> {
     useTrayPanelStore.setState((state) => ({
       reviewing: null,
       shown: state.shown + 1,
-      answeredElsewhere: false,
+      answeredElsewhere: null,
     })),
   )
   document.addEventListener('visibilitychange', followVisibility)
@@ -195,8 +225,13 @@ export async function initTrayPanel(): Promise<void> {
   useTrayPanelStore.setState({ remote: await api.remote.status() })
 }
 
+/** Reviews the first request a session waits on, or lists again with null. */
 export function review(sessionId: string | null): void {
-  useTrayPanelStore.setState({ reviewing: sessionId, answeredElsewhere: false })
+  useTrayPanelStore.setState((state) => {
+    const request = sessionId ? state.details[sessionId]?.requests[0] : undefined
+    const reviewing = sessionId && request ? { sessionId, entryId: request.entryId } : null
+    return { reviewing, answeredElsewhere: null }
+  })
 }
 
 /** Whether any listed session still waits for an answer other than the one just given. */
@@ -222,7 +257,7 @@ function settled(sessionId: string, entryId: string, elsewhere: boolean): void {
           },
         }
       : state.details
-    return { reviewing: null, answeredElsewhere: elsewhere, details }
+    return { reviewing: null, answeredElsewhere: elsewhere ? sessionId : null, details }
   })
 }
 
@@ -239,6 +274,7 @@ export async function answer(
   choice: AnswerChoice,
 ): Promise<string | null> {
   const api = trayApi()
+  answering = request.entryId
   try {
     if (request.kind === 'tool' && 'optionId' in choice) {
       await api.agents.request('permissions.respond', {
@@ -262,6 +298,8 @@ export async function answer(
     if (!already) return error.message
     settled(sessionId, request.entryId, true)
     return null
+  } finally {
+    answering = null
   }
   const others = othersWait(sessionId, request.entryId)
   settled(sessionId, request.entryId, false)

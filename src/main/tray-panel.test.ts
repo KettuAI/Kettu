@@ -6,6 +6,7 @@ const electron = vi.hoisted(() => ({ windows: [] as FakeWindowShape[] }))
 interface FakeWindowShape {
   bounds: { x: number; y: number; width: number; height: number } | null
   visible: boolean
+  destroyed: boolean
   focused: number
   sent: string[]
   webContents: object
@@ -17,6 +18,7 @@ vi.mock('electron', async () => {
   class BrowserWindow extends Emitter {
     bounds: FakeWindowShape['bounds'] = null
     visible = false
+    destroyed = false
     focused = 0
     sent: string[] = []
     webContents = Object.assign(new Emitter(), {
@@ -27,7 +29,7 @@ vi.mock('electron', async () => {
       super()
       electron.windows.push(this as never)
     }
-    isDestroyed = () => false
+    isDestroyed = () => this.destroyed
     isVisible = () => this.visible
     show = () => (this.visible = true)
     hide = () => (this.visible = false)
@@ -35,7 +37,11 @@ vi.mock('electron', async () => {
     setBounds = (bounds: FakeWindowShape['bounds']) => (this.bounds = bounds)
     setAlwaysOnTop = () => {}
     setVisibleOnAllWorkspaces = () => {}
-    destroy = () => {}
+    destroy = () => {
+      this.destroyed = true
+      this.visible = false
+      this.emit('closed')
+    }
   }
   return {
     BrowserWindow,
@@ -44,7 +50,10 @@ vi.mock('electron', async () => {
     },
   }
 })
-vi.mock('./renderer', () => ({ loadRenderer: () => Promise.resolve() }))
+vi.mock('./renderer', () => ({
+  loadRenderer: () => Promise.resolve(),
+  rendererPage: (url: string) => (url.endsWith('/tray.html') ? 'tray' : 'index'),
+}))
 vi.mock('./window', () => ({ markPanel: () => {}, showMainWindow: () => {} }))
 vi.mock('./events', () => ({ sendCommand: () => {} }))
 
@@ -106,6 +115,7 @@ describe('TrayPanel', () => {
     panel.toggle(icon)
     const window = electron.windows[0]!
     expect(window.visible).toBe(false)
+    expect(window.sent).toEqual([])
     expect(panel.owns(window.webContents as never)).toBe(true)
     expect(panel.owns(new EventEmitter() as never)).toBe(false)
     panel.resize(300)
@@ -125,11 +135,59 @@ describe('TrayPanel', () => {
     expect(window.visible).toBe(false)
     vi.advanceTimersByTime(400)
     panel.toggle(icon)
+    panel.resize(300)
     expect(window.visible).toBe(true)
-    expect(window.sent).toEqual(['tray:shown'])
     panel.toggle(icon)
     expect(window.visible).toBe(false)
     expect(electron.windows).toHaveLength(1)
+  })
+
+  it("reopens only once the page answers 'tray:shown' with its height", () => {
+    const { panel } = make()
+    panel.toggle(icon)
+    panel.resize(300)
+    panel.toggle(icon)
+    const window = electron.windows[0]!
+    panel.toggle(icon)
+    expect(window.sent).toEqual(['tray:shown'])
+    expect(window.visible).toBe(false)
+    panel.resize(450)
+    expect(window.visible).toBe(true)
+    expect(window.bounds).toEqual(panelBounds(icon, 450, workArea))
+    // The answer stopped the wait, so the page is not taken for a failed one.
+    vi.advanceTimersByTime(3000)
+    panel.toggle(icon)
+    panel.toggle(icon)
+    expect(electron.windows).toHaveLength(1)
+    expect(window.sent).toEqual(['tray:shown', 'tray:shown'])
+  })
+
+  it('reloads its own page and goes nowhere else', () => {
+    const { panel } = make()
+    panel.toggle(icon)
+    const contents = electron.windows[0]!.webContents as EventEmitter
+    const go = (url: string) => {
+      const event = { preventDefault: vi.fn() }
+      contents.emit('will-navigate', event, url)
+      return event.preventDefault
+    }
+    expect(go('http://localhost:5173/tray.html')).not.toHaveBeenCalled()
+    expect(go('http://localhost:5173/')).toHaveBeenCalled()
+    expect(go('https://example.com/')).toHaveBeenCalled()
+  })
+
+  it('cancels an opening still waiting for the page on a second click', () => {
+    const { panel } = make()
+    panel.toggle(icon)
+    panel.toggle(icon)
+    const window = electron.windows[0]!
+    panel.resize(300)
+    expect(window.visible).toBe(false)
+    vi.advanceTimersByTime(3000)
+    expect(window.visible).toBe(false)
+    panel.toggle(icon)
+    panel.resize(300)
+    expect(window.visible).toBe(true)
   })
 
   it('opens all the same when the page never says how tall it is', () => {
@@ -160,5 +218,37 @@ describe('TrayPanel', () => {
     expect(electron.windows[0]!.bounds).toEqual(panelBounds(icon, 500, workArea))
     panel.resize('tall')
     expect(electron.windows[0]!.bounds!.height).toBe(500)
+  })
+
+  it('opens a fresh page after one that never said its height', () => {
+    const { panel } = make()
+    panel.toggle(icon)
+    vi.advanceTimersByTime(3000)
+    const failed = electron.windows[0]!
+    expect(failed.visible).toBe(true)
+    panel.toggle(icon)
+    panel.toggle(icon)
+    expect(failed.destroyed).toBe(true)
+    expect(electron.windows).toHaveLength(2)
+    const fresh = electron.windows[1]!
+    expect(fresh.sent).toEqual([])
+    // A late 'closed' from the old window leaves the fresh one's opening waiting.
+    failed.emit('closed')
+    expect(panel.owns(fresh.webContents as never)).toBe(true)
+    panel.resize(300)
+    expect(fresh.visible).toBe(true)
+  })
+
+  it('keeps the page that says its height after all', () => {
+    const { panel } = make()
+    panel.toggle(icon)
+    vi.advanceTimersByTime(3000)
+    const window = electron.windows[0]!
+    panel.resize(300)
+    expect(window.bounds).toEqual(panelBounds(icon, 300, workArea))
+    panel.toggle(icon)
+    panel.toggle(icon)
+    expect(electron.windows).toHaveLength(1)
+    expect(window.sent).toEqual(['tray:shown'])
   })
 })

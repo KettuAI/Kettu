@@ -10,7 +10,7 @@
     "finished": "{{count}} 个已完成",
     "quiet": "一切安静"
   },
-  "lastSession": "{{host}} · 上次会话 {{ago}}",
+  "lastSession": "{{host}} · 上次会话：{{ago}}",
   "group": {
     "needsYou": "需要你",
     "running": "正在运行",
@@ -50,7 +50,7 @@
   "answerGroup": "回答",
   "moreWaiting_other": "还有 {{count}} 个在等",
   "openInKettu": "在 Kettu 中打开",
-  "answeredElsewhere": "已在别处回答",
+  "answeredElsewhere": "已在别处回答：{{title}}",
   "answerFailed": "没能回答：{{message}}",
   "remote": {
     "off": "远程 · 已关闭",

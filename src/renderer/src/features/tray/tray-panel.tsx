@@ -8,7 +8,7 @@ import {
   XIcon,
   type LucideIcon,
 } from 'lucide-react'
-import { MotionConfig } from 'motion/react'
+import { AnimatePresence, MotionConfig, motion, type Variants } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import type { BrowserOriginDecision } from '@shared/browser'
@@ -19,6 +19,7 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { relativePath } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
+import { glide } from '@renderer/lib/motion'
 import { LIMIT_FILL, limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -57,6 +58,13 @@ const WANTS_KEY = {
 } as const
 
 const VERB_KEY = { read: 'read', edit: 'edit', delete: 'delete', move: 'move' } as const
+
+// Review pushes the list aside, and going back pushes it in again: `custom` is 1 into a review.
+const SLIDE: Variants = {
+  enter: (into: number) => ({ x: `${into * 100}%`, opacity: 0 }),
+  center: { x: 0, opacity: 1 },
+  exit: (into: number) => ({ x: `${into * -100}%`, opacity: 0 }),
+}
 
 function open(target: TrayTarget): void {
   trayApi().tray.open(target)
@@ -104,12 +112,19 @@ export function TrayPanel() {
   const content = useRef<HTMLDivElement>(null)
   const reviewing = useTrayPanelStore((s) => s.reviewing)
   const shown = useTrayPanelStore((s) => s.shown)
-  const summary = useTrayPanelStore((s) => (reviewing ? s.sessions[reviewing] : undefined))
-  const request = useTrayPanelStore((s) =>
-    reviewing ? s.details[reviewing]?.requests[0] : undefined,
+  const summary = useTrayPanelStore((s) =>
+    reviewing ? s.sessions[reviewing.sessionId] : undefined,
   )
+  const request = useTrayPanelStore((s) =>
+    reviewing
+      ? s.details[reviewing.sessionId]?.requests.find((r) => r.entryId === reviewing.entryId)
+      : undefined,
+  )
+  const reviewed = summary && request ? { summary, request } : null
 
   // The window takes the content's natural height; past the room main gives it, the panel scrolls.
+  // Each opening reports it at once, since main shows the panel only then and a hidden page's
+  // observer stays idle.
   useLayoutEffect(() => {
     const element = content.current
     if (!element) return
@@ -118,19 +133,28 @@ export function TrayPanel() {
     observer.observe(element)
     report()
     return () => observer.disconnect()
-  }, [])
+  }, [shown])
 
   return (
     <div
       aria-label={t('label')}
       className="h-screen overflow-y-auto rounded-2xl bg-[color-mix(in_srgb,var(--bg-surface)_92%,transparent)] text-foreground shadow-[inset_0_0_0_1px_var(--panel-highlight)]"
     >
-      <div ref={content} className="flex flex-col">
-        {reviewing && summary && request ? (
-          <Review key={`${reviewing}:${request.entryId}`} summary={summary} request={request} />
-        ) : (
-          <List key={shown} />
-        )}
+      <div ref={content} className="relative flex flex-col overflow-hidden">
+        <AnimatePresence key={shown} initial={false} mode="popLayout" custom={reviewed ? 1 : -1}>
+          <motion.div
+            key={reviewed ? `${reviewed.summary.id}:${reviewed.request.entryId}` : 'list'}
+            custom={reviewed ? 1 : -1}
+            variants={SLIDE}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={glide}
+            className="flex flex-col"
+          >
+            {reviewed ? <Review summary={reviewed.summary} request={reviewed.request} /> : <List />}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   )
@@ -141,7 +165,6 @@ function List() {
   const sessions = useTrayPanelStore((s) => s.sessions)
   const details = useTrayPanelStore((s) => s.details)
   const loaded = useTrayPanelStore((s) => s.loaded)
-  const elsewhere = useTrayPanelStore((s) => s.answeredElsewhere)
   const groups = groupSessions(Object.values(sessions))
   const idle = loaded && !busy(groups)
   const rows = [...groups.needsYou, ...groups.running, ...groups.finished, ...groups.recent]
@@ -200,11 +223,6 @@ function List() {
   return (
     <>
       <Header groups={groups} idle={idle} />
-      {elsewhere && (
-        <div role="status" className="px-3.5 pb-1 text-caption text-tertiary">
-          {t('answeredElsewhere')}
-        </div>
-      )}
       <div>
         <div>
           {idle && (
@@ -339,6 +357,9 @@ function Header({ groups, idle }: { groups: TrayGroups; idle: boolean }) {
   const latest = useTrayPanelStore((s) =>
     Object.values(s.sessions).reduce((at, x) => Math.max(at, x.updatedAt), 0),
   )
+  const elsewhere = useTrayPanelStore((s) =>
+    s.answeredElsewhere ? (s.sessions[s.answeredElsewhere]?.title ?? t('untitled')) : null,
+  )
   const host = remote?.hostName ?? ''
   const parts = [
     groups.needsYou.length > 0 && t('headline.needsYou', { count: groups.needsYou.length }),
@@ -358,13 +379,19 @@ function Header({ groups, idle }: { groups: TrayGroups; idle: boolean }) {
         className="grid size-7 shrink-0 place-items-center rounded-[7px] bg-(--app-mark-tile)"
       >
         <span
-          className="size-4 bg-attention-dot mask-contain mask-center mask-no-repeat [mask-image:var(--glyph)]"
+          className="size-3 bg-(--app-mark) mask-contain mask-center mask-no-repeat [mask-image:var(--glyph)]"
           style={{ '--glyph': `url(${glyphUrl})` } as React.CSSProperties}
         />
       </span>
       <div className="min-w-0 flex-1">
         <div className="truncate text-control/[1.3] font-semibold text-primary">{title}</div>
-        <div className="truncate text-caption/[1.3] text-tertiary">{subtitle}</div>
+        {elsewhere === null ? (
+          <div className="truncate text-caption/[1.3] text-tertiary">{subtitle}</div>
+        ) : (
+          <div role="status" className="truncate text-caption/[1.3] text-tertiary">
+            {t('answeredElsewhere', { title: elsewhere })}
+          </div>
+        )}
       </div>
       <IconButton label={`${t('newSession')} ⌘N`} onClick={() => open({ kind: 'new-session' })}>
         <PlusIcon className="size-3.75" />
@@ -464,7 +491,7 @@ function ReviewButton({ onClick }: { onClick(): void }) {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex h-6 shrink-0 items-center rounded-xl bg-card px-3 text-control font-medium whitespace-nowrap text-primary shadow-[inset_0_0_0_var(--hairline)_var(--border-default),var(--elevation-control)] outline-none focus-ring hover:bg-hover"
+      className="inline-flex h-6 shrink-0 items-center rounded-xl bg-card px-3 text-control font-medium whitespace-nowrap text-primary shadow-[0_0_0_var(--hairline)_var(--border-default),var(--elevation-control)] outline-none focus-ring hover:bg-hover"
     >
       {t('review')}
     </button>
@@ -583,7 +610,7 @@ function Footer() {
   const down = connection === 'failed'
   const line = remoteLine(remote)
   return (
-    <div className="flex items-center gap-2 bg-[color-mix(in_srgb,var(--bg-subtle)_60%,transparent)] px-3 py-2 text-small leading-normal text-secondary shadow-[inset_0_1px_0_var(--border-subtle)]">
+    <div className="flex items-center gap-2 bg-[color-mix(in_srgb,var(--bg-subtle)_60%,transparent)] px-3 py-2 text-small leading-[normal] text-secondary shadow-[inset_0_1px_0_var(--border-subtle)]">
       <span
         aria-hidden
         className={cn('size-1.5 shrink-0 rounded-full', down ? 'bg-danger' : line.dot)}
@@ -682,12 +709,12 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
           {summary.title ?? t('untitled')}
         </span>
       </div>
-      <div className="px-3 pt-2.5 pb-1 text-hint text-secondary">{wants}</div>
+      <div className="px-3 pt-2.5 pb-1 text-hint leading-[normal] text-secondary">{wants}</div>
       <div
         data-selectable
         className={cn(
           'mx-3 max-h-30 overflow-y-auto rounded-tile bg-code-block px-2.5 py-2 text-primary shadow-[inset_0_0_0_1px_var(--border-subtle)] wrap-anywhere whitespace-pre-wrap',
-          target.code ? 'font-mono text-command leading-normal' : 'text-small leading-normal',
+          target.code ? 'font-mono text-command leading-[normal]' : 'text-small leading-[normal]',
         )}
       >
         {target.text}
@@ -709,7 +736,7 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
                 'flex h-4.5 min-w-4.5 items-center justify-center rounded-md text-[10.5px] font-semibold',
                 highlight === i
                   ? 'bg-primary text-primary-foreground'
-                  : 'bg-card text-secondary shadow-[inset_0_0_0_var(--hairline)_var(--border-default),var(--elevation-control)]',
+                  : 'bg-card text-secondary shadow-[0_0_0_var(--hairline)_var(--border-default),var(--elevation-control)]',
               )}
             >
               {i + 1}
@@ -720,7 +747,7 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
         ))}
       </div>
       {failure && <div className="px-3 pb-1.5 text-caption text-danger">{failure}</div>}
-      <div className="px-3 pb-2.5 text-caption text-tertiary">
+      <div className="px-3 pb-2.5 text-caption leading-[normal] text-tertiary">
         {waiting > 1 && <>{t('moreWaiting', { count: waiting - 1 })} · </>}
         <button
           type="button"

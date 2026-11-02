@@ -17,8 +17,12 @@ export type PendingRequest =
 
 /** What the panel reads from a session's thread: its requests, current step and changed files. */
 export interface SessionDetail {
-  /** The summary's `updatedAt` the thread was read at, to read it again once that moves. */
+  /**
+   * The summary's `updatedAt` and `permissionCount` the thread was read at, to read it again once
+   * either moves: a request settling moves the count alone.
+   */
   readAt: number
+  readRequests: number
   requests: PendingRequest[]
   /** The tool the agent runs now, if one runs. */
   activity: PendingTool | null
@@ -68,11 +72,16 @@ export function groupSessions(summaries: readonly SessionSummary[]): TrayGroups 
 
 const FILE_KINDS = new Set<ToolEntry['toolKind']>(['edit', 'delete', 'move'])
 
+/** Whether a session moved on since its thread was read. */
+export function stale(summary: SessionSummary, detail: SessionDetail | undefined): boolean {
+  return detail?.readAt !== summary.updatedAt || detail.readRequests !== summary.permissionCount
+}
+
 /** Reads the panel's view of a thread from the entries of its latest page. */
 export function readDetail(
   entries: readonly ThreadEntry[],
   turnStartedAt: number | null,
-  readAt: number,
+  read: Pick<SessionSummary, 'updatedAt' | 'permissionCount'>,
 ): SessionDetail {
   const requests: PendingRequest[] = []
   let activity: SessionDetail['activity'] = null
@@ -101,7 +110,14 @@ export function readDetail(
       requests.push({ kind: 'origin', entryId: entry.id, origin: entry.origin })
     }
   })
-  return { readAt, requests, activity, turnStartedAt, files: files.size }
+  return {
+    readAt: read.updatedAt,
+    readRequests: read.permissionCount,
+    requests,
+    activity,
+    turnStartedAt,
+    files: files.size,
+  }
 }
 
 /** The plan beside the agent, without the word they share: "Claude Max" for Claude Code is "Max". */

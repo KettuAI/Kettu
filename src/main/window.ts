@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, nativeTheme, screen, shell } from 'electron'
+import { app, BrowserWindow, nativeTheme, screen, shell, type WebContents } from 'electron'
 import type { Locale } from '@shared/locale'
 import { DEFAULT_SETTINGS, type SettingsFile, type ZoomLevel } from '@shared/settings'
 import type { Theme } from '@shared/themes'
@@ -39,6 +39,12 @@ const panels = new WeakSet<BrowserWindow>()
 
 export function markPanel(window: BrowserWindow): void {
   panels.add(window)
+}
+
+/** Whether `contents` is the menu bar panel's page. */
+export function isPanel(contents: WebContents): boolean {
+  const window = BrowserWindow.fromWebContents(contents)
+  return window !== null && panels.has(window)
 }
 
 /** The app's own windows, without the menu bar panel. */

@@ -52,7 +52,7 @@
   "moreWaiting_one": "{{count}} more waiting",
   "moreWaiting_other": "{{count}} more waiting",
   "openInKettu": "Open in Kettu",
-  "answeredElsewhere": "Answered somewhere else",
+  "answeredElsewhere": "Answered elsewhere: {{title}}",
   "answerFailed": "Could not answer: {{message}}",
   "remote": {
     "off": "Remote · off",

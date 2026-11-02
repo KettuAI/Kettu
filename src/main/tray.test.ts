@@ -130,7 +130,7 @@ function start(system: NodeJS.Platform, { reduced = false, panel = true } = {}) 
     checkForUpdates: vi.fn(),
     setRemoteEnabled: vi.fn(),
     reducedMotion: vi.fn(() => reduced),
-    ...(panel ? { togglePanel: vi.fn(), hidePanel: vi.fn() } : {}),
+    ...(panel ? { togglePanel: vi.fn(() => true), hidePanel: vi.fn() } : {}),
   }
   const tray = new KettuTray(deps)
   tray.start()
@@ -282,6 +282,16 @@ describe('KettuTray', () => {
 
   it('opens the short menu on a left click without a panel', () => {
     const { fake } = start('darwin', { panel: false })
+    fake.emit('click', { altKey: false, ctrlKey: false }, { x: 0, y: 0, width: 0, height: 0 })
+    expect(fake.popped).toHaveLength(1)
+  })
+
+  it('opens the short menu on a left click while the panel cannot open yet', () => {
+    const { deps, fake } = start('darwin')
+    deps.togglePanel!.mockReturnValueOnce(false)
+    fake.emit('click', { altKey: false, ctrlKey: false }, { x: 0, y: 0, width: 0, height: 0 })
+    expect(deps.togglePanel).toHaveBeenCalledOnce()
+    expect(fake.popped).toHaveLength(1)
     fake.emit('click', { altKey: false, ctrlKey: false }, { x: 0, y: 0, width: 0, height: 0 })
     expect(fake.popped).toHaveLength(1)
   })

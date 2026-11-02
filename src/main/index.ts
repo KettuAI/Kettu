@@ -50,7 +50,7 @@ import { loadDeviceKey, loadIdentity, newIdentity, type IdentityCipher } from '.
 import { readJsonFile } from './json-file'
 import { computerModelForRun } from './system-model'
 import { systemReleaseForRun } from './system-name'
-import { isRendererUrl } from './renderer'
+import { rendererPage } from './renderer'
 import { SettingsStore } from './settings'
 import { hostSettings, reachesHost, terminalSettings } from './settings-schema'
 import { hasPendingFrame, isRevoked, watchSubframes } from './subframes'
@@ -128,9 +128,10 @@ async function start(): Promise<void> {
     process.platform === 'darwin' ? app.getLoginItemSettings().wasOpenedAtLogin : false
   const icon = devIcon()
   if (icon) app.dock?.setIcon(icon)
+  // The window's page only: the menu bar panel's needs no clipboard.
   restrictPermissions(
     session.defaultSession,
-    isRendererUrl,
+    (url) => rendererPage(url) === 'index',
     (contents) => isRevoked(contents) || hasPendingFrame(contents),
   )
   const [settings, windowState, appState, themeFolder, themeSources] = await loading
@@ -193,6 +194,8 @@ async function start(): Promise<void> {
   const reducedMotion = (): boolean =>
     settings.get().appearance.reduceMotion === 'always' ||
     (process.platform !== 'linux' && systemPreferences.getAnimationSettings().prefersReducedMotion)
+  // The panel's page reads its settings as it starts, so it opens only once main answers calls.
+  let ipcReady = false
   const trayPanel =
     process.platform === 'darwin'
       ? new TrayPanel({
@@ -214,7 +217,11 @@ async function start(): Promise<void> {
     reducedMotion,
     ...(trayPanel
       ? {
-          togglePanel: (bounds: Electron.Rectangle) => trayPanel.toggle(bounds),
+          togglePanel: (bounds: Electron.Rectangle) => {
+            if (!ipcReady) return false
+            trayPanel.toggle(bounds)
+            return true
+          },
           hidePanel: () => trayPanel.hide(),
         }
       : {}),
@@ -430,7 +437,8 @@ async function start(): Promise<void> {
     importFile: (path, project) => agentHost.artifactImport(path, project),
   })
   await artifacts.install(session.defaultSession)
-  serveMedia(session.defaultSession, mediaGrants, isRendererUrl, hostMedia)
+  // The window's page only: the menu bar panel's shows no media.
+  serveMedia(session.defaultSession, mediaGrants, (url) => rendererPage(url) === 'index', hostMedia)
   // A session of its own, so publishing follows the proxy setting rather than the artifacts'
   // window proxy, and keeps no cookies or storage of its own.
   const sharingSession = session.fromPartition('kettu-sharing')
@@ -585,6 +593,7 @@ async function start(): Promise<void> {
     quit: quitFlow,
     perf,
   })
+  ipcReady = true
   installMenu(menuDeps)
 
   app.on('browser-window-created', (_, window) => {

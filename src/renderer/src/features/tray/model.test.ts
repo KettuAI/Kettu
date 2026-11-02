@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentStatus, PlanLimit, SessionSummary } from '@shared/agent-host'
 import type { ThreadEntry, ToolEntry } from '@shared/thread'
-import { elapsed, groupSessions, limitRows, planName, readDetail } from './model'
+import { elapsed, groupSessions, limitRows, planName, readDetail, stale } from './model'
 
 function session(id: string, patch: Partial<SessionSummary> = {}): SessionSummary {
   return {
@@ -118,9 +118,9 @@ describe('readDetail', () => {
         },
       ],
       100,
-      7,
+      { updatedAt: 7, permissionCount: 2 },
     )
-    expect(detail.readAt).toBe(7)
+    expect(detail).toMatchObject({ readAt: 7, readRequests: 2 })
     expect(detail.turnStartedAt).toBe(100)
     expect(detail.files).toBe(2)
     expect(detail.requests.map((r) => r.entryId)).toEqual(['ask', 'site'])
@@ -186,5 +186,15 @@ describe('elapsed', () => {
     expect(elapsed(10_000)).toEqual({ h: 0, m: 1 })
     expect(elapsed(4 * 60_000 + 59_000)).toEqual({ h: 0, m: 4 })
     expect(elapsed(65 * 60_000)).toEqual({ h: 1, m: 5 })
+  })
+})
+
+describe('stale', () => {
+  it('reads a thread again once its summary moves on or a request settles', () => {
+    const read = readDetail([], null, { updatedAt: 5, permissionCount: 2 })
+    expect(stale(session('s', { updatedAt: 5, permissionCount: 2 }), read)).toBe(false)
+    expect(stale(session('s', { updatedAt: 6, permissionCount: 2 }), read)).toBe(true)
+    expect(stale(session('s', { updatedAt: 5, permissionCount: 1 }), read)).toBe(true)
+    expect(stale(session('s'), undefined)).toBe(true)
   })
 })

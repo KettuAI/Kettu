@@ -63,6 +63,7 @@ import type { TerminalHost } from './terminal-host'
 import { exportThemeFile, installThemeFile, revealThemeFile } from './theme-dialogs'
 import type { ThemeStore } from './themes'
 import type { Updater } from './updater'
+import { isPanel } from './window'
 
 const log = createLogger('ipc')
 
@@ -137,9 +138,13 @@ const PANEL_CHANNELS = new Set<string>([
   'tray:resize',
 ])
 
-/** Whether the sender may use `channel`: any for the window's page, the panel's few for its own. */
+/**
+ * Whether the sender may use `channel`: any for the window's page, the panel's few for its own.
+ * The panel is told by its window, since a page can change its URL with history.pushState.
+ */
 export function mayUse(event: IpcMainInvokeEvent | IpcMainEvent, channel: string): boolean {
-  return rendererPage(event.senderFrame?.url) !== 'tray' || PANEL_CHANNELS.has(channel)
+  const panel = isPanel(event.sender) || rendererPage(event.senderFrame?.url) === 'tray'
+  return !panel || PANEL_CHANNELS.has(channel)
 }
 
 function handle<C extends IpcInvokeChannel>(
