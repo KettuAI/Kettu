@@ -295,6 +295,21 @@ describe('unsafeCommand', () => {
     safe("awk '{ print $1 }' f")
   })
 
+  it('flags tar and cpio when they run a program or remove files', () => {
+    unsafe('tar --use-compress-program=rm -xf x')
+    unsafe('tar -I rm -xf x')
+    unsafe('tar -xIrm -f x')
+    unsafe('tar xIf rm x')
+    unsafe('tar -xf x --to-command=sh')
+    unsafe('tar -cf x.tar src --remove-files')
+    unsafe('tar -F script -cf x.tar src')
+    unsafe('cpio -i < x')
+    unsafe('cpio --rsh-command=sh -o')
+    expect(unsafeCommandPrefix('tar -xf')).toBe(true)
+    safe('tar -xzf release.tar.gz')
+    safe('tar czf out.tar.gz src')
+  })
+
   it('allows git only to read or add', () => {
     for (const command of [
       'git -C repo reset --hard',

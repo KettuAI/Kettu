@@ -213,6 +213,7 @@ const OPAQUE = new Set([
   'arch',
   'script',
   'flock',
+  'cpio',
   'parallel',
   'strace',
   'ltrace',
@@ -373,6 +374,8 @@ function unsafeArgs(words: readonly string[], open: boolean): boolean {
       return open || args.some((arg) => FIND_ACTIONS.has(arg))
     case 'rsync':
       return open || args.some((arg) => /^--(?:del|remove-|rsh|rsync-path)|^-[A-Za-z]*e/.test(arg))
+    case 'tar':
+      return open || unsafeTar(args)
     case 'awk':
     case 'gawk':
     case 'mawk':
@@ -495,6 +498,19 @@ function xargsCommand(args: readonly string[]): readonly string[] | null {
     i += skip
   }
   return args.slice(i)
+}
+
+/**
+ * Tar runs a program given to -I, -F, --use-compress-program, --to-command or the like, and
+ * --remove-files deletes what it archived. Its first word may be options without a dash.
+ */
+function unsafeTar(args: readonly string[]): boolean {
+  return args.some(
+    (arg, i) =>
+      /^--(?:use-compress|to-command|info-script|new-volume-script|checkpoint-action|rsh-command|rmt-command|remove-files)/.test(
+        arg,
+      ) || (i === 0 || /^-[^-]/.test(arg) ? /^-?[A-Za-z]*[IF]/.test(arg) : false),
+  )
 }
 
 /** A package runner such as npx: safe only when the package it runs is. */
