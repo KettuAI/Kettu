@@ -20,7 +20,7 @@ import { cn } from '@renderer/lib/utils'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { shownSidePane, useViewStore } from '@renderer/stores/view'
 import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
-import { aboveBox } from './above-box'
+import { useAboveBox } from './above-box'
 import { AttachmentTray } from './attachment-tray'
 import { attachMention } from './attachments'
 import { ComposerEditor } from './editor'
@@ -433,7 +433,7 @@ export function AddMenu({
   const { t } = useTranslation('composer')
   const { disabled, full, remote, text, editor, update, sessionId } = box
   const shortcut = formatShortcut('Mod+U')
-  const [trigger, setTrigger] = useState<HTMLButtonElement | null>(null)
+  const [setAnchor, aboveBox] = useAboveBox()
   const hasPage = useBrowserStore((s) => {
     const page = sessionId ? s.bySession[sessionId] : undefined
     // An evicted page keeps its address for the pane, with no live page behind it.
@@ -475,7 +475,7 @@ export function AddMenu({
     <DropdownMenu>
       <Tooltip>
         <TooltipTrigger
-          render={<DropdownMenuTrigger render={<Button {...button} ref={setTrigger} />} />}
+          render={<DropdownMenuTrigger render={<Button {...button} ref={setAnchor} />} />}
         >
           {icon}
         </TooltipTrigger>
@@ -486,7 +486,7 @@ export function AddMenu({
       </Tooltip>
       <DropdownMenuContent
         side="top"
-        sideOffset={aboveBox(trigger)}
+        sideOffset={aboveBox}
         className="w-max min-w-66"
         finalFocus={() => {
           box.focus()

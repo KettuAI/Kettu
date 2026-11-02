@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { ChevronRightIcon, TimerIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentAccount, ContextList, PlanLimit } from '@shared/agent-host'
@@ -44,7 +44,7 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { loadContext, refreshLimits, useUsageStore } from '@renderer/stores/usage'
 import { openUsage } from '@renderer/stores/view'
-import { aboveBox } from './above-box'
+import { useAboveBox } from './above-box'
 import { ROW_BUTTON } from './menu-parts'
 
 /** From this share of the context the percentage takes the usage level's color. */
@@ -190,7 +190,7 @@ export function CacheButton({
   const timed = knownExpiry(cache)
   const phase = useCachePhase(timed)
   const time = useCacheLeft(timed?.expiresAt ?? null, countdown)
-  const [trigger, setTrigger] = useState<HTMLButtonElement | null>(null)
+  const [setAnchor, aboveBox] = useAboveBox()
   if (!timed || !phase) return null
   const expired = phase === 'expired'
   const label = expired
@@ -203,7 +203,7 @@ export function CacheButton({
       <PopoverTrigger
         render={
           <Button
-            ref={setTrigger}
+            ref={setAnchor}
             variant="quiet"
             size="sm"
             aria-label={t('usage.cache.button', { time: label })}
@@ -221,7 +221,7 @@ export function CacheButton({
       <PopoverContent
         side="top"
         align="end"
-        sideOffset={aboveBox(trigger)}
+        sideOffset={aboveBox}
         className="w-72.5 gap-0 px-4 py-3.5"
       >
         <CachePart cache={timed} phase={phase} used={used} />
@@ -315,7 +315,7 @@ export function ContextButton({
 }) {
   const { t } = useTranslation('composer')
   const warning = warningLimit(limits)
-  const [trigger, setTrigger] = useState<HTMLButtonElement | null>(null)
+  const [setAnchor, aboveBox] = useAboveBox()
   if (!usage && !warning) return null
   const share = usage && usage.size > 0 ? usage.used / usage.size : 0
   const full = share >= CONTEXT_WARNING
@@ -333,7 +333,7 @@ export function ContextButton({
       <PopoverTrigger
         render={
           <Button
-            ref={setTrigger}
+            ref={setAnchor}
             variant="quiet"
             size="sm"
             aria-label={usage ? t('usage.contextPercent', { percent }) : t('usage.title')}
@@ -363,7 +363,7 @@ export function ContextButton({
       <PopoverContent
         side="top"
         align="end"
-        sideOffset={aboveBox(trigger)}
+        sideOffset={aboveBox}
         className="max-h-(--available-height) w-85 gap-0 overflow-y-auto px-4 py-3.5"
       >
         {usage && (
