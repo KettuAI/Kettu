@@ -127,8 +127,7 @@ export function AgentPicker({
           placeholder={t('newSession.picker.search')}
           aria-label={t('newSession.picker.search')}
           spellCheck={false}
-          // A menu's search keeps its bottom line when focused, not a field's focus ring.
-          className="h-10.5! px-2 has-[[data-slot=input-group-control]:focus-visible]:shadow-[inset_0_calc(var(--hairline)*-1)_0_var(--border-soft)]!"
+          className="h-10.5! px-2"
         >
           <InputGroupAddon>
             <SearchIcon className="size-3.5" />
