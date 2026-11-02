@@ -1,3 +1,4 @@
+import { ArrowDownToLineIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@renderer/lib/utils'
 
@@ -16,17 +17,25 @@ export function DropOverlay({
     <div
       aria-hidden
       className={cn(
-        'pointer-events-none absolute inset-0 z-30 grid place-items-center bg-app/88 transition-opacity duration-(--duration-fast) ease-out-quart',
+        'pointer-events-none absolute inset-0 z-30 bg-app/88 p-4.5 transition-opacity duration-(--duration-fast) ease-out-quart',
         shown ? 'opacity-100' : 'opacity-0',
       )}
     >
-      <div className="rounded-2xl bg-surface px-7 py-5 text-center shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)]">
-        <div className="font-heading text-subheading font-medium text-primary">
+      <div
+        className={cn(
+          'flex size-full flex-col items-center justify-center gap-1.5 rounded-[14px] border-[1.5px] border-dashed text-center',
+          starting
+            ? 'border-border-strong text-secondary'
+            : 'border-control-on bg-control-on-tint text-control-on',
+        )}
+      >
+        <ArrowDownToLineIcon strokeWidth={1.5} className="size-5" />
+        <div className="text-ui font-medium">
           {starting
             ? t('attachments.waitForAgent', { agent: agentName })
             : t('attachments.dropTitle')}
         </div>
-        {!starting && <div className="text-xs text-tertiary">{t('attachments.dropHint')}</div>}
+        {!starting && <div className="text-small text-tertiary">{t('attachments.dropHint')}</div>}
       </div>
     </div>
   )

@@ -225,6 +225,7 @@ function SentAttachment({
   return (
     <AttachmentTile
       view={view}
+      picture="large"
       role="button"
       tabIndex={0}
       aria-label={`${attachment.name}, ${view.tooltip.split('\n').at(-1)}`}
