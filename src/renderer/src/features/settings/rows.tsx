@@ -56,9 +56,13 @@ export function SectionBody({ section }: { section: SectionDef }) {
           ) : (
             <RowGroup>
               {rows.map((row) =>
-                row.layout === 'custom' ? (
-                  <RowShell key={row.id} id={row.id} plain>
-                    {row.render(null)}
+                row.layout === 'custom' || row.layout === 'bare' ? (
+                  <RowShell key={row.id} id={row.id} plain bare={row.layout === 'bare'}>
+                    {row.render(
+                      row.layout === 'bare' ? (
+                        <RowText name={row.name} description={row.rich ?? row.description} />
+                      ) : null,
+                    )}
                   </RowShell>
                 ) : (
                   <Row key={row.id} row={row} />

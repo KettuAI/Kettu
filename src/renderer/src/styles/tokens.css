@@ -13,6 +13,8 @@
   --bg-sidebar: #f1f3f6;
   --bg-surface: #ffffff;
   --bg-subtle: #f2f4f7;
+  /* A system notification in Settings › Notifications, as the menu bar draws one. */
+  --bg-tray: #f7f8fa;
   --bg-code-inline: rgb(20 26 34 / 6%);
   --bg-code-block: #f6f7f9;
   --bg-hover: rgb(20 26 34 / 5%);
@@ -218,6 +220,7 @@
     /* What floats over the page sits a step lighter than it, since shadows barely show here. */
     --bg-surface: #1c222a;
     --bg-subtle: #20262f;
+    --bg-tray: #1a2029;
     --bg-code-inline: rgb(230 236 245 / 8%);
     --bg-code-block: #12161c;
     --bg-hover: rgb(230 236 245 / 5%);
@@ -357,6 +360,7 @@
   /* What floats over the page sits a step lighter than it, since shadows barely show here. */
   --bg-surface: #1c222a;
   --bg-subtle: #20262f;
+  --bg-tray: #1a2029;
   --bg-code-inline: rgb(230 236 245 / 8%);
   --bg-code-block: #12161c;
   --bg-hover: rgb(230 236 245 / 5%);
@@ -567,6 +571,8 @@
 
   /* The autocompact buffer in the context bar: the reserved gray, hatched. */
   --context-hatch: repeating-linear-gradient(135deg, var(--context-7) 0 2px, transparent 2px 4px);
+  /* The tile after the themes in Settings › Appearance, which offers more: faint diagonal lines. */
+  --tile-hatch: repeating-linear-gradient(135deg, transparent 0 6px, var(--bg-hover) 6px 7px);
 
   --terminal-background: var(--bg-app);
   --terminal-foreground: var(--text-primary);

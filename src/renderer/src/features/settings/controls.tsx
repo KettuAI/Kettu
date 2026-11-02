@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@renderer/components/ui/select'
+import { Badge } from '@renderer/components/ui/badge'
 import { Switch } from '@renderer/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage } from '@renderer/lib/host'
@@ -23,9 +24,6 @@ export { CopyAction, IconAction } from '@renderer/components/copy-action'
 
 /** The width of Settings' confirmations, whose sentences run longer than most. */
 export const CONFIRM = 'data-[size=default]:sm:max-w-105'
-
-/** A quiet button at a group label's end, such as Send a test notification. */
-export const GROUP_ACTION = 'px-2.25 text-xs text-secondary'
 
 /** A field's label above it, as the Cloudflare account and a custom proxy take them. */
 export const FIELD_LABEL = 'flex min-w-0 flex-col gap-1.5 text-xs font-medium text-secondary'
@@ -89,6 +87,29 @@ export function Segmented<T extends string | number>({
 
 /** The buttons in a row: 30 px, as a row's controls are. */
 export const ROW_BUTTON = 'h-7.5 gap-1.5 rounded-xl px-3 text-control'
+
+/** A state as a 20 px pill: neutral, or tinted by what it means. */
+export function Pill({
+  tone = 'neutral',
+  className,
+  children,
+}: {
+  tone?: 'neutral' | 'attention' | 'success' | 'warning'
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <Badge
+      variant={tone}
+      className={cn('rounded-tile', tone === 'neutral' && 'font-medium shadow-none', className)}
+    >
+      {children}
+    </Badge>
+  )
+}
+
+/** A quiet button at a group heading's end, such as Check for updates. */
+export const GROUP_ACTION = `${ROW_BUTTON} text-secondary`
 
 /** A field in a row, as wide as the board draws each, with the row's 13.5 px text. */
 export const ROW_FIELD = 'h-8 rounded-xl px-2.75 text-lede'

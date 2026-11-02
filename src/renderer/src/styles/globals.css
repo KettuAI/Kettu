@@ -68,6 +68,7 @@
   --background-color-app: var(--bg-app);
   --background-color-surface: var(--bg-surface);
   --background-color-subtle: var(--bg-subtle);
+  --background-color-tray: var(--bg-tray);
   --background-color-hover: var(--bg-hover);
   --background-color-selected: var(--bg-selected);
   --background-color-raised: var(--bg-raised);
@@ -318,6 +319,10 @@
   --text-section--letter-spacing: -0.012em;
   --text-lede: 13.5px;
   --text-lede--line-height: 1.5;
+  /* A dialog's title over Settings. */
+  --text-sheet-title: 18px;
+  --text-sheet-title--line-height: 1.3;
+  --text-sheet-title--letter-spacing: -0.012em;
 }
 
 :root {

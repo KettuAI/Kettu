@@ -57,10 +57,10 @@ import {
   ControlError,
   CopyAction,
   FIELD_LABEL,
-  GROUP_ACTION,
   Masked,
   PathText,
   RevealAction,
+  ROW_BUTTON,
   Segmented,
   SettingSelect,
   SettingSwitch,
@@ -75,7 +75,7 @@ const useSettings = () => useHostScope().useSettingsStore((s) => s.settings)
 const PREVIEW_BOX = 'rounded-code bg-app shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]'
 
 // A block row's first line: the row's text on the left, its control on the right.
-const BLOCK_LINE = 'flex min-h-10 items-center gap-4'
+const BLOCK_LINE = 'flex items-center gap-x-7 gap-y-3'
 
 // ---- General
 
@@ -297,7 +297,7 @@ function StepButton({
             aria-label={label}
             disabled={disabled}
             onClick={onClick}
-            className="h-6.5 w-7.5 text-secondary hover:bg-transparent hover:text-primary disabled:opacity-40 [&_svg:not([class*='size-'])]:size-3.5"
+            className="size-7 rounded-segment text-secondary hover:bg-hover hover:text-primary disabled:opacity-40 [&_svg:not([class*='size-'])]:size-3.5"
           />
         }
       >
@@ -317,17 +317,12 @@ export function Zoom() {
   const [apply, error] = useApply()
   const step = (by: ZoomStep) => apply({ appearance: { zoom: stepZoom(zoom, by) } })
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-2">
       <ControlError error={error} />
-      {zoom !== DEFAULT_SETTINGS.appearance.zoom && (
-        <Button variant="quiet" size="sm" className="text-secondary" onClick={() => step(0)}>
-          {t('appearance.zoom.reset')}
-        </Button>
-      )}
       <div
         role="group"
         aria-label={t('appearance.zoom.name')}
-        className="inline-flex items-center gap-0.5 rounded-lg bg-segment-track p-0.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
+        className="inline-flex items-center gap-0.5 rounded-segments bg-surface p-0.5 shadow-outline"
       >
         <StepButton
           label={t('appearance.zoom.zoomOut')}
@@ -339,7 +334,7 @@ export function Zoom() {
         </StepButton>
         <span
           aria-live="polite"
-          className="min-w-11.5 text-center text-small font-medium text-primary tabular-nums"
+          className="min-w-12 text-center text-control text-primary tabular-nums"
         >{`${Math.round(zoom * 100)}%`}</span>
         <StepButton
           label={t('appearance.zoom.zoomIn')}
@@ -350,34 +345,32 @@ export function Zoom() {
           <PlusIcon />
         </StepButton>
       </div>
+      <Button
+        variant="ghost"
+        className={ROW_BUTTON}
+        onClick={() => {
+          if (zoom !== DEFAULT_SETTINGS.appearance.zoom) step(0)
+        }}
+      >
+        {t('appearance.zoom.reset')}
+      </Button>
     </div>
   )
 }
 
-/** The text with each of `keys` in it shown as a keycap, as a row's description names shortcuts. */
-export function WithKeys({ text, keys }: { text: string; keys: readonly string[] }) {
-  const parts: ReactNode[] = []
-  let rest = text
-  for (;;) {
-    const next = keys
-      .map((key) => ({ key, at: rest.indexOf(key) }))
-      .filter((found) => found.at >= 0)
-      .sort((a, b) => a.at - b.at)[0]
-    if (!next) break
-    parts.push(rest.slice(0, next.at), <Kbd key={parts.length}>{next.key}</Kbd>)
-    rest = rest.slice(next.at + next.key.length)
-  }
-  parts.push(rest)
-  return parts
-}
-
+/** The row draws its own line, then a paragraph of the thread at the chosen size under it. */
 export function TextSize({ label }: { label: ReactNode }) {
   const { t } = useTranslation('settings')
   const value = useSettings().appearance.textSize
   const [apply, error] = useApply()
   return (
-    <div className="flex w-full flex-col gap-3">
-      <div className={BLOCK_LINE}>
+    <>
+      <div
+        className={cn(
+          BLOCK_LINE,
+          'py-3.75 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
+        )}
+      >
         <div className="min-w-0 flex-1">{label}</div>
         <ControlError error={error} />
         <Segmented
@@ -391,20 +384,15 @@ export function TextSize({ label }: { label: ReactNode }) {
           onChange={(v) => apply({ appearance: { textSize: v } })}
         />
       </div>
-      <div aria-hidden className={cn(PREVIEW_BOX, 'flex flex-col gap-2.5 p-4 text-prose')}>
-        <div className="max-w-4/5 self-end rounded-2xl bg-subtle px-3.25 py-2 leading-normal">
-          {t('appearance.textSize.previewUser')}
-        </div>
-        {/* The thread's own prose rules, its inline code included. */}
-        <p className="markdown">
-          <Trans
-            t={t}
-            i18nKey="appearance.textSize.previewAgent"
-            components={{ code: <code data-streamdown="inline-code" /> }}
-          />
-        </p>
-      </div>
-    </div>
+      {/* The thread's own prose rules, its inline code included. */}
+      <p aria-hidden className="markdown mb-3.75 rounded-2xl bg-subtle px-3.5 py-3 text-prose">
+        <Trans
+          t={t}
+          i18nKey="appearance.textSize.previewAgent"
+          components={{ code: <code data-streamdown="inline-code" /> }}
+        />
+      </p>
+    </>
   )
 }
 
@@ -706,15 +694,14 @@ export function NotificationPreview() {
   const [before = '', after = ''] = t('notifications.previewBody', {
     command: COMMAND_MARK,
   }).split(COMMAND_MARK)
-  // A system banner over the desktop, which a tint of the desk stands for.
   return (
-    <div
-      aria-hidden
-      className="grid place-items-center rounded-xl bg-[linear-gradient(135deg,color-mix(in_srgb,var(--bg-sidebar),var(--info)_10%),var(--bg-sidebar))] px-4 py-5.5 shadow-card"
-    >
-      <div className="flex w-87.5 max-w-full gap-2.5 rounded-3xl bg-surface/88 px-3 py-2.5 shadow-menu backdrop-blur-xl">
-        <BrandIcon size={32} />
-        <div className="flex min-w-0 flex-1 flex-col gap-px text-command">
+    <div className="flex items-center gap-6 py-4.5">
+      <div
+        aria-hidden
+        className="flex w-90 max-w-full shrink-0 gap-3 rounded-dialog bg-tray px-3.5 py-3 shadow-[0_0_0_var(--hairline)_var(--border-subtle),var(--elevation-float)]"
+      >
+        <BrandIcon size={34} />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-control">
           <div className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate font-semibold">
               {t('notifications.previewTitle')}
@@ -725,11 +712,14 @@ export function NotificationPreview() {
           </div>
           <span className="truncate text-secondary">
             {before}
-            <code className="font-mono text-meta">pnpm vitest run src/usage</code>
+            pnpm vitest run src/usage
             {after}
           </span>
         </div>
       </div>
+      <span className="text-group leading-normal text-tertiary">
+        {t(isWeb ? 'notifications.footerWeb' : 'notifications.footer')}
+      </span>
     </div>
   )
 }
@@ -793,12 +783,11 @@ export function TestNotification() {
       </span>
       <ControlError error={error} />
       <Button
-        variant="quiet"
-        size="sm"
+        variant="outline"
         disabled={busy}
         title={unsupported ? unsupportedText() : undefined}
         onClick={() => void run()}
-        className={GROUP_ACTION}
+        className={ROW_BUTTON}
       >
         {busy ? (
           <Spinner data-icon="inline-start" className="size-3.5" />

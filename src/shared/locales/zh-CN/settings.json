@@ -109,9 +109,9 @@
       "export": "导出为文件…",
       "exported": "已将 {{file}} 保存到 {{folder}}",
       "remove": "移除…",
-      "install": "从文件安装…",
+      "install": "安装文件…",
       "moreThemes": "更多主题",
-      "moreDescription": "浏览 Kettu 主题库，或安装 .json 主题文件。",
+      "moreDescription": "来自 Kettu 主题库，或一个 .json 文件。",
       "lowContrast": "对比度不足",
       "contrastPair": "{{mode}}：{{fg}} 在 {{bg}} 上，{{ratio}}:1",
       "contrastMore": "另有 {{count}} 处",
@@ -146,7 +146,7 @@
       }
     },
     "catalog": {
-      "browse": "浏览主题",
+      "browse": "浏览",
       "title": "浏览主题",
       "description": "来自 GitHub 上的 Kettu 主题库。安装后立即应用。",
       "search": "搜索主题",
@@ -176,7 +176,7 @@
     },
     "textSize": {
       "name": "文字大小",
-      "description": "用于对话和输入框：14、15 或 16 px。",
+      "description": "对话和输入框：14、15 或 16 px。",
       "keywords": "字体 字号 font",
       "small": "小",
       "default": "默认",
@@ -186,10 +186,11 @@
     },
     "reduceMotion": {
       "name": "减弱动态效果",
-      "description": "“跟随系统”遵循操作系统的设置；“始终”会去掉所有动态效果。",
+      "description": "“跟随系统”遵循 macOS 的设置；“始终”会去掉所有动态效果。",
       "keywords": "动画 无障碍 animation accessibility",
       "system": "跟随系统",
-      "always": "始终"
+      "always": "始终",
+      "descriptionOther": "“跟随系统”遵循操作系统的设置；“始终”会去掉所有动态效果。"
     },
     "groups": {
       "theme": "主题",
@@ -198,7 +199,7 @@
     },
     "zoom": {
       "name": "界面缩放",
-      "description": "整个窗口的缩放比例，也可以用 {{zoomIn}} 和 {{zoomOut}} 调整。",
+      "description": "整个窗口的显示大小。{{zoomIn}} 和 {{zoomOut}} 在任何地方都可用。",
       "keywords": "缩放 放大 缩小 zoom scale",
       "zoomIn": "放大",
       "zoomOut": "缩小",
@@ -252,33 +253,33 @@
   "notifications": {
     "permission": {
       "name": "需要授权",
-      "description": "Agent 等待你允许某项操作时。",
+      "description": "Agent 正在等你允许某项操作。",
       "keywords": "授权 permission"
     },
     "turnEnded": {
       "name": "本轮对话已完成",
-      "description": "Agent 完成你交给它的任务时。"
+      "description": "Agent 已完成，正在等你的下一条消息。"
     },
     "routines": {
       "name": "例程运行",
-      "description": "例程的运行结束，或例程因套餐限制暂停。",
+      "description": "一次运行结束，或因接近套餐限制而暂停。",
       "keywords": "例程 计划 后台"
     },
     "error": {
       "name": "错误",
-      "description": "会话出错，或 Agent 意外停止时。"
+      "description": "会话出错或 Agent 停止。"
     },
     "sound": {
       "name": "播放提示音",
-      "description": "系统通知提示音。"
+      "description": "系统的通知提示音。"
     },
     "badge": {
       "nameDock": "在程序坞图标上显示数字角标",
       "nameTaskbar": "在任务栏按钮上显示数字角标",
-      "description": "有多少个会话在等待你授权。",
+      "description": "等待你授权的会话。",
       "keywords": "角标 数字 badge"
     },
-    "footer": "仅在 Kettu 的所有窗口都不在前台时显示。",
+    "footer": "只在没有 Kettu 窗口位于前台时显示。",
     "groups": {
       "preview": "预览",
       "when": "提醒我",
@@ -289,7 +290,8 @@
     "sent": "已发送",
     "previewTitle": "Claude Code 需要授权",
     "previewBody": "kettu · 运行 {{command}}",
-    "previewTime": "现在"
+    "previewTime": "现在",
+    "footerWeb": "只在这个页面不在前台时显示。"
   },
   "account": {
     "name": "Kettu 账号",
@@ -321,7 +323,7 @@
     "plainText": "此系统没有钥匙串，登录信息会以不加密的方式保存。",
     "subscription": {
       "name": "订阅",
-      "description": "Kettu 的云服务将需要订阅，在官网购买和管理。",
+      "description": "Kettu 的云服务将需要订阅，其他功能都不需要。",
       "keywords": "订阅 套餐 付费",
       "none": "未订阅",
       "trialing": "试用中",
@@ -329,7 +331,8 @@
       "pastDue": "付款失败",
       "paused": "已暂停",
       "canceled": "已结束"
-    }
+    },
+    "note": "会话、Agent 以及在你自己网络上的远程访问都无需账号，账号只用于官方中继和网页客户端。"
   },
   "browser": {
     "clearData": {
@@ -668,9 +671,9 @@
   "pages": {
     "general": "语言、输入方式，以及新会话和启动时的行为。",
     "appearance": "主题、颜色模式、缩放和文字大小。改动立即生效。",
-    "notifications": "只在 Kettu 的所有窗口都不在前台时提醒你，免得打断正在看的内容。",
-    "notifications_web": "只在这个页面不在前台时提醒你，免得打断正在看的内容。",
-    "account": "你的 Kettu 账号，用于 Kettu 的云服务。不登录也能使用其他所有功能。",
+    "notifications": "Agent 需要你或完成时，Kettu 如何通知你。",
+    "notifications_web": "{{host}} 上的 Agent 需要你或完成时，这个页面如何通知你。",
+    "account": "你的 Kettu 账号，用于 Kettu 的云服务。",
     "agents": "你选来干活的 Agent，每个有自己的账号和额度。同一个 Harness 能有几个 Agent，比如一个用订阅、一个用公司的 API key。",
     "agents_web": "{{host}} 上的 Agent，账号和额度都在 {{host}} 上。同一个 Harness 能有几个 Agent，比如一个用订阅、一个用公司的 API key。",
     "terminal": "侧边面板里的终端用哪个 Shell，以及它的字号。",
@@ -685,7 +688,7 @@
     "browser": "侧边面板里的浏览器让所有会话共用一个配置：登录状态、网站数据和缓存都在这里。",
     "mcp": "Agent 通过这些 MCP 服务器使用工具。这里有 Kettu 自带的服务器，以及各 Agent 自己的服务器所在的位置。",
     "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。在这里安装和更新；账号在 Agent 里。",
-    "hosts": "这台电脑上的 Kettu 连着的主机。会话、项目和 Agent 都在各自的主机上，这里只管怎么连。",
+    "hosts": "这台电脑连接的、运行 Kettu 的其他电脑。它们的会话会显示在侧边栏中。",
     "hostsWeb": "这个页面连着的电脑。会话、项目和 Agent 都在那台电脑上，这里只管这个浏览器怎么连它。"
   },
   "archived": {
@@ -751,9 +754,9 @@
     "version": "Kettu {{version}}",
     "via": {
       "direct": "直连",
-      "directAt": "直连 {{address}}",
+      "directAt": "直连 · {{address}}",
       "ssh": "SSH",
-      "sshAt": "SSH {{target}}"
+      "sshAt": "SSH · {{target}}"
     },
     "failed": {
       "not_connected": "{{name}} 没有连上，等它在线后再试。",
@@ -768,7 +771,7 @@
       "update_client": "要更新这台电脑的 Kettu",
       "update_host": "要更新它上面的 Kettu"
     },
-    "note": "要从手机或别的电脑连这台电脑，到 <link>远程访问</link> 里添加设备。",
+    "note": "要从手机或其他电脑访问这台电脑，请在<link>远程访问</link>中添加设备。",
     "plainTextKey": "这台电脑连别的主机用的密钥存在只有当前用户能读的文件里，因为系统没有钥匙串。",
     "keyFailed": "系统没能解开这台电脑连别的主机用的密钥，所以连不了别的主机。",
     "add": {
@@ -801,10 +804,9 @@
         "ssh": "SSH"
       },
       "ssh": {
-        "hint": "用你自己的 SSH 配置和 agent，跳板机、端口和别名照常生效。那台机器上没装 Kettu 的，会自动装上。",
         "label": "SSH 地址",
         "placeholder": "lin@dev-box",
-        "note": "Kettu 不读也不存你的 SSH 密钥。",
+        "note": "Kettu 使用你的 ssh 配置，从不读取或保存你的密钥。",
         "connect": "连接",
         "steps": {
           "label": "进度",

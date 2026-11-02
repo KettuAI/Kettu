@@ -84,7 +84,7 @@ import { deviceLine } from './remote-text'
 import { NoSharing, PublishedRow, SharingAccount, SharingPending } from './sharing-section'
 import { useLoginItemStatus } from './use-login-item'
 import { environmentText } from './environment-text'
-import { AccountRow, SubscriptionState } from './account-section'
+import { AccountNote, AccountRow, SubscriptionState } from './account-section'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
 import {
   AllowedSitesList,
@@ -113,7 +113,6 @@ import {
   TestNotification,
   WebNotificationsNote,
   TextSize,
-  WithKeys,
   Zoom,
 } from './sections'
 import { ThemeTiles } from './theme-section'
@@ -285,11 +284,8 @@ export function useAppearanceSection(): SectionDef {
         name: t('appearance.theme.name'),
         english: en('appearance.theme.name'),
         keywords: t('appearance.theme.keywords'),
-        group: group('theme', t('appearance.groups.theme'), {
-          actions: <ColorMode />,
-          plain: true,
-        }),
-        layout: 'block',
+        group: group('theme', t('appearance.groups.theme'), { actions: <ColorMode /> }),
+        layout: 'custom',
         render: () => <ThemeTiles />,
       },
       {
@@ -305,7 +301,6 @@ export function useAppearanceSection(): SectionDef {
         name: t('appearance.zoom.name'),
         english: en('appearance.zoom.name'),
         description: zoomDescription,
-        rich: <WithKeys text={zoomDescription} keys={zoomKeys} />,
         keywords: t('appearance.zoom.keywords'),
         group: scale,
         render: () => <Zoom />,
@@ -317,14 +312,16 @@ export function useAppearanceSection(): SectionDef {
         description: t('appearance.textSize.description'),
         keywords: t('appearance.textSize.keywords'),
         group: scale,
-        layout: 'block',
+        layout: 'bare',
         render: (text) => <TextSize label={text} />,
       },
       {
         id: 'reduce-motion',
         name: t('appearance.reduceMotion.name'),
         english: en('appearance.reduceMotion.name'),
-        description: t('appearance.reduceMotion.description'),
+        description: isMac
+          ? t('appearance.reduceMotion.description')
+          : t('appearance.reduceMotion.descriptionOther'),
         keywords: t('appearance.reduceMotion.keywords'),
         group: group('motion', t('appearance.groups.motion')),
         render: () => <ReduceMotion />,
@@ -347,7 +344,6 @@ export function useNotificationsSection(): SectionDef {
       description: t('notifications.test'),
       group: group('preview', t('notifications.groups.preview'), {
         actions: <TestNotification />,
-        plain: true,
         ...(isWeb && { note: <WebNotificationsNote /> }),
       }),
       layout: 'custom',
@@ -462,6 +458,7 @@ export function useAccountSection(): SectionDef {
     description: t('pages.account'),
     icon: UserRoundIcon,
     rows,
+    footer: <AccountNote />,
   }
 }
 
