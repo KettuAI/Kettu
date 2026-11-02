@@ -58,6 +58,7 @@ import {
   FIELD_LABEL,
   Masked,
   PathText,
+  Pill,
   RevealAction,
   ROW_BUTTON,
   Segmented,
@@ -550,10 +551,6 @@ export function FontSize({ label }: { label: ReactNode }) {
 
 // ---- Git
 
-function StatusDot() {
-  return <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current" />
-}
-
 function ToolsPending() {
   const { t } = useTranslation()
   const { useGitStore, loadGitTools } = useHostScope()
@@ -575,19 +572,16 @@ export function GitTool() {
   const tools = useGitStore((s) => s.tools)
   if (!tools) return <ToolsPending />
   const { found, version } = tools.git
-  if (!found) return <Badge variant="neutral">{t('git.git.notFound')}</Badge>
+  if (!found) return <Pill>{t('git.git.notFound')}</Pill>
   return (
-    <Badge variant="success">
-      <CheckIcon data-icon="inline-start" />
-      {version ? (
-        <>
-          <span className="sr-only">{t('git.git.found')}</span>
-          <span className="font-mono text-meta font-normal">{version}</span>
-        </>
-      ) : (
-        t('git.git.found')
+    <>
+      {version && (
+        <span className="font-mono text-code text-tertiary" data-selectable="">
+          {version}
+        </span>
       )}
-    </Badge>
+      <Pill tone="success">{t('git.git.found')}</Pill>
+    </>
   )
 }
 
@@ -606,7 +600,7 @@ export function GhTool() {
         href="https://cli.github.com"
         target="_blank"
         rel="noreferrer"
-        className="text-xs text-tertiary underline underline-offset-2 hover:text-primary"
+        className="rounded-sm text-lede text-secondary underline decoration-border-strong underline-offset-3 outline-none hover:text-primary focus-ring"
       >
         {t('git.gh.install')}
       </a>
@@ -614,15 +608,10 @@ export function GhTool() {
   }
   if (gh.state === 'signed-out') {
     return (
-      <span className="flex items-center gap-1.5">
-        <Badge variant="warning" className="gap-1.5">
-          <StatusDot />
-          {t('git.gh.signedOut')}
-        </Badge>
-        <code className="rounded-md bg-subtle px-1.5 py-0.5 font-mono text-meta">
-          gh auth login
-        </code>
+      <span className="flex items-center gap-2">
+        <code className="rounded-md bg-subtle px-1.5 py-0.5 font-mono text-code">gh auth login</code>
         <CopyAction text="gh auth login" label={t('git.gh.copyCommand')} />
+        <Pill tone="warning">{t('git.gh.signedOut')}</Pill>
       </span>
     )
   }
@@ -630,21 +619,17 @@ export function GhTool() {
     ? t('git.gh.signedInAs', { account: SLOT }).split(SLOT)
     : [t('git.gh.signedIn')]
   return (
-    <Badge
-      variant="success"
-      title={gh.version ? `gh ${gh.version}` : undefined}
-      // A mask that ends the pill brings its own padding, so its hover fill is concentric.
-      className={cn(!after && 'has-data-[slot=masked]:pr-0.5')}
-    >
-      <CheckIcon data-icon="inline-start" />
-      {before}
-      {gh.account && (
-        <span className="font-normal text-primary">
-          <Masked>{gh.account}</Masked>
-        </span>
-      )}
-      {after}
-    </Badge>
+    <>
+      <span
+        className="text-lede text-secondary has-data-[slot=masked]:-me-1.5"
+        title={gh.version ? `gh ${gh.version}` : undefined}
+      >
+        {before}
+        {gh.account && <Masked>{gh.account}</Masked>}
+        {after}
+      </span>
+      <Pill tone="success">{t('git.gh.ready')}</Pill>
+    </>
   )
 }
 

@@ -240,7 +240,8 @@
       "signedOut": "Not signed in",
       "copyCommand": "Copy command",
       "signedInAs": "Signed in as {{account}}",
-      "signedIn": "Signed in"
+      "signedIn": "Signed in",
+      "ready": "Ready"
     },
     "fetch": {
       "name": "Fetch in the background",

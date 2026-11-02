@@ -239,7 +239,8 @@
       "signedOut": "未登录",
       "copyCommand": "复制命令",
       "signedInAs": "已登录为 {{account}}",
-      "signedIn": "已登录"
+      "signedIn": "已登录",
+      "ready": "就绪"
     },
     "fetch": {
       "name": "在后台抓取",
