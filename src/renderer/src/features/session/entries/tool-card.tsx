@@ -21,7 +21,13 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { PermissionKind, ToolContent, ToolEntry, ToolKind } from '@shared/thread'
+import {
+  previewsCommand,
+  type PermissionKind,
+  type ToolContent,
+  type ToolEntry,
+  type ToolKind,
+} from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import {
   Collapsible,
@@ -57,7 +63,6 @@ import { AnswerList, OptionName, WaitingCard, WaitingHeader, WaitingStatus } fro
 import {
   answeredBy,
   commandOutput,
-  previewsCommand,
   primaryOption,
   PANEL,
   respondToPermission,
@@ -129,8 +134,11 @@ export const ToolCard = memo(function ToolCard({
 
   if (!entry) return null
   if (permission) {
+    // Each request gets a card of its own, so an agent's next question in the same entry starts
+    // unanswered rather than inheriting the last one's pending answer.
     return (
       <PermissionCard
+        key={permission.requestId}
         ref={ref}
         sessionId={sessionId}
         entry={entry}
