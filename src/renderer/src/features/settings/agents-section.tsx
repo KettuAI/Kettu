@@ -2,7 +2,7 @@
 // folder and a name, with its account, sign-in, API key, usage and configuration. Installs and
 // updates are Settings > Harnesses'.
 
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import {
   EyeIcon,
   EyeOffIcon,
@@ -424,20 +424,23 @@ function AddAgentDialog({
               />
             </SettingsField>
             <SettingsField label={t('agents.add.folder')}>
-              <div
-                role="radiogroup"
+              <RadioGroup
                 aria-label={t('agents.add.folder')}
-                className="flex flex-col gap-1.5"
+                value={folder}
+                onValueChange={(next) =>
+                  next === 'existing' && !picked ? void pick() : setFolder(next as typeof folder)
+                }
+                className="gap-1.5"
               >
                 <Choice
+                  value="new"
                   checked={folder === 'new'}
-                  onSelect={() => setFolder('new')}
                   title={t('agents.add.folderNew')}
                   description={t('agents.add.folderNewHint')}
                 />
                 <Choice
+                  value="existing"
                   checked={folder === 'existing'}
-                  onSelect={() => (picked ? setFolder('existing') : void pick())}
                   title={t('agents.add.folderExisting')}
                   description={t('agents.add.folderExistingHint')}
                   extra={
@@ -455,25 +458,26 @@ function AddAgentDialog({
                     </span>
                   }
                 />
-              </div>
+              </RadioGroup>
             </SettingsField>
             <SettingsField label={t('agents.add.login')}>
-              <div
-                role="radiogroup"
+              <RadioGroup
                 aria-label={t('agents.add.login')}
-                className="flex flex-col gap-1.5"
+                value={login}
+                onValueChange={(next) => setLogin(next as Login)}
+                className="gap-1.5"
               >
                 <Choice
+                  value="terminal"
                   checked={login === 'terminal'}
-                  onSelect={() => setLogin('terminal')}
                   title={t('agents.add.loginTerminal')}
                   description={t('agents.add.loginTerminalHint', {
                     name: chosen?.harnessName ?? '',
                   })}
                 />
                 <Choice
+                  value="api-key"
                   checked={login === 'api-key'}
-                  onSelect={() => setLogin('api-key')}
                   title={t('agents.add.loginKey')}
                   description={t(
                     providers ? 'agents.add.loginKeyHint' : 'agents.add.loginKeyHintOpenAi',
@@ -483,7 +487,7 @@ function AddAgentDialog({
                     chosen && <ApiKeyFields status={chosen} value={key} onChange={setKey} />
                   }
                 />
-              </div>
+              </RadioGroup>
             </SettingsField>
             {error && <p className="text-hint text-danger">{error}</p>}
           </SettingsDialogBody>
@@ -504,18 +508,19 @@ function AddAgentDialog({
 
 /** One choice of a few as a tile, with what it does under it and anything it needs inside. */
 function Choice({
+  value,
   checked,
-  onSelect,
   title,
   description,
   extra,
 }: {
+  value: string
   checked: boolean
-  onSelect: () => void
   title: string
   description: string
   extra?: ReactNode
 }) {
+  const id = useId()
   return (
     <div
       className={cn(
@@ -525,27 +530,13 @@ function Choice({
           : 'shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] hover:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]',
       )}
     >
-      <button
-        type="button"
-        role="radio"
-        aria-checked={checked}
-        onClick={onSelect}
-        className="flex items-start gap-2.5 rounded-sm text-left outline-none focus-ring"
-      >
-        <span
-          aria-hidden
-          className={cn(
-            'mt-0.5 size-4 shrink-0 rounded-full bg-surface transition-[border-width,box-shadow] duration-(--duration-fast)',
-            checked
-              ? 'border-[5px] border-control-on'
-              : 'shadow-[inset_0_0_0_1.5px_var(--border-strong)]',
-          )}
-        />
+      <label htmlFor={id} className="flex items-start gap-2.5 text-left">
+        <RadioGroupItem id={id} value={value} className="mt-0.5" />
         <span className="flex min-w-0 flex-col gap-0.5">
           <span className="text-lede text-primary">{title}</span>
           <span className="text-hint text-tertiary">{description}</span>
         </span>
-      </button>
+      </label>
       {extra && <div className="pl-6.5">{extra}</div>}
     </div>
   )
