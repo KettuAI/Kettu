@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
-import { DownloadIcon } from 'lucide-react'
+import { ArrowDownToLineIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   extractTableDataFromElement,
@@ -97,7 +97,7 @@ export function MarkdownTable({ node, children, className }: ComponentProps<'tab
             if (d) downloadText(tableDataToCSV(d), 'table.csv', 'text/csv')
           }}
         >
-          <DownloadIcon />
+          <ArrowDownToLineIcon />
         </BlockAction>
       </div>
     </div>

@@ -135,7 +135,7 @@ export function LocalVideo({
               type="button"
               aria-label={t('media.play', { name })}
               onClick={play}
-              className="absolute top-[45%] left-1/2 grid size-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-(--media-control) text-(color:--media-control-ink) shadow-media-control transition-transform duration-(--duration-fast) focus-ring hover:scale-105 active:scale-100"
+              className="absolute top-[45%] left-1/2 grid size-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-(--media-control) text-(color:--media-control-ink) shadow-media-control transition-transform duration-(--duration-fast) focus-ring motion-safe:hover:scale-105 motion-safe:active:scale-100"
             >
               <PlayIcon className="size-4.5" strokeWidth={1.6} />
             </button>

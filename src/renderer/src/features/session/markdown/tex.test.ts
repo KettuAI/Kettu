@@ -23,6 +23,11 @@ describe('renderTex', () => {
     }
   })
 
+  it('keeps a rule from growing past a few lines', () => {
+    const result = renderTex('\\rule{9999em}{1em}', false)
+    expect(result.ok && result.html).toContain('width:20em')
+  })
+
   it('keeps links out of the formula', () => {
     const result = renderTex('\\href{javascript:alert(1)}{x}', false)
     if (result.ok) expect(result.html).not.toMatch(/href=/)

@@ -7,12 +7,15 @@ export interface TexError {
   end: number
 }
 
-// Commands that reach outside the formula, such as `\href`, stay off.
+// Commands that reach outside the formula, such as `\href`, stay off, and no size or macro
+// expansion can grow without bound, such as `\rule{9999em}{1em}`.
 const OPTIONS = {
   throwOnError: true,
   trust: false,
   strict: 'ignore',
   output: 'htmlAndMathml',
+  maxSize: 20,
+  maxExpand: 1000,
 } as const
 
 function texError(tex: string, error: unknown): TexError {

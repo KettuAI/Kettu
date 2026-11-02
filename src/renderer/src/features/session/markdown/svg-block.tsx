@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { DownloadIcon } from 'lucide-react'
+import { ArrowDownToLineIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { CodeBlock } from 'streamdown'
 import { bytes } from '@renderer/lib/format'
@@ -71,7 +71,7 @@ export function SvgBlock(props: BlockProps) {
             label={t('block.download')}
             onClick={() => downloadText(code, downloadName(file ?? picture.title), 'image/svg+xml')}
           >
-            <DownloadIcon />
+            <ArrowDownToLineIcon />
           </BlockAction>
         </>
       }

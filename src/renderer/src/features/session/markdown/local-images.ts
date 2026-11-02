@@ -124,8 +124,8 @@ export function localImageTarget(src: string): string | null {
 }
 
 /**
- * The local pictures of a paragraph that holds nothing else, two or more of them, which show as
- * one grid; null otherwise.
+ * The local pictures of a paragraph that holds nothing else, two or more of them and each once,
+ * which show as one grid; null otherwise.
  */
 export function pictureRun(paragraph: HastNode | undefined): string[] | null {
   const paths: string[] = []
@@ -135,7 +135,7 @@ export function pictureRun(paragraph: HastNode | undefined): string[] | null {
     const src = child.type === 'element' && child.tagName === 'img' ? child.properties?.src : null
     const path = typeof src === 'string' ? localImageTarget(src) : null
     if (path === null || mediaKindOfName(path) !== 'image') return null
-    paths.push(path)
+    if (!paths.includes(path)) paths.push(path)
   }
   return paths.length >= 2 ? paths : null
 }

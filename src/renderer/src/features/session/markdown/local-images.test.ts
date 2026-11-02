@@ -107,6 +107,13 @@ describe('pictureRun', () => {
     expect(pictureRun(run)).toEqual(['./a.png', './b.png', '~/shots/c 1.jpg'])
   })
 
+  it('takes a picture written twice once', () => {
+    expect(pictureRun(paragraphs('![a](./a.png) ![b](./b.png) ![a again](./a.png)')[0])).toEqual([
+      './a.png',
+      './b.png',
+    ])
+  })
+
   it('leaves a lone picture, text beside pictures and clips to show on their own', () => {
     for (const markdown of [
       '![a](./a.png)',

@@ -2,6 +2,7 @@ import {
   isValidElement,
   lazy,
   Suspense,
+  useContext,
   useState,
   type ComponentProps,
   type ReactNode,
@@ -11,6 +12,7 @@ import { useTranslation } from 'react-i18next'
 import { CodeBlock, useIsCodeFenceIncomplete, type ExtraProps } from 'streamdown'
 import { BlockAction, BlockCopy, BlockFrame, BlockSpacer } from './block-frame'
 import { fenceFileName, fenceLanguage, foldLines } from './code-meta'
+import { LiveContext } from './live'
 import { SvgBlock } from './svg-block'
 
 const MermaidBlock = lazy(() => import('./mermaid-block'))
@@ -82,7 +84,10 @@ export function CodeFrame({
 }: BlockProps & { name?: ReactNode }) {
   const { t } = useTranslation('session')
   const [wrap, setWrap] = useState(false)
-  const [folded, setFolded] = useState(true)
+  // A block that arrives while the reply is being written stays open, so it never shrinks under
+  // the reader once its fence closes; one loaded with the history starts folded.
+  const live = useContext(LiveContext)
+  const [folded, setFolded] = useState(() => !live)
   const lang = fenceLanguage(language)
   const file = fenceFileName(language, meta)
   // A block still being written shows every line, so it never shrinks under the reader.
@@ -101,11 +106,7 @@ export function CodeFrame({
               </span>
             ))}
           <BlockSpacer />
-          <BlockAction
-            label={wrap ? t('block.unwrap') : t('block.wrap')}
-            aria-pressed={wrap}
-            onClick={() => setWrap(!wrap)}
-          >
+          <BlockAction label={t('block.wrap')} aria-pressed={wrap} onClick={() => setWrap(!wrap)}>
             <WrapTextIcon />
           </BlockAction>
           <BlockCopy text={code} label={t('block.copy')} />

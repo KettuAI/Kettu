@@ -135,11 +135,7 @@ export const ToolCard = memo(function ToolCard({
   }, [permission])
 
   if (!entry) return null
-  const label = toolLabel(
-    entry,
-    projectPath,
-    entry.status === 'completed' || entry.status === 'failed',
-  )
+  const label = toolLabel(entry, projectPath, entry.status === 'completed')
   const command = label.kind === 'command' ? label.target : null
   // A command's output shows under it, in the same block, as a terminal prints it.
   const output = command ? commandOutput(entry.content) : null

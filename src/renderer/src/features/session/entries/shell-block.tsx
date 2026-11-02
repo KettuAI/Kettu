@@ -5,6 +5,7 @@ import { harnessOf, isAgentId } from '@shared/agents'
 import type { ToolEntry } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { cn } from '@renderer/lib/utils'
+import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import {
   BlockAction,
@@ -17,8 +18,11 @@ const TONE = {
   red: 'text-code-danger',
   green: 'text-code-success',
   dim: 'text-(--syntax-comment)',
-  bold: 'font-semibold text-primary',
+  bold: 'font-bold text-primary',
 } as const
+
+// Past this the header cuts a command short, so it shows whole above the output too.
+const LONG_COMMAND = 60
 
 /**
  * A command and what it printed, as a terminal shows them: the command in the header with its
@@ -45,7 +49,10 @@ export function ShellBlock({
   const exit = exitOf(output, status, harness)
   const printed = exit.output?.replace(/\n$/, '') ?? ''
   const { shown, earlier } = shellTail(printed, all)
+  const terminal = useTerminalAllowed(projectPath)
   const [first, ...more] = command.split('\n')
+  // An approval shows only this block, so a long command must never hide behind the cut.
+  const whole = more.length > 0 || command.length > LONG_COMMAND
   return (
     <BlockFrame
       data-selectable=""
@@ -59,7 +66,12 @@ export function ShellBlock({
           </span>
           <BlockSpacer />
           {exit.code !== null ? (
-            <span className={cn('shell-exit', exit.code === 0 ? 'text-code-success' : 'text-code-danger')}>
+            <span
+              className={cn(
+                'shell-exit',
+                exit.code === 0 ? 'text-code-success' : 'text-code-danger',
+              )}
+            >
               {exit.code === 0 ? (
                 <CheckIcon aria-hidden strokeWidth={2} />
               ) : (
@@ -75,16 +87,18 @@ export function ShellBlock({
               </span>
             )
           )}
-          <BlockAction
-            label={t('block.openInTerminal')}
-            onClick={() => emitAppEvent({ kind: 'run-in-terminal', projectPath, command })}
-          >
-            <SquareTerminalIcon />
-          </BlockAction>
+          {terminal && (
+            <BlockAction
+              label={t('block.openInTerminal')}
+              onClick={() => emitAppEvent({ kind: 'run-in-terminal', projectPath, command })}
+            >
+              <SquareTerminalIcon />
+            </BlockAction>
+          )}
         </>
       }
     >
-      {more.length > 0 && <pre className="shell-command">{command}</pre>}
+      {whole && <pre className="shell-command">{command}</pre>}
       {earlier > 0 && (
         <button type="button" className="shell-earlier" onClick={() => setAll(true)}>
           {t('block.showEarlier', { count: earlier })}
