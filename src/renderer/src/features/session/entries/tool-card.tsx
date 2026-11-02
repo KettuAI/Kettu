@@ -11,6 +11,7 @@ import {
   FileTextIcon,
   GlobeIcon,
   HandIcon,
+  PencilIcon,
   RepeatIcon,
   SearchIcon,
   SquareTerminalIcon,
@@ -516,7 +517,12 @@ function PermissionCard({
   const question = entry.question
   const label = toolLabel(entry, projectPath)
   const command = label.kind === 'command' ? label.target : null
-  const Icon = question !== undefined ? HandIcon : KIND_ICON[entry.toolKind]
+  const Icon =
+    question !== undefined
+      ? HandIcon
+      : entry.toolKind === 'edit'
+        ? PencilIcon
+        : KIND_ICON[entry.toolKind]
 
   const respond = async (index: number) => {
     const option = permission.options[index]
