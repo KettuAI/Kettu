@@ -237,7 +237,7 @@ export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string 
           onChange={setTarget}
         />
       )}
-      <div className="relative size-50 shrink-0 rounded-modal bg-canvas p-3 shadow-[0_0_0_var(--hairline)_var(--border-strong)]">
+      <div className="relative size-56 shrink-0 rounded-modal bg-canvas p-3 shadow-[0_0_0_var(--hairline)_var(--border-default)]">
         {link && (
           <QrCode text={link} label={t('remote.pair.qr')} className={cn(end && 'opacity-8')} />
         )}
@@ -285,8 +285,8 @@ export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string 
       </div>
       <LinkBox link={link} disabled={!waiting} />
       {waiting && (
-        <div className="flex w-full items-center gap-2 pt-3 text-control text-tertiary shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-          <Spinner className="size-3.5" />
+        <div className="flex w-full items-center gap-2 pt-3 text-control leading-[normal] text-tertiary shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
+          <Spinner className="size-3.25" />
           <span role="status" className="flex-1">
             {t('remote.pair.waiting')}
           </span>
@@ -332,10 +332,10 @@ function LinkBox({ link, disabled }: { link: string | null; disabled: boolean })
     return () => clearTimeout(timer)
   }, [copied])
   return (
-    <div className="flex w-full items-center gap-2">
+    <div className="flex w-full gap-2">
       <code
         className={cn(
-          'block h-8 min-w-0 flex-1 truncate rounded-xl bg-card px-2.75 font-mono text-code leading-8 shadow-outline',
+          'block h-8 min-w-0 flex-1 truncate rounded-xl bg-card px-2.75 font-mono text-hint leading-8 shadow-outline',
           disabled ? 'text-disabled' : 'text-primary',
         )}
         data-selectable=""

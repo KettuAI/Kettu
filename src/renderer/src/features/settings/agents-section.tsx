@@ -217,7 +217,7 @@ export function AgentsGroupActions() {
               variant="ghost"
               aria-pressed={hidden}
               onClick={() => apply({ privacy: { hideAccount: !hidden } })}
-              className="-mr-2 h-7 gap-1.5 rounded-segment px-2 text-hint font-normal text-secondary aria-pressed:text-primary [&_svg:not([class*='size-'])]:size-3.5"
+              className="h-7 gap-1.5 rounded-segment px-2 text-hint font-normal has-data-[icon=inline-start]:pl-2 text-secondary aria-pressed:text-primary [&_svg:not([class*='size-'])]:size-3.5"
             />
           }
         >
@@ -428,7 +428,7 @@ function AddAgentDialog({
                 aria-label={t('agents.add.folder')}
                 value={folder}
                 onValueChange={(next) => setFolder(next as typeof folder)}
-                className="gap-1.5"
+                className="gap-5"
               >
                 <Choice
                   value="new"
@@ -442,18 +442,20 @@ function AddAgentDialog({
                   title={t('agents.add.folderExisting')}
                   description={t('agents.add.folderExistingHint')}
                   extra={
-                    <span className="flex min-w-0 items-center gap-2">
-                      {picked && <PathText path={picked} />}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className={ROW_BUTTON}
-                        onClick={() => void pick()}
-                      >
-                        <FolderIcon data-icon="inline-start" className="size-3.5" />
-                        {t('agents.add.choose')}
-                      </Button>
-                    </span>
+                    folder === 'existing' && (
+                      <span className="flex min-w-0 items-center gap-2">
+                        {picked && <PathText path={picked} />}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className={ROW_BUTTON}
+                          onClick={() => void pick()}
+                        >
+                          <FolderIcon data-icon="inline-start" className="size-3.5" />
+                          {t('agents.add.choose')}
+                        </Button>
+                      </span>
+                    )
                   }
                 />
               </RadioGroup>
@@ -463,7 +465,7 @@ function AddAgentDialog({
                 aria-label={t('agents.add.login')}
                 value={login}
                 onValueChange={(next) => setLogin(next as Login)}
-                className="gap-1.5"
+                className="gap-5"
               >
                 <Choice
                   value="terminal"
@@ -531,7 +533,7 @@ function Choice({
       <label htmlFor={id} className="flex items-start gap-2.5 text-left">
         <RadioGroupItem id={id} value={value} className="mt-0.5" />
         <span className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-lede text-primary">{title}</span>
+          <span className="text-lede leading-[normal] text-primary">{title}</span>
           <span className="text-hint text-tertiary">{description}</span>
         </span>
       </label>
@@ -652,10 +654,10 @@ function AgentSubtitle({ status }: { status: AgentStatus }) {
             size="icon"
             aria-label={t('agents.rename.button')}
             title={t('agents.rename.button')}
-            className="size-6.5 rounded-segment text-tertiary [&_svg:not([class*='size-'])]:size-3.5"
+            className="size-6.5 rounded-segment text-tertiary"
             onClick={() => setRenaming(true)}
           >
-            <PencilIcon />
+            <PencilIcon className="size-3.5" />
           </Button>
           <RenameDialog status={status} open={renaming} onOpenChange={setRenaming} />
         </>
@@ -673,15 +675,15 @@ function AgentPageLine({ status }: { status: AgentStatus }) {
     harness: version ? `${status.harnessName} ${version}` : status.harnessName,
   })
   return ready ? (
-    <span className="flex min-w-0 items-center gap-1.5">
+    <span className="mt-1.25 flex min-w-0 items-center gap-1.5 leading-[normal]">
       <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-success" />
       <span className="truncate">
         {t('agents:state.ready')} · {harness}
       </span>
     </span>
   ) : (
-    <span className="flex min-w-0 items-center gap-1">
-      <AgentStateLine status={status} className="text-hint" />
+    <span className="mt-1.25 flex min-w-0 items-center gap-1 leading-[normal]">
+      <AgentStateLine status={status} className="text-hint leading-[normal]" />
       <span className="truncate">· {harness}</span>
     </span>
   )

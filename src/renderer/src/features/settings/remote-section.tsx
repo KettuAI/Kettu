@@ -63,9 +63,11 @@ export function RemoteHeader({ id }: { id: string }) {
       <PageHeader id={id} title={t('sections.remote')}>
         {t('pages.remote', onHost)}
       </PageHeader>
-      <div className="mt-4 flex items-center gap-4 rounded-xl bg-subtle px-4.5 py-3.5">
+      <div className="mt-3.5 flex items-center gap-4 rounded-card bg-subtle px-4.5 py-4">
         <div className="min-w-0 flex-1">
-          <div className="text-label leading-[normal] font-semibold">{t('remote.switch')}</div>
+          <div className="text-subheading leading-[normal] font-semibold tracking-normal">
+            {t('remote.switch')}
+          </div>
           <RemoteStatusLine on={enabled} />
         </div>
         <ControlError error={error} />
@@ -221,8 +223,10 @@ function StatusLine({
   children: ReactNode
 }) {
   return (
-    <div className="mt-1.25 flex flex-col gap-2">
-      <div className="flex items-center gap-1.5 text-hint text-secondary">{children}</div>
+    <div className="mt-2 flex flex-col gap-2">
+      <div className="flex items-center gap-1.5 text-hint leading-[normal] text-secondary">
+        {children}
+      </div>
       {hint && <p className="text-hint text-pretty text-tertiary">{hint}</p>}
       {actions && <div className="flex items-center gap-2">{actions}</div>}
     </div>

@@ -508,7 +508,7 @@ export function SshAddBody({
       <div className={DIALOG_BODY}>
         {tabs}
         <div className="flex flex-col gap-1.75">
-          <label htmlFor={fieldId} className="text-control font-medium">
+          <label htmlFor={fieldId} className="text-control leading-[normal] font-medium">
             {t('hosts.add.ssh.label')}
           </label>
           <div className="flex gap-2">
@@ -533,7 +533,7 @@ export function SshAddBody({
             />
             {!failure && (
               <Button
-                className={cn(ROW_BUTTON, 'h-8')}
+                className={ROW_BUTTON}
                 disabled={!valid || working}
                 onClick={() => onSubmit(draft)}
               >
@@ -541,7 +541,11 @@ export function SshAddBody({
               </Button>
             )}
           </div>
-          {!failure && <span className="text-hint text-tertiary">{t('hosts.add.ssh.note')}</span>}
+          {!failure && (
+            <span className="text-hint leading-[normal] text-tertiary">
+              {t('hosts.add.ssh.note')}
+            </span>
+          )}
         </div>
         {steps.length > 0 && (
           <SshProgress steps={steps} failed={failure !== null} target={target} />
@@ -630,11 +634,11 @@ function SshProgress({
           <li
             key={item.id}
             aria-current={state === 'active' ? 'step' : undefined}
-            className="flex items-start gap-2.5 py-1.75 text-lede"
+            className="flex items-start gap-2.5 py-1.75 text-lede leading-[normal]"
           >
             <span aria-hidden className="mt-px grid size-4 shrink-0 place-items-center">
               {state === 'done' && <CheckIcon strokeWidth={2} className="size-3.5 text-success" />}
-              {state === 'active' && <Spinner className="size-3.5" />}
+              {state === 'active' && <Spinner className="size-3.25" />}
               {state === 'failed' && <CircleAlertIcon className="size-3.5 text-danger" />}
               {state === 'pending' && (
                 <span className="size-2 rounded-full shadow-[inset_0_0_0_1.5px_var(--border-strong)]" />
@@ -648,7 +652,9 @@ function SshProgress({
                 )}
               </span>
               {item.detail && (
-                <span className="truncate text-hint text-tertiary">{item.detail}</span>
+                <span className="truncate text-hint leading-[normal] text-tertiary">
+                  {item.detail}
+                </span>
               )}
             </span>
           </li>

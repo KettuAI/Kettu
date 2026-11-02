@@ -30,7 +30,7 @@ export function ListMeter({ limits }: { limits: PlanLimit[] }) {
   const level = limitLevel(limit)
   return (
     <span className="flex w-37.5 flex-col gap-1.25 tabular">
-      <span className="flex justify-between text-meta text-tertiary">
+      <span className="flex justify-between text-meta leading-[normal] text-tertiary">
         <span>{limitLabel(limit)}</span>
         <span className={cn('text-primary', level !== 'ok' && LIMIT_TEXT[level])}>
           {percent(limit)}
@@ -39,7 +39,7 @@ export function ListMeter({ limits }: { limits: PlanLimit[] }) {
       <Progress
         value={limit.usedPercent ?? 0}
         tone={`limit-${level}`}
-        className="h-1 w-full"
+        className="w-full [&_[data-slot=progress-indicator]]:rounded-full [&_[data-slot=progress-track]]:h-1 [&_[data-slot=progress-track]]:bg-border"
         aria-label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
       />
     </span>
@@ -334,15 +334,16 @@ export function Fact({
         // A mask's box reaches past the column, so its blur ends where the text above does.
         <span
           className={cn(
-            'text-lede text-secondary has-data-[slot=masked]:-me-1.5',
-            mono && 'font-mono text-code text-tertiary',
+            'has-data-[slot=masked]:-me-1.5',
+            mono ? 'font-mono text-code text-tertiary' : 'text-lede text-secondary',
+            'leading-[normal]',
           )}
           data-selectable=""
         >
           {children}
         </span>
       ) : (
-        <span className="text-lede text-tertiary">{t('agents.notReported')}</span>
+        <span className="text-lede leading-[normal] text-tertiary">{t('agents.notReported')}</span>
       )}
     </RowFrame>
   )

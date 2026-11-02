@@ -87,7 +87,8 @@ export function Segmented<T extends string | number>({
 }
 
 /** The buttons in a row: 30 px, as a row's controls are. */
-export const ROW_BUTTON = 'h-7.5 gap-1.5 rounded-xl px-3 text-control'
+export const ROW_BUTTON =
+  "h-7.5 gap-1.5 rounded-xl px-3 text-control [&_svg:not([class*='size-'])]:size-3.5"
 
 /** A state as a 20 px pill: neutral, or tinted by what it means. */
 export function Pill({
@@ -102,7 +103,11 @@ export function Pill({
   return (
     <Badge
       variant={tone}
-      className={cn('rounded-tile', tone === 'neutral' && 'font-medium shadow-none', className)}
+      className={cn(
+        'rounded-tile border-0',
+        tone === 'neutral' && 'font-medium shadow-none',
+        className,
+      )}
     >
       {children}
     </Badge>

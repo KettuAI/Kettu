@@ -274,7 +274,7 @@ export function ItemPageHeader({
       <button
         type="button"
         onClick={onBack}
-        className="mb-3 inline-flex w-max items-center gap-1 rounded-md text-group text-tertiary outline-none transition-colors duration-(--duration-fast) hover:text-primary focus-ring"
+        className="mb-3 inline-flex w-max items-center gap-1 rounded-md text-group leading-[normal] text-tertiary outline-none transition-colors duration-(--duration-fast) hover:text-primary focus-ring"
       >
         <ChevronLeftIcon className="size-3.5" />
         {back}
@@ -282,7 +282,7 @@ export function ItemPageHeader({
       <header data-setting-row={item} className="relative flex flex-col">
         <FlashMark id={item} />
         <h2 className="relative flex min-w-0 font-display text-section font-bold">{title}</h2>
-        <div className="relative mt-3 flex items-center gap-3.5">
+        <div className="relative mt-1.5 flex items-center gap-3.5">
           <span className="relative grid size-10 shrink-0 place-items-center">{icon}</span>
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             {subtitle && (

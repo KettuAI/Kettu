@@ -116,11 +116,11 @@ export function SettingsField({
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-1.75">
-      <label htmlFor={htmlFor} className="text-control font-medium text-primary">
+      <label htmlFor={htmlFor} className="text-control leading-[normal] font-medium text-primary">
         {label}
       </label>
       {children}
-      {hint && <span className="text-hint text-tertiary">{hint}</span>}
+      {hint && <span className="text-hint leading-[normal] text-tertiary">{hint}</span>}
     </div>
   )
 }

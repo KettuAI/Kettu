@@ -51,6 +51,7 @@ import { harnessVersion, useAction, VENDORS } from './agent-helpers'
 import { ControlError, CopyAction, GROUP_ACTION, Pill, ROW_BUTTON } from './controls'
 import { PathActions, PathLine } from './places'
 import {
+  SETTINGS_TILE,
   SettingsDialogBody,
   SettingsDialogContent,
   SettingsDialogFooter,
@@ -312,20 +313,28 @@ function InstallDialog({
               aria-label={t('harnesses.install.method')}
               value={method?.id ?? null}
               onValueChange={(id) => setPicked(id as AgentInstallMethod['id'])}
-              className="gap-1.5"
+              className="gap-5"
             >
               {status.installMethods.map((m, index) => (
                 <RadioGroupTile
                   key={m.id}
                   value={m.id}
                   disabled={!m.available}
-                  className="items-start rounded-segments px-3 py-2.75 data-checked:bg-subtle data-checked:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)]"
+                  className={SETTINGS_TILE}
                 >
                   <span className="flex flex-col gap-0.5">
-                    <span className="flex items-center gap-2 text-lede">
+                    <span className="leading-[normal]">
                       {methodName(t, m.id)}
                       {index === 0 && m.available && (
-                        <Pill tone="attention">{t('harnesses.install.recommended')}</Pill>
+                        <>
+                          {' '}
+                          <Badge
+                            variant="recommended"
+                            className="rounded-tile border-0 font-medium"
+                          >
+                            {t('harnesses.install.recommended')}
+                          </Badge>
+                        </>
                       )}
                     </span>
                     {!m.available && (
@@ -340,9 +349,9 @@ function InstallDialog({
           </SettingsField>
           {method && (
             <SettingsField label={t('harnesses.install.runs')}>
-              <div className="flex items-center gap-2 rounded-segments bg-code-block py-1 pr-1 pl-3 shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]">
+              <div className="flex items-center gap-2 rounded-segments bg-code-block px-3 py-2.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] [&>button]:size-6.5 [&>button]:rounded-segment [&>button>svg]:size-3.5!">
                 <code
-                  className="min-w-0 flex-1 truncate font-mono text-code text-primary"
+                  className="min-w-0 flex-1 truncate font-mono text-hint text-primary"
                   data-selectable=""
                   title={method.command}
                 >
@@ -493,7 +502,7 @@ export function HarnessGroupActions() {
           aria-busy={refresh.phase === 'turning'}
           disabled={refresh.phase === 'turning'}
           onClick={() => void refresh.run(() => checkForUpdates(useAgentsStore)).catch(() => {})}
-          className={cn(GROUP_ACTION, '-mr-3')}
+          className={GROUP_ACTION}
         >
           {refresh.phase === 'turning' && <Spinner data-icon="inline-start" />}
           {t('agents.update.check')}
@@ -1183,17 +1192,19 @@ export function EnvironmentFooter() {
   const source = environment?.source
   const text = environmentText(t, environment, now)
   return (
-    <div data-setting-row="environment" className="relative mt-5 flex flex-col gap-1">
+    <div data-setting-row="environment" className="relative mt-6 flex flex-col gap-1">
       <FlashMark id="environment" />
-      <div className="relative flex items-center gap-2 text-hint text-tertiary">
-        {(!environment || source === 'pending') && <Spinner className="size-3.5" />}
-        {source === 'fallback' && (
-          <TriangleAlertIcon aria-hidden className="size-3.5 shrink-0 text-warning" />
-        )}
-        <span className="min-w-0 flex-1">{text}</span>
+      <div className="relative flex items-center gap-3 text-hint text-tertiary">
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          {(!environment || source === 'pending') && <Spinner className="size-3.5" />}
+          {source === 'fallback' && (
+            <TriangleAlertIcon aria-hidden className="size-3.5 shrink-0 text-warning" />
+          )}
+          <span className="min-w-0 flex-1">{text}</span>
+        </span>
         <Button
           variant="ghost"
-          className={cn(GROUP_ACTION, '-mr-3')}
+          className={GROUP_ACTION}
           aria-busy={refresh.phase === 'turning'}
           disabled={refresh.phase === 'turning'}
           onClick={() => {

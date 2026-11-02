@@ -214,9 +214,10 @@
   --radius-xl: calc(var(--radius) * 1.6);
   --radius-2xl: calc(var(--radius) * 2);
   --radius-3xl: calc(var(--radius) * 2);
-  /* Settings over the app, and a dialog over Settings; Settings' segmented choices, whose
-     chosen segment sits 2 px inside the track. */
+  /* Settings over the app, a card in it such as Remote access's status, and a dialog over
+     Settings; Settings' segmented choices, whose chosen segment sits 2 px inside the track. */
   --radius-modal: 14px;
+  --radius-card: 12px;
   --radius-dialog: 16px;
   --radius-segments: 9px;
   --radius-segment: 7px;
