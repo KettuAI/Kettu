@@ -21,16 +21,17 @@ export function HostsHeader({ id }: { id: string }) {
   const keyFailed = useHostsStore((s) => s.status?.keyFailed === true)
   const [open, setOpen] = useState(false)
   return (
-    <header className="flex items-center gap-4">
-      <div className="min-w-0 flex-1">
-        <PageHeader id={id} title={t('sections.hosts')}>
-          {t('pages.hosts')}
-        </PageHeader>
+    <header className="flex flex-col [&_p]:pr-36">
+      <PageHeader id={id} title={t('sections.hosts')}>
+        {t('pages.hosts')}
+      </PageHeader>
+      {/* Up beside the line under the title, which stops short of it. */}
+      <div className="-mt-9.5 flex justify-end">
+        <Button className={ROW_BUTTON} disabled={keyFailed} onClick={() => setOpen(true)}>
+          <PlusIcon data-icon="inline-start" className="size-3.5" />
+          {t('hosts.add.button')}
+        </Button>
       </div>
-      <Button className={ROW_BUTTON} disabled={keyFailed} onClick={() => setOpen(true)}>
-        <PlusIcon data-icon="inline-start" className="size-3.5" />
-        {t('hosts.add.button')}
-      </Button>
       <AddHostDialog open={open} onOpenChange={setOpen} />
     </header>
   )

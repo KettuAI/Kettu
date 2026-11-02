@@ -143,7 +143,11 @@ export function AgentPlaceRow({ place }: { place: McpStatus['places'][number] })
       <AgentTile agent={place.agentId} size={30} glyph={16} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-label leading-[normal]">{name}</span>
-        <span className="text-group text-pretty text-tertiary" data-selectable="">
+        <span
+          className="truncate text-group leading-[normal] text-tertiary"
+          title={line}
+          data-selectable=""
+        >
           {line}
         </span>
       </div>
@@ -371,7 +375,7 @@ function AgentSwitchRow({
         <AgentTile agent={agentId} size={30} glyph={16} />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="truncate text-label leading-[normal]">{name}</span>
-          <span className="text-group text-tertiary">
+          <span className="text-group leading-[normal] text-tertiary">
             {takesNone
               ? t('mcp.agent.takesNone', { name })
               : t(off ? 'mcp.agent.off' : 'mcp.agent.on')}

@@ -140,7 +140,7 @@ export function SettingSelect<T extends string>({
       <SelectTrigger
         aria-label={label}
         className={cn(
-          'h-8 w-50 shrink-0 gap-2 rounded-xl pr-2.5 pl-3 text-lede *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate',
+          'h-8 w-50 shrink-0 gap-2 rounded-xl pr-2.5 pl-3 text-lede *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate [&>svg]:size-3.25 [&>svg]:text-tertiary',
           className,
         )}
       >

@@ -657,7 +657,8 @@ export function useTerminalSection(): SectionDef {
         english: en('terminal.fontSize.name'),
         description: t('terminal.fontSize.description'),
         group: group('display', t('terminal.groups.display')),
-        layout: 'block',
+        // The preview closes the group, with no line under it.
+        layout: 'bare',
         render: (text) => <FontSize label={text} />,
       },
     ],

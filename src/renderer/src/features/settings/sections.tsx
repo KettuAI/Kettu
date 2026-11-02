@@ -465,7 +465,7 @@ export function FontSize({ label }: { label: ReactNode }) {
   const value = useSettings().terminal.fontSize
   const [apply, error] = useApply()
   return (
-    <div className="flex w-full flex-col gap-3">
+    <div className="flex w-full flex-col gap-3 py-3.75">
       <div className={BLOCK_LINE}>
         <div className="min-w-0 flex-1">{label}</div>
         <ControlError error={error} />
@@ -482,11 +482,11 @@ export function FontSize({ label }: { label: ReactNode }) {
       </div>
       <div
         aria-hidden
-        className="overflow-hidden rounded-segments bg-code-block px-3.5 py-3 font-mono leading-[1.6] shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]"
+        className="overflow-hidden rounded-segments bg-code-block px-3.5 py-3 font-mono leading-[1.6] shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
         style={{ fontSize: value }}
       >
         <div className="whitespace-pre">
-          <span className="text-attention">~/code/kettu</span>{' '}
+          <span className="text-(--control-on)">~/code/kettu</span>{' '}
           <span className="text-merged">main</span> $ pnpm vitest run src/usage
         </div>
         <div className="whitespace-pre">
@@ -638,7 +638,7 @@ export function NotificationPreview() {
         className="flex w-90 max-w-full shrink-0 gap-3 rounded-dialog bg-tray px-3.5 py-3 shadow-[0_0_0_var(--hairline)_var(--border-subtle),var(--elevation-float)]"
       >
         <BrandIcon size={34} />
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-control">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-control leading-[normal]">
           <div className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate font-semibold">
               {t('notifications.previewTitle')}
