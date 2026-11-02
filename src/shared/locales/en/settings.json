@@ -655,7 +655,8 @@
       "none": "Kettu on this computer is not updated from here",
       "none_web": "Kettu on {{host}} is not updated from here",
       "noneDetail": "Kettu on this computer is updated the way it was installed.",
-      "noneDetail_web": "Kettu on {{host}} is updated the way it was installed."
+      "noneDetail_web": "Kettu on {{host}} is updated the way it was installed.",
+      "readyDetail": "Restart to finish. Your sessions come back."
     },
     "automatic": {
       "name": "Automatic updates",
