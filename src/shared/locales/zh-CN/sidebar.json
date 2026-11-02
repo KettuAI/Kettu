@@ -75,6 +75,7 @@
     "stopCount": "停止 {{count}} 个",
     "archiveCount": "归档 {{count}} 个",
     "archivedCount_other": "已归档 {{count}} 个会话",
+    "archivedSome": "{{total}} 个会话中已归档 {{done}} 个。{{error}}",
     "deleteCount": "删除 {{count}} 个…"
   },
   "import": {

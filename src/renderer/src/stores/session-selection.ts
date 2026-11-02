@@ -1,7 +1,11 @@
 import { create } from 'zustand'
+import type { SessionSummary } from '@shared/agent-host'
+import { useSessionsStore } from './sessions'
+import { useViewStore, type MainView } from './view'
 
 // The sidebar rows picked with Mod-click or Shift-click, which a row's menu then acts on together.
-// A plain click, opening a session or leaving the list clears it.
+// A plain click on a row, Esc there or another session coming to the front clears it, and a
+// session that leaves the list, removed or archived, drops out of it.
 
 interface SelectionStore {
   ids: string[]
@@ -40,3 +44,25 @@ export function clearSelection(): void {
 export function selectionFor(id: string, ids: readonly string[]): readonly string[] | null {
   return ids.length > 1 && ids.includes(id) ? ids : null
 }
+
+function prune(byId: Record<string, SessionSummary>): void {
+  const { ids, anchor } = useSessionSelection.getState()
+  if (ids.length === 0 && anchor === null) return
+  const listed = (id: string) => !!byId[id] && !byId[id].archivedAt
+  const kept = ids.filter(listed)
+  const from = anchor !== null && listed(anchor) ? anchor : null
+  if (kept.length < ids.length || from !== anchor) {
+    useSessionSelection.setState({ ids: kept, anchor: from })
+  }
+}
+
+useSessionsStore.subscribe((state, previous) => {
+  if (state.byId !== previous.byId) prune(state.byId)
+})
+
+const inFront = (main: MainView) => (main.kind === 'session' ? main.sessionId : null)
+
+useViewStore.subscribe((state, previous) => {
+  const front = inFront(state.main)
+  if (front !== null && front !== inFront(previous.main)) clearSelection()
+})

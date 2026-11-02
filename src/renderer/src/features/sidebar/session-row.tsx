@@ -100,6 +100,8 @@ export const SessionRow = memo(function SessionRow({
   )
   const tabStop = tabStopId === summary.id
   const picked = useSessionSelection((s) => selectionFor(summary.id, s.ids))
+  // A row picked alone shows it, though its menu still acts on it alone.
+  const marked = useSessionSelection((s) => s.ids.includes(summary.id))
   const userExpanded = useViewStore((s) => s.expandedParents[summary.id])
   const hasChildren = children.length > 0
   const childActive = children.some((c) => c.running || c.permissionCount > 0)
@@ -202,7 +204,7 @@ export const SessionRow = memo(function SessionRow({
       tabIndex={tabStop ? 0 : -1}
       aria-current={current ? 'page' : undefined}
       aria-expanded={hasChildren ? expanded : undefined}
-      data-multi-selected={picked ? '' : undefined}
+      data-multi-selected={marked ? '' : undefined}
       onClick={(event) => pick(event) || openSession(summary.id, summary.projectPath)}
       onDoubleClick={rename.start}
       onKeyDown={(event) => {
@@ -270,8 +272,8 @@ export const SessionRow = memo(function SessionRow({
     </SidebarMenuButton>
   )
 
-  // As drawn: the menu for several rows is narrower than one row's.
-  const menuWidth = picked ? 'w-52.5' : 'w-59'
+  // As drawn: the menus for several rows and for a subagent are narrower than one row's.
+  const menuWidth = picked ? 'w-52.5' : subagent ? 'w-57.5' : 'w-59'
   const menuItems = picked ? (
     <MultiSessionMenuItems ids={picked} onDelete={() => setDeleting(true)} />
   ) : (

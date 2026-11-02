@@ -56,15 +56,28 @@ export function isRunning(summary: Pick<SessionSummary, 'status'>): boolean {
   return summary.status === 'running' || summary.status === 'awaiting_permission'
 }
 
+/** What the session can do where its menu opens. */
+export interface SessionMenuContext {
+  canFork: boolean
+  /** A pane shows the session already. */
+  shown?: boolean
+  place?: SessionMenuPlace
+  /** Its folder is on this computer, which its file manager and editors open. */
+  local: boolean
+  /** The terminal may open in its folder. */
+  terminal: boolean
+  /** Its harness has a command that resumes it. */
+  resume: boolean
+}
+
 /**
- * The groups a session's menu shows, by its state, with no empty group. A session a pane already
- * shows has no **Open in split view**, which only opens one the split does not hold.
+ * The groups a session's menu shows, by its state and where it opens, with no empty group. A
+ * session a pane already shows has no **Open in split view**, which only opens one the split does
+ * not hold.
  */
 export function sessionMenuGroups(
   summary: Pick<SessionSummary, 'status' | 'parentId' | 'origin' | 'pr'>,
-  canFork: boolean,
-  shown = false,
-  place: SessionMenuPlace = 'row',
+  { canFork, shown = false, place = 'row', local, terminal, resume }: SessionMenuContext,
 ): SessionMenuItem[][] {
   const running = isRunning(summary)
   // Its parent archives and deletes a subagent, so its menu opens it, stops it or finds it.
@@ -105,7 +118,14 @@ export function sessionMenuGroups(
           ],
           topLevel ? ['archive', 'delete'] : ['delete'],
         ]
-  return groups.filter((group) => group.length > 0)
+  const missing = new Set<SessionMenuItem>([
+    ...(local ? [] : (['openInEditor', 'showInFolder'] as const)),
+    ...(terminal ? [] : (['openTerminal'] as const)),
+    ...(resume ? [] : (['copyResume'] as const)),
+  ])
+  return groups
+    .map((group) => group.filter((item) => !missing.has(item)))
+    .filter((group) => group.length > 0)
 }
 
 export type MultiSessionMenuItem =
@@ -114,7 +134,6 @@ export type MultiSessionMenuItem =
 export const MULTI_ACCELERATORS: Partial<Record<MultiSessionMenuItem, string>> = {
   stop: 'Mod+.',
   archive: 'A',
-  delete: 'Backspace',
 }
 
 /**
@@ -154,6 +173,30 @@ export function multiSessionMenuGroups(
     ],
   ]
   return groups.filter((group) => group.length > 0)
+}
+
+/** Runs one call per id, all at once: the ids that went through, and the errors of the rest. */
+export async function settle(
+  ids: readonly string[],
+  run: (id: string) => Promise<unknown>,
+): Promise<{ done: string[]; errors: unknown[] }> {
+  const results = await Promise.allSettled(ids.map(async (id) => run(id)))
+  const done: string[] = []
+  const errors: unknown[] = []
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') done.push(ids[index]!)
+    else errors.push(result.reason)
+  })
+  return { done, errors }
+}
+
+/**
+ * Whether the Delete item's second key deletes at once: no sub-session goes with them and their
+ * folders hold no uncommitted file. A folder the host could not read (null) is not known to hold
+ * none.
+ */
+export function canDeleteAtOnce(files: readonly (number | null)[], withChildren: boolean): boolean {
+  return !withChildren && files.every((count) => count === 0)
 }
 
 /**

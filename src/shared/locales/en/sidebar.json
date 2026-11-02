@@ -82,6 +82,7 @@
     "archiveCount": "Archive {{count}}",
     "archivedCount_one": "Archived {{count}} session",
     "archivedCount_other": "Archived {{count}} sessions",
+    "archivedSome": "Archived {{done}} of {{total}} sessions. {{error}}",
     "deleteCount": "Delete {{count}}…"
   },
   "import": {

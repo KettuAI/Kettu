@@ -4,7 +4,6 @@ import {
   ArchiveIcon,
   CheckIcon,
   CircleDotIcon,
-  CircleIcon,
   CodeIcon,
   Columns2Icon,
   CopyIcon,
@@ -91,6 +90,7 @@ import {
 } from '@renderer/stores/view'
 import {
   ACCELERATORS,
+  canDeleteAtOnce,
   isRunning,
   MULTI_ACCELERATORS,
   multiSessionMenuGroups,
@@ -98,6 +98,7 @@ import {
   resumeCommand,
   runSessionMenuAccelerator,
   sessionMenuGroups,
+  settle,
   SPLIT_ACCELERATORS,
   type SessionMenuItem,
   type SessionMenuPlace,
@@ -123,16 +124,28 @@ function useInFront(sessionId: string): boolean {
   )
 }
 
-/** Archives with a toast that undoes it for six seconds. */
+/**
+ * Archives with a toast that undoes it for six seconds. Undo takes back the ones that archived;
+ * the toast names the failure when some did not, since a second toast would replace it.
+ */
 function archiveWithUndo(ids: readonly string[], title: string): void {
-  void Promise.all(ids.map((id) => archiveSession(id))).then(
-    () =>
-      toast(title, {
-        label: i18n.t('sidebar:row.undo'),
-        onClick: () => void Promise.all(ids.map((id) => unarchiveSession(id))),
-      }),
-    (error: unknown) => toast(errorMessage(error)),
-  )
+  void settle(ids, archiveSession).then(({ done, errors }) => {
+    const failure = errors.length > 0 ? errorMessage(errors[0]) : null
+    if (done.length === 0) {
+      if (failure) toast(failure)
+      return
+    }
+    const archived = failure
+      ? i18n.t('sidebar:row.archivedSome', { done: done.length, total: ids.length, error: failure })
+      : title
+    toast(archived, {
+      label: i18n.t('sidebar:row.undo'),
+      onClick: () =>
+        void settle(done, unarchiveSession).then(({ errors: failed }) => {
+          if (failed.length > 0) toast(errorMessage(failed[0]))
+        }),
+    })
+  })
 }
 
 /** Copies the text and says so in a toast. */
@@ -234,7 +247,7 @@ export function SessionMenuItems({
             disabled={inFront}
             onClick={() => void markSessionUnread(id, !unread)}
           >
-            {unread ? <CircleIcon /> : <CircleDotIcon />}
+            <CircleDotIcon />
             {unread ? t('row.markRead') : t('row.markUnread')}
             {shortcut}
           </DropdownMenuItem>
@@ -312,10 +325,8 @@ export function SessionMenuItems({
           )
         )
       case 'openInEditor':
-        if (!local) return null
         return <OpenInEditor key={name} path={summary.projectPath} />
       case 'showInFolder':
-        if (!local) return null
         return (
           <DropdownMenuItem
             {...props}
@@ -327,7 +338,6 @@ export function SessionMenuItems({
           </DropdownMenuItem>
         )
       case 'openTerminal':
-        if (!terminal) return null
         return (
           <DropdownMenuItem {...props} onClick={() => toggleTerminal(summary.projectPath, true)}>
             <SquareTerminalIcon />
@@ -336,12 +346,16 @@ export function SessionMenuItems({
           </DropdownMenuItem>
         )
       case 'copyResume':
-        if (!resume) return null
         return (
-          <DropdownMenuItem {...props} onClick={() => copyWithToast(resume, t('row.copiedResume'))}>
-            {place === 'more' ? <CopyIcon /> : <SquareTerminalIcon />}
-            {t('row.copyResume')}
-          </DropdownMenuItem>
+          resume && (
+            <DropdownMenuItem
+              {...props}
+              onClick={() => copyWithToast(resume, t('row.copiedResume'))}
+            >
+              {place === 'more' ? <CopyIcon /> : <SquareTerminalIcon />}
+              {t('row.copyResume')}
+            </DropdownMenuItem>
+          )
         )
       case 'copySessionId':
         return (
@@ -391,6 +405,8 @@ export function SessionMenuItems({
             variant="destructive"
             // A session cannot be removed mid-write; Stop comes first.
             disabled={running}
+            // As drawn, a disabled Delete keeps its color and fades only its icon.
+            className="data-disabled:opacity-100 data-disabled:[&>.lucide]:opacity-50"
             onClick={(event) => {
               if (event.metaKey || event.ctrlKey) void deleteUnlessAtStake([summary], onDelete)
               else onDelete()
@@ -404,7 +420,8 @@ export function SessionMenuItems({
     }
   }
 
-  return sessionMenuGroups(summary, canFork, inSplit, place).map((group, index) => (
+  const context = { canFork, shown: inSplit, place, local, terminal, resume: resume !== null }
+  return sessionMenuGroups(summary, context).map((group, index) => (
     <DropdownMenuGroup key={group[0]}>
       {index > 0 && <DropdownMenuSeparator />}
       {group.map(item)}
@@ -599,7 +616,7 @@ export function MultiSessionMenuItems({
                     {...props}
                     onClick={each((s) => markSessionUnread(s.id, name === 'unread'))}
                   >
-                    {name === 'read' ? <CircleIcon /> : <CircleDotIcon />}
+                    <CircleDotIcon />
                     {name === 'read' ? t('row.markRead') : t('row.markUnread')}
                   </DropdownMenuItem>
                 )
@@ -635,7 +652,6 @@ export function MultiSessionMenuItems({
                 return (
                   <DropdownMenuItem
                     {...props}
-                    data-quick-accelerator={QUICK_DELETE}
                     variant="destructive"
                     onClick={(event) => {
                       if (event.metaKey || event.ctrlKey) {
@@ -645,7 +661,6 @@ export function MultiSessionMenuItems({
                   >
                     <TrashIcon />
                     {t('row.deleteCount', { count })}
-                    {shortcut(accelerator)}
                   </DropdownMenuItem>
                 )
             }
@@ -799,18 +814,19 @@ export function SessionTitleField({
 
 /** Uncommitted work in a session's folder, and whether that folder is a linked git worktree. */
 interface AtStake {
-  files: number
+  /** Null when the host could not read the folder. */
+  files: number | null
   worktree: boolean
 }
 
 /**
  * Reads what deleting would leave behind: the folder's uncommitted files, from a one-off look that
- * starts no watch. A folder outside git, or one the host cannot read, has nothing to call out.
+ * starts no watch. A folder outside git has none.
  */
 async function readAtStake(projectPath: string): Promise<AtStake> {
   const files = await host('git.changes', { projectPath }).then(
     (changes) => changes.length,
-    () => 0,
+    () => null,
   )
   const gitDir = useGitStore.getState().status[projectPath]?.repo?.gitDir ?? ''
   return { files, worktree: /[\\/]worktrees[\\/][^\\/]+$/.test(gitDir) }
@@ -841,8 +857,9 @@ async function deleteUnlessAtStake(
 ): Promise<void> {
   const paths = [...new Set(summaries.map((s) => s.projectPath))]
   const stakes = await Promise.all(paths.map(readAtStake))
+  const files = stakes.map((stake) => stake.files)
   const withChildren = summaries.some((s) => descendantCount(s.id) > 0)
-  if (withChildren || stakes.some((stake) => stake.files > 0)) return confirm()
+  if (!canDeleteAtOnce(files, withChildren)) return confirm()
   clearSelection()
   try {
     for (const summary of summaries) await deleteSession(summary.id)
@@ -896,7 +913,7 @@ export function DeleteSessionDialog({
   }
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="gap-3.5 px-5.5 sm:max-w-105">
+      <AlertDialogContent className="gap-3.5 px-5.5 data-[size=default]:sm:max-w-105">
         <AlertDialogHeader>
           <AlertDialogTitle>
             {several
@@ -906,8 +923,10 @@ export function DeleteSessionDialog({
         </AlertDialogHeader>
         {stake &&
           [...stake.entries()]
-            .filter(([, { files }]) => files > 0)
-            .map(([path, { files, worktree }]) => (
+            .flatMap(([path, { files, worktree }]) =>
+              files !== null && files > 0 ? [{ path, files, worktree }] : [],
+            )
+            .map(({ path, files, worktree }) => (
               <div
                 key={path}
                 className="flex gap-2.5 rounded-2xl bg-subtle px-3 py-2.5 text-control leading-normal text-secondary"

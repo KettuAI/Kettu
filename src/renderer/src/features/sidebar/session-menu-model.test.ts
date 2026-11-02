@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionSummary } from '@shared/agent-host'
 import {
+  canDeleteAtOnce,
   matchesShortcut,
   multiSessionMenuGroups,
   resumeCommand,
   sessionMenuGroups,
+  settle,
+  type SessionMenuContext,
 } from './session-menu-model'
 
 const summary = (extra: Partial<SessionSummary> = {}) =>
@@ -18,10 +21,18 @@ const summary = (extra: Partial<SessionSummary> = {}) =>
     ...extra,
   }) as SessionSummary
 const pr = { number: 12, state: 'open', url: 'https://github.com/o/r/pull/12' } as const
+// A session on this computer whose agent can fork it and whose harness resumes it.
+const here = (extra: Partial<SessionMenuContext> = {}): SessionMenuContext => ({
+  canFork: true,
+  local: true,
+  terminal: true,
+  resume: true,
+  ...extra,
+})
 
 describe('sessionMenuGroups', () => {
   it('gives an idle top-level session every group but the state one, in the drawn order', () => {
-    expect(sessionMenuGroups(summary(), true)).toEqual([
+    expect(sessionMenuGroups(summary(), here())).toEqual([
       ['pin', 'unread', 'rename'],
       ['fork', 'newSubSession'],
       ['openInSplit', 'copyResume', 'showInFolder'],
@@ -30,20 +41,22 @@ describe('sessionMenuGroups', () => {
   })
 
   it('leads with Stop while it runs or waits, and Retry while it failed or needs sign-in', () => {
-    expect(sessionMenuGroups(summary({ status: 'running' }), true)[0]).toEqual(['stop'])
-    expect(sessionMenuGroups(summary({ status: 'awaiting_permission' }), true)[0]).toEqual(['stop'])
-    expect(sessionMenuGroups(summary({ status: 'failed' }), true)[0]).toEqual(['retry'])
-    expect(sessionMenuGroups(summary({ status: 'auth_required' }), true)[0]).toEqual(['retry'])
+    expect(sessionMenuGroups(summary({ status: 'running' }), here())[0]).toEqual(['stop'])
+    expect(sessionMenuGroups(summary({ status: 'awaiting_permission' }), here())[0]).toEqual([
+      'stop',
+    ])
+    expect(sessionMenuGroups(summary({ status: 'failed' }), here())[0]).toEqual(['retry'])
+    expect(sessionMenuGroups(summary({ status: 'auth_required' }), here())[0]).toEqual(['retry'])
   })
 
   it('offers the pull request when the branch has one, and Fork only when the agent can', () => {
-    const groups = sessionMenuGroups(summary({ pr }), false)
+    const groups = sessionMenuGroups(summary({ pr }), here({ canFork: false }))
     expect(groups).toContainEqual(['openInSplit', 'pullRequest', 'copyResume', 'showInFolder'])
     expect(groups).toContainEqual(['newSubSession'])
   })
 
   it('leaves Pin, Fork and Archive out for a sub-session', () => {
-    expect(sessionMenuGroups(summary({ parentId: 'p' }), true)).toEqual([
+    expect(sessionMenuGroups(summary({ parentId: 'p' }), here())).toEqual([
       ['unread', 'rename'],
       ['newSubSession'],
       ['openInSplit', 'copyResume', 'showInFolder'],
@@ -53,8 +66,8 @@ describe('sessionMenuGroups', () => {
 
   it('gives a subagent only opening, stopping and finding it in its parent', () => {
     const subagent = summary({ parentId: 'p', origin: 'subagent' })
-    expect(sessionMenuGroups(subagent, true)).toEqual([['open'], ['showInParent']])
-    expect(sessionMenuGroups({ ...subagent, status: 'running' }, true)).toEqual([
+    expect(sessionMenuGroups(subagent, here())).toEqual([['open'], ['showInParent']])
+    expect(sessionMenuGroups({ ...subagent, status: 'running' }, here())).toEqual([
       ['open', 'stop'],
       ['showInParent'],
     ])
@@ -62,25 +75,47 @@ describe('sessionMenuGroups', () => {
 
   it('leaves Open in split view out for a session a pane shows already', () => {
     for (const state of [summary(), summary({ parentId: 'p' })]) {
-      expect(sessionMenuGroups(state, true, true).flat()).not.toContain('openInSplit')
+      expect(sessionMenuGroups(state, here({ shown: true })).flat()).not.toContain('openInSplit')
     }
   })
 
   it('gives the More menu its own groups', () => {
-    expect(sessionMenuGroups(summary(), true, true, 'more')).toEqual([
+    expect(sessionMenuGroups(summary(), here({ shown: true, place: 'more' }))).toEqual([
       ['rename', 'pin', 'fork'],
       ['openInEditor', 'showInFolder', 'openTerminal'],
       ['copyResume', 'copySessionId'],
       ['archive', 'delete'],
     ])
     expect(
-      sessionMenuGroups(summary({ status: 'running', parentId: 'p' }), true, true, 'more'),
+      sessionMenuGroups(
+        summary({ status: 'running', parentId: 'p' }),
+        here({ shown: true, place: 'more' }),
+      ),
     ).toEqual([
       ['stop'],
       ['rename'],
       ['openInEditor', 'showInFolder', 'openTerminal'],
       ['copyResume', 'copySessionId'],
       ['delete'],
+    ])
+  })
+
+  it('leaves out what the session cannot do where the menu opens, and the groups that empties', () => {
+    // Another host's opencode session: no folder here, no terminal, no resume command.
+    const away = here({ shown: true, local: false, terminal: false, resume: false })
+    expect(sessionMenuGroups(summary(), { ...away, place: 'more' })).toEqual([
+      ['rename', 'pin', 'fork'],
+      ['copySessionId'],
+      ['archive', 'delete'],
+    ])
+    expect(sessionMenuGroups(summary(), away)).toEqual([
+      ['pin', 'unread', 'rename'],
+      ['fork', 'newSubSession'],
+      ['archive', 'delete'],
+    ])
+    expect(sessionMenuGroups(summary(), here({ terminal: false, place: 'more' }))).toContainEqual([
+      'openInEditor',
+      'showInFolder',
     ])
   })
 })
@@ -122,6 +157,29 @@ describe('multiSessionMenuGroups', () => {
       ['pin'],
       ['archive', 'delete'],
     ])
+  })
+})
+
+describe('settle', () => {
+  it('keeps the ids that went through and the errors of the rest', async () => {
+    const failure = new Error('no')
+    const run = (id: string) => (id === 'b' ? Promise.reject(failure) : Promise.resolve())
+    await expect(settle(['a', 'b', 'c'], run)).resolves.toEqual({
+      done: ['a', 'c'],
+      errors: [failure],
+    })
+  })
+})
+
+describe('canDeleteAtOnce', () => {
+  it('deletes at once only with no sub-session and no uncommitted file', () => {
+    expect(canDeleteAtOnce([0, 0], false)).toBe(true)
+    expect(canDeleteAtOnce([0, 2], false)).toBe(false)
+    expect(canDeleteAtOnce([0], true)).toBe(false)
+  })
+
+  it('asks first when a folder could not be read', () => {
+    expect(canDeleteAtOnce([0, null], false)).toBe(false)
   })
 })
 
