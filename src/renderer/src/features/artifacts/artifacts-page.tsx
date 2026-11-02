@@ -383,7 +383,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                     label={t('page.filter')}
                     clearLabel={t('page.clearFilter')}
                     inputRef={filterField}
-                    className="w-65 max-w-full rounded-xl border-0 bg-subtle shadow-none not-has-disabled:hover:border-0 has-[[data-slot=input-group-control]:focus-visible]:shadow-field-focus [&_input]:text-[13.5px] [&_kbd]:hidden"
+                    className="h-row w-65 max-w-full rounded-xl border-0 bg-subtle shadow-none not-has-disabled:hover:border-0 has-[[data-slot=input-group-control]:focus-visible]:shadow-field-focus [&_input]:text-[13.5px] [&_kbd]:hidden [&>[data-align=inline-start]]:pr-1.25 [&>[data-align=inline-start]]:pl-2.75 [&>[data-align=inline-start]_svg]:size-3"
                   />
                 )}
               </header>
@@ -518,7 +518,10 @@ function GroupView({
         </h2>
       )}
       {group.sections.map((section, i) => (
-        <div key={section.key} className={cn('flex min-w-0 flex-col', i === 0 ? 'mt-2' : 'mt-7')}>
+        <div
+          key={section.key}
+          className={cn('flex min-w-0 flex-col', i > 0 ? 'mt-7' : label !== null && 'mt-2')}
+        >
           {grouping === 'project-session' && section.sessionId && (
             <SessionRow id={section.sessionId} info={sessions.get(section.sessionId)} now={now} />
           )}
@@ -637,6 +640,9 @@ function FilterMenu({
             of.kind === 'project' && of.path === projectFilter ? [of.name] : [],
           )[0] ?? basename(projectFilter))
   const agentLabel = agentFilter === null ? t('page.anyAgent') : agentName(agentFilter)
+  const shown = projectLabel
+    ? t('page.filterBoth', { agent: agentLabel, project: projectLabel })
+    : agentLabel
   const active = agentFilter !== null || projectFilter !== null
   return (
     <DropdownMenu>
@@ -645,17 +651,13 @@ function FilterMenu({
           <Button
             variant="quiet"
             data-active={active || undefined}
-            aria-label={t('page.filterMenu')}
+            aria-label={t('page.filterMenu', { value: shown })}
             className={MENU_BUTTON}
           />
         }
       >
         {agentFilter !== null && <AgentMark agent={agentFilter} size={14} />}
-        <span className="max-w-50 truncate">
-          {projectLabel
-            ? t('page.filterBoth', { agent: agentLabel, project: projectLabel })
-            : agentLabel}
-        </span>
+        <span className="max-w-50 truncate">{shown}</span>
         <ChevronDownIcon strokeWidth={1.75} className="size-3 text-tertiary" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={6} className="max-w-72 min-w-50">
@@ -717,6 +719,7 @@ function FilterMenu({
 /** The order, named on its button, and flat or grouped. */
 function DisplayMenu({ group, sort }: { group: ArtifactGrouping; sort: ArtifactSort }) {
   const { t } = useTranslation('artifacts')
+  const shown = t(`page.sortsShort.${sort}`)
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -724,12 +727,12 @@ function DisplayMenu({ group, sort }: { group: ArtifactGrouping; sort: ArtifactS
           <Button
             variant="quiet"
             data-active={group !== 'none' || sort !== 'recent' || undefined}
-            aria-label={t('page.display')}
+            aria-label={t('page.display', { value: shown })}
             className={MENU_BUTTON}
           />
         }
       >
-        {t(`page.sortsShort.${sort}`)}
+        {shown}
         <ChevronDownIcon strokeWidth={1.75} className="size-3 text-tertiary" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={6} className="min-w-53">

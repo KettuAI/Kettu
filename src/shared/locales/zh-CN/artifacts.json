@@ -14,7 +14,7 @@
       "web": "做一个网页 artifact：",
       "canvas": "做一个多页的画布 artifact："
     },
-    "filterMenu": "筛选",
+    "filterMenu": "筛选：{{value}}",
     "agent": "Agent",
     "anyAgent": "任意 Agent",
     "filterBoth": "{{agent}} · {{project}}",
@@ -22,7 +22,7 @@
     "allKinds": "全部",
     "project": "项目",
     "allProjects": "全部项目",
-    "display": "显示方式",
+    "display": "显示方式：{{value}}",
     "layout": "布局",
     "layouts": {
       "none": "平铺",
@@ -156,7 +156,7 @@
     "pages": "页面",
     "counter": "{{number}} / {{count}}",
     "backToCanvas": "返回画布",
-    "fit": "适应"
+    "fit": "适应窗口"
   },
   "history": {
     "title": "历史",

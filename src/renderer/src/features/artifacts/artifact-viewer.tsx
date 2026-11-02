@@ -243,7 +243,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
         </NoDrag>
         <span className="min-w-2 flex-1" />
         {showing && (
-          <NoDrag className="min-w-0 shrink-0 gap-1">
+          <NoDrag className="min-w-0 shrink-0 gap-2">
             <Presence id={id} presence={artifact.presence} deleted={summary?.deletedAt != null} />
             {pageName && <CanvasBarControls controls={controls} pageName={pageName} zoom={false} />}
             {shown && shares && (

@@ -14,7 +14,7 @@
       "web": "Make a web page artifact: ",
       "canvas": "Make a canvas artifact with several pages: "
     },
-    "filterMenu": "Filter",
+    "filterMenu": "Filter: {{value}}",
     "agent": "Agent",
     "anyAgent": "Any agent",
     "filterBoth": "{{agent}} · {{project}}",
@@ -22,7 +22,7 @@
     "allKinds": "All",
     "project": "Project",
     "allProjects": "All projects",
-    "display": "Display",
+    "display": "Display: {{value}}",
     "layout": "Layout",
     "layouts": {
       "none": "Flat",

@@ -111,13 +111,23 @@ export const ArtifactCard = memo(function ArtifactCard({
       }}
       className="group/open flex w-full flex-col gap-2.5 text-left outline-none"
     >
-      <span className={cn(FRAME, kind === 'canvas' ? 'bg-subtle' : 'bg-canvas')}>
+      {/* A canvas's pages lie on a light desk in either theme, as their content is light. */}
+      <span
+        className={cn(
+          FRAME,
+          kind === 'canvas'
+            ? 'bg-[color-mix(in_oklab,var(--canvas-ink)_5%,var(--canvas))]'
+            : 'bg-canvas',
+        )}
+      >
         <PageContent thumbnail={thumbnail} faded={artifact.deletedAt !== null} />
         {artifact.editing.length > 0 && <EditingPill />}
       </span>
       <span className="flex min-w-0 flex-col gap-1 px-0.5">
-        <span className="truncate text-row font-medium text-primary">{artifact.title}</span>
-        <span className="flex min-w-0 items-center gap-1.5 text-hint text-tertiary tabular-nums">
+        <span className="truncate text-row leading-[normal] font-medium text-primary">
+          {artifact.title}
+        </span>
+        <span className="flex min-w-0 items-center gap-1.5 text-hint leading-[normal] text-tertiary tabular-nums">
           {agent && <AgentMark agent={agent} size={12} className="shrink-0" />}
           {shared && (
             <GlobeIcon
@@ -206,7 +216,7 @@ function PageContent({ thumbnail, faded }: { thumbnail: Thumbnail; faded: boolea
         <span
           key={i}
           aria-hidden
-          className="absolute shadow-[0_0_0_var(--hairline)_var(--border-default)]"
+          className="absolute shadow-[0_0_0_var(--hairline)_color-mix(in_oklab,var(--canvas-ink)_8%,transparent)]"
           style={{
             left: `${page.left * 100}%`,
             top: `${page.top * 100}%`,

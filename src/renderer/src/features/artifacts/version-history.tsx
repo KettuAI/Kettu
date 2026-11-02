@@ -65,11 +65,14 @@ export function VersionHistory({
               </span>
               <span className="flex min-w-0 flex-1 flex-col gap-0.75">
                 <span
-                  className={cn('text-[13.5px] text-primary', on ? 'font-medium' : 'font-normal')}
+                  className={cn(
+                    'text-[13.5px] leading-[normal] text-primary',
+                    on ? 'font-medium' : 'font-normal',
+                  )}
                 >
                   {v.note ?? author(v.author)}
                 </span>
-                <span className="flex min-w-0 items-center gap-1.5 text-small text-tertiary">
+                <span className="flex min-w-0 items-center gap-1.5 text-small leading-[normal] text-tertiary">
                   {agent && <AgentMark agent={agent} size={12} className="shrink-0" />}
                   <span className="truncate">{longAgo(v.createdAt, now)}</span>
                 </span>

@@ -94,7 +94,11 @@ function Rule({ size }: { size: Size }) {
   return (
     <span
       aria-hidden
-      className={cn('mx-1.5 w-(--hairline) shrink-0 bg-border', size === 'pane' ? 'h-4' : 'h-4.5')}
+      // The top bar spaces its controls 8 px apart, the pane's header 2 px.
+      className={cn(
+        'w-(--hairline) shrink-0 bg-border',
+        size === 'pane' ? 'mx-1.5 h-4' : 'mx-0.5 h-4.5',
+      )}
     />
   )
 }
@@ -169,10 +173,10 @@ export function VersionChip({
   return (
     <button
       type="button"
-      aria-pressed={open}
+      aria-expanded={open}
       aria-label={t('viewer.versionChip', { version })}
       onClick={onClick}
-      className="flex h-6.5 shrink-0 items-center gap-1.25 rounded-tile bg-subtle px-2 text-hint whitespace-nowrap text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-selected focus-ring aria-pressed:bg-selected"
+      className="flex h-6.5 shrink-0 items-center gap-1.25 rounded-tile bg-subtle px-2 text-hint whitespace-nowrap text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-selected focus-ring"
     >
       {t('viewer.version', { version })}
       {at !== null && <span className="text-tertiary">· {longAgo(at, now)}</span>}
