@@ -45,7 +45,6 @@
     "titleQuit": "退出 Kettu？",
     "stopsUpdate": "重启会停止以下正在运行的任务：",
     "stopsQuit": "退出会停止以下正在运行的任务：",
-    "working": "运行中",
     "terminal": "终端",
     "comeBackUpdate": "重启后，会话和草稿都会恢复。",
     "comeBackQuit": "再次打开 Kettu 时，会话和草稿都会恢复。",
