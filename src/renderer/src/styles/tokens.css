@@ -127,6 +127,13 @@
   --limit-warn: #e5a000;
   --limit-bad: #dc3f3a;
 
+  /* The account's avatar, a letter on a dark gradient, and the tile Kettu's mark sits on in
+     the update card: dark in both themes, with white on them. */
+  --avatar-from: #3b4552;
+  --avatar-to: #1a212a;
+  --kettu-tile: #10161e;
+  --on-fill: #ffffff;
+
   /* Code: the six colors the syntax themes are built from, and nothing else is colored. */
   --syntax-keyword: #8250df;
   --syntax-string: #1a7f4b;
@@ -293,6 +300,13 @@
     --limit-warn: #d4a017;
     --limit-bad: #e5605a;
 
+    /* The account's avatar, a letter on a dark gradient, and the tile Kettu's mark sits on in
+       the update card: dark in both themes, with white on them. */
+    --avatar-from: #3b4552;
+    --avatar-to: #1a212a;
+    --kettu-tile: #10161e;
+    --on-fill: #ffffff;
+
     --syntax-keyword: #c29bff;
     --syntax-string: #5cc08e;
     --syntax-number: #f0a35e;
@@ -431,6 +445,13 @@
   --limit-ok: #3987e5;
   --limit-warn: #d4a017;
   --limit-bad: #e5605a;
+
+  /* The account's avatar, a letter on a dark gradient, and the tile Kettu's mark sits on in
+     the update card: dark in both themes, with white on them. */
+  --avatar-from: #3b4552;
+  --avatar-to: #1a212a;
+  --kettu-tile: #10161e;
+  --on-fill: #ffffff;
 
   --syntax-keyword: #c29bff;
   --syntax-string: #5cc08e;
@@ -619,6 +640,12 @@
     0 0 0 var(--hairline) color-mix(in srgb, var(--attention-dot) 50%, transparent),
     0 0 0 4px color-mix(in srgb, var(--attention-dot) 9%, transparent), var(--elevation-float);
   /* A selected row and the chosen segment, raised from what they sit on. */
+  /* The sidebar's update card under the pointer, while its list is open, and after a failed
+     update: red only on the edge. */
+  --card-lift: var(--card-ring), 0 4px 14px -6px rgb(16 22 30 / 18%);
+  --card-open: 0 0 0 1.5px var(--text-tertiary);
+  --card-failed:
+    0 0 0 var(--hairline) color-mix(in srgb, var(--danger) 28%, transparent), var(--elevation-card);
   --raised-ring: 0 0 0 var(--hairline) var(--border-subtle), var(--elevation-raised);
   --segment-ring: var(--raised-ring);
   --thumb-shadow: var(--elevation-thumb);
