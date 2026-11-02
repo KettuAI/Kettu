@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { errorMessage, host } from '@renderer/lib/host'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { restoreAttachments } from './composer/attachments'
+import { shownPlace } from './queue-place'
 
 function promptText(item: QueuedPrompt): string {
   return item.content
@@ -29,9 +30,6 @@ function queuedAttachments(item: QueuedPrompt): Attachment[] {
     c.type === 'ref' && c.ref.kind === 'attachment' ? [c.ref.attachment] : [],
   )
 }
-
-// The edge of a card further back: the composer's surface halfway to the stack's back.
-const BACK_NEAR = 'color-mix(in oklab, var(--bg-surface), var(--queue-back) 50%)'
 
 /**
  * The prompts waiting for the running turn, as a card tucked behind the composer with the edges
@@ -56,8 +54,10 @@ export function QueueStack({
 
   // The card keeps the message it shows while others leave, or the place of one that left.
   const [shown, setShown] = useState<{ id: string | null; index: number }>({ id: null, index: 0 })
-  const found = shown.id === null ? -1 : queue.findIndex((item) => item.id === shown.id)
-  const index = found >= 0 ? found : Math.min(shown.index, count - 1)
+  const index = shownPlace(
+    queue.map((item) => item.id),
+    shown,
+  )
   const item = queue[index]
   const go = (to: number) => {
     const next = Math.max(0, Math.min(count - 1, to))
@@ -120,8 +120,7 @@ export function QueueStack({
       {behind > 0 && (
         <span
           aria-hidden
-          style={{ backgroundColor: BACK_NEAR }}
-          className="absolute inset-x-3 -top-1 h-3 rounded-t-[10px] shadow-[inset_0_0_0_1px_var(--border-subtle)]"
+          className="absolute inset-x-3 -top-1 h-3 rounded-t-2xl bg-(--queue-back-near) shadow-[inset_0_0_0_1px_var(--border-subtle)]"
         />
       )}
       <div
@@ -218,12 +217,13 @@ function PageButton({
   children: ReactNode
 }) {
   return (
+    // aria-disabled keeps a focused arrow focused when it reaches the end.
     <button
       type="button"
       aria-label={label}
-      disabled={disabled}
-      onClick={onClick}
-      className="grid h-2.75 w-4.5 place-items-center rounded-xs text-secondary outline-none focus-visible:focus-ring disabled:text-border-strong [&_svg]:size-2.75 [&_svg]:stroke-[1.7]"
+      aria-disabled={disabled || undefined}
+      onClick={() => !disabled && onClick()}
+      className="grid h-2.75 w-4.5 place-items-center rounded-xs text-secondary outline-none focus-visible:focus-ring aria-disabled:text-border-strong [&_svg]:size-2.75 [&_svg]:stroke-[1.7]"
     >
       {children}
     </button>
