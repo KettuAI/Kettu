@@ -34,10 +34,10 @@ describe('the built-in colors', () => {
       expect(Object.keys(colors)).toEqual([...THEME_TOKENS])
     }
     expect(BUILTIN_COLORS.light['bg-app']).toBe('#ffffff')
-    expect(BUILTIN_COLORS.dark['bg-app']).toBe('#1e1e1e')
+    expect(BUILTIN_COLORS.dark['bg-app']).toBe('#161b22')
     // Tokens the dark block leaves alone, and roles, which point at other tokens.
     expect(BUILTIN_COLORS.dark['viewer-scrim']).toBe('oklch(0.14 0 0 / 92%)')
-    expect(BUILTIN_COLORS.dark['primary-foreground']).toBe('#252525')
+    expect(BUILTIN_COLORS.dark['primary-foreground']).toBe('#1c222a')
     expect(BUILTIN_COLORS.light['terminal-background']).toBe('#ffffff')
   })
 

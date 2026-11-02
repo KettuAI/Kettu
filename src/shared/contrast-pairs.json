@@ -13,6 +13,7 @@
         "--bg-code-block",
         "--bg-hover",
         "--bg-selected",
+        "--bg-raised",
         "--danger-tint",
         "--success-tint",
         "--info-tint",
@@ -28,7 +29,8 @@
         "--bg-subtle",
         "--bg-code-block",
         "--bg-hover",
-        "--bg-selected"
+        "--bg-selected",
+        "--bg-raised"
       ]
     },
     {
@@ -39,7 +41,8 @@
         "--bg-surface",
         "--bg-subtle",
         "--bg-code-block",
-        "--bg-hover"
+        "--bg-hover",
+        "--bg-raised"
       ]
     },
     { "fg": "--text-placeholder", "on": ["--bg-surface", "--bg-app", "--bg-sidebar"] },
@@ -78,8 +81,18 @@
     { "fg": "--warning", "on": ["--bg-app", "--bg-sidebar", "--bg-surface", "--warning-tint"] },
     { "fg": "--link", "on": ["--bg-app", "--bg-surface", "--bg-subtle"] },
     { "fg": "--link-hover", "on": ["--bg-app", "--bg-surface", "--bg-subtle"] },
-    { "fg": "--switch-on", "on": ["--bg-app", "--bg-surface"], "minRatio": 3 },
-    { "fg": "--bg-surface", "on": ["--text-primary", "--attention"] },
-    { "fg": "--bg-app", "on": ["--text-primary"] }
+    { "fg": "--switch-on", "on": ["--bg-app", "--bg-sidebar", "--bg-surface"], "minRatio": 3 },
+    { "fg": "--control-on", "on": ["--bg-app", "--bg-sidebar", "--bg-surface"], "minRatio": 3 },
+    { "fg": "--syntax-keyword", "on": ["--bg-code-block", "--bg-app"] },
+    { "fg": "--syntax-string", "on": ["--bg-code-block", "--bg-app"] },
+    { "fg": "--syntax-number", "on": ["--bg-code-block", "--bg-app"] },
+    { "fg": "--syntax-function", "on": ["--bg-code-block", "--bg-app"] },
+    { "fg": "--syntax-type", "on": ["--bg-code-block", "--bg-app"] },
+    {
+      "fg": "--bg-surface",
+      "on": ["--text-primary", "--attention", "--primary-from", "--primary-hover-from"]
+    },
+    { "fg": "--bg-app", "on": ["--text-primary"] },
+    { "fg": "--toast-foreground", "on": ["--toast"] }
   ]
 }

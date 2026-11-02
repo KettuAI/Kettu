@@ -15,10 +15,10 @@ import { titleBarHeight, trafficLightPosition } from './window-controls'
 const log = createLogger('window')
 
 // Must match --bg-sidebar in the renderer's tokens.css, or the window flashes on load.
-const BACKGROUND_COLOR = { light: '#fafafa', dark: '#171717' }
+const BACKGROUND_COLOR = { light: '#f1f3f6', dark: '#0e1217' }
 
 // The symbols of the Windows and Linux window controls: --text-primary of each theme.
-const SYMBOL_COLOR = { light: '#222222', dark: '#ececec' }
+const SYMBOL_COLOR = { light: '#10161e', dark: '#e8ecf1' }
 
 // The chosen theme, whose colors replace the two above; null for the built-in theme.
 let chosen: Theme | null = null

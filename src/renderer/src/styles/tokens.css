@@ -8,101 +8,138 @@
 [data-theme='light'] {
   color-scheme: light;
 
+  /* The desk is the window behind everything; the main column and the panes are sheets on it. */
   --bg-app: #ffffff;
-  --bg-sidebar: #fafafa;
+  --bg-sidebar: #f1f3f6;
   --bg-surface: #ffffff;
-  --bg-subtle: #f4f4f4;
-  --bg-code-inline: #f4f4f4;
-  --bg-code-block: #fafafa;
-  --bg-hover: #eeeeee;
-  --bg-selected: #e1e1e1;
+  --bg-subtle: #f2f4f7;
+  --bg-code-inline: rgb(20 26 34 / 6%);
+  --bg-code-block: #f6f7f9;
+  --bg-hover: rgb(20 26 34 / 5%);
+  /* Pressed, and a highlighted menu item. */
+  --bg-selected: rgb(20 26 34 / 7%);
+  /* A selected row and the chosen segment: lifted toward the reader, never darker. */
+  --bg-raised: #ffffff;
 
-  --border-default: #e8e8e8;
-  --border-subtle: #f0f0f0;
-  /* One step past border-default: a hovered card, a hovered or focused field. */
-  --border-strong: #d4d4d4;
+  --border-default: rgb(20 26 34 / 13%);
+  --border-subtle: rgb(20 26 34 / 8%);
+  /* One step past border-default: an unchecked control, a link's underline, a hovered field. */
+  --border-strong: rgb(20 26 34 / 20%);
 
-  --text-primary: #222222;
-  /* Dark enough to read on a selected row, where the lighter grays fall under 4.5:1. */
-  --text-secondary: #5e5e5e;
-  --text-tertiary: #6b6b6b;
-  --text-placeholder: #737373;
-  --text-disabled: #9a9a9a;
-  --icon-default: #737373;
+  --text-primary: #10161e;
+  --text-secondary: #48525f;
+  --text-tertiary: #5e6875;
+  --text-placeholder: #5e6875;
+  --text-disabled: #9aa1ab;
+  --icon-default: #48525f;
 
   /* Waiting: the fox orange, darkened for text; the dot keeps the brand's own. */
-  --attention: #bf4f18;
-  --attention-dot: #f2641e;
-  --danger: #c4352b;
-  --success: #2e7d4f;
-  --merged: #7053aa;
-  /* Running work. Link's blue for now, a token of its own so the two can part. */
-  --info: #2f5d9c;
-  --warning: #956700;
-  --link: #2f5d9c;
-  --link-hover: #244a7d;
-  --focus: #737373;
-  --selection: rgb(47 93 156 / 18%);
-  /* An edit in place: macOS's own focus ring and text highlight. */
-  --edit-ring: #2a79d7;
-  --edit-selection: #b3d6fe;
+  --attention: #c2410c;
+  --attention-dot: #fa5615;
+  --danger: #ac3b2d;
+  --success: #2e7550;
+  --merged: #6f4c8e;
+  /* Running work, in the ink's grays: blue is kept for data and code. */
+  --info: #48525f;
+  /* A step darker than the reference amber so it reads on the desk. */
+  --warning: #936600;
+  /* Links are ink with a gray underline (thread-link), which darkens on hover. */
+  --link: #10161e;
+  --link-hover: #10161e;
+  /* The fox: what is on, chosen or being typed. The focus ring draws it at half strength. */
+  --focus: #f2581b;
+  --selection: rgb(242 88 27 / 18%);
+  /* An edit in place, such as renaming a session. */
+  --edit-ring: #f2581b;
+  --edit-selection: rgb(242 88 27 / 18%);
 
   /* A turn that ended abnormally, and other failure notices. */
-  --danger-tint: #fbf3f2;
-  --danger-border: #f4dbd9;
+  --danger-tint: #faf3f2;
+  --danger-border: #f0dcd9;
   /* Status pills: each state's color at 6% over --bg-surface. */
-  --success-tint: #f2f7f4;
-  --info-tint: #f3f5f9;
+  --success-tint: #f2f7f5;
+  --info-tint: #f4f5f5;
   --warning-tint: #f9f6f0;
   /* A hovered info pill that is a button: opaque, so the contrast check sees it. */
-  --info-tint-hover: #eaeff5;
+  --info-tint-hover: #edeeef;
   /* What a queued message's card darkens toward as it sits further back in the stack. */
-  --queue-back: #f2f2f2;
+  --queue-back: #edf0f3;
   /* The page under an SVG preview: white in both themes, the page an SVG is drawn for. */
   --canvas: #ffffff;
   /* A QR code's modules on the canvas, black in both themes so scanners read it; the dark blocks
      leave it to this one. */
   --canvas-ink: #000000;
-  --scrollbar-thumb: rgb(0 0 0 / 20%);
+  --scrollbar-thumb: rgb(20 26 34 / 20%);
   /* The dimmed page behind a dialog or a sheet. */
-  --scrim: rgb(0 0 0 / 18%);
+  --scrim: rgb(16 22 30 / 30%);
   /* Behind the media viewer, dark in both themes, since pictures read best on dark; the dark
      blocks leave it to this one. */
   --viewer-scrim: oklch(0.14 0 0 / 92%);
   /* A search match marked in its text. */
   --mark: oklch(0.88 0.14 92 / 55%);
   /* The squares behind a transparent picture, so a dark or light one shows on either theme. */
-  --checker: rgb(0 0 0 / 5%);
+  --checker: rgb(20 26 34 / 5%);
+  /* A toast, dark in both themes; the dark blocks leave it to this one. */
+  --toast: #161c24;
+  --toast-foreground: #e9edf2;
+  --elevation-toast: 0 0 0 1px rgb(255 255 255 / 6%), 0 12px 30px -10px rgb(10 16 24 / 50%);
 
-  /* Flat: rows, cards and controls have no shadow, and lines and grays carry the layers. Only
-     what floats over the page casts one. */
-  --elevation-queue: 0 1px 6px rgb(0 0 0 / 5%);
-  --elevation-popover: 0 10px 28px -12px rgb(0 0 0 / 14%), 0 2px 6px -3px rgb(0 0 0 / 5%);
-  --elevation-control: 0 0 #0000;
-  --elevation-control-hover: 0 0 #0000;
-  --elevation-card: 0 0 #0000;
+  /* Lightly raised: each layer is a 1 px ring (in the roles below) and a soft drop, which these
+     hold. */
+  --elevation-queue: 0 1px 6px rgb(20 26 34 / 5%);
+  --elevation-popover: 0 14px 34px -12px rgb(30 45 70 / 25%), 0 2px 6px -2px rgb(20 26 34 / 8%);
+  /* Secondary buttons, fields and key caps. */
+  --elevation-control: 0 1px 0 rgb(20 26 34 / 10%);
+  --elevation-control-hover: 0 1px 0 rgb(20 26 34 / 10%);
+  --elevation-card: 0 1px 0 rgb(20 26 34 / 3%);
   /* The composer and a hovered card; used with the card tier. */
-  --elevation-float: 0 1px 2px rgb(0 0 0 / 3%);
+  --elevation-float: 0 1px 0 rgb(20 26 34 / 4%), 0 16px 36px -20px rgb(30 45 70 / 30%);
   --elevation-sunk: 0 0 #0000;
-  --elevation-thumb: 0 1px 2px rgb(0 0 0 / 18%), 0 0 0 0.5px rgb(0 0 0 / 6%);
-  --elevation-segment: 0 0 #0000;
-  --elevation-dialog: 0 24px 48px -16px rgb(0 0 0 / 20%), 0 4px 12px -6px rgb(0 0 0 / 8%);
-  --elevation-primary: 0 0 #0000;
-  /* The top edge of a raised surface catching the light; none in the flat style. */
+  --elevation-thumb: 0 1px 3px rgb(0 0 0 / 22%);
+  /* A selected row and the chosen segment. */
+  --elevation-raised: 0 1px 1px rgb(30 45 70 / 6%);
+  --elevation-dialog: 0 28px 70px -20px rgb(30 45 70 / 35%), 0 8px 20px -8px rgb(20 26 34 / 12%);
+  --elevation-primary: 0 1px 2px rgb(16 22 30 / 18%);
+  /* The top edge of a raised surface catching the light; only the primary button has one. */
   --highlight: 0 0 #0000;
 
-  /* The primary button: its fill as gradient stops, a ring, and a highlight along its top edge,
-     which a theme may set; the built-in one is a solid near-black. */
-  --primary-from: #222222;
-  --primary-to: #222222;
-  --primary-hover-from: #3a3a3a;
-  --primary-hover-to: #3a3a3a;
-  --primary-ring: #222222;
-  --primary-highlight: rgb(255 255 255 / 0%);
+  /* The primary button: its fill as gradient stops, a ring a shade darker, and a highlight along
+     its top edge, which a theme may set; the built-in one is solid ink. */
+  --primary-from: #141a22;
+  --primary-to: #141a22;
+  --primary-hover-from: #232b36;
+  --primary-hover-to: #232b36;
+  --primary-ring: #06090d;
+  --primary-highlight: rgb(255 255 255 / 12%);
 
-  /* A switch that is on, green as on Apple's platforms. It reaches 3:1 on the page and on the
-     thumb, which is bg-surface. */
-  --switch-on: #1d9442;
+  /* On, checked and chosen controls in the fox orange: a switch, a check box, a radio, an option
+     tile. Each reaches 3:1 on the page; the tint fills a chosen tile. */
+  --control-on: #f2581b;
+  --control-on-tint: rgb(242 88 27 / 7%);
+  --switch-on: #f2581b;
+  /* The thumb is white on and off, in both themes. */
+  --switch-thumb: #ffffff;
+  /* A switch that is off. */
+  --track: #d5dae1;
+
+  /* Plan limits: under 70%, 70 to 89%, and 90% or more. */
+  --limit-ok: #2a78d6;
+  --limit-warn: #e5a000;
+  --limit-bad: #dc3f3a;
+
+  /* Code: the six colors the syntax themes are built from, and nothing else is colored. */
+  --syntax-keyword: #8250df;
+  --syntax-string: #1a7f4b;
+  --syntax-number: #b35900;
+  --syntax-function: #2463c7;
+  --syntax-type: #8a6100;
+  /* Comments and line numbers, faint on purpose. */
+  --syntax-comment: #8a929c;
+  /* Diffs: a line's tint, and the stronger tint of the words that changed in it. */
+  --diff-add: rgb(26 127 75 / 9%);
+  --diff-add-word: rgb(26 127 75 / 22%);
+  --diff-del: rgb(207 34 46 / 7%);
+  --diff-del-word: rgb(207 34 46 / 20%);
 
   /* Agent marks: with the Kettu icon, the only brand colors in the interface. */
   --brand-claude: #d97757;
@@ -135,16 +172,17 @@
   /* Pi's yellow mixed 86% with the light surface, as Claude Code's and Codex's series are. */
   --agent-pi: oklch(0.852 0.114 83.4);
   --agent-other: oklch(0.8 0 0);
-  --heat-0: rgb(0 0 0 / 5.5%);
+  --heat-0: rgb(20 26 34 / 5.5%);
 
-  /* What fills the context in the usage popover, by source: a ramp of grays. */
-  --context-1: #222222;
-  --context-2: #444444;
-  --context-3: #666666;
-  --context-4: #858585;
-  --context-5: #a3a3a3;
-  --context-6: #c4c4c4;
-  --context-7: #d9d9d9;
+  /* What fills the context, by source: messages, memory files, system tools and MCP tools in
+     the data colors, then grays for fixed costs and the reserved buffer. */
+  --context-1: #2a78d6;
+  --context-2: #eb6834;
+  --context-3: #1baf7a;
+  --context-4: #eda100;
+  --context-5: #7e8792;
+  --context-6: #a3aab3;
+  --context-7: #c5cad1;
 
   /* Terminal, read by xterm.js: sixteen colors toned to read on white. */
   --ansi-black: #222222;
@@ -164,10 +202,8 @@
   --ansi-bright-cyan: #358597;
   --ansi-bright-white: #9a9a9a;
 
-  /* The main area and the panes are flat columns divided by hairlines. */
-  --elevation-sheet: 0 0 #0000;
-  /* The pane in focus in a split view: an inset line in the strong border color. */
-  --elevation-sheet-focused: inset 0 0 0 1px var(--border-strong);
+  /* The main area and the panes are sheets on the desk: a ring and a long, soft drop. */
+  --elevation-sheet: 0 1px 0 rgb(20 26 34 / 3%), 0 18px 44px -26px rgb(30 45 70 / 28%);
   /* An artifact's page in its tray and on its canvas: a hairline, stronger when lifted. */
   --elevation-page: 0 0 0 1px var(--border-default);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
@@ -177,76 +213,96 @@
   :root:not([data-theme='light']) {
     color-scheme: dark;
 
-    --bg-app: #1e1e1e;
-    --bg-sidebar: #171717;
+    --bg-app: #161b22;
+    --bg-sidebar: #0e1217;
     /* What floats over the page sits a step lighter than it, since shadows barely show here. */
-    --bg-surface: #252525;
-    --bg-subtle: #2b2b2b;
-    --bg-code-inline: #2b2b2b;
-    --bg-code-block: #171717;
-    --bg-hover: #2f2f2f;
-    --bg-selected: #3a3a3a;
+    --bg-surface: #1c222a;
+    --bg-subtle: #20262f;
+    --bg-code-inline: rgb(230 236 245 / 8%);
+    --bg-code-block: #12161c;
+    --bg-hover: rgb(230 236 245 / 5%);
+    --bg-selected: rgb(230 236 245 / 8%);
+    --bg-raised: #232a34;
 
-    --border-default: #333333;
-    --border-subtle: #2a2a2a;
-    --border-strong: #4a4a4a;
+    --border-default: rgb(230 236 245 / 14%);
+    --border-subtle: rgb(230 236 245 / 8%);
+    --border-strong: rgb(230 236 245 / 22%);
 
-    --text-primary: #ececec;
-    --text-secondary: #b8b8b8;
-    --text-tertiary: #a1a1a1;
-    --text-placeholder: #a1a1a1;
-    --text-disabled: #6b6b6b;
-    --icon-default: #a1a1a1;
+    --text-primary: #e8ecf1;
+    --text-secondary: #aeb6c1;
+    --text-tertiary: #8a94a1;
+    --text-placeholder: #8a94a1;
+    --text-disabled: #5f6873;
+    --icon-default: #aeb6c1;
 
-    --attention: #f47a3e;
-    --attention-dot: #f2641e;
-    --danger: #f07167;
-    --success: #5bb98a;
-    --merged: #b197ed;
-    --info: #7fa8e8;
-    --warning: #d9a441;
-    --link: #7fa8e8;
-    --link-hover: #a3c1f0;
-    --focus: #a1a1a1;
-    --selection: rgb(127 168 232 / 28%);
-    --edit-ring: #3a8ee6;
-    --edit-selection: #3f638b;
+    --attention: #fb8a55;
+    --attention-dot: #fa6e28;
+    --danger: #ea8a7d;
+    --success: #6fbf8f;
+    --merged: #b798d4;
+    --info: #aeb6c1;
+    --warning: #d9b463;
+    --link: #e8ecf1;
+    --link-hover: #e8ecf1;
+    --focus: #ff6a2b;
+    --selection: rgb(255 106 43 / 24%);
+    --edit-ring: #ff6a2b;
+    --edit-selection: rgb(255 106 43 / 24%);
 
-    --danger-tint: #392d2c;
-    --danger-border: #523634;
-    --success-tint: #2a342f;
-    --info-tint: #2e3239;
-    --warning-tint: #373228;
-    --info-tint-hover: #333a44;
-    --queue-back: #1b1b1b;
+    --danger-tint: #28282f;
+    --danger-border: #413539;
+    --success-tint: #212b30;
+    --info-tint: #252b33;
+    --warning-tint: #272b2d;
+    --info-tint-hover: #2b3139;
+    --queue-back: #141920;
     --canvas: #ffffff;
-    --scrollbar-thumb: rgb(255 255 255 / 20%);
+    --scrollbar-thumb: rgb(230 236 245 / 20%);
     --scrim: rgb(0 0 0 / 50%);
     --mark: oklch(0.8 0.13 88 / 32%);
-    --checker: rgb(255 255 255 / 7%);
+    --checker: rgb(230 236 245 / 7%);
 
     --elevation-queue: 0 1px 6px rgb(0 0 0 / 30%);
-    --elevation-popover: 0 10px 28px -12px rgb(0 0 0 / 42%), 0 2px 6px -3px rgb(0 0 0 / 15%);
+    --elevation-popover: 0 16px 40px -12px rgb(0 0 0 / 65%);
     --elevation-control: 0 0 #0000;
     --elevation-control-hover: 0 0 #0000;
-    --elevation-card: 0 0 #0000;
-    --elevation-float: 0 1px 2px rgb(0 0 0 / 20%);
+    --elevation-card: 0 1px 2px rgb(0 0 0 / 30%);
+    --elevation-float: 0 16px 36px -16px rgb(0 0 0 / 70%);
     --elevation-sunk: 0 0 #0000;
-    --elevation-thumb: 0 1px 2px rgb(0 0 0 / 50%);
-    --elevation-segment: 0 0 #0000;
-    --elevation-dialog: 0 24px 48px -16px rgb(0 0 0 / 60%), 0 4px 12px -6px rgb(0 0 0 / 24%);
-    --elevation-primary: 0 0 #0000;
+    --elevation-thumb: 0 1px 3px rgb(0 0 0 / 22%);
+    --elevation-raised: 0 1px 2px rgb(0 0 0 / 40%);
+    --elevation-dialog: 0 28px 70px -20px rgb(0 0 0 / 70%);
+    --elevation-primary: 0 1px 2px rgb(0 0 0 / 30%);
     --highlight: 0 0 #0000;
 
     /* Inverted: a near-white button with dark text. */
-    --primary-from: #ececec;
-    --primary-to: #ececec;
+    --primary-from: #e8ecf1;
+    --primary-to: #e8ecf1;
     --primary-hover-from: #ffffff;
     --primary-hover-to: #ffffff;
-    --primary-ring: #ececec;
-    --primary-highlight: rgb(255 255 255 / 0%);
+    --primary-ring: #c9d0d9;
+    --primary-highlight: rgb(255 255 255 / 12%);
 
-    --switch-on: #30d158;
+    --control-on: #ff6a2b;
+    --control-on-tint: rgb(255 106 43 / 11%);
+    --switch-on: #ff6a2b;
+    --switch-thumb: #ffffff;
+    --track: #3a424d;
+
+    --limit-ok: #3987e5;
+    --limit-warn: #d4a017;
+    --limit-bad: #e5605a;
+
+    --syntax-keyword: #c29bff;
+    --syntax-string: #5cc08e;
+    --syntax-number: #f0a35e;
+    --syntax-function: #79b0ff;
+    --syntax-type: #e3b341;
+    --syntax-comment: #7d8590;
+    --diff-add: rgb(63 185 120 / 12%);
+    --diff-add-word: rgb(63 185 120 / 28%);
+    --diff-del: rgb(248 81 73 / 10%);
+    --diff-del-word: rgb(248 81 73 / 28%);
 
     --brand-opencode-frame: #ffffff;
     --brand-opencode-fill: #5a5858;
@@ -260,16 +316,15 @@
     /* Pi's yellow mixed 86% with the dark surface. */
     --agent-pi: oklch(0.749 0.115 84.2);
     --agent-other: oklch(0.46 0 0);
-    --heat-0: rgb(255 255 255 / 6.5%);
+    --heat-0: rgb(230 236 245 / 6.5%);
 
-    /* What fills the context in the usage popover, by source: the ramp, light to dark. */
-    --context-1: #ececec;
-    --context-2: #c8c8c8;
-    --context-3: #a8a8a8;
-    --context-4: #8a8a8a;
-    --context-5: #6e6e6e;
-    --context-6: #545454;
-    --context-7: #454545;
+    --context-1: #3987e5;
+    --context-2: #d95926;
+    --context-3: #199e70;
+    --context-4: #c98500;
+    --context-5: #8a939e;
+    --context-6: #69727d;
+    --context-7: #4f5761;
 
     --ansi-black: #3a3a3a;
     --ansi-red: #f07167;
@@ -288,8 +343,7 @@
     --ansi-bright-cyan: #90d2e0;
     --ansi-bright-white: #ececec;
 
-    --elevation-sheet: 0 0 #0000;
-    --elevation-sheet-focused: inset 0 0 0 1px var(--border-strong);
+    --elevation-sheet: 0 12px 32px -14px rgb(0 0 0 / 60%);
     --elevation-page: 0 0 0 1px var(--border-default);
     --elevation-page-lift: 0 0 0 1px var(--border-strong);
   }
@@ -298,76 +352,96 @@
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --bg-app: #1e1e1e;
-  --bg-sidebar: #171717;
+  --bg-app: #161b22;
+  --bg-sidebar: #0e1217;
   /* What floats over the page sits a step lighter than it, since shadows barely show here. */
-  --bg-surface: #252525;
-  --bg-subtle: #2b2b2b;
-  --bg-code-inline: #2b2b2b;
-  --bg-code-block: #171717;
-  --bg-hover: #2f2f2f;
-  --bg-selected: #3a3a3a;
+  --bg-surface: #1c222a;
+  --bg-subtle: #20262f;
+  --bg-code-inline: rgb(230 236 245 / 8%);
+  --bg-code-block: #12161c;
+  --bg-hover: rgb(230 236 245 / 5%);
+  --bg-selected: rgb(230 236 245 / 8%);
+  --bg-raised: #232a34;
 
-  --border-default: #333333;
-  --border-subtle: #2a2a2a;
-  --border-strong: #4a4a4a;
+  --border-default: rgb(230 236 245 / 14%);
+  --border-subtle: rgb(230 236 245 / 8%);
+  --border-strong: rgb(230 236 245 / 22%);
 
-  --text-primary: #ececec;
-  --text-secondary: #b8b8b8;
-  --text-tertiary: #a1a1a1;
-  --text-placeholder: #a1a1a1;
-  --text-disabled: #6b6b6b;
-  --icon-default: #a1a1a1;
+  --text-primary: #e8ecf1;
+  --text-secondary: #aeb6c1;
+  --text-tertiary: #8a94a1;
+  --text-placeholder: #8a94a1;
+  --text-disabled: #5f6873;
+  --icon-default: #aeb6c1;
 
-  --attention: #f47a3e;
-  --attention-dot: #f2641e;
-  --danger: #f07167;
-  --success: #5bb98a;
-  --merged: #b197ed;
-  --info: #7fa8e8;
-  --warning: #d9a441;
-  --link: #7fa8e8;
-  --link-hover: #a3c1f0;
-  --focus: #a1a1a1;
-  --selection: rgb(127 168 232 / 28%);
-  --edit-ring: #3a8ee6;
-  --edit-selection: #3f638b;
+  --attention: #fb8a55;
+  --attention-dot: #fa6e28;
+  --danger: #ea8a7d;
+  --success: #6fbf8f;
+  --merged: #b798d4;
+  --info: #aeb6c1;
+  --warning: #d9b463;
+  --link: #e8ecf1;
+  --link-hover: #e8ecf1;
+  --focus: #ff6a2b;
+  --selection: rgb(255 106 43 / 24%);
+  --edit-ring: #ff6a2b;
+  --edit-selection: rgb(255 106 43 / 24%);
 
-  --danger-tint: #392d2c;
-  --danger-border: #523634;
-  --success-tint: #2a342f;
-  --info-tint: #2e3239;
-  --warning-tint: #373228;
-  --info-tint-hover: #333a44;
-  --queue-back: #1b1b1b;
+  --danger-tint: #28282f;
+  --danger-border: #413539;
+  --success-tint: #212b30;
+  --info-tint: #252b33;
+  --warning-tint: #272b2d;
+  --info-tint-hover: #2b3139;
+  --queue-back: #141920;
   --canvas: #ffffff;
-  --scrollbar-thumb: rgb(255 255 255 / 20%);
+  --scrollbar-thumb: rgb(230 236 245 / 20%);
   --scrim: rgb(0 0 0 / 50%);
   --mark: oklch(0.8 0.13 88 / 32%);
-  --checker: rgb(255 255 255 / 7%);
+  --checker: rgb(230 236 245 / 7%);
 
   --elevation-queue: 0 1px 6px rgb(0 0 0 / 30%);
-  --elevation-popover: 0 10px 28px -12px rgb(0 0 0 / 42%), 0 2px 6px -3px rgb(0 0 0 / 15%);
+  --elevation-popover: 0 16px 40px -12px rgb(0 0 0 / 65%);
   --elevation-control: 0 0 #0000;
   --elevation-control-hover: 0 0 #0000;
-  --elevation-card: 0 0 #0000;
-  --elevation-float: 0 1px 2px rgb(0 0 0 / 20%);
+  --elevation-card: 0 1px 2px rgb(0 0 0 / 30%);
+  --elevation-float: 0 16px 36px -16px rgb(0 0 0 / 70%);
   --elevation-sunk: 0 0 #0000;
-  --elevation-thumb: 0 1px 2px rgb(0 0 0 / 50%);
-  --elevation-segment: 0 0 #0000;
-  --elevation-dialog: 0 24px 48px -16px rgb(0 0 0 / 60%), 0 4px 12px -6px rgb(0 0 0 / 24%);
-  --elevation-primary: 0 0 #0000;
+  --elevation-thumb: 0 1px 3px rgb(0 0 0 / 22%);
+  --elevation-raised: 0 1px 2px rgb(0 0 0 / 40%);
+  --elevation-dialog: 0 28px 70px -20px rgb(0 0 0 / 70%);
+  --elevation-primary: 0 1px 2px rgb(0 0 0 / 30%);
   --highlight: 0 0 #0000;
 
   /* Inverted: a near-white button with dark text. */
-  --primary-from: #ececec;
-  --primary-to: #ececec;
+  --primary-from: #e8ecf1;
+  --primary-to: #e8ecf1;
   --primary-hover-from: #ffffff;
   --primary-hover-to: #ffffff;
-  --primary-ring: #ececec;
-  --primary-highlight: rgb(255 255 255 / 0%);
+  --primary-ring: #c9d0d9;
+  --primary-highlight: rgb(255 255 255 / 12%);
 
-  --switch-on: #30d158;
+  --control-on: #ff6a2b;
+  --control-on-tint: rgb(255 106 43 / 11%);
+  --switch-on: #ff6a2b;
+  --switch-thumb: #ffffff;
+  --track: #3a424d;
+
+  --limit-ok: #3987e5;
+  --limit-warn: #d4a017;
+  --limit-bad: #e5605a;
+
+  --syntax-keyword: #c29bff;
+  --syntax-string: #5cc08e;
+  --syntax-number: #f0a35e;
+  --syntax-function: #79b0ff;
+  --syntax-type: #e3b341;
+  --syntax-comment: #7d8590;
+  --diff-add: rgb(63 185 120 / 12%);
+  --diff-add-word: rgb(63 185 120 / 28%);
+  --diff-del: rgb(248 81 73 / 10%);
+  --diff-del-word: rgb(248 81 73 / 28%);
 
   --brand-opencode-frame: #ffffff;
   --brand-opencode-fill: #5a5858;
@@ -381,16 +455,15 @@
   /* Pi's yellow mixed 86% with the dark surface. */
   --agent-pi: oklch(0.749 0.115 84.2);
   --agent-other: oklch(0.46 0 0);
-  --heat-0: rgb(255 255 255 / 6.5%);
+  --heat-0: rgb(230 236 245 / 6.5%);
 
-  /* What fills the context in the usage popover, by source: the ramp, light to dark. */
-  --context-1: #ececec;
-  --context-2: #c8c8c8;
-  --context-3: #a8a8a8;
-  --context-4: #8a8a8a;
-  --context-5: #6e6e6e;
-  --context-6: #545454;
-  --context-7: #454545;
+  --context-1: #3987e5;
+  --context-2: #d95926;
+  --context-3: #199e70;
+  --context-4: #c98500;
+  --context-5: #8a939e;
+  --context-6: #69727d;
+  --context-7: #4f5761;
 
   --ansi-black: #3a3a3a;
   --ansi-red: #f07167;
@@ -409,8 +482,7 @@
   --ansi-bright-cyan: #90d2e0;
   --ansi-bright-white: #ececec;
 
-  --elevation-sheet: 0 0 #0000;
-  --elevation-sheet-focused: inset 0 0 0 1px var(--border-strong);
+  --elevation-sheet: 0 12px 32px -14px rgb(0 0 0 / 60%);
   --elevation-page: 0 0 0 1px var(--border-default);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
 }
@@ -455,23 +527,21 @@
 
   /* Neutral fills of controls. */
   --tile: var(--bg-subtle);
-  --track: var(--border-default);
-  /* A switch with keyboard focus draws no ring around it: its track goes a step toward the text. */
-  --switch-on-focus: color-mix(in oklch, var(--switch-on), var(--text-primary) 20%);
-  --switch-off-focus: color-mix(in oklch, var(--border-strong), var(--text-primary) 20%);
   --segment-track: var(--bg-subtle);
-  /* The chosen segment is filled like a selected row. */
-  --segment-thumb: var(--bg-selected);
+  --segment-thumb: var(--bg-raised);
   --pressed: var(--bg-selected);
   --pressed-hover: color-mix(in srgb, var(--bg-selected), var(--text-primary) 5%);
+
+  /* Keyboard focus: the fox at half strength, 2 px clear of the control. A field takes a 1 px
+     line and a halo instead. */
+  --focus-ring-color: color-mix(in srgb, var(--focus) 50%, transparent);
+  --focus-halo: 0 0 0 3px var(--focus-ring-color);
 
   /* Meaning, derived. */
   --attention-foreground: var(--bg-surface);
   --destructive-tint: var(--danger-tint);
   --destructive-tint-hover: color-mix(in srgb, var(--danger) 13%, transparent);
   --destructive-foreground: var(--bg-surface);
-  --diff-add: color-mix(in srgb, var(--success) 9%, transparent);
-  --diff-del: color-mix(in srgb, var(--danger) 8%, transparent);
   /* The line a reference points at, in the Files pane's editor. */
   --marked-line: color-mix(in srgb, var(--info) 7%, transparent);
   --sheen: color-mix(in srgb, var(--text-primary) 6%, transparent);
@@ -482,11 +552,11 @@
   --agent-omp: color-mix(in oklch, var(--brand-omp-2) 86%, var(--bg-surface));
   --agent-muse: color-mix(in oklch, var(--brand-muse) 86%, var(--bg-surface));
   --agent-codewhale: color-mix(in oklch, var(--brand-codewhale-1) 86%, var(--bg-surface));
-  /* Amounts deepen in the accent orange, mixed with the card so each step is opaque. */
+  /* Amounts deepen in the fox orange, mixed with the card so each step is opaque. */
   --heat-hue: var(--attention-dot);
-  --heat-1: color-mix(in oklch, var(--heat-hue) 28%, var(--bg-surface));
-  --heat-2: color-mix(in oklch, var(--heat-hue) 48%, var(--bg-surface));
-  --heat-3: color-mix(in oklch, var(--heat-hue) 74%, var(--bg-surface));
+  --heat-1: color-mix(in oklch, var(--heat-hue) 18%, var(--bg-surface));
+  --heat-2: color-mix(in oklch, var(--heat-hue) 38%, var(--bg-surface));
+  --heat-3: color-mix(in oklch, var(--heat-hue) 64%, var(--bg-surface));
   --heat-4: var(--heat-hue);
   /* A day outside the range keeps its step's lightness in gray. */
   --heat-out-1: oklch(from var(--heat-1) l 0 h);
@@ -494,12 +564,8 @@
   --heat-out-3: oklch(from var(--heat-3) l 0 h);
   --heat-out-4: oklch(from var(--heat-4) l 0 h);
 
-  /* The autocompact buffer in the context bar. */
-  --context-hatch: repeating-linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--text-primary) 22%, transparent) 0 2px,
-    transparent 2px 4px
-  );
+  /* The autocompact buffer in the context bar: the reserved gray, hatched. */
+  --context-hatch: repeating-linear-gradient(135deg, var(--context-7) 0 2px, transparent 2px 4px);
 
   --terminal-background: var(--bg-app);
   --terminal-foreground: var(--text-primary);
@@ -514,39 +580,50 @@
     var(--primary-hover-to)
   );
 
-  /* Borders are inset rings, so they take no layout space and follow the radius. */
-  --card-ring:
-    inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-card), var(--highlight);
+  /* Each layer's 1 px ring sits outside its box, so it takes no layout space, follows the radius
+     and shows against the desk. */
+  --card-ring: 0 0 0 var(--hairline) var(--border-subtle), var(--elevation-card), var(--highlight);
   --outline-ring:
-    inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-control), var(--highlight);
+    0 0 0 var(--hairline) var(--border-default), var(--elevation-control), var(--highlight);
   --outline-hover:
-    inset 0 0 0 var(--hairline) var(--border-strong), var(--elevation-control-hover),
-    var(--highlight);
+    0 0 0 var(--hairline) var(--border-strong), var(--elevation-control-hover), var(--highlight);
   --sunk-ring: inset 0 0 0 var(--hairline) var(--border-subtle), var(--elevation-sunk);
-  /* A field draws its line as a border, which an invalid field recolors; this is the depth. */
+  /* A field draws its line as a border, which an invalid or focused field recolors; this is the
+     depth. */
   --field-shadow: var(--elevation-control), var(--highlight);
+  --field-focus-shadow: var(--elevation-control), var(--focus-halo);
   --primary-shadow:
     inset 0 0 0 var(--hairline) var(--primary-ring), inset 0 1px 0 var(--primary-highlight),
     var(--elevation-primary);
-  --destructive-shadow: var(--elevation-control);
+  /* A filled destructive button is flat; a destructive one in a row has a thin red ring. */
+  --destructive-shadow: var(--elevation-primary);
+  --destructive-ring: inset 0 0 0 var(--hairline) color-mix(in srgb, var(--danger) 40%, transparent);
+  --destructive-ring-hover: inset 0 0 0 var(--hairline)
+    color-mix(in srgb, var(--danger) 65%, transparent);
   --menu-ring:
-    inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-popover), var(--highlight);
+    0 0 0 var(--hairline) var(--border-subtle), var(--elevation-popover), var(--highlight);
   --dialog-ring:
-    inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-dialog), var(--highlight);
+    0 0 0 var(--hairline) var(--border-subtle), var(--elevation-dialog), var(--highlight);
   --float-shadow: var(--elevation-card), var(--elevation-float);
   --composer-ring:
-    inset 0 0 0 var(--hairline) var(--border-default), var(--float-shadow), var(--highlight);
+    0 0 0 var(--hairline) var(--border-default), var(--elevation-float), var(--highlight);
   --composer-hover:
-    inset 0 0 0 var(--hairline) var(--border-strong), var(--float-shadow), var(--highlight);
-  --composer-focus:
-    inset 0 0 0 var(--hairline) var(--border-strong), var(--float-shadow), var(--highlight);
+    0 0 0 var(--hairline) var(--border-strong), var(--elevation-float), var(--highlight);
+  /* The composer while typed in: the fox caret marks it, so the frame stays as it is. */
+  --composer-focus: var(--composer-hover);
   --queue-ring:
-    inset 0 0 0 var(--hairline) var(--border-default), var(--elevation-queue), var(--highlight);
-  /* A card waiting on the user: framed like any card, since the orange dot carries the call. */
+    0 0 0 var(--hairline) var(--border-subtle), var(--elevation-queue), var(--highlight);
+  /* A card waiting on the user: a fox ring with a faint halo. */
   --attention-ring-shadow:
-    inset 0 0 0 var(--hairline) var(--border-default), var(--float-shadow), var(--highlight);
-  --segment-ring: var(--elevation-segment), var(--highlight);
+    0 0 0 var(--hairline) color-mix(in srgb, var(--attention-dot) 50%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--attention-dot) 9%, transparent), var(--elevation-float);
+  /* A selected row and the chosen segment, raised from what they sit on. */
+  --raised-ring: 0 0 0 var(--hairline) var(--border-subtle), var(--elevation-raised);
+  --segment-ring: var(--raised-ring);
   --thumb-shadow: var(--elevation-thumb);
+  --sheet-ring: 0 0 0 var(--hairline) var(--border-subtle), var(--elevation-sheet);
+  /* The pane in focus in a split view: its ring in the strong border color. */
+  --sheet-focused-ring: 0 0 0 var(--hairline) var(--border-strong), var(--elevation-sheet);
   --elevation-sm: var(--elevation-card);
   --elevation-md: var(--elevation-popover);
   --elevation-lg: var(--elevation-popover);
