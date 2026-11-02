@@ -163,11 +163,15 @@
     "tooLargeOtherHost": "超过 {{limit}}，太大，无法发到另一台主机。"
   },
   "mentions": {
-    "label": "文件和文件夹",
     "used": "本会话用过",
     "toSearch_other": "输入以搜索 {{count, number}} 个文件及其文件夹",
     "loading": "正在列出项目文件…",
-    "chooseProject": "选择一个项目后才能提及其中的文件"
+    "chooseProject": "选择一个项目后才能提及其中的文件",
+    "files": "文件",
+    "folder": "文件夹",
+    "keysMove": "↑↓ 移动",
+    "keysInsert": "↵ 插入",
+    "keysFolder": "Tab 打开文件夹"
   },
   "slash": {
     "typeToFilter": "输入以筛选"

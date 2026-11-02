@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useId,
   useLayoutEffect,
   useMemo,
@@ -29,7 +28,7 @@ import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
 import { AttachmentTray } from './attachment-tray'
 import { attachMention } from './attachments'
 import { ComposerEditor } from './editor'
-import { MentionFooter, MentionHeader, MentionItem } from './mention-popover'
+import { MentionFooter, MentionItem } from './mention-popover'
 import {
   insertAt,
   mentionAt,
@@ -48,9 +47,6 @@ import type { PromptBoxState } from './use-prompt-box'
 // popovers, the attachments and **+**, kept in a draft. What sends, and how, is each one's own.
 
 type PopoverItem = SlashCommand | MentionRow
-
-// 8 px from the list: the rows sit 6 px inside its edge.
-const TIP_OFFSET = 14
 
 const isMentionRow = (item: PopoverItem): item is MentionRow => 'positions' in item
 
@@ -174,13 +170,12 @@ export function PromptBox({
   })()
   const commandNames = useMemo(() => commands.map((c) => c.name), [commands])
 
-  // The highlighted command's description, in a tooltip 8 px beside the list, whichever row it is.
-  const tipText = slashOpen ? (rows[active] as SlashCommand | undefined)?.description : undefined
-  const tipOpen = !!tipText
-  const tipAnchor = useCallback(
-    () => document.getElementById(`${listId}-${active}`),
-    [listId, active],
-  )
+  // Tab on a folder lists what is in it, as the query `folder/`.
+  const openFolder = (row: MentionRow) => {
+    if (!mention) return
+    const before = `${text.slice(0, mention.start)}@${row.path}/`
+    update(`${before}${text.slice(mention.start + 1 + mention.query.length)}`, before.length)
+  }
 
   // The session's composer puts **+** in its control row; New session's stays in the box.
   const addMenu = stacked && <AddMenu box={box} agentName={agentName} commands={commands} />
@@ -209,8 +204,13 @@ export function PromptBox({
       dismiss()
       return true
     }
+    const row = rows[active]
+    if (handling === 'choose' && row && isMentionRow(row) && row.folder) {
+      openFolder(row)
+      return true
+    }
     if (handling === 'popover' || handling === 'choose') {
-      chooseItem(rows[active])
+      chooseItem(row)
       return true
     }
     onKeyDown(event)
@@ -309,20 +309,30 @@ export function PromptBox({
               finalFocus={false}
               className={cn(
                 'flex max-h-[min(var(--available-height),320px)] origin-(--transform-origin) flex-col overflow-hidden bg-popover text-popover-foreground shadow-menu animation-duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
+                'rounded-xl p-1',
                 showing === 'slash'
-                  ? 'w-max max-w-80 min-w-40 rounded-xl'
-                  : 'w-[min(var(--anchor-width),420px)] rounded-xl',
+                  ? 'w-[min(var(--anchor-width),470px)]'
+                  : 'w-[min(var(--anchor-width),340px)]',
               )}
             >
-              {listing?.used && listing.rows.length > 0 && <MentionHeader id={`${draft}-used`} />}
+              {rows.length > 0 && (
+                <div
+                  id={`${listId}-label`}
+                  className="flex h-6.5 shrink-0 items-center px-2 text-small font-medium text-tertiary"
+                >
+                  {showing === 'slash'
+                    ? agentName
+                    : listing?.used
+                      ? t('mentions.used')
+                      : t('mentions.files')}
+                </div>
+              )}
               <div
                 role="listbox"
                 id={listId}
-                aria-labelledby={listing?.used ? `${draft}-used` : undefined}
-                aria-label={listing && !listing.used ? t('mentions.label') : undefined}
+                aria-labelledby={`${listId}-label`}
                 className={cn(
                   'min-h-0 flex-1 scroll-fade-y overflow-y-auto overscroll-contain',
-                  showing === 'slash' ? 'p-1.5' : 'p-1',
                   rows.length === 0 && 'hidden',
                 )}
               >
@@ -353,23 +363,12 @@ export function PromptBox({
           </Popover.Positioner>
         </Popover.Portal>
       </Popover.Root>
-      {/* Keyed by the row: a tooltip does not follow its anchor to another row on its own. */}
-      <Tooltip key={`${listKey}:${active}`} open={tipOpen}>
-        <TooltipContent
-          anchor={tipAnchor}
-          side="right"
-          sideOffset={TIP_OFFSET}
-          className="pointer-events-none motion-reduce:data-closed:animate-none motion-reduce:data-open:animate-none"
-        >
-          {tipText}
-        </TooltipContent>
-      </Tooltip>
       <TextDialog target={viewing} onClose={() => setViewing(null)} />
     </>
   )
 }
 
-/** A slash command's row: its name alone; the description shows in a tooltip. */
+/** A slash command's row: its name in code type, then what it does. */
 function SlashItem({
   id,
   command,
@@ -388,15 +387,17 @@ function SlashItem({
       role="option"
       id={id}
       aria-selected={highlighted}
-      aria-description={command.description || undefined}
       data-highlighted={highlighted ? '' : undefined}
       // Pressing a row keeps the focus, and with it the caret, in the box.
       onMouseDown={(event) => event.preventDefault()}
       onMouseMove={onHighlight}
       onClick={onChoose}
-      className="flex min-h-row cursor-default items-center rounded-lg px-2 py-1 text-ui outline-none select-none data-highlighted:bg-accent"
+      className="flex min-h-control cursor-default items-center gap-2.5 rounded-md px-2 text-ui outline-none select-none data-highlighted:bg-selected"
     >
-      <span className="truncate">{command.name}</span>
+      <span className="shrink-0 font-mono text-hint">/{command.name}</span>
+      {command.description && (
+        <span className="min-w-0 truncate text-tertiary">{command.description}</span>
+      )}
     </div>
   )
 }

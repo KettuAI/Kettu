@@ -172,12 +172,16 @@
     "tooLargeOtherHost": "Over {{limit}}, too large to send to another host."
   },
   "mentions": {
-    "label": "Files and folders",
     "used": "Used in this session",
     "toSearch_one": "Type to search {{count, number}} file and its folders",
     "toSearch_other": "Type to search {{count, number}} files and their folders",
     "loading": "Listing the project's files…",
-    "chooseProject": "Choose a project to mention its files"
+    "chooseProject": "Choose a project to mention its files",
+    "files": "Files",
+    "folder": "Folder",
+    "keysMove": "↑↓ to move",
+    "keysInsert": "↵ to insert",
+    "keysFolder": "Tab opens a folder"
   },
   "slash": {
     "typeToFilter": "Type to filter"
