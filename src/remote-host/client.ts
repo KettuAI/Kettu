@@ -956,6 +956,10 @@ class SshAdding {
       session.close()
       return this.fail('ssh_failed')
     }
+    // The login reaches one daemon, so a host kept at this address is it before it reset its key.
+    for (const kept of this.client.options.hosts.list()) {
+      if (kept.id !== host.id && kept.ssh?.target === target) await this.client.remove(kept.id)
+    }
     const status = this.client.adopt(host, session)
     if (this.done) return
     this.done = true

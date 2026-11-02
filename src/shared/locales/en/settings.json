@@ -875,6 +875,7 @@
       "removed": {
         "title": "{{name}} removed this computer",
         "body": "This computer no longer connects to it. To use it again, open Add device on it and paste the link here.",
+        "sshBody": "This computer no longer connects to it. To use it again, add it over SSH again.",
         "action": "Add again…"
       },
       "update_client": {

@@ -327,6 +327,31 @@ describePosix('adding a machine over SSH', () => {
     expect(t.client.list()).toEqual([])
   })
 
+  it('replaces what this computer kept of the machine at the same address', async () => {
+    const t = await setup()
+    await t.recordDevice()
+    await t.installed('0.3.0')
+    // The daemon at lin@dev-box before it reset remote access, and another machine.
+    const kept = async (target: string) => {
+      const { publicKey } = await generateKeyPair()
+      return (await t.store.add({
+        publicKey: Buffer.from(publicKey).toString('base64'),
+        name: 'Studio',
+        platform: 'linux',
+        version: '0.3.0',
+        addresses: [],
+        deviceName: 'Lin MacBook',
+        ssh: { target, port: 1 },
+      }))!
+    }
+    const before = await kept('lin@dev-box')
+    t.store.update(before.id, { removed: true })
+    const other = await kept('lin@build-box')
+    t.client.addSsh(1, 'lin@dev-box', '')
+    expect(await t.end(1)).toMatchObject({ state: 'added', host: { id: t.hostId } })
+    expect(t.client.list().map((host) => host.id)).toEqual([other.id, t.hostId])
+  })
+
   it('reconnects through ssh, and asks the daemon for its port when it moved', async () => {
     const t = await setup()
     await t.recordDevice()

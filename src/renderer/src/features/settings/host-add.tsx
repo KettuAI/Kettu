@@ -87,9 +87,15 @@ const isComposing = (event: KeyboardEvent<HTMLInputElement>): boolean =>
 export function AddHostDialog({
   open,
   onOpenChange,
+  ssh,
+  onAdded,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Opens on the SSH tab with this address, for a machine added over SSH before. */
+  ssh?: string
+  /** The host added, as the dialog closes on it. */
+  onAdded?: (host: HostStatus) => void
 }) {
   // Each opening starts afresh.
   const [opened, setOpened] = useState(open)
@@ -100,18 +106,34 @@ export function AddHostDialog({
   }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <AddHostFlow key={round} open={open} onDone={() => onOpenChange(false)} />
+      <AddHostFlow
+        key={round}
+        open={open}
+        ssh={ssh}
+        onDone={(host) => {
+          onOpenChange(false)
+          if (host) onAdded?.(host)
+        }}
+      />
     </Dialog>
   )
 }
 
-function AddHostFlow({ open, onDone }: { open: boolean; onDone: () => void }) {
-  const [tab, setTab] = useState<AddHostTab>('link')
+function AddHostFlow({
+  open,
+  ssh: sshTarget,
+  onDone,
+}: {
+  open: boolean
+  ssh?: string
+  onDone: (added: HostStatus | null) => void
+}) {
+  const [tab, setTab] = useState<AddHostTab>(sshTarget ? 'ssh' : 'link')
   const [step, setStep] = useState<AddHostStep>({ kind: 'paste', invalid: false })
   const [draft, setDraft] = useState('')
   const [link, setLink] = useState('')
   const [ssh, setSsh] = useState<SshAddStep>({ kind: 'enter' })
-  const [sshDraft, setSshDraft] = useState('')
+  const [sshDraft, setSshDraft] = useState(sshTarget ?? '')
   const [target, setTarget] = useState('')
   // Each way has a pairing of its own, so switching tabs leaves the other one going.
   const linkPairing = useRef<number | null>(null)
@@ -267,7 +289,7 @@ function AddHostFlow({ open, onDone }: { open: boolean; onDone: () => void }) {
           }}
           onSubmit={startSsh}
           onRetry={() => startSsh(target)}
-          onDone={onDone}
+          onDone={() => onDone(ssh.kind === 'added' ? ssh.host : null)}
         />
       ) : (
         <AddHostBody
@@ -283,7 +305,7 @@ function AddHostFlow({ open, onDone }: { open: boolean; onDone: () => void }) {
           onSubmit={start}
           onRetry={() => start(link)}
           onAgain={again}
-          onDone={onDone}
+          onDone={() => onDone(step.kind === 'added' ? step.host : null)}
         />
       )}
     </DialogContent>
