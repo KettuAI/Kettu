@@ -76,6 +76,9 @@ export type AppCommand =
   | { kind: 'toggle-sidebar' }
   | { kind: 'open-session'; sessionId: string }
   | { kind: 'open-routines' }
+  | { kind: 'go-back' }
+  | { kind: 'go-forward' }
+  | { kind: 'show-history' }
 
 /**
  * `artifact:open`: the artifact's origin URL, without a query, or why it cannot be shown:

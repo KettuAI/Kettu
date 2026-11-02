@@ -9,6 +9,8 @@ import {
   type SettingsSection,
 } from '@renderer/stores/view'
 import { newSession, openProjectDialog } from './actions'
+import { back, forward, toggleHistory } from './history'
+import { layerOpen } from './shortcuts'
 
 /** Commands from main: the app menu and notification clicks. */
 export function useAppCommands(): void {
@@ -36,6 +38,16 @@ export function useAppCommands(): void {
           }
           case 'open-routines':
             openRoutines()
+            break
+          // The menu has these keys when the page leaves them, as it does under a dialog or menu.
+          case 'go-back':
+            if (!layerOpen()) back()
+            break
+          case 'go-forward':
+            if (!layerOpen()) forward()
+            break
+          case 'show-history':
+            toggleHistory(layerOpen())
             break
         }
       }),

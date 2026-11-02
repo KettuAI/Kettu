@@ -49,6 +49,31 @@
     "showSidebar": "显示侧边栏",
     "hideSidebar": "隐藏侧边栏",
     "back": "后退",
-    "forward": "前进"
+    "forward": "前进",
+    "backTo": "后退到 <title/>",
+    "forwardTo": "前进到 <title/>"
+  },
+  "history": {
+    "title": "历史记录",
+    "showAll": "显示所有历史记录",
+    "search": "搜索历史记录",
+    "noMatch": "没有与“{{query}}”匹配的位置",
+    "current": "当前",
+    "ago": {
+      "now": "刚刚",
+      "minutes": "{{count}} 分钟",
+      "hours": "{{count}} 小时"
+    },
+    "places": {
+      "newSession": "新建会话",
+      "usage": "用量",
+      "routines": "例程",
+      "newRoutine": "新建例程",
+      "artifacts": "Artifacts",
+      "recentlyDeleted": "Artifacts › 最近删除",
+      "artifact": "Artifact",
+      "settings": "设置 › {{section}}",
+      "settingsItem": "设置 › {{section}} › {{item}}"
+    }
   }
 }

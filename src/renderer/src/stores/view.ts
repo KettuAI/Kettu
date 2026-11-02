@@ -59,14 +59,29 @@ type Page = Exclude<MainView, { kind: 'launch' | 'session' | 'new' }>
 /** What a step of the history shows. */
 export type HistoryView = MainView | PaneView
 
+/** A page of Settings as a place of the history: a section's, or one of its items'. */
+export interface SettingsPlace {
+  kind: 'settings'
+  section: SettingsSection
+  item: string | null
+}
+
+/** What the window showed: Settings' page while it was open, else what the main area showed. */
+export type HistoryPlace = MainView | SettingsPlace
+
 /**
- * A step of the history: what the main area showed before a change, as much as the change
- * replaced: the page shown alone, the views of the panes it changed, and the pane in focus.
+ * A step of the history: what the window showed before a change, as much as the change replaced:
+ * the page shown alone, the views of the panes it changed, the pane in focus, and Settings when
+ * the change opened, closed or moved it. `place` names what showed, for the history's lists, and
+ * `at` is when it was left.
  */
 export interface Step {
   page: Page | null
   panes: { id: string; view: PaneView }[]
   focus: string
+  settings?: ViewStore['settings']
+  place: HistoryPlace
+  at: number
 }
 
 // The No project and Pinned groups' keys in `collapsedProjects`, which no folder's path can take.
@@ -794,6 +809,8 @@ const HISTORY_LIMIT = 50
 /** Whether a view of the history can still show, or went with what it showed. */
 export type CanShow = (view: HistoryView) => boolean
 
+type Direction = 'back' | 'forward'
+
 // Off while a change must not record a step: a step itself, or a view shown in place of another.
 let recording = true
 
@@ -821,6 +838,17 @@ function pageOf(main: MainView): Page | null {
 
 const pageKey = (page: Page | null): string | null => (page ? viewKey(page) : null)
 
+/** The page Settings shows, or null while it is closed; before a section is chosen, General. */
+function settingsKey(settings: ViewStore['settings']): string | null {
+  return settings.open ? `${settings.section ?? 'general'}/${settings.item ?? ''}` : null
+}
+
+/** What the window shows now, as the history names it. */
+export function placeOf(s: Pick<ViewStore, 'main' | 'settings'>): HistoryPlace {
+  const { open, section, item } = s.settings
+  return open ? { kind: 'settings', section: section ?? 'general', item } : s.main
+}
+
 /** Shows a view in place of the one it replaces, which stays the same step. */
 function inPlace(change: () => void): void {
   recording = false
@@ -832,23 +860,42 @@ function inPlace(change: () => void): void {
 }
 
 /**
- * The step back from `after` to `before`: the page and the views of the panes there both times
- * that changed. Null when nothing that shows changed, as when only the focus moved.
+ * The step back from `after` to `before`, left at `at`: the page and the views of the panes there
+ * both times that changed, and Settings when its page changed. Null when nothing that shows
+ * changed, as when only the focus moved.
  */
-function stepBetween(before: ViewStore, after: ViewStore): Step | null {
+function stepBetween(before: ViewStore, after: ViewStore, at: number): Step | null {
   const page = pageOf(before.main)
   const panes = allPanes(before.layout).flatMap((pane) => {
     const now = findPane(after.layout, pane.id)
     return now && viewKey(now.view) !== viewKey(pane.view) ? [{ id: pane.id, view: pane.view }] : []
   })
-  if (!panes.length && pageKey(page) === pageKey(pageOf(after.main))) return null
-  return { page, panes, focus: before.layout.focus }
+  const settings = settingsKey(before.settings) !== settingsKey(after.settings)
+  if (!panes.length && !settings && pageKey(page) === pageKey(pageOf(after.main))) return null
+  return {
+    page,
+    panes,
+    focus: before.layout.focus,
+    ...(settings && { settings: before.settings }),
+    place: placeOf(before),
+    at,
+  }
 }
 
 useViewStore.subscribe((state, previous) => {
-  if (!recording || (state.main === previous.main && state.layout === previous.layout)) return
+  if (!recording) return
+  if (
+    state.main === previous.main &&
+    state.layout === previous.layout &&
+    state.settings === previous.settings
+  ) {
+    return
+  }
   if (state.main.kind === 'launch' || previous.main.kind === 'launch') return
-  const step = stepBetween(previous, state)
+  // Under the same Settings page the main area changes unseen, in place of what it showed.
+  const settings = settingsKey(state.settings)
+  if (settings !== null && settings === settingsKey(previous.settings)) return
+  const step = stepBetween(previous, state, Date.now())
   if (!step) return
   useViewStore.setState({
     history: { back: [...state.history.back, step].slice(-HISTORY_LIMIT), forward: [] },
@@ -859,6 +906,7 @@ useViewStore.subscribe((state, previous) => {
  * What showing a step again changes: each pane it changed gets its view back and the focus, unless
  * the view shows in another pane by now, which takes the focus instead, or the pane has closed,
  * when the view goes to the pane in focus. A step that changed no pane gives back the focus.
+ * Settings shows the page it showed then, and closes for a step taken with it closed.
  */
 function applyStep(s: ViewStore, step: Step): Partial<ViewStore> {
   let layout = s.layout
@@ -878,16 +926,27 @@ function applyStep(s: ViewStore, step: Step): Partial<ViewStore> {
     layout = setPaneViewInLayout(layout, focus, view)
   }
   layout = focusPaneInLayout(layout, focus)
-  return step.page ? { layout, main: step.page } : withLayout(s, layout, true)
+  const main = step.page ? { layout, main: step.page } : withLayout(s, layout, true)
+  const settings = step.settings ?? (s.settings.open ? { ...s.settings, open: false } : s.settings)
+  return { ...main, settings }
 }
 
-function stepShows(step: Step, canShow: CanShow): boolean {
+/** Whether a step can still show: its page and the views of its panes. */
+export function stepShows(step: Step, canShow: CanShow): boolean {
   return (!step.page || canShow(step.page)) && step.panes.every((pane) => canShow(pane.view))
 }
 
-/** Shows the nearest step that can still show and moves it to the other list, inverted. */
-function move(direction: 'back' | 'forward', canShow: CanShow): void {
-  const s = useViewStore.getState()
+/**
+ * The changes that show the nearest step of `direction` that can still show and move it to the
+ * other list, inverted, with what showed until then left at `leftAt`; steps that can no longer
+ * show are dropped on the way. Null when the list holds nothing to show or drop.
+ */
+function stepped(
+  s: ViewStore,
+  direction: Direction,
+  canShow: CanShow,
+  leftAt: number,
+): { changes: Partial<ViewStore>; shown: Step | null } | null {
   const from = [...s.history[direction]]
   let step = from.pop()
   while (step && !stepShows(step, canShow)) step = from.pop()
@@ -895,37 +954,62 @@ function move(direction: 'back' | 'forward', canShow: CanShow): void {
   const history = (rest: Step[], others: Step[]) =>
     direction === 'back' ? { back: rest, forward: others } : { back: others, forward: rest }
   if (!step) {
-    if (from.length < s.history[direction].length) {
-      useViewStore.setState({ history: history(from, other) })
-    }
-    return
+    return from.length < s.history[direction].length
+      ? { changes: { history: history(from, other) }, shown: null }
+      : null
   }
   const changes = applyStep(s, step)
-  const undo = stepBetween(s, { ...s, ...changes }) ?? {
+  const undo = stepBetween(s, { ...s, ...changes }, leftAt) ?? {
     page: pageOf(s.main),
     panes: [],
     focus: s.layout.focus,
+    place: placeOf(s),
+    at: leftAt,
   }
-  inPlace(() =>
-    useViewStore.setState({
-      ...changes,
-      history: history(from, [...other, undo].slice(-HISTORY_LIMIT)),
-    }),
-  )
+  return {
+    changes: { ...changes, history: history(from, [...other, undo].slice(-HISTORY_LIMIT)) },
+    shown: step,
+  }
+}
+
+function move(direction: Direction, canShow: CanShow): void {
+  const result = stepped(useViewStore.getState(), direction, canShow, Date.now())
+  if (result) inPlace(() => useViewStore.setState(result.changes))
 }
 
 /**
- * Back to what the main area showed before; while Settings shows, Settings' own back. Steps whose
- * view can no longer show are skipped.
+ * Back to what the window showed before, a page of Settings or what the main area showed. Steps
+ * whose view can no longer show are skipped.
  */
 export function goBack(canShow: CanShow): void {
-  if (useViewStore.getState().settings.open) settingsBack()
-  else move('back', canShow)
+  move('back', canShow)
 }
 
-/** Forward again after going back; nothing while Settings shows. */
+/** Forward again after going back. */
 export function goForward(canShow: CanShow): void {
-  if (!useViewStore.getState().settings.open) move('forward', canShow)
+  move('forward', canShow)
+}
+
+/**
+ * Goes back or forward to a step of that list in one change, as a browser's history does: the
+ * places passed on the way move to the other list, each left when it was. False when the step is
+ * no longer in the list or can no longer show.
+ */
+export function goTo(direction: Direction, target: Step, canShow: CanShow): boolean {
+  let s = useViewStore.getState()
+  if (!s.history[direction].includes(target) || !stepShows(target, canShow)) return false
+  let changes: Partial<ViewStore> = {}
+  let leftAt = Date.now()
+  for (;;) {
+    const result = stepped(s, direction, canShow, leftAt)
+    if (!result) break
+    s = { ...s, ...result.changes }
+    changes = { ...changes, ...result.changes }
+    if (result.shown === target) break
+    if (result.shown) leftAt = result.shown.at
+  }
+  inPlace(() => useViewStore.setState(changes))
+  return true
 }
 
 /**
@@ -935,7 +1019,7 @@ export function goForward(canShow: CanShow): void {
 export function stepBackTo(view: HistoryView, canShow: CanShow): boolean {
   const s = useViewStore.getState()
   const step = s.history.back.at(-1)
-  if (s.settings.open || !step || !stepShows(step, canShow)) return false
+  if (s.settings.open || !step || step.settings?.open || !stepShows(step, canShow)) return false
   if (viewKey(applyStep(s, step).main ?? s.main) !== viewKey(view)) return false
   move('back', canShow)
   return true

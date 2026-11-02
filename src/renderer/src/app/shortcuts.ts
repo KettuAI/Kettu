@@ -19,13 +19,13 @@ import {
 import { paneOrder } from '@renderer/features/split/layout'
 import { newSession, openProjectDialog } from './actions'
 import { emitAppEvent } from './events'
-import { back, forward } from './history'
+import { back, forward, historyKey, toggleHistory } from './history'
 
 const client = window.kettu.client
 
 /**
- * Whether the page handles Mod+O, Mod+N, Mod+, and Mod+B: the desktop app's menu has them on
- * macOS, and a browser has no such menu.
+ * Whether the page handles Mod+O, Mod+N, Mod+, and Mod+B, and the whole history's key: the desktop
+ * app's menu has them on macOS, and a browser has no such menu.
  */
 export function pageHandlesMenuKeys(platform: string, client: 'desktop' | 'web'): boolean {
   return client === 'web' || platform !== 'darwin'
@@ -37,11 +37,13 @@ export function pageHandlesZoomKeys(platform: string, client: 'desktop' | 'web')
 }
 
 /**
- * App-wide shortcuts. On macOS, Cmd+O, Cmd+N, Cmd+, and Cmd+B are menu accelerators that arrive as
- * app commands, and the zoom keys are menu items, so they are not handled here; a browser has no
- * menu, so the web client handles the first four and leaves zoom to the browser. While a terminal
- * has focus on Windows and Linux, only the terminal and zoom shortcuts reach the app, since
- * Ctrl+B, Ctrl+L and Ctrl+N mean something to the shell.
+ * App-wide shortcuts. On macOS, Cmd+O, Cmd+N, Cmd+, Cmd+B and Cmd+Y are menu accelerators that
+ * arrive as app commands, and the zoom keys are menu items, so they are not handled here; a
+ * browser has no menu, so the web client handles the first five and leaves zoom to the browser.
+ * Cmd+[ and Cmd+] are menu items too, but the page takes them first, and the menu gets them only
+ * when the page leaves them, as to the Files pane's editor. While a terminal has focus on Windows
+ * and Linux, only the terminal and zoom shortcuts reach the app, since Ctrl+B, Ctrl+H, Ctrl+L and
+ * Ctrl+N mean something to the shell.
  */
 export function useKeyboardShortcuts(): void {
   useEffect(() => {
@@ -95,6 +97,7 @@ export function useKeyboardShortcuts(): void {
         if (key === 'n') return run(event, newSession)
         if (key === ',') return run(event, () => openSettings())
         if (key === 'b') return run(event, toggleSidebar)
+        if (key === historyKey(platform)) return run(event, () => toggleHistory(layerOpen()))
       }
       if (key === 'u' && !event.shiftKey && view.main.kind === 'session' && !view.settings.open) {
         return run(event, () => emitAppEvent({ kind: 'add-attachments' }))
@@ -220,7 +223,7 @@ function inCodeEditor(target: EventTarget | null): boolean {
  * Whether a dialog or menu is open, closing included: Esc is its own, and Base UI leaves the event
  * unprevented. Focus can be on the body by then, after the button it went back to was disabled.
  */
-function layerOpen(): boolean {
+export function layerOpen(): boolean {
   return !!document.querySelector('[role=dialog], [role=alertdialog], [role=menu]')
 }
 
