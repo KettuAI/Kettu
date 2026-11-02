@@ -137,7 +137,7 @@ export interface ScenarioOptions {
 export interface ScenarioChoice {
   scenario: ScenarioName | 'compact'
   options: ScenarioOptions
-  text: string // the prompt without the command
+  text: string // the prompt without the command; for a command, its words before the first flag
 }
 
 export type Env = Record<string, string | undefined>
@@ -174,8 +174,8 @@ function flagValue(args: string[], name: string): string | undefined {
 }
 
 /**
- * `/scenario <name> [--flags]` or `/<name> [--flags]` picks a scenario; any other text runs
- * the default, `FAKE_AGENT_SCENARIO` or `basic-turn`. Flags override the environment.
+ * `/scenario <name> [text] [--flags]` or `/<name> [text] [--flags]` picks a scenario; any other
+ * text runs the default, `FAKE_AGENT_SCENARIO` or `basic-turn`. Flags override the environment.
  */
 export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
   const trimmed = prompt.trim()
@@ -187,14 +187,16 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
   if (first === '/scenario' && words[1] && isScenario(words[1])) {
     scenario = words[1]
     args = words.slice(2)
-    text = ''
   } else if (first.startsWith('/')) {
     const name = first.slice(1)
     if (isScenario(name) || name === 'compact') {
       scenario = name
       args = words.slice(1)
-      text = ''
     }
+  }
+  if (scenario) {
+    const flag = args.findIndex((arg) => arg.startsWith('--'))
+    text = (flag === -1 ? args : args.slice(0, flag)).join(' ')
   }
   if (!scenario) {
     const fallback = env.FAKE_AGENT_SCENARIO
