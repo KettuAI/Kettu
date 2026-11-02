@@ -26,6 +26,15 @@ import {
   type HostAdminEvent,
   type HostAdminMethod,
 } from '@shared/remote/host-admin'
+import {
+  HOST_KEEPALIVE,
+  Keepalive,
+  KEEPALIVE_VERSION,
+  keepaliveMessage,
+  type KeepaliveTimings,
+  type Ping,
+  type Pong,
+} from '@shared/remote/keepalive'
 import { Handshake, type KeyPair, type TransportCiphers } from '@shared/remote/noise'
 import { bytesOf, findPlaces, isBinary } from '@shared/remote/places'
 import {
@@ -118,6 +127,8 @@ export interface RemoteServerOptions {
   changed(): void
   log: LogFn
   helloTimeoutMs?: number
+  /** When a quiet device is pinged and given up, HOST_KEEPALIVE unless a test shortens it. */
+  keepalive?: KeepaliveTimings
   /** How long a session waits for its device to resume it, RESUME_MS unless a test shortens it. */
   resumeMs?: number
   /** What a device's outbox holds, OUTBOX_LIMITS unless a test lowers them. */
@@ -379,6 +390,8 @@ class DeviceConnection {
   private closing: Promise<void> | null = null
   private received = 0
   private readonly timer: ReturnType<typeof setTimeout>
+  /** Watches a welcomed device that answers pings for a silence, which ends the connection. */
+  private keepalive: Keepalive | null = null
   /** The code this connection's handshake used, and the key it revealed, until it is added. */
   private pairing: { code: PairingCode; publicKey: Uint8Array } | null = null
   /** False once the first message named a key, so it was no attempt at the pairing code. */
@@ -393,6 +406,7 @@ class DeviceConnection {
     transport.onClose(() => this.end())
     transport.onMessage((message) => {
       if (this.state === 'closed') return
+      this.keepalive?.heard()
       this.received++
       if (this.received === 1) void this.answer(message)
       // The device can write a frame only after the host's answer, which follows the channel.
@@ -514,6 +528,11 @@ class DeviceConnection {
 
   private receive(message: ChannelMessage): void {
     if (this.state === 'closed') return
+    if (this.keepalive && message.kind === 'json') {
+      const keepalive = keepaliveMessage(message.value)
+      if (keepalive === 'ping') this.sendNow({ type: 'pong' } satisfies Pong)
+      if (keepalive) return
+    }
     if (this.session) return this.session.receive(this, message)
     // A device has nothing to upload before its welcome.
     if (message.kind === 'bytes') return
@@ -546,6 +565,7 @@ class DeviceConnection {
       if (kept?.resume(this, hello.resume.received)) {
         this.session = kept
         this.state = 'session'
+        this.keepAlive(kept.version)
         return this.server.resumed(this)
       }
       // Its device received what the host never sent: that session cannot go on.
@@ -559,6 +579,7 @@ class DeviceConnection {
     this.session = session
     this.state = 'session'
     session.start(this)
+    this.keepAlive(version)
     this.server.started(this, session)
   }
 
@@ -609,10 +630,32 @@ class DeviceConnection {
     return closed.then(() => this.server.options.pairing.failed(code))
   }
 
+  /**
+   * From version 3, pings the device after a quiet spell, and drops a connection that stays silent
+   * after it as if the network went, so its session waits for the device to resume.
+   */
+  private keepAlive(version: number): void {
+    if (version < KEEPALIVE_VERSION) return
+    this.keepalive = new Keepalive({
+      ...(this.server.options.keepalive ?? HOST_KEEPALIVE),
+      ping: () => this.sendNow({ type: 'ping' } satisfies Ping),
+      silent: () => {
+        this.server.options.log('info', `Device ${this.device?.id} stopped answering`)
+        this.end()
+      },
+    })
+  }
+
+  /** Sends on this connection, outside the session's numbered messages. */
+  private sendNow(value: Ping | Pong): void {
+    this.channel?.send({ kind: 'json', value }).catch(() => {})
+  }
+
   private end(): void {
     if (this.state === 'closed') return
     this.state = 'closed'
     clearTimeout(this.timer)
+    this.keepalive?.stop()
     this.transport.close()
     if (this.pairing) this.server.options.pairing.release(this.pairing.code)
     if (this.session) this.session.detached(this)
@@ -662,7 +705,7 @@ class DeviceSession {
   constructor(
     private readonly server: RemoteServer,
     public device: PairedDevice,
-    private readonly version: number,
+    readonly version: number,
     port: PortChannel,
   ) {
     const { options } = server

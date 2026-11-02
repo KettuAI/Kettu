@@ -84,6 +84,59 @@ export function memoryTransports(): [Transport, Transport] {
   return [unbuffered(device), unbuffered(host)]
 }
 
+/** A connection whose host end can hang, as the end in a stopped process does. */
+export interface HangingTransports {
+  device: Transport
+  host: Transport
+  /** The host's end reads, sends and closes nothing; the device's close waits for it, as TCP's. */
+  hang(): void
+  /** The host's end goes on: what waited goes both ways, then a close the device asked for. */
+  wake(): void
+}
+
+export function hangingTransports(): HangingTransports {
+  const [device, host] = memoryTransports()
+  let hung = false
+  let closeAsked = false
+  // Whether the host's own reading paused it, which waking leaves as it was.
+  let paused = false
+  const held: Uint8Array[] = []
+  return {
+    device: {
+      ...device,
+      close: () => {
+        if (hung) closeAsked = true
+        else device.close()
+      },
+    },
+    host: {
+      ...host,
+      send: (message) => {
+        if (hung) held.push(message)
+        else host.send(message)
+      },
+      pause: () => {
+        paused = true
+        host.pause()
+      },
+      resume: () => {
+        paused = false
+        if (!hung) host.resume()
+      },
+    },
+    hang: () => {
+      hung = true
+      host.pause()
+    },
+    wake: () => {
+      hung = false
+      for (const message of held.splice(0)) host.send(message)
+      if (!paused) host.resume()
+      if (closeAsked) device.close()
+    },
+  }
+}
+
 /** The host's end of a connection whose device can stop reading, which the host then buffers. */
 export interface HeldTransports {
   device: Transport

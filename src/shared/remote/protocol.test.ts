@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { negotiate, parseClosing, parseHello, parseWelcome } from './protocol'
+import { negotiate, parseClosing, parseHello, parseWelcome, PROTOCOL_VERSION } from './protocol'
 
 const hello = {
   type: 'hello',
@@ -75,7 +75,7 @@ describe('parseWelcome', () => {
   it.each([
     null,
     { ...welcome, type: 'hello' },
-    { ...welcome, protocol: 3 },
+    { ...welcome, protocol: PROTOCOL_VERSION + 1 },
     { ...welcome, host: { name: '', platform: 'linux', version: '0.2.0' } },
     { ...welcome, host: null },
     { ...welcome, device: { id: 'x', name: 'Lin MacBook' } },

@@ -7,8 +7,11 @@ import type { Platform } from '../platform'
 import { parseDirectAddress } from './address'
 import { DEVICE_ID, isDeviceModel, normalizeDeviceName } from './device'
 
-/** The newest protocol version this side speaks; one number covers every change on the channel. */
-export const PROTOCOL_VERSION = 2
+/**
+ * The newest protocol version this side speaks; one number covers every change on the channel.
+ * Version 3 added keeping the connection alive with `ping` and `pong` (see keepalive.ts).
+ */
+export const PROTOCOL_VERSION = 3
 
 /** The oldest version this side still speaks, raised only by a change an older side cannot read. */
 export const MIN_PROTOCOL_VERSION = 1

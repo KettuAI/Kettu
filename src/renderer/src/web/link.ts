@@ -14,6 +14,15 @@ import {
   type DeviceChannel,
 } from '@shared/remote/device-channel'
 import { isHostAdminEvent, type HostAdminEvent } from '@shared/remote/host-admin'
+import {
+  DEVICE_KEEPALIVE,
+  Keepalive,
+  KEEPALIVE_VERSION,
+  keepaliveMessage,
+  type KeepaliveTimings,
+  type Ping,
+  type Pong,
+} from '@shared/remote/keepalive'
 import type { KeyPair } from '@shared/remote/noise'
 import { bytesOf, isBinary } from '@shared/remote/places'
 import {
@@ -117,6 +126,8 @@ interface Session {
   transport: Transport
   welcome: Welcome
   closing: ClosingReason | null
+  /** From version 3, notices a host that stopped answering on an open connection. */
+  keepalive: Keepalive | null
 }
 
 /** A connection whose handshake is done, waiting for the host's first word. */
@@ -193,6 +204,8 @@ export interface HostLinkOptions {
   /** Whether the page is in front; a link in the back waits to reconnect until it is. */
   visible?: () => boolean
   retryDelay?: (failures: number) => number
+  /** When a quiet host is pinged and given up, DEVICE_KEEPALIVE unless a test shortens it. */
+  keepalive?: KeepaliveTimings
 }
 
 /** The host protocol over the channel, kept connected. */
@@ -392,7 +405,19 @@ export class HostLink {
 
   /** `askedResume`: the hello named the last session, which the host may have kept. */
   private welcomed(opened: Opened, welcome: Welcome, later: Later[], askedResume: boolean): void {
-    const session: Session = { ...opened, welcome, closing: null }
+    const session: Session = { ...opened, welcome, closing: null, keepalive: null }
+    if (welcome.protocol >= KEEPALIVE_VERSION) {
+      session.keepalive = new Keepalive({
+        ...(this.options.keepalive ?? DEVICE_KEEPALIVE),
+        ping: () => void session.channel.send({ type: 'ping' } satisfies Ping).catch(() => {}),
+        // Ended now as if the network went, so the link reconnects and resumes the session: a
+        // stopped host never finishes the close.
+        silent: () => {
+          session.channel.close()
+          this.ended(session)
+        },
+      })
+    }
     const resumed = askedResume && welcome.resumed !== undefined
     if (this.keptTimer) clearTimeout(this.keptTimer)
     this.keptTimer = null
@@ -429,6 +454,7 @@ export class HostLink {
   }
 
   private ended(session: Session): void {
+    session.keepalive?.stop()
     if (this.session !== session) return
     this.session = null
     this.acks.pause()
@@ -534,6 +560,12 @@ export class HostLink {
 
   private receive(session: Session, value: unknown): void {
     if (this.session !== session || typeof value !== 'object' || value === null) return
+    if (session.keepalive) {
+      session.keepalive.heard()
+      const own = keepaliveMessage(value)
+      if (own === 'ping') void session.channel.send({ type: 'pong' } satisfies Pong).catch(() => {})
+      if (own) return
+    }
     const message = value as Record<string, unknown>
     if (message.type !== 'closing' && resumable(session)) this.acks.counted()
     switch (message.type) {
@@ -594,6 +626,7 @@ export class HostLink {
 
   private receiveBytes(session: Session, stream: number, data: Uint8Array): void {
     if (this.session !== session) return
+    session.keepalive?.heard()
     if (resumable(session)) this.acks.counted(data.length)
     const download = this.downloads.get(stream)
     if (!download) return

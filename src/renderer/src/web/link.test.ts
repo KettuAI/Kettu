@@ -6,6 +6,7 @@ import { realpath, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { PortChannel } from '@shared/port-channel'
+import type { KeepaliveTimings } from '@shared/remote/keepalive'
 import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
 import { parsePairingLink, type PairingPayload, type PairingState } from '@shared/remote/pairing'
 import type { Transport } from '@shared/remote/transport'
@@ -16,7 +17,11 @@ import { PairingCodes } from '../../../remote-host/pairing'
 import type { OutboxLimits } from '../../../remote-host/outbox'
 import { RemoteServer } from '../../../remote-host/server'
 import { clearUploads } from '../../../remote-host/uploads'
-import { memoryPorts, memoryTransports } from '../../../remote-host/testing/memory'
+import {
+  hangingTransports,
+  memoryPorts,
+  type HangingTransports,
+} from '../../../remote-host/testing/memory'
 import { hello, HostLink, type LinkState } from './link'
 import { pair, type PairProgress } from './pair'
 
@@ -78,11 +83,26 @@ async function setup(options: { resumeMs?: number; limits?: Partial<OutboxLimits
   })
   // Every connection the page dials, each one's host end kept to cut it.
   const hostEnds: Transport[] = []
+  const wires: HangingTransports[] = []
+  // While the host's process is stopped, the dials that wait for it to answer.
+  let stopped: (() => void)[] | null = null
   const dial = async (): Promise<Transport> => {
-    const [deviceEnd, hostEnd] = memoryTransports()
-    hostEnds.push(hostEnd)
-    server.accept(hostEnd)
-    return deviceEnd
+    if (stopped) await new Promise<void>((resolve) => stopped!.push(resolve))
+    const wire = hangingTransports()
+    wires.push(wire)
+    hostEnds.push(wire.host)
+    server.accept(wire.host)
+    return wire.device
+  }
+  /** The host's process stops: its connections answer and close nothing, and new ones wait. */
+  const stop = () => {
+    stopped = []
+    for (const wire of wires) wire.hang()
+  }
+  const go = () => {
+    for (const wire of wires) wire.wake()
+    for (const resolve of stopped?.splice(0) ?? []) resolve()
+    stopped = null
   }
   const openCode = (): PairingPayload => {
     pairing.open(1)
@@ -94,7 +114,7 @@ async function setup(options: { resumeMs?: number; limits?: Partial<OutboxLimits
     await expect.poll(() => heard.at(-1)?.state).toBe('confirm')
     pairing.answer(1, { add, name: DEVICE.name })
   }
-  const pairBrowser = async (key: KeyPair) => {
+  const pairBrowser = async (key: KeyPair, keepalive?: KeepaliveTimings) => {
     const payload = openCode()
     const progress: PairProgress[] = []
     const pairing = pair({ dial, payload, key, client: CLIENT, device: DEVICE }, (state) =>
@@ -109,6 +129,7 @@ async function setup(options: { resumeMs?: number; limits?: Partial<OutboxLimits
       hello: hello(CLIENT),
       adopt: paired,
       retryDelay: () => 200,
+      ...(keepalive ? { keepalive } : {}),
     })
     links.push(link)
     const states: LinkState[] = []
@@ -125,6 +146,8 @@ async function setup(options: { resumeMs?: number; limits?: Partial<OutboxLimits
     heard,
     dial,
     hostEnds,
+    stop,
+    go,
     openCode,
     answered,
     pairBrowser,
@@ -261,6 +284,29 @@ describe('the host link', () => {
     expect(states.at(-1)).toEqual({ kind: 'reconnecting', reason: null, kept: true })
     expect(await listed).toEqual(expect.any(Array))
     await expect.poll(() => states.at(-1)?.kind).toBe('connected')
+    expect(t.hostEnds).toHaveLength(2)
+    expect(t.agentPorts()).toBe(1)
+  })
+
+  it('notices a host that stops answering, and resumes the session once it answers', async () => {
+    const t = await setup()
+    const { link, states } = await t.pairBrowser(await generateKeyPair(), {
+      quietMs: 50,
+      answerMs: 50,
+    })
+    // Pings and their answers keep a quiet connection up.
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(states.map((state) => state.kind)).toEqual(['connecting', 'connected'])
+    // The host's process is stopped: the connection stays open but nothing on it is read, and
+    // it never closes.
+    t.stop()
+    await expect
+      .poll(() => states.at(-1))
+      .toEqual({ kind: 'reconnecting', reason: null, kept: true })
+    const listed = link.request('agents.list', undefined)
+    t.go()
+    await expect.poll(() => states.at(-1)?.kind).toBe('connected')
+    expect(await listed).toEqual(expect.any(Array))
     expect(t.hostEnds).toHaveLength(2)
     expect(t.agentPorts()).toBe(1)
   })

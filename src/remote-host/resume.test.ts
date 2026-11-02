@@ -9,6 +9,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { PortChannel } from '@shared/port-channel'
 import { BYTES_PER_FRAME } from '@shared/remote/channel'
+import type { KeepaliveTimings } from '@shared/remote/keepalive'
 import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
 import type { Welcome } from '@shared/remote/protocol'
 import { ActivityLog } from './activity'
@@ -23,6 +24,7 @@ import { clearUploads } from './uploads'
 const base64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64')
 
 const V2 = { protocol: { min: 1, max: 2 } }
+const V3 = { protocol: { min: 1, max: 3 } }
 
 let dirs: string[] = []
 let servers: RemoteServer[] = []
@@ -42,7 +44,13 @@ interface AgentEnd {
   closed: boolean
 }
 
-async function setup(options: { resumeMs?: number; limits?: Partial<OutboxLimits> } = {}) {
+async function setup(
+  options: {
+    resumeMs?: number
+    limits?: Partial<OutboxLimits>
+    keepalive?: KeepaliveTimings
+  } = {},
+) {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-resume-'))
   dirs.push(dir)
   const log = () => {}
@@ -82,12 +90,18 @@ async function setup(options: { resumeMs?: number; limits?: Partial<OutboxLimits
     log,
     ...(options.resumeMs ? { resumeMs: options.resumeMs } : {}),
     ...(options.limits ? { outboxLimits: options.limits } : {}),
+    ...(options.keepalive ? { keepalive: options.keepalive } : {}),
   })
   servers.push(server)
   const connect = async (
     hello: Record<string, unknown> = V2,
-    { device = 'Phone', acks = true, received = 0 } = {},
-  ): Promise<{ device: TestDevice; welcome: Welcome; drop: () => Promise<void> }> => {
+    { device = 'Phone', acks = true, received = 0, pongs = true } = {},
+  ): Promise<{
+    device: TestDevice
+    welcome: Welcome
+    drop: () => Promise<void>
+    closed: Promise<void>
+  }> => {
     const [deviceEnd, hostEnd] = memoryTransports()
     const closed = new Promise<void>((resolve) => hostEnd.onClose(resolve))
     server.accept(hostEnd)
@@ -98,11 +112,13 @@ async function setup(options: { resumeMs?: number; limits?: Partial<OutboxLimits
       hello,
       acks,
       received,
+      pongs,
     })
     const welcome = (await connected.first) as Welcome
     return {
       device: connected,
       welcome,
+      closed,
       // The network goes: the device's end closes, and the host notices.
       drop: async () => {
         connected.close()
@@ -329,6 +345,60 @@ describe('a device session of version 2', () => {
         },
       },
     })
+  })
+})
+
+describe('a connection of version 3', () => {
+  const quick = { quietMs: 60, answerMs: 60 }
+
+  it("answers a device's ping outside the session's numbered messages", async () => {
+    const t = await setup()
+    const first = await t.connect(V3)
+    expect(first.welcome.protocol).toBe(3)
+    await first.device.send({ type: 'ping' })
+    await expect.poll(() => first.device.keepalive).toEqual(['pong'])
+    const agent = t.agents[0]!
+    agent.port.send(event(1))
+    await expect.poll(() => first.device.received()).toBe(1)
+    await first.drop()
+    agent.port.send(event(2))
+    // Counted without the pong, the resume picks up where the device is.
+    const second = await t.connect(
+      { ...V3, resume: { token: first.welcome.resume!, received: 1 } },
+      { received: 1 },
+    )
+    expect(second.welcome.resumed).toBeDefined()
+    await expect.poll(() => second.device.messages).toEqual([event(2)])
+  })
+
+  it('drops a device that stops answering, and keeps its session to resume', async () => {
+    const t = await setup({ keepalive: quick })
+    const first = await t.connect(V3, { pongs: false })
+    await first.closed
+    expect(first.device.keepalive).toEqual(['ping'])
+    expect(t.server.online()).toEqual([])
+    const second = await t.connect(
+      { ...V3, resume: { token: first.welcome.resume!, received: first.device.received() } },
+      { received: first.device.received() },
+    )
+    expect(second.welcome.resumed).toEqual({ request: 0 })
+    expect(t.agents).toHaveLength(1)
+  })
+
+  it('keeps a device that answers', async () => {
+    const t = await setup({ keepalive: quick })
+    const first = await t.connect(V3)
+    await expect.poll(() => first.device.keepalive.length).toBeGreaterThanOrEqual(2)
+    expect(t.server.online()).toHaveLength(1)
+    expect(first.device.messages).toEqual([])
+  })
+
+  it('never pings a device of an earlier version', async () => {
+    const t = await setup({ keepalive: quick })
+    const first = await t.connect(V2)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(first.device.keepalive).toEqual([])
+    expect(t.server.online()).toHaveLength(1)
   })
 })
 
