@@ -2,6 +2,7 @@
 // failed operation is said in the user's terms. Pure, so the rules are tested on their own.
 
 import type { CommitSummary, GitStatus, GitTools, PushTarget } from '@shared/git'
+import { hostPath } from '@renderer/lib/host-paths'
 
 export type OperationKind = 'fetch' | 'pull' | 'push' | 'publishBranch' | 'publishRepo'
 
@@ -264,7 +265,8 @@ export function suggestPullRequest(
 
 /**
  * A repository path as the Files pane names it, relative to the project, or null when the file
- * lies outside the project folder (a project can be a folder inside its repository).
+ * lies outside the project folder (a project can be a folder inside its repository). Another
+ * host answers with its own root, so the project's path is compared as that host writes it.
  */
 export function projectRelative(root: string, projectPath: string, path: string): string | null {
   const windows = root.includes('\\') || projectPath.includes('\\')
@@ -273,7 +275,7 @@ export function projectRelative(root: string, projectPath: string, path: string)
     return windows ? slashed.toLowerCase() : slashed
   }
   const rootKey = norm(root)
-  const projectKey = norm(projectPath)
+  const projectKey = norm(hostPath(projectPath))
   if (projectKey === rootKey) return path
   if (!projectKey.startsWith(rootKey + '/')) return null
   const prefix = projectKey.slice(rootKey.length + 1) + '/'
