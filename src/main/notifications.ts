@@ -54,9 +54,9 @@ export function notifyAttention(
     forget()
     sendCommand(command)
   })
-  notification.on('action', (_, index) => {
+  notification.on('action', (details) => {
     forget()
-    if (index === 0 && answer && message.kind === 'permission') {
+    if (details.actionIndex === 0 && answer && message.kind === 'permission') {
       allowOnce(message.sessionId, answer.requestId, answer.optionId)
     } else {
       sendCommand(command)
