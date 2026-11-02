@@ -41,14 +41,13 @@ import {
 } from '@renderer/components/ui/sidebar'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { BackForward } from '@renderer/features/shell/back-forward'
-import { SidebarToggle } from '@renderer/features/shell/top-bar'
+import { SidebarTitleBar } from '@renderer/features/shell/top-bar'
 import { strongestSignal, signalText } from '@renderer/features/routines/model'
 import { RunningDot } from '@renderer/features/routines/run-mark'
 import { dayOf } from '@renderer/features/usage/model'
 import { limitLabel, tokens } from '@renderer/lib/format'
 import { LIMIT_TEXT, limitLevel } from '@renderer/lib/plan-limit'
-import { formatShortcut, hasBand } from '@renderer/lib/platform'
+import { formatShortcut } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
@@ -132,21 +131,7 @@ export function AppSidebar() {
       className="w-full bg-transparent"
       aria-label={t('nav.label')}
     >
-      {/* On macOS level with the top bar; elsewhere in the band. */}
-      <div
-        className={cn(
-          'app-region-drag flex shrink-0 items-center pr-2.5 pl-5',
-          hasBand
-            ? 'h-(--title-bar)'
-            : 'h-[calc(var(--sheet-gap)+var(--top-bar))] pt-(--sheet-gap)',
-        )}
-      >
-        {!hasBand && <span aria-hidden className="w-(--traffic-lights)" />}
-        <BackForward className={cn(!hasBand && 'ml-2')} />
-        {/* The window's drag region, 18 px of it at the sidebar's narrowest. */}
-        <span className="flex-1" />
-        <SidebarToggle />
-      </div>
+      <SidebarTitleBar />
       <div className="flex shrink-0 flex-col gap-0.5 px-2 pt-0.5">
         <NavRow
           icon={<PlusIcon />}

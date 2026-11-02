@@ -56,6 +56,25 @@ export function TitleBand() {
   )
 }
 
+/** The sidebar's top row: room for the traffic lights, the drag region, Back, Forward, the toggle. */
+export function SidebarTitleBar() {
+  return (
+    // On macOS level with the top bar; elsewhere in the band.
+    <div
+      className={cn(
+        'app-region-drag flex shrink-0 items-center pr-2.5 pl-5',
+        hasBand ? 'h-(--title-bar)' : 'h-[calc(var(--sheet-gap)+var(--top-bar))] pt-(--sheet-gap)',
+      )}
+    >
+      {!hasBand && <span aria-hidden className="w-(--traffic-lights)" />}
+      <BackForward className={cn(!hasBand && 'ml-2')} />
+      {/* The window's drag region, 18 px of it at the sidebar's narrowest. */}
+      <span className="flex-1" />
+      <SidebarToggle />
+    </div>
+  )
+}
+
 /** Where the collapsed sidebar's toggle shows: the toggle, then Back and Forward. */
 export function CornerControls({ className }: { className?: string }) {
   return (
