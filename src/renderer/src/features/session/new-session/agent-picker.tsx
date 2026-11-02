@@ -9,6 +9,7 @@ import {
   Combobox,
   ComboboxCollection,
   ComboboxContent,
+  ComboboxEmpty,
   ComboboxGroup,
   ComboboxInput,
   ComboboxItem,
@@ -99,7 +100,7 @@ export function AgentPicker({
             variant="quiet"
             size="sm"
             aria-label={t('newSession.agent')}
-            className="h-7.5 min-w-0 shrink gap-1.5 overflow-hidden rounded-xl bg-subtle px-2.25 text-control font-normal text-primary hover:bg-selected aria-expanded:bg-selected"
+            className="h-7.5 min-w-0 shrink gap-1.5 overflow-hidden rounded-xl bg-subtle px-2.25 text-control font-normal text-primary hover:bg-selected aria-expanded:bg-selected [&>[data-icon=inline-end]]:text-tertiary"
           />
         }
       >
@@ -127,7 +128,7 @@ export function AgentPicker({
           aria-label={t('newSession.picker.search')}
           spellCheck={false}
           // A menu's search keeps its bottom line when focused, not a field's focus ring.
-          className="h-10.5 px-2 has-[[data-slot=input-group-control]:focus-visible]:shadow-[inset_0_calc(var(--hairline)*-1)_0_var(--border-soft)]!"
+          className="h-10.5! px-2 has-[[data-slot=input-group-control]:focus-visible]:shadow-[inset_0_calc(var(--hairline)*-1)_0_var(--border-soft)]!"
         >
           <InputGroupAddon>
             <SearchIcon className="size-3.5" />
@@ -158,7 +159,7 @@ export function AgentPicker({
                       <ComboboxItem
                         key={id}
                         value={id}
-                        className="group/agent h-11 gap-2.5 rounded-xl py-1 pr-2 pl-2 [&>span.absolute]:hidden"
+                        className="group/agent h-11 gap-2.5 rounded-xl py-1 pr-2 pl-2 data-highlighted:bg-hover [&>span.absolute]:hidden"
                       >
                         <AgentMark agent={id} size={20} className="shrink-0" />
                         <span className="flex min-w-0 flex-1 flex-col gap-px">
@@ -184,6 +185,7 @@ export function AgentPicker({
             )}
           </ComboboxList>
         )}
+        <ComboboxEmpty>{t('newSession.picker.noMatch')}</ComboboxEmpty>
         {/* Settings set up this computer's agents, not another host's. */}
         {hostId === null && (
           <>

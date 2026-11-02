@@ -33,9 +33,9 @@
     "interruptedAt": "已中断 · {{when}}",
     "skipped": "已跳过",
     "skippedAt": "已跳过 · {{when}}",
-    "next": "下次运行 {{when}}",
-    "nextToday": "下次运行 今天 {{time}}",
-    "nextTomorrow": "下次运行 明天 {{time}}",
+    "next": "下次运行：{{when}}",
+    "nextToday": "下次运行：今天 {{time}}",
+    "nextTomorrow": "下次运行：明天 {{time}}",
     "never": "尚未运行"
   },
   "signal": {

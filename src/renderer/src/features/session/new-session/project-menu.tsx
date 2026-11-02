@@ -170,7 +170,7 @@ export function ProjectMenu({
             className={cn(
               'min-w-13 shrink-10 px-2.25 text-control font-normal has-data-[icon=inline-end]:pr-2.25',
               chip
-                ? 'h-7.5 gap-1.5 rounded-xl bg-subtle text-primary hover:bg-selected aria-expanded:bg-selected'
+                ? 'h-7.5 gap-1.5 rounded-xl bg-subtle text-primary hover:bg-selected aria-expanded:bg-selected [&>[data-icon=inline-end]]:text-tertiary'
                 : 'gap-1',
             )}
           />

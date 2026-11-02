@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowUpIcon, CircleAlertIcon, FolderIcon, GitBranchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
@@ -120,7 +120,7 @@ export function NewSessionView({
         {toolsPath && <HeaderTools projectPath={toolsPath} />}
       </TopBar>
       <ColumnScroller className="flex flex-col px-8 pb-12">
-        {/* The heading sits a fixed share down the sheet, as drawn, and moves up on a short one. */}
+        {/* The heading sits a fixed share down the sheet, and moves up on a short one. */}
         <div className="mx-auto flex w-full max-w-175 flex-col pt-[clamp(--spacing(6),calc(23vh-var(--top-bar)-8px),--spacing(38))]">
           <h1 className="mb-7 animate-in text-center font-display text-[30px] leading-[1.2] font-bold tracking-[-0.02em] text-balance fade-in animation-duration-(--duration-slow)">
             {t('newSession.heading')}
@@ -281,7 +281,7 @@ function DraftComposer({
 
   return (
     <>
-      {/* The board's taller box with its rounder corners; the composer keeps its own look. */}
+      {/* Taller and rounder than a session's composer, which keeps its own look. */}
       <div className="w-full shrink-0 [&>[data-slot=input-group]]:rounded-[18px]">
         <PromptBox
           box={box}
@@ -348,7 +348,7 @@ function DraftComposer({
           }
         />
       </div>
-      <div className="flex w-full flex-col gap-1 pt-2">
+      <div className="flex w-full flex-col gap-1 pt-2 empty:hidden">
         {(projectError || (project?.missing && !inScratch)) && (
           <p className="truncate px-2.75 text-xs text-danger" title={projectError ?? undefined}>
             {projectError ?? t('newSession.missingLine')}
@@ -536,7 +536,8 @@ function ModeMenu({ agentId, hostId }: { agentId: AgentId | null; hostId: string
  */
 function PickUp({ hidden }: { hidden: boolean }) {
   const { t } = useTranslation('session')
-  const sessions = useSessionsStore(useShallow((s) => pickupSessions(s.byId)))
+  const byId = useSessionsStore((s) => s.byId)
+  const sessions = useMemo(() => pickupSessions(byId), [byId])
   const projects = useProjectsStore((s) => s.projects)
   const now = useNow()
   if (sessions.length === 0) return null

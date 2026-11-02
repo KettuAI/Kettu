@@ -69,10 +69,10 @@ import { RunAnnouncements } from './run-history'
 
 /** The table's columns: routine, schedule, agent, last run and the switch; two of them narrow. */
 const COLUMNS =
-  'grid grid-cols-[minmax(0,2.4fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_44px] items-center gap-4 px-3 @max-[36rem]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_44px]'
+  'grid grid-cols-[minmax(0,2.4fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_44px] items-center gap-4 px-3 @max-[48rem]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_44px]'
 
 /** The columns that give way in a narrow sheet, the schedule staying under the name. */
-const WIDE_ONLY = '@max-[36rem]:hidden'
+const WIDE_ONLY = '@max-[48rem]:hidden'
 
 export default function RoutinesPage() {
   const { t } = useTranslation('routines')
@@ -234,14 +234,17 @@ export default function RoutinesPage() {
             <p className={cn('mt-4 text-control text-tertiary', !empty && 'mx-3')}>
               {t('page.footnote')}
               {!openAtLogin && (
-                <Button
-                  variant="link"
-                  size="xs"
-                  onClick={enableOpenAtLogin}
-                  className="ml-1 h-auto px-0 align-baseline text-control text-secondary"
-                >
-                  {t('page.openAtLoginAction')}
-                </Button>
+                <>
+                  {' '}
+                  <Button
+                    variant="link"
+                    size="xs"
+                    onClick={enableOpenAtLogin}
+                    className="h-auto px-0 align-baseline text-control text-secondary"
+                  >
+                    {t('page.openAtLoginAction')}
+                  </Button>
+                </>
               )}
             </p>
           )}
@@ -369,7 +372,7 @@ function RoutineRow({
         >
           <span className="truncate text-row leading-tight font-medium text-primary">{name}</span>
           <span id={`${id}-line`} className="truncate text-control leading-tight text-tertiary">
-            <span aria-hidden className="hidden @max-[36rem]:inline">
+            <span aria-hidden className="hidden @max-[48rem]:inline">
               {schedule} ·{' '}
             </span>
             {rowDescription(routine, projectName)}
