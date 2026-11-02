@@ -40,8 +40,8 @@ export function SessionGitChips({ projectPath }: { projectPath: string }) {
   const isRepo = useGitStore((s) => !!s.status[projectPath]?.repo)
   if (!isRepo) return null
   return (
-    // The chips give way before the title, down to the branch icon.
-    <NoDrag className="min-w-8 shrink-1000 overflow-clip [overflow-clip-margin:3px]">
+    // The title truncates first; the chips keep their size up to a share of the bar.
+    <NoDrag className="max-w-[40cqw] min-w-8 shrink-0 overflow-clip [overflow-clip-margin:3px]">
       <GitStatusCluster projectPath={projectPath} />
     </NoDrag>
   )

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   ChevronRightIcon,
+  FileIcon,
   FolderIcon,
   Maximize2Icon,
   Minimize2Icon,
@@ -44,7 +45,6 @@ import { ChangeBadge } from './change-badge'
 import { useFileChanges, type FileChanges } from './changes'
 import { DiffPreview } from './diff-preview'
 import { FilePreview } from './file-preview'
-import { FileTypeIcon } from './file-type-icon'
 import { UnsavedPrompt } from './unsaved-prompt'
 import {
   filterPaths,
@@ -341,7 +341,7 @@ function ChangesList({ projectPath, changes }: { projectPath: string; changes: F
                 row.folder ? toggle(row.path) : showChange(projectPath, changes, row.path)
               }
             >
-              <FileTypeIcon path={row.path} folder={row.folder} open={isOpen} className="size-4" />
+              <TreeIcon folder={row.folder} />
               <span className="min-w-0 flex-1 truncate">{nameOf(row.path)}</span>
               {change && <ChangeBadge status={change.file.status} />}
             </Row>
@@ -353,7 +353,8 @@ function ChangesList({ projectPath, changes }: { projectPath: string; changes: F
           <span className="flex-1 tabular">{t('changes.files', { count: list.length })}</span>
           {totals && <LineCounts insertions={totals.insertions} deletions={totals.deletions} />}
         </div>
-        <div className="flex gap-1.5">
+        {/* A narrow tree puts Discard under Commit. */}
+        <div className="flex flex-wrap gap-1.5">
           <Button
             size="sm"
             className="flex-1"
@@ -482,7 +483,7 @@ function Tree({
             aria-expanded={row.folder ? isOpen : undefined}
             onClick={() => (row.folder ? toggle(row.path) : openFile(projectPath, row.path))}
           >
-            <FileTypeIcon path={row.path} folder={row.folder} open={isOpen} className="size-4" />
+            <TreeIcon folder={row.folder} />
             <span className="min-w-0 flex-1 truncate">{nameOf(row.path)}</span>
             {change && <ChangeBadge status={change} />}
           </Row>
@@ -549,7 +550,7 @@ function FileRow({
   const folder = folderOf(path)
   return (
     <Row selected={selected} title={path} onClick={() => openFile(projectPath, path)}>
-      <FileTypeIcon path={path} className="size-4" />
+      <TreeIcon />
       <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
         <span className="shrink-0">
           {[...path.slice(nameStart)].map((char, i) =>
@@ -637,7 +638,7 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
                 title={row.path}
                 className="mx-1.5 flex h-7 items-center gap-2 truncate px-2 text-xs font-medium text-primary"
               >
-                <FileTypeIcon path={row.path} className="size-4" />
+                <TreeIcon />
                 <span className="truncate">{row.path}</span>
               </div>
             )
@@ -678,6 +679,12 @@ function Highlight({ text, query }: { text: string; query: string }) {
       {text.slice(at + query.length)}
     </>
   )
+}
+
+/** A row's file or folder icon, plain as the pane draws it. */
+function TreeIcon({ folder = false }: { folder?: boolean }) {
+  const Icon = folder ? FolderIcon : FileIcon
+  return <Icon aria-hidden strokeWidth={1.4} className="size-3.5 shrink-0 text-tertiary" />
 }
 
 function Row({

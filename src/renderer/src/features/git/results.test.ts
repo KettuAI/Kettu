@@ -36,7 +36,7 @@ describe('successNote', () => {
   it('says a fetch brought nothing, or how much there is to pull', () => {
     expect(successNote({ kind: 'fetch' }, status(), status(), false)).toMatchObject({
       key: 'result.fetchedNothing',
-      values: { branch: 'fix/day-key' },
+      values: { branch: 'main' },
       tone: 'info',
       next: null,
     })
@@ -44,6 +44,31 @@ describe('successNote', () => {
       key: 'result.fetchedNew',
       values: { count: 3, branch: 'fix/day-key' },
       next: 'pull',
+    })
+  })
+
+  it('counts what a fetch brought to the default branch', () => {
+    const base = (behind: number) => ({ base: { name: 'origin/main', ahead: 2, behind } })
+    expect(successNote({ kind: 'fetch' }, status(base(1)), status(base(4)), false)).toMatchObject({
+      key: 'result.fetchedNew',
+      values: { count: 3, branch: 'main' },
+      next: null,
+    })
+    expect(successNote({ kind: 'fetch' }, status(base(4)), status(base(4)), false)).toMatchObject({
+      key: 'result.fetchedNothing',
+      values: { branch: 'main' },
+    })
+  })
+
+  it('names the upstream after a fetch on the default branch itself', () => {
+    const onMain = {
+      head: { branch: 'main', oid: 'a'.repeat(40), detached: false },
+      upstream: { name: 'origin/main', ahead: 0, behind: 0 },
+      base: null,
+    }
+    expect(successNote({ kind: 'fetch' }, status(onMain), status(onMain), false)).toMatchObject({
+      key: 'result.fetchedNothing',
+      values: { branch: 'main' },
     })
   })
 

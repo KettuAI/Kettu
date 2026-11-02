@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isBranchName, sameFolder } from './switcher-model'
+import { isBranchName, recentBranches, sameFolder } from './switcher-model'
 
 describe('isBranchName', () => {
   it('takes the names git takes', () => {
@@ -52,5 +52,21 @@ describe('sameFolder', () => {
 
   it('tells a folder from another inside it', () => {
     expect(sameFolder('/a/repo', '/a/repo/sub')).toBe(false)
+  })
+})
+
+describe('recentBranches', () => {
+  it('puts the default branch first and leaves out the current one', () => {
+    const names = ['copy/pricing', 'fix/usage-day-key', 'feat/heatmap', 'main']
+    expect(recentBranches(names, 'fix/usage-day-key', 'main')).toEqual([
+      'main',
+      'copy/pricing',
+      'feat/heatmap',
+    ])
+  })
+
+  it('keeps the order when the default branch is current or unknown', () => {
+    expect(recentBranches(['b', 'main', 'a'], 'main', 'main')).toEqual(['b', 'a'])
+    expect(recentBranches(['b', 'a'], null, null)).toEqual(['b', 'a'])
   })
 })

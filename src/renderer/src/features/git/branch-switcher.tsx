@@ -26,7 +26,7 @@ import { openGitDialog } from '@renderer/stores/git'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { openSession } from '@renderer/stores/view'
 import { runStep } from './steps'
-import { isBranchName, sameFolder } from './switcher-model'
+import { isBranchName, recentBranches, sameFolder } from './switcher-model'
 
 // The New branch item's value, which no branch name can take.
 const NEW_BRANCH = '\0new-branch'
@@ -61,6 +61,7 @@ export function BranchSwitcher({
   const [query, setQuery] = useState('')
   const { projectPath } = status
   const current = status.head.detached ? null : status.head.branch
+  const { defaultBranch } = status
 
   useEffect(() => {
     if (!open) return
@@ -82,10 +83,17 @@ export function BranchSwitcher({
     const branches = loaded?.list?.branches ?? []
     return [
       { value: 'session', items: current ? [current] : [] },
-      { value: 'recent', items: branches.map((b) => b.name).filter((name) => name !== current) },
+      {
+        value: 'recent',
+        items: recentBranches(
+          branches.map((b) => b.name),
+          current,
+          defaultBranch,
+        ),
+      },
       { value: 'new', items: [NEW_BRANCH] },
     ]
-  }, [loaded, current])
+  }, [loaded, current, defaultBranch])
 
   const typed = query.trim()
   const creates = typed !== '' && !byName.has(typed) && isBranchName(typed)

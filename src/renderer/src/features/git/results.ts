@@ -71,11 +71,21 @@ export function successNote(
   switch (request.kind) {
     case 'fetch': {
       const name = upstreamBranch(after)
-      if (!name) return note('result.fetched', { remote }, 'info')
-      const count = after.upstream?.behind ?? 0
-      return count > 0
-        ? note('result.fetchedNew', { count, branch: name }, 'info', 'pull')
-        : note('result.fetchedNothing', { branch: name }, 'info')
+      const behind = after.upstream?.behind ?? 0
+      if (name && behind > 0) {
+        return note('result.fetchedNew', { count: behind, branch: name }, 'info', 'pull')
+      }
+      // Off the default branch, what matters next is what landed there.
+      const { base, defaultBranch } = after
+      if (base && defaultBranch) {
+        const count = base.behind - (before.base?.behind ?? 0)
+        return count > 0
+          ? note('result.fetchedNew', { count, branch: defaultBranch }, 'info')
+          : note('result.fetchedNothing', { branch: defaultBranch }, 'info')
+      }
+      return name
+        ? note('result.fetchedNothing', { branch: name }, 'info')
+        : note('result.fetched', { remote }, 'info')
     }
     case 'pull':
       return note('result.pulled', { count: Math.max(1, before.upstream?.behind ?? 1) }, 'success')

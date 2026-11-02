@@ -77,8 +77,8 @@ export function SessionHeader({
 
   return (
     <TopBar cornered={pane?.cornered}>
-      {/* The title gives way last: the git chips shrink first (see SessionGitChips). What is left
-          once the title reaches its least width is cut at the group's edge, not under the tools. */}
+      {/* The title gives way before the git chips (see SessionGitChips). What is left once the
+          title reaches its least width is cut at the group's edge, not under the tools. */}
       <NoDrag className="min-w-0 gap-0.5 overflow-clip">
         {routine && summary.routine && (
           <>
