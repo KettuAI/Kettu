@@ -927,7 +927,9 @@
       "changePort": "Change port",
       "retry": "Retry",
       "plainTextKey": "This computer's key is kept in a file only your user can read, because the system has no keyring.",
-      "plainTextKey_web": "{{host}}'s key is kept in a file only its user can read, because the system has no keyring."
+      "plainTextKey_web": "{{host}}'s key is kept in a file only its user can read, because the system has no keyring.",
+      "serviceKey": "This computer's key is kept in a file only your user can read, because a service that starts with the computer cannot count on an unlocked keyring.",
+      "serviceKey_web": "{{host}}'s key is kept in a file only its user can read, because a service that starts with the computer cannot count on an unlocked keyring."
     },
     "hostName": {
       "name": "This computer's name",

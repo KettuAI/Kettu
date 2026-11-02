@@ -280,6 +280,7 @@ export class Hosts {
       devices: status?.devices ?? [],
       online: status?.online ?? [],
       plainTextKey: true,
+      service: true,
       direct: status?.direct ?? { state: 'off' },
     }
   }

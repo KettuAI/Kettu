@@ -32,6 +32,11 @@ export interface RemoteStatus {
   online: string[]
   /** The key is kept in a file only the user can read, without the system's encryption. */
   plainTextKey: boolean
+  /**
+   * A service that starts with the computer, which keeps its key in a file on every system since
+   * it cannot count on an unlocked keyring; absent from the desktop app and older daemons.
+   */
+  service?: true
   /** Direct connections, as the remote host last reported them; `off` while it is not running. */
   direct: DirectStatus
 }
