@@ -12,6 +12,11 @@ const electron = vi.hoisted(() => ({
     isEmpty: () => false,
     toDataURL: () => `data:image/png;base64,${file}`,
   })),
+  /** macOS: the app's own icon, where `getFileIcon` gives every app the generic one. */
+  createThumbnailFromPath: vi.fn(async (file: string) => ({
+    isEmpty: () => false,
+    toDataURL: () => `data:image/png;base64,thumb:${file}`,
+  })),
   showOpenDialog: vi.fn(),
 }))
 
@@ -26,6 +31,7 @@ vi.mock('electron', () => ({
     getFileIcon: electron.getFileIcon,
   },
   dialog: { showOpenDialog: electron.showOpenDialog },
+  nativeImage: { createThumbnailFromPath: electron.createThumbnailFromPath },
 }))
 
 const { customId, Editors, KNOWN_EDITORS, pathKind } = await import('./editors')
@@ -38,6 +44,7 @@ afterEach(async () => {
   electron.schemes.clear()
   electron.lookups = []
   electron.getFileIcon.mockClear()
+  electron.createThumbnailFromPath.mockClear()
   electron.showOpenDialog.mockReset()
 })
 
@@ -147,13 +154,17 @@ describe('Editors.list', () => {
     expect(list.editors[0]).toEqual({
       id: 'vscode',
       name: 'Visual Studio Code',
-      icon: 'data:image/png;base64,/Applications/Visual Studio Code.app',
+      icon: 'data:image/png;base64,thumb:/Applications/Visual Studio Code.app',
     })
-    expect(list.editors[2]!.icon).toBe('data:image/png;base64,/Users/ana/Applications/Zed.app')
+    expect(list.editors[2]!.icon).toBe(
+      'data:image/png;base64,thumb:/Users/ana/Applications/Zed.app',
+    )
     expect(list.last).toBeNull()
-    expect(electron.getFileIcon).toHaveBeenCalledWith('/Applications/Cursor.app', {
-      size: 'normal',
+    expect(electron.createThumbnailFromPath).toHaveBeenCalledWith('/Applications/Cursor.app', {
+      width: 32,
+      height: 32,
     })
+    expect(electron.getFileIcon).not.toHaveBeenCalled()
   })
 
   it('looks up only the editors with a scheme on Windows', async () => {
@@ -213,12 +224,12 @@ describe('Editors.list', () => {
     clock.now += 120_000
     await editors.list()
 
-    expect(electron.getFileIcon).toHaveBeenCalledTimes(1)
+    expect(electron.createThumbnailFromPath).toHaveBeenCalledTimes(1)
   })
 
   it('shows no icon when the app has none', async () => {
     electron.schemes.set('cursor://', '/Applications/Cursor.app')
-    electron.getFileIcon.mockRejectedValueOnce(new Error('No icon'))
+    electron.createThumbnailFromPath.mockRejectedValueOnce(new Error('No icon'))
     const { editors } = await rig('darwin')
 
     expect((await editors.list()).editors[0]!.icon).toBeNull()
@@ -244,7 +255,7 @@ describe('Editors.list', () => {
         {
           id: customId('/Applications/Nova Two.app', 'darwin'),
           name: 'Nova Two',
-          icon: 'data:image/png;base64,/Applications/Nova Two.app',
+          icon: 'data:image/png;base64,thumb:/Applications/Nova Two.app',
         },
       ],
       // The id main would never have written names no listed editor.
@@ -366,7 +377,7 @@ describe('Editors.choose', () => {
     const cotEditor = {
       id: customId('/Applications/CotEditor.app', 'darwin'),
       name: 'CotEditor',
-      icon: 'data:image/png;base64,/Applications/CotEditor.app',
+      icon: 'data:image/png;base64,thumb:/Applications/CotEditor.app',
     }
     expect(chosen).toEqual(cotEditor)
     expect(launched).toEqual([['/Applications/CotEditor.app', project]])

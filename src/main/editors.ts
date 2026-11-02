@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { realpath, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { app, dialog, type BrowserWindow } from 'electron'
+import { app, dialog, nativeImage, type BrowserWindow } from 'electron'
 import type { EditorApp, EditorList } from '@shared/editors'
 import type { Platform } from '@shared/platform'
 import { findCommand, isExecutableFile, type Env } from '../agent-host/find-command'
@@ -453,7 +453,12 @@ export class Editors {
     if (this.platform !== 'darwin' && this.platform !== 'win32') return Promise.resolve(null)
     let icon = this.icons.get(program)
     if (!icon) {
-      icon = app.getFileIcon(program, { size: 'normal' }).then(
+      // macOS's file icon is the generic one for every app; a thumbnail is the app's own.
+      const read =
+        this.platform === 'darwin'
+          ? nativeImage.createThumbnailFromPath(program, { width: 32, height: 32 })
+          : app.getFileIcon(program, { size: 'normal' })
+      icon = read.then(
         (image) => (image.isEmpty() ? null : image.toDataURL()),
         (error: unknown) => {
           log.warn(`Could not read the icon of ${program}: ${messageOf(error)}`)
