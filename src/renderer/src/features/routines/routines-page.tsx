@@ -216,7 +216,7 @@ export default function RoutinesPage() {
             {!empty && (
               <Button
                 onClick={() => openRoutine(null)}
-                className="h-8.5 gap-1.5 pr-3.5 pl-2.5 text-row"
+                className="h-8.5 gap-1.5 rounded-xl pr-3.5 pl-2.5 text-row"
               >
                 <PlusIcon data-icon="inline-start" />
                 {t('page.new')}
