@@ -88,10 +88,10 @@
     { "fg": "--syntax-number", "on": ["--bg-code-block", "--bg-app"] },
     { "fg": "--syntax-function", "on": ["--bg-code-block", "--bg-app"] },
     { "fg": "--syntax-type", "on": ["--bg-code-block", "--bg-app"] },
-    {
-      "fg": "--bg-surface",
-      "on": ["--text-primary", "--attention", "--primary-from", "--primary-hover-from"]
-    },
+    { "fg": "--code-success", "on": ["--bg-code-block", "--bg-app"] },
+    { "fg": "--code-danger", "on": ["--bg-code-block", "--bg-app"] },
+    { "fg": "--bg-surface", "on": ["--text-primary", "--attention"] },
+    { "fg": "--primary-foreground", "on": ["--primary-from", "--primary-hover-from"] },
     { "fg": "--bg-app", "on": ["--text-primary"] },
     { "fg": "--toast-foreground", "on": ["--toast"] }
   ]
