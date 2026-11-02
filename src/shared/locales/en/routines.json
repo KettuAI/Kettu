@@ -1,10 +1,8 @@
 {
   "page": {
     "title": "Routines",
-    "description": "Prompts that run on a schedule while Kettu is open, each run in a session you can open later.",
+    "description": "Agent tasks that run on a schedule, inside the permissions you give them.",
     "new": "New routine",
-    "on": "On",
-    "off": "Off",
     "emptyTitle": "No routines yet",
     "emptyDescription": "A routine sends a prompt to an agent on a schedule, each run in a session of its own, while Kettu is open.",
     "unreadableTitle": "Your routines could not be read",
@@ -15,15 +13,30 @@
     "open": "Open {{name}}",
     "switchOn": "Turn on {{name}}",
     "switchOff": "Turn off {{name}}",
-    "lastFailed": "Its last run failed",
-    "openAtLogin": "Routines run only while Kettu is open.",
-    "openAtLoginAction": "Open at login"
+    "openAtLoginAction": "Open at login",
+    "columns": {
+      "routine": "Routine",
+      "schedule": "Schedule",
+      "agent": "Agent",
+      "lastRun": "Last run"
+    },
+    "footnote": "Routines only run while Kettu is open. A routine pauses when its agent is within 10% of a plan limit."
   },
   "row": {
-    "waiting": "Waiting",
-    "since": "Since {{time}}",
-    "today": "Today · {{away}}",
-    "tomorrow": "Tomorrow"
+    "waitingSince": "Waiting since {{time}}",
+    "pausedNear": "Paused · near plan limit",
+    "pausedReached": "Paused · plan limit reached",
+    "failed": "Failed {{ago}}",
+    "cancelled": "Cancelled",
+    "cancelledAt": "Cancelled · {{when}}",
+    "interrupted": "Interrupted",
+    "interruptedAt": "Interrupted · {{when}}",
+    "skipped": "Skipped",
+    "skippedAt": "Skipped · {{when}}",
+    "next": "Next run {{when}}",
+    "nextToday": "Next run today, {{time}}",
+    "nextTomorrow": "Next run tomorrow, {{time}}",
+    "never": "Never run"
   },
   "signal": {
     "name": "Routines, {{signal}}",
@@ -47,8 +60,6 @@
     "next": "Next run {{when}} · {{away}}",
     "nextToday": "Next run today, {{time}} · {{away}}",
     "nextTomorrow": "Next run tomorrow, {{time}} · {{away}}",
-    "resumes": "Resumes at {{time}}",
-    "resumesDay": "Resumes {{day}} at {{time}}",
     "pausedUntil": "Paused until {{time}}: {{reason}}",
     "pausedUntilDay": "Paused until {{day}} at {{time}}: {{reason}}",
     "pausedFor": "Paused: {{reason}}"

@@ -3,20 +3,26 @@
     "title": "Artifacts",
     "ask": "让 Agent 做一份",
     "kinds": {
-      "web": "网页",
+      "web": "页面",
+      "canvas": "画布"
+    },
+    "kindsPlural": {
+      "web": "页面",
       "canvas": "画布"
     },
     "askLine": {
       "web": "做一个网页 artifact：",
       "canvas": "做一个多页的画布 artifact："
     },
-    "filterMenu": "筛选",
-    "filterOn": "筛选，已启用",
+    "filterMenu": "筛选：{{value}}",
+    "agent": "Agent",
+    "anyAgent": "任意 Agent",
+    "filterBoth": "{{agent}} · {{project}}",
     "kind": "类型",
-    "allKinds": "全部类型",
+    "allKinds": "全部",
     "project": "项目",
     "allProjects": "全部项目",
-    "display": "显示方式",
+    "display": "显示方式：{{value}}",
     "layout": "布局",
     "layouts": {
       "none": "平铺",
@@ -28,15 +34,20 @@
       "updated": "最近更新",
       "name": "名称"
     },
+    "sortsShort": {
+      "recent": "最近打开",
+      "updated": "最近更新",
+      "name": "名称"
+    },
     "loading": "正在加载 Artifact",
-    "filter": "按标题筛选",
+    "filter": "搜索 Artifacts",
     "clearFilter": "清除筛选",
     "clearFilters": "清除筛选",
     "noProject": "无项目",
     "deletedSession": "已删除的会话",
     "openSession": "打开会话",
     "emptyTitle": "还没有 Artifact",
-    "emptyDescription": "点上面的类型让 Agent 做一份，或在任何会话里让它做；做好的会按最近打开排在这里。",
+    "emptyDescription": "点下面的类型让 Agent 做一份，或在任何会话里让它做；做好的会按最近打开排在这里。",
     "noMatch": "没有匹配的 Artifact",
     "errorTitle": "无法加载 Artifact",
     "errorDescription": "{{error}} 你的 Artifact 仍安全地保存在这台电脑上。",
@@ -60,11 +71,11 @@
     "nothingDeleted": "最近删除中没有内容"
   },
   "card": {
-    "version": "v{{version}}",
+    "canvas_other": "画布 · {{count}} 页",
+    "kindVersion": "{{kind}} · v{{version}}",
     "noPreview": "无预览",
     "more": "{{title}} 的更多操作",
     "when": "版本 {{version}} · {{time}}",
-    "opened": "{{time}}打开",
     "daysLeft_other": "{{project}} · 剩 {{count}} 天",
     "editing": "编辑中",
     "shared": "已在线分享"
@@ -127,7 +138,9 @@
     "using": "正在使用这个 artifact",
     "moreSessions_other": "还有 {{count}} 个会话",
     "places_other": "在 {{count}} 处打开",
-    "placesTip_other": "这个 artifact 在 Kettu 中的 {{count}} 处打开"
+    "placesTip_other": "这个 artifact 在 Kettu 中的 {{count}} 处打开",
+    "history": "历史",
+    "versionChip": "版本 {{version}}，历史"
   },
   "canvas": {
     "role": "画布",
@@ -141,13 +154,11 @@
     "next": "下一页",
     "pages": "页面",
     "counter": "{{number}} / {{count}}",
-    "backToCanvas": "返回画布"
+    "backToCanvas": "返回画布",
+    "fit": "适应窗口"
   },
   "history": {
-    "title": "版本历史",
-    "close": "关闭版本历史",
-    "version": "版本 {{version}}",
-    "latest": "最新",
+    "title": "历史",
     "you": "你"
   },
   "share": {
@@ -187,6 +198,7 @@
       "not_found": "该页面已不在 Cloudflare 上。请重新发布。",
       "unavailable": "Agent host 未响应。请稍后再试。",
       "failed": "出了点问题，请重试。"
-    }
+    },
+    "button": "分享"
   }
 }
