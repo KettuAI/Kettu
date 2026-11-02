@@ -260,9 +260,9 @@ export function matchesShortcut(
     case 'Backspace':
       return event.key === 'Backspace' || event.key === 'Delete'
     default:
-      // A letter is the one the layout types. With Alt held on macOS, or on a layout without Latin
-      // letters, `key` is another character and the physical key decides.
-      if (!event.altKey && /^[a-z]$/i.test(event.key)) return event.key.toUpperCase() === key
+      // A letter is the one the layout types. Where `key` is another character, as with Alt held
+      // on macOS or on a layout without Latin letters, the physical key decides.
+      if (/^[a-z]$/i.test(event.key)) return event.key.toUpperCase() === key
       return event.code === `Key${key.toUpperCase()}`
   }
 }

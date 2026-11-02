@@ -54,6 +54,7 @@
     "deleteCountTitle_other": "删除 {{count}} 个会话？",
     "atStakeWorktree_other": "它的 worktree <name>{{name}}</name> 有 <files>{{count}} 个未提交的文件</files>。",
     "atStakeFolder_other": "它的文件夹 <name>{{name}}</name> 有 <files>{{count}} 个未提交的文件</files>。",
+    "atStakeUnknown": "Kettu 没能检查它的文件夹 <name>{{name}}</name> 里有没有未提交的文件。",
     "archiveInstead": "改为归档",
     "open": "打开",
     "forkFromHere": "从这里分叉",

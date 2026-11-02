@@ -54,7 +54,7 @@ export function useKeyboardShortcuts(): void {
 
       if (event.ctrlKey && !event.metaKey && !event.altKey && event.code === 'Backquote') {
         // A session's More menu opens its own session's terminal on this key.
-        if (layerOpen()) return
+        if (document.querySelector(MENU_OPENS_TERMINAL)) return
         event.preventDefault()
         if (!view.projectPath || view.settings.open) return
         if (event.shiftKey) emitAppEvent({ kind: 'new-terminal' })
@@ -222,6 +222,8 @@ function inCodeEditor(target: EventTarget | null): boolean {
  * Whether a dialog or menu is open, closing included: Esc is its own, and Base UI leaves the event
  * unprevented. Focus can be on the body by then, after the button it went back to was disabled.
  */
+const MENU_OPENS_TERMINAL = '[role=menu] [data-accelerator="Ctrl+`"]:not([data-disabled])'
+
 function layerOpen(): boolean {
   return !!document.querySelector('[role=dialog], [role=alertdialog], [role=menu]')
 }

@@ -134,3 +134,42 @@ describe('Esc in Settings', () => {
     expect(useViewStore.getState().settings.open).toBe(false)
   })
 })
+
+describe('Ctrl+` with a menu open', () => {
+  function press(): void {
+    const event = {
+      key: '`',
+      code: 'Backquote',
+      metaKey: false,
+      ctrlKey: true,
+      altKey: false,
+      shiftKey: false,
+      isComposing: false,
+      defaultPrevented: false,
+      target: { tagName: 'BODY', isContentEditable: false, closest: () => null },
+      preventDefault: () => {},
+      stopPropagation: () => {},
+    } as unknown as KeyboardEvent
+    for (const { listener } of keydowns.filter((k) => k.capture)) listener(event)
+  }
+  const shown = () => useViewStore.getState().sidePane['/repo']
+
+  it('leaves the key to a menu that opens the terminal itself, and toggles it otherwise', () => {
+    if (keydowns.length === 0) useKeyboardShortcuts()
+    useViewStore.setState({ projectPath: '/repo', sidePane: {} })
+    const opensTerminal = vi.fn((selector: string) =>
+      selector.includes('data-accelerator') ? {} : null,
+    )
+    vi.stubGlobal('document', { querySelector: opensTerminal, activeElement: null })
+    press()
+    expect(shown()).toBeUndefined()
+    // Another menu or a dialog is open: the key still toggles the terminal.
+    vi.stubGlobal('document', {
+      querySelector: (selector: string) => (selector.includes('data-accelerator') ? null : {}),
+      activeElement: null,
+    })
+    press()
+    expect(shown()).toBe('terminal')
+    vi.stubGlobal('document', { querySelector: () => null, activeElement: null })
+  })
+})

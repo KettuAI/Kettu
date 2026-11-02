@@ -59,6 +59,7 @@
     "atStakeWorktree_other": "Its worktree <name>{{name}}</name> has <files>{{count}} uncommitted files</files>.",
     "atStakeFolder_one": "Its folder <name>{{name}}</name> has <files>{{count}} uncommitted file</files>.",
     "atStakeFolder_other": "Its folder <name>{{name}}</name> has <files>{{count}} uncommitted files</files>.",
+    "atStakeUnknown": "Kettu couldn’t check its folder <name>{{name}}</name> for uncommitted files.",
     "archiveInstead": "Archive instead",
     "open": "Open",
     "forkFromHere": "Fork from here",

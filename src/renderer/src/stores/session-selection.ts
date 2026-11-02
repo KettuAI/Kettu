@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { SessionSummary } from '@shared/agent-host'
 import { useSessionsStore } from './sessions'
-import { useViewStore, type MainView } from './view'
+import { useViewStore } from './view'
 
 // The sidebar rows picked with Mod-click or Shift-click, which a row's menu then acts on together.
 // A plain click on a row, Esc there or another session coming to the front clears it, and a
@@ -48,7 +48,12 @@ export function selectionFor(id: string, ids: readonly string[]): readonly strin
 function prune(byId: Record<string, SessionSummary>): void {
   const { ids, anchor } = useSessionSelection.getState()
   if (ids.length === 0 && anchor === null) return
-  const listed = (id: string) => !!byId[id] && !byId[id].archivedAt
+  // The host archives only the top-level session; its sub-sessions leave the list with it.
+  const listed = (id: string) => {
+    let s = byId[id]
+    while (s && !s.archivedAt && s.parentId) s = byId[s.parentId]
+    return !!s && !s.archivedAt
+  }
   const kept = ids.filter(listed)
   const from = anchor !== null && listed(anchor) ? anchor : null
   if (kept.length < ids.length || from !== anchor) {
@@ -60,9 +65,12 @@ useSessionsStore.subscribe((state, previous) => {
   if (state.byId !== previous.byId) prune(state.byId)
 })
 
-const inFront = (main: MainView) => (main.kind === 'session' ? main.sessionId : null)
+// The last session in front, so coming back to it from a page keeps the picked rows.
+let lastFront: string | null = null
 
-useViewStore.subscribe((state, previous) => {
-  const front = inFront(state.main)
-  if (front !== null && front !== inFront(previous.main)) clearSelection()
+useViewStore.subscribe((state) => {
+  const front = state.main.kind === 'session' ? state.main.sessionId : null
+  if (front === null || front === lastFront) return
+  if (lastFront !== null) clearSelection()
+  lastFront = front
 })

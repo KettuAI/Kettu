@@ -199,7 +199,6 @@ async function appForScheme(scheme: string): Promise<string | null> {
   }
 }
 
-/** Main's environment, without what makes another Electron app run as Node.js or as Kettu. */
 /**
  * PATH with the folders editors install their commands into. An app started from a desktop launcher
  * gets a minimal PATH, without the user's own folders.
@@ -210,12 +209,12 @@ function linuxSearchPath(inherited: string | undefined, home: string): string {
     path.posix.join(home, '.local/share/JetBrains/Toolbox/scripts'),
     '/usr/local/bin',
     '/snap/bin',
-    '/var/lib/flatpak/exports/bin',
   ]
   const folders = inherited ? inherited.split(':') : []
   return [...folders, ...extra.filter((folder) => !folders.includes(folder))].join(':')
 }
 
+/** Main's environment, without what makes another Electron app run as Node.js or as Kettu. */
 function launchEnv(env: Env): Env {
   return Object.fromEntries(
     Object.entries(env).filter(([key]) => {

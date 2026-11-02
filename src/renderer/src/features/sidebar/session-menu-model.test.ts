@@ -257,6 +257,12 @@ describe('matchesShortcut', () => {
     expect(matchesShortcut(key({ key: 'з', code: 'KeyP' }), 'P', true)).toBe(true)
   })
 
+  it('reads the layout letter with Alt held where Alt leaves it, as on Windows', () => {
+    // Dvorak's R sits where QWERTY's O does.
+    const event = key({ key: 'r', code: 'KeyO', altKey: true, ctrlKey: true })
+    expect(matchesShortcut(event, 'Alt+Mod+R', false)).toBe(true)
+  })
+
   it('takes the physical key when Alt changes the character', () => {
     const event = key({ key: '®', code: 'KeyR', altKey: true, metaKey: true })
     expect(matchesShortcut(event, 'Alt+Mod+R', true)).toBe(true)

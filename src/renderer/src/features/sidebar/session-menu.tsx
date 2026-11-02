@@ -205,7 +205,8 @@ export function SessionMenuItems({
             {...props}
             onClick={() => void host('sessions.cancel', { sessionId: id })}
           >
-            <SquareIcon />
+            {/* As drawn, Stop's square fills half its box, not lucide's three quarters. */}
+            <SquareIcon className="scale-67" strokeWidth={3} />
             {t('row.stop')}
             {shortcut}
           </DropdownMenuItem>
@@ -230,6 +231,8 @@ export function SessionMenuItems({
           >
             <ExternalLinkIcon />
             {t('row.open')}
+            {/* What opens it from its row; in the menu Enter runs the highlighted item. */}
+            <DropdownMenuShortcut>{formatShortcut('Enter')}</DropdownMenuShortcut>
           </DropdownMenuItem>
         )
       case 'pin':
@@ -289,7 +292,7 @@ export function SessionMenuItems({
                     <AgentMark agent={agent.id} size={15} />
                     <span className="min-w-0 flex-1 truncate">{agent.harnessName}</span>
                     {agent.name !== agent.harnessName && (
-                      <span className="max-w-24 shrink-0 truncate pl-4 text-small text-tertiary">
+                      <span className="max-w-24 shrink-0 truncate pl-4 text-hint text-tertiary">
                         {agent.name}
                       </span>
                     )}
@@ -509,7 +512,7 @@ function OpenInEditor({ path }: { path: string }) {
         <CodeIcon />
         <span className="min-w-0 flex-1 truncate">{t('row.openInEditor')}</span>
         {current && (
-          <span className="max-w-24 shrink-0 truncate pl-4 text-small text-tertiary">
+          <span className="max-w-24 shrink-0 truncate pl-4 text-hint text-tertiary">
             {current.name}
           </span>
         )}
@@ -604,7 +607,7 @@ export function MultiSessionMenuItems({
                     {...props}
                     onClick={each((s) => host('sessions.cancel', { sessionId: s.id }))}
                   >
-                    <SquareIcon />
+                    <SquareIcon className="scale-67" strokeWidth={3} />
                     {t('row.stopCount', { count })}
                     {shortcut(accelerator)}
                   </DropdownMenuItem>
@@ -923,20 +926,25 @@ export function DeleteSessionDialog({
         </AlertDialogHeader>
         {stake &&
           [...stake.entries()]
-            .flatMap(([path, { files, worktree }]) =>
-              files !== null && files > 0 ? [{ path, files, worktree }] : [],
-            )
-            .map(({ path, files, worktree }) => (
+            .filter(([, { files }]) => files !== 0)
+            .map(([path, { files, worktree }]) => (
               <div
                 key={path}
                 className="flex gap-2.5 rounded-2xl bg-subtle px-3 py-2.5 text-control leading-normal text-secondary"
               >
                 <GitBranchIcon className="mt-0.5 size-3.75 shrink-0 text-icon" />
                 <span>
+                  {/* A folder the host could not read says so, as the reason this asks. */}
                   <Trans
                     t={t}
-                    i18nKey={worktree ? 'row.atStakeWorktree' : 'row.atStakeFolder'}
-                    count={files}
+                    i18nKey={
+                      files === null
+                        ? 'row.atStakeUnknown'
+                        : worktree
+                          ? 'row.atStakeWorktree'
+                          : 'row.atStakeFolder'
+                    }
+                    count={files ?? undefined}
                     values={{ name: basename(path) }}
                     components={{
                       name: <span className="font-mono text-xs text-primary" />,

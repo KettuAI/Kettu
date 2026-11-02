@@ -55,6 +55,26 @@ describe('session selection', () => {
     expect(ids()).toEqual([])
   })
 
+  // The host marks only the top-level session archived; its sub-sessions hide with it.
+  it('drops a picked sub-session once its parent is archived', () => {
+    useSessionsStore.setState({
+      byId: { p: session('p'), s: session('s', { parentId: 'p' }), x: session('x') },
+    })
+    toggleSelected('s')
+    toggleSelected('x')
+    useSessionsStore.getState().upsert(session('p', { archivedAt: 1 }))
+    expect(ids()).toEqual(['x'])
+  })
+
+  it('keeps the picked rows when the same session comes back from a page', () => {
+    useViewStore.setState({ main: { kind: 'session', sessionId: 'a' } })
+    toggleSelected('b')
+    toggleSelected('c')
+    useViewStore.setState({ main: { kind: 'usage' } })
+    useViewStore.setState({ main: { kind: 'session', sessionId: 'a' } })
+    expect(ids()).toEqual(['b', 'c'])
+  })
+
   it('lets go of the picked rows when another session comes to the front', () => {
     useViewStore.setState({ main: { kind: 'session', sessionId: 'a' } })
     toggleSelected('b')
