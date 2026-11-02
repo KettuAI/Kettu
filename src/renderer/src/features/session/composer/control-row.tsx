@@ -57,10 +57,10 @@ import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { levelRows, levelsOf, splitName, tierOf, type SelectOption } from './levels'
-import { CheckColumn, DESCRIBED_ROW, ItemText } from './menu-parts'
+import { CheckColumn, DESCRIBED_ROW, ItemText, ROW_BUTTON } from './menu-parts'
 import { mainModels, numberedModel, shownChoice, shownValue, splitModels } from './model-list'
 import { modeLook } from './modes'
-import { UsageButton } from './usage'
+import { CacheButton, ContextButton } from './usage'
 
 /** Asks the agent to change an option; resolves to whether it did. */
 type Select = (optionId: string, value: string | boolean) => Promise<boolean>
@@ -141,6 +141,10 @@ export function ControlRow({
   const leftOthers = others.filter((o) => o.category === 'other')
   const rightOthers = others.filter((o) => o.category !== 'other')
 
+  const cache = cacheExpiry(session, agent?.account ?? null)
+  const timed = cache?.expiresAt != null ? cache : null
+  const warns = agent?.limits.some((l) => l.state !== 'ok') ?? false
+
   const set: Select = (optionId, value) => {
     setError(null)
     return host('sessions.setConfigOption', { sessionId: session.id, optionId, value }).then(
@@ -185,14 +189,16 @@ export function ControlRow({
           outOfCredit={outOfCredit}
         />
       )}
-      <UsageButton
+      {(timed || session.usage || warns) && (
+        <span aria-hidden className="mx-1 h-3.5 w-px shrink-0 bg-border" />
+      )}
+      <CacheButton cache={timed} running={running} used={session.usage?.used ?? 0} />
+      <ContextButton
         sessionId={session.id}
         agentId={session.agentId}
         idle={!running && session.status !== 'starting'}
         reports={agent?.capabilities.context ?? false}
-        running={running}
         usage={session.usage}
-        cache={cacheExpiry(session, agent?.account ?? null)}
         limits={agent?.limits ?? []}
         account={agent?.account ?? null}
         onCompact={onCompact}
@@ -208,10 +214,6 @@ const MODE_ICON = {
   auto: ShieldCheckIcon,
   full: TriangleAlertIcon,
 } as const
-
-/** A control row's button: 30 px, its label in the row's quiet ink, the ink of text while open. */
-export const ROW_BUTTON =
-  'h-7.5 gap-1.5 rounded-tile px-2 text-control font-normal text-tertiary aria-expanded:bg-selected aria-expanded:text-primary [&_svg:not([class*=size-])]:size-3.5'
 
 /**
  * A menu for one option, which closes once a choice is made. The permission mode shows its icon,

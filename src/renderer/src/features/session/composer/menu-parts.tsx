@@ -38,3 +38,7 @@ export function CheckColumn({ children }: { children?: ReactNode }) {
     </span>
   )
 }
+
+/** A control row's button: 30 px, its label in the row's quiet ink, the ink of text while open. */
+export const ROW_BUTTON =
+  'h-7.5 gap-1.5 rounded-tile px-2 text-control font-normal text-tertiary aria-expanded:bg-selected aria-expanded:text-primary [&_svg:not([class*=size-])]:size-3.5'

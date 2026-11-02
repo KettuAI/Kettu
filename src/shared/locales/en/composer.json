@@ -63,7 +63,10 @@
       "reasoning": "Reasoning",
       "cacheRead": "Cache read",
       "cacheWrite": "Cache write",
-      "compact": "Compact"
+      "compact": "Compact now",
+      "ofUsed": "of context used",
+      "compactsAt": "Compacts on its own at {{percent}}%",
+      "tokens": "{{tokens}} tokens"
     },
     "breakdown": {
       "loading": "Reading what fills the context",
@@ -75,7 +78,9 @@
       "tier": "{{plan}} ({{tier}})",
       "used": "{{limit}} used",
       "resets": "Resets {{time}}",
-      "updated": "Updated {{ago}}"
+      "updated": "Updated {{ago}}",
+      "planOf": "Plan · {{plan}}",
+      "resetsShort": "resets {{time}}"
     },
     "cache": {
       "title": "Prompt cache",
@@ -105,8 +110,22 @@
       "left": "Prompt cache lifetime left",
       "ifExpires": "If it expires, the next message reads about {{tokens}} tokens again at full price.",
       "costExpired": "The next message reads about {{tokens}} tokens again at full price.",
-      "ifExpired": "If it has expired, the next message reads about {{tokens}} tokens again at full price."
-    }
+      "ifExpired": "If it has expired, the next message reads about {{tokens}} tokens again at full price.",
+      "button": "Prompt cache: {{time}}",
+      "leftCached": "{{time}} left · {{tokens}} tokens cached",
+      "leftAbout": "About {{time}} left · {{tokens}} tokens cached",
+      "explain": "Reply before it runs out and the cached part costs about a tenth as much. After that, the next message writes the cache again.",
+      "lastReply": "Last reply {{time}}",
+      "lastsMinutesShort_one": "Lasts {{count}} min",
+      "lastsMinutesShort_other": "Lasts {{count}} min",
+      "lastsHoursShort_one": "Lasts {{count}} hour",
+      "lastsHoursShort_other": "Lasts {{count}} hours",
+      "estimateLastsMinutes_one": "Lasts about {{count}} min",
+      "estimateLastsMinutes_other": "Lasts about {{count}} min",
+      "estimateLastsHours_one": "Lasts about {{count}} hour",
+      "estimateLastsHours_other": "Lasts about {{count}} hours"
+    },
+    "openUsage": "Open Usage"
   },
   "attachments": {
     "label": "Attachments",

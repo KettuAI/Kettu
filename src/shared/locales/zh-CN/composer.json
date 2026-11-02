@@ -63,7 +63,10 @@
       "reasoning": "推理",
       "cacheRead": "缓存读取",
       "cacheWrite": "缓存写入",
-      "compact": "压缩上下文"
+      "compact": "立即压缩",
+      "ofUsed": "上下文已用",
+      "compactsAt": "用到 {{percent}}% 时自动压缩",
+      "tokens": "{{tokens}} tokens"
     },
     "breakdown": {
       "loading": "正在读取上下文明细",
@@ -75,7 +78,9 @@
       "tier": "{{plan}} ({{tier}})",
       "used": "已使用：{{limit}}",
       "resets": "重置时间：{{time}}",
-      "updated": "{{ago}}更新"
+      "updated": "{{ago}}更新",
+      "planOf": "套餐 · {{plan}}",
+      "resetsShort": "{{time}} 重置"
     },
     "cache": {
       "title": "提示缓存",
@@ -101,8 +106,18 @@
       "left": "提示缓存剩余时间",
       "ifExpires": "如果过期，下一条消息会按全价重新读取约 {{tokens}} token。",
       "costExpired": "下一条消息会按全价重新读取约 {{tokens}} token。",
-      "ifExpired": "如果已过期，下一条消息会按全价重新读取约 {{tokens}} token。"
-    }
+      "ifExpired": "如果已过期，下一条消息会按全价重新读取约 {{tokens}} token。",
+      "button": "Prompt cache：{{time}}",
+      "leftCached": "剩余 {{time}} · 已缓存 {{tokens}} tokens",
+      "leftAbout": "约剩 {{time}} · 已缓存 {{tokens}} tokens",
+      "explain": "在它过期前回复，缓存部分的费用约为原来的十分之一。过期后，下一条消息会重新写入缓存。",
+      "lastReply": "上次回复 {{time}}",
+      "lastsMinutesShort_other": "有效 {{count}} 分钟",
+      "lastsHoursShort_other": "有效 {{count}} 小时",
+      "estimateLastsMinutes_other": "约有效 {{count}} 分钟",
+      "estimateLastsHours_other": "约有效 {{count}} 小时"
+    },
+    "openUsage": "打开用量"
   },
   "attachments": {
     "label": "附件",
