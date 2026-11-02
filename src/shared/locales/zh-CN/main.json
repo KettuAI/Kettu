@@ -87,7 +87,10 @@
     "remoteFailed": "远程访问没能打开",
     "remoteOn_other": "远程访问已打开 · {{count}} 台设备在线",
     "open": "打开 {{name}}",
-    "quit": "退出 {{name}}"
+    "newSession": "新建会话",
+    "quit": "退出 {{name}}",
+    "remoteAccess": "远程访问",
+    "checkForUpdates": "检查更新…"
   },
   "agents": {
     "folderTaken": "这个目录已经属于 {{agent}}。请换一个，或者让 Kettu 新建一个。"

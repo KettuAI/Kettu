@@ -1,0 +1,76 @@
+{
+  "label": "菜单栏面板",
+  "newSession": "新建会话",
+  "settings": "设置",
+  "openKettu": "打开 Kettu",
+  "quit": "退出",
+  "headline": {
+    "needsYou": "{{count}} 个需要你",
+    "running": "{{count}} 个正在运行",
+    "finished": "{{count}} 个已完成",
+    "quiet": "一切安静"
+  },
+  "lastSession": "{{host}} · 上次会话：{{ago}}",
+  "group": {
+    "needsYou": "需要你",
+    "running": "正在运行",
+    "finished": "已完成",
+    "recent": "最近",
+    "limits": "套餐限额"
+  },
+  "review": "查看",
+  "back": "返回",
+  "untitled": "新会话",
+  "working": "正在处理",
+  "routine": "例行任务",
+  "elapsedMinutes": "{{count}} 分钟",
+  "elapsedHours": "{{h}} 小时 {{m}} 分钟",
+  "doneAgo": "{{ago}}完成",
+  "failedAgo": "{{ago}}停止",
+  "files_other": "{{count}} 个文件",
+  "status": {
+    "running": "正在运行",
+    "needsYou": "需要你",
+    "unread": "还没看过",
+    "failed": "失败",
+    "done": "已完成"
+  },
+  "wants": {
+    "read": "想读取",
+    "edit": "想编辑",
+    "delete": "想删除",
+    "move": "想移动",
+    "search": "想搜索",
+    "execute": "想运行",
+    "fetch": "想获取",
+    "switchMode": "想切换模式",
+    "other": "想使用",
+    "origin": "想打开"
+  },
+  "answerGroup": "回答",
+  "moreWaiting_other": "还有 {{count}} 个在等",
+  "openInKettu": "在 Kettu 中打开",
+  "answeredElsewhere": "已在别处回答：{{title}}",
+  "answerFailed": "没能回答：{{message}}",
+  "remote": {
+    "off": "远程 · 已关闭",
+    "starting": "远程 · 正在打开",
+    "failed": "远程 · 没能打开",
+    "devices_other": "远程 · {{count}} 台设备"
+  },
+  "hostDown": "Kettu 的后台进程没有运行",
+  "limitLabel": "{{agent}} · {{plan}}",
+  "ago": {
+    "justNow": "刚刚",
+    "minutes": "{{count}} 分钟前",
+    "hours": "{{count}} 小时前",
+    "yesterday": "昨天",
+    "onDate": "{{date}}"
+  },
+  "when": {
+    "justNow": "刚刚",
+    "minutes": "{{count}} 分钟前",
+    "hours": "{{count}} 小时前",
+    "yesterday": "昨天"
+  }
+}

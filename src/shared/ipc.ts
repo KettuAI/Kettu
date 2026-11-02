@@ -20,6 +20,7 @@ import type { SharingConnectResult, SharingResult, SharingStatus } from './shari
 import type { TerminalMethod, TerminalsApi } from './terminal-host'
 import type { CatalogInstallResult, CatalogState, ThemeInstallResult, ThemesState } from './themes'
 import type { AgentId, HarnessId } from './thread'
+import type { TrayTarget } from './tray'
 import type { UpdateStatus } from './updates'
 
 export interface AppInfo {
@@ -289,6 +290,8 @@ export interface IpcEventContract {
   'browser:state': BrowserState
   /** An agent's first navigation opened a session's page, so the pane may show it. */
   'browser:opened': { sessionId: string }
+  /** To the menu bar panel: it came forward. */
+  'tray:shown': null
 }
 
 export type IpcEventChannel = keyof IpcEventContract
@@ -316,6 +319,11 @@ export interface IpcSendContract {
   'app:set-unsaved': [files: UnsavedFile[]]
   /** The sessions the renderer still lists, so a page closes once its session leaves the host. */
   'browser:sessions': [sessionIds: string[]]
+  /** The menu bar panel's calls, which main takes from the panel's own page alone. */
+  'tray:open': [target: TrayTarget]
+  'tray:quit': []
+  'tray:hide': []
+  'tray:resize': [height: number]
 }
 
 /** Payload of `agent-host:reset` and `terminal-host:reset`. */
