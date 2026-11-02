@@ -450,11 +450,7 @@
       "settings": "设置文件",
       "instructions": "指令文件"
     },
-    "configFolder": {
-      "chosen": "在 Kettu 中选定"
-    },
     "setBy": "由 {{env}} 指定",
-    "notCreated": "尚未创建",
     "showIn": "在{{name}}中显示",
     "noConfig": "没有可显示的配置文件。",
     "advanced": "高级",
@@ -704,7 +700,7 @@
     "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑上的会话，东西都留在这台电脑上。",
     "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 上的会话，东西都留在 {{host}} 上。",
     "browser": "侧边面板里的浏览器为所有会话保留同一个配置，网站只需登录一次。",
-    "mcp": "Agent 通过这些 MCP 服务器使用工具。这里有 Kettu 自带的服务器，以及各 Agent 自己的服务器所在的位置。",
+    "mcp": "Agent 通过这些 MCP 服务器使用工具：Kettu 自带的，以及各 Agent 自己配置的。",
     "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。在这里安装和更新；账号在 Agent 里。",
     "hosts": "这台电脑连接的、运行 Kettu 的其他电脑。它们的会话会显示在侧边栏中。",
     "hostsWeb": "这个页面连着的电脑。会话、项目和 Agent 都在那台电脑上，这里只管这个浏览器怎么连它。"
@@ -1159,7 +1155,8 @@
     "keywords": "MCP 服务器 工具 artifact 会话 浏览器",
     "groups": {
       "kettu": "来自 Kettu",
-      "own": "各 Agent 自己的配置"
+      "own": "各 Agent 自己的配置",
+      "kettuNote": "Artifacts、会话和浏览器都通过这个服务器提供给每个 Agent。"
     },
     "state": {
       "running": "运行中",
@@ -1175,7 +1172,6 @@
       "title": "无法读取 MCP 服务器"
     },
     "server": {
-      "builtIn": "Kettu 内置",
       "notRunning": {
         "title": "Kettu 的服务器没有运行",
         "body": "在它运行之前，会话启动时不带它的工具。"
@@ -1183,9 +1179,9 @@
     },
     "place": {
       "connects": "{{name}} 也会连接它自己配置的服务器。",
-      "list": "在会话中输入 {{command}} 可查看它们及其状态。",
-      "project": "以及项目目录中的 {{file}}。",
-      "keywords": "配置文件 MCP"
+      "keywords": "配置文件 MCP",
+      "ownWithCommand": "它自己的服务器也会连接。在会话中输入 {{command}} 可以查看，或在项目里添加 {{file}}。",
+      "ownFrom": "它自己的服务器也会连接，来自 {{path}} 和项目里的 {{file}}。"
     },
     "agents": "Agent",
     "tools": "工具",
@@ -1195,7 +1191,8 @@
       "off": "它的会话启动时不带这些工具。",
       "takesNone": "{{name}} 不支持通过 HTTP 连接的 MCP 服务器。",
       "nextStart": "将在 {{name}} 下次启动时生效。"
-    }
+    },
+    "builtIn": "内置"
   },
   "harnesses": {
     "groups": {

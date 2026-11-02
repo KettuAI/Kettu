@@ -918,7 +918,10 @@ export function useMcpSection(): SectionDef {
     description: t('mcp.row.tools', { count: server.tools.length }),
     keywords: t('mcp.keywords'),
     english: en('sections.mcp'),
-    group: group('kettu', t('mcp.groups.kettu'), { count: servers.length }),
+    group: group('kettu', t('mcp.groups.kettu'), {
+      count: servers.length,
+      note: <GroupNote>{t('mcp.groups.kettuNote')}</GroupNote>,
+    }),
     layout: 'custom',
     render: () => <ServerRow server={server} />,
     open: () => openSettingsItem('mcp', server.name),
@@ -931,8 +934,7 @@ export function useMcpSection(): SectionDef {
       description: t('mcp.place.connects', { name }),
       keywords: `${t('mcp.place.keywords')} ${place.path} ${place.project}`,
       english: en('sections.mcp'),
-      group: group('own', t('mcp.groups.own'), { count: places.length }),
-      // The row itself is drawn by the section, as its place carries copy and show.
+      group: group('own', t('mcp.groups.own')),
       layout: 'custom',
       render: () => <AgentPlaceRow place={place} />,
     })

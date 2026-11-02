@@ -32,15 +32,6 @@ export function PathLine({
   )
 }
 
-/** A word on a path, such as that its file is not there yet. */
-export function PathNote({ children }: { children: ReactNode }) {
-  return (
-    <span className="h-4.5 shrink-0 rounded-full bg-subtle px-1.5 text-xs leading-4.5 text-tertiary">
-      {children}
-    </span>
-  )
-}
-
 export function PathActions({ path }: { path: string }) {
   const { t } = useTranslation('settings')
   return (
@@ -49,36 +40,6 @@ export function PathActions({ path }: { path: string }) {
       <RevealAction path={path} />
     </>
   )
-}
-
-/** A place: its path, a word when it is not there yet, and copy and show. */
-export function ConfigPath({ item, extra }: { item: PlaceItem; extra?: ReactNode }) {
-  const { t } = useTranslation('settings')
-  return (
-    <PathLine
-      path={item.path}
-      missing={!item.exists}
-      actions={
-        (extra || item.exists) && (
-          <>
-            {extra}
-            {item.exists && <PathActions path={item.path} />}
-          </>
-        )
-      }
-    >
-      {!item.exists && <PathNote>{t('agents.notCreated')}</PathNote>}
-    </PathLine>
-  )
-}
-
-/** What set the place: a folder picked in Kettu, or the variable that moved it. */
-export function ConfigNote({ item }: { item: PlaceItem }) {
-  const { t } = useTranslation('settings')
-  const note = item.chosen
-    ? t('agents.configFolder.chosen')
-    : item.env && t('agents.setBy', { env: item.env })
-  return note ? <span className="text-xs text-tertiary">{note}</span> : null
 }
 
 /**

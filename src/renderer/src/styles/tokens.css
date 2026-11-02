@@ -48,6 +48,9 @@
   --agent-rose: #c0466c;
   --agent-green: #4b8a39;
   --agent-slate: #66707e;
+  /* Kettu's own MCP server's tile in Settings: the fox, with a white glyph. */
+  --kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
+  --on-kettu-tile: #ffffff;
   /* Running work, in the ink's grays: blue is kept for data and code. */
   --info: #48525f;
   /* A step darker than the reference amber so it reads on the desk. */
@@ -257,6 +260,8 @@
     --agent-rose: #da6489;
     --agent-green: #6aac55;
     --agent-slate: #8d96a4;
+    --kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
+    --on-kettu-tile: #ffffff;
     --info: #aeb6c1;
     --warning: #d9b463;
     --link: #e8ecf1;
@@ -404,6 +409,8 @@
   --agent-rose: #da6489;
   --agent-green: #6aac55;
   --agent-slate: #8d96a4;
+  --kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
+  --on-kettu-tile: #ffffff;
   --info: #aeb6c1;
   --warning: #d9b463;
   --link: #e8ecf1;

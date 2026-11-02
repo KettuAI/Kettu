@@ -609,7 +609,9 @@ export function GhTool() {
   if (gh.state === 'signed-out') {
     return (
       <span className="flex items-center gap-2">
-        <code className="rounded-md bg-subtle px-1.5 py-0.5 font-mono text-code">gh auth login</code>
+        <code className="rounded-md bg-subtle px-1.5 py-0.5 font-mono text-code">
+          gh auth login
+        </code>
         <CopyAction text="gh auth login" label={t('git.gh.copyCommand')} />
         <Pill tone="warning">{t('git.gh.signedOut')}</Pill>
       </span>
