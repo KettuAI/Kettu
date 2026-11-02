@@ -18,8 +18,7 @@
       "routine": "Routine",
       "schedule": "Schedule",
       "agent": "Agent",
-      "lastRun": "Last run",
-      "on": "On"
+      "lastRun": "Last run"
     },
     "footnote": "Routines only run while Kettu is open. A routine pauses when its agent is within 10% of a plan limit."
   },
@@ -61,8 +60,6 @@
     "next": "Next run {{when}} · {{away}}",
     "nextToday": "Next run today, {{time}} · {{away}}",
     "nextTomorrow": "Next run tomorrow, {{time}} · {{away}}",
-    "resumes": "Resumes at {{time}}",
-    "resumesDay": "Resumes {{day}} at {{time}}",
     "pausedUntil": "Paused until {{time}}: {{reason}}",
     "pausedUntilDay": "Paused until {{day}} at {{time}}: {{reason}}",
     "pausedFor": "Paused: {{reason}}"

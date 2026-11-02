@@ -236,10 +236,6 @@ export function runDuration(run: RoutineRun, now = Date.now()): string | null {
   return null
 }
 
-export function failedRun(run: RoutineRun | null): boolean {
-  return !!run && FAILED_RUN_STATUSES.includes(run.status)
-}
-
 export type RoutinePause = NonNullable<RoutineView['pause']>
 
 export type RoutineState =
@@ -355,15 +351,6 @@ function nextText(at: number, now: number): string {
   if (days === 0) return i18n.t('routines:state.nextToday', { time, away })
   if (days === 1) return i18n.t('routines:state.nextTomorrow', { time, away })
   return i18n.t('routines:state.next', { when: runDay(at, now), away })
-}
-
-/** When a paused routine resumes, under its state on its row: "Resumes at 2:30 PM". */
-export function resumeText(pause: RoutinePause | null, now = Date.now()): string | null {
-  if (pause?.resetsAt == null) return null
-  const { day, time } = pauseEnd(pause.resetsAt, now)
-  return day === null
-    ? i18n.t('routines:state.resumes', { time })
-    : i18n.t('routines:state.resumesDay', { day, time })
 }
 
 /** "Paused until 2:30 PM: Claude Code's 5-hour limit is 92% used", under a routine's name. */

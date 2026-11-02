@@ -181,9 +181,14 @@ export default function RoutinesPage() {
     )
   } else if (all.length > 0) {
     body = (
-      <div role="table" aria-label={t('page.title')} className="@container flex flex-col">
+      <div className="@container flex flex-col">
         <ColumnHeads />
-        <div role="rowgroup" onKeyDown={moveRowFocus} className="flex flex-col">
+        <div
+          role="list"
+          aria-label={t('page.title')}
+          onKeyDown={moveRowFocus}
+          className="flex flex-col"
+        >
           {all.map((routine) => (
             <RoutineRow
               key={routine.id}
@@ -276,18 +281,13 @@ function PageStrip() {
 function ColumnHeads() {
   const { t } = useTranslation('routines')
   return (
-    <div role="row" className={cn(COLUMNS, 'h-8 text-small font-medium text-tertiary')}>
-      <span role="columnheader">{t('page.columns.routine')}</span>
-      <span role="columnheader" className={WIDE_ONLY}>
-        {t('page.columns.schedule')}
-      </span>
-      <span role="columnheader" className={WIDE_ONLY}>
-        {t('page.columns.agent')}
-      </span>
-      <span role="columnheader">{t('page.columns.lastRun')}</span>
-      <span role="columnheader">
-        <span className="sr-only">{t('page.columns.on')}</span>
-      </span>
+    // Each row's button names and describes the routine, so the heads are for the eye only.
+    <div aria-hidden className={cn(COLUMNS, 'h-8 text-small font-medium text-tertiary')}>
+      <span>{t('page.columns.routine')}</span>
+      <span className={WIDE_ONLY}>{t('page.columns.schedule')}</span>
+      <span className={WIDE_ONLY}>{t('page.columns.agent')}</span>
+      <span>{t('page.columns.lastRun')}</span>
+      <span />
     </div>
   )
 }
@@ -330,7 +330,7 @@ function RoutineRow({
   return (
     <ContextMenu onOpenChange={setContextOpen}>
       <div
-        role="row"
+        role="listitem"
         className={cn(
           COLUMNS,
           'relative min-h-16 shadow-[inset_0_1px_0_var(--border-subtle)]',
@@ -345,7 +345,7 @@ function RoutineRow({
               data-held={moreOpen || contextOpen || undefined}
               tabIndex={tabbable ? 0 : -1}
               aria-label={t('page.open', { name })}
-              aria-describedby={`${id}-line ${id}-last`}
+              aria-describedby={`${id}-line ${id}-schedule ${id}-agent ${id}-last`}
               onClick={() => openRoutine(routine.id)}
               onFocus={onFocus}
               onKeyDown={(event) => {
@@ -364,18 +364,19 @@ function RoutineRow({
           }
         />
         <span
-          role="cell"
           data-dims=""
           className="pointer-events-none relative flex min-w-0 flex-col gap-0.75 py-2.5"
         >
           <span className="truncate text-row leading-tight font-medium text-primary">{name}</span>
           <span id={`${id}-line`} className="truncate text-control leading-tight text-tertiary">
-            <span className="hidden @max-[36rem]:inline">{schedule} · </span>
+            <span aria-hidden className="hidden @max-[36rem]:inline">
+              {schedule} ·{' '}
+            </span>
             {rowDescription(routine, projectName)}
           </span>
         </span>
         <span
-          role="cell"
+          id={`${id}-schedule`}
           data-dims=""
           className={cn(
             'pointer-events-none relative truncate text-[13.5px] text-secondary',
@@ -385,7 +386,6 @@ function RoutineRow({
           {schedule}
         </span>
         <span
-          role="cell"
           data-dims=""
           className={cn(
             'pointer-events-none relative flex min-w-0 items-center gap-2 text-[13.5px] text-secondary',
@@ -393,13 +393,17 @@ function RoutineRow({
           )}
         >
           <AgentMark agent={routine.agentId} size={16} />
-          <span className="truncate">{agentName(routine.agentId)}</span>
+          <span id={`${id}-agent`} className="truncate">
+            {agentName(routine.agentId)}
+          </span>
         </span>
-        <span role="cell" data-dims="" id={`${id}-last`} className="relative min-w-0">
+        {/* Above the row's button, so only what is interactive here takes the pointer. */}
+        <span data-dims="" id={`${id}-last`} className="pointer-events-none relative min-w-0">
           <LastRun routine={routine} tabbable={tabbable} onError={onError} />
         </span>
-        <span role="cell" data-dims="" className="relative flex justify-end">
+        <span data-dims="" className="pointer-events-none relative flex justify-end">
           <Switch
+            className="pointer-events-auto"
             checked={routine.enabled}
             onCheckedChange={toggle}
             tabIndex={tabbable ? 0 : -1}
@@ -476,7 +480,7 @@ function LastRun({
               size="xs"
               tabIndex={tabbable ? 0 : -1}
               onClick={openRun}
-              className="shrink-0"
+              className="pointer-events-auto shrink-0"
             >
               {t('routine.openRun')}
             </Button>
@@ -510,6 +514,7 @@ function LastRun({
           >
             <PauseIcon aria-hidden className={CELL_ICON} />
             <span className="truncate">{text}</span>
+            {cell.pause && <span className="sr-only">{pauseNotice(cell.pause, now)}</span>}
           </TooltipTrigger>
           {cell.pause && (
             <TooltipContent className="max-w-80">{pauseNotice(cell.pause, now)}</TooltipContent>
@@ -529,6 +534,7 @@ function LastRun({
             <span className="truncate">
               {cell.at === null ? t('run.failed') : t('row.failed', { ago: longAgo(cell.at, now) })}
             </span>
+            <span className="sr-only">{runStatus(cell.run)}</span>
           </TooltipTrigger>
           <TooltipContent className="max-w-80">{runStatus(cell.run)}</TooltipContent>
         </Tooltip>

@@ -18,8 +18,7 @@
       "routine": "例程",
       "schedule": "计划",
       "agent": "Agent",
-      "lastRun": "上次运行",
-      "on": "开关"
+      "lastRun": "上次运行"
     },
     "footnote": "例程只在 Kettu 打开时运行。Agent 距离套餐限额不到 10% 时，例程会暂停。"
   },
@@ -61,8 +60,6 @@
     "next": "下次运行 {{when}} · {{away}}",
     "nextToday": "下次运行 今天 {{time}} · {{away}}",
     "nextTomorrow": "下次运行 明天 {{time}} · {{away}}",
-    "resumes": "{{time}} 恢复",
-    "resumesDay": "{{day}} {{time}} 恢复",
     "pausedUntil": "暂停至 {{time}}：{{reason}}",
     "pausedUntilDay": "暂停至 {{day}} {{time}}：{{reason}}",
     "pausedFor": "已暂停：{{reason}}"

@@ -18,7 +18,7 @@ import {
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { longAgo, shortAgo } from '@renderer/lib/format'
+import { longAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
@@ -233,7 +233,7 @@ function EditingPill() {
 /** The caption's time, apart so only it follows the clock. */
 function Ago({ time }: { time: CardTime }) {
   const { t } = useTranslation('artifacts')
-  const ago = shortAgo(time.at, useNow())
+  const ago = longAgo(time.at, useNow())
   return <span className="shrink-0">{time.opened ? t('card.opened', { time: ago }) : ago}</span>
 }
 
