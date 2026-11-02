@@ -170,7 +170,8 @@ export function SessionMenuItems({
 }: {
   summary: SessionSummary
   place?: SessionMenuPlace
-  onRename: () => void
+  /** Left out where nothing renames the session, which leaves Rename out of the menu. */
+  onRename?: () => void
   /** New session opens for a sub-session, and its composer takes the focus from the menu. */
   onNewSubSession: () => void
   onDelete: () => void
@@ -423,7 +424,15 @@ export function SessionMenuItems({
     }
   }
 
-  const context = { canFork, shown: inSplit, place, local, terminal, resume: resume !== null }
+  const context = {
+    canFork,
+    shown: inSplit,
+    place,
+    local,
+    terminal,
+    resume: resume !== null,
+    rename: onRename !== undefined,
+  }
   return sessionMenuGroups(summary, context).map((group, index) => (
     <DropdownMenuGroup key={group[0]}>
       {index > 0 && <DropdownMenuSeparator />}

@@ -68,6 +68,8 @@ export interface SessionMenuContext {
   terminal: boolean
   /** Its harness has a command that resumes it. */
   resume: boolean
+  /** The menu's place has a title field to rename it in; true when left out. */
+  rename?: boolean
 }
 
 /**
@@ -77,7 +79,15 @@ export interface SessionMenuContext {
  */
 export function sessionMenuGroups(
   summary: Pick<SessionSummary, 'status' | 'parentId' | 'origin' | 'pr'>,
-  { canFork, shown = false, place = 'row', local, terminal, resume }: SessionMenuContext,
+  {
+    canFork,
+    shown = false,
+    place = 'row',
+    local,
+    terminal,
+    resume,
+    rename = true,
+  }: SessionMenuContext,
 ): SessionMenuItem[][] {
   const running = isRunning(summary)
   // Its parent archives and deletes a subagent, so its menu opens it, stops it or finds it.
@@ -122,6 +132,7 @@ export function sessionMenuGroups(
     ...(local ? [] : (['openInEditor', 'showInFolder'] as const)),
     ...(terminal ? [] : (['openTerminal'] as const)),
     ...(resume ? [] : (['copyResume'] as const)),
+    ...(rename ? [] : (['rename'] as const)),
   ])
   return groups
     .map((group) => group.filter((item) => !missing.has(item)))

@@ -55,6 +55,13 @@ describe('sessionMenuGroups', () => {
     expect(groups).toContainEqual(['newSubSession'])
   })
 
+  it('leaves Rename out where nothing renames the session', () => {
+    const groups = sessionMenuGroups(summary(), here({ rename: false }))
+    expect(groups.flat()).not.toContain('rename')
+    expect(groups.every((group) => group.length > 0)).toBe(true)
+    expect(sessionMenuGroups(summary(), here()).flat()).toContain('rename')
+  })
+
   it('leaves Pin, Fork and Archive out for a sub-session', () => {
     expect(sessionMenuGroups(summary({ parentId: 'p' }), here())).toEqual([
       ['unread', 'rename'],
