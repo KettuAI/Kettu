@@ -347,6 +347,7 @@ export interface SessionSummary {
   model: string | null // the model option then, for an estimate of the cache's lifetime
   pinnedAt: number | null // when the user pinned it; a top-level session only
   archivedAt: number | null // when the user archived it; off the sidebar while set
+  acpSessionId: string | null // the harness's own id for it, which its CLI resumes; null until known
   prepared?: PreparedInfo // a prepared session, outside the index until its first message
 }
 

@@ -3,6 +3,7 @@ import type { AgentsApi, DiagnosticsBundle, HostMethod } from './agent-host'
 import type { ArtifactImportResult, ThumbnailPage } from './artifacts'
 import type { GrantedAttachment } from './attachments'
 import type { BrowserBounds, BrowserOriginDecision, BrowserState } from './browser'
+import type { EditorApp, EditorList } from './editors'
 import type { BusySession, BusyTerminal } from './host-control'
 import type { HostSessionChange } from './host-sessions'
 import type { Locale } from './locale'
@@ -158,6 +159,11 @@ export interface IpcInvokeContract {
   'shell:show-data-folder': { args: []; result: void }
   'shell:show-item': { args: [path: string]; result: void }
   'shell:open-notices': { args: []; result: void }
+  'editors:list': { args: []; result: EditorList }
+  // `editorId`: one `editors:list` gave; `path`: an existing file or folder, absolute.
+  'editors:open': { args: [editorId: string, path: string]; result: void }
+  // Asks for an app and opens `path` in it; null when the dialog was cancelled.
+  'editors:choose': { args: [path: string]; result: EditorApp | null }
   // A media URL main still grants, never a path; copy and save also take the bytes the thread
   // carries. `media:save-as` is false when the save dialog was cancelled.
   'media:copy-image': { args: [source: string | CarriedMedia]; result: void }
@@ -505,6 +511,15 @@ export interface KettuApi {
     showItem(path: string): Promise<void>
     /** Opens third-party-notices.txt in the system's app for text files. */
     openNotices(): Promise<void>
+  }
+  /** Open in editor: the code editors on this computer, which main finds and starts by id. */
+  editors: {
+    /** The known editors installed, then the apps the user chose; icons read from the apps. */
+    list(): Promise<EditorList>
+    /** Opens a file or folder, by its absolute path, in a listed editor, the last one from then. */
+    open(editorId: string, path: string): Promise<void>
+    /** Asks for an app and opens the path in it, which `list` offers from then; null if cancelled. */
+    choose(path: string): Promise<EditorApp | null>
   }
   /** Actions on a file served on the media scheme, by its URL, or on bytes the thread carries. */
   media: {

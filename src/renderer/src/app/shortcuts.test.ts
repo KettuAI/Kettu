@@ -164,3 +164,41 @@ describe('Mod+1 to Mod+9', () => {
     expect(press(true)).toBe(false)
   })
 })
+
+describe('Ctrl+` with a menu open', () => {
+  function press(menuOpensTerminal: boolean): boolean {
+    let prevented = false
+    const event = {
+      key: '`',
+      code: 'Backquote',
+      metaKey: false,
+      ctrlKey: true,
+      altKey: false,
+      shiftKey: false,
+      isComposing: false,
+      defaultPrevented: false,
+      target: { tagName: 'BODY', isContentEditable: false, closest: () => null },
+      preventDefault: () => (prevented = true),
+      stopPropagation: () => {},
+    } as unknown as KeyboardEvent
+    // Some layer is open either way; only the first is a menu with its own Open terminal.
+    vi.stubGlobal('document', {
+      querySelector: (selector: string) =>
+        selector.includes('data-accelerator') ? (menuOpensTerminal ? {} : null) : {},
+      activeElement: null,
+    })
+    for (const { listener } of keydowns.filter((k) => k.capture)) listener(event)
+    vi.stubGlobal('document', { querySelector: () => null, activeElement: null })
+    return prevented
+  }
+
+  it('leaves the key to a menu that opens the terminal itself, and takes it otherwise', () => {
+    if (keydowns.length === 0) useKeyboardShortcuts()
+    useViewStore.setState((s) => ({
+      projectPath: '/repo',
+      settings: { ...s.settings, open: false },
+    }))
+    expect(press(true)).toBe(false)
+    expect(press(false)).toBe(true)
+  })
+})
