@@ -109,6 +109,7 @@ import {
   OutlineSummaries,
   Proxy,
   ReduceMotion,
+  RememberedSitesList,
   RemoveAll,
   SendKey,
   ShellPicker,
@@ -703,7 +704,8 @@ export function useBrowserSection(): SectionDef {
   return {
     id: 'browser',
     title: t('sections.browser'),
-    description: t('pages.browser'),
+    // The web client shows only the links rows: the built-in browser runs in the desktop app.
+    description: isWeb ? t('pages.browserWeb') : t('pages.browser'),
     icon: GlobeIcon,
     rows: [
       {
@@ -723,6 +725,16 @@ export function useBrowserSection(): SectionDef {
         keywords: t('browser.confirmLinks.keywords'),
         group: links,
         render: () => <ConfirmLinks label={t('browser.confirmLinks.name')} />,
+      },
+      {
+        id: 'remembered-sites',
+        name: t('browser.rememberedSites.name'),
+        english: en('browser.rememberedSites.name'),
+        description: t('browser.rememberedSites.description'),
+        keywords: t('browser.rememberedSites.keywords'),
+        group: links,
+        layout: 'block',
+        render: (text) => <RememberedSitesList label={text} />,
       },
       {
         id: 'clear-data',

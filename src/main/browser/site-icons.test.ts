@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SiteIconEvent } from '@shared/ipc'
 import {
   dataIcon,
+  LOAD_GAP_MS,
   MAX_ICON_BYTES,
   MAX_SITES,
   parseSiteIcons,
@@ -16,6 +17,8 @@ import {
 const folders: string[] = []
 
 afterEach(async () => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
   await Promise.all(folders.splice(0).map((folder) => rm(folder, { recursive: true, force: true })))
 })
 
@@ -32,14 +35,29 @@ const image = (body: Buffer | string, type: string, status = 200) =>
   new Response(body, { status, headers: { 'content-type': type } })
 
 async function icons(
-  answer: (url: string) => Response | Promise<Response> = () => image(PNG, 'image/png'),
+  answer: (url: string, init: RequestInit) => Response | Promise<Response> = () =>
+    image(PNG, 'image/png'),
 ) {
   const folder = await tempFolder()
   const events: SiteIconEvent[] = []
-  const fetch = vi.fn<IconFetch>(async (url) => answer(url))
-  const store = await SiteIcons.load(folder, { fetch, changed: (event) => events.push(event) })
+  const fetch = vi.fn<IconFetch>(async (url, init) => answer(url, init))
+  const store = SiteIcons.open(folder, { fetch, changed: (event) => events.push(event) })
+  await store.ready
   return { store, events, fetch, folder }
 }
+
+/** An answer that never comes, failing as fetch does once the load is stopped. */
+function untilStopped(init: RequestInit): Promise<never> {
+  return new Promise((_, reject) => {
+    init.signal!.addEventListener('abort', () => reject(init.signal!.reason as Error))
+  })
+}
+
+const loaded = (fetch: { mock: { calls: [string, RequestInit][] } }) =>
+  fetch.mock.calls.map(([url]) => url)
+
+// Only the timers the gap uses, so reading bodies and files runs as it does outside tests.
+const fakeTimers = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
 
 describe('pickFavicon', () => {
   it('takes the first http, https or data icon', () => {
@@ -78,6 +96,20 @@ describe('dataIcon', () => {
     const big = Buffer.alloc(MAX_ICON_BYTES + 1).toString('base64')
     expect(dataIcon(`data:image/png;base64,${big}`)).toBeNull()
   })
+
+  it('keeps an icon of the largest size, however it is encoded', () => {
+    const most = Buffer.alloc(MAX_ICON_BYTES, 0x41)
+    expect(dataIcon(`data:image/svg+xml,${'%41'.repeat(MAX_ICON_BYTES)}`)).toBe(
+      `data:image/svg+xml;base64,${most.toString('base64')}`,
+    )
+    expect(dataIcon(`data:image/png;base64,${most.toString('base64')}`)).not.toBeNull()
+  })
+
+  it('refuses an address too long for a fit icon without decoding it', () => {
+    const from = vi.spyOn(Buffer, 'from')
+    expect(dataIcon(`data:image/png;base64,${'A'.repeat(MAX_ICON_BYTES * 4)}`)).toBeNull()
+    expect(from).not.toHaveBeenCalled()
+  })
 })
 
 describe('parseSiteIcons', () => {
@@ -98,6 +130,14 @@ describe('parseSiteIcons', () => {
     ])
   })
 
+  it('drops an icon kept when larger ones were allowed', () => {
+    const big = `data:image/png;base64,${Buffer.alloc(MAX_ICON_BYTES * 2).toString('base64')}`
+    const sites = parseSiteIcons({
+      sites: [{ origin: 'https://kettu.sh', icon: big, source: 'https://kettu.sh/big.png' }],
+    })
+    expect([...sites]).toEqual([['https://kettu.sh', { icon: null, source: null }]])
+  })
+
   it.each([null, [], 'x', { sites: {} }])('reads nothing from %j', (raw) => {
     expect(parseSiteIcons(raw).size).toBe(0)
   })
@@ -108,18 +148,18 @@ describe('SiteIcons', () => {
     const { store, events } = await icons()
     store.visited('https://docs.kettu.sh/remote')
     store.visited('https://docs.kettu.sh/other')
-    expect(store.all()).toEqual({ 'https://docs.kettu.sh': null })
+    expect(await store.all()).toEqual({ 'https://docs.kettu.sh': null })
     expect(events).toEqual([{ kind: 'set', origin: 'https://docs.kettu.sh', icon: null }])
   })
 
-  it("loads a page's icon through the partition with its cookies and cache", async () => {
+  it("loads a page's icon through the partition's cache, without cookies", async () => {
     const { store, events, fetch } = await icons()
     await store.favicons('https://docs.kettu.sh/remote', ['https://docs.kettu.sh/favicon.png'])
     expect(fetch).toHaveBeenCalledWith(
       'https://docs.kettu.sh/favicon.png',
-      expect.objectContaining({ credentials: 'include', cache: 'force-cache' }),
+      expect.objectContaining({ credentials: 'omit', cache: 'force-cache' }),
     )
-    expect(store.all()).toEqual({ 'https://docs.kettu.sh': PNG_ICON })
+    expect(await store.all()).toEqual({ 'https://docs.kettu.sh': PNG_ICON })
     expect(events.at(-1)).toEqual({ kind: 'set', origin: 'https://docs.kettu.sh', icon: PNG_ICON })
   })
 
@@ -134,7 +174,7 @@ describe('SiteIcons', () => {
     const { store, fetch } = await icons()
     await store.favicons('https://kettu.sh/', [PNG_ICON])
     expect(fetch).not.toHaveBeenCalled()
-    expect(store.all()).toEqual({ 'https://kettu.sh': PNG_ICON })
+    expect(await store.all()).toEqual({ 'https://kettu.sh': PNG_ICON })
   })
 
   it.each([
@@ -150,21 +190,68 @@ describe('SiteIcons', () => {
   ])('keeps the visit but no icon for %s', async (_, answer) => {
     const { store } = await icons(answer)
     await store.favicons('https://kettu.sh/', ['https://kettu.sh/favicon.png'])
-    expect(store.all()).toEqual({ 'https://kettu.sh': null })
+    expect(await store.all()).toEqual({ 'https://kettu.sh': null })
   })
 
-  it('keeps only the latest of two loads for one site', async () => {
-    let release!: () => void
-    const held = new Promise<void>((resolve) => (release = resolve))
-    const { store } = await icons(async (url) => {
-      if (url.endsWith('old.png')) await held
-      return image(url.endsWith('old.png') ? Buffer.from('old') : PNG, 'image/png')
-    })
+  it('starts one load per site in the gap, then only the latest icon named', async () => {
+    fakeTimers()
+    const { store, fetch } = await icons()
+    for (const name of ['a', 'b', 'c', 'd']) {
+      await store.favicons('https://kettu.sh/', [`https://kettu.sh/${name}.png`])
+    }
+    expect(loaded(fetch)).toEqual(['https://kettu.sh/a.png'])
+    await vi.advanceTimersByTimeAsync(LOAD_GAP_MS - 1)
+    expect(loaded(fetch)).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(loaded(fetch)).toEqual(['https://kettu.sh/a.png', 'https://kettu.sh/d.png'])
+    await store.favicons('https://kettu.sh/', ['https://kettu.sh/e.png'])
+    expect(loaded(fetch)).toHaveLength(2)
+  })
+
+  it('holds back no other site', async () => {
+    fakeTimers()
+    const { store, fetch } = await icons()
+    await store.favicons('https://kettu.sh/', ['https://kettu.sh/favicon.png'])
+    await store.favicons('https://example.com/', ['https://example.com/favicon.png'])
+    expect(loaded(fetch)).toEqual([
+      'https://kettu.sh/favicon.png',
+      'https://example.com/favicon.png',
+    ])
+  })
+
+  it('drops a waiting icon when the page names the one it has again', async () => {
+    fakeTimers()
+    const { store, fetch } = await icons()
+    await store.favicons('https://kettu.sh/', ['https://kettu.sh/favicon.png'])
+    await store.favicons('https://kettu.sh/', ['https://kettu.sh/other.png'])
+    await store.favicons('https://kettu.sh/', ['https://kettu.sh/favicon.png'])
+    await vi.advanceTimersByTimeAsync(LOAD_GAP_MS)
+    expect(loaded(fetch)).toEqual(['https://kettu.sh/favicon.png'])
+  })
+
+  it('stops the load in flight when the next one starts, and keeps only the next', async () => {
+    fakeTimers()
+    const { store, fetch } = await icons(async (url, init) =>
+      url.endsWith('old.png') ? untilStopped(init) : image(PNG, 'image/png'),
+    )
     const old = store.favicons('https://kettu.sh/', ['https://kettu.sh/old.png'])
     await store.favicons('https://kettu.sh/', ['https://kettu.sh/new.png'])
-    release()
+    expect(fetch.mock.calls[0]![1].signal!.aborted).toBe(false)
+    await vi.advanceTimersByTimeAsync(LOAD_GAP_MS)
     await old
-    expect(store.all()).toEqual({ 'https://kettu.sh': PNG_ICON })
+    expect(fetch.mock.calls[0]![1].signal!.aborted).toBe(true)
+    await vi.waitFor(async () => {
+      expect(await store.all()).toEqual({ 'https://kettu.sh': PNG_ICON })
+    })
+  })
+
+  it('stops the load in flight for a data icon named after it', async () => {
+    const { store, fetch } = await icons(async (_, init) => untilStopped(init))
+    const load = store.favicons('https://kettu.sh/', ['https://kettu.sh/favicon.png'])
+    await store.favicons('https://kettu.sh/', [PNG_ICON])
+    await load
+    expect(fetch.mock.calls[0]![1].signal!.aborted).toBe(true)
+    expect(await store.all()).toEqual({ 'https://kettu.sh': PNG_ICON })
   })
 
   it('forgets the site opened longest ago beyond the limit', async () => {
@@ -172,7 +259,7 @@ describe('SiteIcons', () => {
     for (let i = 0; i <= MAX_SITES; i++) store.visited(`https://site${i}.example/`)
     store.visited('https://site1.example/')
     store.visited('https://new.example/')
-    const origins = Object.keys(store.all())
+    const origins = Object.keys(await store.all())
     expect(origins).toHaveLength(MAX_SITES)
     expect(origins).not.toContain('https://site0.example')
     expect(origins).not.toContain('https://site2.example')
@@ -191,7 +278,7 @@ describe('SiteIcons', () => {
     store.clear()
     release()
     await load
-    expect(store.all()).toEqual({})
+    expect(await store.all()).toEqual({})
     expect(events.at(-1)).toEqual({ kind: 'cleared' })
   })
 
@@ -208,15 +295,36 @@ describe('SiteIcons', () => {
         { origin: 'https://example.com', icon: null, source: null },
       ],
     })
-    const reopened = await SiteIcons.load(folder, { fetch: vi.fn(), changed: () => {} })
-    expect(reopened.all()).toEqual({ 'https://kettu.sh': PNG_ICON, 'https://example.com': null })
+    const reopened = SiteIcons.open(folder, { fetch: vi.fn(), changed: () => {} })
+    expect(await reopened.all()).toEqual({
+      'https://kettu.sh': PNG_ICON,
+      'https://example.com': null,
+    })
+  })
+
+  it('answers with the icons only once the file is read, with changes made before on top', async () => {
+    const folder = await tempFolder()
+    await mkdir(path.join(folder, 'state'), { recursive: true })
+    await writeFile(
+      path.join(folder, 'state', 'site-icons.json'),
+      JSON.stringify({
+        version: 1,
+        sites: [{ origin: 'https://kettu.sh', icon: PNG_ICON, source: 'https://kettu.sh/a.png' }],
+      }),
+    )
+    const store = SiteIcons.open(folder, { fetch: vi.fn(), changed: () => {} })
+    const early = store.all()
+    store.visited('https://example.com/')
+    expect(await early).toEqual({ 'https://kettu.sh': PNG_ICON, 'https://example.com': null })
+    store.clear()
+    expect(await store.all()).toEqual({})
   })
 
   it('starts empty from a file that is not JSON', async () => {
     const folder = await tempFolder()
     await mkdir(path.join(folder, 'state'), { recursive: true })
     await writeFile(path.join(folder, 'state', 'site-icons.json'), '{ not json')
-    const store = await SiteIcons.load(folder, { fetch: vi.fn(), changed: () => {} })
-    expect(store.all()).toEqual({})
+    const store = SiteIcons.open(folder, { fetch: vi.fn(), changed: () => {} })
+    expect(await store.all()).toEqual({})
   })
 })

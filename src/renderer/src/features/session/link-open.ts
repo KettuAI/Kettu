@@ -127,6 +127,19 @@ export interface LinkPlan {
   ask: boolean
 }
 
+/** What choosing a place for the link does, as its menu does; outside a session only the browser. */
+export function planLinkOpenIn(
+  url: string,
+  prefs: LinkPrefs,
+  context: LinkContext,
+  destination: LinkDestination,
+): LinkPlan {
+  return {
+    destination: context.session ? destination : 'browser',
+    ask: asksBeforeOpening(url, prefs, context),
+  }
+}
+
 /** What a click does; `other` is a Mod-click (Cmd on macOS), which takes the other place. */
 export function planLinkOpen(
   url: string,
@@ -135,10 +148,7 @@ export function planLinkOpen(
   other: boolean,
 ): LinkPlan {
   const destination = defaultDestination(url, prefs, context)
-  return {
-    destination: other && context.session ? otherDestination(destination) : destination,
-    ask: asksBeforeOpening(url, prefs, context),
-  }
+  return planLinkOpenIn(url, prefs, context, other ? otherDestination(destination) : destination)
 }
 
 /** The remembered sites with `site` sent to `destination`, newest last, within the limit. */
@@ -150,6 +160,14 @@ export function rememberSite(
   const entries = Object.entries(alwaysOpenIn).filter(([known]) => known !== site)
   entries.push([site, destination])
   return Object.fromEntries(entries.slice(-MAX_LINK_SITES))
+}
+
+/** The remembered sites without `site`, in their order. */
+export function forgetSite(
+  alwaysOpenIn: LinkPrefs['alwaysOpenIn'],
+  site: string,
+): LinkPrefs['alwaysOpenIn'] {
+  return Object.fromEntries(Object.entries(alwaysOpenIn).filter(([known]) => known !== site))
 }
 
 /** Whether a link's text is its address, as an autolink or a pasted URL writes it. */

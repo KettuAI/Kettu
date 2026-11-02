@@ -355,6 +355,14 @@
       "description": "Shows the full address and lets you pick where it opens.",
       "keywords": "link url browser open confirm ask first visit"
     },
+    "rememberedSites": {
+      "name": "Remembered sites",
+      "description": "Sites you chose to always open in one place, without asking.",
+      "keywords": "link url site always open remember forget browser session",
+      "empty": "No site is remembered yet.",
+      "remove": "Remove",
+      "removed": "Removed {{site}}"
+    },
     "allowedSites": {
       "name": "Always allowed sites",
       "description": "Sites the projects let agents open without asking.",
@@ -695,6 +703,7 @@
     "remote": "Use this computer's sessions in Kettu on an iPhone, an iPad or another computer; everything stays on this computer.",
     "remote_web": "Use {{host}}'s sessions in Kettu on an iPhone, an iPad or another computer; everything stays on {{host}}.",
     "browser": "The browser in the side panel keeps one profile for every session: sign-ins, site data and cache.",
+    "browserWeb": "Links in agents’ replies open in a new tab.",
     "mcp": "Agents reach tools through these MCP servers. Kettu's own is here, and where each agent keeps its own.",
     "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Install and update them here; accounts are in Agents.",
     "hosts": "The hosts Kettu on this computer connects to. Sessions, projects and agents stay on each host; this is only how to reach them.",

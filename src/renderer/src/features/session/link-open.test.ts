@@ -4,6 +4,7 @@ import {
   asksBeforeOpening,
   bareParts,
   defaultDestination,
+  forgetSite,
   hasUserinfo,
   isBareLink,
   isLocalLink,
@@ -11,6 +12,7 @@ import {
   linkSite,
   markdownLink,
   planLinkOpen,
+  planLinkOpenIn,
   rememberSite,
   type LinkPrefs,
 } from './link-open'
@@ -195,6 +197,39 @@ describe('planLinkOpen', () => {
       destination: 'session',
       ask: true,
     })
+  })
+})
+
+describe('planLinkOpenIn', () => {
+  const url = 'https://kettu.sh/'
+
+  it('takes the place chosen, asking as a click would', () => {
+    expect(planLinkOpenIn(url, prefs(), inSession, 'session')).toEqual({
+      destination: 'session',
+      ask: false,
+    })
+    expect(planLinkOpenIn(url, prefs({ confirmLinks: true }), inSession, 'browser')).toEqual({
+      destination: 'browser',
+      ask: true,
+    })
+  })
+
+  it('opens only the default browser outside a session', () => {
+    expect(planLinkOpenIn(url, prefs(), noSession, 'session')).toEqual({
+      destination: 'browser',
+      ask: false,
+    })
+  })
+})
+
+describe('forgetSite', () => {
+  it('drops the site and keeps the others in their order', () => {
+    const sites = { 'a.com': 'browser', 'b.com': 'session', 'c.com': 'browser' } as const
+    expect(Object.entries(forgetSite(sites, 'b.com'))).toEqual([
+      ['a.com', 'browser'],
+      ['c.com', 'browser'],
+    ])
+    expect(forgetSite(sites, 'd.com')).toEqual(sites)
   })
 })
 

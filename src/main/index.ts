@@ -187,9 +187,10 @@ async function start(): Promise<void> {
 
   const mediaGrants = new MediaGrants()
   const browserOrigins = await BrowserOriginStore.load(userDataPath)
-  // From the pages' own partition, with the cache and cookies they loaded the icon with.
+  // From the pages' own partition, with the cache they loaded the icon into. The file is read in
+  // the background; the window asks for the icons and waits for it then.
   const browserSession = session.fromPartition(BROWSER_PARTITION)
-  const siteIcons = await SiteIcons.load(userDataPath, {
+  const siteIcons = SiteIcons.open(userDataPath, {
     fetch: (url, init) => browserSession.fetch(url, init) as unknown as Promise<Response>,
     changed: (event) => broadcast('browser:site-icon', event),
   })

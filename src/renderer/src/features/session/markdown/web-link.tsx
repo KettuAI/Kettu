@@ -2,6 +2,8 @@ import {
   isValidElement,
   useContext,
   useEffect,
+  useMemo,
+  useRef,
   useState,
   type ComponentType,
   type KeyboardEvent,
@@ -29,16 +31,17 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { loadSiteIcons, useDefaultBrowser, useSiteIcon } from '@renderer/stores/site-icons'
 import { openSession, toggleSidePane, useViewStore } from '@renderer/stores/view'
 import {
-  asksBeforeOpening,
   bareParts,
   defaultDestination,
   isBareLink,
   isLocalLink,
   linkSite,
   markdownLink,
-  otherDestination,
+  planLinkOpen,
+  planLinkOpenIn,
   rememberSite,
   type LinkContext,
+  type LinkPlan,
 } from '../link-open'
 
 /** What the "Open link?" dialog is given; `link-confirm.tsx` draws it. */
@@ -123,7 +126,14 @@ function SiteTile({ url }: { url: string }) {
   }
   if (icon) {
     return (
-      <span aria-hidden className={tile}>
+      <span
+        aria-hidden
+        className={cn(
+          tile,
+          // The edge lies over the icon, which would cover an inset shadow on the tile itself.
+          'after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
+        )}
+      >
         <img src={icon} alt="" draggable={false} className="size-full object-contain" />
       </span>
     )
@@ -226,29 +236,33 @@ export function WebLink({
   const [menuOpen, setMenuOpen] = useState(false)
   // The dialog's run: a new key each time, so its choices start afresh.
   const [ask, setAsk] = useState<{ key: number; destination: LinkDestination; open: boolean }>()
+  const link = useRef<HTMLAnchorElement>(null)
+  // A link that wraps has a box per line; the tooltip starts at the first, where the link does.
+  const firstLine = useMemo(
+    () => ({
+      getBoundingClientRect: () =>
+        link.current?.getClientRects()[0] ?? link.current?.getBoundingClientRect() ?? new DOMRect(),
+      get contextElement() {
+        return link.current ?? undefined
+      },
+    }),
+    [],
+  )
   useEffect(loadSiteIcons, [])
 
   const label = children ?? url
   const primary = defaultDestination(url, thread, context)
   const browserName = browser.name ?? t('link.yourBrowser')
 
-  const openTo = (destination: LinkDestination) => {
-    const prefs = useSettingsStore.getState().settings.thread
-    const target = context.session ? destination : 'browser'
-    if (asksBeforeOpening(url, prefs, context)) {
-      setAsk((last) => ({ key: (last?.key ?? 0) + 1, destination: target, open: true }))
-    } else {
-      openLinkIn(url, target, sessionId)
-    }
+  const run = (plan: LinkPlan) => {
+    const { destination } = plan
+    if (plan.ask) setAsk((last) => ({ key: (last?.key ?? 0) + 1, destination, open: true }))
+    else openLinkIn(url, destination, sessionId)
   }
-  const openFromClick = (other: boolean) => {
-    const destination = defaultDestination(
-      url,
-      useSettingsStore.getState().settings.thread,
-      context,
-    )
-    openTo(other ? otherDestination(destination) : destination)
-  }
+  const prefs = () => useSettingsStore.getState().settings.thread
+  const openTo = (destination: LinkDestination) =>
+    run(planLinkOpenIn(url, prefs(), context, destination))
+  const openFromClick = (other: boolean) => run(planLinkOpen(url, prefs(), context, other))
   const copy = (text: string) => void navigator.clipboard.writeText(text)
 
   // Mod+Enter in the menu takes the other place, as a Mod-click does.
@@ -274,6 +288,7 @@ export function WebLink({
                 className="select-text"
                 render={
                   <a
+                    ref={link}
                     href={url}
                     rel="noreferrer"
                     draggable={false}
@@ -298,7 +313,7 @@ export function WebLink({
           >
             <LinkText url={url}>{label}</LinkText>
           </TooltipTrigger>
-          <TooltipContent align="start" sideOffset={6} className="max-w-md">
+          <TooltipContent anchor={firstLine} align="start" sideOffset={6} className="max-w-md">
             {primary === 'session' ? (
               <AppWindowMacIcon className="size-2.75" strokeWidth={1} />
             ) : (
