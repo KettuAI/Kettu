@@ -241,9 +241,21 @@ export class DirectListener {
   }
 }
 
+/** A socket's transport, whose close gives up on an end that does not close in turn. */
+function socketTransport(socket: Socket): Transport {
+  const transport = streamTransport(socket)
+  return {
+    ...transport,
+    close: () => {
+      transport.close()
+      setTimeout(() => socket.destroy(), CLOSE_GRACE_MS).unref()
+    },
+  }
+}
+
 /** A direct connection's transport; the handshake settles at the host's first message or the end. */
 function directTransport(socket: Socket, settle: () => void): Transport {
-  const transport = streamTransport(socket)
+  const transport = socketTransport(socket)
   return {
     ...transport,
     send: (message) => {
@@ -253,7 +265,6 @@ function directTransport(socket: Socket, settle: () => void): Transport {
     close: () => {
       settle()
       transport.close()
-      setTimeout(() => socket.destroy(), CLOSE_GRACE_MS).unref()
     },
   }
 }
@@ -279,7 +290,7 @@ export function connectTransport(address: DirectAddress, signal?: AbortSignal): 
     socket.once('connect', () => {
       signal?.removeEventListener('abort', abort)
       socket.off('error', failed)
-      resolve(streamTransport(socket))
+      resolve(socketTransport(socket))
     })
   })
 }

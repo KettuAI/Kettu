@@ -3,6 +3,7 @@
 // byte streams as a device does. It speaks version 1 unless its hello says otherwise.
 
 import { startDeviceChannel, type DeviceChannel } from '@shared/remote/device-channel'
+import { keepaliveMessage } from '@shared/remote/keepalive'
 import type { KeyPair } from '@shared/remote/noise'
 import { type Addresses, type Closing, type Hello } from '@shared/remote/protocol'
 import type { StreamCancel } from '@shared/remote/streams'
@@ -30,8 +31,10 @@ export interface TestDevice {
   addresses: Addresses[]
   /** Messages around the host protocol after the welcome, such as `renamed` and `terminal`. */
   notices: unknown[]
-  /** Every JSON message after the welcome, in order. */
+  /** Every JSON message after the welcome, in order, but the connection's pings and pongs. */
   messages: unknown[]
+  /** The host's pings and pongs, as they came. */
+  keepalive: ('ping' | 'pong')[]
   /** Sends a JSON message on the channel as it is. */
   send(value: unknown): Promise<void>
   sendBytes(stream: number, data: Uint8Array): Promise<void>
@@ -68,6 +71,8 @@ export interface TestDeviceOptions {
   acks?: boolean
   /** The messages its session sent before this connection, for a device that resumes it. */
   received?: number
+  /** Answers the host's pings, as a device that runs does; false plays one that hangs. */
+  pongs?: boolean
 }
 
 export async function connectDevice(options: TestDeviceOptions): Promise<TestDevice> {
@@ -83,6 +88,7 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
   const closing = new Promise<Closing | null>((resolve) => (resolveClosing = resolve))
   const notices: unknown[] = []
   const messages: unknown[] = []
+  const keepalive: ('ping' | 'pong')[] = []
   const streams = new Map<number, HostStream>()
   const cancels: StreamCancel[] = []
   const waiting = new Set<() => void>()
@@ -109,6 +115,12 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
 
   const received = (value: unknown): void => {
     const type = (value as { type?: unknown } | null)?.type
+    const own = welcomed ? keepaliveMessage(value) : null
+    if (own) {
+      keepalive.push(own)
+      if (own === 'ping' && options.pongs !== false) void channel?.send({ type: 'pong' })
+      return
+    }
     if (!welcomed) {
       welcomed = true
       resolveFirst(value)
@@ -169,6 +181,7 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
     addresses,
     notices,
     messages,
+    keepalive,
     send: async (value) => {
       if (!channel) throw new Error('The handshake is not done')
       await channel.send(value)

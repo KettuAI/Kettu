@@ -20,7 +20,7 @@ import { ActivityLog } from './activity'
 import type { Interfaces } from './addresses'
 import { CHECK_ADDRESSES_MS, connectTransport, DirectListener, MAX_UNREAD } from './direct'
 import { DeviceStore } from './devices'
-import { HandshakeLimits, SOURCE_BURST } from './limits'
+import { CLOSE_GRACE_MS, HandshakeLimits, SOURCE_BURST } from './limits'
 import { PairingCodes } from './pairing'
 import { RemoteServer } from './server'
 import { connectDevice } from './testing/device'
@@ -436,5 +436,24 @@ describe('direct connections', () => {
     await new Promise<void>((resolve) => over.once('close', () => resolve()))
     expect(t.server.refused).toBe(1)
     expect(waiting.every((socket) => !socket.destroyed)).toBe(true)
+  })
+
+  it("give up a connection's close once the host does not close in turn, as a stopped one", async () => {
+    const taken: Socket[] = []
+    const stopped = createServer({ allowHalfOpen: true }, (socket) => taken.push(socket))
+    await new Promise<void>((resolve) => stopped.listen(0, LOCALHOST, resolve))
+    cleanups.push(() => {
+      for (const socket of taken) socket.destroy()
+      stopped.close()
+    })
+    const { port } = stopped.address() as { port: number }
+    const transport = await connectTransport({ host: LOCALHOST, port })
+    let closed = false
+    transport.onClose(() => (closed = true))
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    transport.close()
+    vi.advanceTimersByTime(CLOSE_GRACE_MS)
+    vi.useRealTimers()
+    await expect.poll(() => closed).toBe(true)
   })
 })
