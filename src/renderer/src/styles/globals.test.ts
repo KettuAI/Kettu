@@ -129,9 +129,9 @@ describe('type in globals.css', () => {
   }
 
   it.each([
-    ['small', 13, 14.3],
-    ['default', 14, 15.4],
-    ['large', 15, 16.5],
+    ['small', 14, 15.4],
+    ['default', 15, 16.5],
+    ['large', 16, 17.6],
   ] as const)(
     "sets the agent's prose at the prose size, or 1.1 times it in the serif, at the %s text size",
     (size, user, serif) => {
@@ -145,7 +145,7 @@ describe('type in globals.css', () => {
 
   it("sets thoughts, notes and summaries at 0.88 of the agent's prose", () => {
     const muted = declarationsAfter('.markdown-muted {').get('font-size')!
-    expect(pixels(muted, textSizes.default, scales.serif)).toBeCloseTo(15.4 * 0.88)
+    expect(pixels(muted, textSizes.default, scales.serif)).toBeCloseTo(16.5 * 0.88)
   })
 
   it.each([
@@ -171,18 +171,20 @@ describe('type in globals.css', () => {
       return from <= Number(weight) && Number(weight) <= to
     })
   const light = declarationsAfter(':root {')
-  const dark = declarationsAfter("[data-theme='dark'] {")
 
   it.each([
     ['--weight-normal', ['PingFangSC-Regular', 'MicrosoftYaHei', 'NotoSansCJKsc-Regular']],
     ['--weight-medium', ['PingFangSC-Medium', 'MicrosoftYaHei', 'NotoSansCJKsc-Medium']],
     ['--weight-semibold', ['PingFangSC-Semibold', 'MicrosoftYaHei-Bold', 'NotoSansCJKsc-Bold']],
-  ])('maps %s to the same Chinese faces in both themes', (token, faces) => {
-    for (const weight of [light.get(token)!, dark.get(token)!]) {
-      const matched = faceFor(weight)
-      expect(matched, `one face for weight ${weight}`).toHaveLength(1)
-      for (const face of faces) expect(matched[0].get('src')).toContain(`local('${face}')`)
-    }
+  ])('maps %s to its Chinese faces', (token, faces) => {
+    const weight = light.get(token)!
+    const matched = faceFor(weight)
+    expect(matched, `one face for weight ${weight}`).toHaveLength(1)
+    for (const face of faces) expect(matched[0].get('src')).toContain(`local('${face}')`)
+  })
+
+  it('keeps the same weights in the dark theme', () => {
+    expect(blocksAfter("[data-theme='dark'] {")).toEqual([])
   })
 
   it('puts the alias family right after the Latin face of every face a theme may name', () => {

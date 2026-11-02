@@ -5,6 +5,7 @@
 @import '@fontsource-variable/source-serif-4/opsz.css';
 @import '@fontsource-variable/source-serif-4/opsz-italic.css';
 @import '@fontsource-variable/jetbrains-mono/wght.css';
+@import '@fontsource-variable/manrope/wght.css';
 @import './tokens.css';
 
 /* Chinese: the platform's face with pinned weights, since CSS would match the dark theme's 360 to
@@ -55,9 +56,11 @@
 }
 
 @theme inline {
-  /* The faces the theme gives each kind of text, below; titles take the prose face. */
+  /* The faces the theme gives each kind of text, below. Page titles, a reply's first heading and
+     dialog titles take the display face; other headings the prose face. */
   --font-sans: var(--ui-face);
   --font-heading: var(--prose-face);
+  --font-display: var(--display-face);
   --font-prose: var(--prose-face);
   --font-mono: var(--code-face);
 
@@ -67,6 +70,7 @@
   --background-color-subtle: var(--bg-subtle);
   --background-color-hover: var(--bg-hover);
   --background-color-selected: var(--bg-selected);
+  --background-color-raised: var(--bg-raised);
   --background-color-code-inline: var(--bg-code-inline);
   --background-color-code-block: var(--bg-code-block);
   --background-color-scrim: var(--scrim);
@@ -80,6 +84,8 @@
   --border-color-default: var(--border-default);
   --border-color-subtle: var(--border-subtle);
   --border-color-strong: var(--border-strong);
+  /* A focused field's line: the fox at full strength. */
+  --border-color-focused: var(--focus);
   --color-attention: var(--attention);
   --color-attention-dot: var(--attention-dot);
   --color-attention-foreground: var(--attention-foreground);
@@ -100,7 +106,7 @@
   --color-warning-tint: var(--warning-tint);
   --color-link: var(--link);
   --color-link-hover: var(--link-hover);
-  --color-focus: var(--focus);
+  --color-focus: var(--focus-ring-color);
   --color-edit-ring: var(--edit-ring);
   --color-edit-selection: var(--edit-selection);
 
@@ -144,8 +150,12 @@
   --color-tile: var(--tile);
   --color-track: var(--track);
   --color-switch-on: var(--switch-on);
-  --color-switch-on-focus: var(--switch-on-focus);
-  --color-switch-off-focus: var(--switch-off-focus);
+  --color-switch-thumb: var(--switch-thumb);
+  --color-control-on: var(--control-on);
+  --color-control-on-tint: var(--control-on-tint);
+  --color-limit-ok: var(--limit-ok);
+  --color-limit-warn: var(--limit-warn);
+  --color-limit-bad: var(--limit-bad);
   --color-segment-track: var(--segment-track);
   --color-segment-thumb: var(--segment-thumb);
   --color-canvas: var(--canvas);
@@ -153,8 +163,12 @@
   --color-pressed: var(--pressed);
   --color-pressed-hover: var(--pressed-hover);
   --color-mark: var(--mark);
+  --color-toast: var(--toast);
+  --color-toast-foreground: var(--toast-foreground);
   --color-diff-add: var(--diff-add);
+  --color-diff-add-word: var(--diff-add-word);
   --color-diff-del: var(--diff-del);
+  --color-diff-del-word: var(--diff-del-word);
   --color-brand-claude: var(--brand-claude);
   --color-agent-claude-code: var(--agent-claude-code);
   --color-agent-codex: var(--agent-codex);
@@ -181,12 +195,16 @@
   --color-heat-out-3: var(--heat-out-3);
   --color-heat-out-4: var(--heat-out-4);
 
-  --radius-sm: calc(var(--radius) * 0.5);
-  --radius-md: calc(var(--radius) * 0.75);
+  /* Scale B from --radius, 5 px: 3.5 check boxes and inline code, 4 menu items, 5 buttons, fields
+     and rows, 6 option tiles, 8 cards, menus, popovers and code, 10 dialogs and the composer. A
+     nested corner is the outer one less the padding between. */
+  --radius-sm: calc(var(--radius) * 0.7);
+  --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
-  --radius-code: calc(var(--radius) * 1.25);
-  --radius-xl: calc(var(--radius) * 1.5);
-  --radius-2xl: calc(var(--radius) * 1.75);
+  --radius-tile: calc(var(--radius) * 1.2);
+  --radius-code: calc(var(--radius) * 1.6);
+  --radius-xl: calc(var(--radius) * 1.6);
+  --radius-2xl: calc(var(--radius) * 2);
   --radius-3xl: calc(var(--radius) * 2);
 
   --shadow-sm: var(--elevation-sm);
@@ -197,8 +215,11 @@
   --shadow-outline-hover: var(--outline-hover);
   --shadow-sunk: var(--sunk-ring);
   --shadow-field: var(--field-shadow);
+  --shadow-field-focus: var(--field-focus-shadow);
   --shadow-primary: var(--primary-shadow);
   --shadow-destructive: var(--destructive-shadow);
+  --shadow-destructive-ring: var(--destructive-ring);
+  --shadow-destructive-ring-hover: var(--destructive-ring-hover);
   --shadow-float: var(--float-shadow);
   --shadow-menu: var(--menu-ring);
   --shadow-dialog: var(--dialog-ring);
@@ -208,15 +229,22 @@
   --shadow-queue: var(--queue-ring);
   --shadow-attention: var(--attention-ring-shadow);
   --shadow-segment: var(--segment-ring);
+  --shadow-raised: var(--raised-ring);
   --shadow-thumb: var(--thumb-shadow);
-  --shadow-sheet: var(--elevation-sheet);
-  --shadow-sheet-focused: var(--elevation-sheet-focused);
+  --shadow-toast: var(--elevation-toast);
+  --shadow-sheet: var(--sheet-ring);
+  --shadow-sheet-focused: var(--sheet-focused-ring);
 
   --font-weight-normal: var(--weight-normal);
   --font-weight-medium: var(--weight-medium);
   --font-weight-semibold: var(--weight-semibold);
 
   --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
+  /* The interface's own curve: quick out of the gate, a long settle, no overshoot. */
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --default-transition-duration: var(--duration-fast);
+  --default-transition-timing-function: var(--ease-standard);
+  --animate-spin: spin var(--duration-spin) linear infinite;
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
@@ -224,78 +252,105 @@
   --blur-mask: 3px;
 
   --text-prose: var(--prose-size);
-  /* The thread's column, 28 px gutters included: 48em of prose, 720 px at the default size. */
-  --container-thread: calc(48 * var(--prose-size));
+  /* A reply's measure: 48em of prose, 720 px at the default size. The composer takes it. */
+  --container-reply: calc(48 * var(--prose-size));
+  /* The thread's column: the reply's measure with its 28 px gutters. */
+  --container-thread: calc(48 * var(--prose-size) + 56px);
   --text-ui: var(--ui-size);
-  --text-prose--line-height: 1.45;
-  /* The type scale of the design system. Titles take the prose face, through font-heading. */
+  --text-ui--letter-spacing: -0.003em;
+  --text-prose--line-height: 1.65;
+  /* The type scale of the design system. Page and dialog titles take the display face through
+     font-display, at weight 700. */
   --text-greeting: 28px;
-  --text-greeting--line-height: 36px;
-  --text-greeting--letter-spacing: -0.01em;
+  --text-greeting--line-height: 1.2;
+  --text-greeting--letter-spacing: -0.015em;
   /* A figure on the usage page, at weight 500 with tabular figures. */
   --text-figure: 24px;
   --text-figure--line-height: 30px;
   --text-figure--letter-spacing: -0.01em;
   --text-title: 22px;
-  --text-title--line-height: 30px;
-  --text-title--letter-spacing: -0.006em;
-  --text-heading: 16px;
-  --text-heading--line-height: 22px;
+  --text-title--line-height: 1.2;
+  --text-title--letter-spacing: -0.015em;
+  --text-dialog-title: 17px;
+  --text-dialog-title--line-height: 1.35;
+  --text-dialog-title--letter-spacing: -0.012em;
+  --text-heading: 16.5px;
+  --text-heading--line-height: 1.4;
+  --text-heading--letter-spacing: -0.008em;
+  /* The session's title in its top bar, at weight 600. */
   --text-subheading: 15px;
   --text-subheading--line-height: 20px;
-  --text-subheading--letter-spacing: -0.003em;
+  --text-subheading--letter-spacing: -0.006em;
+  /* A sidebar row, and a settings row's label. */
+  --text-row: 14px;
+  --text-row--line-height: 20px;
+  --text-label: 14.5px;
+  --text-label--line-height: 20px;
   --text-group: 13px;
   --text-group--line-height: 18px;
   --text-small: 12px;
   --text-small--line-height: 1.45;
+  /* Hints and a segmented control's segments. */
+  --text-hint: 12.5px;
+  --text-hint--line-height: 18px;
   --text-control: 13px;
   --text-control--line-height: 18px;
+  --text-control--letter-spacing: -0.003em;
   --text-command: 12px;
   --text-command--line-height: 18px;
   --text-code: 12px;
   --text-code--line-height: 20px;
   --text-meta: 12px;
   --text-meta--line-height: 16px;
+  /* Tooltips and a menu item's shortcut. */
+  --text-caption: 11.5px;
+  --text-caption--line-height: 16px;
 }
 
 :root {
   --hairline: 1px;
 
-  /* Density: a native macOS app's. */
-  --radius: 8px;
+  /* Density: heights on 4 px steps. */
+  --radius: 5px;
   --control-height: 28px;
   --control-height-sm: 24px;
-  --row-height: 30px;
+  --row-height: 32px;
   /* Interface text: the sidebar, menus and controls. Prose has its own size below. */
   --ui-size: 13px;
   --card-header: 40px;
   --composer-min: 56px;
   --icon-size: 16px;
-  --top-bar: 44px;
+  --top-bar: 48px;
+  /* The desk around the sheets: from the window's edges and between two sheets. */
+  --sheet-gap: 8px;
   /* Windows and Linux: the band across the window's top, where the window controls sit;
      main's title bar overlay has the same height. */
   --title-bar: 40px;
   /* The page zoom, from settings; the macOS traffic lights keep their size under it. */
   --zoom: 1;
   --traffic-lights: calc(52px / var(--zoom));
+  /* A top bar in the window's top left corner starts clear of the traffic lights, from the edge
+     of its sheet. */
+  --corner-inset: calc(36px - var(--sheet-gap) + var(--traffic-lights));
   --scroll-fade-size: 28px;
   /* Windows only, where the app draws its scrollbars: a 4 px thumb in a 10 px gutter. */
   --scrollbar-size: 10px;
   --scrollbar-inset: 3px;
 
-  /* Motion. */
+  /* Motion: 150 to 220 ms on --ease-standard; spinners turn once in 0.9 s. */
   --duration-instant: 60ms;
-  --duration-fast: 120ms;
-  --duration-base: 200ms;
-  --duration-slow: 300ms;
+  --duration-fast: 150ms;
+  --duration-base: 180ms;
+  --duration-slow: 220ms;
   --duration-slower: 450ms;
+  --duration-spin: 0.9s;
   /* One breath of the launch cover's fox, slow enough to read as calm. */
   --duration-breath: 2400ms;
 
   /* Type. */
-  --prose-size: 14px;
+  --prose-size: 15px;
   /* The faces a theme may name, each with Chinese in the platform's face. A face's files are
-     only fetched once text uses it, so the built-in theme never loads Inter or Source Serif 4. */
+     only fetched once text uses it, so the built-in theme never loads Source Serif 4. */
   --face-system:
     system-ui, 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   --face-inter:
@@ -308,10 +363,17 @@
     'JetBrains Mono Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
     'Noto Sans CJK SC', ui-monospace, monospace;
   --face-system-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+  --face-manrope:
+    'Manrope Variable', 'Inter Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
+    'Noto Sans CJK SC', system-ui, sans-serif;
 
-  --ui-face: var(--face-system);
-  --prose-face: var(--face-system);
+  --ui-face: var(--face-inter);
+  --prose-face: var(--face-inter);
+  --display-face: var(--face-manrope);
   --code-face: 'JetBrains Mono Variable', var(--face-system-mono);
+  /* Inter's single-storey a; another face keeps its own letters. */
+  --ui-features: 'cv11';
+  --prose-features: 'cv11';
   /* The serif reads about a size smaller than the sans faces at the same pixel size. */
   --prose-scale: 1;
   --weight-normal: 400;
@@ -325,6 +387,9 @@
   --diffs-header-font-family: var(--font-sans);
 }
 
+:root[data-font-ui='system'] {
+  --ui-face: var(--face-system);
+}
 :root[data-font-ui='inter'] {
   --ui-face: var(--face-inter);
 }
@@ -333,6 +398,12 @@
 }
 :root[data-font-ui='jetbrains-mono'] {
   --ui-face: var(--face-jetbrains-mono);
+}
+:root[data-font-ui]:not([data-font-ui='inter']) {
+  --ui-features: normal;
+}
+:root[data-font-prose='system'] {
+  --prose-face: var(--face-system);
 }
 :root[data-font-prose='inter'] {
   --prose-face: var(--face-inter);
@@ -344,22 +415,18 @@
 :root[data-font-prose='jetbrains-mono'] {
   --prose-face: var(--face-jetbrains-mono);
 }
+:root[data-font-prose]:not([data-font-prose='inter']) {
+  --prose-features: normal;
+}
 :root[data-font-code='system'] {
   --code-face: var(--face-system-mono);
 }
 
-/* Light text on a dark surface looks heavier than it is. */
-[data-theme='dark'] {
-  --weight-normal: 360;
-  --weight-medium: 460;
-  --weight-semibold: 560;
-}
-
 :root[data-text-size='small'] {
-  --prose-size: 13px;
+  --prose-size: 14px;
 }
 :root[data-text-size='large'] {
-  --prose-size: 15px;
+  --prose-size: 16px;
 }
 
 @layer base {
@@ -368,6 +435,7 @@
   }
   html {
     @apply font-sans;
+    font-feature-settings: var(--ui-features);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     scrollbar-color: var(--scrollbar-thumb) transparent;
@@ -408,6 +476,16 @@
   ::selection {
     background-color: var(--selection);
   }
+  input,
+  textarea,
+  [contenteditable] {
+    caret-color: var(--control-on);
+  }
+  /* Keyboard focus only: a pointer never shows the ring. */
+  :focus-visible {
+    outline: 1.5px solid var(--focus-ring-color);
+    outline-offset: 2px;
+  }
   kbd {
     font-family: var(--font-mono);
   }
@@ -436,17 +514,17 @@
   background: repeating-conic-gradient(var(--checker) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
 }
 
-/* The keyboard focus ring: 2 px, 2 px clear of the element. */
+/* The keyboard focus ring: the fox at half strength, 1.5 px, 2 px clear of the element. */
 @utility focus-ring {
   &:focus-visible {
-    outline: 2px solid var(--focus);
+    outline: 1.5px solid var(--focus-ring-color);
     outline-offset: 2px;
   }
 }
 /* The same ring on a container while something inside it has keyboard focus. */
 @utility focus-ring-within {
   &:has(:focus-visible) {
-    outline: 2px solid var(--focus);
+    outline: 1.5px solid var(--focus-ring-color);
     outline-offset: 2px;
   }
 }
@@ -455,11 +533,13 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* A link in the thread: a reply's, or a web address in a notice. */
+/* A link in the thread: a reply's, or a web address in a notice. Ink, with one gray underline
+   that darkens to the ink on hover. */
 @utility thread-link {
   color: var(--link);
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--link) 40%, transparent);
+  text-decoration-color: var(--border-strong);
+  text-decoration-thickness: 1px;
   text-underline-offset: 3px;
   transition:
     color var(--duration-fast),
@@ -481,6 +561,9 @@
 }
 @utility min-h-row {
   min-height: var(--row-height);
+}
+@utility min-h-control {
+  min-height: var(--control-height);
 }
 @utility h-card-header {
   height: var(--card-header);
@@ -715,9 +798,9 @@
    scales them; the spec's pixel values are those of the default 16.5 px. */
 .markdown {
   font-family: var(--font-prose);
+  font-feature-settings: var(--prose-features);
   font-size: calc(var(--prose-size) * var(--prose-scale));
-  line-height: 1.56;
-  letter-spacing: -0.002em;
+  line-height: 1.65;
   /* Italics are the serif's own; Chinese, which has none, stays upright. */
   font-synthesis-style: none;
   color: var(--text-primary);
@@ -759,17 +842,24 @@
     line-height: 1.4;
     text-wrap: balance;
   }
+  /* Three steps only, 20, 16.5 and 15 px at the default size: the first in the display face. */
   & [data-streamdown='heading-1'] {
-    margin: 1.8em 0 0.4em;
+    margin: 1.6em 0 0.4em;
+    font-family: var(--font-display);
     font-size: 1.3333em;
+    font-weight: 700;
+    line-height: 1.35;
+    letter-spacing: -0.012em;
   }
   & [data-streamdown='heading-2'] {
-    margin: 1.75em 0 0.4em;
-    font-size: 1.1333em;
+    margin: 1.45em 0 0.4em;
+    font-size: 1.1em;
+    letter-spacing: -0.008em;
   }
   & [data-streamdown='heading-3'] {
-    margin: 1.5em 0 0.3em;
+    margin: 1.2em 0 0.3em;
     font-size: 1em;
+    line-height: 1.5;
   }
   &
     :is(
@@ -861,7 +951,7 @@
       background: var(--bg-selected);
     }
     &:focus-visible {
-      outline: 2px solid var(--focus);
+      outline: 1.5px solid var(--focus-ring-color);
       outline-offset: 2px;
     }
     /* The line it points at, after the name. */
@@ -918,7 +1008,7 @@
       color: var(--foreground);
     }
     &:focus-visible {
-      outline: 2px solid var(--focus);
+      outline: 1.5px solid var(--focus-ring-color);
       outline-offset: 2px;
     }
     & svg {
@@ -1084,11 +1174,19 @@
   }
 }
 
-/* Diffs sit on the code block surface, not on the Shiki theme's own background. Outer
-   declarations win over the theme's :host rule inside the diff's shadow root. */
-.diff {
+/* Diffs sit on the code block surface, not on the Shiki theme's own background, with the
+   theme's line and word tints. Outer declarations win over the theme's :host rule inside the
+   diff's shadow root. */
+.diff,
+.file-preview {
   --diffs-light-bg: var(--bg-code-block);
   --diffs-dark-bg: var(--bg-code-block);
+  --diffs-addition-color-override: var(--success);
+  --diffs-deletion-color-override: var(--danger);
+  --diffs-bg-addition-override: var(--diff-add);
+  --diffs-bg-addition-emphasis-override: var(--diff-add-word);
+  --diffs-bg-deletion-override: var(--diff-del);
+  --diffs-bg-deletion-emphasis-override: var(--diff-del-word);
 }
 
 /* The Files pane's preview fills the pane, so a short file ends where the pane does. */
