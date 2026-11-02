@@ -486,7 +486,7 @@ export function AddMenu({
       <DropdownMenuContent
         side="top"
         sideOffset={6}
-        className="w-66"
+        className="w-max min-w-66"
         finalFocus={() => {
           box.focus()
           return false
