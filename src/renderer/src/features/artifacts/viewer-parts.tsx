@@ -223,7 +223,7 @@ export function ZoomPill({ controls }: { controls: CanvasControls }) {
               size="sm"
               aria-pressed={state.fitted}
               onClick={() => commands?.fitAll()}
-              className="h-7 rounded-tile px-2.5 text-hint font-normal text-secondary"
+              className="h-7 rounded-tile px-2.5 text-hint font-normal text-secondary aria-pressed:bg-transparent aria-pressed:text-primary aria-pressed:shadow-none"
             />
           }
         >

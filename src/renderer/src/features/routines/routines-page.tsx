@@ -504,7 +504,9 @@ function LastRun({
       return (
         <Tooltip>
           <TooltipTrigger
-            render={<span className={cn(line, 'pointer-events-auto w-fit text-warning')} />}
+            render={
+              <span className={cn(line, 'pointer-events-auto w-fit max-w-full text-warning')} />
+            }
           >
             <PauseIcon aria-hidden className={CELL_ICON} />
             <span className="truncate">{text}</span>
@@ -519,7 +521,9 @@ function LastRun({
       return (
         <Tooltip>
           <TooltipTrigger
-            render={<span className={cn(line, 'pointer-events-auto w-fit text-danger')} />}
+            render={
+              <span className={cn(line, 'pointer-events-auto w-fit max-w-full text-danger')} />
+            }
           >
             <XIcon aria-hidden strokeWidth={1.75} className="size-3.25 shrink-0" />
             <span className="truncate">

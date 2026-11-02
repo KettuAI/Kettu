@@ -383,7 +383,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                     label={t('page.filter')}
                     clearLabel={t('page.clearFilter')}
                     inputRef={filterField}
-                    className="w-65 max-w-full rounded-xl border-0 bg-subtle shadow-none not-has-disabled:hover:border-0 has-[[data-slot=input-group-control]:focus-visible]:shadow-field-focus [&_input]:text-[13.5px]"
+                    className="w-65 max-w-full rounded-xl border-0 bg-subtle shadow-none not-has-disabled:hover:border-0 has-[[data-slot=input-group-control]:focus-visible]:shadow-field-focus [&_input]:text-[13.5px] [&_kbd]:hidden"
                   />
                 )}
               </header>
