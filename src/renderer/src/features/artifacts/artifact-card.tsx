@@ -2,6 +2,8 @@ import { memo, useRef, useState } from 'react'
 import { EllipsisIcon, GlobeIcon, ImageOffIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ArtifactSummary } from '@shared/artifacts'
+import type { AgentId } from '@shared/thread'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
 import {
   ContextMenu,
@@ -23,7 +25,6 @@ import { useArtifactsStore } from '@renderer/stores/artifacts'
 import { useSharingStore } from '@renderer/stores/sharing'
 import { openArtifact } from '@renderer/stores/view'
 import { ArtifactMenuItems } from './artifact-menu'
-import { KIND_LOOK } from './kinds'
 import { artifactKind } from './model'
 import { useThumbnail, type Thumbnail } from './thumbnails'
 import { useInView } from './use-in-view'
@@ -34,43 +35,40 @@ function openFromPage(id: string, history = false): void {
   openArtifact(id, { history })
 }
 
-// Pointed at, focused or with its menu open, the card's border darkens.
-const CARD =
-  'group/open flex w-full flex-col overflow-hidden border border-default bg-app text-left outline-none transition-colors duration-(--duration-fast) hover:border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus group-data-held/card:border-strong'
-// The artifact's page stands on the band, cut by its lower edge.
-// A canvas's pages lie on its ground, under the fade with the rest of the frame.
-const PAGE = 'relative min-w-0 flex-1 overflow-hidden border border-b-0 border-default'
+// The preview's edge is drawn over the image; pointed at, focused or held, it darkens.
+const FRAME =
+  'relative block aspect-16/10 overflow-hidden rounded-2xl after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[inset_0_0_0_1px_var(--border-subtle)] after:transition-shadow after:duration-(--duration-fast) group-hover/open:after:shadow-[inset_0_0_0_1px_var(--border-strong)] group-focus-visible/open:outline-2 group-focus-visible/open:outline-offset-2 group-focus-visible/open:outline-focus group-data-held/card:after:shadow-[inset_0_0_0_1px_var(--border-strong)]'
 // What lies in Recently deleted shows faded.
 const FADED = 'opacity-72 grayscale-85'
 
-/** When the card says it was last seen: opened on this device, or its latest version. */
+/** The time the card shows: when it was opened on this device, or its latest version. */
 export interface CardTime {
   at: number
-  opened: boolean
 }
 
 /**
- * One artifact: its page on a band, then its title and caption, and its menu. On the page the band
- * takes its kind's tint, under the kind's icon; `recent` is New session's smaller card.
+ * One artifact: its preview, then its title and a line of the agent's mark, its kind and when it
+ * was last seen, with its menu over the preview's corner.
  */
 export const ArtifactCard = memo(function ArtifactCard({
   artifact,
-  lead,
+  agent,
+  meta,
   time,
   project,
   session,
   tabbable,
-  variant = 'page',
 }: {
   artifact: ArtifactSummary
-  /** The caption before the time: the project, or the version when grouped; in Recently deleted,
-   * the project and the days left. */
-  lead: string
+  /** The agent of the session it shows under; none when imported or that session is gone. */
+  agent: AgentId | null
+  /** The line after the mark: its kind and pages, the version when grouped; in Recently deleted,
+   * the days left. */
+  meta: string
   time: CardTime | null
   project: string
   session: string
   tabbable: boolean
-  variant?: 'page' | 'recent'
 }) {
   const { t } = useTranslation('artifacts')
   const card = useRef<HTMLDivElement>(null)
@@ -80,12 +78,7 @@ export const ArtifactCard = memo(function ArtifactCard({
   const shared = useSharingStore(
     (s) => s.status?.published.some((page) => page.id === artifact.id) ?? false,
   )
-  const recent = variant === 'recent'
   const kind = artifactKind(artifact)
-  const look = KIND_LOOK[kind]
-  // Only the page takes the focus back to the card it opened.
-  const open = (history = false) =>
-    recent ? openArtifact(artifact.id, { history }) : openFromPage(artifact.id, history)
 
   const items = (
     <ArtifactMenuItems
@@ -97,8 +90,8 @@ export const ArtifactCard = memo(function ArtifactCard({
         sessionId: artifact.sessionId,
         deletedAt: artifact.deletedAt,
       }}
-      onOpen={() => open()}
-      onVersionHistory={() => open(true)}
+      onOpen={() => openFromPage(artifact.id)}
+      onVersionHistory={() => openFromPage(artifact.id, true)}
     />
   )
 
@@ -107,7 +100,7 @@ export const ArtifactCard = memo(function ArtifactCard({
       type="button"
       data-artifact-card={artifact.id}
       tabIndex={tabbable ? 0 : -1}
-      onClick={() => open()}
+      onClick={() => openFromPage(artifact.id)}
       onKeyDown={(event) => {
         // The context menu key opens the More menu, the card's menu for the keyboard.
         if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
@@ -115,55 +108,42 @@ export const ArtifactCard = memo(function ArtifactCard({
           setMoreOpen(true)
         }
       }}
-      className={cn(CARD, recent ? 'rounded-code' : 'rounded-xl')}
+      className="group/open flex w-full flex-col gap-2.5 text-left outline-none"
     >
+      {/* A canvas's pages lie on a light desk in either theme, as their content is light. */}
       <span
         className={cn(
-          'relative flex shrink-0 overflow-hidden border-b border-default',
-          recent ? 'h-30 bg-sidebar px-3.5 pt-3.5' : cn('aspect-video px-8 pt-6', look.tint),
+          FRAME,
+          kind === 'canvas'
+            ? 'bg-[color-mix(in_oklab,var(--canvas-ink)_5%,var(--canvas))]'
+            : 'bg-canvas',
         )}
       >
-        <span
-          className={cn(
-            PAGE,
-            kind === 'canvas' ? 'bg-subtle' : 'bg-canvas',
-            recent ? 'rounded-t-md' : 'rounded-t-lg',
-          )}
-        >
-          <PageContent thumbnail={thumbnail} faded={artifact.deletedAt !== null} />
-        </span>
+        <PageContent thumbnail={thumbnail} faded={artifact.deletedAt !== null} />
         {artifact.editing.length > 0 && <EditingPill />}
       </span>
-      <span
-        className={cn(
-          'flex min-w-0 items-center gap-2.5',
-          recent ? 'px-3 pt-2.25 pb-2.75' : 'h-16 pr-11 pl-3',
-        )}
-      >
-        {!recent && (
-          <span
-            role="img"
-            aria-label={t(`page.kinds.${kind}`)}
-            className={cn('grid size-8 shrink-0 place-items-center rounded-lg', look.tint)}
-          >
-            <look.icon className={cn('size-4', look.color)} />
-          </span>
-        )}
-        <span className={cn('flex min-w-0 flex-col', recent ? 'gap-px pr-6' : 'gap-0.5')}>
-          <span className="truncate text-ui font-medium text-primary">{artifact.title}</span>
-          <span className="flex min-w-0 items-center gap-1.25 text-xs text-tertiary tabular-nums">
-            {shared && (
-              <GlobeIcon
-                role="img"
-                aria-label={t('card.shared')}
-                className="size-3 shrink-0 text-success"
-              />
-            )}
-            <span className="truncate">
-              {lead}
-              {time && <Ago time={time} />}
-            </span>
-          </span>
+      <span className="flex min-w-0 flex-col gap-1 px-0.5">
+        <span className="truncate text-row leading-[normal] font-medium text-primary">
+          {artifact.title}
+        </span>
+        <span className="flex min-w-0 items-center gap-1.5 text-hint leading-[normal] text-tertiary tabular-nums">
+          {agent && <AgentMark agent={agent} size={12} className="shrink-0" />}
+          {shared && (
+            <GlobeIcon
+              role="img"
+              aria-label={t('card.shared')}
+              className="size-3 shrink-0 text-success"
+            />
+          )}
+          <span className="truncate">{meta}</span>
+          {time && (
+            <>
+              <span aria-hidden className="text-border-strong">
+                ·
+              </span>
+              <Ago time={time} />
+            </>
+          )}
         </span>
       </span>
     </button>
@@ -186,19 +166,16 @@ export const ArtifactCard = memo(function ArtifactCard({
         </Tooltip>
         <ContextMenuContent>{items}</ContextMenuContent>
       </ContextMenu>
-      {/* Over the caption's end, so the title keeps its width; the card's Tab stop is its own. */}
+      {/* Over the preview's corner, so the caption keeps its width; the card's Tab stop is its own. */}
       <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
         <DropdownMenuTrigger
           render={
             <Button
-              variant="quiet"
-              size={recent ? 'icon-xs' : 'icon-sm'}
+              variant="outline"
+              size="icon-xs"
               tabIndex={-1}
               aria-label={t('card.more', { title: artifact.title })}
-              className={cn(
-                'absolute opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/card:opacity-100 group-hover/card:opacity-100 data-popup-open:opacity-100',
-                recent ? 'right-2 bottom-3' : 'right-3 bottom-4.5',
-              )}
+              className="absolute top-2 right-2 opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/card:opacity-100 group-hover/card:opacity-100 data-popup-open:opacity-100"
             />
           }
         >
@@ -211,8 +188,8 @@ export const ArtifactCard = memo(function ArtifactCard({
 })
 
 /**
- * The page at the band's width and its own proportions: a page as rendered, or a canvas's pages
- * where they lie on its ground; or why neither shows.
+ * The page as rendered at the frame's width, or a canvas's pages where they lie on its ground; or
+ * why neither shows.
  */
 function PageContent({ thumbnail, faded }: { thumbnail: Thumbnail; faded: boolean }) {
   const { t } = useTranslation('artifacts')
@@ -228,7 +205,7 @@ function PageContent({ thumbnail, faded }: { thumbnail: Thumbnail; faded: boolea
   return (
     <span
       className={cn(
-        'absolute inset-x-0 top-0 block aspect-16/10 animate-in fade-in duration-(--duration-fast)',
+        'absolute inset-0 block animate-in fade-in duration-(--duration-fast)',
         faded && FADED,
       )}
     >
@@ -238,7 +215,7 @@ function PageContent({ thumbnail, faded }: { thumbnail: Thumbnail; faded: boolea
         <span
           key={i}
           aria-hidden
-          className="absolute shadow-[0_0_0_var(--hairline)_var(--border-default)]"
+          className="absolute shadow-[0_0_0_var(--hairline)_color-mix(in_oklab,var(--canvas-ink)_8%,transparent)]"
           style={{
             left: `${page.left * 100}%`,
             top: `${page.top * 100}%`,
@@ -264,9 +241,7 @@ function EditingPill() {
 
 /** The caption's time, apart so only it follows the clock. */
 function Ago({ time }: { time: CardTime }) {
-  const { t } = useTranslation('artifacts')
-  const ago = longAgo(time.at, useNow())
-  return <> · {time.opened ? t('card.opened', { time: ago }) : ago}</>
+  return <span className="shrink-0">{longAgo(time.at, useNow())}</span>
 }
 
 /** In the tooltip only, so it reads the time as it opens. */
@@ -281,25 +256,13 @@ function VersionTime({ artifact }: { artifact: ArtifactSummary }) {
 }
 
 /** A card's place before the list arrives, at its real size. */
-export function CardSkeleton({ variant = 'page' }: { variant?: 'page' | 'recent' }) {
-  const recent = variant === 'recent'
+export function CardSkeleton() {
   return (
-    <div
-      aria-hidden
-      className={cn(
-        'flex min-w-0 flex-col overflow-hidden border border-default',
-        recent ? 'rounded-code' : 'rounded-xl',
-      )}
-    >
-      <Skeleton className={cn('w-full rounded-none', recent ? 'h-30' : 'aspect-video')} />
-      <div
-        className={cn('flex items-center gap-2.5', recent ? 'px-3 pt-2.25 pb-2.75' : 'h-16 px-3')}
-      >
-        {!recent && <Skeleton className="size-8 shrink-0 rounded-lg" />}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <Skeleton className="mt-0.5 h-3 w-[62%]" />
-          <Skeleton className="mt-1.5 h-2.5 w-[40%]" />
-        </div>
+    <div aria-hidden className="flex min-w-0 flex-col gap-2.5">
+      <Skeleton className="aspect-16/10 w-full rounded-2xl" />
+      <div className="flex flex-col gap-1.5 px-0.5">
+        <Skeleton className="mt-0.5 h-3.5 w-[62%]" />
+        <Skeleton className="h-3 w-[40%]" />
       </div>
     </div>
   )

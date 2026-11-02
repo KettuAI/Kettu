@@ -79,10 +79,11 @@ export function useKeyboardShortcuts(): void {
         return run(event, () => toggleShortcuts(layerOpen()))
       }
 
-      // Mod+1 to Mod+9 focus a pane of the split, unless Settings covers it or no pane is there.
+      // Mod+1 to Mod+9 focus a pane of the split, unless Settings covers it, no pane is there, or a
+      // menu is open, such as the account menu, where they pick a host.
       const digit = /^[1-9]$/.test(event.key) ? Number(event.key) - 1 : null
       if (digit !== null && !view.settings.open && !event.shiftKey) {
-        if (!paneAt(digit)) return
+        if (!paneAt(digit) || layerOpen()) return
         return run(event, () => {
           focusPaneAt(digit)
           focusComposerOfPane()

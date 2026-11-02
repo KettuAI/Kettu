@@ -22,6 +22,7 @@ import { HostIcon } from '@renderer/features/settings/remote-parts'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { formatShortcut } from '@renderer/lib/platform'
+import { cn } from '@renderer/lib/utils'
 import { isAway, useOtherHost, useOtherHosts, type OtherHost } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { chooseNewSessionProject } from '@renderer/stores/view'
@@ -80,11 +81,14 @@ export function ProjectMenu({
   noProject,
   onError,
   onChoose,
+  chip = false,
 }: {
   project: Project | null
   noProject: boolean
   onError: (message: string | null) => void
   onChoose?: (projectPath: string | null) => void
+  /** As New session's composer shows it: on a tinted chip, beside the agent's. */
+  chip?: boolean
 }) {
   const { t } = useTranslation('session')
   const choose = onChoose ?? chooseNewSessionProject
@@ -163,11 +167,16 @@ export function ProjectMenu({
                 : t('newSession.project')
             }
             title={noProject || !project ? undefined : hostPath(project.path)}
-            className="min-w-13 shrink-10 gap-1 px-2.25 text-control font-normal has-data-[icon=inline-end]:pr-2.25"
+            className={cn(
+              'min-w-13 shrink-10 px-2.25 text-control font-normal has-data-[icon=inline-end]:pr-2.25',
+              chip
+                ? 'h-7.5 gap-1.5 rounded-xl bg-subtle text-primary hover:bg-selected aria-expanded:bg-selected [&>[data-icon=inline-end]]:text-tertiary'
+                : 'gap-1',
+            )}
           />
         }
       >
-        <FolderIcon />
+        <FolderIcon className={cn(chip && 'size-3.75 text-secondary')} />
         <span className="truncate text-foreground">
           {noProject
             ? t('newSession.noProject')
