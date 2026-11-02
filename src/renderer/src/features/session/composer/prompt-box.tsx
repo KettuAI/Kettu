@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { Popover } from '@base-ui/react/popover'
-import { AtSignIcon, FileIcon, FolderIcon, PlusIcon, SlashIcon } from 'lucide-react'
+import { AtSignIcon, FolderIcon, ImageIcon, PlusIcon, SlashIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId, SlashCommand } from '@shared/thread'
 import {
@@ -19,7 +19,8 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
-import { InputGroup, InputGroupAddon, InputGroupButton } from '@renderer/components/ui/input-group'
+import { Button } from '@renderer/components/ui/button'
+import { InputGroup, InputGroupAddon } from '@renderer/components/ui/input-group'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { formatShortcut, isWeb } from '@renderer/lib/platform'
@@ -74,8 +75,8 @@ export function PromptBox({
   commands: SlashCommand[]
   placeholder: string
   label: string
-  /** The text's least height and its padding, as CSS lengths. */
-  size: { minHeight: string; padding: string }
+  /** The text's least height, its padding and its line height, as CSS lengths. */
+  size: { minHeight: string; padding: string; lineHeight?: string }
   /** What the box shows before the attachments, such as a notice; `wrap` while it shows. */
   top?: ReactNode
   wrap?: boolean
@@ -166,12 +167,6 @@ export function PromptBox({
     if (slashOpen) setSlashDismissed(true)
     if (mentionOpen && mention) setMentionDismissed(mention.start)
   }
-  const startMention = () => {
-    const current = editor.current?.text() ?? text
-    const { from, to } = editor.current?.selection() ?? { from: current.length, to: current.length }
-    const next = insertAt(current, from, to)
-    update(next.text, next.caret)
-  }
   const hint = (() => {
     if (text === '/' && slashOpen) return t('slash.typeToFilter')
     const match = /^\/(\S+)\s$/.exec(text)
@@ -187,20 +182,8 @@ export function PromptBox({
     [listId, active],
   )
 
-  const addMenu = (
-    <AddMenu
-      agentName={agentName}
-      disabled={disabled}
-      full={box.full}
-      remote={box.remote}
-      commands={commands.length > 0}
-      emptyDraft={text === ''}
-      onFocusBox={box.focus}
-      onPick={box.pick}
-      onSlash={() => update('/')}
-      onMention={startMention}
-    />
-  )
+  // The session's composer puts **+** in its control row; New session's stays in the box.
+  const addMenu = stacked && <AddMenu box={box} agentName={agentName} commands={commands} />
 
   const keyDown = (event: KeyboardEvent): boolean => {
     const modified = event.shiftKey || event.ctrlKey || event.altKey || event.metaKey
@@ -257,7 +240,10 @@ export function PromptBox({
         ref={group}
         variant="composer"
         data-disabled={disabled || undefined}
-        className={cn(!stacked && (attachments.length > 0 || wrap) && 'flex-wrap')}
+        className={cn(
+          !stacked && 'min-h-13 gap-1.5 py-2 pr-2 pl-4',
+          !stacked && (attachments.length > 0 || wrap) && 'flex-wrap',
+        )}
       >
         {top}
         <AttachmentTray
@@ -271,15 +257,6 @@ export function PromptBox({
           onError={box.setError}
           onLeave={box.focus}
         />
-        {/* After the tiles in the DOM, so they keep the first row when the box wraps. */}
-        {!stacked && (
-          <InputGroupAddon
-            align="inline-start"
-            className="order-none self-end pb-2.5 pl-2 has-[>button]:ml-0"
-          >
-            {addMenu}
-          </InputGroupAddon>
-        )}
         {/* With a basis, the text wraps under the attachments instead of sharing their row. */}
         <div className={cn('min-w-0', stacked ? 'w-full' : 'flex-[1_1_12rem] self-stretch')}>
           <ComposerEditor
@@ -311,7 +288,7 @@ export function PromptBox({
         ) : (
           <InputGroupAddon
             align="inline-end"
-            className="self-end gap-1.5 pr-2.5 pb-2.5 pl-1.5 has-[>button]:mr-0"
+            className="mb-0.5 gap-1.5 self-end p-0 has-[>button]:mr-0"
           >
             {end}
           </InputGroupAddon>
@@ -426,42 +403,42 @@ function SlashItem({
 
 /**
  * **+**: adds files, photos or a folder through the system dialog, or starts a mention or a
- * slash command.
+ * slash command. The session's composer shows it in its control row, New session's in its box.
  */
-function AddMenu({
+export function AddMenu({
+  box,
   agentName,
-  disabled,
-  full,
-  remote,
   commands,
-  emptyDraft,
-  onFocusBox,
-  onPick,
-  onSlash,
-  onMention,
 }: {
+  box: PromptBoxState
   agentName: string
-  disabled: boolean
-  full: boolean
-  /** The session is on another host, which takes files from here as uploads and no folder. */
-  remote: boolean
-  commands: boolean
-  emptyDraft: boolean
-  onFocusBox: () => void
-  onPick: (kind: 'files' | 'folder') => void
-  onSlash: () => void
-  onMention: () => void
+  commands: readonly SlashCommand[]
 }) {
   const { t } = useTranslation('composer')
+  const { disabled, full, remote, text, editor, update } = box
   const shortcut = formatShortcut('Mod+U')
+  const emptyDraft = text === ''
+  const startMention = () => {
+    const current = editor.current?.text() ?? text
+    const { from, to } = editor.current?.selection() ?? { from: current.length, to: current.length }
+    const next = insertAt(current, from, to)
+    update(next.text, next.caret)
+  }
+  const button = {
+    variant: 'quiet',
+    size: 'icon-sm',
+    'aria-label': t('attachments.add'),
+    className: 'size-7.5 text-secondary',
+  } as const
+  const icon = <PlusIcon strokeWidth={1.35} className="size-4.25" />
   if (disabled) {
     // A disabled button takes no pointer, so the tooltip says why from around it.
     return (
       <Tooltip>
         <TooltipTrigger render={<span />}>
-          <InputGroupButton size="round" variant="quiet" aria-label={t('attachments.add')} disabled>
-            <PlusIcon className="size-5" />
-          </InputGroupButton>
+          <Button {...button} disabled>
+            {icon}
+          </Button>
         </TooltipTrigger>
         <TooltipContent>{t('attachments.waitForAgent', { agent: agentName })}</TooltipContent>
       </Tooltip>
@@ -470,16 +447,8 @@ function AddMenu({
   return (
     <DropdownMenu>
       <Tooltip>
-        <TooltipTrigger
-          render={
-            <DropdownMenuTrigger
-              render={
-                <InputGroupButton size="round" variant="quiet" aria-label={t('attachments.add')} />
-              }
-            />
-          }
-        >
-          <PlusIcon className="size-5" />
+        <TooltipTrigger render={<DropdownMenuTrigger render={<Button {...button} />} />}>
+          {icon}
         </TooltipTrigger>
         <TooltipContent>
           {t('attachments.add')}
@@ -489,32 +458,33 @@ function AddMenu({
       <DropdownMenuContent
         side="top"
         sideOffset={6}
+        className="w-66"
         finalFocus={() => {
-          onFocusBox()
+          box.focus()
           return false
         }}
       >
-        <DropdownMenuItem disabled={full} onClick={() => onPick('files')}>
-          <FileIcon />
+        <DropdownMenuItem disabled={full} onClick={() => box.pick('files')}>
+          <ImageIcon />
           {t('attachments.addFiles')}
           <DropdownMenuShortcut>{full ? t('attachments.atMost') : shortcut}</DropdownMenuShortcut>
         </DropdownMenuItem>
         {/* A folder here, or a browser's, means nothing on the host. */}
         {!isWeb && !remote && (
-          <DropdownMenuItem disabled={full} onClick={() => onPick('folder')}>
+          <DropdownMenuItem disabled={full} onClick={() => box.pick('folder')}>
             <FolderIcon />
             {t('attachments.addFolder')}
             {full && <DropdownMenuShortcut>{t('attachments.atMost')}</DropdownMenuShortcut>}
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={onMention}>
+        <DropdownMenuItem onClick={startMention}>
           <AtSignIcon />
           {t('attachments.mentionFile')}
           <DropdownMenuShortcut>@</DropdownMenuShortcut>
         </DropdownMenuItem>
-        {commands && (
-          <DropdownMenuItem disabled={!emptyDraft} onClick={onSlash}>
+        {commands.length > 0 && (
+          <DropdownMenuItem disabled={!emptyDraft} onClick={() => update('/')}>
             <SlashIcon />
             {t('attachments.slashCommands')}
             <DropdownMenuShortcut>

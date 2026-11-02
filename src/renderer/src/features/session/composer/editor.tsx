@@ -96,7 +96,11 @@ function attributes(label: string, popover: PopoverAria | null): Extension {
 const theme = EditorView.theme({
   '&': { maxHeight: 'min(40svh, 24rem)', color: 'var(--text-primary)' },
   '&.cm-focused': { outline: 'none' },
-  '.cm-scroller': { overflow: 'auto', fontFamily: 'var(--font-sans)', lineHeight: '24px' },
+  '.cm-scroller': {
+    overflow: 'auto',
+    fontFamily: 'var(--font-sans)',
+    lineHeight: 'var(--box-line-height, 24px)',
+  },
   '.cm-content': {
     padding: 'var(--box-padding)',
     minHeight: 'var(--box-min-height)',
@@ -190,8 +194,8 @@ export function ComposerEditor({
   hint: string | undefined
   /** The names of the agent's commands, for marking the one the text starts with. */
   commands: readonly string[]
-  /** The text's least height and its padding, as CSS lengths. */
-  size: { minHeight: string; padding: string }
+  /** The text's least height, its padding and its line height, as CSS lengths. */
+  size: { minHeight: string; padding: string; lineHeight?: string }
   popover: PopoverAria | null
   /** Typing changed the text; setText does not call it. */
   onChange: (text: string) => void
@@ -351,7 +355,13 @@ export function ComposerEditor({
     <div
       ref={host}
       className="min-w-0"
-      style={{ '--box-padding': size.padding, '--box-min-height': size.minHeight } as CSSProperties}
+      style={
+        {
+          '--box-padding': size.padding,
+          '--box-min-height': size.minHeight,
+          '--box-line-height': size.lineHeight,
+        } as CSSProperties
+      }
     />
   )
 }

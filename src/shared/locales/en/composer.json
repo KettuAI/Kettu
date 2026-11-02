@@ -4,18 +4,20 @@
     "placeholder": {
       "starting": "Starting {{agent}}…",
       "awaiting": "Waiting for your approval",
-      "steer": "Ask {{agent}} to…   {{queue}} to queue, {{steer}} to steer",
-      "queue": "Ask {{agent}} to…   {{queue}} to queue",
+      "steer": "Reply to {{agent}}…   {{queue}} to queue, {{steer}} to steer",
+      "queue": "Reply to {{agent}}…   {{queue}} to queue",
       "limitReached": "{{limit}} limit reached · resets {{time}}",
-      "ask": "Ask {{agent}} to…",
+      "ask": "Reply to {{agent}}…",
       "denied": "Tell {{agent}} what to do differently"
     },
-    "queue": "Queue",
     "stop": "Stop",
     "send": "Send",
-    "queueTooltip": "Queue <shortcut>{{queueShortcut}}</shortcut>",
-    "queueSteerTooltip": "Queue <shortcut>{{queueShortcut}}</shortcut> · Steer <shortcut>{{steerShortcut}}</shortcut>",
-    "stopTooltip": "Stop <shortcut>{{shortcut}}</shortcut>"
+    "stopTooltip": "Stop <shortcut>{{shortcut}}</shortcut>",
+    "stopHoldTooltip": "Stop <shortcut>{{shortcut}}</shortcut> · hold to queue or send now",
+    "queueIt": "Queue it",
+    "queueItHint": "Sends when this turn ends",
+    "sendNow": "Send now",
+    "sendNowHint": "Sends it into this turn straight away"
   },
   "controls": {
     "ultracodeOn": "Ultracode is on for this session: dynamic workflows on substantial tasks",
@@ -26,9 +28,13 @@
     "changesBetweenTurns": "Changes between turns",
     "useFallback": "Use {{name}}",
     "useDefault": "Use the agent's default",
-    "levelsHint": "Higher levels think longer and use more of your plan.",
+    "levelsHint": "Higher effort thinks longer and uses more of your plan. <shortcut>{{shortcut}}</shortcut> cycles it.",
     "moreModels": "More models",
-    "searchModels": "Search models"
+    "searchModels": "Search models",
+    "cyclesModes": "cycles modes",
+    "effort": "Effort",
+    "ultracodeHint": "Runs each task as a multi-agent workflow. Uses much more of your plan",
+    "modelsFrom": "From {{source}}"
   },
   "outOfCredit": {
     "modelTitle": "{{model}} is out of credit",
@@ -129,7 +135,7 @@
     "addFiles": "Add files or photos…",
     "addFolder": "Add folder…",
     "mentionFile": "Mention a file",
-    "slashCommands": "Slash commands",
+    "slashCommands": "Commands",
     "atMost": "20 attachments at most",
     "waitForAgent": "Wait for {{agent}} to start",
     "reading": "Reading…",
