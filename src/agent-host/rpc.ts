@@ -8,6 +8,7 @@ import {
   type HostMethod,
   type HostParams,
   type HostResult,
+  type SessionViewer,
 } from '@shared/agent-host'
 import type { PortChannel } from '@shared/port-channel'
 import type { FromPort, PortError } from '@shared/port-rpc'
@@ -78,6 +79,28 @@ export class PortHub {
 
   send(portIds: Iterable<string>, event: HostEvent): void {
     for (const portId of portIds) this.ports.get(portId)?.send({ type: 'event', event })
+  }
+
+  /**
+   * Who the ports `showing` are, as `to` is told: the host's windows as one, each device once, by
+   * name, leaving out the computer or device `to` serves.
+   */
+  viewers(showing: readonly string[], to: string): SessionViewer[] {
+    const own = this.devices.get(to)?.id ?? null
+    let host = false
+    const devices = new Map<string, PortDevice>()
+    for (const portId of showing) {
+      const device = this.devices.get(portId)
+      if (!device) host ||= own !== null
+      else if (device.id !== own) devices.set(device.id, device)
+    }
+    const named = [...devices.values()].sort(
+      (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id),
+    )
+    return [
+      ...(host ? [{ kind: 'host' as const }] : []),
+      ...named.map(({ id, name }) => ({ kind: 'device' as const, id, name })),
+    ]
   }
 
   closeAll(): void {
