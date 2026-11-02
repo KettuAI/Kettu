@@ -208,10 +208,9 @@ function plainText(html: string): string {
   return html
     .replace(/<[^>]*>/g, '')
     .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity: string, name: string) => {
-      if (name.startsWith('#x') || name.startsWith('#X'))
-        return String.fromCodePoint(parseInt(name.slice(2), 16))
-      if (name.startsWith('#')) return String.fromCodePoint(Number(name.slice(1)))
-      return ENTITIES[name.toLowerCase()] ?? entity
+      if (!name.startsWith('#')) return ENTITIES[name.toLowerCase()] ?? entity
+      const code = /^#x/i.test(name) ? parseInt(name.slice(2), 16) : Number(name.slice(1))
+      return code <= 0x10ffff ? String.fromCodePoint(code) : entity
     })
 }
 

@@ -410,6 +410,12 @@ describe('releaseHighlights', () => {
     ])
   })
 
+  it('keeps an entity outside Unicode as written', () => {
+    expect(
+      releaseHighlights('## What changed\n- Shows &#x110000; and &#99999999; as is.').en,
+    ).toEqual(['Shows &#x110000; and &#99999999; as is'])
+  })
+
   it('finds none in notes without those sections', () => {
     expect(releaseHighlights('<ul><li>Loose bullet</li></ul>')).toEqual({})
     expect(releaseHighlights(null)).toEqual({})
