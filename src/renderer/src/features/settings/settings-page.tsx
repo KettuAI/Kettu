@@ -10,6 +10,7 @@ import {
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { ChevronRightIcon, SearchIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { Button } from '@renderer/components/ui/button'
 import {
   Dialog,
@@ -155,7 +156,9 @@ function SettingsBody() {
   useEffect(() => () => useSettingsHostStore.setState({ hostId: null }), [])
   return (
     <HostScopeContext.Provider value={scope}>
-      <SettingsLayout client={client} about={about} scope={scope} />
+      <AgentMarkHost.Provider value={scope.hostId}>
+        <SettingsLayout client={client} about={about} scope={scope} />
+      </AgentMarkHost.Provider>
     </HostScopeContext.Provider>
   )
 }
@@ -320,29 +323,31 @@ function SettingsLayout({
         <FlashContext.Provider value={flash}>
           {/* A client's section shows this computer's own, whichever host the picker chose. */}
           <HostScopeContext.Provider value={HOST_SECTIONS.has(page.id) ? scope : LOCAL_SCOPE}>
-            <div
-              key={
-                (searching ? 'results' : item ? `${page.id}/${item}` : page.id) +
-                (HOST_SECTIONS.has(page.id) ? `@${scope.hostId ?? ''}` : '')
-              }
-              className="flex animate-in flex-col fade-in animation-duration-(--duration-fast)"
-            >
-              {searching ? (
-                <SearchResults query={needle} hits={hits} count={hitCount} onGo={go} />
-              ) : item && page.itemPage ? (
-                page.itemPage(item)
-              ) : (
-                <section aria-labelledby={`settings-${page.id}`} className="flex flex-col">
-                  {page.hero ?? (
-                    <PageHeader id={`settings-${page.id}`} title={page.title}>
-                      {page.description}
-                    </PageHeader>
-                  )}
-                  <SectionBody section={page} />
-                  {page.footer}
-                </section>
-              )}
-            </div>
+            <AgentMarkHost.Provider value={HOST_SECTIONS.has(page.id) ? scope.hostId : null}>
+              <div
+                key={
+                  (searching ? 'results' : item ? `${page.id}/${item}` : page.id) +
+                  (HOST_SECTIONS.has(page.id) ? `@${scope.hostId ?? ''}` : '')
+                }
+                className="flex animate-in flex-col fade-in animation-duration-(--duration-fast)"
+              >
+                {searching ? (
+                  <SearchResults query={needle} hits={hits} count={hitCount} onGo={go} />
+                ) : item && page.itemPage ? (
+                  page.itemPage(item)
+                ) : (
+                  <section aria-labelledby={`settings-${page.id}`} className="flex flex-col">
+                    {page.hero ?? (
+                      <PageHeader id={`settings-${page.id}`} title={page.title}>
+                        {page.description}
+                      </PageHeader>
+                    )}
+                    <SectionBody section={page} />
+                    {page.footer}
+                  </section>
+                )}
+              </div>
+            </AgentMarkHost.Provider>
           </HostScopeContext.Provider>
         </FlashContext.Provider>
       </div>

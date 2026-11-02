@@ -4,17 +4,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { HARNESS_IDS } from '@shared/agents'
 import type { AgentColor } from '@shared/settings'
 import { AgentMark } from './agent-mark'
+import { AgentMarkHost } from './agent-mark-host'
 
 // Server rendering reads no store, so the test hands over the statuses each host reports.
 type Statuses = { byId: Record<string, { color?: AgentColor }> }
 const stores = vi.hoisted(() => ({
   local: { byId: {} } as Statuses,
   hosts: {} as Record<string, Statuses>,
-}))
-vi.mock('@renderer/stores/host-scope', () => ({
-  useHostScope: () => ({
-    useAgentsStore: (select: (s: Statuses) => unknown) => select(stores.local),
-  }),
 }))
 vi.mock('@renderer/stores/agents', () => ({
   useAgentsStore: (select: (s: unknown) => unknown) => select(stores),
@@ -53,6 +49,15 @@ describe('AgentMark', () => {
       expect(mark('codex')).not.toContain('--agent-')
       // A session of another host takes that host's color for the agent of the same id.
       expect(mark('codex~work', { hostId: 'studio' })).toContain('var(--agent-amber)')
+      // Inside Settings showing another host, the marks are that host's.
+      const inStudio = renderToStaticMarkup(
+        createElement(
+          AgentMarkHost.Provider,
+          { value: 'studio' },
+          createElement(AgentMark, { agent: 'codex~work' }),
+        ),
+      )
+      expect(inStudio).toContain('var(--agent-amber)')
       expect(mark('codex~work', { hostId: 'gone' })).toBe(mark('codex'))
       expect(mark('codex~work', { dot: 'green' })).toContain('var(--agent-green)')
       expect(mark('codex~work', { dot: null })).toBe(mark('codex'))

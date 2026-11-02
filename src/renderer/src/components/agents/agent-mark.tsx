@@ -1,8 +1,9 @@
+import { useContext } from 'react'
 import type { AgentColor } from '@shared/settings'
 import { harnessOf, type AgentId } from '@shared/thread'
 import { cn } from '@renderer/lib/utils'
 import { agentsOn, useAgentsStore } from '@renderer/stores/agents'
-import { useHostScope } from '@renderer/stores/host-scope'
+import { AgentMarkHost } from './agent-mark-host'
 import { AGENT_MARKS } from './marks'
 
 interface AgentMarkProps {
@@ -17,17 +18,11 @@ interface AgentMarkProps {
   dot?: AgentColor | null
 }
 
-/**
- * The dot its host gives an added agent; none for a harness's default agent. Without a host, the
- * one of the section showing the mark: this computer's unless Settings shows another host.
- */
+/** The dot its host gives an added agent; none for a harness's default agent. */
 function useAgentDot(agent: AgentId, hostId: string | null | undefined): AgentColor | null {
-  const { useAgentsStore: useScoped } = useHostScope()
-  const scoped = useScoped((s) => s.byId[agent]?.color ?? null)
-  const onHost = useAgentsStore((s) =>
-    hostId === undefined ? null : (agentsOn(s, hostId).byId[agent]?.color ?? null),
-  )
-  return hostId === undefined ? scoped : onHost
+  const scoped = useContext(AgentMarkHost)
+  const host = hostId === undefined ? scoped : hostId
+  return useAgentsStore((s) => agentsOn(s, host).byId[agent]?.color ?? null)
 }
 
 /**
