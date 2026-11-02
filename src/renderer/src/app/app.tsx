@@ -18,6 +18,7 @@ import { ShortcutsDialog } from '@renderer/features/shell/shortcuts-dialog'
 import { DESK, SHEET_PANEL } from '@renderer/features/shell/sheet'
 import { TitleBand } from '@renderer/features/shell/top-bar'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
+import { UpdateDialog } from '@renderer/features/updates/update-dialog'
 import { AppSidebar } from '@renderer/features/sidebar/app-sidebar'
 import { hasBand } from '@renderer/lib/platform'
 import { layoutStorage, readJson, writeJson } from '@renderer/lib/storage'
@@ -70,6 +71,7 @@ export function App() {
         </div>
         <LaunchCover />
         <QuitConfirm />
+        <UpdateDialog />
         <ArtifactDialogs />
         <MediaViewer />
         <ShortcutsDialog />

@@ -86,15 +86,22 @@
     }
   },
   "attention": {
-    "browserOrigin": "{{origin}} 正在等待你的答复",
-    "permission": "Agent 请求授权",
+    "browserOrigin": "想打开 {{site}}",
+    "permission": "请求权限",
     "turnEnd": {
       "end_turn": "已完成",
       "cancelled": "已取消",
       "max_tokens": "已达到 token 上限而停止",
       "max_turn_requests": "已达到请求次数上限而停止",
       "refusal": "Agent 拒绝了请求"
-    }
+    },
+    "wantsToRun": "想运行 {{command}}",
+    "wantsToEdit": "想修改 {{target}}",
+    "wantsToDelete": "想删除 {{target}}",
+    "wantsToMove": "想移动 {{target}}",
+    "wantsToUse": "想使用 {{tool}}",
+    "asks": "在问：{{question}}",
+    "done": "{{title}} · 已完成"
   },
   "routines": {
     "busy": "此例程已经有一个运行正在工作",

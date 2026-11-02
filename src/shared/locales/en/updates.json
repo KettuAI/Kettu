@@ -58,6 +58,21 @@
     "saveAndQuit": "Save and quit",
     "saveAndRestart": "Save and restart",
     "saveAndClose": "Save and close",
-    "saveFailed": "Some files couldn't be saved; the Files pane shows why."
+    "saveFailed": "Some files couldn't be saved; the Files pane shows why.",
+    "sessionsRunning_one": "{{count}} session is still running",
+    "sessionsRunning_other": "{{count}} sessions are still running",
+    "terminalsRunning_one": "{{count}} terminal is still running",
+    "terminalsRunning_other": "{{count}} terminals are still running",
+    "keepRunning": "Kettu’s background service can keep them running. You’ll see them when you open Kettu again.",
+    "keepRunningRemote": "Kettu’s background service can keep them running. You’ll see them when you open Kettu again, here or on your phone.",
+    "stopAndQuit": "Stop them and quit",
+    "keepRunningAction": "Keep running"
+  },
+  "dialog": {
+    "title": "Kettu {{version}} is ready",
+    "note": "Your sessions and drafts come back after the restart.",
+    "releaseNotes": "Full release notes",
+    "later": "Later",
+    "restart": "Restart now"
   }
 }

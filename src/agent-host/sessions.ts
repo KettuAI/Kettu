@@ -20,7 +20,7 @@ import {
 } from '@shared/agent-host'
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { firstLine, outlineText } from '@shared/outline'
-import type { BrowserOriginAnswer, BrowserOriginDecision } from '@shared/browser'
+import { originLabel, type BrowserOriginAnswer, type BrowserOriginDecision } from '@shared/browser'
 import type { BusyCounts, BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { PortDevice } from '@shared/remote/device'
@@ -63,6 +63,7 @@ import {
   writePatch,
   type ArtifactWrite,
 } from './artifacts/entries'
+import { allowOnceOption, replySummary, requestText } from './attention'
 import { parseContextReport } from './acp/claude-reports'
 import { isValueOf, startOrder, type AgentOptionsStore, type ReplacedValue } from './agent-options'
 import {
@@ -190,6 +191,7 @@ export interface SessionEvents {
     kind: 'permission' | 'turn-ended' | 'error',
     title: string,
     body: string,
+    allowOnce?: { requestId: string; optionId: string },
   ): void
   badge(count: number): void
   busy(counts: BusyCounts): void
@@ -929,7 +931,7 @@ export class SessionManager {
       live.id,
       'permission',
       this.titleOf(live),
-      t('attention.browserOrigin', { origin }),
+      t('attention.browserOrigin', { site: originLabel(origin) }),
     )
   }
 
@@ -4381,7 +4383,15 @@ export class SessionManager {
     })
     // A run's end notifies as the routine's, once, so its session sends nothing here.
     if (!routineTurn) {
-      this.deps.events.attention(live.id, 'turn-ended', this.titleOf(live), turnEndText(stopReason))
+      const reply = stopReason === 'end_turn' ? replySummary(live.thread) : null
+      this.deps.events.attention(
+        live.id,
+        'turn-ended',
+        stopReason === 'end_turn'
+          ? t('attention.done', { title: this.titleOf(live) })
+          : this.titleOf(live),
+        reply ?? turnEndText(stopReason),
+      )
     }
     if (stopReason === 'end_turn' || chosen) this.drainQueue(live, chosen)
     else this.pauseQueue(live)
@@ -4785,12 +4795,23 @@ export class SessionManager {
         this.update(live, { status: 'awaiting_permission' })
       this.touch(live.id)
       this.updateBadge()
-      const tool = live.thread.byId[request.toolEntryId]
-      const title = tool?.kind === 'tool' ? tool.title : t('attention.permission')
+      const entry = live.thread.byId[request.toolEntryId]
+      const tool = entry?.kind === 'tool' ? entry : undefined
       if (live.record.origin === 'routine' && !live.routineTurnEnded) {
-        this.deps.routine?.current?.waiting(live.id, true, title)
+        this.deps.routine?.current?.waiting(
+          live.id,
+          true,
+          tool ? tool.title : t('attention.permission'),
+        )
       } else {
-        this.deps.events.attention(live.id, 'permission', this.titleOf(live), title)
+        const optionId = allowOnceOption(tool, request.options)
+        this.deps.events.attention(
+          live.id,
+          'permission',
+          this.titleOf(live),
+          requestText(tool, live.record.projectPath),
+          optionId !== null ? { requestId, optionId } : undefined,
+        )
       }
     })
   }
@@ -5660,6 +5681,7 @@ export class SessionManager {
           sessionId: live.id,
           agentId: live.record.agentId,
           title: live.thread.session.title,
+          turnStartedAt: live.thread.session.turnStartedAt,
         })
       }
     }

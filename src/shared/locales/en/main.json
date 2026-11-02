@@ -72,11 +72,16 @@
     "filesUnsaved_other": "{{count}} files have unsaved changes: {{names}}.",
     "losesOnQuit": "Quitting loses them.",
     "losesOnRestart": "Restarting loses them.",
-    "losesOnClose": "Closing the window loses them."
+    "losesOnClose": "Closing the window loses them.",
+    "stopAndQuit": "Stop them and quit",
+    "keepRunning": "Keep running",
+    "keepsRunning": "Kettu can keep them running in the background. You’ll see them when you open Kettu again."
   },
   "notifications": {
     "testTitle": "Kettu",
-    "testBody": "Notifications are on. This is how an agent that needs you will reach you."
+    "testBody": "Notifications are on. This is how an agent that needs you will reach you.",
+    "allowOnce": "Allow once",
+    "open": "Open"
   },
   "attachments": {
     "hostDown": "The agent host isn't running. Try again once it has restarted."

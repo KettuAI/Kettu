@@ -58,6 +58,19 @@
     "saveAndQuit": "保存并退出",
     "saveAndRestart": "保存并重启",
     "saveAndClose": "保存并关闭",
-    "saveFailed": "有文件没能保存，原因见文件面板。"
+    "saveFailed": "有文件没能保存，原因见文件面板。",
+    "sessionsRunning_other": "还有 {{count}} 个会话在运行",
+    "terminalsRunning_other": "还有 {{count}} 个终端在运行",
+    "keepRunning": "Kettu 的后台服务可以让它们继续运行，再次打开 Kettu 时就能看到。",
+    "keepRunningRemote": "Kettu 的后台服务可以让它们继续运行，再次打开 Kettu 时就能看到，在这台电脑或你的手机上都可以。",
+    "stopAndQuit": "停止并退出",
+    "keepRunningAction": "继续运行"
+  },
+  "dialog": {
+    "title": "Kettu {{version}} 已准备好",
+    "note": "重启后，会话和草稿都会恢复。",
+    "releaseNotes": "完整更新说明",
+    "later": "稍后",
+    "restart": "立即重启"
   }
 }

@@ -7,13 +7,21 @@ interface UpdatesStore {
   justChecked: boolean
   /** The "Updated to" notice was dismissed; it shows for one launch only anyway. */
   updatedDismissed: boolean
+  /** The dialog that restarts into a downloaded update, which only Restart opens. */
+  dialogOpen: boolean
 }
 
 export const useUpdatesStore = create<UpdatesStore>()(() => ({
   status: null,
   justChecked: false,
   updatedDismissed: false,
+  dialogOpen: false,
 }))
+
+/** Shows what the downloaded update brings, with Restart now and Later. */
+export function openUpdateDialog(open = true): void {
+  useUpdatesStore.setState({ dialogOpen: open })
+}
 
 let justCheckedTimer: ReturnType<typeof setTimeout> | undefined
 

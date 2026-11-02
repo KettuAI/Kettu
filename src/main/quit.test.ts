@@ -54,8 +54,12 @@ class FakeContents extends EventEmitter {
 
 class FakeWindow extends EventEmitter {
   webContents = new FakeContents()
+  closed = false
   isDestroyed(): boolean {
     return false
+  }
+  close(): void {
+    this.closed = true
   }
   isMinimized(): boolean {
     return false
@@ -65,7 +69,12 @@ class FakeWindow extends EventEmitter {
   focus(): void {}
 }
 
-const session = { sessionId: 's1', agentId: 'codex' as const, title: 'Fix the flaky test' }
+const session = {
+  sessionId: 's1',
+  agentId: 'codex' as const,
+  title: 'Fix the flaky test',
+  turnStartedAt: 1000,
+}
 const terminal = { id: 't1', projectPath: '/p', title: 'node' }
 const unsaved = { projectPath: '/p', path: 'src/a.ts' }
 
@@ -145,6 +154,7 @@ describe('QuitFlow', () => {
       sessions: [session],
       terminals: [terminal],
       unsaved: [],
+      keepRunning: true,
     })
     expect(calls).toEqual([])
     flow.respond(1, true)
@@ -166,6 +176,45 @@ describe('QuitFlow', () => {
     expect(
       window.webContents.sent.filter(([channel]) => channel === 'app:confirm-quit'),
     ).toHaveLength(2)
+  })
+
+  it('closes the windows and keeps the work running when the user says so', async () => {
+    const { flow, window, calls, beforeQuit } = setup({ busy: true })
+    expect(flow.staysInBackground).toBe(false)
+    beforeQuit()
+    await settle()
+    flow.respond(1, 'background')
+    await settle()
+    expect(window.closed).toBe(true)
+    expect(calls).toEqual([])
+    expect(electron.app.quit).not.toHaveBeenCalled()
+    expect(flow.staysInBackground).toBe(true)
+    // A later quit asks again, and stopping then quits.
+    beforeQuit()
+    await settle()
+    flow.respond(2, true)
+    await settle()
+    expect(calls).toEqual(['shutDown'])
+  })
+
+  it('keeps running from the native question, its default', async () => {
+    electron.dialog.showMessageBox.mockResolvedValue({ response: 2 })
+    const { flow, calls, beforeQuit } = setup({ busy: true, window: false })
+    beforeQuit()
+    await settle()
+    await settle()
+    expect(calls).toEqual([])
+    expect(flow.staysInBackground).toBe(true)
+  })
+
+  it('offers no keeping running for a restart or with unsaved files', async () => {
+    const restart = setup({ busy: true })
+    restart.flow.request('update')
+    await settle()
+    expect(restart.question()).toMatchObject({ reason: 'update', keepRunning: false })
+    restart.flow.respond(1, 'background')
+    await settle()
+    expect(restart.window.closed).toBe(false)
   })
 
   it('ignores a second quit while it is asking, and stale answers', async () => {
@@ -206,7 +255,8 @@ describe('QuitFlow', () => {
     expect(electron.dialog.showMessageBox).toHaveBeenCalledOnce()
     expect(electron.dialog.showMessageBox.mock.calls[0][0]).toMatchObject({
       message: 'Quit Kettu?',
-      buttons: ['Cancel', 'Quit'],
+      buttons: ['Cancel', 'Stop them and quit', 'Keep running'],
+      defaultId: 2,
     })
     expect(calls).toEqual(['shutDown'])
   })

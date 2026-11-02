@@ -86,15 +86,22 @@
     }
   },
   "attention": {
-    "browserOrigin": "{{origin}} waits for your answer",
-    "permission": "The agent asks for permission",
+    "browserOrigin": "Wants to open {{site}}",
+    "permission": "Asks for permission",
     "turnEnd": {
       "end_turn": "Finished",
       "cancelled": "Cancelled",
       "max_tokens": "Stopped at the token limit",
       "max_turn_requests": "Stopped at the request limit",
       "refusal": "The agent refused"
-    }
+    },
+    "wantsToRun": "Wants to run {{command}}",
+    "wantsToEdit": "Wants to edit {{target}}",
+    "wantsToDelete": "Wants to delete {{target}}",
+    "wantsToMove": "Wants to move {{target}}",
+    "wantsToUse": "Wants to use {{tool}}",
+    "asks": "Asks: {{question}}",
+    "done": "{{title}} · done"
   },
   "routines": {
     "busy": "This routine already has a run working",

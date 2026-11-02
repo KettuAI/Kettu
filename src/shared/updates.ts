@@ -1,5 +1,7 @@
 // State of the updater in main, as every surface reads it.
 
+import type { Locale } from './locale'
+
 export type UpdateState =
   | { kind: 'off'; reason: 'development' | 'unsupported' }
   | { kind: 'idle'; checkedAt: number | null } // up to date, or not checked yet
@@ -8,7 +10,8 @@ export type UpdateState =
   | { kind: 'available'; version: string; mode: 'install' | 'link'; downloadUrl: string | null }
   | { kind: 'moving'; version: string } // Update on a read-only volume, moving the app first
   | { kind: 'downloading'; version: string; percent: number; manual: boolean } // manual: Update
-  | { kind: 'ready'; version: string } // downloaded and verified
+  // Downloaded and verified; notes: the release's highlights in each language it has them in.
+  | { kind: 'ready'; version: string; notes?: Partial<Record<Locale, string[]>> }
   | { kind: 'error'; message: string; manual: boolean; move?: true } // move: the move failed
 
 export interface UpdateStatus {

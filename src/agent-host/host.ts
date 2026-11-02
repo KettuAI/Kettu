@@ -413,8 +413,15 @@ export class AgentHost {
             this.hub.send([portId], { type: 'session.viewers', sessionId, viewers })
           }
         },
-        attention: (sessionId, kind, title, body) =>
-          options.send({ type: 'host:attention', sessionId, kind, title, body }),
+        attention: (sessionId, kind, title, body, allowOnce) =>
+          options.send({
+            type: 'host:attention',
+            sessionId,
+            kind,
+            title,
+            body,
+            ...(allowOnce ? { allowOnce } : {}),
+          }),
         badge: (count) => options.send({ type: 'host:badge', count }),
         busy: (counts) => options.send({ type: 'host:busy-changed', ...counts }),
       },
@@ -589,6 +596,18 @@ export class AgentHost {
 
   busy(requestId: number): void {
     this.options.send({ type: 'host:busy', requestId, sessions: this.sessions.busy() })
+  }
+
+  /** Allow once from a request's notification; a request already answered elsewhere is left. */
+  answerPermission(sessionId: string, requestId: string, optionId: string): void {
+    try {
+      this.sessions.respond(sessionId, requestId, optionId)
+    } catch (error) {
+      this.diagnostics.log(
+        'info',
+        `A notification's answer was not taken: ${(error as Error).message}`,
+      )
+    }
   }
 
   /** Takes the paths main granted for attachments, then says so, before main answers the renderer. */

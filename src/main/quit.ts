@@ -27,10 +27,13 @@ export interface QuitDeps {
 type Phase = 'idle' | 'asking' | 'stopping' | 'done'
 type QuitReason = Exclude<QuitRequest['reason'], 'close'> | 'move'
 
+/** Stop and go on, stay, or close the windows and keep the work running in the background. */
+export type QuitAnswer = boolean | 'background'
+
 interface PendingAnswer {
   request: QuitRequest
   webContents: WebContents | null
-  resolve(confirmed: boolean): void
+  resolve(answer: QuitAnswer): void
 }
 
 /**
@@ -47,6 +50,8 @@ export class QuitFlow {
   private readonly unsaved = new Map<number, UnsavedFile[]>()
   /** A window the user agreed to close with its unsaved edits. */
   private closing: BrowserWindow | null = null
+  /** The user chose to keep the work running: the windows close and the app stays. */
+  private background = false
 
   constructor(private readonly deps: QuitDeps) {
     app.on('before-quit', (event) => {
@@ -60,6 +65,11 @@ export class QuitFlow {
     return this.phase === 'done'
   }
 
+  /** Whether the app stays without windows, as the setting or the user's answer to a quit says. */
+  get staysInBackground(): boolean {
+    return this.background || this.deps.settings().general.background
+  }
+
   request(reason: QuitReason): void {
     if (this.phase !== 'idle') return
     void this.run(reason).catch((error: unknown) => {
@@ -70,9 +80,10 @@ export class QuitFlow {
   }
 
   /** The renderer's answer to `app:confirm-quit`. */
-  respond(id: number, confirmed: boolean): void {
+  respond(id: number, answer: QuitAnswer): void {
     if (this.pending?.request.id !== id) return
-    this.pending.resolve(confirmed)
+    if (answer === 'background' && !this.pending.request.keepRunning) return
+    this.pending.resolve(answer)
   }
 
   /** The page had no listener for `app:confirm-quit`; ask natively instead. */
@@ -103,7 +114,7 @@ export class QuitFlow {
     window.on('close', (event) => {
       if (this.phase === 'done' || this.closing === window) return
       if (BrowserWindow.getAllWindows().filter((other) => !other.isDestroyed()).length > 1) return
-      if (this.deps.settings().general.background) {
+      if (this.staysInBackground) {
         confirmUnsaved(event)
         return
       }
@@ -134,7 +145,14 @@ export class QuitFlow {
     this.phase = 'asking'
     const unsaved = this.unsaved.get(window.webContents.id) ?? []
     const confirmed = await this.ask(
-      { id: this.nextId++, reason: 'close', sessions: [], terminals: [], unsaved },
+      {
+        id: this.nextId++,
+        reason: 'close',
+        sessions: [],
+        terminals: [],
+        unsaved,
+        keepRunning: false,
+      },
       window,
     )
     this.phase = 'idle'
@@ -155,15 +173,23 @@ export class QuitFlow {
           ])
         : [[], []]
       if (sessions.length > 0 || terminals.length > 0 || unsaved.length > 0) {
-        const confirmed = await this.ask({
+        const answer = await this.ask({
           id: this.nextId++,
           // Moving the app restarts it to update, so it asks the same question.
           reason: reason === 'move' ? 'update' : reason,
           sessions,
           terminals,
           unsaved,
+          // Closing the windows would lose unsaved edits, and a restart cannot wait.
+          keepRunning: reason === 'quit' && unsaved.length === 0,
         })
-        if (!confirmed) {
+        if (answer === 'background') {
+          log.info('Quit turned into keeping the work running in the background')
+          this.phase = 'idle'
+          this.keepRunning()
+          return
+        }
+        if (!answer) {
           log.info(`${reason === 'quit' ? 'Quit' : 'Restart'} cancelled`)
           this.phase = 'idle'
           return
@@ -189,7 +215,15 @@ export class QuitFlow {
     }
   }
 
-  private ask(request: QuitRequest, target?: BrowserWindow): Promise<boolean> {
+  /** Closes every window and leaves the hosts running, with the tray icon to come back from. */
+  private keepRunning(): void {
+    this.background = true
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.close()
+    }
+  }
+
+  private ask(request: QuitRequest, target?: BrowserWindow): Promise<QuitAnswer> {
     return new Promise((resolve) => {
       const window = target ?? currentWindow()
       const webContents = window && !window.webContents.isDestroyed() ? window.webContents : null
@@ -205,14 +239,14 @@ export class QuitFlow {
       const pending: PendingAnswer = {
         request,
         webContents,
-        resolve: (confirmed) => {
+        resolve: (answer) => {
           if (this.pending !== pending) return
           this.pending = null
           if (webContents && !webContents.isDestroyed()) {
             webContents.off('destroyed', fallBack)
             webContents.off('did-start-navigation', onNavigation)
           }
-          resolve(confirmed)
+          resolve(answer)
         },
       }
       this.pending = pending
@@ -231,8 +265,10 @@ export class QuitFlow {
 
   private async askNatively(pending: PendingAnswer): Promise<void> {
     pending.webContents = null
-    const { reason, sessions, terminals, unsaved } = pending.request
+    const { reason, sessions, terminals, unsaved, keepRunning } = pending.request
     const window = currentWindow()
+    const buttons = [t('quit.cancel'), confirmLabel(reason, unsaved.length > 0, keepRunning)]
+    if (keepRunning) buttons.push(t('quit.keepRunning'))
     const options: Electron.MessageBoxOptions = {
       type: 'warning',
       message:
@@ -241,20 +277,26 @@ export class QuitFlow {
           : reason === 'close'
             ? t('quit.titleClose')
             : t('quit.titleQuit', { name: app.name }),
-      detail: describeWork(sessions, terminals, reason === 'update', unsaved, reason),
-      buttons: [t('quit.cancel'), confirmLabel(reason, unsaved.length > 0)],
+      detail: describeWork(sessions, terminals, reason === 'update', unsaved, reason, keepRunning),
+      buttons,
       cancelId: 0,
-      defaultId: 1,
+      // Stopping can lose work, so keeping it running is the default where it is offered.
+      defaultId: keepRunning ? 2 : 1,
       noLink: true,
     }
     const { response } = window
       ? await dialog.showMessageBox(window, options)
       : await dialog.showMessageBox(options)
-    pending.resolve(response === 1)
+    pending.resolve(response === 2 ? 'background' : response === 1)
   }
 }
 
-function confirmLabel(reason: QuitRequest['reason'], unsaved: boolean): string {
+function confirmLabel(
+  reason: QuitRequest['reason'],
+  unsaved: boolean,
+  keepRunning: boolean,
+): string {
+  if (keepRunning) return t('quit.stopAndQuit')
   if (reason === 'close') return t('quit.closeWithoutSaving')
   if (reason === 'update') return unsaved ? t('quit.restartWithoutSaving') : t('quit.restart')
   return unsaved ? t('quit.quitWithoutSaving') : t('quit.quit')
@@ -266,6 +308,7 @@ export function describeWork(
   update: boolean,
   unsaved: UnsavedFile[] = [],
   reason: QuitRequest['reason'] = update ? 'update' : 'quit',
+  keepRunning = false,
 ): string {
   const lines: string[] = []
   const separator = t('quit.listSeparator')
@@ -279,7 +322,11 @@ export function describeWork(
       t('quit.terminalsRunning', { count: terminals.length, names: names.join(separator) }),
     )
   }
-  if (lines.length > 0) lines.push(update ? t('quit.stopsForUpdate') : t('quit.stops'))
+  if (lines.length > 0) {
+    lines.push(
+      update ? t('quit.stopsForUpdate') : keepRunning ? t('quit.keepsRunning') : t('quit.stops'),
+    )
+  }
   if (unsaved.length > 0) {
     const names = unsaved.map((file) => file.path.slice(file.path.lastIndexOf('/') + 1))
     lines.push(t('quit.filesUnsaved', { count: unsaved.length, names: names.join(separator) }))

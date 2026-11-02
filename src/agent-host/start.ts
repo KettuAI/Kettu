@@ -134,6 +134,17 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
       case 'host:power':
         withHost((h) => h.power(message.state))
         break
+      case 'host:permission-answer':
+        if (
+          typeof message.sessionId === 'string' &&
+          typeof message.requestId === 'string' &&
+          typeof message.optionId === 'string'
+        ) {
+          withHost((h) =>
+            h.answerPermission(message.sessionId, message.requestId, message.optionId),
+          )
+        }
+        break
       case 'host:shutdown':
         if (!host) {
           send({ type: 'host:stopped' })

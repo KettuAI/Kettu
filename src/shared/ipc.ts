@@ -53,6 +53,8 @@ export interface QuitRequest {
   sessions: BusySession[]
   terminals: BusyTerminal[]
   unsaved: UnsavedFile[]
+  /** The work may keep running in the background, with the windows closed, instead of stopping. */
+  keepRunning: boolean
 }
 
 /** A project and the origins it always lets agents open, as Settings › Browser lists them. */
@@ -109,7 +111,8 @@ export interface ForwardedKey {
 /** Request/response contract of every `ipcRenderer.invoke` channel, keyed by channel name. */
 export interface IpcInvokeContract {
   'app:get-info': { args: []; result: AppInfo }
-  'app:respond-quit': { args: [id: number, confirmed: boolean]; result: void }
+  // true stops the work and goes on, false stays, 'background' closes the windows and keeps it running.
+  'app:respond-quit': { args: [id: number, answer: boolean | 'background']; result: void }
   'settings:get': { args: []; result: SettingsFile }
   'settings:update': { args: [patch: SettingsPatch]; result: SettingsFile }
   'login-item:status': { args: []; result: LoginItemStatus }
@@ -341,7 +344,7 @@ export interface KettuApi {
   systemLocale: Locale
   app: {
     getInfo(): Promise<AppInfo>
-    respondQuit(id: number, confirmed: boolean): Promise<void>
+    respondQuit(id: number, answer: boolean | 'background'): Promise<void>
     onConfirmQuit(listener: (request: QuitRequest) => void): () => void
     setUnsaved(files: UnsavedFile[]): void
     onCommand(listener: (command: AppCommand) => void): () => void

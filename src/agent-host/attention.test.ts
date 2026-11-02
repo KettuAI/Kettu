@@ -1,0 +1,97 @@
+import { describe, expect, it } from 'vitest'
+import type { ThreadEntry, ThreadState, ToolEntry } from '@shared/thread'
+import { allowOnceOption, replySummary, requestText } from './attention'
+
+function tool(changes: Partial<ToolEntry>): ToolEntry {
+  return {
+    kind: 'tool',
+    id: 't:1',
+    title: 'Tool',
+    toolKind: 'other',
+    status: 'pending',
+    content: [],
+    locations: [],
+    permission: null,
+    permissionResult: null,
+    ...changes,
+  }
+}
+
+function thread(entries: ThreadEntry[]): ThreadState {
+  return {
+    session: {} as ThreadState['session'],
+    order: entries.map((e) => e.id),
+    byId: Object.fromEntries(entries.map((e) => [e.id, e])),
+  }
+}
+
+const agent = (id: string, markdown: string): ThreadEntry => ({
+  kind: 'agent',
+  id,
+  markdown,
+  attachments: [],
+  streaming: false,
+})
+
+describe('requestText', () => {
+  it('says what the agent wants to do', () => {
+    expect(
+      requestText(
+        tool({ toolKind: 'execute', title: 'Run', rawInput: 'pnpm vitest run src/usage\nmore' }),
+        '/p',
+      ),
+    ).toBe('Wants to run pnpm vitest run src/usage')
+    expect(
+      requestText(tool({ toolKind: 'edit', locations: [{ path: '/p/src/a.ts' }] }), '/p'),
+    ).toBe('Wants to edit src/a.ts')
+    expect(
+      requestText(tool({ toolKind: 'delete', locations: [{ path: '/elsewhere/b' }] }), '/p'),
+    ).toBe('Wants to delete /elsewhere/b')
+    expect(requestText(tool({ question: 'Which one?' }), '/p')).toBe('Asks: Which one?')
+    expect(requestText(tool({ title: 'mcp lookup' }), '/p')).toBe('Wants to use mcp lookup')
+    expect(requestText(undefined, '/p')).toBe('Asks for permission')
+  })
+})
+
+describe('allowOnceOption', () => {
+  const options = [
+    { id: 'always', name: 'Always', kind: 'allow_always' as const },
+    { id: 'once', name: 'Once', kind: 'allow_once' as const },
+  ]
+
+  it("offers a request's one-time allowing, never a question's answer", () => {
+    expect(allowOnceOption(tool({}), options)).toBe('once')
+    expect(allowOnceOption(tool({ question: 'Which?' }), options)).toBeNull()
+    expect(allowOnceOption(tool({}), [options[0]!])).toBeNull()
+    expect(allowOnceOption(undefined, options)).toBeNull()
+  })
+})
+
+describe('replySummary', () => {
+  it("gives the turn's reply as its first paragraph in plain text", () => {
+    expect(
+      replySummary(
+        thread([
+          { kind: 'user', id: 'u', content: [] },
+          agent('a1', 'Looking.'),
+          agent(
+            'a2',
+            '## Done\n\nHeatmap **added** and checked in the [browser](http://x). `2` files changed.\n\nMore.',
+          ),
+        ]),
+      ),
+    ).toBe('Heatmap added and checked in the browser. 2 files changed.')
+    expect(
+      replySummary(
+        thread([agent('a', 'Heatmap **added** and checked in the [browser](http://x).\n\nMore.')]),
+      ),
+    ).toBe('Heatmap added and checked in the browser.')
+  })
+
+  it('finds none when the turn ended without a reply', () => {
+    expect(
+      replySummary(thread([agent('a', 'Earlier.'), { kind: 'user', id: 'u', content: [] }])),
+    ).toBeNull()
+    expect(replySummary(thread([agent('a', '```\ncode\n```')]))).toBeNull()
+  })
+})
