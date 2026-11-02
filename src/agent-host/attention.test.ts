@@ -98,6 +98,12 @@ describe('replySummary', () => {
     ).toBe('Heatmap added and checked in the browser.')
   })
 
+  it('keeps underscores inside words', () => {
+    expect(
+      replySummary(thread([agent('a', 'Renamed `day_key` to day_key_utc and _kept_ __both__.')])),
+    ).toBe('Renamed day_key to day_key_utc and kept both.')
+  })
+
   it('finds none when the turn ended without a reply', () => {
     expect(
       replySummary(thread([agent('a', 'Earlier.'), { kind: 'user', id: 'u', content: [] }])),

@@ -79,7 +79,9 @@ export function replySummary(thread: ThreadState): string | null {
     const text = paragraph
       .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
       .replace(/^\s{0,3}(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+|>\s?)/gm, '')
-      .replace(/(\*\*|__|\*|_|~~|`)(.+?)\1/g, '$2')
+      .replace(/(\*\*|\*|~~|`)(.+?)\1/g, '$2')
+      // Underscores mark emphasis only at a word's edges, never inside snake_case names.
+      .replace(/(?<!\w)(__|_)(?=\S)(.+?)(?<=\S)\1(?!\w)/g, '$2')
       .replace(/\s+/g, ' ')
       .trim()
     return text || null
