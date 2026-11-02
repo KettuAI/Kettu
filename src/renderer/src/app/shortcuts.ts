@@ -8,7 +8,6 @@ import { useSessionsStore, visibleOrder } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
   focusPaneAt,
-  settingsBack,
   openSession,
   openSettings,
   toggleShortcuts,
@@ -111,13 +110,6 @@ export function useKeyboardShortcuts(): void {
         return run(event, () => stepSession(event.code === 'BracketLeft' ? -1 : 1))
       }
     }
-    // In the bubble phase, after the page: a popup that closes on Esc stops the key on its way.
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return
-      if (!useViewStore.getState().settings.open || isEditable(event.target) || layerOpen()) return
-      event.preventDefault()
-      settingsBack()
-    }
     // The mouse's back and forward buttons.
     const onMouseUp = (event: MouseEvent) => {
       if ((event.button !== 3 && event.button !== 4) || popupOpen()) return
@@ -126,17 +118,14 @@ export function useKeyboardShortcuts(): void {
       else forward()
     }
     window.addEventListener('keydown', onKeyDown, true)
-    window.addEventListener('keydown', onEscape)
     window.addEventListener('mouseup', onMouseUp)
     // An artifact's page keeps the keys typed in it; main passes on the app's own shortcuts.
     const offForwarded = window.kettu.app.onShortcut((key) => {
       const event = new KeyboardEvent('keydown', { ...key, cancelable: true })
       onKeyDown(event)
-      onEscape(event)
     })
     return () => {
       window.removeEventListener('keydown', onKeyDown, true)
-      window.removeEventListener('keydown', onEscape)
       window.removeEventListener('mouseup', onMouseUp)
       offForwarded()
     }
@@ -204,17 +193,6 @@ function zoomBy(step: ZoomStep): void {
   )
 }
 
-function isEditable(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null
-  if (!el) return false
-  return (
-    el.isContentEditable ||
-    el.tagName === 'INPUT' ||
-    el.tagName === 'TEXTAREA' ||
-    el.tagName === 'SELECT'
-  )
-}
-
 function inCodeEditor(target: EventTarget | null): boolean {
   return !!(target as HTMLElement | null)?.closest('[data-code-editor]')
 }
@@ -230,7 +208,7 @@ function layerOpen(): boolean {
 }
 
 /** A dialog or menu other than the Settings modal, which keeps Back and the shortcuts list. */
-function popupOpen(): boolean {
+export function popupOpen(): boolean {
   return !!document.querySelector(
     '[role=dialog]:not([data-settings-dialog]), [role=alertdialog], [role=menu]',
   )

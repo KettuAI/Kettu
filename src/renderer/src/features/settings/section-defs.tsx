@@ -701,6 +701,7 @@ export function useBrowserSection(): SectionDef {
   const { t } = useTranslation('settings')
   const en = english()
   const { sites, error, remove, reload } = useAllowedSites()
+  const remembered = useSettingsStore((s) => Object.keys(s.settings.thread.alwaysOpenIn).length)
   const allowed = group('allowed-sites', t('browser.groups.allowedSites'), {
     count: sites?.length,
     note: (
@@ -730,16 +731,21 @@ export function useBrowserSection(): SectionDef {
       group: links,
       render: () => <ConfirmLinks label={t('browser.confirmLinks.name')} />,
     },
-    {
-      id: 'remembered-sites',
-      name: t('browser.rememberedSites.name'),
-      english: en('browser.rememberedSites.name'),
-      description: t('browser.rememberedSites.description'),
-      keywords: t('browser.rememberedSites.keywords'),
-      group: links,
-      layout: 'block',
-      render: (text) => <RememberedSitesList label={text} />,
-    },
+    // Shown once the "Open link?" dialog has remembered a site: there is nothing to manage before.
+    ...(remembered > 0
+      ? [
+          {
+            id: 'remembered-sites',
+            name: t('browser.rememberedSites.name'),
+            english: en('browser.rememberedSites.name'),
+            description: t('browser.rememberedSites.description'),
+            keywords: t('browser.rememberedSites.keywords'),
+            group: links,
+            layout: 'block',
+            render: (text) => <RememberedSitesList label={text} />,
+          } satisfies RowDef,
+        ]
+      : []),
     {
       id: 'clear-data',
       name: t('browser.clearData.name'),

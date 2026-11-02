@@ -145,7 +145,7 @@ function useAddable(): AgentStatus[] {
 export function AgentListItem({ status }: { status: AgentStatus }) {
   const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
-  const dot = useScopedDot(status.id)
+  const dot = useScopedDot(status)
   const hasOthers = useHasOtherAgents(status)
   const details = useAgentsStore((s) => s.details[status.id])
   const now = useNow()
@@ -617,7 +617,7 @@ export function AgentPage({ agentId }: { agentId: AgentId }) {
 /** The page's header, without an agent once it is gone from the list. */
 function AgentPageHeader({ status, actions }: { status: AgentStatus | null; actions?: ReactNode }) {
   const { t } = useTranslation('settings')
-  const dot = useScopedDot(status?.id ?? null)
+  const dot = useScopedDot(status ?? null)
   return (
     <ItemPageHeader
       back={t('sections.agents')}
@@ -993,7 +993,7 @@ function DangerGroup({ status }: { status: AgentStatus }) {
   return (
     <section className="flex flex-col pt-4">
       <RowGroup>
-        <ColorRow status={status} />
+        {status.color && <ColorRow status={status} />}
         <RowFrame
           text={
             <RowText name={t('agents.remove.name')} description={t('agents.remove.description')} />
@@ -1017,7 +1017,7 @@ function DangerGroup({ status }: { status: AgentStatus }) {
 function ColorRow({ status }: { status: AgentStatus }) {
   const { api } = useHostScope()
   const { t } = useTranslation('settings')
-  const color = useScopedDot(status.id)
+  const color = useScopedDot(status)
   const [act, busy, error] = useAction()
   return (
     <RowFrame
@@ -1048,10 +1048,14 @@ function ColorRow({ status }: { status: AgentStatus }) {
   )
 }
 
-/** An added agent's dot as the scoped host's settings have it. */
-function useScopedDot(agentId: AgentId | null): AgentColor | null {
+/**
+ * An added agent's dot as the scoped host's settings have it, so a choice shows at once. A host
+ * from before colors reports none and has no dot to choose.
+ */
+function useScopedDot(status: AgentStatus | null): AgentColor | null {
   const { useSettingsStore } = useHostScope()
-  return useSettingsStore((s) => (agentId ? agentColor(s.settings.addedAgents, agentId) : null))
+  const id = status?.color ? status.id : null
+  return useSettingsStore((s) => (id ? agentColor(s.settings.addedAgents, id) : null))
 }
 
 function RemoveDialog({

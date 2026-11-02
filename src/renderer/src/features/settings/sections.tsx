@@ -285,18 +285,6 @@ export function ColorMode() {
   )
 }
 
-// Reads the toggle it sits in: a thick ring around a light center while that toggle is pressed.
-export function RadioDot() {
-  return (
-    <span
-      aria-hidden
-      className="grid size-3.5 shrink-0 place-items-center rounded-full bg-surface ring-1 ring-border-strong transition-colors duration-(--duration-fast) ring-inset group-aria-pressed/toggle:bg-primary group-aria-pressed/toggle:ring-0"
-    >
-      <span className="size-1.25 scale-0 rounded-full bg-surface transition-transform duration-(--duration-fast) group-aria-pressed/toggle:scale-100" />
-    </span>
-  )
-}
-
 function StepButton({
   label,
   shortcut,

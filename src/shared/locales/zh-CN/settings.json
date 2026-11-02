@@ -39,7 +39,6 @@
       "name": "语言",
       "description": "菜单、设置和 Kettu 自身的提示。Agent 仍用你写给它的语言回复。",
       "keywords": "语言 中文 英文 翻译 language locale chinese english",
-      "system": "跟随系统",
       "systemNamed": "跟随系统（{{name}}）"
     },
     "defaultAgent": {
@@ -177,7 +176,6 @@
       "small": "小",
       "default": "默认",
       "large": "大",
-      "previewUser": "把设置页做成高保真，浅色和深色都要看。",
       "previewAgent": "好的。我先读一下 <code>settings-page.tsx</code> 和设计文档，再逐页给出方案。"
     },
     "reduceMotion": {
@@ -391,8 +389,7 @@
       "url": "URL",
       "noProxyFor": "不使用代理的地址",
       "invalid": "请输入 URL，例如 http://proxy.example.com:8080",
-      "environmentNote": "在填入 URL 之前，仍使用环境变量中的代理。",
-      "inUse": "新的连接会使用这个代理。"
+      "environmentNote": "在填入 URL 之前，仍使用环境变量中的代理。"
     },
     "diagnostics": {
       "name": "诊断信息",

@@ -40,7 +40,6 @@
       "name": "Language",
       "description": "Menus, settings and Kettu's own messages. Agents keep replying in the language you write to them.",
       "keywords": "language locale chinese english translation",
-      "system": "System",
       "systemNamed": "System ({{name}})"
     },
     "defaultAgent": {
@@ -178,7 +177,6 @@
       "small": "Small",
       "default": "Default",
       "large": "Large",
-      "previewUser": "Make the settings page high fidelity, in light and dark.",
       "previewAgent": "Sure. I'll read <code>settings-page.tsx</code> and the design doc first, then go page by page."
     },
     "reduceMotion": {
@@ -392,8 +390,7 @@
       "url": "URL",
       "noProxyFor": "No proxy for",
       "invalid": "Enter a URL such as http://proxy.example.com:8080",
-      "environmentNote": "The environment's proxy stays in use until a URL is in.",
-      "inUse": "In use for new connections."
+      "environmentNote": "The environment's proxy stays in use until a URL is in."
     },
     "diagnostics": {
       "name": "Diagnostics",

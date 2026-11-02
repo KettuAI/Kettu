@@ -10,6 +10,7 @@ import {
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { ChevronRightIcon, SearchIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { popupOpen } from '@renderer/app/shortcuts'
 import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -96,7 +97,7 @@ export default function SettingsPage() {
       <DialogPortal>
         <DialogOverlay className="supports-backdrop-filter:backdrop-blur-none" />
         <DialogPrimitive.Popup
-          // The section in the list takes the focus, so Tab and the arrows start from it.
+          // The section in the list takes the focus, so Tab starts from it.
           initialFocus={() =>
             document.querySelector<HTMLElement>('[data-settings-dialog] nav [aria-current=page]') ??
             true
@@ -279,6 +280,8 @@ function SettingsLayout({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (isMod(event) && !event.shiftKey && event.key.toLowerCase() === 'f') {
+        // A dialog or menu over Settings keeps the focus: the search lies under it.
+        if (popupOpen()) return
         event.preventDefault()
         search.current?.focus()
         search.current?.select()
