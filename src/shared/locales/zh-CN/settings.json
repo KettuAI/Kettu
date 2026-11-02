@@ -209,7 +209,7 @@
   "terminal": {
     "shell": {
       "name": "Shell",
-      "description": "你的登录 Shell（$SHELL），让终端使用与登录环境相同的工具；也可以选择其他程序。",
+      "description": "你的登录 shell，或你选择的程序。",
       "descriptionWindows": "已安装 pwsh 时使用 pwsh，否则使用 Windows PowerShell；也可以选择其他程序。",
       "loginShell": "登录 Shell",
       "reset": "重置",
@@ -690,7 +690,7 @@
     "account": "你的 Kettu 账号，用于 Kettu 的云服务。",
     "agents": "你选来干活的 Agent，每个有自己的账号和额度。同一个 Harness 能有几个 Agent，比如一个用订阅、一个用公司的 API key。",
     "agents_web": "{{host}} 上的 Agent，账号和额度都在 {{host}} 上。同一个 Harness 能有几个 Agent，比如一个用订阅、一个用公司的 API key。",
-    "terminal": "侧边面板里的终端用哪个 Shell，以及它的字号。",
+    "terminal": "侧边面板的终端运行哪个 shell，以及它的外观。",
     "git": "顶栏的分支与更改、Pull Request 和它的检查结果，都靠下面两个工具。",
     "advanced": "网络代理、诊断信息，以及 Kettu 保存在这台电脑上的数据。",
     "advanced_web": "网络代理、诊断信息，以及 Kettu 保存在 {{host}} 上的数据。",

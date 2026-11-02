@@ -210,7 +210,7 @@
   "terminal": {
     "shell": {
       "name": "Shell",
-      "description": "Your login shell ($SHELL), so the terminal sees the same tools; or a program you pick.",
+      "description": "Your login shell, or a program you pick.",
       "descriptionWindows": "pwsh when it is installed, else Windows PowerShell; or a program you pick.",
       "loginShell": "Login shell",
       "reset": "Reset",
@@ -694,7 +694,7 @@
     "account": "Your Kettu account, for Kettu’s cloud services.",
     "agents": "The agents you pick to work with, each with its own account and limits. One harness can have several agents, such as one on a subscription and one on a company API key.",
     "agents_web": "The agents on {{host}} you pick to work with, each with its own account and limits on {{host}}. One harness can have several agents, such as one on a subscription and one on a company API key.",
-    "terminal": "Which shell the side panel's terminal runs, and its font size.",
+    "terminal": "Which shell the side panel's terminal runs, and how it looks.",
     "git": "The top bar's branch and changes, pull requests and their checks all come from these two tools.",
     "advanced": "Network proxy, diagnostics and the data Kettu keeps on this computer.",
     "advanced_web": "Network proxy, diagnostics and the data Kettu keeps on {{host}}.",

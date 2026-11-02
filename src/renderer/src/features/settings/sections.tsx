@@ -32,7 +32,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
-import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/components/ui/input-group'
 import { Kbd } from '@renderer/components/ui/kbd'
@@ -57,6 +56,7 @@ import {
   CopyAction,
   FIELD_LABEL,
   Masked,
+  GROUP_ACTION,
   PathText,
   Pill,
   RevealAction,
@@ -72,9 +72,6 @@ import { useApply } from './use-apply'
 
 /** The settings of the host the section shows, this computer's own keys among them. */
 const useSettings = () => useHostScope().useSettingsStore((s) => s.settings)
-
-// The panel behind a live preview: text size, terminal font, notification banner.
-const PREVIEW_BOX = 'rounded-code bg-app shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]'
 
 // A block row's first line: the row's text on the left, its control on the right.
 const BLOCK_LINE = 'flex items-center gap-x-7 gap-y-3'
@@ -436,77 +433,32 @@ export function ShellPicker() {
   }
   // A program's name is mono; "Login shell" is a label and stays in the interface font.
   const isProgram = !!shellPath || isWindows
-  const program = shellPath
-    ? basename(shellPath)
-    : isWindows
-      ? 'PowerShell'
-      : t('terminal.shell.loginShell')
+  const program = isWindows ? 'PowerShell' : t('terminal.shell.loginShell')
   return (
-    <div className="flex min-w-0 items-center gap-2">
+    <>
       <ControlError error={error ?? pickError} />
-      <Badge
-        variant="neutral"
+      <span
         title={shellPath ?? undefined}
         className={cn(
-          'max-w-48 min-w-0 shrink text-primary shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
-          isProgram && 'font-mono text-meta',
+          'max-w-56 min-w-0 truncate text-tertiary',
+          isProgram ? 'font-mono text-code' : 'text-lede',
         )}
       >
-        <span className="truncate">{program}</span>
-      </Badge>
+        {shellPath ?? program}
+      </span>
+      <Button className={ROW_BUTTON} variant="outline" onClick={() => void choose()}>
+        {t('terminal.shell.choose')}
+      </Button>
       {shellPath && (
         <Button
           variant="ghost"
-
-          className={cn(ROW_BUTTON, 'text-secondary')}
+          className={GROUP_ACTION}
           onClick={() => apply({ terminal: { shellPath: null } })}
         >
           {t('terminal.shell.reset')}
         </Button>
       )}
-      <Button className={ROW_BUTTON} variant="outline" onClick={() => void choose()}>
-        {t('terminal.shell.choose')}
-      </Button>
-    </div>
-  )
-}
-
-const ANSI_COLOR = {
-  green: 'text-(color:--ansi-green)',
-  blue: 'text-(color:--ansi-blue)',
-  cyan: 'text-(color:--ansi-cyan)',
-  magenta: 'text-(color:--ansi-magenta)',
-}
-
-function Ansi({ color, children }: { color: keyof typeof ANSI_COLOR; children: ReactNode }) {
-  return <span className={ANSI_COLOR[color]}>{children}</span>
-}
-
-function PromptLine({ children }: { children?: ReactNode }) {
-  return (
-    <div className="whitespace-pre">
-      <Ansi color="blue">~/projects/kettu</Ansi> <Ansi color="magenta">main</Ansi>{' '}
-      <Ansi color="green">{'\u276F'}</Ansi> {children}
-    </div>
-  )
-}
-
-function TestFile({ name, detail }: { name: string; detail: string }) {
-  return (
-    <div className="whitespace-pre">
-      {' '}
-      <Ansi color="green">{'\u2713'}</Ansi> {name} <span className="text-tertiary">{detail}</span>
-    </div>
-  )
-}
-
-function TestTotal({ name, count }: { name: string; count: number }) {
-  return (
-    <div className="whitespace-pre">
-      <Ansi color="cyan">{name}</Ansi>
-      {'  '}
-      <Ansi color="green">{count} passed</Ansi> <span className="text-tertiary">({count})</span>
-    </div>
+    </>
   )
 }
 
@@ -532,18 +484,17 @@ export function FontSize({ label }: { label: ReactNode }) {
       </div>
       <div
         aria-hidden
-        className={cn(PREVIEW_BOX, 'overflow-hidden px-3.5 py-3 font-mono leading-normal')}
+        className="overflow-hidden rounded-segments bg-code-block px-3.5 py-3 font-mono leading-[1.6] shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]"
         style={{ fontSize: value }}
       >
-        <PromptLine>pnpm test</PromptLine>
-        <TestFile name="src/shared/settings.test.ts" detail="(12 tests) 8ms" />
-        <TestFile name="src/main/menu.test.ts" detail="(9 tests) 14ms" />
-        <div className="whitespace-pre"> </div>
-        <TestTotal name=" Test Files" count={2} />
-        <TestTotal name="      Tests" count={21} />
-        <PromptLine>
-          <span className="inline-block h-[1.2em] w-[0.6em] bg-foreground/75 align-[-0.2em]" />
-        </PromptLine>
+        <div className="whitespace-pre">
+          <span className="text-attention">~/code/kettu</span>{' '}
+          <span className="text-merged">main</span> $ pnpm vitest run src/usage
+        </div>
+        <div className="whitespace-pre">
+          <span className="text-success">{'\u2713'}</span> 29 passed{' '}
+          <span className="text-tertiary">(1.18s)</span>
+        </div>
       </div>
     </div>
   )
