@@ -101,6 +101,10 @@ export class HostsClient {
     if (message.kind !== 'message') return
     const inner = message.message
     if (inner.type === 'resync') return this.emit(message.hostId, { kind: 'resync' })
+    if (inner.type === 'terminals.restarted') {
+      const ids = inner.ids.filter((id): id is string => typeof id === 'string')
+      return this.emit(message.hostId, { kind: 'terminals-restarted', ids })
+    }
     if (inner.type === 'event')
       return this.emit(message.hostId, { kind: 'event', event: inner.event })
     const pending = this.inFlight.get(inner.id)

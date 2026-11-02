@@ -16,7 +16,7 @@ import type { DirectAddress } from './remote/protocol'
 import type { RemoteStatus } from './remote/status'
 import type { SettingsFile, SettingsPatch } from './settings'
 import type { SharingConnectResult, SharingResult, SharingStatus } from './sharing'
-import type { TerminalsApi } from './terminal-host'
+import type { TerminalMethod, TerminalsApi } from './terminal-host'
 import type { CatalogInstallResult, CatalogState, ThemeInstallResult, ThemesState } from './themes'
 import type { AgentId, HarnessId } from './thread'
 import type { UpdateStatus } from './updates'
@@ -440,10 +440,15 @@ export interface KettuApi {
     onChanged(listener: (status: HostsStatus) => void): () => void
     onPairing(listener: (event: HostPairingEvent) => void): () => void
     /**
-     * A request to a connected host's agent host, or an owner's call to its parent, which rejects as
-     * `agents.request` does; one for a host whose first connection is under way waits for it a while.
+     * A request to a connected host's agent host or terminal host, or an owner's call to its
+     * parent, which rejects as `agents.request` does; one for a host whose first connection is
+     * under way waits for it a while.
      */
-    request(hostId: string, method: HostMethod | HostAdminMethod, params: unknown): Promise<unknown>
+    request(
+      hostId: string,
+      method: HostMethod | HostAdminMethod | TerminalMethod,
+      params: unknown,
+    ): Promise<unknown>
     /** Each host's events, and whether its session opened, ended or must be read again. */
     onSession(listener: (hostId: string, change: HostSessionChange) => void): () => void
   }
