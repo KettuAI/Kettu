@@ -284,4 +284,11 @@ describe('projectRelative', () => {
   it('compares Windows paths without regard to case or separators', () => {
     expect(projectRelative('C:\\Work\\Repo', 'c:\\work\\repo\\App', 'app/x.ts')).toBe('x.ts')
   })
+
+  it("reads another host's project by the path that host writes", () => {
+    const host = '0123456789abcdef0123456789abcdef'
+    expect(projectRelative('/repo', `kettu-host:${host}:/repo`, 'src/a.ts')).toBe('src/a.ts')
+    expect(projectRelative('/repo', `kettu-host:${host}:/repo/app`, 'app/x.ts')).toBe('x.ts')
+    expect(projectRelative('/repo', `kettu-host:${host}:/elsewhere`, 'a.ts')).toBeNull()
+  })
 })
