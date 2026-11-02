@@ -223,7 +223,8 @@ function highlight(item: string, chinese: boolean): string {
     .replace(/\s+/g, ' ')
     .trim()
   const end = chinese ? text.indexOf('。') + 1 : text.search(/[.!?](?:\s|$)/) + 1
-  const sentence = end > 0 ? text.slice(0, end) : text
+  // A highlight is a list item, so it drops its full stop.
+  const sentence = (end > 0 ? text.slice(0, end) : text).replace(/[.。]$/, '')
   return sentence.length > MAX_HIGHLIGHT ? `${sentence.slice(0, MAX_HIGHLIGHT - 1)}…` : sentence
 }
 

@@ -389,24 +389,24 @@ describe('releaseHighlights', () => {
 <li>Kettu 能以 daemon 运行在服务器上。<code>kettu pair</code> 添加设备。</li>
 </ul>`
 
-  it("lists each language's bullets by their first sentence, without issue links", () => {
+  it("lists each language's bullets by their first sentence, without issue links or a full stop", () => {
     expect(releaseHighlights(html)).toEqual({
       en: [
-        'Kettu runs as a daemon on a server without a desktop.',
-        'Claude Code sessions start on the daemon; before, every one failed to load the SDK & more.',
+        'Kettu runs as a daemon on a server without a desktop',
+        'Claude Code sessions start on the daemon; before, every one failed to load the SDK & more',
       ],
-      'zh-CN': ['Kettu 能以 daemon 运行在服务器上。'],
+      'zh-CN': ['Kettu 能以 daemon 运行在服务器上'],
     })
   })
 
   it('reads Markdown notes too, and keeps to five', () => {
     const markdown = `Intro\n\n## What changed\n\n${Array.from({ length: 7 }, (_, i) => `- Change ${i} landed. More words.`).join('\n')}\n`
     expect(releaseHighlights(markdown).en).toEqual([
-      'Change 0 landed.',
-      'Change 1 landed.',
-      'Change 2 landed.',
-      'Change 3 landed.',
-      'Change 4 landed.',
+      'Change 0 landed',
+      'Change 1 landed',
+      'Change 2 landed',
+      'Change 3 landed',
+      'Change 4 landed',
     ])
   })
 
@@ -414,7 +414,7 @@ describe('releaseHighlights', () => {
     expect(releaseHighlights('<ul><li>Loose bullet</li></ul>')).toEqual({})
     expect(releaseHighlights(null)).toEqual({})
     expect(releaseHighlights([{ version: '1.0.0', note: '## What changed\n- One.' }])).toEqual({
-      en: ['One.'],
+      en: ['One'],
     })
   })
 })
