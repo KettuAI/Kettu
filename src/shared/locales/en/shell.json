@@ -42,7 +42,7 @@
     "addFiles": "Add files or photos",
     "toggleTerminal": "Show or hide the terminal",
     "newTerminal": "New terminal",
-    "askSelection": "Ask about the terminal selection",
+    "askSelection": "Ask about the selection",
     "groups": {
       "general": "General",
       "sessions": "Sessions",

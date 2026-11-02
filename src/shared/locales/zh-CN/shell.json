@@ -42,7 +42,7 @@
     "addFiles": "添加文件或照片",
     "toggleTerminal": "显示或隐藏终端",
     "newTerminal": "新建终端",
-    "askSelection": "询问终端里选中的内容",
+    "askSelection": "询问选中的内容",
     "groups": {
       "general": "通用",
       "sessions": "会话",
