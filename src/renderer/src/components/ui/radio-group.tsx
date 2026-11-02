@@ -13,9 +13,10 @@ function RadioGroup({ className, ...props }: RadioGroupPrimitive.Props) {
   )
 }
 
-// Off, a ring of the strong line; on, a 5 px fox border around the surface.
+// Off, a ring of the strong line; on, a 5 px fox ring around the surface: the fill turns fox and
+// a dot of the surface stays in the middle, so only colors change.
 const DOT =
-  'size-4 shrink-0 rounded-full border-0 border-control-on bg-card shadow-[inset_0_0_0_1.5px_var(--border-strong)] transition-[border-width,box-shadow] duration-(--duration-fast)'
+  'relative size-4 shrink-0 rounded-full bg-card shadow-[inset_0_0_0_1.5px_var(--border-strong)] transition-[background-color,box-shadow] duration-(--duration-fast) before:absolute before:inset-[5px] before:rounded-full before:bg-card'
 
 function RadioGroupItem({ className, ...props }: RadioPrimitive.Root.Props) {
   return (
@@ -23,7 +24,7 @@ function RadioGroupItem({ className, ...props }: RadioPrimitive.Root.Props) {
       data-slot="radio-group-item"
       className={cn(
         DOT,
-        'peer relative flex aspect-square outline-none after:absolute after:-inset-x-3 after:-inset-y-2 focus-ring disabled:cursor-not-allowed disabled:opacity-40 aria-invalid:shadow-[inset_0_0_0_1.5px_var(--danger)] data-checked:border-[5px] data-checked:shadow-none',
+        'peer flex aspect-square outline-none after:absolute after:-inset-x-3 after:-inset-y-2 focus-ring disabled:cursor-not-allowed disabled:opacity-40 aria-invalid:shadow-[inset_0_0_0_1.5px_var(--danger)] data-checked:bg-control-on data-checked:shadow-none',
         className,
       )}
       {...props}
@@ -50,7 +51,7 @@ function RadioGroupTile({ className, children, ...props }: RadioPrimitive.Root.P
         aria-hidden
         className={cn(
           DOT,
-          'group-data-checked/radio-group-tile:border-[5px] group-data-checked/radio-group-tile:shadow-none',
+          'group-data-checked/radio-group-tile:bg-control-on group-data-checked/radio-group-tile:shadow-none',
         )}
       />
       <LucideProvider strokeWidth={1.2} nonScalingStroke>

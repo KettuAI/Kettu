@@ -105,7 +105,7 @@ function ToastList() {
         toast={item}
         swipeDirection={[]}
         data-overlay-layer=""
-        className="col-start-1 row-start-1 flex min-h-10 min-w-0 items-center gap-2.5 justify-self-center rounded-2xl bg-toast px-3 py-1.5 text-control text-toast-foreground shadow-toast has-[button]:pr-1.5 transition-[opacity,translate] duration-(--duration-base) ease-standard data-ending-style:opacity-0 data-limited:hidden data-starting-style:opacity-0 motion-safe:data-starting-style:translate-y-1"
+        className="col-start-1 row-start-1 flex min-h-10 min-w-0 items-center gap-2.5 justify-self-center rounded-[11px] bg-toast px-3 py-1.5 text-control text-toast-foreground shadow-toast has-[button]:pr-1.5 transition-[opacity,translate] duration-(--duration-base) ease-standard data-ending-style:opacity-0 data-limited:hidden data-starting-style:opacity-0 motion-safe:data-starting-style:translate-y-1"
       >
         {tone && (
           <span className={cn('flex shrink-0', tone.color)}>
@@ -113,7 +113,7 @@ function ToastList() {
           </span>
         )}
         <Toast.Title className="min-w-0 flex-1 truncate" />
-        <Toast.Action className="h-6.5 shrink-0 rounded-tile bg-toast-foreground/12 px-2.25 text-hint font-semibold text-toast-foreground outline-none hover:bg-toast-foreground/20 focus-ring" />
+        <Toast.Action className="h-6.5 shrink-0 rounded-[7px] bg-toast-foreground/12 px-2.25 text-hint font-semibold text-toast-foreground outline-none hover:bg-toast-foreground/20 focus-ring" />
         {dismissible && (
           <Toast.Close
             aria-label={t('actions.dismiss')}
