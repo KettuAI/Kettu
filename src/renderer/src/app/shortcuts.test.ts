@@ -202,3 +202,41 @@ describe('Ctrl+` with a menu open', () => {
     expect(press(false)).toBe(true)
   })
 })
+
+describe('Back in Settings', () => {
+  /** Mod+[ with only the Settings modal open, which is a dialog, or with a popup over it. */
+  function back(popup: boolean): void {
+    const event = {
+      key: '[',
+      code: 'BracketLeft',
+      metaKey: true,
+      ctrlKey: false,
+      altKey: false,
+      shiftKey: false,
+      isComposing: false,
+      defaultPrevented: false,
+      target: { tagName: 'BODY', isContentEditable: false, closest: () => null },
+      preventDefault: () => {},
+      stopPropagation: () => {},
+    } as unknown as KeyboardEvent
+    // The Settings modal matches a plain dialog selector, never one that leaves it out.
+    vi.stubGlobal('document', {
+      querySelector: (selector: string) =>
+        popup || selector.split(',').some((part) => part.trim() === '[role=dialog]') ? {} : null,
+      activeElement: null,
+    })
+    // Earlier tests installed the listeners more than once; one press reaches one of them.
+    keydowns.find((k) => k.capture)!.listener(event)
+    vi.stubGlobal('document', { querySelector: () => null, activeElement: null })
+  }
+
+  it('steps back from an item to its list, unless a popup over Settings is open', async () => {
+    if (keydowns.length === 0) useKeyboardShortcuts()
+    const { openSettingsItem } = await import('@renderer/stores/view')
+    openSettingsItem('agents', 'claude-code~work')
+    back(true)
+    expect(useViewStore.getState().settings.item).toBe('claude-code~work')
+    back(false)
+    expect(useViewStore.getState().settings).toMatchObject({ open: true, item: null })
+  })
+})

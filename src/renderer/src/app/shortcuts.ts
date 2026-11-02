@@ -64,7 +64,7 @@ export function useKeyboardShortcuts(): void {
 
       const step = historyStep(event, platform)
       if (step) {
-        if (layerOpen()) return
+        if (popupOpen()) return
         return run(event, step === 'back' ? back : forward)
       }
 
@@ -78,7 +78,7 @@ export function useKeyboardShortcuts(): void {
 
       // The Files pane's editor keeps this key, which comments the selected lines there.
       if (event.key === '/' && !inCodeEditor(event.target)) {
-        return run(event, () => toggleShortcuts(layerOpen()))
+        return run(event, () => toggleShortcuts(popupOpen()))
       }
 
       // Mod+1 to Mod+9 focus a pane of the split, unless Settings covers it, no pane is there, or a
@@ -120,7 +120,7 @@ export function useKeyboardShortcuts(): void {
     }
     // The mouse's back and forward buttons.
     const onMouseUp = (event: MouseEvent) => {
-      if ((event.button !== 3 && event.button !== 4) || layerOpen()) return
+      if ((event.button !== 3 && event.button !== 4) || popupOpen()) return
       event.preventDefault()
       if (event.button === 3) back()
       else forward()
@@ -227,6 +227,13 @@ const MENU_OPENS_TERMINAL = '[role=menu] [data-accelerator="Ctrl+`"]:not([data-d
 
 function layerOpen(): boolean {
   return !!document.querySelector('[role=dialog], [role=alertdialog], [role=menu]')
+}
+
+/** A dialog or menu other than the Settings modal, which keeps Back and the shortcuts list. */
+function popupOpen(): boolean {
+  return !!document.querySelector(
+    '[role=dialog]:not([data-settings-dialog]), [role=alertdialog], [role=menu]',
+  )
 }
 
 /** Previous or next session in sidebar order, across Pinned, the projects and No project. */
