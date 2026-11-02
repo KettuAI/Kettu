@@ -231,6 +231,7 @@ describePosix('adding a machine over SSH', () => {
     expect(await t.end(2)).toMatchObject({ state: 'added' })
     expect(t.states(2).map((state) => (state.state === 'ssh' ? state.step : state.state))).toEqual([
       'connecting',
+      'adding',
       'opening',
       'added',
     ])
@@ -281,6 +282,12 @@ describePosix('adding a machine over SSH', () => {
     await writeFile(path.join(t.home, 'setup-exit'), '3')
     t.client.addSsh(1, 'lin@dev-box', '')
     expect(await t.end(1)).toEqual({ state: 'failed', reason: 'ssh_not_running' })
+    // The login went through; recording this computer is what failed.
+    expect(t.states(1).map((state) => (state.state === 'ssh' ? state.step : state.state))).toEqual([
+      'connecting',
+      'adding',
+      'failed',
+    ])
     await writeFile(path.join(t.home, 'setup-exit'), '1')
     t.client.addSsh(2, 'lin@dev-box', '')
     expect(await t.end(2)).toEqual({
