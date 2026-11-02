@@ -323,7 +323,7 @@ function CheckRow({
       value={value}
       closeOnClick
       className={cn(
-        'gap-2 pr-2 *:data-[slot=dropdown-menu-radio-item-indicator]:hidden',
+        'pr-2 *:data-[slot=dropdown-menu-radio-item-indicator]:hidden',
         described && DESCRIBED_ROW,
         className,
       )}
@@ -373,7 +373,7 @@ function SwitchRow({
       aria-checked={option.value === true}
       disabled={option.idleOnly && running}
       onClick={() => void onSelect(option.id, option.value !== true)}
-      className={cn('gap-2', said && DESCRIBED_ROW)}
+      className={cn(said && DESCRIBED_ROW)}
     >
       {icon}
       <ItemText name={option.name} description={said} />
@@ -409,7 +409,7 @@ function EffortMenu({
   const current = rows.find((row) => row.value === value)?.label ?? choiceName(effort, value)
   return (
     <DropdownMenuSub>
-      <DropdownMenuSubTrigger className="gap-2">
+      <DropdownMenuSubTrigger>
         <GaugeIcon strokeWidth={1.4} />
         <span className="flex-1">{t('controls.effort')}</span>
         <span className="shrink-0 pl-4 text-hint text-tertiary">{current}</span>
@@ -467,7 +467,7 @@ function MoreModelsMenu({
   const { t } = useTranslation('composer')
   return (
     <DropdownMenuSub>
-      <DropdownMenuSubTrigger className="gap-2">
+      <DropdownMenuSubTrigger>
         <SparkleIcon strokeWidth={1.4} />
         <span className="flex-1">{t('controls.moreModels')}</span>
       </DropdownMenuSubTrigger>

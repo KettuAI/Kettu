@@ -138,13 +138,17 @@ function archiveWithUndo(ids: readonly string[], title: string): void {
     const archived = failure
       ? i18n.t('sidebar:row.archivedSome', { done: done.length, total: ids.length, error: failure })
       : title
-    toast(archived, {
-      label: i18n.t('sidebar:row.undo'),
-      onClick: () =>
-        void settle(done, unarchiveSession).then(({ errors: failed }) => {
-          if (failed.length > 0) toast(errorMessage(failed[0]))
-        }),
-    })
+    toast(
+      archived,
+      {
+        label: i18n.t('sidebar:row.undo'),
+        onClick: () =>
+          void settle(done, unarchiveSession).then(({ errors: failed }) => {
+            if (failed.length > 0) toast(errorMessage(failed[0]))
+          }),
+      },
+      { icon: ArchiveIcon },
+    )
   })
 }
 
