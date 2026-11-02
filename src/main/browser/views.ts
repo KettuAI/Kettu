@@ -118,6 +118,8 @@ export interface BrowserViewsDeps {
   originAnswered?(request: { id: number; sessionId: string; decision: BrowserOriginAnswer }): void
   /** A page went with its session, which the renderer no longer lists. */
   removed?(sessionId: string): void
+  /** A page opened a site, and later named its icons, which links in replies show. */
+  siteOpened?(pageUrl: string, favicons?: string[]): void
   /** How long a new origin waits for the user; set only by tests, which cannot wait 2 minutes. */
   originWaitMs?: number
 }
@@ -683,9 +685,15 @@ export class BrowserViews {
       page.notice = null
       emit()
     })
-    contents.on('did-navigate', (_event, url) => {
+    contents.on('did-navigate', (_event, url, code) => {
       if (isAllowedNavigation(url)) page.lastUrl = url
+      // A page that failed to load commits too, with no response.
+      if (code > 0 && isHttp(url)) this.deps.siteOpened?.(url)
       emit()
+    })
+    contents.on('page-favicon-updated', (_event, favicons) => {
+      const url = contents.getURL()
+      if (isHttp(url)) this.deps.siteOpened?.(url, favicons)
     })
     contents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
       if (isMainFrame && isAllowedNavigation(url)) page.lastUrl = url

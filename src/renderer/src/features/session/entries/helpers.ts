@@ -27,16 +27,21 @@ const FILE_KINDS: Partial<Record<ToolKind, FileKind>> = {
   move: 'move',
 }
 
-/** What the header names: a verb with a path or command, or the agent's own title. */
+/**
+ * What the header names: a verb with a path or command, or the agent's own title. A finished
+ * call's verb is in the past tense ("Edited", "Ran").
+ */
 export function toolLabel(
   entry: Pick<ToolEntry, 'toolKind' | 'title' | 'locations' | 'rawInput'>,
   projectPath: string,
+  done = false,
 ): { verb: string | null; target: string | null; kind: 'path' | 'command' | 'title' } {
+  const verbs = done ? 'session:tool.verbDone' : 'session:tool.verb'
   const fileKind = FILE_KINDS[entry.toolKind]
   const location = entry.locations[0]?.path
   if (fileKind && location) {
     return {
-      verb: i18n.t(`session:tool.verb.${fileKind}`),
+      verb: i18n.t(`${verbs}.${fileKind}`),
       target: relativePath(location, projectPath),
       kind: 'path',
     }
@@ -44,7 +49,7 @@ export function toolLabel(
   if (entry.toolKind === 'execute') {
     // Without the input, the title is the agent's own label and may already say "Run".
     const target = entry.rawInput ?? entry.title.replace(/^run\s+/i, '')
-    return { verb: i18n.t('session:tool.verb.run'), target, kind: 'command' }
+    return { verb: i18n.t(`${verbs}.run`), target, kind: 'command' }
   }
   return { verb: null, target: entry.title, kind: 'title' }
 }

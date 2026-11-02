@@ -149,8 +149,8 @@ describe('type in globals.css', () => {
   })
 
   it.each([
-    ["[data-streamdown='inline-code']", '0.84em'],
-    ['[data-file-ref]', '0.85em'],
+    ["[data-streamdown='inline-code']", '0.8667em'],
+    ['[data-file-ref]', '0.9em'],
   ])('sets %s in a reply at %s of the prose', (selector, size) => {
     expect(nestedDeclarationsAfter('.markdown {', selector).get('font-size')).toBe(size)
   })
@@ -195,19 +195,24 @@ describe('type in globals.css', () => {
 })
 
 describe('tables in globals.css', () => {
-  it('keeps a table from scrolling inside itself', () => {
-    const box = nestedDeclarationsAfter(
-      '.markdown {',
-      "[data-streamdown='table-wrapper'] > div:last-child",
-    )
-    expect(box.get('overflow')).toBe('visible')
-    expect(box.get('overflow-x')).toBeUndefined()
-    expect(box.get('overflow-y')).toBeUndefined()
+  it('scrolls a wide table sideways inside its frame', () => {
+    const box = nestedDeclarationsAfter('.markdown {', '[data-table-scroll]')
+    expect(box.get('overflow-x')).toBe('auto')
   })
 
-  it('wraps header cells between words and never between Han characters', () => {
-    const header = nestedDeclarationsAfter('.markdown {', "[data-streamdown='table-header-cell']")
-    expect(header.get('white-space')).toBe('normal')
-    expect(header.get('word-break')).toBe('keep-all')
+  it('keeps every cell on one line', () => {
+    const cells = nestedDeclarationsAfter(
+      '.markdown {',
+      ":is([data-streamdown='table-header-cell'], [data-streamdown='table-cell'])",
+    )
+    expect(cells.get('white-space')).toBe('nowrap')
+  })
+
+  it('wraps a column of sentences', () => {
+    const prose = nestedDeclarationsAfter(
+      '.markdown {',
+      "[data-streamdown='table-cell'][data-prose]",
+    )
+    expect(prose.get('white-space')).toBe('normal')
   })
 })

@@ -2,7 +2,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { Streamdown } from 'streamdown'
 import { describe, expect, it } from 'vitest'
-import { localImageTarget, spacedImages } from './local-images'
+import { localImageTarget, pictureRun, spacedImages } from './local-images'
 import { remarkPlugins } from './remark'
 
 function render(markdown: string): string {
@@ -75,5 +75,53 @@ describe('localImages', () => {
     const remote = render('![badge](https://example.com/b.png)')
     expect(remote).toMatch(/src="https:\/\/example\.com\/b\.png"/)
     expect(images(remote)).toEqual([null])
+  })
+})
+
+describe('pictureRun', () => {
+  /** The hast of each paragraph the markdown renders. */
+  function paragraphs(markdown: string): Parameters<typeof pictureRun>[0][] {
+    const nodes: Parameters<typeof pictureRun>[0][] = []
+    renderToStaticMarkup(
+      createElement(
+        Streamdown,
+        {
+          mode: 'static',
+          skipHtml: true,
+          remarkPlugins,
+          components: {
+            p: ({ node }) => {
+              nodes.push(node)
+              return null
+            },
+          },
+        },
+        spacedImages(markdown),
+      ),
+    )
+    return nodes
+  }
+
+  it('takes a paragraph of two or more local pictures as one run', () => {
+    const [run] = paragraphs('![a](./a.png) ![b](./b.png)\n![c](~/shots/c 1.jpg)')
+    expect(pictureRun(run)).toEqual(['./a.png', './b.png', '~/shots/c 1.jpg'])
+  })
+
+  it('takes a picture written twice once', () => {
+    expect(pictureRun(paragraphs('![a](./a.png) ![b](./b.png) ![a again](./a.png)')[0])).toEqual([
+      './a.png',
+      './b.png',
+    ])
+  })
+
+  it('leaves a lone picture, text beside pictures and clips to show on their own', () => {
+    for (const markdown of [
+      '![a](./a.png)',
+      'Before and after: ![a](./a.png) ![b](./b.png)',
+      '![a](./a.png) ![clip](./b.mp4)',
+      '![a](./a.png) ![b](https://example.com/b.png)',
+    ]) {
+      expect(pictureRun(paragraphs(markdown)[0]), markdown).toBeNull()
+    }
   })
 })

@@ -336,3 +336,154 @@ Chinese headers, which never break between their characters:
 | \`src/auth/token.ts\` | 签发和校验都改为接收 \`now\` | 在请求入口只读一次时钟，把同一个时间传给两个函数 | 低 |
 | \`src/middleware/session.ts\` | 在入口处读取一次时钟 | 已经有七个调用方一并更新 | 低 |
 `
+
+// The reply content scenario plays: every kind of text and block an agent's reply can hold.
+export const CONTENT_TEXT = `# 为什么同一天出现了两次
+
+问题出在 \`dayKey()\`：它用 **UTC** 生成日期，而图表按*本地日期*分组。跨过零点的会话因此被算进了两天。旧的写法 ~~toISOString().slice(0, 10)~~ 已经删掉。
+
+## 改了什么
+
+三处改动，都在 usage 模块里。
+
+### 后续
+
+weekly 视图用的是同一个函数，这次一起修好了。
+
+> 图表应该按用户所在时区分组，而不是服务器时区。
+
+---
+
+**无序**
+
+- dayKey() 改成按本地日期
+- 新增跨时区测试
+  - 覆盖 UTC+8 和 UTC−5
+  - 覆盖夏令时切换那天
+
+**有序**
+
+1. 读 usage-store.ts
+2. 找出所有调用 dayKey 的地方
+3. 改完跑一遍测试
+
+**任务**
+
+- [x] 修复 dayKey
+- [x] 补测试
+- [ ] 更新 changelog
+
+链接前面带上网站的图标：写法见 [date-fns 的 format 文档](https://date-fns.org/docs/format)。裸地址显示完整域名、路径变灰：https://github.com/KettuAI/Kettu/pull/482 ；本地地址用会话浏览器的图标：http://localhost:5173/usage ；打开过的站点用它自己的图标：https://docs.kettu.sh/remote 。
+
+表格放进细边框容器里；数字列右对齐、等宽数字；悬停整行变浅灰。
+
+| 函数 | 文件 | 新增 | 删除 | 状态 |
+| --- | --- | --- | --- | --- |
+| \`dayKey\` | src/usage/usage-store.ts | +12 | −4 | 已修复 |
+| \`weekKey\` | src/usage/usage-store.ts | +6 | −2 | 已修复 |
+| \`UsagePage\` | src/usage/UsagePage.tsx | +2 | −2 | 无需改动 |
+| \`day-key.test\` | src/usage/day-key.test.ts | +34 | −0 | 新增 |
+
+行内公式和文字同一行高：缓存命中时，每个 token 的成本约为 $$c_{hit} \\approx 0.1 \\cdot c$$，节省比例是 $$1 - r$$。
+
+$$
+x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}
+$$
+
+$$
+T = \\sum_{d=1}^{7} t_d \\cdot (1 - r_d)
+$$
+
+$$
+a + \\notacommand{b}
+$$
+`
+
+export const CONTENT_BLOCKS = `代码块：文件名或语言在左，换行和复制在右；超过 20 行默认折叠。
+
+\`\`\`ts src/usage/day-key.ts
+// Group events by the local day they happened
+import { format } from 'date-fns'
+
+export function dayKey(ts: number): string {
+  const d = new Date(ts)
+  return format(d, 'yyyy-MM-dd')
+}
+${Array.from({ length: 38 }, (_, i) => `export const day${i + 1} = dayKey(${i + 1} * 86_400_000)`).join('\n')}
+\`\`\`
+
+\`\`\`svg weekly-bars.svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 120" width="300" height="120">
+  <title>Weekly bars</title>
+  <rect x="20" y="70" width="34" height="30" rx="3" fill="#2a78d6"/>
+  <rect x="66" y="50" width="34" height="50" rx="3" fill="#2a78d6"/>
+  <rect x="112" y="30" width="34" height="70" rx="3" fill="#2a78d6"/>
+  <rect x="158" y="58" width="34" height="42" rx="3" fill="#2a78d6"/>
+  <rect x="204" y="20" width="34" height="80" rx="3" fill="#eb6834"/>
+</svg>
+\`\`\`
+
+\`\`\`mermaid
+flowchart LR
+  Event --> dayKey["dayKey()"] --> Bucket --> Chart
+\`\`\`
+`
+
+export const CONTENT_PASSING = `\u001b[32m✓\u001b[39m src/usage/day-key.test.ts \u001b[2m(6 tests)\u001b[22m 41ms
+\u001b[32m✓\u001b[39m src/usage/usage-store.test.ts \u001b[2m(12 tests)\u001b[22m 88ms
+
+ \u001b[1mTest Files\u001b[22m  \u001b[32m2 passed\u001b[39m (2)
+      \u001b[1mTests\u001b[22m  \u001b[32m18 passed\u001b[39m (18)
+`
+
+export const CONTENT_FAILING = `Exit code 1
+${Array.from({ length: 143 }, (_, i) => `  running case ${i + 1}`).join('\n')}
+\u001b[31m✗\u001b[39m e2e/usage.spec.ts › shows one bar per day
+
+  Expected: \u001b[32m7\u001b[39m
+  Received: \u001b[31m8\u001b[39m
+
+  \u001b[2mat e2e/usage.spec.ts:24:31\u001b[22m
+`
+
+export const CONTENT_OLD = `export function weekKey(ts: number) {
+  const d = new Date(ts)
+  return d.getFullYear()
+}
+
+// Group events by the day they happened
+export function dayKey(ts: number) {
+  return new Date(ts).toISOString().slice(0, 10)
+}
+`
+
+export const CONTENT_NEW = `export function weekKey(ts: number) {
+  const d = new Date(ts)
+  return d.getFullYear()
+}
+
+// Group events by the day they happened
+export function dayKey(ts: number) {
+  const d = new Date(ts)
+  return format(d, 'yyyy-MM-dd')
+}
+`
+
+// The media scenario's reply: pictures, a video and a file that cannot play, which it expects in
+// the project's `media` folder; any that is missing shows as such.
+export const MEDIA_REPLY = `修复后的 Usage 页：
+
+![Usage 页修复后的截图](./media/usage-page.png)
+
+检查过的几个界面：
+
+![Light](./media/light.png) ![Dark](./media/dark.png) ![Table](./media/table.png) ![Diagrams](./media/diagrams.png) ![Maths](./media/maths.png)
+
+日期选择器的录屏：
+
+![](./media/screen-recording.mp4)
+
+原始录制文件这里放不了：
+
+![](./media/capture.mkv)
+`
