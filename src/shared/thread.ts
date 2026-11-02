@@ -56,12 +56,20 @@ export interface QueuedPrompt {
   at: number
   /** Set for a prompt another session's agent sent: whose it is, for its label. */
   from?: FromSession
+  /** Set for a prompt a paired device queued. */
+  device?: FromDevice
 }
 
 /** The session that started or messaged another one through the session tools. */
 export interface FromSession {
   sessionId: string
   title: string
+}
+
+/** The paired device a message or answer came from, under the name the host lists it by. */
+export interface FromDevice {
+  id: string
+  name: string
 }
 
 export interface SessionUsage {
@@ -133,6 +141,8 @@ export type ThreadEntry =
       steered?: boolean
       /** Set for a prompt another session's agent sent. */
       from?: FromSession
+      /** Set for a message a paired device sent; the host's own windows send none. */
+      device?: FromDevice
     }
   | {
       kind: 'agent'
@@ -260,7 +270,8 @@ export interface ToolEntry {
   locations: { path: string; line?: number }[]
   permission: PendingPermission | null
   permissionResult:
-    | { optionId: string; kind: PermissionKind; by?: 'routine' } // by: answered within a scope
+    // by: answered within a scope; device: answered on a paired device
+    | { optionId: string; kind: PermissionKind; by?: 'routine'; device?: FromDevice }
     | 'cancelled'
     | 'withdrawn'
     | null

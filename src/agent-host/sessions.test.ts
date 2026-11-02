@@ -2257,6 +2257,114 @@ describe('permissions', () => {
   })
 })
 
+describe('what a paired device sends', () => {
+  const phone = { id: 'a'.repeat(32), name: 'Phone' }
+  const quick = () => setup({ agentEnv: { FAKE_AGENT_DELAY_SCALE: '0.05' } })
+  const text = (value: string) => [{ type: 'text' as const, text: value }]
+  const userEntry = (port: TestPort, sessionId: string, value: string) =>
+    port
+      .entries(sessionId)
+      .find(
+        (entry) =>
+          entry.kind === 'user' &&
+          entry.content[0]?.type === 'text' &&
+          entry.content[0].text === value,
+      )
+
+  it("marks a device's messages with it, and leaves a window's unmarked", async () => {
+    const { t, port } = await quick()
+    const device = t.connect(phone)
+    const created = await device.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+      prompt: text('From the phone first'),
+    })
+    const sessionId = created.id
+    await port.untilStatus(sessionId, 'ready')
+    await port.open(sessionId)
+    await device.open(sessionId)
+    expect(userEntry(port, sessionId, 'From the phone first')).toMatchObject({ device: phone })
+
+    await turn(port, sessionId, 'From the window')
+    await port.untilStatus(sessionId, 'ready')
+    expect(userEntry(port, sessionId, 'From the window')).not.toHaveProperty('device')
+
+    await device.request('sessions.prompt', { sessionId, content: text('From the phone') })
+    await port.untilStatus(sessionId, 'ready')
+    await device.until(() => !!userEntry(device, sessionId, 'From the phone'))
+    expect(userEntry(device, sessionId, 'From the phone')).toMatchObject({ device: phone })
+  })
+
+  it('carries the device from a queued prompt to the message it becomes', async () => {
+    const { t, port } = await quick()
+    const sessionId = await newSession(t, port)
+    const device = t.connect(phone)
+    await device.open(sessionId)
+    await turn(port, sessionId, '/cancel')
+    await device.request('sessions.queue', { sessionId, content: text('Queued on the phone') })
+    const { itemId } = await device.request('sessions.queue', {
+      sessionId,
+      content: text('Steered from the phone'),
+    })
+    await port.until(() => port.thread(sessionId).session.queue.length === 2)
+    expect(port.thread(sessionId).session.queue).toMatchObject([
+      { content: text('Queued on the phone'), device: phone },
+      { content: text('Steered from the phone'), device: phone },
+    ])
+    await device.request('sessions.steer', { sessionId, itemId: itemId! })
+    await port.until(() => !!userEntry(port, sessionId, 'Steered from the phone'))
+    expect(userEntry(port, sessionId, 'Steered from the phone')).toMatchObject({
+      steered: true,
+      device: phone,
+    })
+    await port.request('sessions.cancel', { sessionId })
+    await port.untilStatus(sessionId, 'ready')
+    await port.until(() => port.thread(sessionId).session.queuePaused)
+    await port.request('sessions.resumeQueue', { sessionId })
+    await port.until(() => !!userEntry(port, sessionId, 'Queued on the phone'))
+    expect(userEntry(port, sessionId, 'Queued on the phone')).toMatchObject({ device: phone })
+  })
+
+  it('marks the answer, and tells a late answer where it was answered', async () => {
+    const { t, port } = await quick()
+    const sessionId = await newSession(t, port)
+    const device = t.connect(phone)
+    await device.open(sessionId)
+    const pending = async () => {
+      await port.until(() => tools(port, sessionId).some((tool) => tool.permission !== null))
+      return tools(port, sessionId).find((tool) => tool.permission)!
+    }
+
+    await turn(port, sessionId, '/permission')
+    const first = await pending()
+    const answer = { sessionId, requestId: first.permission!.requestId, optionId: 'allow-once' }
+    await device.request('permissions.respond', answer)
+    expect(tools(port, sessionId).find((tool) => tool.id === first.id)?.permissionResult).toEqual({
+      optionId: 'allow-once',
+      kind: 'allow_once',
+      device: phone,
+    })
+    await expect(port.request('permissions.respond', answer)).rejects.toMatchObject({
+      code: 'not_found',
+      data: { reason: 'already_answered', device: phone },
+    })
+    await port.untilStatus(sessionId, 'ready')
+
+    await turn(port, sessionId, '/permission')
+    const second = await pending()
+    const again = { sessionId, requestId: second.permission!.requestId, optionId: 'reject-once' }
+    await port.request('permissions.respond', again)
+    expect(tools(port, sessionId).find((tool) => tool.id === second.id)?.permissionResult).toEqual({
+      optionId: 'reject-once',
+      kind: 'reject_once',
+    })
+    await expect(device.request('permissions.respond', again)).rejects.toMatchObject({
+      code: 'not_found',
+      data: { reason: 'already_answered', device: null },
+    })
+  })
+})
+
 describe('cancellation', () => {
   it('ends the turn when the agent confirms', async () => {
     const { t, port } = await setup({ agentEnv: { FAKE_AGENT_DELAY_SCALE: '0.05' } })
