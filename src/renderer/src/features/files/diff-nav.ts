@@ -1,18 +1,20 @@
-// Counting and stepping through the changes the Files pane's diff draws.
+// Parsing and stepping through the changes the Files pane's diff draws.
 
 import { useMemo, type RefObject } from 'react'
-import { DIFFS_TAG_NAME, parseDiffFromFile } from '@pierre/diffs'
+import { DIFFS_TAG_NAME, parseDiffFromFile, type FileDiffMetadata } from '@pierre/diffs'
 
-/** How many hunks a file's change has, as the diff below draws them. */
-export function useHunkCount(path: string, oldText: string | null, newText: string): number {
+/** A file's change, parsed once for the diff to draw and the footer to count its hunks. */
+export function useParsedDiff(
+  path: string,
+  oldText: string | null,
+  newText: string,
+): FileDiffMetadata {
   return useMemo(
     () =>
-      parseDiffFromFile(
-        oldText === null ? null : { name: path, contents: oldText },
-        { name: path, contents: newText },
-        undefined,
-        false,
-      ).hunks.length,
+      parseDiffFromFile(oldText === null ? null : { name: path, contents: oldText }, {
+        name: path,
+        contents: newText,
+      }),
     [path, oldText, newText],
   )
 }

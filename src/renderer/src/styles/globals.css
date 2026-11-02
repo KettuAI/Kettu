@@ -1226,6 +1226,8 @@
   --diffs-fg-number-deletion-override: var(--syntax-comment);
   --diffs-bg-selection-override: var(--selection);
   --diffs-bg-selection-number-override: var(--selection);
+  --diffs-bg-separator-override: var(--bg-subtle);
+  --diffs-header-font-family: var(--font-mono);
   --diffs-line-height: 21px;
   font-variant-ligatures: none;
 }

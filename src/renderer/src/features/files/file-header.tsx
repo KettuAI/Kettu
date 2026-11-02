@@ -13,18 +13,22 @@ export function DiffFileToggle({
   disabled?: boolean
 }) {
   const { t } = useTranslation('files')
+  // The fieldset disables the segments natively; without pointer events the track's own press
+  // and drag cannot move the thumb either.
   return (
-    <SegmentedControl
-      aria-label={t('diff.view')}
-      value={value}
-      onChange={(next) => !disabled && onChange(next)}
-      className="app-region-no-drag shrink-0"
-      itemClassName="h-5.5 px-2 text-small"
-      segments={[
-        { value: 'diff', label: t('diff.diff') },
-        { value: 'file', label: t('diff.file') },
-      ]}
-    />
+    <fieldset disabled={disabled} className="shrink-0 disabled:pointer-events-none">
+      <SegmentedControl
+        aria-label={t('diff.view')}
+        value={value}
+        onChange={onChange}
+        className="app-region-no-drag"
+        itemClassName="h-5.5 px-2 text-small"
+        segments={[
+          { value: 'diff', label: t('diff.diff') },
+          { value: 'file', label: t('diff.file') },
+        ]}
+      />
+    </fieldset>
   )
 }
 

@@ -21,17 +21,24 @@ export function mentionText(path: string, [start, end]: [number, number]): strin
   return `@${nameOf(path)}#L${start}${end > start ? `-${end}` : ''}`
 }
 
-/** Puts the mention in the focused pane's composer; false when that pane shows no session. */
-export function mentionLines(projectPath: string, path: string, lines: [number, number]): boolean {
+/** Why lines were not mentioned: no session in the focused pane, or its attachments are full. */
+export type MentionMiss = 'no-composer' | 'full'
+
+/** Puts the mention in the focused pane's composer; null once it is there. */
+export function mentionLines(
+  projectPath: string,
+  path: string,
+  lines: [number, number],
+): MentionMiss | null {
   const { layout } = useViewStore.getState()
   const pane = focusedPane(layout)
-  if (pane.view.kind !== 'session') return false
+  if (pane.view.kind !== 'session') return 'no-composer'
   const editor = document.querySelector<HTMLElement>(
     `[data-split-pane="${CSS.escape(pane.id)}"] .cm-editor`,
   )
   const view = editor ? EditorView.findFromDOM(editor) : null
-  if (!view) return false
-  attachMention(pane.view.sessionId, projectPath, path, false)
+  if (!view) return 'no-composer'
+  if (attachMention(pane.view.sessionId, projectPath, path, false) > 0) return 'full'
   const { from } = view.state.selection.main
   const before = from > 0 ? view.state.sliceDoc(from - 1, from) : ''
   const text = `${before && !/\s/.test(before) ? ' ' : ''}${mentionText(path, lines)} `
@@ -40,5 +47,5 @@ export function mentionLines(projectPath: string, path: string, lines: [number, 
     scrollIntoView: true,
   })
   view.focus()
-  return true
+  return null
 }
