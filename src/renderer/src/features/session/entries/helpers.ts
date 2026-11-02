@@ -82,11 +82,6 @@ export function codeSpans(name: string): { text: string; code: boolean }[] {
   return parts.map((text, i) => ({ text, code: i % 2 === 1 })).filter((part) => part.text !== '')
 }
 
-/** A command of more than one step, or too long for a card's header, shows in full in the card. */
-export function previewsCommand(command: string): boolean {
-  return command.length > 60 || /&&|\|\||[;|\n]/.test(command)
-}
-
 const FENCED = /^(`{3,})[^\n`]*\n([\s\S]*?)\n?\1$/
 
 /**

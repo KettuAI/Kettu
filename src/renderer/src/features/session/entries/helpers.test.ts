@@ -7,7 +7,6 @@ import {
   forkBlocked,
   forkEntry,
   groupLabel,
-  previewsCommand,
   primaryOption,
   runSummary,
   stopReasonText,
@@ -416,17 +415,6 @@ describe('answeredBy', () => {
       undefined,
     )
     expect(answeredBy(new Error('offline'))).toBe(undefined)
-  })
-})
-
-describe('previewsCommand', () => {
-  it('shows a command of more than one step, or a long one, in full', () => {
-    expect(previewsCommand('rm -rf node_modules/.vite && pnpm dev --port 5173')).toBe(true)
-    expect(previewsCommand('pnpm test; pnpm lint')).toBe(true)
-    expect(previewsCommand('git log | head')).toBe(true)
-    expect(previewsCommand('echo a\necho b')).toBe(true)
-    expect(previewsCommand('x'.repeat(61))).toBe(true)
-    expect(previewsCommand('pnpm vitest run src/usage')).toBe(false)
   })
 })
 

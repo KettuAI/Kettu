@@ -2,7 +2,12 @@
 // turn's reply says and changed.
 
 import path from 'node:path'
-import type { PendingPermission, ThreadState, ToolEntry } from '@shared/thread'
+import {
+  previewsCommand,
+  type PendingPermission,
+  type ThreadState,
+  type ToolEntry,
+} from '@shared/thread'
 import { t } from './i18n'
 
 /** A path inside the project as relative to it; one elsewhere as it is. */
@@ -32,14 +37,26 @@ export function requestText(tool: ToolEntry | undefined, projectPath: string): s
 }
 
 /**
- * The option a notification's Allow once gives: a request's one-time allowing, never a question's
- * answer, which wants the session's card.
+ * The option a notification's Allow once gives: a request's one-time allowing, only where the
+ * notification's line says all it allows. A question, a command of several steps or too long for
+ * the line, and a plan, mode or other request want the session's card.
  */
 export function allowOnceOption(
   tool: ToolEntry | undefined,
   options: PendingPermission['options'],
 ): string | null {
   if (!tool || tool.question !== undefined) return null
+  switch (tool.toolKind) {
+    case 'execute':
+      if (previewsCommand(tool.rawInput ?? tool.title)) return null
+      break
+    case 'edit':
+    case 'delete':
+    case 'move':
+      break
+    default:
+      return null
+  }
   return options.find((option) => option.kind === 'allow_once')?.id ?? null
 }
 

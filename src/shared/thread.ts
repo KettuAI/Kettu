@@ -124,6 +124,14 @@ export interface ConfigOption {
 /** Claude Code's ultracode, an option Kettu adds since the adapter offers none. */
 export const ULTRACODE_OPTION_ID = '__ultracode'
 
+/**
+ * A command of more than one step, or too long for one line: a card shows it in full below its
+ * header, and a notification, which shows one line, does not offer to allow it.
+ */
+export function previewsCommand(command: string): boolean {
+  return command.length > 60 || /&&|\|\||[;|\n]/.test(command)
+}
+
 export interface SlashCommand {
   name: string
   description: string

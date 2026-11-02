@@ -60,10 +60,20 @@ describe('allowOnceOption', () => {
   ]
 
   it("offers a request's one-time allowing, never a question's answer", () => {
-    expect(allowOnceOption(tool({}), options)).toBe('once')
-    expect(allowOnceOption(tool({ question: 'Which?' }), options)).toBeNull()
-    expect(allowOnceOption(tool({}), [options[0]!])).toBeNull()
+    expect(allowOnceOption(tool({ toolKind: 'edit' }), options)).toBe('once')
+    expect(allowOnceOption(tool({ toolKind: 'edit', question: 'Which?' }), options)).toBeNull()
+    expect(allowOnceOption(tool({ toolKind: 'edit' }), [options[0]!])).toBeNull()
     expect(allowOnceOption(undefined, options)).toBeNull()
+  })
+
+  it('offers it only for what the notification shows in full', () => {
+    const run = (rawInput: string) => tool({ toolKind: 'execute', title: 'Run', rawInput })
+    expect(allowOnceOption(run('pnpm vitest run src/usage'), options)).toBe('once')
+    expect(allowOnceOption(run('cd x\nrm -rf y'), options)).toBeNull()
+    expect(allowOnceOption(run('pnpm test && rm -rf y'), options)).toBeNull()
+    expect(allowOnceOption(run(`echo ${'x'.repeat(80)}`), options)).toBeNull()
+    expect(allowOnceOption(tool({ toolKind: 'switch_mode' }), options)).toBeNull()
+    expect(allowOnceOption(tool({ toolKind: 'other' }), options)).toBeNull()
   })
 })
 
