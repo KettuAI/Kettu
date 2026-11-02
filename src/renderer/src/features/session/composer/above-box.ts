@@ -23,3 +23,35 @@ export function useAboveBox(
   )
   return [setTrigger, sideOffset]
 }
+
+/**
+ * For a popup from inside a composer box that has the page below it, as New session's: its
+ * trigger ref, and offsets that drop it `gap` px under the box with its start at the box's start,
+ * so it covers neither the text nor the pickers.
+ */
+export function useBelowBox(
+  gap = 6,
+): [
+  setTrigger: (element: HTMLElement | null) => void,
+  sideOffset: (data: { side: string }) => number,
+  alignOffset: (data: { side: string }) => number,
+] {
+  const [trigger, setTrigger] = useState<HTMLElement | null>(null)
+  const sideOffset = useCallback(
+    ({ side }: { side: string }) => {
+      const box = trigger?.closest('[data-slot=input-group]')
+      if (side !== 'bottom' || !trigger || !box) return gap
+      return box.getBoundingClientRect().bottom - trigger.getBoundingClientRect().bottom + gap
+    },
+    [trigger, gap],
+  )
+  const alignOffset = useCallback(
+    ({ side }: { side: string }) => {
+      const box = trigger?.closest('[data-slot=input-group]')
+      if (side !== 'bottom' || !trigger || !box) return 0
+      return box.getBoundingClientRect().left - trigger.getBoundingClientRect().left
+    },
+    [trigger],
+  )
+  return [setTrigger, sideOffset, alignOffset]
+}

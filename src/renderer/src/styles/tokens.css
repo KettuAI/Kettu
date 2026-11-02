@@ -261,8 +261,10 @@
 
   /* The main area and the panes are sheets on the desk: a ring and a long, soft drop. */
   --elevation-sheet: 0 1px 0 rgb(20 26 34 / 3%), 0 18px 44px -26px rgb(30 45 70 / 28%);
-  /* An artifact's page in its tray and on its canvas: a hairline, stronger when lifted. */
-  --elevation-page: 0 0 0 1px var(--border-default);
+  /* An artifact's page in its tray and on its canvas: a hairline, stronger when lifted, over a
+     soft drop; the canvas draws its own hairline at every zoom, so it takes the drop alone. */
+  --elevation-page-drop: 0 4px 14px -6px rgb(0 0 0 / 12%);
+  --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
 }
 
@@ -406,7 +408,7 @@
     /* Pi's yellow mixed 86% with the dark surface. */
     --agent-pi: oklch(0.749 0.115 84.2);
     --agent-other: oklch(0.46 0 0);
-    --heat-0: rgb(230 236 245 / 6.5%);
+    --heat-0: var(--bg-subtle);
     --heat-step-1: 20%;
     --heat-step-2: 40%;
     --heat-step-3: 66%;
@@ -438,7 +440,7 @@
     --ansi-bright-white: #ececec;
 
     --elevation-sheet: 0 12px 32px -14px rgb(0 0 0 / 60%);
-    --elevation-page: 0 0 0 1px var(--border-default);
+    --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
     --elevation-page-lift: 0 0 0 1px var(--border-strong);
   }
 }
@@ -582,7 +584,7 @@
   /* Pi's yellow mixed 86% with the dark surface. */
   --agent-pi: oklch(0.749 0.115 84.2);
   --agent-other: oklch(0.46 0 0);
-  --heat-0: rgb(230 236 245 / 6.5%);
+  --heat-0: var(--bg-subtle);
   --heat-step-1: 20%;
   --heat-step-2: 40%;
   --heat-step-3: 66%;
@@ -614,7 +616,7 @@
   --ansi-bright-white: #ececec;
 
   --elevation-sheet: 0 12px 32px -14px rgb(0 0 0 / 60%);
-  --elevation-page: 0 0 0 1px var(--border-default);
+  --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
 }
 

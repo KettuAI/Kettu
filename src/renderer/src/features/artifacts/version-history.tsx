@@ -33,7 +33,7 @@ export function VersionHistory({
       aria-label={t('history.title')}
       className="flex w-70 shrink-0 animate-in flex-col bg-app shadow-[inset_1px_0_0_var(--border-subtle)] fade-in duration-(--duration-fast)"
     >
-      <h2 className="flex h-11 shrink-0 items-center px-4 text-[13.5px] font-semibold">
+      <h2 className="flex h-11 shrink-0 items-center px-4 text-lede font-semibold">
         {t('history.title')}
       </h2>
       <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-4">

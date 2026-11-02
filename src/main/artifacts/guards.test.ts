@@ -120,6 +120,17 @@ describe('forwardedKey', () => {
     }
   })
 
+  it('passes the history dialog key off macOS, where no menu item takes it', () => {
+    for (const platform of ['win32', 'linux'] as const) {
+      expect(forwardedKey(input('h', 'KeyH', { control: true }), platform)).toMatchObject({
+        key: 'h',
+        ctrlKey: true,
+      })
+      expect(forwardedKey(input('H', 'KeyH', { control: true, shift: true }), platform)).toBeNull()
+    }
+    expect(forwardedKey(input('h', 'KeyH', { meta: true }), 'darwin')).toBeNull()
+  })
+
   it('leaves the menu accelerators to the menu on macOS', () => {
     expect(forwardedKey(input('b', 'KeyB', { meta: true }), 'darwin')).toBeNull()
     expect(forwardedKey(input('=', 'Equal', { meta: true }), 'darwin')).toBeNull()

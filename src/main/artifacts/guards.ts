@@ -91,7 +91,8 @@ export function forwardedKey(input: Input, platform: NodeJS.Platform): Forwarded
   // On macOS the app menu's accelerators take the rest.
   if (mac) return null
   if (['=', '+', '-', '_', '0'].includes(input.key)) return key
-  return !input.shift && ['o', 'n', 'b', ','].includes(lower) ? key : null
+  // Ctrl+H opens the history dialog, which macOS's History menu opens on Cmd+Y.
+  return !input.shift && ['o', 'n', 'b', ',', 'h'].includes(lower) ? key : null
 }
 
 export interface ArtifactFrameDeps {

@@ -71,7 +71,7 @@ import {
   type RangeKind,
 } from './model'
 import { OverTime, type HourTotals } from './over-time'
-import { Panel, PanelTitle, SEGMENT } from './panel'
+import { Panel, PanelTitle } from './panel'
 import { PlanLimits } from './plan-limits'
 import { RangePicker } from './range-picker'
 import { Count, FigureValue } from './count'
@@ -483,7 +483,6 @@ function Header({
             aria-label={t('page.range')}
             value={filters.range.kind}
             onChange={(value) => setUsageFilters({ range: { kind: value as RangeKind } })}
-            itemClassName={SEGMENT}
             segments={RANGE_KINDS.map((rangeKind) => ({
               value: rangeKind,
               label: (

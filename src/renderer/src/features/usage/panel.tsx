@@ -1,9 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '@renderer/lib/utils'
 
-/** A segment of the page's segmented controls: every label at medium weight. */
-export const SEGMENT = 'px-2.5 font-medium'
-
 /** One of the usage page's cards, raised on the sheet. */
 export function Panel({ className, children }: { className?: string; children: ReactNode }) {
   return (

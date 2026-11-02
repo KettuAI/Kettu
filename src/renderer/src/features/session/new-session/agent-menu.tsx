@@ -936,7 +936,7 @@ function SwitchRow({
           <span className="text-xs text-muted-foreground">{option.description}</span>
         )}
       </span>
-      <Switch id={id} checked={option.value === true} onCheckedChange={onChange} />
+      <Switch id={id} size="sm" checked={option.value === true} onCheckedChange={onChange} />
     </label>
   )
 }
