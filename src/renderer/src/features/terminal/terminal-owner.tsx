@@ -33,29 +33,33 @@ export function OwnerBar({ terminal, owner }: { terminal: TerminalState; owner: 
   }
 
   return (
-    <div className="flex h-9.5 shrink-0 items-center gap-2.5 pr-2.5 pl-3.5 text-hint text-secondary shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]">
+    <div className="@container flex h-9.5 shrink-0 items-center gap-2.5 pr-2.5 pl-3.5 text-hint text-secondary shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]">
       <AgentMark agent={owner.agentId} size={14} />
-      {/* The folder gives way first; who started it and when stay readable. */}
+      {/* One line, so the folder at its end is cut before who started it and when. */}
       <span className="min-w-0 truncate">
         {t('owner.startedBy', {
           agent: agentName(owner.agentId, hostId),
           time: longAgo(terminal.createdAt, now),
         })}
-      </span>
-      <span aria-hidden className="text-border-strong">
-        ·
-      </span>
-      <span
-        className="min-w-0 shrink-100 truncate font-mono text-caption text-tertiary"
-        data-selectable=""
-      >
-        {hostPath(terminal.projectPath)}
+        <span aria-hidden className="mx-2.5 text-border-strong">
+          ·
+        </span>
+        <span className="font-mono text-caption text-tertiary" data-selectable="">
+          {hostPath(terminal.projectPath)}
+        </span>
       </span>
       <span className="flex-1" />
       {url && sessionId && (
-        <Button variant="ghost" size="sm" className="h-6.5 px-3" onClick={openInBrowser}>
+        // In a narrow bar, such as one side of a split, only its icon shows.
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6.5 px-3 @max-md:px-1.75"
+          title={t('owner.openInBrowser')}
+          onClick={openInBrowser}
+        >
           <AppWindowIcon className="size-3.5" strokeWidth={1.5} />
-          {t('owner.openInBrowser')}
+          <span className="@max-md:sr-only">{t('owner.openInBrowser')}</span>
         </Button>
       )}
       {running && (
