@@ -6,7 +6,7 @@ vi.stubGlobal('window', { kettu: { perf: false, platform: 'darwin', client: 'des
 const { goToPlace, historyKey, historyPlaces, showHistory, toggleHistory, useHistoryDialog } =
   await import('./history')
 const { useSessionsStore } = await import('@renderer/stores/sessions')
-const { useViewStore, restoreLayout, openSession, openUsage } =
+const { useViewStore, restoreLayout, openSession, openSettings, closeSettings, openUsage } =
   await import('@renderer/stores/view')
 const { createLayout } = await import('@renderer/features/split/layout')
 
@@ -52,6 +52,23 @@ describe('the places Back and Forward list', () => {
       { kind: 'session', sessionId: 's1' },
     ])
     expect(historyPlaces(state().history, 'forward')).toEqual([])
+  })
+
+  it.each([
+    ['archived', { s4: summary('s4', 2) }],
+    ['deleted', { s4: undefined }],
+  ])('leaves out a step whose place was %s, though its pages can still show', (_, change) => {
+    openSession('s4', '/repo')
+    useViewStore.setState({ history: { back: [], forward: [] } })
+    openSettings('general')
+    closeSettings()
+    const settings = { kind: 'settings', section: 'general', item: null }
+    expect(historyPlaces(state().history, 'back').map((step) => step.place)).toEqual([
+      settings,
+      { kind: 'session', sessionId: 's4' },
+    ])
+    useSessionsStore.setState((s) => ({ byId: { ...s.byId, ...change } as typeof s.byId }))
+    expect(historyPlaces(state().history, 'back').map((step) => step.place)).toEqual([settings])
   })
 
   it('goes to one of them in one step, passing over the others', () => {

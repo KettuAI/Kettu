@@ -68,13 +68,18 @@ export function backTo(view: HistoryView, open: () => void): void {
   if (!stepBackTo(view, canShow)) open()
 }
 
-/** The steps Back or Forward can still show, nearest first, as their menus list them. */
+/**
+ * The steps Back or Forward can still show, nearest first, as their menus list them. A step whose
+ * place can no longer show is left out even when its page and panes can, as a step that only
+ * closes Settings over a session archived since.
+ */
 export function historyPlaces(
   history: { back: Step[]; forward: Step[] },
   direction: 'back' | 'forward',
 ): Step[] {
   return history[direction]
-    .filter((step) => step.place.kind !== 'launch' && stepShows(step, canShow))
+    .filter(({ place }) => place.kind === 'settings' || (place.kind !== 'launch' && canShow(place)))
+    .filter((step) => stepShows(step, canShow))
     .reverse()
 }
 
