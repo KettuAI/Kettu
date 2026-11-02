@@ -7,12 +7,19 @@ import { useCallback, useState } from 'react'
  */
 export function useAboveBox(
   gap = 6,
-): [setTrigger: (element: HTMLElement | null) => void, sideOffset: () => number] {
+): [
+  setTrigger: (element: HTMLElement | null) => void,
+  sideOffset: (data: { side: string }) => number,
+] {
   const [trigger, setTrigger] = useState<HTMLElement | null>(null)
-  const sideOffset = useCallback(() => {
-    const box = trigger?.closest('[data-composer]')?.querySelector('[data-slot=input-group]')
-    if (!trigger || !box) return gap
-    return trigger.getBoundingClientRect().top - box.getBoundingClientRect().top + gap
-  }, [trigger, gap])
+  const sideOffset = useCallback(
+    // A popup that flipped below or beside its trigger, short of room above, sits by it instead.
+    ({ side }: { side: string }) => {
+      const box = trigger?.closest('[data-composer]')?.querySelector('[data-slot=input-group]')
+      if (side !== 'top' || !trigger || !box) return gap
+      return trigger.getBoundingClientRect().top - box.getBoundingClientRect().top + gap
+    },
+    [trigger, gap],
+  )
   return [setTrigger, sideOffset]
 }

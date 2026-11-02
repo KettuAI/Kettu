@@ -1,8 +1,8 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { LinkDestination } from '@shared/settings'
 import { isWeb } from '@renderer/lib/platform'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { iconFor, useSiteIconsStore } from '@renderer/stores/site-icons'
+import { iconFor, loadSiteIcons, useSiteIconsStore } from '@renderer/stores/site-icons'
 import { LinkConfirm } from '../link-confirm'
 import { planLinkOpen } from '../link-open'
 import { openLinkIn, rememberDestination } from '../open-link'
@@ -17,6 +17,8 @@ export function useLinkOpener(sessionId: string | null | undefined): {
 } {
   const session = sessionId ?? null
   const context = { session: session !== null && !isWeb }
+  // Whether a site was opened before reads the icons Kettu's browser recorded.
+  useEffect(loadSiteIcons, [])
   // The dialog's run: a new key each time, so its choices start afresh.
   const [ask, setAsk] = useState<{
     key: number

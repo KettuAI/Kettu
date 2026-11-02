@@ -109,10 +109,13 @@ function newSessionStart(
 const promptText = (content: readonly UserContent[]): string =>
   content.flatMap((c) => (c.type === 'text' ? [c.text] : [])).join('\n\n')
 
-/** Whether New session's draft still is this first message, its text and its attachments. */
+/**
+ * Whether New session's draft still is this first message, its text and its attachments; one that
+ * could not be added is left out of the message, so it is left out here too.
+ */
 function draftIsPrompt(prompt: readonly UserContent[]): boolean {
   const ids = contentAttachments(prompt).map((a) => a.id)
-  const items = draftAttachments(NEW_SESSION_DRAFT)
+  const items = draftAttachments(NEW_SESSION_DRAFT).filter((item) => item.status !== 'failed')
   return (
     readDraft(NEW_SESSION_DRAFT).trim() === promptText(prompt).trim() &&
     items.length === ids.length &&

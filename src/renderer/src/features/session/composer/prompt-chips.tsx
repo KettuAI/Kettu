@@ -11,7 +11,7 @@ import { Popover } from '@base-ui/react/popover'
 import { useTranslation } from 'react-i18next'
 import type { SlashCommand } from '@shared/thread'
 import { foldersOf } from '@renderer/features/session/composer/mentions'
-import { formatShortcut, isMod } from '@renderer/lib/platform'
+import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import type { DraftAttachment } from '@renderer/stores/attachments'
 import { ensureFiles, openFile, useFilesStore } from '@renderer/stores/files'
@@ -215,6 +215,7 @@ export function usePromptChips({
                     (a) => 'attachmentKey' in hover.chip && a.key === hover.chip.attachmentKey,
                   )}
                   projectPath={projectPath}
+                  inSession={!!sessionId && !isWeb}
                 />
               )}
             </Popover.Popup>

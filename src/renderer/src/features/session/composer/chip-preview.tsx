@@ -7,6 +7,8 @@ import { host } from '@renderer/lib/host'
 import { hostPlatform, isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import type { DraftAttachment } from '@renderer/stores/attachments'
+import { useSettingsStore } from '@renderer/stores/settings'
+import { defaultDestination } from '../link-open'
 import type { Chip } from './chips'
 
 // Lines a file preview shows: the range with one before it, or the file's first lines.
@@ -17,12 +19,16 @@ export function ChipPreview({
   chip,
   item,
   projectPath,
+  inSession,
 }: {
   chip: Chip
   item: DraftAttachment | undefined
   projectPath: string | null
+  /** A session's composer, whose links may open in its page in Kettu's browser. */
+  inSession: boolean
 }) {
   const { t } = useTranslation('composer')
+  const thread = useSettingsStore((s) => s.settings.thread)
   if (chip.kind === 'command') return null
   if (chip.kind === 'link') {
     return (
@@ -36,7 +42,11 @@ export function ChipPreview({
         </div>
         <div className="text-hint break-all text-secondary">{chip.url}</div>
         <div className="flex gap-3 text-caption text-tertiary">
-          <span>{chip.local ? t('chips.opensInSession') : t('chips.opensInBrowser')}</span>
+          <span>
+            {defaultDestination(chip.url, thread, { session: inSession }) === 'session'
+              ? t('chips.opensInSession')
+              : t('chips.opensInBrowser')}
+          </span>
           <span>{t('chips.sentAsLink')}</span>
         </div>
       </div>
