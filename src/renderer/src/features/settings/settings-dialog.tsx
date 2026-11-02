@@ -23,7 +23,7 @@ export function SettingsDialogContent({
     <DialogContent
       showCloseButton={false}
       className={cn(
-        'top-33 max-h-[calc(100%-164px)] max-w-[calc(100%-64px)] translate-y-0 gap-0 overflow-hidden overflow-y-auto rounded-dialog p-0 data-open:slide-in-from-bottom-1 data-open:zoom-in-100 sm:max-w-130',
+        'top-33 max-h-[calc(100%-164px)] max-w-[calc(100%-64px)] translate-y-0 grid-cols-1 gap-0 overflow-hidden overflow-y-auto rounded-dialog p-0 data-open:slide-in-from-bottom-1 data-open:zoom-in-100 sm:max-w-130',
         className,
       )}
       {...props}
@@ -77,7 +77,11 @@ export function SettingsDialogBody({
   className?: string
   children: ReactNode
 }) {
-  return <div className={cn('flex flex-col gap-3.5 px-6 pt-3.5 pb-1', className)}>{children}</div>
+  return (
+    <div className={cn('flex min-w-0 flex-col gap-3.5 px-6 pt-3.5 pb-1', className)}>
+      {children}
+    </div>
+  )
 }
 
 /** The actions at the dialog's end, on the right. */
@@ -110,7 +114,7 @@ export function SettingsField({
   children: ReactNode
 }) {
   return (
-    <div className="flex flex-col gap-1.75">
+    <div className="flex min-w-0 flex-col gap-1.75">
       <label htmlFor={htmlFor} className="text-control font-medium text-primary">
         {label}
       </label>

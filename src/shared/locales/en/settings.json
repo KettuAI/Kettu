@@ -531,7 +531,8 @@
       "progressTitle": "Installing {{name}}",
       "failedTitle": "Install failed",
       "elsewhere": "Installed somewhere else? Choose the program…",
-      "copyLog": "Copy log"
+      "copyLog": "Copy log",
+      "buttonDialog": "Install…"
     },
     "default": "Default",
     "hiddenTag": "Hidden",
@@ -1212,8 +1213,6 @@
       "notInstalled": "Not installed"
     },
     "keywords": "install update program binary cli node npm",
-    "search": "Search harnesses",
-    "noMatch": "No matching harnesses",
     "methods": {
       "archive": "Download",
       "brew": "Homebrew",
@@ -1222,10 +1221,6 @@
       "winget": "WinGet"
     },
     "updateTo": "Update to {{version}}",
-    "yours": "your {{command}}",
-    "sdkOnFirstUse": "SDK installs on first use",
-    "picked": "the program you chose",
-    "kettus": "{{name}} installed by Kettu",
     "agentCount_one": "{{count}} agent",
     "agentCount_other": "{{count}} agents",
     "missingLine": "Not installed. Install shows the ways {{name}}'s maker documents.",
@@ -1257,6 +1252,7 @@
     "adapterNote": "The adapter Kettu runs {{name}} through, on your Node.js.",
     "usedBy": "Used by",
     "listSeparator": ", ",
-    "manageAgents": "Manage in Agents"
+    "manageAgents": "Manage in Agents",
+    "versionOut": "{{version}} is out"
   }
 }

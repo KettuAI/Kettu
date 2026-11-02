@@ -528,7 +528,8 @@
       "progressTitle": "正在安装 {{name}}",
       "failedTitle": "安装失败",
       "elsewhere": "已经装在别处？选择可执行文件…",
-      "copyLog": "复制日志"
+      "copyLog": "复制日志",
+      "buttonDialog": "安装…"
     },
     "default": "默认",
     "hiddenTag": "已隐藏",
@@ -1201,8 +1202,6 @@
       "notInstalled": "未安装"
     },
     "keywords": "安装 更新 程序 可执行文件 cli node npm",
-    "search": "搜索 Harness",
-    "noMatch": "没有匹配的 Harness",
     "methods": {
       "archive": "下载",
       "brew": "Homebrew",
@@ -1211,10 +1210,6 @@
       "winget": "WinGet"
     },
     "updateTo": "更新到 {{version}}",
-    "yours": "你装的 {{command}}",
-    "sdkOnFirstUse": "SDK 首次使用时安装",
-    "picked": "你选的程序",
-    "kettus": "Kettu 装的 {{name}}",
     "agentCount_other": "{{count}} 个 Agent",
     "missingLine": "未安装。点“安装”查看 {{name}} 官方文档里的安装方式。",
     "install": {
@@ -1245,6 +1240,7 @@
     "adapterNote": "Kettu 经这个适配器运行 {{name}}，用你的 Node.js。",
     "usedBy": "在用它的",
     "listSeparator": "、",
-    "manageAgents": "在 Agent 里管理"
+    "manageAgents": "在 Agent 里管理",
+    "versionOut": "{{version}} 已发布"
   }
 }

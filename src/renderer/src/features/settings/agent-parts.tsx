@@ -362,8 +362,8 @@ export function ConfigFrame({
 }) {
   return (
     <RowShell>
-      <div className="flex flex-col gap-1.5 py-2.5">
-        <div className="flex min-h-7 items-center gap-4">
+      <div className="flex flex-col gap-1.5 py-3.75">
+        <div className="flex min-h-7 items-center gap-7">
           <RowText name={name} description={description} />
           {control && <div className="ml-auto flex shrink-0 items-center gap-2">{control}</div>}
         </div>
