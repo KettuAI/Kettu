@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { PortChannel } from '@shared/port-channel'
 import { deviceId } from '@shared/remote/device'
 import { PAIR_HOST_TIMEOUT_MS, type HostPairingState } from '@shared/remote/hosts'
+import type { KeepaliveTimings } from '@shared/remote/keepalive'
 import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
 import { parsePairingLink, type PairingPayload, type PairingState } from '@shared/remote/pairing'
 import type { DirectAddress } from '@shared/remote/protocol'
@@ -20,7 +21,12 @@ import { connectTransport, DirectListener } from './direct'
 import { HostStore } from './hosts'
 import { PairingCodes } from './pairing'
 import { RemoteServer } from './server'
-import { memoryPorts, memoryTransports } from './testing/memory'
+import {
+  hangingTransports,
+  memoryPorts,
+  memoryTransports,
+  type HangingTransports,
+} from './testing/memory'
 
 const STUDIO: DirectAddress = { host: '192.168.1.8', port: 47821 }
 const NOWHERE: DirectAddress = { host: '192.0.2.1', port: 9 }
@@ -81,7 +87,13 @@ async function startHost(dir: string, hostKey: KeyPair, resumeMs?: number) {
 }
 
 async function setup(
-  options: { timeoutMs?: number; retryMs?: number; lateMs?: number; resumeMs?: number } = {},
+  options: {
+    timeoutMs?: number
+    retryMs?: number
+    lateMs?: number
+    resumeMs?: number
+    keepalive?: KeepaliveTimings
+  } = {},
 ) {
   const dir = await tempFolder('kettu-client-')
   const hostKey = await generateKeyPair()
@@ -90,16 +102,18 @@ async function setup(
   // Whether the host's address answers, and how many connections each address was asked for.
   let reachable = true
   const dialed: string[] = []
-  // The host's end of each connection it took, to cut it.
+  // The host's end of each connection it took, to cut it, and the connection, to hang it.
   const hostEnds: Transport[] = []
+  const wires: HangingTransports[] = []
   const connect = (address: DirectAddress, signal: AbortSignal): Promise<Transport> => {
     dialed.push(`${address.host}:${address.port}`)
     if (address.host === STUDIO.host && reachable) {
       const open = (): Transport => {
-        const [deviceEnd, hostEnd] = memoryTransports()
-        hostEnds.push(hostEnd)
-        host.server.accept(hostEnd)
-        return deviceEnd
+        const wire = hangingTransports()
+        wires.push(wire)
+        hostEnds.push(wire.host)
+        host.server.accept(wire.host)
+        return wire.device
       }
       if (!options.lateMs) return Promise.resolve(open())
       return new Promise((resolve) => setTimeout(() => resolve(open()), options.lateMs))
@@ -135,6 +149,7 @@ async function setup(
       connect,
       timeoutMs: options.timeoutMs ?? 2_000,
       retryDelay: () => options.retryMs ?? 20,
+      ...(options.keepalive ? { keepalive: options.keepalive } : {}),
     })
     cleanups.push(() => client.stop())
     return client
@@ -169,6 +184,7 @@ async function setup(
     makeClient,
     dialed,
     hostEnds,
+    wires,
     mainPorts,
     closedPorts,
     states,
@@ -318,6 +334,32 @@ describe('a known host', () => {
         { type: 'response', id: 1, result: 'pong' },
         { type: 'response', id: 2, result: 'pong' },
       ])
+    expect(t.connection()).toEqual({ state: 'online', address: STUDIO })
+    expect(t.mainPorts).toHaveLength(1)
+    expect(t.closedPorts.has(port)).toBe(false)
+  })
+
+  it('notices a host that stops answering, and resumes the session once it answers', async () => {
+    const t = await setup({ timeoutMs: 100, keepalive: { quietMs: 50, answerMs: 50 } })
+    await t.paired()
+    await expect.poll(() => t.mainPorts.length).toBe(1)
+    const port = t.mainPorts[0]!
+    const answers: unknown[] = []
+    port.onMessage((data) => answers.push(data))
+    // Pings and their answers keep a quiet connection up.
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(t.hostEnds).toHaveLength(1)
+
+    // The host's process is stopped: its connection stays open, and neither it nor a new one
+    // answers, nor ever closes.
+    t.setReachable(false)
+    t.wires[0]!.hang()
+    await expect.poll(() => t.connection()).toEqual({ state: 'offline' })
+    port.send({ type: 'request', id: 1, method: 'ping' })
+
+    t.wires[0]!.wake()
+    t.setReachable(true)
+    await expect.poll(() => answers).toEqual([{ type: 'response', id: 1, result: 'pong' }])
     expect(t.connection()).toEqual({ state: 'online', address: STUDIO })
     expect(t.mainPorts).toHaveLength(1)
     expect(t.closedPorts.has(port)).toBe(false)

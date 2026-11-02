@@ -10,6 +10,15 @@ import type { ChannelMessage } from '@shared/remote/channel'
 import { normalizeDeviceName, isDeviceModel } from '@shared/remote/device'
 import { startDeviceChannel, type DeviceChannel } from '@shared/remote/device-channel'
 import {
+  DEVICE_KEEPALIVE,
+  Keepalive,
+  KEEPALIVE_VERSION,
+  keepaliveMessage,
+  type KeepaliveTimings,
+  type Ping,
+  type Pong,
+} from '@shared/remote/keepalive'
+import {
   PAIR_HOST_TIMEOUT_MS,
   type HostConnection,
   type HostPairingFailure,
@@ -107,6 +116,8 @@ export interface HostClientOptions {
   installScript?: (version: string) => string
   retryDelay?: (failures: number) => number
   now?: () => number
+  /** When a quiet host is pinged and given up, DEVICE_KEEPALIVE unless a test shortens it. */
+  keepalive?: KeepaliveTimings
 }
 
 type SessionEnd = { welcomed: boolean; reason: ClosingReason | null }
@@ -131,11 +142,14 @@ class HostSession {
   private readonly waiting: ChannelMessage[] = []
   private over = false
   private timer: ReturnType<typeof setTimeout> | null = null
+  /** From version 3, notices a host that stopped answering on an open connection. */
+  private keepalive: Keepalive | null = null
 
   constructor(
     readonly channel: DeviceChannel,
     readonly address: DirectAddress,
     private readonly log: LogFn,
+    private readonly timings: KeepaliveTimings = DEVICE_KEEPALIVE,
   ) {}
 
   get open(): boolean {
@@ -155,7 +169,10 @@ class HostSession {
       }, welcomeTimeoutMs)
     }
     this.channel.onMessage((value) => this.receive(value))
-    this.channel.onBytes((stream, data) => this.pass({ kind: 'bytes', stream, data }))
+    this.channel.onBytes((stream, data) => {
+      this.keepalive?.heard()
+      this.pass({ kind: 'bytes', stream, data })
+    })
     void this.channel.closed.then(() => this.end())
   }
 
@@ -178,6 +195,12 @@ class HostSession {
 
   private receive(value: unknown): void {
     if (this.over) return
+    if (this.keepalive) {
+      this.keepalive.heard()
+      const own = keepaliveMessage(value)
+      if (own === 'ping') this.send({ type: 'pong' } satisfies Pong)
+      if (own) return
+    }
     const type = (value as { type?: unknown } | null)?.type
     if (type === 'closing') {
       this.reason = parseClosing(value)?.reason ?? null
@@ -191,6 +214,19 @@ class HostSession {
       }
       this.welcome = welcome
       if (this.timer) clearTimeout(this.timer)
+      if (welcome.protocol >= KEEPALIVE_VERSION) {
+        this.keepalive = new Keepalive({
+          ...this.timings,
+          ping: () => this.send({ type: 'ping' } satisfies Ping),
+          // Ended now as if the network went, so the link reconnects and resumes the session: a
+          // stopped host never finishes the close.
+          silent: () => {
+            this.log('warn', 'A host stopped answering; connecting again')
+            this.channel.close()
+            this.end()
+          },
+        })
+      }
       return this.handlers.welcomed(welcome)
     }
     const fields = value as Record<string, unknown>
@@ -213,6 +249,7 @@ class HostSession {
     if (this.over) return
     this.over = true
     if (this.timer) clearTimeout(this.timer)
+    this.keepalive?.stop()
     this.waiting.length = 0
     this.handlers.ended({ welcomed: this.welcome !== null, reason: this.reason })
   }
@@ -353,7 +390,7 @@ class HostLink {
       if (route && this.mayAskPort(forward!.problem())) return void this.askPort(route)
       return this.failed()
     }
-    const session = new HostSession(result.channel, result.address, options.log)
+    const session = new HostSession(result.channel, result.address, options.log, options.keepalive)
     this.session = session
     session.start(this.handlersFor(session, resume !== null), WELCOME_TIMEOUT_MS)
   }
@@ -605,7 +642,7 @@ class Pairing {
     if (result.kind === 'unreachable') return this.fail('unreachable')
     this.say({ state: 'confirm' })
     const publicKey = Buffer.from(payload.hostKey).toString('base64')
-    const session = new HostSession(result.channel, result.address, options.log)
+    const session = new HostSession(result.channel, result.address, options.log, options.keepalive)
     this.session = session
     session.start(
       {
@@ -758,7 +795,7 @@ class SshAdding {
       const problem = forward.problem()
       return this.fail(problem ? SSH_FAILURES[problem] : 'ssh_failed', forward.detail())
     }
-    const session = new HostSession(result.channel, result.address, options.log)
+    const session = new HostSession(result.channel, result.address, options.log, options.keepalive)
     this.session = session
     session.start(
       {
