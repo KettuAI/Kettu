@@ -95,7 +95,7 @@ export default function SettingsPage() {
       }}
     >
       <DialogPortal>
-        <DialogOverlay className="supports-backdrop-filter:backdrop-blur-none" />
+        <DialogOverlay />
         <DialogPrimitive.Popup
           // The section in the list takes the focus, so Tab starts from it.
           initialFocus={() =>
