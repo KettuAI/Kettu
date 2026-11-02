@@ -60,17 +60,6 @@ export function useKeyboardShortcuts(): void {
         return
       }
 
-      if (
-        event.key === 'Escape' &&
-        view.settings.open &&
-        !isEditable(event.target) &&
-        !layerOpen()
-      ) {
-        event.preventDefault()
-        settingsBack()
-        return
-      }
-
       const step = historyStep(event, platform)
       if (step) {
         if (layerOpen()) return
@@ -119,6 +108,13 @@ export function useKeyboardShortcuts(): void {
         return run(event, () => stepSession(event.code === 'BracketLeft' ? -1 : 1))
       }
     }
+    // In the bubble phase, after the page: a popup that closes on Esc stops the key on its way.
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return
+      if (!useViewStore.getState().settings.open || isEditable(event.target) || layerOpen()) return
+      event.preventDefault()
+      settingsBack()
+    }
     // The mouse's back and forward buttons.
     const onMouseUp = (event: MouseEvent) => {
       if ((event.button !== 3 && event.button !== 4) || layerOpen()) return
@@ -127,13 +123,17 @@ export function useKeyboardShortcuts(): void {
       else forward()
     }
     window.addEventListener('keydown', onKeyDown, true)
+    window.addEventListener('keydown', onEscape)
     window.addEventListener('mouseup', onMouseUp)
     // An artifact's page keeps the keys typed in it; main passes on the app's own shortcuts.
-    const offForwarded = window.kettu.app.onShortcut((key) =>
-      onKeyDown(new KeyboardEvent('keydown', { ...key, cancelable: true })),
-    )
+    const offForwarded = window.kettu.app.onShortcut((key) => {
+      const event = new KeyboardEvent('keydown', { ...key, cancelable: true })
+      onKeyDown(event)
+      onEscape(event)
+    })
     return () => {
       window.removeEventListener('keydown', onKeyDown, true)
+      window.removeEventListener('keydown', onEscape)
       window.removeEventListener('mouseup', onMouseUp)
       offForwarded()
     }
