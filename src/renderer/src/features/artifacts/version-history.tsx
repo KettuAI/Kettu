@@ -66,7 +66,7 @@ export function VersionHistory({
               <span className="flex min-w-0 flex-1 flex-col gap-0.75">
                 <span
                   className={cn(
-                    'text-lede leading-[normal] text-primary',
+                    'text-[13.5px] leading-[normal] text-primary',
                     on ? 'font-medium' : 'font-normal',
                   )}
                 >
