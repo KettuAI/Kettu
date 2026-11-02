@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentAccount } from './agent-host'
 import {
-  cacheChipState,
   cacheExpiry,
   cachePhase,
   endingWindow,
   expiryOf,
+  knownExpiry,
   nextPhaseIn,
 } from './prompt-cache'
 import type { ConfigOption, SessionView } from './thread'
@@ -163,39 +163,31 @@ describe('expiryOf', () => {
   })
 })
 
-describe('cacheChipState', () => {
+describe('knownExpiry', () => {
   it('is nothing before the session has a cache', () => {
-    expect(cacheChipState(null)).toBeNull()
+    expect(knownExpiry(null)).toBeNull()
   })
 
-  it('counts down a lifetime the agent or its provider gave', () => {
+  it('keeps a lifetime the agent or its provider gave', () => {
     const at = { lastRequestAt: 1_000, ttl: null }
-    expect(
-      cacheChipState(expiryOf('claude-code', { ...at, ttl: 60 * MINUTE }, null, null)),
-    ).toEqual({
-      kind: 'countdown',
-      expiry: {
-        lastRequestAt: 1_000,
-        ttl: 60 * MINUTE,
-        expiresAt: 1_000 + 60 * MINUTE,
-        estimate: false,
-      },
+    expect(knownExpiry(expiryOf('claude-code', { ...at, ttl: 60 * MINUTE }, null, null))).toEqual({
+      lastRequestAt: 1_000,
+      ttl: 60 * MINUTE,
+      expiresAt: 1_000 + 60 * MINUTE,
+      estimate: false,
     })
-    expect(cacheChipState(expiryOf('opencode', at, 'anthropic/claude-opus-5-5', null))).toEqual({
-      kind: 'countdown',
-      expiry: {
-        lastRequestAt: 1_000,
-        ttl: 5 * MINUTE,
-        expiresAt: 1_000 + 5 * MINUTE,
-        estimate: true,
-      },
+    expect(knownExpiry(expiryOf('opencode', at, 'anthropic/claude-opus-5-5', null))).toEqual({
+      lastRequestAt: 1_000,
+      ttl: 5 * MINUTE,
+      expiresAt: 1_000 + 5 * MINUTE,
+      estimate: true,
     })
   })
 
-  it('says the lifetime is not reported when nothing gives one', () => {
+  it('is nothing when nothing gives a lifetime', () => {
     expect(
-      cacheChipState(expiryOf('claude-code', { lastRequestAt: 1_000, ttl: null }, null, null)),
-    ).toEqual({ kind: 'unknown' })
+      knownExpiry(expiryOf('claude-code', { lastRequestAt: 1_000, ttl: null }, null, null)),
+    ).toBeNull()
   })
 })
 

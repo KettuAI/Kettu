@@ -9,7 +9,6 @@ import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { usePane } from '@renderer/features/split/pane-context'
 import { usePaneDragSource } from '@renderer/features/split/session-drag-model'
-import { CacheChip } from '@renderer/features/prompt-cache/cache-chip'
 import { SessionGitChips } from '@renderer/features/git/git-status'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { HostChip } from './host-chip'
@@ -64,8 +63,8 @@ export function ParentLink({ parent }: { parent: SessionSummary }) {
 }
 
 /**
- * The session's top bar: its title, which a click renames and which drags its pane, its menu, the
- * prompt cache's time left, who else has it in front, and the project's git status.
+ * The session's top bar: its title, which a click renames and which drags its pane, its menu, who
+ * else has it in front, and the project's git status.
  */
 export function SessionHeader({
   summary,
@@ -138,7 +137,6 @@ export function SessionHeader({
             }}
           />
         )}
-        {session && <CacheChip session={session} />}
         <ViewersChip sessionId={summary.id} projectPath={summary.projectPath} />
       </NoDrag>
       <SessionGitChips projectPath={summary.projectPath} />
