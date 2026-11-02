@@ -196,7 +196,7 @@ export default function RoutinesPage() {
             />
           ))}
         </div>
-        <div className="h-px bg-border-subtle" />
+        <div className="h-px bg-border-soft" />
       </div>
     )
   }
@@ -368,8 +368,8 @@ function RoutineRow({
           data-dims=""
           className="pointer-events-none relative flex min-w-0 flex-col gap-0.75 py-2.5"
         >
-          <span className="truncate text-row font-medium text-primary">{name}</span>
-          <span id={`${id}-line`} className="truncate text-control text-tertiary">
+          <span className="truncate text-row leading-tight font-medium text-primary">{name}</span>
+          <span id={`${id}-line`} className="truncate text-control leading-tight text-tertiary">
             <span className="hidden @max-[36rem]:inline">{schedule} · </span>
             {rowDescription(routine, projectName)}
           </span>
@@ -582,7 +582,7 @@ function LoadingTable() {
           <span />
         </div>
       ))}
-      <div className="h-px bg-border-subtle" />
+      <div className="h-px bg-border-soft" />
     </div>
   )
 }

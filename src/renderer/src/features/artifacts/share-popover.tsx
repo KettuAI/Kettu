@@ -272,7 +272,7 @@ export function ShareButton({
             {published && (
               <span
                 aria-hidden
-                className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-success ring-2 ring-app"
+                className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-success ring-2 ring-background"
               />
             )}
           </TooltipTrigger>

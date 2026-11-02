@@ -214,7 +214,7 @@ export function ZoomPill({ controls }: { controls: CanvasControls }) {
       >
         <PlusIcon className="size-3.75" />
       </BarButton>
-      <span aria-hidden className="mx-1 h-4 w-px bg-border-default" />
+      <span aria-hidden className="mx-1 h-4 w-px bg-border" />
       <Tooltip>
         <TooltipTrigger
           render={
