@@ -480,7 +480,7 @@ function FailedCard({ failure, label }: { failure: HarnessFailure; label: string
             aria-hidden
             className="absolute -right-0.75 -bottom-0.75 grid size-2.75 place-items-center rounded-full bg-danger text-(--on-fill) shadow-[0_0_0_1.5px_var(--bg-surface)]"
           >
-            <XIcon strokeWidth={3.2} className="size-2" />
+            <XIcon strokeWidth={1.2} className="size-2" />
           </span>
         </span>
       }
