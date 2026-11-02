@@ -134,3 +134,33 @@ describe('Esc in Settings', () => {
     expect(useViewStore.getState().settings.open).toBe(false)
   })
 })
+
+describe('Mod+1 to Mod+9', () => {
+  function press(open: boolean): boolean {
+    let prevented = false
+    const event = {
+      key: '1',
+      code: 'Digit1',
+      metaKey: true,
+      ctrlKey: false,
+      altKey: false,
+      shiftKey: false,
+      isComposing: false,
+      target: { tagName: 'BODY', isContentEditable: false, closest: () => null },
+      preventDefault: () => (prevented = true),
+      stopPropagation: () => {},
+    } as unknown as KeyboardEvent
+    vi.stubGlobal('document', { querySelector: () => (open ? {} : null), activeElement: null })
+    for (const { listener } of keydowns.filter((k) => k.capture)) listener(event)
+    vi.stubGlobal('document', { querySelector: () => null, activeElement: null })
+    return prevented
+  }
+
+  it('focus a pane, but leave the keys to an open menu, which picks a host with them', () => {
+    vi.stubGlobal('requestAnimationFrame', () => 0)
+    useKeyboardShortcuts()
+    useViewStore.setState((s) => ({ settings: { ...s.settings, open: false } }))
+    expect(press(false)).toBe(true)
+    expect(press(true)).toBe(false)
+  })
+})

@@ -506,6 +506,7 @@ export function createValidators(platform: Platform): Validators {
     'agents.reinstall': agent,
     'agents.checkUpdates': none,
     'agents.skipUpdate': agent,
+    'agents.unskipUpdate': agent,
     'agents.update': agent,
     'agents.updateCli': agent,
     'agents.setApiKey': (params) => {

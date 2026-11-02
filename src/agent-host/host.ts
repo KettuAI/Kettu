@@ -870,6 +870,7 @@ export class AgentHost {
       'agents.reinstall': ({ agentId }) => agents.reinstall(agentId),
       'agents.checkUpdates': () => agents.checkUpdates(),
       'agents.skipUpdate': ({ agentId }) => agents.skipUpdate(agentId),
+      'agents.unskipUpdate': ({ agentId }) => agents.unskipUpdate(agentId),
       'agents.update': ({ agentId }) => agents.update(agentId),
       'agents.updateCli': ({ agentId }) => agents.updateCli(agentId),
       'agents.setApiKey': ({ agentId, ...input }) => agents.setApiKey(agentId, input),
