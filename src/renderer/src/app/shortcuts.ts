@@ -53,6 +53,8 @@ export function useKeyboardShortcuts(): void {
       )
 
       if (event.ctrlKey && !event.metaKey && !event.altKey && event.code === 'Backquote') {
+        // A session's More menu opens its own session's terminal on this key.
+        if (layerOpen()) return
         event.preventDefault()
         if (!view.projectPath || view.settings.open) return
         if (event.shiftKey) emitAppEvent({ kind: 'new-terminal' })
