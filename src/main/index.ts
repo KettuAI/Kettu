@@ -205,10 +205,19 @@ async function start(): Promise<void> {
     open: () => showMainWindow(),
     quit: () => app.quit(),
     newSession: () => sendCommand({ kind: 'new-session' }),
-    checkForUpdates: () => checkForUpdates(),
+    // As the app menu's item does: About shows the answer, the window being closed or not.
+    checkForUpdates: () => {
+      sendCommand({ kind: 'open-settings', section: 'about' })
+      checkForUpdates()
+    },
     setRemoteEnabled: (enabled) => void settings.update({ remote: { enabled } }),
     reducedMotion,
-    ...(trayPanel ? { togglePanel: (bounds: Electron.Rectangle) => trayPanel.toggle(bounds) } : {}),
+    ...(trayPanel
+      ? {
+          togglePanel: (bounds: Electron.Rectangle) => trayPanel.toggle(bounds),
+          hidePanel: () => trayPanel.hide(),
+        }
+      : {}),
   })
   tray.start()
   if (trayPanel) registerTrayIpc(trayPanel)

@@ -29,7 +29,20 @@ export function loadRenderer(window: BrowserWindow, page: RendererPage = 'index'
 
 /** Whether a URL belongs to the app's own renderer, as opposed to remote content. */
 export function isRendererUrl(url: string | undefined): boolean {
-  return matchesRendererEntry(url, entries.index) || matchesRendererEntry(url, entries.tray)
+  return rendererPage(url) !== null
+}
+
+/**
+ * Which of the renderer's pages a URL is, or null for anything else. On the dev server every page
+ * shares one origin, so a page there is told by its path.
+ */
+export function rendererPage(url: string | undefined): RendererPage | null {
+  if (!matchesRendererEntry(url, entries.index) && !matchesRendererEntry(url, entries.tray)) {
+    return null
+  }
+  if (entries.tray.kind === 'file')
+    return matchesRendererEntry(url, entries.tray) ? 'tray' : 'index'
+  return URL.parse(url!)?.pathname === '/tray.html' ? 'tray' : 'index'
 }
 
 /**

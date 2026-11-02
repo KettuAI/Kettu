@@ -103,7 +103,7 @@ Kettu drives agents that run shell commands, so these are not negotiable:
 - Keep the permission handlers in `src/main/permissions.ts`: the clipboard is the only web permission granted, and only to the app's own page. Add another only with a stated reason.
 - Navigation away from the app and new windows stay blocked; external `http(s)` links open in the system browser.
 - The sandboxed preload can only `require('electron')`. Bundled source and type-only imports from `@shared` are fine; Node built-ins and npm packages are not.
-- Do not loosen the CSP in `src/renderer/index.html` and `src/renderer/tray.html` without a stated reason. The menu bar panel's page gets only what `src/preload/tray.ts` exposes, and main takes its `tray:*` calls from that page alone.
+- Do not loosen the CSP in `src/renderer/index.html` and `src/renderer/tray.html` without a stated reason. The menu bar panel's page gets only what `src/preload/tray.ts` exposes, main takes from it only the channels `PANEL_CHANNELS` in `src/main/ipc.ts` lists, and its `tray:*` calls from that page alone.
 
 ## Commands
 

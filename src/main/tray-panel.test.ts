@@ -132,6 +132,15 @@ describe('TrayPanel', () => {
     expect(electron.windows).toHaveLength(1)
   })
 
+  it('opens all the same when the page never says how tall it is', () => {
+    const { panel } = make()
+    panel.toggle(icon)
+    expect(electron.windows[0]!.visible).toBe(false)
+    vi.advanceTimersByTime(3000)
+    expect(electron.windows[0]!.visible).toBe(true)
+    expect(electron.windows[0]!.bounds).toEqual(panelBounds(icon, 120, workArea))
+  })
+
   it('closes before it opens the window or quits', () => {
     const { panel, deps } = make()
     panel.toggle(icon)

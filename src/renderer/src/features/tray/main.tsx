@@ -9,12 +9,14 @@ import { initTrayPanel } from '@renderer/stores/tray-panel'
 import { TrayRoot } from './tray-panel'
 
 // As the window does, the first render waits for the language, the text size and the colors.
-void Promise.all([initSettings(), initThemes(), initTrayPanel()]).then(() =>
-  createRoot(document.getElementById('root')!).render(
-    <StrictMode>
-      <LucideProvider strokeWidth={1.35} nonScalingStroke>
-        <TrayRoot />
-      </LucideProvider>
-    </StrictMode>,
-  ),
-)
+Promise.all([initSettings(), initThemes(), initTrayPanel()])
+  .then(() =>
+    createRoot(document.getElementById('root')!).render(
+      <StrictMode>
+        <LucideProvider strokeWidth={1.35} nonScalingStroke>
+          <TrayRoot />
+        </LucideProvider>
+      </StrictMode>,
+    ),
+  )
+  .catch((error: unknown) => console.error('The menu bar panel could not start', error))

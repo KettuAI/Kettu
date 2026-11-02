@@ -130,7 +130,7 @@ function start(system: NodeJS.Platform, { reduced = false, panel = true } = {}) 
     checkForUpdates: vi.fn(),
     setRemoteEnabled: vi.fn(),
     reducedMotion: vi.fn(() => reduced),
-    ...(panel ? { togglePanel: vi.fn() } : {}),
+    ...(panel ? { togglePanel: vi.fn(), hidePanel: vi.fn() } : {}),
   }
   const tray = new KettuTray(deps)
   tray.start()
@@ -245,6 +245,7 @@ describe('KettuTray', () => {
     fake.emit('right-click')
     fake.emit('click', { altKey: true, ctrlKey: false }, bounds)
     expect(deps.togglePanel).toHaveBeenCalledOnce()
+    expect(deps.hidePanel).toHaveBeenCalledTimes(2)
     expect(fake.popped.map(labels)).toEqual([
       [
         'Open Kettu',
@@ -295,6 +296,8 @@ describe('KettuTray', () => {
       'Open Kettu',
     ])
     expect(fake.menu[1]!.enabled).toBe(false)
+    // Only macOS has the keys the labels would name.
+    expect(fake.menu.some((item) => item.accelerator)).toBe(false)
     tray.setBusy({ running: 2, waiting: 1 })
     expect(fake.menu[0]!.label).toBe('2 sessions running · 1 needs approval')
     tray.setRemote({ state: 'off', online: [] })

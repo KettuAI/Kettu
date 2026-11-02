@@ -6,6 +6,7 @@ import type { RemoteStatus } from '@shared/remote/status'
 import type { TrayPanelApi } from '@shared/tray'
 import {
   groupSessions,
+  needsYou,
   readDetail,
   type PendingRequest,
   type SessionDetail,
@@ -35,6 +36,8 @@ interface TrayPanelStore {
   reviewing: string | null
   /** Counts the panel's openings, so each one starts afresh. */
   shown: number
+  /** The request the user was reviewing was answered somewhere else first. */
+  answeredElsewhere: boolean
 }
 
 export const useTrayPanelStore = create<TrayPanelStore>()(() => ({
@@ -46,6 +49,7 @@ export const useTrayPanelStore = create<TrayPanelStore>()(() => ({
   remote: null,
   reviewing: null,
   shown: 0,
+  answeredElsewhere: false,
 }))
 
 const lastRead = new Map<string, number>()
@@ -92,9 +96,11 @@ function schedule(sessionId: string): void {
 /** Reads the threads of the listed sessions that changed, and with `running`, every running one. */
 function readListed(running = false): void {
   if (!visible()) return
-  const { sessions, details } = useTrayPanelStore.getState()
+  const { sessions, details, reviewing } = useTrayPanelStore.getState()
   const groups = groupSessions(Object.values(sessions))
-  for (const summary of [...groups.needsYou, ...groups.running, ...groups.finished]) {
+  const reviewed = reviewing ? sessions[reviewing] : undefined
+  const listed = [...groups.needsYou, ...groups.running, ...groups.finished]
+  for (const summary of reviewed ? [reviewed, ...listed] : listed) {
     const moved = details[summary.id]?.readAt !== summary.updatedAt
     if (moved || (running && summary.status === 'running')) schedule(summary.id)
   }
@@ -113,9 +119,14 @@ function followVisibility(): void {
 
 function receiveSummary(summary: SessionSummary): void {
   if (summary.prepared) return
-  useTrayPanelStore.setState((state) => ({
-    sessions: { ...state.sessions, [summary.id]: summary },
-  }))
+  useTrayPanelStore.setState((state) => {
+    const sessions = { ...state.sessions, [summary.id]: summary }
+    // Another window, a device or a timeout settled the request under review.
+    if (state.reviewing === summary.id && !needsYou(summary)) {
+      return { sessions, reviewing: null, answeredElsewhere: true }
+    }
+    return { sessions }
+  })
   readListed()
 }
 
@@ -173,7 +184,11 @@ export async function initTrayPanel(): Promise<void> {
   })
   api.remote.onChanged((remote) => useTrayPanelStore.setState({ remote }))
   api.tray.onShown(() =>
-    useTrayPanelStore.setState((state) => ({ reviewing: null, shown: state.shown + 1 })),
+    useTrayPanelStore.setState((state) => ({
+      reviewing: null,
+      shown: state.shown + 1,
+      answeredElsewhere: false,
+    })),
   )
   document.addEventListener('visibilitychange', followVisibility)
   followVisibility()
@@ -181,7 +196,7 @@ export async function initTrayPanel(): Promise<void> {
 }
 
 export function review(sessionId: string | null): void {
-  useTrayPanelStore.setState({ reviewing: sessionId })
+  useTrayPanelStore.setState({ reviewing: sessionId, answeredElsewhere: false })
 }
 
 /** Whether any listed session still waits for an answer other than the one just given. */
@@ -194,11 +209,29 @@ function othersWait(sessionId: string, entryId: string): boolean {
   })
 }
 
+/** Lists again without the settled request. */
+function settled(sessionId: string, entryId: string, elsewhere: boolean): void {
+  useTrayPanelStore.setState((state) => {
+    const detail = state.details[sessionId]
+    const details = detail
+      ? {
+          ...state.details,
+          [sessionId]: {
+            ...detail,
+            requests: detail.requests.filter((r) => r.entryId !== entryId),
+          },
+        }
+      : state.details
+    return { reviewing: null, answeredElsewhere: elsewhere, details }
+  })
+}
+
 export type AnswerChoice = { optionId: string } | { decision: BrowserOriginDecision }
 
 /**
- * Answers a request, then lists again, or closes the panel when nothing else waits. Null once
- * answered, here or by another window or device first; the message of any other failure.
+ * Answers a request, then lists again, or closes the panel when nothing else waits; when another
+ * window or device answered first, it lists again and says so. Null once settled either way; the
+ * message of any other failure.
  */
 export async function answer(
   sessionId: string,
@@ -227,14 +260,11 @@ export async function answer(
       error.code === 'not_found' &&
       (error.data as { reason?: unknown } | undefined)?.reason === ALREADY_ANSWERED
     if (!already) return error.message
+    settled(sessionId, request.entryId, true)
+    return null
   }
   const others = othersWait(sessionId, request.entryId)
-  useTrayPanelStore.setState((state) => {
-    const detail = state.details[sessionId]
-    if (!detail) return { reviewing: null }
-    const requests = detail.requests.filter((r) => r.entryId !== request.entryId)
-    return { reviewing: null, details: { ...state.details, [sessionId]: { ...detail, requests } } }
-  })
+  settled(sessionId, request.entryId, false)
   if (!others) api.tray.hide()
   return null
 }

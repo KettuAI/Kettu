@@ -172,6 +172,8 @@ export interface TrayDeps {
   reducedMotion(): boolean
   /** Opens or closes the menu bar panel under the icon, on macOS. */
   togglePanel?(bounds: Electron.Rectangle): void
+  /** Closes the panel, so the short menu never opens over it. */
+  hidePanel?(): void
 }
 
 export class KettuTray {
@@ -259,8 +261,10 @@ export class KettuTray {
             ...(remote ? [{ label: remote, enabled: false }] : []),
             { type: 'separator' },
           ]
-    // The panel's and the window's own keys; a tray menu's accelerators only label the items.
-    const key = (accelerator: string) => ({ accelerator, registerAccelerator: false })
+    // The panel's and the window's own keys, which only macOS has; a tray menu's accelerators
+    // only label the items.
+    const key = (accelerator: string) =>
+      process.platform === 'darwin' ? { accelerator, registerAccelerator: false } : {}
     return Menu.buildFromTemplate([
       ...status,
       {
@@ -287,6 +291,7 @@ export class KettuTray {
   }
 
   private popUpMenu(): void {
+    this.deps.hidePanel?.()
     this.tray?.popUpContextMenu(this.menu())
   }
 

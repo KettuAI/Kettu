@@ -53,7 +53,7 @@ import type { QuitFlow } from './quit'
 import type { HostMedia } from './host-media'
 import type { HostSessions } from './host-sessions'
 import type { HostPairingListener, RemoteHost } from './remote-host'
-import { isRendererUrl } from './renderer'
+import { isRendererUrl, rendererPage } from './renderer'
 import type { TrayPanel } from './tray-panel'
 import type { SettingsStore } from './settings'
 import type { Sharing } from './sharing'
@@ -124,6 +124,24 @@ export function whenSettled<T>(
   return settling ? settling.then<T>(() => run(isTrusted(event))) : run(isTrusted(event))
 }
 
+// What the menu bar panel's page may call: the reads it shares with the window, its host port and
+// its own calls. Its preload exposes no other, and main refuses the rest from it all the same.
+const PANEL_CHANNELS = new Set<string>([
+  'settings:get',
+  'themes:get',
+  'remote:status',
+  'agent-host:connect',
+  'tray:open',
+  'tray:quit',
+  'tray:hide',
+  'tray:resize',
+])
+
+/** Whether the sender may use `channel`: any for the window's page, the panel's few for its own. */
+export function mayUse(event: IpcMainInvokeEvent | IpcMainEvent, channel: string): boolean {
+  return rendererPage(event.senderFrame?.url) !== 'tray' || PANEL_CHANNELS.has(channel)
+}
+
 function handle<C extends IpcInvokeChannel>(
   channel: C,
   arity: number,
@@ -131,7 +149,9 @@ function handle<C extends IpcInvokeChannel>(
 ): void {
   ipcMain.handle(channel, async (event, ...args: unknown[]) =>
     whenSettled(event, (trusted) => {
-      if (!trusted) throw new Error(`Rejected "${channel}" call from untrusted sender`)
+      if (!trusted || !mayUse(event, channel)) {
+        throw new Error(`Rejected "${channel}" call from untrusted sender`)
+      }
       if (args.length !== arity) {
         throw new Error(`"${channel}" takes ${arity} argument(s), got ${args.length}`)
       }
@@ -146,7 +166,7 @@ function on<C extends keyof IpcSendContract>(
 ): void {
   ipcMain.on(channel, (event, ...args: unknown[]) => {
     void whenSettled(event, (trusted) => {
-      if (trusted) handler(event, ...args)
+      if (trusted && mayUse(event, channel)) handler(event, ...args)
       else log.warn(`Rejected "${channel}" message from untrusted sender`)
     })
   })

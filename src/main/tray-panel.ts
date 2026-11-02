@@ -19,6 +19,8 @@ const MARGIN = 8
 // A click on the icon blurs the open panel before the click arrives, so a click this soon after
 // the blur closed it leaves it closed instead of opening it again.
 const REOPEN_AFTER_BLUR_MS = 300
+// How long the first opening waits for the page to say its height before it shows anyway.
+const FIRST_SIZE_MS = 3000
 
 /**
  * Where the panel goes: centred under the icon, or over it when the icon sits low on its screen,
@@ -119,7 +121,15 @@ export class TrayPanel {
   private show(): void {
     const window = this.window && !this.window.isDestroyed() ? this.window : this.create()
     this.showing = true
-    if (!this.sized) return
+    if (!this.sized) {
+      // A page that never reports, such as one that failed to start, still opens, to be seen.
+      setTimeout(() => {
+        if (this.sized || window !== this.window) return
+        log.warn('The panel did not report its height')
+        this.resize(this.height)
+      }, FIRST_SIZE_MS)
+      return
+    }
     window.webContents.send('tray:shown', null)
     this.place()
   }
@@ -182,6 +192,9 @@ export class TrayPanel {
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     window.webContents.on('will-navigate', (event) => event.preventDefault())
     window.webContents.on('render-process-gone', () => window.destroy())
+    window.webContents.on('did-fail-load', (_event, code, description) =>
+      log.error(`The panel did not load: ${code} ${description}`),
+    )
     this.window = window
     void loadRenderer(window, 'tray').catch((error: unknown) =>
       log.error('Could not load the panel', error),

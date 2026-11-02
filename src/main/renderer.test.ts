@@ -253,6 +253,18 @@ describe('isRendererUrl', () => {
     expect(isRendererUrl('')).toBe(false)
   })
 
+  it("tells the panel's page from the window's", async () => {
+    const built = await importRenderer(false)
+    const tray = pathToFileURL(join(builtEntry, '../tray.html')).href
+    expect(built.rendererPage(builtHref)).toBe('index')
+    expect(built.rendererPage(`${tray}#x`)).toBe('tray')
+    expect(built.rendererPage('file:///etc/passwd')).toBeNull()
+    const dev = await importRenderer(true, 'http://localhost:5173')
+    expect(dev.rendererPage('http://localhost:5173/')).toBe('index')
+    expect(dev.rendererPage('http://localhost:5173/tray.html?a=1')).toBe('tray')
+    expect(dev.rendererPage('http://localhost:5174/tray.html')).toBeNull()
+  })
+
   it('in development without a dev server, accepts the built index.html', async () => {
     const { isRendererUrl } = await importRenderer(true)
     expect(isRendererUrl(builtHref)).toBe(true)

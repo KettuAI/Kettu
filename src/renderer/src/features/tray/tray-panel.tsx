@@ -14,7 +14,7 @@ import type { SessionSummary } from '@shared/agent-host'
 import type { BrowserOriginDecision } from '@shared/browser'
 import type { RemoteStatus } from '@shared/remote/status'
 import type { TrayTarget } from '@shared/tray'
-import kettuIcon from '@renderer/assets/kettu-icon.svg'
+import glyphUrl from '@renderer/assets/kettu-glyph-on-dark.svg'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { relativePath } from '@renderer/lib/format'
@@ -101,8 +101,7 @@ export function TrayRoot() {
 /** The panel: a list of what goes on, or the request the user reviews. */
 export function TrayPanel() {
   const { t } = useTranslation('tray')
-  const root = useRef<HTMLDivElement>(null)
-  const scroller = useRef<HTMLDivElement>(null)
+  const content = useRef<HTMLDivElement>(null)
   const reviewing = useTrayPanelStore((s) => s.reviewing)
   const shown = useTrayPanelStore((s) => s.shown)
   const summary = useTrayPanelStore((s) => (reviewing ? s.sessions[reviewing] : undefined))
@@ -110,42 +109,39 @@ export function TrayPanel() {
     reviewing ? s.details[reviewing]?.requests[0] : undefined,
   )
 
-  // The window takes the page's natural height; past the window's room, the list scrolls.
+  // The window takes the content's natural height; past the room main gives it, the panel scrolls.
   useLayoutEffect(() => {
-    const element = root.current
+    const element = content.current
     if (!element) return
-    const report = () => {
-      const list = scroller.current
-      const extra = list ? list.scrollHeight - list.clientHeight : 0
-      trayApi().tray.resize(Math.ceil(element.offsetHeight + extra))
-    }
+    const report = () => trayApi().tray.resize(Math.ceil(element.offsetHeight))
     const observer = new ResizeObserver(report)
     observer.observe(element)
-    if (scroller.current?.firstElementChild) observer.observe(scroller.current.firstElementChild)
     report()
     return () => observer.disconnect()
-  })
+  }, [])
 
   return (
     <div
-      ref={root}
       aria-label={t('label')}
-      className="flex max-h-screen flex-col overflow-hidden rounded-2xl bg-[color-mix(in_srgb,var(--bg-surface)_92%,transparent)] text-foreground shadow-[inset_0_0_0_1px_var(--panel-highlight)]"
+      className="h-screen overflow-y-auto rounded-2xl bg-[color-mix(in_srgb,var(--bg-surface)_92%,transparent)] text-foreground shadow-[inset_0_0_0_1px_var(--panel-highlight)]"
     >
-      {reviewing && summary && request ? (
-        <Review key={`${reviewing}:${request.entryId}`} summary={summary} request={request} />
-      ) : (
-        <List key={shown} scroller={scroller} />
-      )}
+      <div ref={content} className="flex flex-col">
+        {reviewing && summary && request ? (
+          <Review key={`${reviewing}:${request.entryId}`} summary={summary} request={request} />
+        ) : (
+          <List key={shown} />
+        )}
+      </div>
     </div>
   )
 }
 
-function List({ scroller }: { scroller: React.RefObject<HTMLDivElement | null> }) {
+function List() {
   const { t } = useTranslation('tray')
   const sessions = useTrayPanelStore((s) => s.sessions)
   const details = useTrayPanelStore((s) => s.details)
   const loaded = useTrayPanelStore((s) => s.loaded)
+  const elsewhere = useTrayPanelStore((s) => s.answeredElsewhere)
   const groups = groupSessions(Object.values(sessions))
   const idle = loaded && !busy(groups)
   const rows = [...groups.needsYou, ...groups.running, ...groups.finished, ...groups.recent]
@@ -168,7 +164,8 @@ function List({ scroller }: { scroller: React.RefObject<HTMLDivElement | null> }
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (passes(event)) return
+      // A held key repeats into the view it opened, which must never answer for the user.
+      if (passes(event) || event.repeat) return
       const mod = event.metaKey || event.ctrlKey
       if (mod && event.key.toLowerCase() === 'n') open({ kind: 'new-session' })
       else if (mod && event.key.toLowerCase() === 'o') open({ kind: 'app' })
@@ -203,7 +200,12 @@ function List({ scroller }: { scroller: React.RefObject<HTMLDivElement | null> }
   return (
     <>
       <Header groups={groups} idle={idle} />
-      <div ref={scroller} className="min-h-0 overflow-y-auto">
+      {elsewhere && (
+        <div role="status" className="px-3.5 pb-1 text-caption text-tertiary">
+          {t('answeredElsewhere')}
+        </div>
+      )}
+      <div>
         <div>
           {idle && (
             <div className="px-1.5 py-1">
@@ -351,16 +353,24 @@ function Header({ groups, idle }: { groups: TrayGroups; idle: boolean }) {
   const subtitle = idle && latest > 0 ? t('lastSession', { host, ago: ago(latest) }) : host
   return (
     <div className="flex items-center gap-2.5 px-3 pt-3 pb-2.5">
-      <img src={kettuIcon} alt="" className="size-7 shrink-0 rounded-[7px]" />
-      <div className="min-w-0 flex-1 leading-[1.3]">
-        <div className="truncate text-control font-semibold text-primary">{title}</div>
-        <div className="truncate text-caption text-tertiary">{subtitle}</div>
+      <span
+        aria-hidden
+        className="grid size-7 shrink-0 place-items-center rounded-[7px] bg-(--app-mark-tile)"
+      >
+        <span
+          className="size-4 bg-attention-dot mask-contain mask-center mask-no-repeat [mask-image:var(--glyph)]"
+          style={{ '--glyph': `url(${glyphUrl})` } as React.CSSProperties}
+        />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-control/[1.3] font-semibold text-primary">{title}</div>
+        <div className="truncate text-caption/[1.3] text-tertiary">{subtitle}</div>
       </div>
       <IconButton label={`${t('newSession')} ⌘N`} onClick={() => open({ kind: 'new-session' })}>
-        <PlusIcon className="size-[15px]" />
+        <PlusIcon className="size-3.75" />
       </IconButton>
       <IconButton label={t('settings')} onClick={() => open({ kind: 'settings' })}>
-        <Settings2Icon className="size-[15px]" />
+        <Settings2Icon className="size-3.75" />
       </IconButton>
     </div>
   )
@@ -425,7 +435,7 @@ function SessionRow({
     <div
       onMouseMove={onHover}
       className={cn(
-        'mx-1.5 flex min-h-10 items-center gap-2.25 rounded-tile px-2 py-1.25',
+        'mx-1.5 flex min-h-12.5 items-center gap-2.25 rounded-tile px-2 py-1.25',
         highlighted && 'bg-selected',
       )}
     >
@@ -435,11 +445,11 @@ function SessionRow({
         className="flex min-w-0 flex-1 items-center gap-2.25 rounded-md text-left outline-none focus-ring"
       >
         <AgentMark agent={summary.agentId} size={16} />
-        <span className="min-w-0 flex-1 leading-[1.3]">
-          <span className="block truncate text-control text-primary">
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-control/[1.3] text-primary">
             {summary.title ?? t('untitled')}
           </span>
-          {line && <span className="block truncate text-caption text-tertiary">{line}</span>}
+          {line && <span className="block truncate text-caption/[1.3] text-tertiary">{line}</span>}
         </span>
       </button>
       {action}
@@ -509,7 +519,7 @@ function MenuRow({
       )}
     >
       <span className="flex w-4 justify-center text-secondary">
-        <Icon strokeWidth={1.4} className="size-[15px]" />
+        <Icon strokeWidth={1.4} className="size-3.75" />
       </span>
       <span className="min-w-0">{label}</span>
       <span className="ml-auto pl-4 text-small text-tertiary tabular">{keys}</span>
@@ -573,7 +583,7 @@ function Footer() {
   const down = connection === 'failed'
   const line = remoteLine(remote)
   return (
-    <div className="flex items-center gap-2 bg-[color-mix(in_srgb,var(--bg-subtle)_60%,transparent)] px-3 py-2 text-small text-secondary shadow-[inset_0_1px_0_var(--border-subtle)]">
+    <div className="flex items-center gap-2 bg-[color-mix(in_srgb,var(--bg-subtle)_60%,transparent)] px-3 py-2 text-small leading-normal text-secondary shadow-[inset_0_1px_0_var(--border-subtle)]">
       <span
         aria-hidden
         className={cn('size-1.5 shrink-0 rounded-full', down ? 'bg-danger' : line.dot)}
@@ -645,7 +655,8 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (passes(event)) return
+      // A held key repeats into the view it opened, which must never answer for the user.
+      if (passes(event) || event.repeat) return
       if (event.key === 'Escape' || event.key === 'ArrowLeft') review(null)
       else if (event.key === 'ArrowDown') setHighlight((i) => (i + 1) % options.length)
       else if (event.key === 'ArrowUp')
@@ -676,7 +687,7 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
         data-selectable
         className={cn(
           'mx-3 max-h-30 overflow-y-auto rounded-tile bg-code-block px-2.5 py-2 text-primary shadow-[inset_0_0_0_1px_var(--border-subtle)] wrap-anywhere whitespace-pre-wrap',
-          target.code ? 'font-mono text-command' : 'text-small',
+          target.code ? 'font-mono text-command leading-normal' : 'text-small leading-normal',
         )}
       >
         {target.text}
@@ -684,7 +695,7 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
       <div role="group" aria-label={t('answerGroup')} className="px-1.5 pt-2 pb-1.5">
         {options.map((option, i) => (
           <button
-            key={option.label}
+            key={i}
             type="button"
             onMouseMove={() => setHighlight(i)}
             onClick={() => choose(i)}
@@ -714,7 +725,7 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
         <button
           type="button"
           onClick={() => open({ kind: 'session', sessionId: summary.id })}
-          className="rounded-sm text-secondary underline decoration-border-strong underline-offset-2 outline-none focus-ring hover:decoration-current"
+          className="rounded-sm text-secondary underline outline-none focus-ring"
         >
           {t('openInKettu')}
         </button>

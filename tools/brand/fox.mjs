@@ -223,8 +223,8 @@ export const GLYPH_CANVAS = 18
 const GLYPH_WIDTH = 16
 // The dot of a waiting permission request, at the bottom right, with a gap around it; the running
 // dot is the smaller one there.
-const DOT = { cx: 14.5, cy: 14, r: 2.5, gap: 1.2 }
-const RUNNING_DOT_R = 2.1
+const DOT = { cx: 14.5, cy: 14, r: 3, gap: 1.5 }
+const RUNNING_DOT_R = 2.5
 
 /** `menubar`, the 18 pt canvas of a macOS template image; `tray`, the fox filling a square. */
 export const GLYPH_FRAMINGS = ['menubar', 'tray']

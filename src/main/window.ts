@@ -7,7 +7,7 @@ import { mayOpenWindow } from './artifacts/guards'
 import { JsonFileWriter, readJsonFile } from './json-file'
 import { createLogger } from './log'
 import type { StartMode } from './login-item'
-import { isRendererUrl, loadRenderer } from './renderer'
+import { loadRenderer, rendererPage } from './renderer'
 import { windowColors, type WindowColors } from './themes'
 import { parseWindowState, placeWindow, type SavedWindowState } from './window-bounds'
 import { titleBarHeight, trafficLightPosition } from './window-controls'
@@ -208,7 +208,7 @@ export function createMainWindow(start: StartMode = 'window'): BrowserWindow {
   })
 
   window.webContents.on('will-navigate', (event, url) => {
-    if (isRendererUrl(url)) return
+    if (rendererPage(url) === 'index') return
     event.preventDefault()
     openIfExternal(url)
   })
