@@ -698,10 +698,12 @@ export function registerIpcHandlers({
     browserViews.removeAllowedSite(projectPathArg(projectPath), browserOrigin(origin))
   })
   handle('browser:clear-data', 0, async () => {
-    siteIcons.clear()
+    await siteIcons.clear()
     await browserViews.clearData()
   })
   handle('browser:site-icons', 0, () => siteIcons.all())
+  // Records only the site, never an icon: those come from the browser's own pages.
+  handle('browser:site-opened', 1, (_, url) => siteIcons.visited(browserUrl(url)))
 
   on('agent-host:connect', (event) => agentHost.connect(event.sender))
   on('terminal-host:connect', (event) => terminalHost.connect(event.sender))

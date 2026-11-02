@@ -373,7 +373,7 @@
     "copy": "复制链接",
     "copyMarkdown": "复制为 Markdown",
     "firstVisit": "首次访问",
-    "firstVisitNote": "你还没有在 Kettu 中打开过这个站点。打开之后才会显示它的图标。",
+    "firstVisitNote": "你还没有从 Kettu 打开过这个站点。会话浏览器打开它之后才会显示它的图标。",
     "defaultBrowser": "默认浏览器",
     "yourBrowser": "默认浏览器",
     "sessionBrowser": "会话浏览器",
@@ -388,7 +388,8 @@
     "alwaysSite": "始终在 {{browser}} 中打开 {{site}} 的链接",
     "alwaysSiteSession": "始终在会话浏览器中打开 {{site}} 的链接",
     "alwaysHost": "始终在 {{browser}} 中打开这个站点",
-    "alwaysHostSession": "始终在会话浏览器中打开这个站点"
+    "alwaysHostSession": "始终在会话浏览器中打开这个站点",
+    "openFailed": "无法打开链接：{{error}}"
   },
   "svg": {
     "alt": "SVG 图片"
@@ -401,7 +402,6 @@
     "copyNew": "复制新内容",
     "copy": "复制",
     "wrap": "自动换行",
-    "unwrap": "不换行",
     "showMore_other": "再显示 {{count}} 行",
     "showLess": "收起",
     "view": "查看方式",

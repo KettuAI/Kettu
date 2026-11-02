@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { DefaultBrowser, SiteIconEvent, SiteIconMap } from '@shared/ipc'
 
 interface SiteIconsStore {
-  /** The icon of each site Kettu's browser opened, by origin; null for one opened without. */
+  /** The icon of each site opened from Kettu, by origin; null for one without. */
   sites: SiteIconMap
   /** The system's default browser, once main has read it. */
   browser: DefaultBrowser | null

@@ -44,6 +44,7 @@ describe('isLocalLink', () => {
     'http://127.0.0.1:3000/',
     'http://127.1/',
     'http://[::1]:8080/',
+    'http://0.0.0.0:8000/',
   ])('takes %s as this computer', (url) => expect(isLocalLink(url)).toBe(true))
 
   it.each([
@@ -133,17 +134,23 @@ describe('defaultDestination', () => {
 describe('asksBeforeOpening', () => {
   const url = 'https://example.com/'
 
-  it('asks while "Ask before opening a site for the first time" is on', () => {
-    expect(asksBeforeOpening(url, prefs({ confirmLinks: true }), inSession)).toBe(true)
+  it('asks for a site never opened while "Ask before opening a site for the first time" is on', () => {
+    expect(asksBeforeOpening(url, prefs({ confirmLinks: true }), inSession, false)).toBe(true)
+    expect(asksBeforeOpening(url, prefs({ confirmLinks: true }), noSession, false)).toBe(true)
+  })
+
+  it('does not ask again for a site opened before', () => {
+    expect(asksBeforeOpening(url, prefs({ confirmLinks: true }), inSession, true)).toBe(false)
+    expect(asksBeforeOpening(url, prefs({ confirmLinks: true }), noSession, true)).toBe(false)
   })
 
   it('does not ask with it off', () => {
-    expect(asksBeforeOpening(url, prefs(), inSession)).toBe(false)
+    expect(asksBeforeOpening(url, prefs(), inSession, false)).toBe(false)
   })
 
   it('asks while the setting is Ask, which needs a second place to offer', () => {
-    expect(asksBeforeOpening(url, prefs({ openLinksIn: 'ask' }), inSession)).toBe(true)
-    expect(asksBeforeOpening(url, prefs({ openLinksIn: 'ask' }), noSession)).toBe(false)
+    expect(asksBeforeOpening(url, prefs({ openLinksIn: 'ask' }), inSession, true)).toBe(true)
+    expect(asksBeforeOpening(url, prefs({ openLinksIn: 'ask' }), noSession, false)).toBe(false)
   })
 
   it('does not ask for a remembered site', () => {
@@ -152,13 +159,13 @@ describe('asksBeforeOpening', () => {
       openLinksIn: 'ask',
       alwaysOpenIn: { 'example.com': 'browser' },
     })
-    expect(asksBeforeOpening('https://www.example.com/a', remembered, inSession)).toBe(false)
+    expect(asksBeforeOpening('https://www.example.com/a', remembered, inSession, false)).toBe(false)
   })
 
   it('does not ask for a local address in a session', () => {
     const asking = prefs({ confirmLinks: true, openLinksIn: 'ask' })
-    expect(asksBeforeOpening('http://localhost:5173/', asking, inSession)).toBe(false)
-    expect(asksBeforeOpening('http://localhost:5173/', asking, noSession)).toBe(true)
+    expect(asksBeforeOpening('http://localhost:5173/', asking, inSession, false)).toBe(false)
+    expect(asksBeforeOpening('http://localhost:5173/', asking, noSession, false)).toBe(true)
   })
 
   it.each([
@@ -167,7 +174,7 @@ describe('asksBeforeOpening', () => {
     'http://user@localhost:5173/',
   ])('always asks for %s', (url) => {
     const remembered = prefs({ alwaysOpenIn: { 'example.com': 'browser' } })
-    expect(asksBeforeOpening(url, remembered, inSession)).toBe(true)
+    expect(asksBeforeOpening(url, remembered, inSession, true)).toBe(true)
   })
 })
 
@@ -175,28 +182,29 @@ describe('planLinkOpen', () => {
   const url = 'https://kettu.sh/'
 
   it('takes the other place on a Mod-click', () => {
-    expect(planLinkOpen(url, prefs(), inSession, true)).toEqual({
+    expect(planLinkOpen(url, prefs(), inSession, false, true)).toEqual({
       destination: 'session',
       ask: false,
     })
-    expect(planLinkOpen(url, prefs({ openLinksIn: 'session' }), inSession, true)).toEqual({
+    expect(planLinkOpen(url, prefs({ openLinksIn: 'session' }), inSession, false, true)).toEqual({
       destination: 'browser',
       ask: false,
     })
-    expect(planLinkOpen('http://localhost:3000/', prefs(), inSession, true).destination).toBe(
-      'browser',
-    )
+    expect(
+      planLinkOpen('http://localhost:3000/', prefs(), inSession, false, true).destination,
+    ).toBe('browser')
   })
 
   it('never takes the session browser outside a session', () => {
-    expect(planLinkOpen(url, prefs(), noSession, true).destination).toBe('browser')
+    expect(planLinkOpen(url, prefs(), noSession, false, true).destination).toBe('browser')
   })
 
   it('still asks on a Mod-click when the site needs asking', () => {
-    expect(planLinkOpen(url, prefs({ confirmLinks: true }), inSession, true)).toEqual({
+    expect(planLinkOpen(url, prefs({ confirmLinks: true }), inSession, false, true)).toEqual({
       destination: 'session',
       ask: true,
     })
+    expect(planLinkOpen(url, prefs({ confirmLinks: true }), inSession, true, true).ask).toBe(false)
   })
 })
 
@@ -204,18 +212,20 @@ describe('planLinkOpenIn', () => {
   const url = 'https://kettu.sh/'
 
   it('takes the place chosen, asking as a click would', () => {
-    expect(planLinkOpenIn(url, prefs(), inSession, 'session')).toEqual({
+    expect(planLinkOpenIn(url, prefs(), inSession, false, 'session')).toEqual({
       destination: 'session',
       ask: false,
     })
-    expect(planLinkOpenIn(url, prefs({ confirmLinks: true }), inSession, 'browser')).toEqual({
-      destination: 'browser',
-      ask: true,
-    })
+    expect(planLinkOpenIn(url, prefs({ confirmLinks: true }), inSession, false, 'browser')).toEqual(
+      {
+        destination: 'browser',
+        ask: true,
+      },
+    )
   })
 
   it('opens only the default browser outside a session', () => {
-    expect(planLinkOpenIn(url, prefs(), noSession, 'session')).toEqual({
+    expect(planLinkOpenIn(url, prefs(), noSession, false, 'session')).toEqual({
       destination: 'browser',
       ask: false,
     })

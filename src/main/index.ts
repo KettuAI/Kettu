@@ -453,6 +453,7 @@ async function start(): Promise<void> {
         appState.flush(),
         sharing.flush(),
         browserOrigins.flush(),
+        siteIcons.flush(),
       ])
     },
     installUpdate: () => updater.installNow(),

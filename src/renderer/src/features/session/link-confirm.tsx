@@ -23,7 +23,7 @@ import { useDefaultBrowser, useSiteIcon } from '@renderer/stores/site-icons'
 import { hasUserinfo, linkHost, linkSite } from './link-open'
 import { BrowserIcon, WebLink, type LinkConfirmProps } from './markdown/web-link'
 
-/** The site's icon on a 32 px tile, or a globe for a site Kettu's browser never opened. */
+/** The site's icon on a 32 px tile, or a globe where Kettu's browser recorded none. */
 function SiteIcon({ url }: { url: string }) {
   const icon = useSiteIcon(url)
   if (icon) {

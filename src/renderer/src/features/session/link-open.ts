@@ -33,7 +33,10 @@ export function hasUserinfo(url: string): boolean {
   return !!parsed && (parsed.username !== '' || parsed.password !== '')
 }
 
-/** Whether a link goes to this computer: a loopback address, `localhost` or a `*.localhost` name. */
+/**
+ * Whether a link goes to this computer: a loopback address, `localhost` or a `*.localhost` name,
+ * or `0.0.0.0`, which dev servers print for listening on every interface.
+ */
 export function isLocalLink(url: string): boolean {
   const host = webUrl(url)?.hostname
   if (!host) return false
@@ -41,6 +44,7 @@ export function isLocalLink(url: string): boolean {
     host === 'localhost' ||
     host.endsWith('.localhost') ||
     host === '[::1]' ||
+    host === '0.0.0.0' ||
     /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
   )
 }
@@ -84,6 +88,8 @@ export function rememberedDestination(
   url: string,
   alwaysOpenIn: LinkPrefs['alwaysOpenIn'],
 ): LinkDestination | undefined {
+  // Spares the Public Suffix List lookup on every link drawn while no site is remembered.
+  if (Object.keys(alwaysOpenIn).length === 0) return undefined
   const site = linkSite(url)
   return site !== null && Object.hasOwn(alwaysOpenIn, site) ? alwaysOpenIn[site] : undefined
 }
@@ -113,13 +119,20 @@ export function defaultDestination(
 /**
  * Whether the "Open link?" dialog asks first: always for an address with a user name or a
  * password, never for a local address in a session, and otherwise unless the site was remembered,
- * while the setting is Ask or "Ask before opening a site for the first time" is on.
+ * while the setting is Ask, or while "Ask before opening a site for the first time" is on and the
+ * site is not `known`, that is, never opened from Kettu.
  */
-export function asksBeforeOpening(url: string, prefs: LinkPrefs, context: LinkContext): boolean {
+export function asksBeforeOpening(
+  url: string,
+  prefs: LinkPrefs,
+  context: LinkContext,
+  known: boolean,
+): boolean {
   if (hasUserinfo(url)) return true
   if (context.session && isLocalLink(url)) return false
   if (rememberedDestination(url, prefs.alwaysOpenIn)) return false
-  return prefs.confirmLinks || (prefs.openLinksIn === 'ask' && context.session)
+  if (prefs.openLinksIn === 'ask' && context.session) return true
+  return prefs.confirmLinks && !known
 }
 
 export interface LinkPlan {
@@ -132,11 +145,12 @@ export function planLinkOpenIn(
   url: string,
   prefs: LinkPrefs,
   context: LinkContext,
+  known: boolean,
   destination: LinkDestination,
 ): LinkPlan {
   return {
     destination: context.session ? destination : 'browser',
-    ask: asksBeforeOpening(url, prefs, context),
+    ask: asksBeforeOpening(url, prefs, context, known),
   }
 }
 
@@ -145,10 +159,17 @@ export function planLinkOpen(
   url: string,
   prefs: LinkPrefs,
   context: LinkContext,
+  known: boolean,
   other: boolean,
 ): LinkPlan {
   const destination = defaultDestination(url, prefs, context)
-  return planLinkOpenIn(url, prefs, context, other ? otherDestination(destination) : destination)
+  return planLinkOpenIn(
+    url,
+    prefs,
+    context,
+    known,
+    other ? otherDestination(destination) : destination,
+  )
 }
 
 /** The remembered sites with `site` sent to `destination`, newest last, within the limit. */

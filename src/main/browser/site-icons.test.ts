@@ -12,15 +12,25 @@ import {
   pickFavicon,
   SiteIcons,
   type IconFetch,
+  type SiteIconsDeps,
 } from './site-icons'
 
 const folders: string[] = []
+const stores: SiteIcons[] = []
 
 afterEach(async () => {
   vi.useRealTimers()
   vi.restoreAllMocks()
+  // A write still waiting or running would put a file in the folder while it is removed.
+  await Promise.all(stores.splice(0).map((store) => store.flush()))
   await Promise.all(folders.splice(0).map((folder) => rm(folder, { recursive: true, force: true })))
 })
+
+function open(folder: string, deps: SiteIconsDeps): SiteIcons {
+  const store = SiteIcons.open(folder, deps)
+  stores.push(store)
+  return store
+}
 
 async function tempFolder(): Promise<string> {
   const folder = await mkdtemp(path.join(os.tmpdir(), 'kettu-site-icons-'))
@@ -41,7 +51,7 @@ async function icons(
   const folder = await tempFolder()
   const events: SiteIconEvent[] = []
   const fetch = vi.fn<IconFetch>(async (url, init) => answer(url, init))
-  const store = SiteIcons.open(folder, { fetch, changed: (event) => events.push(event) })
+  const store = open(folder, { fetch, changed: (event) => events.push(event) })
   await store.ready
   return { store, events, fetch, folder }
 }
@@ -60,17 +70,58 @@ const loaded = (fetch: { mock: { calls: [string, RequestInit][] } }) =>
 const fakeTimers = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
 
 describe('pickFavicon', () => {
+  const page = 'https://a.com/'
+
   it('takes the first http, https or data icon', () => {
-    expect(pickFavicon(['file:///x.ico', 'https://a.com/1.png', 'https://a.com/2.png'])).toBe(
+    expect(pickFavicon(['file:///x.ico', 'https://a.com/1.png', 'https://a.com/2.png'], page)).toBe(
       'https://a.com/1.png',
     )
-    expect(pickFavicon(['data:image/png;base64,AA=='])).toBe('data:image/png;base64,AA==')
+    expect(pickFavicon(['data:image/png;base64,AA=='], page)).toBe('data:image/png;base64,AA==')
   })
 
   it('has none among other schemes, text that is no URL, or values that are no text', () => {
-    expect(pickFavicon(['javascript:alert(1)', 'not a url', 42, 'kettu-media://x'])).toBeNull()
-    expect(pickFavicon([])).toBeNull()
+    expect(
+      pickFavicon(['javascript:alert(1)', 'not a url', 42, 'kettu-media://x'], page),
+    ).toBeNull()
+    expect(pickFavicon([], page)).toBeNull()
   })
+
+  it.each([
+    'http://127.0.0.1/x.png',
+    'http://0x7f.1/x.png',
+    'http://10.1.2.3/x.png',
+    'http://172.16.0.1/x.png',
+    'http://172.31.255.1/x.png',
+    'http://192.168.1.1/x.png',
+    'http://169.254.169.254/x.png',
+    'http://0.0.0.0:8000/x.png',
+    'http://localhost:5173/x.png',
+    'http://LOCALHOST./x.png',
+    'http://app.localhost/x.png',
+    'http://[::1]/x.png',
+    'http://[::]/x.png',
+    'http://[::ffff:127.0.0.1]/x.png',
+    'http://[fd12::1]/x.png',
+    'http://[fe80::1]/x.png',
+  ])("skips %s on a page on the internet, for the page's next icon", (icon) => {
+    expect(pickFavicon([icon, 'https://a.com/favicon.png'], page)).toBe('https://a.com/favicon.png')
+    expect(pickFavicon([icon], page)).toBeNull()
+  })
+
+  it('takes a public address next to the private ranges', () => {
+    expect(pickFavicon(['http://172.32.0.1/x.png'], page)).toBe('http://172.32.0.1/x.png')
+    expect(pickFavicon(['http://192.169.0.1/x.png'], page)).toBe('http://192.169.0.1/x.png')
+  })
+
+  it.each(['http://localhost:5173/', 'http://192.168.1.10:8080/', 'http://[::1]:3000/'])(
+    'takes a local or private icon for a page on %s',
+    (pageUrl) => {
+      expect(pickFavicon(['http://127.0.0.1:5173/x.png'], pageUrl)).toBe(
+        'http://127.0.0.1:5173/x.png',
+      )
+      expect(pickFavicon(['http://192.168.1.1/x.png'], pageUrl)).toBe('http://192.168.1.1/x.png')
+    },
+  )
 })
 
 describe('dataIcon', () => {
@@ -245,13 +296,61 @@ describe('SiteIcons', () => {
     })
   })
 
-  it('stops the load in flight for a data icon named after it', async () => {
+  it('stops the load in flight for a data icon named after it, once the gap has passed', async () => {
+    fakeTimers()
     const { store, fetch } = await icons(async (_, init) => untilStopped(init))
     const load = store.favicons('https://kettu.sh/', ['https://kettu.sh/favicon.png'])
     await store.favicons('https://kettu.sh/', [PNG_ICON])
+    expect(fetch.mock.calls[0]![1].signal!.aborted).toBe(false)
+    await vi.advanceTimersByTimeAsync(LOAD_GAP_MS)
     await load
     expect(fetch.mock.calls[0]![1].signal!.aborted).toBe(true)
     expect(await store.all()).toEqual({ 'https://kettu.sh': PNG_ICON })
+  })
+
+  it('takes one data icon per site in the gap, then only the latest named', async () => {
+    fakeTimers()
+    const { store, events, fetch } = await icons()
+    const frames = [1, 2, 3, 4].map(
+      (n) => `data:image/png;base64,${Buffer.from([n]).toString('base64')}`,
+    )
+    for (const frame of frames) await store.favicons('https://kettu.sh/', [frame])
+    const told = () => events.filter((event) => event.kind === 'set' && event.icon !== null)
+    expect(told()).toEqual([{ kind: 'set', origin: 'https://kettu.sh', icon: frames[0] }])
+    await vi.advanceTimersByTimeAsync(LOAD_GAP_MS - 1)
+    expect(told()).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(told().at(-1)).toEqual({ kind: 'set', origin: 'https://kettu.sh', icon: frames[3] })
+    expect(told()).toHaveLength(2)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('tells nothing and writes nothing when the icon kept does not change', async () => {
+    fakeTimers()
+    const { store, events, folder } = await icons()
+    const svg = Buffer.from('<svg/>')
+    await store.favicons('https://kettu.sh/', [
+      `data:image/svg+xml;base64,${svg.toString('base64')}`,
+    ])
+    await store.flush()
+    const file = path.join(folder, 'state', 'site-icons.json')
+    const written = await readFile(file, 'utf8')
+    const told = events.length
+    await vi.advanceTimersByTimeAsync(LOAD_GAP_MS)
+    await store.favicons('https://kettu.sh/', ['data:image/svg+xml,%3Csvg%2F%3E'])
+    await vi.advanceTimersByTimeAsync(LOAD_GAP_MS)
+    expect(events).toHaveLength(told)
+    await rm(file)
+    await vi.advanceTimersByTimeAsync(LOAD_GAP_MS)
+    await store.flush()
+    await expect(readFile(file, 'utf8')).rejects.toThrow()
+    expect(written).toContain('PHN2Zy8+')
+  })
+
+  it('does not load an icon on this computer or a private network for a site on the internet', async () => {
+    const { store, fetch } = await icons()
+    await store.favicons('https://kettu.sh/', ['http://192.168.1.1/favicon.png'])
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('forgets the site opened longest ago beyond the limit', async () => {
@@ -282,6 +381,15 @@ describe('SiteIcons', () => {
     expect(events.at(-1)).toEqual({ kind: 'cleared' })
   })
 
+  it('writes the cleared list at once', async () => {
+    const { store, folder } = await icons()
+    store.visited('https://kettu.sh/')
+    await store.flush()
+    await store.clear()
+    const file = path.join(folder, 'state', 'site-icons.json')
+    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ version: 1, sites: [] })
+  })
+
   it('writes the sites to state/site-icons.json and reads them back', async () => {
     const { store, folder } = await icons()
     await store.favicons('https://kettu.sh/', ['https://kettu.sh/favicon.png'])
@@ -295,7 +403,7 @@ describe('SiteIcons', () => {
         { origin: 'https://example.com', icon: null, source: null },
       ],
     })
-    const reopened = SiteIcons.open(folder, { fetch: vi.fn(), changed: () => {} })
+    const reopened = open(folder, { fetch: vi.fn(), changed: () => {} })
     expect(await reopened.all()).toEqual({
       'https://kettu.sh': PNG_ICON,
       'https://example.com': null,
@@ -312,7 +420,7 @@ describe('SiteIcons', () => {
         sites: [{ origin: 'https://kettu.sh', icon: PNG_ICON, source: 'https://kettu.sh/a.png' }],
       }),
     )
-    const store = SiteIcons.open(folder, { fetch: vi.fn(), changed: () => {} })
+    const store = open(folder, { fetch: vi.fn(), changed: () => {} })
     const early = store.all()
     store.visited('https://example.com/')
     expect(await early).toEqual({ 'https://kettu.sh': PNG_ICON, 'https://example.com': null })
@@ -324,7 +432,7 @@ describe('SiteIcons', () => {
     const folder = await tempFolder()
     await mkdir(path.join(folder, 'state'), { recursive: true })
     await writeFile(path.join(folder, 'state', 'site-icons.json'), '{ not json')
-    const store = SiteIcons.open(folder, { fetch: vi.fn(), changed: () => {} })
+    const store = open(folder, { fetch: vi.fn(), changed: () => {} })
     expect(await store.all()).toEqual({})
   })
 })

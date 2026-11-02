@@ -36,7 +36,7 @@ export interface DefaultBrowser {
   icon: string | null // a `data:image/png` URL
 }
 
-/** The icon of each site Kettu's browser opened, as a `data:` URL by origin; null for none. */
+/** The icon of each site opened from Kettu, as a `data:` URL by origin; null for none. */
 export type SiteIconMap = Record<string, string | null>
 
 /** A change to the sites' icons. */
@@ -273,6 +273,8 @@ export interface IpcInvokeContract {
   'browser:remove-allowed-site': { args: [projectPath: string, origin: string]; result: void }
   'browser:clear-data': { args: []; result: void }
   'browser:site-icons': { args: []; result: SiteIconMap }
+  /** A link in Kettu opened the address, in either place, so its site counts as opened. */
+  'browser:site-opened': { args: [url: string]; result: void }
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeContract
@@ -588,6 +590,8 @@ export interface KettuApi {
     /** The icons of the sites the pages opened, which links in replies show. */
     siteIcons(): Promise<SiteIconMap>
     onSiteIcon(listener: (event: SiteIconEvent) => void): () => void
+    /** A link in Kettu opened `url`, in either place: its site is recorded, without an icon. */
+    siteOpened(url: string): Promise<void>
     /** The sessions that still exist; a page whose session does not is closed. */
     setSessions(sessionIds: string[]): void
     onState(listener: (state: BrowserState) => void): () => void

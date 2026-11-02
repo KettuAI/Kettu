@@ -1,4 +1,5 @@
 import {
+  createContext,
   isValidElement,
   useContext,
   useEffect,
@@ -21,14 +22,22 @@ import {
   ContextMenuShortcut,
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
+import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { SessionIdContext } from '@renderer/features/session/media/grants'
 import { errorMessage } from '@renderer/lib/host'
+import { i18n } from '@renderer/lib/i18n'
 import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { loadSiteIcons, useDefaultBrowser, useSiteIcon } from '@renderer/stores/site-icons'
+import {
+  iconFor,
+  loadSiteIcons,
+  useDefaultBrowser,
+  useSiteIcon,
+  useSiteIconsStore,
+} from '@renderer/stores/site-icons'
 import { openSession, toggleSidePane, useViewStore } from '@renderer/stores/view'
 import {
   bareParts,
@@ -68,6 +77,10 @@ function useLinkContext(): { sessionId: string | null; context: LinkContext } {
  * side panel then shows for the session's project.
  */
 function openLinkIn(url: string, destination: LinkDestination, sessionId: string | null) {
+  // Either place makes the site one opened from Kettu, which is not asked about as new again.
+  window.kettu.browser
+    .siteOpened(url)
+    .catch((e: unknown) => console.warn(`Could not record the link's site: ${errorMessage(e)}`))
   const summary = sessionId ? useSessionsStore.getState().byId[sessionId] : undefined
   if (destination === 'session' && sessionId && summary) {
     const { main } = useViewStore.getState()
@@ -75,7 +88,9 @@ function openLinkIn(url: string, destination: LinkDestination, sessionId: string
       openSession(sessionId, summary.projectPath)
     }
     toggleSidePane(summary.projectPath, 'browser', true)
-    void window.kettu.browser.navigate(sessionId, url)
+    window.kettu.browser
+      .navigate(sessionId, url)
+      .catch((e: unknown) => toast(i18n.t('session:link.openFailed', { error: errorMessage(e) })))
     return
   }
   // Main hands the address of a window the page opens to the default browser.
@@ -108,7 +123,7 @@ export function BrowserIcon({
 
 /**
  * A link's 14 px tile: the session browser's glyph on the fox's tint for a local address, the
- * icon recorded when Kettu's browser opened the site, or a globe for a site it never opened.
+ * icon recorded when Kettu's browser opened the site, or a globe where it recorded none.
  */
 function SiteTile({ url }: { url: string }) {
   const icon = useSiteIcon(url)
@@ -214,21 +229,27 @@ function LinkText({ url, children }: { url: string; children: ReactNode }) {
   )
 }
 
+interface WebLinkProps {
+  url: string
+  children?: ReactNode
+  confirm: ComponentType<LinkConfirmProps>
+}
+
+// Set within a link's text, where another link, such as a linked badge's image, is drawn as text.
+const InsideLink = createContext(false)
+
 /**
  * A web link in the thread: its site's icon and its text over one line. A click opens it where
  * Settings > Browser says, a Mod-click (Cmd on macOS, Ctrl elsewhere) in the other place, and
  * the "Open link?" dialog asks first where the settings want it to. Its menu offers both places
- * and copies it.
+ * and copies it. Inside another link's text it is only its text, so a click opens one link.
  */
-export function WebLink({
-  url,
-  children,
-  confirm: Confirm,
-}: {
-  url: string
-  children?: ReactNode
-  confirm: ComponentType<LinkConfirmProps>
-}) {
+export function WebLink(props: WebLinkProps) {
+  if (useContext(InsideLink)) return props.children ?? props.url
+  return <OuterWebLink {...props} />
+}
+
+function OuterWebLink({ url, children, confirm: Confirm }: WebLinkProps) {
   const { t } = useTranslation('session')
   const { sessionId, context } = useLinkContext()
   const thread = useSettingsStore((s) => s.settings.thread)
@@ -260,9 +281,11 @@ export function WebLink({
     else openLinkIn(url, destination, sessionId)
   }
   const prefs = () => useSettingsStore.getState().settings.thread
+  // Known once opened from Kettu in either place, as the dialog's "First visit" reads it.
+  const known = () => iconFor(useSiteIconsStore.getState().sites, url) !== undefined
   const openTo = (destination: LinkDestination) =>
-    run(planLinkOpenIn(url, prefs(), context, destination))
-  const openFromClick = (other: boolean) => run(planLinkOpen(url, prefs(), context, other))
+    run(planLinkOpenIn(url, prefs(), context, known(), destination))
+  const openFromClick = (other: boolean) => run(planLinkOpen(url, prefs(), context, known(), other))
   const copy = (text: string) => void navigator.clipboard.writeText(text)
 
   // Mod+Enter in the menu takes the other place, as a Mod-click does.
@@ -311,7 +334,9 @@ export function WebLink({
               />
             }
           >
-            <LinkText url={url}>{label}</LinkText>
+            <InsideLink value>
+              <LinkText url={url}>{label}</LinkText>
+            </InsideLink>
           </TooltipTrigger>
           <TooltipContent anchor={firstLine} align="start" sideOffset={6} className="max-w-md">
             {primary === 'session' ? (

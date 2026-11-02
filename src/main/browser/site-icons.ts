@@ -1,7 +1,8 @@
 // The icons of the sites Kettu's own browser opened, which links in replies show. A site is
-// recorded only when a session's page opens it, and its icon comes through the browser's own
-// partition, so drawing a link never contacts its site.
+// recorded when a session's page or a link in Kettu opens it, and its icon comes only through the
+// browser's own partition, so drawing a link never contacts its site.
 
+import { BlockList, isIPv4, isIPv6 } from 'node:net'
 import { join } from 'node:path'
 import type { SiteIconEvent, SiteIconMap } from '@shared/ipc'
 import { JsonFileWriter, readJsonFile } from '../json-file'
@@ -49,12 +50,39 @@ export interface SiteIconsDeps {
   changed(event: SiteIconEvent): void
 }
 
-/** The icon a page names that may be kept: its first http(s) or `data:` one. */
-export function pickFavicon(favicons: readonly unknown[]): string | null {
+const PRIVATE_NETWORKS = new BlockList()
+PRIVATE_NETWORKS.addAddress('0.0.0.0')
+PRIVATE_NETWORKS.addSubnet('127.0.0.0', 8)
+PRIVATE_NETWORKS.addSubnet('10.0.0.0', 8)
+PRIVATE_NETWORKS.addSubnet('172.16.0.0', 12)
+PRIVATE_NETWORKS.addSubnet('192.168.0.0', 16)
+PRIVATE_NETWORKS.addSubnet('169.254.0.0', 16)
+PRIVATE_NETWORKS.addAddress('::', 'ipv6')
+PRIVATE_NETWORKS.addAddress('::1', 'ipv6')
+PRIVATE_NETWORKS.addSubnet('fc00::', 7, 'ipv6')
+PRIVATE_NETWORKS.addSubnet('fe80::', 10, 'ipv6')
+
+/** Whether a URL's host is this computer or on a private network, by its name or address. */
+function isPrivateHost(url: URL): boolean {
+  const host = url.hostname.replace(/^\[|\]$/g, '').replace(/\.$/, '')
+  if (host === 'localhost' || host.endsWith('.localhost')) return true
+  if (isIPv4(host)) return PRIVATE_NETWORKS.check(host, 'ipv4')
+  return isIPv6(host) && PRIVATE_NETWORKS.check(host, 'ipv6')
+}
+
+/**
+ * The icon a page names that may be kept: its first http(s) or `data:` one. A page on the
+ * internet cannot make main load from this computer or a private network.
+ */
+export function pickFavicon(favicons: readonly unknown[], pageUrl: string): string | null {
+  const page = URL.parse(pageUrl)
+  const local = page !== null && isPrivateHost(page)
   for (const favicon of favicons) {
     if (typeof favicon !== 'string') continue
-    const protocol = URL.parse(favicon)?.protocol
-    if (protocol === 'http:' || protocol === 'https:' || protocol === 'data:') return favicon
+    const url = URL.parse(favicon)
+    if (url?.protocol === 'data:') return favicon
+    if (url?.protocol !== 'http:' && url?.protocol !== 'https:') continue
+    if (local || !isPrivateHost(url)) return favicon
   }
   return null
 }
@@ -151,21 +179,19 @@ export class SiteIcons {
 
   /**
    * The page at `pageUrl` named its icons; the first fit one is loaded and kept for its origin.
-   * A site starts at most one load per `LOAD_GAP_MS`; what its page names in between waits, and
-   * only the latest of it loads.
+   * A site starts at most one load per `LOAD_GAP_MS`, a `data:` icon's included, as a page that
+   * draws its icon on a canvas names a new one each frame; what its page names in between waits,
+   * and only the latest of it loads.
    */
   async favicons(pageUrl: string, favicons: readonly unknown[]): Promise<void> {
     const origin = originOf(pageUrl)
-    const source = pickFavicon(favicons)
+    const source = pickFavicon(favicons, pageUrl)
     if (origin === null || source === null) return
     if (!this.fileRead) await this.ready
     if (!this.sites.has(origin)) this.record(pageUrl)
     const loading = this.loadingOf(origin)
     if (this.sites.get(origin)?.source === source) {
       stop(loading)
-    } else if (source.startsWith('data:')) {
-      stop(loading)
-      this.keep(origin, source, dataIcon(source))
     } else if (loading.current?.source === source) {
       unwait(loading)
     } else {
@@ -182,8 +208,8 @@ export class SiteIcons {
     }
   }
 
-  /** Forgets every site, with the browser's other data. */
-  clear(): void {
+  /** Forgets every site, with the browser's other data, and writes that at once. */
+  async clear(): Promise<void> {
     this.whenRead(() => {
       for (const loading of this.loading.values()) stop(loading)
       this.loading.clear()
@@ -191,6 +217,7 @@ export class SiteIcons {
       this.deps.changed({ kind: 'cleared' })
       this.save()
     })
+    await this.flush()
   }
 
   async flush(): Promise<void> {
@@ -245,9 +272,14 @@ export class SiteIcons {
   /** Loads `source` for the site, stopping the load in flight. */
   private async load(origin: string, loading: Loading, source: string): Promise<void> {
     loading.current?.controller.abort()
+    loading.started = Date.now()
+    if (source.startsWith('data:')) {
+      loading.current = null
+      this.keep(origin, source, dataIcon(source))
+      return
+    }
     const current = { source, controller: new AbortController() }
     loading.current = current
-    loading.started = Date.now()
     const icon = await this.fetchIcon(source, current.controller.signal)
     if (loading.current !== current) return
     loading.current = null
@@ -257,8 +289,9 @@ export class SiteIcons {
   private keep(origin: string, source: string, icon: string | null): void {
     const site = this.sites.get(origin)
     if (!icon || !site) return
-    site.icon = icon
     site.source = source
+    if (site.icon === icon) return
+    site.icon = icon
     this.deps.changed({ kind: 'set', origin, icon })
     this.save()
   }

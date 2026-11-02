@@ -243,6 +243,7 @@ const api: KettuApi = {
     clearData: () => invoke('browser:clear-data'),
     siteIcons: () => invoke('browser:site-icons'),
     onSiteIcon,
+    siteOpened: (url) => invoke('browser:site-opened', url),
     setSessions: (ids) => send('browser:sessions', ids),
     onState: onBrowserState,
     onOpened: onBrowserOpened,
