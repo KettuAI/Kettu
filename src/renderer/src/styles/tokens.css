@@ -159,6 +159,8 @@
   --brand-codex-2: #7a9dff;
   --brand-codex-3: #3941ff;
   --brand-opencode-frame: #17181c;
+  /* Cloudflare's orange, on the account's tile in Settings › Sharing. */
+  --brand-cloudflare: #f48120;
   --brand-opencode-fill: #e6e5e6;
   /* Pi keeps its three colors in both variants. */
   --brand-pi-coral: #f09082;
@@ -327,6 +329,7 @@
     --diff-del-word: rgb(248 81 73 / 28%);
 
     --brand-opencode-frame: #ffffff;
+    --brand-cloudflare: #f48120;
     --brand-opencode-fill: #5a5858;
 
     --kind-web: #6cc0d2;
@@ -476,6 +479,7 @@
   --diff-del-word: rgb(248 81 73 / 28%);
 
   --brand-opencode-frame: #ffffff;
+  --brand-cloudflare: #f48120;
   --brand-opencode-fill: #5a5858;
 
   --kind-web: #6cc0d2;

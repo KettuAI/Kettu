@@ -723,7 +723,7 @@
   "sharing": {
     "groups": {
       "account": "Cloudflare",
-      "published": "Published artifacts"
+      "published": "Published"
     },
     "account": {
       "name": "Cloudflare account",
@@ -747,16 +747,20 @@
       "removeBody": "Kettu forgets the token. Published pages stay online; unpublishing them needs the account again.",
       "removed": "The Cloudflare account is removed",
       "plainText": "This system has no keyring, so the token is stored without the system's encryption.",
-      "dashboard": "Choose a subdomain in Cloudflare"
+      "dashboard": "Choose a subdomain in Cloudflare",
+      "keptConnected": "The token is kept encrypted by the system, only on this computer.",
+      "keptConnected_web": "The token is kept encrypted by the system, only on {{host}}."
     },
     "published": {
-      "version": "Version {{version}}, published {{ago}}",
+      "version": "version {{version}}, published {{ago}}",
       "keywords": "share published link url",
       "unpublish": "Unpublish",
       "unpublishTitle": "Unpublish “{{title}}”?",
       "unpublished": "Unpublished",
       "otherAccount": "Published with another Cloudflare account. Connect that account to change it.",
-      "empty": "Nothing is published yet."
+      "empty": "Nothing is published yet.",
+      "copyLink": "Copy link",
+      "copied": "Link copied"
     },
     "none": {
       "title": "Sharing needs the desktop app",

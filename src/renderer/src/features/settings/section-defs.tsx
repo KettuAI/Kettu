@@ -62,7 +62,7 @@ import {
 } from './harness-section'
 import { AgentPlaceRow, FailedRead, McpServerPage, PendingList, ServerRow } from './mcp-section'
 import { ArchivedRow } from './archived-section'
-import { GroupLabel, GroupNote } from './rows'
+import { GroupLabel, GroupNote, RowGroup, RowShell } from './rows'
 import { SettingSwitch } from './controls'
 import { HostPage } from './host-page'
 import { hostLine, webHostLine } from './host-text'
@@ -1372,9 +1372,13 @@ export function useSharingSection(): SectionDef {
     ...base,
     rows,
     footer: pages.length === 0 && (
-      <section aria-label={t('sharing.groups.published')} className="mt-7 flex flex-col">
+      <section aria-label={t('sharing.groups.published')} className="flex flex-col">
         <GroupLabel group={{ id: 'published', label: t('sharing.groups.published') }} />
-        <p className="px-1 pt-3 text-small text-tertiary">{t('sharing.published.empty')}</p>
+        <RowGroup>
+          <RowShell>
+            <p className="py-3.75 text-group text-tertiary">{t('sharing.published.empty')}</p>
+          </RowShell>
+        </RowGroup>
       </section>
     ),
   }

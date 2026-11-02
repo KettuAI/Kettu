@@ -719,7 +719,7 @@
   "sharing": {
     "groups": {
       "account": "Cloudflare",
-      "published": "已发布的 artifact"
+      "published": "已发布"
     },
     "account": {
       "name": "Cloudflare 账号",
@@ -743,7 +743,9 @@
       "removeBody": "Kettu 会删除保存的 token。已发布的页面仍然在线；之后要取消发布，需要重新连接这个账号。",
       "removed": "已移除 Cloudflare 账号",
       "plainText": "此系统没有钥匙串，token 会以不加密的方式保存。",
-      "dashboard": "在 Cloudflare 中选择子域名"
+      "dashboard": "在 Cloudflare 中选择子域名",
+      "keptConnected": "令牌由系统加密保存，只在这台电脑上。",
+      "keptConnected_web": "令牌由系统加密保存，只在 {{host}} 上。"
     },
     "published": {
       "version": "版本 {{version}}，发布于{{ago}}",
@@ -752,7 +754,9 @@
       "unpublishTitle": "要取消发布“{{title}}”吗？",
       "unpublished": "已取消发布",
       "otherAccount": "此页面是用另一个 Cloudflare 账号发布的。连接该账号后才能修改。",
-      "empty": "还没有发布任何 artifact。"
+      "empty": "还没有发布任何 artifact。",
+      "copyLink": "复制链接",
+      "copied": "链接已复制"
     },
     "none": {
       "title": "分享要用桌面应用",
