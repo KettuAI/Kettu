@@ -1,11 +1,12 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
+import { GlobeIcon, LockIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@renderer/lib/utils'
-import { addressParts, addressText, normalizeAddress } from './address'
+import { addressText, isLocalHost, normalizeAddress } from './address'
 
 /**
- * The address the page shows. The host leads in the primary color and the rest follows in the
- * tertiary one; focusing selects the whole address, and Esc puts back what the page shows.
+ * The address the page shows, after a lock for a page served over https or from this computer;
+ * focusing selects the whole address, and Esc puts back what the page shows.
  */
 export function AddressField({
   url,
@@ -23,8 +24,6 @@ export function AddressField({
   const [text, setText] = useState(shown)
   const [editing, setEditing] = useState(false)
   const [invalid, setInvalid] = useState(false)
-  const input = useRef<HTMLInputElement>(null)
-  const overlay = useRef<HTMLSpanElement>(null)
 
   // While the field does not have focus, it follows the page.
   if (!editing && text !== shown) setText(shown)
@@ -39,23 +38,24 @@ export function AddressField({
     onNavigate(url)
   }
 
-  const parts = editing ? null : url ? addressParts(url) : null
+  const secure = url ? isSecure(url) : false
 
   return (
-    <div className={cn('app-region-no-drag relative min-w-0', className)}>
-      {parts && (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-0 flex items-center overflow-hidden px-2.5 text-command whitespace-nowrap"
-        >
-          <span ref={overlay} className="block">
-            <span className="text-primary">{parts.host}</span>
-            <span className="text-tertiary">{parts.rest}</span>
-          </span>
-        </span>
+    <label
+      className={cn(
+        'app-region-no-drag flex h-7.5 min-w-0 items-center gap-2 rounded-xl bg-subtle px-2.5 text-tertiary transition-[background-color,box-shadow] duration-(--duration-fast)',
+        'hover:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] focus-within:bg-surface focus-within:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)]',
+        invalid && 'shadow-[inset_0_0_0_var(--hairline)_var(--danger)]!',
+        className,
       )}
+    >
+      {url &&
+        (secure ? (
+          <LockIcon aria-hidden strokeWidth={1.5} className="size-3.25 shrink-0" />
+        ) : (
+          <GlobeIcon aria-hidden className="size-3.25 shrink-0" />
+        ))}
       <input
-        ref={input}
         autoFocus={autoFocus}
         aria-label={t('address.label')}
         aria-invalid={invalid || undefined}
@@ -78,13 +78,8 @@ export function AddressField({
           setEditing(false)
           setInvalid(false)
           setText(shown)
-          // The colored address starts at its beginning, not where the field was scrolled to.
+          // The address starts at its beginning, not where the field was scrolled to.
           event.currentTarget.scrollLeft = 0
-        }}
-        onScroll={(event) => {
-          if (overlay.current) {
-            overlay.current.style.transform = `translateX(-${event.currentTarget.scrollLeft}px)`
-          }
         }}
         onKeyDown={(event) => {
           if (event.nativeEvent.isComposing || event.keyCode === 229) return
@@ -98,13 +93,17 @@ export function AddressField({
             event.currentTarget.blur()
           }
         }}
-        className={cn(
-          'h-7 w-full min-w-0 rounded-lg bg-subtle px-2.5 text-command text-primary outline-none transition-[background-color,box-shadow] duration-(--duration-fast)',
-          'hover:ring-1 hover:ring-border hover:ring-inset focus:bg-surface focus:ring-1 focus:ring-border-strong focus:ring-inset',
-          !editing && 'text-transparent caret-transparent',
-          invalid && 'ring-1 ring-danger ring-inset hover:ring-danger focus:ring-danger',
-        )}
+        className="h-full w-full min-w-0 bg-transparent text-hint text-primary outline-none placeholder:text-placeholder"
       />
-    </div>
+    </label>
   )
+}
+
+function isSecure(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' || isLocalHost(parsed.hostname)
+  } catch {
+    return false
+  }
 }

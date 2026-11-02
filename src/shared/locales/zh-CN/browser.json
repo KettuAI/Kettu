@@ -18,7 +18,8 @@
     "tryAgain": "重试",
     "openExternal": "在浏览器中打开",
     "maximize": "最大化",
-    "restore": "还原"
+    "restore": "还原",
+    "closeBrowser": "关闭浏览器"
   },
   "notice": {
     "downloadBlocked": "Kettu 的浏览器会拦截下载",
@@ -26,10 +27,10 @@
     "loadFailed": "此页面未能加载：{{error}}"
   },
   "control": {
-    "using": "{{agent}} 正在使用浏览器",
-    "stop": "停止",
-    "you": "控制权在你手里",
-    "handBack": "交还"
+    "using": "{{agent}} 正在操作",
+    "you": "由你操作",
+    "handBack": "交还",
+    "takeOver": "接管"
   },
   "origin": {
     "decision": {
@@ -44,5 +45,6 @@
       "timeout": "未在限定时间内得到答复"
     },
     "asks": "{{agent}} 想要打开"
-  }
+  },
+  "tabs": "页面"
 }
