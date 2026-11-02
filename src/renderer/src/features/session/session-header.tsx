@@ -20,7 +20,7 @@ import { useRenaming } from '@renderer/features/sidebar/use-renaming'
 import { agentName } from '@renderer/stores/agents'
 import { cn } from '@renderer/lib/utils'
 import { useRoutinesStore } from '@renderer/stores/routines'
-import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openRoutine, openSession } from '@renderer/stores/view'
 
 /** A sub-session's parent at the start of the top bar, then a slash: back to the parent. */
@@ -50,7 +50,7 @@ export function ParentLink({ parent }: { parent: SessionSummary }) {
           {parent.origin === 'subagent' ? (
             <BotIcon aria-hidden className="size-3.5" />
           ) : (
-            <AgentMark agent={parent.agentId} size={14} />
+            <AgentMark agent={parent.agentId} size={14} hostId={hostOfSession(parent)} />
           )}
           <span className="max-w-24 truncate">{title}</span>
         </TooltipTrigger>
@@ -111,7 +111,7 @@ export function SessionHeader({
           {summary.origin === 'subagent' ? (
             <BotIcon className="size-4 text-secondary" />
           ) : (
-            <AgentMark agent={summary.agentId} size={16} />
+            <AgentMark agent={summary.agentId} size={16} hostId={hostOfSession(summary)} />
           )}
         </span>
         <HostChip projectPath={summary.projectPath} />

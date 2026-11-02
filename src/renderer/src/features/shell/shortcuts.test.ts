@@ -20,6 +20,15 @@ describe('shortcutList', () => {
     expect(keysOf('mod-enter', 'newLine')).toBe('Enter')
   })
 
+  it('lists the whole history beside Back and Forward', () => {
+    const rows = shortcutList('enter').map((row) => row.action)
+    expect(rows.slice(rows.indexOf('back'), rows.indexOf('back') + 3)).toEqual([
+      'back',
+      'forward',
+      'history',
+    ])
+  })
+
   it('lists each action once per group', () => {
     const rows = shortcutList('enter')
     expect(new Set(rows.map((row) => `${row.group}:${row.action}`)).size).toBe(rows.length)

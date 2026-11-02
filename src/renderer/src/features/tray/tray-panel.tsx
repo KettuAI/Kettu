@@ -17,7 +17,7 @@ import type { RemoteStatus } from '@shared/remote/status'
 import type { TrayTarget } from '@shared/tray'
 import glyphUrl from '@renderer/assets/kettu-glyph-on-dark.svg'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import { Spinner } from '@renderer/components/ui/spinner'
+import { RingSpinner } from '@renderer/components/ui/spinner'
 import { relativePath } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { glide } from '@renderer/lib/motion'
@@ -252,9 +252,7 @@ function List() {
           {groups.running.length > 0 && <GroupLabel>{t('group.running')}</GroupLabel>}
           {groups.running.map((s) => (
             <RunningRow key={s.id} summary={s} detail={details[s.id]}>
-              {(line) =>
-                row(s, <Spinner aria-label={t('status.running')} className="size-3" />, line)
-              }
+              {(line) => row(s, <RingSpinner aria-label={t('status.running')} />, line)}
             </RunningRow>
           ))}
           {groups.finished.length > 0 && <GroupLabel>{t('group.finished')}</GroupLabel>}

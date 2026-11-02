@@ -130,7 +130,8 @@ export function AppSidebar() {
     <Sidebar
       collapsible="none"
       role="navigation"
-      className="w-full bg-transparent"
+      // An added agent's dot is ringed in the color behind its mark.
+      className="w-full bg-transparent [--agent-dot-ring:var(--bg-sidebar)]"
       aria-label={t('nav.label')}
     >
       <SidebarTitleBar />

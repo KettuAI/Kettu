@@ -184,6 +184,7 @@ export const SessionRow = memo(function SessionRow({
       <AgentMark
         agent={summary.agentId}
         size={16}
+        hostId={hostId}
         className={cn(
           'transition-[filter,opacity] duration-(--duration-base)',
           cacheGone(cache) && 'opacity-40 grayscale',
@@ -201,7 +202,7 @@ export const SessionRow = memo(function SessionRow({
       // The other panes' rows take the current row's fill, without its surface or its edge.
       className={cn(
         // The row its menu acts on keeps a fox ring while the menu is open.
-        'gap-[9px] pr-2.5 text-row data-active:font-medium data-multi-selected:bg-(--row-picked)',
+        'gap-[9px] pr-2.5 text-row data-active:font-medium data-active:[--agent-dot-ring:var(--bg-raised)] data-multi-selected:bg-(--row-picked)',
         inSplit && 'bg-selected font-medium',
         (menuOpen || moreOpen) && 'bg-hover shadow-[inset_0_0_0_1.5px_var(--focus)]',
         away && 'text-tertiary',

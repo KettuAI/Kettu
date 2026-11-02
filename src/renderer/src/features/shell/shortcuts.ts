@@ -12,6 +12,7 @@ export type ShortcutAction =
   | 'toggleSidebar'
   | 'back'
   | 'forward'
+  | 'history'
   | 'zoomIn'
   | 'zoomOut'
   | 'resetZoom'
@@ -46,6 +47,7 @@ export function shortcutList(sendKey: 'enter' | 'mod-enter'): Shortcut[] {
     { group: 'general', action: 'toggleSidebar', keys: 'Mod+B' },
     { group: 'general', action: 'back', keys: HISTORY_SHORTCUTS.back },
     { group: 'general', action: 'forward', keys: HISTORY_SHORTCUTS.forward },
+    { group: 'general', action: 'history', keys: HISTORY_SHORTCUTS.all },
     { group: 'general', action: 'zoomIn', keys: 'Mod+=' },
     { group: 'general', action: 'zoomOut', keys: 'Mod+-' },
     { group: 'general', action: 'resetZoom', keys: 'Mod+0' },

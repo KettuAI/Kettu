@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
-import { Spinner } from '@renderer/components/ui/spinner'
+import { RingSpinner, Spinner } from '@renderer/components/ui/spinner'
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { folderOf, nameOf } from '@renderer/features/files/paths'
 import { runningFor } from '@renderer/lib/format'
@@ -111,7 +111,7 @@ export function QuitConfirm() {
                 <span className="min-w-0 flex-1 truncate">{sessionTitle(s)}</span>
                 {s.turnStartedAt !== null && (
                   <span className="flex shrink-0 items-center gap-2 text-small text-tertiary tabular">
-                    <Spinner aria-hidden className="size-3" />
+                    <RingSpinner aria-hidden />
                     {runningFor(now - s.turnStartedAt)}
                   </span>
                 )}

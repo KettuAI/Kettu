@@ -156,12 +156,7 @@ function SubagentItem({ parent, child }: { parent: SessionSummary; child: Sessio
         </span>
       </ContextMenuTrigger>
       <ContextMenuContent onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}>
-        <SessionMenuItems
-          summary={child}
-          onRename={nothing}
-          onNewSubSession={nothing}
-          onDelete={nothing}
-        />
+        <SessionMenuItems summary={child} onNewSubSession={nothing} onDelete={nothing} />
       </ContextMenuContent>
     </ContextMenu>
   )

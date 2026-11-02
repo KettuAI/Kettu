@@ -16,7 +16,7 @@ import {
 import { useMessageScroller } from '@renderer/components/ui/message-scroller'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { RingSpinner, Spinner } from '@renderer/components/ui/spinner'
-import { SessionMenuItems, SessionTitleField } from '@renderer/features/sidebar/session-menu'
+import { SessionMenuItems } from '@renderer/features/sidebar/session-menu'
 import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-menu-model'
 import { useRenaming } from '@renderer/features/sidebar/use-renaming'
 import { duration } from '@renderer/lib/format'
@@ -140,69 +140,58 @@ function SubagentBlock({
       )}
     >
       <Collapsible open={open} onOpenChange={setUserOpen}>
-        {rename.renaming && child ? (
-          <div className={HEADER}>
-            <BotTile />
-            <SessionTitleField
-              summary={child}
-              onDone={rename.finish}
-              className="h-6 min-w-0 flex-1 rounded-sm bg-transparent px-0.5 font-medium outline-[1.5px] outline-offset-0 outline-edit-ring outline-solid selection:bg-edit-selection aria-invalid:outline-danger"
-            />
-          </div>
-        ) : (
-          <CollapsibleTrigger
-            ref={header}
-            className={cn(
-              HEADER,
-              'group/header w-full rounded-t-xl text-left outline-none transition-colors duration-(--duration-fast) not-data-panel-open:rounded-b-xl hover:bg-hover focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-focus focus-visible:outline-solid',
-            )}
-          >
-            <BotTile />
-            <span className="max-w-1/2 min-w-0 shrink-0 truncate font-medium text-primary">
-              {child ? sessionTitle(child) : t('subagent.fallbackTitle')}
+        <CollapsibleTrigger
+          ref={header}
+          className={cn(
+            HEADER,
+            'group/header w-full rounded-t-xl text-left outline-none transition-colors duration-(--duration-fast) not-data-panel-open:rounded-b-xl hover:bg-hover focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-focus focus-visible:outline-solid',
+          )}
+        >
+          <BotTile />
+          <span className="max-w-1/2 min-w-0 shrink-0 truncate font-medium text-primary">
+            {child ? sessionTitle(child) : t('subagent.fallbackTitle')}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-tertiary">{child?.description}</span>
+          {meta && (
+            <span className="shrink-0 text-caption whitespace-nowrap text-tertiary tabular-nums">
+              {meta}
             </span>
-            <span className="min-w-0 flex-1 truncate text-tertiary">{child?.description}</span>
-            {meta && (
-              <span className="shrink-0 text-caption whitespace-nowrap text-tertiary tabular-nums">
-                {meta}
-              </span>
-            )}
-            <span className="grid w-4 shrink-0 place-items-center">
-              {waiting ? (
-                <span
-                  role="img"
-                  aria-label={t('status.needsApproval')}
-                  className="size-2 rounded-full bg-attention-dot shadow-[0_0_0_3px_var(--attention-halo)]"
-                />
-              ) : failed ? (
-                <CircleAlertIcon
-                  role="img"
-                  aria-label={t('status.failed')}
-                  className="size-3.5 text-danger"
-                />
-              ) : running ? (
-                <RingSpinner aria-label={t('status.running')} className="size-3" />
-              ) : child && !cancelled ? (
-                <CheckIcon
-                  role="img"
-                  aria-label={t('status.done')}
-                  strokeWidth={1.9}
-                  className="size-3 text-success"
-                />
-              ) : null}
-            </span>
-            <span className="grid size-6 shrink-0 place-items-center rounded-tile text-tertiary transition-colors duration-(--duration-fast) group-hover/header:text-secondary">
-              <ChevronRightIcon
-                aria-hidden
-                strokeWidth={1.6}
-                className={cn(
-                  'size-3 transition-transform duration-(--duration-base) ease-standard motion-reduce:transition-none',
-                  open && 'rotate-90',
-                )}
+          )}
+          <span className="grid w-4 shrink-0 place-items-center">
+            {waiting ? (
+              <span
+                role="img"
+                aria-label={t('status.needsApproval')}
+                className="size-2 rounded-full bg-attention-dot shadow-[0_0_0_3px_var(--attention-halo)]"
               />
-            </span>
-          </CollapsibleTrigger>
-        )}
+            ) : failed ? (
+              <CircleAlertIcon
+                role="img"
+                aria-label={t('status.failed')}
+                className="size-3.5 text-danger"
+              />
+            ) : running ? (
+              <RingSpinner aria-label={t('status.running')} className="size-3" />
+            ) : child && !cancelled ? (
+              <CheckIcon
+                role="img"
+                aria-label={t('status.done')}
+                strokeWidth={1.9}
+                className="size-3 text-success"
+              />
+            ) : null}
+          </span>
+          <span className="grid size-6 shrink-0 place-items-center rounded-tile text-tertiary transition-colors duration-(--duration-fast) group-hover/header:text-secondary">
+            <ChevronRightIcon
+              aria-hidden
+              strokeWidth={1.6}
+              className={cn(
+                'size-3 transition-transform duration-(--duration-base) ease-standard motion-reduce:transition-none',
+                open && 'rotate-90',
+              )}
+            />
+          </span>
+        </CollapsibleTrigger>
         <CollapsibleContent className={PANEL} keepMounted={false}>
           <SubagentSteps
             childId={childId}
@@ -235,7 +224,6 @@ function SubagentBlock({
         {/* A sub-agent's menu has no Delete: it goes when its parent goes. */}
         <SessionMenuItems
           summary={child}
-          onRename={rename.menu.onRename}
           onNewSubSession={rename.menu.onLeave}
           onDelete={() => {}}
         />
