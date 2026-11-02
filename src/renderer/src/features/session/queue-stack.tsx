@@ -133,7 +133,7 @@ export function QueueStack({
           event.preventDefault()
           go(index + (event.key === 'ArrowUp' ? -1 : 1))
         }}
-        className="relative flex h-10.5 items-center gap-1.5 rounded-t-[12px] bg-surface pr-1.5 pb-2.5 pl-3 text-ui shadow-card"
+        className="relative flex h-10.5 items-center gap-1.5 rounded-t-card bg-surface pr-1.5 pb-2.5 pl-3 text-ui shadow-card"
       >
         <CornerDownRightIcon aria-hidden strokeWidth={1.5} className="size-3.25 shrink-0" />
         <span key={item.id} className="min-w-0 flex-1 truncate pl-0.5">
