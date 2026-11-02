@@ -200,6 +200,22 @@ async function appForScheme(scheme: string): Promise<string | null> {
 }
 
 /** Main's environment, without what makes another Electron app run as Node.js or as Kettu. */
+/**
+ * PATH with the folders editors install their commands into. An app started from a desktop launcher
+ * gets a minimal PATH, without the user's own folders.
+ */
+function linuxSearchPath(inherited: string | undefined, home: string): string {
+  const extra = [
+    path.posix.join(home, '.local/bin'),
+    path.posix.join(home, '.local/share/JetBrains/Toolbox/scripts'),
+    '/usr/local/bin',
+    '/snap/bin',
+    '/var/lib/flatpak/exports/bin',
+  ]
+  const folders = inherited ? inherited.split(':') : []
+  return [...folders, ...extra.filter((folder) => !folders.includes(folder))].join(':')
+}
+
 function launchEnv(env: Env): Env {
   return Object.fromEntries(
     Object.entries(env).filter(([key]) => {
@@ -232,7 +248,7 @@ function defaultLaunch(
       const child = spawn(program, [target], {
         detached: true,
         stdio: 'ignore',
-        windowsHide: true,
+        // No windowsHide: Windows would apply it to a GUI app's first window.
         env: launchEnv(env),
       })
       child.once('error', reject)
@@ -398,7 +414,7 @@ export class Editors {
     if (!editor.command) return null
     return findCommand(editor.command, {
       platform: this.platform,
-      env: this.env,
+      env: { ...this.env, PATH: linuxSearchPath(this.env.PATH, this.home) },
       isExecutable: this.isExecutable,
     })
   }

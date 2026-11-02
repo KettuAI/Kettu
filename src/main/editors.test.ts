@@ -193,6 +193,24 @@ describe('Editors.list', () => {
     expect(electron.lookups).toEqual([])
   })
 
+  // Started from a desktop launcher, the app gets a PATH without the user's own folders.
+  it("also looks in the user's and the package managers' folders on Linux", async () => {
+    const { editors } = await rig('linux', {
+      env: { PATH: '/usr/bin:/bin' },
+      programs: [
+        '/Users/ana/.local/bin/zed',
+        '/snap/bin/code',
+        '/Users/ana/.local/share/JetBrains/Toolbox/scripts/idea',
+      ],
+    })
+
+    expect((await editors.list()).editors.map((editor) => editor.id)).toEqual([
+      'vscode',
+      'zed',
+      'intellij-idea',
+    ])
+  })
+
   it('lists an app two schemes lead to once', async () => {
     electron.schemes.set('vscode://', '/Applications/Visual Studio Code.app')
     electron.schemes.set('vscode-insiders://', '/Applications/Visual Studio Code.app')
