@@ -126,7 +126,7 @@ export function SharingAccount() {
         <GlobeIcon className="size-4.25" />
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="flex min-w-0 items-center gap-2 text-label leading-tight">
+        <span className="flex min-w-0 items-center gap-2 text-label leading-[normal]">
           <span
             dir="ltr"
             className="truncate font-mono text-[length:inherit]"
@@ -445,7 +445,7 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
     <div className="flex items-center gap-3.5 py-3.25">
       <DeviceTile icon={<Link2Icon className="size-4.25" />} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-label leading-tight">{title ?? page.url}</span>
+        <span className="truncate text-label leading-[normal]">{title ?? page.url}</span>
         <ItemLine>
           <a
             href={page.url}

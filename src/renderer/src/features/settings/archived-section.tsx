@@ -32,7 +32,7 @@ export function ArchivedRow({ summary, where }: { summary: SessionSummary; where
     <div className="flex items-center gap-3.5 py-3.25">
       <AgentTile agent={summary.agentId} size={22} glyph={13} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-label leading-tight">{title}</span>
+        <span className="truncate text-label leading-[normal]">{title}</span>
         <ItemLine>
           {t('archived.description', {
             project: where,

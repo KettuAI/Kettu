@@ -119,7 +119,7 @@ export function AgentPlaceRow({ place }: { place: McpStatus['places'][number] })
     <div className="flex items-center gap-3.5 py-3.25">
       <AgentTile agent={place.agentId} size={30} glyph={16} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-label leading-tight">{name}</span>
+        <span className="truncate text-label leading-[normal]">{name}</span>
         <span className="text-group text-pretty text-tertiary" data-selectable="">
           {place.listCommand
             ? t('mcp.place.ownWithCommand', { command: place.listCommand, file: place.project })
@@ -344,7 +344,7 @@ function AgentSwitchRow({
       <div className="flex items-center gap-3.5 py-3.25">
         <AgentTile agent={agentId} size={30} glyph={16} />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-label leading-tight">{name}</span>
+          <span className="truncate text-label leading-[normal]">{name}</span>
           <span className="text-group text-tertiary">
             {takesNone
               ? t('mcp.agent.takesNone', { name })

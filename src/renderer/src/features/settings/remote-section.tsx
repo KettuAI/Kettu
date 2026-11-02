@@ -1,5 +1,5 @@
 import { useState, type KeyboardEvent, type ReactNode } from 'react'
-import { CircleAlertIcon, ClockIcon, PlusIcon, ScanQrCodeIcon, SmartphoneIcon } from 'lucide-react'
+import { CircleAlertIcon, ClockIcon, PlusIcon, QrCodeIcon, SmartphoneIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { PairedDevice } from '@shared/remote/device'
 import type { RemoteStatus } from '@shared/remote/status'
@@ -65,7 +65,7 @@ export function RemoteHeader({ id }: { id: string }) {
       </PageHeader>
       <div className="mt-4 flex items-center gap-4 rounded-xl bg-subtle px-4.5 py-3.5">
         <div className="min-w-0 flex-1">
-          <div className="text-label leading-tight font-semibold">{t('remote.switch')}</div>
+          <div className="text-label leading-[normal] font-semibold">{t('remote.switch')}</div>
           <RemoteStatusLine on={enabled} />
         </div>
         <ControlError error={error} />
@@ -322,7 +322,7 @@ export function AddDeviceButton({ disabled = false }: { disabled?: boolean }) {
   return (
     <>
       <Button className={ROW_BUTTON} disabled={disabled} onClick={() => setOpen(true)}>
-        <ScanQrCodeIcon data-icon="inline-start" />
+        <QrCodeIcon data-icon="inline-start" />
         {t('remote.devices.add')}
       </Button>
       <PairDialog open={open} onOpenChange={setOpen} />

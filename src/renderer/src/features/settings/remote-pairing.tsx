@@ -409,7 +409,7 @@ export function Confirm({
         <div className="flex items-center gap-3 rounded-xl bg-subtle p-3">
           <DeviceTile large icon={<DeviceIcon device={device} className="size-5" />} />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-label leading-tight">{device.name}</div>
+            <div className="truncate text-label leading-[normal]">{device.name}</div>
             <div className="mt-0.5 text-hint text-pretty text-tertiary">{line}</div>
           </div>
         </div>

@@ -149,7 +149,7 @@ export function RowShell({
 export function RowText({ name, description }: { name: ReactNode; description?: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col">
-      <span className="text-label leading-tight">{name}</span>
+      <span className="text-label leading-[normal]">{name}</span>
       {description && (
         <span className="mt-0.75 text-group leading-normal text-pretty text-tertiary">
           {description}
@@ -228,7 +228,7 @@ export function ItemRow({
       />
       <span className="pointer-events-none relative">{tile}</span>
       <div className="pointer-events-none relative flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex min-w-0 items-center gap-2 text-label leading-tight">{name}</div>
+        <div className="flex min-w-0 items-center gap-2 text-label leading-[normal]">{name}</div>
         {children}
       </div>
       <div className="pointer-events-none relative flex shrink-0 items-center gap-2">
@@ -241,7 +241,7 @@ export function ItemRow({
 
 /** A line under an item row's name, in the quiet small role. */
 export function ItemLine({ children }: { children: ReactNode }) {
-  return <span className="truncate text-group text-tertiary">{children}</span>
+  return <span className="truncate text-group leading-[normal] text-tertiary">{children}</span>
 }
 
 /**

@@ -543,7 +543,9 @@ export function SshAddBody({
           </div>
           {!failure && <span className="text-hint text-tertiary">{t('hosts.add.ssh.note')}</span>}
         </div>
-        {steps.length > 0 && <SshProgress steps={steps} failed={failure !== null} />}
+        {steps.length > 0 && (
+          <SshProgress steps={steps} failed={failure !== null} target={target} />
+        )}
         {failure && (
           <SshFailure
             id={errorId}
@@ -586,13 +588,27 @@ type StepState = 'done' | 'active' | 'failed' | 'pending'
  * Logging in, installing or updating once that turned out to be needed, adding this computer and
  * opening the channel: each done, under way, failed or still to come.
  */
-function SshProgress({ steps, failed }: { steps: SshStep[]; failed: boolean }) {
+function SshProgress({
+  steps,
+  failed,
+  target,
+}: {
+  steps: SshStep[]
+  failed: boolean
+  target: string
+}) {
   const { t } = useTranslation('settings')
   const install = steps.find((s) => s.step === 'installing' || s.step === 'updating')
-  const items: { id: SshStep['step']; label: string }[] = [
-    { id: 'connecting', label: t('hosts.add.ssh.steps.connecting') },
+  const items: { id: SshStep['step']; label: string; detail?: string }[] = [
+    { id: 'connecting', label: t('hosts.add.ssh.steps.connecting'), detail: target },
     ...(install?.step === 'installing'
-      ? [{ id: install.step, label: t('hosts.add.ssh.steps.installing', install) }]
+      ? [
+          {
+            id: install.step,
+            label: t('hosts.add.ssh.steps.installing', install),
+            detail: t('hosts.add.ssh.steps.installingDetail'),
+          },
+        ]
       : install?.step === 'updating'
         ? [{ id: install.step, label: t('hosts.add.ssh.steps.updating', install) }]
         : []),
@@ -624,10 +640,17 @@ function SshProgress({ steps, failed }: { steps: SshStep[]; failed: boolean }) {
                 <span className="size-2 rounded-full shadow-[inset_0_0_0_1.5px_var(--border-strong)]" />
               )}
             </span>
-            <span className="min-w-0 truncate">{item.label}</span>
-            {(state === 'done' || state === 'failed') && (
-              <span className="sr-only">{t(`hosts.add.ssh.steps.${state}`)}</span>
-            )}
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="truncate">
+                {item.label}
+                {(state === 'done' || state === 'failed') && (
+                  <span className="sr-only"> {t(`hosts.add.ssh.steps.${state}`)}</span>
+                )}
+              </span>
+              {item.detail && (
+                <span className="truncate text-hint text-tertiary">{item.detail}</span>
+              )}
+            </span>
           </li>
         )
       })}

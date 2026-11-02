@@ -141,14 +141,14 @@ function CatalogDialog({
           {t('appearance.catalog.description')}
         </SettingsDialogHeader>
         {listed && (
-          <div className="px-6 pt-3">
+          <div className="px-6 pt-3 [--control-height:--spacing(8.5)]">
             <SearchField
               value={query}
               onChange={setQuery}
               label={t('appearance.catalog.search')}
               clearLabel={t('page.clearSearch')}
               inputRef={search}
-              className="h-8.5 rounded-segments border-0 bg-subtle text-tertiary shadow-none [&_input]:text-lede"
+              className="rounded-segments border-0 bg-subtle text-tertiary shadow-none [&_input]:text-lede"
             />
           </div>
         )}

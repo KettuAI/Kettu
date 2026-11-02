@@ -662,7 +662,7 @@
     "automatic": {
       "name": "Automatic updates",
       "description": "When new versions download, and when they install.",
-      "download": "Download and install on quit",
+      "download": "Download, install on quit",
       "restart": "Download, install when I restart",
       "notify": "Ask before downloading",
       "off": "Off: check only when I ask",
@@ -694,8 +694,8 @@
     "notifications": "How Kettu reaches you when an agent needs you or finishes.",
     "notifications_web": "How this page reaches you when an agent on {{host}} needs you or finishes.",
     "account": "Your Kettu account, for Kettu’s cloud services.",
-    "agents": "The agents you pick to work with, each with its own account and limits. One harness can have several agents, such as one on a subscription and one on a company API key.",
-    "agents_web": "The agents on {{host}} you pick to work with, each with its own account and limits on {{host}}. One harness can have several agents, such as one on a subscription and one on a company API key.",
+    "agents": "An agent is a harness signed in to one account. Add a harness twice to keep a personal plan and a work key apart.",
+    "agents_web": "An agent on {{host}} is a harness signed in to one account there. Add a harness twice to keep a personal plan and a work key apart.",
     "terminal": "Which shell the side panel's terminal runs, and how it looks.",
     "git": "The top bar's branch and changes, pull requests and their checks all come from these two tools.",
     "advanced": "Network proxy, diagnostics and the data Kettu keeps on this computer.",
@@ -840,7 +840,8 @@
           "adding": "Add this computer",
           "opening": "Open the encrypted channel",
           "done": "done",
-          "failed": "failed"
+          "failed": "failed",
+          "installingDetail": "It runs as a daemon and starts at boot or login."
         },
         "output": "The last lines it printed",
         "errors": {

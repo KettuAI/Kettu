@@ -70,7 +70,9 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
   if (!status) {
     return (
       <div className="flex items-center gap-4">
-        <span className="min-w-0 flex-1 text-label leading-tight">{t('about.updates.name')}</span>
+        <span className="min-w-0 flex-1 text-label leading-[normal]">
+          {t('about.updates.name')}
+        </span>
         <Spinner className="size-3.5 text-tertiary" />
       </div>
     )
@@ -199,7 +201,7 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
   return (
     <div className="flex items-center gap-x-7 gap-y-3">
       <div className="flex min-w-0 flex-[1_1_280px] flex-col">
-        <span className="flex items-center gap-1.75 text-label leading-tight">{title}</span>
+        <span className="flex items-center gap-1.75 text-label leading-[normal]">{title}</span>
         {detail && (
           <span className="mt-0.75 text-group leading-normal text-tertiary">{detail}</span>
         )}
@@ -216,7 +218,7 @@ export function NoUpdates() {
   const onHost = useHostContext()
   return (
     <div className="flex flex-col">
-      <span className="text-label leading-tight">{t('about.updates.none', onHost)}</span>
+      <span className="text-label leading-[normal]">{t('about.updates.none', onHost)}</span>
       <span className="mt-0.75 text-group leading-normal text-tertiary">
         {t('about.updates.noneDetail', onHost)}
       </span>
@@ -278,7 +280,7 @@ export function LinkRow({
     <>
       <DeviceTile icon={<ExternalLinkIcon className="size-4" />} />
       <span className="relative flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-label leading-tight">{name}</span>
+        <span className="text-label leading-[normal]">{name}</span>
         {error ? (
           <span className="truncate text-group text-danger" title={error}>
             {error}

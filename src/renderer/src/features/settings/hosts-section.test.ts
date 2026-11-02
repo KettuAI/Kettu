@@ -240,14 +240,14 @@ describe('Add host over SSH', () => {
 
   it('shows each step, with installing or updating once it is needed', async () => {
     expect(body({ kind: 'working', steps: [{ step: 'connecting' }] })).toBe(
-      'Add host SSH address Connect Kettu uses your ssh setup and never reads or stores your keys. Log in over SSH Add this computer Open the encrypted channel Cancel',
+      'Add host SSH address Connect Kettu uses your ssh setup and never reads or stores your keys. Log in over SSH lin@dev-box Add this computer Open the encrypted channel Cancel',
     )
     const updating = body({
       kind: 'working',
       steps: [{ step: 'connecting' }, { step: 'updating', from: '0.2.0', to: '0.3.0' }],
     })
     expect(updating).toContain(
-      'Log in over SSH done Update Kettu from 0.2.0 to 0.3.0 Add this computer Open the encrypted channel Cancel',
+      'Log in over SSH done lin@dev-box Update Kettu from 0.2.0 to 0.3.0 Add this computer Open the encrypted channel Cancel',
     )
     await i18n.changeLanguage('zh-CN')
     expect(
@@ -259,7 +259,9 @@ describe('Add host over SSH', () => {
           { step: 'adding' },
         ],
       }),
-    ).toContain('经 SSH 登录 已完成 安装 Kettu 0.3.0 已完成 添加这台电脑 打开加密通道 取消')
+    ).toContain(
+      '经 SSH 登录 已完成 lin@dev-box 安装 Kettu 0.3.0 已完成 它作为守护进程运行，开机或登录时自动启动。 添加这台电脑 打开加密通道 取消',
+    )
   })
 
   it.each([
@@ -296,7 +298,7 @@ describe('Add host over SSH', () => {
       }),
     )
     expect(install).toContain(
-      'Log in over SSH done Install Kettu 0.3.0 failed Add this computer Open the encrypted channel',
+      'Log in over SSH done lin@dev-box Install Kettu 0.3.0 failed It runs as a daemon and starts at boot or login. Add this computer Open the encrypted channel',
     )
     expect(install).toContain(
       'Installing Kettu on lin@dev-box failed. kettu install: Could not download it Close Retry',

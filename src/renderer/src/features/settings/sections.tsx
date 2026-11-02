@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { BellIcon, CheckIcon, GlobeIcon, MinusIcon, PlusIcon } from 'lucide-react'
+import { CheckIcon, GlobeIcon, MinusIcon, PlusIcon } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { originLabel } from '@shared/browser'
@@ -722,10 +722,8 @@ export function TestNotification() {
       >
         {busy ? (
           <Spinner data-icon="inline-start" className="size-3.5" />
-        ) : sent ? (
-          <CheckIcon data-icon="inline-start" className="text-success" />
         ) : (
-          <BellIcon data-icon="inline-start" />
+          sent && <CheckIcon data-icon="inline-start" className="text-success" />
         )}
         {t('notifications.test')}
       </Button>
@@ -1020,7 +1018,7 @@ export function AllowedSiteRow({
     <div className="flex items-center gap-3.5 py-3.25">
       <DeviceTile icon={<GlobeIcon className="size-4" />} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-label leading-tight">{originLabel(site.origin)}</span>
+        <span className="truncate text-label leading-[normal]">{originLabel(site.origin)}</span>
         <span className="truncate text-group text-tertiary">
           {t('browser.allowedSites.in', { projects: names.join(', ') })}
         </span>

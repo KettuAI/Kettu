@@ -690,8 +690,8 @@
     "notifications": "Agent 需要你或完成时，Kettu 如何通知你。",
     "notifications_web": "{{host}} 上的 Agent 需要你或完成时，这个页面如何通知你。",
     "account": "你的 Kettu 账号，用于 Kettu 的云服务。",
-    "agents": "你选来干活的 Agent，每个有自己的账号和额度。同一个 Harness 能有几个 Agent，比如一个用订阅、一个用公司的 API key。",
-    "agents_web": "{{host}} 上的 Agent，账号和额度都在 {{host}} 上。同一个 Harness 能有几个 Agent，比如一个用订阅、一个用公司的 API key。",
+    "agents": "Agent 是登录了一个账号的 Harness。把同一个 Harness 添加两次，就能把个人套餐和工作用的 key 分开。",
+    "agents_web": "{{host}} 上的 Agent 是在那里登录了一个账号的 Harness。把同一个 Harness 添加两次，就能把个人套餐和工作用的 key 分开。",
     "terminal": "侧边面板的终端运行哪个 shell，以及它的外观。",
     "git": "顶栏的分支与更改、Pull Request 和它的检查结果，都靠下面两个工具。",
     "advanced": "网络代理、诊断信息，以及 Kettu 保存在这台电脑上的数据。",
@@ -836,7 +836,8 @@
           "adding": "添加这台电脑",
           "opening": "打开加密通道",
           "done": "已完成",
-          "failed": "失败"
+          "failed": "失败",
+          "installingDetail": "它作为守护进程运行，开机或登录时自动启动。"
         },
         "output": "最后几行输出",
         "errors": {
