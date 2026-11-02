@@ -45,8 +45,8 @@ import {
   type OpenFile,
 } from '@renderer/stores/files'
 import { ChangeBadge } from './change-badge'
-import { FileTypeIcon } from './file-type-icon'
-import { folderOf, nameOf } from './paths'
+import { DiffFileToggle, PathLabel } from './file-header'
+import { nameOf } from './paths'
 
 const CodeEditor = lazy(() => import('./code-editor'))
 
@@ -64,10 +64,13 @@ export function FilePreview({
   projectPath,
   file,
   change,
+  onShowDiff,
 }: {
   projectPath: string
   file: OpenFile | null
   change?: ChangeStatus
+  /** Shows the file's uncommitted change instead, offered while it has one. */
+  onShowDiff?: () => void
 }) {
   const { t } = useTranslation('files')
   const source = useFilesStore((s) => s.markdownSource)
@@ -94,7 +97,6 @@ export function FilePreview({
       </Empty>
     )
   }
-  const folder = folderOf(file.path)
   return (
     <div
       data-file-preview=""
@@ -108,20 +110,21 @@ export function FilePreview({
         void saveFile(projectPath)
       }}
     >
-      <div className="flex h-row shrink-0 items-center gap-1 border-b border-subtle pr-1.5 pl-3.5 text-xs">
-        <FileTypeIcon path={file.path} className="mr-1 size-4" />
-        <span className="flex min-w-0 flex-1 items-baseline gap-1.5" title={file.path}>
-          <span className="shrink-0 font-mono text-code font-medium">{nameOf(file.path)}</span>
-          {change && <ChangeBadge status={change} />}
+      <div className="flex h-10 shrink-0 items-center gap-1 pr-2 pl-3.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]">
+        <span className="mr-1 flex min-w-0 flex-1 items-center gap-1.5">
+          <PathLabel path={file.path} />
+          {change && !onShowDiff && <ChangeBadge status={change} />}
           {file.dirty && (
             <span
               role="img"
               aria-label={t('preview.unsaved')}
-              className="size-1.5 shrink-0 self-center rounded-full bg-primary"
+              className="size-1.5 shrink-0 rounded-full bg-primary"
             />
           )}
-          {folder && <span className="truncate text-tertiary">{folder}</span>}
         </span>
+        {onShowDiff && (
+          <DiffFileToggle value="file" onChange={(next) => next === 'diff' && onShowDiff()} />
+        )}
         {file.dirty && (
           <PanelButton
             label={t('preview.save')}
@@ -161,7 +164,7 @@ export function FilePreview({
             {svgSource ? <BookOpenIcon className="size-3.5" /> : <CodeIcon className="size-3.5" />}
           </PanelButton>
         )}
-        <CopyButton text={file.path} label={t('preview.copyPath')} />
+        <CopyButton text={file.path} label={t('preview.copyPath')} className="size-6.5" />
         <PanelButton label={t('preview.closeFile')} onClick={() => closeFile(projectPath)}>
           <XIcon className="size-3.5" />
         </PanelButton>

@@ -139,6 +139,22 @@ function gitPath(o: Fields, key: string): string {
   return value
 }
 
+// The files of one commit or discard, at most as many as a request should carry.
+const GIT_PATHS = 1_000
+
+function gitPaths(o: Fields, key: string): string[] {
+  const value = o[key]
+  if (!Array.isArray(value) || value.length === 0 || value.length > GIT_PATHS) {
+    throw invalidParams(`${key} must be an array of 1 to ${GIT_PATHS} paths`)
+  }
+  const paths = value.map((path: unknown, index) => {
+    const at = `${key}[${index}]`
+    return gitPath({ [at]: path }, at)
+  })
+  if (new Set(paths).size !== paths.length) throw invalidParams(`${key} names a path twice`)
+  return paths
+}
+
 // A remote or branch name that cannot read as an option or carry a refspec's punctuation.
 function refName(o: Fields, key: string): string {
   const value = string(o, key, ID_CHARS)
@@ -803,6 +819,34 @@ export function createValidators(platform: Platform): Validators {
         oldPath: o.oldPath === null || o.oldPath === undefined ? null : gitPath(o, 'oldPath'),
         ref: o.ref === null || o.ref === undefined ? null : objectId(o, 'ref'),
       }
+    },
+    'git.branches': project,
+    'git.switchBranch': (params) => {
+      const o = fields(params)
+      return {
+        projectPath: absolutePath(o, 'projectPath', platform),
+        branch: refName(o, 'branch'),
+        create: flag(o, 'create'),
+      }
+    },
+    'git.publishBranch': (params) => {
+      const o = fields(params)
+      return { projectPath: absolutePath(o, 'projectPath', platform), remote: refName(o, 'remote') }
+    },
+    'git.commitChanges': (params) => {
+      const o = fields(params)
+      const message = string(o, 'message', 65_536)
+      if (message.trim() === '') throw invalidParams('message must not be blank')
+      if (message.includes('\0')) throw invalidParams('message contains a NUL character')
+      return {
+        projectPath: absolutePath(o, 'projectPath', platform),
+        message,
+        paths: gitPaths(o, 'paths'),
+      }
+    },
+    'git.discardChanges': (params) => {
+      const o = fields(params)
+      return { projectPath: absolutePath(o, 'projectPath', platform), paths: gitPaths(o, 'paths') }
     },
     'git.pullRequest': (params) => {
       const url = string(fields(params), 'url', URL_CHARS)

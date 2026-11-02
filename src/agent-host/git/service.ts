@@ -5,6 +5,7 @@ import { posix, win32 } from 'node:path'
 import {
   GITHUB_LOGIN,
   GITHUB_PULL_REQUEST_URL,
+  type ChangedFile,
   type GitOperation,
   type GitStatus,
   type GitTools,
@@ -15,6 +16,7 @@ import type { ToolKind } from '@shared/thread'
 import type { BranchPullRequest, GitEventDraft, GitServiceApi, GitServiceDeps } from './api'
 import { HostError } from '../errors'
 import { t } from '../i18n'
+import { readBranches, readRemotes } from './branches'
 import { createCoalescer } from './coalesce'
 import { readChanges, readCommitDetails, readFileDiff, readIncoming } from './details'
 import { canChangeRepository, computeGitEvents, listNewCommits } from './events'
@@ -28,12 +30,15 @@ import {
 } from './gh'
 import { nextPollDelayMs } from './github'
 import {
+  commitFiles,
   createdPullRequest,
   createPullRequest,
+  discardFiles,
   logOf,
   publishRepository,
   pull,
   push,
+  switchBranch,
 } from './operations'
 import { createRepoCache, emptyStatus, readStatus, type RepoCache } from './status'
 import { watchGitDir, type GitDirWatch, type WatchFn } from './watch'
@@ -599,6 +604,46 @@ export function createGitService(
     return status.head.branch
   }
 
+  /** Refuses to touch the working tree while a merge, a rebase or a conflict is unfinished. */
+  function checkWorkingTree(status: GitStatus): string {
+    if (!status.repo) throw new Error(t('git.notRepository'))
+    if (status.operation) throw new Error(t('git.operationInProgress'))
+    if (status.changes.conflicted > 0) throw new Error(t('git.conflicts'))
+    return status.repo.root
+  }
+
+  /**
+   * The current changes `paths` name, each by its path or by a rename's old path, as the host
+   * reads them now; refuses a path that names none, a conflicted file, a nested repository and
+   * a submodule.
+   */
+  async function selectChanges(status: GitStatus, paths: string[]): Promise<ChangedFile[]> {
+    const { files: changes, submodules } = await readChanges(
+      exec,
+      status.projectPath,
+      status.head.oid === null,
+    )
+    const byPath = new Map(changes.map((file) => [file.path, file]))
+    const byOldPath = new Map(
+      changes.flatMap((file) =>
+        file.status === 'renamed' && file.oldPath !== null ? [[file.oldPath, file] as const] : [],
+      ),
+    )
+    const selected = new Set<ChangedFile>()
+    for (const path of paths) {
+      const file = byPath.get(path) ?? byOldPath.get(path)
+      if (!file) throw new Error(t('git.notAChange', { path }))
+      if (file.status === 'conflicted') throw new Error(t('git.conflicts'))
+      // git status lists a repository inside the working tree as its folder. A submodule is one
+      // too: removing a new one's entry would delete its working tree, uncommitted work included.
+      if ((file.status === 'untracked' && file.path.endsWith('/')) || submodules.has(file.path)) {
+        throw new Error(t('git.nestedRepository', { path: file.path }))
+      }
+      selected.add(file)
+    }
+    return [...selected]
+  }
+
   /** The status's push target, or why there is none, as the interface says it. */
   function pushTarget(status: GitStatus): Extract<PushTarget, { kind: 'remote' }> {
     const to = status.push
@@ -798,6 +843,41 @@ export function createGitService(
       })
     },
 
+    switchBranch(projectPath, branch, create) {
+      return exclusive(projectFor(projectPath), (status) => {
+        checkWorkingTree(status)
+        return switchBranch(exec, status.projectPath, branch, create)
+      })
+    },
+
+    publishBranch(projectPath, remote) {
+      return exclusive(projectFor(projectPath), async (status) => {
+        const branch = checkBranch(status)
+        if (status.upstream) {
+          throw new Error(t('git.alreadyPublished', { upstream: status.upstream.name }))
+        }
+        const remotes = await readRemotes(exec, status.projectPath)
+        if (!remotes.some((known) => known.name === remote)) {
+          throw new Error(t('git.remoteNotFound', { remote }))
+        }
+        return push(exec, status.projectPath, branch, { remote, branch, setUpstream: true })
+      })
+    },
+
+    commitChanges(projectPath, message, paths) {
+      return exclusive(projectFor(projectPath), async (status) => {
+        const root = checkWorkingTree(status)
+        return commitFiles(exec, root, message, await selectChanges(status, paths))
+      })
+    },
+
+    discardChanges(projectPath, paths) {
+      return exclusive(projectFor(projectPath), async (status) => {
+        const root = checkWorkingTree(status)
+        return discardFiles(exec, root, await selectChanges(status, paths))
+      })
+    },
+
     async createPullRequest(projectPath, draft) {
       const state = projectFor(projectPath)
       const { value } = await locked(state, async (status) => {
@@ -836,7 +916,7 @@ export function createGitService(
       const state = projectFor(projectPath)
       const status = await knownStatus(state)
       if (!status.repo) return []
-      return readChanges(exec, state.projectPath, status.head.oid === null)
+      return (await readChanges(exec, state.projectPath, status.head.oid === null)).files
     },
 
     async incoming(projectPath, from) {
@@ -852,6 +932,17 @@ export function createGitService(
       const status = await knownStatus(state)
       if (!status.repo) throw new Error(t('git.notRepository'))
       return readFileDiff(exec, status.repo.root, path, oldPath, ref, status.head.oid === null)
+    },
+
+    async branches(projectPath) {
+      const state = projectFor(projectPath)
+      const status = await knownStatus(state)
+      if (!status.repo) throw new Error(t('git.notRepository'))
+      const [branches, remotes] = await Promise.all([
+        readBranches(exec, status.repo.root),
+        readRemotes(exec, status.repo.root),
+      ])
+      return { branches, remotes }
     },
 
     async pullRequest(url) {

@@ -9,16 +9,18 @@ export function CopyButton({
   text,
   label,
   className,
+  iconClassName,
   size = 'icon-xs',
 }: {
   text: string | (() => string)
   label: string
   className?: string
+  iconClassName?: string
   size?: ComponentProps<typeof Button>['size']
 }) {
   const [copied, setCopied] = useState(false)
   // A message's row takes the button's own 16 px icon; every other Copy keeps 14 px.
-  const iconSize = size === 'icon-message' ? undefined : 'size-3.5'
+  const iconSize = iconClassName ?? (size === 'icon-message' ? undefined : 'size-3.5')
   return (
     <Tooltip>
       <TooltipTrigger

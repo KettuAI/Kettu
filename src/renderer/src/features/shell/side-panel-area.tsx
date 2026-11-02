@@ -32,7 +32,7 @@ const BrowserPane = lazy(() =>
 // the id it had when it was the only pane.
 const PANES = {
   terminal: { id: 'side-panel', defaultSize: '600px', minSize: '280px' },
-  files: { id: 'side-panel-files', defaultSize: '560px', minSize: '360px' },
+  files: { id: 'side-panel-files', defaultSize: '600px', minSize: '360px' },
   artifact: { id: 'side-panel-artifact', defaultSize: '560px', minSize: '360px' },
   browser: { id: 'side-panel-browser', defaultSize: '600px', minSize: '360px' },
 } as const

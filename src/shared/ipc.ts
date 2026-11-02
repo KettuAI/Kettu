@@ -20,6 +20,7 @@ import type { SharingConnectResult, SharingResult, SharingStatus } from './shari
 import type { TerminalMethod, TerminalsApi } from './terminal-host'
 import type { CatalogInstallResult, CatalogState, ThemeInstallResult, ThemesState } from './themes'
 import type { AgentId, HarnessId } from './thread'
+import type { TrayTarget } from './tray'
 import type { UpdateStatus } from './updates'
 
 export interface AppInfo {
@@ -54,6 +55,8 @@ export interface QuitRequest {
   sessions: BusySession[]
   terminals: BusyTerminal[]
   unsaved: UnsavedFile[]
+  /** The work may keep running in the background, with the windows closed, instead of stopping. */
+  keepRunning: boolean
 }
 
 /** A project and the origins it always lets agents open, as Settings › Browser lists them. */
@@ -110,7 +113,8 @@ export interface ForwardedKey {
 /** Request/response contract of every `ipcRenderer.invoke` channel, keyed by channel name. */
 export interface IpcInvokeContract {
   'app:get-info': { args: []; result: AppInfo }
-  'app:respond-quit': { args: [id: number, confirmed: boolean]; result: void }
+  // true stops the work and goes on, false stays, 'background' closes the windows and keeps it running.
+  'app:respond-quit': { args: [id: number, answer: boolean | 'background']; result: void }
   'settings:get': { args: []; result: SettingsFile }
   'settings:update': { args: [patch: SettingsPatch]; result: SettingsFile }
   'login-item:status': { args: []; result: LoginItemStatus }
@@ -290,6 +294,8 @@ export interface IpcEventContract {
   'browser:state': BrowserState
   /** An agent's first navigation opened a session's page, so the pane may show it. */
   'browser:opened': { sessionId: string }
+  /** To the menu bar panel: it came forward. */
+  'tray:shown': null
 }
 
 export type IpcEventChannel = keyof IpcEventContract
@@ -317,6 +323,11 @@ export interface IpcSendContract {
   'app:set-unsaved': [files: UnsavedFile[]]
   /** The sessions the renderer still lists, so a page closes once its session leaves the host. */
   'browser:sessions': [sessionIds: string[]]
+  /** The menu bar panel's calls, which main takes from the panel's own page alone. */
+  'tray:open': [target: TrayTarget]
+  'tray:quit': []
+  'tray:hide': []
+  'tray:resize': [height: number]
 }
 
 /** Payload of `agent-host:reset` and `terminal-host:reset`. */
@@ -348,7 +359,7 @@ export interface KettuApi {
   systemLocale: Locale
   app: {
     getInfo(): Promise<AppInfo>
-    respondQuit(id: number, confirmed: boolean): Promise<void>
+    respondQuit(id: number, answer: boolean | 'background'): Promise<void>
     onConfirmQuit(listener: (request: QuitRequest) => void): () => void
     setUnsaved(files: UnsavedFile[]): void
     onCommand(listener: (command: AppCommand) => void): () => void

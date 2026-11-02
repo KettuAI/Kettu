@@ -9,6 +9,7 @@ import { SidebarProvider } from '@renderer/components/ui/sidebar'
 import { Toaster } from '@renderer/components/ui/toast'
 import { TooltipProvider } from '@renderer/components/ui/tooltip'
 import { ArtifactDialogs } from '@renderer/features/artifacts/artifact-dialogs'
+import { GitDialogsHost } from '@renderer/features/git/git-dialogs'
 import { MediaViewer } from '@renderer/features/session/media/media-viewer'
 import { HostBanner } from '@renderer/features/shell/host-banner'
 import { LaunchCover } from '@renderer/features/shell/launch-cover'
@@ -18,6 +19,7 @@ import { ShortcutsDialog } from '@renderer/features/shell/shortcuts-dialog'
 import { DESK, SHEET_PANEL } from '@renderer/features/shell/sheet'
 import { TitleBand } from '@renderer/features/shell/top-bar'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
+import { UpdateDialog } from '@renderer/features/updates/update-dialog'
 import { AppSidebar } from '@renderer/features/sidebar/app-sidebar'
 import { hasBand } from '@renderer/lib/platform'
 import { layoutStorage, readJson, writeJson } from '@renderer/lib/storage'
@@ -67,6 +69,7 @@ export function App() {
         </div>
         <LaunchCover />
         <QuitConfirm />
+        <UpdateDialog />
         <ArtifactDialogs />
         <MediaViewer />
         <ShortcutsDialog />
@@ -75,6 +78,7 @@ export function App() {
             <HostPathDialog />
           </Suspense>
         )}
+        <GitDialogsHost />
         <Toaster />
         <ReportInteractive />
       </SidebarProvider>
