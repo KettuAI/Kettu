@@ -2,6 +2,7 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/inter/opsz.css';
+@import '@fontsource-variable/inter/opsz-italic.css';
 @import '@fontsource-variable/source-serif-4/opsz.css';
 @import '@fontsource-variable/source-serif-4/opsz-italic.css';
 @import '@fontsource-variable/jetbrains-mono/wght.css';
@@ -373,7 +374,8 @@
   --prose-face: var(--face-inter);
   --display-face: var(--face-manrope);
   --code-face: 'JetBrains Mono Variable', var(--face-system-mono);
-  /* Inter's single-storey a; another face keeps its own letters. */
+  /* Inter's single-storey a, where its files keep that variant: the bundled subsets do not, so
+     it draws Inter's default a. Another face keeps its own letters. */
   --ui-features: 'cv11';
   --prose-features: 'cv11';
   /* The serif reads about a size smaller than the sans faces at the same pixel size. */
@@ -803,7 +805,7 @@
   font-feature-settings: var(--prose-features);
   font-size: calc(var(--prose-size) * var(--prose-scale));
   line-height: 1.65;
-  /* Italics are the serif's own; Chinese, which has none, stays upright. */
+  /* Italics are the face's own; Chinese, which has none, stays upright. */
   font-synthesis-style: none;
   color: var(--text-primary);
   overflow-wrap: anywhere;
@@ -1167,7 +1169,7 @@
   font-size: 13px;
   line-height: 1.55;
   letter-spacing: normal;
-  /* Inter's italic is not bundled. */
+  /* A theme's code face for the interface has no italic bundled. */
   font-synthesis-style: auto;
 
   /* This text is already Inter's small step, so a chip stays at its own size. */
