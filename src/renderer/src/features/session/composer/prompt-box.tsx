@@ -295,7 +295,9 @@ export function PromptBox({
         {stacked ? (
           <InputGroupAddon align="block-end" className="flex-wrap gap-1.5 px-3 pb-3">
             {addMenu}
-            {lead}
+            {/* A zero basis wraps the end only once the lead's min-content no longer fits, so a
+                shrinking item such as the branch gives way first. */}
+            <div className="flex flex-[1_1_0%] items-center gap-1.5">{lead}</div>
             {/* Kept together at the end, on a line of its own when the row runs out of room. */}
             <div className="ml-auto flex items-center gap-1.5">{end}</div>
           </InputGroupAddon>
