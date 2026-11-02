@@ -5,12 +5,14 @@ import {
   THEME_FORMAT,
   THEME_MODES,
   THEME_TOKENS,
+  themeFallbacks,
   type ContrastIssue,
   type Theme,
   type ThemeColors,
   type ThemeMode,
   type ThemeToken,
 } from '@shared/themes'
+import { isCodeTheme } from '@renderer/features/session/markdown/code-themes'
 import tokensCss from '@renderer/styles/tokens.css?raw'
 
 // The built-in theme as values, read from tokens.css, for what a page cannot get from the cascade:
@@ -75,9 +77,15 @@ export function builtinColors(css: string): Record<ThemeMode, Colors> {
 
 export const BUILTIN_COLORS = builtinColors(tokensCss)
 
-/** A theme's colors in a mode, with the built-in value for each token it leaves out. */
+/**
+ * A theme's colors in a mode: for each token it leaves out, the one of its own that the token
+ * takes, or else the built-in value.
+ */
 export function themeColors(theme: Theme | null, mode: ThemeMode): Colors {
-  return { ...BUILTIN_COLORS[mode], ...theme?.[mode].colors }
+  const own = theme?.[mode].colors ?? {}
+  const colors = { ...BUILTIN_COLORS[mode], ...own }
+  for (const [token, from] of themeFallbacks(own)) colors[token] = colors[from]
+  return colors
 }
 
 export type PreviewToken = (typeof PREVIEW_TOKENS)[number]
@@ -96,7 +104,15 @@ export function previewColors(
 }
 
 export function themeContrast(theme: Theme | null): ContrastIssue[] {
-  return contrastIssues({ light: themeColors(theme, 'light'), dark: themeColors(theme, 'dark') })
+  // A variant that names a bundled code theme never draws code in the syntax tokens.
+  const ownCode = (mode: ThemeMode) => {
+    const code = theme?.[mode].code
+    return code !== undefined && isCodeTheme(code)
+  }
+  return contrastIssues({
+    light: themeColors(theme, 'light'),
+    dark: themeColors(theme, 'dark'),
+  }).filter((issue) => !(issue.fg.startsWith('syntax-') && ownCode(issue.mode)))
 }
 
 /**
