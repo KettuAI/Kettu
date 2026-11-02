@@ -14,7 +14,13 @@
     "noProject": "无项目",
     "noProjectTooltip": "每个会话都在各自的临时文件夹中运行",
     "newSessionNoProject": "新建无项目会话",
-    "importSessions": "导入会话…"
+    "importSessions": "导入会话…",
+    "menu": {
+      "newSession": "新建会话",
+      "openInTerminal": "在终端中打开",
+      "showIn": "在{{name}}中显示",
+      "showArchived": "显示已归档"
+    }
   },
   "row": {
     "collapse": "收起子会话",
@@ -53,13 +59,27 @@
     "moreFor": "{{title}} 的更多操作"
   },
   "import": {
-    "title": "导入会话",
-    "description": "各个 Agent 已有的 {{project}} 会话，例如你在终端里开始的会话。导入的会话会带着完整历史打开。",
+    "title": "将会话导入 {{project}}",
+    "description": "你在终端里为这个文件夹开始的会话。",
+    "agents": "Agent",
+    "tab": "{{agent}} · {{count}}",
+    "tabMore": "{{agent}} · {{count}}+",
     "noAgents": "没有可以列出会话的 Agent。",
     "noSessions": "这个文件夹下没有会话。",
-    "added": "已添加",
+    "imported": "已导入",
+    "footnote": "导入的会话可以在 Kettu 里继续。",
+    "selectAll": "全选 {{count}} 个",
     "import": "导入",
-    "showMore": "显示更多"
+    "importCount": "导入 {{count}} 个",
+    "importing": "正在导入…",
+    "showMore": "显示更多",
+    "ago": {
+      "now": "刚刚",
+      "minutes": "{{count}} 分钟前",
+      "hours": "{{count}} 小时前",
+      "days": "{{count}} 天前",
+      "weeks": "{{count}} 周前"
+    }
   },
   "indicator": {
     "waiting_other": "等待你处理，{{count}} 个授权请求",

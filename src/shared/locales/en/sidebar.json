@@ -14,7 +14,13 @@
     "noProject": "No project",
     "noProjectTooltip": "Each runs in a scratch folder of its own",
     "newSessionNoProject": "New session with No project",
-    "importSessions": "Import sessions…"
+    "importSessions": "Import sessions…",
+    "menu": {
+      "newSession": "New session",
+      "openInTerminal": "Open in terminal",
+      "showIn": "Show in {{name}}",
+      "showArchived": "Show archived"
+    }
   },
   "row": {
     "collapse": "Collapse sub-sessions",
@@ -55,13 +61,27 @@
     "moreFor": "More for {{title}}"
   },
   "import": {
-    "title": "Import sessions",
-    "description": "Sessions the agents already have for {{project}}, such as ones you started in a terminal. Imported sessions open with their full history.",
+    "title": "Import sessions into {{project}}",
+    "description": "Sessions you started in a terminal for this folder.",
+    "agents": "Agents",
+    "tab": "{{agent}} · {{count}}",
+    "tabMore": "{{agent}} · {{count}}+",
     "noAgents": "No agent here can list its sessions.",
     "noSessions": "No sessions for this folder.",
-    "added": "Added",
+    "imported": "Imported",
+    "footnote": "Imported sessions can continue in Kettu.",
+    "selectAll": "Select all {{count}}",
     "import": "Import",
-    "showMore": "Show more"
+    "importCount": "Import {{count}}",
+    "importing": "Importing…",
+    "showMore": "Show more",
+    "ago": {
+      "now": "just now",
+      "minutes": "{{count}} m ago",
+      "hours": "{{count}} h ago",
+      "days": "{{count}} d ago",
+      "weeks": "{{count}} w ago"
+    }
   },
   "indicator": {
     "waiting_one": "Waiting for you, {{count}} request",

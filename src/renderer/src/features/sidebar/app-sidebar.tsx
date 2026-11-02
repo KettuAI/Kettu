@@ -5,7 +5,6 @@ import {
   ClockIcon,
   CircleAlertIcon,
   EllipsisIcon,
-  HistoryIcon,
   PlusIcon,
   ShapesIcon,
 } from 'lucide-react'
@@ -23,7 +22,6 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import {
@@ -76,6 +74,7 @@ import {
 import { HostEmpty, HostFilter, HostHeading, NeedsYouGroup } from './host-groups'
 import { useHostLabel } from './host-label'
 import { ImportSessionsDialog } from './import-sessions'
+import { ProjectMenuItems } from './project-menu'
 import { tightestLimit } from './plan-usage'
 import { visibleProjects } from './project-group'
 import { keepInSight, limitRows, ROWS_SHOWN } from './row-limit'
@@ -561,7 +560,9 @@ function ProjectGroup({
   ) : (
     <TooltipContent side="right">{t('project.noProjectTooltip')}</TooltipContent>
   )
-  const menuItems = project && local && <ProjectMenuItems onImport={() => onImport(project)} />
+  const menuItems = project && local && (
+    <ProjectMenuItems project={project} onImport={() => onImport(project)} />
+  )
 
   return (
     <div className="flex flex-col gap-0.5">
@@ -573,7 +574,7 @@ function ProjectGroup({
               <TooltipTrigger render={<ContextMenuTrigger render={row} />} delay={700} />
               {tooltip}
             </Tooltip>
-            <ContextMenuContent>{menuItems}</ContextMenuContent>
+            <ContextMenuContent className="w-67.5">{menuItems}</ContextMenuContent>
           </ContextMenu>
         ) : (
           <Tooltip>
@@ -607,7 +608,9 @@ function ProjectGroup({
               </TooltipTrigger>
               <TooltipContent>{t('row.more')}</TooltipContent>
             </Tooltip>
-            <DropdownMenuContent align="start">{menuItems}</DropdownMenuContent>
+            <DropdownMenuContent align="start" className="w-67.5">
+              {menuItems}
+            </DropdownMenuContent>
           </DropdownMenu>
         )}
         {/* New session starts No project sessions on this computer only. */}
@@ -750,17 +753,6 @@ function PinnedGroup({
         </SidebarMenu>
       )}
     </div>
-  )
-}
-
-/** A project's actions, one list for its row's context menu and its More button. */
-function ProjectMenuItems({ onImport }: { onImport: () => void }) {
-  const { t } = useTranslation('sidebar')
-  return (
-    <DropdownMenuItem onClick={onImport}>
-      <HistoryIcon />
-      {t('project.importSessions')}
-    </DropdownMenuItem>
   )
 }
 
