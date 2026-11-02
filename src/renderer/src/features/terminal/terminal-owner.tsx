@@ -69,7 +69,7 @@ export function OwnerBar({ terminal, owner }: { terminal: TerminalState; owner: 
           className="h-6.5 px-3"
           onClick={() => void interruptTerminal(terminal.id)}
         >
-          <SquareIcon className="size-3.5" strokeWidth={1.5} />
+          <SquareIcon className="size-3.5 scale-67" strokeWidth={3} />
           {t('owner.stop')}
         </Button>
       )}

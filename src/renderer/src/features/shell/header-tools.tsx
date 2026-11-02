@@ -36,7 +36,7 @@ import { NoDrag } from './top-bar'
 
 /** A top-bar tool: 30 px, its 17 px icon in the icon color, filled while its pane shows. */
 const TOOL =
-  'relative size-7.5 text-secondary aria-pressed:shadow-none [&_svg:not([class*=size-])]:size-4.25'
+  'relative size-7.5 text-secondary aria-expanded:bg-pressed aria-expanded:text-foreground aria-pressed:shadow-none [&_svg:not([class*=size-])]:size-4.25'
 
 /**
  * The right end of the top bar: the project's git status, the side panel's panes, a session's More

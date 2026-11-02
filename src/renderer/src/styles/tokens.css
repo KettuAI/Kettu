@@ -571,7 +571,8 @@
   --context-hatch: repeating-linear-gradient(135deg, var(--context-7) 0 2px, transparent 2px 4px);
 
   --terminal-background: var(--bg-code-block);
-  --terminal-foreground: var(--text-primary);
+  /* As drawn: output in the secondary ink, the cursor in the primary. */
+  --terminal-foreground: var(--text-secondary);
   --terminal-cursor: var(--text-primary);
   --terminal-selection: var(--selection);
 
