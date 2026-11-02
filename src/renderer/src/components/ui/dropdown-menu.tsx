@@ -49,7 +49,7 @@ function DropdownMenuContent({
           data-slot="dropdown-menu-content"
           data-overlay-layer=""
           className={cn(
-            'z-50 max-h-(--available-height) min-w-40 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-xl bg-popover p-1 text-popover-foreground shadow-menu duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:overflow-hidden data-closed:fade-out-0 data-closed:zoom-out-95',
+            'z-50 max-h-(--available-height) min-w-40 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-xl bg-popover p-1 text-popover-foreground shadow-menu duration-(--duration-fast) ease-standard outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:overflow-hidden data-closed:fade-out-0 data-closed:zoom-out-95',
             className,
           )}
           {...props}
@@ -152,7 +152,7 @@ function DropdownMenuSubContent({
     <DropdownMenuContent
       data-slot="dropdown-menu-sub-content"
       className={cn(
-        'w-auto min-w-36 rounded-xl bg-popover p-1 text-popover-foreground shadow-menu duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
+        'w-auto min-w-36 rounded-xl bg-popover p-1 text-popover-foreground shadow-menu duration-(--duration-fast) ease-standard data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
         className,
       )}
       align={align}
