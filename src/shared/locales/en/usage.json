@@ -198,14 +198,14 @@
     "fromComputer": {
       "name": "Usage on this computer",
       "name_web": "Usage on {{host}}",
-      "description": "Also count what Claude Code, Codex and OpenCode recorded in their own logs on this computer, before Kettu and in a terminal. Only token counts, models and times are read, never what was said, and nothing leaves this computer. Either way, Kettu reads the end of the transcript of each Claude Code session it runs, to show when its prompt cache expires.",
-      "description_web": "Also count what Claude Code, Codex and OpenCode recorded in their own logs on {{host}}, before Kettu and in a terminal. Only token counts, models and times are read, never what was said. Either way, Kettu reads the end of the transcript of each Claude Code session it runs, to show when its prompt cache expires.",
+      "description": "Also count Claude Code, Codex and OpenCode logs from outside Kettu. Token counts, models and times only, never content.",
+      "description_web": "Also count Claude Code, Codex and OpenCode logs on {{host}} from outside Kettu. Token counts, models and times only, never content.",
       "keywords": "logs history import tokens statistics"
     },
     "notFound": "No logs found",
     "notRead": "Not read yet",
-    "covers_one": "Since {{date}} · {{requests}} request",
-    "covers_other": "Since {{date}} · {{requests}} requests",
+    "covers_one": "since {{date}} · {{requests}} request",
+    "covers_other": "since {{date}} · {{requests}} requests",
     "coversNone": "No requests yet",
     "synced": "synced {{ago}}",
     "reimport": {
@@ -216,7 +216,7 @@
     },
     "sidebar": {
       "name": "Show in the sidebar",
-      "description": "What the end of the sidebar's Usage row shows.",
+      "description": "What the Usage row ends with.",
       "today": "Today's tokens",
       "cost": "Today's estimated cost",
       "limit": "Tightest plan limit",
@@ -224,7 +224,7 @@
     },
     "clear": {
       "name": "Clear Kettu's record",
-      "description": "Deletes the tokens Kettu recorded for each turn. The agents' logs, and what was imported from them, stay.",
+      "description": "Deletes what Kettu counted. Agents' own logs stay.",
       "button": "Clear…",
       "title": "Clear Kettu's usage record?",
       "confirm": "Clear record"

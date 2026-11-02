@@ -31,12 +31,11 @@ import {
   CONFIRM,
   ControlError,
   GROUP_ACTION,
-  PathText,
   ROW_BUTTON,
   SettingSelect,
   SettingSwitch,
 } from './controls'
-import { RowLine, RowText } from './rows'
+import { ItemLine } from './rows'
 import { useApply } from './use-apply'
 
 export function FromComputer() {
@@ -150,36 +149,39 @@ export function LogRow({ agentId }: { agentId: AgentId }) {
 
   return (
     <>
-      <RowLine
-        text={
-          <div className="flex min-w-0 items-center gap-3">
-            <AgentTile agent={agentId} size={30} glyph={16} />
-            <div className="flex min-w-0 flex-1 flex-col">
-              <RowText
-                name={name}
-                description={
-                  <span className={cn(shownError && 'text-danger')}>
-                    {shownError ?? facts.join(' · ')}
+      <div className="flex items-center gap-3.5 py-3.25">
+        <AgentTile agent={agentId} size={30} glyph={16} />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="truncate text-label leading-tight">{name}</span>
+          <ItemLine>
+            {shownError ? (
+              <span className="text-danger">{shownError}</span>
+            ) : (
+              <>
+                {locations.length > 0 && (
+                  <span
+                    title={locations.join('\n')}
+                    data-selectable=""
+                    className={cn('font-mono text-code', log.found === false && 'text-tertiary')}
+                  >
+                    {locations.join(', ')}
                   </span>
-                }
-              />
-              {locations.map((location) => (
-                <PathText key={location} path={location} missing={log.found === false} />
-              ))}
-            </div>
-          </div>
-        }
-      >
+                )}
+                {locations.length > 0 && ' · '}
+                {facts.join(' · ')}
+              </>
+            )}
+          </ItemLine>
+        </div>
         <Button
           variant="ghost"
-
-          className={cn(ROW_BUTTON, 'text-secondary')}
+          className={GROUP_ACTION}
           disabled={!log.found || scanning}
           onClick={() => setOpen(true)}
         >
           {t('settings.reimport.button')}
         </Button>
-      </RowLine>
+      </div>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>

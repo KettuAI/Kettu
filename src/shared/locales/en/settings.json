@@ -38,7 +38,7 @@
   "general": {
     "language": {
       "name": "Language",
-      "description": "Menus, settings and Kettu’s own messages. Agents keep replying in the language you write to them.",
+      "description": "Menus, settings and Kettu's own messages. Agents keep replying in the language you write to them.",
       "keywords": "language locale chinese english translation",
       "system": "System",
       "systemNamed": "System ({{name}})"
@@ -64,7 +64,7 @@
     },
     "sessionTitles": {
       "name": "Write titles for new sessions",
-      "description": "A small model names each session once. Uses a little of the agent’s plan.",
+      "description": "A small model names each session once. Uses a little of the agent's plan.",
       "keywords": "title name session model credits"
     },
     "background": {
@@ -272,7 +272,7 @@
     },
     "sound": {
       "name": "Play a sound",
-      "description": "The system’s notification sound."
+      "description": "The system's notification sound."
     },
     "badge": {
       "nameDock": "Show a count on the Dock icon",
@@ -551,7 +551,7 @@
     },
     "remove": {
       "name": "Delete agent",
-      "description": "Its sessions stay, but can’t continue.",
+      "description": "Its sessions stay, but can't continue.",
       "button": "Delete",
       "title": "Delete {{name}}?",
       "body": "Its sessions stay in the list and say the agent was deleted; they cannot continue.",

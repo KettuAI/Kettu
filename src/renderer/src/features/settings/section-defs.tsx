@@ -500,7 +500,7 @@ export function useUsageSection(): SectionDef {
         description: logPlaces[i] ?? '',
         keywords: t('settings.groups.logs'),
         group: logGroup,
-        layout: 'block',
+        layout: 'custom',
         render: () => <LogRow agentId={agentId} />,
       })),
     )
