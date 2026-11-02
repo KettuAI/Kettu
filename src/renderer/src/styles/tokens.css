@@ -66,8 +66,6 @@
   --info-tint-hover: #edeeef;
   /* What a queued message's card darkens toward as it sits further back in the stack. */
   --queue-back: #edf0f3;
-  /* The edge of the queued card right behind the front one, halfway there. */
-  --queue-back-near: color-mix(in oklab, var(--bg-surface), var(--queue-back) 50%);
   /* The page under an SVG preview: white in both themes, the page an SVG is drawn for. */
   --canvas: #ffffff;
   /* A QR code's modules on the canvas, black in both themes so scanners read it; the dark blocks
@@ -583,6 +581,8 @@
   --segment-thumb: var(--bg-raised);
   --pressed: var(--bg-selected);
   --pressed-hover: color-mix(in srgb, var(--bg-selected), var(--text-primary) 5%);
+  /* The edge of the queued card right behind the front one, halfway there. */
+  --queue-back-near: color-mix(in oklab, var(--bg-surface), var(--queue-back) 50%);
   /* Sidebar rows picked together with Mod-click or Shift-click, for a menu that acts on all. */
   --row-picked: color-mix(in srgb, var(--control-on) 12%, transparent);
 
