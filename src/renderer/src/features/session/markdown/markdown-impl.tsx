@@ -299,7 +299,9 @@ const Chunk = memo(function Chunk({ markdown, live }: { markdown: string; live: 
   const plugins = useMemo(() => pluginsFor(themes), [themes])
   return (
     <LiveContext value={live}>
+      {/* The last-block rules in globals.css name the chunks by this class. */}
       <Streamdown
+        className="markdown-chunk"
         mode="streaming"
         parseIncompleteMarkdown={live}
         isAnimating={live}

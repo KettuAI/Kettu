@@ -586,6 +586,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Marks a reply's last block for its children's style query (.markdown); not inherited, so only
+   the block's own children see it. */
+@property --markdown-last-block {
+  syntax: '*';
+  inherits: false;
+}
+
 /* The color of a thread link's line, registered so a hover can fade it. */
 @property --thread-link-line {
   syntax: '<color>';
@@ -885,9 +892,18 @@
   & > :first-child > :first-child > :first-child {
     margin-top: 0;
   }
-  & > :last-child > :nth-last-child(1 of :not([data-media-block]:empty)),
-  & > :last-child > :nth-last-child(1 of :not([data-media-block]:empty)) > :last-child {
+  /* Adding a child to a parent whose children a structural pseudo-class was tested on restyles
+     all of them in Chromium, with their whole subtrees when the selector goes on after it. So the
+     chunk class keeps the chunks out of that test, and the last block's own last child finds the
+     block by its mark, not by position; otherwise each new chunk restyled the whole reply. */
+  & > :where(.markdown-chunk):last-child > :nth-last-child(1 of :not([data-media-block]:empty)) {
     margin-bottom: 0;
+    --markdown-last-block: 1;
+  }
+  @container style(--markdown-last-block: 1) {
+    & > :where(.markdown-chunk):last-child > :not([data-media-block]:empty) > :last-child {
+      margin-bottom: 0;
+    }
   }
   /* Media a block's file references name, under it (markdown-impl.tsx). Its captions and
      buttons are interface, so they stay Inter. */

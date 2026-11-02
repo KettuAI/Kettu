@@ -216,3 +216,22 @@ describe('tables in globals.css', () => {
     expect(prose.get('white-space')).toBe('normal')
   })
 })
+
+describe('structural pseudo-classes in globals.css', () => {
+  // With more of the selector after one, Chromium restyles the whole of every child of a parent
+  // it tested whenever a child is added there, so a long reply restyled on every new chunk.
+  it('ends every selector they are in', () => {
+    const text = css.replace(/\/\*[\s\S]*?\*\//g, '')
+    const followed: string[] = []
+    for (const match of text.matchAll(/:nth-(?:last-)?(?:child|of-type)\(/g)) {
+      let end = match.index + match[0].length
+      for (let depth = 1; depth > 0; end++) {
+        if (text[end] === '(') depth++
+        else if (text[end] === ')') depth--
+      }
+      const rest = /^[^{,]*/.exec(text.slice(end))![0].trimEnd()
+      if (/[\s>+~]\S/.test(rest)) followed.push(text.slice(match.index, end) + rest)
+    }
+    expect(followed).toEqual([])
+  })
+})
