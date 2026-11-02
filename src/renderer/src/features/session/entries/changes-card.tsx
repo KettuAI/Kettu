@@ -1,0 +1,160 @@
+import { memo, useMemo } from 'react'
+import { FileIcon, GitPullRequestIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { useShallow } from 'zustand/react/shallow'
+import { Button } from '@renderer/components/ui/button'
+import { LineCounts } from '@renderer/features/git/rows'
+import { relativePath } from '@renderer/lib/format'
+import { cn } from '@renderer/lib/utils'
+import { openDiff } from '@renderer/stores/files'
+import { openGitDialog, useGitStore } from '@renderer/stores/git'
+import { useThreadsStore } from '@renderer/stores/threads'
+import { turnChanges } from '../turn-work'
+import { useDiffStats } from './use-diff-stats'
+
+type Change = ReturnType<typeof turnChanges>[number]
+
+/** A path inside `root`, relative to it, or null for one outside. */
+function within(path: string, root: string): string | null {
+  if (!/^(?:[\\/]|[a-z]:[\\/]|~)/i.test(path)) return path
+  const relative = relativePath(path, root)
+  return relative === path ? null : relative
+}
+
+/**
+ * The files a finished turn changed, under its answer: their count and lines, then a row per file.
+ * In a repository, Review and each row show a file's change in the Files pane, and Commit and open
+ * PR opens the commit dialog with the turn's files chosen.
+ */
+export const ChangesCard = memo(function ChangesCard({
+  sessionId,
+  projectPath,
+  toolIds,
+  className,
+}: {
+  sessionId: string
+  projectPath: string
+  toolIds: string[]
+  className?: string
+}) {
+  const { t } = useTranslation('session')
+  const entries = useThreadsStore(
+    useShallow((s) => {
+      const byId = s.replicas[sessionId]?.state?.byId
+      return toolIds.map((id) => byId?.[id])
+    }),
+  )
+  const changes = useMemo(() => turnChanges(entries), [entries])
+  const all = useMemo(() => changes.flatMap((change) => change.diffs), [changes])
+  const totals = useDiffStats(all)
+  const root = useGitStore((s) => s.status[projectPath]?.repo?.root ?? null)
+  if (changes.length === 0) return null
+
+  const review = (path: string): (() => void) | null => {
+    const file = within(path, projectPath)
+    const tracked = root === null ? null : within(path, root)
+    if (file === null || tracked === null) return null
+    return () =>
+      openDiff(projectPath, { path: tracked, oldPath: null, ref: null, projectFile: file })
+  }
+  const first = changes.map((change) => review(change.path)).find((open) => open !== null)
+  const committable =
+    root === null
+      ? []
+      : changes.map((change) => within(change.path, root)).filter((path) => path !== null)
+
+  return (
+    <section
+      aria-label={t('changes.label')}
+      className={cn('flex flex-col overflow-hidden rounded-card bg-card shadow-card', className)}
+    >
+      {/* In a narrow column the buttons move under the count together. */}
+      <div className="flex min-h-11.5 flex-wrap items-center gap-x-2.5 gap-y-1.5 py-2 pr-2 pl-3.5">
+        <span className="text-file font-semibold whitespace-nowrap text-primary">
+          {t('changes.files', { count: changes.length })}
+        </span>
+        {totals && (
+          <LineCounts
+            insertions={totals.insertions}
+            deletions={totals.deletions}
+            className="gap-2.5 text-code"
+          />
+        )}
+        {(first || committable.length > 0) && (
+          <div className="ml-auto flex gap-2.5">
+            {first && (
+              <Button
+                variant="outline"
+                size="dialog"
+                className="rounded-xl font-medium"
+                onClick={first}
+              >
+                {t('changes.review')}
+              </Button>
+            )}
+            {committable.length > 0 && (
+              <Button
+                size="dialog"
+                className="rounded-xl font-medium"
+                onClick={() => openGitDialog(projectPath, { kind: 'commit', paths: committable })}
+              >
+                <GitPullRequestIcon data-icon="inline-start" className="size-3.25" />
+                {t('changes.commit')}
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+      {changes.map((change) => (
+        <ChangeRow
+          key={change.path}
+          change={change}
+          projectPath={projectPath}
+          onOpen={review(change.path)}
+        />
+      ))}
+    </section>
+  )
+})
+
+function ChangeRow({
+  change,
+  projectPath,
+  onOpen,
+}: {
+  change: Change
+  projectPath: string
+  onOpen: (() => void) | null
+}) {
+  const stats = useDiffStats(change.diffs)
+  const shown = relativePath(change.path, projectPath)
+  const body = (
+    <>
+      <FileIcon aria-hidden strokeWidth={1.4} className="size-3.5 shrink-0 text-tertiary" />
+      <span className="min-w-0 flex-1 truncate font-mono text-hint text-primary" title={shown}>
+        {shown}
+      </span>
+      {stats && (
+        <LineCounts
+          insertions={stats.insertions}
+          deletions={stats.deletions}
+          className="gap-2.5 text-code"
+        />
+      )}
+    </>
+  )
+  const row = 'flex h-8.5 items-center gap-2.5 border-t border-subtle px-3.5 text-left'
+  if (!onOpen) return <div className={row}>{body}</div>
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        row,
+        'outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring',
+      )}
+    >
+      {body}
+    </button>
+  )
+}

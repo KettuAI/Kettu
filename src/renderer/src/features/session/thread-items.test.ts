@@ -509,6 +509,126 @@ describe('reply footers', () => {
   })
 })
 
+describe('finished turns', () => {
+  const end = (id: string): ThreadEntry => ({
+    kind: 'turn_end',
+    id,
+    stopReason: 'end_turn',
+    durationMs: 1000,
+  })
+  const folded = (
+    entries: ThreadEntry[],
+    { live = false, notes = false, open = new Set<string>() } = {},
+  ) => {
+    const s = state(entries)
+    return buildItems(s.order, signatureOf(s), live, notes, open)
+  }
+  const turn = [
+    user('u1'),
+    tool('r1', 'read'),
+    agent('a1'),
+    tool('x1', 'execute'),
+    agent('a2'),
+    agent('a3'),
+    end('t1'),
+  ]
+
+  it('fold the work before the answer into one row under the message', () => {
+    const result = folded(turn)
+    expect(result.map((i) => i.key)).toEqual(['u1', 'worked:u1', 'a2', 'a3', 'reply:u1'])
+    expect(result[1]).toMatchObject({
+      type: 'worked',
+      toolIds: ['r1', 'x1'],
+      endId: 't1',
+      open: false,
+    })
+  })
+
+  it('show the turn as it was when the row is open', () => {
+    const result = folded(turn, { open: new Set(['worked:u1']) })
+    expect(result.map((i) => i.key)).toEqual([
+      'u1',
+      'worked:u1',
+      'run:r1',
+      'a1',
+      'run:x1',
+      'a2',
+      'a3',
+      'reply:u1',
+    ])
+    expect(result[1]).toMatchObject({ open: true })
+  })
+
+  it("give the reply the turn's tool calls", () => {
+    expect(folded(turn).at(-1)).toMatchObject({ type: 'reply', toolIds: ['r1', 'x1'] })
+  })
+
+  it('leave the running turn as it is, and fold the ones before it', () => {
+    const result = folded([...turn, user('u2'), tool('x2', 'execute'), agent('a4')], {
+      live: true,
+    })
+    expect(result.map((i) => i.key)).toEqual([
+      'u1',
+      'worked:u1',
+      'a2',
+      'a3',
+      'reply:u1',
+      'u2',
+      'run:x2',
+      'a4',
+      'status',
+    ])
+  })
+
+  it('fold the progress notes too, keeping the answer', () => {
+    const result = folded(turn, { notes: true })
+    expect(result.map((i) => i.key)).toEqual(['u1', 'worked:u1', 'a2', 'a3', 'reply:u1'])
+  })
+
+  it('fold nothing in a turn with only an answer, or with no answer', () => {
+    expect(folded([user('u1'), agent('a1'), end('t1')]).map((i) => i.key)).toEqual([
+      'u1',
+      'a1',
+      'reply:u1',
+    ])
+    expect(folded([user('u1'), tool('x1', 'execute'), end('t1')]).map((i) => i.key)).toEqual([
+      'u1',
+      'run:x1',
+      't1',
+    ])
+  })
+
+  it('keep work after the answer below it', () => {
+    const result = folded([user('u1'), tool('x1', 'execute'), agent('a1'), tool('x2', 'execute')])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'worked:u1', 'a1', 'run:x2', 'reply:u1'])
+    expect(result[1]).toMatchObject({ toolIds: ['x1', 'x2'], endId: null })
+  })
+
+  it('keep a steered message in view under the row', () => {
+    const steered: ThreadEntry = { kind: 'user', id: 's1', content: [], steered: true }
+    const result = folded([user('u1'), agent('a1'), steered, agent('a2'), end('t1')])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'worked:u1', 's1', 'a2', 'reply:u1'])
+  })
+
+  it('keep a card or a notice in view under the row', () => {
+    const card: ThreadEntry = { kind: 'subagent', id: 'k1', sessionId: 'c1' }
+    const result = folded([
+      user('u1'),
+      tool('x1', 'execute'),
+      card,
+      agent('a1'),
+      notice('n1'),
+      agent('a2'),
+      end('t1'),
+    ])
+    expect(result.map((i) => i.key)).toEqual(['u1', 'worked:u1', 'k1', 'n1', 'a2', 'reply:u1'])
+  })
+
+  it('give the row the height of a step', () => {
+    expect(estimateOf(folded(turn)[1]!)).toBe(28)
+  })
+})
+
 describe('replyKeys', () => {
   it("gives each item after a user message its turn's footer", () => {
     const result = items([
@@ -603,7 +723,7 @@ describe('estimateOf', () => {
     const steered: ThreadEntry = { kind: 'user', id: 's1', content: [], steered: true }
     expect(
       estimates([user('u1'), thought('h1'), agent('a1'), steered, agent('a2'), end('t1')]),
-    ).toEqual({ u1: 69, h1: 18, a1: 20, s1: 69, a2: 20, 'reply:u1': 24 })
+    ).toEqual({ u1: 37, h1: 18, a1: 20, s1: 69, a2: 20, 'reply:u1': 24 })
   })
 
   it('gives a progress note one line of a thought', () => {
