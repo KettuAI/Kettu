@@ -393,7 +393,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                     onChange={(value) =>
                       setArtifactsKindFilter(ARTIFACT_KINDS.find((kind) => kind === value) ?? null)
                     }
-                    itemClassName="h-6.5 px-3 text-control font-medium"
+                    itemClassName="px-3 text-control"
                     segments={[
                       { value: ALL, label: t('page.allKinds') },
                       ...ARTIFACT_KINDS.map((kind) => ({

@@ -21,7 +21,7 @@ import {
   type Metric,
   type MetricKind,
 } from './model'
-import { Panel, PanelTitle, SEGMENT } from './panel'
+import { Panel, PanelTitle } from './panel'
 import { Count } from './count'
 
 type Grouping = 'model' | 'project' | 'agent'
@@ -79,7 +79,6 @@ export function Breakdown({
             setGrouping(next)
             setOpen(false)
           }}
-          itemClassName={SEGMENT}
           segments={GROUPINGS.map((value) => ({ value, label: t(`breakdown.groups.${value}`) }))}
         />
       </div>

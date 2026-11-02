@@ -406,6 +406,7 @@ function RoutineRow({
         </span>
         <span data-dims="" className="pointer-events-none relative flex justify-end">
           <Switch
+            size="md"
             className="pointer-events-auto"
             checked={routine.enabled}
             onCheckedChange={toggle}
