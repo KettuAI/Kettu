@@ -114,7 +114,6 @@ export function AppSidebar() {
     sessionsById,
     shownProjects,
   )
-  const drafting = useViewStore((s) => s.main.kind === 'new' && !s.settings.open)
   // The viewer opened from the page belongs to it.
   const artifactsShown = useViewStore(
     (s) =>
@@ -140,7 +139,6 @@ export function AppSidebar() {
           icon={<PlusIcon />}
           label={t('nav.newSession')}
           shortcut="Mod+N"
-          current={drafting}
           onClick={() => newSession()}
         />
         <NavRow
@@ -257,7 +255,7 @@ export function NavRow({
       onClick={onClick}
       aria-label={ariaLabel}
       aria-keyshortcuts={shortcut?.replace('Mod', isMac ? 'Meta' : 'Control')}
-      className="gap-2.5 pr-2.5 text-row [&_svg]:size-[18px]"
+      className="gap-2.5 pr-2.5 text-row data-active:font-medium [&_svg]:size-[18px]"
     >
       {icon}
       <span className="min-w-0 flex-1 truncate">{label}</span>

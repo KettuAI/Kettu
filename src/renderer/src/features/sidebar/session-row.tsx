@@ -201,10 +201,11 @@ export const SessionRow = memo(function SessionRow({
       aria-description={inSplit ? t('row.inSplitView') : undefined}
       // The other panes' rows take the current row's fill, without its surface or its edge.
       className={cn(
-        // The row its menu acts on keeps a fox ring while the menu is open.
         'gap-[9px] pr-2.5 text-row data-active:font-medium data-active:[--agent-dot-ring:var(--bg-raised)] data-multi-selected:bg-(--row-picked)',
         inSplit && 'bg-selected font-medium',
-        (menuOpen || moreOpen) && 'bg-hover shadow-[inset_0_0_0_1.5px_var(--focus)]',
+        // The row its menu acts on keeps a fox ring while the menu is open, over the current row's
+        // raised fill and edge too.
+        (menuOpen || moreOpen) && 'bg-hover! shadow-[inset_0_0_0_1.5px_var(--focus)]!',
         away && 'text-tertiary',
       )}
       data-sidebar-row=""
