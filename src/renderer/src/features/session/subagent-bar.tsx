@@ -11,7 +11,7 @@ import { agentName } from '@renderer/stores/agents'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openSession } from '@renderer/stores/view'
 
-/** In place of the composer: the agent drives a subagent, so you can only stop it or go back. */
+/** In place of the composer: the agent drives a sub-agent, so you can only stop it or go back. */
 export function SubagentBar({
   summary,
   session,
@@ -40,17 +40,20 @@ export function SubagentBar({
   }
 
   return (
-    <div className="flex min-h-13 items-center gap-2 rounded-3xl bg-subtle py-2 pr-2 pl-4 text-ui text-secondary">
-      <BotIcon className="size-3.5 shrink-0" />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <p className="truncate">
+    // The composer's frame and the row under it, so the bar sits where the composer would.
+    <div className="flex flex-col">
+      <div className="flex min-h-(--composer-min) items-center gap-2.5 rounded-2xl bg-subtle py-2.5 pr-2.5 pl-3 text-ui text-secondary">
+        <span className="grid size-[22px] shrink-0 place-items-center rounded-tile bg-card text-secondary shadow-card">
+          <BotIcon aria-hidden strokeWidth={1.4} className="size-[13px]" />
+        </span>
+        <p className="min-w-0 flex-1 truncate">
           {parent ? (
             <Trans
               t={t}
               i18nKey="subagentBar.runsFor"
               values={{ agent: agentName(summary.agentId) }}
               components={{
-                parent: <span className="font-medium text-foreground">{parentTitle}</span>,
+                parent: <span className="font-medium text-primary">{parentTitle}</span>,
               }}
             />
           ) : (
@@ -58,37 +61,43 @@ export function SubagentBar({
               t={t}
               i18nKey="subagentBar.runsForParent"
               values={{ agent: agentName(summary.agentId) }}
-              components={{ parent: <span className="font-medium text-foreground" /> }}
+              components={{ parent: <span className="font-medium text-primary" /> }}
             />
           )}
         </p>
-        {error && <p className="truncate text-xs text-danger">{error}</p>}
+        {canStop && (
+          <Button variant="outline" size="sm" disabled={stopping} onClick={() => void stop()}>
+            {stopping ? (
+              <Spinner data-icon="inline-start" className="size-3.5" />
+            ) : (
+              <SquareIcon data-icon="inline-start" strokeWidth={1.5} className="size-3.5" />
+            )}
+            {t('subagentBar.stop')}
+          </Button>
+        )}
+        {parent && (
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label={t('subagentBar.back', { title: parentTitle })}
+            onClick={() =>
+              backTo({ kind: 'session', sessionId: parent.id }, () =>
+                openSession(parent.id, parent.projectPath),
+              )
+            }
+          >
+            <ArrowLeftIcon data-icon="inline-start" />
+            {t('subagentBar.backShort')}
+          </Button>
+        )}
       </div>
-      {canStop && (
-        <Button variant="outline" size="sm" disabled={stopping} onClick={() => void stop()}>
-          {stopping ? (
-            <Spinner data-icon="inline-start" className="size-3" />
-          ) : (
-            <SquareIcon data-icon="inline-start" className="size-2.5 fill-current" />
-          )}
-          {t('subagentBar.stop')}
-        </Button>
-      )}
-      {parent && (
-        <Button
-          variant="outline"
-          size="sm"
-          aria-label={t('subagentBar.back', { title: parentTitle })}
-          onClick={() =>
-            backTo({ kind: 'session', sessionId: parent.id }, () =>
-              openSession(parent.id, parent.projectPath),
-            )
-          }
-        >
-          <ArrowLeftIcon data-icon="inline-start" />
-          {t('subagentBar.backShort')}
-        </Button>
-      )}
+      <div className="flex min-h-9 flex-col">
+        {error && (
+          <p role="alert" className="animate-in truncate px-2 pt-1 text-xs text-danger fade-in">
+            {error}
+          </p>
+        )}
+      </div>
     </div>
   )
 }

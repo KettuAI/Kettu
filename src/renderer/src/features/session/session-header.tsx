@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
-import { BotIcon, ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
+import { BotIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import type { SessionView } from '@shared/thread'
+import { backTo } from '@renderer/app/history'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
 import { usePane } from '@renderer/features/split/pane-context'
@@ -31,19 +32,42 @@ import { useRoutinesStore } from '@renderer/stores/routines'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openRoutine, openSession } from '@renderer/stores/view'
 
-/** A sub-session's parent at the start of the top bar, which opens it. */
+/** A sub-session's parent at the start of the top bar, then a slash: back to the parent. */
 export function ParentLink({ parent }: { parent: SessionSummary }) {
+  const { t } = useTranslation('session')
+  const title = sessionTitle(parent)
+  const label = t('subSession.back', { title })
   return (
     <>
-      <Button
-        variant="quiet"
-        size="compact"
-        className="min-w-16 shrink-1000 px-1.5"
-        onClick={() => openSession(parent.id, parent.projectPath)}
-      >
-        <span className="truncate">{sessionTitle(parent)}</span>
-      </Button>
-      <ChevronRightIcon aria-hidden className="size-3.5 shrink-0 text-icon" />
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="quiet"
+              size="compact"
+              aria-label={label}
+              className="h-6.5 min-w-16 shrink-1000 gap-1.5 pr-2 pl-1 font-normal text-tertiary"
+              onClick={() =>
+                backTo({ kind: 'session', sessionId: parent.id }, () =>
+                  openSession(parent.id, parent.projectPath),
+                )
+              }
+            />
+          }
+        >
+          <ChevronLeftIcon aria-hidden strokeWidth={1.6} className="size-[13px]" />
+          {parent.origin === 'subagent' ? (
+            <BotIcon aria-hidden className="size-3.5" />
+          ) : (
+            <AgentMark agent={parent.agentId} size={14} />
+          )}
+          <span className="max-w-24 truncate">{title}</span>
+        </TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+      <span aria-hidden className="mx-1 shrink-0 text-ui text-border-strong">
+        /
+      </span>
     </>
   )
 }
@@ -96,9 +120,9 @@ export function SessionHeader({
         {parent && <ParentLink parent={parent} />}
         <span className="mr-[3px] grid w-4 shrink-0 place-items-center">
           {summary.origin === 'subagent' ? (
-            <BotIcon className="size-3.5 text-secondary" />
+            <BotIcon className="size-4 text-secondary" />
           ) : (
-            <AgentMark agent={summary.agentId} size={14} />
+            <AgentMark agent={summary.agentId} size={16} />
           )}
         </span>
         <HostChip projectPath={summary.projectPath} />
@@ -109,7 +133,7 @@ export function SessionHeader({
             // The ring's outer edge is the button's box (30 px tall, text 4 px in, 6 px radius), so
             // the hover fill and the ring match and the text does not move.
             style={{ minWidth: Math.max(titleWidth - 5, 0) }}
-            className="mx-[5.5px] field-sizing-content h-[25px] rounded-sm bg-transparent px-[1.5px] py-0 font-heading text-ui font-medium outline-[1.5px] outline-offset-1 outline-edit-ring outline-solid selection:bg-edit-selection aria-invalid:outline-danger"
+            className="mx-[5.5px] field-sizing-content h-[25px] rounded-sm bg-transparent px-[1.5px] py-0 text-subheading font-semibold outline-[1.5px] outline-offset-1 outline-edit-ring outline-solid selection:bg-edit-selection aria-invalid:outline-danger"
           />
         ) : (
           <TitleButton
@@ -206,7 +230,7 @@ function TitleButton({
       variant="ghost"
       title={`${title} · ${description}`}
       className={cn(
-        'mx-[3px] h-7.5 min-w-16 shrink-10 rounded-md px-[3px] font-heading text-ui font-medium focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0',
+        'mx-[3px] h-7.5 min-w-16 shrink-10 rounded-md px-[3px] text-subheading font-semibold focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0',
         !focused && 'text-secondary hover:text-primary',
       )}
       onClick={onRename}

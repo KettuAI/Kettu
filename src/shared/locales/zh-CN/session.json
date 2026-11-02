@@ -105,7 +105,11 @@
     }
   },
   "subagent": {
-    "fallbackTitle": "子 Agent"
+    "fallbackTitle": "子 Agent",
+    "tools_other": "{{count}} 个工具",
+    "earlier_other": "前面还有 {{count}} 步",
+    "stop": "停止",
+    "openLog": "打开完整记录"
   },
   "subagentBar": {
     "runsFor": "{{agent}} 正在为 <parent/> 运行这个子 Agent",
@@ -113,6 +117,10 @@
     "stop": "停止",
     "back": "返回 {{title}}",
     "backShort": "返回"
+  },
+  "subSession": {
+    "back": "返回 {{title}}",
+    "startedFrom": "从 <parent>{{title}}</parent> 开始"
   },
   "sessionMessage": {
     "from": "来自 {{title}}",

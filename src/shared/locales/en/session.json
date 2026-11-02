@@ -114,14 +114,24 @@
     }
   },
   "subagent": {
-    "fallbackTitle": "Subagent"
+    "fallbackTitle": "Sub-agent",
+    "tools_one": "{{count}} tool",
+    "tools_other": "{{count}} tools",
+    "earlier_one": "{{count}} earlier step",
+    "earlier_other": "{{count}} earlier steps",
+    "stop": "Stop",
+    "openLog": "Open full log"
   },
   "subagentBar": {
-    "runsFor": "{{agent}} runs this subagent for <parent/>",
-    "runsForParent": "{{agent}} runs this subagent for <parent>its parent session</parent>",
+    "runsFor": "{{agent}} runs this sub-agent for <parent/>",
+    "runsForParent": "{{agent}} runs this sub-agent for <parent>its parent session</parent>",
     "stop": "Stop",
     "back": "Back to {{title}}",
     "backShort": "Back"
+  },
+  "subSession": {
+    "back": "Back to {{title}}",
+    "startedFrom": "Started from <parent>{{title}}</parent>"
   },
   "sessionMessage": {
     "from": "From {{title}}",
