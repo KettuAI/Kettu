@@ -205,7 +205,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
             )}
             <div className="flex flex-col">
               {session && summary.origin !== 'subagent' && (
-                <PlanBar sessionId={sessionId} running={running} hidden={false} />
+                <PlanBar sessionId={sessionId} running={running} />
               )}
               {/* Mounted only while something waits; its cards sit behind the composer. */}
               {session && summary.origin !== 'subagent' && session.queue.length > 0 && (
