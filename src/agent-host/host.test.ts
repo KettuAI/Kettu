@@ -10,7 +10,13 @@ import type { GitStatus, GitTools, PullRequest } from '@shared/git'
 import { DEFAULT_SETTINGS } from '@shared/settings'
 import type { AgentLauncher } from './agents'
 import type { GitEventDraft, GitServiceApi } from './git/api'
-import { inProcessLauncher, loadFakeAgent, startTestHost, type TestHost } from './testing/harness'
+import {
+  inProcessLauncher,
+  loadFakeAgent,
+  startTestHost,
+  type TestHost,
+  type TestPort,
+} from './testing/harness'
 
 let current: TestHost | null = null
 
@@ -1216,6 +1222,158 @@ describe('browser calls', () => {
     })
     await t.host.shutdown()
     expect(await answered).toMatchObject({ error: { code: 'timeout' } })
+  })
+
+  describe('of a turn another computer sent', () => {
+    const laptop = { id: 'b'.repeat(32), name: 'Laptop', browser: true as const }
+    const phone = { id: 'a'.repeat(32), name: 'Phone' }
+    const quick = () => setup({ agentEnv: { FAKE_AGENT_DELAY_SCALE: '0.05' } })
+
+    /** A session whose first turn `device` sent, once that turn has ended. */
+    async function sentFrom(t: TestHost, window: TestPort, device: TestPort) {
+      const created = await device.request('sessions.create', {
+        agentId: 'fake-agent',
+        projectPath: t.project,
+        prompt: [{ type: 'text', text: 'Open the app' }],
+      })
+      await window.untilStatus(created.id, 'ready')
+      return created.id
+    }
+
+    const browserCalls = (port: TestPort) =>
+      port.events.flatMap((event) => (event.type === 'browser.call' ? [event.call] : []))
+
+    it('go to the desktop app that sent it, which answers them', async () => {
+      const { t, port: window } = await quick()
+      const app = t.connect(laptop)
+      const sessionId = await sentFrom(t, window, app)
+      const answered = t.host.browserCall({
+        callId: 11,
+        sessionId,
+        tool: 'browser_navigate',
+        args: { url: 'http://localhost:5173/' },
+        projectPath: t.project,
+      })
+      await app.until(() => browserCalls(app).length === 1)
+      expect(browserCalls(app)[0]).toEqual({
+        callId: 11,
+        sessionId,
+        tool: 'browser_navigate',
+        args: { url: 'http://localhost:5173/' },
+        projectPath: t.project,
+        forward: { host: 'localhost', port: 5173 },
+      })
+      expect(t.sent.some((message) => message.type === 'host:browser-call')).toBe(false)
+      // Only the app's own port answers it.
+      await expect(
+        window.request('browser.answer', {
+          callId: 11,
+          answer: { result: { text: 'no', value: {} } },
+        }),
+      ).rejects.toMatchObject({ code: 'forbidden' })
+      await app.request('browser.waiting', { callId: 11, waiting: true })
+      await app.request('browser.answer', {
+        callId: 11,
+        answer: { result: { text: 'Opened the page.', value: { url: 'http://localhost:5173/' } } },
+      })
+      expect(await answered).toEqual({
+        result: { text: 'Opened the page.', value: { url: 'http://localhost:5173/' } },
+      })
+      await expect(
+        app.request('browser.answer', {
+          callId: 11,
+          answer: { result: { text: 'again', value: {} } },
+        }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it('stay with main for a phone’s turn, and are unavailable once the app is gone', async () => {
+      const { t, port: window } = await quick()
+      const fromPhone = await sentFrom(t, window, t.connect(phone))
+      void t.host.browserCall({
+        callId: 12,
+        sessionId: fromPhone,
+        tool: 'browser_snapshot',
+        args: {},
+        projectPath: t.project,
+      })
+      expect(t.sent).toContainEqual(
+        expect.objectContaining({ type: 'host:browser-call', callId: 12 }),
+      )
+
+      const app = t.connect(laptop)
+      const fromApp = await sentFrom(t, window, app)
+      const waiting = t.host.browserCall({
+        callId: 13,
+        sessionId: fromApp,
+        tool: 'browser_snapshot',
+        args: {},
+        projectPath: t.project,
+      })
+      await app.until(() => browserCalls(app).length === 1)
+      app.disconnect()
+      expect(await waiting).toMatchObject({ error: { code: 'unavailable' } })
+      expect(
+        await t.host.browserCall({
+          callId: 14,
+          sessionId: fromApp,
+          tool: 'browser_snapshot',
+          args: {},
+          projectPath: t.project,
+        }),
+      ).toMatchObject({ error: { code: 'unavailable' } })
+
+      // The same app back on a new port takes them again.
+      const again = t.connect(laptop)
+      void t.host.browserCall({
+        callId: 15,
+        sessionId: fromApp,
+        tool: 'browser_snapshot',
+        args: {},
+        projectPath: t.project,
+      })
+      await again.until(() => browserCalls(again).length === 1)
+    })
+
+    it('ask for a new site in the thread for the app, until it answers or goes', async () => {
+      const { t, port: window } = await quick()
+      const app = t.connect(laptop)
+      const sessionId = await sentFrom(t, window, app)
+      await window.open(sessionId)
+      const decision = (requestId: number) => {
+        const entry = window
+          .entries(sessionId)
+          .find((each) => each.kind === 'browser_origin' && each.requestId === requestId)
+        return entry?.kind === 'browser_origin' ? entry.decision : undefined
+      }
+      await expect(
+        t.connect(phone).request('browser.origin', {
+          sessionId,
+          requestId: 1,
+          origin: 'https://example.com',
+        }),
+      ).rejects.toMatchObject({ code: 'forbidden' })
+
+      // Main numbers its own requests, so the app's may have the same id.
+      t.host.browserOriginAsked(1, sessionId, 'https://main.example')
+      await app.request('browser.origin', {
+        sessionId,
+        requestId: 1,
+        origin: 'https://example.com',
+      })
+      await window.until(() => window.summary(sessionId)?.permissionCount === 2)
+      await app.request('browser.originSettled', { requestId: 1, decision: 'session' })
+      await window.until(() => window.summary(sessionId)?.permissionCount === 1)
+      expect(window.entries(sessionId).filter((entry) => entry.kind === 'browser_origin')).toEqual([
+        expect.objectContaining({ origin: 'https://main.example', decision: null }),
+        expect.objectContaining({ origin: 'https://example.com', decision: 'session' }),
+      ])
+
+      await app.request('browser.origin', { sessionId, requestId: 2, origin: 'https://b.example' })
+      await window.until(() => decision(2) === null)
+      app.disconnect()
+      await window.until(() => decision(2) === 'timeout')
+    })
   })
 
   it('names the session whose page a call drives, and none for one Kettu lost', async () => {

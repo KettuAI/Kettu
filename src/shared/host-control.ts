@@ -3,7 +3,7 @@
 
 import type { ArtifactImportResult } from './artifacts'
 import type { AttachmentGrant } from './attachments'
-import type { BrowserOriginAnswer } from './browser'
+import type { BrowserForward, BrowserOriginAnswer } from './browser'
 import type { MediaGrantRecord } from './media'
 import type { Platform } from './platform'
 import type { PortError } from './port-rpc'
@@ -257,6 +257,17 @@ export type MainToRemoteHost =
   | { type: 'remote-host:host-addresses'; id: string; addresses: DirectAddress[] }
   // Forgets a host here; nothing changes on it.
   | { type: 'remote-host:remove-host'; id: string }
+  // A port on this computer's loopback that reaches a dev server on a host, for the page of the
+  // host's session; answered by remote-host:forwarding under the same id.
+  | {
+      type: 'remote-host:forward'
+      requestId: number
+      hostId: string
+      sessionId: string
+      forward: BrowserForward
+    }
+  // The session's page is gone: its forwards on that host close.
+  | { type: 'remote-host:forward-close'; hostId: string; sessionId: string }
   // The computer woke from sleep, maybe on another network: the direct addresses are read again
   // and the hosts not connected are tried at once.
   | { type: 'remote-host:resume' }
@@ -328,6 +339,8 @@ export type RemoteHostToMain =
   | { type: 'remote-host:open-host-port'; requestId: number; hostId: string }
   // Newest first.
   | { type: 'remote-host:activity'; requestId: number; events: DeviceActivity[] }
+  // The port remote-host:forward listens on, null when the host's session or the port is not there.
+  | { type: 'remote-host:forwarding'; requestId: number; port: number | null }
   // A call an owner's device makes of the host beyond its sessions; answered by
   // remote-host:admin-result.
   | {

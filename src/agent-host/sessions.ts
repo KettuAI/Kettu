@@ -23,6 +23,7 @@ import { firstLine, outlineText } from '@shared/outline'
 import type { BrowserOriginAnswer } from '@shared/browser'
 import type { BusyCounts, BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
+import type { PortDevice } from '@shared/remote/device'
 import type { PermissionScope } from '@shared/routines'
 import type { HostSettings } from '@shared/settings'
 import {
@@ -213,6 +214,8 @@ export interface SessionManagerDeps {
   returned: JsonFile<ReturnedFile>
   /** Whether a port is still open, so a failed start knows whether its window can take its message. */
   portOpen(portId: string): boolean
+  /** The paired device an open port serves, null for a window's; without it every port is one. */
+  portDevice?(portId: string): PortDevice | null
   /** Where threads are stored; without it every session opens through its agent. */
   threads: ThreadStore | null
   /** The empty folder the hidden sessions for the outline's titles run in. */
@@ -251,6 +254,12 @@ type Failure =
   | { action: 'load' }
   | { action: 'resume' }
   | { action: 'prompt'; content: UserContent[]; entryId: string | null }
+
+/** The port that sent a turn and the paired device it served then, null for a window's. */
+export interface TurnSender {
+  portId: string
+  device: PortDevice | null
+}
 
 interface Turn {
   startedAt: number
@@ -328,8 +337,10 @@ interface Live {
   permissions: Map<string, PendingRequest>
   /** Who answered the latest requests, by request id: a device, or null for a window. */
   answered: Map<string, FromDevice | null>
-  /** Each waiting new origin's entry, by the id main gave its request. */
-  origins: Map<number, string>
+  /** Each waiting new origin's entry, by `originKey`. */
+  origins: Map<string, string>
+  /** Who sent the latest turn: a window's or a device's port, and the device it serves. */
+  sender: TurnSender | null
   failure: Failure | null
   unread: boolean
   /** The current error was in front of the user, so the row no longer marks it. */
@@ -405,6 +416,14 @@ const TITLE_LENGTH = 60
 const LISTED_SESSIONS = 1_000
 // Requests whose answerer a session remembers, so a late answer hears where it was answered.
 const ANSWERS_KEPT = 50
+
+/**
+ * A new origin's request by who asks it, `owner` being '' for main and a device's port for a
+ * desktop app's page, since each numbers its own requests.
+ */
+function originKey(owner: string, requestId: number): string {
+  return `${owner}:${requestId}`
+}
 
 /** The first line of the first text, cut to 60 characters: the title until the agent sends one. */
 export function fallbackTitle(content: readonly UserContent[]): string | null {
@@ -527,8 +546,8 @@ export class SessionManager {
   private readonly watchers = new Map<string, Set<string>>()
   // Port id to the sessions it shows in front, every pane of a split view in view.
   private readonly shown = new Map<string, Set<string>>()
-  /** Each waiting new origin's session and entry, by the id main gave its request. */
-  private readonly originRequests = new Map<number, { sessionId: string; entryId: string }>()
+  /** Each waiting new origin's session and entry, by `originKey`. */
+  private readonly originRequests = new Map<string, { sessionId: string; entryId: string }>()
   private readonly missing = new Set<string>()
   private readonly lastSummaries = new Map<string, string>()
   /** `/context` reports running, by session id. */
@@ -655,6 +674,11 @@ export class SessionManager {
     const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
     if (!record) return null
     return sessionWithPage(record, (id) => this.live.get(id)?.record ?? this.records.get(id)).id
+  }
+
+  /** Who sent the session's latest turn, which its browser calls go to; null for none in memory. */
+  browserSender(sessionId: string): TurnSender | null {
+    return this.live.get(sessionId)?.sender ?? null
   }
 
   /** The project of the session whose page a browser call drives, or null when it has none. */
@@ -867,9 +891,10 @@ export class SessionManager {
    * An agent's page wants to open a new origin, which waits for the user in the session's thread
    * and marks the session as waiting, as a permission request does.
    */
-  browserOriginAsked(sessionId: string, requestId: number, origin: string): void {
+  browserOriginAsked(sessionId: string, requestId: number, origin: string, owner = ''): void {
     const live = this.live.get(sessionId)
-    if (!live) return
+    const key = originKey(owner, requestId)
+    if (!live || this.originRequests.has(key)) return
     const entry: BrowserOriginEntry = {
       kind: 'browser_origin',
       id: this.nextId(live),
@@ -878,8 +903,8 @@ export class SessionManager {
       decision: null,
       after: agentEntryBefore(live.thread),
     }
-    live.origins.set(requestId, entry.id)
-    this.originRequests.set(requestId, { sessionId, entryId: entry.id })
+    live.origins.set(key, entry.id)
+    this.originRequests.set(key, { sessionId, entryId: entry.id })
     this.emit(live, [{ op: 'entry.add', entry }])
     this.touch(live.id)
     this.updateBadge()
@@ -892,13 +917,14 @@ export class SessionManager {
   }
 
   /** The wait ended, so the thread's card takes the answer and the session waits no longer. */
-  browserOriginSettled(requestId: number, decision: BrowserOriginAnswer): void {
-    const waiting = this.originRequests.get(requestId)
+  browserOriginSettled(requestId: number, decision: BrowserOriginAnswer, owner = ''): void {
+    const key = originKey(owner, requestId)
+    const waiting = this.originRequests.get(key)
     if (!waiting) return
-    this.originRequests.delete(requestId)
+    this.originRequests.delete(key)
     const live = this.live.get(waiting.sessionId)
     if (!live) return
-    live.origins.delete(requestId)
+    live.origins.delete(key)
     const entry = live.thread.byId[waiting.entryId]
     if (entry?.kind === 'browser_origin') {
       this.emit(live, [{ op: 'entry.update', id: waiting.entryId, changes: { decision } }])
@@ -1358,6 +1384,7 @@ export class SessionManager {
       permissions: new Map(),
       answered: new Map(),
       origins: new Map(),
+      sender: null,
       failure: null,
       unread: this.persistedUnread(record),
       errorSeen: false,
@@ -1817,6 +1844,13 @@ export class SessionManager {
     for (const live of this.live.values()) {
       for (const [itemId, queuedBy] of live.queuedBy) {
         if (queuedBy === portId) live.queuedBy.delete(itemId)
+      }
+    }
+    // A desktop app's page asked these; with its port gone no answer can come.
+    const prefix = `${portId}:`
+    for (const key of [...this.originRequests.keys()]) {
+      if (key.startsWith(prefix)) {
+        this.browserOriginSettled(Number(key.slice(prefix.length)), 'timeout', portId)
       }
     }
   }
@@ -3866,6 +3900,8 @@ export class SessionManager {
       requested: false,
     }
     live.turn = turn
+    live.sender =
+      portId === null ? null : { portId, device: this.deps.portDevice?.(portId) ?? null }
     live.scope = newTurnScope()
     live.failure = null
     this.update(live, {

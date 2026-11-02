@@ -139,10 +139,19 @@ export class Uploads {
     this.idleMs = options.idleMs ?? UPLOAD_IDLE_MS
   }
 
-  /** Opens an upload; false when its id breaks the protocol, being even or not above the last. */
-  open(stream: unknown, size: unknown): boolean {
+  /**
+   * Takes `stream` as the device's next id, for an upload or another of its streams; false when
+   * it breaks the protocol, being even or not above the last.
+   */
+  takeId(stream: unknown): stream is number {
     if (!isDeviceStream(stream) || stream <= this.last) return false
     this.last = stream
+    return true
+  }
+
+  /** Opens an upload; false when its id breaks the protocol, being even or not above the last. */
+  open(stream: unknown, size: unknown): boolean {
+    if (!this.takeId(stream)) return false
     if (this.closed) return true
     const { counts, deviceId } = this.options
     if (typeof size !== 'number' || !Number.isSafeInteger(size) || size < 0) {

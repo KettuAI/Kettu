@@ -49,10 +49,10 @@ export function SidePanelArea({
   children: ReactNode
 }) {
   const remote = hostOfPath(projectPath) !== null
-  // Only the files of another host's project come through its connection.
+  // Another host's project has its files through its connection, and this computer's browser.
   const pane = useViewStore((s) => {
     const shown = shownSidePane(s)
-    return remote && shown !== 'files' ? undefined : shown
+    return remote && shown !== 'files' && shown !== 'browser' ? undefined : shown
   })
   const artifact = useViewStore((s) => s.sideArtifact[projectPath])
   const splitArtifact = useViewStore((s) => s.splitSideArtifact)

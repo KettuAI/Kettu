@@ -39,6 +39,12 @@ export interface ProtocolRange {
 
 const MAX_CLIENT_FIELD = 64
 
+/** The hello's feature of a desktop app, whose main runs the browser calls of the turns it sends. */
+export const BROWSER_FEATURE = 'browser'
+
+/** The most features a hello names that the host reads. */
+const MAX_FEATURES = 16
+
 /**
  * The device's first message once the handshake is done, and its only one until the host answers.
  * Unknown fields are ignored.
@@ -54,6 +60,8 @@ export interface Hello {
   }
   /** While pairing: the name the device suggests for itself and its model, as "iPhone 17 Pro". */
   device?: { name: string; model: string }
+  /** What the device serves the host beyond the base protocol, as `browser`. */
+  features?: string[]
   /**
    * From version 2, the session to take over: the token of the welcome that started or last
    * resumed it, and how many of the host's messages the device received on it since.
@@ -206,7 +214,7 @@ function isClientField(value: unknown): value is string {
 /** A hello as the host reads it, or null when it is not one. */
 export function parseHello(value: unknown): Hello | null {
   if (typeof value !== 'object' || value === null) return null
-  const { type, protocol, client, device, resume } = value as Record<string, unknown>
+  const { type, protocol, client, device, resume, features } = value as Record<string, unknown>
   if (type !== 'hello' || typeof protocol !== 'object' || protocol === null) return null
   const { min, max } = protocol as Record<string, unknown>
   if (!isVersion(min) || !isVersion(max) || min > max) return null
@@ -218,6 +226,10 @@ export function parseHello(value: unknown): Hello | null {
   if (pairing) hello.device = pairing
   const resuming = parseResume(resume)
   if (resuming) hello.resume = resuming
+  if (Array.isArray(features)) {
+    const kept = features.slice(0, MAX_FEATURES).filter(isClientField)
+    if (kept.length > 0) hello.features = kept
+  }
   return hello
 }
 

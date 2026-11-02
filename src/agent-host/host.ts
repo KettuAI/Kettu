@@ -35,6 +35,7 @@ import {
   type AgentTimings,
 } from './agents'
 import { buildCatalog, configFolders, type AgentDefinition } from './catalog'
+import { answerOf, BROWSER_GONE, browserTarget, DeviceBrowserCalls } from './device-browser'
 import { Diagnostics } from './diagnostics'
 import { HostError } from './errors'
 import { setLocale, t } from './i18n'
@@ -49,7 +50,7 @@ import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
 import { Projects } from './projects'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
-import { PortHub, type Handlers } from './rpc'
+import { PortHub, type Handlers, type RequestContext } from './rpc'
 import { Attachments } from './attachments'
 import { RoutinesManager, type RoutineTimings } from './routines/manager'
 import type { RoutineSessionHooksRef } from './routines/hooks'
@@ -79,52 +80,16 @@ import { createValidators } from './validate'
 // The agent menu reads a running agent's options again once they are older than this.
 const OPTIONS_FRESH_MS = 5 * 60_000
 
-const ERROR_CODES = new Set([
-  'user_has_control',
-  'not_allowed',
-  'stale_ref',
-  'timeout',
-  'navigation_failed',
-  'no_page',
-  'invalid',
-])
+/** Refuses a port that is not a desktop app's: only one runs browser calls for the host. */
+function browserApp(ctx: RequestContext): void {
+  if (!ctx.device?.browser) {
+    throw new HostError('forbidden', 'Only a paired desktop app answers browser calls')
+  }
+}
 
 /** What a message or answer from a paired device's port keeps of it; none from a window. */
 function fromDevice(device: PortDevice | null): FromDevice | undefined {
   return device ? { id: device.id, name: device.name } : undefined
-}
-
-/** What main answered a browser call: its result, or the error that refused it. */
-function answerOf(result: unknown, problem: unknown): BrowserCallAnswer {
-  const error = problem as { code?: unknown; message?: unknown } | undefined
-  if (error && typeof error === 'object') {
-    const code = typeof error.code === 'string' && ERROR_CODES.has(error.code) ? error.code : null
-    if (code) {
-      return {
-        error: {
-          code: code as Extract<BrowserCallAnswer, { error: unknown }>['error']['code'],
-          message: typeof error.message === 'string' ? error.message : 'The call failed.',
-        },
-      }
-    }
-  }
-  const value = result as { text?: unknown; value?: unknown; image?: unknown } | undefined
-  if (
-    value &&
-    typeof value === 'object' &&
-    typeof value.text === 'string' &&
-    typeof value.value === 'object' &&
-    value.value !== null
-  ) {
-    return {
-      result: {
-        text: value.text,
-        value: value.value as Record<string, unknown>,
-        ...(typeof value.image === 'string' ? { image: value.image } : {}),
-      },
-    }
-  }
-  return { error: { code: 'invalid', message: 'Main gave no answer to the call.' } }
 }
 
 export interface HostOptions {
@@ -214,6 +179,8 @@ export class AgentHost {
   private readonly gitRetains = new Map<string, { path: string; ports: Set<string> }>()
   /** Browser calls awaiting main's answer, by the id the call was given. */
   private readonly browserCalls = new Map<number, (answer: BrowserCallAnswer) => void>()
+  /** Browser calls sent to the desktop apps that sent their turns. */
+  private readonly deviceBrowser: DeviceBrowserCalls
   private lastProcesses = '[]'
   private sentFolders: string | null = null
   private stopping: Promise<void> | null = null
@@ -376,6 +343,7 @@ export class AgentHost {
       file: sessionsFile(options.userDataPath, log),
       returned: returnedFile(options.userDataPath, log),
       portOpen: (portId) => this.hub.has(portId),
+      portDevice: (portId) => this.hub.deviceOf(portId),
       threads: this.threads,
       reportsDir: path.join(options.userDataPath, 'agent-reports'),
       attachments: this.attachments,
@@ -484,6 +452,10 @@ export class AgentHost {
       },
     })
     routineHooks.current = this.routines.hooks
+    this.deviceBrowser = new DeviceBrowserCalls({
+      send: (portId, event) => this.hub.send([portId], event),
+      servicePort: () => this.artifactService.listeningPort,
+    })
     this.hub = new PortHub({
       handlers: this.handlers(),
       validators: createValidators(platform),
@@ -583,6 +555,7 @@ export class AgentHost {
   }
 
   private portClosed(portId: string): void {
+    this.deviceBrowser.portClosed(portId)
     this.sessions.portClosed(portId)
     this.artifacts.portClosed(portId)
     for (const [key, retained] of this.gitRetains) {
@@ -691,8 +664,16 @@ export class AgentHost {
     this.options.send({ type: 'host:artifact-import', requestId, result })
   }
 
-  /** Sends a browser call to main and settles with its answer, or a failure if the host stops. */
+  /**
+   * Sends a browser call to the desktop app that sent the session's turn, or to main, and settles
+   * with its answer, or a failure if the host stops.
+   */
   browserCall(request: BrowserCallRequest): Promise<BrowserCallAnswer> {
+    const target = browserTarget(this.sessions.browserSender(request.sessionId), this.hub)
+    if (target.kind === 'gone') {
+      return Promise.resolve({ error: { code: 'unavailable', message: BROWSER_GONE } })
+    }
+    if (target.kind === 'device') return this.deviceBrowser.call(target.portId, request)
     // The tools' id travels to main unchanged, so its report of a site wait names the same call.
     const callId = request.callId
     return new Promise<BrowserCallAnswer>((resolve) => {
@@ -1101,6 +1082,31 @@ export class AgentHost {
         artifacts.restore({ id, version, baseVersion, author: null }),
       'artifacts.watch': ({ id }, { portId }) => artifacts.watch(id, portId),
       'artifacts.unwatch': ({ id }, { portId }) => artifacts.unwatch(id, portId),
+      'browser.answer': ({ callId, answer }, ctx) => {
+        browserApp(ctx)
+        if (!this.deviceBrowser.answer(ctx.portId, callId, answer)) {
+          throw new HostError('not_found', 'This port was sent no such browser call')
+        }
+      },
+      'browser.waiting': ({ callId, waiting }, ctx) => {
+        browserApp(ctx)
+        if (this.deviceBrowser.owns(ctx.portId, callId)) {
+          this.artifactService.browserWaiting(callId, waiting)
+        }
+      },
+      'browser.origin': ({ sessionId, requestId, origin }, ctx) => {
+        browserApp(ctx)
+        // Only the app the session's calls go to asks for its page.
+        const target = browserTarget(sessions.browserSender(sessionId), this.hub)
+        if (target.kind !== 'device' || target.portId !== ctx.portId) {
+          throw new HostError('forbidden', 'This port does not drive the session’s browser')
+        }
+        sessions.browserOriginAsked(sessionId, requestId, origin, ctx.portId)
+      },
+      'browser.originSettled': ({ requestId, decision }, ctx) => {
+        browserApp(ctx)
+        sessions.browserOriginSettled(requestId, decision, ctx.portId)
+      },
     }
   }
 }
