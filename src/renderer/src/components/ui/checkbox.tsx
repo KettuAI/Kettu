@@ -14,10 +14,10 @@ function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
     >
       <CheckboxPrimitive.Indicator
         data-slot="checkbox-indicator"
-        className="grid place-content-center text-current transition-none [&>svg]:size-3"
+        className="grid place-content-center text-current transition-none [&>svg]:size-2.5"
       >
         {/* Mixed shows a bar instead of the check. */}
-        <CheckIcon strokeWidth={2} className="group-data-indeterminate/checkbox:hidden" />
+        <CheckIcon strokeWidth={1.6} className="group-data-indeterminate/checkbox:hidden" />
         <span className="hidden h-0.5 w-2 rounded-full bg-current group-data-indeterminate/checkbox:block" />
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>

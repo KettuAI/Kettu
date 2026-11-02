@@ -152,7 +152,7 @@ export function SegmentedControl<T extends string>({
           className={cn(
             'pointer-events-none absolute inset-y-0.5 left-0 overflow-hidden rounded-md bg-segment-thumb shadow-segment contain-strict',
             placed &&
-              'transition-[translate,width,scale,box-shadow] duration-(--duration-base) ease-(--ease-out-quart) motion-reduce:transition-none',
+              'transition-[translate,width,scale,box-shadow] duration-(--duration-base) ease-standard motion-reduce:transition-none',
             pressed !== null && 'scale-97',
             thumbClassName?.(segments[active].value),
           )}
