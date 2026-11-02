@@ -1,9 +1,19 @@
 // Images that name local files: their spaces before parsing, their URLs after.
 
+import { mediaKindOfName } from '@shared/media'
+
 interface MdNode {
   type: string
   url?: string
   children?: MdNode[]
+}
+
+interface HastNode {
+  type: string
+  tagName?: string
+  value?: string
+  properties?: Record<string, unknown>
+  children?: HastNode[]
 }
 
 const SCHEME = /^[a-z][a-z\d+.-]*:/i
@@ -111,4 +121,21 @@ export function localImageTarget(src: string): string | null {
   } catch {
     return null
   }
+}
+
+/**
+ * The local pictures of a paragraph that holds nothing else, two or more of them and each once,
+ * which show as one grid; null otherwise.
+ */
+export function pictureRun(paragraph: HastNode | undefined): string[] | null {
+  const paths: string[] = []
+  for (const child of paragraph?.children ?? []) {
+    if (child.type === 'text' && !child.value?.trim()) continue
+    if (child.type === 'element' && child.tagName === 'br') continue
+    const src = child.type === 'element' && child.tagName === 'img' ? child.properties?.src : null
+    const path = typeof src === 'string' ? localImageTarget(src) : null
+    if (path === null || mediaKindOfName(path) !== 'image') return null
+    if (!paths.includes(path)) paths.push(path)
+  }
+  return paths.length >= 2 ? paths : null
 }

@@ -39,7 +39,9 @@ import { grantClipboardFiles, grantPaths } from './attachments'
 import type { Artifacts } from './artifacts'
 import type { Avatars } from './avatars'
 import type { BrowserViews } from './browser/views'
+import type { SiteIcons } from './browser/site-icons'
 import { originOf } from './browser/origins'
+import { defaultBrowser } from './default-browser'
 import { mainDiagnostics, saveDiagnostics } from './diagnostics'
 import { Editors } from './editors'
 import { sendEvent } from './events'
@@ -78,6 +80,7 @@ export interface IpcDeps {
   terminalHost: TerminalHost
   artifacts: Artifacts
   browserViews: BrowserViews
+  siteIcons: SiteIcons
   mediaGrants: MediaGrants
   sharing: Sharing
   remoteHost: RemoteHost
@@ -391,6 +394,7 @@ export function registerIpcHandlers({
   terminalHost,
   artifacts,
   browserViews,
+  siteIcons,
   mediaGrants,
   sharing,
   remoteHost,
@@ -404,6 +408,7 @@ export function registerIpcHandlers({
   perf,
 }: IpcDeps): void {
   handle('app:get-info', 0, () => appInfo())
+  handle('app:default-browser', 0, () => defaultBrowser(app))
 
   handle('app:respond-quit', 2, (_, id, answer) => {
     if (!Number.isSafeInteger(id) || (typeof answer !== 'boolean' && answer !== 'background')) {
@@ -725,7 +730,13 @@ export function registerIpcHandlers({
   handle('browser:remove-allowed-site', 2, (_, projectPath, origin) => {
     browserViews.removeAllowedSite(projectPathArg(projectPath), browserOrigin(origin))
   })
-  handle('browser:clear-data', 0, () => browserViews.clearData())
+  handle('browser:clear-data', 0, async () => {
+    await siteIcons.clear()
+    await browserViews.clearData()
+  })
+  handle('browser:site-icons', 0, () => siteIcons.all())
+  // Records only the site, never an icon: those come from the browser's own pages.
+  handle('browser:site-opened', 1, (_, url) => siteIcons.visited(browserUrl(url)))
 
   on('agent-host:connect', (event) => agentHost.connect(event.sender))
   on('terminal-host:connect', (event) => terminalHost.connect(event.sender))

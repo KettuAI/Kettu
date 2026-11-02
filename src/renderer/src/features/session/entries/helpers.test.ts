@@ -54,6 +54,14 @@ describe('toolLabel', () => {
     )
   })
 
+  it('puts a finished call in the past tense', () => {
+    const edit = { ...base, toolKind: 'edit' as const, locations: [{ path: '/repo/src/a.ts' }] }
+    expect(toolLabel(edit, '/repo', true).verb).toBe('Edited')
+    expect(toolLabel({ ...base, toolKind: 'execute', rawInput: 'ls' }, '/repo', true).verb).toBe(
+      'Ran',
+    )
+  })
+
   it("falls back to the agent's title", () => {
     expect(toolLabel({ ...base, toolKind: 'search', title: 'grep foo' }, '/repo')).toEqual({
       verb: null,

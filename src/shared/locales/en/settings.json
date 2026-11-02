@@ -81,11 +81,6 @@
       "unavailable": "Available in the installed app.",
       "keywords": "login startup launch start routine"
     },
-    "confirmLinks": {
-      "name": "Ask before opening links",
-      "description": "Shows where a link goes before it opens in your default browser.",
-      "keywords": "link url browser open confirm"
-    },
     "outlineSummaries": {
       "name": "Summarize messages in the outline",
       "description": "Uses a small model of each session's agent, and its plan or credits, when the outline opens with messages it has not summarized.",
@@ -343,8 +338,30 @@
       "cleared": "Browsing data cleared"
     },
     "groups": {
+      "links": "Links from agents",
       "siteData": "Site data",
       "allowedSites": "Allowed sites"
+    },
+    "openLinksIn": {
+      "name": "Open links in",
+      "description": "Where links in an agent’s reply open. {{mod}}-click uses the other one. Local addresses always open in the session browser.",
+      "keywords": "link url browser open default chrome safari session",
+      "defaultBrowser": "Default browser",
+      "session": "Session browser",
+      "ask": "Ask"
+    },
+    "confirmLinks": {
+      "name": "Ask before opening a site for the first time",
+      "description": "Shows the full address and lets you pick where it opens.",
+      "keywords": "link url browser open confirm ask first visit"
+    },
+    "rememberedSites": {
+      "name": "Remembered sites",
+      "description": "Sites you chose to always open in one place, without asking.",
+      "keywords": "link url site always open remember forget browser session",
+      "empty": "No site is remembered yet.",
+      "remove": "Remove",
+      "removed": "Removed {{site}}"
     },
     "allowedSites": {
       "name": "Always allowed sites",
@@ -686,6 +703,7 @@
     "remote": "Use this computer's sessions in Kettu on an iPhone, an iPad or another computer; everything stays on this computer.",
     "remote_web": "Use {{host}}'s sessions in Kettu on an iPhone, an iPad or another computer; everything stays on {{host}}.",
     "browser": "The browser in the side panel keeps one profile for every session: sign-ins, site data and cache.",
+    "browserWeb": "Links in agents’ replies open in a new tab.",
     "mcp": "Agents reach tools through these MCP servers. Kettu's own is here, and where each agent keeps its own.",
     "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Install and update them here; accounts are in Agents.",
     "hosts": "The hosts Kettu on this computer connects to. Sessions, projects and agents stay on each host; this is only how to reach them.",

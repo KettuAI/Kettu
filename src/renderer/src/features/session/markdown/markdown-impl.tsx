@@ -1,7 +1,9 @@
 import 'streamdown/styles.css'
 import {
   isValidElement,
+  lazy,
   memo,
+  Suspense,
   useContext,
   useDeferredValue,
   useLayoutEffect,
@@ -14,22 +16,16 @@ import {
 } from 'react'
 import { cjk } from '@streamdown/cjk'
 import { createCodePlugin } from '@streamdown/code'
-import { ExternalLinkIcon } from 'lucide-react'
-import {
-  defaultComponents,
-  Streamdown,
-  type Components,
-  type ExtraProps,
-  type LinkSafetyModalProps,
-} from 'streamdown'
+import { CheckIcon } from 'lucide-react'
+import { defaultComponents, Streamdown, type Components, type ExtraProps } from 'streamdown'
 import { GITHUB_PULL_REQUEST_URL } from '@shared/git'
 import { FileLink } from '@renderer/features/files/file-link'
 import { ProjectPathContext, useFileRef } from '@renderer/features/files/file-refs'
 import { PrChip } from '@renderer/features/git/pr-chip'
-import { asksBeforeOpening } from '@renderer/features/session/link-open'
-import { LinkConfirm } from '@renderer/features/session/link-confirm'
+import { ConfirmedLink } from '@renderer/features/session/link-confirm'
 import { SessionIdContext } from '@renderer/features/session/media/grants'
-import { LocalMedia } from '@renderer/features/session/media/local-media'
+import { LocalMedia, MediaRows } from '@renderer/features/session/media/local-media'
+import { MediaGrid } from '@renderer/features/session/media/media-grid'
 import {
   NamedMedia,
   NamedMediaContext,
@@ -38,20 +34,23 @@ import {
 } from '@renderer/features/session/media/named'
 import { HAN } from '@renderer/lib/han'
 import { cn } from '@renderer/lib/utils'
-import { useSettingsStore } from '@renderer/stores/settings'
 import { splitIntoChunks } from './chunks'
 import { codeThemeInput, useCodeThemes, type CodeThemes } from './code-themes'
-import { localImageTarget, spacedImages } from './local-images'
+import { localImageTarget, pictureRun, spacedImages } from './local-images'
 import { localTarget } from './local-links'
 import { remarkPlugins } from './remark'
-import { SvgBlock } from './svg-block'
-import { useTableFit } from './table-fit'
+import { BlockCode } from './code-frame'
+import { MarkdownTable } from './markdown-table'
+import { LiveContext } from './live'
 
+// KaTeX, its styles and fonts load with the first formula, not with every reply.
+const InlineMath = lazy(() => import('./math').then((m) => ({ default: m.InlineMath })))
+
+// Fenced blocks go through BlockCode, which picks maths, SVG, diagrams or code by language.
 function createPlugins({ light, dark }: CodeThemes) {
   return {
     code: createCodePlugin({ themes: [codeThemeInput(light), codeThemeInput(dark)] }),
     cjk,
-    renderers: [{ language: 'svg', component: SvgBlock }],
   }
 }
 
@@ -71,13 +70,11 @@ function pluginsFor(themes: CodeThemes): Plugins {
   return plugins
 }
 
-const DefaultLink = defaultComponents.a
 const DefaultImage = defaultComponents.img
 const DefaultParagraph = defaultComponents.p
 const DefaultListItem = defaultComponents.li
-const DefaultTable = defaultComponents.table
 
-// Streamdown's href for a link still streaming in, which it draws as a link that opens nothing.
+// Streamdown's href for a link still streaming in, drawn as a link that opens nothing.
 const INCOMPLETE_LINK = 'streamdown:incomplete-link'
 
 function isWebLink(href: string): boolean {
@@ -85,7 +82,7 @@ function isWebLink(href: string): boolean {
   return protocol === 'http:' || protocol === 'https:'
 }
 
-/** A link: a pull request chip, a project file, or the default link with its safety check. */
+/** A link: a pull request chip, a project file, or a web link with its site's icon. */
 function Link(props: ComponentProps<'a'> & ExtraProps) {
   const raw = typeof props.href === 'string' ? props.href : ''
   const local = localTarget(raw)
@@ -97,8 +94,9 @@ function Link(props: ComponentProps<'a'> & ExtraProps) {
   // A local path that is not one of the project's files has nowhere to go, and main opens
   // nothing but web links.
   if (local !== null) return <span title={local}>{props.children}</span>
-  if (!isWebLink(raw) && raw !== INCOMPLETE_LINK) return <span title={raw}>{props.children}</span>
-  return <DefaultLink {...props} />
+  if (raw === INCOMPLETE_LINK) return <span className="thread-link">{props.children}</span>
+  if (!isWebLink(raw)) return <span title={raw}>{props.children}</span>
+  return <ConfirmedLink url={raw}>{props.children}</ConfirmedLink>
 }
 
 /**
@@ -112,20 +110,24 @@ function MarkdownImage(props: ComponentProps<'img'> & ExtraProps) {
   if (local !== null) return <LocalMedia key={local} path={local} alt={props.alt ?? ''} image />
   const remote = /^https?:/i.test(src) ? URL.parse(src) : null
   if (remote) {
-    return (
-      <DefaultLink href={src}>
-        <ExternalLinkIcon className="mr-0.5 inline size-3 align-[-0.1em]" />
-        {remote.host}
-      </DefaultLink>
-    )
+    return <ConfirmedLink url={src}>{remote.host}</ConfirmedLink>
   }
   if (/^(?:data|blob):/i.test(src)) return <DefaultImage {...props} />
   return <span title={src}>{props.alt}</span>
 }
 
-/** Inline code, which is a file chip when it is a path in the project. */
+/** Inline code, which is a file chip when it is a path in the project, or a formula. */
 function InlineCode({ className, children }: ComponentProps<'code'> & ExtraProps) {
-  const file = useFileRef(typeof children === 'string' ? children : null)
+  const math = !!className?.includes('language-math')
+  const file = useFileRef(typeof children === 'string' && !math ? children : null)
+  if (math) {
+    const tex = textOf(children)
+    return (
+      <Suspense fallback={<code data-streamdown="inline-code">{tex}</code>}>
+        <InlineMath tex={tex} />
+      </Suspense>
+    )
+  }
   if (file) return <FileLink file={file} />
   return (
     <code className={className} data-streamdown="inline-code">
@@ -160,9 +162,7 @@ function MediaUnder({ node }: ExtraProps) {
   return (
     // Empty until it shows a file, which hides it (globals.css).
     <div ref={ref} data-media-block="" className="flex flex-col items-start gap-3">
-      {shown.map((path) => (
-        <LocalMedia key={path} path={path} />
-      ))}
+      <MediaRows paths={shown} />
     </div>
   )
 }
@@ -171,6 +171,17 @@ const noSubscribe = () => () => {}
 const noVersion = () => 0
 
 function Paragraph(props: ComponentProps<'p'> & ExtraProps) {
+  const projectPath = useContext(ProjectPathContext)
+  const sessionId = useContext(SessionIdContext)
+  // Outside a session the pictures cannot be read, so they stay their alt text.
+  const pictures = projectPath && sessionId ? pictureRun(props.node) : null
+  if (pictures) {
+    return (
+      <div data-media-block="">
+        <MediaGrid paths={pictures} images />
+      </div>
+    )
+  }
   return (
     <>
       <DefaultParagraph {...props} />
@@ -189,13 +200,21 @@ function ListItem({ children, ...props }: ComponentProps<'li'> & ExtraProps) {
 }
 
 function Table(props: ComponentProps<'table'> & ExtraProps) {
-  const ref = useRef<HTMLTableElement>(null)
-  useTableFit(ref)
   return (
     <>
-      <DefaultTable {...props} ref={ref} />
+      <MarkdownTable {...props} />
       <MediaUnder node={props.node} />
     </>
+  )
+}
+
+/** A task list's box: checked or not as the agent wrote it, and never something to click. */
+function TaskCheckbox({ type, checked }: ComponentProps<'input'> & ExtraProps) {
+  if (type !== 'checkbox') return null
+  return (
+    <span data-task-box="" role="checkbox" aria-checked={!!checked} aria-disabled>
+      {checked && <CheckIcon aria-hidden strokeWidth={1.6} />}
+    </span>
   )
 }
 
@@ -220,25 +239,17 @@ const components: Components = {
   p: Paragraph,
   li: ListItem,
   table: Table,
+  code: BlockCode,
   inlineCode: InlineCode,
+  input: TaskCheckbox,
   em: Emphasis,
 }
 
-const linkSafety = {
-  enabled: true,
-  // Read at the click: a setting change re-renders no message, since this object stays the same.
-  onLinkCheck: (url: string) =>
-    !asksBeforeOpening(url, useSettingsStore.getState().settings.thread.confirmLinks),
-  renderModal: (props: LinkSafetyModalProps) => <LinkConfirm {...props} />,
-}
+// The link component opens links itself (web-link.tsx), so Streamdown's own check stays off.
+const linkSafety = { enabled: false }
 
-// Module constants: Streamdown's context depends on these, and a new object per render would
-// re-render every code block and table on each streamed chunk.
-const controls = {
-  code: { copy: true, download: false },
-  table: { copy: true, download: false, fullscreen: false },
-  mermaid: false,
-}
+// The blocks and tables draw their own actions (code-frame.tsx, markdown-table.tsx).
+const controls = false
 
 /** The text's chunks, kept from the previous render while the text only grows. */
 function useChunks(markdown: string): string[] {
@@ -287,22 +298,24 @@ const Chunk = memo(function Chunk({ markdown, live }: { markdown: string; live: 
   const themes = useCodeThemes()
   const plugins = useMemo(() => pluginsFor(themes), [themes])
   return (
-    <Streamdown
-      mode="streaming"
-      parseIncompleteMarkdown={live}
-      isAnimating={live}
-      skipHtml
-      plugins={plugins}
-      remarkPlugins={remarkPlugins}
-      components={components}
-      linkSafety={linkSafety}
-      controls={controls}
-      codeBlockMaxHeight={480}
-      tableMaxHeight={0}
-      lineNumbers={false}
-    >
-      {source}
-    </Streamdown>
+    <LiveContext value={live}>
+      <Streamdown
+        mode="streaming"
+        parseIncompleteMarkdown={live}
+        isAnimating={live}
+        skipHtml
+        plugins={plugins}
+        remarkPlugins={remarkPlugins}
+        components={components}
+        linkSafety={linkSafety}
+        controls={controls}
+        codeBlockMaxHeight={0}
+        tableMaxHeight={0}
+        lineNumbers={false}
+      >
+        {source}
+      </Streamdown>
+    </LiveContext>
   )
 })
 

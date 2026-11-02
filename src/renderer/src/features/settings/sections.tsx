@@ -42,6 +42,7 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { forgetSite } from '@renderer/features/session/link-open'
 import { errorMessage } from '@renderer/lib/host'
 import { basename } from '@renderer/lib/format'
 import { fileManagerName, formatShortcut, isMac, isWeb, isWindows } from '@renderer/lib/platform'
@@ -51,6 +52,7 @@ import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agen
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
+import { loadSiteIcons, useDefaultBrowser } from '@renderer/stores/site-icons'
 import { browserNotifications, notificationsProblem } from '@renderer/web/notifications'
 import {
   CONFIRM,
@@ -176,6 +178,29 @@ export function ConfirmLinks({ label }: { label: string }) {
         label={label}
         checked={checked}
         onChange={(v) => apply({ thread: { confirmLinks: v } })}
+      />
+    </>
+  )
+}
+
+export function OpenLinksIn({ label }: { label: string }) {
+  const { t } = useTranslation('settings')
+  const value = useSettings().thread.openLinksIn
+  const browser = useDefaultBrowser()
+  const [apply, error] = useApply()
+  useEffect(loadSiteIcons, [])
+  return (
+    <>
+      <ControlError error={error} />
+      <Segmented
+        label={label}
+        value={value}
+        options={[
+          { value: 'browser', label: browser.name ?? t('browser.openLinksIn.defaultBrowser') },
+          { value: 'session', label: t('browser.openLinksIn.session') },
+          { value: 'ask', label: t('browser.openLinksIn.ask') },
+        ]}
+        onChange={(v) => apply({ thread: { openLinksIn: v } })}
       />
     </>
   )
@@ -1181,6 +1206,67 @@ export function AllowedSitesList() {
 /** An origin as the list shows it: its host and port, without the scheme. */
 function labelOf(origin: string): string {
   return originLabel(origin)
+}
+
+/** The sites the "Open link?" dialog was told to always open in one place, and where. */
+export function RememberedSitesList({ label }: { label: ReactNode }) {
+  const { t } = useTranslation('settings')
+  const { useSettingsStore } = useHostScope()
+  const sites = useSettings().thread.alwaysOpenIn
+  const browser = useDefaultBrowser()
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(loadSiteIcons, [])
+
+  const remove = async (site: string) => {
+    setBusy(site)
+    setError(null)
+    try {
+      const { settings, update } = useSettingsStore.getState()
+      await update({ thread: { alwaysOpenIn: forgetSite(settings.thread.alwaysOpenIn, site) } })
+      toast(t('browser.rememberedSites.removed', { site }))
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const entries = Object.entries(sites)
+  return (
+    <div className="flex w-full flex-col gap-2">
+      <div className={BLOCK_LINE}>
+        <div className="min-w-0 flex-1">{label}</div>
+      </div>
+      <ControlError error={error} />
+      {entries.length === 0 && (
+        <p className="text-ui text-tertiary">{t('browser.rememberedSites.empty')}</p>
+      )}
+      {entries.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {entries.map(([site, destination]) => (
+            <div key={site} className="flex items-center gap-2 py-0.5">
+              <span className="min-w-0 flex-1 truncate text-ui text-primary">{site}</span>
+              <span className="shrink-0 text-ui text-tertiary">
+                {destination === 'session'
+                  ? t('browser.openLinksIn.session')
+                  : (browser.name ?? t('browser.openLinksIn.defaultBrowser'))}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy !== null}
+                onClick={() => void remove(site)}
+              >
+                {busy === site && <Spinner data-icon="inline-start" className="size-3.5" />}
+                {t('browser.rememberedSites.remove')}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function RemoveAll() {

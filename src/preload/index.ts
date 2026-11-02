@@ -75,6 +75,7 @@ const onHostsChanged = subscribe('hosts:changed')
 const onHostPairing = subscribe('hosts:pairing')
 const onBrowserState = subscribe('browser:state')
 const onBrowserOpened = subscribe('browser:opened')
+const onSiteIcon = subscribe('browser:site-icon')
 
 const pathOf = (file: File) => webUtils.getPathForFile(file)
 
@@ -97,6 +98,7 @@ const api: KettuApi = {
   systemLocale: systemLocale(),
   app: {
     getInfo: () => invoke('app:get-info'),
+    defaultBrowser: () => invoke('app:default-browser'),
     respondQuit: (id, answer) => invoke('app:respond-quit', id, answer),
     onConfirmQuit: (listener) => {
       quitListeners.add(listener)
@@ -244,6 +246,9 @@ const api: KettuApi = {
     removeAllowedSite: (projectPath, origin) =>
       invoke('browser:remove-allowed-site', projectPath, origin),
     clearData: () => invoke('browser:clear-data'),
+    siteIcons: () => invoke('browser:site-icons'),
+    onSiteIcon,
+    siteOpened: (url) => invoke('browser:site-opened', url),
     setSessions: (ids) => send('browser:sessions', ids),
     onState: onBrowserState,
     onOpened: onBrowserOpened,

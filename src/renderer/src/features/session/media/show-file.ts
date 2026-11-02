@@ -22,3 +22,19 @@ export function showFileAction(path: string, projectPath: string | null, url: st
     },
   }
 }
+
+/**
+ * Shows any file in the file manager where this computer has the host's; elsewhere, a project file
+ * in the Files pane as `showFileAction` does, and null for any other.
+ */
+export function revealFileAction(path: string, projectPath: string | null, url: string) {
+  if (isWeb || (projectPath !== null && hostOfPath(projectPath) !== null)) {
+    return showFileAction(path, projectPath, url)
+  }
+  return { inFiles: false, show: (): Promise<void> => window.kettu.media.reveal(url) }
+}
+
+/** Whether a path a reply names is inside the session's project. */
+export function insideProject(path: string, projectPath: string | null): boolean {
+  return projectPath !== null && !/^~[\\/]/.test(path) && parseFileRef(path, projectPath) !== null
+}
