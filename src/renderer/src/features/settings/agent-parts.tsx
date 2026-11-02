@@ -10,9 +10,10 @@ import { RefreshIcon } from '@renderer/components/refresh-icon'
 import { Button } from '@renderer/components/ui/button'
 import { Progress } from '@renderer/components/ui/progress'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { countdown, USAGE_TONE_TEXT, usageTone } from '@renderer/features/sidebar/plan-usage'
+import { countdown } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel, longAgo, resetTime } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
+import { LIMIT_TEXT, limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
@@ -27,7 +28,7 @@ export function UsageMeters({ limits }: { limits: PlanLimit[] }) {
   const now = useNow()
   return limits.slice(0, 2).map((limit) => {
     const left = limit.resetsAt ? countdown(limit.resetsAt - now) : null
-    const tone = usageTone(limit)
+    const level = limitLevel(limit)
     return (
       <span
         key={limit.window}
@@ -36,13 +37,11 @@ export function UsageMeters({ limits }: { limits: PlanLimit[] }) {
         <span className="text-secondary">{limitLabel(limit)}</span>
         <Progress
           value={limit.usedPercent ?? 0}
-          tone={tone}
+          tone={`limit-${level}`}
           className="w-13"
           aria-label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
         />
-        <span
-          className={cn('min-w-6.5', tone !== 'success' && 'font-medium', USAGE_TONE_TEXT[tone])}
-        >
+        <span className={cn('min-w-6.5', level !== 'ok' && 'font-medium', LIMIT_TEXT[level])}>
           {percent(limit)}
         </span>
         {left && <span title={t('agents.resetsIn', { time: left })}>{left}</span>}
@@ -251,7 +250,7 @@ export function UsageGroup({
       {status.limits.length > 0 ? (
         <RowGroup>
           {status.limits.map((limit) => {
-            const tone = usageTone(limit)
+            const level = limitLevel(limit)
             const left = limit.resetsAt ? countdown(limit.resetsAt - now) : null
             return (
               <RowFrame
@@ -272,15 +271,15 @@ export function UsageGroup({
                 <span className="flex items-center gap-3">
                   <Progress
                     value={limit.usedPercent ?? 0}
-                    tone={tone}
+                    tone={`limit-${level}`}
                     className="w-42 [&_[data-slot=progress-track]]:h-1.5"
                     aria-label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
                   />
                   <span
                     className={cn(
                       'w-9 text-right text-command tabular',
-                      tone !== 'success' && 'font-medium',
-                      USAGE_TONE_TEXT[tone],
+                      level !== 'ok' && 'font-medium',
+                      LIMIT_TEXT[level],
                     )}
                   >
                     {percent(limit)}

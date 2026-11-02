@@ -1,5 +1,6 @@
 import { Progress as ProgressPrimitive } from '@base-ui/react/progress'
 import { cn } from 'cn'
+import { LIMIT_FILL } from '@renderer/lib/plan-limit'
 
 const TONE = {
   default: 'bg-primary',
@@ -7,6 +8,10 @@ const TONE = {
   checked: 'bg-current text-tertiary',
   attention: 'bg-current text-warning',
   destructive: 'bg-danger',
+  // A plan limit's bar, by limitLevel.
+  'limit-ok': LIMIT_FILL.ok,
+  'limit-warn': LIMIT_FILL.warn,
+  'limit-bad': LIMIT_FILL.bad,
 }
 
 function Progress({

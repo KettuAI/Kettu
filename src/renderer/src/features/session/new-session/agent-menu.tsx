@@ -36,14 +36,10 @@ import {
 import { shownChoice, shownValue } from '@renderer/features/session/composer/model-list'
 import { listedInstalled } from '@renderer/features/agents/readiness'
 import { Ring } from '@renderer/features/session/composer/usage'
-import {
-  countdown,
-  tightestLimit,
-  USAGE_TONE_TEXT,
-  usageTone,
-} from '@renderer/features/sidebar/plan-usage'
+import { countdown, tightestLimit } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel } from '@renderer/lib/format'
 import { errorMessage, hostAt } from '@renderer/lib/host'
+import { LIMIT_TEXT, limitLevel, type LimitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import {
@@ -477,12 +473,18 @@ function RailRow({ status }: { status: AgentStatus }) {
   )
 }
 
+const RING_TONE = {
+  ok: 'success',
+  warn: 'attention',
+  bad: 'destructive',
+} as const satisfies Record<LimitLevel, string>
+
 /** The tightest window's pie and percentage, with every window in the tooltip. */
 function UsageNote({ limits, now }: { limits: AgentStatus['limits']; now: number }) {
   const { t } = useTranslation('session')
   const limit = tightestLimit(limits, now)
   if (!limit) return null
-  const tone = usageTone(limit)
+  const level = limitLevel(limit)
   const percent = limit.usedPercent === null ? null : Math.round(limit.usedPercent)
   const current = limits.filter((l) => l.resetsAt === null || l.resetsAt > now)
   return (
@@ -492,12 +494,12 @@ function UsageNote({ limits, now }: { limits: AgentStatus['limits']; now: number
           <span
             className={cn(
               'flex shrink-0 items-center gap-1.25 pl-2 text-xs tabular',
-              USAGE_TONE_TEXT[tone],
+              LIMIT_TEXT[level],
             )}
           />
         }
       >
-        <Ring share={(limit.usedPercent ?? 0) / 100} tone={tone} className="size-3" />
+        <Ring share={(limit.usedPercent ?? 0) / 100} tone={RING_TONE[level]} className="size-3" />
         {percent === null ? '—' : `${percent}%`}
       </TooltipTrigger>
       <TooltipContent side="right" className="flex flex-col items-start gap-0.5">

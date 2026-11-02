@@ -47,6 +47,7 @@ import { strongestSignal, signalText } from '@renderer/features/routines/model'
 import { RunningDot } from '@renderer/features/routines/run-mark'
 import { dayOf } from '@renderer/features/usage/model'
 import { limitLabel, tokens } from '@renderer/lib/format'
+import { LIMIT_TEXT, limitLevel } from '@renderer/lib/plan-limit'
 import { formatShortcut, hasBand } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -77,7 +78,7 @@ import {
 import { HostEmpty, HostFilter, HostHeading, NeedsYouGroup } from './host-groups'
 import { useHostLabel } from './host-label'
 import { ImportSessionsDialog } from './import-sessions'
-import { tightestLimit, USAGE_TONE_TEXT, usageTone } from './plan-usage'
+import { tightestLimit } from './plan-usage'
 import { visibleProjects } from './project-group'
 import { SessionRow } from './session-row'
 import { SidebarFooterContent } from './sidebar-footer'
@@ -438,13 +439,13 @@ function TightestLimit() {
   if (!tightest) return null
   const { agent, limit } = tightest
   const percent = `${Math.round(limit.usedPercent ?? 0)}%`
-  const tone = usageTone(limit)
+  const level = limitLevel(limit)
   return (
     <span
       className={cn(
         'flex min-w-0 items-center gap-1 text-xs font-normal tabular-nums',
-        USAGE_TONE_TEXT[tone],
-        tone === 'success' && 'group-data-active/menu-button:text-secondary',
+        LIMIT_TEXT[level],
+        level === 'ok' && 'group-data-active/menu-button:text-secondary',
       )}
     >
       <AgentMark agent={agent.id} size={12} />

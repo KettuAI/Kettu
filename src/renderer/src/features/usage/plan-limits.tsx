@@ -5,10 +5,11 @@ import type { AgentStatus, PlanLimit } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Progress } from '@renderer/components/ui/progress'
-import { countdown, USAGE_TONE_TEXT, usageTone } from '@renderer/features/sidebar/plan-usage'
+import { countdown } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel, longAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
+import { LIMIT_TEXT, limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { isInstalled, useAgentsStore } from '@renderer/stores/agents'
@@ -117,7 +118,7 @@ function Plan({ status, now }: { status: AgentStatus; now: number }) {
 /** A limit's window: its name and how much of it is used, the bar, and when it resets. */
 function Window({ limit, now }: { limit: PlanLimit; now: number }) {
   const { t } = useTranslation('usage')
-  const tone = usageTone(limit)
+  const level = limitLevel(limit)
   const name = limitLabel(limit)
   return (
     <div className="flex flex-col">
@@ -127,7 +128,7 @@ function Window({ limit, now }: { limit: PlanLimit; now: number }) {
         <span
           className={cn(
             'text-xs tabular-nums',
-            tone === 'success' ? 'text-secondary' : `${USAGE_TONE_TEXT[tone]} font-semibold`,
+            level === 'ok' ? 'text-secondary' : `${LIMIT_TEXT[level]} font-semibold`,
           )}
         >
           {limit.usedPercent === null ? '—' : `${Math.round(limit.usedPercent)}%`}
@@ -135,12 +136,9 @@ function Window({ limit, now }: { limit: PlanLimit; now: number }) {
       </div>
       <Progress
         value={limit.usedPercent ?? 0}
-        tone={tone}
+        tone={`limit-${level}`}
         aria-label={t('limits.used', { limit: name })}
-        className={cn(
-          'mt-1.25 mb-1',
-          tone === 'success' && '[&_[data-slot=progress-indicator]]:text-secondary',
-        )}
+        className="mt-1.25 mb-1"
       />
       {limit.resetsAt !== null && (
         <p className="text-xs text-tertiary">

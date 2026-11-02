@@ -41,6 +41,7 @@ import {
   tokens,
 } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
+import { LIMIT_TEXT, limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { loadContext, refreshLimits, useUsageStore } from '@renderer/stores/usage'
@@ -48,7 +49,7 @@ import { loadContext, refreshLimits, useUsageStore } from '@renderer/stores/usag
 /** From this share of the context the button shows the percentage, in the usage level's color. */
 const CONTEXT_WARNING = 0.8
 
-/** The context's usage level, by the same thresholds as a plan's windows. */
+/** The context's usage level: plenty below 80% used, getting close from 80%, nearly full from 95%. */
 const contextTone = (share: number): UsageTone =>
   usageTone({ usedPercent: share * 100, state: 'ok' })
 
@@ -201,7 +202,7 @@ export function UsageButton({
             key={`${warning.window}-${warning.usedPercent}`}
             className={cn(
               'animate-in fade-in slide-in-from-bottom-1 animation-duration-(--duration-base)',
-              USAGE_TONE_TEXT[usageTone(warning)],
+              LIMIT_TEXT[limitLevel(warning)],
             )}
           >
             {isShortWindow(warning.window) ? t(SHORT_WINDOW[warning.window]) : limitLabel(warning)}{' '}
@@ -521,7 +522,7 @@ function PlanPart({ limits, account }: { limits: PlanLimit[]; account: AgentAcco
       {limits.length > 0 && (
         <ul className="flex flex-col gap-3">
           {limits.map((limit) => {
-            const tone = usageTone(limit)
+            const level = limitLevel(limit)
             return (
               <li key={limit.window} className="flex flex-col gap-1.5">
                 <div className="flex items-baseline gap-2 text-xs tabular">
@@ -540,13 +541,13 @@ function PlanPart({ limits, account }: { limits: PlanLimit[]; account: AgentAcco
                   ) : (
                     <span className="flex-1" />
                   )}
-                  <span className={tone === 'success' ? 'text-secondary' : USAGE_TONE_TEXT[tone]}>
+                  <span className={level === 'ok' ? 'text-secondary' : LIMIT_TEXT[level]}>
                     {limit.usedPercent === null ? '—' : `${Math.round(limit.usedPercent)}%`}
                   </span>
                 </div>
                 <Progress
                   value={limit.usedPercent ?? 0}
-                  tone={tone}
+                  tone={`limit-${level}`}
                   aria-label={t('usage.limits.used', { limit: limitLabel(limit) })}
                   className="[&_[data-slot=progress-track]]:h-1.5"
                 />

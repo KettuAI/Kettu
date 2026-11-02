@@ -79,7 +79,7 @@ export function partFill(part: ContextPart | { kind: 'used' }): string {
     case 'buffer':
       return 'bg-(image:--context-hatch)'
     case 'used':
-      // The neutral fill a plan's bar takes below 80%.
+      // Neutral, since without a breakdown nothing says what the tokens are.
       return 'bg-current text-tertiary'
     case 'free':
       return ''

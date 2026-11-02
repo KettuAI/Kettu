@@ -21,8 +21,9 @@ export function tightestLimit(limits: readonly PlanLimit[], now: number): PlanLi
 export type UsageTone = 'success' | 'attention' | 'destructive'
 
 /**
- * A window's usage level, as the design system's usage levels give it: plenty below 80% used,
- * getting close from 80%, nearly gone from 95% or once the limit is reached.
+ * A usage level, as the context's ring and percentage show it: plenty below 80% used, getting
+ * close from 80%, nearly gone from 95% or once the limit is reached. A plan limit's bar takes
+ * limitLevel instead.
  */
 export function usageTone(limit: Pick<PlanLimit, 'usedPercent' | 'state'>): UsageTone {
   const used = limit.usedPercent ?? 0
