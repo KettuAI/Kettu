@@ -390,6 +390,9 @@ export function registerIpcHandlers({
     agentFolders.add(harness, name, folder),
   )
   handle('settings:rename-agent', 2, (_, id, name) => agentFolders.rename(id, name))
+  handle('settings:set-agent-color', 2, (_, id, color) => {
+    settings.colorAgent(id, color)
+  })
   handle('settings:remove-agent', 2, (_, id, trash) => agentFolders.remove(id, trash))
   handle('login-item:status', 0, () => loginItemStatus())
 

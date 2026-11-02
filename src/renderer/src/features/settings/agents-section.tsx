@@ -15,7 +15,13 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
-import { AGENT_NAME_CHARS } from '@shared/settings'
+import {
+  AGENT_COLORS,
+  AGENT_NAME_CHARS,
+  agentColor,
+  isAgentColor,
+  type AgentColor,
+} from '@shared/settings'
 import { MULTI_AGENT_HARNESSES, type AgentId, type HarnessId } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
@@ -33,6 +39,7 @@ import { Button } from '@renderer/components/ui/button'
 import { Checkbox } from '@renderer/components/ui/checkbox'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
+import { RadioGroup, RadioGroupItem } from '@renderer/components/ui/radio-group'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { AgentStateLine } from '@renderer/features/agents/agent-state'
@@ -138,6 +145,7 @@ function useAddable(): AgentStatus[] {
 export function AgentListItem({ status }: { status: AgentStatus }) {
   const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
+  const dot = useScopedDot(status.id)
   const hasOthers = useHasOtherAgents(status)
   const details = useAgentsStore((s) => s.details[status.id])
   const now = useNow()
@@ -174,7 +182,7 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
       item={status.id}
       label={status.name}
       onOpen={() => openAgentSettings(status.id)}
-      tile={<AgentTile agent={status.id} size={30} glyph={16} />}
+      tile={<AgentTile agent={status.id} size={30} glyph={16} dot={dot} />}
       name={
         <>
           <span className="truncate">{status.name}</span>
@@ -618,12 +626,13 @@ export function AgentPage({ agentId }: { agentId: AgentId }) {
 /** The page's header, without an agent once it is gone from the list. */
 function AgentPageHeader({ status, actions }: { status: AgentStatus | null; actions?: ReactNode }) {
   const { t } = useTranslation('settings')
+  const dot = useScopedDot(status?.id ?? null)
   return (
     <ItemPageHeader
       back={t('sections.agents')}
       onBack={() => openAgentSettings(null)}
       item={status?.id ?? 'agent'}
-      icon={status && <AgentTile agent={status.id} size={40} glyph={22} />}
+      icon={status && <AgentTile agent={status.id} size={40} glyph={22} dot={dot} />}
       title={status?.name ?? null}
       subtitle={status && <AgentSubtitle status={status} />}
       actions={actions}
@@ -993,6 +1002,7 @@ function DangerGroup({ status }: { status: AgentStatus }) {
   return (
     <section className="flex flex-col pt-4">
       <RowGroup>
+        <ColorRow status={status} />
         <RowFrame
           text={
             <RowText name={t('agents.remove.name')} description={t('agents.remove.description')} />
@@ -1010,6 +1020,47 @@ function DangerGroup({ status }: { status: AgentStatus }) {
       <RemoveDialog status={status} open={removing} onOpenChange={setRemoving} />
     </section>
   )
+}
+
+/** The dot an added agent's mark carries, chosen from the palette. */
+function ColorRow({ status }: { status: AgentStatus }) {
+  const { api } = useHostScope()
+  const { t } = useTranslation('settings')
+  const color = useScopedDot(status.id)
+  const [act, busy, error] = useAction()
+  return (
+    <RowFrame
+      text={<RowText name={t('agents.color.name')} description={t('agents.color.description')} />}
+    >
+      <ControlError error={error} />
+      <RadioGroup
+        aria-label={t('agents.color.name')}
+        value={color}
+        disabled={busy}
+        onValueChange={(next) => {
+          if (isAgentColor(next)) act(() => api.settings.setAgentColor(status.id, next))
+        }}
+        className="flex w-auto gap-2.5"
+      >
+        {AGENT_COLORS.map((option) => (
+          <RadioGroupItem
+            key={option}
+            value={option}
+            aria-label={t(`agents.color.${option}`)}
+            title={t(`agents.color.${option}`)}
+            style={{ backgroundColor: `var(--agent-${option})` }}
+            className="size-4.5 shadow-none data-checked:border-0 data-checked:shadow-[0_0_0_2px_var(--bg-surface),0_0_0_3.5px_var(--control-on)]"
+          />
+        ))}
+      </RadioGroup>
+    </RowFrame>
+  )
+}
+
+/** An added agent's dot as the scoped host's settings have it. */
+function useScopedDot(agentId: AgentId | null): AgentColor | null {
+  const { useSettingsStore } = useHostScope()
+  return useSettingsStore((s) => (agentId ? agentColor(s.settings.addedAgents, agentId) : null))
 }
 
 function RemoveDialog({

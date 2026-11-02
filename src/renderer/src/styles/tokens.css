@@ -41,6 +41,13 @@
   --danger: #ac3b2d;
   --success: #2e7550;
   --merged: #6f4c8e;
+  /* The dot on an added agent's mark, in the color chosen for it in Settings › Agents. */
+  --agent-teal: #2f8f83;
+  --agent-violet: #7a5cc0;
+  --agent-amber: #b07a12;
+  --agent-rose: #c0466c;
+  --agent-green: #4b8a39;
+  --agent-slate: #66707e;
   /* Running work, in the ink's grays: blue is kept for data and code. */
   --info: #48525f;
   /* A step darker than the reference amber so it reads on the desk. */
@@ -243,6 +250,13 @@
     --danger: #ea8a7d;
     --success: #6fbf8f;
     --merged: #b798d4;
+    /* The dot on an added agent's mark. */
+    --agent-teal: #45a99a;
+    --agent-violet: #9a80dc;
+    --agent-amber: #d29a32;
+    --agent-rose: #da6489;
+    --agent-green: #6aac55;
+    --agent-slate: #8d96a4;
     --info: #aeb6c1;
     --warning: #d9b463;
     --link: #e8ecf1;
@@ -383,6 +397,13 @@
   --danger: #ea8a7d;
   --success: #6fbf8f;
   --merged: #b798d4;
+  /* The dot on an added agent's mark. */
+  --agent-teal: #45a99a;
+  --agent-violet: #9a80dc;
+  --agent-amber: #d29a32;
+  --agent-rose: #da6489;
+  --agent-green: #6aac55;
+  --agent-slate: #8d96a4;
   --info: #aeb6c1;
   --warning: #d9b463;
   --link: #e8ecf1;

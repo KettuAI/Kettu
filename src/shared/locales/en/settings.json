@@ -615,7 +615,17 @@
     "notCreatedLine": "Not created yet.",
     "createdByKettu": "created by Kettu",
     "chosenInKettu": "chosen in Kettu",
-    "setByLine": "set by {{env}}"
+    "setByLine": "set by {{env}}",
+    "color": {
+      "name": "Color",
+      "description": "The dot on its mark, wherever its sessions show.",
+      "teal": "Teal",
+      "violet": "Violet",
+      "amber": "Amber",
+      "rose": "Rose",
+      "green": "Green",
+      "slate": "Slate"
+    }
   },
   "about": {
     "version": {

@@ -611,7 +611,17 @@
     "notCreatedLine": "尚未创建。",
     "createdByKettu": "由 Kettu 创建",
     "chosenInKettu": "在 Kettu 中选定",
-    "setByLine": "由 {{env}} 设定"
+    "setByLine": "由 {{env}} 设定",
+    "color": {
+      "name": "颜色",
+      "description": "它的标志上的小圆点，在它的会话出现的地方都会显示。",
+      "teal": "青绿",
+      "violet": "紫",
+      "amber": "琥珀",
+      "rose": "玫红",
+      "green": "绿",
+      "slate": "石板灰"
+    }
   },
   "about": {
     "version": {

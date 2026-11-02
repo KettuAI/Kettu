@@ -4,6 +4,8 @@ import {
   AGENT_NAME_CHARS,
   CONFIG_VARIABLES,
   DEFAULT_SETTINGS,
+  isAgentColor,
+  nextAgentColor,
   type AddedAgent,
   type HostSettings,
   type ProxySettings,
@@ -400,7 +402,11 @@ export function withAddedAgent(current: SettingsFile, agent: AddedAgent): Settin
     throw new SettingsError(`The agent "${agent.id}" exists already`)
   }
   const next = structuredClone(current)
-  next.addedAgents.push({ ...agent, name: agentName(agent.name) })
+  next.addedAgents.push({
+    ...agent,
+    name: agentName(agent.name),
+    color: agent.color ?? nextAgentColor(current.addedAgents),
+  })
   return next
 }
 
@@ -413,6 +419,20 @@ export function withRenamedAgent(
   if (index < 0) throw new SettingsError(`No added agent "${agentId}"`)
   const next = structuredClone(current)
   next.addedAgents[index] = { ...next.addedAgents[index]!, name: agentName(name) }
+  return next
+}
+
+/** Sets an added agent's dot from untrusted arguments. */
+export function withAgentColor(
+  current: SettingsFile,
+  agentId: unknown,
+  color: unknown,
+): SettingsFile {
+  const index = current.addedAgents.findIndex((agent) => agent.id === agentId)
+  if (index < 0) throw new SettingsError(`No added agent "${String(agentId)}"`)
+  if (!isAgentColor(color)) throw new SettingsError(`Unknown agent color "${String(color)}"`)
+  const next = structuredClone(current)
+  next.addedAgents[index] = { ...next.addedAgents[index]!, color }
   return next
 }
 
@@ -572,7 +592,15 @@ function readAddedAgents(list: unknown[], problems: string[]): AddedAgent[] {
       problems.push(`"${path}" repeats another agent's id or folder`)
       continue
     }
-    agents.push({ id, name: stored, configDir: configDir as string, created: created as boolean })
+    const agent: AddedAgent = {
+      id,
+      name: stored,
+      configDir: configDir as string,
+      created: created as boolean,
+    }
+    // A color this version does not know falls back to the agent's place, not to a problem.
+    if (isAgentColor(entry.color)) agent.color = entry.color
+    agents.push(agent)
   }
   return agents
 }

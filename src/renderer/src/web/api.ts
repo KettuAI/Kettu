@@ -329,6 +329,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       addAgent: (harnessId, name, folder) =>
         admin('settings.addAgent', { harnessId, name, folder }),
       renameAgent: (agentId, name) => done(admin('settings.renameAgent', { agentId, name })),
+      setAgentColor: (agentId, color) => done(admin('settings.setAgentColor', { agentId, color })),
       removeAgent: (agentId, trash) => done(admin('settings.removeAgent', { agentId, trash })),
     },
     themes: webThemes({

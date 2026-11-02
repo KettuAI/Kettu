@@ -177,6 +177,7 @@ const api: KettuApi = {
     onChanged: onSettingsChanged,
     addAgent: (harnessId, name, folder) => invoke('settings:add-agent', harnessId, name, folder),
     renameAgent: (agentId, name) => invoke('settings:rename-agent', agentId, name),
+    setAgentColor: (agentId, color) => invoke('settings:set-agent-color', agentId, color),
     removeAgent: (agentId, trash) => invoke('settings:remove-agent', agentId, trash),
   },
   themes: {
