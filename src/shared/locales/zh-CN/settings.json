@@ -22,15 +22,14 @@
     "search": "搜索设置",
     "clearSearch": "清除搜索",
     "sections": "设置分区",
-    "back": "返回",
-    "waiting": "{{count}} 个会话等待授权",
     "noMatch": "没有与“{{query}}”相符的设置",
     "noMatchHint": "试试其他关键词，例如“主题”“代理”或 Shell。",
     "results": "搜索结果",
-    "resultsLine_other": "“{{query}}”匹配 {{count}} 项设置。按 Esc 清除搜索。"
+    "resultsLine_other": "“{{query}}”匹配 {{count}} 项设置。按 Esc 清除搜索。",
+    "close": "关闭设置"
   },
   "hostPicker": {
-    "label": "主机的设置",
+    "label": "设置对象",
     "self": "本机 · {{name}}",
     "selfUnnamed": "本机",
     "offline": "离线"
@@ -38,13 +37,13 @@
   "general": {
     "language": {
       "name": "语言",
-      "description": "菜单、设置和 Kettu 自身提示所用的语言。Agent 的回复不会被翻译。",
+      "description": "菜单、设置和 Kettu 自身的提示。Agent 仍用你写给它的语言回复。",
       "keywords": "语言 中文 英文 翻译 language locale chinese english",
-      "system": "跟随系统"
+      "systemNamed": "跟随系统（{{name}}）"
     },
     "defaultAgent": {
       "name": "默认 Agent",
-      "description": "新建会话时使用的 Agent。选择“每次询问”时，在新建会话中选择。",
+      "description": "新建会话时默认使用的 Agent。",
       "askEachTime": "每次询问"
     },
     "sendKey": {
@@ -57,21 +56,22 @@
       "description": "分屏会连同其中的窗格一起恢复。"
     },
     "confirmQuit": {
-      "name": "Agent 或终端命令正在运行时，退出前先询问",
-      "keywords": "退出 确认 quit confirm"
+      "name": "退出前先询问",
+      "keywords": "退出 确认 quit confirm",
+      "description": "仅在 Agent 或终端命令仍在运行时。"
     },
     "sessionTitles": {
       "name": "为新会话生成标题",
-      "description": "Agent 不会自行为会话起标题时，每个新会话使用一次该 Agent 的小模型，并消耗其套餐额度或积分。",
+      "description": "由小模型为每个会话命名一次，会用掉少量 Agent 的套餐额度。",
       "keywords": "标题 命名 会话 模型 额度 title name session"
     },
     "background": {
       "name": "在后台运行",
-      "descriptionMac": "关闭窗口后 Kettu 继续运行，图标留在菜单栏，会话和例程照常工作。",
-      "descriptionWindows": "关闭窗口后 Kettu 继续运行，图标留在通知区域，会话和例程照常工作。",
-      "descriptionLinux": "关闭窗口后 Kettu 继续运行，图标留在系统托盘，会话和例程照常工作。",
+      "descriptionMac": "关闭窗口后，会话和例程在菜单栏中继续运行。",
+      "descriptionWindows": "关闭窗口后，会话和例程在通知区域中继续运行。",
+      "descriptionLinux": "关闭窗口后，会话和例程在系统托盘中继续运行。",
       "keywords": "后台 托盘 菜单栏 通知区域 关闭 窗口 继续运行 background tray menu bar close window",
-      "lockedByRemote": "远程访问开着时一直开着，关掉窗口后设备也连得上这台电脑。"
+      "lockedByRemote": "远程访问开启时保持开启。"
     },
     "openAtLogin": {
       "name": "登录时打开",
@@ -82,7 +82,7 @@
     },
     "outlineSummaries": {
       "name": "在大纲中总结消息",
-      "description": "大纲打开且有尚未总结的消息时，使用该会话 Agent 的小模型，并消耗其套餐额度或积分。",
+      "description": "打开大纲时，由小模型撰写大纲。",
       "keywords": "大纲 标题 总结 模型 额度 outline titles summary"
     },
     "groups": {
@@ -103,9 +103,9 @@
       "export": "导出为文件…",
       "exported": "已将 {{file}} 保存到 {{folder}}",
       "remove": "移除…",
-      "install": "从文件安装…",
+      "install": "安装文件…",
       "moreThemes": "更多主题",
-      "moreDescription": "浏览 Kettu 主题库，或安装 .json 主题文件。",
+      "moreDescription": "来自 Kettu 主题库，或一个 .json 文件。",
       "lowContrast": "对比度不足",
       "contrastPair": "{{mode}}：{{fg}} 在 {{bg}} 上，{{ratio}}:1",
       "contrastMore": "另有 {{count}} 处",
@@ -140,7 +140,7 @@
       }
     },
     "catalog": {
-      "browse": "浏览主题",
+      "browse": "浏览",
       "title": "浏览主题",
       "description": "来自 GitHub 上的 Kettu 主题库。安装后立即应用。",
       "search": "搜索主题",
@@ -159,7 +159,8 @@
         "unreachable": "无法连接主题库。请检查网络或代理后重试。",
         "invalid": "无法读取主题库。",
         "newer-format": "主题库需要更新版本的 Kettu。"
-      }
+      },
+      "done": "完成"
     },
     "colorMode": {
       "name": "颜色模式",
@@ -170,20 +171,20 @@
     },
     "textSize": {
       "name": "文字大小",
-      "description": "用于对话和输入框：14、15 或 16 px。",
+      "description": "对话和输入框：14、15 或 16 px。",
       "keywords": "字体 字号 font",
       "small": "小",
       "default": "默认",
       "large": "大",
-      "previewUser": "把设置页做成高保真，浅色和深色都要看。",
       "previewAgent": "好的。我先读一下 <code>settings-page.tsx</code> 和设计文档，再逐页给出方案。"
     },
     "reduceMotion": {
       "name": "减弱动态效果",
-      "description": "“跟随系统”遵循操作系统的设置；“始终”会去掉所有动态效果。",
+      "description": "“跟随系统”遵循 macOS 的设置；“始终”会去掉所有动态效果。",
       "keywords": "动画 无障碍 animation accessibility",
       "system": "跟随系统",
-      "always": "始终"
+      "always": "始终",
+      "descriptionOther": "“跟随系统”遵循操作系统的设置；“始终”会去掉所有动态效果。"
     },
     "groups": {
       "theme": "主题",
@@ -192,7 +193,7 @@
     },
     "zoom": {
       "name": "界面缩放",
-      "description": "整个窗口的缩放比例，也可以用 {{zoomIn}} 和 {{zoomOut}} 调整。",
+      "description": "整个窗口的显示大小。{{zoomIn}} 和 {{zoomOut}} 在任何地方都可用。",
       "keywords": "缩放 放大 缩小 zoom scale",
       "zoomIn": "放大",
       "zoomOut": "缩小",
@@ -202,7 +203,7 @@
   "terminal": {
     "shell": {
       "name": "Shell",
-      "description": "你的登录 Shell（$SHELL），让终端使用与登录环境相同的工具；也可以选择其他程序。",
+      "description": "你的登录 shell，或你选择的程序。",
       "descriptionWindows": "已安装 pwsh 时使用 pwsh，否则使用 Windows PowerShell；也可以选择其他程序。",
       "loginShell": "登录 Shell",
       "reset": "重置",
@@ -232,7 +233,8 @@
       "signedOut": "未登录",
       "copyCommand": "复制命令",
       "signedInAs": "已登录为 {{account}}",
-      "signedIn": "已登录"
+      "signedIn": "已登录",
+      "ready": "就绪"
     },
     "fetch": {
       "name": "在后台抓取",
@@ -246,33 +248,33 @@
   "notifications": {
     "permission": {
       "name": "需要授权",
-      "description": "Agent 等待你允许某项操作时。",
+      "description": "Agent 正在等你允许某项操作。",
       "keywords": "授权 permission"
     },
     "turnEnded": {
       "name": "本轮对话已完成",
-      "description": "Agent 完成你交给它的任务时。"
+      "description": "Agent 已完成，正在等你的下一条消息。"
     },
     "routines": {
       "name": "例程运行",
-      "description": "例程的运行结束，或例程因套餐限制暂停。",
+      "description": "一次运行结束，或因接近套餐限制而暂停。",
       "keywords": "例程 计划 后台"
     },
     "error": {
       "name": "错误",
-      "description": "会话出错，或 Agent 意外停止时。"
+      "description": "会话出错或 Agent 停止。"
     },
     "sound": {
       "name": "播放提示音",
-      "description": "系统通知提示音。"
+      "description": "系统的通知提示音。"
     },
     "badge": {
       "nameDock": "在程序坞图标上显示数字角标",
       "nameTaskbar": "在任务栏按钮上显示数字角标",
-      "description": "有多少个会话在等待你授权。",
+      "description": "等待你授权的会话。",
       "keywords": "角标 数字 badge"
     },
-    "footer": "仅在 Kettu 的所有窗口都不在前台时显示。",
+    "footer": "只在没有 Kettu 窗口位于前台时显示。",
     "groups": {
       "preview": "预览",
       "when": "提醒我",
@@ -283,7 +285,8 @@
     "sent": "已发送",
     "previewTitle": "Claude Code 需要授权",
     "previewBody": "kettu · 运行 {{command}}",
-    "previewTime": "现在"
+    "previewTime": "现在",
+    "footerWeb": "只在这个页面不在前台时显示。"
   },
   "account": {
     "name": "Kettu 账号",
@@ -315,7 +318,7 @@
     "plainText": "此系统没有钥匙串，登录信息会以不加密的方式保存。",
     "subscription": {
       "name": "订阅",
-      "description": "Kettu 的云服务将需要订阅，在官网购买和管理。",
+      "description": "Kettu 的云服务将需要订阅，其他功能都不需要。",
       "keywords": "订阅 套餐 付费",
       "none": "未订阅",
       "trialing": "试用中",
@@ -323,12 +326,13 @@
       "pastDue": "付款失败",
       "paused": "已暂停",
       "canceled": "已结束"
-    }
+    },
+    "note": "会话、Agent 以及在你自己网络上的远程访问都无需账号，账号只用于官方中继和网页客户端。"
   },
   "browser": {
     "clearData": {
       "name": "清除浏览数据",
-      "description": "侧边面板中浏览器的 Cookie、网站存储和缓存。",
+      "description": "浏览器打开过的每个网站的 Cookie、存储和缓存。",
       "keywords": "browser cookies cache storage site data privacy 浏览器 Cookie 缓存 数据",
       "button": "清除…",
       "dialogTitle": "清除浏览数据？",
@@ -339,7 +343,7 @@
     "groups": {
       "links": "Agent 给出的链接",
       "siteData": "站点数据",
-      "allowedSites": "允许的站点"
+      "allowedSites": "始终允许"
     },
     "openLinksIn": {
       "name": "链接打开方式",
@@ -367,8 +371,12 @@
       "description": "各项目允许 Agent 无需询问即可打开的站点。",
       "keywords": "浏览器 站点 来源 允许 始终 权限 browser sites origins allow always permissions",
       "empty": "尚未有始终允许的站点。",
+      "readFailed": "无法读取允许的站点",
       "remove": "移除",
-      "removed": "已移除 {{origin}}"
+      "removed": "已移除 {{origin}}",
+      "removeFailed": "无法移除 {{origin}}：{{reason}}",
+      "in": "在 {{projects}} 中允许",
+      "note": "Agent 无需询问即可打开这些站点。在站点卡片上选择“此项目始终允许”时，站点会添加到这里。"
     }
   },
   "advanced": {
@@ -381,12 +389,11 @@
       "url": "URL",
       "noProxyFor": "不使用代理的地址",
       "invalid": "请输入 URL，例如 http://proxy.example.com:8080",
-      "environmentNote": "在填入 URL 之前，仍使用环境变量中的代理。",
-      "inUse": "新的连接会使用这个代理。"
+      "environmentNote": "在填入 URL 之前，仍使用环境变量中的代理。"
     },
     "diagnostics": {
       "name": "诊断信息",
-      "description": "包含近期 Agent 消息、日志和路径的文件，用于提交问题报告。其中可能含有代码和消息内容，请只分享给你信任的人。",
+      "description": "一个包含最近消息、日志和路径的文件，用于报告问题。分享前先检查一遍。",
       "keywords": "日志 问题 反馈 报告 logs bug report",
       "export": "导出诊断信息",
       "saved": "已保存到 {{path}}",
@@ -400,7 +407,7 @@
     },
     "removeSessions": {
       "name": "从 Kettu 中移除所有会话",
-      "description": "清空 Kettu 的会话列表。Agent 的对话记录会保留。",
+      "description": "清空列表。Agent 自己的对话记录会保留。",
       "keywords": "删除 清除 清空 delete clear",
       "button": "移除所有会话…",
       "dialogTitle_other": "从 Kettu 中移除全部 {{count}} 个会话？",
@@ -447,32 +454,31 @@
       "list": "这台电脑上的",
       "list_web": "{{host}} 上的"
     },
-    "search": "搜索 Agent",
-    "noMatch": "没有匹配的 Agent",
     "plan": "套餐",
     "loginMethod": "登录方式",
     "email": "邮箱",
     "notReported": "未提供",
     "planLimits": "套餐限额",
     "usageNotReported": "{{name}} 不提供套餐用量。",
+    "spend": {
+      "group": "花费",
+      "month": "本月",
+      "description": "{{name}} 不为 API key 报告套餐额度。这里是 Kettu 统计的、它发出的请求。",
+      "unpriced": "无价格"
+    },
     "configuration": "配置",
     "config": {
       "folder": "目录",
       "settings": "设置文件",
       "instructions": "指令文件"
     },
-    "configFolder": {
-      "description": "{{name}} 存放登录信息、设置和历史记录的位置。",
-      "chosen": "在 Kettu 中选定"
-    },
     "setBy": "由 {{env}} 指定",
-    "notCreated": "尚未创建",
     "showIn": "在{{name}}中显示",
     "noConfig": "没有可显示的配置文件。",
     "advanced": "高级",
     "readingAccount": "正在读取账号…",
     "readingUsage": "正在读取套餐用量…",
-    "noUsage": "不提供套餐用量",
+    "noUsage": "无套餐用量",
     "usageOnceRunning": "运行后显示套餐用量",
     "hidden": "已隐藏",
     "revealAccount": "点击显示",
@@ -541,19 +547,17 @@
       "progressTitle": "正在安装 {{name}}",
       "failedTitle": "安装失败",
       "elsewhere": "已经装在别处？选择可执行文件…",
-      "copyLog": "复制日志"
+      "copyLog": "复制日志",
+      "buttonDialog": "安装…"
     },
     "default": "默认",
     "hiddenTag": "已隐藏",
     "footerBefore": "要用别的程序，先到 ",
     "footerAfter": " 里安装。",
-    "onHarness": "用 {{harness}}",
+    "onHarness": "运行于 {{harness}}",
     "openHarness": "到 Harness 里打开 {{harness}}",
     "openHarnessButton": "打开",
     "harness": "Harness",
-    "folderDefault": "{{name}} 自己的目录，和终端里运行的 {{name}} 共用。",
-    "folderOwn": "这个 Agent 自己的目录，放着它的登录、设置和历史。",
-    "folderCreated": "Kettu 为这个 Agent 新建的目录，放着它的登录、设置和历史。",
     "signInRow": "登录",
     "signInRowHint": "由 Harness 自己在终端里登录，Kettu 不经手凭据。",
     "signInAgain": "在终端中重新登录",
@@ -569,7 +573,8 @@
       "body": "它的会话仍留在列表里，标明 Agent 已删除，不能再继续。",
       "trash": "把它的配置目录移到废纸篓",
       "trashHint": "这个目录是 Kettu 新建的，里面有它的登录凭据和 Harness 的会话记录。",
-      "keepsFolder": "它的配置目录是你选的，原样保留。"
+      "keepsFolder": "它的配置目录是你选的，原样保留。",
+      "buttonEllipsis": "删除…"
     },
     "rename": {
       "button": "改名",
@@ -590,19 +595,19 @@
       "folderNew": "新建一个",
       "folderNewHint": "Kettu 在自己的数据目录里新建，加好后登录。",
       "folderExisting": "用已有的",
-      "folderExistingHint": "终端里 {{variable}} 指过的目录，里面的登录和设置照用。",
+      "folderExistingHint": "选择一个，与它共用设置和登录。",
       "choose": "选择…",
-      "login": "登录",
-      "loginTerminal": "在终端中登录",
-      "loginTerminalHint": "按 Harness 自己的方式，用订阅或控制台账号登录。",
-      "loginKey": "API key",
-      "loginKeyHint": "你自己的 key，用 Anthropic 官方或兼容它的网关。",
+      "login": "登录方式",
+      "loginTerminal": "在终端中",
+      "loginTerminalHint": "{{name}} 自己登录，使用你的套餐。",
+      "loginKey": "使用 API key",
+      "loginKeyHint": "你自己的 key 和服务商。",
       "loginKeyHintOpenAi": "OpenAI 的 API key。",
       "submit": "添加 Agent"
     },
     "key": {
       "row": "API key",
-      "set": "已设置，由 {{name}} 保存，Kettu 不留副本。",
+      "set": "已设置，{{name}} 把它保存在自己的配置文件夹里。",
       "notSet": "用你自己的 key 和服务商，代替登录。",
       "notSetOpenAi": "用 OpenAI 的 API key 代替登录。",
       "setButton": "设置…",
@@ -617,7 +622,25 @@
       "model": "模型",
       "modelPlaceholder": "可选，留空用 {{name}} 的默认",
       "noteClaude": "key 交给 Claude Code，存进这个 Agent 配置目录里的 settings.json；Kettu 不留副本，也不读回。终端里用这个目录运行 {{command}} 也能用。",
-      "noteCodex": "key 经 Codex 自己的 codex login 保存；Kettu 不留副本。要接别的服务商，在这个目录的 config.toml 里自己配。"
+      "noteCodex": "key 经 Codex 自己的 codex login 保存；Kettu 不留副本。要接别的服务商，在这个目录的 config.toml 里自己配。",
+      "baseUrlOptional": "Base URL（可选）",
+      "modelOptional": "模型（可选）"
+    },
+    "needsSignInLine": "需要你登录",
+    "signInPill": "登录",
+    "notCreatedLine": "尚未创建。",
+    "createdByKettu": "由 Kettu 创建",
+    "chosenInKettu": "在 Kettu 中选定",
+    "setByLine": "由 {{env}} 设定",
+    "color": {
+      "name": "颜色",
+      "description": "它的标志上的小圆点，在它的会话出现的地方都会显示。",
+      "teal": "青绿",
+      "violet": "紫",
+      "amber": "琥珀",
+      "rose": "玫红",
+      "green": "绿",
+      "slate": "石板灰"
     }
   },
   "about": {
@@ -650,7 +673,8 @@
       "none": "这台电脑上的 Kettu 不在这里更新",
       "none_web": "{{host}} 上的 Kettu 不在这里更新",
       "noneDetail": "这台电脑上的 Kettu 按安装它的方式更新。",
-      "noneDetail_web": "{{host}} 上的 Kettu 按安装它的方式更新。"
+      "noneDetail_web": "{{host}} 上的 Kettu 按安装它的方式更新。",
+      "readyDetail": "重启后完成更新。你的会话会回来。"
     },
     "automatic": {
       "name": "自动更新",
@@ -682,35 +706,28 @@
     }
   },
   "pages": {
-    "general": "界面语言、输入方式，以及新会话和启动时的行为。",
+    "general": "语言、输入方式，以及新会话和启动时的行为。",
     "appearance": "主题、颜色模式、缩放和文字大小。改动立即生效。",
-    "notifications": "只在 Kettu 的所有窗口都不在前台时提醒你，免得打断正在看的内容。",
-    "notifications_web": "只在这个页面不在前台时提醒你，免得打断正在看的内容。",
-    "account": "你的 Kettu 账号，用于 Kettu 的云服务。不登录也能使用其他所有功能。",
-    "agents": "你选来干活的 Agent，每个有自己的账号和额度。同一个 Harness 能有几个 Agent，比如一个用订阅、一个用公司的 API key。",
-    "agents_web": "{{host}} 上的 Agent，账号和额度都在 {{host}} 上。同一个 Harness 能有几个 Agent，比如一个用订阅、一个用公司的 API key。",
-    "terminal": "侧边面板里的终端用哪个 Shell，以及它的字号。",
+    "notifications": "Agent 需要你或完成时，Kettu 如何通知你。",
+    "notifications_web": "{{host}} 上的 Agent 需要你或完成时，这个页面如何通知你。",
+    "account": "你的 Kettu 账号，用于 Kettu 的云服务。",
+    "agents": "Agent 是登录了一个账号的 Harness。把同一个 Harness 添加两次，就能把个人套餐和工作用的 key 分开。",
+    "agents_web": "{{host}} 上的 Agent 是在那里登录了一个账号的 Harness。把同一个 Harness 添加两次，就能把个人套餐和工作用的 key 分开。",
+    "terminal": "侧边面板的终端运行哪个 shell，以及它的外观。",
     "git": "顶栏的分支与更改、Pull Request 和它的检查结果，都靠下面两个工具。",
     "advanced": "网络代理、诊断信息，以及 Kettu 保存在这台电脑上的数据。",
     "advanced_web": "网络代理、诊断信息，以及 Kettu 保存在 {{host}} 上的数据。",
     "about": "Kettu 的版本、更新和链接。",
-    "archived": "你归档的会话，不在侧边栏里但都保留着。恢复后会回到原来的项目里。",
+    "archived": "从侧边栏移走但仍保留。恢复后会回到原来的项目里。",
     "sharing": "通过你自己的 Cloudflare 账号，把 artifact 发布为任何人都能打开的链接。",
-    "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑上的会话，东西都留在这台电脑上。",
-    "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 上的会话，东西都留在 {{host}} 上。",
-    "browser": "侧边面板里的浏览器让所有会话共用一个配置：登录状态、网站数据和缓存都在这里。",
+    "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑的会话，只走你自己的网络。",
+    "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 的会话，只走你自己的网络。",
+    "browser": "侧边面板里的浏览器为所有会话保留同一个配置，网站只需登录一次。",
     "browserWeb": "Agent 回复中的链接会在新标签页中打开。",
-    "mcp": "Agent 通过这些 MCP 服务器使用工具。这里有 Kettu 自带的服务器，以及各 Agent 自己的服务器所在的位置。",
-    "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。在这里安装和更新；账号在 Agent 里。",
-    "hosts": "这台电脑上的 Kettu 连着的主机。会话、项目和 Agent 都在各自的主机上，这里只管怎么连。",
+    "mcp": "Agent 通过这些 MCP 服务器使用工具：Kettu 自带的，以及各 Agent 自己配置的。",
+    "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。Kettu 会替你安装和更新它们。",
+    "hosts": "这台电脑连接的、运行 Kettu 的其他电脑。它们的会话会显示在侧边栏中。",
     "hostsWeb": "这个页面连着的电脑。会话、项目和 Agent 都在那台电脑上，这里只管这个浏览器怎么连它。"
-  },
-  "footer": {
-    "about": "关于 Kettu",
-    "upToDate": "已是最新",
-    "ready": "{{version}} 已就绪",
-    "available": "{{version}} 已发布",
-    "downloading": "正在下载 {{percent}}%"
   },
   "archived": {
     "description": "{{project}} · {{when}}归档",
@@ -726,7 +743,7 @@
   "sharing": {
     "groups": {
       "account": "Cloudflare",
-      "published": "已发布的 artifact"
+      "published": "已发布"
     },
     "account": {
       "name": "Cloudflare 账号",
@@ -750,7 +767,9 @@
       "removeBody": "Kettu 会删除保存的 token。已发布的页面仍然在线；之后要取消发布，需要重新连接这个账号。",
       "removed": "已移除 Cloudflare 账号",
       "plainText": "此系统没有钥匙串，token 会以不加密的方式保存。",
-      "dashboard": "在 Cloudflare 中选择子域名"
+      "dashboard": "在 Cloudflare 中选择子域名",
+      "keptConnected": "令牌由系统加密保存，只在这台电脑上。",
+      "keptConnected_web": "令牌由系统加密保存，只在 {{host}} 上。"
     },
     "published": {
       "version": "版本 {{version}}，发布于{{ago}}",
@@ -759,7 +778,9 @@
       "unpublishTitle": "要取消发布“{{title}}”吗？",
       "unpublished": "已取消发布",
       "otherAccount": "此页面是用另一个 Cloudflare 账号发布的。连接该账号后才能修改。",
-      "empty": "还没有发布任何 artifact。"
+      "empty": "还没有发布任何 artifact。",
+      "copyLink": "复制链接",
+      "copied": "链接已复制"
     },
     "none": {
       "title": "分享要用桌面应用",
@@ -775,9 +796,9 @@
     "version": "Kettu {{version}}",
     "via": {
       "direct": "直连",
-      "directAt": "直连 {{address}}",
+      "directAt": "直连 · {{address}}",
       "ssh": "SSH",
-      "sshAt": "SSH {{target}}"
+      "sshAt": "SSH · {{target}}"
     },
     "failed": {
       "not_connected": "{{name}} 没有连上，等它在线后再试。",
@@ -792,7 +813,7 @@
       "update_client": "要更新这台电脑的 Kettu",
       "update_host": "要更新它上面的 Kettu"
     },
-    "note": "要从手机或别的电脑连这台电脑，到 <link>远程访问</link> 里添加设备。",
+    "note": "要从手机或其他电脑访问这台电脑，请在<link>远程访问</link>中添加设备。",
     "plainTextKey": "这台电脑连别的主机用的密钥存在只有当前用户能读的文件里，因为系统没有钥匙串。",
     "keyFailed": "系统没能解开这台电脑连别的主机用的密钥，所以连不了别的主机。",
     "add": {
@@ -825,10 +846,9 @@
         "ssh": "SSH"
       },
       "ssh": {
-        "hint": "用你自己的 SSH 配置和 agent，跳板机、端口和别名照常生效。那台机器上没装 Kettu 的，会自动装上。",
         "label": "SSH 地址",
         "placeholder": "lin@dev-box",
-        "note": "Kettu 不读也不存你的 SSH 密钥。",
+        "note": "Kettu 使用你的 ssh 配置，从不读取或保存你的密钥。",
         "connect": "连接",
         "steps": {
           "label": "进度",
@@ -838,7 +858,8 @@
           "adding": "添加这台电脑",
           "opening": "打开加密通道",
           "done": "已完成",
-          "failed": "失败"
+          "failed": "失败",
+          "installingDetail": "它作为守护进程运行，开机或登录时自动启动。"
         },
         "output": "最后几行输出",
         "errors": {
@@ -943,15 +964,14 @@
       "plainTextKey": "这台电脑的密钥存在只有当前用户能读的文件里，因为系统没有钥匙串。",
       "plainTextKey_web": "{{host}} 的密钥存在只有它的用户能读的文件里，因为系统没有钥匙串。",
       "serviceKey": "这台电脑的密钥存在只有当前用户能读的文件里，因为开机就启动的服务不能指望钥匙串已经解锁。",
-      "serviceKey_web": "{{host}} 的密钥存在只有它的用户能读的文件里，因为开机就启动的服务不能指望钥匙串已经解锁。"
+      "serviceKey_web": "{{host}} 的密钥存在只有它的用户能读的文件里，因为开机就启动的服务不能指望钥匙串已经解锁。",
+      "offLine": "已关闭"
     },
     "hostName": {
       "name": "这台电脑的名字",
       "name_web": "主机的名字",
-      "description": "设备上显示的名字，默认是系统里的电脑名。"
+      "description": "你的设备上显示的这台电脑的名字。"
     },
-    "background": "远程访问开着时，关掉窗口 Kettu 也在后台运行，设备才连得上；通用里的“在后台运行”这时关不掉。",
-    "background_web": "远程访问开着时，{{host}} 上的 Kettu 关掉窗口也继续运行，设备才连得上。",
     "devices": {
       "group": "设备",
       "emptyTitle": "还没有设备",
@@ -965,17 +985,17 @@
       "neverSeen": "还没连接过",
       "removedIn_other": "{{count}} 天后自动移除",
       "staleOne_other": "90 天没连过的设备会自动移除。“{{name}}”已经 {{days}} 天没连了，{{count}} 天内连上一次就会留下。",
-      "staleMany": "90 天没连过的设备会自动移除。有 {{count}} 台设备快满 90 天了，连上一次就会留下。"
+      "staleMany": "90 天没连过的设备会自动移除。有 {{count}} 台设备快满 90 天了，连上一次就会留下。",
+      "removalNote": "90 天没有连接的设备会被移除。"
     },
     "direct": {
       "group": "直连",
       "name": "直连",
-      "description": "没用 Kettu 中继，直连是设备唯一的路，所以随远程访问一起打开。",
-      "description_web": "没用 Kettu 中继，直连是设备连到 {{host}} 唯一的路，所以随远程访问一起打开。",
+      "description": "随远程访问一直开启。走的是普通 TCP，只转发 HTTPS 的隧道传不了。",
       "keywords": "直连 端口 地址 局域网 网络 VPN tailscale frp 转发 direct port address",
       "port": {
         "name": "端口",
-        "description": "第一次打开时随机选的，之后不变；做端口转发时，转发的就是它。",
+        "description": "第一次随机选定，之后保持不变。",
         "invalid": "端口要在 1024 到 65535 之间",
         "confirmTitle": "换成端口 {{port}}？",
         "confirmBody": "在线的设备会收到新端口；不在线的设备只认得旧端口，要重新添加才连得上。做了端口转发的话，也要跟着改。",
@@ -983,28 +1003,27 @@
       },
       "found": {
         "name": "设备会试的地址",
-        "description": "这台电脑找到的私有地址和 VPN 地址，网络变了自动更新。",
-        "description_web": "{{host}} 找到的私有地址和 VPN 地址，网络变了自动更新。",
+        "description": "在这台电脑上找到的内网和 VPN 地址。",
+        "description_web": "在 {{host}} 上找到的内网和 VPN 地址。",
         "none": "还没找到私有地址或 VPN 地址。",
         "notListening": "端口监听上之后才有。"
       },
       "own": {
         "name": "自己的地址",
-        "description": "比如 frp 转发出来的公网地址，随配对码发给设备，和上面的一起试。",
+        "description": "比如 frp 转发到这里的公网地址。",
         "label": "添加自己的地址",
-        "placeholder": "主机名或 IP:端口",
+        "placeholder": "主机或 IP:端口",
         "add": "添加",
         "remove": "移除 {{address}}",
         "invalid": "<strong>格式不对：</strong>只填主机名或 IP 加端口，比如 <code>frp.example.com:60021</code>，不带 https://。",
         "repeat": "这个地址已经在列表里了。",
         "full_other": "最多加 {{count}} 个地址。"
-      },
-      "note": "直连是裸 TCP，只转发 HTTPS 的隧道（比如 Cloudflare Tunnel）接不上。"
+      }
     },
     "terminal": {
       "name": "允许终端",
-      "description": "设备能在这台电脑上运行任何命令，超出 Agent 要授权的范围。关掉时断开设备上的终端，终端本身继续运行。",
-      "description_web": "设备能在 {{host}} 上运行任何命令，超出 Agent 要授权的范围。关掉时断开设备上的终端，终端本身继续在 {{host}} 上运行。",
+      "description": "设备可以打开终端，在这台电脑上运行任何命令。",
+      "description_web": "设备可以打开终端，在 {{host}} 上运行任何命令。",
       "keywords": "终端 命令 命令行 terminal shell"
     },
     "kinds": {
@@ -1014,8 +1033,8 @@
     },
     "reset": {
       "name": "重置远程访问",
-      "description": "移除所有设备，换一个新的身份；之后每台设备都要重新添加。",
-      "description_web": "移除所有设备，给 {{host}} 换一个新的身份；之后每台设备都要重新添加。",
+      "description": "移除所有设备，并给这台电脑一个新身份。",
+      "description_web": "移除所有设备，并给 {{host}} 一个新身份。",
       "keywords": "身份 密钥 忘记 设备 reset identity",
       "button": "重置…",
       "title": "重置远程访问？",
@@ -1028,7 +1047,7 @@
     "pair": {
       "title": "添加设备",
       "scan": "用 iPhone 或 iPad 上的 Kettu 扫这个码。",
-      "otherComputer": "另一台电脑：在它的 Kettu 里打开 设置 › 主机 › 添加主机…，粘贴这个链接。",
+      "otherComputer": "在另一台电脑上，打开 设置 › 主机 › 添加主机 并粘贴链接。",
       "target": "打开方式",
       "targets": {
         "app": "App",
@@ -1039,8 +1058,6 @@
       "address": "地址",
       "copy": "复制",
       "copied": "已复制",
-      "expires": "只能添加一台设备，<time>{{time}}</time> 后失效。设备要能直连这台电脑：同一网络、同一个 VPN，或连得到你加的地址。",
-      "expires_web": "只能添加一台设备，<time>{{time}}</time> 后失效。设备要能直连 {{host}}：同一网络、同一个 VPN，或连得到你加的地址。",
       "waiting": "正在等设备扫码…",
       "qr": "配对二维码",
       "failed": "没能生成配对码：{{message}}",
@@ -1082,7 +1099,10 @@
         "reject": "拒绝",
         "add": "添加"
       },
-      "added": "已添加“{{name}}”"
+      "added": "已添加“{{name}}”",
+      "description": "只添加一台设备。码过期前，任何看到它的人都能用它。",
+      "description_web": "只添加一台设备。码过期前，任何看到它的人都能用它。",
+      "expiresIn": "{{time}} 后过期"
     },
     "device": {
       "rename": "改名",
@@ -1154,6 +1174,10 @@
       "offBody": "所有设备马上断开，这台电脑也一样。要等 {{host}} 上再打开远程访问才会重新连上。",
       "resetBody": "这台电脑也是其中之一，之后要重新添加到 {{host}}。",
       "portBody": "这台电脑也用旧端口连 {{host}}，可能会断开；没再连上的话，到 设置 › 主机 里 {{host}} 的页上改地址。"
+    },
+    "groups": {
+      "permissions": "权限",
+      "danger": "危险区"
     }
   },
   "usage": {
@@ -1163,7 +1187,8 @@
     "keywords": "MCP 服务器 工具 artifact 会话 浏览器",
     "groups": {
       "kettu": "来自 Kettu",
-      "own": "各 Agent 自己的配置"
+      "own": "各 Agent 自己的配置",
+      "kettuNote": "Artifacts、会话和浏览器都通过这个服务器提供给每个 Agent。"
     },
     "state": {
       "running": "运行中",
@@ -1179,7 +1204,6 @@
       "title": "无法读取 MCP 服务器"
     },
     "server": {
-      "builtIn": "Kettu 内置",
       "notRunning": {
         "title": "Kettu 的服务器没有运行",
         "body": "在它运行之前，会话启动时不带它的工具。"
@@ -1187,9 +1211,13 @@
     },
     "place": {
       "connects": "{{name}} 也会连接它自己配置的服务器。",
-      "list": "在会话中输入 {{command}} 可查看它们及其状态。",
-      "project": "以及项目目录中的 {{file}}。",
-      "keywords": "配置文件 MCP"
+      "keywords": "配置文件 MCP",
+      "ownWithCommand": "它自己的服务器也会连接。在会话中输入 {{command}} 可以查看，或在项目里添加 {{file}}。",
+      "ownWithCommandFrom": "它自己的服务器也会连接，来自 {{path}}。在会话中输入 {{command}} 可以查看，或在项目里添加 {{file}}。",
+      "ownWithCommandMissing": "它自己的服务器也会连接。在会话中输入 {{command}} 可以查看，或在项目里添加 {{file}}。{{path}} 尚未创建。",
+      "ownFrom": "它自己的服务器也会连接，来自 {{path}} 和项目里的 {{file}}。",
+      "ownFromMissing": "它自己的服务器也会连接，来自项目里的 {{file}}。{{path}} 尚未创建。",
+      "pathNote": "{{path}}（{{note}}）"
     },
     "agents": "Agent",
     "tools": "工具",
@@ -1199,7 +1227,8 @@
       "off": "它的会话启动时不带这些工具。",
       "takesNone": "{{name}} 不支持通过 HTTP 连接的 MCP 服务器。",
       "nextStart": "将在 {{name}} 下次启动时生效。"
-    }
+    },
+    "builtIn": "内置"
   },
   "harnesses": {
     "groups": {
@@ -1207,8 +1236,6 @@
       "notInstalled": "未安装"
     },
     "keywords": "安装 更新 程序 可执行文件 cli node npm",
-    "search": "搜索 Harness",
-    "noMatch": "没有匹配的 Harness",
     "methods": {
       "archive": "下载",
       "brew": "Homebrew",
@@ -1217,10 +1244,6 @@
       "winget": "WinGet"
     },
     "updateTo": "更新到 {{version}}",
-    "yours": "你装的 {{command}}",
-    "sdkOnFirstUse": "SDK 首次使用时安装",
-    "picked": "你选的程序",
-    "kettus": "Kettu 装的 {{name}}",
     "agentCount_other": "{{count}} 个 Agent",
     "missingLine": "未安装。点“安装”查看 {{name}} 官方文档里的安装方式。",
     "install": {
@@ -1251,6 +1274,7 @@
     "adapterNote": "Kettu 经这个适配器运行 {{name}}，用你的 Node.js。",
     "usedBy": "在用它的",
     "listSeparator": "、",
-    "manageAgents": "在 Agent 里管理"
+    "manageAgents": "在 Agent 里管理",
+    "versionOut": "{{version}} 已发布"
   }
 }

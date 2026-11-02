@@ -15,6 +15,7 @@ import {
   withDirectPort,
   withoutAgent,
   withRenamedAgent,
+  withAgentColor,
   withShellPath,
 } from './settings-schema'
 
@@ -666,7 +667,7 @@ describe('added agents', () => {
 
   it('adds an agent to a harness that has them, once', () => {
     const added = withAddedAgent(defaults(), { ...work, name: ' Work ' })
-    expect(added.addedAgents).toEqual([work])
+    expect(added.addedAgents).toEqual([{ ...work, color: 'teal' }])
     expect(() => withAddedAgent(added, work)).toThrow('exists already')
     expect(() => withAddedAgent(defaults(), { ...work, id: 'claude-code' })).toThrow(
       'not an agent that can be added',
@@ -679,10 +680,60 @@ describe('added agents', () => {
   it('renames an added agent, and no other', () => {
     const added = withAddedAgent(defaults(), work)
     expect(withRenamedAgent(added, 'claude-code~work', ' Client ').addedAgents).toEqual([
-      { ...work, name: 'Client' },
+      { ...work, name: 'Client', color: 'teal' },
     ])
     expect(() => withRenamedAgent(added, 'claude-code', 'X')).toThrow('No added agent')
     expect(() => withRenamedAgent(added, 'claude-code~work', '')).toThrow(SettingsError)
+  })
+
+  it('gives a new agent the first color no other added agent has', () => {
+    const first = withAddedAgent(defaults(), work)
+    const second = withAddedAgent(first, { ...work, id: 'codex~two', configDir: '/srv/two' })
+    expect(second.addedAgents.map((agent) => agent.color)).toEqual(['teal', 'violet'])
+    const chosen = withAddedAgent(defaults(), { ...work, color: 'rose' })
+    expect(chosen.addedAgents[0]!.color).toBe('rose')
+  })
+
+  it("sets an added agent's color, and only a known one", () => {
+    const added = withAddedAgent(defaults(), work)
+    expect(withAgentColor(added, 'claude-code~work', 'amber').addedAgents[0]!.color).toBe('amber')
+    expect(() => withAgentColor(added, 'claude-code', 'amber')).toThrow('No added agent')
+    expect(() => withAgentColor(added, 'claude-code~work', 'blue')).toThrow('Unknown agent color')
+    expect(() => withAgentColor(added, 'claude-code~work', null)).toThrow(SettingsError)
+  })
+
+  it("reads a stored color, and gives one it does not know its place's color without a problem", () => {
+    const loaded = parseSettingsFile({
+      version: 1,
+      addedAgents: [
+        { ...work, color: 'green' },
+        { id: 'codex~e', name: 'E', configDir: '/srv/e', created: false, color: 'mauve' },
+      ],
+    })
+    expect(loaded.settings.addedAgents).toEqual([
+      { ...work, color: 'green' },
+      { id: 'codex~e', name: 'E', configDir: '/srv/e', created: false, color: 'violet' },
+    ])
+    expect(loaded.problems).toEqual([])
+  })
+
+  it('keeps the colors agents from before colors showed once others change', () => {
+    const two = { id: 'codex~two', name: 'Two', configDir: '/srv/two', created: false }
+    const loaded = parseSettingsFile({ version: 1, addedAgents: [work, two] }).settings
+    const before = loaded.addedAgents.map((agent) => agent.color)
+    expect(before).toEqual(['teal', 'violet'])
+    const recolored = withAgentColor(loaded, 'claude-code~work', 'amber')
+    const third = withAddedAgent(recolored, {
+      id: 'codex~three',
+      name: 'Three',
+      configDir: '/srv/three',
+      created: true,
+    })
+    const removed = withoutAgent(third, 'claude-code~work')
+    expect(removed.addedAgents.map((agent) => [agent.id, agent.color])).toEqual([
+      ['codex~two', 'violet'],
+      ['codex~three', 'teal'],
+    ])
   })
 
   it('removes an added agent with the settings that name it', () => {
@@ -713,8 +764,8 @@ describe('added agents', () => {
       ],
     })
     expect(loaded.settings.addedAgents).toEqual([
-      work,
-      { id: 'codex~e', name: 'E', configDir: '/srv/e', created: false },
+      { ...work, color: 'teal' },
+      { id: 'codex~e', name: 'E', configDir: '/srv/e', created: false, color: 'violet' },
     ])
     expect(loaded.problems).toHaveLength(7)
     expect(parseSettingsFile({ version: 1, addedAgents: {} }).problems).toEqual([

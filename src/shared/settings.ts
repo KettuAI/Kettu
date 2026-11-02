@@ -92,6 +92,28 @@ export interface AddedAgent {
   name: string
   configDir: string // Kettu's own new folder, or one picked in a native dialog
   created: boolean // Kettu made the folder, so removing the agent offers to move it to the trash
+  color?: AgentColor // the dot on its mark; absent in files from before it, see `agentColor`
+}
+
+/** The colors of the dot that sets an added agent's mark apart from its harness's default. */
+export const AGENT_COLORS = ['teal', 'violet', 'amber', 'rose', 'green', 'slate'] as const
+export type AgentColor = (typeof AGENT_COLORS)[number]
+
+export function isAgentColor(value: unknown): value is AgentColor {
+  return (AGENT_COLORS as readonly unknown[]).includes(value)
+}
+
+/** An added agent's dot: its own color, else one by its place in the list; null for a default agent. */
+export function agentColor(agents: readonly AddedAgent[], id: AgentId): AgentColor | null {
+  const index = agents.findIndex((agent) => agent.id === id)
+  if (index < 0) return null
+  return agents[index]!.color ?? AGENT_COLORS[index % AGENT_COLORS.length]!
+}
+
+/** The color a new agent gets: the first no other added agent has, else the first. */
+export function nextAgentColor(agents: readonly AddedAgent[]): AgentColor {
+  const taken = new Set(agents.map((agent) => agentColor(agents, agent.id)))
+  return AGENT_COLORS.find((color) => !taken.has(color)) ?? AGENT_COLORS[0]
 }
 
 /** The longest name an added agent may have. */

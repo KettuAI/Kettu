@@ -1,8 +1,22 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { HARNESS_IDS } from '@shared/agents'
+import type { AgentColor } from '@shared/settings'
 import { AgentMark } from './agent-mark'
+import { AgentMarkHost } from './agent-mark-host'
+
+// Server rendering reads no store, so the test hands over the statuses each host reports.
+type Statuses = { byId: Record<string, { color?: AgentColor }> }
+const stores = vi.hoisted(() => ({
+  local: { byId: {} } as Statuses,
+  hosts: {} as Record<string, Statuses>,
+}))
+vi.mock('@renderer/stores/agents', () => ({
+  useAgentsStore: (select: (s: unknown) => unknown) => select(stores),
+  agentsOn: (s: typeof stores, hostId: string | null) =>
+    hostId === null ? s.local : (s.hosts[hostId] ?? { byId: {} }),
+}))
 
 describe('AgentMark', () => {
   it('draws an added agent with its harness mark', () => {
@@ -22,6 +36,34 @@ describe('AgentMark', () => {
         )
         expect(markup.endsWith('</svg>'), agent).toBe(true)
       }
+    }
+  })
+
+  it("puts an added agent's dot on its mark, and none on a default agent's", () => {
+    stores.local = { byId: { 'codex~work': { color: 'rose' }, codex: {} } }
+    stores.hosts = { studio: { byId: { 'codex~work': { color: 'amber' } } } }
+    try {
+      const mark = (agent: 'codex' | 'codex~work', extra: object = {}) =>
+        renderToStaticMarkup(createElement(AgentMark, { agent, mono: false, ...extra }))
+      expect(mark('codex~work')).toContain('var(--agent-rose)')
+      expect(mark('codex')).not.toContain('--agent-')
+      // A session of another host takes that host's color for the agent of the same id.
+      expect(mark('codex~work', { hostId: 'studio' })).toContain('var(--agent-amber)')
+      // Inside Settings showing another host, the marks are that host's.
+      const inStudio = renderToStaticMarkup(
+        createElement(
+          AgentMarkHost.Provider,
+          { value: 'studio' },
+          createElement(AgentMark, { agent: 'codex~work' }),
+        ),
+      )
+      expect(inStudio).toContain('var(--agent-amber)')
+      expect(mark('codex~work', { hostId: 'gone' })).toBe(mark('codex'))
+      expect(mark('codex~work', { dot: 'green' })).toContain('var(--agent-green)')
+      expect(mark('codex~work', { dot: null })).toBe(mark('codex'))
+    } finally {
+      stores.local = { byId: {} }
+      stores.hosts = {}
     }
   })
 })

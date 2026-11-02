@@ -14,7 +14,6 @@ export interface GroupDef {
   count?: number
   /** Small actions at the label's end, such as Send a test notification. */
   actions?: ReactNode
-  tone?: 'danger'
   /** Rows that draw on the page itself rather than on a card, as the theme tiles do. */
   plain?: boolean
   /** The label names the group for assistive technology only, as a lone card needs none. */
@@ -38,9 +37,10 @@ export interface RowDef {
   group?: GroupDef
   /**
    * `block` hands the row's text to the control, which keeps it beside its main control on the
-   * first line and puts what it reveals underneath; `custom` renders only the control.
+   * first line and puts what it reveals underneath; `custom` renders only the control; `bare`
+   * renders only the control and draws no line under it, as Text size draws its own.
    */
-  layout?: 'inline' | 'block' | 'custom'
+  layout?: 'inline' | 'block' | 'custom' | 'bare'
   render: (text: ReactNode) => ReactNode
   /** Where choosing the row in search results goes, when not to the row on its page. */
   open?: () => void

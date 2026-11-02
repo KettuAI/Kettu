@@ -15,19 +15,11 @@ import {
   CopyIcon,
   RotateCwIcon,
 } from 'lucide-react'
-import { Trans, useTranslation } from 'react-i18next'
+import { useTranslation } from 'react-i18next'
 import { DEVICE_NAME_CHARS } from '@shared/remote/device'
 import type { PairingEnd, PairingState } from '@shared/remote/pairing'
 import { Button } from '@renderer/components/ui/button'
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@renderer/components/ui/dialog'
-import { Field, FieldDescription, FieldLabel } from '@renderer/components/ui/field'
+import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
@@ -37,12 +29,20 @@ import { useHostContext } from '@renderer/lib/host-features'
 import { useSeconds } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
-import { Segmented, SettingSelect } from './controls'
+import { ROW_BUTTON, Segmented, SettingSelect } from './controls'
 import { closeRequest } from './pair-close'
 import { browserLinks } from './pair-links'
 import { QrCode } from './qr-code'
 import { DeviceIcon, DeviceTile } from './remote-parts'
 import { deviceLine } from './remote-text'
+import {
+  DIALOG_FIELD,
+  SettingsDialogBody,
+  SettingsDialogContent,
+  SettingsDialogFooter,
+  SettingsDialogHeader,
+  SettingsField,
+} from './settings-dialog'
 
 export type Shown =
   | { kind: 'loading' }
@@ -168,48 +168,43 @@ function PairFlow({
     shown.kind === 'pairing' && shown.pairing.state === 'confirm' ? shown.pairing : null
   const ended = shown.kind === 'pairing' && shown.pairing.state === 'void'
   return (
-    <DialogContent
-      showCloseButton={false}
-      className={cn('gap-0 p-0', confirm ? 'sm:max-w-110' : 'sm:max-w-145')}
-    >
+    <SettingsDialogContent className={confirm ? 'sm:max-w-110' : 'sm:max-w-115'}>
       {confirm ? (
         <Confirm ref={confirmRef} pairing={confirm} onAnswer={answer} />
       ) : (
         <>
-          <DialogHeader className="px-5 pt-5">
-            <DialogTitle>{t('remote.pair.title')}</DialogTitle>
-          </DialogHeader>
+          <PairHeader />
           <CodeBody shown={shown} link={link} />
-          <DialogFooter className="items-center p-5 sm:justify-start">
+          <SettingsDialogFooter>
             {ended ? (
               <>
-                <span className="flex-1" />
-                <DialogClose render={<Button variant="outline" />}>
+                <DialogClose render={<Button variant="ghost" className={ROW_BUTTON} />}>
                   {t('common:actions.close')}
                 </DialogClose>
-                <Button onClick={onNewCode}>
+                <Button className={ROW_BUTTON} onClick={onNewCode}>
                   <RotateCwIcon data-icon="inline-start" />
                   {t('remote.pair.newCode')}
                 </Button>
               </>
             ) : (
-              <>
-                {shown.kind !== 'failed' && (
-                  <span role="status" className="flex items-center gap-2 text-ui text-tertiary">
-                    <Spinner className="size-4" />
-                    {t('remote.pair.waiting')}
-                  </span>
-                )}
-                <span className="flex-1" />
-                <DialogClose render={<Button variant="outline" />}>
-                  {t('common:actions.cancel')}
-                </DialogClose>
-              </>
+              <DialogClose render={<Button variant="ghost" className={ROW_BUTTON} />}>
+                {t('common:actions.done')}
+              </DialogClose>
             )}
-          </DialogFooter>
+          </SettingsDialogFooter>
         </>
       )}
-    </DialogContent>
+    </SettingsDialogContent>
+  )
+}
+
+function PairHeader() {
+  const { t } = useTranslation('settings')
+  const onHost = useHostContext()
+  return (
+    <SettingsDialogHeader title={t('remote.pair.title')}>
+      {t('remote.pair.description', onHost)}
+    </SettingsDialogHeader>
   )
 }
 
@@ -230,15 +225,26 @@ export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string 
   const browser = browsers.find((b) => b.address === chosen) ?? browsers[0] ?? null
   const link = target === 'browser' ? (browser?.link ?? null) : appLink
   return (
-    <div className="flex min-w-0 items-start gap-5 px-5 pt-4">
-      <div className="relative size-50.75 shrink-0 rounded-xl bg-canvas p-3.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]">
+    <div className="flex min-w-0 flex-col items-center gap-4 px-6 pt-3 pb-1">
+      {!end && shown.kind !== 'failed' && browsers.length > 0 && (
+        <Segmented
+          label={t('remote.pair.target')}
+          value={target}
+          options={[
+            { value: 'app', label: t('remote.pair.targets.app') },
+            { value: 'browser', label: t('remote.pair.targets.browser') },
+          ]}
+          onChange={setTarget}
+        />
+      )}
+      <div className="relative size-56 shrink-0 rounded-modal bg-canvas p-3 shadow-[0_0_0_var(--hairline)_var(--border-default)]">
         {link && (
           <QrCode text={link} label={t('remote.pair.qr')} className={cn(end && 'opacity-8')} />
         )}
         {end && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-canvas-ink/60">
             <EndIcon end={end} className="size-5" />
-            <span className="text-ui font-medium">
+            <span className="text-control font-medium">
               {t(`remote.pair.ends.${endKey(end)}.short`)}
             </span>
           </div>
@@ -249,34 +255,18 @@ export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string 
           </div>
         )}
       </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-3">
-        {!end && shown.kind !== 'failed' && browsers.length > 0 && (
-          <div className="self-start">
-            <Segmented
-              label={t('remote.pair.target')}
-              value={target}
-              options={[
-                { value: 'app', label: t('remote.pair.targets.app') },
-                { value: 'browser', label: t('remote.pair.targets.browser') },
-              ]}
-              onChange={setTarget}
-            />
-          </div>
-        )}
+      <div className="flex max-w-90 flex-col items-center gap-1 text-center text-lede text-pretty text-secondary">
         {shown.kind === 'failed' ? (
-          <p className="text-ui text-danger">
-            {t('remote.pair.failed', { message: shown.message })}
-          </p>
+          <p className="text-danger">{t('remote.pair.failed', { message: shown.message })}</p>
         ) : end ? (
           <EndText end={end} />
         ) : target === 'browser' ? (
-          <div className="flex flex-col gap-1">
-            <p className="text-ui font-medium">{t('remote.pair.browserScan')}</p>
-            <p className="text-xs leading-4.5 text-pretty text-tertiary">
-              {t('remote.pair.browserHint')}
+          <>
+            <p>
+              {t('remote.pair.browserScan')} {t('remote.pair.browserHint')}
             </p>
             {browsers.length > 1 && browser && (
-              <div className="flex items-center justify-between gap-2 pt-1 text-ui">
+              <div className="flex items-center gap-2 pt-1 text-control">
                 <span className="text-secondary">{t('remote.pair.address')}</span>
                 <SettingSelect
                   label={t('remote.pair.address')}
@@ -286,18 +276,23 @@ export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string 
                 />
               </div>
             )}
-          </div>
+          </>
         ) : (
-          <div className="flex flex-col gap-1">
-            <p className="text-ui font-medium">{t('remote.pair.scan')}</p>
-            <p className="text-xs leading-4.5 text-pretty text-tertiary">
-              {t('remote.pair.otherComputer')}
-            </p>
-          </div>
+          <p>
+            {t('remote.pair.scan')} {t('remote.pair.otherComputer')}
+          </p>
         )}
-        <LinkBox link={link} disabled={!waiting} />
-        {waiting && <ExpiresIn expiresAt={waiting.expiresAt} />}
       </div>
+      <LinkBox link={link} disabled={!waiting} />
+      {waiting && (
+        <div className="flex w-full items-center gap-2 pt-3 text-control leading-[normal] text-tertiary shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
+          <Spinner className="size-3.25" />
+          <span role="status" className="flex-1">
+            {t('remote.pair.waiting')}
+          </span>
+          <ExpiresIn expiresAt={waiting.expiresAt} />
+        </div>
+      )}
     </div>
   )
 }
@@ -315,14 +310,14 @@ function EndText({ end }: { end: PairingEnd }) {
   const key = endKey(end)
   return (
     <>
-      <p className="flex items-center gap-1.5 text-ui font-medium">
+      <p className="flex items-center gap-1.5 font-medium text-primary">
         <EndIcon
           end={end}
           className={cn('size-4 shrink-0', end === 'attempts' ? 'text-danger' : 'text-tertiary')}
         />
         {t(`remote.pair.ends.${key}.title`)}
       </p>
-      <p className="text-xs leading-4.5 text-tertiary">{t(`remote.pair.ends.${key}.body`)}</p>
+      <p className="text-hint text-tertiary">{t(`remote.pair.ends.${key}.body`)}</p>
     </>
   )
 }
@@ -337,19 +332,19 @@ function LinkBox({ link, disabled }: { link: string | null; disabled: boolean })
     return () => clearTimeout(timer)
   }, [copied])
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-subtle py-1.5 pr-1.5 pl-2.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]">
+    <div className="flex w-full gap-2">
       <code
         className={cn(
-          'min-w-0 flex-1 truncate font-mono text-code leading-4.5',
+          'block h-8 min-w-0 flex-1 truncate rounded-xl bg-card px-2.75 font-mono text-hint leading-8 shadow-outline',
           disabled ? 'text-disabled' : 'text-primary',
         )}
         data-selectable=""
       >
-        {link ?? ' '}
+        {link ?? ' '}
       </code>
       <Button
+        className={ROW_BUTTON}
         variant="outline"
-        size="xs"
         disabled={disabled || !link}
         onClick={() => {
           if (!link) return
@@ -365,18 +360,11 @@ function LinkBox({ link, disabled }: { link: string | null; disabled: boolean })
 
 function ExpiresIn({ expiresAt }: { expiresAt: number }) {
   const { t } = useTranslation('settings')
-  const onHost = useHostContext()
   const now = useSeconds()
   return (
-    <p className="text-xs leading-4.5 text-tertiary">
-      <Trans
-        t={t}
-        i18nKey="remote.pair.expires"
-        context={onHost.context}
-        values={{ time: countdown(expiresAt - now), host: onHost.host }}
-        components={{ time: <span className="text-primary tabular" /> }}
-      />
-    </p>
+    <span className="tabular">
+      {t('remote.pair.expiresIn', { time: countdown(expiresAt - now) })}
+    </span>
   )
 }
 
@@ -414,46 +402,49 @@ export function Confirm({
     .join(' · ')
   return (
     <form className="contents" onSubmit={submit}>
-      <DialogHeader className="px-5 pt-5">
-        <DialogTitle>{t('remote.pair.confirm.title')}</DialogTitle>
-      </DialogHeader>
-      <div className="flex min-w-0 flex-col gap-4 px-5 pt-4">
-        <p className="text-ui leading-5 text-secondary">{t('remote.pair.confirm.body')}</p>
-        <div className="flex items-center gap-3 rounded-xl bg-subtle p-3 shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]">
+      <SettingsDialogHeader title={t('remote.pair.confirm.title')}>
+        {t('remote.pair.confirm.body')}
+      </SettingsDialogHeader>
+      <SettingsDialogBody>
+        <div className="flex items-center gap-3 rounded-xl bg-subtle p-3">
           <DeviceTile large icon={<DeviceIcon device={device} className="size-5" />} />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-ui font-medium">{device.name}</div>
-            <div className="mt-0.5 text-xs leading-4 text-pretty text-tertiary">{line}</div>
+            <div className="truncate text-label leading-[normal]">{device.name}</div>
+            <div className="mt-0.5 text-hint text-pretty text-tertiary">{line}</div>
           </div>
         </div>
-        <Field data-invalid={!valid || undefined}>
-          <FieldLabel htmlFor="pair-name" className="text-ui font-normal text-tertiary">
-            {t('remote.pair.confirm.name')}
-          </FieldLabel>
+        <SettingsField
+          label={t('remote.pair.confirm.name')}
+          htmlFor="pair-name"
+          hint={t('remote.pair.confirm.nameHint')}
+        >
           <Input
             id="pair-name"
             value={name}
             autoFocus
             autoComplete="off"
             spellCheck={false}
-            className="h-7 text-ui md:text-ui"
+            className={DIALOG_FIELD}
             aria-invalid={!valid || undefined}
             onChange={(event) => setName(event.target.value)}
           />
-          <FieldDescription className="text-xs">
-            {t('remote.pair.confirm.nameHint')}
-          </FieldDescription>
-        </Field>
-      </div>
-      <DialogFooter className="p-5">
-        <Button type="button" variant="outline" disabled={answered} onClick={() => answer(false)}>
+        </SettingsField>
+      </SettingsDialogBody>
+      <SettingsDialogFooter>
+        <Button
+          type="button"
+          variant="ghost"
+          className={ROW_BUTTON}
+          disabled={answered}
+          onClick={() => answer(false)}
+        >
           {t('remote.pair.confirm.reject')}
         </Button>
-        <Button type="submit" disabled={answered || !valid}>
+        <Button type="submit" className={ROW_BUTTON} disabled={answered || !valid}>
           {answered && <Spinner data-icon="inline-start" />}
           {t('remote.pair.confirm.add')}
         </Button>
-      </DialogFooter>
+      </SettingsDialogFooter>
     </form>
   )
 }

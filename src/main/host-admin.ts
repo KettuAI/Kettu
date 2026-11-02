@@ -327,6 +327,11 @@ export class HostAdmin {
         agentFolders.rename(agentId, name)
         return null
       }
+      case 'settings.setAgentColor': {
+        const { agentId, color } = fields(params)
+        settings.colorAgent(agentId, color)
+        return null
+      }
       case 'settings.removeAgent': {
         const { agentId, trash } = fields(params)
         await agentFolders.remove(agentId, trash)

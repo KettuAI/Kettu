@@ -34,7 +34,7 @@ import { useSessionsStore } from '@renderer/stores/sessions'
 import { openSettingsItem } from '@renderer/stores/view'
 import { useWebHostStore } from '@renderer/stores/web-host'
 import { Fact } from './agent-parts'
-import { CONFIRM, ControlError } from './controls'
+import { CONFIRM, ControlError, ROW_BUTTON } from './controls'
 import { DeviceIcon, DeviceTile, OnlineDot } from './remote-parts'
 import { ThisBrowserBadge } from './remote-section'
 import { changeDevice, deviceLine, whenAt } from './remote-text'
@@ -370,7 +370,7 @@ function RemoveDevice({ device }: { device: PairedDevice }) {
   return (
     <>
       <ControlError error={open ? null : error} />
-      <Button variant="destructive-outline" size="sm" onClick={() => setOpen(true)}>
+      <Button className={ROW_BUTTON} variant="destructive-outline" onClick={() => setOpen(true)}>
         {t('remote.device.remove.button')}
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>

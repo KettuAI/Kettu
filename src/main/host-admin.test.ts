@@ -201,7 +201,7 @@ describe("HostAdmin's paths", () => {
       await call('settings.addAgent', { harnessId: 'codex', name: 'Work', folder: `${folder}/` }),
     ).toEqual({ result: 'codex~work' })
     expect(settings.get().addedAgents).toEqual([
-      { id: 'codex~work', name: 'Work', configDir: folder, created: false },
+      { id: 'codex~work', name: 'Work', configDir: folder, created: false, color: 'teal' },
     ])
     // A folder another agent has is refused as the dialog's is.
     expect(
@@ -223,6 +223,13 @@ describe("HostAdmin's paths", () => {
       result: null,
     })
     expect(settings.get().addedAgents[0]?.name).toBe('Mine')
+    expect(
+      await call('settings.setAgentColor', { agentId: 'claude-code~made', color: 'rose' }),
+    ).toEqual({ result: null })
+    expect(settings.get().addedAgents[0]?.color).toBe('rose')
+    expect(
+      await call('settings.setAgentColor', { agentId: 'claude-code~made', color: 'blue' }),
+    ).toMatchObject({ error: { code: 'invalid_params' } })
     expect(
       await call('settings.removeAgent', { agentId: 'claude-code~made', trash: true }),
     ).toEqual({ result: null })

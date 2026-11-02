@@ -44,10 +44,8 @@ import { isCodeTheme } from '@renderer/features/session/markdown/code-themes'
 import { basename, dirname } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { fileManagerName, isWeb } from '@renderer/lib/platform'
-import { cn } from '@renderer/lib/utils'
 import { receiveThemes, useThemesStore } from '@renderer/stores/themes'
-import { CONFIRM, ControlError } from './controls'
-import { RadioDot } from './sections'
+import { CONFIRM, ControlError, ROW_BUTTON } from './controls'
 import { BrowseThemes } from './theme-catalog'
 import { themeContrast, themeFile } from './theme-colors'
 import { ThemePreview } from './theme-preview'
@@ -135,7 +133,7 @@ export function ThemeTiles() {
   )
 
   return (
-    <div className="@container flex flex-col gap-3.5 pt-1">
+    <div className="@container flex flex-col gap-3.5 pt-4.5 pb-5">
       {failed && (
         <LoadFailure
           id={failed.id}
@@ -146,19 +144,17 @@ export function ThemeTiles() {
       )}
       <ToggleGroup
         aria-label={t('appearance.theme.name')}
-        variant="tile"
-        size="tile"
-        spacing={3}
+        spacing={0}
         value={[chosen]}
         onValueChange={(next) => {
           const picked = next[0] as string | undefined
           if (picked && picked !== chosen) apply({ appearance: { colorTheme: picked } })
         }}
-        className="grid w-full grid-cols-1 items-stretch @min-[440px]:grid-cols-2"
+        className="grid w-full grid-cols-2 items-start gap-x-4 gap-y-4.5 rounded-none @min-[600px]:grid-cols-3"
       >
         {tile(BUILTIN_THEME_ID, null)}
         {installed.map((item) => tile(item.id, item.theme, item))}
-        <MoreThemes bar={installed.length % 2 === 1} onInstall={install} />
+        <MoreThemes onInstall={install} />
       </ToggleGroup>
       <ControlError error={applyError} />
       {notice && (
@@ -232,15 +228,13 @@ function ThemeTile({
     <div className="group/tile relative min-w-0">
       <ToggleGroupItem
         value={id}
-        className="w-full group-hover/tile:not-aria-pressed:shadow-outline-hover"
+        className="h-auto w-full flex-col items-stretch gap-2 rounded-2xl bg-transparent p-0 text-left font-normal whitespace-normal group-data-[spacing=0]/toggle-group:rounded-2xl group-data-[spacing=0]/toggle-group:px-0 hover:bg-transparent aria-pressed:bg-transparent"
       >
         <ThemePreview light={theme?.light.colors} dark={theme?.dark.colors} />
-        {/* The end keeps the More button's slot, so nothing moves when it shows. */}
-        <span className="flex h-10 min-w-0 items-center gap-1.75 pr-8.5 pl-1.5">
-          <RadioDot />
-          <span className="truncate font-medium text-primary">{name}</span>
+        <span className="flex min-w-0 items-center gap-1.5 text-lede text-primary">
+          <span className="truncate group-aria-pressed/toggle:font-medium">{name}</span>
           {issues.length > 0 && <ContrastWarning issues={issues} />}
-          <span className="ml-auto shrink-0 pl-2 text-xs text-tertiary">
+          <span className="shrink-0 text-meta text-tertiary">
             {t(`appearance.theme.${source}`)}
           </span>
         </span>
@@ -254,7 +248,7 @@ function ThemeTile({
                 variant="quiet"
                 size="icon-xs"
                 aria-label={t('appearance.theme.more', { name })}
-                className="absolute right-2 bottom-2 opacity-0 transition-opacity duration-(--duration-fast) group-hover/tile:opacity-100 group-has-focus-visible/tile:opacity-100 data-popup-open:opacity-100"
+                className="absolute top-2 right-2 bg-surface opacity-0 shadow-outline transition-opacity duration-(--duration-fast) group-hover/tile:opacity-100 group-has-focus-visible/tile:opacity-100 hover:bg-surface data-popup-open:opacity-100"
               />
             }
           >
@@ -366,27 +360,16 @@ function ContrastWarning({ issues }: { issues: ContrastIssue[] }) {
   )
 }
 
-/**
- * After the themes, the ways to add one: in the cell beside the last theme, or across the row as a
- * bar when the themes fill theirs, so a lone theme never leaves half a row empty.
- */
-function MoreThemes({ bar, onInstall }: { bar: boolean; onInstall: () => void }) {
+/** After the themes, the ways to add one, on a hatched tile the size of a theme's picture. */
+function MoreThemes({ onInstall }: { onInstall: () => void }) {
   const { t } = useTranslation('settings')
   return (
-    <div
-      className={cn(
-        'flex min-w-0 flex-col justify-center gap-3 rounded-xl bg-subtle p-3.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
-        bar &&
-          'col-span-full flex-row flex-wrap items-center justify-between gap-x-4 py-3 pr-3 pl-4',
-      )}
-    >
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-ui font-medium text-primary">{t('appearance.theme.moreThemes')}</span>
-        <span className="text-small text-secondary">{t('appearance.theme.moreDescription')}</span>
-      </span>
+    <div className="flex aspect-16/10 min-w-0 flex-col justify-center gap-2 rounded-2xl bg-(image:--tile-hatch) p-3.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]">
+      <span className="text-lede font-medium text-primary">{t('appearance.theme.moreThemes')}</span>
+      <span className="text-small text-tertiary">{t('appearance.theme.moreDescription')}</span>
       <span className="flex flex-wrap gap-1.5">
         <BrowseThemes />
-        <Button variant="outline" size="sm" onClick={onInstall}>
+        <Button variant="ghost" className={ROW_BUTTON} onClick={onInstall}>
           {t('appearance.theme.install')}
         </Button>
       </span>
@@ -444,7 +427,7 @@ function ThemeNotice({
         )}
         {low && <span>{t('appearance.theme.lowContrastNotice')}</span>}
         <span>
-          <Button variant="outline" size="compact" onClick={onDismiss}>
+          <Button className={ROW_BUTTON} variant="outline" onClick={onDismiss}>
             {t('appearance.theme.gotIt')}
           </Button>
         </span>
@@ -478,10 +461,10 @@ function LoadFailure({
           })}
         </span>
         <span className="flex flex-wrap gap-1.5">
-          <Button variant="outline" size="compact" onClick={onUseBuiltIn}>
+          <Button className={ROW_BUTTON} variant="outline" onClick={onUseBuiltIn}>
             {t('appearance.theme.useBuiltIn')}
           </Button>
-          <Button variant="outline" size="compact" onClick={onInstall}>
+          <Button className={ROW_BUTTON} variant="outline" onClick={onInstall}>
             {t('appearance.theme.install')}
           </Button>
         </span>

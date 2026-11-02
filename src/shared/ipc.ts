@@ -15,7 +15,7 @@ import type { HostPairingState, HostPairStart, HostsStatus } from './remote/host
 import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { RemoteStatus } from './remote/status'
-import type { SettingsFile, SettingsPatch } from './settings'
+import type { AgentColor, SettingsFile, SettingsPatch } from './settings'
 import type { SharingConnectResult, SharingResult, SharingStatus } from './sharing'
 import type { TerminalMethod, TerminalsApi } from './terminal-host'
 import type { CatalogInstallResult, CatalogState, ThemeInstallResult, ThemesState } from './themes'
@@ -158,6 +158,7 @@ export interface IpcInvokeContract {
     result: AgentId
   }
   'settings:rename-agent': { args: [agentId: AgentId, name: string]; result: void }
+  'settings:set-agent-color': { args: [agentId: AgentId, color: AgentColor]; result: void }
   // `trash`: move the folder Kettu made for the agent to the trash.
   'settings:remove-agent': { args: [agentId: AgentId, trash: boolean]; result: void }
   'dialog:choose-shell': { args: []; result: string | null }
@@ -499,6 +500,8 @@ export interface KettuApi {
     /** Adds an agent to Claude Code or Codex, in a folder from `chooseAgentFolder` or a new one. */
     addAgent(harnessId: HarnessId, name: string, folder: string | null): Promise<AgentId>
     renameAgent(agentId: AgentId, name: string): Promise<void>
+    /** The dot on an added agent's mark. */
+    setAgentColor(agentId: AgentId, color: AgentColor): Promise<void>
     removeAgent(agentId: AgentId, trash: boolean): Promise<void>
   }
   /** The themes folder, which main reads and checks; the page never names a path. */

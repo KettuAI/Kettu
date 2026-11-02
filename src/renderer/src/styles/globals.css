@@ -69,6 +69,7 @@
   --background-color-app: var(--bg-app);
   --background-color-surface: var(--bg-surface);
   --background-color-subtle: var(--bg-subtle);
+  --background-color-tray: var(--bg-tray);
   --background-color-hover: var(--bg-hover);
   --background-color-selected: var(--bg-selected);
   --background-color-raised: var(--bg-raised);
@@ -214,6 +215,13 @@
   --radius-xl: calc(var(--radius) * 1.6);
   --radius-2xl: calc(var(--radius) * 2);
   --radius-3xl: calc(var(--radius) * 2);
+  /* Settings over the app, a card in it such as Remote access's status, and a dialog over
+     Settings; Settings' segmented choices, whose chosen segment sits 2 px inside the track. */
+  --radius-modal: 14px;
+  --radius-card: 12px;
+  --radius-dialog: 16px;
+  --radius-segments: 9px;
+  --radius-segment: 7px;
 
   --shadow-sm: var(--elevation-sm);
   --shadow-md: var(--elevation-md);
@@ -333,6 +341,19 @@
   /* The number on an answer's key cap. */
   --text-key: 11px;
   --text-key--line-height: 16px;
+  /* A Settings section's title in the display face, and the 13.5 px of its list, its line under
+     the title and its choices. */
+  --text-section: 19px;
+  --text-section--line-height: normal;
+  --text-section--letter-spacing: -0.012em;
+  --text-lede: 13.5px;
+  --text-lede--line-height: 1.5;
+  /* Kettu's name on the About page. */
+  --text-app-name: 20px;
+  --text-app-name--line-height: 1.2;
+  /* A dialog's title over Settings. */
+  --text-sheet-title: 18px;
+  --text-sheet-title--line-height: 1.3;
 }
 
 :root {

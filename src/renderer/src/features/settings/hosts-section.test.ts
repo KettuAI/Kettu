@@ -79,24 +79,18 @@ afterEach(async () => {
 
 describe('the list', () => {
   it('puts this computer first, with its system and version', async () => {
-    expect(text(createElement(SelfRow, { self }))).toBe(
-      'Lin MacBook Local macOS · Kettu 0.3.0 This computer',
-    )
+    expect(text(createElement(SelfRow, { self }))).toBe('This computer Local macOS · Kettu 0.3.0')
     expect(renderToStaticMarkup(createElement(SelfRow, { self }))).toContain('lucide-laptop')
     await i18n.changeLanguage('zh-CN')
-    expect(text(createElement(SelfRow, { self }))).toBe(
-      'Lin MacBook 本机 macOS · Kettu 0.3.0 这台电脑',
-    )
+    expect(text(createElement(SelfRow, { self }))).toBe('这台电脑 本机 macOS · Kettu 0.3.0')
   })
 
   it('says how each host is reached and whether it is online', async () => {
     expect(text(createElement(HostRow, { host: devBox }))).toBe(
-      'dev-box Linux · Kettu 0.2.0 · Direct 192.168.1.42:51234 Online',
+      'dev-box Direct · 192.168.1.42:51234 Online',
     )
     const offline: HostStatus = { ...devBox, connection: { state: 'offline' } }
-    expect(text(createElement(HostRow, { host: offline }))).toBe(
-      'dev-box Linux · Kettu 0.2.0 · Direct Offline · 2 hours ago',
-    )
+    expect(text(createElement(HostRow, { host: offline }))).toBe('dev-box Direct Offline · 2 h ago')
     const connecting: HostStatus = { ...devBox, connection: { state: 'connecting' } }
     expect(text(createElement(HostRow, { host: connecting }))).toContain('Connecting…')
     const removed: HostStatus = {
@@ -107,17 +101,15 @@ describe('the list', () => {
     expect(text(createElement(HostRow, { host: removed }))).toContain('Removed')
     await i18n.changeLanguage('zh-CN')
     expect(text(createElement(HostRow, { host: devBox }))).toBe(
-      'dev-box Linux · Kettu 0.2.0 · 直连 192.168.1.42:51234 在线',
+      'dev-box 直连 · 192.168.1.42:51234 在线',
     )
-    expect(text(createElement(HostRow, { host: offline }))).toBe(
-      'dev-box Linux · Kettu 0.2.0 · 直连 离线 · 2 小时前',
-    )
+    expect(text(createElement(HostRow, { host: offline }))).toBe('dev-box 直连 离线 · 2 小时前')
   })
 
   it('says where devices connect to this computer, and how the key is kept', async () => {
     hosts.status = status()
     expect(text(createElement(HostsNote))).toBe(
-      'To connect to this computer from a phone or another computer, add the device in Remote access.',
+      'To reach this computer from a phone or another computer, add the device in Remote access.',
     )
     hosts.status = status({ plainTextKey: true })
     expect(text(createElement(HostsNote))).toContain(
@@ -128,7 +120,7 @@ describe('the list', () => {
     expect(text(createElement(HostsNote))).toContain(
       '系统没能解开这台电脑连别的主机用的密钥，所以连不了别的主机。',
     )
-    expect(text(createElement(HostsNote))).toContain('到 远程访问 里添加设备。')
+    expect(text(createElement(HostsNote))).toContain('请在 远程访问中添加设备。')
   })
 })
 
@@ -219,7 +211,7 @@ describe('Add host over SSH', () => {
 
   it('asks for the address, and that Kettu keeps no key', async () => {
     expect(body({ kind: 'enter' }, '')).toBe(
-      'Add host Kettu uses your own SSH config and agent, so jump hosts, ports and aliases work as usual. If Kettu is not on that machine yet, it is installed. Kettu never reads or stores your SSH keys. Cancel Connect',
+      'Add host SSH address Connect Kettu uses your ssh setup and never reads or stores your keys. Cancel',
     )
     const markup = renderToStaticMarkup(
       createElement(
@@ -240,20 +232,20 @@ describe('Add host over SSH', () => {
     expect(markup).toMatch(/disabled=""[^>]*>Connect</)
     await i18n.changeLanguage('zh-CN')
     expect(body({ kind: 'enter' }, '')).toBe(
-      '添加主机 用你自己的 SSH 配置和 agent，跳板机、端口和别名照常生效。那台机器上没装 Kettu 的，会自动装上。 Kettu 不读也不存你的 SSH 密钥。 取消 连接',
+      '添加主机 SSH 地址 连接 Kettu 使用你的 ssh 配置，从不读取或保存你的密钥。 取消',
     )
   })
 
   it('shows each step, with installing or updating once it is needed', async () => {
     expect(body({ kind: 'working', steps: [{ step: 'connecting' }] })).toBe(
-      'Add host Kettu uses your own SSH config and agent, so jump hosts, ports and aliases work as usual. If Kettu is not on that machine yet, it is installed. Log in over SSH Add this computer Open the encrypted channel Cancel',
+      'Add host SSH address Connect Kettu uses your ssh setup and never reads or stores your keys. Log in over SSH lin@dev-box Add this computer Open the encrypted channel Cancel',
     )
     const updating = body({
       kind: 'working',
       steps: [{ step: 'connecting' }, { step: 'updating', from: '0.2.0', to: '0.3.0' }],
     })
     expect(updating).toContain(
-      'Log in over SSH done Update Kettu from 0.2.0 to 0.3.0 Add this computer Open the encrypted channel Cancel',
+      'Log in over SSH done lin@dev-box Update Kettu from 0.2.0 to 0.3.0 Add this computer Open the encrypted channel Cancel',
     )
     await i18n.changeLanguage('zh-CN')
     expect(
@@ -265,7 +257,9 @@ describe('Add host over SSH', () => {
           { step: 'adding' },
         ],
       }),
-    ).toContain('经 SSH 登录 已完成 安装 Kettu 0.3.0 已完成 添加这台电脑 打开加密通道 取消')
+    ).toContain(
+      '经 SSH 登录 已完成 lin@dev-box 安装 Kettu 0.3.0 已完成 它作为守护进程运行，开机或登录时自动启动。 添加这台电脑 打开加密通道 取消',
+    )
   })
 
   it.each([
@@ -302,7 +296,7 @@ describe('Add host over SSH', () => {
       }),
     )
     expect(install).toContain(
-      'Log in over SSH done Install Kettu 0.3.0 failed Add this computer Open the encrypted channel',
+      'Log in over SSH done lin@dev-box Install Kettu 0.3.0 failed It runs as a daemon and starts at boot or login. Add this computer Open the encrypted channel',
     )
     expect(install).toContain(
       'Installing Kettu on lin@dev-box failed. kettu install: Could not download it Close Retry',
@@ -335,7 +329,7 @@ describe("a host's page", () => {
     hosts.status = status()
     const page = text(createElement(HostPage, { id: devBox.id }))
     expect(page).toContain('dev-box Online Linux · Kettu 0.2.0 · Added Oct 31')
-    expect(page).toContain('Reached Direct 192.168.1.42:51234')
+    expect(page).toContain('Reached Direct · 192.168.1.42:51234')
     expect(page).toContain('Addresses 192.168.1.42:51234 dev.example.com:7000 Edit…')
     expect(page).toContain('This computer on dev-box Name dev-box lists this computer under')
     expect(page).toContain("dev-box's settings Agents, harnesses, usage, the terminal")
@@ -346,7 +340,7 @@ describe("a host's page", () => {
     )
     await i18n.changeLanguage('zh-CN')
     const zh = text(createElement(HostPage, { id: devBox.id }))
-    expect(zh).toContain('怎么连 直连 192.168.1.42:51234')
+    expect(zh).toContain('怎么连 直连 · 192.168.1.42:51234')
     expect(zh).toContain('这台电脑在 dev-box 上 名字')
     expect(zh).toContain('打开 dev-box 的设置')
     expect(zh).toContain('从这台电脑移除')
@@ -398,9 +392,7 @@ describe("a host's page", () => {
     expect(page).toContain('Reached SSH SSH address lin@dev-box')
     expect(page).toContain('Kettu reaches dev-box with your own SSH config and agent')
     expect(page).not.toContain('Edit…')
-    expect(text(createElement(HostRow, { host: sshBox }))).toBe(
-      'dev-box Linux · Kettu 0.2.0 · SSH lin@dev-box Online',
-    )
+    expect(text(createElement(HostRow, { host: sshBox }))).toBe('dev-box SSH · lin@dev-box Online')
     await i18n.changeLanguage('zh-CN')
     expect(text(createElement(HostPage, { id: devBox.id }))).toContain(
       '怎么连 SSH SSH 地址 lin@dev-box',

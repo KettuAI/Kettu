@@ -1,43 +1,59 @@
 import { useState, type ReactNode } from 'react'
-import { ArrowUpRightIcon, CheckIcon, ExternalLinkIcon } from 'lucide-react'
+import { CheckIcon, ExternalLinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AppInfo } from '@shared/ipc'
 import type { SettingsFile } from '@shared/settings'
 import { releaseUrl, type UpdateStatus } from '@shared/updates'
-import { BrandLockup } from '@renderer/components/brand'
+import { BrandIcon } from '@renderer/components/brand'
 import { useRefresh } from '@renderer/components/refresh'
 import { RefreshIcon } from '@renderer/components/refresh-icon'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Progress } from '@renderer/components/ui/progress'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { longAgo } from '@renderer/lib/format'
+import { mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext } from '@renderer/lib/host-features'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { checkForUpdates, useUpdatesStore } from '@renderer/stores/updates'
-import { ControlError, SettingSelect } from './controls'
+import { ControlError, GROUP_ACTION, ROW_BUTTON, SettingSelect } from './controls'
+import { DeviceTile } from './remote-parts'
+import { PageHeader } from './rows'
 import { useApply } from './use-apply'
 
-/** The top of the About page, in place of the page title. */
+/** The top of the About page: its title, then Kettu's icon, name, version and line. */
 export function AboutHero({ info }: { info: AppInfo | null }) {
   const { t } = useTranslation('settings')
   return (
-    <header className="flex flex-col gap-1.5 pb-7">
-      <h2 id="settings-about" className="pb-1">
-        <BrandLockup fontSize={22} />
-      </h2>
-      <p className="text-small text-pretty text-secondary">{t('about.version.description')}</p>
-      {info ? (
-        <p data-selectable="" className="font-mono text-code text-tertiary">
-          {`${info.version} · ${info.system}`}
-        </p>
-      ) : (
-        <Skeleton className="h-4 w-44" />
-      )}
-    </header>
+    <>
+      <PageHeader id="settings-about" title={t('sections.about')}>
+        {t('pages.about')}
+      </PageHeader>
+      <div className="mt-5 flex items-center gap-4">
+        <BrandIcon size={56} className="shrink-0" />
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-display text-app-name font-extrabold">Kettu</span>
+            {info ? (
+              <span
+                data-selectable=""
+                title={info.system}
+                className="text-label font-medium text-tertiary"
+              >
+                {info.version}
+              </span>
+            ) : (
+              <Skeleton className="h-4 w-12" />
+            )}
+          </div>
+          <p className="mt-0.5 text-lede text-pretty text-tertiary">
+            {t('about.version.description')}
+          </p>
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -53,8 +69,10 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
   }
   if (!status) {
     return (
-      <div className="flex min-h-10 items-center gap-4">
-        <span className="min-w-0 flex-1 text-ui font-medium">{t('about.updates.name')}</span>
+      <div className="flex items-center gap-4">
+        <span className="min-w-0 flex-1 text-label leading-[normal]">
+          {t('about.updates.name')}
+        </span>
         <Spinner className="size-3.5 text-tertiary" />
       </div>
     )
@@ -65,17 +83,17 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
       href={releaseUrl(version)}
       target="_blank"
       rel="noreferrer"
-      className={cn(buttonVariants({ variant: 'quiet', size: 'sm' }), 'text-secondary')}
+      className={cn(buttonVariants({ variant: 'ghost' }), GROUP_ACTION)}
     >
       {t('about.updates.whatsNew')}
-      <ArrowUpRightIcon data-icon="inline-end" className="size-3.5 text-icon" />
     </a>
   )
   // While a check runs the button stays, busy, so the row does not change shape.
   const check = (
     <Button
+      className={ROW_BUTTON}
       variant="outline"
-      size="sm"
+
       aria-busy={refresh.phase === 'turning'}
       disabled={refresh.phase === 'turning'}
       onClick={() => {
@@ -103,7 +121,7 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
           </>
         )
         if (state.checkedAt) {
-          detail = t('about.updates.checkedAgo', { ago: longAgo(state.checkedAt, now) })
+          detail = t('about.updates.checkedAgo', { ago: mediumAgo(state.checkedAt, now) })
         }
       } else title = t('about.updates.notChecked')
       action = check
@@ -127,10 +145,11 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
       break
     case 'ready':
       title = t('about.updates.ready', { version: state.version })
+      detail = t('about.updates.readyDetail')
       action = (
         <>
           {whatsNew(state.version)}
-          <Button size="sm" onClick={() => run(window.kettu.updates.restart)}>
+          <Button className={ROW_BUTTON} onClick={() => run(window.kettu.updates.restart)}>
             {t('about.updates.restart')}
           </Button>
         </>
@@ -153,7 +172,7 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
               <ExternalLinkIcon data-icon="inline-end" />
             </a>
           ) : (
-            <Button size="sm" onClick={() => run(window.kettu.updates.download)}>
+            <Button className={ROW_BUTTON} onClick={() => run(window.kettu.updates.download)}>
               {t('about.updates.update')}
             </Button>
           )}
@@ -167,7 +186,7 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
       title = state.move ? t('about.updates.moveFailed') : t('about.updates.failed')
       detail = <span data-selectable="">{state.message}</span>
       action = (
-        <Button variant="outline" size="sm" onClick={() => run(checkForUpdates)}>
+        <Button className={ROW_BUTTON} variant="outline" onClick={() => run(checkForUpdates)}>
           {t('about.updates.tryAgain')}
         </Button>
       )
@@ -180,13 +199,15 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
   }
   // What the updater is doing is the row's name, as it is the news; the group says it is updates.
   return (
-    <div className="flex min-h-10 items-center gap-4">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="flex items-center gap-1.75 text-ui font-medium">{title}</span>
-        {detail && <span className="mt-0.5 text-xs leading-4 text-secondary">{detail}</span>}
+    <div className="flex items-center gap-x-7 gap-y-3">
+      <div className="flex min-w-0 flex-[1_1_280px] flex-col">
+        <span className="flex items-center gap-1.75 text-label leading-[normal]">{title}</span>
+        {detail && (
+          <span className="mt-0.75 text-group leading-normal text-tertiary">{detail}</span>
+        )}
       </div>
       <ControlError error={error} />
-      {action && <span className="flex shrink-0 items-center gap-1.5">{action}</span>}
+      {action && <span className="flex shrink-0 items-center gap-2">{action}</span>}
     </div>
   )
 }
@@ -196,9 +217,9 @@ export function NoUpdates() {
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
   return (
-    <div className="flex min-h-10 flex-col justify-center">
-      <span className="text-ui font-medium">{t('about.updates.none', onHost)}</span>
-      <span className="mt-0.5 text-xs leading-4 text-secondary">
+    <div className="flex flex-col">
+      <span className="text-label leading-[normal]">{t('about.updates.none', onHost)}</span>
+      <span className="mt-0.75 text-group leading-normal text-tertiary">
         {t('about.updates.noneDetail', onHost)}
       </span>
     </div>
@@ -235,6 +256,7 @@ export function AutomaticUpdates() {
         value={value}
         options={options}
         onChange={(v) => apply({ updates: { automatic: v } })}
+        className="w-57.5"
       />
     </>
   )
@@ -253,24 +275,24 @@ export function LinkRow({
   { url: string; onOpen?: never } | { onOpen: () => Promise<void>; url?: never }
 )) {
   const [error, setError] = useState<string | null>(null)
-  // The whole row is the link, so it fills the row to the card's edges and corners.
   const className =
-    'group -mx-3 flex min-h-15 w-[calc(100%+--spacing(6))] items-center gap-4 rounded-[inherit] py-2.5 pr-3 pl-4 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-visible:shadow-[inset_0_0_0_2px_var(--focus)]'
+    'group relative flex w-full items-center gap-3.5 py-3.25 text-left outline-none before:absolute before:-inset-x-2 before:inset-y-px before:rounded-lg before:transition-colors before:duration-(--duration-fast) hover:before:bg-hover focus-visible:before:shadow-[0_0_0_2px_var(--focus)]'
   const body = (
     <>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="text-ui font-medium">{name}</span>
+      <DeviceTile icon={<ExternalLinkIcon className="size-4" />} />
+      <span className="relative flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-label leading-[normal]">{name}</span>
         {error ? (
-          <span className="mt-0.5 truncate text-xs leading-4 text-danger" title={error}>
+          <span className="truncate text-group leading-[normal] text-danger" title={error}>
             {error}
           </span>
         ) : (
-          <span className="mt-0.5 truncate text-xs leading-4 text-secondary">
+          <span className="truncate text-group leading-[normal] text-tertiary">
             {detail ?? target.url?.replace(/^https?:\/\//, '')}
           </span>
         )}
       </span>
-      <ExternalLinkIcon className="size-3.5 shrink-0 text-icon transition-colors duration-(--duration-fast) group-hover:text-primary" />
+      <ExternalLinkIcon className="relative size-3.5 shrink-0 text-tertiary transition-colors duration-(--duration-fast) group-hover:text-primary" />
     </>
   )
   if (target.url !== undefined) {

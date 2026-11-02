@@ -4,6 +4,9 @@ import {
   AGENT_NAME_CHARS,
   CONFIG_VARIABLES,
   DEFAULT_SETTINGS,
+  AGENT_COLORS,
+  isAgentColor,
+  nextAgentColor,
   isLinkSite,
   MAX_LINK_SITES,
   type AddedAgent,
@@ -425,7 +428,11 @@ export function withAddedAgent(current: SettingsFile, agent: AddedAgent): Settin
     throw new SettingsError(`The agent "${agent.id}" exists already`)
   }
   const next = structuredClone(current)
-  next.addedAgents.push({ ...agent, name: agentName(agent.name) })
+  next.addedAgents.push({
+    ...agent,
+    name: agentName(agent.name),
+    color: agent.color ?? nextAgentColor(current.addedAgents),
+  })
   return next
 }
 
@@ -438,6 +445,20 @@ export function withRenamedAgent(
   if (index < 0) throw new SettingsError(`No added agent "${agentId}"`)
   const next = structuredClone(current)
   next.addedAgents[index] = { ...next.addedAgents[index]!, name: agentName(name) }
+  return next
+}
+
+/** Sets an added agent's dot from untrusted arguments. */
+export function withAgentColor(
+  current: SettingsFile,
+  agentId: unknown,
+  color: unknown,
+): SettingsFile {
+  const index = current.addedAgents.findIndex((agent) => agent.id === agentId)
+  if (index < 0) throw new SettingsError(`No added agent "${String(agentId)}"`)
+  if (!isAgentColor(color)) throw new SettingsError(`Unknown agent color "${String(color)}"`)
+  const next = structuredClone(current)
+  next.addedAgents[index] = { ...next.addedAgents[index]!, color }
   return next
 }
 
@@ -597,7 +618,18 @@ function readAddedAgents(list: unknown[], problems: string[]): AddedAgent[] {
       problems.push(`"${path}" repeats another agent's id or folder`)
       continue
     }
-    agents.push({ id, name: stored, configDir: configDir as string, created: created as boolean })
+    // A file from before colors, or a color this version does not know, gets the color the
+    // agent's place showed, kept from then on so removing an agent above it changes nothing.
+    const color = isAgentColor(entry.color)
+      ? entry.color
+      : AGENT_COLORS[agents.length % AGENT_COLORS.length]!
+    agents.push({
+      id,
+      name: stored,
+      configDir: configDir as string,
+      created: created as boolean,
+      color,
+    })
   }
   return agents
 }

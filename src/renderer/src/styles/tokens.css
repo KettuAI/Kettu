@@ -13,6 +13,8 @@
   --bg-sidebar: #f1f3f6;
   --bg-surface: #ffffff;
   --bg-subtle: #f2f4f7;
+  /* A system notification in Settings › Notifications, as the menu bar draws one. */
+  --bg-tray: #f7f8fa;
   --bg-code-inline: rgb(20 26 34 / 6%);
   --bg-code-block: #f6f7f9;
   --bg-hover: rgb(20 26 34 / 5%);
@@ -39,6 +41,15 @@
   --danger: #ac3b2d;
   --success: #2e7550;
   --merged: #6f4c8e;
+  /* The dot on an added agent's mark, in the color chosen for it in Settings › Agents. */
+  --agent-teal: #2f8f83;
+  --agent-violet: #7a5cc0;
+  --agent-amber: #b07a12;
+  --agent-rose: #c0466c;
+  --agent-green: #4b8a39;
+  --agent-slate: #66707e;
+  /* Kettu's own MCP server's tile in Settings, in the fox's orange. */
+  --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
   /* Running work, in the ink's grays: blue is kept for data and code. */
   --info: #48525f;
   /* Amber, dark enough to read at 4.5:1 on the desk and on its tint. */
@@ -179,6 +190,8 @@
   --brand-codex-2: #7a9dff;
   --brand-codex-3: #3941ff;
   --brand-opencode-frame: #17181c;
+  /* Cloudflare's orange, on the account's tile in Settings › Sharing. */
+  --brand-cloudflare: #f48120;
   --brand-opencode-fill: #e6e5e6;
   /* Pi keeps its three colors in both variants. */
   --brand-pi-coral: #f09082;
@@ -256,6 +269,7 @@
     /* What floats over the page sits a step lighter than it, since shadows barely show here. */
     --bg-surface: #1c222a;
     --bg-subtle: #20262f;
+    --bg-tray: #1a2029;
     --bg-code-inline: rgb(230 236 245 / 8%);
     --bg-code-block: #12161c;
     --bg-hover: rgb(230 236 245 / 5%);
@@ -278,6 +292,14 @@
     --danger: #ea8a7d;
     --success: #6fbf8f;
     --merged: #b798d4;
+    /* The dot on an added agent's mark. */
+    --agent-teal: #45a99a;
+    --agent-violet: #9a80dc;
+    --agent-amber: #d29a32;
+    --agent-rose: #da6489;
+    --agent-green: #6aac55;
+    --agent-slate: #8d96a4;
+    --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
     --info: #aeb6c1;
     --warning: #d9b463;
     --link: #e8ecf1;
@@ -363,6 +385,7 @@
     --code-danger: #ff7b72;
 
     --brand-opencode-frame: #ffffff;
+    --brand-cloudflare: #f48120;
     --brand-opencode-fill: #5a5858;
 
     --kind-web: #6cc0d2;
@@ -419,6 +442,7 @@
   /* What floats over the page sits a step lighter than it, since shadows barely show here. */
   --bg-surface: #1c222a;
   --bg-subtle: #20262f;
+  --bg-tray: #1a2029;
   --bg-code-inline: rgb(230 236 245 / 8%);
   --bg-code-block: #12161c;
   --bg-hover: rgb(230 236 245 / 5%);
@@ -441,6 +465,14 @@
   --danger: #ea8a7d;
   --success: #6fbf8f;
   --merged: #b798d4;
+  /* The dot on an added agent's mark. */
+  --agent-teal: #45a99a;
+  --agent-violet: #9a80dc;
+  --agent-amber: #d29a32;
+  --agent-rose: #da6489;
+  --agent-green: #6aac55;
+  --agent-slate: #8d96a4;
+  --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
   --info: #aeb6c1;
   --warning: #d9b463;
   --link: #e8ecf1;
@@ -526,6 +558,7 @@
   --code-danger: #ff7b72;
 
   --brand-opencode-frame: #ffffff;
+  --brand-cloudflare: #f48120;
   --brand-opencode-fill: #5a5858;
 
   --kind-web: #6cc0d2;
@@ -659,6 +692,8 @@
 
   /* The autocompact buffer in the context bar: the reserved gray, hatched. */
   --context-hatch: repeating-linear-gradient(135deg, var(--context-7) 0 2px, transparent 2px 4px);
+  /* The tile after the themes in Settings › Appearance, which offers more: faint diagonal lines. */
+  --tile-hatch: repeating-linear-gradient(135deg, transparent 0 6px, var(--bg-hover) 6px 7px);
 
   --terminal-background: var(--bg-code-block);
   /* As drawn: output in the secondary ink, the cursor in the primary. */

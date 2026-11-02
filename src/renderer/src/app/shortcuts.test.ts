@@ -20,7 +20,7 @@ vi.mock('react', async (original) => ({
 
 const { historyStep, pageHandlesMenuKeys, pageHandlesZoomKeys, useKeyboardShortcuts } =
   await import('./shortcuts')
-const { openSettings, useViewStore } = await import('@renderer/stores/view')
+const { useViewStore } = await import('@renderer/stores/view')
 
 /** A key event whose target sits inside the elements `inside` names. */
 function key(code: string, modifiers: Partial<KeyboardEvent> = {}, inside: string[] = []) {
@@ -94,47 +94,6 @@ describe('the keys the page handles itself', () => {
   })
 })
 
-describe('Esc in Settings', () => {
-  /**
-   * Presses a key with focus on the page, calling the window's listeners as a browser does: those
-   * in the capture phase, then `page`, as a popup listening on the document, then those in the
-   * bubble phase unless the key was stopped.
-   */
-  function press(key: string, page: (event: KeyboardEvent) => void = () => {}): void {
-    let stopped = false
-    let prevented = false
-    const event = {
-      key,
-      code: key,
-      metaKey: false,
-      ctrlKey: false,
-      altKey: false,
-      shiftKey: false,
-      isComposing: false,
-      get defaultPrevented() {
-        return prevented
-      },
-      target: { tagName: 'BODY', isContentEditable: false, closest: () => null },
-      preventDefault: () => (prevented = true),
-      stopPropagation: () => (stopped = true),
-    } as unknown as KeyboardEvent
-    for (const { listener } of keydowns.filter((k) => k.capture)) listener(event)
-    page(event)
-    if (stopped) return
-    for (const { listener } of keydowns.filter((k) => !k.capture)) listener(event)
-  }
-
-  it('leaves the key to an open popup, which stops it, and goes back once none takes it', () => {
-    useKeyboardShortcuts()
-    openSettings('general')
-    // A select closing on Esc, which keeps the key from the page under it.
-    press('Escape', (event) => event.stopPropagation())
-    expect(useViewStore.getState().settings.open).toBe(true)
-    press('Escape')
-    expect(useViewStore.getState().settings.open).toBe(false)
-  })
-})
-
 describe('Mod+1 to Mod+9', () => {
   function press(open: boolean): boolean {
     let prevented = false
@@ -200,5 +159,43 @@ describe('Ctrl+` with a menu open', () => {
     }))
     expect(press(true)).toBe(false)
     expect(press(false)).toBe(true)
+  })
+})
+
+describe('Back in Settings', () => {
+  /** Mod+[ with only the Settings modal open, which is a dialog, or with a popup over it. */
+  function back(popup: boolean): void {
+    const event = {
+      key: '[',
+      code: 'BracketLeft',
+      metaKey: true,
+      ctrlKey: false,
+      altKey: false,
+      shiftKey: false,
+      isComposing: false,
+      defaultPrevented: false,
+      target: { tagName: 'BODY', isContentEditable: false, closest: () => null },
+      preventDefault: () => {},
+      stopPropagation: () => {},
+    } as unknown as KeyboardEvent
+    // The Settings modal matches a plain dialog selector, never one that leaves it out.
+    vi.stubGlobal('document', {
+      querySelector: (selector: string) =>
+        popup || selector.split(',').some((part) => part.trim() === '[role=dialog]') ? {} : null,
+      activeElement: null,
+    })
+    // Earlier tests installed the listeners more than once; one press reaches one of them.
+    keydowns.find((k) => k.capture)!.listener(event)
+    vi.stubGlobal('document', { querySelector: () => null, activeElement: null })
+  }
+
+  it('steps back from an item to its list, unless a popup over Settings is open', async () => {
+    if (keydowns.length === 0) useKeyboardShortcuts()
+    const { openSettingsItem } = await import('@renderer/stores/view')
+    openSettingsItem('agents', 'claude-code~work')
+    back(true)
+    expect(useViewStore.getState().settings.item).toBe('claude-code~work')
+    back(false)
+    expect(useViewStore.getState().settings).toMatchObject({ open: true, item: null })
   })
 })
