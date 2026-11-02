@@ -28,8 +28,8 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { basename, monthDay } from '@renderer/lib/format'
 import { useHostContext } from '@renderer/lib/host-features'
 import { useNow } from '@renderer/lib/use-now'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { useRemoteStore } from '@renderer/stores/remote'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { openSettingsItem } from '@renderer/stores/view'
 import { useWebHostStore } from '@renderer/stores/web-host'
@@ -44,6 +44,7 @@ const back = () => openSettingsItem('remote', null)
 
 /** A paired device's page: when it joined and last connected, what it did, and removing it. */
 export function DevicePage({ id }: { id: string }) {
+  const { useRemoteStore } = useHostScope()
   const { t } = useTranslation('settings')
   const device = useRemoteStore((s) => s.status?.devices.find((entry) => entry.id === id) ?? null)
   const online = useRemoteStore((s) => s.status?.online.includes(id) ?? false)
@@ -144,18 +145,19 @@ function DevicePageBody({ device, online }: { device: PairedDevice; online: bool
 
 /** The device's activity of the last 30 days, read again when it connects or is renamed. */
 function Activity({ device }: { device: PairedDevice }) {
+  const { api } = useHostScope()
   const { t } = useTranslation('settings')
   const [events, setEvents] = useState<DeviceActivity[] | null>(null)
   useEffect(() => {
     let live = true
-    window.kettu.remote
+    api.remote
       .activity(device.id)
       .then((read) => live && setEvents(read))
       .catch(() => live && setEvents([]))
     return () => {
       live = false
     }
-  }, [device.id, device.lastConnectedAt, device.name])
+  }, [device.id, device.lastConnectedAt, device.name, api])
   return (
     <section aria-label={t('remote.device.activity')} className="flex flex-col">
       <GroupLabel
@@ -280,6 +282,7 @@ function RenameDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { api } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const [name, setName] = useState(device.name)
   const [busy, setBusy] = useState(false)
@@ -291,7 +294,7 @@ function RenameDialog({
     if (!valid || busy) return
     if (trimmed === device.name) return onOpenChange(false)
     setBusy(true)
-    const failed = await changeDevice(t, () => window.kettu.remote.renameDevice(device.id, trimmed))
+    const failed = await changeDevice(t, () => api.remote.renameDevice(device.id, trimmed))
     setBusy(false)
     if (failed) setError(failed)
     else onOpenChange(false)
@@ -344,6 +347,7 @@ function RenameDialog({
 }
 
 function RemoveDevice({ device }: { device: PairedDevice }) {
+  const { api } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const onHost = useHostContext()
   // The web client removing its own browser ends this page's connection for good.
@@ -354,7 +358,7 @@ function RemoveDevice({ device }: { device: PairedDevice }) {
   const remove = async (): Promise<void> => {
     setBusy(true)
     setError(null)
-    const failed = await changeDevice(t, () => window.kettu.remote.removeDevice(device.id))
+    const failed = await changeDevice(t, () => api.remote.removeDevice(device.id))
     if (failed) {
       setError(failed)
       setBusy(false)

@@ -3,8 +3,7 @@
 // to the window that asked; each host's events and resyncs go to every window.
 
 import { MessageChannelMain, type MessagePortMain, type WebContents } from 'electron'
-import { HOST_METHODS } from '@shared/agent-host'
-import type { FromHosts, HostSessionMessage } from '@shared/host-sessions'
+import { isOtherHostMethod, type FromHosts, type HostSessionMessage } from '@shared/host-sessions'
 import type { PortError } from '@shared/port-rpc'
 import { DEVICE_ID } from '@shared/remote/device'
 import type { HostStatus } from '@shared/remote/hosts'
@@ -17,8 +16,6 @@ export const HOLD_MS = 20_000
 
 /** Requests held for one host while it connects; more fail at once. */
 const MAX_HELD = 500
-
-const METHODS: ReadonlySet<string> = new Set(HOST_METHODS)
 
 /** The main end of a window's port, or what tests use in its place. */
 export interface RelayPort {
@@ -173,7 +170,7 @@ export class HostSessions {
         message: 'A request for another host must name it',
       })
     }
-    if (typeof method !== 'string' || !METHODS.has(method)) {
+    if (!isOtherHostMethod(method)) {
       return this.reply(window, hostId, id, {
         code: 'unknown_method',
         message: `Unknown method "${String(method)}"`,

@@ -15,7 +15,7 @@ import { limitLabel, longAgo, resetTime } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { refreshLimits } from '@renderer/stores/usage'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { limitsReadable, percent, useAction } from './agent-helpers'
 import { ControlError, CopyAction, IconAction } from './controls'
 import { ConfigNote, ConfigPath } from './places'
@@ -61,7 +61,11 @@ export function DismissButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-/** What an agent that needs a sign-in asks: its command in a terminal, or a way it signs in itself. */
+/**
+ * What an agent that needs a sign-in asks: its command in a terminal, or a way it signs in itself.
+ * Without `onTerminal`, as for another host whose terminal this window cannot open, the command is
+ * only shown to copy.
+ */
 export function SignInNotice({
   status,
   busy,
@@ -70,20 +74,23 @@ export function SignInNotice({
 }: {
   status: AgentStatus
   busy: boolean
-  onTerminal: (command: string) => void
+  onTerminal?: (command: string) => void
   onAuthenticate: (methodId: string) => void
 }) {
   const { t } = useTranslation(['settings', 'session'])
   const inTerminal = status.authMethods.filter((m) => m.type === 'terminal' && m.command)
   const first = inTerminal[0]
-  const others = status.authMethods.filter((m) => m !== first)
+  const others = status.authMethods.filter(
+    (m) => m !== first && (onTerminal || m.type !== 'terminal'),
+  )
   return (
     <Notice
       variant="warning"
       icon={<LogInIcon />}
       title={t('agents.signInTitle', { name: status.name })}
       action={
-        first?.command && (
+        first?.command &&
+        onTerminal && (
           <Button size="sm" onClick={() => onTerminal(first.command!)}>
             <SquareTerminalIcon data-icon="inline-start" />
             {t('session:signIn.inTerminal')}
@@ -113,7 +120,7 @@ export function SignInNotice({
                       key={method.id}
                       size="sm"
                       variant="outline"
-                      onClick={() => onTerminal(method.command!)}
+                      onClick={() => onTerminal?.(method.command!)}
                     >
                       {method.name}
                     </Button>
@@ -208,6 +215,7 @@ export function UsageGroup({
   reading: boolean
   running: boolean
 }) {
+  const { request } = useHostScope()
   const { t } = useTranslation(['settings', 'composer'])
   const now = useNow()
   const [act, busy, error] = useAction()
@@ -229,7 +237,7 @@ export function UsageGroup({
           onClick={() => {
             setRefreshError(null)
             void refresh
-              .run(() => refreshLimits(status.id))
+              .run(() => request('agents.refreshLimits', { agentId: status.id }))
               .catch((e: unknown) => setRefreshError(errorMessage(e)))
           }}
         >
@@ -292,7 +300,7 @@ export function UsageGroup({
               variant="outline"
               size="sm"
               disabled={busy}
-              onClick={() => act(() => refreshLimits(status.id))}
+              onClick={() => act(() => request('agents.refreshLimits', { agentId: status.id }))}
             >
               {busy && <Spinner data-icon="inline-start" />}
               {t('agents.checkLimits')}

@@ -1,7 +1,9 @@
-// The web client's requests for a folder or a program on the host, which its picker answers. Kept
-// apart from the picker so the web client's API can ask before the picker's code has loaded.
+// Requests for a folder or a program on a host this window reaches over the channel, which the
+// picker answers: the web client's host, or another host in the desktop app. Kept apart from the
+// picker so an API can ask before the picker's code has loaded.
 
 import { create } from 'zustand'
+import type { Platform } from '@shared/platform'
 import type { HostPathKind } from './host-path'
 
 /** What the picker is for, which names it and decides whether it takes folders or programs. */
@@ -23,6 +25,8 @@ export interface HostPathRequest {
    * picker open with the host's reason.
    */
   commit?: (path: string) => Promise<void>
+  /** Another host the desktop app connects to, in place of the web client's own. */
+  on?: { hostId: string; name: string; platform: Platform }
 }
 
 export interface AskedPath extends HostPathRequest {

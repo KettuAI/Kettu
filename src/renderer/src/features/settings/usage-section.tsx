@@ -26,8 +26,7 @@ import { currentLocale } from '@renderer/lib/i18n'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
-import { useSettingsStore } from '@renderer/stores/settings'
-import { clearUsageRecord, reimportUsage, syncUsage, useUsageStore } from '@renderer/stores/usage'
+import { useHostScope } from '@renderer/stores/host-scope'
 import {
   CONFIRM,
   ControlError,
@@ -40,6 +39,7 @@ import { RowLine, RowText } from './rows'
 import { useApply } from './use-apply'
 
 export function FromComputer() {
+  const { useSettingsStore } = useHostScope()
   const { t } = useTranslation('usage')
   const onHost = useHostContext()
   const checked = useSettingsStore((s) => s.settings.usage.fromComputer)
@@ -58,6 +58,7 @@ export function FromComputer() {
 
 /** Sync now at the end of the Logs label, with the running scan's progress before it. */
 export function SyncLogs() {
+  const { useUsageStore, request } = useHostScope()
   const { t } = useTranslation('usage')
   const scanning = useUsageStore((s) => s.status?.scanning ?? null)
   const refresh = useRefresh({ busy: scanning !== null })
@@ -78,7 +79,9 @@ export function SyncLogs() {
         disabled={running}
         onClick={() => {
           setError(null)
-          void refresh.run(syncUsage).catch((e: unknown) => setError(errorMessage(e)))
+          void refresh
+            .run(() => request('usage.sync', undefined))
+            .catch((e: unknown) => setError(errorMessage(e)))
         }}
         className={GROUP_ACTION}
       >
@@ -97,6 +100,7 @@ function dateText(at: number): string {
 const NO_LOCATIONS: string[] = []
 
 export function LogRow({ agentId }: { agentId: AgentId }) {
+  const { hostId, useUsageStore, request } = useHostScope()
   const { t } = useTranslation(['usage', 'common'])
   const now = useNow()
   // Values only: the status is a new object at every step of a scan.
@@ -118,7 +122,7 @@ export function LogRow({ agentId }: { agentId: AgentId }) {
   const scanning = useUsageStore((s) => s.status?.scanning != null)
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const name = agentName(agentId)
+  const name = agentName(agentId, hostId)
   const facts: string[] = []
   if (log.found === null) facts.push(scanning ? t('page.syncing') : t('settings.notRead'))
   else if (!log.found) facts.push(t('settings.notFound'))
@@ -137,7 +141,7 @@ export function LogRow({ agentId }: { agentId: AgentId }) {
   const reimport = async () => {
     setError(null)
     try {
-      await reimportUsage(agentId)
+      await request('usage.reimport', { agentId })
     } catch (e) {
       setError(errorMessage(e))
     }
@@ -201,6 +205,7 @@ export function LogRow({ agentId }: { agentId: AgentId }) {
 }
 
 export function SidebarEnd() {
+  const { useSettingsStore } = useHostScope()
   const { t } = useTranslation('usage')
   const value = useSettingsStore((s) => s.settings.usage.sidebar)
   const [apply, error] = useApply()
@@ -224,6 +229,7 @@ export function SidebarEnd() {
 }
 
 export function ClearRecord() {
+  const { useUsageStore, request } = useHostScope()
   const { t } = useTranslation(['usage', 'common', 'settings'])
   const empty = useUsageStore((s) => s.status?.recordSince == null)
   const [open, setOpen] = useState(false)
@@ -233,7 +239,7 @@ export function ClearRecord() {
     setBusy(true)
     setError(null)
     try {
-      await clearUsageRecord()
+      await request('usage.clearRecord', undefined)
       toast(t('settings:usage.cleared'))
     } catch (e) {
       setError(errorMessage(e))

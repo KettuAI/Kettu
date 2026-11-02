@@ -1,5 +1,5 @@
-// The web client's folder and program picker: a path on the host typed with completion from
-// `paths.complete`, in place of the desktop app's system dialog, which a browser cannot show.
+// The folder and program picker for a host reached over the channel: a path on the host typed with
+// completion from `paths.complete`, in place of the system dialog, which shows this device's files.
 
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Autocomplete } from '@base-ui/react/autocomplete'
@@ -20,7 +20,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from '@renderer/compo
 import { Input } from '@renderer/components/ui/input'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
-import { errorMessage, host } from '@renderer/lib/host'
+import { errorMessage, hostAt } from '@renderer/lib/host'
 import { hostPlatform } from '@renderer/lib/platform'
 import { useWebHostStore } from '@renderer/stores/web-host'
 import {
@@ -57,8 +57,10 @@ type Answer = { typed: string; completion: PathCompletion } | { typed: string; e
 function PathForm({ asked }: { asked: AskedPath }) {
   const { t } = useTranslation(['web', 'common'])
   const id = useId()
-  const platform = hostPlatform()
-  const hostName = useWebHostStore((s) => s.host?.name) ?? ''
+  const webHostName = useWebHostStore((s) => s.host?.name) ?? ''
+  const platform = asked.on?.platform ?? hostPlatform()
+  const hostName = asked.on?.name ?? webHostName
+  const hostId = asked.on?.hostId ?? null
   const kind = PATH_KINDS[asked.purpose]
   const [text, setText] = useState(asked.initial)
   const [answered, setAnswered] = useState<Answer | null>(null)
@@ -73,7 +75,7 @@ function PathForm({ asked }: { asked: AskedPath }) {
     if (!completable) return
     let live = true
     const timer = setTimeout(() => {
-      host('paths.complete', { path: text }).then(
+      hostAt(hostId, 'paths.complete', { path: text }).then(
         (completion) => live && setAnswered({ typed: text, completion }),
         (error: unknown) => live && setAnswered({ typed: text, error: errorMessage(error) }),
       )
@@ -82,7 +84,7 @@ function PathForm({ asked }: { asked: AskedPath }) {
       live = false
       clearTimeout(timer)
     }
-  }, [text, completable])
+  }, [text, completable, hostId])
 
   const current = completable && answered?.typed === text ? answered : null
   const completion = current && 'completion' in current ? current.completion : null

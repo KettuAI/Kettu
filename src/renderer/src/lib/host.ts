@@ -61,6 +61,12 @@ export function routeOf(method: string, params: unknown): string | null {
   return null
 }
 
+/** A request to one host's agent host: `host` routes each to its own, `hostAt` names one. */
+export type HostRequest = <M extends HostMethod>(
+  method: M,
+  params: HostParams<M>,
+) => Promise<HostResult<M>>
+
 export function host<M extends HostMethod>(
   method: M,
   params: HostParams<M>,

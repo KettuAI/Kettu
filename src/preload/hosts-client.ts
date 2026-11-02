@@ -1,8 +1,7 @@
 // The page's end of its port to the sessions on other hosts, which main relays. It asks for the
 // port on first use and never hands the port itself to the page.
 
-import { HOST_METHODS } from '@shared/agent-host'
-import type { FromHosts, HostSessionChange } from '@shared/host-sessions'
+import { isOtherHostMethod, type FromHosts, type HostSessionChange } from '@shared/host-sessions'
 import type { ClientPort } from './port-client'
 import { portError, toError, type PortRejection } from './port-client'
 
@@ -23,8 +22,6 @@ interface Queued extends Pending {
   params: unknown
 }
 
-const METHODS: ReadonlySet<string> = new Set(HOST_METHODS)
-
 export class HostsClient {
   private port: ClientPort | null = null
   private requested = false
@@ -38,7 +35,7 @@ export class HostsClient {
   }
 
   request(hostId: string, method: string, params: unknown): Promise<unknown> {
-    if (typeof method !== 'string' || !METHODS.has(method)) {
+    if (!isOtherHostMethod(method)) {
       return Promise.reject(portError('unknown_method', `Unknown method "${String(method)}"`))
     }
     this.connect()

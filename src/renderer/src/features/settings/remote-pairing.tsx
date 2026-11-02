@@ -36,7 +36,7 @@ import { errorMessage } from '@renderer/lib/host'
 import { useHostContext } from '@renderer/lib/host-features'
 import { useSeconds } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { useSettingsStore } from '@renderer/stores/settings'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { Segmented, SettingSelect } from './controls'
 import { closeRequest } from './pair-close'
 import { browserLinks } from './pair-links'
@@ -106,6 +106,7 @@ function PairFlow({
   onNewCode: () => void
   onDone: () => void
 }) {
+  const { api } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const [shown, setShown] = useState<Shown>({ kind: 'loading' })
   // The last link shown, greyed out once its code is void.
@@ -127,15 +128,15 @@ function PairFlow({
       }
       setShown({ kind: 'pairing', pairing })
     }
-    const off = window.kettu.remote.onPairing(({ codeId, pairing }) => {
+    const off = api.remote.onPairing(({ codeId, pairing }) => {
       if (codeId === code.current) take(pairing)
       else if (code.current === null) early.set(codeId, pairing)
     })
-    window.kettu.remote
+    api.remote
       .pair()
       .then((codeId) => {
         if (!live) {
-          if (codeId !== null) void window.kettu.remote.closePairing(codeId)
+          if (codeId !== null) void api.remote.closePairing(codeId)
           return
         }
         if (codeId === null) {
@@ -154,14 +155,14 @@ function PairFlow({
       off()
       const codeId = code.current
       code.current = null
-      if (codeId !== null) void window.kettu.remote.closePairing(codeId)
+      if (codeId !== null) void api.remote.closePairing(codeId)
     }
     // A code is made once per flow; onDone and t do not change what it asks for.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   const answer = (add: boolean, name: string): void => {
-    if (code.current !== null) void window.kettu.remote.answerPairing(code.current, add, name)
+    if (code.current !== null) void api.remote.answerPairing(code.current, add, name)
   }
   const confirm =
     shown.kind === 'pairing' && shown.pairing.state === 'confirm' ? shown.pairing : null
@@ -217,6 +218,7 @@ function PairFlow({
  * or for a browser, which opens the web client at one of this computer's addresses.
  */
 export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string | null }) {
+  const { useSettingsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const pairing = shown.kind === 'pairing' ? shown.pairing : null
   const end = pairing?.state === 'void' ? pairing.reason : null
