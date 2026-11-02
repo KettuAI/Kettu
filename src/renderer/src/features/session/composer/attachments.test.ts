@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Attachment, UserContent } from '@shared/thread'
 import { host, hostAt } from '@renderer/lib/host'
+import { useBrowserStore } from '@renderer/stores/browser'
 import {
   draftAttachments,
   setDraftAttachments,
@@ -608,7 +609,7 @@ describe('picked and dropped files', () => {
 })
 
 describe('attachBrowserPage', () => {
-  const capture = vi.fn<(sessionId: string) => Promise<string | null>>()
+  const capture = vi.fn<(sessionId: string) => Promise<Uint8Array | null>>()
   const fromFiles = vi.fn<(files: File[]) => Promise<(GrantedAttachment | null)[]>>()
 
   beforeEach(() => {
@@ -626,8 +627,16 @@ describe('attachBrowserPage', () => {
     expect(screenshotName(null)).toBe('screenshot.png')
   })
 
+  it('numbers a name the draft already holds, so a mention can tell them apart', () => {
+    const taken = ['screenshot-localhost-5173.png', 'screenshot-localhost-5173-2.png']
+    expect(screenshotName('http://localhost:5173/', taken)).toBe('screenshot-localhost-5173-3.png')
+    expect(screenshotName('http://localhost:5173/', ['Image 1'])).toBe(
+      'screenshot-localhost-5173.png',
+    )
+  })
+
   it("attaches the session page's still as an image", async () => {
-    capture.mockResolvedValue(`data:image/png;base64,${btoa('\x01\x02\x03')}`)
+    capture.mockResolvedValue(new Uint8Array([1, 2, 3]))
     await expect(
       attachBrowserPage(DRAFT, 'session-1', 'http://localhost:5173/', null),
     ).resolves.toBe(0)
@@ -642,10 +651,36 @@ describe('attachBrowserPage', () => {
     })
   })
 
-  it('fails, attaching nothing, when the session has no page', async () => {
+  it('takes the still the pane shows while an overlay covers the page', async () => {
+    useBrowserStore.getState().setStill('session-1', `data:image/png;base64,${btoa('\x04\x05')}`)
+    try {
+      await attachBrowserPage(DRAFT, 'session-1', null, null)
+      await vi.waitFor(() => expect(draftAttachments(DRAFT)[0]?.status).toBe('ready'))
+      expect(capture).not.toHaveBeenCalled()
+      const file = prepare.mock.calls[0]![0] as File
+      expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([4, 5])
+    } finally {
+      useBrowserStore.getState().setStill('session-1', null)
+    }
+  })
+
+  it('fails, attaching nothing, when there is no page to capture', async () => {
     capture.mockResolvedValue(null)
     await expect(attachBrowserPage(DRAFT, 'session-1', null, null)).rejects.toThrow()
+    capture.mockRejectedValue(new Error('gone'))
+    await expect(attachBrowserPage(DRAFT, 'session-1', null, null)).rejects.toThrow('gone')
     expect(draftAttachments(DRAFT)).toEqual([])
+  })
+
+  it('adds nothing to a full draft, and says one did not fit', async () => {
+    attachImages(
+      DRAFT,
+      Array.from({ length: 20 }, () => png()),
+      null,
+    )
+    capture.mockResolvedValue(new Uint8Array([1, 2, 3]))
+    await expect(attachBrowserPage(DRAFT, 'session-1', null, null)).resolves.toBe(1)
+    expect(draftAttachments(DRAFT)).toHaveLength(20)
   })
 })
 

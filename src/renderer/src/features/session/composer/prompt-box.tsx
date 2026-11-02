@@ -18,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { formatShortcut, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useBrowserStore } from '@renderer/stores/browser'
+import { shownSidePane, useViewStore } from '@renderer/stores/view'
 import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
 import { AttachmentTray } from './attachment-tray'
 import { attachMention } from './attachments'
@@ -434,7 +435,16 @@ export function AddMenu({
   const { t } = useTranslation('composer')
   const { disabled, full, remote, text, editor, update, sessionId } = box
   const shortcut = formatShortcut('Mod+U')
-  const hasPage = useBrowserStore((s) => !!sessionId && !!s.bySession[sessionId]?.url)
+  const hasPage = useBrowserStore((s) => {
+    const page = sessionId ? s.bySession[sessionId] : undefined
+    // An evicted page keeps its address for the pane, with no live page behind it.
+    return !!page?.url && page.notice?.kind !== 'evicted'
+  })
+  // Only a page in front draws a frame to capture; the pane shows the main session's.
+  const pageShown = useViewStore(
+    (s) =>
+      shownSidePane(s) === 'browser' && s.main.kind === 'session' && s.main.sessionId === sessionId,
+  )
   const emptyDraft = text === ''
   const startMention = () => {
     const current = editor.current?.text() ?? text
@@ -497,12 +507,16 @@ export function AddMenu({
         )}
         {/* The session's own browser tab, which New session and the web client have none of. */}
         {!isWeb && sessionId && (
-          <DropdownMenuItem disabled={full || !hasPage} onClick={box.screenshot}>
+          <DropdownMenuItem disabled={full || !hasPage || !pageShown} onClick={box.screenshot}>
             <CameraIcon />
             {t('attachments.screenshot')}
-            {(full || !hasPage) && (
+            {(full || !hasPage || !pageShown) && (
               <DropdownMenuShortcut>
-                {full ? t('attachments.atMost') : t('attachments.noPage')}
+                {full
+                  ? t('attachments.atMost')
+                  : hasPage
+                    ? t('attachments.openBrowser')
+                    : t('attachments.noPage')}
               </DropdownMenuShortcut>
             )}
           </DropdownMenuItem>

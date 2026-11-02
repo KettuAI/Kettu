@@ -98,18 +98,22 @@ export function usePromptBox({
         picking.current = false
       })
   }
-  /** Attaches a still of the session's own browser page. */
+  // No tile shows until the capture returns, so a second click meanwhile is a no-op.
+  const capturing = useRef(false)
   const screenshot = () => {
-    if (disabled || !sessionId) return
+    if (disabled || !sessionId || capturing.current) return
     if (full) {
       setError(t('attachments.limit'))
       return
     }
+    capturing.current = true
     onActivity?.()
     const url = useBrowserStore.getState().bySession[sessionId]?.url ?? null
-    attachBrowserPage(draft, sessionId, url, hostId).then(limitError, (e: unknown) =>
-      setError(errorMessage(e)),
-    )
+    attachBrowserPage(draft, sessionId, url, hostId)
+      .then(limitError, (e: unknown) => setError(errorMessage(e)))
+      .finally(() => {
+        capturing.current = false
+      })
   }
   const onEvent = useEffectEvent((event: AppEvent) => {
     if (event.kind === 'add-attachments' && focused.current) pick('files')

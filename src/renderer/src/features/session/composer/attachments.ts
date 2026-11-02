@@ -23,6 +23,8 @@ import {
   useAttachmentsStore,
   type DraftAttachment,
 } from '@renderer/stores/attachments'
+import { useBrowserStore } from '@renderer/stores/browser'
+import { base64Bytes } from '../media/carried'
 import {
   draftIds,
   readDraftAttachments,
@@ -73,8 +75,9 @@ export function attachImages(draft: string, files: readonly File[], hostId: stri
 }
 
 /**
- * Adds a still of the session's own browser page, named after its site. Returns how many did not
- * fit under the limit; throws when the session's browser has no page.
+ * Adds a still of the session's own browser page, named after its site: the still the pane shows
+ * while an overlay covers the page, else a capture. Returns how many did not fit under the limit;
+ * throws when there was no page to capture.
  */
 export async function attachBrowserPage(
   draft: string,
@@ -82,16 +85,30 @@ export async function attachBrowserPage(
   url: string | null,
   hostId: string | null,
 ): Promise<number> {
-  const still = await window.kettu.browser.capture(sessionId)
-  if (!still) throw new Error(i18n.t('composer:attachments.noPageOpen'))
-  const bytes = Uint8Array.from(atob(still.slice(still.indexOf(',') + 1)), (c) => c.charCodeAt(0))
-  return attachFiles(draft, [new File([bytes], screenshotName(url), { type: 'image/png' })], hostId)
+  const still = useBrowserStore.getState().stills[sessionId]
+  const bytes = still
+    ? base64Bytes(still.slice(still.indexOf(',') + 1))
+    : await window.kettu.browser.capture(sessionId)
+  if (!bytes) throw new Error(i18n.t('composer:attachments.screenshotFailed'))
+  const name = screenshotName(
+    url,
+    draftAttachments(draft).map((item) => item.name),
+  )
+  // A File takes bytes on an ArrayBuffer of their own.
+  const file = new File([new Uint8Array(bytes)], name, { type: 'image/png' })
+  return attachFiles(draft, [file], hostId)
 }
 
-/** A browser still's name, one word so an `@` mention can name it: `screenshot-<host>.png`. */
-export function screenshotName(url: string | null): string {
+/**
+ * A browser still's name, one word so an `@` mention can name it: `screenshot-<host>.png`,
+ * numbered when the draft already holds that name, since a mention names the first of a name.
+ */
+export function screenshotName(url: string | null, taken: readonly string[] = []): string {
   const site = url ? URL.parse(url)?.host.replaceAll(':', '-') : ''
-  return site ? `screenshot-${site}.png` : 'screenshot.png'
+  const base = site ? `screenshot-${site}` : 'screenshot'
+  let name = `${base}.png`
+  for (let number = 2; taken.includes(name); number++) name = `${base}-${number}.png`
+  return name
 }
 
 /** The next number of a numbered name in a draft: one past the highest it holds. */
