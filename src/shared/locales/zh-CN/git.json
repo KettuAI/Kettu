@@ -233,7 +233,8 @@
       "titleOne": "丢弃 {{name}} 的更改？",
       "title_one": "丢弃 {{count}} 个文件的更改？",
       "title_other": "丢弃 {{count}} 个文件的更改？",
-      "description": "文件会恢复到上次提交时的样子，新文件会被删除。此操作无法撤销。",
+      "description_one": "文件会恢复到上次提交时的样子；如果是新文件，则会被删除。此操作无法撤销。",
+      "description_other": "文件会恢复到上次提交时的样子，新文件会被删除。此操作无法撤销。",
       "action": "丢弃"
     },
     "commit": {

@@ -263,7 +263,9 @@ function DiscardDialog({
               ? t('dialog.discard.titleOne', { name })
               : t('dialog.discard.title', { count: paths.length })}
           </AlertDialogTitle>
-          <AlertDialogDescription>{t('dialog.discard.description')}</AlertDialogDescription>
+          <AlertDialogDescription>
+            {t('dialog.discard.description', { count: paths.length })}
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>

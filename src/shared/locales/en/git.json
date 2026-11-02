@@ -235,7 +235,8 @@
       "titleOne": "Discard the changes to {{name}}?",
       "title_one": "Discard the changes to {{count}} file?",
       "title_other": "Discard the changes to {{count}} files?",
-      "description": "The files go back to how the last commit has them, and new files are deleted. This can’t be undone.",
+      "description_one": "The file goes back to how the last commit has it, or is deleted if it is new. This can’t be undone.",
+      "description_other": "The files go back to how the last commit has them, and new files are deleted. This can’t be undone.",
       "action": "Discard"
     },
     "commit": {
