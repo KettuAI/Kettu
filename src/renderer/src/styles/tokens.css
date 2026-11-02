@@ -36,8 +36,6 @@
   /* Waiting: the fox orange, darkened for text; the dot keeps the brand's own. */
   --attention: #c2410c;
   --attention-dot: #fa5615;
-  /* The halo around a needs-you dot. */
-  --attention-halo: rgb(250 86 21 / 18%);
   --danger: #ac3b2d;
   --success: #2e7550;
   --merged: #6f4c8e;
@@ -239,7 +237,6 @@
 
     --attention: #fb8a55;
     --attention-dot: #fa6e28;
-    --attention-halo: rgb(250 110 40 / 22%);
     --danger: #ea8a7d;
     --success: #6fbf8f;
     --merged: #b798d4;
@@ -379,7 +376,6 @@
 
   --attention: #fb8a55;
   --attention-dot: #fa6e28;
-  --attention-halo: rgb(250 110 40 / 22%);
   --danger: #ea8a7d;
   --success: #6fbf8f;
   --merged: #b798d4;
@@ -556,6 +552,11 @@
   --agent-omp: color-mix(in oklch, var(--brand-omp-2) 86%, var(--bg-surface));
   --agent-muse: color-mix(in oklch, var(--brand-muse) 86%, var(--bg-surface));
   --agent-codewhale: color-mix(in oklch, var(--brand-codewhale-1) 86%, var(--bg-surface));
+  /* The halo around a needs-you dot, a little stronger on dark. */
+  --attention-halo: light-dark(
+    color-mix(in srgb, var(--attention-dot) 18%, transparent),
+    color-mix(in srgb, var(--attention-dot) 22%, transparent)
+  );
   /* Amounts deepen in the fox orange laid over the card, mixed so each step is opaque; the top
      step goes a little past the hue toward the text. */
   --heat-hue: var(--attention-dot);
