@@ -586,6 +586,8 @@ export class SessionManager {
   private readonly timings: SessionTimings
   private readonly now: () => number
   private requestCounter = 0
+  // A notification outlives the host that asked, so its answer must not fit the next run's ids.
+  private readonly requestPrefix = `p${randomUUID().slice(0, 8)}-`
   private badgeCount = 0
   private busyCounts: BusyCounts = { running: 0, waiting: 0 }
   /** Set once the host shuts down: the last checkpoints are written and no more follow. */
@@ -4767,7 +4769,7 @@ export class SessionManager {
         return Promise.resolve({ optionId })
       }
     }
-    const requestId = `p${++this.requestCounter}`
+    const requestId = `${this.requestPrefix}${++this.requestCounter}`
     return new Promise<PermissionAnswer>((resolve, reject) => {
       const onAbort = (): void => {
         this.settlePermission(live, requestId, 'withdrawn')
