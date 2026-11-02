@@ -349,9 +349,11 @@ describe('HostSessions', () => {
 
   it('gives main a host’s browser calls, and keeps main’s own answers from the windows', () => {
     const calls: { hostId: string; call: unknown }[] = []
+    const decided: { hostId: string; event: unknown }[] = []
     const ended: string[] = []
     const relay = new HostSessions({
       browserCall: (hostId, call) => calls.push({ hostId, call }),
+      originDecided: (hostId, event) => decided.push({ hostId, event }),
       ended: (hostId) => ended.push(hostId),
     })
     const window = new FakePort()
@@ -360,6 +362,14 @@ describe('HostSessions', () => {
     relay.opened(devBox, port)
     port.deliver({ type: 'event', event: { type: 'browser.call', call: { callId: 4 } } })
     expect(calls).toEqual([{ hostId: devBox, call: { callId: 4 } }])
+    const answer = {
+      type: 'browser.originDecided',
+      sessionId: 's1',
+      requestId: 2,
+      decision: 'deny',
+    }
+    port.deliver({ type: 'event', event: answer })
+    expect(decided).toEqual([{ hostId: devBox, event: answer }])
     expect(window.posted).toEqual([{ kind: 'open', hostId: devBox }])
 
     expect(relay.request(devBox, 'browser.answer', { callId: 4, answer: {} })).toBe(true)
@@ -369,12 +379,15 @@ describe('HostSessions', () => {
     port.deliver({ type: 'response', id: sent.id, result: null })
     expect(window.posted).toHaveLength(1)
 
-    // A window may not answer them itself.
+    // A window may not answer them itself, but it answers a new site's card.
     window.deliver(request(devBox, 9, 'browser.answer', { callId: 4, answer: {} }))
     expect(port.posted).toHaveLength(1)
     expect(window.posted.at(-1)).toMatchObject({
       message: { type: 'error', id: 9, error: { code: 'unknown_method' } },
     })
+    const card = { sessionId: 's1', entryId: 'e4', decision: 'deny' }
+    window.deliver(request(devBox, 10, 'browser.answerOrigin', card))
+    expect(port.posted.at(-1)).toMatchObject({ method: 'browser.answerOrigin', params: card })
     port.hangUp()
     relay.closed(devBox, port)
     expect(ended).toEqual([devBox])

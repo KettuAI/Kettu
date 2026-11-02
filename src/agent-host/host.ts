@@ -1105,7 +1105,20 @@ export class AgentHost {
       },
       'browser.originSettled': ({ requestId, decision }, ctx) => {
         browserApp(ctx)
-        sessions.browserOriginSettled(requestId, decision, ctx.portId)
+        sessions.browserOriginSettled(requestId, decision, ctx.portId, fromDevice(ctx.device))
+      },
+      'browser.answerOrigin': ({ sessionId, entryId, decision }, { device }) => {
+        const { owner, requestId } = sessions.answerOrigin(
+          sessionId,
+          entryId,
+          decision,
+          fromDevice(device),
+        )
+        if (owner === '') {
+          this.options.send({ type: 'host:browser-origin-decide', sessionId, requestId, decision })
+        } else {
+          this.hub.send([owner], { type: 'browser.originDecided', sessionId, requestId, decision })
+        }
       },
     }
   }

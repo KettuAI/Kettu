@@ -6,11 +6,13 @@
 import {
   BROWSER_TOOL_NAMES,
   isBrowserForward,
+  isOriginDecision,
   loopbackForward,
   type BrowserCallAnswer,
   type BrowserDeviceCall,
   type BrowserForward,
   type BrowserOriginAnswer,
+  type BrowserOriginDecision,
   type BrowserToolName,
 } from '@shared/browser'
 import { DEVICE_ID } from '@shared/remote/device'
@@ -100,6 +102,8 @@ export interface RemoteBrowserDeps {
   /** A port on this computer's loopback that reaches `forward` on the host; null when none can. */
   forward(hostId: string, sessionId: string, forward: BrowserForward): Promise<number | null>
   closeForwards(hostId: string, sessionId: string): void
+  /** Answers the new origin a page waits for, as the pane does. */
+  answerOrigin(sessionId: string, requestId: number, decision: BrowserOriginDecision): void
   /** Main's own request to the host; false while its session is not open. */
   request(hostId: string, method: string, params: unknown): boolean
   log(level: 'info' | 'warn', message: string): void
@@ -164,6 +168,22 @@ export class RemoteBrowser {
       decision: request.decision,
     })
     return true
+  }
+
+  /** A host's `browser.originDecided`: a window or device answered its session's card. */
+  originDecided(hostId: string, value: unknown): void {
+    const { sessionId, requestId, decision } = (value ?? {}) as Record<string, unknown>
+    if (
+      typeof sessionId !== 'string' ||
+      this.hosts.get(sessionId) !== hostId ||
+      typeof requestId !== 'number' ||
+      !Number.isSafeInteger(requestId) ||
+      !isOriginDecision(decision)
+    ) {
+      this.deps.log('warn', `Ignored an answer to a new site from host ${hostId}`)
+      return
+    }
+    this.deps.answerOrigin(sessionId, requestId, decision)
   }
 
   /** The session's page is gone with its session: its forwards close. */

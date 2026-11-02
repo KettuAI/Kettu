@@ -3,7 +3,7 @@
 
 import type { ArtifactImportResult } from './artifacts'
 import type { AttachmentGrant } from './attachments'
-import type { BrowserForward, BrowserOriginAnswer } from './browser'
+import type { BrowserForward, BrowserOriginAnswer, BrowserOriginDecision } from './browser'
 import type { MediaGrantRecord } from './media'
 import type { Platform } from './platform'
 import type { PortError } from './port-rpc'
@@ -138,6 +138,13 @@ export type HostToMain =
   | { type: 'host:artifact-import'; requestId: number; result: NonNullable<ArtifactImportResult> }
   | { type: 'host:media-grant'; grant: MediaGrantRecord }
   | { type: 'host:media-revoke'; sessionId: string | null } // null drops them all
+  // A window's or device's answer to the new origin main's page asked for, from the session's card.
+  | {
+      type: 'host:browser-origin-decide'
+      sessionId: string
+      requestId: number
+      decision: BrowserOriginDecision
+    }
   // A browser tool call for main to run on the session's page; answered by browser-result.
   | {
       type: 'host:browser-call'

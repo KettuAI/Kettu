@@ -65,6 +65,7 @@ function setup(answer: BrowserCallAnswer = { result: { text: 'Done.', value: {} 
   const requests: { hostId: string; method: string; params: unknown }[] = []
   const forwards: { hostId: string; sessionId: string; port: number }[] = []
   const closed: string[] = []
+  const answers: { sessionId: string; requestId: number; decision: string }[] = []
   let waiting: ((on: boolean) => void) | null = null
   let localPort: number | null = 50123
   const browser = new RemoteBrowser({
@@ -78,6 +79,8 @@ function setup(answer: BrowserCallAnswer = { result: { text: 'Done.', value: {} 
       return localPort
     },
     closeForwards: (hostId, sessionId) => closed.push(`${hostId}/${sessionId}`),
+    answerOrigin: (sessionId, requestId, decision) =>
+      answers.push({ sessionId, requestId, decision }),
     request: (hostId, method, params) => {
       requests.push({ hostId, method, params })
       return true
@@ -90,6 +93,7 @@ function setup(answer: BrowserCallAnswer = { result: { text: 'Done.', value: {} 
     requests,
     forwards,
     closed,
+    answers,
     wait: (on: boolean) => waiting?.(on),
     noPort: () => (localPort = null),
   }
@@ -195,6 +199,17 @@ describe('RemoteBrowser', () => {
         params: { requestId: 2, decision: 'deny' },
       },
     ])
+  })
+
+  it('gives its page the answer to a new site from that page’s host alone', async () => {
+    const t = setup()
+    await t.browser.call(devBox, navigate('http://localhost:3000/'))
+    t.browser.originDecided(devBox, { sessionId: 's1', requestId: 2, decision: 'project' })
+    t.browser.originDecided(mini, { sessionId: 's1', requestId: 3, decision: 'deny' })
+    t.browser.originDecided(devBox, { sessionId: 'mine', requestId: 4, decision: 'deny' })
+    t.browser.originDecided(devBox, { sessionId: 's1', requestId: 5, decision: 'timeout' })
+    t.browser.originDecided(devBox, { sessionId: 's1', requestId: '6', decision: 'deny' })
+    expect(t.answers).toEqual([{ sessionId: 's1', requestId: 2, decision: 'project' }])
   })
 
   it('closes the forwards of a page that went with its session', async () => {

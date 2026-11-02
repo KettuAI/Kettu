@@ -223,6 +223,8 @@ async function start(): Promise<void> {
       browserTools!.call(callId, sessionId, tool, args, projectPath, waiting),
     forward: (hostId, sessionId, forward) => remoteHost.forward(hostId, sessionId, forward),
     closeForwards: (hostId, sessionId) => remoteHost.closeForwards(hostId, sessionId),
+    answerOrigin: (sessionId, requestId, decision) =>
+      browserViews.answerOrigin(sessionId, requestId, decision),
     request: (hostId, method, params) => hostSessions.request(hostId, method, params),
     log: (level, message) => log[level](`browser: ${message}`),
   })
@@ -248,6 +250,8 @@ async function start(): Promise<void> {
     onRoutinesWorking: (working) => routinesAwake.set(working),
     onReady: () => reconcileSharing?.(),
     onServicePort: (port) => browserViews.setServicePort(port),
+    onOriginDecided: (sessionId, requestId, decision) =>
+      browserViews.answerOrigin(sessionId, requestId, decision),
     browser: (request) =>
       remoteBrowser.claimLocal(request.sessionId)
         ? browserTools!.call(
@@ -335,6 +339,7 @@ async function start(): Promise<void> {
   )
   const hostSessions: HostSessions = new HostSessions({
     browserCall: (hostId, call) => void remoteBrowser.call(hostId, call),
+    originDecided: (hostId, event) => remoteBrowser.originDecided(hostId, event),
     ended: (hostId) => remoteBrowser.hostClosed(hostId),
     media: hostMedia,
   })

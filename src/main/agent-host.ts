@@ -2,7 +2,13 @@ import { join } from 'node:path'
 import { app, MessageChannelMain, type MessagePortMain, type WebContents } from 'electron'
 import { ARTIFACT_ID, type ArtifactImportResult } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
-import type { BrowserCallAnswer, BrowserCallRequest, BrowserOriginAnswer } from '@shared/browser'
+import {
+  isOriginDecision,
+  type BrowserCallAnswer,
+  type BrowserCallRequest,
+  type BrowserOriginAnswer,
+  type BrowserOriginDecision,
+} from '@shared/browser'
 import type {
   ArtifactContentResult,
   BusyCounts,
@@ -48,6 +54,8 @@ export interface AgentHostDeps {
    * pages need the host to send their state.
    */
   browser?: (request: BrowserCallRequest) => Promise<BrowserCallAnswer>
+  /** A window's or device's answer to the new origin a page of main's asked for. */
+  onOriginDecided?(sessionId: string, requestId: number, decision: BrowserOriginDecision): void
 }
 
 const MAX_LIST = 10_000
@@ -441,6 +449,17 @@ export class AgentHost {
           this.deps.onMediaRevoke(message.sessionId)
         }
         break
+      case 'host:browser-origin-decide': {
+        const { sessionId, requestId, decision } = message
+        if (
+          typeof sessionId === 'string' &&
+          Number.isSafeInteger(requestId) &&
+          isOriginDecision(decision)
+        ) {
+          this.deps.onOriginDecided?.(sessionId, requestId, decision)
+        }
+        break
+      }
       case 'host:service-port': {
         const port = message.port
         this.deps.onServicePort?.(

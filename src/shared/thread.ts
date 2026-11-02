@@ -239,10 +239,12 @@ export type ArtifactAction = 'create' | 'update' | 'restore' | 'delete'
 export interface BrowserOriginEntry {
   kind: 'browser_origin'
   id: string
-  /** The id main gave the request, which both the pane's bar and this card answer. */
+  /** The id the asking page's main gave the request, which its pane's bar answers too. */
   requestId: number
   origin: string
   decision: BrowserOriginAnswer | null
+  /** Set when a paired device gave the answer; the host's own windows give none. */
+  device?: FromDevice
   /** The agent's entry before it, to put it back after a replay. */
   after: string | null
 }
