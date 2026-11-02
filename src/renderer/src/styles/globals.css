@@ -325,6 +325,10 @@
   /* A file card's name in a reply. */
   --text-file: 13.5px;
   --text-file--line-height: 18px;
+  /* A menu item, and rows read like one. */
+  --text-menu: 13.5px;
+  --text-menu--line-height: 18px;
+  --text-menu--letter-spacing: -0.003em;
   /* A count over a picture, such as a grid's +3. */
   --text-count: 11px;
   --text-count--line-height: 14px;
