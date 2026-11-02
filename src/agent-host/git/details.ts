@@ -4,7 +4,7 @@
 import { constants } from 'node:fs'
 import { lstat, open, readlink, realpath } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import type { ChangedFile, CommitDetails, FileDiff, LogCommit } from '@shared/git'
+import type { CommitDetails, FileDiff, LogCommit } from '@shared/git'
 import type { Platform } from '@shared/platform'
 import { pathKey } from '../paths'
 import { expectOk, GIT_TIMEOUT_MS, type Exec, type ExecResult } from './exec'
@@ -15,6 +15,7 @@ import {
   parseNumstat,
   parsePorcelainFiles,
   withLineCounts,
+  type PorcelainFiles,
 } from './parse'
 
 /** A side of a diff larger than this is not sent. */
@@ -57,20 +58,26 @@ export async function readCommitDetails(
   }
 }
 
-/** The working tree's changed files against `HEAD`, at most 500. */
+/** The working tree's changed files against `HEAD`, at most 500, and which are submodules. */
 export async function readChanges(
   exec: Exec,
   cwd: string,
   unborn: boolean,
-): Promise<ChangedFile[]> {
+): Promise<PorcelainFiles> {
   const [status, numbers] = await Promise.all([
     git(exec, cwd, ['status', '--porcelain=v2', '-z', '--untracked-files=all']),
     unborn
       ? null
       : git(exec, cwd, ['diff', '--no-ext-diff', '-z', '-M', '--numstat', 'HEAD', '--']),
   ])
-  const files = parsePorcelainFiles(expectOk('git status', status).stdout).slice(0, CHANGES_LIMIT)
-  return numbers ? withLineCounts(files, parseNumstat(expectOk('git diff', numbers).stdout)) : files
+  const { files, submodules } = parsePorcelainFiles(expectOk('git status', status).stdout)
+  const listed = files.slice(0, CHANGES_LIMIT)
+  return {
+    files: numbers
+      ? withLineCounts(listed, parseNumstat(expectOk('git diff', numbers).stdout))
+      : listed,
+    submodules,
+  }
 }
 
 /** Commits on `ref` that `HEAD` does not have, newest first. */

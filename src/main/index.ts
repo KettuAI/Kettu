@@ -1,6 +1,14 @@
 import { hostname } from 'node:os'
 import { join } from 'node:path'
-import { app, powerMonitor, protocol, safeStorage, session, shell } from 'electron'
+import {
+  app,
+  powerMonitor,
+  protocol,
+  safeStorage,
+  session,
+  shell,
+  systemPreferences,
+} from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { BROWSER_PARTITION } from '@shared/browser'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
@@ -22,12 +30,12 @@ import { BrowserViews } from './browser/views'
 import { BrowserTools } from './browser/tools'
 import { BrowserOriginStore } from './browser/origins'
 import { SiteIcons } from './browser/site-icons'
-import { broadcast } from './events'
+import { broadcast, sendCommand } from './events'
 import { HostAdmin } from './host-admin'
 import { HostMedia } from './host-media'
 import { HostSessions } from './host-sessions'
 import { locale as currentLocale, setLocale, t } from './i18n'
-import { appInfo, registerIpcHandlers } from './ipc'
+import { appInfo, registerIpcHandlers, registerTrayIpc } from './ipc'
 import { MediaGrants, mediaScheme, serveMedia } from './media'
 import { createLogger } from './log'
 import { installMenu } from './menu'
@@ -44,7 +52,7 @@ import { loadDeviceKey, loadIdentity, newIdentity, type IdentityCipher } from '.
 import { readJsonFile } from './json-file'
 import { computerModelForRun } from './system-model'
 import { systemReleaseForRun } from './system-name'
-import { isRendererUrl } from './renderer'
+import { rendererPage } from './renderer'
 import { SettingsStore } from './settings'
 import { hostSettings, reachesHost, terminalSettings } from './settings-schema'
 import { hasPendingFrame, isRevoked, watchSubframes } from './subframes'
@@ -52,6 +60,7 @@ import { TerminalHost } from './terminal-host'
 import { ThemeCatalog } from './theme-catalog'
 import { readThemeFolder, readThemeSources, ThemeStore } from './themes'
 import { KettuTray } from './tray'
+import { openTrayTarget, TrayPanel } from './tray-panel'
 import { Updater } from './updater'
 import { devUserDataPath } from './user-data'
 import {
@@ -121,9 +130,10 @@ async function start(): Promise<void> {
     process.platform === 'darwin' ? app.getLoginItemSettings().wasOpenedAtLogin : false
   const icon = devIcon()
   if (icon) app.dock?.setIcon(icon)
+  // The window's page only: the menu bar panel's needs no clipboard.
   restrictPermissions(
     session.defaultSession,
-    isRendererUrl,
+    (url) => rendererPage(url) === 'index',
     (contents) => isRevoked(contents) || hasPendingFrame(contents),
   )
   const [settings, windowState, appState, themeFolder, themeSources] = await loading
@@ -181,9 +191,45 @@ async function start(): Promise<void> {
   watchTheme()
   configureWindows({ state: windowState, perf, systemLocale })
   setBadgeEnabled(settings.get().notifications.badge)
-  // From launch until quitting, whatever Run in the background says.
-  const tray = new KettuTray({ open: () => showMainWindow(), quit: () => app.quit() })
+  // From launch until quitting, whatever Run in the background says. The updater is made later.
+  let checkForUpdates = (): void => {}
+  const reducedMotion = (): boolean =>
+    settings.get().appearance.reduceMotion === 'always' ||
+    (process.platform !== 'linux' && systemPreferences.getAnimationSettings().prefersReducedMotion)
+  // The panel's page reads its settings as it starts, so it opens only once main answers calls.
+  let ipcReady = false
+  const trayPanel =
+    process.platform === 'darwin'
+      ? new TrayPanel({
+          systemLocale,
+          open: (target) => openTrayTarget(target),
+          quit: () => app.quit(),
+        })
+      : null
+  const tray = new KettuTray({
+    open: () => showMainWindow(),
+    quit: () => app.quit(),
+    newSession: () => sendCommand({ kind: 'new-session' }),
+    // As the app menu's item does: About shows the answer, the window being closed or not.
+    checkForUpdates: () => {
+      sendCommand({ kind: 'open-settings', section: 'about' })
+      checkForUpdates()
+    },
+    setRemoteEnabled: (enabled) => void settings.update({ remote: { enabled } }),
+    reducedMotion,
+    ...(trayPanel
+      ? {
+          togglePanel: (bounds: Electron.Rectangle) => {
+            if (!ipcReady) return false
+            trayPanel.toggle(bounds)
+            return true
+          },
+          hidePanel: () => trayPanel.hide(),
+        }
+      : {}),
+  })
   tray.start()
+  if (trayPanel) registerTrayIpc(trayPanel)
 
   const mediaGrants = new MediaGrants()
   const browserOrigins = await BrowserOriginStore.load(userDataPath)
@@ -251,17 +297,18 @@ async function start(): Promise<void> {
       notifyAttention(message, settings.get())
       hostAdmin?.attention(message)
     },
-    onBadge: (count) => {
-      setBadgeCount(count)
-      tray.setDot(count > 0)
-    },
+    onBadge: (count) => setBadgeCount(count),
     onBusy: (counts) => tray.setBusy(counts),
     onProjects: (paths) => terminalHost.setProjects(paths),
     onAuthCommands: (commands) => terminalHost.setAuthCommands(commands),
     onMediaGrant: (grant) => mediaGrants.add(grant),
     onMediaRevoke: (sessionId) => mediaGrants.revoke(sessionId),
     onRoutinesWorking: (working) => routinesAwake.set(working),
-    onReady: () => reconcileSharing?.(),
+    onReady: () => {
+      tray.setConnected(true)
+      reconcileSharing?.()
+    },
+    onDown: () => tray.setConnected(false),
     onServicePort: (port) => browserViews.setServicePort(port),
     onOriginDecided: (sessionId, requestId, decision) =>
       browserViews.answerOrigin(sessionId, requestId, decision),
@@ -403,7 +450,8 @@ async function start(): Promise<void> {
     importFile: (path, project) => agentHost.artifactImport(path, project),
   })
   await artifacts.install(session.defaultSession)
-  serveMedia(session.defaultSession, mediaGrants, isRendererUrl, hostMedia)
+  // The window's page only: the menu bar panel's shows no media.
+  serveMedia(session.defaultSession, mediaGrants, (url) => rendererPage(url) === 'index', hostMedia)
   // A session of its own, so publishing follows the proxy setting rather than the artifacts'
   // window proxy, and keeps no cookies or storage of its own.
   const sharingSession = session.fromPartition('kettu-sharing')
@@ -460,6 +508,7 @@ async function start(): Promise<void> {
     moveApp: () => updater.moveNow(),
   })
   const quitFlow = quit
+  checkForUpdates = () => void updater.check()
   const agentFolders = new AgentFolders(settings, join(userDataPath, 'agent-config'), (folder) =>
     shell.trashItem(folder),
   )
@@ -517,6 +566,7 @@ async function start(): Promise<void> {
       terminalHost.pushSettings(terminalSettings(next))
     }
     if (changed.has('appearance')) {
+      tray.motionChanged()
       applyTheme(next.appearance.theme)
       applyZoom(next.appearance.zoom)
       themes.choose(next.appearance.colorTheme)
@@ -558,6 +608,7 @@ async function start(): Promise<void> {
     quit: quitFlow,
     perf,
   })
+  ipcReady = true
   installMenu(menuDeps)
 
   app.on('browser-window-created', (_, window) => {

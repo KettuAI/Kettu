@@ -5,8 +5,15 @@ const request = vi.fn()
 const loadPicture = vi.fn()
 vi.stubGlobal('window', { kettu: { agents: { request }, avatars: { load: loadPicture } } })
 
-const { loadAvatar, loadGitTools, loadPullRequest, retryPullRequest, showProjects, useGitStore } =
-  await import('./git')
+const {
+  loadAvatar,
+  loadGitTools,
+  loadPullRequest,
+  retryPullRequest,
+  runGitOperation,
+  showProjects,
+  useGitStore,
+} = await import('./git')
 
 const tools: GitTools = {
   git: { found: true, version: '2.50.0' },
@@ -155,5 +162,20 @@ describe('loadAvatar', () => {
     loadAvatar('app/kettu-builder')
     loadAvatar('')
     expect(request).not.toHaveBeenCalled()
+  })
+})
+
+describe('runGitOperation', () => {
+  beforeEach(() => {
+    request.mockReset()
+    useGitStore.setState({ running: {}, failed: {} })
+  })
+
+  it('says another write is running instead of doing nothing', async () => {
+    useGitStore.setState({ running: { '/p': { kind: 'push', startedAt: 1 } } })
+    expect(await runGitOperation('/p', { kind: 'fetch' })).toBeNull()
+    expect(request).not.toHaveBeenCalled()
+    expect(useGitStore.getState().failed['/p']).toMatchObject({ kind: 'fetch', busy: true })
+    expect(useGitStore.getState().failed['/p']?.log).not.toBe('')
   })
 })

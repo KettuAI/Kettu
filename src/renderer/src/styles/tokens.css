@@ -93,6 +93,11 @@
   /* A toast, dark in both themes; the dark blocks leave it to this one. */
   --toast: #161c24;
   --toast-foreground: #e9edf2;
+  /* A toast's icon by what it reports, and its quiet dismiss button. */
+  --toast-success: #7fd1a1;
+  --toast-warning: #f0a27f;
+  --toast-info: #9ab8da;
+  --toast-muted: #8a94a3;
   --elevation-toast: 0 0 0 1px rgb(255 255 255 / 6%), 0 12px 30px -10px rgb(10 16 24 / 50%);
 
   /* Lightly raised: each layer is a 1 px ring (in the roles below) and a soft drop, which these
@@ -611,6 +616,8 @@
   --segment-thumb: var(--bg-raised);
   --pressed: var(--bg-selected);
   --pressed-hover: color-mix(in srgb, var(--bg-selected), var(--text-primary) 5%);
+  /* Sidebar rows picked together with Mod-click or Shift-click, for a menu that acts on all. */
+  --row-picked: color-mix(in srgb, var(--control-on) 12%, transparent);
 
   /* Keyboard focus: the fox at half strength, 2 px clear of the control. A field takes a 1 px
      line and a halo instead. */
@@ -650,7 +657,8 @@
   --context-hatch: repeating-linear-gradient(135deg, var(--context-7) 0 2px, transparent 2px 4px);
 
   --terminal-background: var(--bg-code-block);
-  --terminal-foreground: var(--text-primary);
+  /* As drawn: output in the secondary ink, the cursor in the primary. */
+  --terminal-foreground: var(--text-secondary);
   --terminal-cursor: var(--text-primary);
   --terminal-selection: var(--selection);
 
@@ -697,6 +705,11 @@
   --composer-focus: var(--composer-hover);
   --queue-ring:
     0 0 0 var(--hairline) var(--border-subtle), var(--elevation-queue), var(--highlight);
+  /* The menu bar panel's inner edge, a faint light line over the system's material, and the ink
+     tile with its fox, the same in both modes. */
+  --panel-highlight: rgb(255 255 255 / 8%);
+  --app-mark-tile: #10161e;
+  --app-mark: #fa5615;
   /* A card waiting on the user: a fox ring with a faint halo. */
   --attention-ring-shadow:
     0 0 0 var(--hairline) color-mix(in srgb, var(--attention-dot) 50%, transparent),

@@ -212,6 +212,11 @@ const api: KettuApi = {
     showItem: (path) => invoke('shell:show-item', path),
     openNotices: () => invoke('shell:open-notices'),
   },
+  editors: {
+    list: () => invoke('editors:list'),
+    open: (editorId, path) => invoke('editors:open', editorId, path),
+    choose: (path) => invoke('editors:choose', path),
+  },
   media: {
     copyImage: (source) => invoke('media:copy-image', source),
     saveAs: (source) => invoke('media:save-as', source),

@@ -79,6 +79,15 @@ describe('BrowserControl', () => {
     expect(browser.state('s1')).toEqual({ kind: 'user', bar: true })
   })
 
+  it('tells the pane when a refused call brings the hand-back bar back', () => {
+    const { browser, last } = control()
+    browser.take('s1')
+    vi.advanceTimersByTime(CONTROL_BAR_MS)
+    expect(last()).toEqual({ kind: 'user', bar: false })
+    expect(() => browser.begin('s1')).toThrow(expect.objectContaining({ code: 'user_has_control' }))
+    expect(last()).toEqual({ kind: 'user', bar: true })
+  })
+
   it('the driving bar’s Stop takes control as any input does', () => {
     const { browser } = control()
     browser.begin('s1')

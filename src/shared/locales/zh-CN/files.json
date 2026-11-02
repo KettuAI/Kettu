@@ -2,14 +2,15 @@
   "panel": {
     "filterPlaceholder": "筛选文件，或输入 ? 在文件内搜索",
     "filterLabel": "筛选文件",
-    "showTree": "以树状显示",
-    "showList": "以列表显示",
-    "hideFiles": "收起文件列表",
-    "showFiles": "展开文件列表",
     "emptyTitle": "还没有文件",
     "emptyDescription": "这个文件夹里有文件后，会显示在这里。",
     "restore": "还原",
-    "maximize": "最大化"
+    "maximize": "最大化",
+    "show": "显示",
+    "changes": "更改",
+    "allFiles": "所有文件",
+    "findFile": "查找文件",
+    "close": "关闭面板"
   },
   "browser": {
     "empty": "此项目中没有文件。",
@@ -89,14 +90,33 @@
     "completions": "补全"
   },
   "diff": {
-    "uncommitted": "未提交",
-    "openFile": "打开文件",
-    "close": "关闭差异",
     "failed": "无法显示此更改",
     "binaryDescription": "不显示二进制文件的更改。",
     "tooLargeTitle": "文件太大，无法比较",
     "tooLargeDescription": "此更改有一侧超过 1 MB。",
     "sameTitle": "没有可显示的更改",
-    "sameDescription": "此文件两侧的内容现在相同。"
+    "sameDescription": "此文件两侧的内容现在相同。",
+    "view": "视图",
+    "diff": "差异",
+    "file": "文件",
+    "mentionLine": "提及第 {{line}} 行",
+    "mentionLines": "提及第 {{start}}–{{end}} 行",
+    "selectHint": "选中行即可提及",
+    "atCommit": "此提交中的改动",
+    "noComposer": "先打开一个会话再提及",
+    "hunks_one": "{{count}} 处改动",
+    "hunks_other": "{{count}} 处改动",
+    "previous": "上一处改动",
+    "next": "下一处改动"
+  },
+  "changes": {
+    "emptyTitle": "没有未提交的更改",
+    "emptyDescription": "Agent 或你改动的文件会显示在这里。",
+    "files_one": "{{count}} 个文件",
+    "files_other": "{{count}} 个文件",
+    "commit": "提交…",
+    "discard": "丢弃",
+    "discardFile": "丢弃 {{name}} 的更改",
+    "discardPick": "选择一个文件来丢弃它的更改"
   }
 }

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { AgentId } from '@shared/agents'
 import type { PortConnectionState } from '@shared/port-rpc'
 import type { TerminalCommand, TerminalEvent, TerminalInfo } from '@shared/terminal-host'
 import { emitAppEvent } from '@renderer/app/events'
@@ -8,16 +9,28 @@ import { errorMessage, terminalHost, terminals, terminalsAt } from '@renderer/li
 // goes straight to the xterm.js instances through `sinks`, never through this store, so a flood of
 // output re-renders nothing.
 
+/** The agent that started a terminal, and the session it started it from. */
+export interface TerminalOwner {
+  agentId: AgentId
+  sessionId: string | null
+}
+
 export interface TerminalState extends TerminalInfo {
   activity: boolean // printed while its tab was not shown
   stale: boolean // the terminal host restarted without it; its output stays, with Restart
   name: string | null // the user's name for the tab; null follows the process title
+  owner: TerminalOwner | null // the agent using it, until the user types into it
+  localUrl: string | null // the last local address with a port it printed
 }
+
+export type TerminalSide = 'left' | 'right'
 
 interface TerminalsStore {
   byId: Record<string, TerminalState>
-  active: Record<string, string> // projectPath → shown terminal
+  active: Record<string, string> // projectPath → shown terminal, the left one while split
   order: Record<string, string[]> // projectPath → tab order the user dragged into
+  split: Record<string, string | null> // projectPath → terminal shown on the right
+  focusedSide: Record<string, TerminalSide> // projectPath → side a selected tab shows in
   connection: PortConnectionState
   error: string | null
 }
@@ -26,6 +39,8 @@ export const useTerminalsStore = create<TerminalsStore>()(() => ({
   byId: {},
   active: {},
   order: {},
+  split: {},
+  focusedSide: {},
   connection: 'connected',
   error: null,
 }))
@@ -37,6 +52,10 @@ const replays = new Map<string, Sink>()
 
 /** Terminals started to sign in an agent; when their command returns, the session retries. */
 const signIns = new Map<string, { agentId: string; sawBusy: boolean }>()
+
+/** The end of each terminal's last output, so an address split across two chunks is found. */
+const urlTails = new Map<string, string>()
+const URL_TAIL = 200
 
 export function setSink(id: string, sink: Sink | null, replay: Sink | null = null): void {
   if (sink) sinks.set(id, sink)
@@ -72,7 +91,8 @@ export function terminalsOf(
   )
 }
 
-function upsert(info: TerminalInfo): void {
+/** Adds or updates a terminal; `owner` is given only by the call that started it. */
+function upsert(info: TerminalInfo, owner?: TerminalOwner | null): void {
   useTerminalsStore.setState((s) => {
     const previous = s.byId[info.id]
     return {
@@ -83,6 +103,8 @@ function upsert(info: TerminalInfo): void {
           activity: previous?.activity ?? false,
           stale: false,
           name: previous?.name ?? null,
+          owner: owner === undefined ? (previous?.owner ?? null) : owner,
+          localUrl: previous?.localUrl ?? null,
         },
       },
       active: s.active[info.projectPath] ? s.active : { ...s.active, [info.projectPath]: info.id },
@@ -103,22 +125,74 @@ export function forgetTerminal(id: string): void {
   sinks.delete(id)
   replays.delete(id)
   signIns.delete(id)
+  urlTails.delete(id)
   useTerminalsStore.setState((s) => {
     const gone = s.byId[id]
     if (!gone) return s
+    const projectPath = gone.projectPath
     const byId = { ...s.byId }
     delete byId[id]
     const order = { ...s.order }
-    const kept = order[gone.projectPath]?.filter((other) => other !== id)
-    if (kept?.length) order[gone.projectPath] = kept
-    else delete order[gone.projectPath]
+    const kept = order[projectPath]?.filter((other) => other !== id)
+    if (kept?.length) order[projectPath] = kept
+    else delete order[projectPath]
     const active = { ...s.active }
-    if (active[gone.projectPath] === id) {
-      const next = terminalsOf(byId, gone.projectPath, order[gone.projectPath]).at(-1)
-      if (next) active[gone.projectPath] = next.id
-      else delete active[gone.projectPath]
+    const right = s.split[projectPath] ?? null
+    // Either side going ends the split; the one that stays shows alone.
+    if (right === id || (right && active[projectPath] === id)) {
+      if (right !== id) active[projectPath] = right
+      return { byId, active, order, ...unsplit(s, projectPath) }
+    }
+    if (active[projectPath] === id) {
+      const next = terminalsOf(byId, projectPath, order[projectPath]).at(-1)
+      if (next) active[projectPath] = next.id
+      else delete active[projectPath]
     }
     return { byId, active, order }
+  })
+}
+
+function unsplit(
+  s: TerminalsStore,
+  projectPath: string,
+): Pick<TerminalsStore, 'split' | 'focusedSide'> {
+  const split = { ...s.split }
+  const focusedSide = { ...s.focusedSide }
+  delete split[projectPath]
+  delete focusedSide[projectPath]
+  return { split, focusedSide }
+}
+
+// eslint-disable-next-line no-control-regex
+const ESCAPES = /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g
+const LOCAL_URL =
+  // eslint-disable-next-line no-control-regex
+  /\bhttps?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]):\d{1,5}(?!\d)(?:[/?#][^\s"'<>`\x00-\x1f\x7f]*)?/gi
+const TRAILING_PUNCTUATION = /[.,;:!?'")\]}]+$/
+
+/**
+ * The last address on this computer with a port in a terminal's output, such as a dev server's
+ * `http://localhost:5173/`. An address on 0.0.0.0, every interface, opens as localhost.
+ */
+export function findLocalUrl(text: string): string | null {
+  let found: string | null = null
+  for (const match of text.replace(ESCAPES, '').matchAll(LOCAL_URL)) found = match[0]
+  if (!found) return null
+  return found.replace(TRAILING_PUNCTUATION, '').replace(/^(https?:\/\/)0\.0\.0\.0/i, '$1localhost')
+}
+
+/** Notes the local address a terminal prints; most output has no `://` and costs a few scans. */
+function scanForLocalUrl(id: string, data: string): void {
+  const tail = urlTails.get(id) ?? ''
+  urlTails.set(id, data.length >= URL_TAIL ? data.slice(-URL_TAIL) : (tail + data).slice(-URL_TAIL))
+  const seam = tail.slice(-2) + data.slice(0, 2)
+  if (!data.includes('://') && !tail.includes('://') && !seam.includes('://')) return
+  const url = findLocalUrl(tail + data)
+  if (!url) return
+  useTerminalsStore.setState((s) => {
+    const t = s.byId[id]
+    if (!t || t.localUrl === url) return s
+    return { byId: { ...s.byId, [id]: { ...t, localUrl: url } } }
   })
 }
 
@@ -126,6 +200,7 @@ export function forgetTerminal(id: string): void {
 export function takeTerminalEvent(event: TerminalEvent): void {
   switch (event.type) {
     case 'terminal.data': {
+      scanForLocalUrl(event.id, event.data)
       const sink = sinks.get(event.id)
       if (sink) {
         sink(event.data)
@@ -148,6 +223,8 @@ export function takeTerminalEvent(event: TerminalEvent): void {
       return
     // Another host's, after this computer fell behind on it and missed output.
     case 'terminal.replay':
+      urlTails.delete(event.id)
+      scanForLocalUrl(event.id, event.replay)
       replays.get(event.id)?.(event.replay)
       return
     case 'terminal.removed':
@@ -179,10 +256,30 @@ export async function loadTerminals(projectPath: string): Promise<void> {
   }
 }
 
+export interface CreateTerminalOptions extends Partial<TerminalCommand> {
+  signInAgent?: string
+  /** The agent starting it, which uses it until the user types into it. */
+  owner?: TerminalOwner
+}
+
+type Size = { cols: number; rows: number }
+const SIZE: Size = { cols: 100, rows: 24 }
+
+/** Starts a terminal and shows it, in the focused side while the panel is split. */
 export async function createTerminal(
   projectPath: string,
-  size: { cols: number; rows: number } = { cols: 100, rows: 24 },
-  command?: TerminalCommand & { signInAgent?: string },
+  size: Size = SIZE,
+  options?: CreateTerminalOptions,
+): Promise<TerminalInfo | null> {
+  const info = await startTerminal(projectPath, size, options)
+  if (info) showTerminal(projectPath, info.id)
+  return info
+}
+
+async function startTerminal(
+  projectPath: string,
+  size: Size = SIZE,
+  options?: CreateTerminalOptions,
 ): Promise<TerminalInfo | null> {
   useTerminalsStore.setState({ error: null })
   try {
@@ -190,11 +287,12 @@ export async function createTerminal(
       projectPath,
       cols: size.cols,
       rows: size.rows,
-      ...(command ? { command: { text: command.text, run: command.run } } : {}),
+      ...(options?.text !== undefined
+        ? { command: { text: options.text, run: options.run ?? false } }
+        : {}),
     })
-    if (command?.signInAgent) signIns.set(info.id, { agentId: command.signInAgent, sawBusy: false })
-    upsert(info)
-    showTerminal(projectPath, info.id)
+    if (options?.signInAgent) signIns.set(info.id, { agentId: options.signInAgent, sawBusy: false })
+    upsert(info, options?.owner ?? null)
     return info
   } catch (error) {
     useTerminalsStore.setState({ error: errorMessage(error) })
@@ -202,14 +300,82 @@ export async function createTerminal(
   }
 }
 
+/**
+ * Shows a terminal. While split, a tab already on one side focuses that side, and any other
+ * takes the place of the focused side's.
+ */
 export function showTerminal(projectPath: string, id: string): void {
   useTerminalsStore.setState((s) => {
     const t = s.byId[id]
+    const byId = t?.activity ? { ...s.byId, [id]: { ...t, activity: false } } : s.byId
+    const right = s.split[projectPath]
+    if (!right) return { active: { ...s.active, [projectPath]: id }, byId }
+    const side: TerminalSide =
+      id === right
+        ? 'right'
+        : id === s.active[projectPath]
+          ? 'left'
+          : (s.focusedSide[projectPath] ?? 'left')
     return {
-      active: { ...s.active, [projectPath]: id },
-      byId: t?.activity ? { ...s.byId, [id]: { ...t, activity: false } } : s.byId,
+      byId,
+      focusedSide: { ...s.focusedSide, [projectPath]: side },
+      ...(side === 'right'
+        ? { split: { ...s.split, [projectPath]: id } }
+        : { active: { ...s.active, [projectPath]: id } }),
     }
   })
+}
+
+/**
+ * The Split button: unsplit, it starts a terminal and shows it on the right, focused; split, it
+ * leaves the left one shown and the right one a tab.
+ */
+export async function toggleSplit(projectPath: string): Promise<void> {
+  if (useTerminalsStore.getState().split[projectPath]) {
+    useTerminalsStore.setState((s) => unsplit(s, projectPath))
+    return
+  }
+  const info = await startTerminal(projectPath)
+  if (!info) return
+  useTerminalsStore.setState((s) => {
+    const left = s.active[projectPath]
+    if (!s.byId[info.id] || s.split[projectPath]) return s
+    // Nothing was shown to split from: the new terminal shows alone.
+    if (!left || left === info.id || !s.byId[left]) {
+      return { active: { ...s.active, [projectPath]: info.id } }
+    }
+    return {
+      split: { ...s.split, [projectPath]: info.id },
+      focusedSide: { ...s.focusedSide, [projectPath]: 'right' },
+    }
+  })
+}
+
+/** Where a selected tab shows while split: a click into a side's terminal focuses that side. */
+export function focusTerminalSide(projectPath: string, side: TerminalSide): void {
+  useTerminalsStore.setState((s) => {
+    if (!s.split[projectPath] || (s.focusedSide[projectPath] ?? 'left') === side) return s
+    return { focusedSide: { ...s.focusedSide, [projectPath]: side } }
+  })
+}
+
+/** The user typed into a terminal an agent was using: it is theirs from now on. */
+export function takeOverTerminal(id: string): void {
+  if (!useTerminalsStore.getState().byId[id]?.owner) return
+  useTerminalsStore.setState((s) => {
+    const t = s.byId[id]
+    if (!t?.owner) return s
+    return { byId: { ...s.byId, [id]: { ...t, owner: null } } }
+  })
+}
+
+/** Ctrl+C to the terminal's foreground process, as the user would type it. */
+export async function interruptTerminal(id: string): Promise<void> {
+  try {
+    await terminals('terminals.input', { id, data: '\x03' })
+  } catch (error) {
+    useTerminalsStore.setState({ error: errorMessage(error) })
+  }
 }
 
 /** Names a tab; a blank name returns it to the title of its process. */
@@ -245,7 +411,14 @@ export async function killTerminal(id: string): Promise<void> {
 export async function restartTerminal(id: string): Promise<void> {
   useTerminalsStore.setState({ error: null })
   try {
-    upsert(await terminals('terminals.restart', { id }))
+    const info = await terminals('terminals.restart', { id })
+    // A new shell the user started: no agent's, with none of the old one's output.
+    urlTails.delete(id)
+    useTerminalsStore.setState((s) => {
+      const t = s.byId[id]
+      return t ? { byId: { ...s.byId, [id]: { ...t, owner: null, localUrl: null } } } : s
+    })
+    upsert(info)
   } catch (error) {
     useTerminalsStore.setState({ error: errorMessage(error) })
   }
@@ -321,25 +494,33 @@ export async function replaceStale(id: string): Promise<void> {
       return
     }
   }
-  const created = await createTerminal(old.projectPath)
+  const created = await startTerminal(old.projectPath)
   if (!created) return
   inheritTab(id, created.id)
   forgetTerminal(id)
 }
 
-/** Gives a replacement terminal the name and the place of the one it replaces. */
+/**
+ * Gives a replacement terminal the name and the place of the one it replaces: its tab, and the
+ * right side when it was shown there, or else the shown terminal.
+ */
 function inheritTab(oldId: string, newId: string): void {
   useTerminalsStore.setState((s) => {
     const old = s.byId[oldId]
     const created = s.byId[newId]
     if (!old || !created) return s
-    const ids = terminalsOf(s.byId, old.projectPath, s.order[old.projectPath])
+    const projectPath = old.projectPath
+    const ids = terminalsOf(s.byId, projectPath, s.order[projectPath])
       .map((t) => t.id)
       .filter((other) => other !== newId)
       .map((other) => (other === oldId ? newId : other))
+    const right = s.split[projectPath] === oldId
     return {
       byId: { ...s.byId, [newId]: { ...created, name: old.name } },
-      order: { ...s.order, [old.projectPath]: ids },
+      order: { ...s.order, [projectPath]: ids },
+      ...(right
+        ? { split: { ...s.split, [projectPath]: newId } }
+        : { active: { ...s.active, [projectPath]: newId } }),
     }
   })
 }

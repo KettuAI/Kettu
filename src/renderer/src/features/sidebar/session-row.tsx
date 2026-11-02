@@ -22,16 +22,36 @@ import { SidebarMenuButton, SidebarMenuItem } from '@renderer/components/ui/side
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { PrIcon } from '@renderer/features/git/pr-icon'
 import { prStateText } from '@renderer/features/git/pr-text'
+import { isMac, isMod } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
-import { isAway, useOtherHost } from '@renderer/stores/hosts'
-import { hostOfSession, sessionTitle, type SessionNode } from '@renderer/stores/sessions'
+import { awayHosts, isAway, sidebarHosts, useOtherHost } from '@renderer/stores/hosts'
+import { useProjectsStore } from '@renderer/stores/projects'
+import {
+  clearSelection,
+  selectionFor,
+  selectRange,
+  toggleSelected,
+  useSessionSelection,
+} from '@renderer/stores/session-selection'
+import {
+  hostOfSession,
+  sessionTitle,
+  useSessionsStore,
+  visibleOrder,
+  type SessionNode,
+} from '@renderer/stores/sessions'
 import { useSessionDragSource } from '@renderer/features/split/session-drag-model'
 import { allPanes, paneWithSession } from '@renderer/features/split/layout'
 import { openSession, useViewStore } from '@renderer/stores/view'
 import { CacheTip } from './cache-status'
 import { cacheGone, useGoneLabel, useSessionCache } from './session-cache'
 import { SessionIndicator } from './session-indicator'
-import { DeleteSessionDialog, SessionMenuItems, SessionTitleField } from './session-menu'
+import {
+  DeleteSessionDialog,
+  MultiSessionMenuItems,
+  SessionMenuItems,
+  SessionTitleField,
+} from './session-menu'
 import { runSessionMenuAccelerator } from './session-menu-model'
 import { useRenaming } from './use-renaming'
 
@@ -79,6 +99,9 @@ export const SessionRow = memo(function SessionRow({
       ),
   )
   const tabStop = tabStopId === summary.id
+  const picked = useSessionSelection((s) => selectionFor(summary.id, s.ids))
+  // A row picked alone shows it, though its menu still acts on it alone.
+  const marked = useSessionSelection((s) => s.ids.includes(summary.id))
   const userExpanded = useViewStore((s) => s.expandedParents[summary.id])
   const hasChildren = children.length > 0
   const childActive = children.some((c) => c.running || c.permissionCount > 0)
@@ -108,6 +131,29 @@ export const SessionRow = memo(function SessionRow({
   const cache = useSessionCache(summary)
   const gone = useGoneLabel(cache)
   const expiring = cache?.state === 'ending' ? cache.cache : null
+
+  // Mod-click and Shift-click pick rows for a menu that acts on all of them; a plain click opens
+  // the session and lets go of the picked ones.
+  const pick = (event: React.MouseEvent): boolean => {
+    const currentId = useViewStore.getState().main
+    const current = currentId.kind === 'session' ? currentId.sessionId : null
+    if (isMod(event) && !event.shiftKey && !event.altKey) {
+      toggleSelected(summary.id)
+      return true
+    }
+    if (event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      const view = useViewStore.getState()
+      const order = visibleOrder(
+        { ...view, hosts: sidebarHosts(), away: awayHosts() },
+        useSessionsStore.getState().byId,
+        useProjectsStore.getState().projects,
+      )
+      selectRange(summary.id, current, order)
+      return true
+    }
+    clearSelection()
+    return false
+  }
 
   const lead = subagent ? (
     <span className="grid size-4 shrink-0 place-items-center text-secondary">
@@ -149,7 +195,7 @@ export const SessionRow = memo(function SessionRow({
       aria-description={inSplit ? t('row.inSplitView') : undefined}
       // The other panes' rows take the current row's fill, without its surface or its edge.
       className={cn(
-        'gap-[9px] data-active:font-medium',
+        'gap-[9px] data-active:font-medium data-multi-selected:bg-(--row-picked)',
         inSplit && 'bg-selected font-medium',
         away && 'text-tertiary',
       )}
@@ -158,9 +204,11 @@ export const SessionRow = memo(function SessionRow({
       tabIndex={tabStop ? 0 : -1}
       aria-current={current ? 'page' : undefined}
       aria-expanded={hasChildren ? expanded : undefined}
-      onClick={() => openSession(summary.id, summary.projectPath)}
+      data-multi-selected={marked ? '' : undefined}
+      onClick={(event) => pick(event) || openSession(summary.id, summary.projectPath)}
       onDoubleClick={rename.start}
       onKeyDown={(event) => {
+        if (event.key === 'Escape') clearSelection()
         // The context menu key opens the More menu, the row's menu for the keyboard.
         if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
           event.preventDefault()
@@ -224,7 +272,11 @@ export const SessionRow = memo(function SessionRow({
     </SidebarMenuButton>
   )
 
-  const menuItems = (
+  // As drawn: the menus for several rows and for a subagent are narrower than one row's.
+  const menuWidth = picked ? 'w-52.5' : subagent ? 'w-57.5' : 'w-59'
+  const menuItems = picked ? (
+    <MultiSessionMenuItems ids={picked} onDelete={() => setDeleting(true)} />
+  ) : (
     <SessionMenuItems
       summary={summary}
       onRename={rename.menu.onRename}
@@ -275,8 +327,9 @@ export const SessionRow = memo(function SessionRow({
                 </TooltipContent>
               </Tooltip>
               <ContextMenuContent
+                className={menuWidth}
                 finalFocus={rename.menu.finalFocus}
-                onKeyDown={runSessionMenuAccelerator}
+                onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}
               >
                 {menuItems}
               </ContextMenuContent>
@@ -308,8 +361,9 @@ export const SessionRow = memo(function SessionRow({
               </Tooltip>
               <DropdownMenuContent
                 align="start"
+                className={menuWidth}
                 finalFocus={rename.menu.finalFocus}
-                onKeyDown={runSessionMenuAccelerator}
+                onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}
               >
                 {menuItems}
               </DropdownMenuContent>
@@ -338,6 +392,7 @@ export const SessionRow = memo(function SessionRow({
       <DeleteSessionDialog
         sessionId={summary.id}
         title={sessionTitle(summary)}
+        ids={picked ?? undefined}
         open={deleting}
         onOpenChange={setDeleting}
       />

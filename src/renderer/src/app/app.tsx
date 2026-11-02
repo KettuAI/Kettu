@@ -9,6 +9,7 @@ import { SidebarProvider } from '@renderer/components/ui/sidebar'
 import { Toaster } from '@renderer/components/ui/toast'
 import { TooltipProvider } from '@renderer/components/ui/tooltip'
 import { ArtifactDialogs } from '@renderer/features/artifacts/artifact-dialogs'
+import { GitDialogsHost } from '@renderer/features/git/git-dialogs'
 import { MediaViewer } from '@renderer/features/session/media/media-viewer'
 import { HostBanner } from '@renderer/features/shell/host-banner'
 import { LaunchCover } from '@renderer/features/shell/launch-cover'
@@ -78,6 +79,7 @@ export function App() {
             <HostPathDialog />
           </Suspense>
         )}
+        <GitDialogsHost />
         <Toaster />
         <ReportInteractive />
       </SidebarProvider>

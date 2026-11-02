@@ -48,7 +48,8 @@
     "addFolder": "添加文件夹",
     "installTheme": "安装主题",
     "exportTheme": "导出主题",
-    "chooseAgentFolder": "选择 Agent 的配置目录"
+    "chooseAgentFolder": "选择 Agent 的配置目录",
+    "chooseEditor": "选择编辑器"
   },
   "quit": {
     "titleQuit": "退出 {{name}}？",
@@ -86,7 +87,10 @@
     "remoteFailed": "远程访问没能打开",
     "remoteOn_other": "远程访问已打开 · {{count}} 台设备在线",
     "open": "打开 {{name}}",
-    "quit": "退出 {{name}}"
+    "newSession": "新建会话",
+    "quit": "退出 {{name}}",
+    "remoteAccess": "远程访问",
+    "checkForUpdates": "检查更新…"
   },
   "agents": {
     "folderTaken": "这个目录已经属于 {{agent}}。请换一个，或者让 Kettu 新建一个。"

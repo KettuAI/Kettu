@@ -100,7 +100,7 @@ function LocalTile({ path, image, more }: { path: string; image: boolean; more: 
         {more > 0 && (
           <span
             aria-hidden
-            className="absolute right-1.5 bottom-1.5 flex h-5 items-center rounded-md bg-(--media-badge) px-1.5 text-badge text-(color:--media-foreground) tabular"
+            className="absolute right-1.5 bottom-1.5 flex h-5 items-center rounded-md bg-(--media-badge) px-1.5 text-count text-(color:--media-foreground) tabular"
           >
             {t('media.moreBadge', { count: more })}
           </span>

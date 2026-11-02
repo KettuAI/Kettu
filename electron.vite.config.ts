@@ -16,6 +16,13 @@ export default defineConfig({
   preload: {
     resolve: { alias: sharedAlias },
     plugins: [notices()],
+    // Each page's preload is one file, since a sandboxed preload can require no chunk of its own.
+    build: {
+      isolatedEntries: true,
+      rolldownOptions: {
+        input: { index: resolve('src/preload/index.ts'), tray: resolve('src/preload/tray.ts') },
+      },
+    },
   },
   renderer: {
     resolve: {
@@ -28,6 +35,14 @@ export default defineConfig({
     },
     // Full tables depend only on the theme, so tests can use the committed file as is.
     plugins: [react(), tailwindcss(), cn({ full: true, out: 'src/lib/cn-tables.ts' }), notices()],
-    build: { minify: true },
+    build: {
+      minify: true,
+      rolldownOptions: {
+        input: {
+          index: resolve('src/renderer/index.html'),
+          tray: resolve('src/renderer/tray.html'),
+        },
+      },
+    },
   },
 })
