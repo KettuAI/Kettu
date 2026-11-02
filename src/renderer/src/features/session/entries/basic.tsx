@@ -89,6 +89,12 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
           {t('userEntry.from', { title: entry.from.title })}
         </span>
       )}
+      {/* A message from a paired device names it; the host's own windows send unmarked ones. */}
+      {entry.device && (
+        <span className="max-w-[85%] truncate pr-0.5 text-xs text-tertiary">
+          {t('userEntry.device', { device: entry.device.name })}
+        </span>
+      )}
       {first && routine && <RoutineSent routine={routine} />}
       <UserActions content={entry.content} at={entry.at} steered={entry.steered} />
     </div>

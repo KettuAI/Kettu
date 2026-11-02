@@ -306,6 +306,12 @@ export type SessionAttention = 'none' | 'permission' | 'unread' | 'error'
  */
 export const REMOVED_WHILE_STARTING = 'removed_while_starting'
 
+/**
+ * The `reason` in the `data` of the `not_found` that `permissions.respond` fails with when another
+ * window or device answered first; `device` there is the one that did, null for a host's window.
+ */
+export const ALREADY_ANSWERED = 'already_answered'
+
 /** A message the host kept to give back, to a session's composer or New session's (null). */
 export interface ReturnedMessage {
   sessionId: string | null
