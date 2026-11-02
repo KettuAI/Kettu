@@ -20,8 +20,8 @@ import {
   placeholder as placeholderText,
   WidgetType,
 } from '@codemirror/view'
+import { chipHooks, chips, keepAsText, type ChipHooks } from './editor-chips'
 import { markdownPreview } from './markdown-preview'
-import { leadingCommand } from './slash'
 
 export interface ComposerEditorHandle {
   /** Focuses the box with the editor's own selection, which a DOM focus would lose. */
@@ -32,6 +32,10 @@ export interface ComposerEditorHandle {
   insert(text: string): void
   /** Replaces the whole text and puts the caret at `caret`, the end by default. */
   setText(text: string, caret?: number): void
+  /** Keeps the link from `from` to `to` as text rather than a chip. */
+  keepAsText(from: number, to: number): void
+  /** The chip that starts at `pos`, as drawn. */
+  chipElement(pos: number): HTMLElement | null
 }
 
 /** The list a popover shows, for the box's combobox attributes. */
@@ -63,16 +67,6 @@ function hintAtEnd(hint: string | undefined): Extension {
   if (!hint) return []
   const widget = Decoration.widget({ widget: new HintWidget(hint), side: 1 })
   return EditorView.decorations.of((view) => Decoration.set([widget.range(view.state.doc.length)]))
-}
-
-const commandMark = Decoration.mark({ class: 'cm-slash-command' })
-
-function leadingCommandMark(names: readonly string[]): Extension {
-  if (names.length === 0) return []
-  return EditorView.decorations.of((view) => {
-    const length = leadingCommand(view.state.doc.line(1).text, names)
-    return length ? Decoration.set([commandMark.range(0, length)]) : Decoration.none
-  })
 }
 
 function editability(disabled: boolean): Extension {
@@ -120,13 +114,20 @@ const theme = EditorView.theme({
     color: 'var(--text-placeholder)',
   },
   '.cm-hint': { color: 'var(--text-placeholder)' },
-  // A shadow takes the tint 2 px past the text without moving it; it adds 2 px to the radius.
-  '.cm-slash-command': {
-    color: 'var(--info)',
-    background: 'var(--info-tint)',
-    borderRadius: '2px',
-    boxShadow: '0 0 0 2px var(--info-tint)',
+  // The command chip as marks: the padding sits inline, so the caret still moves through it.
+  '.cm-chip-command': {
+    background: 'var(--bg-subtle)',
+    boxShadow: 'inset 0 0 0 var(--hairline) var(--border-subtle)',
+    borderRadius: '5px',
+    padding: '3px 6px 3px 5px',
+    margin: '0 1px',
+    fontFamily: 'var(--font-mono)',
+    fontVariantLigatures: 'none',
+    fontSize: 'var(--text-hint)',
   },
+  '.cm-chip-slash': { color: 'var(--control-on)' },
+  // A line with chips opens up, so chips on two lines do not touch.
+  '.cm-line:has(.cm-chip, .cm-chip-command)': { lineHeight: '30px' },
   '.cm-md-mark': { color: 'var(--text-tertiary)' },
   '.cm-md-strong': { color: 'var(--foreground)', fontWeight: 'var(--font-weight-semibold)' },
   '.cm-md-em': { fontStyle: 'italic' },
@@ -173,7 +174,7 @@ export function ComposerEditor({
   placeholder,
   disabled,
   hint,
-  commands,
+  chipContext,
   size,
   popover,
   onChange,
@@ -192,8 +193,8 @@ export function ComposerEditor({
   disabled: boolean
   /** The slash command's input hint, after the text. */
   hint: string | undefined
-  /** The names of the agent's commands, for marking the one the text starts with. */
-  commands: readonly string[]
+  /** What the chips resolve against, and what they report. */
+  chipContext: ChipHooks
   /** The text's least height, its padding and its line height, as CSS lengths. */
   size: { minHeight: string; padding: string; lineHeight?: string }
   popover: PopoverAria | null
@@ -217,10 +218,10 @@ export function ComposerEditor({
     editable: new Compartment(),
     attributes: new Compartment(),
     hint: new Compartment(),
-    command: new Compartment(),
+    chips: new Compartment(),
   }))
   // What the first render had, which the editor starts with.
-  const initial = useRef({ initialText, placeholder, disabled, label, popover, hint, commands })
+  const initial = useRef({ initialText, placeholder, disabled, label, popover, hint, chipContext })
   const changed = useEffectEvent(onChange)
   const moved = useEffectEvent(onCaret)
   const keyDown = useEffectEvent(onKeyDown)
@@ -282,7 +283,8 @@ export function ComposerEditor({
           parts.editable.of(editability(first.disabled)),
           parts.attributes.of(attributes(first.label, first.popover)),
           parts.hint.of(hintAtEnd(first.hint)),
-          parts.command.of(leadingCommandMark(first.commands)),
+          chips(),
+          parts.chips.of(chipHooks.of(first.chipContext)),
           EditorView.updateListener.of((update) => {
             if (update.transactions.some((tr) => tr.annotation(fromBox))) return
             if (update.docChanged) changed(update.state.doc.toString())
@@ -311,8 +313,8 @@ export function ComposerEditor({
     view.current?.dispatch({ effects: parts.hint.reconfigure(hintAtEnd(hint)) })
   }, [parts, hint])
   useEffect(() => {
-    view.current?.dispatch({ effects: parts.command.reconfigure(leadingCommandMark(commands)) })
-  }, [parts, commands])
+    view.current?.dispatch({ effects: parts.chips.reconfigure(chipHooks.of(chipContext)) })
+  }, [parts, chipContext])
   const listId = popover?.listId
   const activeId = popover?.activeId
   useEffect(() => {
@@ -346,6 +348,17 @@ export function ComposerEditor({
           annotations: fromBox.of(true),
           scrollIntoView: true,
         })
+      },
+      keepAsText: (from, to) => {
+        view.current?.dispatch({ effects: keepAsText.of({ from, to }) })
+      },
+      chipElement: (pos) => {
+        const editor = view.current
+        if (!editor) return null
+        const { node, offset } = editor.domAtPos(pos, 1)
+        const at = node.childNodes[offset] ?? node
+        const element = at instanceof HTMLElement ? at : at.parentElement
+        return element?.closest<HTMLElement>('.cm-chip') ?? null
       },
     }),
     [],

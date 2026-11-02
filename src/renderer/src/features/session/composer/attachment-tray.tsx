@@ -34,6 +34,7 @@ export function AttachmentTray({
   onPasteAsText,
   onError,
   onLeave,
+  hidden,
 }: {
   draft: string
   /** The session whose thread's pictures the viewer steps through with the draft's. */
@@ -49,9 +50,12 @@ export function AttachmentTray({
   onError: (message: string) => void
   /** Focus leaves the row, as when its last tile is removed. */
   onLeave: () => void
+  /** The keys of the attachments a chip in the text stands for, which need no tile. */
+  hidden?: ReadonlySet<string>
 }) {
   const { t } = useTranslation('composer')
-  const items = useAttachmentsStore(selectDraft(draft))
+  const all = useAttachmentsStore(selectDraft(draft))
+  const items = hidden?.size ? all.filter((item) => !hidden.has(item.key)) : all
   const takesImages = useAgentsStore((s) =>
     agentId ? (s.byId[agentId]?.capabilities.prompt?.image ?? null) : null,
   )

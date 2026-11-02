@@ -175,5 +175,17 @@
   },
   "slash": {
     "typeToFilter": "输入以筛选"
+  },
+  "chips": {
+    "pastedLink": "已粘贴为链接",
+    "pasteAsText": "粘贴为文本",
+    "opensInSession": "在会话浏览器中打开",
+    "opensInBrowser": "在你的浏览器中打开",
+    "sentAsLink": "以链接发送",
+    "missing": "这个文件已无法读取",
+    "folderSent": "Agent 收到的是目录结构，而不是每个文件",
+    "lines": "第 {{lines}} 行",
+    "clickToOpen": "点击打开",
+    "backspaceRemoves": "⌫ 移除"
   }
 }

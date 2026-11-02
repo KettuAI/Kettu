@@ -185,5 +185,17 @@
   },
   "slash": {
     "typeToFilter": "Type to filter"
+  },
+  "chips": {
+    "pastedLink": "Pasted as a link",
+    "pasteAsText": "Paste as text",
+    "opensInSession": "Opens in the session browser",
+    "opensInBrowser": "Opens in your browser",
+    "sentAsLink": "Sent as the link",
+    "missing": "This file can’t be read any more",
+    "folderSent": "The agent gets its tree, not every file",
+    "lines": "lines {{lines}}",
+    "clickToOpen": "Click to open",
+    "backspaceRemoves": "⌫ removes it"
   }
 }

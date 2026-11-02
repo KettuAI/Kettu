@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Popover } from '@base-ui/react/popover'
 import { AtSignIcon, FolderIcon, ImageIcon, PlusIcon, SlashIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -32,6 +32,7 @@ import {
   replaceMention,
   type MentionRow,
 } from './mentions'
+import { usePromptChips } from './prompt-chips'
 import { orderSlashMatches } from './slash'
 import { useMentionList, type MentionList } from './use-mention-list'
 import type { PromptBoxState } from './use-prompt-box'
@@ -156,12 +157,22 @@ export function PromptBox({
     if (slashOpen) setSlashDismissed(true)
     if (mentionOpen && mention) setMentionDismissed(mention.start)
   }
-  const hint = (() => {
-    if (text === '/' && slashOpen) return t('slash.typeToFilter')
-    const match = /^\/(\S+)\s$/.exec(text)
-    return match ? commands.find((c) => c.name === match[1])?.inputHint : undefined
-  })()
-  const commandNames = useMemo(() => commands.map((c) => c.name), [commands])
+  // A chosen command's own hint shows in the strip over the box.
+  const hint = text === '/' && slashOpen ? t('slash.typeToFilter') : undefined
+  const [focused, setFocused] = useState(false)
+  const chips = usePromptChips({
+    draft,
+    sessionId: box.sessionId,
+    text,
+    attachments,
+    commands,
+    agentName,
+    projectPath,
+    editor,
+    anchor: group,
+    focused,
+    popoverOpen: open,
+  })
 
   // Tab on a folder lists what is in it, as the query `folder/`.
   const openFolder = (row: MentionRow) => {
@@ -184,6 +195,7 @@ export function PromptBox({
     })
     // IME composition: no key reaches a popover, and Enter confirms the candidate, never sends.
     if (handling === 'block') return false
+    if (chips.keyDown(event)) return true
     if (
       open &&
       !modified &&
@@ -223,6 +235,7 @@ export function PromptBox({
   }
   // Focus leaving the box closes the popover.
   const blur = (event: FocusEvent) => {
+    setFocused(false)
     if (event.relatedTarget instanceof Node && popup.current?.contains(event.relatedTarget)) return
     dismiss()
   }
@@ -249,6 +262,7 @@ export function PromptBox({
           onPasteAsText={box.pasteAsText}
           onError={box.setError}
           onLeave={box.focus}
+          hidden={chips.hidden}
         />
         {/* With a basis, the text wraps under the attachments instead of sharing their row. */}
         <div className={cn('min-w-0', stacked ? 'w-full' : 'flex-[1_1_12rem] self-stretch')}>
@@ -259,14 +273,20 @@ export function PromptBox({
             placeholder={placeholder}
             disabled={disabled}
             hint={hint}
-            commands={commandNames}
+            chipContext={chips.chipContext}
             size={size}
             popover={open ? { listId, activeId: active >= 0 ? optionId(active) : undefined } : null}
-            onChange={box.changed}
+            onChange={(next) => {
+              chips.dropUnmentioned(text, next)
+              box.changed(next)
+            }}
             onCaret={setCaret}
             onKeyDown={keyDown}
             onPaste={box.onPaste}
-            onFocus={() => box.onActivity?.()}
+            onFocus={() => {
+              setFocused(true)
+              box.onActivity?.()
+            }}
             onBlur={blur}
             onCompositionStart={() => setComposition({ open: mentionOpen })}
             onCompositionEnd={() => setComposition(null)}
@@ -356,6 +376,7 @@ export function PromptBox({
           </Popover.Positioner>
         </Popover.Portal>
       </Popover.Root>
+      {chips.overlays}
       <TextDialog target={viewing} onClose={() => setViewing(null)} />
     </>
   )
