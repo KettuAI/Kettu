@@ -99,6 +99,15 @@ export function duration(ms: number): string {
   return i18n.t('time.hoursMinutes', { h: Math.floor(m / 60), m: m % 60 })
 }
 
+/** How long a turn has run, to the minute once it passes one: "45 s", "4 m", "1 h 20 m". */
+export function runningFor(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  if (s < 60) return i18n.t('time.seconds', { s })
+  const m = Math.floor(s / 60)
+  if (m < 60) return i18n.t('time.minutes', { m })
+  return i18n.t('time.hoursMinutes', { h: Math.floor(m / 60), m: m % 60 })
+}
+
 /** A clip's length as "0:07", "4:12" or "1:02:03", in whole seconds. */
 export function clock(seconds: number): string {
   const s = Math.max(0, Math.round(seconds))

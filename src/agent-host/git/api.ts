@@ -1,6 +1,7 @@
 // The git service's interface, as the rest of the agent host uses it.
 
 import type {
+  BranchList,
   ChangedFile,
   CommitDetails,
   FileDiff,
@@ -56,6 +57,17 @@ export interface GitServiceApi {
     name: string,
     visibility: RepositoryVisibility,
   ): Promise<GitOperation>
+  /** `git switch` to a local branch, or a new one from HEAD; refused amid a merge or conflict. */
+  switchBranch(projectPath: string, branch: string, create: boolean): Promise<GitOperation>
+  /** Pushes a branch that has no upstream to `remote` under its own name, and tracks it. */
+  publishBranch(projectPath: string, remote: string): Promise<GitOperation>
+  /**
+   * Commits the working tree state of the changed files at `paths`, relative to the repository
+   * root, with a rename's old path, and leaves every other change, staged or not, as it was.
+   */
+  commitChanges(projectPath: string, message: string, paths: string[]): Promise<GitOperation>
+  /** Puts the changed files at `paths` back as HEAD has them; new files are deleted. */
+  discardChanges(projectPath: string, paths: string[]): Promise<GitOperation>
   createPullRequest(
     projectPath: string,
     draft: { title: string; body: string; base: string; draft: boolean },
@@ -69,6 +81,8 @@ export interface GitServiceApi {
     oldPath: string | null,
     ref: string | null,
   ): Promise<FileDiff>
+  /** The local branches and the remotes; rejects outside a repository. */
+  branches(projectPath: string): Promise<BranchList>
   /** Details for a pull request chip; `url` matches GITHUB_PULL_REQUEST_URL. */
   pullRequest(url: string): Promise<PullRequest>
   /** The avatar URL of a chip's author, null when GitHub's avatar host has none; `login` matches GITHUB_LOGIN. */

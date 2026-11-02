@@ -85,24 +85,28 @@
     },
     "label": "权限请求",
     "answeredOn": "已在 {{device}} 上回答过。",
-    "answeredInWindow": "已在另一个窗口中回答过。"
+    "answeredInWindow": "已在另一个窗口中回答过。",
+    "needsYou": "需要你"
   },
   "browserOrigin": {
     "label": "新站点",
     "ask": "{{agent}} 想要在浏览器中打开此站点。",
     "answerGroup": "答复",
-    "waiting": "等待批准",
     "decision": {
-      "session": "本次会话允许",
-      "project": "此项目始终允许",
-      "deny": "拒绝"
+      "session": "本会话内允许",
+      "project": "在本项目中始终允许 {{site}}",
+      "deny": "不允许"
     },
     "answer": {
       "session": "本次会话已允许",
       "project": "此项目已始终允许",
       "deny": "已拒绝",
       "timeout": "未在限定时间内得到答复"
-    }
+    },
+    "open": "打开",
+    "newSite": "新网站",
+    "wants": "{{agent}} 想打开 <site>{{site}}</site>",
+    "where": "在本会话的浏览器里打开 · 带着你的登录状态"
   },
   "subagent": {
     "fallbackTitle": "子 Agent"
@@ -421,5 +425,11 @@
     "away": "{{name}} 没有连上",
     "awayBody": "{{state}}。它回来后，这里的会话会自动接上。",
     "awayComposer": "{{name}} 没有连上：{{state}}。它回来后才能接着发消息。"
+  },
+  "question": {
+    "label": "问题",
+    "ask": "{{agent}} 问你一个问题。",
+    "asksYou": "在问你",
+    "answeredOther": "其他回答"
   }
 }

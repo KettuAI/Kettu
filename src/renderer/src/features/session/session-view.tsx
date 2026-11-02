@@ -19,6 +19,7 @@ import { openSettings } from '@renderer/stores/view'
 import { DropOverlay } from './attachments/drop-overlay'
 import { useFileDrop } from './attachments/use-file-drop'
 import { Composer } from './composer/composer'
+import { NUMBERED } from './entries/answer-list'
 import { readDraft } from './composer/drafts'
 import { preloadRenderers, useRenderersReady } from './markdown/preload'
 import { PlanBar } from './plan-bar'
@@ -273,8 +274,9 @@ const handlesEnter = (target: EventTarget | null) =>
   )
 
 /**
- * Number keys 1 to 4 answer the first pending permission request while the composer is empty,
- * and Enter answers it with its highlighted option, unless the focus is on a control of its own.
+ * Number keys 1 to 9 answer the first card waiting for the user (a permission request, a question
+ * or a new site) while the composer is empty, and Enter answers it with its highlighted option,
+ * unless the focus is on a control of its own.
  */
 function usePermissionKeys(sessionId: string, focused: boolean): void {
   useEffect(() => {
@@ -283,7 +285,7 @@ function usePermissionKeys(sessionId: string, focused: boolean): void {
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.repeat) return
       const enter = event.key === 'Enter'
       const n = Number(event.key)
-      if (!enter && (!Number.isInteger(n) || n < 1 || n > 4)) return
+      if (!enter && (!Number.isInteger(n) || n < 1 || n > NUMBERED)) return
       if (enter && (event.defaultPrevented || event.isComposing || handlesEnter(event.target))) {
         return
       }
@@ -292,10 +294,13 @@ function usePermissionKeys(sessionId: string, focused: boolean): void {
       if (!state) return
       for (const id of state.order) {
         const entry = state.byId[id]
-        if (entry?.kind !== 'tool' || !entry.permission) continue
+        const waiting =
+          (entry?.kind === 'tool' && !!entry.permission) ||
+          (entry?.kind === 'browser_origin' && entry.decision === null)
+        if (!waiting) continue
         // Through the card's own button, so a failure shows where the answer was given.
         const button = document.querySelector<HTMLButtonElement>(
-          `[data-entry-id="${CSS.escape(id)}"] ${enter ? '[data-permission-option][data-highlighted]' : `[data-permission-option="${n}"]`}`,
+          `[data-entry-id="${CSS.escape(id)}"] ${enter ? '[data-answer-option][data-highlighted]' : `[data-answer-option="${n}"]`}`,
         )
         if (!button || button.disabled) return
         event.preventDefault()

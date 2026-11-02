@@ -57,6 +57,15 @@ describe('a new site', () => {
     expect(port.summary(sessionId)).toMatchObject({ permissionCount: 0 })
   })
 
+  it('holds the session waiting for the user until the site is answered', async () => {
+    const { t, port, sessionId } = await setup()
+    await port.untilStatus(sessionId, 'ready')
+    t.host.browserOriginAsked(10, sessionId, 'https://example.com')
+    await port.untilStatus(sessionId, 'awaiting_permission')
+    t.host.browserOriginSettled(10, 'deny')
+    await port.untilStatus(sessionId, 'ready')
+  })
+
   it('says the site was not answered in time', async () => {
     const { t, port, sessionId } = await setup()
     t.host.browserOriginAsked(8, sessionId, 'https://example.com')

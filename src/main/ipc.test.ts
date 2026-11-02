@@ -3,9 +3,15 @@ import path from 'node:path'
 import type { IpcMainEvent, WebContents } from 'electron'
 import { describe, expect, it, vi } from 'vitest'
 
+// Each sender's window, a fresh one for any sender not listed.
+const windows = vi.hoisted(() => new WeakMap<object, object>())
+
 vi.mock('electron', () => ({
   app: {},
-  BrowserWindow: { fromWebContents: () => ({}), getAllWindows: () => [] },
+  BrowserWindow: {
+    fromWebContents: (contents: object) => windows.get(contents) ?? {},
+    getAllWindows: () => [],
+  },
   dialog: {},
   ipcMain: {},
   nativeTheme: {},
@@ -16,9 +22,10 @@ vi.mock('electron', () => ({
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
 
-const { isTrusted, openNotices, whenSettled } = await import('./ipc')
+const { isTrusted, mayUse, openNotices, whenSettled } = await import('./ipc')
 const electron = await import('electron')
 const { watchSubframes } = await import('./subframes')
+const { markPanel } = await import('./window')
 
 const ARTIFACT = 'kettu-artifact://0123456789abcdef0123456789/'
 
@@ -87,6 +94,30 @@ describe('isTrusted', () => {
     contents.mainFrame.frames = []
     contents.emit('did-navigate', {}, contents.mainFrame.url, -1, '')
     expect(isTrusted(eventFrom(contents))).toBe(true)
+  })
+})
+
+describe('mayUse', () => {
+  it("takes every channel from the window's page and only its own from the panel's", () => {
+    const contents = new FakeContents()
+    expect(mayUse(eventFrom(contents), 'settings:update')).toBe(true)
+    contents.mainFrame.url = 'http://localhost:5173/tray.html'
+    for (const channel of ['settings:get', 'remote:status', 'agent-host:connect', 'tray:open']) {
+      expect(mayUse(eventFrom(contents), channel)).toBe(true)
+    }
+    for (const channel of ['settings:update', 'terminal-host:connect', 'app:get-info']) {
+      expect(mayUse(eventFrom(contents), channel)).toBe(false)
+    }
+  })
+
+  it("takes only the panel's channels from its window, whatever URL its page shows", () => {
+    const contents = new FakeContents()
+    const window = {}
+    windows.set(contents, window)
+    markPanel(window as never)
+    // history.pushState can give the panel's page the window page's URL.
+    expect(mayUse(eventFrom(contents), 'tray:resize')).toBe(true)
+    expect(mayUse(eventFrom(contents), 'settings:update')).toBe(false)
   })
 })
 

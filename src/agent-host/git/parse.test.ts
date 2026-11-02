@@ -388,7 +388,8 @@ describe('parsePorcelainFiles', () => {
       'u UU N... 100644 100644 100644 100644 aaa bbb ccc both.ts',
       '? new dir/file.ts',
     )
-    expect(parsePorcelainFiles(output).map((f) => [f.status, f.path, f.oldPath])).toEqual([
+    const { files, submodules } = parsePorcelainFiles(output)
+    expect(files.map((f) => [f.status, f.path, f.oldPath])).toEqual([
       ['modified', 'src/a file.ts', null],
       ['added', 'added.ts', null],
       ['deleted', 'deleted.ts', null],
@@ -396,6 +397,29 @@ describe('parsePorcelainFiles', () => {
       ['conflicted', 'both.ts', null],
       ['untracked', 'new dir/file.ts', null],
     ])
+    expect(submodules).toEqual(new Set())
+  })
+
+  it('tells which entries are submodules, whatever their status', () => {
+    const output = z(
+      '1 A. N... 000000 100644 100644 000 bbb .gitmodules',
+      '1 AM S.MU 000000 160000 160000 000 bbb new sub',
+      '1 .M SC.. 160000 160000 160000 aaa aaa lib',
+      '1 D. S... 160000 000000 000000 aaa 000 gone',
+      '2 R. S... 160000 160000 160000 aaa aaa R100 vendor/lib',
+      'lib-old',
+      '? S... a file',
+    )
+    const { files, submodules } = parsePorcelainFiles(output)
+    expect(files.map((f) => [f.status, f.path])).toEqual([
+      ['added', '.gitmodules'],
+      ['added', 'new sub'],
+      ['modified', 'lib'],
+      ['deleted', 'gone'],
+      ['renamed', 'vendor/lib'],
+      ['untracked', 'S... a file'],
+    ])
+    expect(submodules).toEqual(new Set(['new sub', 'lib', 'gone', 'vendor/lib']))
   })
 })
 

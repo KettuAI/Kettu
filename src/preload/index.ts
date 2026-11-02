@@ -97,7 +97,7 @@ const api: KettuApi = {
   systemLocale: systemLocale(),
   app: {
     getInfo: () => invoke('app:get-info'),
-    respondQuit: (id, confirmed) => invoke('app:respond-quit', id, confirmed),
+    respondQuit: (id, answer) => invoke('app:respond-quit', id, answer),
     onConfirmQuit: (listener) => {
       quitListeners.add(listener)
       return () => {
