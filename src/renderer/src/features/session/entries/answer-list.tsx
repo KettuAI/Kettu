@@ -94,7 +94,7 @@ export function AnswerList({
               <Kbd
                 aria-hidden
                 variant={highlighted ? 'primary' : 'default'}
-                className="text-key font-semibold"
+                className="h-5 min-w-5 rounded-md text-key font-semibold"
               >
                 {i + 1}
               </Kbd>

@@ -120,7 +120,7 @@ export const BrowserOriginEntry = memo(function BrowserOriginEntry({
           <GlobeIcon aria-hidden className="size-4.25" />
         </span>
         <div className="flex min-w-0 flex-col">
-          <span className="truncate text-row text-foreground">
+          <span className="truncate text-row leading-normal text-foreground">
             <Trans
               t={t}
               i18nKey="browserOrigin.wants"
@@ -128,7 +128,9 @@ export const BrowserOriginEntry = memo(function BrowserOriginEntry({
               components={{ site: <b className="font-semibold" /> }}
             />
           </span>
-          <span className="truncate text-hint text-tertiary">{t('browserOrigin.where')}</span>
+          <span className="truncate text-hint leading-normal text-tertiary">
+            {t('browserOrigin.where')}
+          </span>
         </div>
       </div>
       <AnswerList
