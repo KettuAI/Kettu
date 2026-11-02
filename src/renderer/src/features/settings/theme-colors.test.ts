@@ -21,9 +21,9 @@ import {
 // Kettu tile and the white drawn on them, the added agents' dots, the system notification's tray in
 // Settings, which follows the system rather than the theme, and the controls drawn over a video or
 // a picture; and what follows a token a theme does set: the chosen tile's tint, and the amounts of
-// the heat steps and the halo.
+// the heat steps, the focus halo and the waiting card's ring and halo.
 const KEPT_OUT =
-  /^(?:canvas|canvas-ink|highlight|elevation-.+|brand-.+|kind-.+|agent-.+|bg-tray|media-.+|control-on-tint|heat-step-\d|focus-halo-strength|avatar-from|avatar-to|kettu-tile|on-fill)$/
+  /^(?:canvas|canvas-ink|highlight|elevation-.+|brand-.+|kind-.+|agent-.+|bg-tray|media-.+|control-on-tint|heat-step-\d|focus-halo-strength|attention-.+-strength|avatar-from|avatar-to|kettu-tile|on-fill)$/
 
 const nord: Theme = {
   name: 'Nord',
