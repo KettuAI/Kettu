@@ -59,6 +59,18 @@ describe('ansiRuns', () => {
     expect(ansiRuns('\x1b[1;91mFAIL\x1b[0m')).toEqual([{ text: 'FAIL', tone: 'red' }])
   })
 
+  it('skips the parameters of 256-color and true-color codes', () => {
+    expect(ansiRuns('\x1b[38;5;32mblue\x1b[0m')).toEqual([{ text: 'blue', tone: null }])
+    expect(ansiRuns('\x1b[38;2;255;31;0morange\x1b[0m')).toEqual([{ text: 'orange', tone: null }])
+    expect(ansiRuns('\x1b[48;5;31mback\x1b[0m')).toEqual([{ text: 'back', tone: null }])
+    expect(ansiRuns('\x1b[58;5;2munderline\x1b[0m')).toEqual([{ text: 'underline', tone: null }])
+  })
+
+  it('reads the codes after a 256-color or true-color one', () => {
+    expect(ansiRuns('\x1b[38;5;196;31mFAIL')).toEqual([{ text: 'FAIL', tone: 'red' }])
+    expect(ansiRuns('\x1b[48;2;0;0;0;32mPASS')).toEqual([{ text: 'PASS', tone: 'green' }])
+  })
+
   it('leaves plain text alone', () => {
     expect(ansiRuns('plain')).toEqual([{ text: 'plain', tone: null }])
     expect(ansiRuns('')).toEqual([])

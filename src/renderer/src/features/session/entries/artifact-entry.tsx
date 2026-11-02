@@ -1,7 +1,7 @@
 import { memo, useEffect, useId, useRef, useState } from 'react'
 import { EllipsisIcon, ExternalLinkIcon, ImageOffIcon, ShapesIcon, TrashIcon } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
-import type { ArtifactSummary } from '@shared/artifacts'
+import type { ArtifactSummary, VersionSummary } from '@shared/artifacts'
 import type { ArtifactEntry as Entry } from '@shared/thread'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -18,8 +18,8 @@ import { artifactKind } from '@renderer/features/artifacts/model'
 import { ShareButton } from '@renderer/features/artifacts/share-popover'
 import { useThumbnail, type Thumbnail } from '@renderer/features/artifacts/thumbnails'
 import { useInView } from '@renderer/features/artifacts/use-in-view'
-import { useVersions } from '@renderer/features/artifacts/use-versions'
 import { longAgo } from '@renderer/lib/format'
+import { errorMessage, host } from '@renderer/lib/host'
 import { useHostHas } from '@renderer/lib/host-features'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -99,6 +99,50 @@ function useStanding(id: string): Standing {
   })
 }
 
+/** Each artifact's latest read of its versions, at the head it was read for, shared by its cards. */
+const versionReads = new Map<
+  string,
+  { head: number | null; versions: VersionSummary[] | null; done: Promise<void> }
+>()
+
+/**
+ * The version an entry wrote, read once its card is in view. A version never changes once
+ * written, so a card that has its own asks nothing more, and the artifact's cards share each read.
+ */
+function useEntryVersion(
+  id: string,
+  version: number | null,
+  head: number | null,
+  inView: boolean,
+): VersionSummary | null {
+  const [, setDone] = useState(0)
+  const found =
+    version === null
+      ? null
+      : (versionReads.get(id)?.versions?.find((v) => v.version === version) ?? null)
+  const missing = version !== null && found === null
+  useEffect(() => {
+    if (!inView || !missing) return
+    let read = versionReads.get(id)
+    if (!read || read.head !== head) {
+      const next = { head, versions: null as VersionSummary[] | null, done: Promise.resolve() }
+      // A failed read leaves the card without its time and note until the head moves.
+      next.done = host('artifacts.versions', { id }).then(
+        (versions) => void (next.versions = versions),
+        () => undefined,
+      )
+      versionReads.set(id, next)
+      read = next
+    }
+    let live = true
+    void read.done.then(() => live && setDone((n) => n + 1))
+    return () => {
+      live = false
+    }
+  }, [id, head, inView, missing])
+  return found
+}
+
 const AGO = {
   create: 'artifactEntry.createdAgo',
   update: 'artifactEntry.updatedAgo',
@@ -153,9 +197,9 @@ function ArtifactCard({
   const published = useSharingStore((s) =>
     s.status ? s.status.published.some((page) => page.id === entry.artifactId) : null,
   )
-  const { versions } = useVersions(entry.artifactId, summary?.version ?? null)
   const now = useNow()
   const inView = useInView(card)
+  const version = useEntryVersion(entry.artifactId, entry.version, summary?.version ?? null, inView)
   const made = useThumbnail(
     { id: entry.artifactId, version: entry.version ?? 0, pages: summary?.pages ?? 0 },
     inView && summary !== null && entry.version !== null,
@@ -168,7 +212,6 @@ function ArtifactCard({
 
   const writing = last && standing === 'live' && !!summary?.editing.includes(sessionId)
   const kind = summary ? artifactKind(summary) : null
-  const version = versions?.find((v) => v.version === entry.version) ?? null
   const updatedAt =
     version?.createdAt ?? (summary && summary.version === entry.version ? summary.updatedAt : null)
   const action = entry.action === 'create' && entry.writes > 1 ? 'update' : entry.action
@@ -209,7 +252,7 @@ function ArtifactCard({
   return (
     <div ref={card} className={cn('w-full', className)}>
       {size === 'large' ? (
-        <LargeCard view={view} shares={shares} projectPath={projectPath} />
+        <LargeCard view={view} shares={shares} sessionId={sessionId} projectPath={projectPath} />
       ) : (
         <CompactCard view={view} />
       )}
@@ -250,18 +293,18 @@ function CompactCard({ view }: { view: CardView }) {
           />
         </span>
       )}
-      <span className={cn('flex min-w-0 flex-1 flex-col', writing && 'gap-2')}>
+      <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-row font-semibold text-primary">{entry.title}</span>
         <span
           id={view.metaId}
-          className={cn('truncate text-hint text-tertiary tabular-nums', !writing && 'mt-0.75')}
+          className={cn('truncate text-hint text-tertiary tabular-nums', writing && 'mt-1.25')}
         >
           {view.meta}
         </span>
         {writing ? (
-          <Skeleton render={<span />} className="block h-2 w-[70%] rounded-full bg-subtle" />
+          <Skeleton render={<span />} className="mt-1.5 block h-2 w-[70%] rounded-full bg-subtle" />
         ) : (
-          view.chips.length > 0 && <Chips chips={view.chips} className="mt-2" />
+          view.chips.length > 0 && <Chips chips={view.chips} className="mt-1.5" />
         )}
       </span>
       {!erased && !writing && (
@@ -277,24 +320,37 @@ function CompactCard({ view }: { view: CardView }) {
 }
 
 /**
- * A card for a turn's main output: its preview across the top, which shows Open when pointed at
- * or focused, then its title with Open, Share and its menu, and what is known of it.
+ * A card for a turn's main output, across the reply: its preview on top, which shows Open when
+ * pointed at or focused, then its title with Open, Share and its menu, or Stop while the turn
+ * writes it, and what is known of it.
  */
 function LargeCard({
   view,
   shares,
+  sessionId,
   projectPath,
 }: {
   view: CardView
   shares: boolean
+  sessionId: string
   projectPath: string
 }) {
   const { t } = useTranslation(['session', 'artifacts'])
   const { entry, summary, standing, writing } = view
   const erased = standing === 'erased'
   const KindIcon = summary ? KIND_LOOK[artifactKind(summary)].icon : ShapesIcon
+  const [stopping, setStopping] = useState(false)
+  const [stopError, setStopError] = useState<string | null>(null)
+  const stop = () => {
+    setStopping(true)
+    setStopError(null)
+    host('sessions.cancel', { sessionId })
+      .catch((e: unknown) => setStopError(errorMessage(e)))
+      .finally(() => setStopping(false))
+  }
+  const failure = writing ? stopError : null
   return (
-    <div className="w-full max-w-84 rounded-code bg-surface shadow-card">
+    <div className="w-full rounded-code bg-surface shadow-card">
       <button
         type="button"
         disabled={erased}
@@ -331,16 +387,28 @@ function LargeCard({
           <span className="min-w-0 flex-1 truncate text-row font-semibold text-primary">
             {entry.title}
           </span>
-          {!erased && (
+          {writing ? (
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              aria-pressed={view.pressed}
-              onClick={view.open}
-              className="aria-pressed:bg-pressed aria-pressed:shadow-sunk"
+              disabled={stopping}
+              onClick={stop}
+              className="px-3 text-secondary"
             >
-              {t('artifactEntry.openShort')}
+              {t('artifactEntry.stop')}
             </Button>
+          ) : (
+            !erased && (
+              <Button
+                variant="outline"
+                size="sm"
+                aria-pressed={view.pressed}
+                onClick={view.open}
+                className="px-3 aria-pressed:bg-pressed aria-pressed:shadow-sunk"
+              >
+                {t('artifactEntry.openShort')}
+              </Button>
+            )
           )}
           {shares && summary && standing === 'live' && !writing && (
             // The viewer's own Share, its icon at the card's 14 px.
@@ -393,11 +461,14 @@ function LargeCard({
         </div>
         <div
           id={view.metaId}
-          className="mt-0.75 truncate pl-5.75 text-hint text-tertiary tabular-nums"
+          className={cn(
+            'mt-0.5 truncate pl-5.75 text-hint tabular-nums',
+            failure ? 'text-danger' : 'text-tertiary',
+          )}
         >
-          {view.meta}
+          {failure ?? view.meta}
         </div>
-        {view.chips.length > 0 && <Chips chips={view.chips} className="mt-2.5 pl-5.75" />}
+        {view.chips.length > 0 && <Chips chips={view.chips} className="mt-2 pl-5.75" />}
       </div>
     </div>
   )

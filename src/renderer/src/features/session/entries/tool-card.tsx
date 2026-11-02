@@ -210,6 +210,7 @@ export const ToolCard = memo(function ToolCard({
                   index={output === null ? i : i + 1}
                   content={c}
                   projectPath={projectPath}
+                  proposed={!!permission}
                 />
               ))}
               {media.length > 0 && (
@@ -409,6 +410,7 @@ function ContentBlock({
   index,
   content,
   projectPath,
+  proposed,
 }: {
   sessionId: string
   entryId: string
@@ -416,6 +418,8 @@ function ContentBlock({
   index: number
   content: ToolContent
   projectPath: string
+  /** The call still waits for permission, so a diff in it is not applied yet. */
+  proposed: boolean
 }) {
   const { t } = useTranslation('session')
   switch (content.type) {
@@ -429,7 +433,7 @@ function ContentBlock({
       )
     case 'diff':
       // In the block frame, in a row's details and in a request's card alike.
-      return <DiffBlock diff={content} projectPath={projectPath} />
+      return <DiffBlock diff={content} projectPath={projectPath} proposed={proposed} />
     case 'ref':
       if (content.ref.kind === 'image') {
         return (

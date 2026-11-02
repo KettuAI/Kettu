@@ -1,8 +1,9 @@
 import 'katex/dist/katex.min.css'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useContext, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { BlockCopy } from './block-frame'
-import { drawTex, type TexError } from './tex'
+import { LiveContext } from './live'
+import { drawTex, formulaView, type FormulaView, type TexError } from './tex'
 
 /** The source of a formula KaTeX could not read, with the part it stopped at in red. */
 function Fallback({ tex, error }: { tex: string; error: TexError }) {
@@ -15,19 +16,26 @@ function Fallback({ tex, error }: { tex: string; error: TexError }) {
   )
 }
 
-/** KaTeX's drawing of `tex` in an element React leaves to it, or the marked source. */
+/** KaTeX's drawing of `tex` in an element React leaves to it, or its source (formulaView). */
 function Formula({ tex, display }: { tex: string; display: boolean }) {
+  const live = useContext(LiveContext)
   const ref = useRef<HTMLSpanElement>(null)
-  const [error, setError] = useState<{ tex: string; error: TexError } | null>(null)
+  const [failed, setFailed] = useState<{ tex: string; error: TexError; view: FormulaView } | null>(
+    null,
+  )
   useLayoutEffect(() => {
-    if (!ref.current) return
-    const failed = drawTex(tex, display, ref.current)
-    setError(failed ? { tex, error: failed } : null)
-  }, [tex, display])
+    const element = ref.current
+    if (!element) return
+    const error = drawTex(tex, display, element, live)
+    const view = formulaView(!!error, live, element.childNodes.length > 0)
+    setFailed(error ? { tex, error, view } : null)
+  }, [tex, display, live])
+  const view = failed?.view ?? 'drawing'
   return (
     <>
-      <span ref={ref} hidden={!!error} data-math-inline={display ? undefined : ''} />
-      {error && <Fallback tex={error.tex} error={error.error} />}
+      <span ref={ref} hidden={view !== 'drawing'} data-math-inline={display ? undefined : ''} />
+      {failed && view === 'marked' && <Fallback tex={failed.tex} error={failed.error} />}
+      {failed && view === 'source' && <code>{failed.tex}</code>}
     </>
   )
 }

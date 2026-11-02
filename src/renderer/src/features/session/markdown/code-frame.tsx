@@ -11,10 +11,10 @@ import { useTranslation } from 'react-i18next'
 import { CodeBlock, useIsCodeFenceIncomplete, type ExtraProps } from 'streamdown'
 import { BlockAction, BlockCopy, BlockFrame, BlockSpacer } from './block-frame'
 import { fenceFileName, fenceLanguage, foldLines } from './code-meta'
-import { MathBlock } from './math'
 import { SvgBlock } from './svg-block'
 
 const MermaidBlock = lazy(() => import('./mermaid-block'))
+const MathBlock = lazy(() => import('./math').then((m) => ({ default: m.MathBlock })))
 
 function codeOf(children: ReactNode): string {
   if (typeof children === 'string') return children
@@ -29,7 +29,13 @@ export function BlockCode({ node, className, children }: ComponentProps<'code'> 
   const language = /language-(\S+)/.exec(className ?? '')?.[1] ?? ''
   const meta = node?.properties?.metastring
   const code = codeOf(children)
-  if (language === 'math') return <MathBlock tex={code} isIncomplete={isIncomplete} />
+  if (language === 'math') {
+    return (
+      <Suspense fallback={<MathSource tex={code} />}>
+        <MathBlock tex={code} isIncomplete={isIncomplete} />
+      </Suspense>
+    )
+  }
   const props = {
     code,
     language,
@@ -45,6 +51,15 @@ export function BlockCode({ node, className, children }: ComponentProps<'code'> 
     )
   }
   return <CodeFrame {...props} />
+}
+
+/** A formula's source on the block's ground while KaTeX loads. */
+function MathSource({ tex }: { tex: string }) {
+  return (
+    <div data-math-block="">
+      <code>{tex.replace(/\n$/, '')}</code>
+    </div>
+  )
 }
 
 export interface BlockProps {
@@ -70,8 +85,9 @@ export function CodeFrame({
   const [folded, setFolded] = useState(true)
   const lang = fenceLanguage(language)
   const file = fenceFileName(language, meta)
-  const { shown, hidden } = foldLines(code, folded)
-  const foldable = foldLines(code, true).hidden > 0
+  // A block still being written shows every line, so it never shrinks under the reader.
+  const { shown, hidden } = foldLines(code, folded && !isIncomplete)
+  const foldable = !isIncomplete && foldLines(code, true).hidden > 0
   return (
     <BlockFrame
       data-wrap={wrap || undefined}
@@ -98,7 +114,12 @@ export function CodeFrame({
     >
       <CodeBlock code={shown} language={lang} isIncomplete={isIncomplete} lineNumbers />
       {foldable && (
-        <button type="button" className="block-frame-more" onClick={() => setFolded(!folded)}>
+        <button
+          type="button"
+          className="block-frame-more"
+          aria-expanded={!folded}
+          onClick={() => setFolded(!folded)}
+        >
           {folded ? t('block.showMore', { count: hidden }) : t('block.showLess')}
         </button>
       )}

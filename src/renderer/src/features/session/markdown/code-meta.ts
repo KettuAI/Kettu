@@ -30,7 +30,7 @@ export function fenceLanguage(language: string): string {
 /** Blocks longer than this many lines start folded. */
 export const FOLD_OVER = 20
 /** How many lines a folded block shows. */
-export const FOLDED_LINES = 12
+export const FOLDED_LINES = 7
 
 /** The lines a block shows, and how many it hides, folded or not. */
 export function foldLines(code: string, folded: boolean): { shown: string; hidden: number } {

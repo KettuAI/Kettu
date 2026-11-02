@@ -9,7 +9,7 @@ import {
 } from 'streamdown'
 import { BlockAction, BlockCopy } from './block-frame'
 import { downloadText } from './download'
-import { numericColumns, tableSize } from './table-columns'
+import { numericColumns, proseColumns, tableSize } from './table-columns'
 
 type Overflow = { left: boolean; right: boolean }
 
@@ -48,6 +48,7 @@ export function MarkdownTable({ node, children, className }: ComponentProps<'tab
   const scroller = useRef<HTMLDivElement>(null)
   const overflow = useOverflow(scroller)
   const numeric = useMemo(() => numericColumns(node), [node])
+  const prose = useMemo(() => proseColumns(node), [node])
   const size = useMemo(() => tableSize(node), [node])
 
   // Streamdown draws the cells, so the column marks go on them once they are in the page.
@@ -57,6 +58,7 @@ export function MarkdownTable({ node, children, className }: ComponentProps<'tab
     for (const row of el.rows) {
       for (const [i, cell] of [...row.cells].entries()) {
         cell.toggleAttribute('data-numeric', numeric.includes(i))
+        cell.toggleAttribute('data-prose', prose.includes(i))
       }
     }
   })

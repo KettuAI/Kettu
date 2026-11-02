@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { CircleAlertIcon, ImageOffIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { cn } from '@renderer/lib/utils'
 import { FrameRing } from './frame'
 import { gridTiles } from './layout'
+import { NamedMediaContext } from './named'
 import { imageSurface } from './surface'
 import { useMediaFile } from './use-media-file'
 
@@ -12,27 +13,51 @@ const TILE = 'relative h-24 min-w-0 overflow-hidden rounded-tile'
 
 /**
  * Two or more pictures one block names, as a row of three tiles; past three, the last tile counts
- * the rest. The viewer still steps through all of them.
+ * the rest. The viewer still steps through all of them. `images` marks them as Markdown images,
+ * which the blocks of their message then leave out.
  */
-export function MediaGrid({ paths }: { paths: readonly string[] }) {
+export function MediaGrid({
+  paths,
+  images = false,
+}: {
+  paths: readonly string[]
+  images?: boolean
+}) {
   const { tiles, more } = gridTiles(paths)
+  const named = useContext(NamedMediaContext)
+  const rest = paths.slice(tiles.length).join('\0')
+  // No tile stands for the pictures the last one counts, so the grid marks them itself.
+  useEffect(() => {
+    if (!images || !named || rest === '') return
+    const marks = rest.split('\0').map((path) => named.image(path))
+    return () => marks.forEach((unmark) => unmark())
+  }, [images, named, rest])
   return (
     <div className="grid w-full max-w-[600px] grid-cols-3 gap-1.5">
       {tiles.map((path, i) => (
-        <LocalTile key={path} path={path} more={i === tiles.length - 1 ? more : 0} />
+        <LocalTile key={path} path={path} image={images} more={i === tiles.length - 1 ? more : 0} />
       ))}
     </div>
   )
 }
 
 /** One picture of a grid, cropped to its tile, as a button that opens the viewer. */
-function LocalTile({ path, more }: { path: string; more: number }) {
+function LocalTile({ path, image, more }: { path: string; image: boolean; more: number }) {
   const { t } = useTranslation('session')
   const near = useRef<HTMLSpanElement>(null)
-  const media = useMediaFile(path, false, near)
+  const media = useMediaFile(path, image, near)
   const { shown, name } = media
   const [loaded, setLoaded] = useState(false)
 
+  // Without a session nothing can be read, so the picture stays its name, as LocalMedia's does.
+  if (!media.enabled) {
+    return (
+      <span title={path} className="min-w-0 truncate">
+        {name}
+        {more > 0 && ` ${t('media.moreBadge', { count: more })}`}
+      </span>
+    )
+  }
   if (shown.kind === 'asking') {
     return (
       <span ref={near} className={cn(TILE, 'block')}>

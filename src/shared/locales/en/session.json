@@ -177,6 +177,7 @@
     "erased": "Deleted permanently",
     "open": "Open {{title}}",
     "openShort": "Open",
+    "stop": "Stop",
     "deletedLine": "Deleted artifact <title/>"
   },
   "plan": {
@@ -430,6 +431,7 @@
     "source": "Source",
     "download": "Download",
     "diagram": "Diagram",
+    "diagramFailed": "Could not draw this diagram.",
     "copyLatex": "Copy LaTeX",
     "copyMarkdown": "Copy as Markdown",
     "downloadCsv": "Download CSV",

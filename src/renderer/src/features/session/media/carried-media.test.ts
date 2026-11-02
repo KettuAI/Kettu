@@ -30,7 +30,7 @@ describe('CarriedMedia', () => {
     expect(html).not.toMatch(/<video[^>]*\s(?:controls|autoplay)(?:=""|[\s>])/i)
     expect(html).toContain('aria-label="Play my clip.webm"')
     expect(html).toContain('aria-label="Open larger"')
-    expect(html).toContain('>my clip.webm · 3 byte<')
+    expect(html).toContain('>my clip.webm · 3 B<')
     // Carried bytes have no file to show or to open with another app.
     expect(html).not.toContain('Show in')
     expect(html).not.toContain('Open with default app')
@@ -47,9 +47,9 @@ describe('CarriedMedia', () => {
     expect(sound).toMatch(/<audio[^>]*\bsrc="data:audio\/wav;base64,AAAA"/)
     expect(sound).toMatch(/<audio[^>]*\bcontrols=""/)
     expect(sound).toContain('>Sound<')
-    expect(sound).toContain('3 byte')
+    expect(sound).toContain('3 B')
     const clip = render({ kind: 'video', mimeType: 'video/mp4', data: 'AAAA', size: 3, name: null })
-    expect(clip).toContain('>Video · 3 byte<')
+    expect(clip).toContain('>Video · 3 B<')
   })
 })
 

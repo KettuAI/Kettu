@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { renderTex } from './tex'
+import { formulaView, renderTex } from './tex'
 
 describe('renderTex', () => {
   it('draws a formula', () => {
@@ -26,5 +26,21 @@ describe('renderTex', () => {
   it('keeps links out of the formula', () => {
     const result = renderTex('\\href{javascript:alert(1)}{x}', false)
     if (result.ok) expect(result.html).not.toMatch(/href=/)
+  })
+})
+
+describe('formulaView', () => {
+  it('draws a formula KaTeX reads', () => {
+    expect(formulaView(false, true, true)).toBe('drawing')
+    expect(formulaView(false, false, false)).toBe('drawing')
+  })
+
+  it('marks where a finished formula goes wrong', () => {
+    expect(formulaView(true, false, false)).toBe('marked')
+  })
+
+  it('keeps the last drawing, or the plain source, while the formula is still being written', () => {
+    expect(formulaView(true, true, true)).toBe('drawing')
+    expect(formulaView(true, true, false)).toBe('source')
   })
 })

@@ -26,16 +26,35 @@ function texError(tex: string, error: unknown): TexError {
 
 /**
  * Draws `tex` into `element` with KaTeX's own DOM builder, which makes every node itself and
- * parses no HTML, or empties it and says where the source went wrong.
+ * parses no HTML, or says where the source went wrong and empties the element unless `keep` asks
+ * it to keep its last drawing.
  */
-export function drawTex(tex: string, display: boolean, element: HTMLElement): TexError | null {
+export function drawTex(
+  tex: string,
+  display: boolean,
+  element: HTMLElement,
+  keep = false,
+): TexError | null {
   try {
     katex.render(tex, element, { ...OPTIONS, displayMode: display })
     return null
   } catch (error) {
-    element.textContent = ''
+    if (!keep) element.textContent = ''
     return texError(tex, error)
   }
+}
+
+export type FormulaView = 'drawing' | 'source' | 'marked'
+
+/**
+ * What a formula shows: KaTeX's drawing, or the source with the part it cannot read marked. While
+ * the message is still being written a formula is often half typed, so it keeps its last drawing,
+ * or shows its plain source, instead of flashing an error on every chunk.
+ */
+export function formulaView(failed: boolean, live: boolean, drawn: boolean): FormulaView {
+  if (!failed) return 'drawing'
+  if (!live) return 'marked'
+  return drawn ? 'drawing' : 'source'
 }
 
 /** KaTeX's markup for `tex`, or where it goes wrong: what drawTex would draw, as text. */

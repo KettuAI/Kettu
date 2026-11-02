@@ -11,14 +11,17 @@ import { useDiffStats } from './use-diff-stats'
 
 /**
  * One file's change in the block frame: its path and line counts in the header, with Open diff,
- * which shows the file's change in the Files pane, and Copy for the new text.
+ * which shows the file's change in the Files pane, and Copy for the new text. A change that still
+ * waits for permission is not in the working tree yet, so it has no Open diff.
  */
 export function DiffBlock({
   diff,
   projectPath,
+  proposed = false,
 }: {
   diff: Extract<ToolContent, { type: 'diff' }>
   projectPath: string
+  proposed?: boolean
 }) {
   const { t } = useTranslation('session')
   const { path, oldText, newText } = diff
@@ -41,7 +44,7 @@ export function DiffBlock({
             </span>
           )}
           <BlockSpacer />
-          {inside && (
+          {inside && !proposed && (
             <Button
               variant="ghost"
               size="xs"

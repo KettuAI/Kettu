@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { numericColumns, tableSize } from './table-columns'
+import { numericColumns, proseColumns, tableSize } from './table-columns'
 
 type Cell = string | { text: string; align?: string }
 
@@ -89,5 +89,37 @@ describe('tableSize', () => {
       columns: 3,
     })
     expect(tableSize(undefined)).toEqual({ rows: 0, columns: 0 })
+  })
+})
+
+describe('proseColumns', () => {
+  it('lets a column of sentences wrap and keeps short columns on one line', () => {
+    const sentence = 'Reads the clock once at the request entry and passes it to both functions'
+    expect(
+      proseColumns(
+        table(
+          ['File', 'Change', 'Lines'],
+          [
+            ['src/auth/token.ts', sentence, '12'],
+            ['src/auth/session.ts', 'Small', '3'],
+          ],
+        ),
+      ),
+    ).toEqual([1])
+  })
+
+  it('counts a Han character as two, since it is as wide', () => {
+    expect(
+      proseColumns(table(['说明'], [['签发和校验都改为接收同一个时间，七个调用方一并更新']])),
+    ).toEqual([0])
+    expect(proseColumns(table(['状态'], [['已修复']]))).toEqual([])
+  })
+
+  it('leaves a long path or address on one line, which has nowhere to break', () => {
+    expect(
+      proseColumns(
+        table(['Path'], [['src/renderer/src/features/session/markdown/table-columns.ts']]),
+      ),
+    ).toEqual([])
   })
 })

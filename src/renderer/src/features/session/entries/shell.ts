@@ -61,7 +61,14 @@ export function ansiRuns(text: string): AnsiRun[] {
     push(text.slice(at, match.index))
     at = match.index + match[0].length
     if (match[2] !== 'm') continue
-    for (const code of (match[1] || '0').split(';').map(Number)) {
+    const codes = (match[1] || '0').split(';').map(Number)
+    for (let i = 0; i < codes.length; i++) {
+      const code = codes[i]
+      // A foreground, background or underline color by index (5;n) or by value (2;r;g;b).
+      if (code === 38 || code === 48 || code === 58) {
+        i += codes[i + 1] === 5 ? 2 : codes[i + 1] === 2 ? 4 : 0
+        continue
+      }
       if (code === 0 || code === 39 || code === 22) tone = null
       else if (code === 31 || code === 91) tone = 'red'
       else if (code === 32 || code === 92) tone = 'green'

@@ -157,16 +157,17 @@ export function percent(share: number): string {
   return format().percent.format(share)
 }
 
-/** "812 B", "41 kB", "1.2 MB", in the locale's number format. */
+/**
+ * "812 B", "41 KB", "1.2 MB", with the number in the locale's format. The unit is written out,
+ * since Intl's short byte unit reads "byte" and its kilobyte "kB".
+ */
 export function bytes(n: number): string {
   const [value, unit] =
-    n < 1000 ? [n, 'byte'] : n < 1_000_000 ? [n / 1000, 'kilobyte'] : [n / 1_000_000, 'megabyte']
-  return new Intl.NumberFormat(currentLocale(), {
-    style: 'unit',
-    unit,
-    unitDisplay: 'short',
+    n < 1000 ? [n, 'B'] : n < 1_000_000 ? [n / 1000, 'KB'] : [n / 1_000_000, 'MB']
+  const number = new Intl.NumberFormat(currentLocale(), {
     maximumFractionDigits: n < 1000 ? 0 : 1,
   }).format(value)
+  return `${number} ${unit}`
 }
 
 export function money(amount: number, currency: string): string {

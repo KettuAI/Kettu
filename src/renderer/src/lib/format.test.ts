@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  bytes,
   clock,
   countdown,
   duration,
@@ -51,6 +52,15 @@ describe('format in the interface language', () => {
     expect(limitLabel({ window: 'seven_day_fable', label: 'Weekly · Fable' })).toBe('每周 · Fable')
     expect(limitLabel({ window: 'monthly', label: 'Monthly' })).toBe('每月')
     expect(limitLabel({ window: '2_day', label: '2-day' })).toBe('2-day')
+  })
+
+  it('gives a size in B, KB and MB', async () => {
+    expect(bytes(472)).toBe('472 B')
+    expect(bytes(2_100)).toBe('2.1 KB')
+    expect(bytes(4_000)).toBe('4 KB')
+    expect(bytes(6_200_000)).toBe('6.2 MB')
+    await i18n.changeLanguage('zh-CN')
+    expect(bytes(840_500)).toBe('840.5 KB')
   })
 
   it('gives a length as a clock', () => {

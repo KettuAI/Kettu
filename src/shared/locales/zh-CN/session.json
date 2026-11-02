@@ -165,6 +165,7 @@
     "erased": "已永久删除",
     "open": "打开 {{title}}",
     "openShort": "打开",
+    "stop": "停止",
     "deletedLine": "已删除 artifact <title/>"
   },
   "plan": {
@@ -408,6 +409,7 @@
     "source": "源码",
     "download": "下载",
     "diagram": "图表",
+    "diagramFailed": "无法绘制这个图表。",
     "copyLatex": "复制 LaTeX",
     "copyMarkdown": "复制为 Markdown",
     "downloadCsv": "下载 CSV",

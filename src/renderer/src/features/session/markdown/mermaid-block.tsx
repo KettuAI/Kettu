@@ -43,7 +43,7 @@ function themeVariables(): Record<string, string> {
   }
 }
 
-type Drawn = { url: string; width: number } | { error: string } | null
+type Drawn = { url: string; width: number } | { error: string | null } | null
 
 /**
  * The diagram as a picture: an `<img>` runs none of the SVG's scripts and loads nothing it
@@ -84,15 +84,15 @@ export default function MermaidBlock(props: BlockProps) {
       securityLevel: 'strict',
       theme: 'base',
       themeVariables: themeVariables(),
-      // Nodes take the cards' 6 px corners.
+      // Nodes take the cards' 6 px corners and a 30 px height.
       themeCSS: '.node rect { rx: 6px; ry: 6px; }',
-      flowchart: { htmlLabels: false },
+      flowchart: { htmlLabels: false, padding: 8 },
     })
     mermaid.render(id, code).then(
       ({ svg }) => {
         if (!current) return
         const picture = pictureOf(svg)
-        setDrawn(picture ?? { error: 'Mermaid drew no picture' })
+        setDrawn(picture ?? { error: null })
       },
       (error: unknown) =>
         current && setDrawn({ error: error instanceof Error ? error.message : String(error) }),
@@ -129,7 +129,12 @@ export default function MermaidBlock(props: BlockProps) {
       {failed || source ? (
         <>
           <CodeBlock code={code} language="mermaid" lineNumbers />
-          {failed && <p className="block-frame-error">{drawn.error}</p>}
+          {failed && (
+            <p className="block-frame-error">
+              {t('block.diagramFailed')}
+              {drawn.error && ` ${drawn.error}`}
+            </p>
+          )}
         </>
       ) : (
         <div className="block-frame-diagram">

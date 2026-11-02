@@ -1,7 +1,9 @@
 import 'streamdown/styles.css'
 import {
   isValidElement,
+  lazy,
   memo,
+  Suspense,
   useContext,
   useDeferredValue,
   useLayoutEffect,
@@ -39,7 +41,10 @@ import { localTarget } from './local-links'
 import { remarkPlugins } from './remark'
 import { BlockCode } from './code-frame'
 import { MarkdownTable } from './markdown-table'
-import { InlineMath } from './math'
+import { LiveContext } from './live'
+
+// KaTeX, its styles and fonts load with the first formula, not with every reply.
+const InlineMath = lazy(() => import('./math').then((m) => ({ default: m.InlineMath })))
 
 // Fenced blocks go through BlockCode, which picks maths, SVG, diagrams or code by language.
 function createPlugins({ light, dark }: CodeThemes) {
@@ -115,7 +120,14 @@ function MarkdownImage(props: ComponentProps<'img'> & ExtraProps) {
 function InlineCode({ className, children }: ComponentProps<'code'> & ExtraProps) {
   const math = !!className?.includes('language-math')
   const file = useFileRef(typeof children === 'string' && !math ? children : null)
-  if (math) return <InlineMath tex={textOf(children)} />
+  if (math) {
+    const tex = textOf(children)
+    return (
+      <Suspense fallback={<code data-streamdown="inline-code">{tex}</code>}>
+        <InlineMath tex={tex} />
+      </Suspense>
+    )
+  }
   if (file) return <FileLink file={file} />
   return (
     <code className={className} data-streamdown="inline-code">
@@ -159,11 +171,14 @@ const noSubscribe = () => () => {}
 const noVersion = () => 0
 
 function Paragraph(props: ComponentProps<'p'> & ExtraProps) {
-  const pictures = pictureRun(props.node)
+  const projectPath = useContext(ProjectPathContext)
+  const sessionId = useContext(SessionIdContext)
+  // Outside a session the pictures cannot be read, so they stay their alt text.
+  const pictures = projectPath && sessionId ? pictureRun(props.node) : null
   if (pictures) {
     return (
       <div data-media-block="">
-        <MediaGrid paths={pictures} />
+        <MediaGrid paths={pictures} images />
       </div>
     )
   }
@@ -283,22 +298,24 @@ const Chunk = memo(function Chunk({ markdown, live }: { markdown: string; live: 
   const themes = useCodeThemes()
   const plugins = useMemo(() => pluginsFor(themes), [themes])
   return (
-    <Streamdown
-      mode="streaming"
-      parseIncompleteMarkdown={live}
-      isAnimating={live}
-      skipHtml
-      plugins={plugins}
-      remarkPlugins={remarkPlugins}
-      components={components}
-      linkSafety={linkSafety}
-      controls={controls}
-      codeBlockMaxHeight={0}
-      tableMaxHeight={0}
-      lineNumbers={false}
-    >
-      {source}
-    </Streamdown>
+    <LiveContext value={live}>
+      <Streamdown
+        mode="streaming"
+        parseIncompleteMarkdown={live}
+        isAnimating={live}
+        skipHtml
+        plugins={plugins}
+        remarkPlugins={remarkPlugins}
+        components={components}
+        linkSafety={linkSafety}
+        controls={controls}
+        codeBlockMaxHeight={0}
+        tableMaxHeight={0}
+        lineNumbers={false}
+      >
+        {source}
+      </Streamdown>
+    </LiveContext>
   )
 })
 

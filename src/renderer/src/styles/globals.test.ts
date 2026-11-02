@@ -207,4 +207,12 @@ describe('tables in globals.css', () => {
     )
     expect(cells.get('white-space')).toBe('nowrap')
   })
+
+  it('wraps a column of sentences', () => {
+    const prose = nestedDeclarationsAfter(
+      '.markdown {',
+      "[data-streamdown='table-cell'][data-prose]",
+    )
+    expect(prose.get('white-space')).toBe('normal')
+  })
 })

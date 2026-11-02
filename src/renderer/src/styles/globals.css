@@ -904,12 +904,29 @@
     list-style: none;
   }
   & [data-streamdown='ordered-list'] {
-    padding-left: 1.8667em;
-    list-style: decimal outside;
     font-variant-numeric: tabular-nums;
   }
-  & [data-streamdown='ordered-list'] > [data-streamdown='list-item']::marker {
+  & [data-streamdown='ordered-list'] > [data-streamdown='list-item'] {
+    position: relative;
+    padding-left: 1.8667em;
+  }
+  & [data-streamdown='ordered-list'] > [data-streamdown='list-item']::before {
+    content: counter(list-item) '.';
+    position: absolute;
+    left: 0;
+    width: 1.2em;
     color: var(--text-tertiary);
+    text-align: right;
+  }
+  /* A list hangs under its lead-in and leaves more room before what follows. */
+  & :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list']) {
+    margin-bottom: 1.0667em;
+  }
+  & p:has(+ :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list'])) {
+    margin-bottom: 0;
+  }
+  & p + :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list']) {
+    margin-top: 0;
   }
   & [data-streamdown='list-item'] {
     margin-block: 0.4em 0;
@@ -1128,22 +1145,30 @@
     text-align: left;
   }
   & [data-streamdown='table-header-cell'] {
-    box-shadow: inset 0 -1px 0 var(--border-default);
     color: var(--text-secondary);
     font-size: 12.5px;
     font-weight: var(--font-weight-medium);
   }
   & [data-streamdown='table-cell'] {
-    box-shadow: inset 0 -1px 0 var(--border-subtle);
     color: var(--text-primary);
     font-size: 13.5px;
+  }
+  /* A column of sentences wraps instead of stretching the table (markdown-table.tsx). */
+  & [data-streamdown='table-cell'][data-prose] {
+    min-width: 16em;
+    white-space: normal;
   }
   & :is([data-streamdown='table-header-cell'], [data-streamdown='table-cell'])[data-numeric] {
     text-align: right;
   }
+  /* Lines on the rows, not the cells, so they run unbroken across the columns. */
   & [data-streamdown='table-row'] {
     border: 0;
+    border-bottom: 1px solid var(--border-subtle);
     transition: background-color var(--duration-fast);
+  }
+  & [data-streamdown='table-header'] > [data-streamdown='table-row'] {
+    border-bottom-color: var(--border-default);
   }
   & [data-streamdown='table-body'] > [data-streamdown='table-row']:hover {
     background: var(--bg-hover);
@@ -1173,6 +1198,18 @@
   & .katex {
     font-size: 1.06em;
     line-height: 1;
+  }
+  & p + [data-table-frame] {
+    margin-top: 0.9333em;
+  }
+  & p + [data-math-block] {
+    margin-top: 1.0667em;
+  }
+  & [data-math-block]:has(+ [data-math-block]) {
+    margin-bottom: 0;
+  }
+  & [data-math-block] + [data-math-block] {
+    margin-top: 0.6667em;
   }
   & [data-math-block] {
     position: relative;
@@ -1481,12 +1518,18 @@
     outline: 1.5px solid var(--focus-ring-color);
   }
 }
-/* A diff in the block frame: code type and the code's own green and red for its signs. */
+/* A diff in the block frame: code type, the code's own green and red for its signs, and a changed
+   line's tint across its number too, with no gap after the number (diff-impl.tsx). */
 .block-frame .diff {
   --diffs-font-family: var(--font-mono);
   --diffs-font-size: 12.5px;
   --diffs-line-height: 1.7;
+  --diffs-gap-style: none;
   --diffs-fg-number-override: var(--syntax-comment);
+  --diffs-fg-number-addition-override: var(--syntax-comment);
+  --diffs-fg-number-deletion-override: var(--syntax-comment);
+  --diffs-bg-addition-number-override: var(--diff-add);
+  --diffs-bg-deletion-number-override: var(--diff-del);
   --diffs-bg-separator-override: var(--bg-subtle);
   --diffs-addition-color-override: var(--code-ok);
   --diffs-deletion-color-override: var(--code-bad);
