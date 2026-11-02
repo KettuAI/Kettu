@@ -7,11 +7,17 @@ import type {
   EnvironmentInfo,
 } from '@shared/agent-host'
 import { harnessOf, sortAgentIds, type AgentId, type HarnessId } from '@shared/thread'
-import { errorMessage, host } from '@renderer/lib/host'
+import { errorMessage, host, hostAt } from '@renderer/lib/host'
 
-interface AgentsStore {
+/** One host's agents, in the order the menus list them. */
+export interface HostAgents {
   byId: Partial<Record<AgentId, AgentStatus>>
   order: AgentId[]
+}
+
+interface AgentsStore extends HostAgents {
+  /** The agents of each other host this computer connects to, by its id; the rest is this computer's. */
+  hosts: Record<string, HostAgents>
   environment: EnvironmentInfo | null
   /** Each agent's page in Settings, read when it shows; kept so it does not flash empty. */
   details: Partial<Record<AgentId, AgentDetails>>
@@ -52,6 +58,7 @@ function laterEnvironment(current: EnvironmentInfo | null, next: EnvironmentInfo
 export const useAgentsStore = create<AgentsStore>()((set, get) => ({
   byId: {},
   order: [],
+  hosts: {},
   environment: null,
   details: {},
   loaded: false,
@@ -59,11 +66,7 @@ export const useAgentsStore = create<AgentsStore>()((set, get) => ({
   updated: {},
   taskErrors: {},
   setAll(statuses) {
-    set({
-      byId: Object.fromEntries(statuses.map((s) => [s.id, s])),
-      order: sortAgentIds(statuses.map((s) => s.id)),
-      loaded: true,
-    })
+    set({ ...listOf(statuses), loaded: true })
   },
   remove(agentId) {
     set((state) => ({
@@ -143,6 +146,61 @@ export const useAgentsStore = create<AgentsStore>()((set, get) => ({
   },
 }))
 
+function listOf(statuses: AgentStatus[]): HostAgents {
+  return {
+    byId: Object.fromEntries(statuses.map((s) => [s.id, s])),
+    order: sortAgentIds(statuses.map((s) => s.id)),
+  }
+}
+
+const NO_AGENTS: HostAgents = { byId: {}, order: [] }
+
+/** The agents of the host named, null being this computer; none while another's are unread. */
+export function agentsOn(
+  state: Pick<AgentsStore, 'byId' | 'order' | 'hosts'>,
+  hostId: string | null,
+): HostAgents {
+  return hostId === null ? state : (state.hosts[hostId] ?? NO_AGENTS)
+}
+
+function setHost(hostId: string, change: (agents: HostAgents) => HostAgents): void {
+  useAgentsStore.setState((state) => ({
+    hosts: { ...state.hosts, [hostId]: change(state.hosts[hostId] ?? NO_AGENTS) },
+  }))
+}
+
+/** Reads another host's agents, as when a connection to it opens. */
+export async function readHostAgents(hostId: string): Promise<void> {
+  const statuses = await hostAt(hostId, 'agents.list', undefined)
+  setHost(hostId, () => listOf(statuses))
+}
+
+export function hostAgentChanged(hostId: string, status: AgentStatus): void {
+  setHost(hostId, (agents) => ({
+    byId: { ...agents.byId, [status.id]: status },
+    order: agents.order.includes(status.id)
+      ? agents.order
+      : sortAgentIds([...agents.order, status.id]),
+  }))
+}
+
+export function hostAgentRemoved(hostId: string, agentId: AgentId): void {
+  setHost(hostId, (agents) => ({
+    byId: without(agents.byId, agentId),
+    order: agents.order.filter((id) => id !== agentId),
+  }))
+}
+
+/** Forgets the agents of a host this computer no longer connects to. */
+export function forgetHostAgents(hostId: string): void {
+  useAgentsStore.setState((state) => {
+    if (!(hostId in state.hosts)) return state
+    const hosts = { ...state.hosts }
+    delete hosts[hostId]
+    return { hosts }
+  })
+}
+
 function without<T>(
   record: Partial<Record<AgentId, T>>,
   agentId: AgentId,
@@ -171,9 +229,12 @@ async function taskRequest(
   }
 }
 
-/** The agent's name; a removed agent's sessions name its harness. */
-export function agentName(agentId: AgentId): string {
-  return useAgentsStore.getState().byId[agentId]?.name ?? AGENT_NAMES[harnessOf(agentId)]
+/** The agent's name on the host named; a removed agent's sessions name its harness. */
+export function agentName(agentId: AgentId, hostId: string | null = null): string {
+  return (
+    agentsOn(useAgentsStore.getState(), hostId).byId[agentId]?.name ??
+    AGENT_NAMES[harnessOf(agentId)]
+  )
 }
 
 export const AGENT_NAMES: Record<HarnessId, string> = {
