@@ -38,7 +38,7 @@ describe('the built-in colors', () => {
     // Tokens the dark block leaves alone, and roles, which point at other tokens.
     expect(BUILTIN_COLORS.dark['viewer-scrim']).toBe('oklch(0.14 0 0 / 92%)')
     expect(BUILTIN_COLORS.dark['primary-foreground']).toBe('#1c222a')
-    expect(BUILTIN_COLORS.light['terminal-background']).toBe('#ffffff')
+    expect(BUILTIN_COLORS.light['terminal-background']).toBe('#f6f7f9')
   })
 
   it('deepen the heatmap from the accent orange', () => {
