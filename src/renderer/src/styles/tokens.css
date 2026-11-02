@@ -616,6 +616,8 @@
   --segment-thumb: var(--bg-raised);
   --pressed: var(--bg-selected);
   --pressed-hover: color-mix(in srgb, var(--bg-selected), var(--text-primary) 5%);
+  /* The edge of the queued card right behind the front one, halfway there. */
+  --queue-back-near: color-mix(in oklab, var(--bg-surface), var(--queue-back) 50%);
   /* Sidebar rows picked together with Mod-click or Shift-click, for a menu that acts on all. */
   --row-picked: color-mix(in srgb, var(--control-on) 12%, transparent);
 
@@ -634,6 +636,8 @@
   /* The line a reference points at, in the Files pane's editor. */
   --marked-line: color-mix(in srgb, var(--info) 7%, transparent);
   --sheen: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  /* What a typed filter matched in a menu's rows: the fox, faint. */
+  --match: color-mix(in srgb, var(--attention-dot) 16%, transparent);
 
   /* A chart's series: the brand colors, a shade toward the card they are drawn on. */
   --agent-claude-code: color-mix(in oklch, var(--brand-claude) 86%, var(--bg-surface));
@@ -702,7 +706,7 @@
   --composer-hover:
     0 0 0 var(--hairline) var(--border-strong), var(--elevation-float), var(--highlight);
   /* The composer while typed in: the fox caret marks it, so the frame stays as it is. */
-  --composer-focus: var(--composer-hover);
+  --composer-focus: var(--composer-ring);
   --queue-ring:
     0 0 0 var(--hairline) var(--border-subtle), var(--elevation-queue), var(--highlight);
   /* The menu bar panel's inner edge, a faint light line over the system's material, and the ink

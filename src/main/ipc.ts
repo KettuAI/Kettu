@@ -720,6 +720,7 @@ export function registerIpcHandlers({
   handle('browser:open-external', 1, (_, id) => browserViews.openExternal(sessionId(id)))
   handle('browser:freeze', 1, (_, id) => browserViews.freeze(sessionId(id)))
   handle('browser:thaw', 1, (_, id) => browserViews.thaw(sessionId(id)))
+  handle('browser:capture', 1, (_, id) => browserViews.capture(sessionId(id)))
   handle('browser:hand-back', 1, (_, id) => browserViews.handBack(sessionId(id)))
   handle('browser:stop-driving', 1, (_, id) => browserViews.stopDriving(sessionId(id)))
   // The pane's bar and the thread's card both answer through main, so the page and the thread agree.

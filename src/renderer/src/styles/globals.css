@@ -164,6 +164,7 @@
   --color-pressed: var(--pressed);
   --color-pressed-hover: var(--pressed-hover);
   --color-mark: var(--mark);
+  --color-match: var(--match);
   --color-toast: var(--toast);
   --color-toast-foreground: var(--toast-foreground);
   --color-toast-success: var(--toast-success);

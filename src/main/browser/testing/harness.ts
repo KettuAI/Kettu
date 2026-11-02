@@ -23,6 +23,9 @@ interface Result {
   dialog?: string | null
   evicted?: string | null
   forbidden?: boolean
+  capturedShown?: boolean
+  capturedHidden?: boolean
+  capturedNone?: Uint8Array | null
   layout?: { bounds: Rectangle; children: Rectangle[] }[]
 }
 
@@ -83,6 +86,15 @@ async function main(): Promise<Result> {
 
   views.navigate(session, `${FIXTURE}/two`)
   result.two = (await loaded(session, '/two')).title
+
+  // A still for a message comes from the page the pane shows: a hidden view draws no frame.
+  const isPng = (bytes: Uint8Array | null) =>
+    !!bytes && String.fromCharCode(...bytes.subarray(1, 4)) === 'PNG'
+  result.capturedShown = isPng(await views.capture(session))
+  views.hide(session)
+  result.capturedHidden = isPng(await views.capture(session))
+  views.show(session)
+  result.capturedNone = await views.capture('nobody')
 
   views.back(session)
   result.back = (await loaded(session, '/one')).url

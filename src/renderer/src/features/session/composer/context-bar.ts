@@ -16,24 +16,33 @@ export interface ContextRow {
 
 const FREE = /^free space$/i
 const BUFFER = /^autocompact buffer$/i
+// The kinds that take the four colors, in the order every context breakdown shows them.
+const KINDS = [/^messages$/i, /^memory files$/i, /^system tools$/i, /^mcp tools$/i]
+// The small fixed costs take the grays, `--context-5` on.
+const FIRST_GRAY = KINDS.length + 1
 
 /**
- * The report's categories as rows: the sources in the report's order, each in the next context
- * color (a source past the seventh reuses the last), then free space, then the autocompact buffer.
+ * The report's categories as rows: messages, memory files, system tools and MCP tools in their own
+ * colors and that order, then the other sources in the report's order in grays (one past the
+ * third reuses the last), then the autocompact buffer, then free space.
  */
 export function contextRows(categories: ContextBreakdown['categories']): ContextRow[] {
-  const sources: ContextRow[] = []
+  const kinds: ContextRow[][] = KINDS.map(() => [])
+  const others: ContextRow[] = []
   const free: ContextRow[] = []
   const buffer: ContextRow[] = []
   for (const category of categories) {
+    const kind = KINDS.findIndex((name) => name.test(category.name))
     if (FREE.test(category.name)) free.push({ ...category, part: { kind: 'free' } })
     else if (BUFFER.test(category.name)) buffer.push({ ...category, part: { kind: 'buffer' } })
+    else if (kind >= 0)
+      kinds[kind]!.push({ ...category, part: { kind: 'source', color: kind + 1 } })
     else {
-      const color = Math.min(sources.length + 1, CONTEXT_COLORS)
-      sources.push({ ...category, part: { kind: 'source', color } })
+      const color = Math.min(FIRST_GRAY + others.length, CONTEXT_COLORS)
+      others.push({ ...category, part: { kind: 'source', color } })
     }
   }
-  return [...sources, ...free, ...buffer]
+  return [...kinds.flat(), ...others, ...buffer, ...free]
 }
 
 export interface ContextSegment {
@@ -116,4 +125,11 @@ export function breakdownView(
     }
   }
   return { kind: 'loading' }
+}
+
+/** The share of the context at which the agent compacts on its own: all but its buffer. */
+export function compactsAt(rows: readonly ContextRow[] | null, size: number): number | null {
+  const buffer = rows?.find((row) => row.part.kind === 'buffer')
+  if (!buffer || size <= 0) return null
+  return Math.floor(((size - buffer.tokens) / size) * 100)
 }

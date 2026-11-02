@@ -445,6 +445,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       stop: () => unsupported('show the browser'),
       openExternal: () => unsupported('show the browser'),
       freeze: async () => null,
+      capture: async () => null,
       thaw: async () => {},
       handBack: () => unsupported('show the browser'),
       stopDriving: () => unsupported('show the browser'),

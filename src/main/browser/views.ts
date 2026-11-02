@@ -30,6 +30,9 @@ export const DEFAULT_BOUNDS: BrowserBounds = { x: 0, y: 0, width: 1280, height: 
 /** How long a navigation an agent asked for may take. */
 export const NAVIGATION_TIMEOUT_MS = 30_000
 
+/** How long a screenshot for a message may take before it gives up. */
+const CAPTURE_MS = 10_000
+
 // On macOS a page draws in its window's own compositor, so a view around it clips it: a frame
 // rounds the page's lower corners and leaves its upper ones square under the pane's header.
 // Elsewhere a page is a native window of its own that only its own radius clips, on all four
@@ -358,6 +361,33 @@ export class BrowserViews {
     page.frozen = true
     this.setVisible(page, false)
     return image.toDataURL()
+  }
+
+  /**
+   * The page the pane shows, as PNG bytes for attaching to a message; null when the pane does not
+   * show it, since a hidden view draws no frame to capture, or when the capture fails. Through the
+   * page's debugger, which reads the page's own frame.
+   */
+  async capture(sessionId: string): Promise<Uint8Array | null> {
+    const page = this.pages.get(sessionId)
+    const contents = page?.view?.webContents
+    if (!page?.shown || page.frozen || !contents || contents.isDestroyed()) return null
+    if (contents.isCrashed() || !contents.getURL() || !contents.debugger.isAttached()) return null
+    let timer: NodeJS.Timeout | undefined
+    try {
+      const shot = (await Promise.race([
+        contents.debugger.sendCommand('Page.captureScreenshot', { format: 'png' }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('timed out')), CAPTURE_MS)
+        }),
+      ])) as { data: string }
+      return Buffer.from(shot.data, 'base64')
+    } catch (error) {
+      log.warn(`Could not capture a page: ${(error as Error).message}`)
+      return null
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   thaw(sessionId: string): void {

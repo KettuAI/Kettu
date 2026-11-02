@@ -1,6 +1,7 @@
 // Process test: the browser's views in Electron. A fixture server stands in for a dev server; main's
-// real BrowserViews opens its pages, goes back and forward, refuses a download, opens a window's
-// link in place, answers an alert, and closes the least recently used page when a fifth opens.
+// real BrowserViews opens its pages, captures the one shown, goes back and forward, refuses
+// a download, opens a window's link in place, answers an alert, and closes the least recently used
+// page when a fifth opens.
 
 import { spawn } from 'node:child_process'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -123,6 +124,9 @@ describe('the browser views', () => {
     expect(result).toMatchObject({
       one: 'One',
       two: 'Two',
+      capturedShown: true,
+      capturedHidden: false,
+      capturedNone: null,
       back: `${fixture}/one`,
       forward: `${fixture}/two`,
       download: 'download-blocked',
