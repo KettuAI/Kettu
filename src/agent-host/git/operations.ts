@@ -1,9 +1,11 @@
-// The writes the branch popover offers: pull, push, publishing and creating a pull request.
+// The writes the branch popover offers: pull, push, publishing and creating a pull request,
+// switching branches, and committing or discarding changed files.
 // Nothing here forces a push or merges; a branch that has diverged is refused before this runs.
 
 import {
   GITHUB_PULL_REQUEST_URL,
   isRepositoryName,
+  type ChangedFile,
   type PullRequest,
   type RepositoryVisibility,
 } from '@shared/git'
@@ -12,6 +14,10 @@ import { describeFailure, type Exec, type ExecResult } from './exec'
 export const SYNC_TIMEOUT_MS = 60_000
 export const PUBLISH_TIMEOUT_MS = 120_000
 export const CREATE_PR_TIMEOUT_MS = 60_000
+export const SWITCH_TIMEOUT_MS = 60_000
+/** Hooks run, so a commit may take a while. */
+export const COMMIT_TIMEOUT_MS = 120_000
+export const DISCARD_TIMEOUT_MS = 60_000
 /** The end of a command's output that is kept for the log. */
 export const LOG_LIMIT = 64 * 1024
 
@@ -31,7 +37,8 @@ async function run(
   const result = await exec(file, args, { cwd, timeoutMs })
   const log = logOf(result)
   if (result.failure === 'timeout') {
-    throw new Error(`${file} ${args[0]} timed out after ${timeoutMs / 1000} s\n${log}`.trim())
+    const command = args.find((arg) => !arg.startsWith('-'))
+    throw new Error(`${file} ${command} timed out after ${timeoutMs / 1000} s\n${log}`.trim())
   }
   if (result.failure !== null || result.code !== 0) throw new Error(log || describeFailure(result))
   return log
@@ -46,6 +53,27 @@ function checkRemoteName(remote: string): string {
   // Never let a remote name read as an option.
   if (remote === '' || remote.startsWith('-')) throw new Error(`Unusable remote name: ${remote}`)
   return remote
+}
+
+function checkBranchName(branch: string): string {
+  if (branch === '' || branch.startsWith('-')) throw new Error(`Unusable branch name: ${branch}`)
+  return branch
+}
+
+/** Switches to a local branch, never one made from a remote's, or creates one from HEAD. */
+export function switchBranch(
+  exec: Exec,
+  cwd: string,
+  branch: string,
+  create: boolean,
+): Promise<string> {
+  return run(
+    exec,
+    cwd,
+    'git',
+    ['switch', create ? '--create' : '--no-guess', checkBranchName(branch)],
+    SWITCH_TIMEOUT_MS,
+  )
 }
 
 export interface PushTo {
@@ -72,6 +100,117 @@ export function push(exec: Exec, cwd: string, branch: string, to: PushTo): Promi
     ],
     SYNC_TIMEOUT_MS,
   )
+}
+
+// Paths are the repository root's, as git status gives them, and never patterns.
+const literal = (command: string, ...args: string[]): string[] => [
+  '--literal-pathspecs',
+  command,
+  ...args,
+]
+
+/**
+ * Commits the working tree state of `files`, from the repository root, and nothing else: the
+ * index's other entries stay as they were. A rename takes its old path along.
+ */
+export async function commitFiles(
+  exec: Exec,
+  root: string,
+  message: string,
+  files: readonly ChangedFile[],
+): Promise<string> {
+  // A partial commit takes only paths git knows; a staged deletion would make `git add` fail.
+  const untracked = files.filter((file) => file.status === 'untracked').map((file) => file.path)
+  const paths = files.flatMap((file) =>
+    file.status === 'renamed' && file.oldPath !== null ? [file.path, file.oldPath] : [file.path],
+  )
+  const added =
+    untracked.length > 0
+      ? await run(exec, root, 'git', literal('add', '--', ...untracked), COMMIT_TIMEOUT_MS)
+      : ''
+  let committed: string
+  try {
+    committed = await run(
+      exec,
+      root,
+      'git',
+      literal('commit', '-m', message, '--', ...paths),
+      COMMIT_TIMEOUT_MS,
+    )
+  } catch (error) {
+    if (untracked.length > 0) await untrackAgain(exec, root, untracked, error as Error)
+    throw error
+  }
+  return [added, committed].filter(Boolean).join('\n')
+}
+
+// A failed commit, such as one a hook refused, leaves the files it added untracked again.
+// Dropping their index entries rather than resetting them to HEAD also restores a file that
+// `git rm --cached` had untracked; `--force` drops one a hook changed after it was added.
+async function untrackAgain(
+  exec: Exec,
+  root: string,
+  paths: string[],
+  failure: Error,
+): Promise<void> {
+  const args = literal('rm', '--cached', '--force', '--quiet', '--ignore-unmatch', '--', ...paths)
+  try {
+    await run(exec, root, 'git', args, COMMIT_TIMEOUT_MS)
+  } catch (error) {
+    throw new Error(`${failure.message}\n${(error as Error).message}`, { cause: error })
+  }
+}
+
+/** Puts `files` back as HEAD has them, from the repository root; new files are deleted. */
+export async function discardFiles(
+  exec: Exec,
+  root: string,
+  files: readonly ChangedFile[],
+): Promise<string> {
+  const remove: string[] = []
+  const restore: string[] = []
+  const clean: string[] = []
+  for (const file of files) {
+    switch (file.status) {
+      case 'untracked':
+        clean.push(file.path)
+        break
+      case 'added':
+      case 'copied':
+        remove.push(file.path)
+        break
+      case 'renamed':
+        remove.push(file.path)
+        if (file.oldPath !== null) restore.push(file.oldPath)
+        break
+      case 'conflicted':
+        throw new Error(`Not discarding a conflicted file: ${file.path}`)
+      default:
+        restore.push(file.path)
+    }
+  }
+  const logs: string[] = []
+  if (remove.length > 0) {
+    logs.push(
+      await run(
+        exec,
+        root,
+        'git',
+        literal('rm', '-f', '--quiet', '--', ...remove),
+        DISCARD_TIMEOUT_MS,
+      ),
+    )
+  }
+  if (restore.length > 0) {
+    const args = literal('restore', '--source=HEAD', '--staged', '--worktree', '--', ...restore)
+    logs.push(await run(exec, root, 'git', args, DISCARD_TIMEOUT_MS))
+  }
+  if (clean.length > 0) {
+    logs.push(
+      await run(exec, root, 'git', literal('clean', '-f', '--', ...clean), DISCARD_TIMEOUT_MS),
+    )
+  }
+  return logs.filter(Boolean).join('\n')
 }
 
 /** Creates a GitHub repository for the folder with gh, adds it as `origin` and pushes. */

@@ -11,7 +11,6 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { GitStatusCluster } from '@renderer/features/git/git-status'
 import { usePane } from '@renderer/features/split/pane-context'
 import {
   DeleteSessionDialog,
@@ -21,7 +20,6 @@ import {
 import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-menu-model'
 import { formatShortcut, isMac, isWeb } from '@renderer/lib/platform'
 import { useBrowserStore } from '@renderer/stores/browser'
-import { useGitStore } from '@renderer/stores/git'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import {
@@ -64,7 +62,6 @@ export function HeaderTools({
   const { t } = useTranslation('shell')
   const pane = usePane()
   const terminal = useTerminalAllowed(projectPath)
-  const isRepo = useGitStore((s) => !!s.status[projectPath]?.repo)
   // An agent opened a session's page while another pane showed: a dot says to look.
   const unseen = useBrowserStore((s) => s.unseen)
   const sessions = useSessionsStore((s) => s.byId)
@@ -74,11 +71,6 @@ export function HeaderTools({
     : Object.keys(unseen).some((id) => sessions[id]?.projectPath === projectPath)
   return (
     <>
-      {isRepo && (
-        <NoDrag className="min-w-8 shrink-1000 overflow-clip [overflow-clip-margin:3px]">
-          <GitStatusCluster projectPath={projectPath} />
-        </NoDrag>
-      )}
       <NoDrag className="shrink-0 gap-2">
         {/* Another host's terminal opens only while its owner allows devices it. */}
         {terminal && (

@@ -137,6 +137,28 @@ export interface FileDiff {
   tooLarge: boolean
 }
 
+/** A local branch, as the branch switcher lists it. */
+export interface BranchInfo {
+  name: string
+  /** Its tip's commit time, or null on an unborn branch. */
+  committedAt: number | null
+  current: boolean
+  /** The folder of another worktree that has it checked out, or null. */
+  worktree: string | null
+}
+
+export interface GitRemote {
+  name: string
+  url: string
+  github: { owner: string; repo: string } | null
+}
+
+/** The local branches, the most recently committed first, and the repository's remotes. */
+export interface BranchList {
+  branches: BranchInfo[]
+  remotes: GitRemote[]
+}
+
 /** The result of a write such as a pull or a push: the status after it, and git's output. */
 export interface GitOperation {
   status: GitStatus
