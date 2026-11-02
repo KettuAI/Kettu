@@ -21,6 +21,12 @@ describe('splitLines', () => {
     expect(splitLines('usage-store.ts')).toEqual({ name: 'usage-store.ts', lines: null })
     expect(splitLines(':41')).toEqual({ name: ':41', lines: null })
   })
+
+  it('reads the ranges Claude Code and GitHub write', () => {
+    expect(splitLines('usage-store.ts#L4-5')).toEqual({ name: 'usage-store.ts', lines: '4–5' })
+    expect(splitLines('usage-store.ts#L4-L5')).toEqual({ name: 'usage-store.ts', lines: '4–5' })
+    expect(splitLines('usage-store.ts#L4')).toEqual({ name: 'usage-store.ts', lines: '4' })
+  })
 })
 
 describe('linkParts', () => {

@@ -48,13 +48,16 @@ const MENTION = /(^|\s)[@＠](\S+)/g
 const URL_TEXT = /https?:\/\/[^\s<>"'`\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]+/g
 // What a sentence puts after a link, which is not part of it.
 const TRAILING = /[.,;:!?)\]}>'"。，；：！？）、]+$/
-const RANGE = /:(\d+)(?:[-–](\d+))?$/
+// `:41-44`, or `#L41-44` as Claude Code writes a range and `#L41-L44` as GitHub does.
+const RANGE = /(?::(\d+)(?:[-–](\d+))?|#L(\d+)(?:-L?(\d+))?)$/
 
 /** A mention's name and the lines after it: `usage-store.ts:41-44` is the file and `41–44`. */
 export function splitLines(token: string): { name: string; lines: string | null } {
   const match = RANGE.exec(token)
   if (!match || match.index === 0) return { name: token, lines: null }
-  const lines = match[2] && match[2] !== match[1] ? `${match[1]}–${match[2]}` : match[1]!
+  const start = match[1] ?? match[3]!
+  const end = match[2] ?? match[4]
+  const lines = end && end !== start ? `${start}–${end}` : start
   return { name: token.slice(0, match.index), lines }
 }
 
