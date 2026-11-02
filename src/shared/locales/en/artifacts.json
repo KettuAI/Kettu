@@ -3,17 +3,23 @@
     "title": "Artifacts",
     "ask": "Ask an agent for one",
     "kinds": {
-      "web": "Web page",
+      "web": "Page",
       "canvas": "Canvas"
+    },
+    "kindsPlural": {
+      "web": "Pages",
+      "canvas": "Canvases"
     },
     "askLine": {
       "web": "Make a web page artifact: ",
       "canvas": "Make a canvas artifact with several pages: "
     },
     "filterMenu": "Filter",
-    "filterOn": "Filter, on",
+    "agent": "Agent",
+    "anyAgent": "Any agent",
+    "filterBoth": "{{agent}} · {{project}}",
     "kind": "Kind",
-    "allKinds": "All kinds",
+    "allKinds": "All",
     "project": "Project",
     "allProjects": "All projects",
     "display": "Display",
@@ -28,15 +34,20 @@
       "updated": "Recently updated",
       "name": "Name"
     },
+    "sortsShort": {
+      "recent": "Recent",
+      "updated": "Updated",
+      "name": "Name"
+    },
     "loading": "Loading artifacts",
-    "filter": "Filter by title",
+    "filter": "Search artifacts",
     "clearFilter": "Clear the filter",
     "clearFilters": "Clear filters",
     "noProject": "No project",
     "deletedSession": "Deleted session",
     "openSession": "Open the session",
     "emptyTitle": "No artifacts yet",
-    "emptyDescription": "Pick a kind above to ask an agent for one, or ask in any session; what they make shows here, the most recently opened first.",
+    "emptyDescription": "Pick a kind below to ask an agent for one, or ask in any session; what they make shows here, the most recently opened first.",
     "noMatch": "No matching artifacts",
     "errorTitle": "Artifacts could not be loaded",
     "errorDescription": "{{error}} Your artifacts are safe on this computer.",
@@ -60,7 +71,9 @@
     "nothingDeleted": "Nothing in Recently deleted"
   },
   "card": {
-    "version": "v{{version}}",
+    "canvas_one": "Canvas · {{count}} page",
+    "canvas_other": "Canvas · {{count}} pages",
+    "kindVersion": "{{kind}} · v{{version}}",
     "noPreview": "No preview",
     "more": "More for {{title}}",
     "when": "Version {{version}} · {{time}}",

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { ArtifactImportResult, ArtifactSummary } from '@shared/artifacts'
+import type { AgentId } from '@shared/thread'
 import {
   parseOpened,
   withOpened,
@@ -23,6 +24,8 @@ interface ArtifactsStore {
   kindFilter: ArtifactKind | null
   /** A project's folder, or NO_PROJECT. */
   projectFilter: string | null
+  /** The agent of the sessions the artifacts show under. */
+  agentFilter: AgentId | null
   /** When this device last showed each artifact. */
   openedAt: OpenedTimes
   /** The card the viewer was opened from, which takes the focus back. */
@@ -47,6 +50,7 @@ export const useArtifactsStore = create<ArtifactsStore>()(() => ({
   filter: '',
   kindFilter: null,
   projectFilter: null,
+  agentFilter: null,
   openedAt: parseOpened(readJson<unknown>(OPENED_KEY, {})),
   opened: null,
   importFailed: null,
@@ -110,6 +114,10 @@ export function setArtifactsKindFilter(kindFilter: ArtifactKind | null): void {
 
 export function setArtifactsProjectFilter(projectFilter: string | null): void {
   useArtifactsStore.setState({ projectFilter })
+}
+
+export function setArtifactsAgentFilter(agentFilter: AgentId | null): void {
+  useArtifactsStore.setState({ agentFilter })
 }
 
 /** A viewer or pane shows the artifact: the page lists it as just opened. */

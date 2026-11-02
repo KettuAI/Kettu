@@ -1,22 +1,22 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { flushSync } from 'react-dom'
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  ChevronDownIcon,
   ChevronRightIcon,
   CircleAlertIcon,
   FileUpIcon,
-  LayoutGridIcon,
-  ListFilterIcon,
-  SearchIcon,
   TrashIcon,
   XIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { NO_SESSION, type ArtifactSummary } from '@shared/artifacts'
+import type { AgentId } from '@shared/thread'
 import { backTo } from '@renderer/app/history'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { SearchField } from '@renderer/components/search-field'
+import { SegmentedControl } from '@renderer/components/segmented-control'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -38,19 +38,20 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@renderer/components/ui/empty'
-import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { CornerControls } from '@renderer/features/shell/top-bar'
 import { basename, longAgo } from '@renderer/lib/format'
 import { useHostContext } from '@renderer/lib/host-features'
-import { formatShortcut, hasBand, isMod, isWeb } from '@renderer/lib/platform'
+import { hasBand, isMod, isWeb } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
+import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import {
   artifactListShown,
   dismissImportFailure,
   importArtifact,
   retryArtifacts,
+  setArtifactsAgentFilter,
   setArtifactsFilter,
   setArtifactsKindFilter,
   setArtifactsProjectFilter,
@@ -70,7 +71,9 @@ import { askForArtifact } from './ask'
 import { isEditable } from './keys'
 import { KIND_LOOK } from './kinds'
 import {
+  agentsOf,
   ARTIFACT_KINDS,
+  artifactKind,
   daysLeft,
   filterArtifacts,
   groupArtifacts,
@@ -83,13 +86,14 @@ import {
   type Group,
 } from './model'
 
-/** Three across in the 960 px column, two or one as it narrows. */
-const GRID = 'grid grid-cols-1 gap-6 @min-[34rem]:grid-cols-2 @min-[50rem]:grid-cols-3'
+/** As many 220 px columns as fit, sharing what is left. */
+const GRID = 'grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-x-5 gap-y-7'
 
 interface SessionInfo {
   title: string | null
   updatedAt: number
   projectPath: string
+  agentId: AgentId
 }
 
 /** Where the list was scrolled when the viewer opened, for Back. */
@@ -101,8 +105,8 @@ function leaveRecentlyDeleted(): void {
 }
 
 /**
- * Every artifact as a card, the most recently opened first or as the user chooses, under a row of
- * kinds to ask an agent for; with `deleted`, the page's Recently deleted view.
+ * Every artifact as a card, the most recently opened first or as the user chooses, under its
+ * search and filters; with `deleted`, the page's Recently deleted view.
  */
 export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   const { t, i18n } = useTranslation(['artifacts', 'common'])
@@ -112,6 +116,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   const filter = useArtifactsStore((s) => s.filter)
   const kindFilter = useArtifactsStore((s) => s.kindFilter)
   const projectFilter = useArtifactsStore((s) => s.projectFilter)
+  const agentFilter = useArtifactsStore((s) => s.agentFilter)
   const openedAt = useArtifactsStore((s) => s.openedAt)
   const importFailed = useArtifactsStore((s) => s.importFailed)
   const { group, sort } = useViewStore(useShallow((s) => s.artifactsView))
@@ -121,7 +126,6 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   const scroller = useRef<HTMLDivElement>(null)
   const filterField = useRef<HTMLInputElement>(null)
   const [active, setActive] = useState<string | null>(null)
-  const [searching, setSearching] = useState(false)
 
   useEffect(() => {
     artifactListShown(true)
@@ -146,8 +150,6 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
         event.key.toLowerCase() === 'f'
       ) {
         event.preventDefault()
-        if (!useArtifactsStore.getState().list?.length) return
-        flushSync(() => setSearching(true))
         filterField.current?.focus()
         filterField.current?.select()
       } else if (event.key === 'Escape' && useArtifactsStore.getState().filter && onPage) {
@@ -181,12 +183,21 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     () => new Intl.Collator(i18n.language, { numeric: true, sensitivity: 'base' }),
     [i18n.language],
   )
+  const agentOf = useMemo(() => {
+    return (id: string): AgentId | null => sessions.get(id)?.agentId ?? null
+  }, [sessions])
   const shown = useMemo(
     () =>
       list
-        ? filterArtifacts(list, { title: filter, kind: kindFilter, project: projectFilter })
+        ? filterArtifacts(list, {
+            title: filter,
+            kind: kindFilter,
+            project: projectFilter,
+            agent: agentFilter,
+            agentOf,
+          })
         : [],
-    [list, filter, kindFilter, projectFilter],
+    [list, filter, kindFilter, projectFilter, agentFilter, agentOf],
   )
   const groups = useMemo(() => {
     if (!list) return []
@@ -222,16 +233,22 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
       ? { at: opened, opened: true }
       : { at: artifact.updatedAt, opened: false }
   }
+  // "Page", or "Canvas · 6 pages".
+  const kindLine = (artifact: ArtifactSummary): string =>
+    artifactKind(artifact) === 'canvas'
+      ? t('card.canvas', { count: artifact.pages })
+      : t('page.kinds.web')
   const card = (
     artifact: ArtifactSummary,
-    lead: string,
+    meta: string,
     time: CardTime | null,
     tabbable: string | null,
   ) => (
     <ArtifactCard
       key={artifact.id}
       artifact={artifact}
-      lead={lead}
+      agent={agentOf(artifact.sessionId)}
+      meta={meta}
       time={time}
       project={projectName(artifact)}
       session={sessionName(artifact.sessionId)}
@@ -249,7 +266,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     setArtifactsFilter('')
     setArtifactsKindFilter(null)
     setArtifactsProjectFilter(null)
-    setSearching(false)
+    setArtifactsAgentFilter(null)
   }
 
   let body
@@ -262,7 +279,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
       body = (
         <>
           {error && <ListError error={error} />}
-          <div {...cardsProps} className={cn(GRID, 'mt-8')}>
+          <div {...cardsProps} className={cn(GRID, 'mt-1')}>
             {trash.map((artifact) =>
               card(
                 artifact,
@@ -289,7 +306,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
       body = (
         <>
           {error && <ListError error={error} />}
-          <div {...cardsProps} className="mt-8">
+          <div {...cardsProps} className="mt-1">
             {groups.map((g, i) => (
               <GroupView
                 key={g.key}
@@ -302,8 +319,11 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                   card(
                     artifact,
                     group === 'project-session'
-                      ? t('card.version', { version: artifact.version })
-                      : projectName(artifact),
+                      ? t('card.kindVersion', {
+                          kind: kindLine(artifact),
+                          version: artifact.version,
+                        })
+                      : kindLine(artifact),
                     timeOf(artifact),
                     tabbable,
                   )
@@ -317,23 +337,18 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   }
 
   const any = list !== null && list.length > 0
-  const searchOpen = searching || filter !== ''
-  const openSearch = () => {
-    flushSync(() => setSearching(true))
-    filterField.current?.focus()
-  }
 
   return (
     <div className="flex h-full flex-col">
-      <DragStrip />
+      <PageStrip />
       <div
         ref={scroller}
         onScroll={(event) => (scrolledTo = event.currentTarget.scrollTop)}
-        className="min-h-0 flex-1 overflow-y-auto px-8 pb-18 [scrollbar-gutter:stable]"
+        className="min-h-0 flex-1 overflow-y-auto px-9 pb-10 [scrollbar-gutter:stable]"
       >
-        <div className="@container mx-auto flex max-w-240 flex-col">
+        <div className="mx-auto flex max-w-270 flex-col gap-5">
           {deleted ? (
-            <>
+            <header>
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -352,60 +367,46 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                   {t('page.backToArtifacts')} <span className="opacity-60">Esc</span>
                 </TooltipContent>
               </Tooltip>
-              <header>
-                <h1 className="font-display text-title font-bold">{t('page.recentlyDeleted')}</h1>
-                <p className="mt-1.5 text-small leading-5.5 text-secondary">
-                  {t('page.deletedDescription')}
-                </p>
-              </header>
-            </>
+              <h1 className="font-display text-title font-bold">{t('page.recentlyDeleted')}</h1>
+              <p className="mt-1.5 text-row text-tertiary">{t('page.deletedDescription')}</p>
+            </header>
           ) : (
             <>
-              <header className="flex h-7.5 items-center gap-2">
+              <header className="flex min-h-8 flex-wrap items-center gap-4">
                 <h1 className="min-w-0 flex-1 font-display text-title font-bold">
                   {t('page.title')}
                 </h1>
-                <div className="flex items-center gap-0.5">
-                  {any &&
-                    (searchOpen ? (
-                      <div
-                        onBlur={(event) => {
-                          if (!filter && !event.currentTarget.contains(event.relatedTarget)) {
-                            setSearching(false)
-                          }
-                        }}
-                        className="mr-1"
-                      >
-                        <SearchField
-                          value={filter}
-                          onChange={setArtifactsFilter}
-                          label={t('page.filter')}
-                          clearLabel={t('page.clearFilter')}
-                          inputRef={filterField}
-                          className="w-50 @min-[47.5rem]:w-60"
-                        />
-                      </div>
-                    ) : (
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <Button
-                              variant="quiet"
-                              size="icon-sm"
-                              aria-label={t('page.filter')}
-                              onClick={openSearch}
-                            />
-                          }
-                        >
-                          <SearchIcon />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {t('page.filter')} <Kbd>{formatShortcut('Mod+F')}</Kbd>
-                        </TooltipContent>
-                      </Tooltip>
-                    ))}
-                  {any && <FilterMenu list={list} />}
-                  {any && <DisplayMenu group={group} sort={sort} />}
+                {any && (
+                  <SearchField
+                    value={filter}
+                    onChange={setArtifactsFilter}
+                    label={t('page.filter')}
+                    clearLabel={t('page.clearFilter')}
+                    inputRef={filterField}
+                    className="w-65 max-w-full rounded-xl border-0 bg-subtle shadow-none not-has-disabled:hover:border-0 has-[[data-slot=input-group-control]:focus-visible]:shadow-field-focus [&_input]:text-[13.5px]"
+                  />
+                )}
+              </header>
+              {any && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <SegmentedControl
+                    aria-label={t('page.kind')}
+                    value={kindFilter ?? ALL}
+                    onChange={(value) =>
+                      setArtifactsKindFilter(ARTIFACT_KINDS.find((kind) => kind === value) ?? null)
+                    }
+                    itemClassName="h-6.5 px-3 text-control font-medium"
+                    segments={[
+                      { value: ALL, label: t('page.allKinds') },
+                      ...ARTIFACT_KINDS.map((kind) => ({
+                        value: kind,
+                        label: t(`page.kindsPlural.${kind}`),
+                      })),
+                    ]}
+                  />
+                  <span className="flex-1" />
+                  <FilterMenu list={list} agentOf={agentOf} />
+                  <DisplayMenu group={group} sort={sort} />
                   {!isWeb && (
                     <ImportMenu align="end">
                       <Tooltip>
@@ -417,6 +418,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                                   variant="quiet"
                                   size="icon-sm"
                                   aria-label={t('page.import')}
+                                  className="size-7.5 rounded-tile text-secondary"
                                 />
                               }
                             />
@@ -429,8 +431,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                     </ImportMenu>
                   )}
                 </div>
-              </header>
-              <KindTiles />
+              )}
             </>
           )}
           {!deleted && importFailed && <ImportError failure={importFailed} />}
@@ -439,12 +440,12 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
             <button
               type="button"
               onClick={() => openRecentlyDeleted(true)}
-              className="mt-8 flex h-11 w-full items-center gap-2.5 rounded-lg px-2.5 text-ui text-secondary shadow-[0_calc(-1*var(--hairline))_0_var(--border-subtle)] outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring"
+              className="mt-3 flex h-11 w-full items-center gap-2.5 rounded-xl px-2.5 text-row text-secondary shadow-[0_-1px_0_var(--border-subtle)] outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring"
             >
               <TrashIcon className="size-4 text-icon" />
               {t('page.recentlyDeleted')}
               <span className="text-xs text-tertiary tabular-nums">{trash.length}</span>
-              <ChevronRightIcon className="ml-auto size-3.5 text-icon" />
+              <ChevronRightIcon strokeWidth={1.75} className="ml-auto size-3.5 text-icon" />
             </button>
           )}
         </div>
@@ -454,16 +455,16 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
 }
 
 /**
- * The window's drag region over the page, a top bar's height with the desk above the sheet. On
- * macOS with the sidebar collapsed it holds the sidebar toggle, level with the traffic lights.
+ * The strip of sheet above the page, which drags the window. On macOS with the sidebar collapsed
+ * it is a top bar's height, beside the traffic lights, and holds the sidebar toggle.
  */
-function DragStrip() {
+function PageStrip() {
   const cornered = useViewStore((s) => s.sidebarCollapsed) && !hasBand
   return (
     <div
       className={cn(
-        'app-region-drag flex h-top-bar shrink-0 items-end',
-        cornered && 'pl-(--corner-inset)',
+        'app-region-drag flex shrink-0 items-center',
+        cornered ? 'h-top-bar pl-(--corner-inset)' : 'h-8',
       )}
     >
       {cornered && <CornerControls className="-ml-1" />}
@@ -496,11 +497,11 @@ function GroupView({
       aria-label={label ?? undefined}
       className={cn(
         'flex min-w-0 flex-col',
-        !first && 'mt-10 pt-7 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]',
+        !first && 'mt-10 pt-7 shadow-[inset_0_1px_0_var(--border-subtle)]',
       )}
     >
       {label !== null && (
-        <h2 className="mb-1 flex min-w-0 items-baseline gap-2 font-heading text-heading font-medium">
+        <h2 className="mb-1 flex min-w-0 items-baseline gap-2 text-row font-semibold">
           {of.kind === 'project' ? (
             <Tooltip>
               <TooltipTrigger render={<span className="truncate" />} delay={700}>
@@ -513,9 +514,7 @@ function GroupView({
           ) : (
             <span className="truncate">{label}</span>
           )}
-          <span className="font-sans text-xs font-normal text-tertiary tabular-nums">
-            {group.count}
-          </span>
+          <span className="text-xs font-normal text-tertiary tabular-nums">{group.count}</span>
         </h2>
       )}
       {group.sections.map((section, i) => (
@@ -552,6 +551,7 @@ function SessionRow({ id, info, now }: { id: string; info: SessionInfo | undefin
         }
         delay={700}
       >
+        <AgentMark agent={info.agentId} size={14} className="shrink-0" />
         <span className="truncate font-medium">{info.title ?? t('common:untitledSession')}</span>
         <span className="shrink-0 text-xs text-tertiary">{longAgo(info.updatedAt, now)}</span>
         <ArrowRightIcon className="size-3.5 shrink-0 text-tertiary opacity-0 transition-[opacity,translate] duration-(--duration-fast) group-hover/session:translate-x-0 group-hover/session:opacity-100 group-focus-visible/session:translate-x-0 group-focus-visible/session:opacity-100 motion-safe:-translate-x-0.75" />
@@ -561,15 +561,15 @@ function SessionRow({ id, info, now }: { id: string; info: SessionInfo | undefin
   )
 }
 
-/** The row of kinds an agent makes, each opening New session to ask for one. */
+/** The kinds an agent makes, each opening New session to ask for one. */
 function KindTiles() {
   const { t } = useTranslation('artifacts')
   return (
-    <section aria-labelledby="artifacts-ask" className="mt-6.5">
+    <section aria-labelledby="artifacts-ask" className="mt-2 flex flex-col items-center">
       <h2 id="artifacts-ask" className="text-xs text-tertiary">
         {t('page.ask')}
       </h2>
-      <div className="mt-2.5 flex flex-wrap gap-4">
+      <div className="mt-2.5 flex flex-wrap justify-center gap-4">
         {ARTIFACT_KINDS.map((kind) => {
           const look = KIND_LOOK[kind]
           return (
@@ -581,12 +581,12 @@ function KindTiles() {
             >
               <span
                 className={cn(
-                  'grid h-20 place-items-center rounded-code transition-colors duration-(--duration-fast) group-focus-visible/tile:outline-2 group-focus-visible/tile:outline-offset-2 group-focus-visible/tile:outline-focus',
+                  'grid h-20 place-items-center rounded-xl transition-colors duration-(--duration-fast) group-focus-visible/tile:outline-2 group-focus-visible/tile:outline-offset-2 group-focus-visible/tile:outline-focus',
                   look.tint,
                   look.tileHover,
                 )}
               >
-                <look.icon strokeWidth={1.5} className={cn('size-7', look.color)} />
+                <look.icon strokeWidth={1.2} className={cn('size-7', look.color)} />
               </span>
               <span className="pl-0.5">{t(`page.kinds.${kind}`)}</span>
             </button>
@@ -597,48 +597,26 @@ function KindTiles() {
   )
 }
 
-/** A header button that opens one of the page's menus; `active` while its choice is not the default. */
-function MenuButton({
-  label,
-  active,
-  children,
-}: {
-  label: string
-  active: boolean
-  children: React.ReactNode
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="quiet"
-                size="icon-sm"
-                aria-label={label}
-                data-active={active || undefined}
-                className="data-active:bg-pressed data-active:text-foreground data-active:shadow-sunk"
-              />
-            }
-          />
-        }
-      >
-        {children}
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  )
-}
+/** A header menu's button: what it is, then its current choice, as text; `active` off the default. */
+const MENU_BUTTON =
+  'h-7.5 gap-1.25 rounded-tile px-2 text-control font-normal text-secondary data-active:text-primary'
 
 const ALL = 'all'
 
-/** Narrows the list to a kind and a project, each "All" by default. */
-function FilterMenu({ list }: { list: ArtifactSummary[] }) {
+/** Narrows the list to an agent's artifacts and to a project, each any by default. */
+function FilterMenu({
+  list,
+  agentOf,
+}: {
+  list: ArtifactSummary[]
+  agentOf: (sessionId: string) => AgentId | null
+}) {
   const { t, i18n } = useTranslation('artifacts')
-  const kindFilter = useArtifactsStore((s) => s.kindFilter)
   const projectFilter = useArtifactsStore((s) => s.projectFilter)
+  const agentFilter = useArtifactsStore((s) => s.agentFilter)
   const projects = useProjectsStore((s) => s.projects)
+  const order = useAgentsStore((s) => s.order)
+  const agents = useMemo(() => agentsOf(list, agentOf, order), [list, agentOf, order])
   const choices = useMemo(
     () =>
       projectsOf(list, {
@@ -650,33 +628,54 @@ function FilterMenu({ list }: { list: ArtifactSummary[] }) {
   // A radio value per project: its folder after a prefix, so "All" can never be a folder.
   const projectValue =
     projectFilter === null ? ALL : projectFilter === NO_PROJECT ? 'none' : `in:${projectFilter}`
-  const active = kindFilter !== null || projectFilter !== null
+  const projectLabel =
+    projectFilter === null
+      ? null
+      : projectFilter === NO_PROJECT
+        ? t('page.noProject')
+        : (choices.flatMap((of) =>
+            of.kind === 'project' && of.path === projectFilter ? [of.name] : [],
+          )[0] ?? basename(projectFilter))
+  const agentLabel = agentFilter === null ? t('page.anyAgent') : agentName(agentFilter)
+  const active = agentFilter !== null || projectFilter !== null
   return (
     <DropdownMenu>
-      <MenuButton label={active ? t('page.filterOn') : t('page.filterMenu')} active={active}>
-        <ListFilterIcon />
-      </MenuButton>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="quiet"
+            data-active={active || undefined}
+            aria-label={t('page.filterMenu')}
+            className={MENU_BUTTON}
+          />
+        }
+      >
+        {agentFilter !== null && <AgentMark agent={agentFilter} size={14} />}
+        <span className="max-w-50 truncate">
+          {projectLabel
+            ? t('page.filterBoth', { agent: agentLabel, project: projectLabel })
+            : agentLabel}
+        </span>
+        <ChevronDownIcon strokeWidth={1.75} className="size-3 text-tertiary" />
+      </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={6} className="max-w-72 min-w-50">
         <DropdownMenuGroup>
-          <DropdownMenuLabel>{t('page.kind')}</DropdownMenuLabel>
+          <DropdownMenuLabel>{t('page.agent')}</DropdownMenuLabel>
           <DropdownMenuRadioGroup
-            value={kindFilter ?? ALL}
+            value={agentFilter ?? ALL}
             onValueChange={(value) =>
-              setArtifactsKindFilter(ARTIFACT_KINDS.find((kind) => kind === value) ?? null)
+              setArtifactsAgentFilter(agents.find((id) => id === value) ?? null)
             }
           >
             <DropdownMenuRadioItem value={ALL} closeOnClick>
-              {t('page.allKinds')}
+              {t('page.anyAgent')}
             </DropdownMenuRadioItem>
-            {ARTIFACT_KINDS.map((kind) => {
-              const look = KIND_LOOK[kind]
-              return (
-                <DropdownMenuRadioItem key={kind} value={kind} closeOnClick>
-                  <look.icon className={look.color} />
-                  {t(`page.kinds.${kind}`)}
-                </DropdownMenuRadioItem>
-              )
-            })}
+            {agents.map((id) => (
+              <DropdownMenuRadioItem key={id} value={id} closeOnClick>
+                <AgentMark agent={id} size={14} />
+                <span className="truncate">{agentName(id)}</span>
+              </DropdownMenuRadioItem>
+            ))}
           </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
@@ -715,31 +714,25 @@ function FilterMenu({ list }: { list: ArtifactSummary[] }) {
   )
 }
 
-/** Flat or grouped, and the order; active away from flat and recently opened. */
+/** The order, named on its button, and flat or grouped. */
 function DisplayMenu({ group, sort }: { group: ArtifactGrouping; sort: ArtifactSort }) {
   const { t } = useTranslation('artifacts')
   return (
     <DropdownMenu>
-      <MenuButton label={t('page.display')} active={group !== 'none' || sort !== 'recent'}>
-        <LayoutGridIcon />
-      </MenuButton>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="quiet"
+            data-active={group !== 'none' || sort !== 'recent' || undefined}
+            aria-label={t('page.display')}
+            className={MENU_BUTTON}
+          />
+        }
+      >
+        {t(`page.sortsShort.${sort}`)}
+        <ChevronDownIcon strokeWidth={1.75} className="size-3 text-tertiary" />
+      </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={6} className="min-w-53">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>{t('page.layout')}</DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            value={group}
-            onValueChange={(value) =>
-              setArtifactsView({ group: GROUPINGS.find((g) => g === value) ?? 'none' })
-            }
-          >
-            {GROUPINGS.map((g) => (
-              <DropdownMenuRadioItem key={g} value={g} closeOnClick>
-                {t(`page.layouts.${g}`)}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuLabel>{t('page.sort')}</DropdownMenuLabel>
           <DropdownMenuRadioGroup
@@ -751,6 +744,22 @@ function DisplayMenu({ group, sort }: { group: ArtifactGrouping; sort: ArtifactS
             {SORTS.map((s) => (
               <DropdownMenuRadioItem key={s} value={s} closeOnClick>
                 {t(`page.sorts.${s}`)}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t('page.layout')}</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={group}
+            onValueChange={(value) =>
+              setArtifactsView({ group: GROUPINGS.find((g) => g === value) ?? 'none' })
+            }
+          >
+            {GROUPINGS.map((g) => (
+              <DropdownMenuRadioItem key={g} value={g} closeOnClick>
+                {t(`page.layouts.${g}`)}
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
@@ -836,20 +845,21 @@ function useSessionInfo(...lists: (ArtifactSummary[] | null)[]): Map<string, Ses
       ids.flatMap((id) => {
         const session = s.byId[id]
         return session
-          ? [session.title, session.updatedAt, session.projectPath]
-          : [null, null, null]
+          ? [session.title, session.updatedAt, session.projectPath, session.agentId]
+          : [null, null, null, null]
       }),
     ),
   )
   return useMemo(() => {
     const map = new Map<string, SessionInfo>()
     ids.forEach((id, i) => {
-      const updatedAt = flat[i * 3 + 1] as number | null
+      const updatedAt = flat[i * 4 + 1] as number | null
       if (updatedAt === null) return
       map.set(id, {
-        title: flat[i * 3] as string | null,
+        title: flat[i * 4] as string | null,
         updatedAt,
-        projectPath: flat[i * 3 + 2] as string,
+        projectPath: flat[i * 4 + 2] as string,
+        agentId: flat[i * 4 + 3] as AgentId,
       })
     })
     return map
@@ -859,8 +869,8 @@ function useSessionInfo(...lists: (ArtifactSummary[] | null)[]): Map<string, Ses
 function LoadingList() {
   const { t } = useTranslation('artifacts')
   return (
-    <div aria-busy aria-label={t('page.loading')} className={cn(GRID, 'mt-8')}>
-      {Array.from({ length: 3 }, (_, i) => (
+    <div aria-busy aria-label={t('page.loading')} className={cn(GRID, 'mt-1')}>
+      {Array.from({ length: 4 }, (_, i) => (
         <CardSkeleton key={i} />
       ))}
     </div>
@@ -890,6 +900,7 @@ function NoArtifacts() {
         <EmptyDescription className="max-w-none">{t('page.emptyDescription')}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
+        <KindTiles />
         {!isWeb && (
           <ImportMenu align="center">
             <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
