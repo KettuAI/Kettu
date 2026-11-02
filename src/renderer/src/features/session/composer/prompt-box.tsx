@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Popover } from '@base-ui/react/popover'
-import { AtSignIcon, FolderIcon, ImageIcon, PlusIcon, SlashIcon } from 'lucide-react'
+import { AtSignIcon, CameraIcon, FolderIcon, ImageIcon, PlusIcon, SlashIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId, SlashCommand } from '@shared/thread'
 import {
@@ -17,6 +17,7 @@ import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { formatShortcut, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
+import { useBrowserStore } from '@renderer/stores/browser'
 import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
 import { AttachmentTray } from './attachment-tray'
 import { attachMention } from './attachments'
@@ -431,8 +432,9 @@ export function AddMenu({
   commands: readonly SlashCommand[]
 }) {
   const { t } = useTranslation('composer')
-  const { disabled, full, remote, text, editor, update } = box
+  const { disabled, full, remote, text, editor, update, sessionId } = box
   const shortcut = formatShortcut('Mod+U')
+  const hasPage = useBrowserStore((s) => !!sessionId && !!s.bySession[sessionId]?.url)
   const emptyDraft = text === ''
   const startMention = () => {
     const current = editor.current?.text() ?? text
@@ -491,6 +493,18 @@ export function AddMenu({
             <FolderIcon />
             {t('attachments.addFolder')}
             {full && <DropdownMenuShortcut>{t('attachments.atMost')}</DropdownMenuShortcut>}
+          </DropdownMenuItem>
+        )}
+        {/* The session's own browser tab, which New session and the web client have none of. */}
+        {!isWeb && sessionId && (
+          <DropdownMenuItem disabled={full || !hasPage} onClick={box.screenshot}>
+            <CameraIcon />
+            {t('attachments.screenshot')}
+            {(full || !hasPage) && (
+              <DropdownMenuShortcut>
+                {full ? t('attachments.atMost') : t('attachments.noPage')}
+              </DropdownMenuShortcut>
+            )}
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />

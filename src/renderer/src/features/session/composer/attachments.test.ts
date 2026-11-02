@@ -8,6 +8,7 @@ import {
 } from '@renderer/stores/attachments'
 import type { GrantedAttachment } from '@shared/attachments'
 import {
+  attachBrowserPage,
   attachFiles,
   attachImages,
   attachMention,
@@ -22,6 +23,7 @@ import {
   pickAttachments,
   removeAttachment,
   restoreAttachments,
+  screenshotName,
 } from './attachments'
 import { prepareImage, type PreparedImage } from './image-work'
 
@@ -601,6 +603,48 @@ describe('picked and dropped files', () => {
     removeAttachment(DRAFT, draftAttachments(DRAFT)[0]!.key)
     await settled()
     expect(request).toHaveBeenCalledWith('attachments.remove', { id: 'r-notes.md' })
+    expect(draftAttachments(DRAFT)).toEqual([])
+  })
+})
+
+describe('attachBrowserPage', () => {
+  const capture = vi.fn<(sessionId: string) => Promise<string | null>>()
+  const fromFiles = vi.fn<(files: File[]) => Promise<(GrantedAttachment | null)[]>>()
+
+  beforeEach(() => {
+    vi.stubGlobal('window', { kettu: { browser: { capture }, attachments: { fromFiles } } })
+    fromFiles.mockResolvedValue([null])
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('names a still after its site, in one word an @ mention can name', () => {
+    expect(screenshotName('http://localhost:5173/usage')).toBe('screenshot-localhost-5173.png')
+    expect(screenshotName('https://date-fns.org/docs/format')).toBe('screenshot-date-fns.org.png')
+    expect(screenshotName('not a url')).toBe('screenshot.png')
+    expect(screenshotName(null)).toBe('screenshot.png')
+  })
+
+  it("attaches the session page's still as an image", async () => {
+    capture.mockResolvedValue(`data:image/png;base64,${btoa('\x01\x02\x03')}`)
+    await expect(
+      attachBrowserPage(DRAFT, 'session-1', 'http://localhost:5173/', null),
+    ).resolves.toBe(0)
+    expect(capture).toHaveBeenCalledWith('session-1')
+    await vi.waitFor(() => expect(draftAttachments(DRAFT)[0]?.status).toBe('ready'))
+    const file = prepare.mock.calls[0]![0] as File
+    expect([file.name, file.type]).toEqual(['screenshot-localhost-5173.png', 'image/png'])
+    expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([1, 2, 3])
+    expect(draftAttachments(DRAFT)[0]).toMatchObject({
+      kind: 'image',
+      name: 'screenshot-localhost-5173.png',
+    })
+  })
+
+  it('fails, attaching nothing, when the session has no page', async () => {
+    capture.mockResolvedValue(null)
+    await expect(attachBrowserPage(DRAFT, 'session-1', null, null)).rejects.toThrow()
     expect(draftAttachments(DRAFT)).toEqual([])
   })
 })

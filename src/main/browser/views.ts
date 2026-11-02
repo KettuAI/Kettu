@@ -358,6 +358,19 @@ export class BrowserViews {
     return image.toDataURL()
   }
 
+  /**
+   * Captures the page for attaching to a message, as a PNG data URL. Through the page's debugger,
+   * since a view the pane hides has no frame for `capturePage` to read.
+   */
+  async capture(sessionId: string): Promise<string | null> {
+    const contents = this.pages.get(sessionId)?.view?.webContents
+    if (!contents || contents.isDestroyed() || !contents.getURL()) return null
+    const shot = (await contents.debugger.sendCommand('Page.captureScreenshot', {
+      format: 'png',
+    })) as { data: string }
+    return `data:image/png;base64,${shot.data}`
+  }
+
   thaw(sessionId: string): void {
     const page = this.pages.get(sessionId)
     if (!page) return

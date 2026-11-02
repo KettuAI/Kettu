@@ -5,6 +5,7 @@ import { onAppEvent, type AppEvent } from '@renderer/app/events'
 import { usePane } from '@renderer/features/split/pane-context'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
+import { useBrowserStore } from '@renderer/stores/browser'
 import {
   selectDraft,
   setDraftAttachments,
@@ -12,6 +13,7 @@ import {
   type DraftAttachment,
 } from '@renderer/stores/attachments'
 import {
+  attachBrowserPage,
   attachFiles,
   attachImages,
   attachPastedFiles,
@@ -95,6 +97,19 @@ export function usePromptBox({
       .finally(() => {
         picking.current = false
       })
+  }
+  /** Attaches a still of the session's own browser page. */
+  const screenshot = () => {
+    if (disabled || !sessionId) return
+    if (full) {
+      setError(t('attachments.limit'))
+      return
+    }
+    onActivity?.()
+    const url = useBrowserStore.getState().bySession[sessionId]?.url ?? null
+    attachBrowserPage(draft, sessionId, url, hostId).then(limitError, (e: unknown) =>
+      setError(errorMessage(e)),
+    )
   }
   const onEvent = useEffectEvent((event: AppEvent) => {
     if (event.kind === 'add-attachments' && focused.current) pick('files')
@@ -222,6 +237,7 @@ export function usePromptBox({
     full,
     remote,
     pick,
+    screenshot,
     onPaste,
     pasteAsText: pasteBack,
     onActivity,

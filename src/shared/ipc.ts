@@ -248,6 +248,7 @@ export interface IpcInvokeContract {
   'browser:open-external': { args: [sessionId: string]; result: void }
   // The page as it looks now, for the pane to show while an overlay would cover the view.
   'browser:freeze': { args: [sessionId: string]; result: string | null }
+  'browser:capture': { args: [sessionId: string]; result: string | null }
   'browser:thaw': { args: [sessionId: string]; result: void }
   /** The user hands the page back to the agent, after taking control. */
   'browser:hand-back': { args: [sessionId: string]; result: void }
@@ -565,6 +566,8 @@ export interface KettuApi {
     /** A still of the page for the pane to show, after which main hides the view. */
     freeze(sessionId: string): Promise<string | null>
     thaw(sessionId: string): Promise<void>
+    /** The page as a PNG data URL, for attaching to a message; null when the session has none. */
+    capture(sessionId: string): Promise<string | null>
     /** Takes the page back from the user, so the agent may drive it again. */
     handBack(sessionId: string): Promise<void>
     /** The driving bar's Stop: the user takes control, and the running call fails. */

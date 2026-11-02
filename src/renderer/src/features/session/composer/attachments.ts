@@ -72,6 +72,28 @@ export function attachImages(draft: string, files: readonly File[], hostId: stri
   return files.length - taken.length
 }
 
+/**
+ * Adds a still of the session's own browser page, named after its site. Returns how many did not
+ * fit under the limit; throws when the session's browser has no page.
+ */
+export async function attachBrowserPage(
+  draft: string,
+  sessionId: string,
+  url: string | null,
+  hostId: string | null,
+): Promise<number> {
+  const still = await window.kettu.browser.capture(sessionId)
+  if (!still) throw new Error(i18n.t('composer:attachments.noPageOpen'))
+  const bytes = Uint8Array.from(atob(still.slice(still.indexOf(',') + 1)), (c) => c.charCodeAt(0))
+  return attachFiles(draft, [new File([bytes], screenshotName(url), { type: 'image/png' })], hostId)
+}
+
+/** A browser still's name, one word so an `@` mention can name it: `screenshot-<host>.png`. */
+export function screenshotName(url: string | null): string {
+  const site = url ? URL.parse(url)?.host.replaceAll(':', '-') : ''
+  return site ? `screenshot-${site}.png` : 'screenshot.png'
+}
+
 /** The next number of a numbered name in a draft: one past the highest it holds. */
 function nextNumber(
   items: readonly DraftAttachment[],

@@ -236,6 +236,7 @@ const api: KettuApi = {
     openExternal: (id) => invoke('browser:open-external', id),
     freeze: (id) => invoke('browser:freeze', id),
     thaw: (id) => invoke('browser:thaw', id),
+    capture: (id) => invoke('browser:capture', id),
     handBack: (id) => invoke('browser:hand-back', id),
     stopDriving: (id) => invoke('browser:stop-driving', id),
     answerOrigin: (id, requestId, decision) =>
