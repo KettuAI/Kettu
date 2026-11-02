@@ -48,7 +48,8 @@
     "addFolder": "Add Folder",
     "installTheme": "Install Theme",
     "exportTheme": "Export Theme",
-    "chooseAgentFolder": "Choose Agent Folder"
+    "chooseAgentFolder": "Choose Agent Folder",
+    "chooseEditor": "Choose Editor"
   },
   "quit": {
     "titleQuit": "Quit {{name}}?",

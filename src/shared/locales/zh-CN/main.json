@@ -48,7 +48,8 @@
     "addFolder": "添加文件夹",
     "installTheme": "安装主题",
     "exportTheme": "导出主题",
-    "chooseAgentFolder": "选择 Agent 的配置目录"
+    "chooseAgentFolder": "选择 Agent 的配置目录",
+    "chooseEditor": "选择编辑器"
   },
   "quit": {
     "titleQuit": "退出 {{name}}？",

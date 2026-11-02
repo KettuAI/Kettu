@@ -581,6 +581,8 @@
   --segment-thumb: var(--bg-raised);
   --pressed: var(--bg-selected);
   --pressed-hover: color-mix(in srgb, var(--bg-selected), var(--text-primary) 5%);
+  /* Sidebar rows picked together with Mod-click or Shift-click, for a menu that acts on all. */
+  --row-picked: color-mix(in srgb, var(--control-on) 12%, transparent);
 
   /* Keyboard focus: the fox at half strength, 2 px clear of the control. A field takes a 1 px
      line and a halo instead. */
@@ -620,7 +622,8 @@
   --context-hatch: repeating-linear-gradient(135deg, var(--context-7) 0 2px, transparent 2px 4px);
 
   --terminal-background: var(--bg-code-block);
-  --terminal-foreground: var(--text-primary);
+  /* As drawn: output in the secondary ink, the cursor in the primary. */
+  --terminal-foreground: var(--text-secondary);
   --terminal-cursor: var(--text-primary);
   --terminal-selection: var(--selection);
 
