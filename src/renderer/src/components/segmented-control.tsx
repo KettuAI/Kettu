@@ -132,7 +132,6 @@ export function SegmentedControl<T extends string>({
       {...aria}
       ref={group}
       variant="segmented"
-      size="compact"
       spacing={0.5}
       value={[value]}
       onValueChange={(next) => {
@@ -150,7 +149,7 @@ export function SegmentedControl<T extends string>({
           aria-hidden
           data-slot="segmented-thumb"
           className={cn(
-            'pointer-events-none absolute inset-y-0.5 left-0 overflow-hidden rounded-md bg-segment-thumb shadow-segment contain-strict',
+            'pointer-events-none absolute inset-y-0.5 left-0 overflow-hidden rounded-segment bg-segment-thumb shadow-segment contain-strict',
             placed &&
               'transition-[translate,width,scale,box-shadow] duration-(--duration-base) ease-standard motion-reduce:transition-none',
             pressed !== null && 'scale-97',
@@ -165,8 +164,13 @@ export function SegmentedControl<T extends string>({
         <ToggleGroupItem
           key={s.value}
           value={s.value}
+          // No toggle size: its height utility would outrank an itemClassName height.
+          size={null}
           data-active={i === active || undefined}
-          className={cn('relative flex-auto', itemClassName)}
+          className={cn(
+            "relative h-6.5 flex-auto rounded-segment px-2.5 text-hint font-medium [&_svg:not([class*='size-'])]:size-3.5",
+            itemClassName,
+          )}
         >
           <span className="truncate">
             {typeof s.label === 'function' ? s.label(i === active) : s.label}
