@@ -12,6 +12,8 @@ export interface HarnessQueueDeps {
   run(agentId: AgentId): Promise<void>
   /** How many of the harness's sessions run now. */
   busy(agentId: AgentId): number
+  /** Calls back as sessions change; returns what stops it. */
+  watch(onChange: () => void): () => void
   changed(state: HarnessQueueState): void
 }
 
@@ -25,6 +27,8 @@ export class HarnessQueue {
   private installing: AgentId | null = null
   /** Asked for with Now, after its sessions were stopped, so a late status cannot hold it. */
   private readonly forced = new Set<AgentId>()
+  /** Stops watching the sessions, which the queue does only while an update waits. */
+  private unwatch: (() => void) | null = null
 
   constructor(private readonly deps: HarnessQueueDeps) {}
 
@@ -67,11 +71,12 @@ export class HarnessQueue {
     this.emit()
   }
 
-  hasWaiting(): boolean {
-    return this.waiting.length > 0
-  }
-
   private emit(): void {
+    if (this.waiting.length > 0) this.unwatch ??= this.deps.watch(() => this.check())
+    else if (this.unwatch) {
+      this.unwatch()
+      this.unwatch = null
+    }
     this.deps.changed({ waiting: [...this.waiting], queued: [...this.queued] })
   }
 

@@ -4,7 +4,7 @@ import { RELEASES_URL, releaseUrl } from '@shared/updates'
 import { Button } from '@renderer/components/ui/button'
 import { PopoverTitle } from '@renderer/components/ui/popover'
 import { useUpdatesStore } from '@renderer/stores/updates'
-import { appUpdateText } from './app-updates'
+import { appUpdateText, type AppUpdateNotice } from './app-updates'
 import { harnessRowNote, versionsText, type HarnessItem, type UpdateItem } from './card-model'
 import { unskipHarnessUpdate, updateHarnesses } from './harness-updates'
 import { CARD_BUTTON } from './update-actions'
@@ -24,7 +24,7 @@ export function UpdateReview({ items }: { items: UpdateItem[] }) {
   return (
     <div className="flex flex-col">
       <div className="flex items-center px-3 py-2.5 shadow-[inset_0_calc(var(--hairline)*-1)_0_var(--border-subtle)]">
-        <PopoverTitle className="flex-1 text-control font-semibold">
+        <PopoverTitle className="flex-1 text-control leading-4 font-semibold">
           {t('review.title')}
         </PopoverTitle>
         <a
@@ -42,7 +42,7 @@ export function UpdateReview({ items }: { items: UpdateItem[] }) {
             <Row
               key="kettu"
               item={item}
-              versions={current ? `${current} → ${item.notice.version}` : item.notice.version}
+              versions={appVersions(item.notice, current)}
               note={appUpdateText(item.notice).rowNote}
               action={<AppAction notice={item.notice} />}
             />
@@ -85,13 +85,13 @@ function Row({
     <li className="flex items-center gap-2.5 px-3 py-2.25 not-last:shadow-[inset_0_calc(var(--hairline)*-1)_0_var(--border-subtle)]">
       <ItemTile item={item} size={20} />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-control text-primary">
+        <div className="truncate text-control leading-4 text-primary">
           {name}{' '}
           <span className="font-mono text-caption text-tertiary [font-variant-ligatures:none]">
             {versions}
           </span>
         </div>
-        <div className="mt-px truncate text-caption text-tertiary">{note}</div>
+        <div className="mt-px truncate text-caption leading-3.5 text-tertiary">{note}</div>
       </div>
       {action}
     </li>
@@ -130,4 +130,10 @@ function HarnessRow({ item }: { item: HarnessItem }) {
   return (
     <Row item={item} versions={versionsText(offer)} note={harnessRowNote(item)} action={action} />
   )
+}
+
+/** "0.0.9 → 0.1.0": from the running version, or the one an update came from. */
+function appVersions(notice: AppUpdateNotice, current: string | undefined): string {
+  const from = notice.kind === 'updated' ? notice.from : current
+  return from ? `${from} → ${notice.version}` : notice.version
 }

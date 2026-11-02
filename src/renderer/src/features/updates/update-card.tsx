@@ -55,19 +55,23 @@ import { UpdateReview } from './update-review'
 const BESIDE_SIDEBAR = 18
 
 /** What one entry of the stack names on hover: "Claude Code 2.4.1 → 2.5.0". */
-function itemVersions(item: UpdateItem): { name: string; versions: string } {
+function itemVersions(
+  item: UpdateItem,
+  current: string | undefined,
+): { name: string; versions: string } {
   if (item.kind === 'harness') return { name: item.offer.name, versions: versionsText(item.offer) }
   const { notice } = item
-  const from = notice.kind === 'updated' ? notice.from : useUpdatesStore.getState().status?.current
+  const from = notice.kind === 'updated' ? notice.from : current
   return { name: 'Kettu', versions: from ? `${from} → ${notice.version}` : notice.version }
 }
 
 /** The entries' marks, overlapping at rest and fanned out while the card is hovered. */
 function UpdateStack({ items, onOpen }: { items: UpdateItem[]; onOpen: () => void }) {
+  const current = useUpdatesStore((s) => s.status?.current)
   return (
     <span className="relative flex shrink-0 items-center">
       {items.map((item, index) => {
-        const { name, versions } = itemVersions(item)
+        const { name, versions } = itemVersions(item, current)
         return (
           <Tooltip key={item.kind === 'app' ? 'kettu' : item.offer.agentId}>
             <TooltipTrigger
@@ -86,8 +90,10 @@ function UpdateStack({ items, onOpen }: { items: UpdateItem[]; onOpen: () => voi
             >
               <ItemTile item={item} size={20} />
             </TooltipTrigger>
-            <TooltipContent>
-              {name} <span className="opacity-65">{versions}</span>
+            {/* Clear of the card's top edge, as the icons sit 12 px into it. */}
+            <TooltipContent sideOffset={16} className="gap-1">
+              {name}
+              <span className="opacity-65">{versions}</span>
             </TooltipContent>
           </Tooltip>
         )
@@ -131,6 +137,8 @@ function CardFrame({
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!onClose || (event.key !== 'Backspace' && event.key !== 'Delete')) return
     if (event.metaKey || event.ctrlKey || event.altKey) return
+    // Keys bubble out of a popover's portal too, such as the log's; only the card's own count.
+    if (!event.currentTarget.contains(event.target as Node)) return
     event.preventDefault()
     onClose()
   }
@@ -217,7 +225,7 @@ export function UpdateCardView({ card, items }: { card: UpdateCard; items: Updat
   const label = updateCardLabel(card)
   switch (card.kind) {
     case 'installing':
-      return <InstallingCard card={card} label={label} />
+      return <InstallingCard card={card} items={items} label={label} />
     case 'failed':
       return <FailedCard failure={card.failure} label={label} />
     case 'waiting':
@@ -308,16 +316,29 @@ function SeveralCard({
         }
         onClose={() => closeItems(shown)}
       />
-      <PopoverContent
-        anchor={card}
-        side="right"
-        align="end"
-        sideOffset={BESIDE_SIDEBAR}
-        className="w-92.5 gap-0 overflow-hidden p-0"
-      >
-        <UpdateReview items={items} />
-      </PopoverContent>
+      <ReviewPopover anchor={card} items={items} />
     </Popover>
+  )
+}
+
+/** The review list beside the card, inside the card's Popover. */
+function ReviewPopover({
+  anchor,
+  items,
+}: {
+  anchor: RefObject<HTMLDivElement | null>
+  items: UpdateItem[]
+}) {
+  return (
+    <PopoverContent
+      anchor={anchor}
+      side="right"
+      align="end"
+      sideOffset={BESIDE_SIDEBAR}
+      className="w-92.5 max-w-[calc(100vw-2rem)] gap-0 overflow-hidden p-0"
+    >
+      <UpdateReview items={items} />
+    </PopoverContent>
   )
 }
 
@@ -372,12 +393,17 @@ function UpdateBar({ percent, label }: { percent: number | null; label: string }
 
 function InstallingCard({
   card,
+  items,
   label,
 }: {
   card: Extract<UpdateCard, { kind: 'installing' }>
+  /** The other updates, which the card opens the list of so each can still act on its own. */
+  items: UpdateItem[]
   label: string
 }) {
   const { t } = useTranslation('updates')
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
   const { run } = card
   const app = run.kind === 'app' ? appUpdateText(run.notice) : null
   const harness = run.kind === 'harness' ? run.run : null
@@ -388,9 +414,24 @@ function InstallingCard({
       : run.notice.kind === 'downloading'
         ? () => void window.kettu.updates.cancel()
         : undefined
-  return (
+  const frame = (
     <CardFrame
+      ref={ref}
       label={label}
+      open={open}
+      hit={
+        items.length > 0 && (
+          <PopoverTrigger
+            render={
+              <button
+                type="button"
+                aria-label={t('several.review')}
+                className="absolute inset-0 rounded-xl outline-none focus-visible:focus-ring"
+              />
+            }
+          />
+        )
+      }
       icon={harness ? <HarnessTile agentId={harness.agentId} size={22} /> : <KettuTile size={22} />}
       title={label}
       note={<span title={harness?.command}>{note}</span>}
@@ -413,6 +454,13 @@ function InstallingCard({
       onClose={close}
       closeLabel={run.kind === 'harness' ? t('harness.stop') : t('app.cancel')}
     />
+  )
+  if (items.length === 0) return frame
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      {frame}
+      <ReviewPopover anchor={ref} items={items} />
+    </Popover>
   )
 }
 

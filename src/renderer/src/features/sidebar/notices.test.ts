@@ -55,7 +55,7 @@ describe('noticeSummary', () => {
       update: { kind: 'one', item: harness('claude-code', 'Claude Code', '2.1.310') },
     })
     expect(summary).toMatchObject({
-      name: 'Notices: 2 agents need you to sign in, Claude Code 2.1.310',
+      name: 'Notices: 2 agents need you to sign in, Claude Code 2.1.310 is out',
     })
   })
 

@@ -4,6 +4,7 @@ import { useUpdates } from '@renderer/features/updates/use-updates'
 import { useHostsStore } from '@renderer/stores/hosts'
 import { useRemoteStore } from '@renderer/stores/remote'
 import { useUpdatesStore } from '@renderer/stores/updates'
+import { settingsAttention } from './model'
 
 /** This computer's name, as devices see it: "Studio Mac". */
 export function useThisComputerName(): string {
@@ -13,19 +14,11 @@ export function useThisComputerName(): string {
   return remote || self || t('hosts.thisComputer')
 }
 
-/**
- * Whether Settings needs you: an agent to sign in, or updates the card was closed on that are still
- * to do, until Settings is opened.
- */
+/** Whether Settings needs you, which its button marks with a dot. */
 export function useSettingsAttention(): boolean {
   const { signIn } = useNotices()
   const dot = useUpdatesStore((s) => s.settingsDot)
   const status = useUpdatesStore((s) => s.status)
   const { items } = useUpdates()
-  if (signIn.length > 0) return true
-  if (!dot) return false
-  const state = status?.state
-  const appDismissed =
-    (state?.kind === 'ready' || state?.kind === 'available') && status?.dismissed === state.version
-  return appDismissed || items.some((item) => item.kind === 'harness' && item.skipped)
+  return settingsAttention({ signIn: signIn.length, dot, status, items })
 }

@@ -11,19 +11,19 @@ import {
   MonitorIcon,
   PencilIcon,
   PlusIcon,
-  Settings2Icon,
   SparkleIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
 import { RELEASES_URL, releaseUrl } from '@shared/updates'
-import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuList,
+  DropdownMenuRadioGroup,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
 } from '@renderer/components/ui/dropdown-menu'
@@ -45,7 +45,8 @@ import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { openSettings, showShortcuts, THIS_COMPUTER, useViewStore } from '@renderer/stores/view'
-import { Avatar, IdentityName } from './avatar'
+import { HarnessTile } from '@renderer/features/updates/update-parts'
+import { AccountAvatar, IdentityName, SettingsGlyph } from './avatar'
 import { chosenHost, limitRows, systemName, type Identity } from './model'
 import { useThisComputerName } from './use-account'
 
@@ -78,7 +79,8 @@ export function AccountMenuContent({
   const choices: (string | null)[] = [THIS_COMPUTER, ...hosts.map((h) => h.id)]
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!isMod(event) || event.shiftKey || event.altKey) return
+    // The web client lists no host to pick, and the browser keeps its own tab keys.
+    if (isWeb || !isMod(event) || event.shiftKey || event.altKey) return
     const digit = /^Digit([1-9])$/.exec(event.code)?.[1]
     const choice = digit ? choices[Number(digit) - 1] : undefined
     if (choice === undefined) return
@@ -97,30 +99,32 @@ export function AccountMenuContent({
       onKeyDown={onKeyDown}
       className="w-75 max-w-[calc(100vw-2rem)] p-1.5"
     >
-      <Profile identity={identity} />
-      <DropdownMenuSeparator className={SEPARATOR} />
-      {!isWeb && <HostChoices hosts={hosts} />}
-      {!isWeb && <DropdownMenuSeparator className={SEPARATOR} />}
-      <PlanLimits />
-      <ThemeChoice />
-      <DropdownMenuSeparator className={SEPARATOR} />
-      <DropdownMenuItem onClick={() => openSettings()}>
-        <Settings2Icon />
-        {t('account.settings')}
-        <DropdownMenuShortcut>{formatShortcut('Mod+,')}</DropdownMenuShortcut>
-      </DropdownMenuItem>
-      <DropdownMenuItem onClick={() => showShortcuts(true)}>
-        <KeyboardIcon />
-        {t('account.shortcuts')}
-        <DropdownMenuShortcut>{formatShortcut('Mod+/')}</DropdownMenuShortcut>
-      </DropdownMenuItem>
-      <WhatsNewItem />
-      <DropdownMenuItem render={<a href={DOCS_URL} target="_blank" rel="noreferrer" />}>
-        <ExternalLinkIcon />
-        {t('account.docs')}
-      </DropdownMenuItem>
-      <AccountAction />
-      <VersionLine />
+      <DropdownMenuList>
+        <Profile identity={identity} />
+        <DropdownMenuSeparator className={SEPARATOR} />
+        {!isWeb && <HostChoices hosts={hosts} />}
+        {!isWeb && <DropdownMenuSeparator className={SEPARATOR} />}
+        <PlanLimits />
+        <ThemeChoice />
+        <DropdownMenuSeparator className={SEPARATOR} />
+        <DropdownMenuItem onClick={() => openSettings()}>
+          <SettingsGlyph />
+          {t('account.settings')}
+          <DropdownMenuShortcut>{formatShortcut('Mod+,')}</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => showShortcuts(true)}>
+          <KeyboardIcon />
+          {t('account.shortcuts')}
+          <DropdownMenuShortcut>{formatShortcut('Mod+/')}</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <WhatsNewItem />
+        <DropdownMenuItem render={<a href={DOCS_URL} target="_blank" rel="noreferrer" />}>
+          <ExternalLinkIcon />
+          {t('account.docs')}
+        </DropdownMenuItem>
+        <AccountAction />
+        <VersionLine />
+      </DropdownMenuList>
     </DropdownMenuContent>
   )
 }
@@ -137,7 +141,7 @@ function Profile({ identity }: { identity: Identity }) {
   const manageUrl = status?.state === 'signed-in' ? status.manageUrl : null
   return (
     <div className="flex items-center gap-2.5 px-2 pt-2 pb-2.5">
-      <Avatar identity={identity} size={32} />
+      <AccountAvatar identity={identity} size={32} />
       <div className="flex min-w-0 flex-1 flex-col leading-[1.3]">
         <span className="truncate text-[13.5px] font-semibold text-primary">
           <IdentityName identity={identity} />
@@ -153,15 +157,13 @@ function Profile({ identity }: { identity: Identity }) {
         </span>
       </div>
       {manageUrl && (
-        <a
-          href={manageUrl}
-          target="_blank"
-          rel="noreferrer"
+        <DropdownMenuItem
           aria-label={t('account.editProfile')}
-          className="grid size-6.5 shrink-0 place-items-center rounded-tile text-tertiary outline-none hover:bg-hover hover:text-primary focus-visible:focus-ring"
+          render={<a href={manageUrl} target="_blank" rel="noreferrer" />}
+          className="grid size-6.5 min-h-0 shrink-0 place-items-center rounded-tile p-0 text-tertiary focus:text-primary"
         >
-          <PencilIcon strokeWidth={1.35} className="size-3.25" />
-        </a>
+          <PencilIcon strokeWidth={1.35} className="size-2.75" />
+        </DropdownMenuItem>
       )}
     </div>
   )
@@ -199,7 +201,7 @@ function HostChoices({ hosts }: { hosts: OtherHost[] }) {
   return (
     <DropdownMenuGroup>
       <GroupLabel>{t('account.controls')}</GroupLabel>
-      <MenuPrimitive.RadioGroup
+      <DropdownMenuRadioGroup
         value={value}
         onValueChange={(next: string) => choose(next === 'all' ? null : next, hosts)}
       >
@@ -260,7 +262,7 @@ function HostChoices({ hosts }: { hosts: OtherHost[] }) {
             shortcut={null}
           />
         )}
-      </MenuPrimitive.RadioGroup>
+      </DropdownMenuRadioGroup>
       <DropdownMenuItem onClick={() => openSettings('hosts')}>
         <PlusIcon />
         {t('account.addHost')}
@@ -337,7 +339,7 @@ function PlanLimits() {
         <div className="px-2 pb-1">
           {rows.map((row) => (
             <div key={row.agentId} className="flex h-6.5 items-center gap-2">
-              <AgentMark agent={row.agentId} size={14} />
+              <HarnessTile agentId={row.agentId} size={14} />
               <span className="min-w-0 flex-1 truncate text-hint text-secondary">{row.label}</span>
               <span
                 aria-hidden
@@ -376,10 +378,13 @@ function ThemeChoice() {
   const theme = useSettingsStore((s) => s.settings.appearance.theme)
   return (
     <div className="px-1.5 pt-1 pb-1.5">
-      <MenuPrimitive.RadioGroup
+      <DropdownMenuRadioGroup
         value={theme}
         onValueChange={(next: (typeof THEMES)[number]) =>
-          void useSettingsStore.getState().update({ appearance: { theme: next } })
+          void useSettingsStore
+            .getState()
+            .update({ appearance: { theme: next } })
+            .catch((error: unknown) => console.warn('Could not change the theme', error))
         }
         aria-label={t('account.theme')}
         className="flex gap-0.5 rounded-tile bg-segment-track p-0.5"
@@ -394,7 +399,7 @@ function ThemeChoice() {
             {t(`account.themes.${value}`)}
           </MenuPrimitive.RadioItem>
         ))}
-      </MenuPrimitive.RadioGroup>
+      </DropdownMenuRadioGroup>
     </div>
   )
 }

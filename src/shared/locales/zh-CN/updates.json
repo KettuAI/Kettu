@@ -22,6 +22,7 @@
   },
   "harness": {
     "offer": "{{name}} {{version}}",
+    "offerLabel": "{{name}} {{version}} 已发布",
     "offerAgents": "{{versions}} · {{count}} 个 Agent 在用",
     "update": "更新",
     "installing": "正在更新 {{name}}",
@@ -50,8 +51,7 @@
     "withKettu_other": "Kettu + {{count}} 个 Harness",
     "harnesses_one": "{{count}} 个 Harness",
     "harnesses_other": "{{count}} 个 Harness",
-    "review": "查看",
-    "version": "{{name}} {{versions}}"
+    "review": "查看"
   },
   "review": {
     "title": "更新",
@@ -59,7 +59,6 @@
     "waits_one": "等 {{count}} 个正在运行的会话结束",
     "waits_other": "等 {{count}} 个正在运行的会话结束",
     "queued": "已排队",
-    "installing": "正在更新…",
     "skipped": "已跳过这个版本",
     "undo": "撤销",
     "note": "更新 Harness 不会重启 Kettu",

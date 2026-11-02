@@ -138,6 +138,7 @@
     "signIn": "登录 Kettu…",
     "cancelSignIn": "取消登录",
     "connecting": "正在连接 {{name}}…",
+    "escKey": "esc",
     "cancelSwitch": "回到之前的主机"
   }
 }

@@ -1,6 +1,8 @@
 import type { AccountStatus } from '@shared/account'
 import type { AgentStatus, PlanLimit } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
+import type { UpdateStatus } from '@shared/updates'
+import type { UpdateItem } from '@renderer/features/updates/card-model'
 import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
 import { limitLevel, type LimitLevel } from '@renderer/lib/plan-limit'
 import { THIS_COMPUTER } from '@renderer/stores/view'
@@ -66,4 +68,27 @@ export function chosenHost(filter: string | null, hostIds: readonly string[]): s
 /** "macOS 26.1" from the system as a bug report names it, "macOS 26.1 (arm64)". */
 export function systemName(system: string): string {
   return system.replace(/\s*\([^)]*\)\s*$/, '')
+}
+
+/**
+ * Whether Settings needs you: an agent to sign in, or updates the card was closed on that are still
+ * to do, until Settings is opened (`dot`).
+ */
+export function settingsAttention({
+  signIn,
+  dot,
+  status,
+  items,
+}: {
+  signIn: number
+  dot: boolean
+  status: UpdateStatus | null
+  items: readonly UpdateItem[]
+}): boolean {
+  if (signIn > 0) return true
+  if (!dot) return false
+  const state = status?.state
+  const appDismissed =
+    (state?.kind === 'ready' || state?.kind === 'available') && status?.dismissed === state.version
+  return appDismissed || items.some((item) => item.kind === 'harness' && item.skipped)
 }

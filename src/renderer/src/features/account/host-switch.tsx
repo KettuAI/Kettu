@@ -24,16 +24,17 @@ export function HostSwitchBar() {
 
   useEffect(() => {
     if (!switching) return
+    // In the capture phase, before a running turn's Esc to stop it, which then sees it prevented.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return
+      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return
       // Only where Esc has nothing else to do: the page itself or the sidebar.
       const at = document.activeElement
       if (at && at !== document.body && !at.closest('[data-slot=sidebar]')) return
       event.preventDefault()
       cancelHostSwitch()
     }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [switching])
 
   if (!switching || !host || !connecting) return null
@@ -52,7 +53,7 @@ export function HostSwitchBar() {
         aria-label={t('account.cancelSwitch')}
         className="rounded-xs text-tertiary outline-none hover:text-secondary focus-visible:focus-ring"
       >
-        esc
+        {t('account.escKey')}
       </button>
     </div>
   )

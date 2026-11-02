@@ -147,6 +147,7 @@
     "signIn": "Sign in to Kettu…",
     "cancelSignIn": "Cancel signing in",
     "connecting": "Connecting to {{name}}…",
+    "escKey": "esc",
     "cancelSwitch": "Go back to the host before"
   }
 }

@@ -1,11 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { MonitorSmartphoneIcon, Settings2Icon } from 'lucide-react'
+import { MonitorSmartphoneIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { DropdownMenu, DropdownMenuTrigger } from '@renderer/components/ui/dropdown-menu'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { routeName } from '@renderer/features/settings/host-text'
-import { formatShortcut } from '@renderer/lib/platform'
+import { formatShortcut, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useAccountStore } from '@renderer/stores/account'
 import { otherHosts, useHostsStore, useOtherHost } from '@renderer/stores/hosts'
@@ -13,7 +13,7 @@ import { useRemoteStore } from '@renderer/stores/remote'
 import { setSettingsDot } from '@renderer/stores/updates'
 import { openSettings, THIS_COMPUTER, useViewStore } from '@renderer/stores/view'
 import { AccountMenuContent } from './account-menu'
-import { Avatar, IdentityName } from './avatar'
+import { AccountAvatar, IdentityName, SettingsGlyph } from './avatar'
 import { identityOf } from './model'
 import { useSettingsAttention, useThisComputerName } from './use-account'
 
@@ -38,6 +38,7 @@ export function AccountRow() {
   const { t } = useTranslation('sidebar')
   const identity = identityOf(useAccountStore((s) => s.status))
   const line = useHostLine()
+  const self = useThisComputerName()
   const [open, setOpen] = useState(false)
   const settingsOpen = useViewStore((s) => s.settings.open)
   // Opening Settings is looking at what its dot pointed to.
@@ -48,21 +49,24 @@ export function AccountRow() {
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <div
         className={cn(
-          'flex h-10 shrink-0 items-center gap-0.5 rounded-tile pr-1 transition-colors duration-(--duration-fast)',
+          'flex h-10 shrink-0 items-center gap-2.25 rounded-tile pr-1 transition-colors duration-(--duration-fast)',
           open ? 'bg-selected' : 'has-[>[data-account-trigger]:hover]:bg-hover',
         )}
       >
         <DropdownMenuTrigger
           data-account-trigger=""
-          aria-label={t('account.menuLabel')}
+          aria-description={t('account.menuLabel')}
           className="flex h-full min-w-0 flex-1 items-center gap-2.25 rounded-tile pl-2 text-left outline-none focus-visible:focus-ring"
         >
-          <Avatar identity={identity} size={24} />
+          <AccountAvatar identity={identity} size={24} />
           <span className="flex min-w-0 flex-1 flex-col leading-[1.2]">
+            {/* The web client signs in to no account, so it names the host it shows. */}
             <span className="truncate text-control font-medium text-primary">
-              <IdentityName identity={identity} />
+              {isWeb ? self : <IdentityName identity={identity} />}
             </span>
-            <span className="truncate text-caption leading-[1.2] text-tertiary">{line}</span>
+            {!isWeb && (
+              <span className="truncate text-caption leading-[1.2] text-tertiary">{line}</span>
+            )}
           </span>
         </DropdownMenuTrigger>
         <RemoteButton />
@@ -155,7 +159,7 @@ function SettingsButton() {
         )
       }
     >
-      <Settings2Icon strokeWidth={1.3} />
+      <SettingsGlyph />
     </RowButton>
   )
 }

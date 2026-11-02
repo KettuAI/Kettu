@@ -181,7 +181,10 @@ export function updateCardLabel(card: UpdateCard): string {
     case 'one':
       return card.item.kind === 'app'
         ? appUpdateText(card.item.notice).title
-        : harnessOfferText(card.item).title
+        : i18n.t('updates:harness.offerLabel', {
+            name: card.item.offer.name,
+            version: card.item.offer.to,
+          })
     case 'several':
       return i18n.t('updates:several.title', { count: card.items.length })
   }

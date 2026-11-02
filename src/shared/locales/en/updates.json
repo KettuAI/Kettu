@@ -22,6 +22,7 @@
   },
   "harness": {
     "offer": "{{name}} {{version}}",
+    "offerLabel": "{{name}} {{version}} is out",
     "offerAgents": "{{versions}} · {{count}} agents use it",
     "update": "Update",
     "installing": "Updating {{name}}",
@@ -50,8 +51,7 @@
     "withKettu_other": "Kettu + {{count}} harnesses",
     "harnesses_one": "{{count}} harness",
     "harnesses_other": "{{count}} harnesses",
-    "review": "Review",
-    "version": "{{name}} {{versions}}"
+    "review": "Review"
   },
   "review": {
     "title": "Updates",
@@ -59,7 +59,6 @@
     "waits_one": "Waits for {{count}} running session",
     "waits_other": "Waits for {{count}} running sessions",
     "queued": "Queued",
-    "installing": "Updating…",
     "skipped": "Skipped this version",
     "undo": "Undo",
     "note": "Harness updates never restart Kettu",

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { AccountStatus } from '@shared/account'
 import type { AgentStatus, PlanLimit } from '@shared/agent-host'
 import { THIS_COMPUTER } from '@renderer/stores/view'
-import { chosenHost, identityOf, limitRows, systemName } from './model'
+import type { UpdateStatus } from '@shared/updates'
+import type { HarnessItem } from '@renderer/features/updates/card-model'
+import { chosenHost, identityOf, limitRows, settingsAttention, systemName } from './model'
 
 const signedIn = (name: string | null, avatar: string | null = null): AccountStatus => ({
   state: 'signed-in',
@@ -84,5 +86,35 @@ describe('systemName', () => {
   it('leaves out the architecture', () => {
     expect(systemName('macOS 26.1 (arm64)')).toBe('macOS 26.1')
     expect(systemName('Ubuntu 24.04')).toBe('Ubuntu 24.04')
+  })
+})
+
+describe('settingsAttention', () => {
+  const ready = (dismissed: string | null): UpdateStatus => ({
+    state: { kind: 'ready', version: '0.1.0' },
+    mode: 'install',
+    readOnly: false,
+    current: '0.0.9',
+    updatedFrom: null,
+    dismissed,
+  })
+  const skipped = { kind: 'harness', skipped: true } as HarnessItem
+
+  it('marks an agent to sign in at any time', () => {
+    expect(settingsAttention({ signIn: 1, dot: false, status: null, items: [] })).toBe(true)
+  })
+
+  it('marks updates the card was closed on until Settings is opened', () => {
+    expect(settingsAttention({ signIn: 0, dot: true, status: ready('0.1.0'), items: [] })).toBe(
+      true,
+    )
+    expect(settingsAttention({ signIn: 0, dot: true, status: null, items: [skipped] })).toBe(true)
+    expect(settingsAttention({ signIn: 0, dot: false, status: ready('0.1.0'), items: [] })).toBe(
+      false,
+    )
+  })
+
+  it('drops the dot once nothing closed is left, as after the update installed', () => {
+    expect(settingsAttention({ signIn: 0, dot: true, status: ready(null), items: [] })).toBe(false)
   })
 })

@@ -639,13 +639,13 @@
   --attention-ring-shadow:
     0 0 0 var(--hairline) color-mix(in srgb, var(--attention-dot) 50%, transparent),
     0 0 0 4px color-mix(in srgb, var(--attention-dot) 9%, transparent), var(--elevation-float);
-  /* A selected row and the chosen segment, raised from what they sit on. */
   /* The sidebar's update card under the pointer, while its list is open, and after a failed
      update: red only on the edge. */
   --card-lift: var(--card-ring), 0 4px 14px -6px rgb(16 22 30 / 18%);
   --card-open: 0 0 0 1.5px var(--text-tertiary);
   --card-failed:
     0 0 0 var(--hairline) color-mix(in srgb, var(--danger) 28%, transparent), var(--elevation-card);
+  /* A selected row and the chosen segment, raised from what they sit on. */
   --raised-ring: 0 0 0 var(--hairline) var(--border-subtle), var(--elevation-raised);
   --segment-ring: var(--raised-ring);
   --thumb-shadow: var(--elevation-thumb);

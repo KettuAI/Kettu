@@ -35,29 +35,17 @@ async function run(agentId: AgentId): Promise<void> {
 const queue = new HarnessQueue({
   run,
   busy: (agentId) => runningSessions(agentId).length,
+  watch: (onChange) =>
+    useSessionsStore.subscribe((state, previous) => {
+      if (state.byId !== previous.byId) onChange()
+    }),
   changed: ({ waiting, queued }) =>
     useUpdatesStore.setState({ harnessWaiting: waiting, harnessQueued: queued }),
 })
 
-let unfollow: (() => void) | null = null
-
-/** Watches the sessions while an update waits for some to end. */
-function follow(): void {
-  if (unfollow || !queue.hasWaiting()) return
-  unfollow = useSessionsStore.subscribe((state, previous) => {
-    if (state.byId === previous.byId) return
-    queue.check()
-    if (!queue.hasWaiting()) {
-      unfollow?.()
-      unfollow = null
-    }
-  })
-}
-
 /** Updates harnesses one after another, each once its running sessions end. */
 export function updateHarnesses(agentIds: readonly AgentId[]): void {
   queue.request(agentIds)
-  follow()
 }
 
 /** Retries a failed update the way it ran. */
