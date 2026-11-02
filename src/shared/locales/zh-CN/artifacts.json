@@ -76,7 +76,6 @@
     "noPreview": "无预览",
     "more": "{{title}} 的更多操作",
     "when": "版本 {{version}} · {{time}}",
-    "opened": "{{time}}打开",
     "daysLeft_other": "{{project}} · 剩 {{count}} 天",
     "editing": "编辑中",
     "shared": "已在线分享"

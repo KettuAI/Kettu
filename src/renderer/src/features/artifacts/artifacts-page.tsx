@@ -229,9 +229,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   // The time the order goes by: when it was opened here or written, or when it was written.
   const timeOf = (artifact: ArtifactSummary): CardTime => {
     const opened = openedAt[artifact.id] ?? 0
-    return sort !== 'updated' && opened > artifact.updatedAt
-      ? { at: opened, opened: true }
-      : { at: artifact.updatedAt, opened: false }
+    return { at: sort !== 'updated' && opened > artifact.updatedAt ? opened : artifact.updatedAt }
   }
   // "Page", or "Canvas · 6 pages".
   const kindLine = (artifact: ArtifactSummary): string =>

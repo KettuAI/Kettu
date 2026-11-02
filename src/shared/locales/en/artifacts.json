@@ -77,7 +77,6 @@
     "noPreview": "No preview",
     "more": "More for {{title}}",
     "when": "Version {{version}} · {{time}}",
-    "opened": "Opened {{time}}",
     "daysLeft_one": "{{project}} · {{count}} day left",
     "daysLeft_other": "{{project}} · {{count}} days left",
     "editing": "Editing",

@@ -41,10 +41,9 @@ const FRAME =
 // What lies in Recently deleted shows faded.
 const FADED = 'opacity-72 grayscale-85'
 
-/** When the card says it was last seen: opened on this device, or its latest version. */
+/** The time the card shows: when it was opened on this device, or its latest version. */
 export interface CardTime {
   at: number
-  opened: boolean
 }
 
 /**
@@ -242,9 +241,7 @@ function EditingPill() {
 
 /** The caption's time, apart so only it follows the clock. */
 function Ago({ time }: { time: CardTime }) {
-  const { t } = useTranslation('artifacts')
-  const ago = longAgo(time.at, useNow())
-  return <span className="shrink-0">{time.opened ? t('card.opened', { time: ago }) : ago}</span>
+  return <span className="shrink-0">{longAgo(time.at, useNow())}</span>
 }
 
 /** In the tooltip only, so it reads the time as it opens. */
