@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { InfoIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { releaseUrl } from '@shared/updates'
@@ -20,6 +21,7 @@ import { openUpdateDialog, useUpdatesStore } from '@renderer/stores/updates'
  */
 export function UpdateDialog() {
   const { t, i18n } = useTranslation('updates')
+  const restartButton = useRef<HTMLButtonElement>(null)
   const open = useUpdatesStore((s) => s.dialogOpen)
   const state = useUpdatesStore((s) => s.status?.state ?? null)
   const ready = state?.kind === 'ready' ? state : null
@@ -38,7 +40,10 @@ export function UpdateDialog() {
 
   return (
     <AlertDialog open={open && !!ready} onOpenChange={(next) => openUpdateDialog(next)}>
-      <AlertDialogContent className="gap-0 px-5.5 pt-5 pb-4.5 data-[size=default]:sm:max-w-[420px]">
+      <AlertDialogContent
+        initialFocus={restartButton}
+        className="gap-0 px-5.5 pt-5 pb-4.5 data-[size=default]:sm:max-w-[420px]"
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>
             {t('dialog.title', { version: ready?.version ?? '' })}
@@ -67,7 +72,9 @@ export function UpdateDialog() {
             </a>
           )}
           <AlertDialogCancel variant="outline">{t('dialog.later')}</AlertDialogCancel>
-          <AlertDialogAction onClick={restart}>{t('dialog.restart')}</AlertDialogAction>
+          <AlertDialogAction ref={restartButton} onClick={restart}>
+            {t('dialog.restart')}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
