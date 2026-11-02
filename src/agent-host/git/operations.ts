@@ -128,14 +128,37 @@ export async function commitFiles(
     untracked.length > 0
       ? await run(exec, root, 'git', literal('add', '--', ...untracked), COMMIT_TIMEOUT_MS)
       : ''
-  const committed = await run(
-    exec,
-    root,
-    'git',
-    literal('commit', '-m', message, '--', ...paths),
-    COMMIT_TIMEOUT_MS,
-  )
+  let committed: string
+  try {
+    committed = await run(
+      exec,
+      root,
+      'git',
+      literal('commit', '-m', message, '--', ...paths),
+      COMMIT_TIMEOUT_MS,
+    )
+  } catch (error) {
+    if (untracked.length > 0) await untrackAgain(exec, root, untracked, error as Error)
+    throw error
+  }
   return [added, committed].filter(Boolean).join('\n')
+}
+
+// A failed commit, such as one a hook refused, leaves the files it added untracked again.
+// Dropping their index entries rather than resetting them to HEAD also restores a file that
+// `git rm --cached` had untracked; `--force` drops one a hook changed after it was added.
+async function untrackAgain(
+  exec: Exec,
+  root: string,
+  paths: string[],
+  failure: Error,
+): Promise<void> {
+  const args = literal('rm', '--cached', '--force', '--quiet', '--ignore-unmatch', '--', ...paths)
+  try {
+    await run(exec, root, 'git', args, COMMIT_TIMEOUT_MS)
+  } catch (error) {
+    throw new Error(`${failure.message}\n${(error as Error).message}`, { cause: error })
+  }
 }
 
 /** Puts `files` back as HEAD has them, from the repository root; new files are deleted. */

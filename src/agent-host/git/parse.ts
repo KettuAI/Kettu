@@ -351,12 +351,22 @@ export function withLineCounts(files: ChangedFile[], numstat: NumstatEntry[]): C
   })
 }
 
-/** Lists the changed files of `git status --porcelain=v2 -z`, in git's order. */
-export function parsePorcelainFiles(output: string): ChangedFile[] {
+export interface PorcelainFiles {
+  /** In git's order. */
+  files: ChangedFile[]
+  /** The paths of `files` that are submodules, whatever their status. */
+  submodules: Set<string>
+}
+
+/** Lists the changed files of `git status --porcelain=v2 -z`. */
+export function parsePorcelainFiles(output: string): PorcelainFiles {
   const records = output.split('\0')
   const files: ChangedFile[] = []
+  const submodules = new Set<string>()
   for (let i = 0; i < records.length; i++) {
     const record = records[i]!
+    // A 1, 2 or u record's <sub> field reads "S<c><m><u>" for a submodule, "N..." otherwise.
+    const submodule = record[5] === 'S'
     switch (record[0]) {
       case '1': {
         // 1 XY sub mH mI mW hH hI path
@@ -369,7 +379,10 @@ export function parsePorcelainFiles(output: string): ChangedFile[] {
             : xy.includes('T')
               ? 'typechange'
               : 'modified'
-        if (path) files.push({ path, oldPath: null, status, insertions: null, deletions: null })
+        if (path) {
+          files.push({ path, oldPath: null, status, insertions: null, deletions: null })
+          if (submodule) submodules.add(path)
+        }
         break
       }
       case '2': {
@@ -377,7 +390,10 @@ export function parsePorcelainFiles(output: string): ChangedFile[] {
         const path = fieldsAfter(record, 9)
         const oldPath = records[++i] ?? null
         const status = record[2] === 'C' || record[3] === 'C' ? 'copied' : 'renamed'
-        if (path) files.push({ path, oldPath, status, insertions: null, deletions: null })
+        if (path) {
+          files.push({ path, oldPath, status, insertions: null, deletions: null })
+          if (submodule) submodules.add(path)
+        }
         break
       }
       case 'u': {
@@ -391,6 +407,7 @@ export function parsePorcelainFiles(output: string): ChangedFile[] {
             insertions: null,
             deletions: null,
           })
+          if (submodule) submodules.add(path)
         }
         break
       }
@@ -407,7 +424,7 @@ export function parsePorcelainFiles(output: string): ChangedFile[] {
         break
     }
   }
-  return files
+  return { files, submodules }
 }
 
 // The rest of a record after `count` space-separated fields; a path may hold spaces.

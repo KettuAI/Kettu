@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, realpath, rm } from 'node:fs/promises'
+import { chmod, mkdir, readFile, realpath, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import type { GitServiceApi } from './api'
@@ -57,6 +57,14 @@ async function repoWith(...names: string[]): Promise<string> {
   for (const file of names) await s.write(work, file, `${file}\n`)
   await s.git(work, 'add', '--', ...names)
   await s.git(work, 'commit', '-m', 'chore: init')
+  return work
+}
+
+/** A repository with `sub` added as a submodule of another local repository, not committed. */
+async function repoWithSubmodule(): Promise<string> {
+  const lib = await repoWith('lib.txt')
+  const work = await repoWith('a.txt')
+  await s.git(work, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', lib, 'sub')
   return work
 }
 
@@ -372,6 +380,37 @@ describe('commitChanges', () => {
     const { svc } = createTestService(s, services)
     await expect(svc.commitChanges(work, 'chore: b', ['b.txt'])).rejects.toThrow(/Finish the merge/)
   })
+
+  it('refuses a submodule', async () => {
+    const work = await repoWithSubmodule()
+    await s.git(work, 'commit', '-q', '-m', 'chore: add sub')
+    const before = await s.git(work, 'rev-parse', 'HEAD')
+    await s.commit(join(work, 'sub'), 'lib.txt', 'chore: move sub', 'moved\n')
+    const { svc } = createTestService(s, services)
+    await expect(svc.commitChanges(work, 'chore: bump', ['sub'])).rejects.toThrow(
+      /sub is a repository of its own/,
+    )
+    expect(await s.git(work, 'rev-parse', 'HEAD')).toBe(before)
+  })
+
+  it('leaves new files untracked when the commit fails', async () => {
+    const work = await repoWith('a.txt')
+    const before = await s.git(work, 'rev-parse', 'HEAD')
+    await s.write(work, 'a.txt', 'a2\n')
+    await s.write(work, 'new.txt', 'new\n')
+    await s.write(
+      work,
+      '.git/hooks/pre-commit',
+      '#!/bin/sh\necho "lint failed in new.txt" >&2\nexit 1\n',
+    )
+    await chmod(join(work, '.git/hooks/pre-commit'), 0o755)
+    const { svc } = createTestService(s, services)
+    await expect(svc.commitChanges(work, 'chore: x', ['a.txt', 'new.txt'])).rejects.toThrow(
+      'lint failed in new.txt',
+    )
+    expect(await s.git(work, 'rev-parse', 'HEAD')).toBe(before)
+    expect(await porcelain(work)).toEqual([' M a.txt', '?? new.txt'])
+  })
 })
 
 describe('discardChanges', () => {
@@ -450,5 +489,18 @@ describe('discardChanges', () => {
     const { svc } = createTestService(s, services)
     await expect(svc.discardChanges(work, ['nested/'])).rejects.toThrow(/repository of its own/)
     expect(existsSync(join(nested, 'n.txt'))).toBe(true)
+  })
+
+  it('refuses a new submodule and leaves its working tree alone', async () => {
+    const work = await repoWithSubmodule()
+    await s.write(work, 'sub/lib.txt', 'edited\n')
+    await s.write(work, 'sub/notes.txt', 'mine\n')
+    const { svc } = createTestService(s, services)
+    await expect(svc.discardChanges(work, ['sub'])).rejects.toThrow(
+      /sub is a repository of its own/,
+    )
+    expect(await read(work, 'sub/lib.txt')).toBe('edited\n')
+    expect(await read(work, 'sub/notes.txt')).toBe('mine\n')
+    expect(await porcelain(work)).toEqual(['A  .gitmodules', 'AM sub'])
   })
 })

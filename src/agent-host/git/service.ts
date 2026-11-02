@@ -614,10 +614,15 @@ export function createGitService(
 
   /**
    * The current changes `paths` name, each by its path or by a rename's old path, as the host
-   * reads them now; refuses a path that names none, a conflicted file and a nested repository.
+   * reads them now; refuses a path that names none, a conflicted file, a nested repository and
+   * a submodule.
    */
   async function selectChanges(status: GitStatus, paths: string[]): Promise<ChangedFile[]> {
-    const changes = await readChanges(exec, status.projectPath, status.head.oid === null)
+    const { files: changes, submodules } = await readChanges(
+      exec,
+      status.projectPath,
+      status.head.oid === null,
+    )
     const byPath = new Map(changes.map((file) => [file.path, file]))
     const byOldPath = new Map(
       changes.flatMap((file) =>
@@ -629,8 +634,9 @@ export function createGitService(
       const file = byPath.get(path) ?? byOldPath.get(path)
       if (!file) throw new Error(t('git.notAChange', { path }))
       if (file.status === 'conflicted') throw new Error(t('git.conflicts'))
-      // git status lists a repository inside the working tree as its folder.
-      if (file.status === 'untracked' && file.path.endsWith('/')) {
+      // git status lists a repository inside the working tree as its folder. A submodule is one
+      // too: removing a new one's entry would delete its working tree, uncommitted work included.
+      if ((file.status === 'untracked' && file.path.endsWith('/')) || submodules.has(file.path)) {
         throw new Error(t('git.nestedRepository', { path: file.path }))
       }
       selected.add(file)
@@ -910,7 +916,7 @@ export function createGitService(
       const state = projectFor(projectPath)
       const status = await knownStatus(state)
       if (!status.repo) return []
-      return readChanges(exec, state.projectPath, status.head.oid === null)
+      return (await readChanges(exec, state.projectPath, status.head.oid === null)).files
     },
 
     async incoming(projectPath, from) {
