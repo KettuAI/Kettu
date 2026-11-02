@@ -797,7 +797,7 @@ export function useAdvancedSection(): SectionDef {
         name: t('advanced.dataFolder.name'),
         english: en('advanced.dataFolder.name'),
         description: t('advanced.dataFolder.description'),
-        rich: <DataFolderText text={t('advanced.dataFolder.description')} />,
+        rich: <DataFolderText />,
         group: data,
         render: () => <DataFolderActions />,
       },

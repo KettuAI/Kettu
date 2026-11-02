@@ -377,7 +377,7 @@
     },
     "diagnostics": {
       "name": "诊断信息",
-      "description": "包含近期 Agent 消息、日志和路径的文件，用于提交问题报告。其中可能含有代码和消息内容，请只分享给你信任的人。",
+      "description": "一个包含最近消息、日志和路径的文件，用于报告问题。分享前先检查一遍。",
       "keywords": "日志 问题 反馈 报告 logs bug report",
       "export": "导出诊断信息",
       "saved": "已保存到 {{path}}",
@@ -391,7 +391,7 @@
     },
     "removeSessions": {
       "name": "从 Kettu 中移除所有会话",
-      "description": "清空 Kettu 的会话列表。Agent 的对话记录会保留。",
+      "description": "清空列表。Agent 自己的对话记录会保留。",
       "keywords": "删除 清除 清空 delete clear",
       "button": "移除所有会话…",
       "dialogTitle_other": "从 Kettu 中移除全部 {{count}} 个会话？",

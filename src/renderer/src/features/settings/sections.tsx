@@ -1,13 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import {
-  BellIcon,
-  CheckIcon,
-  FileDownIcon,
-  GlobeIcon,
-  ListIcon,
-  MinusIcon,
-  PlusIcon,
-} from 'lucide-react'
+import { BellIcon, CheckIcon, GlobeIcon, MinusIcon, PlusIcon } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { originLabel } from '@shared/browser'
@@ -33,7 +25,7 @@ import {
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/components/ui/input-group'
+import { Input } from '@renderer/components/ui/input'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
@@ -54,13 +46,13 @@ import {
   CONFIRM,
   ControlError,
   CopyAction,
-  FIELD_LABEL,
   Masked,
   GROUP_ACTION,
   PathText,
   Pill,
-  RevealAction,
+  RevealButton,
   ROW_BUTTON,
+  ROW_FIELD,
   Segmented,
   SettingSelect,
   SettingSwitch,
@@ -743,6 +735,10 @@ export function TestNotification() {
 
 // ---- Advanced
 
+// A custom proxy's field, as a row of its own under Proxy.
+const PROXY_ROW =
+  'flex min-h-15.5 items-center gap-7 pl-8 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]'
+
 export function Proxy({ label }: { label: ReactNode }) {
   const { t } = useTranslation('settings')
   const proxy = useSettings().proxy
@@ -768,87 +764,71 @@ export function Proxy({ label }: { label: ReactNode }) {
     apply({ proxy: { mode: 'custom', url: trimmed, noProxy: noProxy.trim() } })
   }
 
+  const choose = (mode: 'environment' | 'custom') => {
+    if (mode === 'environment') {
+      setChoosing(false)
+      setInvalid(false)
+      if (proxy.mode !== 'environment') apply({ proxy: { mode: 'environment' } })
+    } else if (url.trim()) save()
+    else {
+      setChoosing(true)
+      requestAnimationFrame(() => urlInput.current?.focus())
+    }
+  }
+  const note = invalid ? 'advanced.proxy.invalid' : inUse ? null : 'advanced.proxy.environmentNote'
   return (
-    <div className="flex w-full flex-col gap-3">
+    <div className="flex w-full flex-col">
       <div className={BLOCK_LINE}>
         <div className="min-w-0 flex-1">{label}</div>
         <ControlError error={error} />
-        <SettingSelect
+        <Segmented
           label={t('advanced.proxy.name')}
           value={custom ? 'custom' : 'environment'}
           options={[
             { value: 'environment', label: t('advanced.proxy.useEnvironment') },
             { value: 'custom', label: t('advanced.proxy.custom') },
           ]}
-          onChange={(mode) => {
-            if (mode === 'environment') {
-              setChoosing(false)
-              setInvalid(false)
-              if (proxy.mode !== 'environment') apply({ proxy: { mode: 'environment' } })
-            } else if (url.trim()) save()
-            else {
-              setChoosing(true)
-              requestAnimationFrame(() => urlInput.current?.focus())
-            }
-          }}
+          onChange={choose}
         />
       </div>
       {custom && (
-        <div className="grid animate-in grid-cols-2 gap-x-3 gap-y-2.5 fade-in animation-duration-(--duration-base)">
-          <label className={FIELD_LABEL}>
-            {t('advanced.proxy.url')}
-            <InputGroup>
-              <InputGroupAddon>
-                <GlobeIcon className="size-3.5 text-icon" />
-              </InputGroupAddon>
-              <InputGroupInput
-                ref={urlInput}
-                value={url}
-                placeholder="http://proxy.example.com:8080"
-                spellCheck={false}
-                aria-invalid={invalid || undefined}
-                aria-describedby={noteId}
-                onChange={(e) => setUrl(e.target.value)}
-                onBlur={() => (url.trim() || proxy.mode === 'custom') && save()}
-                onKeyDown={(e) => e.key === 'Enter' && save()}
-                className="text-small font-normal md:text-small"
-              />
-            </InputGroup>
+        <div className="-mb-3.75 mt-3.75 flex animate-in flex-col fade-in animation-duration-(--duration-base)">
+          <label className={PROXY_ROW}>
+            <span className="flex-1 text-label">{t('advanced.proxy.url')}</span>
+            <Input
+              ref={urlInput}
+              value={url}
+              placeholder="http://proxy.example.com:8080"
+              spellCheck={false}
+              aria-invalid={invalid || undefined}
+              aria-describedby={noteId}
+              onChange={(e) => setUrl(e.target.value)}
+              onBlur={() => (url.trim() || proxy.mode === 'custom') && save()}
+              onKeyDown={(e) => e.key === 'Enter' && save()}
+              className={cn(ROW_FIELD, 'w-65 md:text-lede')}
+            />
           </label>
-          <label className={FIELD_LABEL}>
-            {t('advanced.proxy.noProxyFor')}
-            <InputGroup>
-              <InputGroupAddon>
-                <ListIcon className="size-3.5 text-icon" />
-              </InputGroupAddon>
-              <InputGroupInput
-                value={noProxy}
-                placeholder="localhost, 127.0.0.1, .internal"
-                spellCheck={false}
-                onChange={(e) => setNoProxy(e.target.value)}
-                onBlur={() => url.trim() && save()}
-                onKeyDown={(e) => e.key === 'Enter' && save()}
-                className="text-small font-normal md:text-small"
-              />
-            </InputGroup>
+          <label className={PROXY_ROW}>
+            <span className="flex-1 text-label">{t('advanced.proxy.noProxyFor')}</span>
+            <Input
+              value={noProxy}
+              placeholder="localhost, 127.0.0.1, .internal"
+              spellCheck={false}
+              onChange={(e) => setNoProxy(e.target.value)}
+              onBlur={() => url.trim() && save()}
+              onKeyDown={(e) => e.key === 'Enter' && save()}
+              className={cn(ROW_FIELD, 'w-65 md:text-lede')}
+            />
           </label>
-          <p
-            id={noteId}
-            role="status"
-            className={cn(
-              'col-span-2 flex items-center gap-1.5 text-xs',
-              invalid ? 'text-danger' : inUse ? 'text-success' : 'text-tertiary',
-            )}
-          >
-            {!invalid && inUse && <CheckIcon className="size-3.5 shrink-0" />}
-            {t(
-              invalid
-                ? 'advanced.proxy.invalid'
-                : inUse
-                  ? 'advanced.proxy.inUse'
-                  : 'advanced.proxy.environmentNote',
-            )}
-          </p>
+          {note && (
+            <p
+              id={noteId}
+              role="status"
+              className={cn('pb-3.75 pl-8 text-hint', invalid ? 'text-danger' : 'text-tertiary')}
+            >
+              {t(note)}
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -881,7 +861,7 @@ export function Diagnostics({ label }: { label: ReactNode }) {
         {label}
         {note &&
           ('error' in note ? (
-            <p role="alert" className="mt-1.5 text-xs text-danger">
+            <p role="alert" className="mt-1.5 text-hint text-danger">
               {note.error}
             </p>
           ) : (
@@ -896,11 +876,7 @@ export function Diagnostics({ label }: { label: ReactNode }) {
         aria-label={t('advanced.diagnostics.export')}
         onClick={() => void run()}
       >
-        {busy ? (
-          <Spinner data-icon="inline-start" className="size-3.5" />
-        ) : (
-          <FileDownIcon data-icon="inline-start" />
-        )}
+        {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
         {t('advanced.diagnostics.exportShort')}
       </Button>
     </div>
@@ -915,7 +891,7 @@ function SavedTo({ path }: { path: string }) {
   return (
     <div
       role="status"
-      className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-secondary"
+      className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-hint text-secondary"
     >
       <span className="flex max-w-full min-w-0 items-center whitespace-pre">
         {before}
@@ -940,16 +916,21 @@ function SavedTo({ path }: { path: string }) {
   )
 }
 
-/** The data folder's description, with the folder itself under it. */
-export function DataFolderText({ text }: { text: string }) {
+/** The data folder's line: the folder itself, in mono. */
+export function DataFolderText() {
   const path = useAppInfo()?.userDataPath
-  return (
-    <>
-      {text}
-      <span className="mt-0.5 flex">
-        {path ? <PathText path={path} /> : <Skeleton className="my-0.5 h-3.5 w-48" />}
-      </span>
-    </>
+  return path ? (
+    <span
+      title={path}
+      data-selectable=""
+      className="block truncate text-left font-mono text-code [direction:rtl]"
+    >
+      {'\u200E'}
+      {path}
+      {'\u200E'}
+    </span>
+  ) : (
+    <Skeleton className="my-0.5 h-3.5 w-48" />
   )
 }
 
@@ -958,10 +939,10 @@ export function DataFolderActions() {
   const path = useAppInfo()?.userDataPath
   if (!path) return null
   return (
-    <span className="flex items-center gap-0.5">
+    <>
+      <RevealButton path={path} outline />
       <CopyAction text={path} label={t('advanced.dataFolder.copy')} />
-      <RevealAction path={path} />
-    </span>
+    </>
   )
 }
 

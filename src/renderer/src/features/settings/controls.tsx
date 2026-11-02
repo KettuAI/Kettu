@@ -197,8 +197,8 @@ export function RevealAction({ path }: { path: string }) {
   )
 }
 
-/** Show in Finder as a row's quiet text button, where the path is the row's line. */
-export function RevealButton({ path }: { path: string }) {
+/** Show in Finder as a row's text button, quiet unless `outline`, where the path is the row's line. */
+export function RevealButton({ path, outline }: { path: string; outline?: boolean }) {
   const { t } = useTranslation('settings')
   const { hostId } = useHostScope()
   const [error, setError] = useState<string | null>(null)
@@ -207,8 +207,8 @@ export function RevealButton({ path }: { path: string }) {
     <>
       <ControlError error={error} />
       <Button
-        variant="ghost"
-        className={GROUP_ACTION}
+        variant={outline ? 'outline' : 'ghost'}
+        className={outline ? ROW_BUTTON : GROUP_ACTION}
         onClick={() => {
           setError(null)
           window.kettu.shell.showItem(path).catch((e: unknown) => setError(errorMessage(e)))

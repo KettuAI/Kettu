@@ -378,7 +378,7 @@
     },
     "diagnostics": {
       "name": "Diagnostics",
-      "description": "A file with recent agent messages, logs and paths, for a bug report. It can contain code and prompts, so share it only with people you trust.",
+      "description": "A file with recent messages, logs and paths for a bug report. Look through it before sharing.",
       "keywords": "logs bug report",
       "export": "Export diagnostics",
       "saved": "Saved to {{path}}",
@@ -392,7 +392,7 @@
     },
     "removeSessions": {
       "name": "Remove all sessions from Kettu",
-      "description": "Clears Kettu's session list. The agents' transcripts stay.",
+      "description": "Clears the list. Agents keep their own transcripts.",
       "keywords": "delete clear",
       "button": "Remove all sessions…",
       "dialogTitle_one": "Remove the only session from Kettu?",
