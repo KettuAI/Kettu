@@ -1,7 +1,8 @@
-import { agentColor, type AgentColor } from '@shared/settings'
+import type { AgentColor } from '@shared/settings'
 import { harnessOf, type AgentId } from '@shared/thread'
 import { cn } from '@renderer/lib/utils'
-import { useSettingsStore } from '@renderer/stores/settings'
+import { agentsOn, useAgentsStore } from '@renderer/stores/agents'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { AGENT_MARKS } from './marks'
 
 interface AgentMarkProps {
@@ -10,13 +11,23 @@ interface AgentMarkProps {
   /** One color, `currentColor`: an agent that is not installed. */
   mono?: boolean
   className?: string
-  /** The added agent's dot where its settings are another host's; this computer's otherwise. */
+  /** The host the agent is on, where the mark shows outside that host's scope, as a session's. */
+  hostId?: string | null
+  /** The dot to draw, in place of the one the agent's host reports; null for none. */
   dot?: AgentColor | null
 }
 
-/** The dot of an agent added on this computer; null for a harness's default agent. */
-function useAgentDot(agent: AgentId): AgentColor | null {
-  return useSettingsStore((s) => agentColor(s.settings.addedAgents, agent))
+/**
+ * The dot its host gives an added agent; none for a harness's default agent. Without a host, the
+ * one of the section showing the mark: this computer's unless Settings shows another host.
+ */
+function useAgentDot(agent: AgentId, hostId: string | null | undefined): AgentColor | null {
+  const { useAgentsStore: useScoped } = useHostScope()
+  const scoped = useScoped((s) => s.byId[agent]?.color ?? null)
+  const onHost = useAgentsStore((s) =>
+    hostId === undefined ? null : (agentsOn(s, hostId).byId[agent]?.color ?? null),
+  )
+  return hostId === undefined ? scoped : onHost
 }
 
 /**
@@ -37,9 +48,16 @@ function AgentDot({ color }: { color: AgentColor }) {
  * The mark of the agent's harness in its own colors, the only brand colors in the interface; the
  * agents of one harness share it, an added agent's with its dot.
  */
-export function AgentMark({ agent, size = 14, mono = false, className, dot }: AgentMarkProps) {
+export function AgentMark({
+  agent,
+  size = 14,
+  mono = false,
+  className,
+  hostId,
+  dot,
+}: AgentMarkProps) {
   const { viewBox, Body } = AGENT_MARKS[harnessOf(agent)]
-  const own = useAgentDot(agent)
+  const own = useAgentDot(agent, hostId)
   const color = dot === undefined ? own : dot
   const mark = (
     <svg
@@ -67,15 +85,17 @@ export function AgentTile({
   mono,
   size = 32,
   glyph = 17,
+  hostId,
   dot,
 }: {
   agent: AgentId
   mono?: boolean
   size?: number
   glyph?: number
+  hostId?: string | null
   dot?: AgentColor | null
 }) {
-  const own = useAgentDot(agent)
+  const own = useAgentDot(agent, hostId)
   const color = dot === undefined ? own : dot
   return (
     <span

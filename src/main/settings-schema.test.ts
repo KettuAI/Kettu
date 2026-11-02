@@ -633,7 +633,7 @@ describe('added agents', () => {
     expect(() => withAgentColor(added, 'claude-code~work', null)).toThrow(SettingsError)
   })
 
-  it('reads a stored color, and drops one it does not know without a problem', () => {
+  it("reads a stored color, and gives one it does not know its place's color without a problem", () => {
     const loaded = parseSettingsFile({
       version: 1,
       addedAgents: [
@@ -643,9 +643,28 @@ describe('added agents', () => {
     })
     expect(loaded.settings.addedAgents).toEqual([
       { ...work, color: 'green' },
-      { id: 'codex~e', name: 'E', configDir: '/srv/e', created: false },
+      { id: 'codex~e', name: 'E', configDir: '/srv/e', created: false, color: 'violet' },
     ])
     expect(loaded.problems).toEqual([])
+  })
+
+  it('keeps the colors agents from before colors showed once others change', () => {
+    const two = { id: 'codex~two', name: 'Two', configDir: '/srv/two', created: false }
+    const loaded = parseSettingsFile({ version: 1, addedAgents: [work, two] }).settings
+    const before = loaded.addedAgents.map((agent) => agent.color)
+    expect(before).toEqual(['teal', 'violet'])
+    const recolored = withAgentColor(loaded, 'claude-code~work', 'amber')
+    const third = withAddedAgent(recolored, {
+      id: 'codex~three',
+      name: 'Three',
+      configDir: '/srv/three',
+      created: true,
+    })
+    const removed = withoutAgent(third, 'claude-code~work')
+    expect(removed.addedAgents.map((agent) => [agent.id, agent.color])).toEqual([
+      ['codex~two', 'violet'],
+      ['codex~three', 'teal'],
+    ])
   })
 
   it('removes an added agent with the settings that name it', () => {
@@ -676,8 +695,8 @@ describe('added agents', () => {
       ],
     })
     expect(loaded.settings.addedAgents).toEqual([
-      work,
-      { id: 'codex~e', name: 'E', configDir: '/srv/e', created: false },
+      { ...work, color: 'teal' },
+      { id: 'codex~e', name: 'E', configDir: '/srv/e', created: false, color: 'violet' },
     ])
     expect(loaded.problems).toHaveLength(7)
     expect(parseSettingsFile({ version: 1, addedAgents: {} }).problems).toEqual([
