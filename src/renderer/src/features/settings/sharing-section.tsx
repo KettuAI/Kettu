@@ -50,7 +50,7 @@ import { hostPlatform } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
-import { CONFIRM, ControlError, FIELD_LABEL, Masked } from './controls'
+import { CONFIRM, ControlError, FIELD_LABEL, Masked, ROW_BUTTON } from './controls'
 import { RowLine, RowText } from './rows'
 
 type Failure = Extract<SharingResult, { failed: string }>
@@ -145,9 +145,9 @@ export function SharingAccount() {
           {t('sharing.account.connected')}
         </Badge>
         <Button
-          variant="quiet"
-          size="sm"
-          className="text-secondary"
+          variant="ghost"
+
+          className={cn(ROW_BUTTON, 'text-secondary')}
           disabled={busy}
           onClick={() => setAsking(true)}
         >
@@ -367,9 +367,9 @@ function ConnectForm({ focus }: { focus: boolean }) {
         )}
         <Button
           type="submit"
-          size="sm"
+
           disabled={!secret || checking || (accounts !== null && chosen === null)}
-          className="ml-auto min-w-26"
+          className={cn(ROW_BUTTON, 'ml-auto min-w-26')}
         >
           {checking && <Spinner data-icon="inline-start" className="size-3.5" />}
           {t(checking ? 'sharing.account.checking' : 'sharing.account.connect')}
@@ -434,9 +434,9 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
   )
   const button = (
     <Button
-      variant="quiet"
-      size="sm"
-      className="text-secondary"
+      variant="ghost"
+
+      className={cn(ROW_BUTTON, 'text-secondary')}
       disabled={busy || page.otherAccount}
       onClick={() => setAsking(true)}
     >

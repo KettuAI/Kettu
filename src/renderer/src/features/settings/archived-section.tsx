@@ -11,7 +11,8 @@ import { longAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { sessionTitle } from '@renderer/stores/sessions'
 import { RowLine, RowText } from './rows'
-import { ControlError } from './controls'
+import { ControlError, ROW_BUTTON } from './controls'
+import { cn } from '@renderer/lib/utils'
 
 export function ArchivedRow({ summary, where }: { summary: SessionSummary; where: string }) {
   const { t } = useTranslation('settings')
@@ -45,13 +46,16 @@ export function ArchivedRow({ summary, where }: { summary: SessionSummary; where
         }
       >
         <ControlError error={error} />
-        <Button variant="outline" size="sm" onClick={() => void restore()}>
+        <Button className={ROW_BUTTON} variant="outline" onClick={() => void restore()}>
           {t('archived.restore')}
         </Button>
         <Button
-          variant="quiet"
-          size="sm"
-          className="text-danger hover:bg-danger-tint hover:text-danger aria-expanded:bg-danger-tint aria-expanded:text-danger"
+          variant="ghost"
+
+          className={cn(
+            ROW_BUTTON,
+            'text-danger hover:bg-danger-tint hover:text-danger aria-expanded:bg-danger-tint aria-expanded:text-danger',
+          )}
           onClick={() => setDeleting(true)}
         >
           {t('archived.delete')}

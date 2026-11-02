@@ -20,6 +20,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus, SessionSummary } from '@shared/agent-host'
+import { originLabel } from '@shared/browser'
 import type { AgentId, HarnessId } from '@shared/thread'
 import {
   Empty,
@@ -87,7 +88,8 @@ import { environmentText } from './environment-text'
 import { AccountNote, AccountRow, SubscriptionState } from './account-section'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
 import {
-  AllowedSitesList,
+  AllowedSiteRow,
+  AllowedSitesState,
   BackgroundFetch,
   ClearBrowsingData,
   ColorMode,
@@ -115,6 +117,7 @@ import {
   TextSize,
   Zoom,
 } from './sections'
+import { useAllowedSites } from './allowed-sites'
 import { ThemeTiles } from './theme-section'
 import { ClearRecord, FromComputer, LogRow, SidebarEnd, SyncLogs } from './usage-section'
 import { BrowserNameField, ForgetHost, WebHostRow } from './web-host-section'
@@ -704,32 +707,58 @@ export function useGitSection(): SectionDef {
 export function useBrowserSection(): SectionDef {
   const { t } = useTranslation('settings')
   const en = english()
+  const { sites, error, busy, remove } = useAllowedSites()
+  const allowed = group('allowed-sites', t('browser.groups.allowedSites'), {
+    count: sites?.length,
+    note: (
+      <>
+        {error && <GroupNote>{error}</GroupNote>}
+        <GroupNote>{t('browser.allowedSites.note')}</GroupNote>
+      </>
+    ),
+  })
+  const rows: RowDef[] = [
+    {
+      id: 'clear-data',
+      name: t('browser.clearData.name'),
+      english: en('browser.clearData.name'),
+      description: t('browser.clearData.description'),
+      keywords: t('browser.clearData.keywords'),
+      group: group('site-data', t('browser.groups.siteData')),
+      render: () => <ClearBrowsingData />,
+    },
+    {
+      id: 'allowed-sites',
+      name: t('browser.allowedSites.name'),
+      english: en('browser.allowedSites.name'),
+      description: t('browser.allowedSites.description'),
+      keywords: t('browser.allowedSites.keywords'),
+      searchOnly: !!sites?.length,
+      group: allowed,
+      layout: 'custom',
+      render: () => <AllowedSitesState loading={sites === null && error === null} />,
+    },
+    ...(sites ?? []).map((site): RowDef => ({
+      id: `site-${site.origin}`,
+      name: originLabel(site.origin),
+      keywords: t('browser.allowedSites.keywords'),
+      group: allowed,
+      layout: 'custom',
+      render: () => (
+        <AllowedSiteRow
+          site={site}
+          busy={busy === site.origin}
+          onRemove={() => remove(site.origin)}
+        />
+      ),
+    })),
+  ]
   return {
     id: 'browser',
     title: t('sections.browser'),
     description: t('pages.browser'),
     icon: GlobeIcon,
-    rows: [
-      {
-        id: 'clear-data',
-        name: t('browser.clearData.name'),
-        english: en('browser.clearData.name'),
-        description: t('browser.clearData.description'),
-        keywords: t('browser.clearData.keywords'),
-        group: group('site-data', t('browser.groups.siteData')),
-        render: () => <ClearBrowsingData />,
-      },
-      {
-        id: 'allowed-sites',
-        name: t('browser.allowedSites.name'),
-        english: en('browser.allowedSites.name'),
-        description: t('browser.allowedSites.description'),
-        keywords: t('browser.allowedSites.keywords'),
-        group: group('allowed-sites', t('browser.groups.allowedSites')),
-        layout: 'block',
-        render: () => <AllowedSitesList />,
-      },
-    ],
+    rows,
   }
 }
 

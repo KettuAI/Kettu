@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CopyAction, PathText, RevealAction } from './controls'
+import { CopyAction, PathText, RevealAction, RevealButton } from './controls'
+import { RowFrame, RowText } from './rows'
 
 /** The fields of a place that Settings shows, on an agent's page and for its MCP servers' file. */
 export interface PlaceItem {
@@ -78,4 +79,56 @@ export function ConfigNote({ item }: { item: PlaceItem }) {
     ? t('agents.configFolder.chosen')
     : item.env && t('agents.setBy', { env: item.env })
   return note ? <span className="text-xs text-tertiary">{note}</span> : null
+}
+
+/**
+ * A place as a row: its name, then its path in mono and what set it, or that it is not there yet;
+ * Show in Finder at the end.
+ */
+export function PlaceRow({
+  name,
+  item,
+  note,
+  children,
+}: {
+  name: string
+  item: PlaceItem
+  note?: ReactNode
+  children?: ReactNode
+}) {
+  const { t } = useTranslation('settings')
+  const set = item.chosen
+    ? t('agents.chosenInKettu')
+    : item.env && t('agents.setByLine', { env: item.env })
+  const after = note ?? set
+  return (
+    <RowFrame
+      text={
+        <RowText
+          name={name}
+          description={
+            item.exists ? (
+              <span className="flex min-w-0 items-baseline gap-1">
+                <span
+                  title={item.path}
+                  data-selectable=""
+                  className="min-w-0 truncate font-mono text-code [direction:rtl]"
+                >
+                  {'\u200E'}
+                  {item.path}
+                  {'\u200E'}
+                </span>
+                {after && <span className="shrink-0">· {after}</span>}
+              </span>
+            ) : (
+              t('agents.notCreatedLine')
+            )
+          }
+        />
+      }
+    >
+      {children}
+      {item.exists && <RevealButton path={item.path} />}
+    </RowFrame>
+  )
 }

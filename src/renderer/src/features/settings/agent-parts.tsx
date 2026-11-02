@@ -4,7 +4,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { CheckIcon, CopyIcon, LogInIcon, SquareTerminalIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { AgentConfigItem, AgentStatus, AgentTask, PlanLimit } from '@shared/agent-host'
+import type { AgentStatus, AgentTask, PlanLimit } from '@shared/agent-host'
 import { useRefresh } from '@renderer/components/refresh'
 import { RefreshIcon } from '@renderer/components/refresh-icon'
 import { Button } from '@renderer/components/ui/button'
@@ -18,36 +18,32 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { limitsReadable, percent, useAction } from './agent-helpers'
-import { ControlError, CopyAction, IconAction } from './controls'
-import { ConfigNote, ConfigPath } from './places'
+import { ControlError, CopyAction, IconAction, ROW_BUTTON } from './controls'
 import { GroupLabel, Notice, RowFrame, RowGroup, RowShell, RowText } from './rows'
 
-/** Up to two current windows, each its label, a short bar, its percentage and the time left. */
-export function UsageMeters({ limits }: { limits: PlanLimit[] }) {
+/** The window nearest its limit as a list row's end: its label and percent over a 4 px bar. */
+export function ListMeter({ limits }: { limits: PlanLimit[] }) {
   const { t } = useTranslation(['settings', 'composer'])
-  const now = useNow()
-  return limits.slice(0, 2).map((limit) => {
-    const left = limit.resetsAt ? countdown(limit.resetsAt - now) : null
-    const level = limitLevel(limit)
-    return (
-      <span
-        key={limit.window}
-        className="inline-flex items-center gap-1.75 text-xs leading-4 text-tertiary tabular"
-      >
-        <span className="text-secondary">{limitLabel(limit)}</span>
-        <Progress
-          value={limit.usedPercent ?? 0}
-          tone={`limit-${level}`}
-          className="w-13"
-          aria-label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
-        />
-        <span className={cn('min-w-6.5', level !== 'ok' && 'font-medium', LIMIT_TEXT[level])}>
+  const limit = limits.reduce((most, next) =>
+    (next.usedPercent ?? 0) > (most.usedPercent ?? 0) ? next : most,
+  )
+  const level = limitLevel(limit)
+  return (
+    <span className="flex w-37.5 flex-col gap-1.25 tabular">
+      <span className="flex justify-between text-meta text-tertiary">
+        <span>{limitLabel(limit)}</span>
+        <span className={cn('text-primary', level !== 'ok' && LIMIT_TEXT[level])}>
           {percent(limit)}
         </span>
-        {left && <span title={t('agents.resetsIn', { time: left })}>{left}</span>}
       </span>
-    )
-  })
+      <Progress
+        value={limit.usedPercent ?? 0}
+        tone={`limit-${level}`}
+        className="h-1 w-full"
+        aria-label={t('composer:usage.limits.used', { limit: limitLabel(limit) })}
+      />
+    </span>
+  )
 }
 
 /** The small x at a notice's end that puts it away. */
@@ -90,7 +86,7 @@ export function SignInNotice({
       action={
         first?.command &&
         onTerminal && (
-          <Button size="sm" onClick={() => onTerminal(first.command!)}>
+          <Button className={ROW_BUTTON} onClick={() => onTerminal(first.command!)}>
             <SquareTerminalIcon data-icon="inline-start" />
             {t('session:signIn.inTerminal')}
           </Button>
@@ -116,8 +112,9 @@ export function SignInNotice({
                 {others.map((method) =>
                   method.type === 'terminal' && method.command ? (
                     <Button
+                      className={ROW_BUTTON}
                       key={method.id}
-                      size="sm"
+
                       variant="outline"
                       onClick={() => onTerminal?.(method.command!)}
                     >
@@ -125,8 +122,9 @@ export function SignInNotice({
                     </Button>
                   ) : (
                     <Button
+                      className={ROW_BUTTON}
                       key={method.id}
-                      size="sm"
+
                       variant={first ? 'outline' : 'default'}
                       disabled={busy}
                       title={method.description}
@@ -187,9 +185,9 @@ export function LogCopyButton({ task }: { task: AgentTask }) {
   const [copied, setCopied] = useState(false)
   return (
     <Button
-      variant="quiet"
-      size="sm"
-      className="text-secondary"
+      variant="ghost"
+
+      className={cn(ROW_BUTTON, 'text-secondary')}
       onClick={() => {
         const text = [`$ ${task.command}`, ...task.progress, task.error ?? ''].join('\n')
         void navigator.clipboard.writeText(text).then(() => {
@@ -290,14 +288,15 @@ export function UsageGroup({
           })}
         </RowGroup>
       ) : reading && status.capabilities.reports ? (
-        <p className="px-1 py-0.5 text-small text-tertiary">{t('agents.readingUsage')}</p>
+        <p className="py-1 text-group text-tertiary">{t('agents.readingUsage')}</p>
       ) : limitsReadable(status) && !running ? (
         <RowGroup>
           <RowFrame text={<RowText name={t('agents.planLimits')} />}>
             <ControlError error={error} />
             <Button
+              className={ROW_BUTTON}
               variant="outline"
-              size="sm"
+
               disabled={busy}
               onClick={() => act(() => request('agents.refreshLimits', { agentId: status.id }))}
             >
@@ -307,12 +306,12 @@ export function UsageGroup({
           </RowFrame>
         </RowGroup>
       ) : (
-        <p className="px-1 py-0.5 text-small text-tertiary">
+        <p className="py-1 text-group text-tertiary">
           {t('agents.usageNotReported', { name: status.name })}
         </p>
       )}
       {(error ?? refreshError) && status.limits.length > 0 && (
-        <p className="px-1 pt-1 text-xs text-danger">{error ?? refreshError}</p>
+        <p className="pt-2 text-hint text-danger">{error ?? refreshError}</p>
       )}
     </section>
   )
@@ -334,13 +333,16 @@ export function Fact({
       {children ? (
         // A mask's box reaches past the column, so its blur ends where the text above does.
         <span
-          className={cn('text-small has-data-[slot=masked]:-me-1.5', mono && 'font-mono text-code')}
+          className={cn(
+            'text-lede text-secondary has-data-[slot=masked]:-me-1.5',
+            mono && 'font-mono text-code text-tertiary',
+          )}
           data-selectable=""
         >
           {children}
         </span>
       ) : (
-        <span className="text-small text-tertiary">{t('agents.notReported')}</span>
+        <span className="text-lede text-tertiary">{t('agents.notReported')}</span>
       )}
     </RowFrame>
   )
@@ -368,20 +370,5 @@ export function ConfigFrame({
         {children}
       </div>
     </RowShell>
-  )
-}
-
-export function ConfigRow({ item, status }: { item: AgentConfigItem; status: AgentStatus }) {
-  const { t } = useTranslation('settings')
-  return (
-    <ConfigFrame
-      name={t(`agents.config.${item.id}`)}
-      description={
-        item.id === 'folder' ? t('agents.configFolder.description', { name: status.name }) : null
-      }
-    >
-      <ConfigPath item={item} />
-      <ConfigNote item={item} />
-    </ConfigFrame>
   )
 }

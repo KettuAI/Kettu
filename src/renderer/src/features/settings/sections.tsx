@@ -11,7 +11,6 @@ import {
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { originLabel } from '@shared/browser'
-import type { AllowedSites } from '@shared/ipc'
 import { LOCALES, LOCALE_NAMES, type LanguageSetting } from '@shared/locale'
 import {
   DEFAULT_SETTINGS,
@@ -65,6 +64,8 @@ import {
   SettingSelect,
   SettingSwitch,
 } from './controls'
+import type { AllowedSite } from './allowed-sites'
+import { DeviceTile } from './remote-parts'
 import { FlashMark, GroupNote } from './rows'
 import { useApply } from './use-apply'
 
@@ -454,15 +455,15 @@ export function ShellPicker() {
       </Badge>
       {shellPath && (
         <Button
-          variant="quiet"
-          size="sm"
-          className="text-secondary"
+          variant="ghost"
+
+          className={cn(ROW_BUTTON, 'text-secondary')}
           onClick={() => apply({ terminal: { shellPath: null } })}
         >
           {t('terminal.shell.reset')}
         </Button>
       )}
-      <Button variant="outline" size="sm" onClick={() => void choose()}>
+      <Button className={ROW_BUTTON} variant="outline" onClick={() => void choose()}>
         {t('terminal.shell.choose')}
       </Button>
     </div>
@@ -561,7 +562,7 @@ function ToolsPending() {
   return (
     <span className="flex items-center gap-2">
       <ControlError error={error} />
-      <Button variant="outline" size="compact" onClick={() => void loadGitTools()}>
+      <Button className={ROW_BUTTON} variant="outline" onClick={() => void loadGitTools()}>
         {t('actions.retry')}
       </Button>
     </span>
@@ -950,8 +951,9 @@ export function Diagnostics({ label }: { label: ReactNode }) {
           ))}
       </div>
       <Button
+        className={ROW_BUTTON}
         variant="outline"
-        size="sm"
+
         disabled={busy}
         aria-label={t('advanced.diagnostics.export')}
         onClick={() => void run()}
@@ -1045,7 +1047,12 @@ export function ClearBrowsingData() {
   return (
     <>
       <ControlError error={error} />
-      <Button variant="outline" size="sm" disabled={busy} onClick={() => setOpen(true)}>
+      <Button
+        variant="outline"
+        className={ROW_BUTTON}
+        disabled={busy}
+        onClick={() => setOpen(true)}
+      >
         {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
         {t('browser.clearData.button')}
       </Button>
@@ -1075,100 +1082,50 @@ export function ClearBrowsingData() {
   )
 }
 
-export function AllowedSitesList() {
-  const { t } = useTranslation(['settings', 'common'])
+/** A site in Always allowed: its address, the projects that allow it, and Remove. */
+export function AllowedSiteRow({
+  site,
+  busy,
+  onRemove,
+}: {
+  site: AllowedSite
+  busy: boolean
+  onRemove: () => void
+}) {
+  const { t } = useTranslation('settings')
   const projects = useProjectsStore((s) => s.projects)
-  const [sites, setSites] = useState<AllowedSites[] | null>(null)
-  const [busy, setBusy] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const names = site.projects.map(
+    (path) => projects.find((project) => project.path === path)?.name ?? basename(path),
+  )
+  return (
+    <div className="flex items-center gap-3.5 py-3.25">
+      <DeviceTile icon={<GlobeIcon className="size-4" />} />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-label leading-tight">{originLabel(site.origin)}</span>
+        <span className="truncate text-group text-tertiary">
+          {t('browser.allowedSites.in', { projects: names.join(', ') })}
+        </span>
+      </div>
+      <Button variant="ghost" className={ROW_BUTTON} disabled={busy} onClick={onRemove}>
+        {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
+        {t('browser.allowedSites.remove')}
+      </Button>
+    </div>
+  )
+}
 
-  useEffect(() => {
-    let cancelled = false
-    void window.kettu.browser
-      .allowedSites()
-      .then((list) => {
-        if (!cancelled) setSites(list)
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(errorMessage(e))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const remove = async (projectPath: string, origin: string) => {
-    const key = `${projectPath}\n${origin}`
-    setBusy(key)
-    setError(null)
-    try {
-      await window.kettu.browser.removeAllowedSite(projectPath, origin)
-      setSites(
-        (list) =>
-          list
-            ?.map((site) =>
-              site.projectPath === projectPath
-                ? { ...site, origins: site.origins.filter((known) => known !== origin) }
-                : site,
-            )
-            .filter((site) => site.origins.length > 0) ?? null,
-      )
-      toast(t('browser.allowedSites.removed', { origin: labelOf(origin) }))
-    } catch (e) {
-      setError(errorMessage(e))
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  if (sites === null && error === null) {
+/** In place of the sites while they are read, or when there are none. */
+export function AllowedSitesState({ loading }: { loading: boolean }) {
+  const { t } = useTranslation('settings')
+  if (loading) {
     return (
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 py-3.75">
         <Skeleton className="h-5 w-40" />
         <Skeleton className="h-5 w-32" />
       </div>
     )
   }
-  return (
-    <div className="flex flex-col gap-3">
-      <ControlError error={error} />
-      {sites && sites.length === 0 && (
-        <p className="text-ui text-tertiary">{t('browser.allowedSites.empty')}</p>
-      )}
-      {sites?.map((site) => (
-        <div key={site.projectPath} className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-tertiary">
-            {projects.find((project) => project.path === site.projectPath)?.name ??
-              basename(site.projectPath)}
-          </span>
-          {site.origins.map((origin) => {
-            const key = `${site.projectPath}\n${origin}`
-            return (
-              <div key={origin} className="flex items-center gap-2 py-0.5">
-                <span className="min-w-0 flex-1 truncate text-ui text-primary">
-                  {labelOf(origin)}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy !== null}
-                  onClick={() => void remove(site.projectPath, origin)}
-                >
-                  {busy === key && <Spinner data-icon="inline-start" className="size-3.5" />}
-                  {t('browser.allowedSites.remove')}
-                </Button>
-              </div>
-            )
-          })}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-/** An origin as the list shows it: its host and port, without the scheme. */
-function labelOf(origin: string): string {
-  return originLabel(origin)
+  return <p className="py-3.75 text-group text-tertiary">{t('browser.allowedSites.empty')}</p>
 }
 
 export function RemoveAll() {
@@ -1197,8 +1154,9 @@ export function RemoveAll() {
     <>
       <ControlError error={error} />
       <Button
+        className={ROW_BUTTON}
         variant="destructive-outline"
-        size="sm"
+
         disabled={count === 0 || busy}
         onClick={() => setOpen(true)}
       >

@@ -25,7 +25,7 @@ import { useHostContext } from '@renderer/lib/host-features'
 import { isWeb } from '@renderer/lib/platform'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useOtherHost } from '@renderer/stores/hosts'
-import { CONFIRM, ControlError } from './controls'
+import { CONFIRM, ControlError, ROW_BUTTON } from './controls'
 import { DIRECT_PORT_FIELD } from './remote-text'
 import { useApply } from './use-apply'
 
@@ -222,7 +222,12 @@ export function OwnAddresses({ text }: { text: ReactNode }) {
               setProblem(null)
             }}
           />
-          <Button type="submit" variant="outline" size="sm" disabled={draft.trim() === ''}>
+          <Button
+            className={ROW_BUTTON}
+            type="submit"
+            variant="outline"
+            disabled={draft.trim() === ''}
+          >
             {t('remote.direct.own.add')}
           </Button>
         </form>

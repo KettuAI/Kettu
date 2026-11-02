@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@renderer/components/ui/select'
 import { Badge } from '@renderer/components/ui/badge'
+import { Button } from '@renderer/components/ui/button'
 import { Switch } from '@renderer/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage } from '@renderer/lib/host'
@@ -192,6 +193,29 @@ export function RevealAction({ path }: { path: string }) {
       >
         <FolderIcon />
       </IconAction>
+    </>
+  )
+}
+
+/** Show in Finder as a row's quiet text button, where the path is the row's line. */
+export function RevealButton({ path }: { path: string }) {
+  const { t } = useTranslation('settings')
+  const { hostId } = useHostScope()
+  const [error, setError] = useState<string | null>(null)
+  if (isWeb || hostId !== null) return null
+  return (
+    <>
+      <ControlError error={error} />
+      <Button
+        variant="ghost"
+        className={GROUP_ACTION}
+        onClick={() => {
+          setError(null)
+          window.kettu.shell.showItem(path).catch((e: unknown) => setError(errorMessage(e)))
+        }}
+      >
+        {t('agents.showIn', { name: fileManagerName() })}
+      </Button>
     </>
   )
 }

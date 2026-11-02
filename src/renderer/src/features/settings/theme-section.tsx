@@ -427,7 +427,7 @@ function ThemeNotice({
         )}
         {low && <span>{t('appearance.theme.lowContrastNotice')}</span>}
         <span>
-          <Button variant="outline" size="compact" onClick={onDismiss}>
+          <Button className={ROW_BUTTON} variant="outline" onClick={onDismiss}>
             {t('appearance.theme.gotIt')}
           </Button>
         </span>
@@ -461,10 +461,10 @@ function LoadFailure({
           })}
         </span>
         <span className="flex flex-wrap gap-1.5">
-          <Button variant="outline" size="compact" onClick={onUseBuiltIn}>
+          <Button className={ROW_BUTTON} variant="outline" onClick={onUseBuiltIn}>
             {t('appearance.theme.useBuiltIn')}
           </Button>
-          <Button variant="outline" size="compact" onClick={onInstall}>
+          <Button className={ROW_BUTTON} variant="outline" onClick={onInstall}>
             {t('appearance.theme.install')}
           </Button>
         </span>

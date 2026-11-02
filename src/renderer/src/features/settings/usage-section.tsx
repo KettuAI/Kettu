@@ -32,6 +32,7 @@ import {
   ControlError,
   GROUP_ACTION,
   PathText,
+  ROW_BUTTON,
   SettingSelect,
   SettingSwitch,
 } from './controls'
@@ -73,8 +74,8 @@ export function SyncLogs() {
       )}
       <ControlError error={error} />
       <Button
-        variant="quiet"
-        size="sm"
+        variant="ghost"
+
         aria-busy={running}
         disabled={running}
         onClick={() => {
@@ -83,7 +84,7 @@ export function SyncLogs() {
             .run(() => request('usage.sync', undefined))
             .catch((e: unknown) => setError(errorMessage(e)))
         }}
-        className={GROUP_ACTION}
+        className={cn(ROW_BUTTON, GROUP_ACTION)}
       >
         <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
         {t('page.sync')}
@@ -170,9 +171,9 @@ export function LogRow({ agentId }: { agentId: AgentId }) {
         }
       >
         <Button
-          variant="quiet"
-          size="sm"
-          className="text-secondary"
+          variant="ghost"
+
+          className={cn(ROW_BUTTON, 'text-secondary')}
           disabled={!log.found || scanning}
           onClick={() => setOpen(true)}
         >
@@ -251,8 +252,9 @@ export function ClearRecord() {
     <>
       <ControlError error={error} />
       <Button
+        className={ROW_BUTTON}
         variant="destructive-outline"
-        size="sm"
+
         disabled={empty || busy}
         onClick={() => setOpen(true)}
       >

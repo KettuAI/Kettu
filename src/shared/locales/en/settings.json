@@ -338,7 +338,7 @@
   "browser": {
     "clearData": {
       "name": "Clear browsing data",
-      "description": "Cookies, site storage and cache of the browser in the side panel.",
+      "description": "Cookies, storage and cache for every site the browser has opened.",
       "keywords": "browser cookies cache storage site data privacy",
       "button": "Clear…",
       "dialogTitle": "Clear browsing data?",
@@ -348,7 +348,8 @@
     },
     "groups": {
       "siteData": "Site data",
-      "allowedSites": "Allowed sites"
+      "allowedSites": "Always allowed",
+      "links": "Links from agents"
     },
     "allowedSites": {
       "name": "Always allowed sites",
@@ -356,7 +357,9 @@
       "keywords": "browser sites origins allow always permissions",
       "empty": "No site is always allowed yet.",
       "remove": "Remove",
-      "removed": "Removed {{origin}}"
+      "removed": "Removed {{origin}}",
+      "in": "Allowed in {{projects}}",
+      "note": "Agents open these without asking. A site is added here when you choose “Always for this project” on its card."
     }
   },
   "advanced": {
@@ -436,8 +439,6 @@
       "list": "On this computer",
       "list_web": "On {{host}}"
     },
-    "search": "Search agents",
-    "noMatch": "No matching agents",
     "plan": "Plan",
     "loginMethod": "Login method",
     "email": "Email",
@@ -451,7 +452,6 @@
       "instructions": "Instructions file"
     },
     "configFolder": {
-      "description": "Where {{name}} keeps its sign-in, settings and history.",
       "chosen": "Chosen in Kettu"
     },
     "setBy": "Set by {{env}}",
@@ -461,7 +461,7 @@
     "advanced": "Advanced",
     "readingAccount": "Reading the account…",
     "readingUsage": "Reading plan usage…",
-    "noUsage": "No plan usage reported",
+    "noUsage": "No plan usage",
     "usageOnceRunning": "Plan usage shows once it runs",
     "hidden": "Hidden",
     "revealAccount": "Click to show",
@@ -537,13 +537,10 @@
     "hiddenTag": "Hidden",
     "footerBefore": "To use another program, install it in ",
     "footerAfter": ".",
-    "onHarness": "On {{harness}}",
+    "onHarness": "on {{harness}}",
     "openHarness": "Open {{harness}} in Harnesses",
     "openHarnessButton": "Open",
     "harness": "Harness",
-    "folderDefault": "{{name}}'s own folder, shared with the {{name}} you run in a terminal.",
-    "folderOwn": "This agent's own folder, which keeps its sign-in, settings and history.",
-    "folderCreated": "Made by Kettu for this agent; it keeps its sign-in, settings and history.",
     "signInRow": "Sign-in",
     "signInRowHint": "The harness signs in itself, in a terminal; Kettu never sees the credentials.",
     "signInAgain": "Sign in again in terminal",
@@ -553,13 +550,14 @@
     },
     "remove": {
       "name": "Delete agent",
-      "description": "Its sessions stay, but cannot continue.",
+      "description": "Its sessions stay, but can’t continue.",
       "button": "Delete",
       "title": "Delete {{name}}?",
       "body": "Its sessions stay in the list and say the agent was deleted; they cannot continue.",
       "trash": "Move its folder to the trash",
       "trashHint": "Kettu made the folder; it holds the agent's sign-in and the harness's own session records.",
-      "keepsFolder": "You picked its folder, so it stays as it is."
+      "keepsFolder": "You picked its folder, so it stays as it is.",
+      "buttonEllipsis": "Delete…"
     },
     "rename": {
       "button": "Rename",
@@ -581,19 +579,19 @@
       "folderNew": "A new folder",
       "folderNewHint": "Kettu makes it in its data folder; sign in once the agent is added.",
       "folderExisting": "A folder you already use",
-      "folderExistingHint": "A folder {{variable}} pointed at in a terminal; its sign-in and settings carry over.",
+      "folderExistingHint": "Choose one to share its settings and sign-in.",
       "choose": "Choose…",
-      "login": "Sign-in",
-      "loginTerminal": "Sign in in a terminal",
-      "loginTerminalHint": "With a subscription or a console account, as the harness asks.",
-      "loginKey": "API key",
-      "loginKeyHint": "Your own key, for Anthropic or a gateway that speaks its API.",
+      "login": "Sign in",
+      "loginTerminal": "In a terminal",
+      "loginTerminalHint": "{{name}} signs in itself, with your plan.",
+      "loginKey": "With an API key",
+      "loginKeyHint": "Your own key and provider.",
       "loginKeyHintOpenAi": "An OpenAI API key.",
       "submit": "Add agent"
     },
     "key": {
       "row": "API key",
-      "set": "Set; {{name}} keeps it, Kettu has no copy.",
+      "set": "Set. {{name}} keeps it in its own configuration folder.",
       "notSet": "Your own key and provider, in place of a sign-in.",
       "notSetOpenAi": "An OpenAI API key, in place of a sign-in.",
       "setButton": "Set…",
@@ -608,8 +606,16 @@
       "model": "Model",
       "modelPlaceholder": "Optional; {{name}}'s default when empty",
       "noteClaude": "Claude Code keeps the key in the settings.json of this agent's folder; Kettu keeps no copy and never reads it back. {{command}} in a terminal with this folder uses it too.",
-      "noteCodex": "Codex keeps the key through its own codex login; Kettu keeps no copy. For another provider, set it up in this folder's config.toml."
-    }
+      "noteCodex": "Codex keeps the key through its own codex login; Kettu keeps no copy. For another provider, set it up in this folder's config.toml.",
+      "baseUrlOptional": "Base URL (optional)",
+      "modelOptional": "Model (optional)"
+    },
+    "needsSignInLine": "needs you to sign in",
+    "signInPill": "Sign in",
+    "notCreatedLine": "Not created yet.",
+    "createdByKettu": "created by Kettu",
+    "chosenInKettu": "chosen in Kettu",
+    "setByLine": "set by {{env}}"
   },
   "about": {
     "version": {
@@ -689,7 +695,7 @@
     "sharing": "Publish artifacts to links anyone can open, through your own Cloudflare account.",
     "remote": "Use this computer's sessions in Kettu on an iPhone, an iPad or another computer; everything stays on this computer.",
     "remote_web": "Use {{host}}'s sessions in Kettu on an iPhone, an iPad or another computer; everything stays on {{host}}.",
-    "browser": "The browser in the side panel keeps one profile for every session: sign-ins, site data and cache.",
+    "browser": "The browser in the side panel keeps one profile for every session, so you sign in to a site once.",
     "mcp": "Agents reach tools through these MCP servers. Kettu's own is here, and where each agent keeps its own.",
     "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Install and update them here; accounts are in Agents.",
     "hosts": "Other computers running Kettu that this one connects to. Their sessions show up in your sidebar.",

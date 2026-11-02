@@ -15,7 +15,7 @@ import { useHostScope } from '@renderer/stores/host-scope'
 import { openSettingsItem } from '@renderer/stores/view'
 import { ConfigNote, ConfigPath } from './places'
 import { GroupLabel, ItemPageHeader, ItemRow, Notice, RowGroup, RowShell, RowText } from './rows'
-import { SettingSwitch } from './controls'
+import { ROW_BUTTON, SettingSwitch } from './controls'
 import { useApply } from './use-apply'
 
 /** Both groups wait for the first status this long, then show what comes, or a skeleton. */
@@ -177,7 +177,8 @@ export function FailedRead({ error }: { error: string }) {
       title={t('mcp.error.title')}
       action={
         <Button
-          size="sm"
+          className={ROW_BUTTON}
+
           variant="outline"
           disabled={busy}
           onClick={() => {
@@ -272,7 +273,8 @@ function NotRunning({ server }: { server: McpStatus['servers'][number] }) {
       title={t('mcp.server.notRunning.title')}
       action={
         <Button
-          size="sm"
+          className={ROW_BUTTON}
+
           variant="outline"
           disabled={busy}
           onClick={() => {

@@ -337,7 +337,7 @@
   "browser": {
     "clearData": {
       "name": "清除浏览数据",
-      "description": "侧边面板中浏览器的 Cookie、网站存储和缓存。",
+      "description": "浏览器打开过的每个网站的 Cookie、存储和缓存。",
       "keywords": "browser cookies cache storage site data privacy 浏览器 Cookie 缓存 数据",
       "button": "清除…",
       "dialogTitle": "清除浏览数据？",
@@ -347,7 +347,8 @@
     },
     "groups": {
       "siteData": "站点数据",
-      "allowedSites": "允许的站点"
+      "allowedSites": "始终允许",
+      "links": "来自 Agent 的链接"
     },
     "allowedSites": {
       "name": "始终允许的站点",
@@ -355,7 +356,9 @@
       "keywords": "浏览器 站点 来源 允许 始终 权限 browser sites origins allow always permissions",
       "empty": "尚未有始终允许的站点。",
       "remove": "移除",
-      "removed": "已移除 {{origin}}"
+      "removed": "已移除 {{origin}}",
+      "in": "在 {{projects}} 中允许",
+      "note": "Agent 无需询问即可打开这些站点。在站点卡片上选择“此项目始终允许”时，站点会添加到这里。"
     }
   },
   "advanced": {
@@ -434,8 +437,6 @@
       "list": "这台电脑上的",
       "list_web": "{{host}} 上的"
     },
-    "search": "搜索 Agent",
-    "noMatch": "没有匹配的 Agent",
     "plan": "套餐",
     "loginMethod": "登录方式",
     "email": "邮箱",
@@ -449,7 +450,6 @@
       "instructions": "指令文件"
     },
     "configFolder": {
-      "description": "{{name}} 存放登录信息、设置和历史记录的位置。",
       "chosen": "在 Kettu 中选定"
     },
     "setBy": "由 {{env}} 指定",
@@ -459,7 +459,7 @@
     "advanced": "高级",
     "readingAccount": "正在读取账号…",
     "readingUsage": "正在读取套餐用量…",
-    "noUsage": "不提供套餐用量",
+    "noUsage": "无套餐用量",
     "usageOnceRunning": "运行后显示套餐用量",
     "hidden": "已隐藏",
     "revealAccount": "点击显示",
@@ -534,13 +534,10 @@
     "hiddenTag": "已隐藏",
     "footerBefore": "要用别的程序，先到 ",
     "footerAfter": " 里安装。",
-    "onHarness": "用 {{harness}}",
+    "onHarness": "运行于 {{harness}}",
     "openHarness": "到 Harness 里打开 {{harness}}",
     "openHarnessButton": "打开",
     "harness": "Harness",
-    "folderDefault": "{{name}} 自己的目录，和终端里运行的 {{name}} 共用。",
-    "folderOwn": "这个 Agent 自己的目录，放着它的登录、设置和历史。",
-    "folderCreated": "Kettu 为这个 Agent 新建的目录，放着它的登录、设置和历史。",
     "signInRow": "登录",
     "signInRowHint": "由 Harness 自己在终端里登录，Kettu 不经手凭据。",
     "signInAgain": "在终端中重新登录",
@@ -556,7 +553,8 @@
       "body": "它的会话仍留在列表里，标明 Agent 已删除，不能再继续。",
       "trash": "把它的配置目录移到废纸篓",
       "trashHint": "这个目录是 Kettu 新建的，里面有它的登录凭据和 Harness 的会话记录。",
-      "keepsFolder": "它的配置目录是你选的，原样保留。"
+      "keepsFolder": "它的配置目录是你选的，原样保留。",
+      "buttonEllipsis": "删除…"
     },
     "rename": {
       "button": "改名",
@@ -577,19 +575,19 @@
       "folderNew": "新建一个",
       "folderNewHint": "Kettu 在自己的数据目录里新建，加好后登录。",
       "folderExisting": "用已有的",
-      "folderExistingHint": "终端里 {{variable}} 指过的目录，里面的登录和设置照用。",
+      "folderExistingHint": "选择一个，与它共用设置和登录。",
       "choose": "选择…",
-      "login": "登录",
-      "loginTerminal": "在终端中登录",
-      "loginTerminalHint": "按 Harness 自己的方式，用订阅或控制台账号登录。",
-      "loginKey": "API key",
-      "loginKeyHint": "你自己的 key，用 Anthropic 官方或兼容它的网关。",
+      "login": "登录方式",
+      "loginTerminal": "在终端中",
+      "loginTerminalHint": "{{name}} 自己登录，使用你的套餐。",
+      "loginKey": "使用 API key",
+      "loginKeyHint": "你自己的 key 和服务商。",
       "loginKeyHintOpenAi": "OpenAI 的 API key。",
       "submit": "添加 Agent"
     },
     "key": {
       "row": "API key",
-      "set": "已设置，由 {{name}} 保存，Kettu 不留副本。",
+      "set": "已设置，{{name}} 把它保存在自己的配置文件夹里。",
       "notSet": "用你自己的 key 和服务商，代替登录。",
       "notSetOpenAi": "用 OpenAI 的 API key 代替登录。",
       "setButton": "设置…",
@@ -604,8 +602,16 @@
       "model": "模型",
       "modelPlaceholder": "可选，留空用 {{name}} 的默认",
       "noteClaude": "key 交给 Claude Code，存进这个 Agent 配置目录里的 settings.json；Kettu 不留副本，也不读回。终端里用这个目录运行 {{command}} 也能用。",
-      "noteCodex": "key 经 Codex 自己的 codex login 保存；Kettu 不留副本。要接别的服务商，在这个目录的 config.toml 里自己配。"
-    }
+      "noteCodex": "key 经 Codex 自己的 codex login 保存；Kettu 不留副本。要接别的服务商，在这个目录的 config.toml 里自己配。",
+      "baseUrlOptional": "Base URL（可选）",
+      "modelOptional": "模型（可选）"
+    },
+    "needsSignInLine": "需要你登录",
+    "signInPill": "登录",
+    "notCreatedLine": "尚未创建。",
+    "createdByKettu": "由 Kettu 创建",
+    "chosenInKettu": "在 Kettu 中选定",
+    "setByLine": "由 {{env}} 设定"
   },
   "about": {
     "version": {
@@ -685,7 +691,7 @@
     "sharing": "通过你自己的 Cloudflare 账号，把 artifact 发布为任何人都能打开的链接。",
     "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑上的会话，东西都留在这台电脑上。",
     "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 上的会话，东西都留在 {{host}} 上。",
-    "browser": "侧边面板里的浏览器让所有会话共用一个配置：登录状态、网站数据和缓存都在这里。",
+    "browser": "侧边面板里的浏览器为所有会话保留同一个配置，网站只需登录一次。",
     "mcp": "Agent 通过这些 MCP 服务器使用工具。这里有 Kettu 自带的服务器，以及各 Agent 自己的服务器所在的位置。",
     "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。在这里安装和更新；账号在 Agent 里。",
     "hosts": "这台电脑连接的、运行 Kettu 的其他电脑。它们的会话会显示在侧边栏中。",

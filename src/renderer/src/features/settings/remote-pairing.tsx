@@ -37,7 +37,7 @@ import { useHostContext } from '@renderer/lib/host-features'
 import { useSeconds } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
-import { Segmented, SettingSelect } from './controls'
+import { ROW_BUTTON, Segmented, SettingSelect } from './controls'
 import { closeRequest } from './pair-close'
 import { browserLinks } from './pair-links'
 import { QrCode } from './qr-code'
@@ -348,8 +348,9 @@ function LinkBox({ link, disabled }: { link: string | null; disabled: boolean })
         {link ?? ' '}
       </code>
       <Button
+        className={ROW_BUTTON}
         variant="outline"
-        size="xs"
+
         disabled={disabled || !link}
         onClick={() => {
           if (!link) return

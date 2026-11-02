@@ -34,7 +34,7 @@ import { useNow } from '@renderer/lib/use-now'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { openSettingsItem } from '@renderer/stores/view'
 import { useWebHostStore } from '@renderer/stores/web-host'
-import { CONFIRM, ControlError, SettingSwitch } from './controls'
+import { CONFIRM, ControlError, ROW_BUTTON, SettingSwitch } from './controls'
 import { PairDialog } from './remote-pairing'
 import { DeviceIcon, DeviceTile, OnlineDot } from './remote-parts'
 import { daysToRemoval, daysUnseen, deviceLine, focusDirectPort, lastSeen } from './remote-text'
@@ -170,12 +170,13 @@ function RetryDirect() {
   return (
     <>
       <ControlError error={error} />
-      <Button variant="outline" size="sm" onClick={focusDirectPort}>
+      <Button className={ROW_BUTTON} variant="outline" onClick={focusDirectPort}>
         {t('remote.status.changePort')}
       </Button>
       <Button
+        className={ROW_BUTTON}
         variant="outline"
-        size="sm"
+
         aria-busy={refresh.phase === 'turning'}
         disabled={refresh.phase === 'turning'}
         onClick={() => {
@@ -336,7 +337,7 @@ export function NoDevices() {
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+          <Button className={ROW_BUTTON} variant="outline" onClick={() => setOpen(true)}>
             <PlusIcon data-icon="inline-start" />
             {t('remote.devices.add')}
           </Button>
@@ -431,8 +432,9 @@ export function ResetRemote() {
     <>
       <ControlError error={open ? null : error} />
       <Button
+        className={ROW_BUTTON}
         variant="destructive-outline"
-        size="sm"
+
         disabled={!on || busy}
         onClick={() => setOpen(true)}
       >

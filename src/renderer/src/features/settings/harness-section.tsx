@@ -66,7 +66,7 @@ import { useHostScope } from '@renderer/stores/host-scope'
 import { openAgentSettings, openHarnessSettings } from '@renderer/stores/view'
 import { ConfigFrame, DismissButton, Fact, Log, LogCopyButton, TaskLog } from './agent-parts'
 import { harnessVersion, useAction, VENDORS } from './agent-helpers'
-import { ControlError, CopyAction, GROUP_ACTION } from './controls'
+import { ControlError, CopyAction, GROUP_ACTION, ROW_BUTTON } from './controls'
 import { PathActions, PathLine } from './places'
 import {
   FlashMark,
@@ -532,12 +532,12 @@ export function HarnessGroupActions() {
       {meta && <span className="mr-1 text-tertiary">{meta}</span>}
       {checkable && (
         <Button
-          variant="quiet"
-          size="sm"
+          variant="ghost"
+
           aria-busy={refresh.phase === 'turning'}
           disabled={refresh.phase === 'turning'}
           onClick={() => void refresh.run(() => checkForUpdates(useAgentsStore)).catch(() => {})}
-          className={GROUP_ACTION}
+          className={cn(ROW_BUTTON, GROUP_ACTION)}
         >
           <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
           {t('agents.update.check')}
@@ -669,8 +669,9 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
                       }
                     >
                       <Button
+                        className={ROW_BUTTON}
                         variant="outline"
-                        size="compact"
+
                         disabled={busy || r.kind === 'installing' || r.kind === 'starting'}
                         onClick={() =>
                           act(() => request('agents.reinstall', { agentId: status.harnessId }))
@@ -763,9 +764,9 @@ function VersionGroup({ status }: { status: AgentStatus }) {
         >
           {checks && (
             <Button
-              variant="quiet"
-              size="sm"
-              className="text-secondary"
+              variant="ghost"
+
+              className={cn(ROW_BUTTON, 'text-secondary')}
               aria-busy={refresh.phase === 'turning'}
               disabled={refresh.phase === 'turning' || updating}
               onClick={() =>
@@ -810,7 +811,11 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
               })
         }
         action={
-          <Button variant="outline" size="sm" onClick={() => cancelTask(useAgentsStore, harness)}>
+          <Button
+            className={ROW_BUTTON}
+            variant="outline"
+            onClick={() => cancelTask(useAgentsStore, harness)}
+          >
             {t(updating ? 'agents.update.cancel' : 'agents.install.cancel')}
           </Button>
         }
@@ -843,7 +848,7 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
         icon={outdated ? <TriangleAlertIcon /> : <CircleArrowUpIcon />}
         title={t('agents.update.noticeTitle', { name, version: cliUpdate.version })}
         action={
-          <Button size="sm" onClick={() => startCliUpdate(useAgentsStore, harness)}>
+          <Button className={ROW_BUTTON} onClick={() => startCliUpdate(useAgentsStore, harness)}>
             {t('harnesses.updateTo', { version: cliUpdate.version })}
           </Button>
         }
@@ -876,7 +881,7 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
               : t('agents.update.noticeTitleAdapter', { name })
         }
         action={
-          <Button size="sm" onClick={() => startUpdate(useAgentsStore, harness)}>
+          <Button className={ROW_BUTTON} onClick={() => startUpdate(useAgentsStore, harness)}>
             {t('agents.update.button')}
           </Button>
         }
@@ -931,8 +936,9 @@ function FailedTaskNotice({ status, task }: { status: AgentStatus; task: AgentTa
           <TaskLog task={task} />
           <span className="flex flex-wrap gap-1.5">
             <Button
+              className={ROW_BUTTON}
               variant="outline"
-              size="sm"
+
               onClick={() => retryTask(useAgentsStore, status.harnessId, task)}
             >
               <RotateCwIcon data-icon="inline-start" />
@@ -967,8 +973,9 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: 'program' 
         action={
           (task || status.package) && (
             <Button
+              className={ROW_BUTTON}
               variant="outline"
-              size="sm"
+
               onClick={() => cancelTask(useAgentsStore, status.harnessId)}
             >
               {t('agents.install.cancel')}
@@ -991,7 +998,10 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: 'program' 
         icon={<DownloadIcon />}
         title={t('agents.install.title', { name })}
         action={
-          <Button size="sm" onClick={() => startInstall(useAgentsStore, status.harnessId)}>
+          <Button
+            className={ROW_BUTTON}
+            onClick={() => startInstall(useAgentsStore, status.harnessId)}
+          >
             {t('agents.install.button')}
           </Button>
         }
@@ -1006,7 +1016,7 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: 'program' 
       icon={<DownloadIcon />}
       title={t('agents.install.title', { name })}
       action={
-        <Button size="sm" onClick={() => setOpen(true)}>
+        <Button className={ROW_BUTTON} onClick={() => setOpen(true)}>
           {t('harnesses.install.open')}
         </Button>
       }
@@ -1014,9 +1024,9 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: 'program' 
         status.binaryCommand && (
           <span>
             <Button
-              variant="quiet"
-              size="sm"
-              className="-ml-2 text-secondary"
+              variant="ghost"
+
+              className={cn(ROW_BUTTON, '-ml-2 text-secondary')}
               onClick={() =>
                 void api.dialogs
                   .chooseAgentBinary(status.harnessId)
@@ -1081,9 +1091,9 @@ function ProgramGroup({ status }: { status: AgentStatus }) {
                 <ControlError error={error} />
                 {override && (
                   <Button
-                    variant="quiet"
-                    size="sm"
-                    className="text-secondary"
+                    variant="ghost"
+
+                    className={cn(ROW_BUTTON, 'text-secondary')}
                     onClick={() =>
                       act(() =>
                         useSettingsStore
@@ -1096,8 +1106,9 @@ function ProgramGroup({ status }: { status: AgentStatus }) {
                   </Button>
                 )}
                 <Button
+                  className={ROW_BUTTON}
                   variant="outline"
-                  size="sm"
+
                   onClick={() => act(() => api.dialogs.chooseAgentBinary(status.harnessId))}
                 >
                   {t('agents.chooseBinary')}
@@ -1159,7 +1170,8 @@ function PackageGroup({ status }: { status: AgentStatus }) {
         >
           {status.update && (
             <Button
-              size="sm"
+              className={ROW_BUTTON}
+
               variant="outline"
               onClick={() => startUpdate(useAgentsStore, status.harnessId)}
             >
@@ -1200,7 +1212,7 @@ function AgentsGroup({ status }: { status: AgentStatus }) {
             />
           }
         >
-          <Button variant="outline" size="sm" onClick={() => openAgentSettings(null)}>
+          <Button className={ROW_BUTTON} variant="outline" onClick={() => openAgentSettings(null)}>
             {t('harnesses.manageAgents')}
           </Button>
         </RowFrame>
@@ -1277,8 +1289,9 @@ export function EnvironmentFooter() {
         )}
         <span className="min-w-0 flex-1">{text}</span>
         <Button
+          className={ROW_BUTTON}
           variant="outline"
-          size="sm"
+
           aria-busy={refresh.phase === 'turning'}
           disabled={refresh.phase === 'turning'}
           onClick={() => {

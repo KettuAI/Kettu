@@ -18,7 +18,7 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { checkForUpdates, useUpdatesStore } from '@renderer/stores/updates'
-import { ControlError, SettingSelect } from './controls'
+import { ControlError, ROW_BUTTON, SettingSelect } from './controls'
 import { useApply } from './use-apply'
 
 /** The top of the About page, in place of the page title. */
@@ -74,8 +74,9 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
   // While a check runs the button stays, busy, so the row does not change shape.
   const check = (
     <Button
+      className={ROW_BUTTON}
       variant="outline"
-      size="sm"
+
       aria-busy={refresh.phase === 'turning'}
       disabled={refresh.phase === 'turning'}
       onClick={() => {
@@ -130,7 +131,7 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
       action = (
         <>
           {whatsNew(state.version)}
-          <Button size="sm" onClick={() => run(window.kettu.updates.restart)}>
+          <Button className={ROW_BUTTON} onClick={() => run(window.kettu.updates.restart)}>
             {t('about.updates.restart')}
           </Button>
         </>
@@ -153,7 +154,7 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
               <ExternalLinkIcon data-icon="inline-end" />
             </a>
           ) : (
-            <Button size="sm" onClick={() => run(window.kettu.updates.download)}>
+            <Button className={ROW_BUTTON} onClick={() => run(window.kettu.updates.download)}>
               {t('about.updates.update')}
             </Button>
           )}
@@ -167,7 +168,7 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
       title = state.move ? t('about.updates.moveFailed') : t('about.updates.failed')
       detail = <span data-selectable="">{state.message}</span>
       action = (
-        <Button variant="outline" size="sm" onClick={() => run(checkForUpdates)}>
+        <Button className={ROW_BUTTON} variant="outline" onClick={() => run(checkForUpdates)}>
           {t('about.updates.tryAgain')}
         </Button>
       )

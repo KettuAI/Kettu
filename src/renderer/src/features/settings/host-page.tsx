@@ -31,7 +31,7 @@ import { monthDay } from '@renderer/lib/format'
 import { isAway, useHostsStore } from '@renderer/stores/hosts'
 import { openSettingsItem } from '@renderer/stores/view'
 import { Fact } from './agent-parts'
-import { CONFIRM, ControlError } from './controls'
+import { CONFIRM, ControlError, ROW_BUTTON } from './controls'
 import { AddHostDialog } from './host-add'
 import { openHostSettings } from './host-sections'
 import { changeHost, platformName, routeName, routeText } from './host-text'
@@ -173,7 +173,8 @@ function HostPageBody({ host, onAddAgain }: { host: HostStatus; onAddAgain: () =
               }
             >
               <Button
-                size="sm"
+                className={ROW_BUTTON}
+
                 variant="outline"
                 disabled={isAway(host.connection)}
                 onClick={() => openHostSettings(host.id)}
@@ -214,7 +215,7 @@ function StoppedNotice({ host, onAddAgain }: { host: HostStatus; onAddAgain: () 
       title={t(`hosts.page.${reason}.title`, { name: host.name })}
       action={
         reason === 'removed' && (
-          <Button variant="outline" size="sm" onClick={onAddAgain}>
+          <Button className={ROW_BUTTON} variant="outline" onClick={onAddAgain}>
             {t('hosts.page.removed.action')}
           </Button>
         )
@@ -305,7 +306,7 @@ function EditAddresses({ host }: { host: HostStatus }) {
   }
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button className={ROW_BUTTON} variant="outline" onClick={() => setOpen(true)}>
         {t('hosts.page.edit')}
       </Button>
       <Dialog
@@ -368,7 +369,12 @@ function EditAddresses({ host }: { host: HostStatus }) {
                   setProblem(null)
                 }}
               />
-              <Button type="submit" variant="outline" size="sm" disabled={draft.trim() === ''}>
+              <Button
+                className={ROW_BUTTON}
+                type="submit"
+                variant="outline"
+                disabled={draft.trim() === ''}
+              >
                 {t('remote.direct.own.add')}
               </Button>
             </form>
@@ -428,7 +434,7 @@ function RemoveHost({ host }: { host: HostStatus }) {
   return (
     <>
       <ControlError error={open ? null : error} />
-      <Button variant="destructive-outline" size="sm" onClick={() => setOpen(true)}>
+      <Button className={ROW_BUTTON} variant="destructive-outline" onClick={() => setOpen(true)}>
         {t('hosts.page.remove.button')}
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>

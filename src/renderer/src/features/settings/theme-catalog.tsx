@@ -20,6 +20,8 @@ import { catalogView, type CatalogAnswer } from './catalog-view'
 import { useReason } from './theme-reason'
 import { ThemePreview } from './theme-preview'
 import { ReplaceDialog, type Conflict } from './theme-section'
+import { ROW_BUTTON } from './controls'
+import { cn } from '@renderer/lib/utils'
 
 type Failure = { name: string; error: CatalogInstallError } | { message: string }
 
@@ -32,8 +34,9 @@ export function BrowseThemes() {
   return (
     <>
       <Button
+        className={ROW_BUTTON}
         variant="outline"
-        size="sm"
+
         onClick={() => {
           setOpened((count) => count + 1)
           setOpen(true)
@@ -161,7 +164,7 @@ function CatalogDialog({
                 </EmptyTitle>
               </EmptyHeader>
               <EmptyContent>
-                <Button variant="outline" size="compact" onClick={retry}>
+                <Button className={ROW_BUTTON} variant="outline" onClick={retry}>
                   {t('appearance.catalog.tryAgain')}
                 </Button>
               </EmptyContent>
@@ -243,14 +246,14 @@ function CatalogTile({
           </span>
         </div>
         {theme.action === 'installed' ? (
-          <Button variant="ghost" size="xs" disabled className="shrink-0">
+          <Button variant="ghost" disabled className={cn(ROW_BUTTON, 'shrink-0')}>
             <CheckIcon data-icon="inline-start" />
             {t('appearance.catalog.installed')}
           </Button>
         ) : (
           <Button
             variant="outline"
-            size="xs"
+
             disabled={disabled}
             onClick={onInstall}
             aria-label={
@@ -258,7 +261,7 @@ function CatalogTile({
                 ? t('appearance.catalog.updateLabel', { name: theme.name, version: theme.version })
                 : t('appearance.catalog.installLabel', { name: theme.name })
             }
-            className="shrink-0"
+            className={cn(ROW_BUTTON, 'shrink-0')}
           >
             {busy && <Spinner aria-hidden data-icon="inline-start" className="size-3" />}
             {theme.action === 'update'
