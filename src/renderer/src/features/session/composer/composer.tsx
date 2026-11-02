@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import type { SessionView, UserContent } from '@shared/thread'
@@ -15,7 +15,7 @@ import { attachmentContent, attachmentsBlock } from './attachments'
 import { ControlRow } from './control-row'
 import { hasMessage } from './drafts'
 import { levelsOf, type SelectOption } from './levels'
-import { nextChoice } from './modes'
+import { nextChoice, nextMode } from './modes'
 import { OutOfCreditStrip } from './out-of-credit-strip'
 import { AddMenu, PromptBox } from './prompt-box'
 import { RunningButton, SendButton } from './send-button'
@@ -91,16 +91,21 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     host('sessions.cancel', { sessionId }).catch((e: unknown) => setError(errorMessage(e)))
   }
 
+  // A step asked for and not yet reported, so quick presses keep stepping from it.
+  const stepped = useRef<Record<string, { from: string | undefined; to: string }>>({})
   // Shift+Tab steps through the permission modes and Alt+E through the effort levels.
   const cycle = (category: 'mode' | 'thought_level') => {
     const option = session.config.find((o) => o.category === category && o.type === 'select')
     if (!option?.choices?.length) return false
-    const current = option.value === undefined ? undefined : String(option.value)
+    const reported = option.value === undefined ? undefined : String(option.value)
+    const asked = stepped.current[option.id]
+    const current = asked && asked.from === reported ? asked.to : reported
     const next =
       category === 'mode'
-        ? nextChoice(option.choices, current)
+        ? nextMode(option.choices, current)
         : nextChoice(levelsOf(option as SelectOption, current).levels, current)
     if (next === undefined || next === current) return true
+    stepped.current[option.id] = { from: reported, to: next }
     host('sessions.setConfigOption', { sessionId, optionId: option.id, value: next }).catch(
       (e: unknown) => setError(errorMessage(e)),
     )
@@ -115,6 +120,8 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
         event.altKey &&
         !event.shiftKey &&
         !isMod(event) &&
+        // A layout whose Option+E types a character, as the euro sign, keeps it.
+        !(event.key.length === 1 && event.key.toLowerCase() !== 'e') &&
         cycle('thought_level'))
     ) {
       event.preventDefault()
@@ -172,7 +179,11 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
         commands={session.commands}
         placeholder={placeholder}
         label={t('prompt.label', { agent: agentName })}
-        size={{ minHeight: '36px', padding: '8px 0', lineHeight: '20px' }}
+        size={{
+          minHeight: 'calc(var(--spacing) * 9)',
+          padding: 'calc(var(--spacing) * 2) 0',
+          lineHeight: 'calc(var(--spacing) * 5)',
+        }}
         onKeyDown={onKeyDown}
         wrap={!!outOfCredit}
         top={

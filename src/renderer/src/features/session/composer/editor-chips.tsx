@@ -1,6 +1,7 @@
 // The composer's chips: the leading command as marks the caret can enter, so Backspace turns it
 // back into text one letter at a time, and mentions and links as atomic widgets the caret steps
-// over and Backspace deletes whole. A link being typed stays text until the caret leaves it.
+// over and Backspace deletes whole. A mention or link being typed stays text until the caret
+// leaves it.
 
 import {
   Facet,
@@ -20,7 +21,7 @@ import {
 } from '@codemirror/view'
 import { createRoot, type Root } from 'react-dom/client'
 import { RenderedChip, type ChipState } from './chip-view'
-import { findChips, findLinks, type Chip, type ChipContext } from './chips'
+import { findChips, findLinks, mentionEndingAt, type Chip, type ChipContext } from './chips'
 
 export interface ChipHooks extends ChipContext {
   /** The pointer rests on a chip, or left the one it was on. */
@@ -68,7 +69,7 @@ class ChipWidget extends WidgetType {
     super()
   }
   eq(other: ChipWidget): boolean {
-    return other.state === this.state && JSON.stringify(other.chip) === JSON.stringify(this.chip)
+    return other.state === this.state && sameChip(other.chip, this.chip)
   }
   private render(root: Root, view: EditorView) {
     root.render(
@@ -100,6 +101,25 @@ class ChipWidget extends WidgetType {
   }
 }
 
+/** Whether two chips draw the same, wherever they are in the text. */
+function sameChip(a: Chip, b: Chip): boolean {
+  if (a.kind === 'command' || b.kind === 'command') {
+    return a.kind === b.kind && 'name' in a && 'name' in b && a.name === b.name
+  }
+  if (a.kind === 'link' || b.kind === 'link') {
+    return a.kind === 'link' && b.kind === 'link' && a.url === b.url
+  }
+  return (
+    a.kind === b.kind &&
+    a.label === b.label &&
+    a.lines === b.lines &&
+    a.thumb === b.thumb &&
+    !!a.missing === !!b.missing &&
+    a.attachmentKey === b.attachmentKey &&
+    a.path === b.path
+  )
+}
+
 const commandMark = Decoration.mark({ class: 'cm-chip-command' })
 const slashMark = Decoration.mark({ class: 'cm-chip-slash' })
 
@@ -125,13 +145,14 @@ function draw(view: EditorView, typing: { from: number; to: number } | null): Dr
       marks.push(commandMark.range(chip.from, chip.to), slashMark.range(chip.from, chip.from + 1))
       continue
     }
+    if (typing && typing.from <= chip.to && typing.to >= chip.from) continue
     if (chip.kind === 'link') {
       let kept = false
       plain.between(chip.from, chip.to, () => {
         kept = true
         return false
       })
-      if (kept || (typing && typing.from <= chip.to && typing.to >= chip.from)) continue
+      if (kept) continue
     }
     const state: ChipState =
       within(chip, selection) || within(chip, hooks.highlight ?? null) ? 'selected' : 'default'
@@ -144,14 +165,23 @@ function draw(view: EditorView, typing: { from: number; to: number } | null): Dr
   return { decorations: Decoration.set([...marks, ...widgets], true), atomic, chips }
 }
 
-/** The link token the caret is in or at the end of, if any. */
-function linkAt(view: EditorView, head: number): { from: number; to: number } | null {
+/** The mention the caret ends, as a pick of a folder writes it: still being typed. */
+function mentionAt(view: EditorView, head: number): { from: number; to: number } | null {
+  const line = view.state.doc.lineAt(head)
+  const start = mentionEndingAt(line.text.slice(0, head - line.from))
+  return start < 0 ? null : { from: line.from + start, to: head }
+}
+
+/** The link or mention the caret is typing: the one it is in or at the end of, if any. */
+function typingAt(view: EditorView, head: number): { from: number; to: number } | null {
   const line = view.state.doc.lineAt(head)
   for (const link of findLinks(line.text)) {
     const from = line.from + link.from
     const to = line.from + link.to
     if (head >= from && head <= to) return { from, to }
   }
+  const mention = mentionAt(view, head)
+  if (mention) return mention
   // A link still being typed, such as `https:/`, is not a link yet but will be.
   const before = line.text.slice(0, head - line.from)
   const start = before.search(/\S+$/)
@@ -170,17 +200,24 @@ const chipPlugin = ViewPlugin.fromClass(
     }
     update(update: ViewUpdate) {
       const head = update.state.selection.main.head
-      if (this.typing && update.docChanged) {
-        this.typing = {
-          from: update.changes.mapPos(this.typing.from, -1),
-          to: update.changes.mapPos(this.typing.to, 1),
+      const event = (name: string) => update.transactions.some((tr) => tr.isUserEvent(name))
+      if (update.docChanged) {
+        if ((event('input.type') || event('input.complete')) && update.state.selection.main.empty) {
+          this.typing = typingAt(update.view, head)
+        } else if (this.typing && event('delete')) {
+          // Deleting within what is being typed keeps it text, so a chip never takes the rest.
+          this.typing = {
+            from: update.changes.mapPos(this.typing.from, -1),
+            to: update.changes.mapPos(this.typing.to, 1),
+          }
+        } else {
+          this.typing =
+            update.state.selection.main.empty && !event('delete')
+              ? mentionAt(update.view, head)
+              : null
         }
       }
-      const typed = update.transactions.some(
-        (tr) => tr.isUserEvent('input.type') || tr.isUserEvent('input.complete'),
-      )
-      if (typed && update.state.selection.main.empty) this.typing = linkAt(update.view, head)
-      else if (this.typing && (head < this.typing.from || head > this.typing.to)) this.typing = null
+      if (this.typing && (head < this.typing.from || head > this.typing.to)) this.typing = null
       if (update.transactions.some((tr) => tr.isUserEvent('input.paste'))) {
         this.typing = null
         this.pasted(update)

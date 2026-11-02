@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { FileIcon, LinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { readTextThumb } from '@shared/attachments'
@@ -6,12 +6,9 @@ import type { Attachment, ContentRef, ThreadEntry, UserContent } from '@shared/t
 import { basename, bytes } from '@renderer/lib/format'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { host } from '@renderer/lib/host'
-import { isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { ensureFiles, openFile, useFilesStore } from '@renderer/stores/files'
-import { useSettingsStore } from '@renderer/stores/settings'
 import { useThreadsStore } from '@renderer/stores/threads'
-import { toggleSidePane } from '@renderer/stores/view'
 import { openViewer } from '@renderer/stores/viewer'
 import { AttachmentTile, type TileView } from '../attachments/attachment-tile'
 import { openAttachmentPath } from '../attachments/open-attachment'
@@ -20,9 +17,8 @@ import { replayThumb } from '../attachments/thumb'
 import { Clamp } from '../clamp'
 import { ChipView } from '../composer/chip-view'
 import { findChips, mentioned, mentionResolver, type Chip } from '../composer/chips'
+import { useLinkOpener } from '../composer/link-opener'
 import { projectOf } from '../composer/prompt-chips'
-import { LinkConfirm } from '../link-confirm'
-import { asksBeforeOpening } from '../link-open'
 import { CarriedImage } from '../media/carried-image'
 import { CarriedMedia } from '../media/carried-media'
 import { attachmentKey } from '../media/viewer-items'
@@ -185,21 +181,10 @@ function ChipText({
     () => findChips(text, { commands: commands?.map((c) => c.name) ?? [], resolve }),
     [text, commands, resolve],
   )
-  const [confirming, setConfirming] = useState<string | null>(null)
-
-  const openLink = (url: string, local: boolean) => {
-    if (local && !isWeb && sessionId && projectPath) {
-      void window.kettu.browser.navigate(sessionId, url)
-      toggleSidePane(projectPath, 'browser', true)
-      return
-    }
-    const { confirmLinks } = useSettingsStore.getState().settings.thread
-    if (asksBeforeOpening(url, confirmLinks)) setConfirming(url)
-    else window.open(url, '_blank', 'noreferrer')
-  }
+  const links = useLinkOpener(sessionId, projectPath)
   const opener = (chip: Chip): ((from: HTMLElement) => void) | null => {
     if (chip.kind === 'command') return null
-    if (chip.kind === 'link') return () => openLink(chip.url, chip.local)
+    if (chip.kind === 'link') return () => links.open(chip.url, chip.local)
     const attachment = attachments.find((a) => a.id === chip.attachmentKey)
     if (attachment) {
       return (from) =>
@@ -220,20 +205,29 @@ function ChipText({
   for (const chip of chips) {
     if (chip.from > at) parts.push(text.slice(at, chip.from))
     const open = opener(chip)
+    // A selection copies what was typed: the chip's look is left out of it, its text is not.
+    const raw = text.slice(chip.from, chip.to)
     parts.push(
-      open ? (
-        <button
-          key={chip.from}
-          type="button"
-          title={chip.kind === 'link' ? chip.url : undefined}
-          onClick={(event) => open(event.currentTarget)}
-          className="rounded-lg align-middle outline-none focus-visible:focus-ring"
-        >
-          <ChipView chip={chip} surface />
-        </button>
-      ) : (
-        <ChipView key={chip.from} chip={chip} surface />
-      ),
+      <Fragment key={chip.from}>
+        {open ? (
+          <button
+            type="button"
+            aria-label={raw}
+            title={chip.kind === 'link' ? chip.url : undefined}
+            onClick={(event) => open(event.currentTarget)}
+            className="rounded-lg align-middle outline-none select-none focus-visible:focus-ring"
+          >
+            <ChipView chip={chip} surface />
+          </button>
+        ) : (
+          <span aria-hidden className="select-none">
+            <ChipView chip={chip} surface />
+          </span>
+        )}
+        <span aria-hidden={open ? true : undefined} className="sr-only">
+          {raw}
+        </span>
+      </Fragment>,
     )
     at = chip.to
   }
@@ -244,14 +238,7 @@ function ChipText({
       data-selectable=""
     >
       {parts}
-      {confirming && (
-        <LinkConfirm
-          url={confirming}
-          isOpen
-          onClose={() => setConfirming(null)}
-          onConfirm={() => window.open(confirming, '_blank', 'noreferrer')}
-        />
-      )}
+      {links.dialog}
     </div>
   )
 }

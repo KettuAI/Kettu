@@ -32,7 +32,9 @@
     "cyclesModes": "cycles modes",
     "effort": "Effort",
     "ultracodeHint": "Runs each task as a multi-agent workflow. Uses much more of your plan",
-    "modelsFrom": "From {{source}}"
+    "modelsFrom": "From {{source}}",
+    "optionValue": "{{name}}: {{value}}",
+    "ultracodeSuffix": "· Ultracode"
   },
   "outOfCredit": {
     "modelTitle": "{{model}} is out of credit",
@@ -162,7 +164,7 @@
     "sentAsFileLink": "Sent as a link. {{agent}} reads it with its own tools.",
     "sentLinkedFolder": "Sent as a link to the folder",
     "dropTitle": "Drop to attach",
-    "dropHint": "Images, files and folders · up to 20",
+    "dropHint": "Images, files and folders · up to {{megabytes}} MB each",
     "slashNeedsEmpty": "In an empty message",
     "notOnDisk": "It isn't a file on disk, so it can't be attached.",
     "theAgent": "The agent",
@@ -194,6 +196,6 @@
     "folderSent": "The agent gets its tree, not every file",
     "lines": "lines {{lines}}",
     "clickToOpen": "Click to open",
-    "backspaceRemoves": "⌫ removes it"
+    "backspaceRemoves": "{{key}} removes it"
   }
 }

@@ -164,7 +164,11 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
     <div className="relative flex h-full min-h-0 flex-col" {...drop.handlers}>
       <SessionHeader summary={summary} session={session} />
       <ProjectPathContext value={summary.projectPath}>
-        <div className="flex min-h-0 flex-1 flex-col">{body}</div>
+        {/* The drop zone covers the thread and leaves the composer in view. */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {body}
+          <DropOverlay shown={drop.over} starting={status === 'starting'} agentName={name} />
+        </div>
       </ProjectPathContext>
       {/* Leaves the width the column's scrollbar takes, so the composer centres on the column. */}
       <div style={{ paddingRight: gutter }}>
@@ -222,7 +226,6 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
         </div>
       </div>
       <Announcer summary={summary} name={name} />
-      <DropOverlay shown={drop.over} starting={status === 'starting'} agentName={name} />
     </div>
   )
 }

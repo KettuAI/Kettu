@@ -42,12 +42,24 @@ export interface ChipContext {
   resolve: (token: string) => MentionTarget | null
 }
 
-// A full-width at sign is what some input methods type for `@`.
-const MENTION = /(^|\s)[@＠](\S+)/g
+// A full-width at sign is what some input methods type for `@`. A mention ends at a space or at
+// CJK punctuation, which a path seldom holds; CJK letters stay, as a file may be named in them.
+const MENTION =
+  /(^|\s)[@＠]([^\s\u3000-\u303f\uff01-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff65]+)/g
+const MENTION_AT_END =
+  /(^|\s)[@＠][^\s\u3000-\u303f\uff01-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff65]*$/
+
+/** Where the mention that runs to the end of `before` starts, at its `@`; -1 for none. */
+export function mentionEndingAt(before: string): number {
+  const match = MENTION_AT_END.exec(before)
+  return match ? match.index + match[1]!.length : -1
+}
 // A link ends at a space, a quote or a character of CJK text, which a URL never holds as typed.
 const URL_TEXT = /https?:\/\/[^\s<>"'`\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]+/g
-// What a sentence puts after a link, which is not part of it.
+// What a sentence puts after a mention or a link, which is not part of it.
 const TRAILING = /[.,;:!?)\]}>'"。，；：！？）、]+$/
+const SENTENCE_END = /[.,;:!?>'"]/
+const OPENER: Record<string, string> = { ')': '(', ']': '[', '}': '{' }
 // `:41-44`, or `#L41-44` as Claude Code writes a range and `#L41-L44` as GitHub does.
 const RANGE = /(?::(\d+)(?:[-–](\d+))?|#L(\d+)(?:-L?(\d+))?)$/
 
@@ -80,11 +92,25 @@ export function linkParts(url: string): { host: string; path: string; local: boo
   }
 }
 
+const count = (text: string, char: string) => text.split(char).length - 1
+
+/** A link without what ends the sentence around it, or a bracket it did not open. */
+function trimLink(url: string): string {
+  let end = url.length
+  for (;;) {
+    const last = url[end - 1] ?? ''
+    const kept = url.slice(0, end)
+    if (SENTENCE_END.test(last)) end--
+    else if (last in OPENER && count(kept, OPENER[last]!) < count(kept, last)) end--
+    else return kept
+  }
+}
+
 /** The links in the text, each without the punctuation that ends a sentence after it. */
 export function findLinks(text: string): Extract<Chip, { kind: 'link' }>[] {
   const links: Extract<Chip, { kind: 'link' }>[] = []
   for (const match of text.matchAll(URL_TEXT)) {
-    const url = match[0].replace(TRAILING, '')
+    const url = trimLink(match[0])
     const parts = linkParts(url)
     if (!parts) continue
     links.push({ kind: 'link', from: match.index, to: match.index + url.length, url, ...parts })
@@ -99,10 +125,9 @@ export function findChips(text: string, context: ChipContext): Chip[] {
   if (command) chips.push({ kind: 'command', from: 0, to: command, name: text.slice(1, command) })
   for (const match of text.matchAll(MENTION)) {
     const from = match.index + match[1]!.length
-    const token = match[2]!
-    const { name, lines } = splitLines(token)
-    const target = context.resolve(name)
-    if (!target) continue
+    const found = resolveMention(match[2]!, context.resolve)
+    if (!found) continue
+    const { token, name, lines, target } = found
     const label =
       target.kind === 'folder' ? (name.endsWith('/') ? name : `${name}/`) : basename(name)
     chips.push({ ...target, from, to: from + 1 + token.length, label, lines })
@@ -122,6 +147,17 @@ export function mentioned(
     if ('attachmentKey' in chip && chip.attachmentKey) keys.add(chip.attachmentKey)
   }
   return keys
+}
+
+/** What `@token` names, as written or without the punctuation of the sentence after it. */
+function resolveMention(token: string, resolve: ChipContext['resolve']) {
+  for (const candidate of new Set([token, token.replace(TRAILING, '')])) {
+    if (!candidate) continue
+    const { name, lines } = splitLines(candidate)
+    const target = resolve(name)
+    if (target) return { token: candidate, name, lines, target }
+  }
+  return null
 }
 
 function basename(path: string): string {

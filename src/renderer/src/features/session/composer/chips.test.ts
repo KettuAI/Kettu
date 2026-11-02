@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { findChips, findLinks, linkParts, mentioned, mentionResolver, splitLines } from './chips'
+import {
+  findChips,
+  findLinks,
+  linkParts,
+  mentioned,
+  mentionEndingAt,
+  mentionResolver,
+  splitLines,
+} from './chips'
 
 const project = {
   files: new Set(['src/usage/usage-store.ts', 'README.md']),
@@ -64,7 +72,25 @@ describe('findLinks', () => {
   })
 })
 
+describe('findLinks brackets', () => {
+  it('keeps a bracket the link opened and drops one it did not', () => {
+    const text = '(see https://en.wikipedia.org/wiki/Fork_(software)) and [https://a.dev/x]'
+    expect(findLinks(text).map((l) => text.slice(l.from, l.to))).toEqual([
+      'https://en.wikipedia.org/wiki/Fork_(software)',
+      'https://a.dev/x',
+    ])
+  })
+})
+
 describe('findChips', () => {
+  it('leaves the punctuation after a mention out of its chip', () => {
+    const text = '看 @usage-store.ts，再看 @src/usage/usage-store.ts:3.'
+    expect(findChips(text, context).map((c) => text.slice(c.from, c.to))).toEqual([
+      '@usage-store.ts',
+      '@src/usage/usage-store.ts:3',
+    ])
+  })
+
   it('finds the command, the mentions and the links in order', () => {
     const text =
       '/review 把 @usage-store.ts:41-44 和 @usage-bug.png 改了，参考 https://date-fns.org/x'
@@ -113,5 +139,18 @@ describe('mentioned', () => {
       context.resolve,
     )
     expect([...keys]).toEqual(['a', 'c'])
+  })
+})
+
+describe('mentionEndingAt', () => {
+  it('finds the mention the text ends in, up to its at sign', () => {
+    expect(mentionEndingAt('看 @src/us')).toBe(2)
+    expect(mentionEndingAt('@')).toBe(0)
+  })
+
+  it('has none once a space or CJK punctuation ends it', () => {
+    expect(mentionEndingAt('看 @src/usage ')).toBe(-1)
+    expect(mentionEndingAt('看 @src/usage，再看')).toBe(-1)
+    expect(mentionEndingAt('a@b')).toBe(-1)
   })
 })

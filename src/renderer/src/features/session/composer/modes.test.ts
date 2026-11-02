@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { modeLook, nextChoice } from './modes'
+import { modeLook, nextChoice, nextMode } from './modes'
 
 describe('modeLook', () => {
   it('knows the modes Claude Code and Codex give', () => {
@@ -29,5 +29,20 @@ describe('nextChoice', () => {
   it('starts at the first for a value it does not know, and has none for no choices', () => {
     expect(nextChoice(choices, 'z')).toBe('a')
     expect(nextChoice([], 'a')).toBeUndefined()
+  })
+})
+
+describe('nextMode', () => {
+  const claude = ['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions'].map((value) => ({
+    value,
+  }))
+
+  it('steps past full access, as Claude Code does', () => {
+    expect(nextMode(claude, 'plan')).toBe('auto')
+    expect(nextMode(claude, 'auto')).toBe('default')
+  })
+
+  it('steps on from full access when it is on', () => {
+    expect(nextMode(claude, 'bypassPermissions')).toBe('default')
   })
 })

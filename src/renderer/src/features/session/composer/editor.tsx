@@ -118,16 +118,19 @@ const theme = EditorView.theme({
   '.cm-chip-command': {
     background: 'var(--bg-subtle)',
     boxShadow: 'inset 0 0 0 var(--hairline) var(--border-subtle)',
-    borderRadius: '5px',
-    padding: '3px 6px 3px 5px',
-    margin: '0 1px',
+    borderRadius: 'var(--radius)',
+    padding:
+      'calc(var(--spacing) * 0.75) calc(var(--spacing) * 1.5) calc(var(--spacing) * 0.75) calc(var(--spacing) * 1.25)',
+    margin: '0 calc(var(--spacing) * 0.25)',
     fontFamily: 'var(--font-mono)',
     fontVariantLigatures: 'none',
     fontSize: 'var(--text-hint)',
   },
   '.cm-chip-slash': { color: 'var(--control-on)' },
   // A line with chips opens up, so chips on two lines do not touch.
-  '.cm-line:has(.cm-chip, .cm-chip-command)': { lineHeight: '30px' },
+  // Two rules: the theme splits a selector list at its commas.
+  '.cm-line:has(.cm-chip)': { lineHeight: 'calc(var(--spacing) * 7.5)' },
+  '.cm-line:has(.cm-chip-command)': { lineHeight: 'calc(var(--spacing) * 7.5)' },
   '.cm-md-mark': { color: 'var(--text-tertiary)' },
   '.cm-md-strong': { color: 'var(--foreground)', fontWeight: 'var(--font-weight-semibold)' },
   '.cm-md-em': { fontStyle: 'italic' },

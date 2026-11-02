@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import { Popover } from '@base-ui/react/popover'
 import { useTranslation } from 'react-i18next'
 import type { SlashCommand } from '@shared/thread'
@@ -15,7 +23,7 @@ import { ChipView } from './chip-view'
 import { findChips, mentioned, mentionResolver, type Chip } from './chips'
 import type { ComposerEditorHandle } from './editor'
 import type { ChipHooks } from './editor-chips'
-import { removeAttachment } from './attachments'
+import { useLinkOpener } from './link-opener'
 
 // The hover preview opens once the pointer rests on a chip, and stays while it moves between two.
 const PREVIEW_DELAY = 350
@@ -81,7 +89,11 @@ export function usePromptChips({
   const resolve = useMemo(() => mentionResolver(attachments, project), [attachments, project])
   const names = useMemo(() => commands.map((c) => c.name), [commands])
 
-  const [hover, setHover] = useState<{ chip: Chip; element: HTMLElement } | null>(null)
+  // The preview belongs to the text it was opened on: an edit can take its chip away.
+  const [hover, setHover] = useState<{ chip: Chip; element: HTMLElement; text: string } | null>(
+    null,
+  )
+  if (hover && hover.text !== text) setHover(null)
   const hoverTimer = useRef<number | undefined>(undefined)
   const onHover = (chip: Chip | null, element: HTMLElement | null) => {
     window.clearTimeout(hoverTimer.current)
@@ -90,7 +102,7 @@ export function usePromptChips({
       return
     }
     hoverTimer.current = window.setTimeout(
-      () => setHover({ chip, element }),
+      () => setHover({ chip, element, text }),
       hover ? 0 : PREVIEW_DELAY,
     )
   }
@@ -110,9 +122,14 @@ export function usePromptChips({
     editor.current?.focus()
   }
 
+  const links = useLinkOpener(sessionId, projectPath)
   const open = (chip: Chip) => {
     setHover(null)
-    if (chip.kind === 'command' || chip.kind === 'link') return
+    if (chip.kind === 'command') return
+    if (chip.kind === 'link') {
+      links.open(chip.url, chip.local)
+      return
+    }
     const item = attachments.find((a) => a.key === chip.attachmentKey)
     const attachment = item?.attachment
     if (attachment && item.status === 'ready') {
@@ -139,23 +156,28 @@ export function usePromptChips({
     }
   }
 
-  const chipContext: ChipHooks = {
-    commands: names,
-    resolve,
-    onHover,
-    onOpen: open,
-    onLinkPasted: (from, to) => setPasted({ from, to, text: editor.current?.text() ?? '' }),
-    highlight: pasted,
-  }
+  // The editor redraws its chips when the context changes, so it changes only with what they
+  // show; the handlers are read when they fire.
+  const onLinkPasted = (from: number, to: number) =>
+    setPasted({ from, to, text: editor.current?.text() ?? '' })
+  const handlers = useRef({ onHover, open, onLinkPasted })
+  useLayoutEffect(() => {
+    handlers.current = { onHover, open, onLinkPasted }
+  })
+  const chipContext = useMemo<ChipHooks>(
+    () => ({
+      commands: names,
+      resolve,
+      onHover: (chip, element) => handlers.current.onHover(chip, element),
+      onOpen: (chip) => handlers.current.open(chip),
+      onLinkPasted: (from, to) => handlers.current.onLinkPasted(from, to),
+      highlight: pasted,
+    }),
+    [names, resolve, pasted],
+  )
 
+  // An attachment a chip stands for needs no tile; one whose chip goes shows its tile again.
   const hidden = useMemo(() => mentioned(text, resolve), [text, resolve])
-  /** Drops the attachments whose last chip the edit deleted. */
-  const dropUnmentioned = (before: string, after: string) => {
-    const now = mentioned(after, resolve)
-    for (const key of mentioned(before, resolve)) {
-      if (!now.has(key)) removeAttachment(draft, key)
-    }
-  }
 
   const keyDown = (event: KeyboardEvent): boolean => {
     if (!pasted || !isMod(event) || !event.shiftKey || event.key.toLowerCase() !== 'v') return false
@@ -171,6 +193,7 @@ export function usePromptChips({
 
   const overlays: ReactNode = (
     <>
+      {links.dialog}
       <Popover.Root open={!!hover}>
         <Popover.Portal>
           <Popover.Positioner
@@ -261,5 +284,5 @@ export function usePromptChips({
     </>
   )
 
-  return { chipContext, hidden, dropUnmentioned, keyDown, overlays, strip }
+  return { chipContext, hidden, keyDown, overlays, strip }
 }

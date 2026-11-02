@@ -29,3 +29,14 @@ export function nextChoice(
   const at = choices.findIndex((c) => c.value === value)
   return choices[(at + 1) % choices.length]!.value
 }
+
+/** The mode Shift+Tab moves to: the next in the agent's order, past any that gives full access. */
+export function nextMode(
+  choices: readonly { value: string }[],
+  value: string | undefined,
+): string | undefined {
+  return nextChoice(
+    choices.filter((c) => modeLook(c.value) !== 'full' || c.value === value),
+    value,
+  )
+}

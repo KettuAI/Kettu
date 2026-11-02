@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import type { FileContent } from '@shared/files'
 import { bytes, fileUrlPath, relativePath } from '@renderer/lib/format'
 import { host } from '@renderer/lib/host'
-import { hostPlatform } from '@renderer/lib/platform'
+import { hostPlatform, isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import type { DraftAttachment } from '@renderer/stores/attachments'
 import type { Chip } from './chips'
@@ -150,7 +150,7 @@ function FilePreview({
       )}
       <div className="mt-2 flex gap-3 text-caption text-tertiary">
         <span>{t('chips.clickToOpen')}</span>
-        <span>{t('chips.backspaceRemoves')}</span>
+        <span>{t('chips.backspaceRemoves', { key: isMac ? '⌫' : 'Backspace' })}</span>
       </div>
     </div>
   )

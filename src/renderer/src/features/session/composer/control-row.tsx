@@ -248,7 +248,10 @@ export function OptionMenu({
           <Button
             variant="quiet"
             size="sm"
-            aria-label={option.name}
+            aria-label={t('controls.optionValue', {
+              name: option.name,
+              value: choiceName(option, value),
+            })}
             className={cn(ROW_BUTTON, isMode && look === 'full' && 'text-danger', className)}
           />
         }
@@ -287,8 +290,8 @@ export function OptionMenu({
           <>
             <DropdownMenuSeparator />
             <div className="flex items-center gap-1.5 px-2 pt-1 pb-1.25 text-small text-tertiary">
-              <Kbd>⇧</Kbd>
-              <Kbd>Tab</Kbd>
+              <Kbd>{formatShortcut('Shift')}</Kbd>
+              <Kbd>{formatShortcut('Tab')}</Kbd>
               <span>{t('controls.cyclesModes')}</span>
             </div>
           </>
@@ -702,7 +705,7 @@ function ModelMenu({
           {effort && !(model && levelsOf(effort, effortValue).usesDefault) && (
             <span className="shrink-0">{choiceName(effort, effortValue)}</span>
           )}
-          {ultracode && <span className="shrink-0">· Ultracode</span>}
+          {ultracode && <span className="shrink-0">{t('controls.ultracodeSuffix')}</span>}
           {!model && !effort && <span>{t('controls.options')}</span>}
           <ChevronDownIcon strokeWidth={1.75} className="size-3 text-icon" />
         </TooltipTrigger>

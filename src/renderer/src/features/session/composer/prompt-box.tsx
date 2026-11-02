@@ -276,10 +276,7 @@ export function PromptBox({
             chipContext={chips.chipContext}
             size={size}
             popover={open ? { listId, activeId: active >= 0 ? optionId(active) : undefined } : null}
-            onChange={(next) => {
-              chips.dropUnmentioned(text, next)
-              box.changed(next)
-            }}
+            onChange={box.changed}
             onCaret={setCaret}
             onKeyDown={keyDown}
             onPaste={box.onPaste}
