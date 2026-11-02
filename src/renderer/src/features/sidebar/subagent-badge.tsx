@@ -56,17 +56,11 @@ export function SubagentBadge({
           <span className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-full bg-subtle pr-[5px] pl-1 text-[11px] font-medium text-secondary tabular-nums shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]" />
         }
       >
-        <BotIcon aria-hidden strokeWidth={1.4} className="size-[11px] text-tertiary" />
+        <BotIcon aria-hidden strokeWidth={1.4} className="size-[11px]! text-tertiary" />
         {count}
         {running > 0 && <RingSpinner aria-hidden className="size-[9px] border-[1.25px]" />}
       </HoverCardTrigger>
-      <HoverCardContent
-        side="right"
-        align="start"
-        sideOffset={8}
-        alignOffset={-6}
-        className="w-[300px] p-[5px]"
-      >
+      <HoverCardContent side="bottom" align="center" sideOffset={12} className="w-[300px] p-[5px]">
         <div className="flex items-center px-2 pt-1.5 pb-1">
           <span className="flex-1 text-small font-medium text-tertiary">
             {t('subagents.title')}

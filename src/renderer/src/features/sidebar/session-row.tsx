@@ -201,7 +201,7 @@ export const SessionRow = memo(function SessionRow({
           }}
         />
       )}
-      {summary.pr && <PrIcon state={summary.pr.state} className="size-[13px]" />}
+      {summary.pr && <PrIcon state={summary.pr.state} className="size-[13px]!" />}
       {hasChildren && !expanded && (
         <span
           aria-label={t('row.subSessions', { count: children.length })}

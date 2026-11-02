@@ -91,7 +91,7 @@ const SIDEBAR_WIDTH = 'sidebar-width'
 function Workbench() {
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
   // Fixed at mount: a changed default re-registers the panel, which forgets its size before collapsing.
-  const [sidebarDefault] = useState(() => (collapsed ? '0px' : '260px'))
+  const [sidebarDefault] = useState(() => (collapsed ? '0px' : '336px'))
   const sidebar = usePanelRef()
   const width = useRef(0)
   const layout = useDefaultLayout({ id: 'workbench', storage: layoutStorage })
