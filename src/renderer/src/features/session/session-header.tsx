@@ -65,7 +65,7 @@ export function ParentLink({ parent }: { parent: SessionSummary }) {
         </TooltipTrigger>
         <TooltipContent>{label}</TooltipContent>
       </Tooltip>
-      <span aria-hidden className="mx-1 shrink-0 text-ui text-border-strong">
+      <span aria-hidden className="mx-1.5 shrink-0 text-ui text-border-strong">
         /
       </span>
     </>
@@ -118,7 +118,7 @@ export function SessionHeader({
           </>
         )}
         {parent && <ParentLink parent={parent} />}
-        <span className="mr-[3px] grid w-4 shrink-0 place-items-center">
+        <span className="grid w-4 shrink-0 place-items-center">
           {summary.origin === 'subagent' ? (
             <BotIcon className="size-4 text-secondary" />
           ) : (
@@ -231,7 +231,7 @@ function TitleButton({
       title={`${title} · ${description}`}
       className={cn(
         'mx-[3px] h-7.5 min-w-16 shrink-10 rounded-md px-[3px] text-subheading font-semibold focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0',
-        !focused && 'text-secondary hover:text-primary',
+        focused ? 'text-primary' : 'text-secondary hover:text-primary',
       )}
       onClick={onRename}
     >
