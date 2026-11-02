@@ -6,14 +6,15 @@ import { useCodeThemes } from './code-themes'
 import { diffsPool as pool } from './diff-pool'
 import type { DiffProps } from './index'
 
-// Inside the diff's shadow root, where outer CSS cannot reach. The library mixes the line tints
-// into the ground at 88 to 91 percent, so a changed line takes its tint as given instead; and a
-// fold is one plain row of code type, its chevron beside its text.
-const FRAMED_CSS = `
-[data-line], [data-no-newline], [data-column-number], [data-gutter-buffer] {
-  --mix-light: 0%;
-  --mix-dark: 0%;
-}
+// @pierre/diffs mixes a changed row's tint into the background once more, at 12% in light and
+// 20% in dark, which leaves a translucent tint all but invisible. The tints are laid on as they
+// are instead, over the code surface.
+const TINTS_AS_GIVEN =
+  '[data-line],[data-no-newline],[data-gutter-buffer],[data-column-number]{--mix-light:0%;--mix-dark:0%}'
+
+// Inside the diff's shadow root, where outer CSS cannot reach: in a reply's block frame a fold is
+// one plain row of code type, its chevron beside its text.
+const FRAMED_FOLDS = `
 [data-separator='line-info-basic'] {
   height: 26px;
   font-family: var(--diffs-font-family);
@@ -62,7 +63,7 @@ function DiffImpl({ path, oldText, newText, className, framed = false }: DiffPro
       lineDiffType: 'word' as const,
       disableFileHeader: true,
       preferredHighlighter: 'shiki-js' as const,
-      unsafeCSS: framed ? FRAMED_CSS : undefined,
+      unsafeCSS: framed ? TINTS_AS_GIVEN + FRAMED_FOLDS : TINTS_AS_GIVEN,
     }),
     [dark, theme, framed],
   )

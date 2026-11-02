@@ -14,8 +14,8 @@ import {
 import { ansiRuns, exitOf, shellTail } from './shell'
 
 const TONE = {
-  red: 'text-code-bad',
-  green: 'text-code-ok',
+  red: 'text-code-danger',
+  green: 'text-code-success',
   dim: 'text-(--syntax-comment)',
   bold: 'font-semibold text-primary',
 } as const
@@ -59,7 +59,7 @@ export function ShellBlock({
           </span>
           <BlockSpacer />
           {exit.code !== null ? (
-            <span className={cn('shell-exit', exit.code === 0 ? 'text-code-ok' : 'text-code-bad')}>
+            <span className={cn('shell-exit', exit.code === 0 ? 'text-code-success' : 'text-code-danger')}>
               {exit.code === 0 ? (
                 <CheckIcon aria-hidden strokeWidth={2} />
               ) : (
@@ -69,7 +69,7 @@ export function ShellBlock({
             </span>
           ) : (
             status === 'failed' && (
-              <span className="shell-exit text-code-bad">
+              <span className="shell-exit text-code-danger">
                 <XIcon aria-hidden strokeWidth={2} />
                 {t('status.failed')}
               </span>

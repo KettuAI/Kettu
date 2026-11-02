@@ -39,8 +39,8 @@ export function DiffBlock({
           </span>
           {stats && (
             <span className="flex shrink-0 gap-1.5 font-mono text-[11.5px] tabular">
-              <span className="text-code-ok">+{stats.insertions}</span>
-              <span className="text-code-bad">−{stats.deletions}</span>
+              <span className="text-code-success">+{stats.insertions}</span>
+              <span className="text-code-danger">−{stats.deletions}</span>
             </span>
           )}
           <BlockSpacer />

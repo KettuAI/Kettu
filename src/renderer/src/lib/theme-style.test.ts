@@ -24,6 +24,14 @@ html:root[data-theme='dark'],
 `)
   })
 
+  it('points a token the theme leaves out at the one of its own it takes', () => {
+    const css = themeCss(theme({ 'bg-surface': '#eff1f5', attention: '#a8411b' }, {}))
+    expect(css).toContain('  --bg-raised: var(--bg-surface);')
+    expect(css).toContain('  --control-on: var(--attention);')
+    expect(css).toContain('  --switch-on: var(--control-on);')
+    expect(css).not.toContain('--track')
+  })
+
   it('writes nothing for the built-in theme or a variant without colors', () => {
     expect(themeCss(null)).toBe('')
     expect(themeCss(theme({}, { 'bg-app': '#000' }))).not.toContain("'light'")
