@@ -48,6 +48,7 @@ export class BrowserControl {
     const state = this.get(sessionId)
     if (state.user) {
       this.showBar(state)
+      this.emit(sessionId)
       throw new ToolFailure(
         'user_has_control',
         'The user has control of the browser. Wait for them to hand it back.',

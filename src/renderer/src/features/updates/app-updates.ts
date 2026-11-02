@@ -32,115 +32,83 @@ export function appUpdateNotice(
   return null
 }
 
-export type AppUpdateAction = 'restart' | 'update' | 'download' | 'cancel' | 'whats-new'
+export type AppUpdateAction = 'restart' | 'update' | 'download' | 'whats-new'
 
-export interface AppUpdateRow {
-  /** The first line's words beside the version. */
-  words: string
-  /** The version comes first, as in "0.3.0 is out". */
-  versionFirst: boolean
-  /** The first line as one string, for names and lists. */
-  label: string
-  /** The card's tooltip; null while downloading, when the progress bar is the second line. */
-  detail: string | null
-  /** A short second line on the card, saying what clicking it does. */
-  note: string | null
-  /** Null while the app moves, which nothing can stop. */
+/** What the card and the review list say of the app's update in each state. */
+export interface AppUpdateText {
+  /** The card's first line: "Kettu 0.3.0 is ready". */
+  title: string
+  /** The card's second line. */
+  note: string
+  /** The review list's line under the name and versions. */
+  rowNote: string
+  /** Null while it downloads or moves, which nothing but its own corner stops. */
   action: AppUpdateAction | null
   actionLabel: string
   /** The page an action opens in the browser. */
   href: string | null
-  /** A download in progress is cancelled, not dismissed. */
-  dismissible: boolean
 }
 
-/** The update row's lines and action in each state. */
-export function appUpdateRow(notice: AppUpdateNotice): AppUpdateRow {
-  const row = (
-    words: string,
-    versionFirst: boolean,
-    detail: string | null,
-    action: AppUpdateAction,
-    actionLabel: string,
+/** The app's update in words, with its one action. */
+export function appUpdateText(notice: AppUpdateNotice): AppUpdateText {
+  const { version } = notice
+  const text = (
+    title: string,
+    note: string,
+    rowNote: string,
+    action: AppUpdateAction | null,
+    actionLabel = '',
     href: string | null = null,
-    note: string | null = null,
-  ): AppUpdateRow => ({
-    words,
-    versionFirst,
-    label: versionFirst ? `${notice.version} ${words}` : `${words} ${notice.version}`,
-    detail,
-    note,
-    action,
-    actionLabel,
-    href,
-    dismissible: action !== 'cancel',
-  })
+  ): AppUpdateText => ({ title, note, rowNote, action, actionLabel, href })
   switch (notice.kind) {
     case 'ready':
-      return row(
-        i18n.t('updates:notice.ready'),
-        false,
-        i18n.t('updates:notice.readyDetail'),
+      return text(
+        i18n.t('updates:app.ready', { version }),
+        i18n.t('updates:app.readyNote'),
+        i18n.t('updates:app.readyRow'),
         'restart',
-        i18n.t('updates:notice.restart'),
-        null,
-        i18n.t('updates:notice.readyNote'),
+        i18n.t('updates:app.restart'),
       )
-    case 'available':
-      return row(
-        i18n.t('updates:notice.available'),
-        true,
-        notice.moves ? i18n.t('updates:notice.moveDetail') : i18n.t('updates:notice.updateDetail'),
+    case 'available': {
+      const note = i18n.t(notice.moves ? 'updates:app.moveNote' : 'updates:app.updateNote')
+      return text(
+        i18n.t('updates:app.available', { version }),
+        note,
+        note,
         'update',
-        i18n.t('updates:notice.update'),
-        null,
-        i18n.t(notice.moves ? 'updates:notice.moveNote' : 'updates:notice.updateNote'),
+        i18n.t('updates:app.update'),
       )
-    case 'moving': {
-      // The app moves, not the version, so the words stand alone.
-      const words = i18n.t('updates:notice.moving')
-      return {
-        words,
-        versionFirst: false,
-        label: words,
-        detail: null,
-        note: null,
-        action: null,
-        actionLabel: '',
-        href: null,
-        dismissible: false,
-      }
     }
-    case 'link':
-      return row(
-        i18n.t('updates:notice.available'),
-        true,
-        i18n.t('updates:notice.downloadDetail'),
+    case 'link': {
+      const note = i18n.t('updates:app.downloadNote')
+      return text(
+        i18n.t('updates:app.available', { version }),
+        note,
+        note,
         'download',
-        i18n.t('updates:notice.download'),
-        notice.downloadUrl ?? releaseUrl(notice.version),
+        i18n.t('updates:app.download'),
+        notice.downloadUrl ?? releaseUrl(version),
+      )
+    }
+    case 'updated':
+      return text(
+        i18n.t('updates:app.updated', { version }),
+        i18n.t('updates:app.updatedNote', { version: notice.from }),
+        i18n.t('updates:app.updatedNote', { version: notice.from }),
+        'whats-new',
+        i18n.t('updates:whatsNew'),
+        releaseUrl(version),
       )
     case 'downloading':
-      return row(
-        i18n.t('updates:notice.downloading'),
-        false,
+      return text(
+        i18n.t('updates:app.installing'),
+        i18n.t('updates:app.downloading', { version }),
+        i18n.t('updates:app.downloadingRow', { percent: notice.percent }),
         null,
-        'cancel',
-        i18n.t('updates:notice.cancel'),
       )
-    case 'updated':
-      return row(
-        i18n.t('updates:notice.updatedTo'),
-        false,
-        i18n.t('updates:notice.updatedDetail', { version: notice.from }),
-        'whats-new',
-        i18n.t('updates:notice.whatsNew'),
-        releaseUrl(notice.version),
-      )
+    case 'moving': {
+      const note = i18n.t('updates:app.moving')
+      return text(i18n.t('updates:app.installing'), note, note, null)
+    }
   }
-}
-
-/** What clicking the card does: the row's own action, except a cancel, which is the corner's. */
-export function cardAction(row: AppUpdateRow): AppUpdateAction | null {
-  return row.action === 'cancel' ? null : row.action
 }

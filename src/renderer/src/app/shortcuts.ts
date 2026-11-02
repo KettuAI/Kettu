@@ -53,6 +53,8 @@ export function useKeyboardShortcuts(): void {
       )
 
       if (event.ctrlKey && !event.metaKey && !event.altKey && event.code === 'Backquote') {
+        // A session's More menu opens its own session's terminal on this key.
+        if (document.querySelector(MENU_OPENS_TERMINAL)) return
         event.preventDefault()
         if (!view.projectPath || view.settings.open) return
         if (event.shiftKey) emitAppEvent({ kind: 'new-terminal' })
@@ -79,10 +81,11 @@ export function useKeyboardShortcuts(): void {
         return run(event, () => toggleShortcuts(layerOpen()))
       }
 
-      // Mod+1 to Mod+9 focus a pane of the split, unless Settings covers it or no pane is there.
+      // Mod+1 to Mod+9 focus a pane of the split, unless Settings covers it, no pane is there, or a
+      // menu is open, such as the account menu, where they pick a host.
       const digit = /^[1-9]$/.test(event.key) ? Number(event.key) - 1 : null
       if (digit !== null && !view.settings.open && !event.shiftKey) {
-        if (!paneAt(digit)) return
+        if (!paneAt(digit) || layerOpen()) return
         return run(event, () => {
           focusPaneAt(digit)
           focusComposerOfPane()
@@ -220,6 +223,8 @@ function inCodeEditor(target: EventTarget | null): boolean {
  * Whether a dialog or menu is open, closing included: Esc is its own, and Base UI leaves the event
  * unprevented. Focus can be on the body by then, after the button it went back to was disabled.
  */
+const MENU_OPENS_TERMINAL = '[role=menu] [data-accelerator="Ctrl+`"]:not([data-disabled])'
+
 function layerOpen(): boolean {
   return !!document.querySelector('[role=dialog], [role=alertdialog], [role=menu]')
 }

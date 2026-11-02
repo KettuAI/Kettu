@@ -17,10 +17,11 @@ import {
 } from './theme-colors'
 
 // What tokens.css holds that a theme never changes: the white page under an SVG and a QR code's
-// ink on it, the shadows, the brand marks and the artifact kinds' colors; and what follows a
-// token a theme does set: the chosen tile's tint, and the amounts of the heat steps and the halo.
+// ink on it, the shadows, the brand marks, the artifact kinds' colors, the avatar's gradient, the
+// Kettu tile and the white drawn on them; and what follows a token a theme does set: the chosen
+// tile's tint, and the amounts of the heat steps and the halo.
 const KEPT_OUT =
-  /^(?:canvas|canvas-ink|highlight|elevation-.+|brand-.+|kind-.+|control-on-tint|heat-step-\d|focus-halo-strength)$/
+  /^(?:canvas|canvas-ink|highlight|elevation-.+|brand-.+|kind-.+|control-on-tint|heat-step-\d|focus-halo-strength|avatar-from|avatar-to|kettu-tile|on-fill)$/
 
 const nord: Theme = {
   name: 'Nord',

@@ -381,6 +381,12 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       showItem: (path) => copyPath(path),
       openNotices: () => unsupported('show files'),
     },
+    // The host's files open in apps on the host, which a browser cannot start.
+    editors: {
+      list: async () => ({ editors: [], last: null }),
+      open: () => unsupported('open files in another app'),
+      choose: () => unsupported('open files in another app'),
+    },
     media: {
       copyImage: async (source) => {
         const blob =

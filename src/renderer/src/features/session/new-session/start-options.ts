@@ -215,3 +215,13 @@ export function menuGroups(
   }
   return groups
 }
+
+/**
+ * The agents New session can start, the installed first, each group in catalog order with each
+ * harness's default agent first. Hidden default agents stay out, and the harnesses still to
+ * install are installed in Settings > Harnesses, so the menu leaves them out too.
+ */
+export function menuAgents(statuses: AgentStatus[]): AgentStatus[] {
+  const listed = statuses.filter((s) => canStart(s) && !s.hidden)
+  return [...listed.filter(listedInstalled), ...listed.filter((s) => !listedInstalled(s))]
+}

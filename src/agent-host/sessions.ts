@@ -785,6 +785,7 @@ export class SessionManager {
       model: record.model ?? null,
       pinnedAt: record.pinnedAt ?? null,
       archivedAt: record.archivedAt ?? null,
+      acpSessionId: record.acpSessionId || null,
       ...(live?.prepared
         ? {
             prepared: {
