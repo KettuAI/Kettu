@@ -411,15 +411,13 @@ function LargeCard({
             )
           )}
           {shares && summary && standing === 'live' && !writing && (
-            // The viewer's own Share, its icon at the card's 14 px.
-            <span className="contents [&_svg]:size-3.5!">
-              <ShareButton
-                id={summary.id}
-                title={summary.title}
-                shown={summary.version}
-                head={summary.version}
-              />
-            </span>
+            <ShareButton
+              id={summary.id}
+              title={summary.title}
+              shown={summary.version}
+              head={summary.version}
+              iconOnly
+            />
           )}
           {summary && !writing && (
             <DropdownMenu>

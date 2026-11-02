@@ -48,6 +48,7 @@ export function ShareButton({
   title,
   shown,
   head,
+  iconOnly = false,
 }: {
   id: string
   /** The artifact's title, which Unpublish asks about. */
@@ -56,6 +57,8 @@ export function ShareButton({
   shown: number
   /** The latest version, which Update offers when it is newer than the published one. */
   head: number
+  /** A quiet icon button with no label, as on a reply's artifact card. */
+  iconOnly?: boolean
 }) {
   const { t } = useTranslation('artifacts')
   const account = useSharingStore((s) => s.status?.cloudflare ?? null)
@@ -257,18 +260,28 @@ export function ShareButton({
             render={
               <PopoverTrigger
                 render={
-                  <Button
-                    ref={trigger}
-                    variant="outline"
-                    aria-label={t('share.open')}
-                    className="relative h-7.5 gap-1.5 rounded-xl px-3 text-control"
-                  />
+                  iconOnly ? (
+                    <Button
+                      ref={trigger}
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t('share.open')}
+                      className="relative text-tertiary"
+                    />
+                  ) : (
+                    <Button
+                      ref={trigger}
+                      variant="outline"
+                      aria-label={t('share.open')}
+                      className="relative h-7.5 gap-1.5 rounded-xl px-3 text-control"
+                    />
+                  )
                 }
               />
             }
           >
             <ShareIcon className="size-3.5" />
-            {t('share.button')}
+            {!iconOnly && t('share.button')}
             {published && (
               <span
                 aria-hidden

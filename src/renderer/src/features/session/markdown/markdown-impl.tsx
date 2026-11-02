@@ -18,10 +18,8 @@ import { cjk } from '@streamdown/cjk'
 import { createCodePlugin } from '@streamdown/code'
 import { CheckIcon } from 'lucide-react'
 import { defaultComponents, Streamdown, type Components, type ExtraProps } from 'streamdown'
-import { GITHUB_PULL_REQUEST_URL } from '@shared/git'
 import { FileLink } from '@renderer/features/files/file-link'
 import { ProjectPathContext, useFileRef } from '@renderer/features/files/file-refs'
-import { PrChip } from '@renderer/features/git/pr-chip'
 import { ConfirmedLink } from '@renderer/features/session/link-confirm'
 import { SessionIdContext } from '@renderer/features/session/media/grants'
 import { LocalMedia, MediaRows } from '@renderer/features/session/media/local-media'
@@ -82,14 +80,12 @@ function isWebLink(href: string): boolean {
   return protocol === 'http:' || protocol === 'https:'
 }
 
-/** A link: a pull request chip, a project file, or a web link with its site's icon. */
+/** A link: a project file, or a web link with its site's icon. */
 function Link(props: ComponentProps<'a'> & ExtraProps) {
   const raw = typeof props.href === 'string' ? props.href : ''
   const local = localTarget(raw)
   const href = local ?? raw
   const file = useFileRef(href)
-  // A chip is interface, so it keeps Inter in the serif prose.
-  if (GITHUB_PULL_REQUEST_URL.test(href)) return <PrChip url={href} className="font-sans" />
   if (file) return <FileLink file={file} />
   // A local path that is not one of the project's files has nowhere to go, and main opens
   // nothing but web links.

@@ -1071,7 +1071,7 @@
     color: var(--text-tertiary);
   }
 
-  /* A file reference is a chip, not a link: its type's icon and its name on a subtle ground in a
+  /* A file reference is a chip, not a link: a document icon and its name on a subtle ground in a
      thin ring, the path in its tooltip. It opens the file in the Files pane. */
   & [data-file-ref] {
     position: relative;
@@ -1221,15 +1221,17 @@
   & [data-table-footer] {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 12px;
     height: 32px;
-    padding: 0 6px 0 12px;
+    padding: 0 8px 0 12px;
     color: var(--text-tertiary);
     font-size: 12px;
     line-height: 1;
     & .block-frame-action {
       width: 24px;
       height: 24px;
+      /* The button's own padding would hold it at 28 px wide. */
+      padding: 0;
     }
   }
 
