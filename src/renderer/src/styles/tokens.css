@@ -41,7 +41,7 @@
   --merged: #6f4c8e;
   /* Running work, in the ink's grays: blue is kept for data and code. */
   --info: #48525f;
-  /* A step darker than the reference amber so it reads on the desk. */
+  /* Amber, dark enough to read at 4.5:1 on the desk and on its tint. */
   --warning: #936600;
   /* Links are ink with a gray underline (thread-link), which darkens on hover. */
   --link: #10161e;
