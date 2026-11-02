@@ -49,7 +49,8 @@
       "panes": "每列最多三个窗格",
       "room": "窗口空间不足"
     },
-    "inSplitView": "在分屏中"
+    "inSplitView": "在分屏中",
+    "moreFor": "{{title}} 的更多操作"
   },
   "import": {
     "title": "导入会话",
@@ -115,5 +116,37 @@
     "unknown": "另一台主机",
     "filterLabel": "只看一台主机：现在是{{shown}}",
     "empty": "这台主机上还没有会话。"
+  },
+  "rename": {
+    "save": "保存",
+    "cancel": "取消",
+    "undo": "撤销"
+  },
+  "list": {
+    "showMore_other": "再显示 {{count}} 个",
+    "showLess": "收起"
+  },
+  "card": {
+    "model": "模型",
+    "branch": "分支",
+    "cache": "提示缓存",
+    "lastTurn": "上一轮",
+    "cacheNone": "无",
+    "cacheExpired": "已过期",
+    "cacheLikelyExpired": "可能已过期",
+    "minutesLeft_other": "还剩 {{count}} 分钟",
+    "minutesLeftAbout_other": "大约还剩 {{count}} 分钟",
+    "timeLeft": "还剩 {{time}}",
+    "timeLeftAbout": "大约还剩 {{time}}"
+  },
+  "subagents": {
+    "title": "这个会话的子 Agent",
+    "runningShort_other": "{{count}} 个运行中",
+    "running_other": "{{count}} 个子 Agent 运行中",
+    "count_other": "{{count}} 个子 Agent",
+    "tools_other": "{{count}} 个工具",
+    "done": "完成",
+    "failed": "失败",
+    "showFinished": "显示已结束的子 Agent"
   }
 }

@@ -51,7 +51,8 @@
       "panes": "Three panes in a column at most",
       "room": "No room in the window"
     },
-    "inSplitView": "In split view"
+    "inSplitView": "In split view",
+    "moreFor": "More for {{title}}"
   },
   "import": {
     "title": "Import sessions",
@@ -124,5 +125,44 @@
     "unknown": "Another host",
     "filterLabel": "Show one host: {{shown}} now",
     "empty": "No sessions on this host yet."
+  },
+  "rename": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "undo": "Undo"
+  },
+  "list": {
+    "showMore_one": "Show {{count}} more",
+    "showMore_other": "Show {{count}} more",
+    "showLess": "Show less"
+  },
+  "card": {
+    "model": "Model",
+    "branch": "Branch",
+    "cache": "Prompt cache",
+    "lastTurn": "Last turn",
+    "cacheNone": "None",
+    "cacheExpired": "Expired",
+    "cacheLikelyExpired": "Probably expired",
+    "minutesLeft_one": "{{count}} min left",
+    "minutesLeft_other": "{{count}} min left",
+    "minutesLeftAbout_one": "About {{count}} min left",
+    "minutesLeftAbout_other": "About {{count}} min left",
+    "timeLeft": "{{time}} left",
+    "timeLeftAbout": "About {{time}} left"
+  },
+  "subagents": {
+    "title": "Sub-agents of this session",
+    "runningShort_one": "{{count}} running",
+    "runningShort_other": "{{count}} running",
+    "running_one": "{{count}} sub-agent running",
+    "running_other": "{{count}} sub-agents running",
+    "count_one": "{{count}} sub-agent",
+    "count_other": "{{count}} sub-agents",
+    "tools_one": "{{count}} tool",
+    "tools_other": "{{count}} tools",
+    "done": "Done",
+    "failed": "Failed",
+    "showFinished": "Show finished sub-agents"
   }
 }

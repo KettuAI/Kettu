@@ -47,6 +47,47 @@ describe('sessionTree', () => {
   })
 })
 
+describe('sub-agents and sub-sessions', () => {
+  const sessions = Object.fromEntries(
+    [
+      session('root', '/repo', { status: 'ready' }),
+      session('agent', '/repo', {
+        parentId: 'root',
+        origin: 'subagent',
+        status: 'running',
+        permissionCount: 1,
+      }),
+      session('agent-agent', '/repo', { parentId: 'agent', origin: 'subagent', status: 'running' }),
+      session('sub', '/repo', { parentId: 'root', origin: 'user', createdAt: 2 }),
+      session('sub-sub', '/repo', {
+        parentId: 'sub',
+        origin: 'user',
+        createdAt: 1,
+        status: 'running',
+      }),
+      session('from-agent', '/repo', { parentId: 'agent', origin: 'user', createdAt: 3 }),
+    ].map((s) => [s.id, s]),
+  )
+  const [root] = sessionTree(sessions, '/repo')
+
+  it('shows sub-agents as a badge on their parent, never as rows', () => {
+    expect(sessionTree(sessions, '/repo').map((n) => n.summary.id)).toEqual(['root'])
+    expect(root!.subagents.map((s) => s.id)).toEqual(['agent'])
+    expect(root!.own).toEqual({ permissionCount: 1, running: true })
+  })
+
+  it('nests every sub-session one level under the top-level session', () => {
+    expect(root!.children.map((n) => n.summary.id)).toEqual(['sub-sub', 'sub', 'from-agent'])
+    expect(root!.children.every((n) => n.children.length === 0)).toBe(true)
+  })
+
+  it('rolls the sub-sessions up into the parent', () => {
+    expect(root!.permissionCount).toBe(1)
+    expect(root!.children[0]!.own.running).toBe(true)
+    expect(root!.running).toBe(true)
+  })
+})
+
 describe('pinned and archived sessions', () => {
   const sessions = Object.fromEntries(
     [

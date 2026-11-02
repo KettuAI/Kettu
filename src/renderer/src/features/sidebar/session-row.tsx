@@ -1,11 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react'
-import {
-  BotIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  CornerDownRightIcon,
-  EllipsisIcon,
-} from 'lucide-react'
+import { ChevronDownIcon, ChevronRightIcon, EllipsisIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
@@ -18,41 +12,44 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
+import { Kbd } from '@renderer/components/ui/kbd'
 import { SidebarMenuButton, SidebarMenuItem } from '@renderer/components/ui/sidebar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { PrIcon } from '@renderer/features/git/pr-icon'
-import { prStateText } from '@renderer/features/git/pr-text'
+import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
 import { hostOfSession, sessionTitle, type SessionNode } from '@renderer/stores/sessions'
 import { useSessionDragSource } from '@renderer/features/split/session-drag-model'
 import { allPanes, paneWithSession } from '@renderer/features/split/layout'
 import { openSession, useViewStore } from '@renderer/stores/view'
-import { CacheTip } from './cache-status'
+import { rowStatus } from './row-status'
 import { cacheGone, useGoneLabel, useSessionCache } from './session-cache'
+import { SessionCard } from './session-card'
 import { SessionIndicator } from './session-indicator'
 import { DeleteSessionDialog, SessionMenuItems, SessionTitleField } from './session-menu'
 import { runSessionMenuAccelerator } from './session-menu-model'
+import { SubagentBadge } from './subagent-badge'
 import { useRenaming } from './use-renaming'
 
-/** The sidebar indents two levels at most and lists deeper sub-sessions at the second level. */
-const MAX_DEPTH = 2
-/** A row's padding before its mark, and how far each level of sub-sessions indents it. */
+/** A row's padding before its mark; a sub-session's row starts past its parent's tree line. */
 const ROW_PAD = 10
-const INDENT = 24
+const NESTED_PAD = 32
 
 export const SessionRow = memo(function SessionRow({
   node,
-  depth = 0,
   tabStopId,
   showHost = false,
+  branch,
 }: {
   node: SessionNode
-  depth?: number
   /** The id of the list's one Tab stop, which the row it names takes. */
   tabStopId: string | null
   /** The row ends with its host's name, as in a list across the hosts. */
   showHost?: boolean
+  /** A sub-session's place under its parent, which the tree line follows. */
+  branch?: 'middle' | 'last'
 }) {
   const { t } = useTranslation('sidebar')
   const { summary, children } = node
@@ -61,9 +58,13 @@ export const SessionRow = memo(function SessionRow({
   // What an offline host's session last said is not known to hold, so it shows no state.
   const away = isAway(otherHost?.connection ?? null)
   const hostName = hostId === null ? t('hosts.thisComputer') : (otherHost?.name ?? '')
-  const current = useViewStore(
-    (s) => s.main.kind === 'session' && s.main.sessionId === summary.id && !s.settings.open,
+  const shownId = useViewStore((s) =>
+    s.main.kind === 'session' && !s.settings.open ? s.main.sessionId : null,
   )
+  // A sub-agent has no row, so its parent's stands for it while it shows.
+  const current =
+    shownId !== null &&
+    (shownId === summary.id || node.subagents.some((agent) => agent.id === shownId))
   // The rows of the other panes in view take the current row's fill as well.
   const inSplit = useViewStore(
     (s) =>
@@ -100,44 +101,48 @@ export const SessionRow = memo(function SessionRow({
 
   const [deleting, setDeleting] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [cardOpen, setCardOpen] = useState(false)
+  // The badge lists the sub-agents on its own hover, which the row's card leaves to it.
+  const overBadge = useRef(false)
   const row = useRef<HTMLDivElement>(null)
   const rename = useRenaming(() => row.current?.querySelector<HTMLElement>('[data-sidebar-row]'))
   const drag = useSessionDragSource(summary.id, rename.renaming)
-  const pad = ROW_PAD + Math.min(depth, MAX_DEPTH) * INDENT
-  const subagent = summary.origin === 'subagent'
+  const pad = branch ? NESTED_PAD : ROW_PAD
   const cache = useSessionCache(summary)
   const gone = useGoneLabel(cache)
   const expiring = cache?.state === 'ending' ? cache.cache : null
+  // Collapsed, a parent speaks for its sub-sessions: their count and the loudest status.
+  const status = rowStatus(node, hasChildren && !expanded)
+  const title = sessionTitle(summary)
 
-  const lead = subagent ? (
-    <span className="grid size-4 shrink-0 place-items-center text-secondary">
-      <BotIcon />
+  const caret = hasChildren && (
+    <span
+      role="button"
+      tabIndex={-1}
+      aria-label={expanded ? t('row.collapse') : t('row.expand')}
+      onClick={(event) => {
+        event.stopPropagation()
+        setExpanded(!expanded)
+      }}
+      className="-mr-px -ml-1 grid size-3.5 shrink-0 place-items-center rounded-sm text-tertiary hover:text-primary"
+    >
+      {expanded ? (
+        <ChevronDownIcon strokeWidth={1.6} className="size-[11px]!" />
+      ) : (
+        <ChevronRightIcon strokeWidth={1.6} className="size-[11px]!" />
+      )}
     </span>
-  ) : (
+  )
+  const mark = (
     <span className="relative grid size-4 shrink-0 place-items-center">
       <AgentMark
         agent={summary.agentId}
-        size={14}
+        size={16}
         className={cn(
           'transition-[filter,opacity] duration-(--duration-base)',
           cacheGone(cache) && 'opacity-40 grayscale',
-          hasChildren && 'group-hover/menu-button:opacity-0',
         )}
       />
-      {hasChildren && (
-        <span
-          role="button"
-          tabIndex={-1}
-          aria-label={expanded ? t('row.collapse') : t('row.expand')}
-          onClick={(event) => {
-            event.stopPropagation()
-            setExpanded(!expanded)
-          }}
-          className="absolute top-1/2 left-1/2 grid size-6 -translate-1/2 place-items-center rounded-md text-secondary opacity-0 group-hover/menu-button:opacity-100 hover:bg-selected hover:text-primary"
-        >
-          {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
-        </span>
-      )}
     </span>
   )
 
@@ -149,7 +154,7 @@ export const SessionRow = memo(function SessionRow({
       aria-description={inSplit ? t('row.inSplitView') : undefined}
       // The other panes' rows take the current row's fill, without its surface or its edge.
       className={cn(
-        'gap-[9px] data-active:font-medium',
+        'gap-[9px] pr-2.5 text-row data-active:font-medium',
         inSplit && 'bg-selected font-medium',
         away && 'text-tertiary',
       )}
@@ -167,6 +172,11 @@ export const SessionRow = memo(function SessionRow({
           setMoreOpen(true)
           return
         }
+        if (event.key === 'F2') {
+          event.preventDefault()
+          rename.start()
+          return
+        }
         if (!hasChildren) return
         if (event.key === 'ArrowRight' && !expanded) {
           event.preventDefault()
@@ -178,23 +188,25 @@ export const SessionRow = memo(function SessionRow({
       }}
       style={{ paddingLeft: pad }}
     >
-      {lead}
-      <span className="min-w-0 flex-1 truncate">
-        {sessionTitle(summary)}
-        {subagent && summary.description && (
-          <span className="font-normal text-tertiary group-data-active/menu-button:text-secondary">
-            {' '}
-            · {summary.description}
-          </span>
-        )}
-      </span>
-      {summary.pr && <PrIcon state={summary.pr.state} size={12} />}
+      {caret}
+      {mark}
+      <span className="min-w-0 flex-1 truncate">{title}</span>
+      {node.subagents.length > 0 && !away && (
+        <SubagentBadge
+          parent={summary}
+          subagents={node.subagents}
+          onHover={(over) => {
+            overBadge.current = over
+            if (over) setCardOpen(false)
+          }}
+        />
+      )}
+      {summary.pr && <PrIcon state={summary.pr.state} className="size-[13px]" />}
       {hasChildren && !expanded && (
         <span
           aria-label={t('row.subSessions', { count: children.length })}
-          className="inline-flex items-center gap-0.5 text-meta text-tertiary tabular group-data-active/menu-button:text-secondary"
+          className="shrink-0 text-caption font-normal text-tertiary tabular-nums"
         >
-          <CornerDownRightIcon className="size-3!" />
           {children.length}
         </span>
       )}
@@ -211,9 +223,7 @@ export const SessionRow = memo(function SessionRow({
       )}
       {!away && (
         <SessionIndicator
-          summary={summary}
-          permissionCount={node.permissionCount}
-          running={node.running}
+          status={status}
           expiring={expiring}
           className={cn(
             'group-hover/session:opacity-0 group-has-focus-visible/session:opacity-0',
@@ -236,44 +246,47 @@ export const SessionRow = memo(function SessionRow({
   return (
     <SidebarMenuItem>
       <div ref={row} className="group/session relative">
+        {branch && <TreeLine last={branch === 'last'} />}
         {rename.renaming ? (
-          // A field cannot sit inside the row's button, so the row is a plain box while renaming.
-          <SidebarMenuButton
-            render={<div />}
-            size="row"
-            isActive={current}
-            style={{ paddingLeft: pad }}
-            className="gap-[9px] bg-selected text-primary"
-          >
-            {lead}
-            <SessionTitleField
-              summary={summary}
-              onDone={rename.finish}
-              className="h-full flex-1 bg-transparent aria-invalid:text-danger"
-            />
-          </SidebarMenuButton>
+          <>
+            {/* A field cannot sit inside the row's button, so the row is a plain box while renaming. */}
+            <div
+              className="flex h-row items-center gap-[9px] rounded-lg bg-surface pr-1.5 text-row text-primary shadow-[0_0_0_2px_var(--edit-ring),var(--elevation-control)]"
+              style={{ paddingLeft: pad }}
+            >
+              {caret}
+              {mark}
+              <SessionTitleField
+                summary={summary}
+                onDone={rename.finish}
+                className="h-full flex-1 bg-transparent selection:bg-edit-selection aria-invalid:text-danger"
+              />
+            </div>
+            <RenameHints />
+          </>
         ) : (
           <>
             <ContextMenu onOpenChangeComplete={rename.menu.onOpenChangeComplete}>
-              {/*
-               * A trigger's render must take its props, so the tooltip Root wraps the menu trigger.
-               */}
-              <Tooltip>
-                <TooltipTrigger render={<ContextMenuTrigger render={button} />} delay={700} />
-                <TooltipContent side="right" className="flex-col items-start gap-0.5">
-                  <span>
-                    {sessionTitle(summary)}
-                    {subagent && summary.description && ` · ${summary.description}`}
-                  </span>
-                  {summary.branch && <span className="font-mono">{summary.branch}</span>}
-                  {summary.branch && summary.pr && (
-                    <span>
-                      #{summary.pr.number} · {prStateText(summary.pr.state)}
-                    </span>
-                  )}
-                  {expiring ? <CacheTip cache={expiring} /> : gone && <span>{gone}</span>}
-                </TooltipContent>
-              </Tooltip>
+              {/* A trigger's render must take its props, so the card's Root wraps the menu trigger. */}
+              <HoverCard
+                open={cardOpen}
+                onOpenChange={(open) => setCardOpen(open && !overBadge.current)}
+              >
+                <HoverCardTrigger
+                  delay={600}
+                  closeDelay={0}
+                  render={<ContextMenuTrigger render={button} />}
+                />
+                <HoverCardContent
+                  side="right"
+                  align="start"
+                  sideOffset={10}
+                  alignOffset={-4}
+                  className="pointer-events-none w-[272px] px-3.5 py-3"
+                >
+                  <SessionCard summary={summary} cache={cache} />
+                </HoverCardContent>
+              </HoverCard>
               <ContextMenuContent
                 finalFocus={rename.menu.finalFocus}
                 onKeyDown={runSessionMenuAccelerator}
@@ -295,8 +308,8 @@ export const SessionRow = memo(function SessionRow({
                         <button
                           type="button"
                           tabIndex={-1}
-                          aria-label={t('row.more')}
-                          className="absolute top-1/2 right-1.5 grid size-6 -translate-y-1/2 place-items-center rounded-md text-secondary opacity-0 outline-none transition-opacity duration-(--duration-fast) group-hover/session:opacity-100 group-has-focus-visible/session:opacity-100 hover:bg-selected hover:text-primary data-popup-open:opacity-100 [&_svg]:size-4"
+                          aria-label={t('row.moreFor', { title })}
+                          className="absolute top-1 right-1.5 grid size-6 place-items-center rounded-md bg-selected text-primary opacity-0 outline-none transition-opacity duration-(--duration-fast) group-hover/session:opacity-100 group-has-focus-visible/session:opacity-100 data-popup-open:opacity-100 [&_svg]:size-[15px]"
                         />
                       }
                     />
@@ -318,29 +331,62 @@ export const SessionRow = memo(function SessionRow({
         )}
       </div>
       {expanded && (
-        <ul className="relative flex flex-col gap-0.5 pt-0.5">
-          {/* Under the parent's mark, along its sub-sessions' rows. */}
-          <span
-            aria-hidden
-            className="absolute inset-y-0 w-(--hairline) bg-border"
-            style={{ left: pad + 7 }}
-          />
-          {children.map((child) => (
+        <ul className="flex flex-col gap-0.5 pt-0.5">
+          {children.map((child, i) => (
             <SessionRow
               key={child.summary.id}
               node={child}
-              depth={depth + 1}
               tabStopId={tabStopId}
+              branch={i === children.length - 1 ? 'last' : 'middle'}
             />
           ))}
         </ul>
       )}
       <DeleteSessionDialog
         sessionId={summary.id}
-        title={sessionTitle(summary)}
+        title={title}
         open={deleting}
         onOpenChange={setDeleting}
       />
     </SidebarMenuItem>
   )
 })
+
+/**
+ * The line from a parent down along its sub-sessions, with a tick to each; on the last it turns
+ * with a short curve and stops.
+ */
+function TreeLine({ last }: { last: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'pointer-events-none absolute left-[17px] w-[9px] border-l border-border-default',
+        last
+          ? 'top-[-2px] h-[18px] rounded-bl-[4px] border-b'
+          : 'top-[-2px] bottom-[-2px] before:absolute before:top-[18px] before:left-0 before:w-[9px] before:border-t before:border-border-default',
+      )}
+    />
+  )
+}
+
+/** Under a row being renamed: the keys that save, cancel and undo. */
+function RenameHints() {
+  const { t } = useTranslation('sidebar')
+  return (
+    <div aria-hidden className="flex gap-3.5 px-2.5 pt-2.5 pb-1 text-meta text-tertiary">
+      <span className="inline-flex items-center gap-1">
+        <Kbd>↵</Kbd>
+        {t('rename.save')}
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <Kbd>esc</Kbd>
+        {t('rename.cancel')}
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <Kbd>{formatShortcut('Mod+Z')}</Kbd>
+        {t('rename.undo')}
+      </span>
+    </div>
+  )
+}

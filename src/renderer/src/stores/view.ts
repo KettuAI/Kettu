@@ -125,6 +125,10 @@ interface ViewStore {
   hostFilter: string | null
   /** Parent sessions the user collapsed or expanded; others follow activity. */
   expandedParents: Record<string, boolean>
+  /** Groups whose every row shows, past the first few; by the group's key. Not persisted. */
+  allRowsShown: Record<string, true>
+  /** Whether a session's sub-agents list and count the finished ones too, not only running ones. */
+  showFinishedSubagents: boolean
   /** The open side pane per project; none when the panel is closed. */
   sidePane: Record<string, SidePane>
   /** The artifact each project's artifact pane shows. */
@@ -141,6 +145,7 @@ interface Persisted {
   collapsedProjects: Record<string, true>
   hostFilter?: string | null
   expandedParents: Record<string, boolean>
+  showFinishedSubagents?: boolean
   sidePane: Record<string, SidePane>
   splitSidePane?: SidePane | null
   /** One pane per column, the pane in focus; read back as the split a restart opens. */
@@ -173,6 +178,8 @@ export const useViewStore = create<ViewStore>()(() => ({
   collapsedProjects: saved.collapsedProjects ?? {},
   hostFilter: typeof saved.hostFilter === 'string' ? saved.hostFilter : null,
   expandedParents: saved.expandedParents ?? {},
+  allRowsShown: {},
+  showFinishedSubagents: saved.showFinishedSubagents === true,
   sidePane:
     saved.sidePane ??
     Object.fromEntries(
@@ -203,6 +210,7 @@ useViewStore.subscribe((state) => {
       collapsedProjects: state.collapsedProjects,
       hostFilter: state.hostFilter,
       expandedParents: state.expandedParents,
+      showFinishedSubagents: state.showFinishedSubagents,
       // An artifact's pane is not remembered: it opens from the thread, for the work at hand.
       sidePane: Object.fromEntries(
         Object.entries(state.sidePane).filter(([, pane]) => pane !== 'artifact'),
@@ -680,6 +688,20 @@ export function settingsBack(): void {
 
 export function closeSettings(): void {
   useViewStore.setState((s) => ({ settings: { ...s.settings, open: false } }))
+}
+
+/** Shows a group's every row, or its first few again. */
+export function showAllRows(key: string, shown: boolean): void {
+  useViewStore.setState((s) => {
+    const allRowsShown = { ...s.allRowsShown }
+    if (shown) allRowsShown[key] = true
+    else delete allRowsShown[key]
+    return { allRowsShown }
+  })
+}
+
+export function setShowFinishedSubagents(shown: boolean): void {
+  useViewStore.setState({ showFinishedSubagents: shown })
 }
 
 export function toggleSidebar(): void {
