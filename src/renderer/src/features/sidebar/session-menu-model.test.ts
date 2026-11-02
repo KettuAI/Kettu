@@ -127,30 +127,25 @@ describe('multiSessionMenuGroups', () => {
 
 describe('resumeCommand', () => {
   const session = (agentId: string, acpSessionId: string | null = 'abc-123') =>
-    ({ agentId, projectPath: '/Users/me/my repo', acpSessionId }) as SessionSummary
+    ({ agentId, acpSessionId }) as SessionSummary
 
   it("resumes in the harness's CLI from the session's folder", () => {
-    expect(resumeCommand(session('claude-code'), false)).toBe(
+    expect(resumeCommand(session('claude-code'), '/Users/me/my repo')).toBe(
       "cd '/Users/me/my repo' && claude --resume abc-123",
     )
-    expect(resumeCommand(session('codex'), false)).toBe(
-      "cd '/Users/me/my repo' && codex resume abc-123",
-    )
+    expect(resumeCommand(session('codex'), '/srv/app')).toBe('cd /srv/app && codex resume abc-123')
   })
 
-  it('quotes for cmd on Windows', () => {
-    const windows = {
-      agentId: 'codex',
-      projectPath: 'C:\\Users\\me\\my repo',
-      acpSessionId: 'abc',
-    } as SessionSummary
-    expect(resumeCommand(windows, true)).toBe('cd "C:\\Users\\me\\my repo" && codex resume abc')
+  it('quotes for cmd when the folder is a Windows one', () => {
+    expect(resumeCommand(session('codex', 'abc'), 'C:\\Users\\me\\my repo')).toBe(
+      'cd "C:\\Users\\me\\my repo" && codex resume abc',
+    )
   })
 
   it('has none without an id, for an added agent or another harness', () => {
-    expect(resumeCommand(session('claude-code', null), false)).toBeNull()
-    expect(resumeCommand(session('claude-code~work'), false)).toBeNull()
-    expect(resumeCommand(session('opencode'), false)).toBeNull()
+    expect(resumeCommand(session('claude-code', null), '/a')).toBeNull()
+    expect(resumeCommand(session('claude-code~work'), '/a')).toBeNull()
+    expect(resumeCommand(session('opencode'), '/a')).toBeNull()
   })
 })
 

@@ -65,9 +65,9 @@ import { toast } from '@renderer/components/ui/toast'
 import { PrIcon } from '@renderer/features/git/pr-icon'
 import { basename, tokens } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
-import { hostOfPath } from '@renderer/lib/host-paths'
+import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'
-import { fileManagerName, formatShortcut, isMac, isWeb, isWindows } from '@renderer/lib/platform'
+import { fileManagerName, formatShortcut, isMac, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useGitStore } from '@renderer/stores/git'
@@ -176,7 +176,7 @@ export function SessionMenuItems({
   const running = isRunning(summary)
   // Only this computer's folders open in its file manager and its editors.
   const local = !isWeb && hostOfPath(summary.projectPath) === null
-  const resume = resumeCommand(summary, isWindows)
+  const resume = resumeCommand(summary, hostPath(summary.projectPath))
   const { id } = summary
 
   const item = (name: SessionMenuItem) => {

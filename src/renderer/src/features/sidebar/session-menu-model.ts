@@ -157,17 +157,19 @@ export function multiSessionMenuGroups(
 }
 
 /**
- * The command that resumes the session in its harness's own CLI, run from its folder; null for a
- * harness without one, or an added agent, whose CLI reads another config folder.
+ * The command that resumes the session in its harness's own CLI, run from its folder as its host
+ * writes it, quoted for that host's shell by the path's form; null for a harness without one, or
+ * an added agent, whose CLI reads another config folder.
  */
 export function resumeCommand(
-  summary: Pick<SessionSummary, 'agentId' | 'projectPath' | 'acpSessionId'>,
-  windows: boolean,
+  summary: Pick<SessionSummary, 'agentId' | 'acpSessionId'>,
+  folder: string,
 ): string | null {
   const id = summary.acpSessionId
   if (!id || !isDefaultAgent(summary.agentId)) return null
+  const windows = /^[a-z]:[\\/]/i.test(folder) || folder.startsWith('\\\\')
   const quote = windows ? quoteWindows : quotePosix
-  const cd = `cd ${quote(summary.projectPath)} && `
+  const cd = `cd ${quote(folder)} && `
   switch (summary.agentId) {
     case 'claude-code':
       return `${cd}claude --resume ${quote(id)}`
