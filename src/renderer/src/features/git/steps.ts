@@ -11,7 +11,7 @@ import {
   type GitOperationRequest,
 } from '@renderer/stores/git'
 import { failureNote, successNote, type NextStep, type ResultNote } from './results'
-import { pushTargetOf } from './sync'
+import { pushesToDefault, pushTargetOf } from './sync'
 
 const LABEL = {
   pull: 'git:sync.pull',
@@ -24,19 +24,20 @@ const LABEL = {
 
 /**
  * Runs a write and toasts its result; the result, or null when it failed. A dialog that shows
- * its own failure passes `quietFailure`.
+ * its own failure passes `quietFailure`, and one that takes the next step itself `noNext`.
  */
 export async function runStep(
   projectPath: string,
   request: GitOperationRequest,
-  { quietFailure = false }: { quietFailure?: boolean } = {},
+  { quietFailure = false, noNext = false }: { quietFailure?: boolean; noNext?: boolean } = {},
 ): Promise<GitOperation | null> {
   const before = useGitStore.getState().status[projectPath]
   const result = await runGitOperation(projectPath, request)
   if (!before) return result
   if (result) {
     const hasPr = !!useGitStore.getState().currentPr[projectPath]
-    show(projectPath, successNote(request, before, result.status, hasPr))
+    const note = successNote(request, before, result.status, hasPr)
+    show(projectPath, noNext ? { ...note, next: null } : note)
   } else if (!quietFailure) {
     const failed = useGitStore.getState().failed[projectPath]
     if (failed) show(projectPath, failureNote(request, failed.log, failed.busy))
@@ -53,7 +54,10 @@ export function pushRequest(status: GitStatus): GitOperationRequest | null {
     : { kind: 'push', remote: target.remote, branch: target.branch }
 }
 
-/** Pushes the branch as Push would, asking first where it has to: the publish dialog. */
+/**
+ * Pushes the branch as Push would, asking first where it has to: where to publish, and whether
+ * to push straight to the default branch.
+ */
 export function pushNow(projectPath: string): void {
   const status = useGitStore.getState().status[projectPath]
   if (!status) return
@@ -67,6 +71,14 @@ export function pushNow(projectPath: string): void {
     return
   }
   const request = pushRequest(status)
+  if (request?.kind === 'push' && pushesToDefault(status, 'push')) {
+    openGitDialog(projectPath, {
+      kind: 'confirmPush',
+      operation: request,
+      count: status.upstream?.ahead ?? 0,
+    })
+    return
+  }
   if (request) void runStep(projectPath, request)
 }
 

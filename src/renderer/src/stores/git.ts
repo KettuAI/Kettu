@@ -8,6 +8,7 @@ import {
   type RepositoryVisibility,
 } from '@shared/git'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
+import { i18n } from '@renderer/lib/i18n'
 import { hostOfPath } from '@renderer/lib/host-paths'
 
 export type GitOperationKind =
@@ -46,7 +47,7 @@ export type GitDialog =
       operation: Extract<GitOperationRequest, { kind: 'push' }>
       count: number
     }
-  | { kind: 'commit'; paths: string[] | null; push: boolean }
+  | { kind: 'commit'; paths: string[] | null }
   | { kind: 'discard'; paths: string[] }
   | { kind: 'newBranch' }
   | { kind: 'log' }
@@ -224,7 +225,13 @@ export async function runGitOperation(
   request: GitOperationRequest,
 ): Promise<GitOperation | null> {
   const { kind } = request
-  if (useGitStore.getState().running[projectPath]) return null
+  if (useGitStore.getState().running[projectPath]) {
+    // Said like the host's own refusal, so a dialog or toast shows why nothing happened.
+    useGitStore.setState((s) => ({
+      failed: { ...s.failed, [projectPath]: { kind, log: i18n.t('git:failure.busy'), busy: true } },
+    }))
+    return null
+  }
   useGitStore.setState((s) => ({
     running: { ...s.running, [projectPath]: { kind, startedAt: Date.now() } },
     failed: without(s.failed, projectPath),
@@ -294,8 +301,16 @@ export function dismissGitFailure(projectPath: string): void {
   useGitStore.setState((s) => ({ failed: without(s.failed, projectPath) }))
 }
 
+// By project, what had focus when its dialog opened: the button that opened it.
+const openers = new Map<string, Element | null>()
+
 export function openGitDialog(projectPath: string, dialog: GitDialog): void {
+  openers.set(projectPath, document.activeElement)
   useGitStore.setState((s) => ({ dialogs: { ...s.dialogs, [projectPath]: dialog } }))
+}
+
+export function gitDialogOpener(projectPath: string): Element | null {
+  return openers.get(projectPath) ?? null
 }
 
 export function closeGitDialog(projectPath: string): void {

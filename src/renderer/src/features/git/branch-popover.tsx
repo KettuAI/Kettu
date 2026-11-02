@@ -99,13 +99,13 @@ function Header({ status, onSwitch }: { status: GitStatus; onSwitch: () => void 
             }
           >
             <Icon aria-hidden className="size-3.5 shrink-0 text-secondary" />
-            <span className="min-w-0 truncate text-row font-semibold tracking-[-0.006em] text-primary">
+            <span className="min-w-0 truncate text-row leading-snug font-semibold tracking-[-0.006em] text-primary">
               {branchName(status)}
             </span>
           </TooltipTrigger>
           <TooltipContent>{t('popover.switchBranch')}</TooltipContent>
         </Tooltip>
-        <p className="mt-0.75 ml-5.25 truncate text-small text-tertiary">
+        <p className="mt-0.75 ml-5.25 truncate text-small leading-snug text-tertiary">
           {fromBase ? t('popover.fromBase', { base: defaultBranch, fetched }) : fetched}
         </p>
       </div>
@@ -166,7 +166,7 @@ function ChangesPart({ status, onClose }: { status: GitStatus; onClose: () => vo
           className="px-2.5 text-hint"
           onClick={() => {
             onClose()
-            openGitDialog(status.projectPath, { kind: 'commit', paths: null, push: false })
+            openGitDialog(status.projectPath, { kind: 'commit', paths: null })
           }}
         >
           {t('popover.commit')}
@@ -256,7 +256,12 @@ function WorktreeFooter({ status }: { status: GitStatus }) {
       <span className="min-w-0 flex-1 truncate font-mono text-code-sm" title={root}>
         {root}
       </span>
-      <CopyButton text={root} label={t('popover.copyPath')} className="size-5.5" />
+      <CopyButton
+        text={root}
+        label={t('popover.copyPath')}
+        className="size-5.5"
+        iconClassName="size-3"
+      />
     </div>
   )
 }

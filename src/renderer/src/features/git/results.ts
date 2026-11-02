@@ -24,6 +24,7 @@ export type ResultKey =
   | 'result.created'
   | 'result.switched'
   | 'result.committed'
+  | 'result.committedDetached'
   | 'result.discardedOne'
   | 'result.discarded'
   | 'result.pushRejected'
@@ -107,7 +108,10 @@ export function successNote(
       )
     case 'commit': {
       const next = after.push?.kind === 'remote' || after.push?.kind === 'noRemote' ? 'push' : null
-      return note('result.committed', { count: request.paths.length, branch }, 'success', next)
+      const count = request.paths.length
+      return after.head.branch === null
+        ? note('result.committedDetached', { count }, 'success', null)
+        : note('result.committed', { count, branch }, 'success', next)
     }
     case 'discard':
       return request.paths.length === 1

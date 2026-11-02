@@ -4,7 +4,6 @@
     "pullRequestState": "Pull Request #{{number}} · {{state}}",
     "detachedAt": "HEAD 已分离于 {{ref}}",
     "branch": "分支 {{name}}",
-    "detached": "已分离",
     "noCommits": "尚无提交",
     "notPublished": "未发布",
     "operation": {
@@ -22,7 +21,7 @@
       "commit": "正在提交",
       "discard": "正在丢弃更改"
     },
-    "chipHint": "分支、同步与拉取请求 · ⌥ 点按切换分支",
+    "chipHint": "分支、同步与拉取请求 · {{alt}} 点按切换分支",
     "ahead_one": "{{count}} 个提交待推送",
     "ahead_other": "{{count}} 个提交待推送",
     "behind_one": "{{count}} 个提交待拉取",
@@ -289,6 +288,8 @@
     "switched": "已切换到 {{branch}}",
     "committed_one": "已向 {{branch}} 提交 {{count}} 个文件",
     "committed_other": "已向 {{branch}} 提交 {{count}} 个文件",
+    "committedDetached_one": "已提交 {{count}} 个文件",
+    "committedDetached_other": "已提交 {{count}} 个文件",
     "discardedOne": "已丢弃 {{name}} 的更改",
     "discarded_one": "已丢弃 {{count}} 个文件的更改",
     "discarded_other": "已丢弃 {{count}} 个文件的更改",

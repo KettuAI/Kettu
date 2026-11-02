@@ -72,6 +72,16 @@ describe('successNote', () => {
     })
   })
 
+  it('names no branch for a commit on a detached HEAD', () => {
+    const commit = { kind: 'commit' as const, message: 'm', paths: ['a', 'b'] }
+    const detached = { head: { branch: null, oid: 'a'.repeat(40), detached: true } }
+    expect(successNote(commit, status(), status(detached), false)).toMatchObject({
+      key: 'result.committedDetached',
+      values: { count: 2 },
+      next: null,
+    })
+  })
+
   it('counts a push from the status before it and offers a pull request next', () => {
     const push = { kind: 'push', remote: 'origin', branch: 'fix/day-key' } as const
     expect(successNote(push, status(upstream(2, 0)), status(), false)).toMatchObject({

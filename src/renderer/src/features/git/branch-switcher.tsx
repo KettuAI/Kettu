@@ -131,6 +131,7 @@ export function BranchSwitcher({
     <Combobox
       items={groups}
       value={null}
+      autoHighlight
       open={open}
       onOpenChange={(next) => {
         onOpenChange(next)
@@ -144,7 +145,8 @@ export function BranchSwitcher({
     >
       <ComboboxContent
         anchor={anchor}
-        sideOffset={6}
+        // Clears the top bar's edge by 6px, as the branch popover does.
+        sideOffset={17}
         className="w-75 p-1.25 *:data-[slot=input-group]:mb-1 *:data-[slot=input-group]:h-8! *:data-[slot=input-group]:rounded-md! *:data-[slot=input-group]:bg-subtle! *:data-[slot=input-group]:shadow-none!"
       >
         <ComboboxInput
@@ -236,7 +238,7 @@ export function BranchSwitcher({
   )
 }
 
-const ITEM = 'min-h-7.5 gap-2.25 px-2 pr-2 text-control'
+const ITEM = 'h-7.5 gap-2.25 px-2 pr-2 text-control'
 
 /** Opens the latest session in the worktree that has the branch, or says where it is. */
 function openWorktree(branch: BranchInfo, projectPath: string, t: TFunction<'git'>): void {

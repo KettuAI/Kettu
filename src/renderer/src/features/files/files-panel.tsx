@@ -220,6 +220,7 @@ export default function FilesPanel({
             id="files-tree"
             defaultSize="220px"
             minSize="160px"
+            groupResizeBehavior="preserve-pixel-size"
             collapsible
             collapsedSize="0px"
             className="min-w-0 shadow-[inset_calc(-1*var(--hairline))_0_0_var(--border-subtle)]"
@@ -360,11 +361,7 @@ function ChangesList({ projectPath, changes }: { projectPath: string; changes: F
             className="flex-1"
             disabled={blocked}
             onClick={() =>
-              openGitDialog(projectPath, {
-                kind: 'commit',
-                paths: list.map((c) => c.file.path),
-                push: false,
-              })
+              openGitDialog(projectPath, { kind: 'commit', paths: list.map((c) => c.file.path) })
             }
           >
             {t('changes.commit')}

@@ -4,7 +4,6 @@
     "pullRequestState": "Pull request #{{number}} · {{state}}",
     "detachedAt": "Detached at {{ref}}",
     "branch": "Branch {{name}}",
-    "detached": "detached",
     "noCommits": "no commits",
     "notPublished": "Not published",
     "operation": {
@@ -22,7 +21,7 @@
       "commit": "Committing",
       "discard": "Discarding changes"
     },
-    "chipHint": "Branch, sync and pull request · ⌥-click to switch branch",
+    "chipHint": "Branch, sync and pull request · {{alt}}-click to switch branch",
     "ahead_one": "{{count}} commit to push",
     "ahead_other": "{{count}} commits to push",
     "behind_one": "{{count}} commit to pull",
@@ -291,6 +290,8 @@
     "switched": "Switched to {{branch}}",
     "committed_one": "Committed {{count}} file to {{branch}}",
     "committed_other": "Committed {{count}} files to {{branch}}",
+    "committedDetached_one": "Committed {{count}} file",
+    "committedDetached_other": "Committed {{count}} files",
     "discardedOne": "Discarded the changes to {{name}}",
     "discarded_one": "Discarded the changes to {{count}} file",
     "discarded_other": "Discarded the changes to {{count}} files",

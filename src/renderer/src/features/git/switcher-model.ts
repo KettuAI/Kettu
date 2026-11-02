@@ -6,13 +6,14 @@
  * and it cannot read as an option.
  */
 export function isBranchName(name: string): boolean {
-  if (name === '' || name === '@' || name.startsWith('-') || name.startsWith('/')) return false
-  if (name.endsWith('/') || name.endsWith('.') || name.endsWith('.lock')) return false
+  if (name === '' || name === '@' || name === 'HEAD') return false
+  if (name.startsWith('-') || name.startsWith('/')) return false
+  if (name.endsWith('/') || name.endsWith('.')) return false
   if (name.includes('..') || name.includes('@{') || name.includes('//')) return false
   // Control characters and space, then ~ ^ : ? * [ and backslash.
   if ([...name].some((char) => char <= ' ' || char === '\u007f')) return false
   if (/[~^:?*[\\]/.test(name)) return false
-  return name.split('/').every((part) => !part.startsWith('.'))
+  return name.split('/').every((part) => !part.startsWith('.') && !part.endsWith('.lock'))
 }
 
 /** Whether two folders are one, as the host writes them; Windows paths ignore case. */

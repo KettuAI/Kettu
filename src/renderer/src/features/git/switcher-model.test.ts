@@ -31,6 +31,8 @@ describe('isBranchName', () => {
       '.hidden',
       'feat/.x',
       'tab\there',
+      'a.lock/b',
+      'HEAD',
     ]) {
       expect(isBranchName(name), name).toBe(false)
     }

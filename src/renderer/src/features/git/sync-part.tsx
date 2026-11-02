@@ -1,22 +1,14 @@
 import type { TFunction } from 'i18next'
-import { ArrowUpToLineIcon, TriangleAlertIcon } from 'lucide-react'
+import { ArrowUpFromLineIcon, TriangleAlertIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { GitStatus } from '@shared/git'
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
-import { openGitDialog, useGitStore, type RunningOperation } from '@renderer/stores/git'
+import { useGitStore, type RunningOperation } from '@renderer/stores/git'
 import { pushNow, runStep } from './steps'
-import {
-  commandOf,
-  HINT_TONE,
-  planSync,
-  pushesToDefault,
-  pushTargetOf,
-  stepOf,
-  type SyncButton,
-} from './sync'
+import { commandOf, HINT_TONE, planSync, pushesToDefault, stepOf, type SyncButton } from './sync'
 
 /** The values the reasons and hints name: where the branch tracks, and what blocks it. */
 function syncWords(
@@ -44,18 +36,8 @@ export function SyncStrip({ status, onClose }: { status: GitStatus; onClose: () 
       void runStep(projectPath, { kind: 'pull' })
       return
     }
-    const target = pushTargetOf(status)
-    if (button.kind === 'push' && target && pushesToDefault(status, 'push')) {
-      onClose()
-      openGitDialog(projectPath, {
-        kind: 'confirmPush',
-        operation: { kind: 'push', remote: target.remote, branch: target.branch },
-        count: button.count,
-      })
-      return
-    }
-    // Publishing asks where to first; a plain push runs at once.
-    if (button.kind !== 'push') onClose()
+    // Publishing and pushing to the default branch ask first; a plain push runs at once.
+    if (button.kind !== 'push' || pushesToDefault(status, 'push')) onClose()
     pushNow(projectPath)
   }
 
@@ -132,7 +114,7 @@ function SyncButtonView({
       onClick={onRun}
       className={cn('px-2.5 text-hint', mine && 'disabled:opacity-100')}
     >
-      {mine ? <Spinner className="size-3.5" /> : isPush && <ArrowUpToLineIcon />}
+      {mine ? <Spinner className="size-3.5" /> : isPush && <ArrowUpFromLineIcon />}
       {label}
     </Button>
   )

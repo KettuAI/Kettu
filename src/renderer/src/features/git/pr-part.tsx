@@ -174,7 +174,7 @@ function PullRequestDetails({ pr, onOpen }: { pr: PullRequest; onOpen: () => voi
         data-git-row=""
         title={pr.title}
         onClick={onOpen}
-        className={cn(ROW, 'mt-0.5 min-h-7 py-1 text-control font-medium tracking-[-0.004em]')}
+        className={cn(ROW, 'mt-0.5 py-0.5 text-control font-medium tracking-[-0.004em]')}
       >
         <span className="line-clamp-2">
           <span className="font-normal text-tertiary tabular">#{pr.number}</span>

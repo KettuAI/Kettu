@@ -14,11 +14,12 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { NoDrag } from '@renderer/features/shell/top-bar'
 import { host } from '@renderer/lib/host'
+import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { loadGitTools, receiveCurrentPr, receiveGitStatus, useGitStore } from '@renderer/stores/git'
 import { BranchPopover } from './branch-popover'
 import { BranchSwitcher } from './branch-switcher'
-import { GitDialogs } from './git-dialogs'
+import { useDialogReturn } from './dialog-focus'
 import { branchName, followPointer, popoverKeys } from './popover-keys'
 import { PrIcon } from './pr-icon'
 import { prStateText } from './pr-text'
@@ -33,7 +34,7 @@ function middleTruncate(text: string, max: number): string {
 
 /** The branch chip: filled, and ringed while its popover or the switcher is open. */
 const CHIP =
-  'app-region-no-drag inline-flex h-6.5 min-w-7.5 items-center gap-1.5 overflow-hidden rounded-lg bg-subtle px-2 text-hint whitespace-nowrap text-secondary tabular outline-none transition-colors duration-(--duration-fast) hover:bg-selected hover:text-primary focus-ring aria-expanded:bg-selected aria-expanded:text-primary aria-expanded:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] data-switching:bg-selected data-switching:text-primary data-switching:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]'
+  'app-region-no-drag inline-flex h-6.5 min-w-7.5 items-center gap-1.5 overflow-hidden rounded-lg bg-subtle px-2 text-hint whitespace-nowrap text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-selected hover:text-primary focus-ring aria-expanded:bg-selected aria-expanded:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] data-switching:bg-selected data-switching:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]'
 
 /** The session's repository beside its title: the branch chip, then the pull request's. */
 export function SessionGitChips({ projectPath }: { projectPath: string }) {
@@ -55,6 +56,7 @@ export function GitStatusCluster({ projectPath }: { projectPath: string }) {
   const [open, setOpen] = useState<'branch' | 'switch' | null>(null)
   const popup = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
+  useDialogReturn(projectPath, trigger)
   // A commit's card is a popup outside the popover's own, which the same Escape would close too.
   const cardEscape = useRef<Event | null>(null)
   if (!status?.repo) return null
@@ -114,12 +116,13 @@ export function GitStatusCluster({ projectPath }: { projectPath: string }) {
           >
             <BranchSummary status={status} />
           </TooltipTrigger>
-          <TooltipContent>{t('status.chipHint')}</TooltipContent>
+          <TooltipContent>{t('status.chipHint', { alt: formatShortcut('Alt') })}</TooltipContent>
         </Tooltip>
         <PopoverContent
           ref={popup}
           align="start"
-          sideOffset={6}
+          // Clears the top bar's edge by 6px.
+          sideOffset={17}
           // From the keyboard the first row takes focus, as in a menu; from the pointer, none.
           initialFocus={(type) =>
             type === 'mouse' || type === 'touch' || type === 'pen'
@@ -153,7 +156,6 @@ export function GitStatusCluster({ projectPath }: { projectPath: string }) {
         anchor={trigger}
         onOpenChange={(next) => setOpen(next ? 'switch' : null)}
       />
-      <GitDialogs status={status} returnFocus={trigger} />
       {pr && <PrChip pr={pr} />}
     </div>
   )
@@ -280,7 +282,7 @@ function PrChip({ pr }: { pr: PullRequest }) {
             rel="noreferrer"
             tabIndex={-1}
             aria-label={label}
-            className="app-region-no-drag inline-flex h-6.5 shrink-0 items-center gap-1.5 rounded-lg px-2 text-hint whitespace-nowrap text-secondary tabular shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring"
+            className="app-region-no-drag inline-flex h-6.5 shrink-0 items-center gap-1.5 rounded-lg px-2 text-hint whitespace-nowrap text-secondary shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring"
           />
         }
       >

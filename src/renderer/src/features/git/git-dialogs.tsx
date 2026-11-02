@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import {
   ArrowLeftIcon,
-  ArrowUpToLineIcon,
+  ArrowUpFromLineIcon,
   CheckIcon,
   GitBranchIcon,
   GlobeIcon,
   LockIcon,
 } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
+import { useShallow } from 'zustand/react/shallow'
 import {
   isRepositoryName,
   type ChangedFile,
@@ -66,25 +67,34 @@ import {
   type GitDialog,
 } from '@renderer/stores/git'
 import { CopyButton } from './copy-button'
+import { dialogReturn } from './dialog-focus'
 import { LineCounts } from './rows'
 import { pushNow, pushRequest, runStep, showCreatedPr } from './steps'
 import { failureOf, lastLine, pullRequestHead, pushTargetOf, suggestPullRequest } from './sync'
 import { isBranchName } from './switcher-model'
 import { loadCommit, useChanges } from './use-git-data'
 
-type ReturnFocus = RefObject<HTMLElement | null>
+type ReturnFocus = () => HTMLElement | true
 
 /**
- * The branch popover's and the Files pane's dialogs, kept outside them so they can close under
- * a dialog. The opener's button may be gone when one closes, so focus goes back to `returnFocus`.
+ * Every project's git dialogs, mounted once for the window: the branch popover, the Files pane
+ * and toasts open them, on any page, and the opener may be gone before one closes.
  */
-export function GitDialogs({
-  status,
-  returnFocus,
-}: {
-  status: GitStatus
-  returnFocus?: ReturnFocus
-}) {
+export function GitDialogsHost() {
+  const projects = useGitStore(useShallow((s) => Object.keys(s.status)))
+  return projects.map((projectPath) => (
+    <ProjectDialogs key={projectPath} projectPath={projectPath} />
+  ))
+}
+
+function ProjectDialogs({ projectPath }: { projectPath: string }) {
+  const status = useGitStore((s) => s.status[projectPath])
+  const returnFocus = useCallback(() => dialogReturn(projectPath), [projectPath])
+  if (!status?.repo) return null
+  return <GitDialogs status={status} returnFocus={returnFocus} />
+}
+
+function GitDialogs({ status, returnFocus }: { status: GitStatus; returnFocus: ReturnFocus }) {
   const dialog = useGitStore((s) => s.dialogs[status.projectPath] ?? null)
   const close = (): void => closeGitDialog(status.projectPath)
   const shown = (kind: GitDialog['kind']) => dialog?.kind === kind
@@ -156,7 +166,7 @@ function Body({ children }: { children: ReactNode }) {
 
 function Foot({ children, note }: { children: ReactNode; note?: ReactNode }) {
   return (
-    <div className="flex items-center gap-2 px-5.5 py-4.5">
+    <div className="flex items-center gap-2 px-5.5 py-4.5 *:data-[slot=button]:h-7.5">
       <span className="min-w-0 flex-1 truncate text-hint text-tertiary">{note}</span>
       {children}
     </div>
@@ -174,7 +184,7 @@ function Label({
   action?: ReactNode
 }) {
   return (
-    <div className="mt-3 mb-1.5 flex items-center first:mt-0">
+    <div className="mt-3 mb-1.5 flex items-center">
       <label htmlFor={htmlFor} className="flex-1 text-control font-medium text-primary">
         {children}
       </label>
@@ -203,7 +213,7 @@ function ConfirmPushDialog({
 }: {
   status: GitStatus
   dialog: GitDialog | null
-  returnFocus?: ReturnFocus
+  returnFocus: ReturnFocus
   onClose: () => void
 }) {
   const { t } = useTranslation(['git', 'common'])
@@ -247,7 +257,7 @@ function DiscardDialog({
 }: {
   status: GitStatus
   dialog: GitDialog | null
-  returnFocus?: ReturnFocus
+  returnFocus: ReturnFocus
   onClose: () => void
 }) {
   const { t } = useTranslation(['git', 'common'])
@@ -329,7 +339,7 @@ function CommitForm({
     const done = await runStep(
       projectPath,
       { kind: 'commit', message: message.trim(), paths: chosen.map((file) => file.path) },
-      { quietFailure: true },
+      { quietFailure: true, noNext: andPush },
     )
     setBusy(null)
     if (!done) {
@@ -357,7 +367,7 @@ function CommitForm({
           autoFocus
           rows={4}
           placeholder={t('dialog.commit.placeholder')}
-          className="max-h-60 min-h-27.5 text-control leading-[1.55]"
+          className="max-h-60 min-h-27.5 resize-none text-control leading-[1.55]"
           onChange={(event) => setMessage(event.target.value)}
           onKeyDown={(event) => {
             if (event.nativeEvent.isComposing || event.keyCode === 229) return
@@ -481,7 +491,10 @@ function PublishBranchForm({ status, onClose }: { status: GitStatus; onClose: ()
             items={(remotes ?? []).map((r) => ({ value: r.name, label: r.name }))}
             onValueChange={(next) => next && setPicked(next as string)}
           >
-            <SelectTrigger id="publish-remote" className="h-8.5 w-full text-control">
+            <SelectTrigger
+              id="publish-remote"
+              className="w-full text-control data-[size=default]:h-8.5 [&>svg:last-child]:size-3.25 [&>svg:last-child]:text-tertiary"
+            >
               <SelectValue>
                 {(name: string | null) => {
                   const r = remotes?.find((item) => item.name === name)
@@ -510,7 +523,7 @@ function PublishBranchForm({ status, onClose }: { status: GitStatus; onClose: ()
           {busy ? (
             <Spinner data-icon="inline-start" />
           ) : (
-            <ArrowUpToLineIcon data-icon="inline-start" />
+            <ArrowUpFromLineIcon data-icon="inline-start" />
           )}
           {t('dialog.publishBranch.action')}
         </Button>
@@ -683,7 +696,8 @@ function CreatePrForm({ status, onClose }: { status: GitStatus; onClose: () => v
             <SelectTrigger
               aria-label={t('dialog.createPr.base')}
               variant="quiet"
-              className="h-6.5 gap-1.5 bg-subtle px-3 text-control font-medium text-primary"
+              size="sm"
+              className="gap-1.5 rounded-xl px-2.5 text-control font-medium text-primary data-[size=sm]:h-6.5 data-[variant=quiet]:bg-subtle [&>svg:last-child]:hidden"
             >
               <GitBranchIcon className="size-3.25" />
               <SelectValue />
@@ -723,7 +737,7 @@ function CreatePrForm({ status, onClose }: { status: GitStatus; onClose: () => v
           id="pr-body"
           value={body}
           rows={7}
-          className="max-h-75 min-h-42.5 text-control leading-[1.55]"
+          className="max-h-75 min-h-42.5 resize-none text-control leading-[1.55]"
           onChange={(e) => setBody(e.target.value)}
         />
         <label className="mt-3 flex items-center gap-2.25 text-control text-primary">
