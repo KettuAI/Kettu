@@ -23,7 +23,7 @@ import { frameArtifact } from './frames'
 import { folderOf, homeStart } from './host-path'
 import { askHostPath, type HostPathPurpose } from './host-path-request'
 import type { HostLink, LinkError, LinkState } from './link'
-import { downloadFile, mediaRequest } from './media'
+import { downloadFile, mediaRequest, saveMedia, type SaveProgress } from './media'
 import { browserNotifications, notifyAttention, notifyTest } from './notifications'
 import type { WebSettings } from './settings'
 import { pickThemeFile, webThemes, type AdminCall } from './themes'
@@ -38,6 +38,26 @@ function unsupported(what: string): Promise<never> {
 }
 
 const never = (): (() => void) => () => {}
+
+/** A save the page reads itself shows its progress in a toast, whose Cancel gives it up. */
+async function saveProgress(name: string, cancel: () => void): Promise<SaveProgress> {
+  const [{ lastingToast }, { i18n }] = await Promise.all([
+    import('@renderer/components/ui/toast'),
+    import('@renderer/lib/i18n'),
+  ])
+  const title = (percent: number) => i18n.t('web:media.saving', { name, percent })
+  const shown = lastingToast(title(0), { label: i18n.t('common:actions.cancel'), onClick: cancel })
+  let last = 0
+  return {
+    update: (done, size) => {
+      const percent = size > 0 ? Math.floor((done / size) * 100) : 0
+      if (percent === last) return
+      last = percent
+      shown.update(title(percent))
+    },
+    close: shown.close,
+  }
+}
 
 /** A call whose answer means nothing beyond having come. */
 async function done(call: Promise<unknown>): Promise<void> {
@@ -371,6 +391,8 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       },
       saveAs: async (source) => {
         if (typeof source === 'string') {
+          const saved = await saveMedia(link, source, saveProgress)
+          if (saved !== null) return saved
           downloadFile(await (await fetch(source)).blob(), '')
         } else {
           const blob = new Blob([source.bytes as Uint8Array<ArrayBuffer>], {

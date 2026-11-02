@@ -86,12 +86,21 @@ async function setup(options: { resumeMs?: number; limits?: Partial<OutboxLimits
   const wires: HangingTransports[] = []
   // While the host's process is stopped, the dials that wait for it to answer.
   let stopped: (() => void)[] | null = null
+  // What the host sent the page, over all its connections.
+  const sent = { bytes: 0 }
   const dial = async (): Promise<Transport> => {
     if (stopped) await new Promise<void>((resolve) => stopped!.push(resolve))
     const wire = hangingTransports()
     wires.push(wire)
-    hostEnds.push(wire.host)
-    server.accept(wire.host)
+    const counted: Transport = {
+      ...wire.host,
+      send: (message) => {
+        sent.bytes += message.length
+        wire.host.send(message)
+      },
+    }
+    hostEnds.push(counted)
+    server.accept(counted)
     return wire.device
   }
   /** The host's process stops: its connections answer and close nothing, and new ones wait. */
@@ -152,6 +161,7 @@ async function setup(options: { resumeMs?: number; limits?: Partial<OutboxLimits
     answered,
     pairBrowser,
     agentPorts: () => agentPorts,
+    sent: () => sent.bytes,
   }
 }
 
@@ -255,6 +265,47 @@ describe('the host link', () => {
     })) as { kind: string; media: { kind: string }; bytes: ArrayBuffer }
     expect(read).toMatchObject({ kind: 'granted', media: { kind: 'image' } })
     expect(new Uint8Array(read.bytes)).toEqual(PNG)
+  })
+
+  it('cancels the streams of a read it gave up, so the host stops sending them', async () => {
+    const t = await setup()
+    // As many reads of a large file as a connection may have at once, each given up.
+    const big = new Uint8Array(32 * 1024 * 1024)
+    big.set(PNG)
+    await writeFile(path.join(t.project, 'big.png'), big)
+    const { link } = await t.pairBrowser(await generateKeyPair())
+    const read = (signal?: AbortSignal, length?: number) =>
+      link.request(
+        'media.read',
+        { projectPath: t.project, path: 'big.png', ...(length === undefined ? {} : { length }) },
+        signal,
+      )
+    const early = new AbortController()
+    early.abort()
+    await expect(read(early.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    const reads = Array.from({ length: 16 }, () => {
+      const cancel = new AbortController()
+      return { cancel, read: read(cancel.signal).catch((error: unknown) => error) }
+    })
+    // Half are given up before their answers come, half once their bytes are on the way.
+    for (const { cancel } of reads.slice(0, 8)) cancel.abort()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    for (const { cancel } of reads.slice(8)) cancel.abort()
+    for (const { read } of reads) expect(await read).toMatchObject({ name: 'AbortError' })
+    // Once the host goes quiet it has sent a small share of the 512 MB those reads asked for.
+    let before = -1
+    await expect
+      .poll(
+        () => {
+          const quiet = t.sent() === before
+          before = t.sent()
+          return quiet
+        },
+        { interval: 200, timeout: 10_000 },
+      )
+      .toBe(true)
+    expect(t.sent()).toBeLessThan(128 * 1024 * 1024)
+    expect(await read(undefined, PNG.length)).toMatchObject({ kind: 'granted' })
   })
 
   it('reconnects with its key once the connection drops, and holds requests meanwhile', async () => {

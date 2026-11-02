@@ -43,6 +43,7 @@
     "binaryDescription": "{{size}}, not shown.",
     "tooLargeTitle": "Too large to preview",
     "tooLargeDescription": "{{size}}; the preview shows files up to {{limit}}.",
+    "mediaTooLargeTitle": "Too large to show here",
     "unsaved": "Unsaved changes",
     "save": "Save",
     "changedOnDisk": "This file changed on disk.",
