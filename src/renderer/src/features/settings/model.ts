@@ -14,7 +14,6 @@ export interface GroupDef {
   count?: number
   /** Small actions at the label's end, such as Send a test notification. */
   actions?: ReactNode
-  tone?: 'danger'
   /** Rows that draw on the page itself rather than on a card, as the theme tiles do. */
   plain?: boolean
   /** The label names the group for assistive technology only, as a lone card needs none. */

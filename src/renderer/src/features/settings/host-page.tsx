@@ -122,7 +122,6 @@ function HostPageBody({ host, onAddAgain }: { host: HostStatus; onAddAgain: () =
               </Fact>
             ) : (
               <RowFrame
-                compact
                 text={
                   <RowText
                     name={t('hosts.page.addresses')}

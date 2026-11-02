@@ -5,13 +5,19 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
+  type RefObject,
 } from 'react'
-import { ArrowLeftIcon, ChevronRightIcon, SearchIcon } from 'lucide-react'
+import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
+import { ChevronRightIcon, SearchIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { SearchField } from '@renderer/components/search-field'
-import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
+import {
+  Dialog,
+  DialogClose,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+} from '@renderer/components/ui/dialog'
 import {
   Empty,
   EmptyDescription,
@@ -19,10 +25,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@renderer/components/ui/empty'
-import { Kbd } from '@renderer/components/ui/kbd'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { DESK, ON_DESK, SHEET } from '@renderer/features/shell/sheet'
-import { formatShortcut, hasBand, isMod, isWeb } from '@renderer/lib/platform'
+import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import {
   hostScope,
@@ -31,20 +34,18 @@ import {
   useSettingsHostStore,
   type HostScope,
 } from '@renderer/stores/host-scope'
-import { isAway, useOtherHost, useOtherHosts } from '@renderer/stores/hosts'
-import { useSessionsStore } from '@renderer/stores/sessions'
-import { useUpdatesStore } from '@renderer/stores/updates'
+import { isAway, useOtherHost } from '@renderer/stores/hosts'
 import {
   closeSettings,
   openSettings,
+  settingsBack,
   useViewStore,
   type SettingsSection,
 } from '@renderer/stores/view'
-import { footerLabel } from './footer-label'
 import { HostPicker } from './host-picker'
 import { HOST_SECTIONS } from './host-sections'
 import { excerpt, FlashContext, highlight, matches, type RowDef, type SectionDef } from './model'
-import { GroupLabel, RowGroup, SectionBody } from './rows'
+import { GroupLabel, PageHeader, SectionBody } from './rows'
 import { webClusters } from './web-sections'
 import {
   useAboutSection,
@@ -69,12 +70,76 @@ import {
 const FLASH_MS = 1200
 
 /**
- * Settings take the whole window: a list of sections and search on the left, the selected section
- * as a page of its own on the right. While searching, the page gives way to the matching rows,
- * each of which opens its page at the row. The client's own sections are this computer's; the
- * host's show the host the picker chose.
+ * Settings open as a sheet over the app, which stays in view under the scrim: a list of sections
+ * and search on the left, the selected section on the right. While searching, the page gives way
+ * to the matching rows, each of which opens its page at the row. The client's own sections are
+ * this computer's; the host's show the host the picker chose.
  */
 export default function SettingsPage() {
+  const { t } = useTranslation('settings')
+  const open = useViewStore((s) => s.settings.open)
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next, details) => {
+        if (next) return
+        // Esc steps back from an item's page first, and leaves a field being typed in alone.
+        if (details.reason === 'escape-key') {
+          details.cancel()
+          if (!isEditable(details.event.target)) settingsBack()
+          return
+        }
+        closeSettings()
+      }}
+    >
+      <DialogPortal>
+        <DialogOverlay className="supports-backdrop-filter:backdrop-blur-none" />
+        <DialogPrimitive.Popup
+          // The section in the list takes the focus, so Tab and the arrows start from it.
+          initialFocus={() =>
+            document.querySelector<HTMLElement>('[data-settings-dialog] nav [aria-current=page]') ??
+            true
+          }
+          data-overlay-layer=""
+          data-settings-dialog=""
+          className="fixed top-14 left-1/2 z-50 flex h-[calc(100%-112px)] w-[calc(100%-48px)] max-w-265 -translate-x-1/2 flex-col overflow-hidden rounded-modal bg-surface text-primary shadow-dialog outline-none duration-(--duration-fast) data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-bottom-1 data-closed:animate-out data-closed:fade-out-0"
+        >
+          <header className="flex h-13.5 shrink-0 items-center pr-3 pl-5.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]">
+            <DialogTitle className="flex-1 font-sans text-label font-semibold tracking-normal">
+              {t('page.title')}
+            </DialogTitle>
+            <DialogClose
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t('page.close')}
+                  className="rounded-xl text-secondary [&_svg:not([class*='size-'])]:size-4.25"
+                />
+              }
+            >
+              <XIcon />
+            </DialogClose>
+          </header>
+          <SettingsBody />
+        </DialogPrimitive.Popup>
+      </DialogPortal>
+    </Dialog>
+  )
+}
+
+function isEditable(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  if (!el) return false
+  return (
+    el.isContentEditable ||
+    el.tagName === 'INPUT' ||
+    el.tagName === 'TEXTAREA' ||
+    el.tagName === 'SELECT'
+  )
+}
+
+function SettingsBody() {
   const client = [
     useGeneralSection(),
     useAppearanceSection(),
@@ -135,8 +200,7 @@ function SettingsLayout({
   ]
   // The list and the page come from the same sections, so the web client lists only its own.
   const clusters = isWeb ? webClusters(all) : all
-  const others = useOtherHosts()
-  const picker = !isWeb && others.length > 0
+  const picker = !isWeb
   const sections = clusters.flat()
   const [query, setQuery] = useState('')
   const needle = query.trim()
@@ -221,133 +285,117 @@ function SettingsLayout({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  // The desk drags the window; the column and the page's sheet on it opt out.
   return (
-    <div
-      className={cn(
-        'flex h-full animate-in bg-sidebar fade-in animation-duration-(--duration-fast)',
-        DESK,
-      )}
-    >
-      <aside className={cn('flex w-64 shrink-0 flex-col pb-2', ON_DESK)}>
-        {/* As the sidebar's header: level with the top bar on macOS, in the band elsewhere. */}
-        <div
-          className={cn(
-            'app-region-drag flex shrink-0 items-center px-2',
-            hasBand
-              ? 'h-(--title-bar)'
-              : 'h-[calc(var(--sheet-gap)+var(--top-bar))] pt-(--sheet-gap)',
-          )}
-        >
-          {!hasBand && (
-            <span aria-hidden className="w-[calc(26px+var(--traffic-lights))] shrink-0" />
-          )}
-          <BackButton />
-        </div>
-        <h1 className="mx-4.5 mt-1.5 mb-3 font-heading text-subheading font-medium">
-          {t('page.title')}
-        </h1>
-        <SearchField
-          value={query}
-          onChange={setQuery}
-          label={t('page.search')}
-          clearLabel={t('page.clearSearch')}
-          inputRef={search}
-          className="mx-2.5 mb-2.5 h-7.5 w-auto"
-        />
-        {/* Padded inside the scroller, so the rows' focus rings are not cut off. */}
-        <nav
-          aria-label={t('page.sections')}
-          className="-my-1 flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-2 py-1"
-        >
-          {clusters.map((cluster, i) => (
-            <Fragment key={i}>
-              {picker && i === 1 && <HostPicker hostId={scope.hostId} />}
-              <div className="flex flex-col gap-0.5">
-                {cluster.map((section) => {
-                  const count = hits.find((h) => h.id === section.id)?.rows.length ?? 0
-                  return (
-                    <NavRow
-                      key={section.id}
-                      section={section}
-                      selected={!searching && section.id === page.id}
-                      dim={searching && count === 0}
-                      count={searching && count > 0 ? count : null}
-                      onChoose={() => choose(section.id)}
-                    />
-                  )
-                })}
-              </div>
-            </Fragment>
-          ))}
-        </nav>
-        <AppFooter />
-      </aside>
-
-      <main
-        className={cn(
-          'my-(--sheet-gap) mr-(--sheet-gap) flex min-w-0 flex-1 flex-col',
-          hasBand && 'mt-[calc(var(--title-bar)+var(--sheet-gap))]',
-          SHEET,
-        )}
+    <div className="flex min-h-0 flex-1">
+      <nav
+        aria-label={t('page.sections')}
+        className="flex w-59 shrink-0 flex-col overflow-y-auto px-3 py-3.5 shadow-[inset_calc(-1*var(--hairline))_0_0_var(--border-subtle)]"
       >
-        {/* A drag region; with the desk above the sheet it spans a top bar's height. */}
-        <div className="app-region-drag h-[calc(var(--top-bar)-var(--sheet-gap))] shrink-0" />
-        <div
-          ref={scroller}
-          className="min-h-0 flex-1 overflow-y-auto px-8 [scrollbar-gutter:stable_both-edges]"
-        >
-          <FlashContext.Provider value={flash}>
-            {/* A client's section shows this computer's own, whichever host the picker chose. */}
-            <HostScopeContext.Provider value={HOST_SECTIONS.has(page.id) ? scope : LOCAL_SCOPE}>
-              <div
-                key={
-                  (searching ? 'results' : item ? `${page.id}/${item}` : page.id) +
-                  (HOST_SECTIONS.has(page.id) ? `@${scope.hostId ?? ''}` : '')
-                }
-                className="mx-auto flex w-full max-w-[560px] animate-in flex-col pt-1 pb-24 fade-in slide-in-from-bottom-1 animation-duration-(--duration-base)"
-              >
-                {searching ? (
-                  <SearchResults query={needle} hits={hits} count={hitCount} onGo={go} />
-                ) : item && page.itemPage ? (
-                  page.itemPage(item)
-                ) : (
-                  <section aria-labelledby={`settings-${page.id}`} className="flex flex-col">
-                    {page.hero ?? (
-                      <PageHeader id={`settings-${page.id}`} title={page.title}>
-                        {page.description}
-                      </PageHeader>
-                    )}
-                    <SectionBody section={page} />
-                    {page.footer}
-                  </section>
-                )}
-              </div>
-            </HostScopeContext.Provider>
-          </FlashContext.Provider>
-        </div>
-      </main>
+        <SettingsSearch value={query} onChange={setQuery} inputRef={search} />
+        {clusters.map((cluster, i) => (
+          <Fragment key={i}>
+            {picker && i === 1 && <HostPicker hostId={scope.hostId} />}
+            <div className="mt-2 flex flex-col gap-px">
+              {cluster.map((section) => {
+                const count = hits.find((h) => h.id === section.id)?.rows.length ?? 0
+                return (
+                  <NavRow
+                    key={section.id}
+                    section={section}
+                    selected={!searching && section.id === page.id}
+                    dim={searching && count === 0}
+                    count={searching && count > 0 ? count : null}
+                    onChoose={() => choose(section.id)}
+                  />
+                )
+              })}
+            </div>
+          </Fragment>
+        ))}
+      </nav>
+      <div
+        ref={scroller}
+        className="min-h-0 min-w-0 flex-1 overflow-y-auto px-8 pt-6.5 pb-12 [scrollbar-gutter:stable]"
+      >
+        <FlashContext.Provider value={flash}>
+          {/* A client's section shows this computer's own, whichever host the picker chose. */}
+          <HostScopeContext.Provider value={HOST_SECTIONS.has(page.id) ? scope : LOCAL_SCOPE}>
+            <div
+              key={
+                (searching ? 'results' : item ? `${page.id}/${item}` : page.id) +
+                (HOST_SECTIONS.has(page.id) ? `@${scope.hostId ?? ''}` : '')
+              }
+              className="flex animate-in flex-col fade-in animation-duration-(--duration-fast)"
+            >
+              {searching ? (
+                <SearchResults query={needle} hits={hits} count={hitCount} onGo={go} />
+              ) : item && page.itemPage ? (
+                page.itemPage(item)
+              ) : (
+                <section aria-labelledby={`settings-${page.id}`} className="flex flex-col">
+                  {page.hero ?? (
+                    <PageHeader id={`settings-${page.id}`} title={page.title}>
+                      {page.description}
+                    </PageHeader>
+                  )}
+                  <SectionBody section={page} />
+                  {page.footer}
+                </section>
+              )}
+            </div>
+          </HostScopeContext.Provider>
+        </FlashContext.Provider>
+      </div>
     </div>
   )
 }
 
-/** A page's title and its one line, in the page title and small roles. */
-export function PageHeader({
-  id,
-  title,
-  children,
+function SettingsSearch({
+  value,
+  onChange,
+  inputRef,
 }: {
-  id?: string
-  title: ReactNode
-  children?: ReactNode
+  value: string
+  onChange: (value: string) => void
+  inputRef: RefObject<HTMLInputElement | null>
 }) {
+  const { t } = useTranslation('settings')
   return (
-    <header className="flex flex-col gap-1 pb-7">
-      <h2 id={id} className="font-display text-title font-bold text-balance">
-        {title}
-      </h2>
-      {children && <p className="text-small text-pretty text-tertiary">{children}</p>}
-    </header>
+    <label className="flex h-row shrink-0 items-center gap-2.25 rounded-xl bg-subtle pr-2 pl-2.5 text-tertiary transition-shadow duration-(--duration-fast) has-focus-visible:shadow-[0_0_0_var(--hairline)_var(--focus),var(--focus-halo)]">
+      <SearchIcon className="size-3.75 shrink-0" />
+      <input
+        ref={inputRef}
+        value={value}
+        placeholder={t('page.search')}
+        aria-label={t('page.search')}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(event) => {
+          // Esc clears the search, then leaves the field; it does not close Settings.
+          if (event.key !== 'Escape' || event.nativeEvent.isComposing) return
+          event.stopPropagation()
+          if (value) onChange('')
+          else event.currentTarget.blur()
+        }}
+        className="min-w-0 flex-1 bg-transparent text-lede text-primary outline-none placeholder:text-tertiary"
+      />
+      {value ? (
+        <button
+          type="button"
+          aria-label={t('page.clearSearch')}
+          onClick={() => {
+            onChange('')
+            inputRef.current?.focus()
+          }}
+          className="flex size-5 shrink-0 items-center justify-center rounded-md outline-none hover:bg-hover hover:text-primary focus-ring"
+        >
+          <XIcon className="size-3" strokeWidth={1.75} />
+        </button>
+      ) : (
+        <span aria-hidden className="shrink-0 pr-0.5 text-caption">
+          {formatShortcut('Mod+F')}
+        </span>
+      )}
+    </label>
   )
 }
 
@@ -372,24 +420,19 @@ function NavRow({
       aria-current={selected ? 'page' : undefined}
       onClick={onChoose}
       className={cn(
-        'group flex h-row shrink-0 items-center gap-2.5 rounded-lg px-2.5 text-left text-ui text-primary outline-none transition-[background-color,opacity] duration-(--duration-fast) focus-ring',
+        'flex h-row shrink-0 items-center gap-2.75 rounded-xl px-2.5 text-left text-lede text-primary outline-none transition-[background-color,opacity] duration-(--duration-fast) focus-ring',
         selected ? 'bg-raised font-medium shadow-raised' : 'hover:bg-hover',
         dim && 'opacity-42',
       )}
     >
-      <Icon
-        className={cn(
-          'size-4 shrink-0 transition-colors duration-(--duration-fast)',
-          selected ? 'text-primary' : 'text-icon group-hover:text-primary',
-        )}
-      />
+      <Icon className="size-4 shrink-0" />
       <span className="min-w-0 flex-1 truncate">{section.title}</span>
-      {section.mark && (
+      {section.mark && count === null && (
         <span
           role="img"
           aria-label={section.mark}
           title={section.mark}
-          className="mr-1 size-1.5 shrink-0 rounded-full bg-info"
+          className="size-1.75 shrink-0 rounded-full bg-attention-dot"
         />
       )}
       {count !== null && (
@@ -400,33 +443,6 @@ function NavRow({
           {count}
         </span>
       )}
-    </button>
-  )
-}
-
-/** The app's version at the foot of the list, and what its updater has to say; opens About. */
-function AppFooter() {
-  const { t } = useTranslation('settings')
-  const status = useUpdatesStore((s) => s.status)
-  if (!status) return null
-  const label = footerLabel(status.state)
-  const end: ReactNode = !label ? null : label.pill ? (
-    <Badge variant="info" className="min-w-0 shrink">
-      <span className="truncate">{t(label.key, label.values)}</span>
-    </Badge>
-  ) : (
-    <span className="truncate text-xs text-tertiary tabular">{t(label.key, label.values)}</span>
-  )
-  return (
-    <button
-      type="button"
-      title={t('footer.about')}
-      onClick={() => openSettings('about')}
-      className="mx-2 flex h-8 shrink-0 items-center gap-1.5 rounded-lg pr-1.5 pl-2.5 text-left text-command text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
-    >
-      <span>Kettu</span>
-      <span className="font-mono text-code text-tertiary">{status.current}</span>
-      <span className="ml-auto flex min-w-0 items-center">{end}</span>
     </button>
   )
 }
@@ -459,40 +475,38 @@ function SearchResults({
           </EmptyHeader>
         </Empty>
       ) : (
-        <div className="flex flex-col gap-7">
-          {hits.map(
-            (section) =>
-              section.rows.length > 0 && (
-                <section key={section.id} aria-label={section.title} className="flex flex-col">
-                  <GroupLabel
-                    group={{ id: section.id, label: section.title, count: section.rows.length }}
-                  />
-                  <RowGroup>
-                    {section.rows.map((row) => (
-                      <button
-                        key={row.id}
-                        type="button"
-                        onClick={() => onGo(section, row)}
-                        className="relative flex min-h-15 w-full items-center gap-4 py-2.5 pr-3 pl-4 text-left outline-none transition-colors duration-(--duration-fast) before:absolute before:top-0 before:right-0 before:left-4 before:h-(--hairline) before:bg-border-soft first:rounded-t-xl first:before:hidden last:rounded-b-xl hover:bg-hover focus-ring"
-                      >
-                        <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="text-ui font-medium">
-                            <Marked text={row.name} query={query} />
-                          </span>
-                          {row.description && (
-                            <span className="mt-0.5 line-clamp-2 text-xs leading-4 text-secondary">
-                              <Marked text={excerpt(row.description, query)} query={query} />
-                            </span>
-                          )}
+        hits.map(
+          (section) =>
+            section.rows.length > 0 && (
+              <section key={section.id} aria-label={section.title} className="flex flex-col">
+                <GroupLabel
+                  group={{ id: section.id, label: section.title, count: section.rows.length }}
+                />
+                <div className="shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
+                  {section.rows.map((row) => (
+                    <button
+                      key={row.id}
+                      type="button"
+                      onClick={() => onGo(section, row)}
+                      className="flex w-full items-center gap-4 rounded-lg py-3.75 text-left shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)] outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
+                    >
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.75">
+                        <span className="text-label">
+                          <Marked text={row.name} query={query} />
                         </span>
-                        <ChevronRightIcon className="size-4 shrink-0 text-icon" />
-                      </button>
-                    ))}
-                  </RowGroup>
-                </section>
-              ),
-          )}
-        </div>
+                        {row.description && (
+                          <span className="line-clamp-2 text-group leading-normal text-tertiary">
+                            <Marked text={excerpt(row.description, query)} query={query} />
+                          </span>
+                        )}
+                      </span>
+                      <ChevronRightIcon className="size-3.5 shrink-0 text-tertiary" />
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ),
+        )
       )}
     </>
   )
@@ -507,41 +521,5 @@ function Marked({ text, query }: { text: string; query: string }) {
     ) : (
       <Fragment key={i}>{part.text}</Fragment>
     ),
-  )
-}
-
-function BackButton() {
-  const { t } = useTranslation('settings')
-  const waiting = useSessionsStore((s) =>
-    Object.values(s.byId).reduce((sum, x) => sum + x.permissionCount, 0),
-  )
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant="quiet"
-            size="sm"
-            className="app-region-no-drag gap-1.5 pr-2 pl-1.5 text-ui font-normal text-primary"
-            onClick={closeSettings}
-          />
-        }
-      >
-        <ArrowLeftIcon data-icon="inline-start" className="size-4" />
-        {t('page.back')}
-        {waiting > 0 && (
-          <span
-            aria-label={t('page.waiting', { count: waiting })}
-            className="ml-0.5 inline-flex h-4.5 min-w-4.5 animate-in items-center justify-center rounded-full bg-attention px-1.25 text-meta font-semibold text-attention-foreground tabular zoom-in-75 fade-in"
-          >
-            {waiting}
-          </span>
-        )}
-      </TooltipTrigger>
-      <TooltipContent side="bottom">
-        {t('page.back')}
-        <Kbd>{formatShortcut('Esc')}</Kbd>
-      </TooltipContent>
-    </Tooltip>
   )
 }

@@ -3,20 +3,19 @@ import {
   ArchiveIcon,
   BellIcon,
   BotIcon,
-  BoxesIcon,
   ChartNoAxesColumnIcon,
-  CircleUserRoundIcon,
+  CodeIcon,
+  ContrastIcon,
   GitBranchIcon,
   GlobeIcon,
   InfoIcon,
   MonitorSmartphoneIcon,
   PlugIcon,
   ServerIcon,
-  SettingsIcon,
+  Settings2Icon,
   ShareIcon,
   SquareTerminalIcon,
-  SunMoonIcon,
-  WrenchIcon,
+  UserRoundIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
@@ -135,12 +134,14 @@ export function useGeneralSection(): SectionDef {
   const { t } = useTranslation('settings')
   const en = english()
   const input = group('input', t('general.groups.input'))
-  const sessions = group('sessions', t('general.groups.sessions'))
+  // Devices reach the computer only while Kettu runs, so remote access holds it on.
+  const remoteOn = useSettingsStore((s) => s.settings.remote.enabled)
+  const sessions = group('sessions', t('general.groups.sessions'), {
+    note: remoteOn && <GroupNote>{t('general.background.lockedByRemote')}</GroupNote>,
+  })
   const thread = group('thread', t('general.groups.thread'))
   const startup = group('startup', t('general.groups.startup'))
   const loginItem = useLoginItemStatus()
-  // Devices reach the computer only while Kettu runs, so remote access holds it on.
-  const remoteOn = useSettingsStore((s) => s.settings.remote.enabled)
   const openAtLoginDescription = loginItem
     ? !loginItem.available
       ? t('general.openAtLogin.unavailable')
@@ -152,7 +153,7 @@ export function useGeneralSection(): SectionDef {
     id: 'general',
     title: t('sections.general'),
     description: t('pages.general'),
-    icon: SettingsIcon,
+    icon: Settings2Icon,
     rows: [
       {
         id: 'language',
@@ -194,6 +195,7 @@ export function useGeneralSection(): SectionDef {
         id: 'confirm-quit',
         name: t('general.confirmQuit.name'),
         english: en('general.confirmQuit.name'),
+        description: t('general.confirmQuit.description'),
         keywords: t('general.confirmQuit.keywords'),
         group: sessions,
         render: () => (
@@ -215,13 +217,11 @@ export function useGeneralSection(): SectionDef {
         id: 'background',
         name: t('general.background.name'),
         english: en('general.background.name'),
-        description: remoteOn
-          ? t('general.background.lockedByRemote')
-          : isMac
-            ? t('general.background.descriptionMac')
-            : isWindows
-              ? t('general.background.descriptionWindows')
-              : t('general.background.descriptionLinux'),
+        description: isMac
+          ? t('general.background.descriptionMac')
+          : isWindows
+            ? t('general.background.descriptionWindows')
+            : t('general.background.descriptionLinux'),
         keywords: t('general.background.keywords'),
         group: sessions,
         render: () => (
@@ -278,7 +278,7 @@ export function useAppearanceSection(): SectionDef {
     id: 'appearance',
     title: t('sections.appearance'),
     description: t('pages.appearance'),
-    icon: SunMoonIcon,
+    icon: ContrastIcon,
     rows: [
       {
         id: 'theme',
@@ -460,7 +460,7 @@ export function useAccountSection(): SectionDef {
     id: 'account',
     title: t('sections.account'),
     description: t('pages.account'),
-    icon: CircleUserRoundIcon,
+    icon: UserRoundIcon,
     rows,
   }
 }
@@ -519,7 +519,7 @@ export function useUsageSection(): SectionDef {
       name: t('settings.clear.name'),
       english: en('settings.clear.name'),
       description: t('settings.clear.description'),
-      group: group('danger', t('settings.groups.danger'), { tone: 'danger' }),
+      group: group('danger', t('settings.groups.danger')),
       render: () => <ClearRecord />,
     },
   )
@@ -610,7 +610,7 @@ export function useHarnessesSection(): SectionDef {
     id: 'harnesses',
     title: t('sections.harnesses'),
     description: t('pages.harnesses'),
-    icon: BoxesIcon,
+    icon: SquareTerminalIcon,
     rows: [
       ...installed.map((h) => row(h, groups.installed)),
       ...missing.map((h) => row(h, groups.missing)),
@@ -745,7 +745,7 @@ export function useAdvancedSection(): SectionDef {
     id: 'advanced',
     title: t('sections.advanced'),
     description: t('pages.advanced', onHost),
-    icon: WrenchIcon,
+    icon: CodeIcon,
     rows: [
       {
         id: 'proxy',
@@ -782,7 +782,7 @@ export function useAdvancedSection(): SectionDef {
         english: en('advanced.removeSessions.name'),
         description: t('advanced.removeSessions.description'),
         keywords: t('advanced.removeSessions.keywords'),
-        group: group('danger', t('advanced.groups.danger'), { tone: 'danger' }),
+        group: group('danger', t('advanced.groups.danger')),
         render: () => <RemoveAll />,
       },
     ],

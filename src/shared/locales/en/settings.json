@@ -22,16 +22,15 @@
     "search": "Search settings",
     "clearSearch": "Clear search",
     "sections": "Sections",
-    "back": "Back",
-    "waiting": "{{count}} waiting for approval",
     "noMatch": "No settings match “{{query}}”",
     "noMatchHint": "Try another word, such as theme, proxy or shell.",
     "results": "Search results",
     "resultsLine_one": "{{count}} setting matches “{{query}}”. Esc clears the search.",
-    "resultsLine_other": "{{count}} settings match “{{query}}”. Esc clears the search."
+    "resultsLine_other": "{{count}} settings match “{{query}}”. Esc clears the search.",
+    "close": "Close settings"
   },
   "hostPicker": {
-    "label": "Host settings",
+    "label": "Settings for",
     "self": "This computer · {{name}}",
     "selfUnnamed": "This computer",
     "offline": "Offline"
@@ -39,18 +38,19 @@
   "general": {
     "language": {
       "name": "Language",
-      "description": "The language of menus, settings and Kettu's own messages. What agents write is not translated.",
+      "description": "Menus, settings and Kettu’s own messages. Agents keep replying in the language you write to them.",
       "keywords": "language locale chinese english translation",
-      "system": "System"
+      "system": "System",
+      "systemNamed": "System ({{name}})"
     },
     "defaultAgent": {
       "name": "Default agent",
-      "description": "The agent New session starts. With Ask each time, you choose one there.",
+      "description": "Which agent New session starts with.",
       "askEachTime": "Ask each time"
     },
     "sendKey": {
       "name": "Send with",
-      "description": "The other key inserts a new line.",
+      "description": "The other key adds a new line.",
       "keywords": "enter newline composer"
     },
     "restore": {
@@ -58,21 +58,22 @@
       "description": "A split view comes back with its panes."
     },
     "confirmQuit": {
-      "name": "Ask before quitting while agents or terminal commands are running",
-      "keywords": "quit confirm"
+      "name": "Ask before quitting",
+      "keywords": "quit confirm",
+      "description": "Only while an agent or a terminal command is still running."
     },
     "sessionTitles": {
       "name": "Write titles for new sessions",
-      "description": "For agents that do not title their sessions themselves, uses a small model of the agent, and its plan or credits, once for each new session.",
+      "description": "A small model names each session once. Uses a little of the agent’s plan.",
       "keywords": "title name session model credits"
     },
     "background": {
       "name": "Run in the background",
-      "descriptionMac": "Keeps Kettu running with its icon in the menu bar after you close its window, so sessions and routines keep working.",
-      "descriptionWindows": "Keeps Kettu running with its icon in the notification area after you close its window, so sessions and routines keep working.",
-      "descriptionLinux": "Keeps Kettu running with its icon in the system tray after you close its window, so sessions and routines keep working.",
+      "descriptionMac": "Keeps sessions and routines running in the menu bar after you close the window.",
+      "descriptionWindows": "Keeps sessions and routines running in the notification area after you close the window.",
+      "descriptionLinux": "Keeps sessions and routines running in the system tray after you close the window.",
       "keywords": "background tray menu bar notification area close window keep running",
-      "lockedByRemote": "On while remote access is, so devices can reach this computer after you close its window."
+      "lockedByRemote": "On while remote access is on."
     },
     "openAtLogin": {
       "name": "Open at login",
@@ -83,12 +84,12 @@
     },
     "confirmLinks": {
       "name": "Ask before opening links",
-      "description": "Shows where a link goes before it opens in your default browser.",
+      "description": "Shows where a link goes before it opens in your browser.",
       "keywords": "link url browser open confirm"
     },
     "outlineSummaries": {
       "name": "Summarize messages in the outline",
-      "description": "Uses a small model of each session's agent, and its plan or credits, when the outline opens with messages it has not summarized.",
+      "description": "A small model writes the outline when you open it.",
       "keywords": "outline titles summary model credits"
     },
     "groups": {
@@ -669,7 +670,7 @@
     }
   },
   "pages": {
-    "general": "The interface language, how you type, and what new sessions and launches do.",
+    "general": "Language, how you type, and what new sessions and launches do.",
     "appearance": "Theme, color mode, zoom and text size. Changes apply at once.",
     "notifications": "They show only while no Kettu window is in front, so they never interrupt what you are reading.",
     "notifications_web": "They show only while this page is not in front, so they never interrupt what you are reading.",
@@ -690,13 +691,6 @@
     "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Install and update them here; accounts are in Agents.",
     "hosts": "The hosts Kettu on this computer connects to. Sessions, projects and agents stay on each host; this is only how to reach them.",
     "hostsWeb": "The computer this page connects to. Its sessions, projects and agents stay on it; here is only how this browser reaches it."
-  },
-  "footer": {
-    "about": "About Kettu",
-    "upToDate": "Up to date",
-    "ready": "{{version}} ready",
-    "available": "{{version}} is out",
-    "downloading": "{{percent}}% downloaded"
   },
   "archived": {
     "description": "{{project}} · archived {{when}}",

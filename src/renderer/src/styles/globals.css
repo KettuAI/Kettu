@@ -206,6 +206,12 @@
   --radius-xl: calc(var(--radius) * 1.6);
   --radius-2xl: calc(var(--radius) * 2);
   --radius-3xl: calc(var(--radius) * 2);
+  /* Settings over the app, and a dialog over Settings; Settings' segmented choices, whose
+     chosen segment sits 2 px inside the track. */
+  --radius-modal: 14px;
+  --radius-dialog: 16px;
+  --radius-segments: 9px;
+  --radius-segment: 7px;
 
   --shadow-sm: var(--elevation-sm);
   --shadow-md: var(--elevation-md);
@@ -305,6 +311,13 @@
   /* Tooltips and a menu item's shortcut. */
   --text-caption: 11.5px;
   --text-caption--line-height: 16px;
+  /* A Settings section's title in the display face, and the 13.5 px of its list, its line under
+     the title and its choices. */
+  --text-section: 19px;
+  --text-section--line-height: 1.2;
+  --text-section--letter-spacing: -0.012em;
+  --text-lede: 13.5px;
+  --text-lede--line-height: 1.5;
 }
 
 :root {

@@ -330,7 +330,7 @@ export function Fact({
 }) {
   const { t } = useTranslation('settings')
   return (
-    <RowFrame compact text={<RowText name={name} />}>
+    <RowFrame text={<RowText name={name} />}>
       {children ? (
         // A mask's box reaches past the column, so its blur ends where the text above does.
         <span

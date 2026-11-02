@@ -2,7 +2,6 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import {
   BellIcon,
   CheckIcon,
-  CircleHelpIcon,
   FileDownIcon,
   GlobeIcon,
   ListIcon,
@@ -43,6 +42,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage } from '@renderer/lib/host'
+import { systemLocale } from '@renderer/lib/i18n'
 import { basename } from '@renderer/lib/format'
 import { fileManagerName, formatShortcut, isMac, isWeb, isWindows } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
@@ -84,7 +84,10 @@ export function Language() {
   const value = useSettings().general.language
   const [apply, error] = useApply()
   const options: { value: LanguageSetting; label: string }[] = [
-    { value: 'system', label: t('general.language.system') },
+    {
+      value: 'system',
+      label: t('general.language.systemNamed', { name: LOCALE_NAMES[systemLocale] }),
+    },
     ...LOCALES.map((locale) => ({ value: locale, label: LOCALE_NAMES[locale] })),
   ]
   return (
@@ -113,11 +116,7 @@ export function DefaultAgent() {
   )
   const [apply, error] = useApply()
   const options = [
-    {
-      value: 'ask',
-      label: t('general.defaultAgent.askEachTime'),
-      icon: <CircleHelpIcon className="size-3.5 text-icon" />,
-    },
+    { value: 'ask', label: t('general.defaultAgent.askEachTime') },
     ...agents.map((agent) => {
       const absent = !isInstalled(agent)
       return {

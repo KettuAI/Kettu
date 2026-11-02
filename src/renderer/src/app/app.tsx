@@ -35,6 +35,9 @@ const HostPathDialog = lazy(() => import('@renderer/web/host-path-dialog'))
 
 export function App() {
   const settingsOpen = useViewStore((s) => s.settings.open)
+  // Settings stays mounted once loaded, so it closes with its own exit.
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
+  if (settingsOpen && !settingsLoaded) setSettingsLoaded(true)
   const pathAsked = usePathRequest((s) => s.asked !== null)
   const [pathPicker, setPathPicker] = useState(false)
   if (pathAsked && !pathPicker) setPathPicker(true)
@@ -47,24 +50,18 @@ export function App() {
         <div className="relative flex h-full w-full flex-col">
           <HostBanner />
           <div className="relative min-h-0 flex-1">
-            {/* The workbench stays mounted under Settings, so threads and terminals keep their
-                state and scroll position; content-visibility skips rendering it meanwhile. */}
-            <div
-              inert={settingsOpen}
-              className={cn('absolute inset-0', settingsOpen && '[content-visibility:hidden]')}
-            >
+            {/* The workbench stays in view under Settings, which opens over it. */}
+            <div inert={settingsOpen} className="absolute inset-0">
               {/* One drag scope for the sidebar and the main area: a session's row drags into
                   the split. */}
               <SplitDragProvider>
                 <Workbench />
               </SplitDragProvider>
             </div>
-            {settingsOpen && (
-              <div className="absolute inset-0">
-                <Suspense fallback={null}>
-                  <SettingsPage />
-                </Suspense>
-              </div>
+            {settingsLoaded && (
+              <Suspense fallback={null}>
+                <SettingsPage />
+              </Suspense>
             )}
           </div>
         </div>

@@ -74,6 +74,9 @@ export function Segmented<T extends string | number>({
   return (
     <SegmentedControl
       aria-label={label}
+      className="h-8 rounded-segments"
+      itemClassName="h-7 rounded-segment px-3 text-control font-medium"
+      thumbClassName={() => 'rounded-segment'}
       value={String(value)}
       segments={options.map((o) => ({ value: String(o.value), label: o.label }))}
       onChange={(next) => {
@@ -84,17 +87,25 @@ export function Segmented<T extends string | number>({
   )
 }
 
-/** A choice from a list: quiet at rest, so a page of rows does not read as a form. */
+/** The buttons in a row: 30 px, as a row's controls are. */
+export const ROW_BUTTON = 'h-7.5 gap-1.5 rounded-xl px-3 text-control'
+
+/** A field in a row, as wide as the board draws each, with the row's 13.5 px text. */
+export const ROW_FIELD = 'h-8 rounded-xl px-2.75 text-lede'
+
+/** A choice from a list, framed as a field, 200 px wide unless `className` says otherwise. */
 export function SettingSelect<T extends string>({
   label,
   value,
   options,
   onChange,
+  className,
 }: {
   label: string
   value: T
   options: { value: T; label: string; icon?: ReactNode; hint?: string; disabled?: boolean }[]
   onChange: (value: T) => void
+  className?: string
 }) {
   return (
     <Select
@@ -104,7 +115,13 @@ export function SettingSelect<T extends string>({
         if (next !== null && next !== value) onChange(next as T)
       }}
     >
-      <SelectTrigger aria-label={label} variant="quiet" className="-mr-2 text-ui">
+      <SelectTrigger
+        aria-label={label}
+        className={cn(
+          'h-8 w-50 shrink-0 gap-2 rounded-xl pr-2.5 pl-3 text-lede *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate',
+          className,
+        )}
+      >
         <SelectValue>
           {(current: T) => {
             const chosen = options.find((o) => o.value === current)
