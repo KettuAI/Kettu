@@ -204,9 +204,9 @@ export default function RoutinesPage() {
   return (
     <div className="flex h-full flex-col">
       <PageStrip />
-      <div className="min-h-0 flex-1 scroll-fade-y overflow-y-auto [scrollbar-gutter:stable]">
+      <div className="min-h-0 flex-1 scroll-fade-y overflow-y-auto px-9 pb-10 [scrollbar-gutter:stable]">
         {/* Block flow, so a notice's margin and the foot's meet as one gap. */}
-        <div className="mx-auto w-full max-w-270 px-9 pb-10">
+        <div className="mx-auto w-full max-w-270">
           <RunAnnouncements />
           <header className="mb-6 flex items-start gap-4">
             <div className="min-w-0 flex-1">
