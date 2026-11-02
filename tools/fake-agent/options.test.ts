@@ -33,6 +33,22 @@ describe('chooseScenario', () => {
     expect(chooseScenario('/tool-storm --count 3', env).options.count).toBe(3)
   })
 
+  it("keeps the words before a command's first flag as its text", () => {
+    expect(chooseScenario('/open-site https://kettu.sh/', {})).toMatchObject({
+      scenario: 'open-site',
+      text: 'https://kettu.sh/',
+    })
+    expect(chooseScenario('/scenario open-site https://kettu.sh/', {}).text).toBe(
+      'https://kettu.sh/',
+    )
+    expect(chooseScenario('/open-site', {}).text).toBe('')
+    expect(chooseScenario('/permission --withdraw 10', {}).text).toBe('')
+    expect(chooseScenario('/basic-turn a question --rate 5', {})).toMatchObject({
+      text: 'a question',
+      options: { rate: 5 },
+    })
+  })
+
   it('treats unknown commands as text', () => {
     expect(chooseScenario('/nope', {}).scenario).toBe('basic-turn')
   })
