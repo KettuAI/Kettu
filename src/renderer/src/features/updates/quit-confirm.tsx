@@ -45,6 +45,12 @@ export function QuitConfirm() {
       }),
     [],
   )
+  const open = request !== null
+  useEffect(() => {
+    if (!open) return
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [open])
 
   const answer = (value: boolean | 'background') => {
     if (!request) return
@@ -77,7 +83,7 @@ export function QuitConfirm() {
             : t('quit.terminalsRunning', { count: terminals.length })
           : t('quit.titleQuit')
   return (
-    <AlertDialog open={!!request} onOpenChange={(open) => !open && !saving && answer(false)}>
+    <AlertDialog open={open} onOpenChange={(open) => !open && !saving && answer(false)}>
       <AlertDialogContent
         initialFocus={keepRunning ? keep : true}
         className="gap-0 px-5.5 pt-5 pb-4.5 data-[size=default]:sm:max-w-[440px]"
