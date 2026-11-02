@@ -30,6 +30,12 @@
     "resultsLine_one": "{{count}} setting matches “{{query}}”. Esc clears the search.",
     "resultsLine_other": "{{count}} settings match “{{query}}”. Esc clears the search."
   },
+  "hostPicker": {
+    "label": "Host settings",
+    "self": "This computer · {{name}}",
+    "selfUnnamed": "This computer",
+    "offline": "Offline"
+  },
   "general": {
     "language": {
       "name": "Language",
@@ -669,6 +675,7 @@
     "notifications_web": "They show only while this page is not in front, so they never interrupt what you are reading.",
     "account": "Your Kettu account, for Kettu’s cloud services. Everything else works without signing in.",
     "agents": "The agents you pick to work with, each with its own account and limits. One harness can have several agents, such as one on a subscription and one on a company API key.",
+    "agents_web": "The agents on {{host}} you pick to work with, each with its own account and limits on {{host}}. One harness can have several agents, such as one on a subscription and one on a company API key.",
     "terminal": "Which shell the side panel's terminal runs, and its font size.",
     "git": "The top bar's branch and changes, pull requests and their checks all come from these two tools.",
     "advanced": "Network proxy, diagnostics and the data Kettu keeps on this computer.",
@@ -849,6 +856,11 @@
       "name": "Name",
       "nameDescription": "{{name}} lists this computer under this name.",
       "nameOffline": "{{name}} lists this computer under this name, which can be changed while it is online.",
+      "settings": {
+        "name": "{{name}}'s settings",
+        "description": "Agents, harnesses, usage, the terminal, remote access and the rest belong to {{name}}: choose it under Host settings at the left of Settings. Only its owner can change them.",
+        "open": "Open {{name}}'s settings"
+      },
       "editTitle": "Addresses of {{name}}",
       "editBody": "This computer tries all of them at once and uses the first that answers.",
       "save": "Save",
@@ -1127,6 +1139,11 @@
       "portBody": "This page uses the old port, so it disconnects, and a browser keeps its pairing per address: add this browser again at the new port.",
       "removeTitle": "Remove this browser?",
       "removeBody": "This page disconnects at once and goes back to pairing. To use Kettu in this browser again, add it again from Add device."
+    },
+    "other": {
+      "offBody": "Every device disconnects at once, this computer too. It connects again only once remote access is turned on again on {{host}}.",
+      "resetBody": "This computer is one of them, so it has to be added to {{host}} again.",
+      "portBody": "This computer reaches {{host}} at the old port too, so it may disconnect; if it does not connect again, change the address on {{host}}'s page in Settings > Hosts."
     }
   },
   "usage": {

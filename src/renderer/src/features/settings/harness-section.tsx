@@ -53,11 +53,16 @@ import { listedInstalled, readiness } from '@renderer/features/agents/readiness'
 import { adapterOnlyUpdate } from '@renderer/features/agents/updates'
 import { PANEL } from '@renderer/features/session/entries/helpers'
 import { longAgo } from '@renderer/lib/format'
-import { errorMessage, host } from '@renderer/lib/host'
+import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { harnessStatuses, isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
-import { useSettingsStore } from '@renderer/stores/settings'
+import {
+  harnessStatuses,
+  isInstalled,
+  usableAgents,
+  type AgentsStoreHook,
+} from '@renderer/stores/agents'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { openAgentSettings, openHarnessSettings } from '@renderer/stores/view'
 import { ConfigFrame, DismissButton, Fact, Log, LogCopyButton, TaskLog } from './agent-parts'
 import { harnessVersion, useAction, VENDORS } from './agent-helpers'
@@ -84,9 +89,9 @@ type SettingsT = ReturnType<typeof useTranslation<'settings'>>['t']
  * Checks every harness for updates. The store records a failure as `updateCheck.error`, so reject
  * as well, which keeps a failed check from showing the icon's check.
  */
-async function checkForUpdates(): Promise<void> {
-  await useAgentsStore.getState().checkUpdates()
-  const error = useAgentsStore.getState().updateCheck.error
+async function checkForUpdates(agents: AgentsStoreHook): Promise<void> {
+  await agents.getState().checkUpdates()
+  const error = agents.getState().updateCheck.error
   if (error) throw new Error(error)
 }
 
@@ -108,28 +113,32 @@ function installKind(status: AgentStatus): 'program' | 'package' | null {
   return null
 }
 
-function startInstall(harness: HarnessId, method?: AgentInstallMethod['id'] | null): void {
-  void useAgentsStore.getState().install(harness, method ?? undefined)
+function startInstall(
+  agents: AgentsStoreHook,
+  harness: HarnessId,
+  method?: AgentInstallMethod['id'] | null,
+): void {
+  void agents.getState().install(harness, method ?? undefined)
 }
 
-function startUpdate(harness: HarnessId): void {
-  void useAgentsStore.getState().update(harness)
+function startUpdate(agents: AgentsStoreHook, harness: HarnessId): void {
+  void agents.getState().update(harness)
 }
 
-function startCliUpdate(harness: HarnessId): void {
-  void useAgentsStore.getState().updateCli(harness)
+function startCliUpdate(agents: AgentsStoreHook, harness: HarnessId): void {
+  void agents.getState().updateCli(harness)
 }
 
-function cancelTask(harness: HarnessId): void {
-  void useAgentsStore.getState().cancelTask(harness)
+function cancelTask(agents: AgentsStoreHook, harness: HarnessId): void {
+  void agents.getState().cancelTask(harness)
 }
 
 /** Runs a failed task again, by the route it took; an update with a route is the program's own. */
-function retryTask(harness: HarnessId, task: AgentTask): void {
+function retryTask(agents: AgentsStoreHook, harness: HarnessId, task: AgentTask): void {
   if (task.kind === 'update') {
-    if (task.method) startCliUpdate(harness)
-    else startUpdate(harness)
-  } else startInstall(harness, task.method)
+    if (task.method) startCliUpdate(agents, harness)
+    else startUpdate(agents, harness)
+  } else startInstall(agents, harness, task.method)
 }
 
 function methodName(t: SettingsT, method: AgentInstallMethod['id']): string {
@@ -179,6 +188,7 @@ function PillClose({
 
 /** What a harness's row offers next to its name: install, update, or how either is going. */
 function HarnessPill({ status }: { status: AgentStatus }) {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const updated = useAgentsStore((s) => s.updated[status.id])
   const taskError = useAgentsStore((s) => s.taskErrors[status.id])
@@ -196,7 +206,7 @@ function HarnessPill({ status }: { status: AgentStatus }) {
           <PillClose
             label={t(updating ? 'agents.update.cancel' : 'agents.install.cancel')}
             tone="info"
-            onClick={() => cancelTask(harness)}
+            onClick={() => cancelTask(useAgentsStore, harness)}
           />
         )}
       </Badge>
@@ -210,7 +220,7 @@ function HarnessPill({ status }: { status: AgentStatus }) {
           type="button"
           data-retry=""
           title={task.error ?? undefined}
-          onClick={() => retryTask(harness, task)}
+          onClick={() => retryTask(useAgentsStore, harness, task)}
           className="inline-flex items-center gap-1 rounded-sm outline-none focus-ring"
         >
           <RotateCwIcon className="size-3" />
@@ -219,7 +229,7 @@ function HarnessPill({ status }: { status: AgentStatus }) {
         <PillClose
           label={t('agents.task.dismiss')}
           tone="error"
-          onClick={() => cancelTask(harness)}
+          onClick={() => cancelTask(useAgentsStore, harness)}
         />
       </Badge>
     )
@@ -234,7 +244,7 @@ function HarnessPill({ status }: { status: AgentStatus }) {
         <PillClose
           label={t('agents.task.dismiss')}
           tone="error"
-          onClick={() => cancelTask(harness)}
+          onClick={() => cancelTask(useAgentsStore, harness)}
         />
       </Badge>
     )
@@ -250,7 +260,9 @@ function HarnessPill({ status }: { status: AgentStatus }) {
             title={cliUpdate?.command}
             // The user's own CLI changes outside Kettu, so its update runs from the page that
             // shows the command; Kettu's own package updates here.
-            onClick={() => (cliUpdate ? openHarnessSettings(harness) : startUpdate(harness))}
+            onClick={() =>
+              cliUpdate ? openHarnessSettings(harness) : startUpdate(useAgentsStore, harness)
+            }
           />
         }
       >
@@ -279,7 +291,9 @@ function HarnessPill({ status }: { status: AgentStatus }) {
         render={
           <button
             type="button"
-            onClick={() => (kind === 'program' ? setInstalling(true) : startInstall(harness))}
+            onClick={() =>
+              kind === 'program' ? setInstalling(true) : startInstall(useAgentsStore, harness)
+            }
           />
         }
       >
@@ -306,6 +320,7 @@ function InstallDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const [picked, setPicked] = useState<AgentInstallMethod['id'] | undefined>(undefined)
   const method = installMethod(status, picked)
@@ -395,7 +410,7 @@ function InstallDialog({
           <Button
             disabled={!method}
             onClick={() => {
-              startInstall(status.harnessId, method?.id)
+              startInstall(useAgentsStore, status.harnessId, method?.id)
               onOpenChange(false)
             }}
           >
@@ -409,6 +424,7 @@ function InstallDialog({
 
 /** One harness in the list: its version, how it runs, whose program, and how many agents use it. */
 export function HarnessListItem({ status }: { status: AgentStatus }) {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const taskError = useAgentsStore((s) => s.taskErrors[status.id])
   const agents = useAgentsStore(
@@ -484,6 +500,7 @@ export function HarnessListItem({ status }: { status: AgentStatus }) {
 
 /** The Installed group's own action: check every harness for updates, and when it last did. */
 export function HarnessGroupActions() {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const check = useAgentsStore((s) => s.updateCheck)
   const harnesses = useAgentsStore(useShallow((s) => harnessStatuses(s.order, s.byId)))
@@ -519,7 +536,7 @@ export function HarnessGroupActions() {
           size="sm"
           aria-busy={refresh.phase === 'turning'}
           disabled={refresh.phase === 'turning'}
-          onClick={() => void refresh.run(checkForUpdates).catch(() => {})}
+          onClick={() => void refresh.run(() => checkForUpdates(useAgentsStore)).catch(() => {})}
           className={GROUP_ACTION}
         >
           <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
@@ -532,6 +549,7 @@ export function HarnessGroupActions() {
 
 /** A harness's own page: its version and updates, the program that runs, and its agents. */
 export function HarnessPage({ harnessId }: { harnessId: HarnessId }) {
+  const { useAgentsStore } = useHostScope()
   const status = useAgentsStore((s) => s.byId[harnessId])
   if (!status) return <HarnessPageHeader status={null} />
   return <HarnessPageBody status={status} />
@@ -575,6 +593,7 @@ function HarnessPageLine({ status }: { status: AgentStatus }) {
 }
 
 function HarnessPageBody({ status }: { status: AgentStatus }) {
+  const { request, useAgentsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const environment = useAgentsStore((s) => s.environment)
   const [act, busy, error] = useAction()
@@ -654,7 +673,7 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
                         size="compact"
                         disabled={busy || r.kind === 'installing' || r.kind === 'starting'}
                         onClick={() =>
-                          act(() => host('agents.reinstall', { agentId: status.harnessId }))
+                          act(() => request('agents.reinstall', { agentId: status.harnessId }))
                         }
                       >
                         {busy && <Spinner data-icon="inline-start" />}
@@ -679,6 +698,7 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
 
 /** The harness's version, whether a newer one exists, and the check for it. */
 function VersionGroup({ status }: { status: AgentStatus }) {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const check = useAgentsStore((s) => s.updateCheck)
   const refresh = useRefresh({ busy: check.running })
@@ -748,7 +768,9 @@ function VersionGroup({ status }: { status: AgentStatus }) {
               className="text-secondary"
               aria-busy={refresh.phase === 'turning'}
               disabled={refresh.phase === 'turning' || updating}
-              onClick={() => void refresh.run(checkForUpdates).catch(() => {})}
+              onClick={() =>
+                void refresh.run(() => checkForUpdates(useAgentsStore)).catch(() => {})
+              }
             >
               <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
               {t('agents.update.check')}
@@ -762,6 +784,7 @@ function VersionGroup({ status }: { status: AgentStatus }) {
 
 /** An update on offer, under way, failed or just done, in one notice under the page's title. */
 function TaskNotice({ status, installed }: { status: AgentStatus; installed: boolean }) {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const updated = useAgentsStore((s) => s.updated[status.id])
   const taskError = useAgentsStore((s) => s.taskErrors[status.id])
@@ -787,7 +810,7 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
               })
         }
         action={
-          <Button variant="outline" size="sm" onClick={() => cancelTask(harness)}>
+          <Button variant="outline" size="sm" onClick={() => cancelTask(useAgentsStore, harness)}>
             {t(updating ? 'agents.update.cancel' : 'agents.install.cancel')}
           </Button>
         }
@@ -806,7 +829,7 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
         title={t(
           taskError.kind === 'update' ? 'agents.update.failedTitle' : 'agents.install.failedTitle',
         )}
-        action={<DismissButton onClick={() => cancelTask(harness)} />}
+        action={<DismissButton onClick={() => cancelTask(useAgentsStore, harness)} />}
       >
         <span data-selectable="">{taskError.message}</span>
       </Notice>
@@ -820,7 +843,7 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
         icon={outdated ? <TriangleAlertIcon /> : <CircleArrowUpIcon />}
         title={t('agents.update.noticeTitle', { name, version: cliUpdate.version })}
         action={
-          <Button size="sm" onClick={() => startCliUpdate(harness)}>
+          <Button size="sm" onClick={() => startCliUpdate(useAgentsStore, harness)}>
             {t('harnesses.updateTo', { version: cliUpdate.version })}
           </Button>
         }
@@ -853,7 +876,7 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
               : t('agents.update.noticeTitleAdapter', { name })
         }
         action={
-          <Button size="sm" onClick={() => startUpdate(harness)}>
+          <Button size="sm" onClick={() => startUpdate(useAgentsStore, harness)}>
             {t('agents.update.button')}
           </Button>
         }
@@ -894,6 +917,7 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
 
 /** A failed install or update: why, its log, and retry, copy or dismiss. */
 function FailedTaskNotice({ status, task }: { status: AgentStatus; task: AgentTask }) {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const updating = task.kind === 'update'
   return (
@@ -901,12 +925,16 @@ function FailedTaskNotice({ status, task }: { status: AgentStatus; task: AgentTa
       variant="error"
       icon={<CircleAlertIcon />}
       title={t(updating ? 'agents.update.failedTitle' : 'agents.install.failedTitle')}
-      action={<DismissButton onClick={() => cancelTask(status.harnessId)} />}
+      action={<DismissButton onClick={() => cancelTask(useAgentsStore, status.harnessId)} />}
       more={
         <>
           <TaskLog task={task} />
           <span className="flex flex-wrap gap-1.5">
-            <Button variant="outline" size="sm" onClick={() => retryTask(status.harnessId, task)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => retryTask(useAgentsStore, status.harnessId, task)}
+            >
               <RotateCwIcon data-icon="inline-start" />
               {t('common:actions.retry')}
             </Button>
@@ -924,6 +952,7 @@ function FailedTaskNotice({ status, task }: { status: AgentStatus; task: AgentTa
 
 /** Installing a harness: its program by a route in the dialog, or Kettu's package; then progress. */
 function InstallNotice({ status, kind }: { status: AgentStatus; kind: 'program' | 'package' }) {
+  const { api, useAgentsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const [open, setOpen] = useState(false)
   const task = status.task?.kind === 'install' ? status.task : null
@@ -937,7 +966,11 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: 'program' 
         title={t('agents.install.progressTitle', { name })}
         action={
           (task || status.package) && (
-            <Button variant="outline" size="sm" onClick={() => cancelTask(status.harnessId)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => cancelTask(useAgentsStore, status.harnessId)}
+            >
               {t('agents.install.cancel')}
             </Button>
           )
@@ -958,7 +991,7 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: 'program' 
         icon={<DownloadIcon />}
         title={t('agents.install.title', { name })}
         action={
-          <Button size="sm" onClick={() => startInstall(status.harnessId)}>
+          <Button size="sm" onClick={() => startInstall(useAgentsStore, status.harnessId)}>
             {t('agents.install.button')}
           </Button>
         }
@@ -985,7 +1018,7 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: 'program' 
               size="sm"
               className="-ml-2 text-secondary"
               onClick={() =>
-                void window.kettu.dialogs
+                void api.dialogs
                   .chooseAgentBinary(status.harnessId)
                   .catch((e: unknown) => console.warn(errorMessage(e)))
               }
@@ -1009,6 +1042,7 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: 'program' 
  * another one picked in a dialog for a harness that runs a binary.
  */
 function ProgramGroup({ status }: { status: AgentStatus }) {
+  const { api, useSettingsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const override = useSettingsStore((s) => s.settings.agents[status.harnessId]?.binaryPath)
   const [act, , error] = useAction()
@@ -1064,9 +1098,7 @@ function ProgramGroup({ status }: { status: AgentStatus }) {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() =>
-                    act(() => window.kettu.dialogs.chooseAgentBinary(status.harnessId))
-                  }
+                  onClick={() => act(() => api.dialogs.chooseAgentBinary(status.harnessId))}
                 >
                   {t('agents.chooseBinary')}
                 </Button>
@@ -1098,6 +1130,7 @@ function ProgramGroup({ status }: { status: AgentStatus }) {
 
 /** Kettu's own package for the harness: Claude Code's SDK or an ACP adapter, and its updates. */
 function PackageGroup({ status }: { status: AgentStatus }) {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const pkg = status.package
   if (!pkg) return null
@@ -1125,7 +1158,11 @@ function PackageGroup({ status }: { status: AgentStatus }) {
           }
         >
           {status.update && (
-            <Button size="sm" variant="outline" onClick={() => startUpdate(status.harnessId)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => startUpdate(useAgentsStore, status.harnessId)}
+            >
               {t('harnesses.updateTo', { version: status.update.adapterVersion })}
             </Button>
           )}
@@ -1142,6 +1179,7 @@ function PackageGroup({ status }: { status: AgentStatus }) {
 
 /** The agents that use the harness; they are added and changed in Settings > Agents. */
 function AgentsGroup({ status }: { status: AgentStatus }) {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const agents = useAgentsStore(
     useShallow((s) =>
@@ -1173,6 +1211,7 @@ function AgentsGroup({ status }: { status: AgentStatus }) {
 
 /** The harness's name as the page's title, opening a searchable list of the harnesses. */
 function HarnessPicker({ status }: { status: AgentStatus }) {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const harnesses = useAgentsStore(useShallow((s) => harnessStatuses(s.order, s.byId)))
   const { contains } = useComboboxFilter()
@@ -1217,6 +1256,7 @@ function HarnessPicker({ status }: { status: AgentStatus }) {
 }
 
 export function EnvironmentFooter() {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const environment = useAgentsStore((s) => s.environment)
   const now = useNow()

@@ -22,7 +22,6 @@ import {
   type ZoomStep,
 } from '@shared/settings'
 import type { AgentId } from '@shared/thread'
-import { exportDiagnostics } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { BrandIcon } from '@renderer/components/brand'
 import {
@@ -43,16 +42,15 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { errorMessage, host } from '@renderer/lib/host'
+import { errorMessage } from '@renderer/lib/host'
 import { basename } from '@renderer/lib/format'
 import { fileManagerName, formatShortcut, isMac, isWeb, isWindows } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
 import { cn } from '@renderer/lib/utils'
 import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
-import { loadGitTools, useGitStore } from '@renderer/stores/git'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { useSessionsStore } from '@renderer/stores/sessions'
-import { useSettingsStore } from '@renderer/stores/settings'
+import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { browserNotifications, notificationsProblem } from '@renderer/web/notifications'
 import {
   CONFIRM,
@@ -70,7 +68,8 @@ import {
 import { FlashMark, GroupNote } from './rows'
 import { useApply } from './use-apply'
 
-const useSettings = () => useSettingsStore((s) => s.settings)
+/** The settings of the host the section shows, this computer's own keys among them. */
+const useSettings = () => useHostScope().useSettingsStore((s) => s.settings)
 
 // The panel behind a live preview: text size, terminal font, notification banner.
 const PREVIEW_BOX = 'rounded-code bg-app shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]'
@@ -434,13 +433,14 @@ export function ReduceMotion() {
 
 export function ShellPicker() {
   const { t } = useTranslation('settings')
+  const { api } = useHostScope()
   const shellPath = useSettings().terminal.shellPath
   const [apply, error] = useApply()
   const [pickError, setPickError] = useState<string | null>(null)
   const choose = async () => {
     setPickError(null)
     try {
-      await window.kettu.dialogs.chooseShell()
+      await api.dialogs.chooseShell()
     } catch (e) {
       setPickError(errorMessage(e))
     }
@@ -568,6 +568,7 @@ function StatusDot() {
 
 function ToolsPending() {
   const { t } = useTranslation()
+  const { useGitStore, loadGitTools } = useHostScope()
   const error = useGitStore((s) => s.toolsError)
   if (!error) return <Spinner className="size-3.5 text-tertiary" />
   return (
@@ -582,6 +583,7 @@ function ToolsPending() {
 
 export function GitTool() {
   const { t } = useTranslation('settings')
+  const { useGitStore } = useHostScope()
   const tools = useGitStore((s) => s.tools)
   if (!tools) return <ToolsPending />
   const { found, version } = tools.git
@@ -606,6 +608,7 @@ const SLOT = '\uE001'
 
 export function GhTool() {
   const { t } = useTranslation('settings')
+  const { useGitStore } = useHostScope()
   const tools = useGitStore((s) => s.tools)
   if (!tools) return <ToolsPending />
   const { gh } = tools
@@ -927,13 +930,17 @@ export function Proxy({ label }: { label: ReactNode }) {
 
 export function Diagnostics({ label }: { label: ReactNode }) {
   const { t } = useTranslation('settings')
+  const { request } = useHostScope()
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<{ path: string } | { error: string } | null>(null)
   const run = async () => {
     setBusy(true)
     setNote(null)
     try {
-      const path = await exportDiagnostics()
+      // Saved on this computer, wherever the host it describes is.
+      const path = await window.kettu.diagnostics.save(
+        await request('diagnostics.collect', undefined),
+      )
       if (path) setNote({ path })
     } catch (e) {
       setNote({ error: errorMessage(e) })
@@ -1178,7 +1185,10 @@ function labelOf(origin: string): string {
 
 export function RemoveAll() {
   const { t } = useTranslation(['settings', 'common'])
-  const count = useSessionsStore((s) => Object.keys(s.byId).length)
+  const { hostId, request } = useHostScope()
+  const count = useSessionsStore(
+    (s) => Object.values(s.byId).filter((summary) => hostOfSession(summary) === hostId).length,
+  )
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -1186,8 +1196,8 @@ export function RemoveAll() {
     setBusy(true)
     setError(null)
     try {
-      await host('sessions.removeAll', undefined)
-      await useSessionsStore.getState().refresh()
+      await request('sessions.removeAll', undefined)
+      useSessionsStore.getState().setAll(await request('sessions.list', {}), hostId)
       toast(t('advanced.removeSessions.removed'))
     } catch (e) {
       setError(errorMessage(e))

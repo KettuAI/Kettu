@@ -70,6 +70,22 @@ describe('HostsClient', () => {
     })
   })
 
+  it("sends an owner's calls to the host, and path completion", () => {
+    const { client, give } = setup()
+    const port = new FakePort()
+    client.onSession(() => {})
+    give(port)
+    void client.request(devBox, 'settings.get', undefined)
+    void client.request(devBox, 'paths.complete', { path: '/ho' })
+    expect(port.posted).toEqual([
+      { hostId: devBox, message: { type: 'request', id: 1, method: 'settings.get' } },
+      {
+        hostId: devBox,
+        message: { type: 'request', id: 2, method: 'paths.complete', params: { path: '/ho' } },
+      },
+    ])
+  })
+
   it("tells its listeners of each host's session and events", () => {
     const { client, give } = setup()
     const heard: [string, HostSessionChange][] = []

@@ -10,9 +10,8 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
-import { usableAgents, useAgentsStore } from '@renderer/stores/agents'
-import { useMcpStore } from '@renderer/stores/mcp'
-import { useSettingsStore } from '@renderer/stores/settings'
+import { usableAgents } from '@renderer/stores/agents'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { openSettingsItem } from '@renderer/stores/view'
 import { ConfigNote, ConfigPath } from './places'
 import { GroupLabel, ItemPageHeader, ItemRow, Notice, RowGroup, RowShell, RowText } from './rows'
@@ -24,6 +23,7 @@ const SKELETON_AFTER_MS = 200
 
 /** The saved state of a switch: the settings the renderer holds, out of reach of the page. */
 function useKettuOff(): AgentId[] {
+  const { useSettingsStore } = useHostScope()
   return useSettingsStore((s) => s.settings.mcp.kettu.off)
 }
 
@@ -77,6 +77,7 @@ function RunningDot({ running, words }: { running: boolean; words: boolean }) {
 
 /** "3 tools", and then who the server is off for. */
 function ServerSummary({ server }: { server: McpStatus['servers'][number] }) {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const off = useKettuOff()
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
@@ -115,6 +116,7 @@ export function ServerRow({ server }: { server: McpStatus['servers'][number] }) 
 
 /** One agent's own configuration: its tile and name, then the file as a place. */
 export function AgentPlaceRow({ place }: { place: McpStatus['places'][number] }) {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const agent = useAgentsStore((s) => s.byId[place.agentId])
   const name = agent?.name ?? place.agentId
@@ -164,6 +166,7 @@ function LoadingRows({ rows }: { rows: number }) {
 
 /** In place of both groups when the read failed: what went wrong and Retry at its end. */
 export function FailedRead({ error }: { error: string }) {
+  const { useMcpStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const [busy, setBusy] = useState(false)
   const retry = useMcpStore((s) => s.retry)
@@ -216,6 +219,7 @@ export function PendingList() {
 
 /** Kettu's own server's page: its state, the agents it is for and its tools. */
 export function McpServerPage({ name }: { name: string }) {
+  const { useMcpStore } = useHostScope()
   const { t } = useTranslation('settings')
   const status = useMcpStore((s) => s.status)
   const error = useMcpStore((s) => s.error)
@@ -257,6 +261,7 @@ export function McpServerPage({ name }: { name: string }) {
 
 /** The notice a server that does not listen shows, with Retry at its end. */
 function NotRunning({ server }: { server: McpStatus['servers'][number] }) {
+  const { useMcpStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const retry = useMcpStore((s) => s.retry)
   const [busy, setBusy] = useState(false)
@@ -294,6 +299,7 @@ function NotRunning({ server }: { server: McpStatus['servers'][number] }) {
 
 /** A switch per agent in catalog order: whether its sessions get Kettu's tools. */
 function AgentsGroup() {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   const off = useKettuOff()
@@ -329,6 +335,7 @@ function AgentSwitchRow({
   off: boolean
   set: (agentId: AgentId, on: boolean) => void
 }) {
+  const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const status = useAgentsStore((s) => s.byId[agentId])
   const name = status?.name ?? agentId

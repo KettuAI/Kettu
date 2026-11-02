@@ -28,11 +28,12 @@ import {
 import { Input } from '@renderer/components/ui/input'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { monthDay } from '@renderer/lib/format'
-import { useHostsStore } from '@renderer/stores/hosts'
+import { isAway, useHostsStore } from '@renderer/stores/hosts'
 import { openSettingsItem } from '@renderer/stores/view'
 import { Fact } from './agent-parts'
 import { CONFIRM, ControlError } from './controls'
 import { AddHostDialog } from './host-add'
+import { openHostSettings } from './host-sections'
 import { changeHost, platformName, routeName, routeText } from './host-text'
 import { HostState } from './hosts-section'
 import { DeviceTile, HostIcon } from './remote-parts'
@@ -146,6 +147,27 @@ function HostPageBody({ host }: { host: HostStatus }) {
               }
             >
               <DeviceNameField host={host} />
+            </RowFrame>
+          </RowGroup>
+        </section>
+        <section aria-label={t('hostPicker.label')} className="flex flex-col">
+          <RowGroup>
+            <RowFrame
+              text={
+                <RowText
+                  name={t('hosts.page.settings.name', { name })}
+                  description={t('hosts.page.settings.description', { name })}
+                />
+              }
+            >
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isAway(host.connection)}
+                onClick={() => openHostSettings(host.id)}
+              >
+                {t('hosts.page.settings.open', { name })}
+              </Button>
             </RowFrame>
           </RowGroup>
         </section>

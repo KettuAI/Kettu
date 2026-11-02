@@ -34,6 +34,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { initSettings, useSettingsStore } from '@renderer/stores/settings'
+import { hostScopeEvent, hostScopeOpened } from '@renderer/stores/host-scope'
 import { initHosts, loadHosts } from '@renderer/stores/hosts'
 import { initRemote } from '@renderer/stores/remote'
 import { initSharing } from '@renderer/stores/sharing'
@@ -95,18 +96,24 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       return
     case 'agent.status':
       if (hostId === null) useAgentsStore.getState().setOne(event.status)
-      else hostAgentChanged(hostId, event.status)
+      else {
+        hostAgentChanged(hostId, event.status)
+        hostScopeEvent(hostId, event)
+      }
       return
     case 'agent.removed':
       if (hostId === null) useAgentsStore.getState().remove(event.agentId)
-      else hostAgentRemoved(hostId, event.agentId)
+      else {
+        hostAgentRemoved(hostId, event.agentId)
+        hostScopeEvent(hostId, event)
+      }
       return
     case 'agent.options':
       receiveAgentOptions(event.options, hostId)
       return
   }
-  // The rest is this computer's alone: its environment, usage, artifacts and routines.
-  if (hostId !== null) return
+  // The rest is each host's own: another host's goes to its Settings, if they have shown it.
+  if (hostId !== null) return hostScopeEvent(hostId, event)
   switch (event.type) {
     case 'environment.changed':
       useAgentsStore.setState({ environment: event.info })
@@ -250,6 +257,7 @@ export function bootstrap(): Promise<unknown> {
     initHostSessions({
       event: (hostId, event) => onHostEvent(event, hostId),
       opened: (hostId) => {
+        hostScopeOpened(hostId)
         hostRestarted(hostId)
         rewatchAll((sessionId) => sessionHost(sessionId) === hostId)
         showFront(true)

@@ -4,8 +4,9 @@
 import { useEffect, useState } from 'react'
 import type { AgentStatus, PlanLimit } from '@shared/agent-host'
 import type { HarnessId } from '@shared/thread'
-import { errorMessage, host } from '@renderer/lib/host'
-import { isInstalled, useAgentsStore } from '@renderer/stores/agents'
+import { errorMessage } from '@renderer/lib/host'
+import { isInstalled } from '@renderer/stores/agents'
+import { useHostScope } from '@renderer/stores/host-scope'
 
 export const VENDORS: Partial<Record<HarnessId, string>> = {
   'claude-code': 'Anthropic',
@@ -40,10 +41,11 @@ export function limitsReadable(status: AgentStatus): boolean {
  * reports them, and its details. True while the account and limits are being read.
  */
 export function useAgentReads(status: AgentStatus): boolean {
+  const { request, useAgentsStore } = useHostScope()
   const [reading, setReading] = useState(true)
   useEffect(() => {
     let current = true
-    host('agents.refreshAccount', { agentId: status.id })
+    request('agents.refreshAccount', { agentId: status.id })
       .catch((e: unknown) =>
         console.warn(`Could not read the account and plan limits: ${errorMessage(e)}`),
       )
@@ -53,7 +55,7 @@ export function useAgentReads(status: AgentStatus): boolean {
     return () => {
       current = false
     }
-  }, [status.id])
+  }, [status.id, request])
   // Again on each state or task change, so an adapter installed or updated shows its CLI version.
   const task = status.task?.state ?? null
   useEffect(() => {
@@ -61,7 +63,7 @@ export function useAgentReads(status: AgentStatus): boolean {
       .getState()
       .loadDetails(status.id)
       .catch((e: unknown) => console.warn(`Could not read the agent details: ${errorMessage(e)}`))
-  }, [status.id, status.state, task, status.configDir?.runs])
+  }, [status.id, status.state, task, status.configDir?.runs, useAgentsStore])
   return reading
 }
 
@@ -81,6 +83,7 @@ export function harnessVersion(status: AgentStatus): string | null {
 
 /** Whether the agent's harness has another agent, which is when "Default" tells them apart. */
 export function useHasOtherAgents(status: AgentStatus): boolean {
+  const { useAgentsStore } = useHostScope()
   return useAgentsStore((s) =>
     s.order.some((id) => id !== status.id && s.byId[id]?.harnessId === status.harnessId),
   )

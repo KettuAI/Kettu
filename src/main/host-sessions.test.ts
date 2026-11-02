@@ -196,6 +196,23 @@ describe('HostSessions', () => {
     ])
   })
 
+  it("passes an owner's calls to the host's parent, which the host checks", () => {
+    const { relay, window } = setup()
+    const host = new FakePort()
+    relay.opened(devBox, host)
+    window.deliver(request(devBox, 1, 'settings.update', { patch: { git: { fetch: false } } }))
+    window.deliver(request(devBox, 2, 'remote.status'))
+    expect(host.posted).toEqual([
+      {
+        type: 'request',
+        id: 1,
+        method: 'settings.update',
+        params: { patch: { git: { fetch: false } } },
+      },
+      { type: 'request', id: 2, method: 'remote.status', params: {} },
+    ])
+  })
+
   it('closes every port when Kettu quits', () => {
     const { relay, window } = setup()
     const port = new FakePort()

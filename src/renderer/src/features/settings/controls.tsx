@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { errorMessage } from '@renderer/lib/host'
 import { fileManagerName, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { useSettingsStore } from '@renderer/stores/settings'
 
 export { CopyAction, IconAction } from '@renderer/components/copy-action'
@@ -132,13 +133,15 @@ export function SettingSelect<T extends string>({
 }
 
 /**
- * Shows a file or folder in the platform's file manager. A browser cannot show the host's files,
- * and the copy action beside it already gives the path, so it shows nothing there.
+ * Shows a file or folder in the platform's file manager. Neither a browser nor this computer can
+ * show another host's files, and the copy action beside it already gives the path, so it shows
+ * nothing there.
  */
 export function RevealAction({ path }: { path: string }) {
   const { t } = useTranslation('settings')
+  const { hostId } = useHostScope()
   const [error, setError] = useState<string | null>(null)
-  if (isWeb) return null
+  if (isWeb || hostId !== null) return null
   return (
     <>
       <ControlError error={error} />

@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+import { create, type StoreApi, type UseBoundStore } from 'zustand'
 import type {
   AgentDetails,
   AgentInstallMethod,
@@ -7,7 +7,7 @@ import type {
   EnvironmentInfo,
 } from '@shared/agent-host'
 import { harnessOf, sortAgentIds, type AgentId, type HarnessId } from '@shared/thread'
-import { errorMessage, host, hostAt } from '@renderer/lib/host'
+import { errorMessage, host, hostAt, type HostRequest } from '@renderer/lib/host'
 
 /** One host's agents, in the order the menus list them. */
 export interface HostAgents {
@@ -15,7 +15,7 @@ export interface HostAgents {
   order: AgentId[]
 }
 
-interface AgentsStore extends HostAgents {
+export interface AgentsStore extends HostAgents {
   /** The agents of each other host this computer connects to, by its id; the rest is this computer's. */
   hosts: Record<string, HostAgents>
   environment: EnvironmentInfo | null
@@ -55,96 +55,108 @@ function laterEnvironment(current: EnvironmentInfo | null, next: EnvironmentInfo
   return next.resolvedAt != null && next.resolvedAt >= current.resolvedAt ? next : current
 }
 
-export const useAgentsStore = create<AgentsStore>()((set, get) => ({
-  byId: {},
-  order: [],
-  hosts: {},
-  environment: null,
-  details: {},
-  loaded: false,
-  updateCheck: { running: false, finishedAt: null, error: null },
-  updated: {},
-  taskErrors: {},
-  setAll(statuses) {
-    set({ ...listOf(statuses), loaded: true })
-  },
-  remove(agentId) {
-    set((state) => ({
-      byId: without(state.byId, agentId),
-      order: state.order.filter((id) => id !== agentId),
-      details: without(state.details, agentId),
-    }))
-  },
-  setOne(status) {
-    set((state) => ({
-      byId: { ...state.byId, [status.id]: status },
-      // An agent added since takes its place beside its harness's other agents.
-      order: state.order.includes(status.id)
-        ? state.order
-        : sortAgentIds([...state.order, status.id]),
-      // A task the host reports says more than a request's error.
-      taskErrors: status.task ? without(state.taskErrors, status.id) : state.taskErrors,
-    }))
-  },
-  async refresh() {
-    const [statuses, environment] = await Promise.all([
-      host('agents.list', undefined),
-      host('agents.environment', undefined),
-    ])
-    get().setAll(statuses)
-    set((state) => ({ environment: laterEnvironment(state.environment, environment) }))
-  },
-  async check(agentId) {
-    get().setAll(await host('agents.check', agentId ? { agentId } : {}))
-  },
-  async reloadEnvironment() {
-    get().setAll(await host('agents.reloadEnvironment', undefined))
-    const environment = await host('agents.environment', undefined)
-    set((state) => ({ environment: laterEnvironment(state.environment, environment) }))
-  },
-  async loadDetails(agentId) {
-    const details = await host('agents.details', { agentId })
-    set((state) => ({ details: { ...state.details, [agentId]: details } }))
-  },
-  async checkUpdates() {
-    if (get().updateCheck.running) return
-    set({ updateCheck: { running: true, finishedAt: null, error: null } })
-    try {
-      get().setAll(await host('agents.checkUpdates', undefined))
-      set({ updateCheck: { running: false, finishedAt: Date.now(), error: null } })
-    } catch (e) {
-      set({ updateCheck: { running: false, finishedAt: null, error: errorMessage(e) } })
-    }
-  },
-  async update(agentId) {
-    const done = await taskRequest(agentId, 'update', () => host('agents.update', { agentId }))
-    // The request also resolves when cancelled; then the update is still on offer.
-    const status = get().byId[agentId]
-    if (done && status && !status.task && !status.update) {
-      set((state) => ({ updated: { ...state.updated, [agentId]: true } }))
-    }
-    await get()
-      .loadDetails(agentId)
-      .catch((e: unknown) => console.warn(`Could not read the agent details: ${errorMessage(e)}`))
-  },
-  async updateCli(agentId) {
-    const done = await taskRequest(agentId, 'update', () => host('agents.updateCli', { agentId }))
-    if (done && !get().byId[agentId]?.task) {
-      set((state) => ({ updated: { ...state.updated, [agentId]: true } }))
-    }
-  },
-  async install(agentId, method) {
-    await taskRequest(agentId, 'install', () =>
-      host('agents.install', method ? { agentId, method } : { agentId }),
-    )
-  },
-  async cancelTask(agentId) {
-    set((state) => ({ taskErrors: without(state.taskErrors, agentId) }))
-    await host('agents.cancelTask', { agentId }).catch((e: unknown) =>
-      console.warn(`Could not cancel the task: ${errorMessage(e)}`),
-    )
-  },
-}))
+export type AgentsStoreHook = UseBoundStore<StoreApi<AgentsStore>>
+
+/** The agents of the host `request` reaches: this computer's, or another host's for Settings. */
+export function createAgentsStore(request: HostRequest): AgentsStoreHook {
+  const store: AgentsStoreHook = create<AgentsStore>()((set, get) => ({
+    byId: {},
+    order: [],
+    hosts: {},
+    environment: null,
+    details: {},
+    loaded: false,
+    updateCheck: { running: false, finishedAt: null, error: null },
+    updated: {},
+    taskErrors: {},
+    setAll(statuses) {
+      set({ ...listOf(statuses), loaded: true })
+    },
+    remove(agentId) {
+      set((state) => ({
+        byId: without(state.byId, agentId),
+        order: state.order.filter((id) => id !== agentId),
+        details: without(state.details, agentId),
+      }))
+    },
+    setOne(status) {
+      set((state) => ({
+        byId: { ...state.byId, [status.id]: status },
+        // An agent added since takes its place beside its harness's other agents.
+        order: state.order.includes(status.id)
+          ? state.order
+          : sortAgentIds([...state.order, status.id]),
+        // A task the host reports says more than a request's error.
+        taskErrors: status.task ? without(state.taskErrors, status.id) : state.taskErrors,
+      }))
+    },
+    async refresh() {
+      const [statuses, environment] = await Promise.all([
+        request('agents.list', undefined),
+        request('agents.environment', undefined),
+      ])
+      get().setAll(statuses)
+      set((state) => ({ environment: laterEnvironment(state.environment, environment) }))
+    },
+    async check(agentId) {
+      get().setAll(await request('agents.check', agentId ? { agentId } : {}))
+    },
+    async reloadEnvironment() {
+      get().setAll(await request('agents.reloadEnvironment', undefined))
+      const environment = await request('agents.environment', undefined)
+      set((state) => ({ environment: laterEnvironment(state.environment, environment) }))
+    },
+    async loadDetails(agentId) {
+      const details = await request('agents.details', { agentId })
+      set((state) => ({ details: { ...state.details, [agentId]: details } }))
+    },
+    async checkUpdates() {
+      if (get().updateCheck.running) return
+      set({ updateCheck: { running: true, finishedAt: null, error: null } })
+      try {
+        get().setAll(await request('agents.checkUpdates', undefined))
+        set({ updateCheck: { running: false, finishedAt: Date.now(), error: null } })
+      } catch (e) {
+        set({ updateCheck: { running: false, finishedAt: null, error: errorMessage(e) } })
+      }
+    },
+    async update(agentId) {
+      const done = await taskRequest(store, agentId, 'update', () =>
+        request('agents.update', { agentId }),
+      )
+      // The request also resolves when cancelled; then the update is still on offer.
+      const status = get().byId[agentId]
+      if (done && status && !status.task && !status.update) {
+        set((state) => ({ updated: { ...state.updated, [agentId]: true } }))
+      }
+      await get()
+        .loadDetails(agentId)
+        .catch((e: unknown) => console.warn(`Could not read the agent details: ${errorMessage(e)}`))
+    },
+    async updateCli(agentId) {
+      const done = await taskRequest(store, agentId, 'update', () =>
+        request('agents.updateCli', { agentId }),
+      )
+      if (done && !get().byId[agentId]?.task) {
+        set((state) => ({ updated: { ...state.updated, [agentId]: true } }))
+      }
+    },
+    async install(agentId, method) {
+      await taskRequest(store, agentId, 'install', () =>
+        request('agents.install', method ? { agentId, method } : { agentId }),
+      )
+    },
+    async cancelTask(agentId) {
+      set((state) => ({ taskErrors: without(state.taskErrors, agentId) }))
+      await request('agents.cancelTask', { agentId }).catch((e: unknown) =>
+        console.warn(`Could not cancel the task: ${errorMessage(e)}`),
+      )
+    },
+  }))
+  return store
+}
+
+export const useAgentsStore = createAgentsStore(host)
 
 function listOf(statuses: AgentStatus[]): HostAgents {
   return {
@@ -211,11 +223,12 @@ function without<T>(
 
 /** Runs an install or update request; true when it finished, false when it failed. */
 async function taskRequest(
+  store: AgentsStoreHook,
   agentId: AgentId,
   kind: AgentTask['kind'],
   request: () => Promise<unknown>,
 ): Promise<boolean> {
-  const { setState, getState } = useAgentsStore
+  const { setState, getState } = store
   setState((state) => ({ taskErrors: without(state.taskErrors, agentId) }))
   try {
     await request()

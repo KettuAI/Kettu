@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { RemoteStatus } from '@shared/remote/status'
 
-interface RemoteStore {
+export interface RemoteStore {
   /** What main has: whether remote access runs, and the devices; null until the first read. */
   status: RemoteStatus | null
 }

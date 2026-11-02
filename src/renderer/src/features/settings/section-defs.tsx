@@ -35,25 +35,16 @@ import { i18n } from '@renderer/lib/i18n'
 import { useHostContext, useHostHas } from '@renderer/lib/host-features'
 import { formatShortcut, isMac, isWeb, isWindows, platform } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
-import {
-  agentName,
-  harnessStatuses,
-  hasProgram,
-  usableAgents,
-  useAgentsStore,
-} from '@renderer/stores/agents'
+import { agentName, harnessStatuses, hasProgram, usableAgents } from '@renderer/stores/agents'
 import { useAccountStore } from '@renderer/stores/account'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { archivedSessions, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { useMcpStore } from '@renderer/stores/mcp'
 import { loadHosts, useHostsStore } from '@renderer/stores/hosts'
-import { useRemoteStore } from '@renderer/stores/remote'
 import { useWebHostStore } from '@renderer/stores/web-host'
-import { useSharingStore } from '@renderer/stores/sharing'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { useUpdatesStore } from '@renderer/stores/updates'
-import { useUsageStore } from '@renderer/stores/usage'
 import { openAgentSettings, openHarnessSettings, openSettingsItem } from '@renderer/stores/view'
 import { AboutHero, AutomaticUpdates, LinkRow, NoUpdates, UpdateRow } from './about-section'
 import {
@@ -477,6 +468,7 @@ export function useAccountSection(): SectionDef {
 export function useUsageSection(): SectionDef {
   const { t } = useTranslation('usage')
   const onHost = useHostContext()
+  const { hostId, useSettingsStore, useUsageStore } = useHostScope()
   const en = i18n.getFixedT('en', 'usage')
   const fromComputer = useSettingsStore((s) => s.settings.usage.fromComputer)
   // Strings only: the status is a new object at every step of a scan.
@@ -504,7 +496,7 @@ export function useUsageSection(): SectionDef {
     rows.push(
       ...logIds.map((agentId, i): RowDef => ({
         id: `logs-${agentId}`,
-        name: agentName(agentId),
+        name: agentName(agentId, hostId),
         description: logPlaces[i] ?? '',
         keywords: t('settings.groups.logs'),
         group: logGroup,
@@ -543,6 +535,7 @@ export function useUsageSection(): SectionDef {
 export function useAgentsSection(): SectionDef {
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
+  const { useAgentsStore, useSettingsStore } = useHostScope()
   const en = english()
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId).filter(hasProgram)))
   const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
@@ -566,7 +559,7 @@ export function useAgentsSection(): SectionDef {
   return {
     id: 'agents',
     title: t('sections.agents'),
-    description: t('pages.agents'),
+    description: t('pages.agents', onHost),
     icon: BotIcon,
     rows: [
       ...agents.map(row),
@@ -587,6 +580,7 @@ export function useAgentsSection(): SectionDef {
 
 export function useHarnessesSection(): SectionDef {
   const { t } = useTranslation('settings')
+  const { useAgentsStore } = useHostScope()
   const en = english()
   const harnesses = useAgentsStore(useShallow((s) => harnessStatuses(s.order, s.byId)))
   const environment = useAgentsStore((s) => s.environment)
@@ -886,6 +880,7 @@ export function useAboutSection(): SectionDef {
 
 export function useMcpSection(): SectionDef {
   const { t } = useTranslation('settings')
+  const { hostId, useMcpStore } = useHostScope()
   const en = english()
   const status = useMcpStore((s) => s.status)
   const error = useMcpStore((s) => s.error)
@@ -903,7 +898,7 @@ export function useMcpSection(): SectionDef {
     open: () => openSettingsItem('mcp', server.name),
   }))
   for (const place of places) {
-    const name = agentName(place.agentId)
+    const name = agentName(place.agentId, hostId)
     rows.push({
       id: place.agentId,
       name,
@@ -930,8 +925,9 @@ export function useMcpSection(): SectionDef {
 
 export function useArchivedSection(): SectionDef {
   const { t } = useTranslation(['settings', 'sidebar'])
+  const { hostId } = useHostScope()
   const en = english()
-  const archived = useSessionsStore(useShallow((s) => archivedSessions(s.byId)))
+  const archived = useSessionsStore(useShallow((s) => archivedSessions(s.byId, hostId)))
   const projects = useProjectsStore((s) => s.projects)
   const where = (summary: SessionSummary) =>
     summary.scratch
@@ -948,7 +944,7 @@ export function useArchivedSection(): SectionDef {
       id: summary.id,
       name: sessionTitle(summary),
       description: where(summary),
-      keywords: `${agentName(summary.agentId)} ${t('archived.keywords')}`,
+      keywords: `${agentName(summary.agentId, hostId)} ${t('archived.keywords')}`,
       english: en('sections.archived'),
       group: list,
       layout: 'custom',
@@ -1102,6 +1098,7 @@ function useDesktopHostsSection(): SectionDef {
 export function useRemoteSection(): SectionDef {
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
+  const { useSettingsStore, useRemoteStore } = useHostScope()
   const en = english()
   const enabled = useSettingsStore((s) => s.settings.remote.enabled)
   const status = useRemoteStore((s) => s.status)
@@ -1277,10 +1274,13 @@ function usePublishedTitles(some: boolean): ReadonlyMap<string, string> {
 
 export function useSharingSection(): SectionDef {
   const { t } = useTranslation('settings')
+  const { hostId, sharing } = useHostScope()
+  const { useSharingStore } = sharing
   const en = english()
   const account = useSharingStore((s) => s.status?.cloudflare ?? null)
   const pages = useSharingStore(useShallow((s) => s.status?.published ?? []))
-  const titles = usePublishedTitles(pages.length > 0)
+  // Another host's artifacts are not listed here, so its pages go by their addresses.
+  const titles = usePublishedTitles(hostId === null && pages.length > 0)
   const shares = useHostHas('sharing')
   const base = {
     id: 'sharing' as const,

@@ -9,6 +9,7 @@ import type { Locale } from './locale'
 import type { CarriedMedia } from './media'
 import type { Platform } from './platform'
 import type { DeviceActivity } from './remote/activity'
+import type { HostAdminMethod } from './remote/host-admin'
 import type { HostPairingState, HostPairStart, HostsStatus } from './remote/hosts'
 import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
@@ -439,10 +440,10 @@ export interface KettuApi {
     onChanged(listener: (status: HostsStatus) => void): () => void
     onPairing(listener: (event: HostPairingEvent) => void): () => void
     /**
-     * A request to a connected host's agent host, which rejects as `agents.request` does; one for a
-     * host whose first connection is under way waits for it a while.
+     * A request to a connected host's agent host, or an owner's call to its parent, which rejects as
+     * `agents.request` does; one for a host whose first connection is under way waits for it a while.
      */
-    request(hostId: string, method: HostMethod, params: unknown): Promise<unknown>
+    request(hostId: string, method: HostMethod | HostAdminMethod, params: unknown): Promise<unknown>
     /** Each host's events, and whether its session opened, ended or must be read again. */
     onSession(listener: (hostId: string, change: HostSessionChange) => void): () => void
   }

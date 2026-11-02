@@ -17,6 +17,7 @@ import type {
   HostInfo,
 } from '@shared/remote/host-admin'
 import type { TerminalEvent } from '@shared/terminal-host'
+import { copyPath } from '@renderer/lib/copy-path'
 import { useWebHostStore, type WebHost } from '@renderer/stores/web-host'
 import { frameArtifact } from './frames'
 import { folderOf, homeStart } from './host-path'
@@ -106,16 +107,6 @@ export function webHost(previous: WebHost, state: LinkState, now: number): WebHo
     case 'stopped':
       return { ...previous, connection: { state: 'stopped', reason: state.reason } }
   }
-}
-
-/** Copies the path and says so, where the desktop app shows the item in the file manager. */
-async function copyPath(path: string): Promise<void> {
-  await navigator.clipboard.writeText(path)
-  const [{ toast }, { i18n }] = await Promise.all([
-    import('@renderer/components/ui/toast'),
-    import('@renderer/lib/i18n'),
-  ])
-  toast(i18n.t('web:copiedPath', { path }))
 }
 
 function askPath(

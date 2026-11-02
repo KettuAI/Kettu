@@ -21,9 +21,10 @@ import {
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import { useHostContext } from '@renderer/lib/host-features'
 import { isWeb } from '@renderer/lib/platform'
-import { useRemoteStore } from '@renderer/stores/remote'
-import { useSettingsStore } from '@renderer/stores/settings'
+import { useHostScope } from '@renderer/stores/host-scope'
+import { useOtherHost } from '@renderer/stores/hosts'
 import { CONFIRM, ControlError } from './controls'
 import { DIRECT_PORT_FIELD } from './remote-text'
 import { useApply } from './use-apply'
@@ -33,7 +34,11 @@ const isComposing = (event: KeyboardEvent<HTMLInputElement>): boolean =>
 
 /** The direct connections' port; a new one takes effect after a warning. */
 export function DirectPortField({ label }: { label: string }) {
+  const { hostId, useSettingsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
+  const onHost = useHostContext()
+  // A host added over SSH is reached through it alone, whatever its direct port.
+  const direct = useOtherHost(hostId)?.ssh === undefined
   const port = useSettingsStore((s) => s.settings.remote.direct.port)
   const [draft, setDraft] = useState<string | null>(null)
   const [asking, setAsking] = useState<number | null>(null)
@@ -87,6 +92,7 @@ export function DirectPortField({ label }: { label: string }) {
             <AlertDialogDescription>
               {t('remote.direct.port.confirmBody')}
               {isWeb && ` ${t('remote.web.portBody')}`}
+              {hostId !== null && direct && ` ${t('remote.other.portBody', onHost)}`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -118,6 +124,7 @@ function AddressLine({ address, children }: { address: DirectAddress; children?:
 
 /** The addresses the computer found for itself, which every code and welcome carry. */
 export function FoundAddresses({ text }: { text: ReactNode }) {
+  const { useSettingsStore, useRemoteStore } = useHostScope()
   const { t } = useTranslation('settings')
   const direct = useRemoteStore((s) => s.status?.direct)
   const own = useSettingsStore((s) => s.settings.remote.direct.addresses)
@@ -148,6 +155,7 @@ export function FoundAddresses({ text }: { text: ReactNode }) {
 
 /** The owner's own addresses, such as a forwarded port, with a field to add one. */
 export function OwnAddresses({ text }: { text: ReactNode }) {
+  const { useSettingsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const own = useSettingsStore((s) => s.settings.remote.direct.addresses)
   const [draft, setDraft] = useState('')
