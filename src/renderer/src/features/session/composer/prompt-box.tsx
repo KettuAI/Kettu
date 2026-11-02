@@ -20,7 +20,7 @@ import { cn } from '@renderer/lib/utils'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { shownSidePane, useViewStore } from '@renderer/stores/view'
 import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
-import { useAboveBox } from './above-box'
+import { useAboveBox, useBelowBox } from './above-box'
 import { AttachmentTray } from './attachment-tray'
 import { attachMention } from './attachments'
 import { ComposerEditor } from './editor'
@@ -186,7 +186,7 @@ export function PromptBox({
   }
 
   // The session's composer puts **+** in its control row; New session's stays in the box.
-  const addMenu = stacked && <AddMenu box={box} agentName={agentName} commands={commands} />
+  const addMenu = stacked && <AddMenu box={box} agentName={agentName} commands={commands} below />
 
   const keyDown = (event: KeyboardEvent): boolean => {
     const modified = event.shiftKey || event.ctrlKey || event.altKey || event.metaKey
@@ -425,15 +425,20 @@ export function AddMenu({
   box,
   agentName,
   commands,
+  below = false,
 }: {
   box: PromptBoxState
   agentName: string
   commands: readonly SlashCommand[]
+  /** Opens under the box, as New session's does, whose box has the page below it. */
+  below?: boolean
 }) {
   const { t } = useTranslation('composer')
   const { disabled, full, remote, text, editor, update, sessionId } = box
   const shortcut = formatShortcut('Mod+U')
-  const [setAnchor, aboveBox] = useAboveBox()
+  const [setAbove, aboveBox] = useAboveBox()
+  const [setBelow, belowBox, startOfBox] = useBelowBox()
+  const setAnchor = below ? setBelow : setAbove
   const hasPage = useBrowserStore((s) => {
     const page = sessionId ? s.bySession[sessionId] : undefined
     // An evicted page keeps its address for the pane, with no live page behind it.
@@ -485,8 +490,9 @@ export function AddMenu({
         </TooltipContent>
       </Tooltip>
       <DropdownMenuContent
-        side="top"
-        sideOffset={aboveBox}
+        side={below ? 'bottom' : 'top'}
+        sideOffset={below ? belowBox : aboveBox}
+        alignOffset={below ? startOfBox : 0}
         className="w-max min-w-66"
         finalFocus={() => {
           box.focus()
