@@ -9,12 +9,13 @@
   },
   "page": {
     "title": "Usage",
-    "synced": "Logs synced {{ago}}",
+    "synced": "Synced {{ago}}",
     "syncing": "Reading the logs…",
     "record": "Kettu's record",
     "sync": "Sync now",
+    "syncAction": "Sync",
     "syncFailed": "Could not sync",
-    "agent": "Agent",
+    "agents": "Agents",
     "allShort": "All",
     "metric": "Metric",
     "range": "Time range",
@@ -26,9 +27,18 @@
       "365": "A year",
       "all": "All time"
     },
-    "scope": "Count from",
+    "rangesShort": {
+      "1": "Today",
+      "7": "7 d",
+      "30": "30 d",
+      "90": "90 d",
+      "365": "1 y",
+      "all": "All time"
+    },
+    "scope": "Source",
     "scopes": {
       "computer": "This computer",
+      "computer_mac": "This Mac",
       "computer_web": "{{host}}",
       "kettu": "Kettu only"
     },
@@ -53,12 +63,16 @@
   },
   "figures": {
     "label": "Figures",
-    "total": "Tokens",
-    "cost": "Estimated cost",
-    "tokensPerRequest": "Tokens per request",
-    "savedByCache": "Saved by cache",
-    "perRequestNote": "Tokens divided by requests",
-    "cacheSavedNote": "Cache reads at the input price",
+    "total": "Total tokens",
+    "cost": "Total cost",
+    "totalRequests": "Total requests",
+    "totalTurns": "Total turns",
+    "requestsPerDay": "{{value}} a day on the days you worked",
+    "turnsPerDay": "{{value}} a day on the days you worked",
+    "requestsPerHour": "{{value}} an hour in the hours you worked",
+    "turnsPerHour": "{{value}} an hour in the hours you worked",
+    "perRequest": "{{value}} tokens per request",
+    "perTurn": "{{value}} tokens per turn",
     "estimated": "Estimated at API prices · prices as of {{date}}",
     "unpriced": "{{tokens}} tokens of models without a price are not counted",
     "days_one": "{{range}} · {{count}} day",
@@ -71,11 +85,21 @@
     "activeHours_one": "Used in {{active}} of {{count}} hour",
     "activeHours_other": "Used in {{active}} of {{count}} hours",
     "peakHour": "Busiest hour",
-    "cacheShare": "Cache reads",
-    "cacheShareNote": "Of all input, cached or not",
     "none": "No usage"
   },
+  "cache": {
+    "title": "Where the tokens come from",
+    "read": "Read from the prompt cache",
+    "perHundred_one": "Of every 100 tokens, {{count}} came from cache, billed at a fraction of the price.",
+    "perHundred_other": "Of every 100 tokens, {{count}} came from cache, billed at a fraction of the price.",
+    "none": "None of these tokens came from the prompt cache.",
+    "saved": "At API prices, that saved about {{cost}}.",
+    "other": "The other {{share}} · {{tokens}}",
+    "allTokens": "All {{tokens}} tokens",
+    "otherNone": "Other tokens"
+  },
   "trend": {
+    "title": "Over time",
     "daily": "Tokens per day",
     "weekly": "Tokens per week",
     "monthly": "Tokens per month",
@@ -103,44 +127,67 @@
     "keepOne": "At least one agent stays in the chart"
   },
   "limits": {
-    "title": "Plan limits",
+    "title": "What’s left",
     "none": "No agent has reported plan limits yet.",
     "read": "Read {{ago}}",
-    "accounts_one": "{{count}} account",
-    "accounts_other": "{{count}} accounts",
     "used": "{{limit}} used",
+    "usedShort": "{{percent}} used",
     "resetsIn": "Resets in {{time}}",
     "resetsAt": "Resets {{time}}",
-    "notReported_one": "{{name}} does not report plan usage.",
-    "notReported_other": "{{name}} do not report plan usage.",
+    "notReported_one": "{{name}} doesn’t report plan usage.",
+    "notReported_other": "{{name}} don’t report plan usage.",
     "notYet": "No plan usage reported yet."
   },
   "activity": {
     "title": "Activity",
-    "weeks": "Last 53 weeks",
     "less": "Less",
     "more": "More",
     "outside": "Days outside the range are gray",
-    "label": "Tokens per day over the last 53 weeks; use the arrow keys to move between days"
+    "label": "Tokens per day over the last 53 weeks; use the arrow keys to move between days",
+    "cell": "{{date}} · {{value}}",
+    "stats": {
+      "active": "Active days",
+      "activeOf": "of {{count}}",
+      "current": "Current streak",
+      "longest": "Longest streak",
+      "weekday": "Busiest weekday",
+      "days_one": "{{count}} day",
+      "days_other": "{{count}} days",
+      "none": "None",
+      "shareOf": {
+        "tokens": "{{share}} of tokens",
+        "requests": "{{share}} of requests",
+        "turns": "{{share}} of turns",
+        "cost": "{{share}} of the cost"
+      }
+    }
   },
   "parts": {
-    "title": "Tokens by type",
-    "share": "Share",
     "input": "Input",
     "output": "Output",
     "reasoning": "Reasoning",
     "cacheRead": "Cache read",
     "cacheWrite": "Cache write"
   },
-  "models": {
-    "title": "By model",
-    "name": "Model",
-    "unknown": "Unknown model"
-  },
-  "projects": {
-    "title": "By project",
-    "name": "Project",
-    "none": "No project"
+  "breakdown": {
+    "title": "Breakdown",
+    "groupBy": "Group by",
+    "groups": {
+      "model": "Model",
+      "project": "Project",
+      "agent": "Agent"
+    },
+    "others": {
+      "model_one": "{{count}} other model",
+      "model_other": "{{count}} other models",
+      "project_one": "{{count}} other project",
+      "project_other": "{{count}} other projects",
+      "agent_one": "{{count}} other agent",
+      "agent_other": "{{count}} other agents"
+    },
+    "fewer": "Show fewer",
+    "unknownModel": "Unknown model",
+    "noProject": "No project"
   },
   "noUsage": "No usage in this range.",
   "noCost": "No cost in this range.",
@@ -162,7 +209,6 @@
     "savedTo": "Saved to {{path}}"
   },
   "picker": {
-    "button": "Custom",
     "label": "Choose a time range",
     "presets": {
       "yesterday": "Yesterday",

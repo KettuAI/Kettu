@@ -1574,6 +1574,15 @@ export class AgentManager {
     this.emit(this.home(h))
   }
 
+  /** Offers the harness's skipped update again, as Undo in the sidebar's list does. */
+  async unskipUpdate(agentId: AgentId): Promise<void> {
+    const { h } = this.slot(agentId)
+    if (!h.skipped && !h.cliSkipped) return
+    h.skipped = null
+    h.cliSkipped = null
+    this.emit(this.home(h))
+  }
+
   /**
    * Installs a harness that is missing: the user's own program by one of its routes, or a package
    * harness's pinned adapter now, without starting it. Resolves when done or cancelled.

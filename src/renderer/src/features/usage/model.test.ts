@@ -3,16 +3,20 @@ import type { DayUsage } from '@shared/usage'
 import {
   addDays,
   agentFill,
+  agentRows,
   axisLabels,
   barCenters,
   barGap,
   busiest,
+  busiestWeekday,
   clocksChange,
   dayOf,
   dayStarts,
   dayTotals,
   figures,
   firstDayOfWeek,
+  foldRows,
+  fromCache,
   heatLevels,
   heatmapRange,
   hourBars,
@@ -34,6 +38,7 @@ import {
   shownSeries,
   splitPlans,
   shownTotals,
+  streaks,
   tokenParts,
   tokensPerRequest,
   trend,
@@ -43,7 +48,7 @@ import {
   usedOutside,
   weekStartOf,
   wholeMonth,
-  widest,
+  type BreakdownRow,
   type LegendChoice,
 } from './model'
 
@@ -303,14 +308,6 @@ describe('trend series', () => {
     // Figures for another range or source.
     expect(legendHides(legend, { agent: 2, figures: 6 })).toEqual([])
   })
-
-  it('finds the widest value a legend key must keep room for', () => {
-    const measure = (text: string) =>
-      text.replace('.', '').length * 7 + (text.includes('.') ? 3 : 0)
-    expect(widest(['0', '1.2M', '100K', '9.7M'], measure)).toBe('100K')
-    expect(widest(['2.7B', '9.7M'], measure)).toBe('2.7B')
-    expect(widest([], measure)).toBe('')
-  })
 })
 
 describe('axis labels', () => {
@@ -336,16 +333,16 @@ describe('axis labels', () => {
     expect(wholeMonth({ from: day(2026, 10, 1), to: day(2026, 10, 24) })).toBe(false)
   })
 
-  it('lays bars out as the chart does: at most 48 px, 3 px apart, centred', () => {
-    expect(barCenters(3, 300)).toEqual([99, 150, 201])
+  it('lays bars out as the chart does: at most 48 px, 4 px apart, centred', () => {
+    expect(barCenters(3, 300)).toEqual([98, 150, 202])
     const centers = barCenters(30, 600)
-    expect(centers[1]! - centers[0]!).toBeCloseTo(513 / 30 + 3)
-    expect(centers[0]).toBeCloseTo(513 / 60)
+    expect(centers[1]! - centers[0]!).toBeCloseTo(484 / 30 + 4)
+    expect(centers[0]).toBeCloseTo(484 / 60)
     expect(barCenters(0, 600)).toEqual([])
   })
 
   it('puts 1 px between more than 45 bars, so they stay wider than the gaps', () => {
-    expect(barGap(45)).toBe(3)
+    expect(barGap(45)).toBe(4)
     expect(barGap(46)).toBe(1)
     const centers = barCenters(90, 600)
     expect(centers[1]! - centers[0]!).toBeCloseTo(511 / 90 + 1)
@@ -617,6 +614,107 @@ describe('figure cells', () => {
   })
 })
 
+describe('activity stats', () => {
+  // Oct 10 to Oct 22, today, a Thursday.
+  const range = { from: day(2026, 10, 10), to: day(2026, 10, 23) }
+  const starts = dayStarts(range)
+  const used = (indices: number[]) =>
+    dayTotals({ days: indices.map((i) => usage(i, 'codex', 10)) }, starts, 'all')
+
+  it('finds the longest run of days with usage, the first of equals', () => {
+    const days = used([0, 1, 2, 4, 5, 6, 7, 9, 10, 11])
+    expect(streaks(days, range, TODAY).longest).toEqual({
+      days: 4,
+      from: day(2026, 10, 14),
+      to: day(2026, 10, 17),
+    })
+    expect(streaks(used([0, 1, 2, 3, 5, 6, 7, 8]), range, TODAY).longest).toEqual({
+      days: 4,
+      from: day(2026, 10, 10),
+      to: day(2026, 10, 13),
+    })
+    // Only the days in the range count.
+    expect(streaks(days, { from: day(2026, 10, 15), to: range.to }, TODAY).longest).toEqual({
+      days: 3,
+      from: day(2026, 10, 15),
+      to: day(2026, 10, 17),
+    })
+  })
+
+  it('counts the current streak to the last day, or to yesterday while today has none', () => {
+    expect(streaks(used([9, 10, 11]), range, TODAY).current).toBe(3)
+    expect(streaks(used([9, 10, 11, 12]), range, TODAY).current).toBe(4)
+    expect(streaks(used([9, 10]), range, TODAY).current).toBe(0)
+    // A range that ends before today has no grace for its last day.
+    const earlier = { from: range.from, to: day(2026, 10, 22) }
+    expect(streaks(used([9, 10]), earlier, TODAY).current).toBe(0)
+    expect(streaks(used([9, 10, 11]), earlier, TODAY).current).toBe(3)
+  })
+
+  it('has no streaks without usage', () => {
+    expect(streaks(used([]), range, TODAY)).toEqual({ current: 0, longest: null })
+  })
+
+  it('finds the busiest weekday in the metric, the first from the week start among equals', () => {
+    // Oct 12 and 19 are Mondays, Oct 14 a Wednesday, Oct 20 a Tuesday.
+    const days = dayTotals(
+      {
+        days: [
+          usage(2, 'codex', 30, { requests: 1 }),
+          usage(9, 'codex', 100, { requests: 1 }),
+          usage(10, 'codex', 50, { requests: 1 }),
+          usage(4, 'claude-code', 130, { requests: 4 }),
+        ],
+      },
+      starts,
+      'all',
+    )
+    expect(busiestWeekday(days, range, 1)).toEqual({ weekday: 1, share: 130 / 310 })
+    expect(busiestWeekday(days, range, 3)).toEqual({ weekday: 3, share: 130 / 310 })
+    expect(busiestWeekday(days, range, 1, 'requests')).toEqual({ weekday: 3, share: 4 / 7 })
+    expect(busiestWeekday(days, { from: day(2026, 10, 19), to: range.to }, 1)).toEqual({
+      weekday: 1,
+      share: 100 / 150,
+    })
+    expect(busiestWeekday(used([]), range, 1)).toBeNull()
+  })
+})
+
+describe('fromCache', () => {
+  const parts = { input: 10, output: 5, reasoning: 0, cacheRead: 981, cacheWrite: 4 }
+
+  it('gives the cache reads, the rest, and their share of every 100 tokens', () => {
+    expect(fromCache(parts)).toEqual({ read: 981, other: 19, share: 0.981, perHundred: 98 })
+  })
+
+  it('never rounds to all or none while that is not so', () => {
+    expect(
+      fromCache({ ...parts, input: 1, output: 0, cacheRead: 999, cacheWrite: 0 }),
+    ).toMatchObject({ perHundred: 99 })
+    expect(
+      fromCache({ ...parts, input: 999, output: 0, cacheRead: 1, cacheWrite: 0 }),
+    ).toMatchObject({ perHundred: 1 })
+    expect(fromCache({ ...parts, cacheRead: 0 })).toMatchObject({
+      read: 0,
+      share: 0,
+      perHundred: 0,
+    })
+    expect(fromCache({ ...parts, input: 0, output: 0, cacheWrite: 0 })).toMatchObject({
+      share: 1,
+      perHundred: 100,
+    })
+  })
+
+  it('has no share without tokens', () => {
+    expect(fromCache({ input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 })).toEqual({
+      read: 0,
+      other: 0,
+      share: null,
+      perHundred: null,
+    })
+  })
+})
+
 describe('plan limits', () => {
   it('lists the agents with limits and the others with usage, in their order', () => {
     const agents = [
@@ -733,6 +831,46 @@ describe('breakdowns', () => {
       ['a', 2],
       ['b', 1],
     ])
+  })
+
+  it('names the agents in each row, the most tokens first, and groups by agent', () => {
+    const rows = {
+      models: [
+        { agentId: 'claude-code' as const, model: 'a', output: 5, ...parts },
+        { agentId: 'codex' as const, model: 'a', output: 8, ...parts },
+        { agentId: 'codex' as const, model: 'b', output: 3, ...parts },
+      ],
+    }
+    expect(modelRows(rows, 'all').map((row) => [row.name, row.agents])).toEqual([
+      ['a', ['codex', 'claude-code']],
+      ['b', ['codex']],
+    ])
+    expect(agentRows(rows, 'all').map((row) => [row.key, row.agents, row.total])).toEqual([
+      ['codex', ['codex'], 11],
+      ['claude-code', ['claude-code'], 5],
+    ])
+    expect(agentRows(rows, 'claude-code').map((row) => row.key)).toEqual(['claude-code'])
+  })
+
+  it('folds the rows past the first five into one, unless only one is left', () => {
+    const row = (key: string, value: number | null, total = 10): BreakdownRow => ({
+      key,
+      name: key,
+      path: null,
+      agents: ['codex'],
+      total,
+      value,
+    })
+    const six = ['a', 'b', 'c', 'd', 'e', 'f'].map((key) => row(key, 1))
+    expect(foldRows(six)).toEqual({ rows: six, rest: null })
+    const eight = [...six, row('g', 2, 20), row('h', null, 5)]
+    expect(foldRows(eight)).toEqual({
+      rows: eight.slice(0, 5),
+      rest: { count: 3, total: 35, value: 3 },
+    })
+    expect(foldRows([...six, row('g', null)]).rest).toEqual({ count: 2, total: 20, value: 1 })
+    const unpriced = [...six.slice(0, 5), row('f', null), row('g', null)]
+    expect(foldRows(unpriced).rest).toEqual({ count: 2, total: 20, value: null })
   })
 })
 

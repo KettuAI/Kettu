@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { BotIcon, ChevronDownIcon, ChevronRightIcon } from 'lucide-react'
+import { BotIcon, ChevronRightIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import type { SessionView } from '@shared/thread'
@@ -7,23 +7,12 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
 import { usePane } from '@renderer/features/split/pane-context'
 import { usePaneDragSource } from '@renderer/features/split/session-drag-model'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from '@renderer/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { CacheChip } from '@renderer/features/prompt-cache/cache-chip'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { HostChip } from './host-chip'
 import { ViewersChip } from './viewers-chip'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
-import {
-  DeleteSessionDialog,
-  SessionMenuItems,
-  SessionTitleField,
-} from '@renderer/features/sidebar/session-menu'
-import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-menu-model'
+import { SessionTitleField } from '@renderer/features/sidebar/session-menu'
 import { useRenaming } from '@renderer/features/sidebar/use-renaming'
 import { agentName } from '@renderer/stores/agents'
 import { cn } from '@renderer/lib/utils'
@@ -59,13 +48,11 @@ export function SessionHeader({
   summary: SessionSummary
   session: SessionView | undefined
 }) {
-  const { t } = useTranslation('sidebar')
   const { t: ts } = useTranslation('session')
   const parent = useSessionsStore((s) => (summary.parentId ? s.byId[summary.parentId] : undefined))
   const routine = useRoutinesStore((s) =>
     summary.routine ? s.byId[summary.routine.routineId] : undefined,
   )
-  const [deleting, setDeleting] = useState(false)
   const titleButtonRef = useRef<HTMLButtonElement>(null)
   const rename = useRenaming(() => titleButtonRef.current)
   // The field starts at the button's width, so a short title does not jump wider.
@@ -109,7 +96,7 @@ export function SessionHeader({
             // The ring's outer edge is the button's box (30 px tall, text 4 px in, 6 px radius), so
             // the hover fill and the ring match and the text does not move.
             style={{ minWidth: Math.max(titleWidth - 5, 0) }}
-            className="mx-[5.5px] field-sizing-content h-[25px] rounded-sm bg-transparent px-[1.5px] py-0 font-heading text-ui font-medium outline-[1.5px] outline-offset-1 outline-edit-ring outline-solid selection:bg-edit-selection aria-invalid:outline-danger"
+            className="mx-[5.5px] field-sizing-content h-[25px] rounded-sm bg-transparent px-[1.5px] py-0 font-sans text-subheading font-semibold outline-[1.5px] outline-offset-1 outline-edit-ring outline-solid selection:bg-edit-selection aria-invalid:outline-danger"
           />
         ) : (
           <TitleButton
@@ -125,51 +112,20 @@ export function SessionHeader({
             }}
           />
         )}
-        <DropdownMenu onOpenChangeComplete={rename.menu.onOpenChangeComplete}>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={t('row.more')}
-                      className="-ml-0.5 text-secondary"
-                    />
-                  }
-                />
-              }
-            >
-              <ChevronDownIcon />
-            </TooltipTrigger>
-            <TooltipContent>{t('row.more')}</TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent
-            finalFocus={rename.menu.finalFocus}
-            onKeyDown={runSessionMenuAccelerator}
-          >
-            <SessionMenuItems
-              summary={summary}
-              onRename={() => {
-                measureTitle()
-                rename.menu.onRename()
-              }}
-              onNewSubSession={rename.menu.onLeave}
-              onDelete={() => setDeleting(true)}
-            />
-          </DropdownMenuContent>
-        </DropdownMenu>
         {session && <CacheChip session={session} />}
         <ViewersChip sessionId={summary.id} projectPath={summary.projectPath} />
       </NoDrag>
       <span className="flex-1" />
-      <HeaderTools projectPath={summary.projectPath} />
-      <DeleteSessionDialog
-        sessionId={summary.id}
-        title={title}
-        open={deleting}
-        onOpenChange={setDeleting}
+      <HeaderTools
+        projectPath={summary.projectPath}
+        summary={summary}
+        session={session}
+        onRename={() => {
+          measureTitle()
+          rename.menu.onRename()
+        }}
+        onNewSubSession={rename.menu.onLeave}
+        menu={rename.menu}
       />
     </TopBar>
   )
@@ -206,7 +162,7 @@ function TitleButton({
       variant="ghost"
       title={`${title} · ${description}`}
       className={cn(
-        'mx-[3px] h-7.5 min-w-16 shrink-10 rounded-md px-[3px] font-heading text-ui font-medium focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0',
+        'mx-[3px] h-7.5 min-w-16 shrink-10 rounded-md px-[3px] font-sans text-subheading font-semibold text-foreground focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0',
         !focused && 'text-secondary hover:text-primary',
       )}
       onClick={onRename}

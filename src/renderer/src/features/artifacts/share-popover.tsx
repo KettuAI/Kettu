@@ -259,20 +259,20 @@ export function ShareButton({
                 render={
                   <Button
                     ref={trigger}
-                    variant="quiet"
-                    size="icon-compact"
+                    variant="outline"
                     aria-label={t('share.open')}
-                    className="relative text-foreground"
+                    className="relative h-7.5 gap-1.5 rounded-xl px-3 text-control"
                   />
                 }
               />
             }
           >
-            <ShareIcon />
+            <ShareIcon className="size-3.5" />
+            {t('share.button')}
             {published && (
               <span
                 aria-hidden
-                className="absolute top-1.75 right-1.75 size-1.5 rounded-full bg-success ring-2 ring-app"
+                className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-success ring-2 ring-background"
               />
             )}
           </TooltipTrigger>

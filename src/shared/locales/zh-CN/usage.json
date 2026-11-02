@@ -9,12 +9,13 @@
   },
   "page": {
     "title": "用量",
-    "synced": "日志 {{ago}}同步",
+    "synced": "{{ago}}同步",
     "syncing": "正在读取日志…",
     "record": "Kettu 的记录",
     "sync": "立即同步",
+    "syncAction": "同步",
     "syncFailed": "同步失败",
-    "agent": "Agent",
+    "agents": "Agent",
     "allShort": "全部",
     "metric": "统计指标",
     "range": "时间范围",
@@ -26,9 +27,18 @@
       "365": "一年",
       "all": "全部时间"
     },
-    "scope": "统计来源",
+    "rangesShort": {
+      "1": "今天",
+      "7": "7 天",
+      "30": "30 天",
+      "90": "90 天",
+      "365": "1 年",
+      "all": "全部"
+    },
+    "scope": "来源",
     "scopes": {
       "computer": "本机",
+      "computer_mac": "这台 Mac",
       "computer_web": "{{host}}",
       "kettu": "仅 Kettu"
     },
@@ -54,11 +64,15 @@
   "figures": {
     "label": "数据概览",
     "total": "总 token",
-    "cost": "估算费用",
-    "tokensPerRequest": "每次请求 token",
-    "savedByCache": "缓存节省",
-    "perRequestNote": "token 数除以请求数",
-    "cacheSavedNote": "按输入价格计算的缓存读取",
+    "cost": "总费用",
+    "totalRequests": "总请求数",
+    "totalTurns": "总轮数",
+    "requestsPerDay": "有用量的日子平均每天 {{value}} 次",
+    "turnsPerDay": "有用量的日子平均每天 {{value}} 轮",
+    "requestsPerHour": "有用量的小时平均每小时 {{value}} 次",
+    "turnsPerHour": "有用量的小时平均每小时 {{value}} 轮",
+    "perRequest": "每次请求 {{value}} token",
+    "perTurn": "每轮 {{value}} token",
     "estimated": "按 API 价格估算 · 价格截至 {{date}}",
     "unpriced": "{{tokens}} token 来自没有价格的模型，未计入费用",
     "days_other": "{{range}} · {{count}} 天",
@@ -68,11 +82,20 @@
     "hourlyAverage": "每小时平均",
     "activeHours_other": "{{count}} 小时中有 {{active}} 小时有用量",
     "peakHour": "用量最多的一小时",
-    "cacheShare": "缓存读取占比",
-    "cacheShareNote": "占全部输入的比例，含缓存",
     "none": "无用量"
   },
+  "cache": {
+    "title": "Token 从哪里来",
+    "read": "从 prompt cache 读取",
+    "perHundred_other": "每 100 个 token 中有 {{count}} 个来自缓存，只按很低的价格计费。",
+    "none": "这些 token 都不是从 prompt cache 读取的。",
+    "saved": "按 API 价格估算，大约节省了 {{cost}}。",
+    "other": "其余 {{share}} · {{tokens}}",
+    "allTokens": "全部 {{tokens}} token",
+    "otherNone": "其他 token"
+  },
   "trend": {
+    "title": "趋势",
     "daily": "每日用量",
     "weekly": "每周用量",
     "monthly": "每月用量",
@@ -100,11 +123,11 @@
     "keepOne": "图表中至少保留一个 Agent"
   },
   "limits": {
-    "title": "套餐限额",
+    "title": "剩余额度",
     "none": "还没有 Agent 报告套餐限额。",
     "read": "{{ago}}读取",
-    "accounts_other": "{{count}} 个账号",
     "used": "已使用：{{limit}}",
+    "usedShort": "已用 {{percent}}",
     "resetsIn": "{{time}}后重置",
     "resetsAt": "{{time}} 重置",
     "notReported_other": "{{name}} 不提供套餐用量。",
@@ -112,30 +135,50 @@
   },
   "activity": {
     "title": "活动",
-    "weeks": "近 53 周",
     "less": "少",
     "more": "多",
     "outside": "所选时间范围以外的日子显示为灰色",
-    "label": "近 53 周每天的 token 用量；用方向键在日子之间移动"
+    "label": "近 53 周每天的 token 用量；用方向键在日子之间移动",
+    "cell": "{{date}} · {{value}}",
+    "stats": {
+      "active": "活跃天数",
+      "activeOf": "/ {{count}} 天",
+      "current": "当前连续天数",
+      "longest": "最长连续天数",
+      "weekday": "最活跃的星期几",
+      "days_other": "{{count}} 天",
+      "none": "无",
+      "shareOf": {
+        "tokens": "占 token 的 {{share}}",
+        "requests": "占请求数的 {{share}}",
+        "turns": "占轮数的 {{share}}",
+        "cost": "占费用的 {{share}}"
+      }
+    }
   },
   "parts": {
-    "title": "Token 构成",
-    "share": "占比",
     "input": "输入",
     "output": "输出",
     "reasoning": "推理",
     "cacheRead": "缓存读取",
     "cacheWrite": "缓存写入"
   },
-  "models": {
-    "title": "按模型",
-    "name": "模型",
-    "unknown": "未知模型"
-  },
-  "projects": {
-    "title": "按项目",
-    "name": "项目",
-    "none": "无项目"
+  "breakdown": {
+    "title": "明细",
+    "groupBy": "分组方式",
+    "groups": {
+      "model": "模型",
+      "project": "项目",
+      "agent": "Agent"
+    },
+    "others": {
+      "model_other": "其他 {{count}} 个模型",
+      "project_other": "其他 {{count}} 个项目",
+      "agent_other": "其他 {{count}} 个 Agent"
+    },
+    "fewer": "收起",
+    "unknownModel": "未知模型",
+    "noProject": "无项目"
   },
   "noUsage": "这段时间没有用量。",
   "noCost": "这段时间没有费用。",
@@ -157,7 +200,6 @@
     "savedTo": "已保存到 {{path}}"
   },
   "picker": {
-    "button": "自定义",
     "label": "选择时间范围",
     "presets": {
       "yesterday": "昨天",

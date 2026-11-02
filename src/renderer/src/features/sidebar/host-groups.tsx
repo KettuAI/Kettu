@@ -1,24 +1,11 @@
-// The sidebar with other hosts added: All hosts to narrow it to one host, Needs you across the
-// hosts, and each host's heading over its projects, which says whether it is online.
+// The sidebar with other hosts added: Needs you across the hosts, and each host's heading over
+// its projects, which says whether it is online.
 
 import { useMemo } from 'react'
-import {
-  CheckIcon,
-  ChevronDownIcon,
-  CircleAlertIcon,
-  LaptopIcon,
-  ListFilterIcon,
-  MonitorIcon,
-} from 'lucide-react'
+import { CircleAlertIcon, LaptopIcon, MonitorIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@renderer/components/ui/dropdown-menu'
 import { SidebarMenu } from '@renderer/components/ui/sidebar'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { HostIcon, OnlineDot } from '@renderer/features/settings/remote-parts'
@@ -26,60 +13,10 @@ import { deviceShape } from '@renderer/features/settings/remote-text'
 import { connectionText, routeName } from '@renderer/features/settings/host-text'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import {
-  shownHosts,
-  useHostsStore,
-  useOtherHost,
-  useOtherHosts,
-  type OtherHost,
-} from '@renderer/stores/hosts'
+import { useHostsStore, useOtherHost, type OtherHost } from '@renderer/stores/hosts'
 import { hostOfSession, needsYouTree, useSessionsStore } from '@renderer/stores/sessions'
-import { THIS_COMPUTER, useViewStore } from '@renderer/stores/view'
 import { useHostLabel } from './host-label'
 import { SessionRow } from './session-row'
-
-/** All hosts, which narrows the list to one host. */
-export function HostFilter() {
-  const { t } = useTranslation('sidebar')
-  const hosts = useOtherHosts()
-  const filter = useViewStore((s) => s.hostFilter)
-  const shown = shownHosts(hosts, filter)
-  const narrowed = shown.length === 1 ? shown[0]! : undefined
-  const label =
-    narrowed === undefined
-      ? t('hosts.all')
-      : narrowed === null
-        ? t('hosts.thisComputer')
-        : (hosts.find((h) => h.id === narrowed)?.name ?? t('hosts.all'))
-  const choose = (value: string | null) => useViewStore.setState({ hostFilter: value })
-  const item = (value: string | null, name: string) => (
-    <DropdownMenuItem key={value ?? 'all'} onClick={() => choose(value)}>
-      <span className="min-w-0 flex-1 truncate">{name}</span>
-      {(value === null ? narrowed === undefined : value === (narrowed ?? THIS_COMPUTER)) && (
-        <CheckIcon />
-      )}
-    </DropdownMenuItem>
-  )
-  return (
-    <div className="mt-3.5 flex h-7 items-center pr-1 pl-2.5">
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          aria-label={t('hosts.filterLabel', { shown: label })}
-          className="-ml-1.5 inline-flex h-6 items-center gap-[5px] rounded-sm px-1.5 text-xs text-tertiary outline-none hover:bg-hover hover:text-secondary focus-visible:ring-2 focus-visible:ring-ring data-popup-open:bg-hover"
-        >
-          <ListFilterIcon aria-hidden className="size-[13px]" />
-          <span className="truncate">{label}</span>
-          <ChevronDownIcon aria-hidden className="size-[11px]" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-48">
-          {item(null, t('hosts.all'))}
-          {item(THIS_COMPUTER, t('hosts.thisComputer'))}
-          {hosts.map((host) => item(host.id, host.name))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  )
-}
 
 /** The sessions on the hosts shown that wait for you or failed, each naming its host. */
 export function NeedsYouGroup({

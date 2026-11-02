@@ -48,18 +48,19 @@
   --agent-rose: #c0466c;
   --agent-green: #4b8a39;
   --agent-slate: #66707e;
-  /* Kettu's own MCP server's tile in Settings, in the fox, and the white glyph on a brand's tile. */
+  /* Kettu's own MCP server's tile in Settings, in the fox's orange. */
   --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
-  --brand-tile-glyph: #ffffff;
   /* Running work, in the ink's grays: blue is kept for data and code. */
   --info: #48525f;
-  /* A step darker than the reference amber so it reads on the desk. */
+  /* Amber, dark enough to read at 4.5:1 on the desk and on its tint. */
   --warning: #936600;
   /* Links are ink with a gray underline (thread-link), which darkens on hover. */
   --link: #10161e;
   --link-hover: #10161e;
   /* The fox: what is on, chosen or being typed. The focus ring draws it at half strength. */
   --focus: #f2581b;
+  /* A focused field's halo: a little fainter than the focus ring on the light page. */
+  --focus-halo-strength: 42%;
   --selection: rgb(242 88 27 / 18%);
   /* An edit in place, such as renaming a session. */
   --edit-ring: #f2581b;
@@ -115,19 +116,20 @@
   /* The top edge of a raised surface catching the light; only the primary button has one. */
   --highlight: 0 0 #0000;
 
-  /* The primary button: its fill as gradient stops, a ring a shade darker, and a highlight along
-     its top edge, which a theme may set; the built-in one is solid ink. */
+  /* The primary button: its fill as gradient stops, a ring a shade darker, a highlight along its
+     top edge and its label, which a theme may set; the built-in one is solid ink. */
   --primary-from: #141a22;
   --primary-to: #141a22;
   --primary-hover-from: #232b36;
   --primary-hover-to: #232b36;
   --primary-ring: #06090d;
   --primary-highlight: rgb(255 255 255 / 12%);
+  --primary-foreground: #ffffff;
 
   /* On, checked and chosen controls in the fox orange: a switch, a check box, a radio, an option
-     tile. Each reaches 3:1 on the page; the tint fills a chosen tile. */
+     tile. Each reaches 3:1 on the page; the tint, which follows it, fills a chosen tile. */
   --control-on: #f2581b;
-  --control-on-tint: rgb(242 88 27 / 7%);
+  --control-on-tint: color-mix(in srgb, var(--control-on) 7%, transparent);
   --switch-on: #f2581b;
   /* The thumb is white on and off, in both themes. */
   --switch-thumb: #ffffff;
@@ -139,10 +141,18 @@
   --limit-warn: #e5a000;
   --limit-bad: #dc3f3a;
 
+  /* The account's avatar, a letter on a dark gradient, and the tile Kettu's mark sits on in
+     the update card: dark in both themes, with white on them. */
+  --avatar-from: #3b4552;
+  --avatar-to: #1a212a;
+  --kettu-tile: #10161e;
+  --on-fill: #ffffff;
+
   /* Code: the six colors the syntax themes are built from, and nothing else is colored. */
   --syntax-keyword: #8250df;
   --syntax-string: #1a7f4b;
-  --syntax-number: #b35900;
+  /* A shade darker than drawn, so it reaches 4.5:1 on warmer code blocks too. */
+  --syntax-number: #b05800;
   --syntax-function: #2463c7;
   --syntax-type: #8a6100;
   /* Comments and line numbers, faint on purpose. */
@@ -152,6 +162,10 @@
   --diff-add-word: rgb(26 127 75 / 22%);
   --diff-del: rgb(207 34 46 / 7%);
   --diff-del-word: rgb(207 34 46 / 20%);
+  /* Success and failure inside code, in GitHub's own green and red: diff markers and counts, a
+     passing or failing test, a command's exit code. */
+  --code-success: #1a7f4b;
+  --code-danger: #cf222e;
 
   /* Agent marks: with the Kettu icon, the only brand colors in the interface. */
   --brand-claude: #d97757;
@@ -187,6 +201,12 @@
   --agent-pi: oklch(0.852 0.114 83.4);
   --agent-other: oklch(0.8 0 0);
   --heat-0: rgb(20 26 34 / 5.5%);
+  /* How much of the heat hue each step lays over the card, and how far the top step goes past
+     the hue toward the text. */
+  --heat-step-1: 16%;
+  --heat-step-2: 36%;
+  --heat-step-3: 62%;
+  --heat-step-4: 7%;
 
   /* What fills the context, by source: messages, memory files, system tools and MCP tools in
      the data colors, then grays for fixed costs and the reserved buffer. */
@@ -263,12 +283,12 @@
     --agent-green: #6aac55;
     --agent-slate: #8d96a4;
     --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
-    --brand-tile-glyph: #ffffff;
     --info: #aeb6c1;
     --warning: #d9b463;
     --link: #e8ecf1;
     --link-hover: #e8ecf1;
     --focus: #ff6a2b;
+    --focus-halo-strength: 50%;
     --selection: rgb(255 106 43 / 24%);
     --edit-ring: #ff6a2b;
     --edit-selection: rgb(255 106 43 / 24%);
@@ -306,9 +326,10 @@
     --primary-hover-to: #ffffff;
     --primary-ring: #c9d0d9;
     --primary-highlight: rgb(255 255 255 / 12%);
+    --primary-foreground: #10161e;
 
     --control-on: #ff6a2b;
-    --control-on-tint: rgb(255 106 43 / 11%);
+    --control-on-tint: color-mix(in srgb, var(--control-on) 11%, transparent);
     --switch-on: #ff6a2b;
     --switch-thumb: #ffffff;
     --track: #3a424d;
@@ -316,6 +337,13 @@
     --limit-ok: #3987e5;
     --limit-warn: #d4a017;
     --limit-bad: #e5605a;
+
+    /* The account's avatar, a letter on a dark gradient, and the tile Kettu's mark sits on in
+       the update card: dark in both themes, with white on them. */
+    --avatar-from: #3b4552;
+    --avatar-to: #1a212a;
+    --kettu-tile: #10161e;
+    --on-fill: #ffffff;
 
     --syntax-keyword: #c29bff;
     --syntax-string: #5cc08e;
@@ -327,6 +355,8 @@
     --diff-add-word: rgb(63 185 120 / 28%);
     --diff-del: rgb(248 81 73 / 10%);
     --diff-del-word: rgb(248 81 73 / 28%);
+    --code-success: #5cc08e;
+    --code-danger: #ff7b72;
 
     --brand-opencode-frame: #ffffff;
     --brand-cloudflare: #f48120;
@@ -342,6 +372,10 @@
     --agent-pi: oklch(0.749 0.115 84.2);
     --agent-other: oklch(0.46 0 0);
     --heat-0: rgb(230 236 245 / 6.5%);
+    --heat-step-1: 20%;
+    --heat-step-2: 40%;
+    --heat-step-3: 66%;
+    --heat-step-4: 9%;
 
     --context-1: #3987e5;
     --context-2: #d95926;
@@ -413,12 +447,12 @@
   --agent-green: #6aac55;
   --agent-slate: #8d96a4;
   --brand-kettu-tile: linear-gradient(180deg, #ff7a3d, #e8540f);
-  --brand-tile-glyph: #ffffff;
   --info: #aeb6c1;
   --warning: #d9b463;
   --link: #e8ecf1;
   --link-hover: #e8ecf1;
   --focus: #ff6a2b;
+  --focus-halo-strength: 50%;
   --selection: rgb(255 106 43 / 24%);
   --edit-ring: #ff6a2b;
   --edit-selection: rgb(255 106 43 / 24%);
@@ -456,9 +490,10 @@
   --primary-hover-to: #ffffff;
   --primary-ring: #c9d0d9;
   --primary-highlight: rgb(255 255 255 / 12%);
+  --primary-foreground: #10161e;
 
   --control-on: #ff6a2b;
-  --control-on-tint: rgb(255 106 43 / 11%);
+  --control-on-tint: color-mix(in srgb, var(--control-on) 11%, transparent);
   --switch-on: #ff6a2b;
   --switch-thumb: #ffffff;
   --track: #3a424d;
@@ -466,6 +501,13 @@
   --limit-ok: #3987e5;
   --limit-warn: #d4a017;
   --limit-bad: #e5605a;
+
+  /* The account's avatar, a letter on a dark gradient, and the tile Kettu's mark sits on in
+     the update card: dark in both themes, with white on them. */
+  --avatar-from: #3b4552;
+  --avatar-to: #1a212a;
+  --kettu-tile: #10161e;
+  --on-fill: #ffffff;
 
   --syntax-keyword: #c29bff;
   --syntax-string: #5cc08e;
@@ -477,6 +519,8 @@
   --diff-add-word: rgb(63 185 120 / 28%);
   --diff-del: rgb(248 81 73 / 10%);
   --diff-del-word: rgb(248 81 73 / 28%);
+  --code-success: #5cc08e;
+  --code-danger: #ff7b72;
 
   --brand-opencode-frame: #ffffff;
   --brand-cloudflare: #f48120;
@@ -492,6 +536,10 @@
   --agent-pi: oklch(0.749 0.115 84.2);
   --agent-other: oklch(0.46 0 0);
   --heat-0: rgb(230 236 245 / 6.5%);
+  --heat-step-1: 20%;
+  --heat-step-2: 40%;
+  --heat-step-3: 66%;
+  --heat-step-4: 9%;
 
   --context-1: #3987e5;
   --context-2: #d95926;
@@ -535,7 +583,6 @@
   --popover: var(--bg-surface);
   --popover-foreground: var(--text-primary);
   --primary: var(--text-primary);
-  --primary-foreground: var(--bg-surface);
   --secondary: var(--bg-subtle);
   --secondary-foreground: var(--text-primary);
   --muted: var(--bg-subtle);
@@ -546,7 +593,7 @@
   --border: var(--border-default);
   --border-soft: var(--border-subtle);
   --input: var(--border-default);
-  --ring: var(--focus);
+  --ring: var(--focus-ring-color);
   --sidebar: var(--bg-sidebar);
   --sidebar-foreground: var(--text-primary);
   --sidebar-primary: var(--text-primary);
@@ -554,7 +601,7 @@
   --sidebar-accent: var(--bg-hover);
   --sidebar-accent-foreground: var(--text-primary);
   --sidebar-border: var(--border-subtle);
-  --sidebar-ring: var(--focus);
+  --sidebar-ring: var(--focus-ring-color);
   --chart-1: var(--text-disabled);
   --chart-2: var(--text-tertiary);
   --chart-3: var(--text-secondary);
@@ -567,17 +614,21 @@
   --segment-thumb: var(--bg-raised);
   --pressed: var(--bg-selected);
   --pressed-hover: color-mix(in srgb, var(--bg-selected), var(--text-primary) 5%);
+  /* Sidebar rows picked together with Mod-click or Shift-click, for a menu that acts on all. */
+  --row-picked: color-mix(in srgb, var(--control-on) 12%, transparent);
 
   /* Keyboard focus: the fox at half strength, 2 px clear of the control. A field takes a 1 px
      line and a halo instead. */
   --focus-ring-color: color-mix(in srgb, var(--focus) 50%, transparent);
-  --focus-halo: 0 0 0 3px var(--focus-ring-color);
+  --focus-halo: 0 0 0 3px color-mix(in srgb, var(--focus) var(--focus-halo-strength), transparent);
 
   /* Meaning, derived. */
   --attention-foreground: var(--bg-surface);
   --destructive-tint: var(--danger-tint);
   --destructive-tint-hover: color-mix(in srgb, var(--danger) 13%, transparent);
-  --destructive-foreground: var(--bg-surface);
+  /* White on the light page's red, as drawn; on the dark page's lighter red the ink reads, where
+     white falls to 2.4:1. */
+  --destructive-foreground: var(--primary-foreground);
   /* The line a reference points at, in the Files pane's editor. */
   --marked-line: color-mix(in srgb, var(--info) 7%, transparent);
   --sheen: color-mix(in srgb, var(--text-primary) 6%, transparent);
@@ -588,13 +639,12 @@
   --agent-omp: color-mix(in oklch, var(--brand-omp-2) 86%, var(--bg-surface));
   --agent-muse: color-mix(in oklch, var(--brand-muse) 86%, var(--bg-surface));
   --agent-codewhale: color-mix(in oklch, var(--brand-codewhale-1) 86%, var(--bg-surface));
-  /* Amounts deepen in the fox orange laid over the card, mixed so each step is opaque; the top
-     step goes a little past the hue toward the text. */
+  /* Amounts deepen in the fox orange laid over the card, mixed so each step is opaque. */
   --heat-hue: var(--attention-dot);
-  --heat-1: color-mix(in srgb, var(--heat-hue) 18%, var(--bg-surface));
-  --heat-2: color-mix(in srgb, var(--heat-hue) 38%, var(--bg-surface));
-  --heat-3: color-mix(in srgb, var(--heat-hue) 64%, var(--bg-surface));
-  --heat-4: color-mix(in srgb, var(--heat-hue), var(--text-primary) 7%);
+  --heat-1: color-mix(in srgb, var(--heat-hue) var(--heat-step-1), var(--bg-surface));
+  --heat-2: color-mix(in srgb, var(--heat-hue) var(--heat-step-2), var(--bg-surface));
+  --heat-3: color-mix(in srgb, var(--heat-hue) var(--heat-step-3), var(--bg-surface));
+  --heat-4: color-mix(in srgb, var(--heat-hue), var(--text-primary) var(--heat-step-4));
   /* A day outside the range keeps its step's lightness in gray. */
   --heat-out-1: oklch(from var(--heat-1) l 0 h);
   --heat-out-2: oklch(from var(--heat-2) l 0 h);
@@ -606,8 +656,9 @@
   /* The tile after the themes in Settings › Appearance, which offers more: faint diagonal lines. */
   --tile-hatch: repeating-linear-gradient(135deg, transparent 0 6px, var(--bg-hover) 6px 7px);
 
-  --terminal-background: var(--bg-app);
-  --terminal-foreground: var(--text-primary);
+  --terminal-background: var(--bg-code-block);
+  /* As drawn: output in the secondary ink, the cursor in the primary. */
+  --terminal-foreground: var(--text-secondary);
   --terminal-cursor: var(--text-primary);
   --terminal-selection: var(--selection);
 
@@ -630,7 +681,7 @@
   /* A field draws its line as a border, which an invalid or focused field recolors; this is the
      depth. */
   --field-shadow: var(--elevation-control), var(--highlight);
-  --field-focus-shadow: var(--elevation-control), var(--focus-halo);
+  --field-focus-shadow: var(--focus-halo);
   --primary-shadow:
     inset 0 0 0 var(--hairline) var(--primary-ring), inset 0 1px 0 var(--primary-highlight),
     var(--elevation-primary);
@@ -644,8 +695,10 @@
   --dialog-ring:
     0 0 0 var(--hairline) var(--border-subtle), var(--elevation-dialog), var(--highlight);
   --float-shadow: var(--elevation-card), var(--elevation-float);
+  /* The composer's ring is lighter than a control's: it is large, and its drop carries it. */
   --composer-ring:
-    0 0 0 var(--hairline) var(--border-default), var(--elevation-float), var(--highlight);
+    0 0 0 var(--hairline) color-mix(in srgb, var(--border-default) 75%, transparent),
+    var(--elevation-float), var(--highlight);
   --composer-hover:
     0 0 0 var(--hairline) var(--border-strong), var(--elevation-float), var(--highlight);
   /* The composer while typed in: the fox caret marks it, so the frame stays as it is. */
@@ -656,11 +709,19 @@
   --attention-ring-shadow:
     0 0 0 var(--hairline) color-mix(in srgb, var(--attention-dot) 50%, transparent),
     0 0 0 4px color-mix(in srgb, var(--attention-dot) 9%, transparent), var(--elevation-float);
+  /* The sidebar's update card under the pointer, while its list is open, and after a failed
+     update: red only on the edge. */
+  --card-lift: var(--card-ring), 0 4px 14px -6px rgb(16 22 30 / 18%);
+  --card-open: 0 0 0 1.5px var(--text-tertiary);
+  --card-failed:
+    0 0 0 var(--hairline) color-mix(in srgb, var(--danger) 28%, transparent), var(--elevation-card);
   /* A selected row and the chosen segment, raised from what they sit on. */
-  --raised-ring: 0 0 0 var(--hairline) var(--border-subtle), var(--elevation-raised);
+  --raised-ring: 0 0 0 var(--hairline) var(--sheet-line), var(--elevation-raised);
   --segment-ring: var(--raised-ring);
   --thumb-shadow: var(--elevation-thumb);
-  --sheet-ring: 0 0 0 var(--hairline) var(--border-subtle), var(--elevation-sheet);
+  /* A sheet's ring, and a raised row's, a shade fainter than the subtle line. */
+  --sheet-line: color-mix(in srgb, var(--border-subtle) 87.5%, transparent);
+  --sheet-ring: 0 0 0 var(--hairline) var(--sheet-line), var(--elevation-sheet);
   /* The pane in focus in a split view: its ring in the strong border color. */
   --sheet-focused-ring: 0 0 0 var(--hairline) var(--border-strong), var(--elevation-sheet);
   --elevation-sm: var(--elevation-card);

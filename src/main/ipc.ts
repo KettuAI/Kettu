@@ -40,6 +40,7 @@ import type { Avatars } from './avatars'
 import type { BrowserViews } from './browser/views'
 import { originOf } from './browser/origins'
 import { mainDiagnostics, saveDiagnostics } from './diagnostics'
+import { Editors } from './editors'
 import { sendEvent } from './events'
 import { deviceIdArg, deviceName, pairingCode, runnableProgram } from './host-admin'
 import { t } from './i18n'
@@ -496,6 +497,11 @@ export function registerIpcHandlers({
   })
 
   handle('shell:open-notices', 0, () => openNotices())
+
+  const editors = new Editors({ file: join(app.getPath('userData'), 'editors.json') })
+  handle('editors:list', 0, () => editors.list())
+  handle('editors:open', 2, (_, editorId, target) => editors.open(editorId, target))
+  handle('editors:choose', 1, ({ window }, target) => editors.choose(window, target))
 
   handle('media:copy-image', 1, (_, source) => copyImage(source, mediaGrants, hostMedia))
   handle('media:save-as', 1, ({ window }, source) =>

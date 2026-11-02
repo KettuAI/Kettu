@@ -82,6 +82,7 @@ export function SplitView() {
             defaultLayout={sizes.columns}
             onLayoutChanged={setColumnShares}
             className="h-full min-h-0"
+            style={SHEET_PANEL}
           >
             {folded.columns.map((column, index) => (
               <Column
@@ -141,6 +142,7 @@ function Column({
             defaultLayout={defaultsOf(panes, sizes)}
             onLayoutChanged={(next) => setPaneShares(columnId, next)}
             className="h-full min-h-0"
+            style={SHEET_PANEL}
           >
             {found.map((pane, index) => (
               <PanePanel key={pane.id} last={index === found.length - 1}>
@@ -157,7 +159,7 @@ function Column({
 function PanePanel({ last, children }: { last: boolean; children: ReactNode }) {
   return (
     <>
-      <ResizablePanel minSize={`${MIN_PANE_HEIGHT}px`} className="min-w-0">
+      <ResizablePanel minSize={`${MIN_PANE_HEIGHT}px`} className="min-w-0" style={SHEET_PANEL}>
         {children}
       </ResizablePanel>
       {!last && <ResizableHandle withHandle className="h-(--sheet-gap)" />}

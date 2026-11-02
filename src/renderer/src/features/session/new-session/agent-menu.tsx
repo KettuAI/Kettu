@@ -57,6 +57,7 @@ import {
   canStart,
   isMoreKey,
   itemKey,
+  menuAgents,
   menuGroups,
   menuModels,
   moreKey,
@@ -73,19 +74,10 @@ const isSelect = (o: ConfigOption | undefined): o is SelectOption =>
   !!o && o.type === 'select' && !!o.choices?.length
 
 /**
- * The agents New session can start, the installed first, each group in catalog order with each
- * harness's default agent first. Hidden default agents stay out, and the harnesses still to
- * install are installed in Settings > Harnesses, so the menu leaves them out too.
- */
-function menuAgents(statuses: AgentStatus[]): AgentStatus[] {
-  const listed = statuses.filter((s) => canStart(s) && !s.hidden)
-  return [...listed.filter(listedInstalled), ...listed.filter((s) => !listedInstalled(s))]
-}
-
-/**
  * The composer's agent-and-model button and its menu: the agents on a rail, the shown agent's
  * models with its reasoning level and switches beside them, and one search over both. Choosing a
- * model chooses its agent with it.
+ * model chooses its agent with it. With `modelOnly`, the chosen agent's models alone, under a
+ * button that names the model and its level.
  */
 export function AgentMenu({
   agentId,
@@ -94,9 +86,11 @@ export function AgentMenu({
   onValues,
   folderless = false,
   hostId = null,
+  modelOnly = false,
 }: {
   agentId: AgentId | null
   onChoose: (agentId: AgentId, model: string | null) => void
+  modelOnly?: boolean
   /**
    * The option values of the menu's own agent, when the caller keeps them itself, as a routine
    * does; without them the menu shows and sets New session's picks.
@@ -114,7 +108,8 @@ export function AgentMenu({
   const statuses = useAgentsStore(
     useShallow((s) => {
       const { order, byId } = agentsOn(s, hostId)
-      return menuAgents(usableAgents(order, byId))
+      const listed = menuAgents(usableAgents(order, byId))
+      return modelOnly ? listed.filter((status) => status.id === agentId) : listed
     }),
   )
   const entries = useAgentOptionsStore((s) => optionsOn(s, hostId))
@@ -270,18 +265,33 @@ export function AgentMenu({
       itemToStringLabel={label}
       autoHighlight
     >
-      <ComboboxTrigger
-        render={
-          <Button
-            variant="quiet"
-            size="sm"
-            aria-label={t('newSession.agentMenu.label')}
-            className="min-w-0 shrink gap-1 overflow-hidden px-2.25 text-control font-normal has-data-[icon=inline-end]:pr-2.25"
-          />
-        }
-      >
-        <AgentButtonLabel agentId={agentId} values={values} hostId={hostId} />
-      </ComboboxTrigger>
+      {modelOnly ? (
+        <ComboboxTrigger
+          render={
+            <Button
+              variant="quiet"
+              size="sm"
+              aria-label={t('newSession.modelMenu.label')}
+              className="h-7.5 min-w-0 shrink gap-1.25 overflow-hidden rounded-tile px-2 text-control font-normal text-tertiary"
+            />
+          }
+        >
+          <ModelButtonLabel agentId={agentId} values={values} hostId={hostId} />
+        </ComboboxTrigger>
+      ) : (
+        <ComboboxTrigger
+          render={
+            <Button
+              variant="quiet"
+              size="sm"
+              aria-label={t('newSession.agentMenu.label')}
+              className="min-w-0 shrink gap-1 overflow-hidden px-2.25 text-control font-normal has-data-[icon=inline-end]:pr-2.25"
+            />
+          }
+        >
+          <AgentButtonLabel agentId={agentId} values={values} hostId={hostId} />
+        </ComboboxTrigger>
+      )}
       <ComboboxContent
         align="end"
         sideOffset={6}
@@ -289,8 +299,8 @@ export function AgentMenu({
       >
         <ComboboxInput
           showTrigger={false}
-          placeholder={t('newSession.agentMenu.search')}
-          aria-label={t('newSession.agentMenu.search')}
+          placeholder={t(modelOnly ? 'newSession.modelMenu.search' : 'newSession.agentMenu.search')}
+          aria-label={t(modelOnly ? 'newSession.modelMenu.search' : 'newSession.agentMenu.search')}
           spellCheck={false}
         >
           <InputGroupAddon>
@@ -318,24 +328,27 @@ export function AgentMenu({
               className="flex min-h-0 flex-1 p-1.5"
               style={searching && size ? { minHeight: size.height } : undefined}
             >
-              <TabsList
-                ref={rail}
-                style={searching && size ? { minWidth: size.rail } : undefined}
-                variant="rail"
-                activateOnFocus
-                aria-label={t('newSession.agentMenu.agents')}
-                className="max-h-[min(--spacing(96),calc(var(--available-height)---spacing(12)))] w-auto min-w-49 shrink-0 scroll-fade-y justify-start overflow-y-auto overscroll-contain pr-1.5"
-              >
-                {visibleRail.map((status) => (
-                  <RailRow key={status.id} status={status} />
-                ))}
-              </TabsList>
-              <Separator orientation="vertical" className="bg-border-soft" />
+              {/* With the models alone the rail is one agent, so only its pane shows. */}
+              {!modelOnly && (
+                <TabsList
+                  ref={rail}
+                  style={searching && size ? { minWidth: size.rail } : undefined}
+                  variant="rail"
+                  activateOnFocus
+                  aria-label={t('newSession.agentMenu.agents')}
+                  className="max-h-[min(--spacing(96),calc(var(--available-height)---spacing(12)))] w-auto min-w-49 shrink-0 scroll-fade-y justify-start overflow-y-auto overscroll-contain pr-1.5"
+                >
+                  {visibleRail.map((status) => (
+                    <RailRow key={status.id} status={status} />
+                  ))}
+                </TabsList>
+              )}
+              {!modelOnly && <Separator orientation="vertical" className="bg-border-soft" />}
               <TabsContent
                 value={shown ?? undefined}
                 tabIndex={-1}
                 keepMounted={false}
-                className="ml-1.5 flex w-80 min-w-0 flex-col"
+                className={cn('flex w-80 min-w-0 flex-col', !modelOnly && 'ml-1.5')}
               >
                 <Pane
                   status={shownStatus ?? null}
@@ -362,7 +375,7 @@ export function AgentMenu({
           </Tabs>
         )}
         {/* Settings set up this computer's agents, not another host's. */}
-        {hostId === null && (
+        {hostId === null && !modelOnly && (
           <>
             <Separator className="bg-border-soft" />
             <div className="p-1.5">
@@ -428,6 +441,39 @@ function AgentButtonLabel({
   )
 }
 
+/** The model button's label: the model the session starts with, then its level. */
+function ModelButtonLabel({
+  agentId,
+  values,
+  hostId,
+}: {
+  agentId: AgentId | null
+  values?: OptionValues
+  hostId: string | null
+}) {
+  const { t } = useTranslation('session')
+  const config = useStartConfig(agentId, values, hostId)
+  const model = config?.find((o) => o.category === 'model')
+  const effort = config?.find((o) => o.category === 'thought_level')
+  const modelName = isSelect(model)
+    ? (shownChoice(model.choices, String(model.value))?.name ?? String(model.value))
+    : null
+  const level = isSelect(effort) ? levelsOf(effort, String(effort.value)) : null
+  const levelName = isSelect(effort)
+    ? effort.choices.find((c) => c.value === effort.value)?.name
+    : undefined
+  return (
+    <>
+      <span className="min-w-0 truncate text-secondary" title={modelName ?? undefined}>
+        {modelName ? splitName(modelName)[1] : t('newSession.modelMenu.model')}
+      </span>
+      {levelName && !(modelName && level?.usesDefault) && (
+        <span className="shrink-0">{levelName}</span>
+      )}
+    </>
+  )
+}
+
 /** One agent on the rail: its mark and name, then its plan usage or what it needs. */
 function RailRow({ status }: { status: AgentStatus }) {
   const { t } = useTranslation('session')
@@ -474,9 +520,9 @@ function RailRow({ status }: { status: AgentStatus }) {
 }
 
 const RING_TONE = {
-  ok: 'success',
-  warn: 'attention',
-  bad: 'destructive',
+  ok: 'limit-ok',
+  warn: 'limit-warn',
+  bad: 'limit-bad',
 } as const satisfies Record<LimitLevel, string>
 
 /** The tightest window's pie and percentage, with every window in the tooltip. */
