@@ -96,11 +96,17 @@ describe('HostsClient', () => {
     port.deliver({ kind: 'open', hostId: devBox })
     port.deliver({ kind: 'message', hostId: devBox, message: { type: 'event', event } })
     port.deliver({ kind: 'message', hostId: devBox, message: { type: 'resync' } })
+    port.deliver({
+      kind: 'message',
+      hostId: devBox,
+      message: { type: 'terminals.restarted', ids: ['t1', 7] },
+    })
     port.deliver({ kind: 'closed', hostId: devBox })
     expect(heard).toEqual([
       [devBox, { kind: 'open' }],
       [devBox, { kind: 'event', event }],
       [devBox, { kind: 'resync' }],
+      [devBox, { kind: 'terminals-restarted', ids: ['t1'] }],
       [devBox, { kind: 'closed' }],
     ])
   })

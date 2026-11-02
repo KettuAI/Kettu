@@ -59,8 +59,11 @@ export type HostStop = 'removed' | 'update_client' | 'update_host'
 export type HostConnection =
   /** Trying the addresses, until the first try since the host was last online settles. */
   | { state: 'connecting' }
-  /** Welcomed, through the address whose handshake finished first. */
-  | { state: 'online'; address: DirectAddress }
+  /**
+   * Welcomed, through the address whose handshake finished first; `terminal` while its owner
+   * allows devices the terminal.
+   */
+  | { state: 'online'; address: DirectAddress; terminal?: true }
   /** Not reached; tried again with backoff. */
   | { state: 'offline' }
   | { state: 'stopped'; reason: HostStop }
@@ -206,11 +209,12 @@ const STOPS: readonly string[] = ['removed', 'update_client', 'update_host']
 
 function parseConnection(value: unknown): HostConnection | null {
   if (typeof value !== 'object' || value === null) return null
-  const { state, address, reason } = value as Record<string, unknown>
+  const { state, address, reason, terminal } = value as Record<string, unknown>
   if (state === 'connecting' || state === 'offline') return { state }
   if (state === 'online') {
     const parsed = parseDirectAddress(address)
-    return parsed ? { state, address: parsed } : null
+    if (!parsed) return null
+    return terminal === true ? { state, address: parsed, terminal } : { state, address: parsed }
   }
   if (state === 'stopped' && STOPS.includes(reason as string)) {
     return { state, reason: reason as HostStop }

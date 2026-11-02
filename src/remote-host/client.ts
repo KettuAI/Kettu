@@ -281,7 +281,7 @@ const IGNORED: SessionHandlers = {
 }
 
 /** The session's own messages, which main never hears. */
-const OWN: ReadonlySet<unknown> = new Set(['addresses', 'renamed'])
+const OWN: ReadonlySet<unknown> = new Set(['addresses', 'renamed', 'terminal'])
 
 /** The connection to one known host, tried again with backoff until it is forgotten. */
 class HostLink {
@@ -523,7 +523,7 @@ class HostLink {
       removed: false,
     })
     this.failures = 0
-    this.set({ state: 'online', address: session.address })
+    this.set(online(session.address, welcome.terminal))
     // The host read main's requests up to the one it names; the rest go again.
     this.requests.attach(session.wire(), resumed ? welcome.resumed!.request : 0)
     if (!resumed) void this.openPort(session, ++this.sessions)
@@ -557,7 +557,12 @@ class HostLink {
     }
     const value = message.value
     if (typeof value !== 'object' || value === null) return
-    if (OWN.has((value as { type?: unknown }).type) || this.forwards.message(value)) return
+    const { type, allowed } = value as { type?: unknown; allowed?: unknown }
+    // The owner allowed devices the terminal, or stopped allowing it.
+    if (type === 'terminal' && this.connection.state === 'online') {
+      return this.set(online(this.connection.address, allowed === true))
+    }
+    if (OWN.has(type) || this.forwards.message(value)) return
     this.requests.received(value as Record<string, unknown>)
   }
 
@@ -657,6 +662,10 @@ class HostLink {
     this.connection = connection
     this.client.options.changed()
   }
+}
+
+function online(address: DirectAddress, terminal: boolean): HostConnection {
+  return terminal ? { state: 'online', address, terminal } : { state: 'online', address }
 }
 
 /** The answering address first, then the host's own list, or what was kept while it sends none. */

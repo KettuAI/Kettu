@@ -377,7 +377,11 @@ export class HostSessions {
           : { type: 'error', error: message.error as PortError },
       )
     }
-    if (message.type !== 'event' && message.type !== 'resync') return
+    const passed =
+      message.type === 'event' ||
+      message.type === 'resync' ||
+      (message.type === 'terminals.restarted' && Array.isArray(message.ids))
+    if (!passed) return
     const event = message.event as { type?: unknown; call?: unknown } | undefined
     if (message.type === 'event' && event?.type === 'browser.call') {
       this.options.browserCall?.(hostId, event.call)
