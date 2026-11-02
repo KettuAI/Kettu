@@ -66,9 +66,9 @@ export interface SessionNode {
   subagents: SessionSummary[]
   /** Pending permission requests here, in its sub-agents and in its sub-sessions. */
   permissionCount: number
-  /** Whether this session, one of its sub-agents or one of its sub-sessions is running. */
+  /** Whether this session or one of its sub-sessions is running; sub-agents run on its badge. */
   running: boolean
-  /** The same two for the row alone, with its sub-agents but not its sub-sessions' rows. */
+  /** The same two for the row alone, with its sub-agents' requests but not its sub-sessions'. */
   own: { permissionCount: number; running: boolean }
 }
 
@@ -172,28 +172,23 @@ function buildTree(
   }
   const kids = (id: string) =>
     (children.get(id) ?? []).slice().sort((a, b) => a.createdAt - b.createdAt)
-  // A sub-agent's own sub-agents count toward the row that shows its badge.
-  const agentLoad = (id: string): { permissionCount: number; running: boolean } => {
-    let permissionCount = 0
-    let running = false
-    for (const child of kids(id)) {
-      if (child.origin !== 'subagent') continue
-      const below = agentLoad(child.id)
-      permissionCount += child.permissionCount + below.permissionCount
-      running ||= isActive(child) || below.running
-    }
-    return { permissionCount, running }
-  }
+  // A sub-agent's requests wait on the row that shows its badge, its own sub-agents' too; their
+  // runs show on the badge, not as the row's.
+  const agentWaits = (id: string): number =>
+    kids(id).reduce(
+      (n, child) =>
+        child.origin === 'subagent' ? n + child.permissionCount + agentWaits(child.id) : n,
+      0,
+    )
   // Sub-sessions at any depth, sub-agents' included, as one level.
   const subSessions = (id: string): SessionSummary[] =>
     kids(id).flatMap((child) =>
       child.origin === 'subagent' ? subSessions(child.id) : [child, ...subSessions(child.id)],
     )
   const row = (summary: SessionSummary, nested: SessionNode[]): SessionNode => {
-    const agents = agentLoad(summary.id)
     const own = {
-      permissionCount: summary.permissionCount + agents.permissionCount,
-      running: isActive(summary) || agents.running,
+      permissionCount: summary.permissionCount + agentWaits(summary.id),
+      running: isActive(summary),
     }
     return {
       summary,

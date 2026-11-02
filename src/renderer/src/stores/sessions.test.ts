@@ -73,7 +73,7 @@ describe('sub-agents and sub-sessions', () => {
   it('shows sub-agents as a badge on their parent, never as rows', () => {
     expect(sessionTree(sessions, '/repo').map((n) => n.summary.id)).toEqual(['root'])
     expect(root!.subagents.map((s) => s.id)).toEqual(['agent'])
-    expect(root!.own).toEqual({ permissionCount: 1, running: true })
+    expect(root!.own).toEqual({ permissionCount: 1, running: false })
   })
 
   it('nests every sub-session one level under the top-level session', () => {
