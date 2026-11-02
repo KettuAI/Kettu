@@ -552,12 +552,13 @@
   --agent-omp: color-mix(in oklch, var(--brand-omp-2) 86%, var(--bg-surface));
   --agent-muse: color-mix(in oklch, var(--brand-muse) 86%, var(--bg-surface));
   --agent-codewhale: color-mix(in oklch, var(--brand-codewhale-1) 86%, var(--bg-surface));
-  /* Amounts deepen in the fox orange, mixed with the card so each step is opaque. */
+  /* Amounts deepen in the fox orange laid over the card, mixed so each step is opaque; the top
+     step goes a little past the hue toward the text. */
   --heat-hue: var(--attention-dot);
-  --heat-1: color-mix(in oklch, var(--heat-hue) 18%, var(--bg-surface));
-  --heat-2: color-mix(in oklch, var(--heat-hue) 38%, var(--bg-surface));
-  --heat-3: color-mix(in oklch, var(--heat-hue) 64%, var(--bg-surface));
-  --heat-4: var(--heat-hue);
+  --heat-1: color-mix(in srgb, var(--heat-hue) 18%, var(--bg-surface));
+  --heat-2: color-mix(in srgb, var(--heat-hue) 38%, var(--bg-surface));
+  --heat-3: color-mix(in srgb, var(--heat-hue) 64%, var(--bg-surface));
+  --heat-4: color-mix(in srgb, var(--heat-hue), var(--text-primary) 7%);
   /* A day outside the range keeps its step's lightness in gray. */
   --heat-out-1: oklch(from var(--heat-1) l 0 h);
   --heat-out-2: oklch(from var(--heat-2) l 0 h);
