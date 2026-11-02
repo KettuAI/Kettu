@@ -37,6 +37,8 @@ export interface ClientInfo {
   os: string
   arch: string
   version: string | null
+  /** The system user signing in, which the daemon's confirm page names. */
+  user?: string
 }
 
 /** Cuts each field to what the service takes. */
@@ -48,6 +50,7 @@ export function clientInfo(info: ClientInfo): ClientInfo {
     os: cut(info.os, MAX_FIELD),
     arch: cut(info.arch, MAX_FIELD),
     version: info.version ? info.version.slice(0, MAX_FIELD) : null,
+    ...(info.user?.trim() ? { user: cut(info.user, MAX_FIELD) } : {}),
   }
 }
 

@@ -7,6 +7,7 @@ import {
   AccountNetworkError,
   AccountServiceError,
   clientInfo,
+  type ClientInfo,
   newPkce,
 } from './service'
 
@@ -51,6 +52,19 @@ describe('clientInfo', () => {
     })
     expect(info.name).toHaveLength(100)
     expect(info.os).toBe('Ubuntu 24.04.1 LTS')
+  })
+
+  it('names the system user when there is one', () => {
+    const base: ClientInfo = {
+      kind: 'daemon',
+      name: 'build-box',
+      os: 'Ubuntu',
+      arch: 'x64',
+      version: null,
+    }
+    expect(clientInfo({ ...base, user: ' lin ' }).user).toBe('lin')
+    expect(clientInfo({ ...base, user: '  ' })).not.toHaveProperty('user')
+    expect(clientInfo(base)).not.toHaveProperty('user')
   })
 })
 
