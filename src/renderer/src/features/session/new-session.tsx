@@ -298,7 +298,7 @@ function DraftComposer({
           }
           label={name ? t('newSession.messageAgent', { agent: name }) : t('newSession.message')}
           // Three lines high empty, with the row of +, the pickers and Send under the text.
-          size={{ minHeight: '102px', padding: '16px 12px 14px 18px' }}
+          size={{ minHeight: '96px', padding: '16px 12px 14px 18px' }}
           stacked
           onKeyDown={onKeyDown}
           lead={

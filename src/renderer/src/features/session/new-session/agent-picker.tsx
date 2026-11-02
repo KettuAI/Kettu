@@ -114,13 +114,20 @@ export function AgentPicker({
           <span className="truncate">{t('newSession.chooseAgentShort')}</span>
         )}
       </ComboboxTrigger>
-      <ComboboxContent align="start" sideOffset={6} className="flex w-85 flex-col">
+      {/* Below the composer's edge, its marks in line with the chip's. */}
+      <ComboboxContent
+        align="start"
+        sideOffset={20}
+        alignOffset={-14}
+        className="flex w-85 flex-col"
+      >
         <ComboboxInput
           showTrigger={false}
           placeholder={t('newSession.picker.search')}
           aria-label={t('newSession.picker.search')}
           spellCheck={false}
-          className="h-10.5 px-2"
+          // A menu's search keeps its bottom line when focused, not a field's focus ring.
+          className="h-10.5 px-2 has-[[data-slot=input-group-control]:focus-visible]:shadow-[inset_0_calc(var(--hairline)*-1)_0_var(--border-soft)]!"
         >
           <InputGroupAddon>
             <SearchIcon className="size-3.5" />
@@ -151,7 +158,7 @@ export function AgentPicker({
                       <ComboboxItem
                         key={id}
                         value={id}
-                        className="group/agent min-h-11 gap-2.5 rounded-xl py-1 pr-2 pl-2 [&>span.absolute]:hidden"
+                        className="group/agent h-11 gap-2.5 rounded-xl py-1 pr-2 pl-2 [&>span.absolute]:hidden"
                       >
                         <AgentMark agent={id} size={20} className="shrink-0" />
                         <span className="flex min-w-0 flex-1 flex-col gap-px">

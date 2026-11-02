@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronDownIcon, ChevronRightIcon, SearchIcon } from 'lucide-react'
+import { ChevronRightIcon, SearchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
@@ -277,7 +277,6 @@ export function AgentMenu({
           }
         >
           <ModelButtonLabel agentId={agentId} values={values} hostId={hostId} />
-          <ChevronDownIcon strokeWidth={1.75} className="size-3 shrink-0" />
         </ComboboxTrigger>
       ) : (
         <ComboboxTrigger
