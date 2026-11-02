@@ -122,12 +122,12 @@ export function usePromptChips({
     editor.current?.focus()
   }
 
-  const links = useLinkOpener(sessionId, projectPath)
+  const links = useLinkOpener(sessionId)
   const open = (chip: Chip) => {
     setHover(null)
     if (chip.kind === 'command') return
     if (chip.kind === 'link') {
-      links.open(chip.url, chip.local)
+      links.open(chip.url)
       return
     }
     const item = attachments.find((a) => a.key === chip.attachmentKey)

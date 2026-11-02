@@ -1,35 +1,56 @@
 import { useState, type ReactNode } from 'react'
+import type { LinkDestination } from '@shared/settings'
 import { isWeb } from '@renderer/lib/platform'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { toggleSidePane } from '@renderer/stores/view'
+import { iconFor, useSiteIconsStore } from '@renderer/stores/site-icons'
 import { LinkConfirm } from '../link-confirm'
-import { asksBeforeOpening } from '../link-open'
+import { planLinkOpen } from '../link-open'
+import { openLinkIn, rememberDestination } from '../open-link'
 
 /**
- * Opens a link chip's address: a local one in the session's browser, any other in the system
- * browser after the confirmation a reply's link asks for. `dialog` is that confirmation.
+ * Opens a link chip's address as a reply's link opens: where the link settings send it, asking
+ * first where they say to. `dialog` is that confirmation.
  */
-export function useLinkOpener(
-  sessionId: string | null | undefined,
-  projectPath: string | null,
-): { open: (url: string, local: boolean) => void; dialog: ReactNode } {
-  const [confirming, setConfirming] = useState<string | null>(null)
-  const open = (url: string, local: boolean) => {
-    if (local && !isWeb && sessionId && projectPath) {
-      void window.kettu.browser.navigate(sessionId, url)
-      toggleSidePane(projectPath, 'browser', true)
-      return
+export function useLinkOpener(sessionId: string | null | undefined): {
+  open: (url: string) => void
+  dialog: ReactNode
+} {
+  const session = sessionId ?? null
+  const context = { session: session !== null && !isWeb }
+  // The dialog's run: a new key each time, so its choices start afresh.
+  const [ask, setAsk] = useState<{
+    key: number
+    url: string
+    destination: LinkDestination
+    open: boolean
+  }>()
+  const open = (url: string) => {
+    const prefs = useSettingsStore.getState().settings.thread
+    const known = iconFor(useSiteIconsStore.getState().sites, url) !== undefined
+    const plan = planLinkOpen(url, prefs, context, known, false)
+    if (plan.ask) {
+      setAsk((last) => ({
+        key: (last?.key ?? 0) + 1,
+        url,
+        destination: plan.destination,
+        open: true,
+      }))
+    } else {
+      openLinkIn(url, plan.destination, session)
     }
-    const { confirmLinks } = useSettingsStore.getState().settings.thread
-    if (asksBeforeOpening(url, confirmLinks)) setConfirming(url)
-    else window.open(url, '_blank', 'noreferrer')
   }
-  const dialog = confirming && (
+  const dialog = ask && (
     <LinkConfirm
-      url={confirming}
-      isOpen
-      onClose={() => setConfirming(null)}
-      onConfirm={() => window.open(confirming, '_blank', 'noreferrer')}
+      key={ask.key}
+      url={ask.url}
+      open={ask.open}
+      destination={ask.destination}
+      sessionId={context.session ? session : null}
+      onClose={() => setAsk((last) => last && { ...last, open: false })}
+      onOpen={(destination, remember) => {
+        if (remember) rememberDestination(ask.url, destination)
+        openLinkIn(ask.url, destination, session)
+      }}
     />
   )
   return { open, dialog }

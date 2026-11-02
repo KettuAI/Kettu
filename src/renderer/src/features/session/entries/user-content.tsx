@@ -181,10 +181,10 @@ function ChipText({
     () => findChips(text, { commands: commands?.map((c) => c.name) ?? [], resolve }),
     [text, commands, resolve],
   )
-  const links = useLinkOpener(sessionId, projectPath)
+  const links = useLinkOpener(sessionId)
   const opener = (chip: Chip): ((from: HTMLElement) => void) | null => {
     if (chip.kind === 'command') return null
-    if (chip.kind === 'link') return () => links.open(chip.url, chip.local)
+    if (chip.kind === 'link') return () => links.open(chip.url)
     const attachment = attachments.find((a) => a.id === chip.attachmentKey)
     if (attachment) {
       return (from) =>
