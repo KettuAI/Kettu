@@ -42,6 +42,7 @@
   --attention-ring-strength: 50%;
   --attention-halo-strength: 9%;
   --danger: #ac3b2d;
+  --destructive-ring-color: color-mix(in srgb, var(--danger) 40%, transparent);
   --success: #2e7550;
   --merged: #6f4c8e;
   /* The dot on an added agent's mark, in the color chosen for it in Settings › Agents. */
@@ -73,7 +74,7 @@
   --danger-tint: #faf3f2;
   --danger-border: #f0dcd9;
   /* Status pills: each state's color at 6% over --bg-surface. */
-  --success-tint: #f2f7f5;
+  --success-tint: #eaf1ed;
   --info-tint: #f4f5f5;
   --warning-tint: #f9f6f0;
   /* A hovered info pill that is a button: opaque, so the contrast check sees it. */
@@ -123,6 +124,8 @@
   --elevation-card: 0 1px 0 rgb(20 26 34 / 3%);
   /* The composer and a hovered card; used with the card tier. */
   --elevation-float: 0 1px 0 rgb(20 26 34 / 4%), 0 16px 36px -20px rgb(30 45 70 / 30%);
+  /* The system notification drawn in Settings, which keeps the same shadow in either theme. */
+  --elevation-notification: 0 10px 24px -14px rgb(30 45 70 / 35%);
   /* Under a card waiting on the user; in dark its ring alone sets it apart. */
   --elevation-attention: 0 16px 36px -22px rgb(30 45 70 / 25%);
   --elevation-sunk: 0 0 #0000;
@@ -321,7 +324,9 @@
 
     --danger-tint: #28282f;
     --danger-border: #413539;
-    --success-tint: #212b30;
+    --success-tint: #1e2a2d;
+    /* The light theme's danger, faint: the dark one mixed in reads pink on the dark surface. */
+    --destructive-ring-color: rgb(172 59 45 / 35%);
     --info-tint: #252b33;
     --warning-tint: #272b2d;
     --info-tint-hover: #2b3139;
@@ -496,7 +501,8 @@
 
   --danger-tint: #28282f;
   --danger-border: #413539;
-  --success-tint: #212b30;
+  --success-tint: #1e2a2d;
+  --destructive-ring-color: rgb(172 59 45 / 35%);
   --info-tint: #252b33;
   --warning-tint: #272b2d;
   --info-tint-hover: #2b3139;
@@ -742,7 +748,7 @@
     var(--elevation-primary);
   /* A filled destructive button is flat; a destructive one in a row has a thin red ring. */
   --destructive-shadow: var(--elevation-primary);
-  --destructive-ring: inset 0 0 0 var(--hairline) color-mix(in srgb, var(--danger) 40%, transparent);
+  --destructive-ring: inset 0 0 0 var(--hairline) var(--destructive-ring-color);
   --destructive-ring-hover: inset 0 0 0 var(--hairline)
     color-mix(in srgb, var(--danger) 65%, transparent);
   --menu-ring:

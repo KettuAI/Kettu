@@ -40,7 +40,7 @@ export function AboutHero({ info }: { info: AppInfo | null }) {
               <span
                 data-selectable=""
                 title={info.system}
-                className="text-label font-medium text-tertiary"
+                className="font-display text-row font-medium text-tertiary"
               >
                 {info.version}
               </span>

@@ -97,11 +97,16 @@ export default function SettingsPage() {
       <DialogPortal>
         <DialogOverlay />
         <DialogPrimitive.Popup
-          // The section in the list takes the focus, so Tab starts from it.
-          initialFocus={() =>
-            document.querySelector<HTMLElement>('[data-settings-dialog] nav [aria-current=page]') ??
-            true
-          }
+          // The section in the list takes the focus, so Tab starts from it, without scrolling the
+          // list down to a section near its end, which would hide the search above it.
+          initialFocus={() => {
+            const current = document.querySelector<HTMLElement>(
+              '[data-settings-dialog] nav [aria-current=page]',
+            )
+            if (!current) return true
+            current.focus({ preventScroll: true })
+            return false
+          }}
           data-overlay-layer=""
           data-settings-dialog=""
           className="fixed top-14 left-1/2 z-50 flex h-[calc(100%-112px)] w-[calc(100%-48px)] max-w-265 -translate-x-1/2 flex-col overflow-hidden rounded-modal bg-surface text-primary shadow-dialog outline-none duration-(--duration-fast) [--segment-thumb:var(--bg-surface)] data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-bottom-1 data-closed:animate-out data-closed:fade-out-0"
@@ -492,24 +497,29 @@ function SearchResults({
                 />
                 <div className="shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
                   {section.rows.map((row) => (
-                    <button
+                    // The hairline sits on the row, straight, under the rounded hover of its button.
+                    <div
                       key={row.id}
-                      type="button"
-                      onClick={() => onGo(section, row)}
-                      className="flex w-full items-center gap-4 rounded-lg py-3.75 text-left shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)] outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
+                      className="shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]"
                     >
-                      <span className="flex min-w-0 flex-1 flex-col gap-0.75">
-                        <span className="text-label">
-                          <Marked text={row.name} query={query} />
-                        </span>
-                        {row.description && (
-                          <span className="line-clamp-2 text-group leading-normal text-tertiary">
-                            <Marked text={excerpt(row.description, query)} query={query} />
+                      <button
+                        type="button"
+                        onClick={() => onGo(section, row)}
+                        className="flex w-full items-center gap-4 rounded-lg py-3.75 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
+                      >
+                        <span className="flex min-w-0 flex-1 flex-col gap-0.75">
+                          <span className="text-label">
+                            <Marked text={row.name} query={query} />
                           </span>
-                        )}
-                      </span>
-                      <ChevronRightIcon className="size-3.5 shrink-0 text-tertiary" />
-                    </button>
+                          {row.description && (
+                            <span className="line-clamp-2 text-group leading-normal text-tertiary">
+                              <Marked text={excerpt(row.description, query)} query={query} />
+                            </span>
+                          )}
+                        </span>
+                        <ChevronRightIcon className="size-3.5 shrink-0 text-tertiary" />
+                      </button>
+                    </div>
                   ))}
                 </div>
               </section>

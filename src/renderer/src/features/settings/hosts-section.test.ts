@@ -171,7 +171,7 @@ describe('Add host', () => {
     ['void', 'This pairing code no longer works', 'Paste a new link'],
     ['rejected', 'The host did not add this computer.', 'Paste a new link'],
     ['unreachable', 'Could not reach the host within 15 seconds.', 'Retry'],
-    ['self', "This is this computer's own pairing code.", 'Paste a new link'],
+    ['self', 'This is this computer’s own pairing code.', 'Paste a new link'],
     ['update_host', 'Kettu on the host is too old for this computer.', 'Paste a new link'],
   ] as const)('says why it added nothing: %s', (reason, words, action) => {
     const shown = body({ kind: 'failed', reason })
@@ -181,7 +181,7 @@ describe('Add host', () => {
 
   it('names the host it added and this computer there, in Chinese too', async () => {
     expect(body({ kind: 'added', host: devBox })).toBe(
-      "Add host Added dev-box Linux · Kettu 0.2.0 · Direct This computer's name on dev-box dev-box lists this computer under this name; change it later in Settings › Hosts › dev-box. Done",
+      'Add host Added dev-box Linux · Kettu 0.2.0 · Direct This computer’s name on dev-box dev-box lists this computer under this name; change it later in Settings › Hosts › dev-box. Done',
     )
     await i18n.changeLanguage('zh-CN')
     expect(body({ kind: 'added', host: devBox })).toBe(
@@ -264,7 +264,7 @@ describe('Add host over SSH', () => {
 
   it.each([
     ['ssh_auth', 'did not accept the login.', 'check that ssh lin@dev-box logs in without one'],
-    ['ssh_host_unknown', "does not know lin@dev-box's host key yet.", 'ssh lin@dev-box'],
+    ['ssh_host_unknown', 'does not know lin@dev-box’s host key yet.', 'ssh lin@dev-box'],
     ['ssh_host_changed', 'someone may be intercepting the connection', 'known hosts'],
     ['ssh_forwarding', 'does not forward connections', 'AllowTcpForwarding'],
     ['ssh_not_running', 'its daemon is not running', 'kettu service install'],
@@ -332,8 +332,8 @@ describe("a host's page", () => {
     expect(page).toContain('Reached Direct · 192.168.1.42:51234')
     expect(page).toContain('Addresses 192.168.1.42:51234 dev.example.com:7000 Edit…')
     expect(page).toContain('This computer on dev-box Name dev-box lists this computer under')
-    expect(page).toContain("dev-box's settings Agents, harnesses, usage, the terminal")
-    expect(page).toContain("Open dev-box's settings")
+    expect(page).toContain('dev-box’s settings Agents, harnesses, usage, the terminal')
+    expect(page).toContain('Open dev-box’s settings')
     expect(page).toContain('Remove from this computer')
     expect(renderToStaticMarkup(createElement(HostPage, { id: devBox.id }))).toContain(
       'value="Lin MacBook"',
@@ -355,7 +355,7 @@ describe("a host's page", () => {
     expect(page).toContain('Add again…')
     // A host it cannot reach has no settings to open.
     expect(renderToStaticMarkup(createElement(HostPage, { id: devBox.id }))).toMatch(
-      /disabled=""[^>]*>Open dev-box&#x27;s settings/,
+      /disabled=""[^>]*>Open dev-box’s settings/,
     )
     // Its name can be changed only while it is online.
     expect(renderToStaticMarkup(createElement(HostPage, { id: devBox.id }))).toMatch(
@@ -370,7 +370,7 @@ describe("a host's page", () => {
     expect(await failed('not_connected')).toBe(
       'dev-box is not connected. Try again once it is online.',
     )
-    expect(await failed('unknown_host')).toBe("dev-box is no longer in this computer's list.")
+    expect(await failed('unknown_host')).toBe('dev-box is no longer in this computer’s list.')
     expect(await changeHost(t, devBox, async () => null)).toBeNull()
     // A call main refused outright still says why.
     expect(await changeHost(t, devBox, () => Promise.reject(new Error('Not a host id')))).toBe(

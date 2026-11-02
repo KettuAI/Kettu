@@ -163,7 +163,7 @@ describe('the key kept in a file', () => {
   it('is noted only when the system has no keyring', () => {
     remote.status = status({ plainTextKey: true })
     expect(text(createElement(PlainKeyNote))).toBe(
-      "This computer's key is kept in a file only your user can read, because the system has no keyring.",
+      'This computer’s key is kept in a file only your user can read, because the system has no keyring.',
     )
     remote.status = status()
     expect(renderToStaticMarkup(createElement(PlainKeyNote))).toBe('')
@@ -172,7 +172,7 @@ describe('the key kept in a file', () => {
   it('says why a service keeps it there on every system', () => {
     remote.status = status({ plainTextKey: true, service: true })
     expect(text(createElement(PlainKeyNote))).toBe(
-      "This computer's key is kept in a file only your user can read, because a service that starts with the computer cannot count on an unlocked keyring.",
+      'This computer’s key is kept in a file only your user can read, because a service that starts with the computer cannot count on an unlocked keyring.',
     )
   })
 })
@@ -353,7 +353,7 @@ describe('the list', () => {
     expect(rows[2]!.searchOnly).toBe(true)
     expect(renderToStaticMarkup(rows[1]!.group!.actions as ReactElement)).toContain('disabled=""')
     expect(text(rows[1]!.group!.note as ReactElement)).toBe(
-      "A device that doesn't connect for 90 days is removed. Turn on remote access to add a device.",
+      'A device that doesn’t connect for 90 days is removed. Turn on remote access to add a device.',
     )
     // With no device to show, the page is the switch alone.
     remote.status = status({ state: 'off', devices: [] })
@@ -374,7 +374,7 @@ describe('the list', () => {
     // With none in its last days, it says when a device is removed.
     remote.status = status({ devices: [stale], online: [stale.id] })
     expect(text(createElement(StaleNote))).toBe(
-      "A device that doesn't connect for 90 days is removed.",
+      'A device that doesn’t connect for 90 days is removed.',
     )
   })
 })

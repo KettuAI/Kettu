@@ -641,7 +641,8 @@ function AgentSubtitle({ status }: { status: AgentStatus }) {
   const account = status.account?.kind === 'none' ? null : status.account
   return (
     <>
-      <span className="truncate">
+      {/* As tall as the rename button, whether or not it shows. */}
+      <span className="truncate leading-6.5">
         {status.harnessName}
         {account && ` · ${account.label}`}
       </span>
@@ -675,14 +676,14 @@ function AgentPageLine({ status }: { status: AgentStatus }) {
     harness: version ? `${status.harnessName} ${version}` : status.harnessName,
   })
   return ready ? (
-    <span className="mt-1.25 flex min-w-0 items-center gap-1.5 leading-[normal]">
+    <span className="flex min-h-4.5 min-w-0 items-center gap-1.5 leading-[normal]">
       <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-success" />
       <span className="truncate">
         {t('agents:state.ready')} · {harness}
       </span>
     </span>
   ) : (
-    <span className="mt-1.25 flex min-w-0 items-center gap-1 leading-[normal]">
+    <span className="flex min-h-4.5 min-w-0 items-center gap-1 leading-[normal]">
       <AgentStateLine status={status} className="text-hint leading-[normal]" />
       <span className="truncate">· {harness}</span>
     </span>

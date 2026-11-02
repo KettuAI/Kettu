@@ -234,8 +234,8 @@
     "fromComputer": {
       "name": "统计本机用量",
       "name_web": "统计 {{host}} 上的用量",
-      "description": "同时统计 Claude Code、Codex 和 OpenCode 在 Kettu 之外的日志。只读 token 数、模型和时间，不读内容。",
-      "description_web": "同时统计 Claude Code、Codex 和 OpenCode 在 {{host}} 上、Kettu 之外的日志。只读 token 数、模型和时间，不读内容。",
+      "description": "同时统计 Claude Code、Codex 和 opencode 在 Kettu 之外的日志。只读 token 数、模型和时间，不读内容。",
+      "description_web": "同时统计 Claude Code、Codex 和 opencode 在 {{host}} 上、Kettu 之外的日志。只读 token 数、模型和时间，不读内容。",
       "keywords": "日志 历史 导入 token 统计"
     },
     "notFound": "没有找到日志",
