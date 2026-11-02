@@ -154,8 +154,11 @@ export const SessionRow = memo(function SessionRow({
       aria-description={inSplit ? t('row.inSplitView') : undefined}
       // The other panes' rows take the current row's fill, without its surface or its edge.
       className={cn(
-        'gap-[9px] pr-2.5 text-row data-active:font-medium',
+        // The row its menu acts on keeps a fox ring while the menu is open; rows chosen together
+        // take a fox tint.
+        'gap-[9px] pr-2.5 text-row data-active:font-medium data-multi-selected:bg-[color-mix(in_srgb,var(--focus)_12%,transparent)] data-popup-open:shadow-[inset_0_0_0_1.5px_var(--focus)]',
         inSplit && 'bg-selected font-medium',
+        moreOpen && 'bg-hover shadow-[inset_0_0_0_1.5px_var(--focus)]',
         away && 'text-tertiary',
       )}
       data-sidebar-row=""
