@@ -121,6 +121,8 @@
   --elevation-card: 0 1px 0 rgb(20 26 34 / 3%);
   /* The composer and a hovered card; used with the card tier. */
   --elevation-float: 0 1px 0 rgb(20 26 34 / 4%), 0 16px 36px -20px rgb(30 45 70 / 30%);
+  /* Under a card waiting on the user; in dark its ring alone sets it apart. */
+  --elevation-attention: 0 16px 36px -22px rgb(30 45 70 / 25%);
   --elevation-sunk: 0 0 #0000;
   --elevation-thumb: 0 1px 3px rgb(0 0 0 / 22%);
   /* A selected row and the chosen segment. */
@@ -336,6 +338,7 @@
     --elevation-control-hover: 0 0 #0000;
     --elevation-card: 0 1px 2px rgb(0 0 0 / 30%);
     --elevation-float: 0 16px 36px -16px rgb(0 0 0 / 70%);
+    --elevation-attention: 0 0 #0000;
     --elevation-sunk: 0 0 #0000;
     --elevation-thumb: 0 1px 3px rgb(0 0 0 / 22%);
     --elevation-raised: 0 1px 2px rgb(0 0 0 / 40%);
@@ -509,6 +512,7 @@
   --elevation-control-hover: 0 0 #0000;
   --elevation-card: 0 1px 2px rgb(0 0 0 / 30%);
   --elevation-float: 0 16px 36px -16px rgb(0 0 0 / 70%);
+  --elevation-attention: 0 0 #0000;
   --elevation-sunk: 0 0 #0000;
   --elevation-thumb: 0 1px 3px rgb(0 0 0 / 22%);
   --elevation-raised: 0 1px 2px rgb(0 0 0 / 40%);
@@ -721,9 +725,7 @@
      depth. */
   --field-shadow: var(--elevation-control), var(--highlight);
   --field-focus-shadow: var(--focus-halo);
-  --primary-shadow:
-    inset 0 0 0 var(--hairline) var(--primary-ring), inset 0 1px 0 var(--primary-highlight),
-    var(--elevation-primary);
+  --primary-shadow: inset 0 1px 0 var(--primary-highlight), var(--elevation-primary);
   /* A filled destructive button is flat; a destructive one in a row has a thin red ring. */
   --destructive-shadow: var(--elevation-primary);
   --destructive-ring: inset 0 0 0 var(--hairline) color-mix(in srgb, var(--danger) 40%, transparent);
@@ -750,7 +752,7 @@
   /* A card waiting on the user: a fox ring with a faint halo. */
   --attention-ring-shadow:
     0 0 0 var(--hairline) color-mix(in srgb, var(--attention-dot) 50%, transparent),
-    0 0 0 4px color-mix(in srgb, var(--attention-dot) 9%, transparent), var(--elevation-float);
+    0 0 0 4px color-mix(in srgb, var(--attention-dot) 9%, transparent), var(--elevation-attention);
   /* The sidebar's update card under the pointer, while its list is open, and after a failed
      update: red only on the edge. */
   --card-lift: var(--card-ring), 0 4px 14px -6px rgb(16 22 30 / 18%);

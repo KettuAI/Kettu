@@ -48,7 +48,8 @@ export function ShortcutsDialog() {
             className="min-w-0 flex-1 bg-transparent text-control text-foreground outline-none placeholder:text-tertiary"
           />
         </label>
-        <div className="@container mt-4 min-h-0 overflow-y-auto">
+        {/* The key caps' ring sits a pixel outside them, which the scroll box would clip. */}
+        <div className="@container -mx-px mt-4 min-h-0 overflow-y-auto px-px">
           {rows.length === 0 ? (
             <p className="py-6 text-center text-control text-tertiary">{t('shortcuts.noMatch')}</p>
           ) : (
