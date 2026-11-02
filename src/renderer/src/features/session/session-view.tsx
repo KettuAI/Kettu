@@ -69,7 +69,6 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   useEffect(() => ensureFiles(summary.projectPath), [summary.projectPath])
 
   const [actionError, setActionError] = useState<string | null>(null)
-  const [queueOpen, setQueueOpen] = useState(false)
   // A queued message's failed action; the stack clears it with its next action or its last item.
   const [queueError, setQueueError] = useState<string | null>(null)
   const gutter = useScrollbarGutter()
@@ -201,15 +200,11 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
             )}
             <div className="flex flex-col">
               {session && summary.origin !== 'subagent' && (
-                <PlanBar
-                  sessionId={sessionId}
-                  running={running}
-                  hidden={queueOpen && session.queue.length > 0}
-                />
+                <PlanBar sessionId={sessionId} running={running} hidden={false} />
               )}
               {/* Mounted only while something waits; its cards sit behind the composer. */}
               {session && summary.origin !== 'subagent' && session.queue.length > 0 && (
-                <QueueStack session={session} onOpenChange={setQueueOpen} onError={setQueueError} />
+                <QueueStack session={session} onError={setQueueError} />
               )}
               {away ? (
                 session && <HostAway host={away} inline />
