@@ -22,6 +22,7 @@ import { connectTransport, DirectListener } from './direct'
 import { HostStore } from './hosts'
 import { PairingCodes } from './pairing'
 import { RemoteServer } from './server'
+import { clearUploads } from './uploads'
 import {
   hangingTransports,
   memoryPorts,
@@ -40,12 +41,17 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup()
 })
 
-/** A host as the remote host runs it, whose agent host answers `ping` with `pong`. */
+/**
+ * A host as the remote host runs it, whose agent host answers `ping` with `pong` and `echo` with
+ * the bytes it was given.
+ */
 async function startHost(dir: string, hostKey: KeyPair, resumeMs?: number) {
   // The agent host's end of each device session's port, with the device it serves.
   const agentEnds: { device: PortDevice; port: PortChannel }[] = []
   const devices = await DeviceStore.load(dir, quiet)
   const activity = await ActivityLog.load(dir, quiet)
+  const uploads = path.join(dir, 'remote', 'uploads')
+  await clearUploads(uploads)
   const heard = new Map<number, PairingState[]>()
   const pairing = new PairingCodes({
     hostKey: hostKey.publicKey,
@@ -58,14 +64,23 @@ async function startHost(dir: string, hostKey: KeyPair, resumeMs?: number) {
     activity,
     pairing,
     host: { name: 'Studio', platform: 'linux', version: '0.2.0' },
-    uploads: path.join(dir, 'remote', 'uploads'),
+    uploads,
     openAgentPort: async (device) => {
       const [remoteEnd, agentEnd] = memoryPorts()
       agentEnds.push({ device, port: agentEnd })
       agentEnd.onMessage((data) => {
-        const { type, id, method } = data as { type: string; id: number; method: string }
+        const { type, id, method, params } = data as {
+          type: string
+          id: number
+          method: string
+          params: { bytes?: ArrayBuffer }
+        }
         if (type === 'request' && method === 'ping') {
           agentEnd.send({ type: 'response', id, result: 'pong' })
+        }
+        if (type === 'request' && method === 'echo') {
+          const bytes = params.bytes
+          agentEnd.send({ type: 'response', id, result: { got: bytes?.byteLength, bytes } })
         }
       })
       return remoteEnd
@@ -314,6 +329,22 @@ describe('a known host', () => {
     port.onMessage((data) => answers.push(data))
     port.send({ type: 'request', id: 1, method: 'ping' })
     await expect.poll(() => answers).toEqual([{ type: 'response', id: 1, result: 'pong' }])
+  })
+
+  it("carries a request's bytes up as an upload and an answer's bytes back", async () => {
+    const t = await setup()
+    await t.paired()
+    await expect.poll(() => t.mainPorts.length).toBe(1)
+    const port = t.mainPorts[0]!
+    const answers: { id: number; result: { got: number; bytes: ArrayBuffer } }[] = []
+    port.onMessage((data) => answers.push(data as (typeof answers)[number]))
+    const bytes = new Uint8Array(200_000).map((_, i) => i % 251)
+    port.send({ type: 'request', id: 1, method: 'ping' })
+    port.send({ type: 'request', id: 2, method: 'echo', params: { bytes: bytes.buffer } })
+    await expect.poll(() => answers.length).toBe(2)
+    const echo = answers.find((answer) => answer.id === 2)!
+    expect(echo.result.got).toBe(bytes.length)
+    expect(new Uint8Array(echo.result.bytes)).toEqual(bytes)
   })
 
   it("keeps main's port through a drop the host keeps the session through", async () => {

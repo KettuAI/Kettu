@@ -9,11 +9,15 @@ import { removeKey } from '@renderer/lib/storage'
 /** The New session screen's draft, kept like a session's until the session it starts exists. */
 export const NEW_SESSION_DRAFT = 'new'
 
-/** A draft's attachment as stored: the host's record of it, and what the tile shows about it. */
+/**
+ * A draft's attachment as stored: the host's record of it, and what the tile shows about it;
+ * `hostId` names another host that holds the record.
+ */
 export interface SavedAttachment {
   attachment: Attachment
   pixels: { width: number; height: number } | null
   scaled: { width: number; height: number } | null
+  hostId?: string
 }
 
 interface Draft {
@@ -43,7 +47,8 @@ function isSaved(value: unknown): value is SavedAttachment {
     isRecord(value) &&
     isAttachment(value.attachment) &&
     isSize(value.pixels) &&
-    isSize(value.scaled)
+    isSize(value.scaled) &&
+    (value.hostId === undefined || typeof value.hostId === 'string')
   )
 }
 

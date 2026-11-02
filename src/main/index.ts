@@ -22,6 +22,7 @@ import { BrowserTools } from './browser/tools'
 import { BrowserOriginStore } from './browser/origins'
 import { broadcast } from './events'
 import { HostAdmin } from './host-admin'
+import { HostMedia } from './host-media'
 import { HostSessions } from './host-sessions'
 import { locale as currentLocale, setLocale, t } from './i18n'
 import { appInfo, registerIpcHandlers } from './ipc'
@@ -329,9 +330,13 @@ async function start(): Promise<void> {
     plainTextKey: remoteHost.plainTextDeviceKey,
     keyFailed: remoteHost.deviceKeyFailed,
   })
-  const hostSessions = new HostSessions({
+  const hostMedia = new HostMedia((hostId, params) =>
+    hostSessions.call(hostId, 'media.read', params),
+  )
+  const hostSessions: HostSessions = new HostSessions({
     browserCall: (hostId, call) => void remoteBrowser.call(hostId, call),
     ended: (hostId) => remoteBrowser.hostClosed(hostId),
+    media: hostMedia,
   })
   const hostsChanged = (): void => {
     hostSessions.connections(remoteHost.hosts)
@@ -380,7 +385,7 @@ async function start(): Promise<void> {
     importFile: (path, project) => agentHost.artifactImport(path, project),
   })
   await artifacts.install(session.defaultSession)
-  serveMedia(session.defaultSession, mediaGrants, isRendererUrl)
+  serveMedia(session.defaultSession, mediaGrants, isRendererUrl, hostMedia)
   // A session of its own, so publishing follows the proxy setting rather than the artifacts'
   // window proxy, and keeps no cookies or storage of its own.
   const sharingSession = session.fromPartition('kettu-sharing')
@@ -522,6 +527,7 @@ async function start(): Promise<void> {
     sharing,
     remoteHost,
     hostSessions,
+    hostMedia,
     remoteStatus,
     hostsStatus: () => {
       void readComputerModel()

@@ -14,6 +14,7 @@ import {
 } from 'electron'
 import { CARRIED_MEDIA_BYTES, type CarriedMedia, type MediaType } from '@shared/media'
 import { safeName } from '@shared/file-name'
+import type { HostMedia } from './host-media'
 import { grantedFile, type MediaGrants } from './media'
 
 const MIME_TYPE = /^(?:image|audio|video)\/[\w.+-]{1,100}$/
@@ -66,10 +67,24 @@ export function savedName({ name, mimeType }: Pick<CarriedMedia, 'name' | 'mimeT
   return `${base}.${extension}`
 }
 
-/** `media:copy-image`: the picture on the clipboard, from the granted file or the given bytes. */
-export async function copyImage(source: unknown, grants: MediaGrants): Promise<void> {
+/** The most of another host's picture a copy reads from it. */
+const COPIED_HOST_BYTES = 128 * 1024 * 1024
+
+/**
+ * `media:copy-image`: the picture on the clipboard, from the granted file, from another host, or
+ * from the given bytes.
+ */
+export async function copyImage(
+  source: unknown,
+  grants: MediaGrants,
+  hostMedia?: HostMedia,
+): Promise<void> {
   let bytes: Uint8Array
-  if (typeof source === 'string') {
+  const onHost = hostMedia?.byUrl(source)
+  if (onHost) {
+    if (!onHost.mimeType.startsWith('image/')) throw new Error('Only a picture can be copied')
+    bytes = await hostMedia!.readAll(onHost, COPIED_HOST_BYTES)
+  } else if (typeof source === 'string') {
     const grant = await grantedFile(source, grants)
     if (!grant.mimeType.startsWith('image/')) throw new Error('Only a picture can be copied')
     bytes = await readFile(grant.path)
@@ -92,10 +107,15 @@ export async function saveMediaAs(
   window: BrowserWindow | null,
   source: unknown,
   grants: MediaGrants,
+  hostMedia?: HostMedia,
 ): Promise<boolean> {
   let name: string
   let save: (to: string) => Promise<void>
-  if (typeof source === 'string') {
+  const onHost = hostMedia?.byUrl(source)
+  if (onHost) {
+    name = safeName(onHost.name, onHost.mimeType.slice(0, onHost.mimeType.indexOf('/')))
+    save = (to) => hostMedia!.saveTo(onHost, to)
+  } else if (typeof source === 'string') {
     const grant = await grantedFile(source, grants)
     name = path.basename(grant.path)
     save = (to) => copyFile(grant.path, to)
@@ -116,6 +136,14 @@ export async function saveMediaAs(
 }
 
 /** `media:reveal`: the granted file, selected in the file manager and never run. */
-export async function revealMedia(url: unknown, grants: MediaGrants): Promise<void> {
+export async function revealMedia(
+  url: unknown,
+  grants: MediaGrants,
+  hostMedia?: HostMedia,
+): Promise<void> {
+  if (hostMedia?.byUrl(url)) throw new Error(ON_HOST)
   shell.showItemInFolder((await grantedFile(url, grants)).path)
 }
+
+/** Why a file of another host has no place in this computer's file manager or apps. */
+export const ON_HOST = 'The file is on another host; save a copy to open it here'

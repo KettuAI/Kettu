@@ -143,7 +143,8 @@
     "slashNeedsEmpty": "In an empty message",
     "notOnDisk": "It isn't a file on disk, so it can't be attached.",
     "theAgent": "The agent",
-    "otherHost": "Files and images from this computer cannot be attached to a session on another host yet. Mention the host's files with @."
+    "folderOtherHost": "A folder on this computer can't go to a session on another host. Attach the files in it instead.",
+    "tooLargeOtherHost": "Over {{limit}}, too large to send to another host."
   },
   "mentions": {
     "label": "Files and folders",

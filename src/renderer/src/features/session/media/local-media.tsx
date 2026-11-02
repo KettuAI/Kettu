@@ -13,6 +13,7 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { errorMessage } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { fileManagerName, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { openViewer } from '@renderer/stores/viewer'
@@ -197,6 +198,7 @@ function MediaState({
 }) {
   const { t } = useTranslation(['session', 'common'])
   const [error, setError] = useState<string | null>(null)
+  const projectPath = useContext(ProjectPathContext)
   const retryButton = (
     <Button variant="outline" size="xs" onClick={onRetry}>
       <RotateCwIcon />
@@ -236,7 +238,7 @@ function MediaState({
           {error && <span className="block text-danger">{error}</span>}
         </>
       }
-      action={<PlayElsewhere url={grant.url} onError={setError} />}
+      action={<PlayElsewhere url={grant.url} projectPath={projectPath} onError={setError} />}
     />
   )
 }
@@ -261,9 +263,12 @@ export function UnsupportedReason({ kind }: { kind: MediaKind }) {
 /** Open with default app and Show in the file manager: the ways out for such a file. */
 export function PlayElsewhere({
   url,
+  projectPath,
   onError,
 }: {
   url: string
+  /** The project the file is in, whose host may be another one. */
+  projectPath: string | null
   onError: (message: string | null) => void
 }) {
   const { t } = useTranslation('session')
@@ -271,8 +276,9 @@ export function PlayElsewhere({
     onError(null)
     action(url).catch((e: unknown) => onError(errorMessage(e)))
   }
-  // A browser has no app or file manager of the host's; the file can only be saved.
-  if (isWeb) {
+  // A browser has no app or file manager of the host's, nor has this computer of another host's;
+  // the file can only be saved.
+  if (isWeb || (projectPath !== null && hostOfPath(projectPath) !== null)) {
     return (
       <Button variant="outline" size="xs" onClick={act(window.kettu.media.saveAs)}>
         <DownloadIcon />

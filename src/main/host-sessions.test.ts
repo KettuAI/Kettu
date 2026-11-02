@@ -213,6 +213,114 @@ describe('HostSessions', () => {
     ])
   })
 
+  it("asks a host on main's behalf, holding the request while the host connects", async () => {
+    const { relay } = setup()
+    relay.connections([status(devBox, 'connecting')])
+    const asked = relay.call(devBox, 'media.read', { path: 'a.png' })
+    const port = new FakePort()
+    relay.opened(devBox, port)
+    expect(port.posted).toEqual([
+      { type: 'request', id: 1, method: 'media.read', params: { path: 'a.png' } },
+    ])
+    port.deliver({ type: 'response', id: 1, result: { kind: 'not_found' } })
+    await expect(asked).resolves.toEqual({ kind: 'not_found' })
+    await expect(relay.call(mini, 'media.read', {})).rejects.toMatchObject({
+      code: 'host_offline',
+    })
+  })
+
+  it("opens another host's media through a read of none of it, and grants main's URL", () => {
+    const grants: unknown[] = []
+    const relay = new HostSessions({
+      media: {
+        grant: (file, media) => {
+          grants.push({ file, media })
+          return { url: 'kettu-media://t/a.png?v=9', kind: 'image', mimeType: 'image/png', size: 9 }
+        },
+      },
+    })
+    const window = new FakePort()
+    relay.attach(window)
+    const port = new FakePort()
+    relay.opened(devBox, port)
+    const params = { projectPath: '/home/lin/api', path: 'a.png', sessionId: 's1' }
+    window.deliver(request(devBox, 4, 'media.open', params))
+    expect(port.posted).toEqual([
+      { type: 'request', id: 1, method: 'media.read', params: { ...params, offset: 0, length: 0 } },
+    ])
+    const media = { name: 'a.png', kind: 'image', mimeType: 'image/png', size: 9 }
+    port.deliver({
+      type: 'response',
+      id: 1,
+      result: { kind: 'granted', media, offset: 0, length: 0, bytes: new ArrayBuffer(0) },
+    })
+    expect(grants).toEqual([
+      {
+        file: { hostId: devBox, projectPath: '/home/lin/api', path: 'a.png', sessionId: 's1' },
+        media,
+      },
+    ])
+    expect(window.posted.at(-1)).toEqual({
+      kind: 'message',
+      hostId: devBox,
+      message: {
+        type: 'response',
+        id: 4,
+        result: {
+          kind: 'granted',
+          grant: {
+            url: 'kettu-media://t/a.png?v=9',
+            kind: 'image',
+            mimeType: 'image/png',
+            size: 9,
+          },
+        },
+      },
+    })
+    window.deliver(request(devBox, 5, 'media.open', params))
+    port.deliver({ type: 'response', id: 2, result: { kind: 'forbidden' } })
+    expect(window.posted.at(-1)).toMatchObject({
+      message: { id: 5, result: { kind: 'forbidden' } },
+    })
+  })
+
+  it("grants the window a URL for a media file another host's Files pane reads", () => {
+    const relay = new HostSessions({
+      media: {
+        grant: (file) => ({
+          url: `kettu-media://t/${file.path}?v=9`,
+          kind: 'video',
+          mimeType: 'video/mp4',
+          size: 9,
+        }),
+      },
+    })
+    const window = new FakePort()
+    relay.attach(window)
+    const port = new FakePort()
+    relay.opened(devBox, port)
+    window.deliver(request(devBox, 2, 'files.read', { projectPath: '/srv/app', path: 'demo.mp4' }))
+    port.deliver({
+      type: 'response',
+      id: 1,
+      result: {
+        kind: 'media',
+        path: 'demo.mp4',
+        media: { name: 'demo.mp4', kind: 'video', mimeType: 'video/mp4', size: 9 },
+      },
+    })
+    expect(window.posted.at(-1)).toMatchObject({
+      message: {
+        id: 2,
+        result: {
+          kind: 'media',
+          path: 'demo.mp4',
+          grant: { url: 'kettu-media://t/demo.mp4?v=9', kind: 'video' },
+        },
+      },
+    })
+  })
+
   it('closes every port when Kettu quits', () => {
     const { relay, window } = setup()
     const port = new FakePort()

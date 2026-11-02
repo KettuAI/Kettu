@@ -443,7 +443,7 @@ function AddMenu({
   agentName: string
   disabled: boolean
   full: boolean
-  /** The session is on another host, whose files `@` names and no pick reaches. */
+  /** The session is on another host, which takes files from here as uploads and no folder. */
   remote: boolean
   commands: boolean
   emptyDraft: boolean
@@ -494,15 +494,12 @@ function AddMenu({
           return false
         }}
       >
-        {/* Another host's session takes only its own project's files, through `@`. */}
-        {!remote && (
-          <DropdownMenuItem disabled={full} onClick={() => onPick('files')}>
-            <FileIcon />
-            {t('attachments.addFiles')}
-            <DropdownMenuShortcut>{full ? t('attachments.atMost') : shortcut}</DropdownMenuShortcut>
-          </DropdownMenuItem>
-        )}
-        {/* A browser's folder means nothing on the host. */}
+        <DropdownMenuItem disabled={full} onClick={() => onPick('files')}>
+          <FileIcon />
+          {t('attachments.addFiles')}
+          <DropdownMenuShortcut>{full ? t('attachments.atMost') : shortcut}</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        {/* A folder here, or a browser's, means nothing on the host. */}
         {!isWeb && !remote && (
           <DropdownMenuItem disabled={full} onClick={() => onPick('folder')}>
             <FolderIcon />

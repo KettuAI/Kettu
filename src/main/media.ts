@@ -4,6 +4,7 @@ import { open, realpath } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import type { CustomScheme, Session, WebFrameMain } from 'electron'
 import { MEDIA_SCHEME, MEDIA_TOKEN, mediaUrlToken, type MediaGrantRecord } from '@shared/media'
+import type { HostMedia } from './host-media'
 import { refuseRequests } from './request-filter'
 
 /**
@@ -112,11 +113,17 @@ export function parseRange(
   return { start, end: Math.min(end, size - 1) }
 }
 
-/** Answers one request on the media scheme. */
-export async function respondMedia(request: Request, grants: MediaGrants): Promise<Response> {
+/** Answers one request on the media scheme, for a file here or on another host. */
+export async function respondMedia(
+  request: Request,
+  grants: MediaGrants,
+  hostMedia?: HostMedia,
+): Promise<Response> {
   if (request.method !== 'GET' && request.method !== 'HEAD') return answer(405)
   const token = URL.parse(request.url)?.hostname ?? ''
   if (!MEDIA_TOKEN.test(token)) return answer(404)
+  const onHost = hostMedia?.find(token)
+  if (onHost) return hostMedia!.respond(request, onHost)
   const grant = await grants.find(token)
   if (!grant) return answer(404)
   try {
@@ -193,8 +200,9 @@ export function serveMedia(
   session: Session,
   grants: MediaGrants,
   isRendererUrl: (url: string | undefined) => boolean,
+  hostMedia?: HostMedia,
 ): void {
-  session.protocol.handle(MEDIA_SCHEME, (request) => respondMedia(request, grants))
+  session.protocol.handle(MEDIA_SCHEME, (request) => respondMedia(request, grants, hostMedia))
   refuseRequests(
     session,
     (details) =>

@@ -383,7 +383,7 @@ function FileMedia({
         </EmptyHeader>
         <EmptyContent>
           <span className="flex flex-wrap justify-center gap-1.5">
-            <PlayElsewhere url={grant.url} onError={setError} />
+            <PlayElsewhere url={grant.url} projectPath={projectPath} onError={setError} />
           </span>
           {error && <span className="text-xs text-danger">{error}</span>}
         </EmptyContent>

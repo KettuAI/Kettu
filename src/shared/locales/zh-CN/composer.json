@@ -138,7 +138,8 @@
     "slashNeedsEmpty": "仅限空消息",
     "notOnDisk": "它不是磁盘上的文件，无法添加。",
     "theAgent": "Agent",
-    "otherHost": "另一台主机上的会话暂时不能附加这台电脑的文件和图片。可以用 @ 提到那台主机上的文件。"
+    "folderOtherHost": "这台电脑上的文件夹不能发到另一台主机上的会话，请改为添加里面的文件。",
+    "tooLargeOtherHost": "超过 {{limit}}，太大，无法发到另一台主机。"
   },
   "mentions": {
     "label": "文件和文件夹",

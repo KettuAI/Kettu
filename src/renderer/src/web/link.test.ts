@@ -357,6 +357,8 @@ describe('HostLink acknowledgements and pace', () => {
       closed: new Promise<void>(() => {}),
       send: async (value: unknown) => void sent.push(value),
       sendBytes: async () => {},
+      buffered: () => 0,
+      drained: async () => {},
       close: () => {},
     }
     const welcome = {
@@ -430,6 +432,8 @@ describe('HostLink events', () => {
       closed: new Promise<void>(() => {}),
       send: async () => {},
       sendBytes: async () => {},
+      buffered: () => 0,
+      drained: async () => {},
       close: () => {},
     }
     const welcome = {
