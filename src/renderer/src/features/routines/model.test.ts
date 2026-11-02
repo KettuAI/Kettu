@@ -115,7 +115,7 @@ describe('times on the routines pages', () => {
     await i18n.changeLanguage('zh-CN')
     expect(untilTime(NOW + (17 * 60 + 47) * MINUTE, NOW)).toBe('17 小时 47 分钟后')
     expect(runDay(at(25, 22, 58), NOW)).toBe('昨天 22:58')
-    expect(nextRunText(at(26, 16), NOW)).toBe('下次运行 今天 16:00')
+    expect(nextRunText(at(26, 16), NOW)).toBe('下次运行：今天 16:00')
   })
 })
 
