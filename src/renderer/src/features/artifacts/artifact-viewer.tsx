@@ -216,7 +216,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
                 <button
                   type="button"
                   onClick={leaveArtifact}
-                  className="flex h-7 shrink-0 items-center gap-1 rounded-tile pr-2 pl-1 text-[13.5px] text-tertiary outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-secondary focus-ring"
+                  className="flex h-7 shrink-0 items-center gap-1 rounded-tile pr-2 pl-1 text-lede text-tertiary outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-secondary focus-ring"
                 />
               }
             >

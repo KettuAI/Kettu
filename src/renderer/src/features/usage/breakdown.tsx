@@ -105,7 +105,7 @@ export function Breakdown({
               </span>
               <span
                 className={cn(
-                  'text-right text-[13.5px] tabular-nums',
+                  'text-right text-lede tabular-nums',
                   row.value === null ? 'text-secondary' : 'text-primary',
                 )}
               >
@@ -123,7 +123,7 @@ export function Breakdown({
               type="button"
               aria-expanded={open}
               onClick={() => setOpen((was) => !was)}
-              className="flex items-center gap-1.5 justify-self-start rounded-md text-[13.5px] text-secondary outline-none focus-ring hover:text-foreground"
+              className="flex items-center gap-1.5 justify-self-start rounded-md text-lede text-secondary outline-none focus-ring hover:text-foreground"
             >
               {open
                 ? t('breakdown.fewer')
@@ -140,7 +140,7 @@ export function Breakdown({
             <span />
             {!open && (
               <>
-                <span className="text-right text-[13.5px] text-secondary tabular-nums">
+                <span className="text-right text-lede text-secondary tabular-nums">
                   {amount(folded.rest.value)}
                 </span>
                 <span className="text-right text-hint text-tertiary tabular-nums">
@@ -174,7 +174,7 @@ function RowName({ row, grouping }: { row: BreakdownRow; grouping: Grouping }) {
       )}
       <Tooltip>
         <TooltipTrigger
-          render={<span className="min-w-0 truncate text-[13.5px] font-medium text-primary" />}
+          render={<span className="min-w-0 truncate text-lede font-medium text-primary" />}
         >
           {name}
         </TooltipTrigger>

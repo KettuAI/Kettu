@@ -98,7 +98,7 @@ function Plan({ status, now, first }: { status: AgentStatus; now: number; first:
     >
       <div className="flex min-w-0 items-center gap-2.5">
         <AgentMark agent={status.id} size={18} mono={!isInstalled(status)} />
-        <span className="truncate text-[13.5px] font-medium text-primary">{status.name}</span>
+        <span className="truncate text-lede font-medium text-primary">{status.name}</span>
         {status.account && (
           <span className="truncate text-hint text-tertiary">{status.account.label}</span>
         )}
