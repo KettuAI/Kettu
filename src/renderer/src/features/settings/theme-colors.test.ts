@@ -17,8 +17,10 @@ import {
 } from './theme-colors'
 
 // What tokens.css holds that a theme never changes: the white page under an SVG and a QR code's
-// ink on it, the shadows, the brand marks and the artifact kinds' colors.
-const KEPT_OUT = /^(?:canvas|canvas-ink|highlight|elevation-.+|brand-.+|kind-.+)$/
+// ink on it, the shadows, the brand marks and the artifact kinds' colors; and what follows a
+// token a theme does set: the chosen tile's tint, and the amounts of the heat steps and the halo.
+const KEPT_OUT =
+  /^(?:canvas|canvas-ink|highlight|elevation-.+|brand-.+|kind-.+|control-on-tint|heat-step-\d|focus-halo-strength)$/
 
 const nord: Theme = {
   name: 'Nord',
@@ -37,8 +39,8 @@ describe('the built-in colors', () => {
     expect(BUILTIN_COLORS.dark['bg-app']).toBe('#161b22')
     // Tokens the dark block leaves alone, and roles, which point at other tokens.
     expect(BUILTIN_COLORS.dark['viewer-scrim']).toBe('oklch(0.14 0 0 / 92%)')
-    expect(BUILTIN_COLORS.dark['primary-foreground']).toBe('#1c222a')
-    expect(BUILTIN_COLORS.light['terminal-background']).toBe('#ffffff')
+    expect(BUILTIN_COLORS.dark['primary-foreground']).toBe('#10161e')
+    expect(BUILTIN_COLORS.light['terminal-background']).toBe('#f6f7f9')
   })
 
   it('deepen the heatmap from the accent orange', () => {
@@ -56,6 +58,59 @@ describe('the built-in colors', () => {
 
   it('have no pair under its ratio', () => {
     expect(themeContrast(null)).toEqual([])
+  })
+})
+
+describe('themeColors', () => {
+  // A theme made before the raised rows, the fox controls and the code colors.
+  const older: Theme = {
+    name: 'Older',
+    light: {
+      colors: {
+        'bg-surface': '#eff1f5',
+        'border-default': 'rgb(76 79 105 / 14%)',
+        attention: '#a8411b',
+        success: '#2e7d4f',
+        danger: '#c4352b',
+      },
+    },
+    dark: { colors: { 'control-on': '#ff9e64' } },
+  }
+
+  it("gives a token a theme leaves out the one of its own it takes, not the built-in's", () => {
+    const light = themeColors(older, 'light')
+    expect(light['bg-raised']).toBe('#eff1f5')
+    expect(light['primary-foreground']).toBe('#eff1f5')
+    expect(light.track).toBe('rgb(76 79 105 / 14%)')
+    expect(light['control-on']).toBe('#a8411b')
+    expect(light['switch-on']).toBe('#a8411b')
+    expect(light['code-success']).toBe('#2e7d4f')
+    expect(light['code-danger']).toBe('#c4352b')
+  })
+
+  it('keeps what the theme sets, and the built-in value where it sets nothing to take', () => {
+    const dark = themeColors(older, 'dark')
+    expect(dark['control-on']).toBe('#ff9e64')
+    expect(dark['switch-on']).toBe('#ff9e64')
+    expect(dark['bg-raised']).toBe(BUILTIN_COLORS.dark['bg-raised'])
+    expect(themeColors(null, 'dark')).toEqual(BUILTIN_COLORS.dark)
+  })
+})
+
+describe('themeContrast', () => {
+  // Code blocks too dark for the built-in syntax colors.
+  const dim = (code?: string): Theme => ({
+    name: 'Dim',
+    light: { ...(code ? { code } : {}), colors: { 'bg-code-block': '#b0b0b0' } },
+    dark: { colors: {} },
+  })
+
+  it('checks the syntax colors only where the built-in code theme draws them', () => {
+    const syntax = (theme: Theme) =>
+      themeContrast(theme).filter((issue) => issue.fg.startsWith('syntax-'))
+    expect(syntax(dim()).length).toBeGreaterThan(0)
+    expect(syntax(dim('github-light'))).toEqual([])
+    expect(syntax(dim('no-such-theme')).length).toBeGreaterThan(0)
   })
 })
 

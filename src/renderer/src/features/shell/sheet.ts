@@ -13,5 +13,8 @@ export const ON_DESK =
 /** A sheet laid on the desk: the main area, a page or a side pane. */
 export const SHEET = `${ON_DESK} overflow-clip rounded-xl bg-app shadow-sheet`
 
-/** The style of a resizable panel that holds a sheet, whose ring and shadow it would clip. */
+/**
+ * The style of a resizable panel, or a group of them, that holds a sheet, whose ring and shadow
+ * it would clip.
+ */
 export const SHEET_PANEL = { overflow: 'visible' } as const
