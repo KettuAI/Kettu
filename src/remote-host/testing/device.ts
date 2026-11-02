@@ -130,7 +130,12 @@ export async function connectDevice(options: TestDeviceOptions): Promise<TestDev
     }
     if (type === 'closing') closingMessage = value as Closing
     else if (type === 'addresses') addresses.push(value as Addresses)
-    else if (type === 'renamed' || type === 'terminal' || type === 'terminals.restarted') {
+    else if (
+      type === 'renamed' ||
+      type === 'host.renamed' ||
+      type === 'terminal' ||
+      type === 'terminals.restarted'
+    ) {
       notices.push(value)
     } else if (type === 'stream.end') {
       streamOf((value as { stream: number }).stream).ended = true

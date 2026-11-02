@@ -358,6 +358,14 @@ const WHOLE_STATES: ReadonlySet<string> = new Set([
   'themes.changed',
 ])
 
+/** The channel's own messages whose newest one says all their kind does. */
+const CHANNEL_STATES: ReadonlySet<string> = new Set([
+  'addresses',
+  'terminal',
+  'renamed',
+  'host.renamed',
+])
+
 function idKey(kind: string, id: unknown): string | null {
   return typeof id === 'string' ? `${kind}:${id}` : null
 }
@@ -366,7 +374,7 @@ function idKey(kind: string, id: unknown): string | null {
 function stateKey(value: unknown): string | null {
   if (typeof value !== 'object' || value === null) return null
   const { type, event } = value as { type?: unknown; event?: unknown }
-  if (type === 'addresses' || type === 'terminal' || type === 'renamed') return type
+  if (typeof type === 'string' && CHANNEL_STATES.has(type)) return type
   if (type !== 'event' || typeof event !== 'object' || event === null) return null
   const fields = event as Record<string, unknown>
   const of = (key: string): Record<string, unknown> =>

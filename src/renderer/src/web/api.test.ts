@@ -254,7 +254,7 @@ describe('webApi', () => {
     }
   })
 
-  it('keeps the host as Settings shows it, and renames this browser through the channel', async () => {
+  it('keeps the host as Settings shows it, renamed or renaming this browser through the channel', async () => {
     const { setState, message, sent, forget } = setup()
     expect(useWebHostStore.getState().host).toMatchObject({
       name: 'Studio',
@@ -274,6 +274,11 @@ describe('webApi', () => {
     expect(sent).toEqual([{ type: 'rename', name: 'Work laptop' }])
     message({ type: 'renamed', name: 'Work laptop' })
     expect(useWebHostStore.getState().host?.device.name).toBe('Work laptop')
+    message({ type: 'host.renamed', name: 'Desk' })
+    expect(useWebHostStore.getState().host).toMatchObject({
+      name: 'Desk',
+      device: { name: 'Work laptop' },
+    })
     await actions?.forget()
     expect(forget).toHaveBeenCalledOnce()
   })

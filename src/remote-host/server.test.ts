@@ -636,6 +636,21 @@ describe('a device name', () => {
   })
 })
 
+describe('the host name', () => {
+  it('reaches every connected device when it changes, and the next welcomes', async () => {
+    const t = await setup()
+    const device = await t.connect()
+    expect(await device.first).toMatchObject({ host: { name: 'Studio' } })
+    t.server.setHostName('Studio')
+    t.server.setHostName('')
+    t.server.setHostName('Desk')
+    await expect.poll(() => device.notices).toEqual([{ type: 'host.renamed', name: 'Desk' }])
+    expect(t.forwarded).toEqual([])
+    const again = await t.connect()
+    expect(await again.first).toMatchObject({ host: { name: 'Desk' } })
+  })
+})
+
 describe('devices not seen for 90 days', () => {
   it('are removed, unless a session is open', async () => {
     let now = Date.now()
