@@ -1,6 +1,7 @@
 // Relays each window's port to the sessions on other hosts: a request goes to the port of the
 // host it names under an id of main's own, so windows never share one, and its answer comes back
-// to the window that asked; each host's events and resyncs go to every window.
+// to the window that asked; each host's events and resyncs go to every window. A host's browser
+// calls are main's to run, and its answers to them main's own requests.
 
 import { MessageChannelMain, type MessagePortMain, type WebContents } from 'electron'
 import { isOtherHostMethod, type FromHosts, type HostSessionMessage } from '@shared/host-sessions'
@@ -49,12 +50,18 @@ export interface HostSessionsOptions {
   /** A port pair, which tests replace. */
   channel?: () => { port1: RelayPort; port2: RelayPort }
   holdMs?: number
+  /** A host's `browser.call` event, for this computer's page of its session; windows never see it. */
+  browserCall?(hostId: string, call: unknown): void
+  /** The host's session ended. */
+  ended?(hostId: string): void
 }
 
 export class HostSessions {
   private readonly hosts = new Map<string, RelayPort>()
   private readonly windows = new Set<Window>()
   private readonly inFlight = new Map<number, InFlight>()
+  /** Main's own requests, by id, with their host and method, whose answers go nowhere. */
+  private readonly own = new Map<number, { hostId: string; method: string }>()
   private readonly held = new Map<string, Held[]>()
   /** The hosts whose first try is under way, where requests wait rather than fail. */
   private connecting = new Set<string>()
@@ -112,6 +119,24 @@ export class HostSessions {
     }
   }
 
+  /**
+   * Main's own request to a host whose session is open, as an answer to its browser call; false
+   * when it is not. The host's reply is only logged when it is an error.
+   */
+  request(hostId: string, method: string, params: unknown): boolean {
+    const port = this.hosts.get(hostId)
+    if (!port) return false
+    const mainId = this.nextId++
+    try {
+      port.postMessage({ type: 'request', id: mainId, method, params })
+    } catch (error) {
+      log.warn(`A request for a host could not be sent: ${(error as Error).message}`)
+      return false
+    }
+    this.own.set(mainId, { hostId, method })
+    return true
+  }
+
   /** Kettu quits: every port closes. */
   close(): void {
     for (const [hostId, port] of [...this.hosts]) this.ended(hostId, port)
@@ -129,6 +154,10 @@ export class HostSessions {
   private ended(hostId: string, port: RelayPort): void {
     this.hosts.delete(hostId)
     port.close()
+    for (const [mainId, request] of [...this.own]) {
+      if (request.hostId === hostId) this.own.delete(mainId)
+    }
+    this.options.ended?.(hostId)
     for (const [mainId, request] of [...this.inFlight]) {
       if (request.hostId !== hostId) continue
       this.inFlight.delete(mainId)
@@ -230,6 +259,15 @@ export class HostSessions {
     if (this.hosts.get(hostId) !== port || typeof data !== 'object' || data === null) return
     const message = data as Record<string, unknown>
     if (message.type === 'response' || message.type === 'error') {
+      const own = typeof message.id === 'number' ? this.own.get(message.id) : undefined
+      if (own?.hostId === hostId) {
+        this.own.delete(message.id as number)
+        if (message.type === 'error') {
+          const error = message.error as { message?: unknown } | undefined
+          log.warn(`Host ${hostId} refused ${own.method}: ${String(error?.message)}`)
+        }
+        return
+      }
       const request = typeof message.id === 'number' ? this.inFlight.get(message.id) : undefined
       if (!request || request.hostId !== hostId) return
       this.inFlight.delete(message.id as number)
@@ -241,6 +279,11 @@ export class HostSessions {
       })
     }
     if (message.type !== 'event' && message.type !== 'resync') return
+    const event = message.event as { type?: unknown; call?: unknown } | undefined
+    if (message.type === 'event' && event?.type === 'browser.call') {
+      this.options.browserCall?.(hostId, event.call)
+      return
+    }
     for (const window of this.windows) {
       this.post(window, { kind: 'message', hostId, message: message as HostSessionMessage })
     }

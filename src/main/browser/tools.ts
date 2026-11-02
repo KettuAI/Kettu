@@ -98,21 +98,27 @@ export class BrowserTools {
     this.opened.delete(sessionId)
   }
 
-  /** Runs a call the agent host forwarded, and answers its result or error. */
+  /**
+   * Runs a call the agent host forwarded, and answers its result or error. `waiting` hears that
+   * the call waits on a new origin, in place of `deps.waiting`, for a call of another host's.
+   */
   async call(
     callId: number,
     sessionId: string,
     tool: string,
     args: Record<string, unknown>,
     projectPath = '',
+    waiting?: (waiting: boolean) => void,
   ): Promise<BrowserCallAnswer> {
     if (!isName(tool)) {
       return error('invalid', `Unknown browser tool ${tool}.`)
     }
     // The page's rules read the project its always-allowed sites are stored under.
     this.deps.views.setProject(sessionId, projectPath)
-    this.deps.views.setOriginWait(sessionId, callId, (waiting) =>
-      this.deps.waiting?.(callId, waiting),
+    this.deps.views.setOriginWait(
+      sessionId,
+      callId,
+      waiting ?? ((on) => this.deps.waiting?.(callId, on)),
     )
     try {
       const result = await this.cdp.call(sessionId, tool, args)

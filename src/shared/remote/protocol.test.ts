@@ -25,6 +25,15 @@ describe('parseHello', () => {
     expect(parseHello({ ...hello, resume: 'token' })).toEqual(hello)
   })
 
+  it('reads what the device serves, leaving out what is no short word', () => {
+    expect(parseHello({ ...hello, features: ['browser', 7, ''] })).toEqual({
+      ...hello,
+      features: ['browser'],
+    })
+    expect(parseHello({ ...hello, features: 'browser' })).toEqual(hello)
+    expect(parseHello({ ...hello, features: [] })).toEqual(hello)
+  })
+
   it("reads a pairing device's name, cleaned up, and its model", () => {
     expect(
       parseHello({ ...hello, device: { name: ' Lin\u0007 iPad ', model: 'iPad Air' } }),

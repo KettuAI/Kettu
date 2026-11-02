@@ -3,6 +3,7 @@
 // reads, which a window gets from main's media scheme, are answered the same way.
 
 import { ATTACHMENT_BYTES } from '../attachments'
+import type { BrowserForward } from '../browser'
 import type { MediaFile } from '../media'
 import type { PortError } from '../port-rpc'
 
@@ -79,6 +80,23 @@ export type MediaReadResult =
   | { kind: 'not_found' }
   | { kind: 'forbidden' }
   | { kind: 'not_media' }
+
+/** A forward's connections a device may have open at once, on one session. */
+export const MAX_FORWARDS = 32
+
+/**
+ * The device opens a forward: one TCP connection to a dev server on the host, at a port an agent
+ * of the session navigated the device's page to. `stream` is an id the device opens, as for an
+ * upload; the bytes go both ways under it, `stream.end` from either side ends that side's
+ * direction, and `stream.cancel` from either side ends the connection.
+ */
+export interface ForwardOpen {
+  type: 'forward.open'
+  stream: number
+  sessionId: string
+  host: BrowserForward['host']
+  port: number
+}
 
 /** Whether a stream id is one a device opens: odd, and 32 bits. */
 export function isDeviceStream(value: unknown): value is number {

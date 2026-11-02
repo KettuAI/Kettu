@@ -2,11 +2,12 @@
 // pairing through IKpsk1 and the owner's answer, the welcome saving the host, reconnecting with IK,
 // resuming the session the host kept, addresses, renames, removal and the timeout.
 
-import { createServer } from 'node:net'
+import http from 'node:http'
+import { createServer, type AddressInfo } from 'node:net'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { PortChannel } from '@shared/port-channel'
-import { deviceId } from '@shared/remote/device'
+import { deviceId, type PortDevice } from '@shared/remote/device'
 import { PAIR_HOST_TIMEOUT_MS, type HostPairingState } from '@shared/remote/hosts'
 import type { KeepaliveTimings } from '@shared/remote/keepalive'
 import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
@@ -41,6 +42,8 @@ afterEach(async () => {
 
 /** A host as the remote host runs it, whose agent host answers `ping` with `pong`. */
 async function startHost(dir: string, hostKey: KeyPair, resumeMs?: number) {
+  // The agent host's end of each device session's port, with the device it serves.
+  const agentEnds: { device: PortDevice; port: PortChannel }[] = []
   const devices = await DeviceStore.load(dir, quiet)
   const activity = await ActivityLog.load(dir, quiet)
   const heard = new Map<number, PairingState[]>()
@@ -56,8 +59,9 @@ async function startHost(dir: string, hostKey: KeyPair, resumeMs?: number) {
     pairing,
     host: { name: 'Studio', platform: 'linux', version: '0.2.0' },
     uploads: path.join(dir, 'remote', 'uploads'),
-    openAgentPort: async () => {
+    openAgentPort: async (device) => {
       const [remoteEnd, agentEnd] = memoryPorts()
+      agentEnds.push({ device, port: agentEnd })
       agentEnd.onMessage((data) => {
         const { type, id, method } = data as { type: string; id: number; method: string }
         if (type === 'request' && method === 'ping') {
@@ -83,7 +87,7 @@ async function startHost(dir: string, hostKey: KeyPair, resumeMs?: number) {
     return parsePairingLink(waiting.link)!
   }
   cleanups.push(() => server.stop('stopping'))
-  return { server, devices, pairing, openCode, until }
+  return { server, devices, pairing, openCode, until, agentEnds }
 }
 
 async function setup(
@@ -522,5 +526,43 @@ describe('direct connections', () => {
     host.pairing.answer(1, { add: true, name: 'Lin MacBook' })
     await expect.poll(() => pairings.at(-1)?.state).toBe('added')
     expect(client.list()[0]!.connection).toEqual({ state: 'online', address: live })
+  })
+})
+
+describe('forwards for the browser', () => {
+  it('says hello as a desktop app that runs browser calls', async () => {
+    const t = await setup()
+    await t.paired()
+    await expect.poll(() => t.host.agentEnds.length).toBe(1)
+    expect(t.host.agentEnds[0]!.device).toMatchObject({ browser: true })
+  })
+
+  it('reach a dev server on the host once its agent host granted the port', async () => {
+    const devServer = http.createServer((req, res) => res.end(`from the host: ${req.url}`))
+    await new Promise<void>((resolve) => devServer.listen(0, '127.0.0.1', resolve))
+    cleanups.push(() => new Promise<void>((resolve) => devServer.close(() => resolve())))
+    const devPort = (devServer.address() as AddressInfo).port
+    const t = await setup()
+    await t.paired()
+    await expect.poll(() => t.host.agentEnds.length).toBe(1)
+    const forward = { host: '127.0.0.1' as const, port: devPort }
+    t.host.agentEnds[0]!.port.send({
+      type: 'event',
+      event: { type: 'browser.call', call: { sessionId: 's1', forward } },
+    })
+    await expect.poll(() => t.mainPorts.length).toBe(1)
+    const local = await t.client.forward(t.hostId, 's1', forward)
+    expect(local).toEqual(expect.any(Number))
+    const body = await new Promise<string>((resolve, reject) => {
+      http
+        .get({ host: '127.0.0.1', port: local!, path: '/app', agent: false }, (res) => {
+          let text = ''
+          res.on('data', (chunk) => (text += chunk))
+          res.on('end', () => resolve(text))
+        })
+        .on('error', reject)
+    })
+    expect(body).toBe('from the host: /app')
+    expect(await t.client.forward('c'.repeat(32), 's1', forward)).toBeNull()
   })
 })

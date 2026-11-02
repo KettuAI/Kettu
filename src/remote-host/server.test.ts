@@ -2,6 +2,7 @@
 // fake agent: handshake, pairing, hello and welcome, the session passed through, and what ends it.
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -23,10 +24,12 @@ import { memoryPorts, memoryTransports } from './testing/memory'
 const base64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64')
 
 let agent: TestHost | null = null
+const cleanups: (() => Promise<void>)[] = []
 
 afterEach(async () => {
   await agent?.stop()
   agent = null
+  for (const cleanup of cleanups.splice(0)) await cleanup()
 })
 
 const DAY = 24 * 60 * 60 * 1000
@@ -845,5 +848,106 @@ describe("the host's events", () => {
     t.server.adminEvent(pairing, tablet.id)
     await expect.poll(() => pad.port.events).toEqual([changed, pairing])
     await expect.poll(() => phone.port.events).toEqual([changed])
+  })
+})
+
+describe("a desktop app's browser", () => {
+  /** A dev server on this host's loopback, which answers every request with `body`. */
+  async function devServer(body: string): Promise<number> {
+    const server = net.createServer((socket) => {
+      socket.once('data', () => socket.end(`HTTP/1.0 200 OK\r\n\r\n${body}`))
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())))
+    return (server.address() as net.AddressInfo).port
+  }
+
+  it('opens a dev server here through a forward the agent host granted', async () => {
+    const t = await setup()
+    const app = await t.connect(undefined, {
+      client: { kind: 'desktop', version: '1.0.0', platform: 'macOS 26.1' },
+      features: ['browser'],
+    })
+    await app.first
+    const created = await app.port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.agent.project,
+      prompt: [{ type: 'text', text: 'Open the app' }],
+    })
+    await app.port.untilStatus(created.id, 'ready')
+    const devPort = await devServer('hello from the host')
+    const answered = t.agent.host.browserCall({
+      callId: 21,
+      sessionId: created.id,
+      tool: 'browser_navigate',
+      args: { url: `http://127.0.0.1:${devPort}/` },
+      projectPath: t.agent.project,
+    })
+    await app.port.until(() => app.port.events.some((event) => event.type === 'browser.call'))
+
+    // A port the agent did not open stays shut; the granted one reaches the server.
+    await app.send({
+      type: 'forward.open',
+      stream: 1,
+      sessionId: created.id,
+      host: '127.0.0.1',
+      port: devPort + 1,
+    })
+    await expect.poll(() => app.cancels.map((cancel) => cancel.stream)).toEqual([1])
+    expect(app.cancels[0]!.error).toMatchObject({ code: 'forbidden' })
+    await app.send({
+      type: 'forward.open',
+      stream: 3,
+      sessionId: created.id,
+      host: '127.0.0.1',
+      port: devPort,
+    })
+    await app.sendBytes(3, new TextEncoder().encode('GET / HTTP/1.0\r\n\r\n'))
+    const response = new TextDecoder().decode(await app.download(3))
+    expect(response).toBe('HTTP/1.0 200 OK\r\n\r\nhello from the host')
+
+    await app.port.request('browser.answer', {
+      callId: 21,
+      answer: { result: { text: 'Opened the page.', value: {} } },
+    })
+    expect(await answered).toEqual({ result: { text: 'Opened the page.', value: {} } })
+
+    // An id not above the last the device opened breaks the protocol.
+    await app.send({
+      type: 'forward.open',
+      stream: 3,
+      sessionId: created.id,
+      host: '127.0.0.1',
+      port: devPort,
+    })
+    expect(await app.closing).toEqual({ type: 'closing', reason: 'invalid' })
+  })
+
+  it('is not one a phone’s port serves', async () => {
+    const t = await setup()
+    const phone = await t.connect()
+    await phone.first
+    const created = await phone.port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.agent.project,
+      prompt: [{ type: 'text', text: 'Open the app' }],
+    })
+    await phone.port.untilStatus(created.id, 'ready')
+    void t.agent.host.browserCall({
+      callId: 22,
+      sessionId: created.id,
+      tool: 'browser_snapshot',
+      args: {},
+      projectPath: t.agent.project,
+    })
+    expect(t.agent.sent).toContainEqual(
+      expect.objectContaining({ type: 'host:browser-call', callId: 22 }),
+    )
+    await expect(
+      phone.port.request('browser.answer', {
+        callId: 22,
+        answer: { result: { text: 'no', value: {} } },
+      }),
+    ).rejects.toMatchObject({ code: 'forbidden' })
   })
 })

@@ -38,6 +38,7 @@ import {
 import { Handshake, type KeyPair, type TransportCiphers } from '@shared/remote/noise'
 import { bytesOf, findPlaces, isBinary } from '@shared/remote/places'
 import {
+  BROWSER_FEATURE,
   negotiate,
   parseHello,
   RESUME_MS,
@@ -68,6 +69,7 @@ import type { ActivityLog } from './activity'
 import { DeviceTerminal, isTerminalMethod, NOT_ALLOWED } from './device-terminal'
 import type { DeviceStore, RemovedDevice } from './devices'
 import { bytesSource, Downloads, fileSource } from './downloads'
+import { HostForwards } from './forwards'
 import { IN_FLIGHT_BYTES, Outbox, type OutboxLimits } from './outbox'
 import type { PairingCode, PairingCodes } from './pairing'
 import { SessionTitles } from './titles'
@@ -572,7 +574,11 @@ class DeviceConnection {
       kept?.end()
     }
     this.state = 'opening'
-    const port = await this.server.options.openAgentPort({ id: device.id, name: device.name })
+    const port = await this.server.options.openAgentPort({
+      id: device.id,
+      name: device.name,
+      ...(hello.features?.includes(BROWSER_FEATURE) ? { browser: true as const } : {}),
+    })
     if (this.state !== 'opening') return port?.close()
     if (!port) return this.close('unavailable')
     const session = new DeviceSession(this.server, device, version, port)
@@ -691,6 +697,7 @@ class DeviceSession {
   private readonly titles = new SessionTitles()
   private readonly uploads: Uploads
   private readonly downloads: Downloads
+  private readonly forwards: HostForwards
   /** The remote host's own requests on the port, by their ids, which are negative. */
   private readonly asking = new Map<
     number,
@@ -748,6 +755,15 @@ class DeviceSession {
       failed: (reason) => options.log('warn', `Device ${device.id}'s download failed: ${reason}`),
       ...(this.resumable ? { highWater: IN_FLIGHT_BYTES } : {}),
     })
+    this.forwards = new HostForwards({
+      send: (message) => this.send(message),
+      sendBytes: (stream, data) => {
+        if (this.live) this.outbox.push({ kind: 'bytes', stream, data }).catch(() => {})
+      },
+      transport: { buffered: () => this.outbox.buffered(), drained: () => this.outbox.drained() },
+      ...(this.resumable ? { highWater: IN_FLIGHT_BYTES } : {}),
+      log: options.log,
+    })
   }
 
   /** Whether the session runs on a connection now. */
@@ -770,6 +786,7 @@ class DeviceSession {
     this.terminal = this.deviceTerminal(this.device)
     port.onMessage((data) => {
       if (this.answered(data)) return
+      this.forwards.observe(data)
       this.fromHost(data)
       this.toDevice(data)
     })
@@ -791,6 +808,7 @@ class DeviceSession {
     if (previous) {
       previous.drop()
       this.uploads.dropUnfinished()
+      this.forwards.dropConnections()
     }
     this.welcome(connection, { request: this.lastRequest })
     this.outbox.attach({ channel: connection.channel!, transport: connection.transport }, received)
@@ -808,6 +826,7 @@ class DeviceSession {
     this.state = 'away'
     // Their bytes on the way are lost; the device sends them again in uploads of their own.
     this.uploads.dropUnfinished()
+    this.forwards.dropConnections()
     this.awayTimer = setTimeout(() => this.end(), this.server.options.resumeMs ?? RESUME_MS)
     this.server.options.changed()
   }
@@ -840,6 +859,7 @@ class DeviceSession {
     this.outbox.close()
     this.uploads.closeAll()
     this.downloads.closeAll()
+    this.forwards.close()
     for (const asked of this.asking.values()) asked.reject(ENDED)
     this.asking.clear()
     const port = this.port
@@ -877,7 +897,10 @@ class DeviceSession {
   /** A message from the device on `connection`, which only the current one may send. */
   receive(connection: DeviceConnection, message: ChannelMessage): void {
     if (connection !== this.connection || this.state !== 'open') return
-    if (message.kind === 'bytes') return this.uploads.bytes(message.stream, message.data)
+    if (message.kind === 'bytes') {
+      if (this.forwards.bytes(message.stream, message.data)) return
+      return this.uploads.bytes(message.stream, message.data)
+    }
     this.fromDevice(message.value)
   }
 
@@ -926,12 +949,17 @@ class DeviceSession {
         // mean either stream.
         if (!this.uploads.open(stream, size)) void this.close('invalid')
         return
+      case 'forward.open':
+        if (!this.uploads.takeId(stream)) void this.close('invalid')
+        else this.forwards.open(stream, value as Record<string, unknown>)
+        return
       case 'stream.end':
-        if (typeof stream === 'number') this.uploads.end(stream)
+        if (typeof stream === 'number' && !this.forwards.end(stream)) this.uploads.end(stream)
         return
       case 'stream.cancel':
-        if (isDeviceStream(stream)) this.uploads.cancel(stream)
-        else if (typeof stream === 'number') this.downloads.cancel(stream)
+        if (isDeviceStream(stream)) {
+          if (!this.forwards.cancel(stream)) this.uploads.cancel(stream)
+        } else if (typeof stream === 'number') this.downloads.cancel(stream)
         return
     }
     this.toHost(value)

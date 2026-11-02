@@ -3,6 +3,7 @@
 
 import type { AgentInstallMethod, HostMethod, HostParams } from '@shared/agent-host'
 import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
+import type { BrowserCallAnswer, BrowserOriginAnswer } from '@shared/browser'
 import { FILE_READ_LIMIT } from '@shared/files'
 import { GITHUB_LOGIN, GITHUB_PULL_REQUEST_URL, isRepositoryName } from '@shared/git'
 import type { Platform } from '@shared/platform'
@@ -316,6 +317,32 @@ function flag(o: Fields, key: string): boolean {
   const value = optionalFlag(o, key)
   if (value === undefined) throw invalidParams(`${key} must be a boolean`)
   return value
+}
+
+/** A browser call's or a site question's id, which the side that made it gave. */
+function callId(o: Fields, key: string): number {
+  const value = o[key]
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) {
+    throw invalidParams(`${key} must be a whole number from 1`)
+  }
+  return value
+}
+
+const ORIGIN_ANSWERS: ReadonlySet<unknown> = new Set<BrowserOriginAnswer>([
+  'session',
+  'project',
+  'deny',
+  'timeout',
+])
+
+/** An http(s) origin as a browser names it: scheme, host and port alone. */
+function isOrigin(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return (url.protocol === 'http:' || url.protocol === 'https:') && url.origin === value
+  } catch {
+    return false
+  }
 }
 
 function artifactId(o: Fields): string {
@@ -918,5 +945,30 @@ export function createValidators(platform: Platform): Validators {
     },
     'artifacts.watch': artifact,
     'artifacts.unwatch': artifact,
+    // The host checks the answer's shape as it checks main's.
+    'browser.answer': (params) => {
+      const o = fields(params)
+      return { callId: callId(o, 'callId'), answer: fields(o.answer) as BrowserCallAnswer }
+    },
+    'browser.waiting': (params) => {
+      const o = fields(params)
+      return { callId: callId(o, 'callId'), waiting: flag(o, 'waiting') }
+    },
+    'browser.origin': (params) => {
+      const o = fields(params)
+      const origin = string(o, 'origin', URL_CHARS)
+      if (!isOrigin(origin)) throw invalidParams('origin must be an http or https origin')
+      return { sessionId: sessionId(o), requestId: callId(o, 'requestId'), origin }
+    },
+    'browser.originSettled': (params) => {
+      const o = fields(params)
+      if (!ORIGIN_ANSWERS.has(o.decision)) {
+        throw invalidParams('decision must be session, project, deny or timeout')
+      }
+      return {
+        requestId: callId(o, 'requestId'),
+        decision: o.decision as BrowserOriginAnswer,
+      }
+    },
   }
 }

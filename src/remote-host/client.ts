@@ -4,6 +4,7 @@
 // through a drop for a while: the link acknowledges what it receives, resumes with the welcome's
 // token, keeps main's port, and sends again the requests the host did not read.
 
+import type { BrowserForward } from '@shared/browser'
 import type { PortChannel } from '@shared/port-channel'
 import { Acknowledger } from '@shared/remote/acks'
 import type { ChannelMessage } from '@shared/remote/channel'
@@ -31,6 +32,7 @@ import {
 import type { KeyPair } from '@shared/remote/noise'
 import type { PairingPayload } from '@shared/remote/pairing'
 import {
+  BROWSER_FEATURE,
   MIN_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
   RESUME_MS,
@@ -45,6 +47,7 @@ import {
 } from '@shared/remote/protocol'
 import type { LogFn } from '../agent-host/storage'
 import { compareVersions } from '../agent-host/versions'
+import { ClientForwards } from './client-forwards'
 import { dial, type Connect } from './dial'
 import { publicKeyBytes } from './devices'
 import { connectTransport } from './direct'
@@ -288,11 +291,24 @@ class HostLink {
   /** A host reached over SSH was asked for its port since it was last online. */
   private askedPort = false
   private readonly acks = new Acknowledger((ack) => this.session?.send(ack))
+  /** The host's dev servers that its agents opened in this computer's browser. */
+  private readonly forwards: ClientForwards
 
   constructor(
     private readonly client: HostClient,
     readonly id: string,
-  ) {}
+  ) {
+    this.forwards = new ClientForwards({
+      send: (message) => {
+        if (!this.session?.open) return false
+        this.session.send(message)
+        return true
+      },
+      sendBytes: (stream, data) =>
+        this.session?.open ? this.session.channel.sendBytes(stream, data) : null,
+      log: client.options.log,
+    })
+  }
 
   private get host(): KnownHost | null {
     return this.client.options.hosts.get(this.id)
@@ -332,6 +348,17 @@ class HostLink {
     if (!this.session?.open) return false
     this.session.send({ type: 'rename', name })
     return true
+  }
+
+  /** A port on this computer that reaches `forward` on the host; null without its session. */
+  forward(sessionId: string, forward: BrowserForward): Promise<number | null> {
+    if (!this.port) return Promise.resolve(null)
+    return this.forwards.listen(sessionId, forward)
+  }
+
+  /** The session's page is gone, so its forwards go. */
+  closeForwards(sessionId: string): void {
+    this.forwards.close(sessionId)
   }
 
   /** Forgotten, or the client stops: the connection ends and is not tried again. */
@@ -494,11 +521,14 @@ class HostLink {
     if (session.welcome!.protocol >= RESUME_VERSION) {
       this.acks.counted(message.kind === 'bytes' ? message.data.length : 0)
     }
-    // Main reads no streams yet.
-    if (message.kind === 'bytes') return
+    // Main reads no streams; the forwards' are the only ones of use here.
+    if (message.kind === 'bytes') {
+      this.forwards.bytes(message.stream, message.data)
+      return
+    }
     const value = message.value
     const { type, id } = (value ?? {}) as { type?: unknown; id?: unknown }
-    if (OWN.has(type)) return
+    if (OWN.has(type) || this.forwards.message(value)) return
     if ((type === 'response' || type === 'error') && typeof id === 'number') {
       this.requests.delete(id)
     }
@@ -516,6 +546,7 @@ class HostLink {
   }
 
   private ended(session: HostSession, { welcomed, reason }: SessionEnd): void {
+    this.forwards.dropConnections()
     if (this.closed) return
     this.acks.pause()
     const { hosts } = this.client.options
@@ -561,6 +592,7 @@ class HostLink {
     this.acks.reset()
     this.requests.clear()
     this.queued.length = 0
+    this.forwards.closeAll()
     const port = this.port
     this.port = null
     port?.close()
@@ -926,6 +958,8 @@ export class HostClient {
       type: 'hello',
       protocol: { min: MIN_PROTOCOL_VERSION, max: PROTOCOL_VERSION },
       client: this.options.client,
+      // Main runs the browser calls of the turns this computer sends.
+      features: [BROWSER_FEATURE],
     }
     if (model === undefined) return hello
     const name = normalizeDeviceName(this.options.name()) ?? 'Kettu'
@@ -968,6 +1002,15 @@ export class HostClient {
   /** Renames this computer on a host it is connected to; false when it is not. */
   rename(id: string, name: string): boolean {
     return this.links.get(id)?.rename(name) ?? false
+  }
+
+  /** A port on this computer that reaches a dev server on a host; null when none can. */
+  forward(id: string, sessionId: string, forward: BrowserForward): Promise<number | null> {
+    return this.links.get(id)?.forward(sessionId, forward) ?? Promise.resolve(null)
+  }
+
+  closeForwards(id: string, sessionId: string): void {
+    this.links.get(id)?.closeForwards(sessionId)
   }
 
   setAddresses(id: string, addresses: DirectAddress[]): boolean {

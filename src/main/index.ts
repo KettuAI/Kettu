@@ -16,6 +16,7 @@ import { artifactScheme } from './artifacts/protocol'
 import { AppStateStore } from './app-state'
 import { accountAvatarRequestUrl, Avatars } from './avatars'
 import { applyBadgeTo, setBadgeCount, setBadgeEnabled } from './badge'
+import { RemoteBrowser } from './browser/remote'
 import { BrowserViews } from './browser/views'
 import { BrowserTools } from './browser/tools'
 import { BrowserOriginStore } from './browser/origins'
@@ -200,8 +201,13 @@ async function start(): Promise<void> {
     created: (sessionId, contents) => browserTools?.watch(sessionId, contents),
     closed: (sessionId) => browserTools?.forget(sessionId),
     origins: browserOrigins,
-    originAsked: (request) => hostRef.current?.originAsked(request),
-    originAnswered: (request) => hostRef.current?.originAnswered(request),
+    originAsked: (request) => {
+      if (!remoteBrowser.originAsked(request)) hostRef.current?.originAsked(request)
+    },
+    originAnswered: (request) => {
+      if (!remoteBrowser.originAnswered(request)) hostRef.current?.originAnswered(request)
+    },
+    removed: (sessionId) => remoteBrowser.pageRemoved(sessionId),
   })
   browserTools = new BrowserTools({
     views: browserViews,
@@ -209,6 +215,15 @@ async function start(): Promise<void> {
     opened: (sessionId) => broadcast('browser:opened', { sessionId }),
     log: (level, message) => log[level](`browser: ${message}`),
     waiting: (callId, waiting) => hostRef.current?.browserWaiting(callId, waiting),
+  })
+  // Other hosts' agents drive the pages of the turns this computer sends them.
+  const remoteBrowser = new RemoteBrowser({
+    run: (callId, sessionId, tool, args, projectPath, waiting) =>
+      browserTools!.call(callId, sessionId, tool, args, projectPath, waiting),
+    forward: (hostId, sessionId, forward) => remoteHost.forward(hostId, sessionId, forward),
+    closeForwards: (hostId, sessionId) => remoteHost.closeForwards(hostId, sessionId),
+    request: (hostId, method, params) => hostSessions.request(hostId, method, params),
+    log: (level, message) => log[level](`browser: ${message}`),
   })
   const routinesAwake = new RoutinesAwake()
   const terminalHost = new TerminalHost({ settings: () => terminalSettings(settings.get()) })
@@ -233,13 +248,17 @@ async function start(): Promise<void> {
     onReady: () => reconcileSharing?.(),
     onServicePort: (port) => browserViews.setServicePort(port),
     browser: (request) =>
-      browserTools!.call(
-        request.callId,
-        request.sessionId,
-        request.tool,
-        request.args,
-        request.projectPath,
-      ),
+      remoteBrowser.claimLocal(request.sessionId)
+        ? browserTools!.call(
+            request.callId,
+            request.sessionId,
+            request.tool,
+            request.args,
+            request.projectPath,
+          )
+        : Promise.resolve({
+            error: { code: 'no_page', message: 'Another host’s session has this page.' },
+          }),
   })
   hostRef.current = agentHost
   const identityCipher: IdentityCipher = {
@@ -310,7 +329,10 @@ async function start(): Promise<void> {
     plainTextKey: remoteHost.plainTextDeviceKey,
     keyFailed: remoteHost.deviceKeyFailed,
   })
-  const hostSessions = new HostSessions()
+  const hostSessions = new HostSessions({
+    browserCall: (hostId, call) => void remoteBrowser.call(hostId, call),
+    ended: (hostId) => remoteBrowser.hostClosed(hostId),
+  })
   const hostsChanged = (): void => {
     hostSessions.connections(remoteHost.hosts)
     broadcast('hosts:changed', hostsStatus())

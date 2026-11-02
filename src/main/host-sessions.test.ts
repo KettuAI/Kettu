@@ -221,4 +221,37 @@ describe('HostSessions', () => {
     expect(port.closed).toBe(true)
     expect(window.closed).toBe(true)
   })
+
+  it('gives main a host’s browser calls, and keeps main’s own answers from the windows', () => {
+    const calls: { hostId: string; call: unknown }[] = []
+    const ended: string[] = []
+    const relay = new HostSessions({
+      browserCall: (hostId, call) => calls.push({ hostId, call }),
+      ended: (hostId) => ended.push(hostId),
+    })
+    const window = new FakePort()
+    relay.attach(window)
+    const port = new FakePort()
+    relay.opened(devBox, port)
+    port.deliver({ type: 'event', event: { type: 'browser.call', call: { callId: 4 } } })
+    expect(calls).toEqual([{ hostId: devBox, call: { callId: 4 } }])
+    expect(window.posted).toEqual([{ kind: 'open', hostId: devBox }])
+
+    expect(relay.request(devBox, 'browser.answer', { callId: 4, answer: {} })).toBe(true)
+    expect(relay.request(mini, 'browser.answer', { callId: 4, answer: {} })).toBe(false)
+    const sent = port.posted.at(-1) as { id: number }
+    expect(sent).toMatchObject({ type: 'request', method: 'browser.answer' })
+    port.deliver({ type: 'response', id: sent.id, result: null })
+    expect(window.posted).toHaveLength(1)
+
+    // A window may not answer them itself.
+    window.deliver(request(devBox, 9, 'browser.answer', { callId: 4, answer: {} }))
+    expect(port.posted).toHaveLength(1)
+    expect(window.posted.at(-1)).toMatchObject({
+      message: { type: 'error', id: 9, error: { code: 'unknown_method' } },
+    })
+    port.hangUp()
+    relay.closed(devBox, port)
+    expect(ended).toEqual([devBox])
+  })
 })

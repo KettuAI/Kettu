@@ -12,6 +12,7 @@ import type {
   RemoteHostStopReason,
   RemoteHostToMain,
 } from '@shared/host-control'
+import type { BrowserForward } from '@shared/browser'
 import type { DeviceActivity } from '@shared/remote/activity'
 import { isDirectStatus } from '@shared/remote/address'
 import {
@@ -350,6 +351,35 @@ export class RemoteHost {
   setHostAddresses(id: string, addresses: DirectAddress[]): boolean {
     if (!this.hostList?.some((entry) => entry.id === id)) return false
     return this.host?.post({ type: 'remote-host:host-addresses', id, addresses }) ?? false
+  }
+
+  /**
+   * A port on this computer's loopback that reaches a dev server on a host, for the page of one
+   * of its sessions; null while the host's session is not open.
+   */
+  async forward(
+    hostId: string,
+    sessionId: string,
+    forward: BrowserForward,
+  ): Promise<number | null> {
+    if (!this.hostList?.some((entry) => entry.id === hostId)) return null
+    const answer = await this.request((requestId) => ({
+      type: 'remote-host:forward',
+      requestId,
+      hostId,
+      sessionId,
+      forward,
+    }))
+    if (answer?.type !== 'remote-host:forwarding') return null
+    const { port } = answer
+    return typeof port === 'number' && Number.isSafeInteger(port) && port > 0 && port < 65_536
+      ? port
+      : null
+  }
+
+  /** The session's page is gone: its forwards on that host close. */
+  closeForwards(hostId: string, sessionId: string): void {
+    this.host?.post({ type: 'remote-host:forward-close', hostId, sessionId })
   }
 
   /** Forgets a host here; false when it is not known. */
@@ -771,6 +801,7 @@ export class RemoteHost {
       case 'remote-host:activity':
       case 'remote-host:reset':
       case 'remote-host:stop-serving':
+      case 'remote-host:forwarding':
         if (this.host === host) this.requests.get(message.requestId)?.(message)
         break
       case 'remote-host:admin-call':

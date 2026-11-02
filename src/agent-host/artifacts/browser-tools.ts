@@ -76,6 +76,7 @@ const ERROR_CODES: BrowserToolErrorCode[] = [
   'navigation_failed',
   'no_page',
   'invalid',
+  'unavailable',
 ]
 
 // The message too, since the agents give the model the structured value rather than the text.

@@ -15,6 +15,7 @@ import type {
   RemoteHostToMain,
   TerminalHostToMain,
 } from '@shared/host-control'
+import { BROWSER_UNAVAILABLE } from '@shared/browser'
 import type { Locale } from '@shared/locale'
 import type { DeviceActivity } from '@shared/remote/activity'
 import { isDirectStatus, isPort } from '@shared/remote/address'
@@ -688,7 +689,7 @@ export class Hosts {
           this.agent.post({
             type: 'browser-result',
             callId: message.callId,
-            error: { code: 'no_page', message: 'This host drives no browser.' },
+            error: { code: 'unavailable', message: BROWSER_UNAVAILABLE },
           })
         }
         break

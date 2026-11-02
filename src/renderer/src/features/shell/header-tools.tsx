@@ -49,7 +49,7 @@ export function HeaderTools({ projectPath }: { projectPath: string }) {
         <PaneToggle projectPath={projectPath} pane="files" label={t('headerTools.files')}>
           <FolderIcon />
         </PaneToggle>
-        {/* Another host's project offers its files alone through its connection. */}
+        {/* Another host's project offers no terminal through its connection. */}
         {!remote && (
           <PaneToggle
             projectPath={projectPath}
@@ -60,8 +60,9 @@ export function HeaderTools({ projectPath }: { projectPath: string }) {
             <SquareTerminalIcon />
           </PaneToggle>
         )}
-        {/* The browser runs in the desktop app; a web page has no such view. */}
-        {!isWeb && !remote && (
+        {/* The browser runs in the desktop app, for another host's agents too; a web page has
+            no such view. */}
+        {!isWeb && (
           <PaneToggle
             projectPath={projectPath}
             pane="browser"

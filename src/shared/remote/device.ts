@@ -39,6 +39,8 @@ export type DeviceChangeFailure = 'not_renamed' | 'not_removed'
 export interface PortDevice {
   id: string
   name: string
+  /** The device is a desktop app, whose main runs the browser calls of the turns it sends. */
+  browser?: true
 }
 
 export async function deviceId(publicKey: Uint8Array): Promise<string> {
@@ -79,9 +81,9 @@ export function normalizeDeviceName(value: unknown): string | null {
 /** The device a port names, or null when the value does not name one. */
 export function parsePortDevice(value: unknown): PortDevice | null {
   if (typeof value !== 'object' || value === null) return null
-  const { id, name } = value as Record<string, unknown>
+  const { id, name, browser } = value as Record<string, unknown>
   if (typeof id !== 'string' || !DEVICE_ID.test(id) || !isDeviceName(name)) return null
-  return { id, name }
+  return browser === true ? { id, name, browser } : { id, name }
 }
 
 /**

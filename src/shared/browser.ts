@@ -89,6 +89,14 @@ export type BrowserToolErrorCode =
   | 'navigation_failed'
   | 'no_page'
   | 'invalid'
+  // Nobody on a desktop app sent the turn, so no browser can open for it.
+  | 'unavailable'
+
+/** What an agent is told when the turn did not come from a desktop app, which has the browser. */
+export const BROWSER_UNAVAILABLE =
+  'The browser is unavailable: it opens in the Kettu desktop app of whoever sent this turn, and ' +
+  'this turn did not come from one. Ask the user to check the page themselves, or to send their ' +
+  'next message from the desktop app.'
 
 /** A refused browser call, whose message says what to do next. */
 export interface BrowserToolError {
@@ -116,4 +124,54 @@ export interface BrowserCallRequest {
   args: Record<string, unknown>
   /** The calling session's project, whose always-allowed sites the page reads. */
   projectPath: string
+}
+
+/** A dev server on the agent's own host, which another computer's page reaches through a forward. */
+export interface BrowserForward {
+  /** What the host connects to; `localhost` tries both of its loopback addresses. */
+  host: 'localhost' | '127.0.0.1' | '::1'
+  port: number
+}
+
+/**
+ * A call for the desktop app that sent the turn, on another host than the agent's: a navigation to
+ * a dev server there names the forward it needs, which the host grants that app's session.
+ */
+export interface BrowserDeviceCall extends BrowserCallRequest {
+  forward?: BrowserForward
+}
+
+/** The forward an address needs to reach a dev server on the agent's host; null for others. */
+export function loopbackForward(url: string): BrowserForward | null {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return null
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null
+  const name = parsed.hostname.toLowerCase()
+  const host =
+    name === '127.0.0.1'
+      ? '127.0.0.1'
+      : name === '[::1]'
+        ? '::1'
+        : name === 'localhost' || name.endsWith('.localhost')
+          ? 'localhost'
+          : null
+  if (!host) return null
+  const port = parsed.port === '' ? (parsed.protocol === 'https:' ? 443 : 80) : Number(parsed.port)
+  return { host, port }
+}
+
+/** Whether a value is a forward a host may grant. */
+export function isBrowserForward(value: unknown): value is BrowserForward {
+  if (typeof value !== 'object' || value === null) return false
+  const { host, port } = value as Record<string, unknown>
+  return (
+    (host === 'localhost' || host === '127.0.0.1' || host === '::1') &&
+    Number.isSafeInteger(port) &&
+    (port as number) > 0 &&
+    (port as number) < 65_536
+  )
 }

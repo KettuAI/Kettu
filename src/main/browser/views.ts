@@ -112,7 +112,9 @@ export interface BrowserViewsDeps {
   /** A page asked for a new origin, for the session's thread. */
   originAsked?(request: { id: number; sessionId: string; origin: string }): void
   /** The wait ended, so the session's card takes the answer too; from either place it is one. */
-  originAnswered?(request: { id: number; decision: BrowserOriginAnswer }): void
+  originAnswered?(request: { id: number; sessionId: string; decision: BrowserOriginAnswer }): void
+  /** A page went with its session, which the renderer no longer lists. */
+  removed?(sessionId: string): void
   /** How long a new origin waits for the user; set only by tests, which cannot wait 2 minutes. */
   originWaitMs?: number
 }
@@ -375,6 +377,7 @@ export class BrowserViews {
       if (live.has(sessionId)) continue
       this.close(page)
       this.pages.delete(sessionId)
+      this.deps.removed?.(sessionId)
     }
   }
 

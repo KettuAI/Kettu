@@ -7,9 +7,13 @@ import { isHostAdminMethod } from './remote/host-admin'
 
 const METHODS: ReadonlySet<string> = new Set(HOST_METHODS)
 
-/** What a window may ask another host: its agent host's methods and its owner's calls to it. */
+/**
+ * What a window may ask another host: its agent host's methods and its owner's calls to it, but
+ * not the answers to the host's browser calls, which main gives.
+ */
 export function isOtherHostMethod(method: unknown): method is string {
-  return typeof method === 'string' && (METHODS.has(method) || isHostAdminMethod(method))
+  if (typeof method !== 'string' || method.startsWith('browser.')) return false
+  return METHODS.has(method) || isHostAdminMethod(method)
 }
 
 /** What a window sends: a request for the host it names. */
