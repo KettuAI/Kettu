@@ -111,13 +111,6 @@
     "estimateHours_other": "按 {{count}} 小时估算"
   },
   "footer": {
-    "settings": "设置",
-    "archived": "已归档会话",
-    "shortcuts": "键盘快捷键",
-    "help": "帮助",
-    "documentation": "文档",
-    "reportProblem": "报告问题…",
-    "whatsNew": "更新内容",
     "signInOne": "{{name}} 需要登录",
     "signInMany": "{{count}} 个 Agent 需要登录",
     "signInDetail": "打开「设置 › Agent」进行登录",
@@ -141,7 +134,39 @@
     "all": "全部主机",
     "thisComputer": "本机",
     "unknown": "另一台主机",
-    "filterLabel": "只看一台主机：现在是{{shown}}",
     "empty": "这台主机上还没有会话。"
+  },
+  "account": {
+    "menuLabel": "账号与主机",
+    "signedOut": "未登录",
+    "signedOutLine": "Kettu 账号",
+    "signingIn": "请在浏览器里完成登录",
+    "editProfile": "编辑个人资料",
+    "remote_zero": "远程访问",
+    "remote_one": "远程访问：{{count}} 台设备",
+    "remote_other": "远程访问：{{count}} 台设备",
+    "settings": "设置",
+    "settingsAttention": "设置：有事需要你处理",
+    "controls": "这个窗口控制",
+    "hostLine_one": "{{route}} · {{count}} 个会话",
+    "hostLine_other": "{{route}} · {{count}} 个会话",
+    "allHostsLine": "{{count}} 台主机并列显示",
+    "addHost": "添加主机…",
+    "limits": "套餐限额",
+    "theme": "主题",
+    "themes": {
+      "system": "跟随系统",
+      "light": "浅色",
+      "dark": "深色"
+    },
+    "shortcuts": "键盘快捷键",
+    "whatsNew": "更新内容",
+    "docs": "文档与帮助",
+    "signOut": "退出远程访问",
+    "signIn": "登录 Kettu…",
+    "cancelSignIn": "取消登录",
+    "connecting": "正在连接 {{name}}…",
+    "escKey": "esc",
+    "cancelSwitch": "回到之前的主机"
   }
 }

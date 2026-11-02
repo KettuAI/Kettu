@@ -44,7 +44,8 @@ export const HEATMAP_WEEKS = 53
 export const DAILY_BARS = 92
 /** Up to this many days, two years, the trend has a bar per week, beyond it one per month. */
 export const WEEKLY_DAYS = 731
-export const BREAKDOWN_ROWS = 6
+/** The breakdown shows this many rows before the rest fold into one. */
+export const BREAKDOWN_ROWS = 5
 
 const HOUR_MS = 3_600_000
 
@@ -295,6 +296,91 @@ export function tokenParts(
   }))
 }
 
+export interface FromCache {
+  /** Tokens read from the prompt cache. */
+  read: number
+  /** Every other token. */
+  other: number
+  /** The cache reads' share of all tokens; null without tokens. */
+  share: number | null
+  /** How many of every 100 tokens came from the cache; null without tokens. */
+  perHundred: number | null
+}
+
+/** How much of the tokens the prompt cache served. */
+export function fromCache(parts: Pick<TokenParts, TokenPart>): FromCache {
+  const total = TOKEN_PARTS.reduce((sum, part) => sum + parts[part], 0)
+  if (total <= 0) return { read: 0, other: 0, share: null, perHundred: null }
+  const share = parts.cacheRead / total
+  // Never 0 while some tokens came from the cache, nor 100 while some did not.
+  const perHundred = Math.min(
+    parts.cacheRead < total ? 99 : 100,
+    Math.max(parts.cacheRead > 0 ? 1 : 0, Math.round(share * 100)),
+  )
+  return { read: parts.cacheRead, other: total - parts.cacheRead, share, perHundred }
+}
+
+export interface Streaks {
+  /** Days with usage in a row up to the range's last day, or the day before while today has none. */
+  current: number
+  /** The longest run of days with usage in the range, the first of equals; null with none. */
+  longest: { days: number; from: number; to: number } | null
+}
+
+/** Runs of days with usage in the range; `days` are consecutive, as `dayTotals` gives them. */
+export function streaks(days: readonly DayTotal[], range: DayRange, today: number): Streaks {
+  const inRange = days.filter((d) => d.day >= range.from && d.day < range.to)
+  let longest: Streaks['longest'] = null
+  let run = 0
+  let start = 0
+  for (const day of inRange) {
+    if (day.total <= 0) {
+      run = 0
+      continue
+    }
+    if (run === 0) start = day.day
+    run++
+    if (!longest || run > longest.days) longest = { days: run, from: start, to: day.day }
+  }
+  let last = inRange.length - 1
+  // Today may still bring usage, so a streak through yesterday holds until it ends.
+  if (last >= 0 && inRange[last]!.day === today && inRange[last]!.total <= 0) last--
+  let current = 0
+  while (last >= 0 && inRange[last]!.total > 0) {
+    current++
+    last--
+  }
+  return { current, longest }
+}
+
+/**
+ * The weekday with the most of the metric in the range, as `Date.getDay` gives it, and its share;
+ * among equals the first from `firstDay`. Null when no day has any.
+ */
+export function busiestWeekday(
+  days: readonly DayTotal[],
+  range: DayRange,
+  firstDay: number,
+  metric: Metric = 'tokens',
+  scope: UsageScope = 'computer',
+): { weekday: number; share: number } | null {
+  const sums = [0, 0, 0, 0, 0, 0, 0]
+  let total = 0
+  for (const day of days) {
+    if (day.day < range.from || day.day >= range.to) continue
+    const value = metricValue(day.parts, metric, scope) ?? 0
+    sums[new Date(day.day).getDay()]! += value
+    total += value
+  }
+  if (total <= 0) return null
+  let best = firstDay % 7
+  for (let i = 1; i < 7; i++) {
+    const weekday = (firstDay + i) % 7
+    if (sums[weekday]! > sums[best]!) best = weekday
+  }
+  return { weekday: best, share: sums[best]! / total }
+}
+
 /** The range's tokens per request; null without requests. */
 export function tokensPerRequest(facts: Pick<Figures, 'tokens' | 'total'>): number | null {
   return facts.total > 0 ? facts.tokens / facts.total : null
@@ -434,25 +520,14 @@ export function busiest(totals: readonly number[]): number | null {
   return best
 }
 
-/** The widest of `texts` by `measure`, the first of equals; '' for none. */
-export function widest(texts: readonly string[], measure: (text: string) => number): string {
-  let best = ''
-  let size = -1
-  for (const text of texts) {
-    const width = measure(text)
-    if (width > size) [best, size] = [text, width]
-  }
-  return best
-}
-
 /** The trend's bars are at most this wide, in px; the chart draws them so. */
 export const BAR_WIDTH = 48
-/** Up to this many bars stand 3 px apart, more of them 1 px, so they stay wider than the gaps. */
+/** Up to this many bars stand 4 px apart, more of them 1 px, so they stay wider than the gaps. */
 const SPACED_BARS = 45
 
 /** The room between two of `count` bars, in px. */
 export function barGap(count: number): number {
-  return count <= SPACED_BARS ? 3 : 1
+  return count <= SPACED_BARS ? 4 : 1
 }
 
 /** The middle of each bar in a row `width` px wide, where the bars sit centred. */
@@ -594,29 +669,39 @@ export function ledgerCell(index: number): { top: boolean; left: boolean } {
 
 export interface BreakdownRow {
   key: string
-  /** The model, or the project folder; null for a scratch or unknown project. */
+  /** The model, or the project folder; null for an unknown model, a scratch or unknown project. */
   name: string | null
   /** The folder, for a project's tooltip. */
   path: string | null
+  /** The agents with usage in the row, the most tokens first. */
+  agents: AgentId[]
   /** The row's tokens, which rank rows a metric cannot price. */
   total: number
   /** The row's value in the metric; null for a row no price covers. */
   value: number | null
 }
 
-function top(rows: Map<string, BreakdownRow>): BreakdownRow[] {
+interface RowSum extends Omit<BreakdownRow, 'agents'> {
+  byAgent: Map<AgentId, number>
+}
+
+/** The rows with usage, the most of the metric first, then the most tokens. */
+function ranked(rows: Map<string, RowSum>): BreakdownRow[] {
   return [...rows.values()]
     .filter((row) => row.total > 0)
     .sort((a, b) => (b.value ?? -1) - (a.value ?? -1) || b.total - a.total)
-    .slice(0, BREAKDOWN_ROWS)
+    .map(({ byAgent, ...row }) => ({
+      ...row,
+      agents: [...byAgent.keys()].sort((a, b) => byAgent.get(b)! - byAgent.get(a)!),
+    }))
 }
 
 function addRow(
-  rows: Map<string, BreakdownRow>,
+  rows: Map<string, RowSum>,
   key: string,
   name: string | null,
   path: string | null,
-  row: TokenParts,
+  row: TokenParts & { agentId: AgentId },
   metric: Metric,
   scope: UsageScope,
 ): void {
@@ -624,10 +709,13 @@ function addRow(
     key,
     name,
     path,
+    byAgent: new Map(),
     total: 0,
     value: metricKind(metric, scope) === 'cost' ? null : 0,
   }
-  sum.total += partsTotal(row)
+  const tokens = partsTotal(row)
+  sum.total += tokens
+  if (tokens > 0) sum.byAgent.set(row.agentId, (sum.byAgent.get(row.agentId) ?? 0) + tokens)
   if (metricKind(metric, scope) === 'cost') {
     if (row.cost !== null) sum.value = (sum.value ?? 0) + row.cost
   } else {
@@ -642,12 +730,56 @@ export function modelRows(
   metric: Metric = 'tokens',
   scope: UsageScope = 'computer',
 ): BreakdownRow[] {
-  const rows = new Map<string, BreakdownRow>()
+  const rows = new Map<string, RowSum>()
   for (const row of summary.models) {
     if (agent !== 'all' && row.agentId !== agent) continue
     addRow(rows, row.model, row.model || null, null, row, metric, scope)
   }
-  return top(rows)
+  return ranked(rows)
+}
+
+/** A row per agent, keyed by its id, from the models' usage. */
+export function agentRows(
+  summary: Pick<UsageSummary, 'models'>,
+  agent: AgentFilter,
+  metric: Metric = 'tokens',
+  scope: UsageScope = 'computer',
+): BreakdownRow[] {
+  const rows = new Map<string, RowSum>()
+  for (const row of summary.models) {
+    if (agent !== 'all' && row.agentId !== agent) continue
+    addRow(rows, row.agentId, null, null, row, metric, scope)
+  }
+  return ranked(rows)
+}
+
+/** What the rows past the first few add up to, folded into one. */
+export interface RestRow {
+  count: number
+  total: number
+  /** Null when no price covers any of them. */
+  value: number | null
+}
+
+/**
+ * The first `shown` rows, and the rest folded into one row while it holds more than one: a single
+ * row left over shows as itself.
+ */
+export function foldRows(
+  rows: readonly BreakdownRow[],
+  shown = BREAKDOWN_ROWS,
+): { rows: BreakdownRow[]; rest: RestRow | null } {
+  if (rows.length <= shown + 1) return { rows: [...rows], rest: null }
+  const others = rows.slice(shown)
+  const priced = others.filter((row) => row.value !== null)
+  return {
+    rows: rows.slice(0, shown),
+    rest: {
+      count: others.length,
+      total: others.reduce((sum, row) => sum + row.total, 0),
+      value: priced.length > 0 ? priced.reduce((sum, row) => sum + row.value!, 0) : null,
+    },
+  }
 }
 
 /** Projects by folder; No project folders and unknown ones are one row with no name. */
@@ -658,7 +790,7 @@ export function projectRows(
   metric: Metric = 'tokens',
   scope: UsageScope = 'computer',
 ): BreakdownRow[] {
-  const rows = new Map<string, BreakdownRow>()
+  const rows = new Map<string, RowSum>()
   for (const row of summary.projects) {
     if (agent !== 'all' && row.agentId !== agent) continue
     const named = row.project !== null && !row.scratch
@@ -673,7 +805,7 @@ export function projectRows(
       scope,
     )
   }
-  return top(rows)
+  return ranked(rows)
 }
 
 export interface Preset {

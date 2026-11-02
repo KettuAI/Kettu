@@ -5,10 +5,12 @@ import {
   cronFieldAt,
   dayTime,
   everyChoices,
+  lastRunCell,
   minutesLabel,
+  nextRunText,
   onRoutines,
+  rowDescription,
   routineState,
-  rowDay,
   runDay,
   runDuration,
   runTrigger,
@@ -97,12 +99,6 @@ describe('times on the routines pages', () => {
     expect(runDay(at(4, 9, 0, 0, 2027), NOW)).toBe('Mon, Jan 4, 2027, 9:00 AM')
   })
 
-  it("puts how soon under a row's time today, else its day", () => {
-    expect(rowDay(at(26, 16), NOW)).toBe('Today · in 47 min')
-    expect(rowDay(at(27, 9), NOW)).toBe('Tomorrow')
-    expect(rowDay(at(30, 9), NOW)).toBe('Fri, Oct 30')
-  })
-
   it('says when something began: the time today, else its day too', () => {
     expect(sinceTime(at(26, 9), NOW)).toBe('9:00 AM')
     expect(sinceTime(at(25, 22, 58), NOW)).toBe('Yesterday, 10:58 PM')
@@ -119,7 +115,7 @@ describe('times on the routines pages', () => {
     await i18n.changeLanguage('zh-CN')
     expect(untilTime(NOW + (17 * 60 + 47) * MINUTE, NOW)).toBe('17 小时 47 分钟后')
     expect(runDay(at(25, 22, 58), NOW)).toBe('昨天 22:58')
-    expect(rowDay(at(26, 16), NOW)).toBe('今天 · 47 分钟后')
+    expect(nextRunText(at(26, 16), NOW)).toBe('下次运行：今天 16:00')
   })
 })
 
@@ -191,6 +187,60 @@ describe('a routine on its row and page', () => {
     expect(runsHint(routine({ nextRunAt: at(28, 9) }), NOW)).toBe(
       'Run now tries it, or wait for Wed, Oct 28, 9:00 AM.',
     )
+  })
+})
+
+describe("a row's Last run column", () => {
+  it('shows a run at work and a pause before the last run', () => {
+    const last = run({ status: 'succeeded', endedAt: at(26, 9) })
+    expect(lastRunCell(routine({ lastRun: last, activeRun: run({ status: 'waiting' }) }))).toEqual({
+      kind: 'waiting',
+      since: null,
+    })
+    expect(lastRunCell(routine({ lastRun: last, activeRun: run({ status: 'queued' }) }))).toEqual({
+      kind: 'queued',
+    })
+    expect(lastRunCell(routine({ lastRun: last, state: 'paused' })).kind).toBe('paused')
+  })
+
+  it('shows how the last run ended, at its end, start or scheduled time', () => {
+    expect(lastRunCell(routine({ lastRun: run({ endedAt: at(26, 9, 5) }) }))).toEqual({
+      kind: 'succeeded',
+      at: at(26, 9, 5),
+    })
+    const failed = run({ status: 'timed_out', startedAt: at(26, 9) })
+    expect(lastRunCell(routine({ lastRun: failed }))).toEqual({
+      kind: 'failed',
+      at: at(26, 9),
+      run: failed,
+    })
+    expect(
+      lastRunCell(
+        routine({
+          nextRunAt: at(27, 9),
+          lastRun: run({ status: 'skipped', reason: 'overlap', scheduledFor: at(26, 9) }),
+        }),
+      ),
+    ).toEqual({ kind: 'ended', status: 'skipped', at: at(26, 9) })
+  })
+
+  it('shows the next run before the first, and done or never without one', () => {
+    expect(lastRunCell(routine({ nextRunAt: at(27, 9) }))).toEqual({ kind: 'next', at: at(27, 9) })
+    expect(lastRunCell(routine({ state: 'done' }))).toEqual({ kind: 'done' })
+    expect(lastRunCell(routine({ enabled: false, state: 'off' }))).toEqual({ kind: 'never' })
+  })
+
+  it('names the next run by its day', () => {
+    expect(nextRunText(at(26, 16), NOW)).toBe('Next run today, 4:00 PM')
+    expect(nextRunText(at(27, 9), NOW)).toBe('Next run tomorrow, 9:00 AM')
+    expect(nextRunText(at(30, 17), NOW)).toBe('Next run Fri, 5:00 PM')
+  })
+
+  it("describes a routine by its prompt's first line, else its project", () => {
+    expect(rowDescription(routine(), 'kettu')).toBe('Summarize what changed since yesterday.')
+    expect(
+      rowDescription(routine({ name: 'Summarize what changed since yesterday.' }), 'kettu'),
+    ).toBe('kettu')
   })
 })
 

@@ -4,6 +4,7 @@ import {
   HistoryIcon,
   MessageSquareIcon,
   PencilIcon,
+  RefreshCwIcon,
   ShapesIcon,
   TrashIcon,
   Undo2Icon,
@@ -41,12 +42,15 @@ export interface MenuTarget {
 export function ArtifactMenuItems({
   target,
   onOpen,
+  onReload,
   onVersionHistory,
   historyOpen,
   onDeleted,
 }: {
   target: MenuTarget
   onOpen?: () => void
+  /** In the viewer, which shows the page live. */
+  onReload?: () => void
   onVersionHistory: () => void
   /** Where the history can show beside the artifact, whether it does; Version history checks it. */
   historyOpen?: boolean
@@ -103,6 +107,12 @@ export function ArtifactMenuItems({
           <DropdownMenuItem onClick={onOpen}>
             <ShapesIcon />
             {t('menu.open')}
+          </DropdownMenuItem>
+        )}
+        {onReload && (
+          <DropdownMenuItem onClick={onReload}>
+            <RefreshCwIcon />
+            {t('viewer.reload')}
           </DropdownMenuItem>
         )}
         {/* The web client shows it in a browser already. */}

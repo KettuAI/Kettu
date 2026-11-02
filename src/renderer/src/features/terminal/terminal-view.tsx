@@ -141,7 +141,12 @@ export function TerminalView({
     <div className="absolute inset-0 flex flex-col bg-code-block">
       <ContextMenu>
         <ContextMenuTrigger
-          render={<div className="relative min-h-0 flex-1 px-4 py-3.5" data-terminal="" />}
+          render={
+            <div
+              className="relative min-h-0 flex-1 bg-(--terminal-background) px-4 py-3.5"
+              data-terminal=""
+            />
+          }
         >
           <div ref={container} className="size-full" />
           {selection && instance && (
@@ -193,7 +198,7 @@ export function TerminalView({
         </ContextMenuContent>
       </ContextMenu>
       {(exited || stopped) && (
-        <div className="flex h-8 shrink-0 animate-in items-center gap-2 border-t border-subtle px-3.5 text-xs text-tertiary fade-in animation-duration-(--duration-base)">
+        <div className="flex h-8 shrink-0 animate-in items-center gap-2 border-t border-subtle bg-(--terminal-background) px-3.5 text-xs text-tertiary fade-in animation-duration-(--duration-base)">
           <span className={cn(stopped && 'text-danger')}>
             {stopped ? t('view.stopped') : t('view.exited', { code: terminal.exitCode })}
           </span>

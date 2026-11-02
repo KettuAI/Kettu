@@ -68,7 +68,11 @@ function Body({ diff }: { diff: DiffView }) {
     return <Notice title={t('diff.sameTitle')} description={t('diff.sameDescription')} />
   }
   return (
-    <div className="absolute inset-0 overflow-y-auto overscroll-contain" data-selectable="">
+    // On the code surface to the pane's end, below a short diff too.
+    <div
+      className="absolute inset-0 overflow-y-auto overscroll-contain bg-code-block"
+      data-selectable=""
+    >
       <Diff
         path={result.path}
         oldText={result.oldText}

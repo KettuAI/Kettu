@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { NO_SESSION, type ArtifactSession, type ArtifactSummary } from '@shared/artifacts'
 import {
+  agentsOf,
   artifactKind,
   daysLeft,
   filterArtifacts,
@@ -18,6 +19,7 @@ import {
   type ListFilter,
   type OpenedTimes,
 } from './model'
+import type { AgentId } from '@shared/thread'
 
 const NOW = new Date(2026, 9, 24, 15, 0).getTime()
 const HOUR = 60 * 60 * 1000
@@ -100,6 +102,32 @@ describe('filterArtifacts', () => {
     expect(titles({ project: '/work/deck' })).toEqual(['Q3 Traffic report'])
     expect(titles({ project: NO_PROJECT })).toEqual(['Scratch'])
     expect(titles({ project: '/work/acme', kind: 'canvas' })).toEqual(['Slides'])
+  })
+
+  it("keeps one agent, by its session's, and none without a session", () => {
+    const made = [
+      artifact({ title: 'By Codex', sessionId: 's-codex' }),
+      artifact({ title: 'By Claude', sessionId: 's-claude', pages: 2 }),
+      artifact({ title: 'Imported', sessionId: NO_SESSION }),
+    ]
+    const agents: Record<string, AgentId> = { 's-codex': 'codex', 's-claude': 'claude-code' }
+    const agentOf = (id: string) => agents[id] ?? null
+    const kept = (filter: Partial<ListFilter>) =>
+      filterArtifacts(made, { ...ALL, agentOf, ...filter }).map((a) => a.title)
+    expect(kept({ agent: 'codex' })).toEqual(['By Codex'])
+    expect(kept({ agent: 'claude-code', kind: 'web' })).toEqual([])
+    expect(kept({ agent: null })).toHaveLength(3)
+  })
+})
+
+describe('agentsOf', () => {
+  it('lists the agents found in the given order, then any other', () => {
+    const list = ['s-a', 's-b', 's-c', 's-d'].map((sessionId) => artifact({ sessionId }))
+    const agents: Record<string, AgentId> = { 's-a': 'opencode', 's-b': 'codex', 's-c': 'codex' }
+    expect(agentsOf(list, (id) => agents[id] ?? null, ['codex', 'claude-code'])).toEqual([
+      'codex',
+      'opencode',
+    ])
   })
 })
 

@@ -135,8 +135,39 @@ describe('Esc in Settings', () => {
   })
 })
 
+describe('Mod+1 to Mod+9', () => {
+  function press(open: boolean): boolean {
+    let prevented = false
+    const event = {
+      key: '1',
+      code: 'Digit1',
+      metaKey: true,
+      ctrlKey: false,
+      altKey: false,
+      shiftKey: false,
+      isComposing: false,
+      target: { tagName: 'BODY', isContentEditable: false, closest: () => null },
+      preventDefault: () => (prevented = true),
+      stopPropagation: () => {},
+    } as unknown as KeyboardEvent
+    vi.stubGlobal('document', { querySelector: () => (open ? {} : null), activeElement: null })
+    for (const { listener } of keydowns.filter((k) => k.capture)) listener(event)
+    vi.stubGlobal('document', { querySelector: () => null, activeElement: null })
+    return prevented
+  }
+
+  it('focus a pane, but leave the keys to an open menu, which picks a host with them', () => {
+    vi.stubGlobal('requestAnimationFrame', () => 0)
+    useKeyboardShortcuts()
+    useViewStore.setState((s) => ({ settings: { ...s.settings, open: false } }))
+    expect(press(false)).toBe(true)
+    expect(press(true)).toBe(false)
+  })
+})
+
 describe('Ctrl+` with a menu open', () => {
-  function press(): void {
+  function press(menuOpensTerminal: boolean): boolean {
+    let prevented = false
     const event = {
       key: '`',
       code: 'Backquote',
@@ -147,29 +178,27 @@ describe('Ctrl+` with a menu open', () => {
       isComposing: false,
       defaultPrevented: false,
       target: { tagName: 'BODY', isContentEditable: false, closest: () => null },
-      preventDefault: () => {},
+      preventDefault: () => (prevented = true),
       stopPropagation: () => {},
     } as unknown as KeyboardEvent
-    for (const { listener } of keydowns.filter((k) => k.capture)) listener(event)
-  }
-  const shown = () => useViewStore.getState().sidePane['/repo']
-
-  it('leaves the key to a menu that opens the terminal itself, and toggles it otherwise', () => {
-    if (keydowns.length === 0) useKeyboardShortcuts()
-    useViewStore.setState({ projectPath: '/repo', sidePane: {} })
-    const opensTerminal = vi.fn((selector: string) =>
-      selector.includes('data-accelerator') ? {} : null,
-    )
-    vi.stubGlobal('document', { querySelector: opensTerminal, activeElement: null })
-    press()
-    expect(shown()).toBeUndefined()
-    // Another menu or a dialog is open: the key still toggles the terminal.
+    // Some layer is open either way; only the first is a menu with its own Open terminal.
     vi.stubGlobal('document', {
-      querySelector: (selector: string) => (selector.includes('data-accelerator') ? null : {}),
+      querySelector: (selector: string) =>
+        selector.includes('data-accelerator') ? (menuOpensTerminal ? {} : null) : {},
       activeElement: null,
     })
-    press()
-    expect(shown()).toBe('terminal')
+    for (const { listener } of keydowns.filter((k) => k.capture)) listener(event)
     vi.stubGlobal('document', { querySelector: () => null, activeElement: null })
+    return prevented
+  }
+
+  it('leaves the key to a menu that opens the terminal itself, and takes it otherwise', () => {
+    if (keydowns.length === 0) useKeyboardShortcuts()
+    useViewStore.setState((s) => ({
+      projectPath: '/repo',
+      settings: { ...s.settings, open: false },
+    }))
+    expect(press(true)).toBe(false)
+    expect(press(false)).toBe(true)
   })
 })
