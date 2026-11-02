@@ -51,24 +51,37 @@ const isComposing = (event: KeyboardEvent<HTMLInputElement>): boolean =>
 export function HostPage({ id }: { id: string }) {
   const { t } = useTranslation('settings')
   const host = useHostsStore((s) => s.status?.hosts?.find((entry) => entry.id === id) ?? null)
-  if (!host) {
-    return (
-      <div className="flex flex-col">
-        <ItemPageHeader
-          back={t('sections.hosts')}
-          onBack={back}
-          item={id}
-          icon={null}
-          title={null}
-        />
-        <p className="px-1 text-small text-tertiary">{t('hosts.page.gone')}</p>
-      </div>
-    )
-  }
-  return <HostPageBody host={host} />
+  // Kept past the host: adding it over SSH again replaces it with one of a new id.
+  const [again, setAgain] = useState<{ ssh?: string } | null>(null)
+  return (
+    <>
+      {host ? (
+        <HostPageBody host={host} onAddAgain={() => setAgain({ ssh: host.ssh?.target })} />
+      ) : (
+        <div className="flex flex-col">
+          <ItemPageHeader
+            back={t('sections.hosts')}
+            onBack={back}
+            item={id}
+            icon={null}
+            title={null}
+          />
+          <p className="px-1 text-small text-tertiary">{t('hosts.page.gone')}</p>
+        </div>
+      )}
+      <AddHostDialog
+        open={again !== null}
+        onOpenChange={(open) => {
+          if (!open) setAgain(null)
+        }}
+        ssh={again?.ssh}
+        onAdded={(added) => openSettingsItem('hosts', added.id)}
+      />
+    </>
+  )
 }
 
-function HostPageBody({ host }: { host: HostStatus }) {
+function HostPageBody({ host, onAddAgain }: { host: HostStatus; onAddAgain: () => void }) {
   const { t } = useTranslation('settings')
   const { name } = host
   return (
@@ -95,7 +108,7 @@ function HostPageBody({ host }: { host: HostStatus }) {
       </ItemPageHeader>
 
       <div className="flex flex-col gap-7">
-        <StoppedNotice host={host} />
+        <StoppedNotice host={host} onAddAgain={onAddAgain} />
         <section aria-label={t('hosts.page.connection')} className="flex flex-col">
           <GroupLabel group={{ id: 'connection', label: t('hosts.page.connection') }} />
           <RowGroup>
@@ -191,29 +204,27 @@ function HostPageBody({ host }: { host: HostStatus }) {
 }
 
 /** Why a host is not connected for good, or until one side's Kettu is updated. */
-function StoppedNotice({ host }: { host: HostStatus }) {
+function StoppedNotice({ host, onAddAgain }: { host: HostStatus; onAddAgain: () => void }) {
   const { t } = useTranslation('settings')
-  const [adding, setAdding] = useState(false)
   if (host.connection.state !== 'stopped') return null
   const { reason } = host.connection
   return (
-    <>
-      <Notice
-        variant="warning"
-        icon={<CircleAlertIcon />}
-        title={t(`hosts.page.${reason}.title`, { name: host.name })}
-        action={
-          reason === 'removed' && (
-            <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-              {t('hosts.page.removed.action')}
-            </Button>
-          )
-        }
-      >
-        {t(`hosts.page.${reason}.body`, { name: host.name })}
-      </Notice>
-      {reason === 'removed' && <AddHostDialog open={adding} onOpenChange={setAdding} />}
-    </>
+    <Notice
+      variant="warning"
+      icon={<CircleAlertIcon />}
+      title={t(`hosts.page.${reason}.title`, { name: host.name })}
+      action={
+        reason === 'removed' && (
+          <Button variant="outline" size="sm" onClick={onAddAgain}>
+            {t('hosts.page.removed.action')}
+          </Button>
+        )
+      }
+    >
+      {reason === 'removed' && host.ssh
+        ? t('hosts.page.removed.sshBody')
+        : t(`hosts.page.${reason}.body`, { name: host.name })}
+    </Notice>
   )
 }
 
