@@ -82,6 +82,16 @@ describe('signatureOf', () => {
     expect(signatureOf(state([tool('r1', 'read', 'in_progress'), waiting]))).toBe('tw')
   })
 
+  it("keeps an agent's question out of a run, asked or answered", () => {
+    const asked = {
+      ...tool('q', 'other', 'pending'),
+      question: 'Which one?',
+      permission: { requestId: 'p1', options: [] },
+    }
+    const answered = { ...tool('q2', 'other'), question: 'And this?' }
+    expect(signatureOf(state([tool('a', 'read'), asked, answered, tool('b', 'edit')]))).toBe('goot')
+  })
+
   it('marks plans and compactions as work', () => {
     expect(signatureOf(state([plan('p1'), compaction('c1'), notice('n1')]))).toBe('ppo')
   })

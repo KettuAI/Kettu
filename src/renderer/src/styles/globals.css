@@ -305,6 +305,9 @@
   /* Tooltips and a menu item's shortcut. */
   --text-caption: 11.5px;
   --text-caption--line-height: 16px;
+  /* The number on an answer's key cap. */
+  --text-key: 11px;
+  --text-key--line-height: 16px;
 }
 
 :root {

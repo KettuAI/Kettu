@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import type { ToolEntry } from '@shared/thread'
 import {
   answeredBy,
+  codeSpans,
   commandOutput,
   forkBlocked,
   forkEntry,
   groupLabel,
+  previewsCommand,
   primaryOption,
   runSummary,
   stopReasonText,
@@ -414,5 +416,31 @@ describe('answeredBy', () => {
       undefined,
     )
     expect(answeredBy(new Error('offline'))).toBe(undefined)
+  })
+})
+
+describe('previewsCommand', () => {
+  it('shows a command of more than one step, or a long one, in full', () => {
+    expect(previewsCommand('rm -rf node_modules/.vite && pnpm dev --port 5173')).toBe(true)
+    expect(previewsCommand('pnpm test; pnpm lint')).toBe(true)
+    expect(previewsCommand('git log | head')).toBe(true)
+    expect(previewsCommand('echo a\necho b')).toBe(true)
+    expect(previewsCommand('x'.repeat(61))).toBe(true)
+    expect(previewsCommand('pnpm vitest run src/usage')).toBe(false)
+  })
+})
+
+describe('codeSpans', () => {
+  it('sets the backticked parts apart', () => {
+    expect(codeSpans('Always allow `pnpm dev` in this project')).toEqual([
+      { text: 'Always allow ', code: false },
+      { text: 'pnpm dev', code: true },
+      { text: ' in this project', code: false },
+    ])
+  })
+
+  it('reads a name without a pair of backticks as written', () => {
+    expect(codeSpans('Allow once')).toEqual([{ text: 'Allow once', code: false }])
+    expect(codeSpans('Run `x')).toEqual([{ text: 'Run `x', code: false }])
   })
 })

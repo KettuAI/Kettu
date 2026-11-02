@@ -94,24 +94,28 @@
     },
     "label": "Permission request",
     "answeredOn": "Already answered on {{device}}.",
-    "answeredInWindow": "Already answered in another window."
+    "answeredInWindow": "Already answered in another window.",
+    "needsYou": "Needs you"
   },
   "browserOrigin": {
     "label": "New site",
     "ask": "{{agent}} wants to open this site in the browser.",
     "answerGroup": "Answer",
-    "waiting": "Needs approval",
     "decision": {
       "session": "Allow for this session",
-      "project": "Always for this project",
-      "deny": "Deny"
+      "project": "Always allow {{site}} in this project",
+      "deny": "Don’t allow"
     },
     "answer": {
       "session": "Allowed for this session",
       "project": "Always allowed for this project",
       "deny": "Denied",
       "timeout": "Not answered in time"
-    }
+    },
+    "open": "Open",
+    "newSite": "New site",
+    "wants": "{{agent}} wants to open <site>{{site}}</site>",
+    "where": "In this session’s browser · with your sign-ins"
   },
   "subagent": {
     "fallbackTitle": "Subagent"
@@ -421,5 +425,11 @@
     "away": "{{name}} is not connected",
     "awayBody": "{{state}}. Its sessions open here again once it is back.",
     "awayComposer": "{{name}} is not connected: {{state}}. You can send messages again once it is back."
+  },
+  "question": {
+    "label": "Question",
+    "ask": "{{agent}} asks you a question.",
+    "asksYou": "Asks you",
+    "answeredOther": "Something else"
   }
 }

@@ -4,7 +4,7 @@ import type { ThreadEntry, ThreadState } from '@shared/thread'
 // streamed token: u user, s user message steered into a running turn, a agent, h thought shown in
 // place, r long thought, q short thought still streaming, g groupable lookup, t other tool, w tool
 // waiting for permission, p plan or compaction, c progress note, e turn end, o anything else,
-// which a new site's request is: a card of its own, never folded into a run.
+// which a new site's request and an agent's question are: of their own, never folded into a run.
 export function signatureOf(state: ThreadState | null | undefined): string {
   if (!state) return ''
   let signature = ''
@@ -19,7 +19,7 @@ function charOf(entry: ThreadEntry | undefined): string {
   if (entry.kind === 'turn_end') return 'e'
   if (entry.kind === 'thought') return longThought(entry) ? 'r' : entry.streaming ? 'q' : 'h'
   if (entry.kind === 'plan' || entry.kind === 'compaction') return 'p'
-  if (entry.kind !== 'tool') return 'o'
+  if (entry.kind !== 'tool' || entry.question !== undefined) return 'o'
   if (entry.permission) return 'w'
   if (
     entry.status === 'completed' &&

@@ -32,6 +32,7 @@ export const SCENARIOS = [
   'report',
   'tables',
   'open-site',
+  'approvals',
 ] as const
 
 export type ScenarioName = (typeof SCENARIOS)[number]
@@ -105,6 +106,9 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   'open-site': {
     description: 'Opens a site through the browser tools, which asks the user for a new one',
     hint: '<url>',
+  },
+  approvals: {
+    description: 'A command of two steps, then an edit with its diff, each asking first',
   },
   report: { description: 'Short Chinese notes between runs of work, then a report' },
   tables: {

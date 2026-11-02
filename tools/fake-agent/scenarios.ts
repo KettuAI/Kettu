@@ -392,6 +392,75 @@ const parallelPermissions: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+// Worded as Claude Code's requests are in Kettu: allowing always names only the safe step.
+const COMMAND_OPTIONS: PermissionOption[] = [
+  { optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' },
+  {
+    optionId: 'allow-always',
+    name: 'Always allow `pnpm dev` in this project',
+    kind: 'allow_always',
+  },
+  { optionId: 'reject-once', name: 'Deny, and say what to do instead', kind: 'reject_once' },
+]
+const EDIT_OPTIONS: PermissionOption[] = [
+  { optionId: 'allow-once', name: 'Allow this edit', kind: 'allow_once' },
+  { optionId: 'allow-always', name: 'Allow all edits in this session', kind: 'allow_always' },
+  { optionId: 'reject-once', name: 'Deny, and say what to do instead', kind: 'reject_once' },
+]
+const DAY_KEY_BEFORE = `export function dayKey(ts: number) {
+  return new Date(ts).toISOString().slice(0, 10)
+}
+`
+const DAY_KEY_AFTER = `export function dayKey(ts: number) {
+  const d = new Date(ts)
+  return format(d, "yyyy-MM-dd")
+}
+`
+
+const approvals: Scenario = async (turn) => {
+  if (!(await stream(turn, 'The cache is stale, so I will clear it and start the dev server.\n\n')))
+    return 'cancelled'
+  const commandId = `cmd-${turn.id}`
+  const command = 'rm -rf node_modules/.vite && pnpm dev --port 5173'
+  await turn.send({
+    sessionUpdate: 'tool_call',
+    toolCallId: commandId,
+    title: `Run ${command}`,
+    kind: 'execute',
+    status: 'pending',
+    rawInput: { command },
+  })
+  const ran = await turn.requestPermission(
+    { toolCallId: commandId, title: `Run ${command}`, kind: 'execute', rawInput: { command } },
+    COMMAND_OPTIONS,
+  )
+  if (ran === 'cancelled') return 'cancelled'
+  await runCommand(turn, commandId, command, ran)
+  const editId = `edit-${turn.id}`
+  const path = filePath(turn, 'src/usage/usage-store.ts')
+  await turn.send({
+    sessionUpdate: 'tool_call',
+    toolCallId: editId,
+    title: 'Edit src/usage/usage-store.ts',
+    kind: 'edit',
+    status: 'pending',
+    locations: [{ path, line: 41 }],
+    content: [{ type: 'diff', path, oldText: DAY_KEY_BEFORE, newText: DAY_KEY_AFTER }],
+  })
+  const edited = await turn.requestPermission(
+    { toolCallId: editId, title: 'Edit src/usage/usage-store.ts', kind: 'edit' },
+    EDIT_OPTIONS,
+  )
+  if (edited === 'cancelled') return 'cancelled'
+  await turn.send({
+    sessionUpdate: 'tool_call_update',
+    toolCallId: editId,
+    status: edited.startsWith('allow') ? 'completed' : 'failed',
+  })
+  await stream(turn, `Answers: \`${ran}\`, \`${edited}\`.`)
+  return 'end_turn'
+}
+
 const cancel: Scenario = async (turn) => {
   const deadline = Date.now() + 60_000
   let step = 0
@@ -1371,6 +1440,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   report,
   tables,
   'open-site': openSite,
+  approvals,
 }
 
 export const compact: Scenario = async (turn) => {
