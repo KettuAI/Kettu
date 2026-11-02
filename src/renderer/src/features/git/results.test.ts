@@ -105,6 +105,19 @@ describe('successNote', () => {
     ).toMatchObject({ key: 'result.committed', values: { count: 2 }, next: 'push' })
   })
 
+  it('says a pull brought nothing when HEAD did not move', () => {
+    expect(successNote({ kind: 'pull' }, status(), status(), false)).toMatchObject({
+      key: 'result.pulledNothing',
+      values: { branch: 'fix/day-key' },
+      tone: 'info',
+      next: null,
+    })
+    const moved = { head: { branch: 'fix/day-key', oid: 'b'.repeat(40), detached: false } }
+    expect(
+      successNote({ kind: 'pull' }, status(upstream(0, 2)), status(moved), false),
+    ).toMatchObject({ key: 'result.pulled', values: { count: 2 }, tone: 'success' })
+  })
+
   it('names a single discarded file', () => {
     expect(
       successNote({ kind: 'discard', paths: ['src/a/b.ts'] }, status(), status(), false),

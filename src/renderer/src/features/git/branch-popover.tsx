@@ -98,7 +98,7 @@ function Header({ status, onSwitch }: { status: GitStatus; onSwitch: () => void 
               />
             }
           >
-            <Icon aria-hidden className="size-3.5 shrink-0 text-secondary" />
+            <Icon aria-hidden className="size-3.5 shrink-0 text-tertiary" />
             <span className="min-w-0 truncate text-row leading-snug font-semibold tracking-[-0.006em] text-primary">
               {branchName(status)}
             </span>

@@ -10,6 +10,7 @@
     "changes": "Changes",
     "allFiles": "All files",
     "findFile": "Find file",
+    "openInEditor": "Open in editor",
     "close": "Close panel"
   },
   "browser": {
