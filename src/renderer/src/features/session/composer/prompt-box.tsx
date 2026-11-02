@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Popover } from '@base-ui/react/popover'
 import { AtSignIcon, CameraIcon, FolderIcon, ImageIcon, PlusIcon, SlashIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -129,6 +129,22 @@ export function PromptBox({
   // What the popup shows, kept after it closes so it fades out as it was.
   const showing = slashOpen ? 'slash' : mentionOpen ? mentions : popover
   if (showing !== popover) setPopover(showing)
+  // The mention list starts at its `@`, over the box, and stays there while it fades out.
+  const [atStart, setAtStart] = useState(0)
+  if (mentionOpen && mention!.start !== atStart) setAtStart(mention!.start)
+  const atMention = useMemo(
+    () => ({
+      getBoundingClientRect: () => {
+        const box = group.current?.getBoundingClientRect() ?? new DOMRect()
+        const left = editor.current?.leftOf(atStart) ?? box.left
+        return new DOMRect(left, box.top, box.right - left, box.height)
+      },
+      get contextElement() {
+        return group.current ?? undefined
+      },
+    }),
+    [atStart, editor],
+  )
   const listing = typeof showing === 'object' ? showing : null
   const open = slashOpen || mentionOpen
   const rows: PopoverItem[] = showing === 'slash' ? slashMatches : listing ? listing.rows : []
@@ -313,7 +329,7 @@ export function PromptBox({
       <Popover.Root open={open} onOpenChange={openChange}>
         <Popover.Portal>
           <Popover.Positioner
-            anchor={group}
+            anchor={showing === 'slash' ? group : atMention}
             side="top"
             align="start"
             sideOffset={6}
@@ -325,10 +341,10 @@ export function PromptBox({
               finalFocus={false}
               className={cn(
                 'flex max-h-[min(var(--available-height),320px)] origin-(--transform-origin) flex-col overflow-hidden bg-popover text-popover-foreground shadow-menu animation-duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
-                'rounded-xl p-1',
+                'rounded-xl p-1.25',
                 showing === 'slash'
                   ? 'w-[min(var(--anchor-width),470px)]'
-                  : 'w-[min(var(--anchor-width),340px)]',
+                  : 'w-85 max-w-(--available-width)',
               )}
             >
               {rows.length > 0 && (
@@ -409,7 +425,7 @@ function SlashItem({
       onMouseDown={(event) => event.preventDefault()}
       onMouseMove={onHighlight}
       onClick={onChoose}
-      className="flex min-h-control cursor-default items-center gap-2.5 rounded-md px-2 text-ui outline-none select-none data-highlighted:bg-selected"
+      className="flex min-h-7.5 cursor-default items-center gap-2.5 rounded-md px-2 text-menu outline-none select-none data-highlighted:bg-selected"
     >
       <span className="shrink-0 font-mono text-hint">/{command.name}</span>
       {command.description && (

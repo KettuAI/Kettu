@@ -46,7 +46,7 @@ export function MentionItem({
       onMouseMove={onHighlight}
       onClick={() => onChoose(row)}
       title={row.folder ? `${row.path}/` : row.path}
-      className="flex min-h-control cursor-default items-center gap-2.25 rounded-md px-2 text-ui outline-none select-none data-highlighted:bg-selected"
+      className="flex min-h-7.5 cursor-default items-center gap-2.25 rounded-md px-2 text-menu outline-none select-none data-highlighted:bg-selected"
     >
       <Icon strokeWidth={1.4} className="size-3.75 shrink-0 text-icon" />
       <span className="min-w-0 flex-1 truncate font-mono text-hint">

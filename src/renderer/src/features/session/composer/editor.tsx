@@ -30,6 +30,8 @@ export interface ComposerEditorHandle {
   keepAsText(from: number, to: number): void
   /** The chip that starts at `pos`, as drawn. */
   chipElement(pos: number): HTMLElement | null
+  /** Where the character at `pos` starts on screen, or null while it is not drawn. */
+  leftOf(pos: number): number | null
 }
 
 /** The list a popover shows, for the box's combobox attributes. */
@@ -328,6 +330,11 @@ export function ComposerEditor({
         const at = node.childNodes[offset] ?? node
         const element = at instanceof HTMLElement ? at : at.parentElement
         return element?.closest<HTMLElement>('.cm-chip') ?? null
+      },
+      leftOf: (pos) => {
+        const editor = view.current
+        if (!editor) return null
+        return editor.coordsAtPos(Math.min(pos, editor.state.doc.length), 1)?.left ?? null
       },
     }),
     [],
