@@ -109,6 +109,7 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   },
   approvals: {
     description: 'A command of two steps, then an edit with its diff, each asking first',
+    hint: 'single',
   },
   report: { description: 'Short Chinese notes between runs of work, then a report' },
   tables: {

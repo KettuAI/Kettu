@@ -418,10 +418,16 @@ const DAY_KEY_AFTER = `export function dayKey(ts: number) {
 `
 
 const approvals: Scenario = async (turn) => {
-  if (!(await stream(turn, 'The cache is stale, so I will clear it and start the dev server.\n\n')))
-    return 'cancelled'
+  // `/approvals single` asks for one plain command and stops there.
+  const single = turn.text.trim() === 'single'
+  const intro = single
+    ? 'I will run the usage tests to check the fix.\n\n'
+    : 'The cache is stale, so I will clear it and start the dev server.\n\n'
+  if (!(await stream(turn, intro))) return 'cancelled'
   const commandId = `cmd-${turn.id}`
-  const command = 'rm -rf node_modules/.vite && pnpm dev --port 5173'
+  const command = single
+    ? 'pnpm vitest run src/usage'
+    : 'rm -rf node_modules/.vite && pnpm dev --port 5173'
   await turn.send({
     sessionUpdate: 'tool_call',
     toolCallId: commandId,
@@ -432,10 +438,20 @@ const approvals: Scenario = async (turn) => {
   })
   const ran = await turn.requestPermission(
     { toolCallId: commandId, title: `Run ${command}`, kind: 'execute', rawInput: { command } },
-    COMMAND_OPTIONS,
+    single
+      ? COMMAND_OPTIONS.map((option) =>
+          option.kind === 'allow_always'
+            ? { ...option, name: 'Always allow `pnpm vitest` in this project' }
+            : option,
+        )
+      : COMMAND_OPTIONS,
   )
   if (ran === 'cancelled') return 'cancelled'
   await runCommand(turn, commandId, command, ran)
+  if (single) {
+    await stream(turn, `Answer: \`${ran}\`.`)
+    return 'end_turn'
+  }
   const editId = `edit-${turn.id}`
   const path = filePath(turn, 'src/usage/usage-store.ts')
   await turn.send({
