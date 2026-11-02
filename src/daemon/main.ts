@@ -60,6 +60,15 @@ const NOT_RUNNING = 3
 const out = (text: string): void => void process.stdout.write(text)
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
+/** The login name; none where the uid has no passwd entry, as in some containers. */
+function systemUser(): string | undefined {
+  try {
+    return os.userInfo().username
+  } catch {
+    return undefined
+  }
+}
+
 function runTool(command: string, args: string[]): Promise<CommandResult> {
   return new Promise((resolve) => {
     execFile(command, args, { timeout: 30_000 }, (error, stdout, stderr) => {
@@ -262,6 +271,7 @@ async function account(kind: 'login' | 'logout', data: string): Promise<number> 
           os: await nodeSystemReleaseForRun(),
           arch: process.arch,
           version,
+          user: systemUser(),
         }),
       write: out,
       error: (message: string) => void process.stderr.write(`kettu: ${message}\n`),
