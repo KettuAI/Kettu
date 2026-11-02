@@ -1,12 +1,14 @@
-// The Routines page: every routine as a timetable, on and off, led by its next run or its state.
+// The Routines page: every routine as a row of a table, with its schedule, agent and last run.
 
 import { useEffect, useId, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
 import {
   CalendarClockIcon,
-  ChartNoAxesColumnIcon,
+  CalendarIcon,
+  CheckIcon,
   CircleAlertIcon,
+  PauseIcon,
   PlusIcon,
-  PowerIcon,
+  XIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
@@ -36,36 +38,41 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Switch } from '@renderer/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { TopBar } from '@renderer/features/shell/top-bar'
-import { basename } from '@renderer/lib/format'
+import { CornerControls } from '@renderer/features/shell/top-bar'
+import { basename, longAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
+import { hasBand } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { openRoutine } from '@renderer/stores/view'
+import { openRoutine, useViewStore } from '@renderer/stores/view'
 import { openActiveRun } from './actions'
 import { DeleteRoutineDialog } from './delete-routine-dialog'
-import { HEADING, ROW_SLOT } from './fields'
 import {
-  agentPauses,
-  clockTime,
-  failedRun,
+  lastRunCell,
+  nextRunText,
   offRoutines,
   onRoutines,
   pauseNotice,
-  resumeText,
   routineProject,
-  routineState,
-  rowDay,
+  rowDescription,
+  runDay,
+  runStatus,
   scheduleWords,
   sinceTime,
-  type RoutinePause,
 } from './model'
 import { RoutineMenuItems } from './routine-menu'
 import { RunAnnouncements } from './run-history'
+
+/** The table's columns: routine, schedule, agent, last run and the switch; two of them narrow. */
+const COLUMNS =
+  'grid grid-cols-[minmax(0,2.4fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_44px] items-center gap-4 px-3 @max-[36rem]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_44px]'
+
+/** The columns that give way in a narrow sheet, the schedule staying under the name. */
+const WIDE_ONLY = '@max-[36rem]:hidden'
 
 export default function RoutinesPage() {
   const { t } = useTranslation('routines')
@@ -86,10 +93,8 @@ export default function RoutinesPage() {
     if (!useRoutinesStore.getState().loaded) void useRoutinesStore.getState().load()
   }, [])
 
-  const on = useMemo(() => onRoutines(routines), [routines])
-  const off = useMemo(() => offRoutines(routines), [routines])
-  const all = useMemo(() => [...on, ...off], [on, off])
-  const pauses = useMemo(() => agentPauses(routines), [routines])
+  // On first, those that need the user leading, then Off, which the rows' dimming tells apart.
+  const all = useMemo(() => [...onRoutines(routines), ...offRoutines(routines)], [routines])
   const tabStop = active && all.some((routine) => routine.id === active) ? active : all[0]?.id
   // With nothing to list, the empty state holds the one New routine; with a notice, the header.
   const empty = loaded && all.length === 0 && !problem && !loadError
@@ -112,9 +117,7 @@ export default function RoutinesPage() {
       .catch((failure: unknown) => setError(errorMessage(failure)))
   }
 
-  const notices: ReactNode[] = pauses.map((pause) => (
-    <PauseNotice key={pause.agentId} pause={pause} />
-  ))
+  const notices: ReactNode[] = []
   if (problem) {
     notices.push(
       <Alert key="problem" variant="error">
@@ -157,7 +160,7 @@ export default function RoutinesPage() {
 
   let body: ReactNode = null
   if (!loaded) {
-    body = <LoadingGroup />
+    body = <LoadingTable />
   } else if (empty) {
     body = (
       <Empty className="py-16">
@@ -178,47 +181,43 @@ export default function RoutinesPage() {
     )
   } else if (all.length > 0) {
     body = (
-      <div className="flex flex-col gap-9" onKeyDown={moveRowFocus}>
-        {on.length > 0 && (
-          <RoutineGroup
-            label={t('page.on')}
-            routines={on}
-            tabStop={tabStop}
-            onFocus={setActive}
-            onRunNow={runNow}
-            onDelete={setDeleting}
-            onError={setError}
-          />
-        )}
-        {off.length > 0 && (
-          <RoutineGroup
-            label={t('page.off')}
-            routines={off}
-            tabStop={tabStop}
-            onFocus={setActive}
-            onRunNow={runNow}
-            onDelete={setDeleting}
-            onError={setError}
-          />
-        )}
+      <div role="table" aria-label={t('page.title')} className="@container flex flex-col">
+        <ColumnHeads />
+        <div role="rowgroup" onKeyDown={moveRowFocus} className="flex flex-col">
+          {all.map((routine) => (
+            <RoutineRow
+              key={routine.id}
+              routine={routine}
+              tabbable={routine.id === tabStop}
+              onFocus={() => setActive(routine.id)}
+              onRunNow={() => runNow(routine)}
+              onDelete={() => setDeleting(routine.id)}
+              onError={setError}
+            />
+          ))}
+        </div>
+        <div className="h-px bg-border-subtle" />
       </div>
     )
   }
 
   return (
     <div className="flex h-full flex-col">
-      <TopBar className="shadow-none">{null}</TopBar>
+      <PageStrip />
       <div className="min-h-0 flex-1 scroll-fade-y overflow-y-auto [scrollbar-gutter:stable]">
         {/* Block flow, so a notice's margin and the foot's meet as one gap. */}
-        <div className="mx-auto w-full max-w-210 px-10 pb-20">
+        <div className="mx-auto w-full max-w-270 px-9 pb-10">
           <RunAnnouncements />
-          <header className="mb-7 flex items-start gap-4">
+          <header className="mb-6 flex items-start gap-4">
             <div className="min-w-0 flex-1">
               <h1 className="font-display text-title font-bold">{t('page.title')}</h1>
-              <p className="mt-1 max-w-100 text-small text-tertiary">{t('page.description')}</p>
+              <p className="mt-1.5 text-row text-tertiary">{t('page.description')}</p>
             </div>
             {!empty && (
-              <Button size="sm" className="mt-0.5" onClick={() => openRoutine(null)}>
+              <Button
+                onClick={() => openRoutine(null)}
+                className="h-8.5 gap-1.5 pr-3.5 pl-2.5 text-row"
+              >
                 <PlusIcon data-icon="inline-start" />
                 {t('page.new')}
               </Button>
@@ -226,14 +225,20 @@ export default function RoutinesPage() {
           </header>
           {notices.length > 0 && <div className="mb-5.5 flex flex-col gap-2">{notices}</div>}
           {body}
-          {loaded && !openAtLogin && (
-            <div className="mt-7 flex items-center gap-2 rounded-code bg-subtle px-3.5 py-3 text-small text-secondary">
-              <PowerIcon aria-hidden className="size-3.5 shrink-0 text-icon" />
-              <p className="min-w-0 flex-1">{t('page.openAtLogin')}</p>
-              <Button variant="quiet" size="sm" onClick={enableOpenAtLogin}>
-                {t('page.openAtLoginAction')}
-              </Button>
-            </div>
+          {loaded && (
+            <p className={cn('mt-4 text-control text-tertiary', !empty && 'mx-3')}>
+              {t('page.footnote')}
+              {!openAtLogin && (
+                <Button
+                  variant="link"
+                  size="xs"
+                  onClick={enableOpenAtLogin}
+                  className="ml-1 h-auto px-0 align-baseline text-control text-secondary"
+                >
+                  {t('page.openAtLoginAction')}
+                </Button>
+              )}
+            </p>
           )}
         </div>
       </div>
@@ -250,59 +255,40 @@ export default function RoutinesPage() {
   )
 }
 
-/** An agent's routines paused at a plan limit: the window, its use and when they resume. */
-function PauseNotice({ pause }: { pause: RoutinePause }) {
-  const { t } = useTranslation('routines')
-  const now = useNow()
+/**
+ * The strip of sheet above the page, which drags the window. On macOS with the sidebar collapsed
+ * it is a top bar's height, beside the traffic lights, and holds the sidebar toggle.
+ */
+function PageStrip() {
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && !hasBand
   return (
-    <Alert variant="info">
-      <ChartNoAxesColumnIcon />
-      <AlertTitle>{t('pause.title', { agent: agentName(pause.agentId) })}</AlertTitle>
-      <AlertDescription>{pauseNotice(pause, now)}</AlertDescription>
-    </Alert>
+    <div
+      className={cn(
+        'app-region-drag flex shrink-0 items-center',
+        cornered ? 'h-top-bar pl-(--corner-inset)' : 'h-8',
+      )}
+    >
+      {cornered && <CornerControls className="-ml-1" />}
+    </div>
   )
 }
 
-/** A row: its fill reaches 8 px past the column on each side, as a hovered row's does. */
-const ROW = 'relative -mx-2 flex min-h-16 items-center gap-3.5 rounded-lg px-2 py-2.5'
-
-function RoutineGroup({
-  label,
-  routines,
-  tabStop,
-  onFocus,
-  onRunNow,
-  onDelete,
-  onError,
-}: {
-  label: string
-  routines: RoutineView[]
-  tabStop: string | undefined
-  onFocus: (id: string) => void
-  onRunNow: (routine: RoutineView) => void
-  onDelete: (routineId: string) => void
-  onError: (message: string) => void
-}) {
+function ColumnHeads() {
+  const { t } = useTranslation('routines')
   return (
-    <section aria-label={label} className="flex flex-col">
-      <div className={HEADING}>
-        <h2 className="font-heading text-heading font-medium">{label}</h2>
-        <span className="text-xs text-tertiary tabular">{routines.length}</span>
-      </div>
-      <ul className="flex flex-col">
-        {routines.map((routine) => (
-          <RoutineRow
-            key={routine.id}
-            routine={routine}
-            tabbable={routine.id === tabStop}
-            onFocus={() => onFocus(routine.id)}
-            onRunNow={() => onRunNow(routine)}
-            onDelete={() => onDelete(routine.id)}
-            onError={onError}
-          />
-        ))}
-      </ul>
-    </section>
+    <div role="row" className={cn(COLUMNS, 'h-8 text-small font-medium text-tertiary')}>
+      <span role="columnheader">{t('page.columns.routine')}</span>
+      <span role="columnheader" className={WIDE_ONLY}>
+        {t('page.columns.schedule')}
+      </span>
+      <span role="columnheader" className={WIDE_ONLY}>
+        {t('page.columns.agent')}
+      </span>
+      <span role="columnheader">{t('page.columns.lastRun')}</span>
+      <span role="columnheader">
+        <span className="sr-only">{t('page.columns.on')}</span>
+      </span>
+    </div>
   )
 }
 
@@ -323,15 +309,16 @@ function RoutineRow({
 }) {
   const { t } = useTranslation('routines')
   const projects = useProjectsStore((s) => s.projects)
-  const now = useNow()
   const id = useId()
   const [moreOpen, setMoreOpen] = useState(false)
   const [contextOpen, setContextOpen] = useState(false)
   const project = routineProject(routine, projects)
-  const failed = failedRun(routine.lastRun)
   const off = !routine.enabled
-  const waiting = routine.activeRun?.status === 'waiting' && !!routine.activeRun.sessionId
   const name = routine.name
+  const schedule = scheduleWords(routine.trigger.schedule)
+  const projectName =
+    project?.name ??
+    (routine.projectPath === null ? t('routine.noProject') : basename(routine.projectPath))
 
   const toggle = (enabled: boolean) => {
     useRoutinesStore
@@ -340,218 +327,267 @@ function RoutineRow({
       .catch((error: unknown) => onError(errorMessage(error)))
   }
 
-  const openRun = () => {
-    openActiveRun(routine).catch((error: unknown) => onError(errorMessage(error)))
-  }
-
   return (
-    <li className={ROW_SLOT}>
-      <ContextMenu onOpenChange={setContextOpen}>
-        <div className={ROW}>
-          <ContextMenuTrigger
-            render={
-              <button
-                type="button"
-                data-routine-row=""
-                data-held={moreOpen || contextOpen || undefined}
-                tabIndex={tabbable ? 0 : -1}
-                aria-label={t('page.open', { name })}
-                aria-describedby={`${id}-when ${id}-line`}
-                onClick={() => openRoutine(routine.id)}
-                onFocus={onFocus}
-                onKeyDown={(event) => {
-                  // The context menu key opens the row's menu, for the keyboard.
-                  if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
-                    event.preventDefault()
-                    setMoreOpen(true)
-                  } else if (event.key === 'Enter' || event.key === ' ') {
-                    // The trigger takes the key before the button activates itself.
-                    event.preventDefault()
-                    openRoutine(routine.id)
-                  }
-                }}
-                className="absolute inset-0 rounded-lg transition-colors duration-(--duration-fast) outline-none focus-ring hover:bg-hover data-held:bg-hover"
-              />
-            }
-          />
-          <RowWhen id={`${id}-when`} routine={routine} now={now} />
-          <span
-            aria-hidden
-            className="pointer-events-none relative grid size-7.5 shrink-0 place-items-center rounded-lg bg-tile"
-          >
-            <AgentMark agent={routine.agentId} size={15} className={cn(off && 'opacity-60')} />
-          </span>
-          <span className="pointer-events-none relative flex min-w-0 flex-1 flex-col">
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span
-                className={cn(
-                  'truncate text-ui font-medium',
-                  off ? 'text-secondary' : 'text-primary',
-                )}
-              >
-                {name}
-              </span>
-              {failed && <FailedMark />}
-            </span>
-            <span id={`${id}-line`} className="mt-px truncate text-xs text-secondary">
-              {scheduleWords(routine.trigger.schedule)} ·{' '}
-              {project?.name ??
-                (routine.projectPath === null
-                  ? t('routine.noProject')
-                  : basename(routine.projectPath))}
-            </span>
-          </span>
-          {waiting && (
-            <Button
-              variant="outline"
-              size="xs"
+    <ContextMenu onOpenChange={setContextOpen}>
+      <div
+        role="row"
+        className={cn(
+          COLUMNS,
+          'relative min-h-16 shadow-[inset_0_1px_0_var(--border-subtle)]',
+          off && '*:data-dims:opacity-60',
+        )}
+      >
+        <ContextMenuTrigger
+          render={
+            <button
+              type="button"
+              data-routine-row=""
+              data-held={moreOpen || contextOpen || undefined}
               tabIndex={tabbable ? 0 : -1}
-              onClick={openRun}
-              className="relative"
-            >
-              {t('routine.openRun')}
-            </Button>
+              aria-label={t('page.open', { name })}
+              aria-describedby={`${id}-line ${id}-last`}
+              onClick={() => openRoutine(routine.id)}
+              onFocus={onFocus}
+              onKeyDown={(event) => {
+                // The context menu key opens the row's menu, for the keyboard.
+                if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                  event.preventDefault()
+                  setMoreOpen(true)
+                } else if (event.key === 'Enter' || event.key === ' ') {
+                  // The trigger takes the key before the button activates itself.
+                  event.preventDefault()
+                  openRoutine(routine.id)
+                }
+              }}
+              className="absolute inset-0 rounded-lg transition-colors duration-(--duration-fast) outline-none focus-ring hover:bg-hover data-held:bg-hover"
+            />
+          }
+        />
+        <span
+          role="cell"
+          data-dims=""
+          className="pointer-events-none relative flex min-w-0 flex-col gap-0.75 py-2.5"
+        >
+          <span className="truncate text-row font-medium text-primary">{name}</span>
+          <span id={`${id}-line`} className="truncate text-control text-tertiary">
+            <span className="hidden @max-[36rem]:inline">{schedule} · </span>
+            {rowDescription(routine, projectName)}
+          </span>
+        </span>
+        <span
+          role="cell"
+          data-dims=""
+          className={cn(
+            'pointer-events-none relative truncate text-[13.5px] text-secondary',
+            WIDE_ONLY,
           )}
+        >
+          {schedule}
+        </span>
+        <span
+          role="cell"
+          data-dims=""
+          className={cn(
+            'pointer-events-none relative flex min-w-0 items-center gap-2 text-[13.5px] text-secondary',
+            WIDE_ONLY,
+          )}
+        >
+          <AgentMark agent={routine.agentId} size={16} />
+          <span className="truncate">{agentName(routine.agentId)}</span>
+        </span>
+        <span role="cell" data-dims="" id={`${id}-last`} className="relative min-w-0">
+          <LastRun routine={routine} tabbable={tabbable} onError={onError} />
+        </span>
+        <span role="cell" data-dims="" className="relative flex justify-end">
           <Switch
             checked={routine.enabled}
             onCheckedChange={toggle}
             tabIndex={tabbable ? 0 : -1}
             aria-label={t(routine.enabled ? 'page.switchOff' : 'page.switchOn', { name })}
-            className="relative"
           />
-          <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
-            <DropdownMenuTrigger
-              render={
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  aria-hidden
-                  className="absolute right-2 bottom-2 size-0"
-                />
-              }
-            />
-            <DropdownMenuContent align="end" side="bottom">
-              <RoutineMenuItems
-                routine={routine}
-                onRunNow={onRunNow}
-                onDelete={onDelete}
-                onError={onError}
+        </span>
+        <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-hidden
+                className="absolute right-3 bottom-2 size-0"
               />
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <ContextMenuContent side="bottom" align="start">
-          <RoutineMenuItems
-            routine={routine}
-            onRunNow={onRunNow}
-            onDelete={onDelete}
-            onError={onError}
+            }
           />
-        </ContextMenuContent>
-      </ContextMenu>
-    </li>
-  )
-}
-
-/** The error mark after a routine's name, named by its tooltip. */
-function FailedMark() {
-  const { t } = useTranslation('routines')
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <span
-            role="img"
-            aria-label={t('page.lastFailed')}
-            className="pointer-events-auto inline-flex shrink-0 text-danger"
-          />
-        }
-      >
-        <CircleAlertIcon className="size-3" />
-      </TooltipTrigger>
-      <TooltipContent>{t('page.lastFailed')}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-/** What leads a row: its next run's time and day, or its state when that matters more. */
-function RowWhen({ id, routine, now }: { id: string; routine: RoutineView; now: number }) {
-  const { t } = useTranslation('routines')
-  const state = routineState(routine)
-  let first: ReactNode
-  let second: string | null = null
-  switch (state.kind) {
-    case 'waiting':
-      first = (
-        <span className="flex items-center gap-1.5 text-ui leading-5.5 font-medium text-attention">
-          <span aria-hidden className="size-2 shrink-0 rounded-full bg-attention-dot" />
-          {t('row.waiting')}
-        </span>
-      )
-      if (state.since !== null) second = t('row.since', { time: sinceTime(state.since, now) })
-      break
-    case 'running':
-      first = (
-        <span
-          className={cn(
-            'flex items-center gap-1.5 text-ui leading-5.5 font-medium',
-            // Starting is the app's own wait, so it keeps a neutral spinner.
-            state.status === 'running' ? 'text-info' : 'text-secondary',
-          )}
-        >
-          <Spinner aria-hidden className="size-3" />
-          {t(state.status === 'starting' ? 'state.starting' : 'state.running')}
-        </span>
-      )
-      if (state.since !== null) second = t('row.since', { time: sinceTime(state.since, now) })
-      break
-    case 'next':
-      first = (
-        <span className="font-heading text-subheading font-medium tracking-normal lining-nums tabular-nums">
-          {clockTime(state.at)}
-        </span>
-      )
-      second = rowDay(state.at, now)
-      break
-    default:
-      first = <span className="text-ui leading-5.5 text-tertiary">{t(`state.${state.kind}`)}</span>
-      if (state.kind === 'paused') second = resumeText(state.pause, now)
-  }
-  return (
-    <span id={id} className="pointer-events-none relative flex w-28 shrink-0 flex-col">
-      {first}
-      {second && <span className="truncate text-xs text-tertiary">{second}</span>}
-    </span>
-  )
-}
-
-/** Skeleton rows at the rows' sizes, under a heading's. */
-function LoadingGroup() {
-  return (
-    <div aria-hidden className="flex flex-col">
-      <div className={cn(HEADING, 'items-start pt-1.5')}>
-        <Skeleton className="h-3.5 w-7" />
+          <DropdownMenuContent align="end" side="bottom">
+            <RoutineMenuItems
+              routine={routine}
+              onRunNow={onRunNow}
+              onDelete={onDelete}
+              onError={onError}
+            />
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+      <ContextMenuContent side="bottom" align="start">
+        <RoutineMenuItems
+          routine={routine}
+          onRunNow={onRunNow}
+          onDelete={onDelete}
+          onError={onError}
+        />
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
+const CELL_ICON = 'size-3.5 shrink-0'
+
+/** The Last run cell: a run at work or waiting, a pause, how the last run ended, or the next. */
+function LastRun({
+  routine,
+  tabbable,
+  onError,
+}: {
+  routine: RoutineView
+  tabbable: boolean
+  onError: (message: string) => void
+}) {
+  const { t } = useTranslation('routines')
+  const now = useNow()
+  const cell = lastRunCell(routine)
+  const line = 'pointer-events-none flex min-w-0 items-center gap-1.5 text-control'
+  switch (cell.kind) {
+    case 'waiting': {
+      const openRun = () => {
+        openActiveRun(routine).catch((error: unknown) => onError(errorMessage(error)))
+      }
+      return (
+        <span className="flex min-w-0 items-center gap-2">
+          <span className={cn(line, 'text-attention')}>
+            <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-attention-dot" />
+            <span className="truncate">
+              {cell.since === null
+                ? t('state.waiting')
+                : t('row.waitingSince', { time: sinceTime(cell.since, now) })}
+            </span>
+          </span>
+          {routine.activeRun?.sessionId && (
+            <Button
+              variant="outline"
+              size="xs"
+              tabIndex={tabbable ? 0 : -1}
+              onClick={openRun}
+              className="shrink-0"
+            >
+              {t('routine.openRun')}
+            </Button>
+          )}
+        </span>
+      )
+    }
+    case 'running':
+      return (
+        <span className={cn(line, 'text-secondary')}>
+          <Spinner aria-hidden className="size-3 shrink-0" />
+          <span className="truncate">
+            {cell.status === 'starting'
+              ? t('state.starting')
+              : cell.since === null
+                ? t('state.running')
+                : t('state.runningSince', { time: sinceTime(cell.since, now) })}
+          </span>
+        </span>
+      )
+    case 'queued':
+      return <span className={cn(line, 'text-tertiary')}>{t('state.queued')}</span>
+    case 'paused': {
+      const text = t(cell.pause?.usedPercent === null ? 'row.pausedReached' : 'row.pausedNear')
+      return (
+        <Tooltip>
+          <TooltipTrigger
+            render={<span className={cn(line, 'pointer-events-auto w-fit text-warning')} />}
+          >
+            <PauseIcon aria-hidden className={CELL_ICON} />
+            <span className="truncate">{text}</span>
+          </TooltipTrigger>
+          {cell.pause && (
+            <TooltipContent className="max-w-80">{pauseNotice(cell.pause, now)}</TooltipContent>
+          )}
+        </Tooltip>
+      )
+    }
+    case 'failed':
+      return (
+        <Tooltip>
+          <TooltipTrigger
+            render={<span className={cn(line, 'pointer-events-auto w-fit text-danger')} />}
+          >
+            <XIcon aria-hidden strokeWidth={1.75} className="size-3.25 shrink-0" />
+            <span className="truncate">
+              {cell.at === null ? t('run.failed') : t('row.failed', { ago: longAgo(cell.at, now) })}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-80">{runStatus(cell.run)}</TooltipContent>
+        </Tooltip>
+      )
+    case 'succeeded':
+      return (
+        <span className={cn(line, 'text-secondary')}>
+          <CheckIcon aria-hidden strokeWidth={1.75} className={cn(CELL_ICON, 'text-success')} />
+          <span className="truncate">
+            {cell.at === null ? t('run.succeeded') : runDay(cell.at, now)}
+          </span>
+        </span>
+      )
+    case 'ended':
+      return (
+        <span className={cn(line, 'text-tertiary')}>
+          <span className="truncate">
+            {cell.at === null
+              ? t(`row.${cell.status}`)
+              : t(`row.${cell.status}At`, { when: runDay(cell.at, now) })}
+          </span>
+        </span>
+      )
+    case 'next':
+      return (
+        <span className={cn(line, 'text-tertiary')}>
+          <CalendarIcon aria-hidden className={CELL_ICON} />
+          <span className="truncate">{nextRunText(cell.at, now)}</span>
+        </span>
+      )
+    case 'done':
+      return <span className={cn(line, 'text-tertiary')}>{t('state.done')}</span>
+    case 'never':
+      return <span className={cn(line, 'text-tertiary')}>{t('row.never')}</span>
+  }
+}
+
+/** Skeleton rows at the rows' sizes, under the column heads. */
+function LoadingTable() {
+  return (
+    <div aria-hidden className="@container flex flex-col">
+      <ColumnHeads />
       {[0, 1, 2].map((i) => (
-        <div key={i} className={ROW_SLOT}>
-          <div className={ROW}>
-            <span className="flex w-28 shrink-0 flex-col gap-1.5">
-              <Skeleton className="h-3.5 w-16" />
-              <Skeleton className="h-2.5 w-11" />
-            </span>
-            <Skeleton className="size-7.5 shrink-0 rounded-lg" />
-            <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-              <Skeleton className="h-3 w-2/5" />
-              <Skeleton className="h-2.5 w-1/4" />
-            </span>
-          </div>
+        <div
+          key={i}
+          className={cn(COLUMNS, 'min-h-16 shadow-[inset_0_1px_0_var(--border-subtle)]')}
+        >
+          <span className="flex flex-col gap-2">
+            <Skeleton className="h-3.5 w-2/5" />
+            <Skeleton className="h-3 w-3/5" />
+          </span>
+          <Skeleton className={cn('h-3 w-3/5', WIDE_ONLY)} />
+          <Skeleton className={cn('h-3 w-1/2', WIDE_ONLY)} />
+          <Skeleton className="h-3 w-1/2" />
+          <span />
         </div>
       ))}
+      <div className="h-px bg-border-subtle" />
     </div>
   )
 }
 
-/** The list is one Tab stop; the arrow keys move between its rows. */
+/** The table is one Tab stop; the arrow keys move between its rows. */
 function moveRowFocus(event: KeyboardEvent<HTMLDivElement>): void {
   const target = event.target
   if (!(target instanceof HTMLElement) || !target.hasAttribute('data-routine-row')) return

@@ -10,7 +10,6 @@ import {
   type RoutineView,
   type Schedule,
 } from '@shared/routines'
-import type { AgentId } from '@shared/thread'
 import { startConfig, startValues } from '@renderer/features/session/new-session/start-options'
 import { duration, limitLabel } from '@renderer/lib/format'
 import { currentLocale, i18n } from '@renderer/lib/i18n'
@@ -110,14 +109,6 @@ export function runDay(at: number, now = Date.now()): string {
   if (days === 1) return i18n.t('routines:when.tomorrow', { time })
   if (days === -1) return i18n.t('routines:when.yesterday', { time })
   return i18n.t('routines:when.date', { date: dayDate(at, now), time })
-}
-
-/** Under a row's time: today and how soon, "Tomorrow", or the day, "Fri, Oct 30". */
-export function rowDay(at: number, now = Date.now()): string {
-  const days = dayDelta(at, now)
-  if (days === 0) return i18n.t('routines:row.today', { away: untilTime(at, now) })
-  if (days === 1) return i18n.t('routines:row.tomorrow')
-  return dayDate(at, now)
 }
 
 /** When something began: the time today, else its day and time. */
@@ -280,6 +271,54 @@ export function routineState(routine: RoutineView): RoutineState {
   return { kind: 'on' }
 }
 
+/** What a row's Last run column shows: its run at work, a pause, its last run, or its next. */
+export type LastRunCell =
+  | Extract<RoutineState, { kind: 'waiting' | 'running' | 'queued' | 'paused' }>
+  | { kind: 'failed'; at: number | null; run: RoutineRun }
+  | { kind: 'succeeded'; at: number | null }
+  | { kind: 'ended'; status: 'cancelled' | 'interrupted' | 'skipped'; at: number | null }
+  | { kind: 'next'; at: number }
+  | { kind: 'done' }
+  | { kind: 'never' }
+
+export function lastRunCell(routine: RoutineView): LastRunCell {
+  const state = routineState(routine)
+  if (
+    state.kind === 'waiting' ||
+    state.kind === 'running' ||
+    state.kind === 'queued' ||
+    state.kind === 'paused'
+  ) {
+    return state
+  }
+  const last = routine.lastRun
+  if (last) {
+    const at = last.endedAt ?? last.startedAt ?? last.scheduledFor
+    if (FAILED_RUN_STATUSES.includes(last.status)) return { kind: 'failed', at, run: last }
+    if (last.status === 'succeeded') return { kind: 'succeeded', at }
+    if (last.status === 'cancelled' || last.status === 'interrupted' || last.status === 'skipped') {
+      return { kind: 'ended', status: last.status, at }
+    }
+  }
+  if (state.kind === 'next') return state
+  return state.kind === 'done' ? { kind: 'done' } : { kind: 'never' }
+}
+
+/** "Next run today, 9:00 AM", "Next run tomorrow, 9:00 AM", "Next run Fri, 9:00 AM". */
+export function nextRunText(at: number, now = Date.now()): string {
+  const days = dayDelta(at, now)
+  const time = format().clock.format(at)
+  if (days === 0) return i18n.t('routines:row.nextToday', { time })
+  if (days === 1) return i18n.t('routines:row.nextTomorrow', { time })
+  return i18n.t('routines:row.next', { when: dayTime(at, now) })
+}
+
+/** Under a routine's name: its prompt's first line, or its project when the name is that line. */
+export function rowDescription(routine: RoutineView, project: string): string {
+  const line = firstLine(routine.prompt)
+  return line && line !== routine.name ? line : project
+}
+
 /** A routine's state as a sentence, for its page under the name. */
 export function stateText(routine: RoutineView, now = Date.now()): string {
   const state = routineState(routine)
@@ -344,16 +383,6 @@ function pauseReason(pause: RoutinePause): string {
   return pause.usedPercent === null
     ? i18n.t('routines:pause.reached', { agent, limit })
     : i18n.t('routines:pause.used', { agent, limit, percent: Math.round(pause.usedPercent) })
-}
-
-/** The paused agents among the routines, each with its pause, for the Routines page's notices. */
-export function agentPauses(routines: RoutineView[]): RoutinePause[] {
-  const pauses = new Map<AgentId, RoutinePause>()
-  for (const routine of routines) {
-    const pause = routine.state === 'paused' ? routine.pause : null
-    if (pause && !pauses.has(pause.agentId)) pauses.set(pause.agentId, pause)
-  }
-  return [...pauses.values()]
 }
 
 /** A pause's notice: the window, its use, and when the routines resume. */

@@ -1,10 +1,8 @@
 {
   "page": {
     "title": "例程",
-    "description": "在 Kettu 打开时按计划运行提示词，每次运行都在一个可以之后打开的会话里。",
+    "description": "按计划运行的 Agent 任务，只在你给的权限内行事。",
     "new": "新建例程",
-    "on": "开启",
-    "off": "关闭",
     "emptyTitle": "还没有例程",
     "emptyDescription": "例程在 Kettu 打开时按计划把提示词发给 Agent，每次运行都在一个单独的会话里。",
     "unreadableTitle": "无法读取你的例程",
@@ -15,15 +13,31 @@
     "open": "打开 {{name}}",
     "switchOn": "开启 {{name}}",
     "switchOff": "关闭 {{name}}",
-    "lastFailed": "它上次运行失败",
-    "openAtLogin": "例程只在 Kettu 打开时运行。",
-    "openAtLoginAction": "登录时打开"
+    "openAtLoginAction": "登录时打开",
+    "columns": {
+      "routine": "例程",
+      "schedule": "计划",
+      "agent": "Agent",
+      "lastRun": "上次运行",
+      "on": "开关"
+    },
+    "footnote": "例程只在 Kettu 打开时运行。Agent 距离套餐限额不到 10% 时，例程会暂停。"
   },
   "row": {
-    "waiting": "等待批准",
-    "since": "{{time}} 起",
-    "today": "今天 · {{away}}",
-    "tomorrow": "明天"
+    "waitingSince": "{{time}} 起等待批准",
+    "pausedNear": "已暂停 · 接近套餐限额",
+    "pausedReached": "已暂停 · 已达套餐限额",
+    "failed": "{{ago}}失败",
+    "cancelled": "已取消",
+    "cancelledAt": "已取消 · {{when}}",
+    "interrupted": "已中断",
+    "interruptedAt": "已中断 · {{when}}",
+    "skipped": "已跳过",
+    "skippedAt": "已跳过 · {{when}}",
+    "next": "下次运行 {{when}}",
+    "nextToday": "下次运行 今天 {{time}}",
+    "nextTomorrow": "下次运行 明天 {{time}}",
+    "never": "尚未运行"
   },
   "signal": {
     "name": "例程，{{signal}}",
