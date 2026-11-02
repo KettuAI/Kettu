@@ -5,7 +5,7 @@ import type { SessionView, UserContent } from '@shared/thread'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { limitLabel, resetTime } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
-import { formatShortcut, isMod } from '@renderer/lib/platform'
+import { isMod } from '@renderer/lib/platform'
 import { usePane } from '@renderer/features/split/pane-context'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -145,20 +145,14 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     ? t('prompt.placeholder.starting', { agent: agentName })
     : awaiting
       ? t('prompt.placeholder.awaiting')
-      : running
-        ? t(steering ? 'prompt.placeholder.steer' : 'prompt.placeholder.queue', {
-            agent: agentName,
-            queue: formatShortcut(queueKey),
-            steer: formatShortcut(steerKey),
+      : !running && reached?.resetsAt
+        ? t('prompt.placeholder.limitReached', {
+            limit: limitLabel(reached),
+            time: resetTime(reached.resetsAt),
           })
-        : reached?.resetsAt
-          ? t('prompt.placeholder.limitReached', {
-              limit: limitLabel(reached),
-              time: resetTime(reached.resetsAt),
-            })
-          : rejected
-            ? t('prompt.placeholder.denied', { agent: agentName })
-            : t('prompt.placeholder.ask', { agent: agentName })
+        : !running && rejected
+          ? t('prompt.placeholder.denied', { agent: agentName })
+          : t('prompt.placeholder.ask', { agent: agentName })
 
   const compact = session.commands.some((c) => c.name === 'compact')
     ? () => {

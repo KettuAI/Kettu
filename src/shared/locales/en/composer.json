@@ -4,8 +4,6 @@
     "placeholder": {
       "starting": "Starting {{agent}}…",
       "awaiting": "Waiting for your approval",
-      "steer": "Reply to {{agent}}…   {{queue}} to queue, {{steer}} to steer",
-      "queue": "Reply to {{agent}}…   {{queue}} to queue",
       "limitReached": "{{limit}} limit reached · resets {{time}}",
       "ask": "Reply to {{agent}}…",
       "denied": "Tell {{agent}} what to do differently"
