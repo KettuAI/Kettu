@@ -101,6 +101,7 @@ export const SessionRow = memo(function SessionRow({
 
   const [deleting, setDeleting] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [cardOpen, setCardOpen] = useState(false)
   // The badge lists the sub-agents on its own hover, which the row's card leaves to it.
   const overBadge = useRef(false)
@@ -156,9 +157,9 @@ export const SessionRow = memo(function SessionRow({
       className={cn(
         // The row its menu acts on keeps a fox ring while the menu is open; rows chosen together
         // take a fox tint.
-        'gap-[9px] pr-2.5 text-row data-active:font-medium data-multi-selected:bg-[color-mix(in_srgb,var(--focus)_12%,transparent)] data-popup-open:shadow-[inset_0_0_0_1.5px_var(--focus)]',
+        'gap-[9px] pr-2.5 text-row data-active:font-medium data-multi-selected:bg-[color-mix(in_srgb,var(--focus)_12%,transparent)]',
         inSplit && 'bg-selected font-medium',
-        moreOpen && 'bg-hover shadow-[inset_0_0_0_1.5px_var(--focus)]',
+        (menuOpen || moreOpen) && 'bg-hover shadow-[inset_0_0_0_1.5px_var(--focus)]',
         away && 'text-tertiary',
       )}
       data-sidebar-row=""
@@ -269,7 +270,10 @@ export const SessionRow = memo(function SessionRow({
           </>
         ) : (
           <>
-            <ContextMenu onOpenChangeComplete={rename.menu.onOpenChangeComplete}>
+            <ContextMenu
+              onOpenChange={setMenuOpen}
+              onOpenChangeComplete={rename.menu.onOpenChangeComplete}
+            >
               {/* A trigger's render must take its props, so the card's Root wraps the menu trigger. */}
               <HoverCard
                 open={cardOpen}
