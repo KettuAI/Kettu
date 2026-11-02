@@ -32,6 +32,6 @@ describe('keyCaps', () => {
     expect(keyCaps('Enter')).toEqual(['↵'])
     expect(keyCaps('Ctrl+`')).toEqual(['⌃', '`'])
     expect(keyCaps('Mod+=')).toEqual(['⌘', '='])
-    expect(keyCaps('Mod+Shift+[')).toEqual(['⌘', '⇧', '['])
+    expect(keyCaps('Mod+Shift+[')).toEqual(['⇧', '⌘', '['])
   })
 })
