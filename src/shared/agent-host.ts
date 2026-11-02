@@ -804,11 +804,17 @@ export const HOST_METHODS = [
   'artifacts.unwatch',
 ] as const satisfies readonly HostMethod[]
 
+/** One that has a session in front: the host's own windows as one, or a paired device. */
+export type SessionViewer = { kind: 'host' } | { kind: 'device'; id: string; name: string }
+
 export type HostEvent =
   | { type: 'session.patches'; batch: PatchBatch }
   | { type: 'session.summary'; summary: SessionSummary }
   | { type: 'session.removed'; sessionId: string }
   | { type: 'session.returned'; sessionId: string | null }
+  // To a port that watches the session: the others that have it in front, never the port's own
+  // computer or device.
+  | { type: 'session.viewers'; sessionId: string; viewers: SessionViewer[] }
   | { type: 'agent.status'; status: AgentStatus }
   | { type: 'agent.removed'; agentId: AgentId }
   | { type: 'agent.options'; options: AgentOptions }

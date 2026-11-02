@@ -124,6 +124,10 @@
     "from": "From {{title}}",
     "fromParent": "From the parent session"
   },
+  "viewers": {
+    "more": "{{name}} +{{count}}",
+    "label": "Also open on {{names, list}}"
+  },
   "userEntry": {
     "from": "From {{title}}"
   },

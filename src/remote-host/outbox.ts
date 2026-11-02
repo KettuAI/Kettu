@@ -382,6 +382,8 @@ function stateKey(value: unknown): string | null {
       return idKey('session', fields.sessionId)
     case 'session.returned':
       return fields.sessionId === null ? 'returned' : idKey('returned', fields.sessionId)
+    case 'session.viewers':
+      return idKey('viewers', fields.sessionId)
     case 'agent.status':
       return idKey('agent', of('status').id)
     case 'agent.removed':

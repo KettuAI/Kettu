@@ -3518,6 +3518,60 @@ describe('streaming', () => {
   })
 })
 
+describe('who else has a session in front', () => {
+  const phone = { id: 'a'.repeat(32), name: 'Phone' }
+  const laptop = { id: 'b'.repeat(32), name: 'Laptop' }
+  const asViewer = (device: { id: string; name: string }) => ({ kind: 'device', ...device })
+
+  function viewers(port: TestPort, sessionId: string) {
+    for (let i = port.events.length - 1; i >= 0; i--) {
+      const event = port.events[i]!
+      if (event.type === 'session.viewers' && event.sessionId === sessionId) return event.viewers
+    }
+    return undefined
+  }
+
+  it("tells each watcher the others, the host's windows as one and never itself", async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    expect(viewers(port, sessionId)).toEqual([])
+    const window = t.connect()
+    const device = t.connect(phone)
+    const other = t.connect(laptop)
+
+    await device.open(sessionId)
+    expect(viewers(device, sessionId)).toEqual([{ kind: 'host' }])
+    expect(viewers(port, sessionId)).toEqual([asViewer(phone)])
+
+    // A second window counts once for the device, and a window is not told of the others.
+    await window.open(sessionId)
+    expect(viewers(window, sessionId)).toEqual([asViewer(phone)])
+    expect(viewers(device, sessionId)).toEqual([{ kind: 'host' }])
+
+    // One that watches without showing hears of those in front, and is not one of them.
+    await other.request('sessions.watch', { sessionId })
+    expect(viewers(other, sessionId)).toEqual([{ kind: 'host' }, asViewer(phone)])
+    expect(viewers(device, sessionId)).toEqual([{ kind: 'host' }])
+
+    await device.request('sessions.show', { sessionIds: [] })
+    expect(viewers(port, sessionId)).toEqual([])
+    expect(viewers(other, sessionId)).toEqual([{ kind: 'host' }])
+
+    port.disconnect()
+    window.disconnect()
+    expect(viewers(other, sessionId)).toEqual([])
+  })
+
+  it('names each device once, however many of its ports show the session', async () => {
+    const { t, port } = await setup()
+    const sessionId = await newSession(t, port)
+    await t.connect(phone).open(sessionId)
+    await t.connect(phone).open(sessionId)
+    await t.connect(laptop).open(sessionId)
+    expect(viewers(port, sessionId)).toEqual([asViewer(laptop), asViewer(phone)])
+  })
+})
+
 describe('unread and viewing', () => {
   it('marks a turn that ends out of view as unread, and showing clears it', async () => {
     const { t, port } = await setup()

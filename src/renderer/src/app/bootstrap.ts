@@ -40,6 +40,7 @@ import { initSharing } from '@renderer/stores/sharing'
 import { initTerminals } from '@renderer/stores/terminals'
 import { initThemes } from '@renderer/stores/themes'
 import { keepWatched, receiveBatch, rewatchAll } from '@renderer/stores/threads'
+import { forgetViewers, receiveViewers } from '@renderer/stores/viewers'
 import { initUpdates } from '@renderer/stores/updates'
 import {
   loadToday,
@@ -73,11 +74,15 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       else useSessionsStore.getState().upsert(event.summary)
       return
     case 'session.removed':
+      forgetViewers(event.sessionId)
       if (!preparedRemoved(event.sessionId)) sessionRemoved(event.sessionId)
       if (hostId !== null) forgetSessionHost(event.sessionId)
       return
     case 'session.returned':
       void takeReturnedMessages(event.sessionId, hostId)
+      return
+    case 'session.viewers':
+      receiveViewers(event.sessionId, event.viewers)
       return
     case 'projects.changed':
       useProjectsStore.getState().setAll(event.projects, hostId)

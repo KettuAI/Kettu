@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { CacheChip } from '@renderer/features/prompt-cache/cache-chip'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { HostChip } from './host-chip'
+import { ViewersChip } from './viewers-chip'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import {
   DeleteSessionDialog,
@@ -49,7 +50,7 @@ export function ParentLink({ parent }: { parent: SessionSummary }) {
 
 /**
  * The session's top bar: its title, which a click renames and which drags its pane, its menu, the
- * prompt cache's time left, and the project's git status.
+ * prompt cache's time left, who else has it in front, and the project's git status.
  */
 export function SessionHeader({
   summary,
@@ -160,6 +161,7 @@ export function SessionHeader({
           </DropdownMenuContent>
         </DropdownMenu>
         {session && <CacheChip session={session} />}
+        <ViewersChip sessionId={summary.id} projectPath={summary.projectPath} />
       </NoDrag>
       <span className="flex-1" />
       <HeaderTools projectPath={summary.projectPath} />
