@@ -27,12 +27,12 @@ const nothing = () => {}
 export function SubagentBadge({
   parent,
   subagents,
-  onHover,
+  onEnter,
 }: {
   parent: SessionSummary
   subagents: SessionSummary[]
-  /** Pointer over the badge, so the row's own card stays closed. */
-  onHover: (over: boolean) => void
+  /** The pointer came onto the badge, whose list takes the place of the row's own card. */
+  onEnter: () => void
 }) {
   const { t } = useTranslation('sidebar')
   const showFinished = useViewStore((s) => s.showFinishedSubagents)
@@ -50,12 +50,12 @@ export function SubagentBadge({
         delay={300}
         closeDelay={200}
         aria-label={label}
-        onPointerEnter={() => onHover(true)}
-        onPointerLeave={() => onHover(false)}
+        onPointerEnter={onEnter}
         render={
           // As an image, its label goes into the name of the row's button around it.
           <span
             role="img"
+            data-subagent-badge=""
             className="inline-flex h-[18px] shrink-0 items-center gap-1 rounded-full bg-subtle pr-[5px] pl-1 text-[11px] font-medium text-secondary tabular-nums shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] hover:bg-selected data-popup-open:bg-selected"
           />
         }

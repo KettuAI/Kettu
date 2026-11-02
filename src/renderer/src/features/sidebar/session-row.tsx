@@ -103,9 +103,6 @@ export const SessionRow = memo(function SessionRow({
   const [moreOpen, setMoreOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [cardOpen, setCardOpen] = useState(false)
-  // The badge lists the sub-agents on its own hover, which the row's card leaves to it.
-  const overBadge = useRef(false)
-  const [badgeHovered, setBadgeHovered] = useState(false)
   const row = useRef<HTMLDivElement>(null)
   const rename = useRenaming(() => row.current?.querySelector<HTMLElement>('[data-sidebar-row]'))
   const drag = useSessionDragSource(summary.id, rename.renaming)
@@ -201,11 +198,7 @@ export const SessionRow = memo(function SessionRow({
         <SubagentBadge
           parent={summary}
           subagents={node.subagents}
-          onHover={(over) => {
-            overBadge.current = over
-            setBadgeHovered(over)
-            if (over) setCardOpen(false)
-          }}
+          onEnter={() => setCardOpen(false)}
         />
       )}
       {summary.pr && <PrIcon state={summary.pr.state} className="size-[13px]!" />}
@@ -221,7 +214,7 @@ export const SessionRow = memo(function SessionRow({
       {showHost && hostName && (
         <span
           className={cn(
-            'max-w-24 shrink-0 truncate text-xs font-normal text-tertiary group-hover/session:opacity-0 group-has-focus-visible/session:opacity-0 group-data-over-badge/session:opacity-100!',
+            'max-w-24 shrink-0 truncate text-xs font-normal text-tertiary group-hover/session:opacity-0 group-has-focus-visible/session:opacity-0 group-has-[[data-subagent-badge]:hover]/session:opacity-100!',
             moreOpen && 'opacity-0',
           )}
         >
@@ -233,7 +226,7 @@ export const SessionRow = memo(function SessionRow({
           status={status}
           expiring={expiring}
           className={cn(
-            'group-hover/session:opacity-0 group-has-focus-visible/session:opacity-0 group-data-over-badge/session:opacity-100!',
+            'group-hover/session:opacity-0 group-has-focus-visible/session:opacity-0 group-has-[[data-subagent-badge]:hover]/session:opacity-100!',
             moreOpen && 'opacity-0',
           )}
         />
@@ -252,7 +245,7 @@ export const SessionRow = memo(function SessionRow({
 
   return (
     <SidebarMenuItem>
-      <div ref={row} data-over-badge={badgeHovered || undefined} className="group/session relative">
+      <div ref={row} className="group/session relative">
         {branch && <TreeLine last={branch === 'last'} />}
         {rename.renaming ? (
           <>
@@ -280,7 +273,10 @@ export const SessionRow = memo(function SessionRow({
               {/* A trigger's render must take its props, so the card's Root wraps the menu trigger. */}
               <HoverCard
                 open={cardOpen}
-                onOpenChange={(open) => setCardOpen(open && !overBadge.current)}
+                // The badge lists the sub-agents on its own hover, which the row's card leaves to it.
+                onOpenChange={(open) =>
+                  setCardOpen(open && !row.current?.querySelector('[data-subagent-badge]:hover'))
+                }
               >
                 <HoverCardTrigger
                   delay={600}
@@ -319,7 +315,7 @@ export const SessionRow = memo(function SessionRow({
                           type="button"
                           tabIndex={-1}
                           aria-label={t('row.moreFor', { title })}
-                          className="absolute top-1 right-1.5 grid size-6 place-items-center rounded-md bg-selected text-primary opacity-0 outline-none transition-opacity duration-(--duration-fast) group-hover/session:opacity-100 group-has-focus-visible/session:opacity-100 group-data-over-badge/session:opacity-0! data-popup-open:opacity-100 [&_svg]:size-[15px]"
+                          className="absolute top-1 right-1.5 grid size-6 place-items-center rounded-md bg-selected text-primary opacity-0 outline-none transition-opacity duration-(--duration-fast) group-hover/session:opacity-100 group-has-focus-visible/session:opacity-100 group-has-[[data-subagent-badge]:hover]/session:opacity-0! data-popup-open:opacity-100 [&_svg]:size-[15px]"
                         />
                       }
                     />
