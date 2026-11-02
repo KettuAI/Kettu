@@ -48,6 +48,7 @@ import {
   type ClosingReason,
   type DirectAddress,
   type Hello,
+  type HostRenamed,
   type Renamed,
   type TerminalAccess,
   type Welcome,
@@ -261,11 +262,11 @@ export class RemoteServer {
     }
   }
 
-  /** The name the next welcomes carry. */
+  /** The host's new name: the devices connected now hear it, and the next welcomes carry it. */
   setHostName(name: string): void {
-    if (name.length > 0 && name.length <= MAX_HOST_NAME) {
-      this.options.host = { ...this.options.host, name }
-    }
+    if (name.length === 0 || name.length > MAX_HOST_NAME || name === this.options.host.name) return
+    this.options.host = { ...this.options.host, name }
+    for (const session of this.sessions) session.hostRenamed(name)
   }
 
   /** Looks for devices not seen for 90 days now and then every hour, until the server stops. */
@@ -886,6 +887,10 @@ class DeviceSession {
   /** Something of the host its owner hears, beside the agent host's events. */
   adminEvent(event: HostAdminEvent): void {
     if (this.live && this.role === 'owner') this.send({ type: 'event', event })
+  }
+
+  hostRenamed(name: string): void {
+    if (this.live) this.send({ type: 'host.renamed', name } satisfies HostRenamed)
   }
 
   /** The device's name changed: its sessions hear the new one. */

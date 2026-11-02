@@ -145,12 +145,14 @@ describe('Outbox', () => {
   })
 
   it('drops the patches once too much waits, keeps the latest of each state and asks to resync', async () => {
-    const { box, json, events } = outbox({ queued: 5 })
+    const { box, json, events } = outbox({ queued: 7 })
     await json(summary('s', 'One'))
+    await json({ type: 'host.renamed', name: 'Desk' })
     await json(patches('s', 1))
     await json({ type: 'response', id: 1, result: 'kept' })
     await json(summary('t', 'Other'))
     await json(event('session.removed', { sessionId: 'u' }))
+    await json({ type: 'host.renamed', name: 'Studio' })
     await json(summary('s', 'Two'))
 
     const link = connection()
@@ -159,10 +161,11 @@ describe('Outbox', () => {
       { type: 'response', id: 1, result: 'kept' },
       summary('t', 'Other'),
       event('session.removed', { sessionId: 'u' }),
+      { type: 'host.renamed', name: 'Studio' },
       summary('s', 'Two'),
       { type: 'resync' },
     ])
-    expect(events.dropped).toBe(2)
+    expect(events.dropped).toBe(3)
     expect(events.overflowed).toBe(0)
   })
 
