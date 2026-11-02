@@ -20,7 +20,7 @@ import {
 } from '@shared/agent-host'
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { firstLine, outlineText } from '@shared/outline'
-import type { BrowserOriginAnswer } from '@shared/browser'
+import type { BrowserOriginAnswer, BrowserOriginDecision } from '@shared/browser'
 import type { BusyCounts, BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { PortDevice } from '@shared/remote/device'
@@ -339,6 +339,8 @@ interface Live {
   answered: Map<string, FromDevice | null>
   /** Each waiting new origin's entry, by `originKey`. */
   origins: Map<string, string>
+  /** Who answered the latest new origins, by entry id: a device, or null for a window. */
+  originsAnswered: Map<string, FromDevice | null>
   /** Who sent the latest turn: a window's or a device's port, and the device it serves. */
   sender: TurnSender | null
   failure: Failure | null
@@ -423,6 +425,21 @@ const ANSWERS_KEPT = 50
  */
 function originKey(owner: string, requestId: number): string {
   return `${owner}:${requestId}`
+}
+
+/** A new origin that waits for the user, and the first answer a window or device gave it. */
+interface OriginRequest {
+  sessionId: string
+  entryId: string
+  owner: string
+  requestId: number
+  answer: { decision: BrowserOriginDecision; device: FromDevice | null } | null
+}
+
+/** The page an answer to a new origin goes to: main's for '', else a desktop app's port. */
+export interface OriginTarget {
+  owner: string
+  requestId: number
 }
 
 /** The first line of the first text, cut to 60 characters: the title until the agent sends one. */
@@ -547,7 +564,7 @@ export class SessionManager {
   // Port id to the sessions it shows in front, every pane of a split view in view.
   private readonly shown = new Map<string, Set<string>>()
   /** Each waiting new origin's session and entry, by `originKey`. */
-  private readonly originRequests = new Map<string, { sessionId: string; entryId: string }>()
+  private readonly originRequests = new Map<string, OriginRequest>()
   private readonly missing = new Set<string>()
   private readonly lastSummaries = new Map<string, string>()
   /** `/context` reports running, by session id. */
@@ -904,7 +921,7 @@ export class SessionManager {
       after: agentEntryBefore(live.thread),
     }
     live.origins.set(key, entry.id)
-    this.originRequests.set(key, { sessionId, entryId: entry.id })
+    this.originRequests.set(key, { sessionId, entryId: entry.id, owner, requestId, answer: null })
     this.emit(live, [{ op: 'entry.add', entry }])
     this.touch(live.id)
     this.updateBadge()
@@ -916,8 +933,17 @@ export class SessionManager {
     )
   }
 
-  /** The wait ended, so the thread's card takes the answer and the session waits no longer. */
-  browserOriginSettled(requestId: number, decision: BrowserOriginAnswer, owner = ''): void {
+  /**
+   * The wait ended, so the thread's card takes the answer and the session waits no longer. It is
+   * labelled with the device whose answer it is: the one that answered the card first, or the
+   * desktop app whose own pane answered, `ownerDevice`.
+   */
+  browserOriginSettled(
+    requestId: number,
+    decision: BrowserOriginAnswer,
+    owner = '',
+    ownerDevice?: FromDevice,
+  ): void {
     const key = originKey(owner, requestId)
     const waiting = this.originRequests.get(key)
     if (!waiting) return
@@ -925,12 +951,56 @@ export class SessionManager {
     const live = this.live.get(waiting.sessionId)
     if (!live) return
     live.origins.delete(key)
+    const device =
+      decision === 'timeout'
+        ? null
+        : waiting.answer?.decision === decision
+          ? waiting.answer.device
+          : (ownerDevice ?? null)
+    if (decision !== 'timeout') {
+      live.originsAnswered.set(waiting.entryId, device)
+      if (live.originsAnswered.size > ANSWERS_KEPT) {
+        live.originsAnswered.delete(live.originsAnswered.keys().next().value!)
+      }
+    }
     const entry = live.thread.byId[waiting.entryId]
     if (entry?.kind === 'browser_origin') {
-      this.emit(live, [{ op: 'entry.update', id: waiting.entryId, changes: { decision } }])
+      this.emit(live, [
+        {
+          op: 'entry.update',
+          id: waiting.entryId,
+          changes: { decision, ...(device ? { device } : {}) },
+        },
+      ])
     }
     this.touch(live.id)
     this.updateBadge()
+  }
+
+  /**
+   * A window's or a device's answer to a new origin's card. The first one counts and goes to the
+   * page that asked, whose wait then settles the card; a later one hears where the first was given.
+   */
+  answerOrigin(
+    sessionId: string,
+    entryId: string,
+    decision: BrowserOriginDecision,
+    device?: FromDevice,
+  ): OriginTarget {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    const key = live && [...live.origins].find(([, id]) => id === entryId)?.[0]
+    const waiting = key === undefined ? undefined : this.originRequests.get(key)
+    const first = waiting?.answer
+    if (live && (first || live.originsAnswered.has(entryId))) {
+      throw new HostError('not_found', `The new site of ${entryId} was already answered`, {
+        reason: ALREADY_ANSWERED,
+        device: first ? first.device : (live.originsAnswered.get(entryId) ?? null),
+      })
+    }
+    if (!waiting) throw notFound(`No new site waits in ${entryId}`)
+    waiting.answer = { decision, device: device ?? null }
+    return { owner: waiting.owner, requestId: waiting.requestId }
   }
 
   /** A replay ended: the kept entries it never came back to go at its end. */
@@ -1384,6 +1454,7 @@ export class SessionManager {
       permissions: new Map(),
       answered: new Map(),
       origins: new Map(),
+      originsAnswered: new Map(),
       sender: null,
       failure: null,
       unread: this.persistedUnread(record),

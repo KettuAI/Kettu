@@ -3,7 +3,7 @@
 
 import type { AgentInstallMethod, HostMethod, HostParams } from '@shared/agent-host'
 import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
-import type { BrowserCallAnswer, BrowserOriginAnswer } from '@shared/browser'
+import type { BrowserCallAnswer, BrowserOriginAnswer, BrowserOriginDecision } from '@shared/browser'
 import { FILE_READ_LIMIT } from '@shared/files'
 import { GITHUB_LOGIN, GITHUB_PULL_REQUEST_URL, isRepositoryName } from '@shared/git'
 import type { Platform } from '@shared/platform'
@@ -333,6 +333,11 @@ const ORIGIN_ANSWERS: ReadonlySet<unknown> = new Set<BrowserOriginAnswer>([
   'project',
   'deny',
   'timeout',
+])
+const ORIGIN_DECISIONS: ReadonlySet<unknown> = new Set<BrowserOriginDecision>([
+  'session',
+  'project',
+  'deny',
 ])
 
 /** An http(s) origin as a browser names it: scheme, host and port alone. */
@@ -968,6 +973,17 @@ export function createValidators(platform: Platform): Validators {
       return {
         requestId: callId(o, 'requestId'),
         decision: o.decision as BrowserOriginAnswer,
+      }
+    },
+    'browser.answerOrigin': (params) => {
+      const o = fields(params)
+      if (!ORIGIN_DECISIONS.has(o.decision)) {
+        throw invalidParams('decision must be session, project or deny')
+      }
+      return {
+        sessionId: sessionId(o),
+        entryId: string(o, 'entryId', ID_CHARS),
+        decision: o.decision as BrowserOriginDecision,
       }
     },
   }

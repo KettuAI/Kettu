@@ -711,6 +711,7 @@ export class Hosts {
       case 'host:media-grant':
       case 'host:media-revoke':
       case 'host:service-port':
+      case 'host:browser-origin-decide':
       case 'host:busy':
       case 'host:granted':
       case 'host:artifact-content':

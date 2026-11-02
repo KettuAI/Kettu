@@ -1,7 +1,12 @@
 // The contract between the renderer and the agent host, over the agent host port.
 
 import type { ArtifactContent, ArtifactSession, ArtifactSummary, VersionSummary } from './artifacts'
-import type { BrowserCallAnswer, BrowserDeviceCall, BrowserOriginAnswer } from './browser'
+import type {
+  BrowserCallAnswer,
+  BrowserDeviceCall,
+  BrowserOriginAnswer,
+  BrowserOriginDecision,
+} from './browser'
 import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { MediaAuthorization, MediaOpenResult } from './media'
 import type {
@@ -308,8 +313,9 @@ export type SessionAttention = 'none' | 'permission' | 'unread' | 'error'
 export const REMOVED_WHILE_STARTING = 'removed_while_starting'
 
 /**
- * The `reason` in the `data` of the `not_found` that `permissions.respond` fails with when another
- * window or device answered first; `device` there is the one that did, null for a host's window.
+ * The `reason` in the `data` of the `not_found` that `permissions.respond` and
+ * `browser.answerOrigin` fail with when another window or device answered first; `device` there is
+ * the one that did, null for a host's window.
  */
 export const ALREADY_ANSWERED = 'already_answered'
 
@@ -695,6 +701,12 @@ export interface HostContract {
     params: { requestId: number; decision: BrowserOriginAnswer }
     result: void
   }
+  // Any window's or device's answer to a new site's card, `entryId`, which goes to the page that
+  // asked; the first counts, as for `permissions.respond`.
+  'browser.answerOrigin': {
+    params: { sessionId: string; entryId: string; decision: BrowserOriginDecision }
+    result: void
+  }
 }
 
 export type HostMethod = keyof HostContract
@@ -826,6 +838,7 @@ export const HOST_METHODS = [
   'browser.waiting',
   'browser.origin',
   'browser.originSettled',
+  'browser.answerOrigin',
 ] as const satisfies readonly HostMethod[]
 
 /** One that has a session in front: the host's own windows as one, or a paired device. */
@@ -858,6 +871,13 @@ export type HostEvent =
   // To the port of the desktop app that sent the turn: a call for its main to run on the session's
   // page, answered by `browser.answer`.
   | { type: 'browser.call'; call: BrowserDeviceCall }
+  // To that port: the answer a window or device gave its page's new site, for its main to give.
+  | {
+      type: 'browser.originDecided'
+      sessionId: string
+      requestId: number
+      decision: BrowserOriginDecision
+    }
 
 export interface AgentsApi {
   request<M extends HostMethod>(method: M, params: HostParams<M>): Promise<HostResult<M>>

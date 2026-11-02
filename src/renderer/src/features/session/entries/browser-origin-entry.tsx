@@ -2,12 +2,19 @@ import { memo, useEffect, useRef, useState } from 'react'
 import { GlobeIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { originLabel, type BrowserOriginAnswer, type BrowserOriginDecision } from '@shared/browser'
+import type { FromDevice } from '@shared/thread'
 import { Card } from '@renderer/components/ui/card'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { errorMessage } from '@renderer/lib/host'
+import { toast } from '@renderer/components/ui/toast'
+import { errorMessage, host } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { cn } from '@renderer/lib/utils'
+import { useOtherHost } from '@renderer/stores/hosts'
+import { useSessionsStore } from '@renderer/stores/sessions'
+import { useWebHostStore } from '@renderer/stores/web-host'
 import { useEntry, useEntryAnimation } from '../use-thread'
+import { answeredBy } from './helpers'
 
 const DECISIONS: BrowserOriginDecision[] = ['session', 'project', 'deny']
 
@@ -20,7 +27,8 @@ const ANSWER_TEXT = {
 
 /**
  * An agent's page asked to open a new site: a card like a permission request, with the origin as
- * its title and the three answers, which the pane's bar shows too. Answering either answers both.
+ * its title and the three answers, which the asking app's pane shows too. Every client that shows
+ * the session answers it through the host, and the first answer, from anywhere, counts.
  */
 export const BrowserOriginEntry = memo(function BrowserOriginEntry({
   sessionId,
@@ -37,6 +45,9 @@ export const BrowserOriginEntry = memo(function BrowserOriginEntry({
   const [answering, setAnswering] = useState<BrowserOriginDecision | null>(null)
   const [error, setError] = useState<string | null>(null)
   const card = useRef<HTMLDivElement>(null)
+  const hostId = useSessionsStore((s) => hostOfPath(s.byId[sessionId]?.projectPath ?? ''))
+  const other = useOtherHost(hostId)
+  const served = useWebHostStore((s) => s.host?.name ?? null)
   const waiting = entry?.decision === null
 
   useEffect(() => {
@@ -48,9 +59,18 @@ export const BrowserOriginEntry = memo(function BrowserOriginEntry({
     setAnswering(decision)
     setError(null)
     try {
-      await window.kettu.browser.answerOrigin(sessionId, entry.requestId, decision)
+      await host('browser.answerOrigin', { sessionId, entryId: entry.id, decision })
     } catch (caught) {
-      setError(errorMessage(caught))
+      const by = answeredBy(caught)
+      if (by !== undefined) {
+        // The card takes the first answer as its patch lands, so the note goes in a toast.
+        const where = by?.name ?? (hostId !== null ? (other?.name ?? null) : served)
+        toast(
+          where ? t('permission.answeredOn', { device: where }) : t('permission.answeredInWindow'),
+        )
+      } else {
+        setError(errorMessage(caught))
+      }
     } finally {
       setAnswering(null)
     }
@@ -75,7 +95,7 @@ export const BrowserOriginEntry = memo(function BrowserOriginEntry({
         <span className="min-w-0 flex-1 truncate text-ui font-medium text-primary">
           {originLabel(entry.origin)}
         </span>
-        <Status decision={entry.decision} />
+        <Status decision={entry.decision} device={entry.device} />
       </div>
       {waiting ? (
         <div className="flex flex-col border-t border-border-soft p-3">
@@ -118,7 +138,13 @@ export const BrowserOriginEntry = memo(function BrowserOriginEntry({
   )
 })
 
-function Status({ decision }: { decision: BrowserOriginAnswer | null }) {
+function Status({
+  decision,
+  device,
+}: {
+  decision: BrowserOriginAnswer | null
+  device: FromDevice | undefined
+}) {
   const { t } = useTranslation('session')
   if (decision === null) {
     return (
@@ -128,9 +154,10 @@ function Status({ decision }: { decision: BrowserOriginAnswer | null }) {
       </span>
     )
   }
+  const answer = t(ANSWER_TEXT[decision])
   return (
     <span className="shrink-0 animate-in text-xs text-tertiary animation-duration-(--duration-base) fade-in">
-      {t(ANSWER_TEXT[decision])}
+      {device ? t('permission.answer.onDevice', { answer, device: device.name }) : answer}
     </span>
   )
 }

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { ARTIFACT_ID, NO_SESSION } from '@shared/artifacts'
 import type { GitStatus, GitTools, PullRequest } from '@shared/git'
 import { DEFAULT_SETTINGS } from '@shared/settings'
+import type { ThreadEntry } from '@shared/thread'
 import type { AgentLauncher } from './agents'
 import type { GitEventDraft, GitServiceApi } from './git/api'
 import {
@@ -1373,6 +1374,120 @@ describe('browser calls', () => {
       await window.until(() => decision(2) === null)
       app.disconnect()
       await window.until(() => decision(2) === 'timeout')
+    })
+
+    /** The card of the new site `requestId` asks for, once the window shows it. */
+    async function originCard(window: TestPort, sessionId: string, requestId: number) {
+      const find = () =>
+        window
+          .entries(sessionId)
+          .find((each) => each.kind === 'browser_origin' && each.requestId === requestId)
+      await window.until(() => find() !== undefined)
+      return () => find() as Extract<ThreadEntry, { kind: 'browser_origin' }>
+    }
+
+    it('take a new site’s answer from any client, the first counting, for main’s page', async () => {
+      const { t, port: window } = await quick()
+      const device = t.connect(phone)
+      const sessionId = await sentFrom(t, window, device)
+      await window.open(sessionId)
+      t.host.browserOriginAsked(7, sessionId, 'https://main.example')
+      const card = await originCard(window, sessionId, 7)
+      const entryId = card().id
+
+      await expect(
+        device.request('browser.answerOrigin', {
+          sessionId,
+          entryId,
+          decision: 'timeout' as never,
+        }),
+      ).rejects.toMatchObject({ code: 'invalid_params' })
+      await expect(
+        device.request('browser.answerOrigin', { sessionId, entryId: 'e0', decision: 'deny' }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+
+      await device.request('browser.answerOrigin', { sessionId, entryId, decision: 'session' })
+      expect(t.sent).toContainEqual({
+        type: 'host:browser-origin-decide',
+        sessionId,
+        requestId: 7,
+        decision: 'session',
+      })
+      // Main has not settled it yet, and still a second answer is too late.
+      await expect(
+        window.request('browser.answerOrigin', { sessionId, entryId, decision: 'deny' }),
+      ).rejects.toMatchObject({
+        code: 'not_found',
+        data: { reason: 'already_answered', device: { id: phone.id, name: phone.name } },
+      })
+      t.host.browserOriginSettled(7, 'session')
+      await window.until(() => card().decision === 'session')
+      expect(card().device).toEqual({ id: phone.id, name: phone.name })
+      await expect(
+        window.request('browser.answerOrigin', { sessionId, entryId, decision: 'deny' }),
+      ).rejects.toMatchObject({ data: { reason: 'already_answered', device: phone } })
+
+      // The window's answer is unlabelled, and so is the one main's pane gave.
+      t.host.browserOriginAsked(8, sessionId, 'https://b.example')
+      const second = await originCard(window, sessionId, 8)
+      await window.request('browser.answerOrigin', {
+        sessionId,
+        entryId: second().id,
+        decision: 'deny',
+      })
+      t.host.browserOriginSettled(8, 'deny')
+      await window.until(() => second().decision === 'deny')
+      expect(second().device).toBeUndefined()
+      await expect(
+        device.request('browser.answerOrigin', {
+          sessionId,
+          entryId: second().id,
+          decision: 'session',
+        }),
+      ).rejects.toMatchObject({ data: { reason: 'already_answered', device: null } })
+    })
+
+    it('pass a new site’s answer to the desktop app whose page asked', async () => {
+      const { t, port: window } = await quick()
+      const app = t.connect(laptop)
+      const device = t.connect(phone)
+      const sessionId = await sentFrom(t, window, app)
+      await window.open(sessionId)
+      await app.request('browser.origin', { sessionId, requestId: 1, origin: 'https://a.example' })
+      const card = await originCard(window, sessionId, 1)
+      await window.request('browser.answerOrigin', {
+        sessionId,
+        entryId: card().id,
+        decision: 'deny',
+      })
+      await app.until(() => app.events.some((event) => event.type === 'browser.originDecided'))
+      expect(app.events).toContainEqual({
+        type: 'browser.originDecided',
+        sessionId,
+        requestId: 1,
+        decision: 'deny',
+      })
+      expect(device.events.some((event) => event.type === 'browser.originDecided')).toBe(false)
+      expect(t.sent.some((message) => message.type === 'host:browser-origin-decide')).toBe(false)
+      await app.request('browser.originSettled', { requestId: 1, decision: 'deny' })
+      await window.until(() => card().decision === 'deny')
+      expect(card().device).toBeUndefined()
+
+      // The app's own pane answered: the card names the app.
+      await app.request('browser.origin', { sessionId, requestId: 2, origin: 'https://b.example' })
+      const second = await originCard(window, sessionId, 2)
+      await app.request('browser.originSettled', { requestId: 2, decision: 'project' })
+      await window.until(() => second().decision === 'project')
+      expect(second().device).toEqual({ id: laptop.id, name: laptop.name })
+      await expect(
+        device.request('browser.answerOrigin', {
+          sessionId,
+          entryId: second().id,
+          decision: 'deny',
+        }),
+      ).rejects.toMatchObject({
+        data: { reason: 'already_answered', device: { id: laptop.id, name: laptop.name } },
+      })
     })
   })
 
