@@ -118,7 +118,7 @@ const basicTurn: Scenario = async (turn) => {
     return 'cancelled'
   }
   // Two runs of work around a short note, which the thread folds into a line each.
-  const n = turn.session.turns
+  const n = turn.id
   for (const [i, file] of ['src/clock.ts', 'src/session.ts', 'test/login.ts'].entries()) {
     const path = filePath(turn, file)
     await turn.send({
@@ -219,7 +219,7 @@ const toolStorm: Scenario = async (turn) => {
   for (let i = 0; i < turn.options.count; i++) {
     if (turn.signal.aborted) return 'cancelled'
     const kind = TOOL_KINDS[i % TOOL_KINDS.length]!
-    const toolCallId = `storm-${turn.session.turns}-${i}`
+    const toolCallId = `storm-${turn.id}-${i}`
     const file = fakeFile(i)
     const path = filePath(turn, file)
     const command = COMMANDS[i % COMMANDS.length]!
@@ -328,7 +328,7 @@ async function runCommand(
 const permission: Scenario = async (turn) => {
   if (!(await stream(turn, 'I need to run the test suite to check the fix.\n\n')))
     return 'cancelled'
-  const toolCallId = `cmd-${turn.session.turns}`
+  const toolCallId = `cmd-${turn.id}`
   const command = 'pnpm test --filter login'
   await turn.send({
     sessionUpdate: 'tool_call',
@@ -368,7 +368,7 @@ const parallelPermissions: Scenario = async (turn) => {
   for (const call of calls) {
     await turn.send({
       sessionUpdate: 'tool_call',
-      toolCallId: `${call.id}-${turn.session.turns}`,
+      toolCallId: `${call.id}-${turn.id}`,
       title: call.title,
       kind: call.kind,
       status: 'pending',
@@ -378,14 +378,14 @@ const parallelPermissions: Scenario = async (turn) => {
   const outcomes = await Promise.all(
     calls.map((call) =>
       turn.requestPermission(
-        { toolCallId: `${call.id}-${turn.session.turns}`, title: call.title, kind: call.kind },
+        { toolCallId: `${call.id}-${turn.id}`, title: call.title, kind: call.kind },
         ALL_PERMISSION_OPTIONS.filter((option) => option.kind !== 'reject_always'),
       ),
     ),
   )
   if (outcomes.includes('cancelled')) return 'cancelled'
   for (const [index, call] of calls.entries()) {
-    await runCommand(turn, `${call.id}-${turn.session.turns}`, call.command, outcomes[index]!)
+    await runCommand(turn, `${call.id}-${turn.id}`, call.command, outcomes[index]!)
   }
   await stream(turn, `Answers: ${outcomes.map((o) => `\`${o}\``).join(', ')}.`)
   await sendUsage(turn)
@@ -402,7 +402,7 @@ const cancel: Scenario = async (turn) => {
     await turn.sleep(250)
     if (turn.signal.aborted) return 'cancelled'
     if (step % 4 === 0) {
-      const toolCallId = `long-${turn.session.turns}-${step}`
+      const toolCallId = `long-${turn.id}-${step}`
       await turn.send({
         sessionUpdate: 'tool_call',
         toolCallId,
@@ -449,7 +449,7 @@ const longTurn: Scenario = async (turn) => {
     return true
   }
   for (let round = 1; Date.now() < deadline; round++) {
-    const id = `long-${turn.session.turns}-${round}`
+    const id = `long-${turn.id}-${round}`
     const thought = `Round ${round}: what the last command printed decides what to change next.`
     if (!(await stream(turn, thought, { kind: 'thought', delayMs: 150 }))) return 'cancelled'
     const file = fakeFile(round)
@@ -472,7 +472,7 @@ const crash: Scenario = async (turn) => {
     await stream(turn, 'Starting the build. ', { messageId: turn.messageId() })
     await turn.send({
       sessionUpdate: 'tool_call',
-      toolCallId: `build-${turn.session.turns}`,
+      toolCallId: `build-${turn.id}`,
       title: 'Run pnpm build',
       kind: 'execute',
       status: 'in_progress',
@@ -536,7 +536,7 @@ const slowStart: Scenario = async (turn) => {
 }
 
 const allUpdates: Scenario = async (turn) => {
-  const id = turn.session.turns
+  const id = turn.id
   const path = filePath(turn, 'src/clock.ts')
   const updates: SessionUpdate[] = [
     { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'Echoed user text' } },
@@ -675,7 +675,7 @@ const subagent: Scenario = async (turn) => {
   ) {
     return 'cancelled'
   }
-  const n = turn.session.turns
+  const n = turn.id
   if (!turn.supportsSubagents) {
     await turn.send({
       sessionUpdate: 'tool_call',
@@ -821,7 +821,7 @@ const plan: Scenario = async (turn) => {
     await turn.send({ sessionUpdate: 'plan', entries: entries(done) })
     if (done === items.length) break
     await stream(turn, `${items[done]}… `, { delayMs: 40 })
-    const toolCallId = `plan-${turn.session.turns}-${done}`
+    const toolCallId = `plan-${turn.id}-${done}`
     await turn.send({
       sessionUpdate: 'tool_call',
       toolCallId,
@@ -840,7 +840,7 @@ const plan: Scenario = async (turn) => {
 // Claude Code's Bash call returns as soon as the command goes to the background, and it tells a
 // client without terminals nothing of the command after that.
 const background: Scenario = async (turn) => {
-  const toolCallId = `background-${turn.session.turns}`
+  const toolCallId = `background-${turn.id}`
   await turn.send({
     sessionUpdate: 'tool_call',
     toolCallId,
@@ -969,7 +969,7 @@ const thinking: Scenario = async (turn) => {
 // Long raw reasoning between runs of work, as many models send it, beside short thoughts and two
 // short messages; with --summaries, the short summaries that other models send in its place.
 const reasoning: Scenario = async (turn) => {
-  const n = turn.session.turns
+  const n = turn.id
   let calls = 0
   const thoughts = REASONING.map((t) => (turn.options.summaries ? t.summary : t.raw))
   // Chinese has no spaces to split tokens at, so every thought streams in short pieces.
@@ -1255,7 +1255,7 @@ const tables: Scenario = async (turn) => {
 
 const report: Scenario = async (turn) => {
   let n = 0
-  const id = () => `report-${turn.session.turns}-${n++}`
+  const id = () => `report-${turn.id}-${n++}`
   const say = (text: string) =>
     stream(turn, text, { messageId: turn.messageId(), chunks: [text], delayMs: 0 })
   const command = async (command: string, description: string, output = 'ok\n') => {
@@ -1374,7 +1374,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
 }
 
 export const compact: Scenario = async (turn) => {
-  const compactionId = `compact-${turn.session.turns}`
+  const compactionId = `compact-${turn.id}`
   await turn.send({ sessionUpdate: 'compaction_update', compactionId, status: 'in_progress' })
   for (const chunk of groupTokens(
     tokenChunks(

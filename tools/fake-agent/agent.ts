@@ -1,6 +1,6 @@
 // A scripted ACP agent for development and tests. It never calls a model.
 
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -147,6 +147,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
   let clientCapabilities: ClientCapabilities = {}
   let signedIn = env.FAKE_AGENT_AUTH !== 'required'
   let counter = 0
+  const run = randomUUID().slice(0, 8)
 
   const nextId = (prefix: string): string => `${prefix}-${Date.now().toString(36)}-${++counter}`
 
@@ -855,6 +856,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         exit,
         log,
         messageId: () => nextId('msg'),
+        id: `${run}-${session.turns}`,
       }
 
       try {
