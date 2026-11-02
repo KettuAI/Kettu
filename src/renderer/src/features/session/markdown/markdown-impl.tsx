@@ -23,6 +23,7 @@ import { PrChip } from '@renderer/features/git/pr-chip'
 import { ConfirmedLink } from '@renderer/features/session/link-confirm'
 import { SessionIdContext } from '@renderer/features/session/media/grants'
 import { LocalMedia, MediaRows } from '@renderer/features/session/media/local-media'
+import { MediaGrid } from '@renderer/features/session/media/media-grid'
 import {
   NamedMedia,
   NamedMediaContext,
@@ -33,7 +34,7 @@ import { HAN } from '@renderer/lib/han'
 import { cn } from '@renderer/lib/utils'
 import { splitIntoChunks } from './chunks'
 import { codeThemeInput, useCodeThemes, type CodeThemes } from './code-themes'
-import { localImageTarget, spacedImages } from './local-images'
+import { localImageTarget, pictureRun, spacedImages } from './local-images'
 import { localTarget } from './local-links'
 import { remarkPlugins } from './remark'
 import { BlockCode } from './code-frame'
@@ -158,6 +159,14 @@ const noSubscribe = () => () => {}
 const noVersion = () => 0
 
 function Paragraph(props: ComponentProps<'p'> & ExtraProps) {
+  const pictures = pictureRun(props.node)
+  if (pictures) {
+    return (
+      <div data-media-block="">
+        <MediaGrid paths={pictures} />
+      </div>
+    )
+  }
   return (
     <>
       <DefaultParagraph {...props} />

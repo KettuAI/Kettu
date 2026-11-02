@@ -6,8 +6,11 @@ import { cn } from '@renderer/lib/utils'
 import { FRAME, FrameCaption, FrameRing, MEDIA_MAX_WIDTH } from './frame'
 import { imageSurface } from './surface'
 
-/** The tallest an image shows in a reply; the viewer shows it whole. */
-const MAX_HEIGHT = 288
+/**
+ * The tallest an image shows in a reply, so a 16:10 or 16:9 screenshot fills the 600 px column and
+ * only a taller one narrows; the viewer shows it whole.
+ */
+const MAX_HEIGHT = 400
 
 /**
  * An image a reply names, in place, as a frame that opens the viewer, at most 600 px wide, with its
