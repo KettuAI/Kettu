@@ -347,13 +347,19 @@ export function NoDevices() {
   )
 }
 
-/** Under the status, when the key is in a file because the system has no keyring. */
+/** Under the status, when the key is in a file, and why. */
 export function PlainKeyNote() {
   const { useRemoteStore } = useHostScope()
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
   const plain = useRemoteStore((s) => s.status?.plainTextKey === true)
-  return plain ? <GroupNote>{t('remote.status.plainTextKey', onHost)}</GroupNote> : null
+  const service = useRemoteStore((s) => s.status?.service === true)
+  if (!plain) return null
+  return (
+    <GroupNote>
+      {t(service ? 'remote.status.serviceKey' : 'remote.status.plainTextKey', onHost)}
+    </GroupNote>
+  )
 }
 
 /** Under the list, while a device is in its last days before it is removed. */

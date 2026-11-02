@@ -168,6 +168,13 @@ describe('the key kept in a file', () => {
     remote.status = status()
     expect(renderToStaticMarkup(createElement(PlainKeyNote))).toBe('')
   })
+
+  it('says why a service keeps it there on every system', () => {
+    remote.status = status({ plainTextKey: true, service: true })
+    expect(text(createElement(PlainKeyNote))).toBe(
+      "This computer's key is kept in a file only your user can read, because a service that starts with the computer cannot count on an unlocked keyring.",
+    )
+  })
 })
 
 describe('the Direct group', () => {
