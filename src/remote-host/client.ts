@@ -853,6 +853,9 @@ class SshAdding {
       this.say({ state: 'ssh', step: 'adding' })
       setup = await this.setup(target, device)
       if (!setup) return
+    } else {
+      // The login's run already recorded this computer, or found the daemon down.
+      this.say({ state: 'ssh', step: 'adding' })
     }
     const info = setup.report.host
     const hostKey = info ? publicKeyBytes(info.publicKey) : null
