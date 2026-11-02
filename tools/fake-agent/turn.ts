@@ -32,6 +32,11 @@ export interface FakeSessionState {
 
 export interface Turn {
   readonly session: FakeSessionState
+  /**
+   * The turn's number with the agent process's own tag, for the ids it gives: a session resumed
+   * by a new process counts its turns from 0 again.
+   */
+  readonly id: string
   readonly options: ScenarioOptions
   /** The prompt text, without the scenario command. */
   readonly text: string
