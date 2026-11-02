@@ -1,5 +1,4 @@
 import type { HostEvent, HostMethod, HostParams, HostResult } from '@shared/agent-host'
-import type { DeviceFileContent, FileContent } from '@shared/files'
 import type { TerminalMethod, TerminalParams, TerminalResult } from '@shared/terminal-host'
 import { hostOfPath, hostPath, onHost } from './host-paths'
 import { i18n } from './i18n'
@@ -23,6 +22,16 @@ const MAX_DEPTH = 64
 /** The other host the session is on, or null for this computer's and the unknown. */
 export function sessionHost(sessionId: string): string | null {
   return sessionHosts.get(sessionId) ?? null
+}
+
+/** The other host an attachment was added on, or null for this computer's and the unknown. */
+export function attachmentHost(id: string): string | null {
+  return attachmentHosts.get(id) ?? null
+}
+
+/** Remembers the other host of an attachment a draft kept from an earlier run. */
+export function learnAttachmentHost(id: string, hostId: string): void {
+  attachmentHosts.set(id, hostId)
 }
 
 /** Remembers the other host of sessions the window kept from an earlier run. */
@@ -132,11 +141,6 @@ export function fromHost(hostId: string, method: string, result: unknown): unkno
   if (method === 'projects.list' || method === 'projects.add') qualifyProjects(hostId, result)
   const added = (result as { id?: unknown } | null)?.id
   if (method === 'attachments.add' && typeof added === 'string') attachmentHosts.set(added, hostId)
-  // A device gets a media file described, not granted; its bytes do not come through here yet.
-  if (method === 'files.read' && (result as DeviceFileContent | null)?.kind === 'media') {
-    const media = result as Extract<DeviceFileContent, { kind: 'media' }>
-    return { kind: 'binary', path: media.path, size: media.media.size } satisfies FileContent
-  }
   qualify(hostId, result, 0)
   return result
 }

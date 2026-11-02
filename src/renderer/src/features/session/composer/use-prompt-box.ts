@@ -71,17 +71,17 @@ export function usePromptBox({
   useEffect(() => () => flushDraft(draft), [draft])
 
   const limitError = (left: number) => setError(left > 0 ? t('attachments.limit') : null)
-  // Another host's session takes the files its own project holds, as `@` names them, and no
-  // files or images from this computer yet.
-  const remote = projectPath !== null && hostOfPath(projectPath) !== null
+  // Another host's session takes files and images from this computer as uploads, and no folder.
+  const hostId = projectPath === null ? null : hostOfPath(projectPath)
+  const remote = hostId !== null
 
   // A pick that is still open, or waiting for its grants, makes a second one a no-op.
   const picking = useRef(false)
   const full = attachments.length >= ATTACHMENT_LIMIT
   const pick = (kind: 'files' | 'folder') => {
     if (disabled || picking.current) return
-    if (remote) {
-      setError(t('attachments.otherHost'))
+    if (remote && kind === 'folder') {
+      setError(t('attachments.folderOtherHost'))
       return
     }
     if (full) {
@@ -90,7 +90,7 @@ export function usePromptBox({
     }
     picking.current = true
     onActivity?.()
-    pickAttachments(draft, kind, projectPath)
+    pickAttachments(draft, kind, projectPath, hostId)
       .then(limitError, (e: unknown) => setError(errorMessage(e)))
       .finally(() => {
         picking.current = false
@@ -99,9 +99,10 @@ export function usePromptBox({
   const onEvent = useEffectEvent((event: AppEvent) => {
     if (event.kind === 'add-attachments' && focused.current) pick('files')
     if (event.kind === 'drop-attachments' && event.draft === draft && !disabled) {
-      if (remote) return setError(t('attachments.otherHost'))
       onActivity?.()
-      attachFiles(draft, event.files).then(limitError, (e: unknown) => setError(errorMessage(e)))
+      attachFiles(draft, event.files, hostId).then(limitError, (e: unknown) =>
+        setError(errorMessage(e)),
+      )
     }
   })
 
@@ -174,14 +175,7 @@ export function usePromptBox({
   const onPaste = (event: ClipboardEvent): boolean => {
     const data = event.clipboardData
     if (!data) return false
-    if (remote) {
-      // A long text goes in as it is; files and images have no way there yet.
-      if (data.files.length === 0) return false
-      event.preventDefault()
-      setError(t('attachments.otherHost'))
-      return true
-    }
-    const files = attachPastedFiles(draft, data)
+    const files = attachPastedFiles(draft, data, hostId)
     if (files) {
       event.preventDefault()
       onActivity?.()
@@ -193,7 +187,9 @@ export function usePromptBox({
     if (images.length === 0 && long === null) return false
     event.preventDefault()
     onActivity?.()
-    limitError(long === null ? attachImages(draft, images) : attachPastedText(draft, long))
+    limitError(
+      long === null ? attachImages(draft, images, hostId) : attachPastedText(draft, long, hostId),
+    )
     return true
   }
 

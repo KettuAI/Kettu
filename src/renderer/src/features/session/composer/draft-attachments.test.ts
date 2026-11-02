@@ -108,7 +108,7 @@ describe('restoreDraftAttachments', () => {
   })
 
   it('writes the draft once an attachment is added, not while it is being added', async () => {
-    attachImages('s2', [new File([new Uint8Array([1])], 'x.png', { type: 'image/png' })])
+    attachImages('s2', [new File([new Uint8Array([1])], 'x.png', { type: 'image/png' })], null)
     flushDraft('s2')
     expect(stored.get('draft:s2')).toBe('Text alone')
     await vi.waitFor(() => expect(draftAttachments('s2')[0]?.status).toBe('ready'))

@@ -1,8 +1,9 @@
 // The desktop app as a device of other hosts: one connection to each known host, kept up with
 // backoff, pairing with the host of a pasted link, and adding a machine over SSH. Each session's
-// host protocol reaches main through a port of its own. A host of version 2 keeps the session
-// through a drop for a while: the link acknowledges what it receives, resumes with the welcome's
-// token, keeps main's port, and sends again the requests the host did not read.
+// host protocol reaches main through a port of its own, with its binary values carried as byte
+// streams. A host of version 2 keeps the session through a drop for a while: the link
+// acknowledges what it receives, resumes with the welcome's token, keeps main's port, and sends
+// again the requests the host did not read.
 
 import type { BrowserForward } from '@shared/browser'
 import type { PortChannel } from '@shared/port-channel'
@@ -45,6 +46,7 @@ import {
   type Hello,
   type Welcome,
 } from '@shared/remote/protocol'
+import { BYTES_FEATURE } from '@shared/remote/streams'
 import type { LogFn } from '../agent-host/storage'
 import { compareVersions } from '../agent-host/versions'
 import { ClientForwards } from './client-forwards'
@@ -52,6 +54,7 @@ import { dial, type Connect } from './dial'
 import { publicKeyBytes } from './devices'
 import { connectTransport } from './direct'
 import type { HostStore } from './hosts'
+import { LinkRequests, type RequestWire } from './link-requests'
 import {
   INSTALL_TIMEOUT_MS,
   installRun,
@@ -192,6 +195,18 @@ class HostSession {
     })
   }
 
+  /** What main's requests go on while this session is the link's. */
+  wire(): RequestWire {
+    const { channel } = this
+    return {
+      send: (value) => this.send(value),
+      sendBytes: (stream, data) => channel.sendBytes(stream, data),
+      buffered: () => channel.buffered(),
+      drained: () => channel.drained(),
+      bytes: this.welcome?.features.includes(BYTES_FEATURE) ?? false,
+    }
+  }
+
   close(): void {
     this.channel.close()
   }
@@ -280,8 +295,8 @@ class HostLink {
   private port: PortChannel | null = null
   /** What came for main before its port did. */
   private readonly queued: unknown[] = []
-  /** Main's requests not answered yet, by id, sent again when the host did not read them. */
-  private readonly requests = new Map<number, unknown>()
+  /** Main's requests not answered yet, sent again when the host did not read them. */
+  private readonly requests: LinkRequests
   /** The token of the last welcome, while the host keeps the session for this link to resume. */
   private resumeToken: string | null = null
   private keptTimer: ReturnType<typeof setTimeout> | null = null
@@ -293,6 +308,8 @@ class HostLink {
   private readonly acks = new Acknowledger((ack) => this.session?.send(ack))
   /** The host's dev servers that its agents opened in this computer's browser. */
   private readonly forwards: ClientForwards
+  /** The streams this side opens, uploads and forwards alike, are odd and each above the last. */
+  private streams = 1
 
   constructor(
     private readonly client: HostClient,
@@ -306,12 +323,24 @@ class HostLink {
       },
       sendBytes: (stream, data) =>
         this.session?.open ? this.session.channel.sendBytes(stream, data) : null,
+      nextStream: () => this.nextStream(),
+      log: client.options.log,
+    })
+    this.requests = new LinkRequests({
+      toMain: (message) => this.toMain(message),
+      nextStream: () => this.nextStream(),
       log: client.options.log,
     })
   }
 
   private get host(): KnownHost | null {
     return this.client.options.hosts.get(this.id)
+  }
+
+  private nextStream(): number {
+    const stream = this.streams
+    this.streams += 2
+    return stream
   }
 
   start(): void {
@@ -385,6 +414,7 @@ class HostLink {
     const session = this.session
     this.session = null
     this.acks.pause()
+    this.requests.detach()
     session?.close()
   }
 
@@ -494,10 +524,9 @@ class HostLink {
     })
     this.failures = 0
     this.set({ state: 'online', address: session.address })
-    if (!resumed) return void this.openPort(session, ++this.sessions)
     // The host read main's requests up to the one it names; the rest go again.
-    const read = welcome.resumed!.request
-    for (const [id, request] of this.requests) if (id > read) session.send(request)
+    this.requests.attach(session.wire(), resumed ? welcome.resumed!.request : 0)
+    if (!resumed) void this.openPort(session, ++this.sessions)
   }
 
   private async openPort(session: HostSession, sessions: number): Promise<void> {
@@ -512,8 +541,9 @@ class HostLink {
   /** A request from main goes now, or once the host is back; it is kept until answered. */
   private fromMain(data: unknown): void {
     const { type, id } = (data ?? {}) as { type?: unknown; id?: unknown }
-    const request = type === 'request' && typeof id === 'number' && Number.isSafeInteger(id)
-    if (request) this.requests.set(id, data)
+    if (type === 'request' && typeof id === 'number' && Number.isSafeInteger(id)) {
+      return this.requests.request(data as Record<string, unknown>)
+    }
     if (this.session?.open) this.session.send(data)
   }
 
@@ -521,19 +551,19 @@ class HostLink {
     if (session.welcome!.protocol >= RESUME_VERSION) {
       this.acks.counted(message.kind === 'bytes' ? message.data.length : 0)
     }
-    // Main reads no streams; the forwards' are the only ones of use here.
     if (message.kind === 'bytes') {
-      this.forwards.bytes(message.stream, message.data)
-      return
+      if (this.forwards.bytes(message.stream, message.data)) return
+      return this.requests.bytes(message.stream, message.data)
     }
     const value = message.value
-    const { type, id } = (value ?? {}) as { type?: unknown; id?: unknown }
-    if (OWN.has(type) || this.forwards.message(value)) return
-    if ((type === 'response' || type === 'error') && typeof id === 'number') {
-      this.requests.delete(id)
-    }
-    if (this.port) this.port.send(value)
-    else if (this.queued.length < MAX_QUEUED) this.queued.push(value)
+    if (typeof value !== 'object' || value === null) return
+    if (OWN.has((value as { type?: unknown }).type) || this.forwards.message(value)) return
+    this.requests.received(value as Record<string, unknown>)
+  }
+
+  private toMain(message: unknown): void {
+    if (this.port) this.port.send(message)
+    else if (this.queued.length < MAX_QUEUED) this.queued.push(message)
   }
 
   private addresses(addresses: DirectAddress[], answered: DirectAddress): void {
@@ -549,6 +579,7 @@ class HostLink {
     this.forwards.dropConnections()
     if (this.closed) return
     this.acks.pause()
+    this.requests.detach()
     const { hosts } = this.client.options
     if (welcomed) hosts.online(this.id)
     // A host that says why ends the session; one that just went keeps it for a while.
@@ -590,7 +621,7 @@ class HostLink {
     this.keptTimer = null
     this.resumeToken = null
     this.acks.reset()
-    this.requests.clear()
+    this.requests.lose()
     this.queued.length = 0
     this.forwards.closeAll()
     const port = this.port

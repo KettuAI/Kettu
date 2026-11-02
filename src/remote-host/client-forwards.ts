@@ -16,6 +16,8 @@ export interface ClientForwardsOptions {
   send(message: ForwardOpen | StreamEnd | StreamCancel): boolean
   /** Bytes on the host's session; null while the link has no connection. */
   sendBytes(stream: number, data: Uint8Array): Promise<void> | null
+  /** The id of a stream this side opens, shared with the link's uploads: odd, above the last. */
+  nextStream(): number
   log: LogFn
 }
 
@@ -43,8 +45,6 @@ function listenerKey(sessionId: string, forward: BrowserForward): string {
 export class ClientForwards {
   private readonly listeners = new Map<string, Listener>()
   private readonly locals = new Map<number, Local>()
-  /** The ids this side opens are odd and each above the last, over every session with the host. */
-  private next = 1
 
   constructor(private readonly options: ClientForwardsOptions) {}
 
@@ -121,7 +121,7 @@ export class ClientForwards {
     forward: BrowserForward,
     socket: net.Socket,
   ): void {
-    const stream = this.next
+    const stream = this.options.nextStream()
     const open: ForwardOpen = {
       type: 'forward.open',
       stream,
@@ -133,7 +133,6 @@ export class ClientForwards {
       socket.destroy()
       return
     }
-    this.next += 2
     const local: Local = { key, socket, sentEnd: false, gotEnd: false, quiet: false, pending: 0 }
     this.locals.set(stream, local)
     socket.on('data', (data: Buffer) => {

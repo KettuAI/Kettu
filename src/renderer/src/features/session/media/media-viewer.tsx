@@ -16,6 +16,7 @@ import { Dialog, DialogPortal, DialogTitle } from '@renderer/components/ui/dialo
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { bytes as formatBytes, fileUrlPath, relativePath } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import {
   fileManagerName,
   formatShortcut,
@@ -374,7 +375,8 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
     if (!path) return null
     const { projectPath } = request
     const inFiles = !!projectPath && relativePath(path, projectPath) !== path
-    if (!inFiles && isWeb) return null
+    // Neither a browser nor this computer has a file manager of another host's.
+    if (!inFiles && (isWeb || (!!projectPath && hostOfPath(projectPath) !== null))) return null
     return {
       inFiles,
       show: () => openAttachmentPath({ type: 'file', uri }, projectPath),
