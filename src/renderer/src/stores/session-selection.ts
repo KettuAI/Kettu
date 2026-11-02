@@ -11,16 +11,12 @@ interface SelectionStore {
 
 export const useSessionSelection = create<SelectionStore>()(() => ({ ids: [], anchor: null }))
 
-/**
- * Mod-click: adds the row, or takes it out. The first pick also takes in the session in front, as
- * a file manager's selection starts from the item already selected.
- */
-export function toggleSelected(id: string, current: string | null): void {
-  useSessionSelection.setState((s) => {
-    const base = s.ids.length === 0 && current && current !== id ? [current] : s.ids
-    const ids = base.includes(id) ? base.filter((other) => other !== id) : [...base, id]
-    return { ids, anchor: id }
-  })
+/** Mod-click: adds the row, or takes it out. */
+export function toggleSelected(id: string): void {
+  useSessionSelection.setState((s) => ({
+    ids: s.ids.includes(id) ? s.ids.filter((other) => other !== id) : [...s.ids, id],
+    anchor: id,
+  }))
 }
 
 /** Shift-click: every row from the anchor to this one, in the order the sidebar lists them. */

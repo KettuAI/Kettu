@@ -12,25 +12,19 @@ const ids = () => useSessionSelection.getState().ids
 describe('session selection', () => {
   beforeEach(clearSelection)
 
-  it('starts a Mod-click selection from the session in front', () => {
-    toggleSelected('b', 'a')
-    expect(ids()).toEqual(['a', 'b'])
-    toggleSelected('c', 'a')
-    expect(ids()).toEqual(['a', 'b', 'c'])
-    toggleSelected('b', 'a')
-    expect(ids()).toEqual(['a', 'c'])
-  })
-
-  it('does not add the session in front twice', () => {
-    toggleSelected('a', 'a')
-    expect(ids()).toEqual(['a'])
+  it('adds and removes rows with Mod-click, leaving out the session in front', () => {
+    toggleSelected('b')
+    toggleSelected('c')
+    expect(ids()).toEqual(['b', 'c'])
+    toggleSelected('b')
+    expect(ids()).toEqual(['c'])
   })
 
   it('picks a Shift-click range in sidebar order, from the last pick', () => {
     const order = ['a', 'b', 'c', 'd', 'e']
     selectRange('c', 'a', order)
     expect(ids()).toEqual(['a', 'b', 'c'])
-    toggleSelected('e', 'a')
+    toggleSelected('e')
     selectRange('d', 'a', order)
     expect(ids()).toEqual(['d', 'e'])
   })

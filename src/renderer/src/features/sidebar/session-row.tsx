@@ -136,7 +136,7 @@ export const SessionRow = memo(function SessionRow({
     const currentId = useViewStore.getState().main
     const current = currentId.kind === 'session' ? currentId.sessionId : null
     if (isMod(event) && !event.shiftKey && !event.altKey) {
-      toggleSelected(summary.id, current)
+      toggleSelected(summary.id)
       return true
     }
     if (event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
@@ -270,6 +270,8 @@ export const SessionRow = memo(function SessionRow({
     </SidebarMenuButton>
   )
 
+  // As drawn: the menu for several rows is narrower than one row's.
+  const menuWidth = picked ? 'w-52.5' : 'w-59'
   const menuItems = picked ? (
     <MultiSessionMenuItems ids={picked} onDelete={() => setDeleting(true)} />
   ) : (
@@ -323,6 +325,7 @@ export const SessionRow = memo(function SessionRow({
                 </TooltipContent>
               </Tooltip>
               <ContextMenuContent
+                className={menuWidth}
                 finalFocus={rename.menu.finalFocus}
                 onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}
               >
@@ -356,6 +359,7 @@ export const SessionRow = memo(function SessionRow({
               </Tooltip>
               <DropdownMenuContent
                 align="start"
+                className={menuWidth}
                 finalFocus={rename.menu.finalFocus}
                 onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}
               >

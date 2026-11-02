@@ -46,6 +46,9 @@ export const ACCELERATORS: Partial<Record<SessionMenuItem, string>> = {
   delete: 'Backspace',
 }
 
+/** Open in split view's sides, which take their keys while its submenu is open. */
+export const SPLIT_ACCELERATORS = { right: 'Mod+\\', below: 'Shift+Mod+\\' } as const
+
 /** The Delete item's second key, which deletes at once when there is nothing to lose. */
 export const QUICK_DELETE = 'Mod+Backspace'
 

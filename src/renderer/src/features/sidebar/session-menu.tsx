@@ -96,7 +96,9 @@ import {
   multiSessionMenuGroups,
   QUICK_DELETE,
   resumeCommand,
+  runSessionMenuAccelerator,
   sessionMenuGroups,
+  SPLIT_ACCELERATORS,
   type SessionMenuItem,
   type SessionMenuPlace,
 } from './session-menu-model'
@@ -161,7 +163,10 @@ export function SessionMenuItems({
   onDelete: () => void
 }) {
   const { t } = useTranslation(['sidebar', 'common'])
-  const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
+  // The agents that can run one now; More options opens New session with every agent.
+  const agents = useAgentsStore(
+    useShallow((s) => usableAgents(s.order, s.byId).filter((a) => isInstalled(a) && !a.hidden)),
+  )
   const canFork = useAgentsStore((s) => !!s.byId[summary.agentId]?.capabilities?.forkSession)
   const inFront = useInFront(summary.id)
   // A session a pane shows already, in view or folded, has no Open in split view.
@@ -263,13 +268,12 @@ export function SessionMenuItems({
                 {agents.map((agent) => (
                   <DropdownMenuItem
                     key={agent.id}
-                    disabled={!isInstalled(agent)}
                     onClick={() => {
                       onNewSubSession()
                       openNewSubSession(summary, agent.id)
                     }}
                   >
-                    <AgentMark agent={agent.id} size={15} mono={!isInstalled(agent)} />
+                    <AgentMark agent={agent.id} size={15} />
                     <span className="min-w-0 flex-1 truncate">{agent.harnessName}</span>
                     {agent.name !== agent.harnessName && (
                       <span className="max-w-24 shrink-0 truncate pl-4 text-small text-tertiary">
@@ -566,10 +570,13 @@ export function MultiSessionMenuItems({
 
   return (
     <>
-      <DropdownMenuLabel>{t('row.sessionsCount', { count })}</DropdownMenuLabel>
       {groups.map((group, index) => (
         <DropdownMenuGroup key={group[0]}>
-          {index > 0 && <DropdownMenuSeparator />}
+          {index > 0 ? (
+            <DropdownMenuSeparator />
+          ) : (
+            <DropdownMenuLabel>{t('row.sessionsCount', { count })}</DropdownMenuLabel>
+          )}
           {group.map((name) => {
             const accelerator = MULTI_ACCELERATORS[name]
             const props = { key: name, 'data-accelerator': accelerator }
@@ -673,7 +680,10 @@ function OpenInSplit({ summary }: { summary: SessionSummary }) {
         <Columns2Icon />
         {t('row.openInSplit')}
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="w-49">
+      <DropdownMenuSubContent
+        className="w-49"
+        onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}
+      >
         <OpenInSplitItem
           side="right"
           label={t('row.splitRight')}
@@ -704,12 +714,15 @@ function OpenInSplitItem({
   onClick: () => void
 }) {
   const { t } = useTranslation('sidebar')
+  const accelerator = SPLIT_ACCELERATORS[side]
   return (
-    <DropdownMenuItem disabled={reason !== null} onClick={onClick}>
+    <DropdownMenuItem disabled={reason !== null} onClick={onClick} data-accelerator={accelerator}>
       {side === 'right' ? <PanelRightIcon /> : <PanelBottomIcon />}
       {label}
-      {reason && (
+      {reason ? (
         <span className="ml-auto pl-3 text-xs text-tertiary">{t(`row.noRoom.${reason}`)}</span>
+      ) : (
+        <DropdownMenuShortcut>{shortcutLabel(accelerator)}</DropdownMenuShortcut>
       )}
     </DropdownMenuItem>
   )
