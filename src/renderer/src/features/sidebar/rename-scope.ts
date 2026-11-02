@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect } from 'react'
+import { createContext, useContext, useEffect, useId } from 'react'
 import { useViewStore } from '@renderer/stores/view'
 
 /** The group a row sits in, whose end shows the rename keys; rows outside a group show them below. */
@@ -10,12 +10,14 @@ export const RenameScope = createContext<string | null>(null)
  */
 export function useRenameHints(renaming: boolean): boolean {
   const scope = useContext(RenameScope)
+  const row = useId()
   useEffect(() => {
     if (!renaming || scope === null) return
-    useViewStore.setState({ renamingIn: scope })
+    useViewStore.setState({ renamingIn: { scope, row } })
     return () => {
-      if (useViewStore.getState().renamingIn === scope) useViewStore.setState({ renamingIn: null })
+      if (useViewStore.getState().renamingIn?.row === row)
+        useViewStore.setState({ renamingIn: null })
     }
-  }, [renaming, scope])
+  }, [renaming, scope, row])
   return renaming && scope === null
 }

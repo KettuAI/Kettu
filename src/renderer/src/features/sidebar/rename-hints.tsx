@@ -5,9 +5,9 @@ import { useViewStore } from '@renderer/stores/view'
 
 /** At the end of a group, the rename keys while one of its rows is being renamed. */
 export function GroupRenameHints({ scope }: { scope: string }) {
-  const shown = useViewStore((s) => s.renamingIn === scope)
+  const shown = useViewStore((s) => s.renamingIn?.scope === scope)
   return shown ? (
-    <li aria-hidden>
+    <li>
       <RenameHints />
     </li>
   ) : null

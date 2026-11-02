@@ -83,10 +83,10 @@ export function HostFilter() {
   )
 }
 
-/** The sessions on the hosts shown that wait for you or failed, each naming its host. */
 // Its rows' group, for the rename keys at its end; no project path looks like it.
 const NEEDS_YOU_GROUP = 'needs-you'
 
+/** The sessions on the hosts shown that wait for you or failed, each naming its host. */
 export function NeedsYouGroup({
   hosts,
   away,

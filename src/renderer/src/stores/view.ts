@@ -144,8 +144,11 @@ interface ViewStore {
   allRowsShown: Record<string, true>
   /** Whether a session's sub-agents list and count the finished ones too, not only running ones. */
   showFinishedSubagents: boolean
-  /** The group whose end shows the rename keys, while one of its rows is being renamed. Not persisted. */
-  renamingIn: string | null
+  /**
+   * The row being renamed and its group, whose end shows the rename keys. A row's own id, so one
+   * still saving its name does not clear another's. Not persisted.
+   */
+  renamingIn: { scope: string; row: string } | null
   /** The open side pane per project; none when the panel is closed. */
   sidePane: Record<string, SidePane>
   /** The artifact each project's artifact pane shows. */
