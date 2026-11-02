@@ -395,6 +395,7 @@
     "unsupported": "This image's format can't be shown here.",
     "unsupportedVideo": "This video's format can't be played here.",
     "unsupportedAudio": "This sound's format can't be played here.",
+    "tooLarge": "Too large to show here: {{size}}.",
     "openLarger": "Open larger",
     "showInFiles": "Show in Files",
     "showIn": "Show in {{name}}",

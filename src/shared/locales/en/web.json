@@ -66,5 +66,8 @@
     "openOnly": "Notifications need this page open in the browser, even in a background tab; a closed page gets none.",
     "insecure": "Browsers give notifications only to pages on https or localhost. Open this page through an SSH tunnel to localhost, or over HTTPS such as Tailscale's, to get them.",
     "denied": "This browser blocks notifications for this page. Allow them in the browser's settings for this site, then try again."
+  },
+  "media": {
+    "saving": "Saving {{name}}… {{percent}}%"
   }
 }

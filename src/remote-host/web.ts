@@ -28,6 +28,9 @@ const PING_MS = 30_000
 
 const CHANNEL_PATH = '/channel'
 
+/** The web client's service worker, which its build names with a hash, as every asset. */
+const MEDIA_WORKER_PREFIX = '/assets/media-worker-'
+
 const TYPES: Readonly<Record<string, string>> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -190,7 +193,15 @@ export class WebServer {
     const file = files.get(pathname)
     if (pathname.startsWith('/assets/')) {
       if (!file) return plain(response, 404, 'Not found.')
-      return send(request, response, file, { ...PAGE_HEADERS, 'Cache-Control': IMMUTABLE })
+      // It answers the page's media URLs, so it takes the whole site from its folder.
+      const worker: Record<string, string> = pathname.startsWith(MEDIA_WORKER_PREFIX)
+        ? { 'Service-Worker-Allowed': '/' }
+        : {}
+      return send(request, response, file, {
+        ...PAGE_HEADERS,
+        ...worker,
+        'Cache-Control': IMMUTABLE,
+      })
     }
     const frame = files.get('/frame.html')
     if (frame && (pathname === '/frame.html' || pathname.startsWith('/frame/'))) {

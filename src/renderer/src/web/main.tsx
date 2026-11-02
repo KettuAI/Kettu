@@ -18,6 +18,8 @@ import { devicePlatform, pageAddress, webApi } from './api'
 import { browserDevice, deviceName } from './device-name'
 import { serveFrames } from './frames'
 import { channelUrl, dialWebSocket, hello, HostLink } from './link'
+import { startMediaWorker } from './media'
+import mediaWorker from './media-worker.ts?worker&url'
 import type { Paired, PairProgress } from './pair'
 import type { PairingNotice } from './pairing-page'
 import { WebSettings } from './settings'
@@ -120,6 +122,7 @@ async function showApp(device: WebDevice, paired: Paired | null): Promise<void> 
     }),
   )
   serveFrames(link)
+  startMediaWorker(link, mediaWorker)
   // A page in the back takes patches a batch a second, which the host merges meanwhile.
   const pace = (): void =>
     link.setPace(document.visibilityState === 'visible' ? 0 : BACKGROUND_PACE_MS)

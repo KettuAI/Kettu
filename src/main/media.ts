@@ -3,7 +3,13 @@
 import { open, realpath } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import type { CustomScheme, Session, WebFrameMain } from 'electron'
-import { MEDIA_SCHEME, MEDIA_TOKEN, mediaUrlToken, type MediaGrantRecord } from '@shared/media'
+import {
+  MEDIA_SCHEME,
+  MEDIA_TOKEN,
+  mediaUrlToken,
+  parseRange,
+  type MediaGrantRecord,
+} from '@shared/media'
 import type { HostMedia } from './host-media'
 import { refuseRequests } from './request-filter'
 
@@ -83,34 +89,6 @@ const HEADERS = {
 
 function answer(status: number, headers: Record<string, string> = {}): Response {
   return new Response(null, { status, headers: { ...HEADERS, ...headers } })
-}
-
-export interface ByteRange {
-  start: number
-  end: number // inclusive
-}
-
-/**
- * The one range a `Range` header asks of a file of `size` bytes: `bytes=a-b`, `bytes=a-` or the
- * suffix `bytes=-n`. Null for the whole file, as for no header, a malformed one or several
- * ranges, which a server may ignore; `unsatisfiable` when the range starts past the end.
- */
-export function parseRange(
-  header: string | null,
-  size: number,
-): ByteRange | 'unsatisfiable' | null {
-  const match = header === null ? null : /^bytes=(\d*)-(\d*)$/.exec(header.trim())
-  if (!match || (match[1] === '' && match[2] === '')) return null
-  if (match[1] === '') {
-    const suffix = Number(match[2])
-    if (suffix === 0 || size === 0) return 'unsatisfiable'
-    return { start: Math.max(0, size - suffix), end: size - 1 }
-  }
-  const start = Number(match[1])
-  const end = match[2] === '' ? Infinity : Number(match[2])
-  if (end < start) return null
-  if (start >= size) return 'unsatisfiable'
-  return { start, end: Math.min(end, size - 1) }
 }
 
 /** Answers one request on the media scheme, for a file here or on another host. */

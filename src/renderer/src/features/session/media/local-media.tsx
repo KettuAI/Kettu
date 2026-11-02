@@ -12,6 +12,7 @@ import { Button } from '@renderer/components/ui/button'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
+import { bytes } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { fileManagerName, isWeb } from '@renderer/lib/platform'
@@ -128,6 +129,9 @@ export function LocalMedia({
       </span>
     )
   }
+  if (shown.kind === 'granted' && shown.grant.tooLarge) {
+    return <TooLarge grant={shown.grant} name={name} />
+  }
   if (shown.kind === 'granted') {
     const { grant } = shown
     const viewerKey = fileKey(entryId ?? '', path)
@@ -235,6 +239,25 @@ function MediaState({
       detail={
         <>
           <UnsupportedReason kind={grant.kind} />
+          {error && <span className="block text-danger">{error}</span>}
+        </>
+      }
+      action={<PlayElsewhere url={grant.url} projectPath={projectPath} onError={setError} />}
+    />
+  )
+}
+
+/** A file larger than this client shows, in its place: its name and size, and Save. */
+function TooLarge({ grant, name }: { grant: MediaGrant; name: string }) {
+  const { t } = useTranslation('session')
+  const [error, setError] = useState<string | null>(null)
+  const projectPath = useContext(ProjectPathContext)
+  return (
+    <Placeholder
+      title={<MediaTitle name={name} />}
+      detail={
+        <>
+          {t('media.tooLarge', { size: bytes(grant.size) })}
           {error && <span className="block text-danger">{error}</span>}
         </>
       }

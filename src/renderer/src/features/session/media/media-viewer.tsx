@@ -111,7 +111,8 @@ async function fileSource(path: string, request: ViewerRequest, fresh: boolean):
   const result = await openMedia(projectPath, path, sessionId, fresh)
   if (result.kind !== 'granted') return { state: 'gone' }
   const { grant } = result
-  if (grant.kind === 'audio') return { state: 'gone' }
+  // A file too large to show is saved from its place in the thread instead.
+  if (grant.kind === 'audio' || grant.tooLarge) return { state: 'gone' }
   return {
     state: 'ready',
     kind: grant.kind,

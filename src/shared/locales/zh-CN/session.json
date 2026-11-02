@@ -375,6 +375,7 @@
     "unsupported": "这种图片格式无法在这里显示。",
     "unsupportedVideo": "这种视频格式无法在这里播放。",
     "unsupportedAudio": "这种音频格式无法在这里播放。",
+    "tooLarge": "文件太大，无法在这里显示：{{size}}。",
     "openLarger": "放大查看",
     "showInFiles": "在文件面板中显示",
     "showIn": "在{{name}}中显示",

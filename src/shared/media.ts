@@ -68,6 +68,34 @@ export function mediaKindOfName(name: string): MediaKind | null {
   return null
 }
 
+export interface ByteRange {
+  start: number
+  end: number // inclusive
+}
+
+/**
+ * The one range a `Range` header asks of a file of `size` bytes: `bytes=a-b`, `bytes=a-` or the
+ * suffix `bytes=-n`. Null for the whole file, as for no header, a malformed one or several
+ * ranges, which a server may ignore; `unsatisfiable` when the range starts past the end.
+ */
+export function parseRange(
+  header: string | null,
+  size: number,
+): ByteRange | 'unsatisfiable' | null {
+  const match = header === null ? null : /^bytes=(\d*)-(\d*)$/.exec(header.trim())
+  if (!match || (match[1] === '' && match[2] === '')) return null
+  if (match[1] === '') {
+    const suffix = Number(match[2])
+    if (suffix === 0 || size === 0) return 'unsatisfiable'
+    return { start: Math.max(0, size - suffix), end: size - 1 }
+  }
+  const start = Number(match[1])
+  const end = match[2] === '' ? Infinity : Number(match[2])
+  if (end < start) return null
+  if (start >= size) return 'unsatisfiable'
+  return { start, end: Math.min(end, size - 1) }
+}
+
 export interface MediaGrant {
   url: string // kettu-media://<token>/<file name>?v=<mtime>
   kind: MediaKind
@@ -75,6 +103,8 @@ export interface MediaGrant {
   size: number // bytes
   width?: number // pixels, when the header holds them
   height?: number
+  /** Too large for this client to show; it offers the file for saving instead. */
+  tooLarge?: boolean
 }
 
 /** `media.open`: a grant, or why there is none. */

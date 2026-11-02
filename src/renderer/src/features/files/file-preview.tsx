@@ -369,7 +369,7 @@ function FileMedia({
   if (failure?.message) {
     return <Notice title={t('preview.openFailed')} description={failure.message} />
   }
-  if (failure) {
+  if (failure || grant.tooLarge) {
     return (
       <Empty className="h-full">
         <EmptyHeader>
@@ -377,7 +377,11 @@ function FileMedia({
             <FileWarningIcon />
           </EmptyMedia>
           <EmptyTitle>
-            <UnsupportedReason kind={grant.kind} />
+            {grant.tooLarge ? (
+              t('preview.mediaTooLargeTitle')
+            ) : (
+              <UnsupportedReason kind={grant.kind} />
+            )}
           </EmptyTitle>
           <EmptyDescription>{bytes(grant.size)}</EmptyDescription>
         </EmptyHeader>
