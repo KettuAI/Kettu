@@ -318,6 +318,9 @@
   /* The letter in a file's change tile. */
   --text-badge: 9.5px;
   --text-badge--line-height: 1;
+  /* The number on an answer's key cap. */
+  --text-key: 11px;
+  --text-key--line-height: 16px;
 }
 
 :root {

@@ -70,11 +70,16 @@
     "filesUnsaved_other": "{{count}} 个文件有未保存的更改：{{names}}。",
     "losesOnQuit": "退出会丢失这些更改。",
     "losesOnRestart": "重启会丢失这些更改。",
-    "losesOnClose": "关闭窗口会丢失这些更改。"
+    "losesOnClose": "关闭窗口会丢失这些更改。",
+    "stopAndQuit": "停止并退出",
+    "keepRunning": "继续运行",
+    "keepsRunning": "Kettu 可以在后台让它们继续运行，再次打开 Kettu 时就能看到。"
   },
   "notifications": {
     "testTitle": "Kettu",
-    "testBody": "通知已开启。Agent 需要你时，会这样提醒你。"
+    "testBody": "通知已开启。Agent 需要你时，会这样提醒你。",
+    "allowOnce": "允许一次",
+    "open": "打开"
   },
   "attachments": {
     "hostDown": "Agent 后台进程没有运行，请等它重启后再试。"

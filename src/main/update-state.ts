@@ -1,6 +1,7 @@
 // Pure parts of the updater: which mode a build uses, whether it can update, when a download
 // installs on quit, and how events from electron-updater move the state every surface reads.
 
+import type { Locale } from '@shared/locale'
 import type { Platform } from '@shared/platform'
 import type { SettingsFile } from '@shared/settings'
 import { RELEASES_URL, type UpdateState, type UpdateStatus } from '@shared/updates'
@@ -116,7 +117,7 @@ export type UpdaterEvent =
   | { type: 'not-available'; at: number }
   | { type: 'download-started'; version: string; manual: boolean }
   | { type: 'progress'; percent: number }
-  | { type: 'downloaded'; version: string }
+  | { type: 'downloaded'; version: string; notes?: Partial<Record<Locale, string[]>> }
   | { type: 'download-cancelled' }
   | { type: 'moving'; version: string }
   | { type: 'move-cancelled' }
@@ -163,7 +164,9 @@ export function nextState(
       if (state.kind !== 'downloading' || !Number.isFinite(event.percent)) return state
       return { ...state, percent: Math.max(0, Math.min(100, Math.floor(event.percent))) }
     case 'downloaded':
-      return { kind: 'ready', version: event.version }
+      return event.notes && Object.keys(event.notes).length > 0
+        ? { kind: 'ready', version: event.version, notes: event.notes }
+        : { kind: 'ready', version: event.version }
     case 'download-cancelled':
       return state.kind === 'downloading' ? available(state.version, context) : state
     case 'moving':
@@ -186,6 +189,76 @@ export function nextState(
       // Without electron-updater no check can run, so even an automatic one shows it.
       return { kind: 'error', message: event.message, manual: event.manual }
   }
+}
+
+/** The most highlights the update dialog lists, and the longest one before it is cut. */
+const MAX_HIGHLIGHTS = 5
+const MAX_HIGHLIGHT = 120
+
+const ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+}
+
+function plainText(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity: string, name: string) => {
+      if (!name.startsWith('#')) return ENTITIES[name.toLowerCase()] ?? entity
+      const code = /^#x/i.test(name) ? parseInt(name.slice(2), 16) : Number(name.slice(1))
+      return code <= 0x10ffff ? String.fromCodePoint(code) : entity
+    })
+}
+
+/** A bullet as the dialog shows it: plain text, its first sentence, without issue links. */
+function highlight(item: string, chinese: boolean): string {
+  const text = plainText(item)
+    .replace(/`/g, '')
+    .replace(/\s*\((?:#\d+(?:,\s*)?)+\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const end = chinese ? text.indexOf('。') + 1 : text.search(/[.!?](?:\s|$)/) + 1
+  // A highlight is a list item, so it drops its full stop.
+  const sentence = (end > 0 ? text.slice(0, end) : text).replace(/[.。]$/, '')
+  return sentence.length > MAX_HIGHLIGHT ? `${sentence.slice(0, MAX_HIGHLIGHT - 1)}…` : sentence
+}
+
+/**
+ * The release's highlights in each language, from the notes electron-updater read for it: the
+ * bullets under "What changed" in English, and under "中文" in Chinese. The notes come as the
+ * release page's HTML, or as Markdown; anything else gives none.
+ */
+export function releaseHighlights(notes: unknown): Partial<Record<Locale, string[]>> {
+  const text =
+    typeof notes === 'string'
+      ? notes
+      : Array.isArray(notes)
+        ? notes.map((n) => (typeof n?.note === 'string' ? n.note : '')).join('\n')
+        : ''
+  const out: Partial<Record<Locale, string[]>> = {}
+  let section: Locale | null = null
+  const token =
+    /<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>|<li[^>]*>([\s\S]*?)<\/li>|^#{1,6}\s+(.+)$|^\s*[-*]\s+(.+)$/gim
+  for (const match of text.matchAll(token)) {
+    const heading = match[1] ?? match[3]
+    if (heading !== undefined) {
+      const title = plainText(heading).trim()
+      section = /^what changed$/i.test(title) ? 'en' : title === '中文' ? 'zh-CN' : null
+      continue
+    }
+    const item = match[2] ?? match[4]
+    if (!section || item === undefined) continue
+    const list = (out[section] ??= [])
+    if (list.length < MAX_HIGHLIGHTS) {
+      const line = highlight(item, section === 'zh-CN')
+      if (line) list.push(line)
+    }
+  }
+  return out
 }
 
 /** First line of an updater error, short enough for Settings › About. */

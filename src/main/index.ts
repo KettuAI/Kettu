@@ -281,7 +281,9 @@ async function start(): Promise<void> {
   const agentHost = new AgentHost({
     settings: () => hostSettings(settings.get(), systemLocale),
     onAttention: (message) => {
-      notifyAttention(message, settings.get())
+      notifyAttention(message, settings.get(), (sessionId, requestId, optionId) =>
+        agentHost.answerPermission(sessionId, requestId, optionId),
+      )
       hostAdmin?.attention(message)
     },
     onBadge: (count) => setBadgeCount(count),
@@ -637,7 +639,7 @@ async function start(): Promise<void> {
     if (!quitFlow.quitting) showMainWindow()
   })
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin' && !settings.get().general.background) app.quit()
+    if (process.platform !== 'darwin' && !quitFlow.staysInBackground) app.quit()
   })
 }
 

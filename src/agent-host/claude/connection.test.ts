@@ -28,6 +28,7 @@ import {
 import { FAKE_INIT, FakeChild, FakeClaudeSdk, type FakeQuery } from '../testing/fake-claude-sdk'
 import { ClaudeConnection, promptContent } from './connection'
 import { claudeSdkDriver } from './driver'
+import { ANSWER_IN_REPLY, QUESTION_UNREADABLE } from './permissions'
 import type { SdkMessage, StoredMessage } from './sdk'
 
 const baseSession: SessionView = {
@@ -249,8 +250,8 @@ describe('the Claude Agent SDK driver', () => {
       },
       settings: { ultracode: true },
       extraArgs: { 'replay-user-messages': null },
-      disallowedTools: ['AskUserQuestion'],
     })
+    expect(options.disallowedTools).toBeUndefined()
     expect(options.env).toMatchObject({
       PATH: '/usr/bin',
       CLAUDE_CONFIG_DIR: '/home/ada/.claude-work',
@@ -781,7 +782,7 @@ describe('permissions', () => {
     )
   }
 
-  it('asks with allow once, always allow naming its rule and where, and reject', async () => {
+  it('asks with allow once, always allow naming its command and where, and deny', async () => {
     const answer = ask()
     await settle()
     expect(target.asked[0]!.request).toMatchObject({
@@ -791,10 +792,10 @@ describe('permissions', () => {
         { id: 'allow-once', name: 'Allow once', kind: 'allow_once' },
         {
           id: 'allow-with-updates',
-          name: 'Always allow Bash(npm test:*) in local settings (.claude/settings.local.json)',
+          name: 'Always allow `npm test` in this project',
           kind: 'allow_always',
         },
-        { id: 'reject', name: 'Reject', kind: 'reject_once' },
+        { id: 'reject', name: 'Deny, and say what to do instead', kind: 'reject_once' },
       ],
     })
     expect(target.entry('t:toolu_7')).toMatchObject({
@@ -827,6 +828,65 @@ describe('permissions', () => {
     await settle()
     target.asked[2]!.answer('cancelled')
     expect(await answer).toMatchObject({ behavior: 'deny' })
+  })
+
+  function askQuestions(questions: unknown[]) {
+    return s.sdk.last.options.canUseTool!(
+      'AskUserQuestion',
+      { questions },
+      { signal: new AbortController().signal, toolUseID: 'toolu_q' },
+    )
+  }
+
+  const which = {
+    question: 'Fix it here or in a separate session?',
+    header: 'Where',
+    options: [
+      { label: 'Fix it here', description: '' },
+      { label: 'Separate session', description: 'Keeps this change small' },
+    ],
+    multiSelect: false,
+  }
+
+  it('asks each of AskUserQuestion questions as a card and answers with the labels', async () => {
+    const second = { ...which, question: 'Add a test?', header: 'Test' }
+    const answer = askQuestions([which, second])
+    await settle()
+    expect(target.asked[0]!.request.options).toEqual([
+      { id: 'answer:0', name: 'Fix it here', kind: 'allow_once' },
+      {
+        id: 'answer:1',
+        name: 'Separate session',
+        kind: 'allow_once',
+        description: 'Keeps this change small',
+      },
+      { id: 'other', name: 'Something else…', kind: 'reject_once' },
+    ])
+    expect(target.entry('t:toolu_q')).toMatchObject({
+      title: 'Where',
+      question: 'Fix it here or in a separate session?',
+    })
+    target.asked[0]!.answer({ optionId: 'answer:1' })
+    await settle()
+    expect(target.entry('t:toolu_q')).toMatchObject({ title: 'Test', question: 'Add a test?' })
+    target.asked[1]!.answer({ optionId: 'answer:0' })
+    expect(await answer).toEqual({
+      behavior: 'allow',
+      updatedInput: {
+        questions: [which, second],
+        answers: { [which.question]: 'Separate session', 'Add a test?': 'Fix it here' },
+      },
+      toolUseID: 'toolu_q',
+    })
+  })
+
+  it('lets the user answer in their next message, and turns down a question it cannot show', async () => {
+    let answer = askQuestions([which])
+    await settle()
+    target.asked[0]!.answer({ optionId: 'other' })
+    expect(await answer).toMatchObject({ behavior: 'deny', message: ANSWER_IN_REPLY })
+    answer = askQuestions([{ question: 'Free text?', header: '', options: [] }])
+    expect(await answer).toMatchObject({ behavior: 'deny', message: QUESTION_UNREADABLE })
   })
 
   it('withdraws a request Claude Code no longer waits for', async () => {

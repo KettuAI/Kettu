@@ -405,11 +405,11 @@ export function registerIpcHandlers({
 }: IpcDeps): void {
   handle('app:get-info', 0, () => appInfo())
 
-  handle('app:respond-quit', 2, (_, id, confirmed) => {
-    if (!Number.isSafeInteger(id) || typeof confirmed !== 'boolean') {
-      throw new Error('"app:respond-quit" takes a request id and a boolean')
+  handle('app:respond-quit', 2, (_, id, answer) => {
+    if (!Number.isSafeInteger(id) || (typeof answer !== 'boolean' && answer !== 'background')) {
+      throw new Error('"app:respond-quit" takes a request id and a boolean or "background"')
     }
-    quit.respond(id as number, confirmed)
+    quit.respond(id as number, answer)
   })
 
   handle('settings:get', 0, () => settings.get())

@@ -2178,6 +2178,22 @@ describe('a prompt turn', () => {
 })
 
 describe('permissions', () => {
+  it('never gives two host runs the same request id', async () => {
+    const asked = async (t: TestHost) => {
+      const port = t.connect()
+      const sessionId = await newSession(t, port)
+      await turn(port, sessionId, '/permission')
+      await port.until(() => tools(port, sessionId).some((tool) => tool.permission !== null))
+      return tools(port, sessionId).find((tool) => tool.permission)!.permission!.requestId
+    }
+    const first = await startTestHost()
+    const before = await asked(first)
+    await first.stop()
+    current = await startTestHost()
+    // A notification still showing the first run's request must not answer the next run's.
+    expect(await asked(current)).not.toBe(before)
+  })
+
   it.each([
     ['allow-once', 'allow_once'],
     ['allow-always', 'allow_always'],

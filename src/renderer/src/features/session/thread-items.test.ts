@@ -82,6 +82,16 @@ describe('signatureOf', () => {
     expect(signatureOf(state([tool('r1', 'read', 'in_progress'), waiting]))).toBe('tw')
   })
 
+  it("keeps an agent's question out of a run, asked or answered", () => {
+    const asked = {
+      ...tool('q', 'other', 'pending'),
+      question: 'Which one?',
+      permission: { requestId: 'p1', options: [] },
+    }
+    const answered = { ...tool('q2', 'other'), question: 'And this?' }
+    expect(signatureOf(state([tool('a', 'read'), asked, answered, tool('b', 'edit')]))).toBe('goot')
+  })
+
   it('marks plans and compactions as work', () => {
     expect(signatureOf(state([plan('p1'), compaction('c1'), notice('n1')]))).toBe('ppo')
   })
@@ -146,6 +156,17 @@ describe('buildItems', () => {
       'entry',
       'reply',
     ])
+  })
+
+  it('keeps a permission request out of the run of work before it', () => {
+    const waiting: ToolEntry = {
+      ...tool('x3', 'edit', 'in_progress'),
+      permission: { requestId: 'p', options: [] },
+    }
+    const s = state([user('u1'), tool('x1', 'execute'), tool('x2', 'execute'), waiting])
+    const result = buildItems(s.order, signatureOf(s), true)
+    expect(result.map((i) => i.key)).toEqual(['u1', 'run:x1', 'x3', 'status'])
+    expect(result[1]).toMatchObject({ type: 'run', ids: ['x1', 'x2'] })
   })
 
   it('never folds an agent message', () => {

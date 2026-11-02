@@ -75,6 +75,13 @@ export function primaryOption(options: readonly { kind: PermissionKind }[]): num
   )
 }
 
+/** An option's name in parts, the `code` spans apart; an unpaired backtick reads as written. */
+export function codeSpans(name: string): { text: string; code: boolean }[] {
+  const parts = name.split('`')
+  if (parts.length % 2 === 0) return [{ text: name, code: false }]
+  return parts.map((text, i) => ({ text, code: i % 2 === 1 })).filter((part) => part.text !== '')
+}
+
 const FENCED = /^(`{3,})[^\n`]*\n([\s\S]*?)\n?\1$/
 
 /**

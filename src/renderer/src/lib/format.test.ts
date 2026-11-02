@@ -11,6 +11,7 @@ import {
   resetTime,
   shortAgo,
   tokens,
+  runningFor,
 } from './format'
 import { i18n } from './i18n'
 
@@ -96,5 +97,14 @@ describe('fileUrlPath', () => {
     expect(fileUrlPath('file://server/share/a.txt', 'win32')).toBe('\\\\server\\share\\a.txt')
     expect(fileUrlPath('https://example.com/a', 'darwin')).toBeNull()
     expect(fileUrlPath('not a uri', 'darwin')).toBeNull()
+  })
+})
+
+describe('runningFor', () => {
+  it('says seconds under a minute, then whole minutes, then hours and minutes', () => {
+    expect(runningFor(45_400)).toBe('45 s')
+    expect(runningFor(4 * 60_000 + 59_000)).toBe('4 m')
+    expect(runningFor(80 * 60_000)).toBe('1 h 20 m')
+    expect(runningFor(-5)).toBe('0 s')
   })
 })

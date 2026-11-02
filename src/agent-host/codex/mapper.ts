@@ -605,6 +605,7 @@ export class ThreadMapper {
       permissionResult: null,
       ...(changes.rawInput !== undefined ? { rawInput: changes.rawInput } : {}),
       ...(changes.description !== undefined ? { description: changes.description } : {}),
+      ...(changes.question !== undefined ? { question: changes.question } : {}),
     }
     addEntry(ctx, out, entry)
     toolEffects(out, itemId, id, null, entry)

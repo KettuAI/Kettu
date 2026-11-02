@@ -254,7 +254,14 @@ describe('main messages', () => {
     expect(t.sent.at(-1)).toEqual({
       type: 'host:busy',
       requestId: 7,
-      sessions: [{ sessionId: session.id, agentId: 'fake-agent', title: 'Run the login tests' }],
+      sessions: [
+        {
+          sessionId: session.id,
+          agentId: 'fake-agent',
+          title: 'Run the login tests',
+          turnStartedAt: expect.any(Number),
+        },
+      ],
     })
 
     await t.host.shutdown()

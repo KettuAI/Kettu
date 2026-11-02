@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { SquareTerminalIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { QuitRequest } from '@shared/ipc'
@@ -17,30 +17,44 @@ import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { folderOf, nameOf } from '@renderer/features/files/paths'
+import { runningFor } from '@renderer/lib/format'
 import { saveAll } from '@renderer/stores/files'
 import { sessionTitle } from '@renderer/stores/sessions'
+import { useSettingsStore } from '@renderer/stores/settings'
 
 /**
  * Main asks before a quit or an update restart would stop agents or terminal commands, or would
- * lose unsaved files; on macOS, also before closing the window with unsaved files.
+ * lose unsaved files; on macOS, also before closing the window with unsaved files. A quit with
+ * work running offers to keep it running in the background, the default, since stopping can lose
+ * work.
  */
 export function QuitConfirm() {
   const { t } = useTranslation(['updates', 'common'])
   const [request, setRequest] = useState<QuitRequest | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveFailed, setSaveFailed] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
+  const remote = useSettingsStore((s) => s.settings.remote.enabled)
+  const keep = useRef<HTMLButtonElement>(null)
   useEffect(
     () =>
       window.kettu.app.onConfirmQuit((next) => {
         setSaveFailed(false)
+        setNow(Date.now())
         setRequest(next)
       }),
     [],
   )
+  const open = request !== null
+  useEffect(() => {
+    if (!open) return
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [open])
 
-  const answer = (confirmed: boolean) => {
+  const answer = (value: boolean | 'background') => {
     if (!request) return
-    void window.kettu.app.respondQuit(request.id, confirmed)
+    void window.kettu.app.respondQuit(request.id, value)
     setRequest(null)
   }
 
@@ -53,50 +67,75 @@ export function QuitConfirm() {
   }
 
   const reason = request?.reason ?? 'quit'
-  const busy = !!request && request.sessions.length + request.terminals.length > 0
+  const sessions = request?.sessions ?? []
+  const terminals = request?.terminals ?? []
+  const busy = sessions.length + terminals.length > 0
   const unsaved = request?.unsaved ?? []
+  const keepRunning = !!request?.keepRunning
   const title =
     reason === 'update'
       ? t('quit.titleUpdate')
       : reason === 'close'
         ? t('quit.titleClose')
-        : t('quit.titleQuit')
+        : busy
+          ? sessions.length > 0
+            ? t('quit.sessionsRunning', { count: sessions.length })
+            : t('quit.terminalsRunning', { count: terminals.length })
+          : t('quit.titleQuit')
   return (
-    <AlertDialog open={!!request} onOpenChange={(open) => !open && !saving && answer(false)}>
-      <AlertDialogContent className="sm:max-w-[380px]">
+    <AlertDialog open={open} onOpenChange={(open) => !open && !saving && answer(false)}>
+      <AlertDialogContent
+        initialFocus={keepRunning ? keep : true}
+        className="gap-0 px-5.5 pt-5 pb-4.5 data-[size=default]:sm:max-w-[440px]"
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {busy
-              ? reason === 'update'
-                ? t('quit.stopsUpdate')
-                : t('quit.stopsQuit')
-              : t('quit.unsavedFiles')}
-          </AlertDialogDescription>
+          {!keepRunning && (
+            <AlertDialogDescription>
+              {busy
+                ? reason === 'update'
+                  ? t('quit.stopsUpdate')
+                  : t('quit.stopsQuit')
+                : t('quit.unsavedFiles')}
+            </AlertDialogDescription>
+          )}
         </AlertDialogHeader>
         {busy && (
-          <ul className="rounded-code bg-subtle py-0.5 text-ui">
-            {request?.sessions.map((s) => (
-              <li key={s.sessionId} className="flex h-8 items-center gap-2 px-2.5">
-                <AgentMark agent={s.agentId} size={14} />
+          <ul className="mt-3.5 flex flex-col text-ui">
+            {sessions.map((s) => (
+              <li
+                key={s.sessionId}
+                className="flex h-8.5 items-center gap-2.5 border-b border-border-soft"
+              >
+                <AgentMark agent={s.agentId} size={16} />
                 <span className="min-w-0 flex-1 truncate">{sessionTitle(s)}</span>
-                <span className="text-xs text-tertiary">{t('quit.working')}</span>
+                {s.turnStartedAt !== null && (
+                  <span className="flex shrink-0 items-center gap-2 text-small text-tertiary tabular">
+                    <Spinner aria-hidden className="size-3" />
+                    {runningFor(now - s.turnStartedAt)}
+                  </span>
+                )}
               </li>
             ))}
-            {request?.terminals.map((terminal) => (
-              <li key={terminal.id} className="flex h-8 items-center gap-2 px-2.5">
-                <SquareTerminalIcon className="size-3.5 text-icon" />
+            {terminals.map((terminal) => (
+              <li
+                key={terminal.id}
+                className="flex h-8.5 items-center gap-2.5 border-b border-border-soft"
+              >
+                <SquareTerminalIcon aria-hidden className="size-4 text-icon" />
                 <span className="min-w-0 flex-1 truncate font-mono text-xs">{terminal.title}</span>
-                <span className="text-xs text-tertiary">{t('quit.terminal')}</span>
+                <span className="text-small text-tertiary">{t('quit.terminal')}</span>
               </li>
             ))}
           </ul>
         )}
         {busy && unsaved.length > 0 && (
-          <p className="text-control leading-normal text-secondary">{t('quit.unsavedFiles')}</p>
+          <p className="mt-3 text-control leading-normal text-secondary">
+            {t('quit.unsavedFiles')}
+          </p>
         )}
         {unsaved.length > 0 && (
-          <ul className="rounded-code bg-subtle py-0.5 text-ui">
+          <ul className="mt-3 rounded-code bg-subtle py-0.5 text-ui">
             {unsaved.map((file) => (
               <li
                 key={`${file.projectPath}\0${file.path}`}
@@ -114,18 +153,23 @@ export function QuitConfirm() {
           </ul>
         )}
         {saveFailed ? (
-          <p className="text-control leading-normal text-danger">{t('quit.saveFailed')}</p>
+          <p className="mt-3 text-control leading-normal text-danger">{t('quit.saveFailed')}</p>
+        ) : keepRunning ? (
+          <AlertDialogDescription className="mt-3 text-control leading-normal text-secondary">
+            {remote ? t('quit.keepRunningRemote') : t('quit.keepRunning')}
+          </AlertDialogDescription>
         ) : (
           busy && (
-            <p className="text-control leading-normal text-secondary">
+            <p className="mt-3 text-control leading-normal text-secondary">
               {reason === 'update' ? t('quit.comeBackUpdate') : t('quit.comeBackQuit')}
             </p>
           )
         )}
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={saving} onClick={() => answer(false)}>
+        <AlertDialogFooter className="mt-4.5 items-center">
+          <AlertDialogCancel variant="ghost" disabled={saving} onClick={() => answer(false)}>
             {t('common:actions.cancel')}
           </AlertDialogCancel>
+          <span aria-hidden className="hidden flex-1 sm:block" />
           {unsaved.length > 0 ? (
             <>
               <Button variant="outline" disabled={saving} onClick={() => answer(true)}>
@@ -138,6 +182,15 @@ export function QuitConfirm() {
                   : reason === 'close'
                     ? t('quit.saveAndClose')
                     : t('quit.saveAndQuit')}
+              </AlertDialogAction>
+            </>
+          ) : keepRunning ? (
+            <>
+              <Button variant="outline" onClick={() => answer(true)}>
+                {t('quit.stopAndQuit')}
+              </Button>
+              <AlertDialogAction ref={keep} onClick={() => answer('background')}>
+                {t('quit.keepRunningAction')}
               </AlertDialogAction>
             </>
           ) : (
