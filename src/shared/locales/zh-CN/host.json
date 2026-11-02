@@ -241,23 +241,24 @@
   },
   "permission": {
     "allowOnce": "允许一次",
-    "allowAlways": "始终允许 {{changes}}",
-    "addRules": "{{rules}}{{place}}",
-    "addDirectories": "访问 {{directories}}{{place}}",
+    "allowAlways": "始终允许{{changes}}",
+    "addRules": "{{place}}中的 {{rules}}",
+    "addDirectories": "在{{place}}中访问 {{directories}}",
     "setMode": "切换到 {{mode}}",
-    "reject": "拒绝",
+    "reject": "拒绝，并说明该怎么做",
     "place": {
-      "user": "（记入用户设置）",
-      "project": "（记入项目设置 .claude/settings.json）",
-      "local": "（记入本地设置 .claude/settings.local.json）",
-      "session": "（仅本会话）"
+      "user": "所有项目",
+      "project": "本项目",
+      "session": "本会话"
     },
     "exitPlan": {
       "auto": "是，并使用 Auto 模式",
       "acceptEdits": "是，并自动接受编辑",
       "manual": "是，并手动批准编辑",
       "keepPlanning": "否，继续规划"
-    }
+    },
+    "allowEdit": "允许这次修改",
+    "acceptEdits": "允许本会话中的所有修改"
   },
   "content": {
     "audioTooLarge": "音频，{{size}}，太大，无法显示",
@@ -329,14 +330,14 @@
       "gateway": "自定义模型服务商"
     },
     "approval": {
-      "allowOnce": "允许",
-      "allowSession": "允许，本会话内都允许",
-      "allowTurn": "允许，这一轮内都允许",
-      "allowPrefix": "允许，以后 `{{command}}` 不再询问",
-      "allowHost": "允许，以后都允许 {{host}}",
-      "denyHost": "拒绝，以后都拦截 {{host}}",
-      "decline": "拒绝",
-      "cancel": "拒绝并停止",
+      "allowOnce": "允许一次",
+      "allowSession": "本会话内都允许",
+      "allowTurn": "这一轮内都允许",
+      "allowPrefix": "始终允许 `{{command}}`",
+      "allowHost": "始终允许 {{host}}",
+      "denyHost": "始终拦截 {{host}}",
+      "decline": "拒绝，并继续",
+      "cancel": "拒绝，并说明该怎么做",
       "accept": "继续",
       "network": "网络访问",
       "networkHost": "{{protocol}} 访问 {{host}}",
@@ -344,7 +345,8 @@
       "read": "读取 {{path}}",
       "write": "写入 {{path}}",
       "permissionsTitle": "更多权限",
-      "elicitationTitle": "{{server}} 请求继续"
+      "elicitationTitle": "{{server}} 请求继续",
+      "allowEdit": "允许这次修改"
     },
     "tool": {
       "readFile": "读取文件 '{{path}}'",
@@ -464,5 +466,8 @@
       "unknownError": "未知的 MCP 启动错误",
       "unnamed": "（未命名）"
     }
+  },
+  "question": {
+    "other": "其他回答…"
   }
 }

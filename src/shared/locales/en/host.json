@@ -246,11 +246,10 @@
     "addRules": "{{rules}} {{place}}",
     "addDirectories": "access to {{directories}} {{place}}",
     "setMode": "switch to {{mode}}",
-    "reject": "Reject",
+    "reject": "Deny, and say what to do instead",
     "place": {
-      "user": "in user settings",
-      "project": "in project settings (.claude/settings.json)",
-      "local": "in local settings (.claude/settings.local.json)",
+      "user": "in every project",
+      "project": "in this project",
       "session": "for this session"
     },
     "exitPlan": {
@@ -258,7 +257,9 @@
       "acceptEdits": "Yes, and accept edits",
       "manual": "Yes, and approve edits manually",
       "keepPlanning": "No, keep planning"
-    }
+    },
+    "allowEdit": "Allow this edit",
+    "acceptEdits": "Allow all edits in this session"
   },
   "content": {
     "audioTooLarge": "Audio, {{size}}, too large to show",
@@ -330,14 +331,14 @@
       "gateway": "Custom model provider"
     },
     "approval": {
-      "allowOnce": "Yes",
-      "allowSession": "Yes, for this session",
-      "allowTurn": "Yes, for this turn",
-      "allowPrefix": "Yes, and don't ask again for `{{command}}`",
-      "allowHost": "Yes, and allow {{host}} from now on",
-      "denyHost": "No, and block {{host}} from now on",
-      "decline": "No",
-      "cancel": "No, and stop",
+      "allowOnce": "Allow once",
+      "allowSession": "Allow for this session",
+      "allowTurn": "Allow for this turn",
+      "allowPrefix": "Always allow `{{command}}`",
+      "allowHost": "Always allow {{host}}",
+      "denyHost": "Always block {{host}}",
+      "decline": "Deny, and keep going",
+      "cancel": "Deny, and say what to do instead",
       "accept": "Continue",
       "network": "Network access",
       "networkHost": "{{protocol}} access to {{host}}",
@@ -345,7 +346,8 @@
       "read": "Read {{path}}",
       "write": "Write {{path}}",
       "permissionsTitle": "More permissions",
-      "elicitationTitle": "{{server}} asks to continue"
+      "elicitationTitle": "{{server}} asks to continue",
+      "allowEdit": "Allow this edit"
     },
     "tool": {
       "readFile": "Read file '{{path}}'",
@@ -466,5 +468,8 @@
       "unknownError": "unknown MCP startup error",
       "unnamed": "(unnamed)"
     }
+  },
+  "question": {
+    "other": "Something else…"
   }
 }

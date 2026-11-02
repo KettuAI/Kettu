@@ -32,10 +32,14 @@ const KIND_ORDER: Record<PermissionKind, number> = {
   reject_always: 3,
 }
 
+// Stopping to say what to do instead comes before denying and going on, as the cards put it.
+const rank = (option: Option): number =>
+  KIND_ORDER[option.kind] - (option.id === 'cancel' ? 0.5 : 0)
+
 function ordered(options: Option[]): Option[] {
   return options
     .map((option, index) => ({ option, index }))
-    .sort((a, b) => KIND_ORDER[a.option.kind] - KIND_ORDER[b.option.kind] || a.index - b.index)
+    .sort((a, b) => rank(a.option) - rank(b.option) || a.index - b.index)
     .map(({ option }) => option)
 }
 
@@ -195,12 +199,12 @@ export function fileChangeApproval(
     ...(started ? {} : { title: t('codex.tool.editFiles'), toolKind: 'edit', status: 'pending' }),
     ...(params.reason ? { description: params.reason } : {}),
   })
-  const options: Option[] = [
-    { id: 'allow_once', name: t('codex.approval.allowOnce'), kind: 'allow_once' },
+  const options: Option[] = ordered([
+    { id: 'allow_once', name: t('codex.approval.allowEdit'), kind: 'allow_once' },
     { id: 'allow_for_session', name: t('codex.approval.allowSession'), kind: 'allow_always' },
     { id: 'decline', name: t('codex.approval.decline'), kind: 'reject_once' },
     { id: 'cancel', name: t('codex.approval.cancel'), kind: 'reject_once' },
-  ]
+  ])
   const decisions: Record<string, string> = {
     allow_once: 'accept',
     allow_for_session: 'acceptForSession',
@@ -252,8 +256,9 @@ export function permissionsApproval(
 }
 
 /**
- * A question with choices, as a request whose options are the choices. Null for anything else,
- * which Kettu cannot ask: several questions, free text or a secret.
+ * A question with choices, as a question card: the choices, then Something else, which answers
+ * nothing so the user can say it in their next message. Null for anything else, which Kettu
+ * cannot ask: several questions, free text or a secret.
  */
 export function userInputApproval(
   params: ToolRequestUserInputParams,
@@ -268,18 +273,22 @@ export function userInputApproval(
     title: question.header || question.question,
     toolKind: 'other',
     status: 'pending',
-    ...(question.header && question.question ? { description: question.question } : {}),
+    question: question.question || question.header,
   })
-  const options: Option[] = choices.map((choice, index) => ({
-    id: `answer:${index}`,
-    name: choice.label,
-    kind: 'allow_once',
-  }))
+  const options: Option[] = [
+    ...choices.map((choice, index) => ({
+      id: `answer:${index}`,
+      name: choice.label,
+      kind: 'allow_once' as const,
+      ...(choice.description ? { description: choice.description } : {}),
+    })),
+    { id: 'other', name: t('question.other'), kind: 'reject_once' },
+  ]
   return {
     request: { toolCallId: params.itemId, toolEntryId: entryId, output: out, options },
     respond: (answer) => {
-      const index = answer === 'cancelled' ? -1 : Number(answer.optionId.replace(/^answer:/, ''))
-      const choice = choices[index]
+      const id = answer === 'cancelled' ? 'other' : answer.optionId
+      const choice = id.startsWith('answer:') ? choices[Number(id.slice('answer:'.length))] : null
       return choice ? { answers: { [question.id]: { answers: [choice.label] } } } : { answers: {} }
     },
   }

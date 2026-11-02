@@ -272,13 +272,15 @@ export interface ToolEntry {
   locations: { path: string; line?: number }[]
   permission: PendingPermission | null
   permissionResult:
-    // by: answered within a scope; device: answered on a paired device
-    | { optionId: string; kind: PermissionKind; by?: 'routine'; device?: FromDevice }
+    // by: answered within a scope; device: answered on a paired device; name: a question's answer
+    | { optionId: string; kind: PermissionKind; by?: 'routine'; device?: FromDevice; name?: string }
     | 'cancelled'
     | 'withdrawn'
     | null
   rawInput?: string // the command or input as text, when the agent sent one
   description?: string // what a command does, in the agent's words (Claude Code's Bash)
+  // The agent's question, when the call asks the user to pick an answer rather than to allow it.
+  question?: string
 }
 
 export type ToolContent =
@@ -288,7 +290,8 @@ export type ToolContent =
 
 export interface PendingPermission {
   requestId: string
-  options: { id: string; name: string; kind: PermissionKind }[]
+  // name may hold `code` spans; description: what a question's answer means, in the agent's words
+  options: { id: string; name: string; kind: PermissionKind; description?: string }[]
 }
 
 export type PermissionKind = 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always'

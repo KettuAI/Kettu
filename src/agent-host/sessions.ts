@@ -4800,7 +4800,9 @@ export class SessionManager {
     live: Live,
     requestId: string,
     result:
-      { optionId: string; kind: PermissionKind; device?: FromDevice } | 'cancelled' | 'withdrawn',
+      | { optionId: string; kind: PermissionKind; device?: FromDevice; name?: string }
+      | 'cancelled'
+      | 'withdrawn',
   ): void {
     const pending = live.permissions.get(requestId)
     if (!pending) return
@@ -4853,9 +4855,13 @@ export class SessionManager {
     if (!live || !pending) throw notFound(`No pending permission request ${requestId}`)
     const option = pending.options.find((o) => o.id === optionId)
     if (!option) throw invalidParams(`${optionId} is not an option of request ${requestId}`)
+    const tool = live.thread.byId[pending.toolEntryId]
+    // A question's answer is what the card shows once answered; a permission's kind says enough.
+    const answered = tool?.kind === 'tool' && tool.question !== undefined
     this.settlePermission(live, requestId, {
       optionId,
       kind: option.kind,
+      ...(answered && option.kind !== 'reject_once' ? { name: option.name } : {}),
       ...(device ? { device } : {}),
     })
     live.answered.set(requestId, device ?? null)

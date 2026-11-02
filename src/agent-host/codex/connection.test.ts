@@ -639,13 +639,13 @@ describe('approvals', () => {
     const request = t.requests[0]!.request
     expect(request.toolEntryId).toBe('t:exec-1')
     expect(request.options).toEqual([
-      { id: 'allow_once', name: 'Yes', kind: 'allow_once' },
+      { id: 'allow_once', name: 'Allow once', kind: 'allow_once' },
       {
         id: 'accept_execpolicy_amendment',
-        name: "Yes, and don't ask again for `touch`",
+        name: 'Always allow `touch`',
         kind: 'allow_always',
       },
-      { id: 'cancel', name: 'No, and stop', kind: 'reject_once' },
+      { id: 'cancel', name: 'Deny, and say what to do instead', kind: 'reject_once' },
     ])
     expect(t.entry('t:exec-1')).toMatchObject({
       toolKind: 'execute',
@@ -669,8 +669,8 @@ describe('approvals', () => {
     expect(t.requests[0]!.request.options.map((o) => [o.id, o.kind])).toEqual([
       ['allow_once', 'allow_once'],
       ['allow_for_session', 'allow_always'],
-      ['decline', 'reject_once'],
       ['cancel', 'reject_once'],
+      ['decline', 'reject_once'],
     ])
     expect(t.entry('t:patch-1')).toMatchObject({ toolKind: 'edit' })
   })
@@ -707,7 +707,7 @@ describe('approvals', () => {
     expect(await answer).toEqual({ decision: 'decline' })
   })
 
-  it('asks a question with choices, and answers others it cannot ask with none', async () => {
+  it('asks a question with choices and Something else, and answers others it cannot ask with none', async () => {
     const { server, connection } = await connect()
     await connection.newSession('/project')
     const t = threadTarget((request) => ({ optionId: request.options[1]!.id }))
@@ -728,13 +728,22 @@ describe('approvals', () => {
           ...question,
           options: [
             { label: 'A', description: '' },
-            { label: 'B', description: '' },
+            { label: 'B', description: 'The second way' },
           ],
         },
       ],
     })
     expect(await asked.answer).toEqual({ answers: { q: { answers: ['B'] } } })
-    expect(t.entry('t:ask-1')).toMatchObject({ toolKind: 'other', title: 'Plan' })
+    expect(t.requests[0]!.request.options).toEqual([
+      { id: 'answer:0', name: 'A', kind: 'allow_once' },
+      { id: 'answer:1', name: 'B', kind: 'allow_once', description: 'The second way' },
+      { id: 'other', name: 'Something else…', kind: 'reject_once' },
+    ])
+    expect(t.entry('t:ask-1')).toMatchObject({
+      toolKind: 'other',
+      title: 'Plan',
+      question: 'Which one?',
+    })
     const free = server.request('item/tool/requestUserInput', {
       threadId: 'thread-1',
       turnId: 'turn-1',
