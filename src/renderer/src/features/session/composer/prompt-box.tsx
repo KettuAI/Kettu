@@ -65,6 +65,7 @@ export function PromptBox({
   top,
   wrap = false,
   stacked = false,
+  lead,
   end,
   onKeyDown,
 }: {
@@ -81,6 +82,8 @@ export function PromptBox({
   wrap?: boolean
   /** The text over a row of **+** and `end`, as on New session, rather than between them. */
   stacked?: boolean
+  /** With `stacked`, what follows **+** on the row, such as New session's project and agent. */
+  lead?: ReactNode
   /** What follows the text on its last line, such as Send. */
   end: ReactNode
   /** A key the popovers left to the composer, which calls preventDefault on one it takes. */
@@ -305,6 +308,7 @@ export function PromptBox({
         {stacked ? (
           <InputGroupAddon align="block-end" className="gap-1.5 px-3 pb-3">
             {addMenu}
+            {lead}
             <span className="flex-1" />
             {end}
           </InputGroupAddon>
