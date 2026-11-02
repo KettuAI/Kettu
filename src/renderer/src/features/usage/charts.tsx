@@ -45,6 +45,17 @@ const HEAT_CELL = 14
 const BAR_OUTLINE = 'shadow-[0_0_0_2px_var(--bg-surface),0_0_0_3.5px_var(--focus)]'
 const CELL_OUTLINE = 'shadow-[0_0_0_1.5px_var(--bg-surface),0_0_0_3px_var(--focus)]'
 
+/**
+ * The trend's grid under the bars: a line atop each quarter, then the baseline. Borders, since an
+ * inset shadow for the baseline leaves faint side lines when the chart sits between pixels.
+ */
+const GRID_ROWS = [
+  'border-t border-subtle',
+  'border-t border-subtle',
+  'border-t border-subtle',
+  'border-y border-subtle border-b-default',
+] as const
+
 /** Where the arrow keys, Home and End take an index; `vertical` is how far up and down go. */
 function moveIndex(
   event: KeyboardEvent,
@@ -128,12 +139,17 @@ export function TrendChart({
 
   return (
     <div className="relative">
+      <div aria-hidden className="pointer-events-none absolute inset-0 grid grid-rows-4">
+        {GRID_ROWS.map((line, i) => (
+          <span key={i} className={line} />
+        ))}
+      </div>
       <div
         ref={row}
         role="group"
         tabIndex={0}
         aria-label={label}
-        className="relative flex h-45 items-end justify-center rounded-xs bg-[linear-gradient(var(--border-subtle)_var(--hairline),transparent_var(--hairline))] bg-size-[100%_45px] shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-default)] outline-none focus-ring"
+        className="relative flex h-45 items-end justify-center rounded-xs outline-none focus-ring"
         style={{ gap: barGap(bars.length) }}
         onPointerLeave={() => onChoose(null)}
         onFocus={(event) => {

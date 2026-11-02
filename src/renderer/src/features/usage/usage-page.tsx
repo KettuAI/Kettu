@@ -458,12 +458,14 @@ function Header({
   const { t } = useTranslation('usage')
   const onHost = useHostContext()
   const filters = useUsageStore((s) => s.filters)
-  const fromComputer = useUsageStore((s) => s.status?.fromComputer ?? false)
+  // null until the status arrives, when the sync state shows nothing either.
+  const fromComputer = useUsageStore((s) => s.status?.fromComputer ?? null)
   const rangeText = useRangeText()
   const { agent, scope } = filters
   const agents = page?.summary.agents ?? []
   // A chosen agent stays a choice once its usage is gone, as after clearing the record.
   const choices = agent === 'all' || agents.includes(agent) ? agents : [...agents, agent]
+  const filterRow = choices.length > 1 || fromComputer !== null
   const clockDay = useClock(dayOf)
   const today = page?.today ?? clockDay
   const custom = filters.range.kind === 'custom' ? filters.range : null
@@ -504,35 +506,37 @@ function Header({
           />
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {/* With usage from one agent only, All is the only choice. */}
-        {choices.length > 1 && (
-          <FilterMenu
-            label={t('page.agents')}
-            value={agent}
-            current={agent === 'all' ? t('page.allShort') : <AgentChoice agentId={agent} />}
-            choices={[
-              { value: 'all', label: t('page.allShort') },
-              ...choices.map((id) => ({ value: id, label: <AgentChoice agentId={id} /> })),
-            ]}
-            onChange={(next) => setUsageFilters({ agent: next })}
-          />
-        )}
-        {fromComputer && (
-          <FilterMenu<UsageScope>
-            label={t('page.scope')}
-            value={scope}
-            current={scope === 'computer' ? computer : t('page.scopes.kettu')}
-            choices={[
-              { value: 'computer', label: computer },
-              { value: 'kettu', label: t('page.scopes.kettu') },
-            ]}
-            onChange={(next) => setUsageFilters({ scope: next })}
-          />
-        )}
-        <span className="flex-1" />
-        <SyncState />
-      </div>
+      {filterRow && (
+        <div className="flex flex-wrap items-center gap-2">
+          {/* With usage from one agent only, All is the only choice. */}
+          {choices.length > 1 && (
+            <FilterMenu
+              label={t('page.agents')}
+              value={agent}
+              current={agent === 'all' ? t('page.allShort') : <AgentChoice agentId={agent} />}
+              choices={[
+                { value: 'all', label: t('page.allShort') },
+                ...choices.map((id) => ({ value: id, label: <AgentChoice agentId={id} /> })),
+              ]}
+              onChange={(next) => setUsageFilters({ agent: next })}
+            />
+          )}
+          {fromComputer && (
+            <FilterMenu<UsageScope>
+              label={t('page.scope')}
+              value={scope}
+              current={scope === 'computer' ? computer : t('page.scopes.kettu')}
+              choices={[
+                { value: 'computer', label: computer },
+                { value: 'kettu', label: t('page.scopes.kettu') },
+              ]}
+              onChange={(next) => setUsageFilters({ scope: next })}
+            />
+          )}
+          <span className="flex-1" />
+          <SyncState />
+        </div>
+      )}
     </div>
   )
 }

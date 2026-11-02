@@ -143,8 +143,8 @@
     "stats": {
       "active": "活跃天数",
       "activeOf": "/ {{count}} 天",
-      "current": "当前连续",
-      "longest": "最长连续",
+      "current": "当前连续天数",
+      "longest": "最长连续天数",
       "weekday": "最活跃的星期几",
       "days_other": "{{count}} 天",
       "none": "无",
