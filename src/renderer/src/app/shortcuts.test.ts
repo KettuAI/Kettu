@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 type Listener = (event: KeyboardEvent) => void
 const keydowns: { listener: Listener; capture: boolean }[] = []
@@ -18,9 +18,18 @@ vi.mock('react', async (original) => ({
   useEffect: (effect: () => void) => effect(),
 }))
 
-const { historyStep, pageHandlesMenuKeys, pageHandlesZoomKeys, useKeyboardShortcuts } =
-  await import('./shortcuts')
-const { openSettings, useViewStore } = await import('@renderer/stores/view')
+const {
+  historyStep,
+  keepHistoryKey,
+  pageHandlesMenuKeys,
+  pageHandlesZoomKeys,
+  useKeyboardShortcuts,
+} = await import('./shortcuts')
+const { openRoutines, openSettings, openUsage, useViewStore } =
+  await import('@renderer/stores/view')
+
+// Its listeners stay on the window above for every test.
+beforeAll(() => useKeyboardShortcuts())
 
 /** A key event whose target sits inside the elements `inside` names. */
 function key(code: string, modifiers: Partial<KeyboardEvent> = {}, inside: string[] = []) {
@@ -79,6 +88,34 @@ describe('historyStep', () => {
   })
 })
 
+describe('keepHistoryKey', () => {
+  const editor = ['[data-code-editor]']
+
+  it("keeps a history key the Files pane's editor left from the menu and the browser", () => {
+    expect(keepHistoryKey(key('BracketLeft', { metaKey: true }, editor), 'darwin')).toBe(true)
+    expect(keepHistoryKey(key('BracketRight', { metaKey: true }, editor), 'darwin')).toBe(true)
+    expect(keepHistoryKey(key('ArrowLeft', { altKey: true }, editor), 'linux')).toBe(true)
+  })
+
+  it('leaves a key the editor used, other keys, and history keys outside the editor', () => {
+    const used = key('BracketLeft', { metaKey: true, defaultPrevented: true }, editor)
+    expect(keepHistoryKey(used, 'darwin')).toBe(false)
+    expect(keepHistoryKey(key('Slash', { metaKey: true }, editor), 'darwin')).toBe(false)
+    expect(
+      keepHistoryKey(key('BracketLeft', { metaKey: true, shiftKey: true }, editor), 'darwin'),
+    ).toBe(false)
+    expect(keepHistoryKey(key('BracketLeft', { metaKey: true }), 'darwin')).toBe(false)
+  })
+
+  it('keeps a history key typed while an input method composes, and no other key', () => {
+    expect(keepHistoryKey(key('BracketLeft', { metaKey: true, isComposing: true }), 'darwin')).toBe(
+      true,
+    )
+    expect(keepHistoryKey(key('KeyA', { isComposing: true }), 'darwin')).toBe(false)
+    expect(keepHistoryKey(key('Enter', { isComposing: true }), 'darwin')).toBe(false)
+  })
+})
+
 describe('the keys the page handles itself', () => {
   it('takes the app menu keys where no app menu has them: off macOS, and in a browser', () => {
     expect(pageHandlesMenuKeys('darwin', 'desktop')).toBe(false)
@@ -94,43 +131,86 @@ describe('the keys the page handles itself', () => {
   })
 })
 
-describe('Esc in Settings', () => {
-  /**
-   * Presses a key with focus on the page, calling the window's listeners as a browser does: those
-   * in the capture phase, then `page`, as a popup listening on the document, then those in the
-   * bubble phase unless the key was stopped.
-   */
-  function press(key: string, page: (event: KeyboardEvent) => void = () => {}): void {
-    let stopped = false
-    let prevented = false
-    const event = {
-      key,
-      code: key,
-      metaKey: false,
-      ctrlKey: false,
-      altKey: false,
-      shiftKey: false,
-      isComposing: false,
-      get defaultPrevented() {
-        return prevented
-      },
-      target: { tagName: 'BODY', isContentEditable: false, closest: () => null },
-      preventDefault: () => (prevented = true),
-      stopPropagation: () => (stopped = true),
-    } as unknown as KeyboardEvent
-    for (const { listener } of keydowns.filter((k) => k.capture)) listener(event)
-    page(event)
-    if (stopped) return
-    for (const { listener } of keydowns.filter((k) => !k.capture)) listener(event)
-  }
+/**
+ * Presses a key with focus on the page, calling the window's listeners as a browser does: those
+ * in the capture phase, then `page`, as an element listening below the window, then those in the
+ * bubble phase unless the key was stopped. The target sits inside the elements `inside` names.
+ * True when the key was prevented.
+ */
+function press(
+  init: Partial<KeyboardEvent> & { key: string },
+  page: (event: KeyboardEvent) => void = () => {},
+  inside: string[] = [],
+): boolean {
+  let stopped = false
+  let prevented = false
+  const event = {
+    code: init.key,
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+    isComposing: false,
+    ...init,
+    get defaultPrevented() {
+      return prevented
+    },
+    target: {
+      tagName: 'BODY',
+      isContentEditable: false,
+      closest: (selector: string) => (inside.includes(selector) ? {} : null),
+    },
+    preventDefault: () => (prevented = true),
+    stopPropagation: () => (stopped = true),
+  } as unknown as KeyboardEvent
+  for (const { listener } of keydowns.filter((k) => k.capture)) listener(event)
+  page(event)
+  if (!stopped) for (const { listener } of keydowns.filter((k) => !k.capture)) listener(event)
+  return prevented
+}
 
+describe('Esc in Settings', () => {
   it('leaves the key to an open popup, which stops it, and goes back once none takes it', () => {
-    useKeyboardShortcuts()
     openSettings('general')
     // A select closing on Esc, which keeps the key from the page under it.
-    press('Escape', (event) => event.stopPropagation())
+    press({ key: 'Escape' }, (event) => event.stopPropagation())
     expect(useViewStore.getState().settings.open).toBe(true)
-    press('Escape')
+    press({ key: 'Escape' })
     expect(useViewStore.getState().settings.open).toBe(false)
+  })
+})
+
+describe('Cmd+[ and Cmd+], which the History menu has too', () => {
+  const back = { key: '[', code: 'BracketLeft', metaKey: true }
+  const editor = ['[data-code-editor]']
+  const shown = () => useViewStore.getState().main.kind
+
+  beforeEach(() => {
+    useViewStore.setState((s) => ({
+      main: { kind: 'launch' },
+      settings: { ...s.settings, open: false },
+    }))
+    useViewStore.setState({ history: { back: [], forward: [] } })
+    openUsage()
+    openRoutines()
+  })
+
+  it('step back from the page, kept from the menu', () => {
+    expect(press(back)).toBe(true)
+    expect(shown()).toBe('usage')
+  })
+
+  it("step nowhere from the Files pane's editor, and are kept from the menu once it leaves them", () => {
+    // Its indentLess leaves the key in a read-only file.
+    expect(press(back, () => {}, editor)).toBe(true)
+    expect(shown()).toBe('routines')
+    expect(press(back, (event) => event.preventDefault(), editor)).toBe(true)
+    expect(shown()).toBe('routines')
+  })
+
+  it('step nowhere while an input method composes, and are kept from the menu', () => {
+    expect(press({ ...back, isComposing: true })).toBe(true)
+    expect(shown()).toBe('routines')
+    expect(press({ key: 'a', code: 'KeyA', isComposing: true })).toBe(false)
   })
 })

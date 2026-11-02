@@ -41,14 +41,19 @@ export function pageHandlesZoomKeys(platform: string, client: 'desktop' | 'web')
  * arrive as app commands, and the zoom keys are menu items, so they are not handled here; a
  * browser has no menu, so the web client handles the first five and leaves zoom to the browser.
  * Cmd+[ and Cmd+] are menu items too, but the page takes them first, and the menu gets them only
- * when the page leaves them, as to the Files pane's editor. While a terminal has focus on Windows
+ * when the page leaves them, as under a dialog or menu. While a terminal has focus on Windows
  * and Linux, only the terminal and zoom shortcuts reach the app, since Ctrl+B, Ctrl+H, Ctrl+L and
  * Ctrl+N mean something to the shell.
  */
 export function useKeyboardShortcuts(): void {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing) return
+      if (event.defaultPrevented) return
+      if (event.isComposing) {
+        // The input method has had the key by now, so preventing it leaves the composition be.
+        if (keepHistoryKey(event, platform)) event.preventDefault()
+        return
+      }
       const view = useViewStore.getState()
       const inTerminal = !!(document.activeElement as HTMLElement | null)?.closest(
         '[data-terminal]',
@@ -118,6 +123,10 @@ export function useKeyboardShortcuts(): void {
       event.preventDefault()
       settingsBack()
     }
+    // In the bubble phase too, once the Files pane's editor has used the key or left it.
+    const onHistoryKey = (event: KeyboardEvent) => {
+      if (keepHistoryKey(event, platform)) event.preventDefault()
+    }
     // The mouse's back and forward buttons.
     const onMouseUp = (event: MouseEvent) => {
       if ((event.button !== 3 && event.button !== 4) || layerOpen()) return
@@ -127,6 +136,7 @@ export function useKeyboardShortcuts(): void {
     }
     window.addEventListener('keydown', onKeyDown, true)
     window.addEventListener('keydown', onEscape)
+    window.addEventListener('keydown', onHistoryKey)
     window.addEventListener('mouseup', onMouseUp)
     // An artifact's page keeps the keys typed in it; main passes on the app's own shortcuts.
     const offForwarded = window.kettu.app.onShortcut((key) => {
@@ -137,6 +147,7 @@ export function useKeyboardShortcuts(): void {
     return () => {
       window.removeEventListener('keydown', onKeyDown, true)
       window.removeEventListener('keydown', onEscape)
+      window.removeEventListener('keydown', onHistoryKey)
       window.removeEventListener('mouseup', onMouseUp)
       offForwarded()
     }
@@ -154,17 +165,39 @@ const ARROWS: Record<string, 'back' | 'forward'> = { ArrowLeft: 'back', ArrowRig
  * Files pane's editor keeps them, where they indent or move by syntax, and outside macOS so does
  * a terminal, where they move by a word.
  */
-export function historyStep(
-  event: Pick<KeyboardEvent, 'code' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey' | 'target'>,
+export function historyStep(event: HistoryKeyEvent, platform: string): 'back' | 'forward' | null {
+  const step = historyKeys(event, platform)
+  if (!step || inCodeEditor(event.target)) return null
+  if (platform !== 'darwin' && (event.target as HTMLElement | null)?.closest('[data-terminal]')) {
+    return null
+  }
+  return step
+}
+
+/**
+ * Whether a history key the page does not step on is still prevented, since macOS's History menu
+ * and a browser's Back have the same keys and take any the page leaves: one the Files pane's
+ * editor did not use, as in a read-only file, or one typed while an input method composes.
+ */
+export function keepHistoryKey(
+  event: HistoryKeyEvent & Pick<KeyboardEvent, 'isComposing' | 'defaultPrevented'>,
   platform: string,
-): 'back' | 'forward' | null {
+): boolean {
+  if (event.defaultPrevented || !historyKeys(event, platform)) return false
+  return event.isComposing || inCodeEditor(event.target)
+}
+
+type HistoryKeyEvent = Pick<
+  KeyboardEvent,
+  'code' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey' | 'target'
+>
+
+/** Back or forward by the keys alone, wherever the focus is. */
+function historyKeys(event: HistoryKeyEvent, platform: string): 'back' | 'forward' | null {
   const mac = platform === 'darwin'
   const held = mac ? event.metaKey && !event.altKey : event.altKey && !event.metaKey
   if (!held || event.ctrlKey || event.shiftKey) return null
-  const step = (mac ? BRACKETS : ARROWS)[event.code]
-  if (!step || inCodeEditor(event.target)) return null
-  if (!mac && (event.target as HTMLElement | null)?.closest('[data-terminal]')) return null
-  return step
+  return (mac ? BRACKETS : ARROWS)[event.code] ?? null
 }
 
 function run(event: KeyboardEvent, action: () => void): void {
