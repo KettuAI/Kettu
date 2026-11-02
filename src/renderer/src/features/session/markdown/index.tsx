@@ -33,6 +33,8 @@ export interface DiffProps {
   oldText: string | null
   newText: string
   className?: string
+  /** In a reply's block frame. */
+  framed?: boolean
 }
 
 /** One file's change in unified style, highlighted off the main thread. */

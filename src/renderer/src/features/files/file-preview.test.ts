@@ -52,7 +52,7 @@ describe('FilePreview', () => {
       size: 41,
     })
     expect(loaders(html, url)).toEqual(['img'])
-    expect(html).toContain('41 byte')
+    expect(html).toContain('41 B')
     expect(html).toContain('aria-label="Show source"')
   })
 
@@ -65,7 +65,7 @@ describe('FilePreview', () => {
       height: 1080,
     })
     expect(loaders(picture.html, picture.url)).toEqual(['img'])
-    expect(picture.html).toContain('1920 × 1080 · 2 kB')
+    expect(picture.html).toContain('1920 × 1080 · 2 KB')
     const clip = preview('out/clip.mp4', { kind: 'video', mimeType: 'video/mp4', size: 10 })
     expect(loaders(clip.html, clip.url)).toEqual(['video'])
     expect(clip.html).toMatch(/<video[^>]*\bcontrols=""/)

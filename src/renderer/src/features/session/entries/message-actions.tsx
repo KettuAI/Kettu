@@ -1,5 +1,5 @@
 import { memo, useState, type ReactNode } from 'react'
-import { CornerDownRightIcon, SplitIcon } from 'lucide-react'
+import { CornerDownRightIcon, GitForkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { UserContent } from '@shared/thread'
 import { forkSession } from '@renderer/app/actions'
@@ -43,13 +43,7 @@ function ActionButton({
       {disabled ? (
         // A disabled button takes no pointer, so its tooltip opens from around it.
         <TooltipTrigger render={<span className="inline-flex" />}>
-          <Button
-            variant="quiet"
-            size="icon-message"
-            aria-label={label}
-            disabled
-            className="shrink-0"
-          >
+          <Button variant="quiet" size="icon-sm" aria-label={label} disabled className="shrink-0">
             {children}
           </Button>
         </TooltipTrigger>
@@ -58,7 +52,7 @@ function ActionButton({
           render={
             <Button
               variant="quiet"
-              size="icon-message"
+              size="icon-sm"
               aria-label={label}
               onClick={onClick}
               className="shrink-0"
@@ -95,7 +89,7 @@ export function UserActions({
 }) {
   const { t } = useTranslation('session')
   return (
-    <div className="-mr-1 flex h-6 items-center gap-1 text-xs text-muted-foreground">
+    <div className="-mr-1.5 flex h-7 items-center gap-1 text-hint text-tertiary">
       {steered && (
         <span className="mr-1 inline-flex items-center gap-1">
           <CornerDownRightIcon className="size-3" />
@@ -107,7 +101,7 @@ export function UserActions({
         <CopyButton
           text={() => userText(content)}
           label={t('userActions.copyMessage')}
-          size="icon-message"
+          size="icon-sm"
         />
       </span>
     </div>
@@ -182,7 +176,7 @@ export const ReplyFooter = memo(
     return (
       <div
         className={cn(
-          'group/actions -ml-1 flex h-6 min-w-0 items-center gap-0.5 text-xs text-muted-foreground',
+          'group/actions -ml-1.5 flex h-7 min-w-0 items-center gap-0.5 text-hint text-tertiary',
           animation,
         )}
       >
@@ -190,17 +184,18 @@ export const ReplyFooter = memo(
           className={cn(
             'flex min-w-0 items-center gap-0.5',
             REVEAL,
-            (hovered || forking) && 'opacity-100',
+            // The latest reply keeps its actions in view, under the turn's end.
+            (hovered || forking || latest) && 'opacity-100',
           )}
         >
-          <CopyButton text={text} label={t('replyFooter.copyReply')} size="icon-message" />
+          <CopyButton text={text} label={t('replyFooter.copyReply')} size="icon-sm" />
           {showFork && (
             <ActionButton
               label={forkLabel}
               disabled={forking || blocked !== null}
               onClick={() => void fork()}
             >
-              {forking ? <Spinner /> : <SplitIcon />}
+              {forking ? <Spinner /> : <GitForkIcon />}
             </ActionButton>
           )}
           {(end || at !== undefined) && (

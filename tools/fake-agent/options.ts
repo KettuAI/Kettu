@@ -33,6 +33,8 @@ export const SCENARIOS = [
   'tables',
   'open-site',
   'approvals',
+  'content',
+  'media',
 ] as const
 
 export type ScenarioName = (typeof SCENARIOS)[number]
@@ -114,6 +116,13 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   report: { description: 'Short Chinese notes between runs of work, then a report' },
   tables: {
     description: 'Five tables: long, wide, long paths and a URL, many columns, and Chinese',
+  },
+  content: {
+    description:
+      'Every kind of reply content: text, lists, links, a table, maths, commands, a diff and blocks',
+  },
+  media: {
+    description: "Pictures, a video and a file that cannot play, from the project's media folder",
   },
 }
 

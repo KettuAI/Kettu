@@ -249,6 +249,8 @@
   --shadow-toast: var(--elevation-toast);
   --shadow-sheet: var(--sheet-ring);
   --shadow-sheet-focused: var(--sheet-focused-ring);
+  --shadow-media: var(--elevation-media);
+  --shadow-media-control: var(--elevation-media-control);
 
   --font-weight-normal: var(--weight-normal);
   --font-weight-medium: var(--weight-medium);
@@ -320,6 +322,15 @@
   /* Tooltips and a menu item's shortcut. */
   --text-caption: 11.5px;
   --text-caption--line-height: 16px;
+  /* A file card's name in a reply. */
+  --text-file: 13.5px;
+  --text-file--line-height: 18px;
+  /* A count over a picture, such as a grid's +3. */
+  --text-count: 11px;
+  --text-count--line-height: 14px;
+  /* The extension at the foot of a file card's type tile, in bold. */
+  --text-file-type: 9px;
+  --text-file-type--line-height: 11px;
   /* Mono beside interface text: commit ids, line counts, a worktree's path. */
   --text-code-sm: 11px;
   --text-code-sm--line-height: 16px;
@@ -571,20 +582,31 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* A link in the thread: a reply's, or a web address in a notice. Ink, with one gray underline
-   that darkens to the ink on hover. */
+/* The color of a thread link's line, registered so a hover can fade it. */
+@property --thread-link-line {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+
+/* A link in the thread: a reply's, or a web address in a notice. Ink, with one gray line 3 px
+   below that runs under its site's icon and its text and darkens to the ink on hover. A
+   background draws the line, so it goes on under every line a long link wraps to. */
 @utility thread-link {
+  --thread-link-line: var(--border-strong);
   color: var(--link);
-  text-decoration: underline;
-  text-decoration-color: var(--border-strong);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
+  text-decoration: none;
+  padding-bottom: 3px;
+  background-image: linear-gradient(var(--thread-link-line), var(--thread-link-line));
+  background-size: 100% 1px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
   transition:
     color var(--duration-fast),
-    text-decoration-color var(--duration-fast);
+    --thread-link-line var(--duration-fast);
   &:hover {
+    --thread-link-line: var(--link-hover);
     color: var(--link-hover);
-    text-decoration-color: currentColor;
   }
 }
 
@@ -833,7 +855,7 @@
 
 /* Agent prose, rendered by Streamdown, set to the thread's measurements. These rules are not in a layer, so they win over the utility
    classes Streamdown puts on each element. Sizes are in em of the prose size, so Text size
-   scales them; the spec's pixel values are those of the default 16.5 px. */
+   scales them; the spec's pixel values are those of the default 15 px. */
 .markdown {
   font-family: var(--font-prose);
   font-feature-settings: var(--prose-features);
@@ -846,11 +868,11 @@
   user-select: text;
 
   & :where(p) {
-    margin: 0 0 0.75em;
+    margin: 0 0 0.8em;
     text-wrap: pretty;
   }
   & :where(ul, ol, blockquote, table, pre) {
-    margin-block: 0.75em;
+    margin-block: 0.8em;
   }
   /* Blocks sit in the chunks of markdown-impl.tsx, whose margins collapse through them. These
      rules outrank the block rules below, so not even a heading adds space above the first block
@@ -873,16 +895,16 @@
     display: none;
   }
 
-  /* More space above than below, so a heading sits on its content. */
+  /* More space above than below, so a heading sits on its content: three steps only, 20, 16.5
+     and 15 px, the first in the display face. Margins are in em of each heading's own size. */
   & [data-streamdown^='heading-'] {
     color: var(--foreground);
     font-weight: var(--font-weight-semibold);
     line-height: 1.4;
     text-wrap: balance;
   }
-  /* Three steps only, 20, 16.5 and 15 px at the default size: the first in the display face. */
   & [data-streamdown='heading-1'] {
-    margin: 1.6em 0 0.4em;
+    margin: 1.2em 0 0.6em;
     font-family: var(--font-display);
     font-size: 1.3333em;
     font-weight: 700;
@@ -890,12 +912,12 @@
     letter-spacing: -0.012em;
   }
   & [data-streamdown='heading-2'] {
-    margin: 1.45em 0 0.4em;
+    margin: 1.3333em 0 0.4848em;
     font-size: 1.1em;
     letter-spacing: -0.008em;
   }
   & [data-streamdown='heading-3'] {
-    margin: 1.2em 0 0.3em;
+    margin: 1.2em 0 0.4em;
     font-size: 1em;
     line-height: 1.5;
   }
@@ -905,36 +927,117 @@
       [data-streamdown='heading-5'],
       [data-streamdown='heading-6']
     ) {
-    margin: 1.5em 0 0.3em;
-    color: var(--muted-foreground);
+    margin: 1.2em 0 0.4em;
+    color: var(--text-secondary);
     font-size: 1em;
+    line-height: 1.5;
   }
 
+  /* Bullets and numbers are gray, so the text leads: a 5 px dot in a 16 px column, a ring one
+     level down, 22 px in; numbers right-aligned in tabular figures. */
   & :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list']) {
-    padding-left: 1.25em;
-    list-style-position: outside;
+    padding-left: 0;
+    list-style: none;
   }
   & [data-streamdown='ordered-list'] {
     font-variant-numeric: tabular-nums;
   }
-  & [data-streamdown='list-item'] {
-    margin-block: 0.3em;
-    padding-block: 0;
+  & [data-streamdown='ordered-list'] > [data-streamdown='list-item'] {
+    position: relative;
+    padding-left: 1.8667em;
   }
-  & [data-streamdown='list-item']::marker {
-    color: var(--muted-foreground);
+  & [data-streamdown='ordered-list'] > [data-streamdown='list-item']::before {
+    content: counter(list-item) '.';
+    position: absolute;
+    left: 0;
+    width: 1.2em;
+    color: var(--text-tertiary);
+    text-align: right;
+  }
+  /* A list hangs under its lead-in and leaves more room before what follows. */
+  & :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list']) {
+    margin-bottom: 1.0667em;
+  }
+  & p:has(+ :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list'])) {
+    margin-bottom: 0;
+  }
+  & p + :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list']) {
+    margin-top: 0;
+  }
+  & [data-streamdown='list-item'] {
+    margin-block: 0.4em 0;
+    padding-block: 0;
+    line-height: 1.6;
+  }
+  & [data-streamdown='unordered-list'] > [data-streamdown='list-item'] {
+    position: relative;
+    padding-left: 1.7333em;
+  }
+  & [data-streamdown='unordered-list'] > [data-streamdown='list-item']::before {
+    content: '';
+    position: absolute;
+    top: 0.6667em;
+    left: calc(0.5333em - 2.5px);
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--text-tertiary);
+  }
+  &
+    [data-streamdown='list-item']
+    [data-streamdown='unordered-list']
+    > [data-streamdown='list-item']::before {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.2px var(--text-tertiary);
   }
   &
     [data-streamdown='list-item']
     > :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list']) {
-    margin-block: 0.25em;
+    margin-block: 0.4em 0;
+  }
+  &
+    [data-streamdown='unordered-list']
+    > [data-streamdown='list-item']
+    > [data-streamdown='unordered-list'] {
+    margin-left: -0.2667em;
   }
   /* Loose lists keep the spacing of tight ones. */
   & [data-streamdown='list-item'] > p {
     margin: 0;
   }
   & [data-streamdown='list-item'] > [data-media-block] {
-    margin-block: 0.3em;
+    margin-block: 0.4em;
+  }
+  /* A task's box takes the bullet's place; a done task's text turns gray and struck through. */
+  & .task-list-item::before {
+    content: none;
+  }
+  & [data-task-box] {
+    position: absolute;
+    top: 0.2667em;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    box-shadow: inset 0 0 0 1.5px var(--border-strong);
+    color: var(--switch-thumb);
+    & svg {
+      width: 10px;
+      height: 10px;
+    }
+  }
+  & [data-task-box][aria-checked='true'] {
+    background: var(--control-on);
+    box-shadow: none;
+  }
+  & .task-list-item:has(> [data-task-box][aria-checked='true']) {
+    color: var(--text-tertiary);
+    text-decoration: line-through;
+    text-decoration-color: var(--border-strong);
   }
 
   & [data-streamdown='strong'] {
@@ -955,31 +1058,36 @@
     border-radius: var(--radius-sm);
     background: var(--bg-code-inline);
     color: var(--text-primary);
-    padding: 0.1em 0.35em;
+    padding: 0.0667em 0.3333em;
     font-family: var(--font-mono);
-    /* The mono face's x-height is larger, so this reaches about 95% of the serif's. */
-    font-size: 0.84em;
+    font-variant-ligatures: none;
+    font-size: 0.8667em;
+  }
+  & del {
+    color: var(--text-tertiary);
   }
 
-  /* A file reference is a chip, not a link: its type's icon and its name, the path in its
-     tooltip. It opens the file in the Files pane. */
+  /* A file reference is a chip, not a link: its type's icon and its name on a subtle ground in a
+     thin ring, the path in its tooltip. It opens the file in the Files pane. */
   & [data-file-ref] {
+    position: relative;
+    top: -1px;
     display: inline-flex;
     vertical-align: middle;
     align-items: center;
-    gap: 4px;
+    gap: 5px;
     margin-inline: 1px;
-    /* The line counts the chip as 18 px, so it never makes a 1.45 line taller, down to 14 px. */
+    /* The line counts the chip as 18 px, so it never makes a line taller. */
     margin-block: -2px;
-    border-radius: var(--radius-md);
-    background: var(--bg-code-inline);
-    padding: 0 6px;
+    border-radius: var(--radius-lg);
+    background: var(--bg-subtle);
+    box-shadow: inset 0 0 0 1px var(--border-subtle);
+    padding: 0 6px 0 5px;
     height: 22px;
     color: var(--text-primary);
     font-family: var(--font-sans);
-    /* Follows Text size; about 96% of the serif's x-height beside the prose. */
-    font-size: 0.85em;
-    font-weight: var(--font-weight-medium);
+    font-size: 0.9em;
+    font-weight: var(--font-weight-normal);
     line-height: 1;
     white-space: nowrap;
     cursor: pointer;
@@ -992,197 +1100,211 @@
       outline: 1.5px solid var(--focus-ring-color);
       outline-offset: 2px;
     }
+    & svg {
+      color: var(--text-tertiary);
+    }
     /* The line it points at, after the name. */
     & > span + span {
       color: var(--text-tertiary);
-      font-weight: var(--font-weight-normal);
     }
   }
 
-  & [data-streamdown='code-block'] {
-    margin-block: 1em;
-    gap: 0;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-code);
-    background: var(--bg-code-block);
-    padding: 0;
-    overflow: hidden;
-  }
-  & [data-streamdown='code-block-header'] {
-    height: 32px;
-    padding-inline: 14px 6px;
-    color: var(--muted-foreground);
-    font-size: 12px;
-  }
-  /* The copy control sits in the header row as a ghost button, without Streamdown's frosted box. */
-  & [data-streamdown='code-block'] > div:not([data-streamdown]) {
-    top: 4px;
-    right: 4px;
-  }
-  & [data-streamdown='code-block'] > div:not([data-streamdown]) > div {
-    border: 0;
-    background: transparent;
-    backdrop-filter: none;
-    padding: 0;
-  }
-  &
-    :is(
-      [data-streamdown='code-block'] > div:not([data-streamdown]),
-      [data-streamdown='table-wrapper'] > div:first-child:not(:last-child)
-    )
-    button {
-    display: grid;
-    place-items: center;
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    border-radius: var(--radius-md);
-    color: var(--muted-foreground);
-    transition:
-      color var(--duration-fast) ease-out,
-      background-color var(--duration-fast) ease-out;
-    &:hover {
-      background: var(--accent);
-      color: var(--foreground);
-    }
-    &:focus-visible {
-      outline: 1.5px solid var(--focus-ring-color);
-      outline-offset: 2px;
-    }
-    & svg {
-      width: 14px;
-      height: 14px;
-    }
-  }
-  & [data-streamdown='code-block-body'] {
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    padding: 0 14px 12px;
-    @apply text-code;
-    overflow-x: auto;
-  }
-  & [data-streamdown='code-block-body'] pre {
-    margin: 0;
-    background: transparent !important;
-    white-space: pre;
-    overflow-wrap: normal;
+  /* Blocks in the prose: code, diagrams and maths (the frame itself is .block-frame). */
+  & [data-block-frame],
+  & [data-math-block],
+  & [data-table-frame] {
+    margin-block: 0.8em;
   }
 
   & [data-streamdown='blockquote'] {
-    border-left: 2px solid var(--border);
-    padding-left: 12px;
-    color: var(--muted-foreground);
+    margin-block: 0.9333em;
+    border: 0;
+    box-shadow: inset 2px 0 0 var(--border-default);
+    padding: 2px 0 2px 14px;
+    color: var(--text-secondary);
     font-style: normal;
   }
 
-  & [data-streamdown='horizontal-rule'] {
-    margin-block: 1.5em;
-    border: 0;
-    border-top: 1px solid var(--border);
+  & [data-streamdown='blockquote'] > :last-child {
+    margin-bottom: 0;
   }
 
-  & [data-streamdown='table-wrapper'] {
+  & [data-streamdown='horizontal-rule'] {
+    margin-block: 1.3333em 0.9333em;
+    border: 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  /* A table sits in a thin frame that scrolls sideways when it is wider than the reply, its
+     hidden edge fading (markdown-table.tsx); numbers line up on the right. */
+  & [data-table-frame] {
     position: relative;
-    gap: 0;
-    margin-block: 1em;
-    border: 0;
-    background: transparent;
-    padding: 0;
+    overflow: hidden;
+    border-radius: var(--radius-code);
+    font-family: var(--font-sans);
   }
-  /* The copy control floats over the corner on hover instead of taking a row of its own. */
-  & [data-streamdown='table-wrapper'] > div:first-child:not(:last-child) {
-    position: absolute;
-    top: 3px;
-    right: 3px;
-    z-index: 1;
-    border-radius: var(--radius-md);
-    background: var(--background);
-    opacity: 0;
-    transition: opacity var(--duration-fast) ease-out;
+  & [data-table-scroll] {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
   }
-  & [data-streamdown='table-wrapper']:is(:hover, :focus-within) > div:first-child:not(:last-child) {
-    opacity: 1;
+  & [data-table-scroll][data-fade-right] {
+    mask-image: linear-gradient(to right, black calc(100% - 32px), transparent);
   }
-  /* A table never scrolls inside itself: every row and column shows, and one too wide for its
-     room is fitted by table-fit.ts. */
-  & [data-streamdown='table-wrapper'] > div:last-child {
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    overflow: visible;
+  & [data-table-scroll][data-fade-left] {
+    mask-image: linear-gradient(to left, black calc(100% - 32px), transparent);
+  }
+  & [data-table-scroll][data-fade-left][data-fade-right] {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black 32px,
+      black calc(100% - 32px),
+      transparent
+    );
   }
   & [data-streamdown='table'] {
+    width: 100%;
     margin: 0;
     border: 0;
-    font-size: 0.9333em;
+    border-collapse: collapse;
     font-variant-numeric: tabular-nums;
     overflow-wrap: normal;
   }
   & [data-streamdown='table-header'] {
-    background: var(--bg-code-block);
+    background: transparent;
   }
+  /* Rows of 34 px and a 30 px header, each with its 1 px line under it. */
   & :is([data-streamdown='table-header-cell'], [data-streamdown='table-cell']) {
     border: 0;
     padding: 8px 12px;
-    line-height: 1.5;
+    line-height: 18px;
+    white-space: nowrap;
+    text-align: left;
   }
   & [data-streamdown='table-header-cell'] {
-    border-bottom: 1px solid var(--border-subtle);
-    color: var(--muted-foreground);
+    color: var(--text-secondary);
+    font-size: 12.5px;
     font-weight: var(--font-weight-medium);
-    text-align: left;
-    /* Headers wrap between words, and Chinese and Japanese text never breaks between its
-       characters. */
-    white-space: normal;
-    word-break: keep-all;
+    line-height: 14px;
   }
   & [data-streamdown='table-cell'] {
-    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    font-size: 13.5px;
   }
-  & [data-streamdown='table-body'] > tr:last-child > [data-streamdown='table-cell'] {
-    border-bottom: 0;
+  /* A column of sentences wraps instead of stretching the table (markdown-table.tsx). */
+  & [data-streamdown='table-cell'][data-prose] {
+    min-width: 16em;
+    white-space: normal;
   }
-  /* A fitted table's cells break inside a word once the table no longer fits as it is. */
-  & [data-fit] :is(th, td) {
-    overflow-wrap: anywhere;
+  & :is([data-streamdown='table-header-cell'], [data-streamdown='table-cell'])[data-numeric] {
+    text-align: right;
   }
-  /* No room even for whole words: each row lists its cells under its first one, the header
-     hidden and each value after its column's name. */
-  & [data-fit='stack'] {
-    display: block;
-  }
-  & [data-fit='stack'] > tbody,
-  & [data-fit='stack'] > tbody > tr,
-  & [data-fit='stack'] > tbody > tr > td {
-    display: block;
-  }
-  & [data-fit='stack'] > thead {
-    display: none;
-  }
-  & [data-fit='stack'] > tbody > tr {
-    border-top: 0;
-    border-bottom: 1px solid var(--border-subtle);
-    padding: 8px 12px;
-  }
-  & [data-fit='stack'] > tbody > tr:last-child {
-    border-bottom: 0;
-  }
-  & [data-fit='stack'] > tbody > tr > td {
+  /* Lines on the rows, not the cells, so they run unbroken across the columns. */
+  & [data-streamdown='table-row'] {
     border: 0;
-    padding: 0;
+    border-bottom: 1px solid var(--border-subtle);
+    transition: background-color var(--duration-fast);
   }
-  & [data-fit='stack'] > tbody > tr > td:first-child {
-    color: var(--foreground);
-    font-weight: var(--font-weight-semibold);
+  & [data-streamdown='table-header'] > [data-streamdown='table-row'] {
+    border-bottom-color: var(--border-default);
   }
-  & [data-fit='stack'] > tbody > tr > td:empty {
-    display: none;
+  & [data-streamdown='table-body'] > [data-streamdown='table-row']:hover {
+    background: var(--bg-hover);
   }
-  & [data-fit='stack'] > tbody > tr > td:not(:first-child)::before {
-    content: attr(data-label);
-    color: var(--muted-foreground);
-    font-weight: var(--font-weight-medium);
+  & [data-streamdown='table-cell'] [data-streamdown='inline-code'] {
+    font-size: 13px;
+  }
+  & [data-table-footer] {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 32px;
+    padding: 0 6px 0 12px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    line-height: 1;
+    & .block-frame-action {
+      width: 24px;
+      height: 24px;
+    }
+  }
+
+  /* Maths: inline formulas keep the line's height; one on its own line is centered on a subtle
+     ground and numbered in the message's order, with Copy LaTeX on hover. A formula KaTeX cannot
+     read shows its source, with the part it stopped at in red. */
+  counter-reset: equation;
+  & .katex {
+    font-size: 1.06em;
+    line-height: 1;
+  }
+  & p + [data-table-frame] {
+    margin-top: 0.9333em;
+  }
+  & p + [data-math-block] {
+    margin-top: 1.0667em;
+  }
+  & [data-math-block]:has(+ [data-math-block]) {
+    margin-bottom: 0;
+  }
+  & [data-math-block] + [data-math-block] {
+    margin-top: 0.6667em;
+  }
+  & [data-math-block] {
+    position: relative;
+    counter-increment: equation;
+    overflow-x: auto;
+    border-radius: var(--radius-code);
+    background: var(--bg-subtle);
+    padding: 17px 52px;
+    color: var(--text-primary);
+    text-align: center;
+    & .katex-display {
+      margin: 0;
+    }
+    & .katex-display > .katex {
+      font-size: 1.27em;
+    }
+    &::after {
+      content: '(' counter(equation) ')';
+      position: absolute;
+      top: 50%;
+      right: 14px;
+      translate: 0 -50%;
+      color: var(--text-tertiary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+    & > code {
+      font-family: var(--font-mono);
+      font-size: 0.8667em;
+      white-space: pre-wrap;
+    }
+  }
+  & .math-copy {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    opacity: 0;
+    transition: opacity var(--duration-fast);
+  }
+  & [data-math-block]:is(:hover, :focus-within) .math-copy {
+    opacity: 1;
+  }
+  & [data-math-block]:is(:hover, :focus-within)::after {
+    opacity: 0;
+  }
+  & [data-math-error] {
+    font-family: var(--font-mono);
+    font-variant-ligatures: none;
+    font-size: 0.8667em;
+    & mark {
+      border-radius: 2px;
+      background: var(--danger-tint);
+      color: var(--danger);
+      text-decoration: underline wavy var(--danger);
+      text-underline-offset: 3px;
+    }
   }
 }
 
@@ -1210,6 +1332,247 @@
   & [data-file-ref] {
     font-size: 1em;
   }
+}
+
+/* The frame every block in a reply shares: code, diffs, shell output, SVG and diagrams, with a
+   34 px header that names the block on the left and holds its actions on the right
+   (block-frame.tsx). */
+.block-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-code);
+  background: var(--bg-code-block);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-style: normal;
+  line-height: normal;
+  overflow-wrap: normal;
+  user-select: text;
+}
+/* The frame's edge, drawn over its content so a preview's ground cannot cover it. */
+.block-frame::after,
+.markdown [data-table-frame]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  pointer-events: none;
+}
+/* In a request's card a block runs edge to edge, with only a line under it. */
+.block-frame[data-bleed] {
+  border-radius: 0;
+}
+.block-frame[data-bleed]::after {
+  box-shadow: inset 0 -1px 0 var(--border-soft);
+}
+.block-frame-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 6px 0 12px;
+  box-shadow: inset 0 -1px 0 var(--border-subtle);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.block-frame-lang {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-variant-ligatures: none;
+}
+.block-frame-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.block-frame-action {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-tile);
+  color: var(--text-tertiary);
+  & svg {
+    width: 13px;
+    height: 13px;
+  }
+}
+/* Folds a long block, or opens it again: the full width of the frame's foot. */
+.block-frame-more {
+  display: block;
+  width: 100%;
+  height: 30px;
+  box-shadow: inset 0 1px 0 var(--border-subtle);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  outline: none;
+  transition:
+    color var(--duration-fast),
+    background-color var(--duration-fast);
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+  }
+  &:focus-visible {
+    outline: 1.5px solid var(--focus-ring-color);
+    outline-offset: -2px;
+  }
+}
+.block-frame-error {
+  margin: 0;
+  padding: 8px 14px 10px;
+  box-shadow: inset 0 1px 0 var(--border-subtle);
+  color: var(--danger);
+  font-size: 12px;
+}
+/* An SVG on a checkerboard, so its transparent parts show. */
+.block-frame-checker {
+  display: flex;
+  justify-content: center;
+  padding: 12px 16px;
+  background-color: var(--bg-surface);
+  background-image:
+    linear-gradient(45deg, var(--bg-subtle) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--bg-subtle) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--bg-subtle) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--bg-subtle) 75%);
+  background-position:
+    0 0,
+    0 6px,
+    6px -6px,
+    -6px 0;
+  background-size: 12px 12px;
+  & img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+}
+.block-frame-diagram {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  padding: 16px 14px 10px;
+  background: var(--bg-surface);
+  & img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+}
+/* Streamdown's code block inside the frame: only its highlighted body, with the line numbers in
+   an 18 px column 14 px from the edge. */
+.block-frame [data-streamdown='code-block'] {
+  margin: 0;
+  gap: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+.block-frame [data-streamdown='code-block-header'],
+.block-frame [data-streamdown='code-block'] > div:not([data-streamdown]) {
+  display: none;
+}
+.block-frame [data-streamdown='code-block-body'] {
+  max-height: none;
+  overflow-x: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-variant-ligatures: none;
+  line-height: 1.7;
+}
+.block-frame [data-streamdown='code-block-body'] pre {
+  margin: 0;
+  background: transparent !important;
+  font: inherit;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.block-frame [data-streamdown='code-block-body'] code > span {
+  position: relative;
+  display: block;
+  padding: 0 14px 0 46px;
+}
+.block-frame [data-streamdown='code-block-body'] code > span::before {
+  position: absolute;
+  left: 14px;
+  width: 18px;
+  margin: 0;
+  color: var(--syntax-comment);
+  font-size: inherit;
+  opacity: 1;
+}
+.block-frame[data-wrap] [data-streamdown='code-block-body'] pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A shell block: the exit code as a small tinted badge, the output's last lines under the
+   header, and a quiet line that opens the earlier ones (shell-block.tsx). */
+.shell-exit {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  font-size: 11.5px;
+  font-weight: var(--font-weight-semibold);
+  & svg {
+    width: 11px;
+    height: 11px;
+  }
+}
+.shell-command,
+.shell-output {
+  margin: 0;
+  overflow-x: auto;
+  padding: 8px 14px 10px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-ligatures: none;
+  line-height: 1.65;
+  white-space: pre;
+}
+.shell-command {
+  box-shadow: inset 0 -1px 0 var(--border-subtle);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.shell-earlier {
+  display: block;
+  padding: 6px 14px 0;
+  color: var(--syntax-comment);
+  font-size: 11.5px;
+  outline: none;
+  &:hover {
+    color: var(--text-secondary);
+  }
+  &:focus-visible {
+    border-radius: var(--radius-md);
+    outline: 1.5px solid var(--focus-ring-color);
+  }
+}
+/* A diff in the block frame: code type, the code's own green and red for its signs, and a changed
+   line's tint across its number too, with no gap after the number (diff-impl.tsx). */
+.block-frame .diff {
+  --diffs-font-family: var(--font-mono);
+  --diffs-font-size: 12.5px;
+  --diffs-line-height: 1.7;
+  --diffs-gap-style: none;
+  --diffs-bg-separator-override: var(--bg-subtle);
 }
 
 /* Diffs sit on the code block surface, not on the Shiki theme's own background, with the

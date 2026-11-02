@@ -18,11 +18,12 @@ import {
 
 // What tokens.css holds that a theme never changes: the white page under an SVG and a QR code's
 // ink on it, the shadows, the brand marks, the artifact kinds' colors, the avatar's gradient, the
-// Kettu tile and the white drawn on them, the added agents' dots and the system notification's
-// tray in Settings, which follows the system rather than the theme; and what follows a token a
-// theme does set: the chosen tile's tint, and the amounts of the heat steps and the halo.
+// Kettu tile and the white drawn on them, the added agents' dots, the system notification's tray in
+// Settings, which follows the system rather than the theme, and the controls drawn over a video or
+// a picture; and what follows a token a theme does set: the chosen tile's tint, and the amounts of
+// the heat steps and the halo.
 const KEPT_OUT =
-  /^(?:canvas|canvas-ink|highlight|elevation-.+|brand-.+|kind-.+|agent-.+|bg-tray|control-on-tint|heat-step-\d|focus-halo-strength|avatar-from|avatar-to|kettu-tile|on-fill)$/
+  /^(?:canvas|canvas-ink|highlight|elevation-.+|brand-.+|kind-.+|agent-.+|bg-tray|media-.+|control-on-tint|heat-step-\d|focus-halo-strength|avatar-from|avatar-to|kettu-tile|on-fill)$/
 
 const nord: Theme = {
   name: 'Nord',

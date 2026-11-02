@@ -81,11 +81,6 @@
       "unavailable": "仅在已安装的应用中可用。",
       "keywords": "登录 启动 开机 例程 login startup launch routine"
     },
-    "confirmLinks": {
-      "name": "打开链接前先询问",
-      "description": "在浏览器中打开前，先显示链接的去向。",
-      "keywords": "链接 网址 浏览器 打开 确认 link url browser"
-    },
     "outlineSummaries": {
       "name": "在大纲中总结消息",
       "description": "打开大纲时，由小模型撰写大纲。",
@@ -348,9 +343,30 @@
       "cleared": "浏览数据已清除"
     },
     "groups": {
+      "links": "Agent 给出的链接",
       "siteData": "站点数据",
-      "allowedSites": "始终允许",
-      "links": "来自 Agent 的链接"
+      "allowedSites": "始终允许"
+    },
+    "openLinksIn": {
+      "name": "链接打开方式",
+      "description": "Agent 回复中的链接在哪里打开。按住 {{mod}} 点击则用另一种方式。本地地址始终在会话浏览器中打开。",
+      "keywords": "链接 网址 浏览器 打开 默认 会话 link url browser open default session",
+      "defaultBrowser": "默认浏览器",
+      "session": "会话浏览器",
+      "ask": "每次询问"
+    },
+    "confirmLinks": {
+      "name": "首次打开站点前先询问",
+      "description": "显示完整地址，并让你选择在哪里打开。",
+      "keywords": "链接 网址 浏览器 打开 确认 询问 首次 link url browser open confirm ask"
+    },
+    "rememberedSites": {
+      "name": "已记住的站点",
+      "description": "你选择始终在同一个地方打开的站点，打开时不再询问。",
+      "keywords": "链接 网址 站点 始终 打开 记住 移除 link url site always open remember forget browser session",
+      "empty": "尚未记住任何站点。",
+      "remove": "移除",
+      "removed": "已移除 {{site}}"
     },
     "allowedSites": {
       "name": "始终允许的站点",
@@ -704,6 +720,7 @@
     "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑的会话，只走你自己的网络。",
     "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 的会话，只走你自己的网络。",
     "browser": "侧边面板里的浏览器为所有会话保留同一个配置，网站只需登录一次。",
+    "browserWeb": "Agent 回复中的链接会在新标签页中打开。",
     "mcp": "Agent 通过这些 MCP 服务器使用工具：Kettu 自带的，以及各 Agent 自己配置的。",
     "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。在这里安装和更新；账号在 Agent 里。",
     "hosts": "这台电脑连接的、运行 Kettu 的其他电脑。它们的会话会显示在侧边栏中。",

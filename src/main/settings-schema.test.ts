@@ -68,6 +68,30 @@ describe('validateSettingsPatch', () => {
     })
   })
 
+  it('accepts where links open, and the sites that always open in one place', () => {
+    const patch = {
+      thread: {
+        openLinksIn: 'ask',
+        alwaysOpenIn: {
+          'kettu.sh': 'browser',
+          'kettu-preview.vercel.app': 'session',
+          '127.0.0.1': 'session',
+          '[::1]': 'browser',
+        },
+      },
+    }
+    expect(validateSettingsPatch(patch)).toEqual(patch)
+  })
+
+  it('replaces the remembered sites whole', () => {
+    const current = mergeSettings(DEFAULT_SETTINGS, {
+      thread: { alwaysOpenIn: { 'kettu.sh': 'browser', 'github.com': 'session' } },
+    })
+    const next = mergeSettings(current, { thread: { alwaysOpenIn: { 'github.com': 'browser' } } })
+    expect(next.thread.alwaysOpenIn).toEqual({ 'github.com': 'browser' })
+    expect(next.thread.openLinksIn).toBe('browser')
+  })
+
   it("accepts today's cost as what the sidebar shows", () => {
     expect(validateSettingsPatch({ usage: { sidebar: 'cost' } })).toEqual({
       usage: { sidebar: 'cost' },
@@ -101,6 +125,16 @@ describe('validateSettingsPatch', () => {
     [{ general: { background: 'on' } }, '"general.background" must be a boolean'],
     [{ general: 'enter' }, '"general" must be an object'],
     [{ thread: { confirmLinks: 'no' } }, '"thread.confirmLinks" must be a boolean'],
+    [{ thread: { openLinksIn: 'chrome' } }, '"thread.openLinksIn" must be one of'],
+    [{ thread: { alwaysOpenIn: [] } }, '"thread.alwaysOpenIn" must be an object'],
+    [{ thread: { alwaysOpenIn: { 'kettu.sh': 'ask' } } }, '"thread.alwaysOpenIn.kettu.sh" must be'],
+    [{ thread: { alwaysOpenIn: { 'Kettu.sh': 'browser' } } }, 'names a site that is not a host'],
+    [
+      { thread: { alwaysOpenIn: { 'https://kettu.sh': 'browser' } } },
+      'names a site that is not a host',
+    ],
+    [{ thread: { alwaysOpenIn: { '': 'browser' } } }, 'names a site that is not a host'],
+    [{ thread: { alwaysOpenIn: { ['__proto__']: 'browser' } } }, 'names a site that is not a host'],
     [{ appearance: { theme: 'sepia' } }, '"appearance.theme" must be one of'],
     [{ appearance: { colorTheme: '../nord' } }, '"appearance.colorTheme" must be a theme id'],
     [{ appearance: { colorTheme: 'Nord' } }, '"appearance.colorTheme" must be a theme id'],
@@ -402,10 +436,45 @@ describe('parseSettingsFile', () => {
     expect(loaded.settings.appearance.colorTheme).toBe('kettu')
   })
 
-  it('reads a stored thread setting without the link one as asking', () => {
+  it('reads a stored thread setting without the link ones as asking, in the default browser', () => {
     const loaded = parseSettingsFile({ version: 1, thread: { outlineSummaries: false } })
     expect(loaded.problems).toEqual([])
-    expect(loaded.settings.thread).toEqual({ outlineSummaries: false, confirmLinks: true })
+    expect(loaded.settings.thread).toEqual({
+      outlineSummaries: false,
+      confirmLinks: true,
+      openLinksIn: 'browser',
+      alwaysOpenIn: {},
+    })
+  })
+
+  it('reads where links open and the remembered sites', () => {
+    const loaded = parseSettingsFile({
+      version: 1,
+      thread: { openLinksIn: 'session', alwaysOpenIn: { 'kettu.sh': 'browser' } },
+    })
+    expect(loaded.problems).toEqual([])
+    expect(loaded.settings.thread.openLinksIn).toBe('session')
+    expect(loaded.settings.thread.alwaysOpenIn).toEqual({ 'kettu.sh': 'browser' })
+  })
+
+  it('keeps no remembered sites when one of them is not valid', () => {
+    const loaded = parseSettingsFile({
+      version: 1,
+      thread: { alwaysOpenIn: { 'kettu.sh': 'browser', 'github.com': 'chrome' } },
+    })
+    expect(loaded.problems).toEqual([
+      '"thread.alwaysOpenIn.github.com" must be one of "browser", "session"',
+    ])
+    expect(loaded.settings.thread.alwaysOpenIn).toEqual({})
+  })
+
+  it('refuses more remembered sites than it keeps', () => {
+    const many = Object.fromEntries(
+      Array.from({ length: 501 }, (_, i) => [`site${i}.example`, 'browser']),
+    )
+    expect(() => validateSettingsPatch({ thread: { alwaysOpenIn: many } })).toThrow(
+      'may hold at most 500 sites',
+    )
   })
 
   it('reads the chosen theme, keeping the built-in one for an id that is not one', () => {

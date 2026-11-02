@@ -3,7 +3,6 @@ import {
   ArrowRightLeftIcon,
   BanIcon,
   BrainIcon,
-  CheckIcon,
   ChevronRightIcon,
   CircleIcon,
   CopyIcon,
@@ -42,7 +41,7 @@ import {
 } from '@renderer/components/ui/context-menu'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { basename, dirname, relativePath } from '@renderer/lib/format'
+import { basename, dirname } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { cn } from '@renderer/lib/utils'
@@ -52,7 +51,7 @@ import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useWebHostStore } from '@renderer/stores/web-host'
 import { Clamp } from '../clamp'
-import { Diff, Markdown } from '../markdown'
+import { Markdown } from '../markdown'
 import { CarriedImage } from '../media/carried-image'
 import { CarriedMedia } from '../media/carried-media'
 import { EntryIdContext, SessionIdContext } from '../media/grants'
@@ -68,6 +67,8 @@ import {
   respondToPermission,
   toolLabel,
 } from './helpers'
+import { DiffBlock } from './diff-block'
+import { ShellBlock } from './shell-block'
 import { useDiffStats } from './use-diff-stats'
 
 const KIND_ICON: Record<ToolKind, LucideIcon> = {
@@ -149,7 +150,7 @@ export const ToolCard = memo(function ToolCard({
       />
     )
   }
-  const label = toolLabel(entry, projectPath)
+  const label = toolLabel(entry, projectPath, entry.status === 'completed')
   const command = label.kind === 'command' ? label.target : null
   // A command's output shows under it, in the same block, as a terminal prints it.
   const output = command ? commandOutput(entry.content) : null
@@ -173,7 +174,15 @@ export const ToolCard = memo(function ToolCard({
       {hasBody && (
         <CollapsibleContent className={PANEL} keepMounted={false}>
           <div className="flex flex-col gap-1.5 pt-1.5 pb-0.5 pl-5.5">
-            {command && <CommandBlock command={command} output={output} />}
+            {command && (
+              <ShellBlock
+                sessionId={sessionId}
+                projectPath={projectPath}
+                command={command}
+                output={output}
+                status={entry.status}
+              />
+            )}
             {content.map((c, i) => (
               <ContentBlock
                 key={i}
@@ -222,33 +231,28 @@ function ToolHeader({
   toggle: boolean
   open: boolean
 }) {
-  const Icon = entry.question !== undefined ? HandIcon : KIND_ICON[entry.toolKind]
   const stats = useDiffStats(entry.content)
   const content = (
     <>
-      <span className="relative flex size-3.5 shrink-0 items-center justify-center text-icon">
-        <Icon
-          className={cn(
-            'size-3.5 transition-opacity duration-(--duration-fast)',
-            toggle && 'group-hover/tool:opacity-0',
-          )}
-        />
+      {/* A row leads with its disclosure chevron, as the reply's other steps do. */}
+      <span className="flex size-3 shrink-0 items-center justify-center text-tertiary">
         {toggle && (
           <ChevronRightIcon
             aria-hidden
+            strokeWidth={1.75}
             className={cn(
-              'absolute size-3.5 opacity-0 transition-[opacity,rotate] duration-(--duration-fast) group-hover/tool:opacity-100',
+              'size-3 transition-[rotate] duration-(--duration-fast) motion-reduce:transition-none',
               open && 'rotate-90',
             )}
           />
         )}
       </span>
-      <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+      <span className="flex min-w-0 flex-1 items-baseline gap-2">
         {label.verb && <span className="shrink-0 font-medium text-secondary">{label.verb}</span>}
         {label.target && <Target label={label} />}
       </span>
       {stats && (stats.insertions > 0 || stats.deletions > 0) && (
-        <span className="flex shrink-0 animate-in gap-2 tabular animation-duration-(--duration-base) fade-in">
+        <span className="flex shrink-0 animate-in gap-2 font-mono text-xs tabular animation-duration-(--duration-base) fade-in">
           <span className="text-success">+{stats.insertions}</span>
           <span className="text-danger">−{stats.deletions}</span>
         </span>
@@ -261,7 +265,7 @@ function ToolHeader({
   )
   // A flat row reaches past the column by its padding, so its icon lines up with the prose.
   const row =
-    'group/tool -mx-1.5 flex h-6.5 w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-small text-muted-foreground outline-none'
+    'group/tool -mx-1.5 flex h-7 w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-tile px-1.5 text-left text-control text-tertiary outline-none'
   if (!toggle) return <div className={row}>{content}</div>
   return (
     <CollapsibleTrigger
@@ -320,15 +324,9 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
       return (
         <Spinner key="running" aria-label={t('status.running')} className={cn(icon, 'text-info')} />
       )
+    // A finished step shows nothing: the past-tense verb says it is done.
     case 'completed':
-      return (
-        <CheckIcon
-          key="done"
-          role="img"
-          aria-label={t('status.done')}
-          className={cn(icon, 'zoom-in-75 text-icon')}
-        />
-      )
+      return null
     case 'failed':
       return (
         <XIcon
@@ -350,33 +348,6 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
   }
 }
 
-/** The command, and what it printed under it once it has run, as a terminal shows them. */
-function CommandBlock({ command, output }: { command: string; output: string | null }) {
-  const { t } = useTranslation('session')
-  const printed = !!output
-  return (
-    <div
-      data-selectable=""
-      className={cn(
-        'flex flex-col rounded-code bg-code-block px-3 font-mono shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
-        printed ? 'py-2.25 text-code' : 'py-2 text-command',
-      )}
-    >
-      <pre className="overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
-        <span className="mr-2 text-tertiary select-none">$</span>
-        {command}
-      </pre>
-      {printed && (
-        <Clamp maxHeight={260} more={t('tool.showAll')} buttonClassName="-mx-1.5">
-          <pre className="overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
-            {output}
-          </pre>
-        </Clamp>
-      )}
-    </div>
-  )
-}
-
 /** The tallest an image shows in a tool call's details. */
 const MEDIA_IMAGE_HEIGHT = 160
 
@@ -387,6 +358,7 @@ function ContentBlock({
   content,
   projectPath,
   bleed = false,
+  proposed = false,
 }: {
   sessionId: string
   entryId: string
@@ -396,6 +368,8 @@ function ContentBlock({
   projectPath: string
   /** In a request's card: a diff spans the card's width. */
   bleed?: boolean
+  /** The call still waits for permission, so a diff in it is not applied yet. */
+  proposed?: boolean
 }) {
   const { t } = useTranslation('session')
   switch (content.type) {
@@ -408,24 +382,9 @@ function ContentBlock({
         </div>
       )
     case 'diff':
-      // Framed like a code block in a row's details; in a request's card it runs edge to edge.
+      // In the block frame in a row's details; in a request's card it runs edge to edge.
       return (
-        <div
-          className={cn(
-            'flex flex-col overflow-hidden',
-            bleed
-              ? 'border-b border-border-soft bg-code-block'
-              : 'rounded-code border border-subtle',
-          )}
-        >
-          <Clamp maxHeight={480} more={t('tool.showFullDiff')} buttonClassName="mx-2 my-1">
-            <Diff
-              path={relativePath(content.path, projectPath)}
-              oldText={content.oldText}
-              newText={content.newText}
-            />
-          </Clamp>
-        </div>
+        <DiffBlock diff={content} projectPath={projectPath} proposed={proposed} bleed={bleed} />
       )
     case 'ref':
       if (content.ref.kind === 'image') {
@@ -619,6 +578,7 @@ function PermissionCard({
             content={content}
             projectPath={projectPath}
             bleed
+            proposed
           />
         ) : (
           <div key={i} className="border-b border-border-soft px-3.5 py-2.5">

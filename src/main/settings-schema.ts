@@ -7,6 +7,8 @@ import {
   AGENT_COLORS,
   isAgentColor,
   nextAgentColor,
+  isLinkSite,
+  MAX_LINK_SITES,
   type AddedAgent,
   type HostSettings,
   type ProxySettings,
@@ -63,6 +65,24 @@ const isHostName: Check = (value, path) =>
 const isThemeId: Check = (value, path) =>
   typeof value === 'string' && THEME_ID.test(value) ? null : `"${path}" must be a theme id`
 
+/** The sites the "Always open" choice remembers, each a host mapped to where it opens. */
+const isLinkSites: Check = (value, path) => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return `"${path}" must be an object`
+  }
+  const entries = Object.entries(value)
+  if (entries.length > MAX_LINK_SITES) return `"${path}" may hold at most ${MAX_LINK_SITES} sites`
+  for (const [site, destination] of entries) {
+    if (!isLinkSite(site)) {
+      return `"${path}" names a site that is not a host`
+    }
+    if (destination !== 'browser' && destination !== 'session') {
+      return `"${path}.${site}" must be one of "browser", "session"`
+    }
+  }
+  return null
+}
+
 const SECTION_FIELDS = {
   general: {
     language: oneOf(...LANGUAGE_SETTINGS),
@@ -74,7 +94,12 @@ const SECTION_FIELDS = {
     background: isBoolean,
     sessionTitles: isBoolean,
   },
-  thread: { outlineSummaries: isBoolean, confirmLinks: isBoolean },
+  thread: {
+    outlineSummaries: isBoolean,
+    confirmLinks: isBoolean,
+    openLinksIn: oneOf('browser', 'session', 'ask'),
+    alwaysOpenIn: isLinkSites,
+  },
   appearance: {
     theme: oneOf('system', 'light', 'dark'),
     colorTheme: isThemeId,
