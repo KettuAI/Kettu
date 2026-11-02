@@ -570,7 +570,7 @@
   /* The autocompact buffer in the context bar: the reserved gray, hatched. */
   --context-hatch: repeating-linear-gradient(135deg, var(--context-7) 0 2px, transparent 2px 4px);
 
-  --terminal-background: var(--bg-app);
+  --terminal-background: var(--bg-code-block);
   --terminal-foreground: var(--text-primary);
   --terminal-cursor: var(--text-primary);
   --terminal-selection: var(--selection);
