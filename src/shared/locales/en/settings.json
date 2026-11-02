@@ -358,8 +358,10 @@
       "description": "Sites the projects let agents open without asking.",
       "keywords": "browser sites origins allow always permissions",
       "empty": "No site is always allowed yet.",
+      "readFailed": "Couldn't read the allowed sites",
       "remove": "Remove",
       "removed": "Removed {{origin}}",
+      "removeFailed": "Couldn't remove {{origin}}: {{reason}}",
       "in": "Allowed in {{projects}}",
       "note": "Agents open these without asking. A site is added here when you choose “Always for this project” on its card."
     }
@@ -1202,7 +1204,11 @@
       "connects": "{{name}} also connects to the servers it keeps itself.",
       "keywords": "configuration file MCP",
       "ownWithCommand": "Its own servers too. Type {{command}} in a session to see them, or add {{file}} to a project.",
-      "ownFrom": "Its own servers too, from {{path}} and {{file}} in a project."
+      "ownWithCommandFrom": "Its own servers too, from {{path}}. Type {{command}} in a session to see them, or add {{file}} to a project.",
+      "ownWithCommandMissing": "Its own servers too. Type {{command}} in a session to see them, or add {{file}} to a project. {{path}} is not created yet.",
+      "ownFrom": "Its own servers too, from {{path}} and {{file}} in a project.",
+      "ownFromMissing": "Its own servers too, from {{file}} in a project. {{path}} is not created yet.",
+      "pathNote": "{{path}} ({{note}})"
     },
     "agents": "Agents",
     "tools": "Tools",

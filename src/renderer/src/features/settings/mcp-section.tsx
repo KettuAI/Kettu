@@ -23,6 +23,7 @@ import {
   RowText,
 } from './rows'
 import { Pill, ROW_BUTTON, SettingSwitch } from './controls'
+import { PlaceAction } from './places'
 import { useApply } from './use-apply'
 
 /** Both groups wait for the first status this long, then show what comes, or a skeleton. */
@@ -109,23 +110,48 @@ export function ServerRow({ server }: { server: McpStatus['servers'][number] }) 
   )
 }
 
-/** One agent's own configuration: its tile and name, then where its servers come from. */
+/**
+ * One agent's own configuration: its tile and name, then where its servers come from, saying so
+ * when the file is not there yet, with Show in Finder or Copy path at the end while it is.
+ */
 export function AgentPlaceRow({ place }: { place: McpStatus['places'][number] }) {
   const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const agent = useAgentsStore((s) => s.byId[place.agentId])
   const name = agent?.name ?? place.agentId
+  const note = place.chosen
+    ? t('agents.chosenInKettu')
+    : place.env && t('agents.setByLine', { env: place.env })
+  const values = {
+    path: note ? t('mcp.place.pathNote', { path: place.path, note }) : place.path,
+    command: place.listCommand,
+    file: place.project,
+  }
+  // Where a command lists the servers, the line names the file only when it is missing or moved.
+  const line = place.listCommand
+    ? t(
+        !place.exists
+          ? 'mcp.place.ownWithCommandMissing'
+          : note
+            ? 'mcp.place.ownWithCommandFrom'
+            : 'mcp.place.ownWithCommand',
+        values,
+      )
+    : t(place.exists ? 'mcp.place.ownFrom' : 'mcp.place.ownFromMissing', values)
   return (
     <div className="flex items-center gap-3.5 py-3.25">
       <AgentTile agent={place.agentId} size={30} glyph={16} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-label leading-[normal]">{name}</span>
         <span className="text-group text-pretty text-tertiary" data-selectable="">
-          {place.listCommand
-            ? t('mcp.place.ownWithCommand', { command: place.listCommand, file: place.project })
-            : t('mcp.place.ownFrom', { path: place.path, file: place.project })}
+          {line}
         </span>
       </div>
+      {place.exists && (
+        <span className="flex shrink-0 items-center gap-2">
+          <PlaceAction path={place.path} icon />
+        </span>
+      )}
     </div>
   )
 }

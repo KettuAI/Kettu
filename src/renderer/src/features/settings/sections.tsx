@@ -1,5 +1,12 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { CheckIcon, GlobeIcon, MinusIcon, PlusIcon } from 'lucide-react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import {
+  CheckIcon,
+  CircleAlertIcon,
+  GlobeIcon,
+  MinusIcon,
+  PlusIcon,
+  RotateCwIcon,
+} from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { originLabel } from '@shared/browser'
@@ -59,7 +66,7 @@ import {
 } from './controls'
 import type { AllowedSite } from './allowed-sites'
 import { DeviceTile } from './remote-parts'
-import { FlashMark, GroupNote } from './rows'
+import { FlashMark, GroupNote, ItemLine, Notice } from './rows'
 import { useApply } from './use-apply'
 
 /** The settings of the host the section shows, this computer's own keys among them. */
@@ -339,9 +346,8 @@ export function Zoom() {
       <Button
         variant="ghost"
         className={ROW_BUTTON}
-        onClick={() => {
-          if (zoom !== DEFAULT_SETTINGS.appearance.zoom) step(0)
-        }}
+        disabled={zoom === DEFAULT_SETTINGS.appearance.zoom}
+        onClick={() => step(0)}
       >
         {t('appearance.zoom.reset')}
       </Button>
@@ -737,6 +743,9 @@ export function TestNotification() {
 const PROXY_ROW =
   'flex min-h-15.5 items-center gap-7 pl-8 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]'
 
+const isComposing = (event: KeyboardEvent<HTMLInputElement>): boolean =>
+  event.nativeEvent.isComposing || event.keyCode === 229
+
 export function Proxy({ label }: { label: ReactNode }) {
   const { t } = useTranslation('settings')
   const proxy = useSettings().proxy
@@ -799,10 +808,10 @@ export function Proxy({ label }: { label: ReactNode }) {
               placeholder="http://proxy.example.com:8080"
               spellCheck={false}
               aria-invalid={invalid || undefined}
-              aria-describedby={noteId}
+              aria-describedby={note ? noteId : undefined}
               onChange={(e) => setUrl(e.target.value)}
               onBlur={() => (url.trim() || proxy.mode === 'custom') && save()}
-              onKeyDown={(e) => e.key === 'Enter' && save()}
+              onKeyDown={(e) => e.key === 'Enter' && !isComposing(e) && save()}
               className={cn(ROW_FIELD, 'w-65 md:text-lede')}
             />
           </label>
@@ -814,19 +823,22 @@ export function Proxy({ label }: { label: ReactNode }) {
               spellCheck={false}
               onChange={(e) => setNoProxy(e.target.value)}
               onBlur={() => url.trim() && save()}
-              onKeyDown={(e) => e.key === 'Enter' && save()}
+              onKeyDown={(e) => e.key === 'Enter' && !isComposing(e) && save()}
               className={cn(ROW_FIELD, 'w-65 md:text-lede')}
             />
           </label>
-          {note && (
-            <p
-              id={noteId}
-              role="status"
-              className={cn('pb-3.75 pl-8 text-hint', invalid ? 'text-danger' : 'text-tertiary')}
-            >
-              {t(note)}
-            </p>
-          )}
+          {/* Mounted while the fields show, so a screen reader hears each change of its text. */}
+          <p
+            id={noteId}
+            role="status"
+            className={cn(
+              'pl-8 text-hint',
+              note && 'pb-3.75',
+              invalid ? 'text-danger' : 'text-tertiary',
+            )}
+          >
+            {note && t(note)}
+          </p>
         </div>
       )}
     </div>
@@ -1000,40 +1012,62 @@ export function ClearBrowsingData() {
 }
 
 /** A site in Always allowed: its address, the projects that allow it, and Remove. */
-export function AllowedSiteRow({
-  site,
-  busy,
-  onRemove,
-}: {
-  site: AllowedSite
-  busy: boolean
-  onRemove: () => void
-}) {
+export function AllowedSiteRow({ site, onRemove }: { site: AllowedSite; onRemove: () => void }) {
   const { t } = useTranslation('settings')
   const projects = useProjectsStore((s) => s.projects)
   const names = site.projects.map(
     (path) => projects.find((project) => project.path === path)?.name ?? basename(path),
   )
+  const removing = site.removing
   return (
     <div className="flex items-center gap-3.5 py-3.25">
       <DeviceTile icon={<GlobeIcon className="size-4" />} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-label leading-[normal]">{originLabel(site.origin)}</span>
-        <span className="truncate text-group text-tertiary">
-          {t('browser.allowedSites.in', { projects: names.join(', ') })}
-        </span>
+        <ItemLine>{t('browser.allowedSites.in', { projects: names.join(', ') })}</ItemLine>
       </div>
-      <Button variant="ghost" className={ROW_BUTTON} disabled={busy} onClick={onRemove}>
-        {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
+      <Button variant="ghost" className={ROW_BUTTON} disabled={removing} onClick={onRemove}>
+        {removing && <Spinner data-icon="inline-start" className="size-3.5" />}
         {t('browser.allowedSites.remove')}
       </Button>
     </div>
   )
 }
 
-/** In place of the sites while they are read, or when there are none. */
-export function AllowedSitesState({ loading }: { loading: boolean }) {
-  const { t } = useTranslation('settings')
+/** In place of the sites while they are read, when reading them failed, or when there are none. */
+export function AllowedSitesState({
+  loading,
+  error,
+  onRetry,
+}: {
+  loading: boolean
+  error?: string | null
+  onRetry?: () => void
+}) {
+  const { t } = useTranslation(['settings', 'common'])
+  if (error) {
+    return (
+      <div className="py-3.75">
+        <Notice
+          variant="error"
+          icon={<CircleAlertIcon />}
+          title={t('browser.allowedSites.readFailed')}
+          action={
+            onRetry && (
+              <Button className={ROW_BUTTON} variant="outline" onClick={onRetry}>
+                <RotateCwIcon data-icon="inline-start" />
+                {t('common:actions.retry')}
+              </Button>
+            )
+          }
+        >
+          <span className="font-mono text-code break-words" data-selectable="">
+            {error}
+          </span>
+        </Notice>
+      </div>
+    )
+  }
   if (loading) {
     return (
       <div className="flex flex-col gap-2 py-3.75">

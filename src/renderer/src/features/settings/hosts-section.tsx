@@ -141,7 +141,7 @@ export function HostsNote() {
               <button
                 type="button"
                 onClick={() => openSettings('remote')}
-                className="rounded-sm text-tertiary outline-none focus-ring"
+                className="rounded-sm text-primary underline decoration-border-strong underline-offset-2 outline-none hover:decoration-current focus-ring"
               />
             ),
           }}

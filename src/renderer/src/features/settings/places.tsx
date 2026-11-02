@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { isWeb } from '@renderer/lib/platform'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { CopyAction, PathText, RevealAction, RevealButton } from './controls'
 import { RowFrame, RowText } from './rows'
 
@@ -32,6 +34,18 @@ export function PathLine({
   )
 }
 
+/**
+ * Show in Finder, as a row's text button or an icon, or Copy path where the reveal controls show
+ * nothing: in a browser, and for another host.
+ */
+export function PlaceAction({ path, icon }: { path: string; icon?: boolean }) {
+  const { t } = useTranslation('settings')
+  const { hostId } = useHostScope()
+  if (isWeb || hostId !== null)
+    return <CopyAction text={path} label={t('advanced.dataFolder.copy')} />
+  return icon ? <RevealAction path={path} /> : <RevealButton path={path} />
+}
+
 export function PathActions({ path }: { path: string }) {
   const { t } = useTranslation('settings')
   return (
@@ -44,7 +58,7 @@ export function PathActions({ path }: { path: string }) {
 
 /**
  * A place as a row: its name, then its path in mono and what set it, or that it is not there yet;
- * Show in Finder at the end.
+ * Show in Finder at the end, or Copy path where the window cannot show it.
  */
 export function PlaceRow({
   name,
@@ -89,7 +103,7 @@ export function PlaceRow({
       }
     >
       {children}
-      {item.exists && <RevealButton path={item.path} />}
+      {item.exists && <PlaceAction path={item.path} />}
     </RowFrame>
   )
 }

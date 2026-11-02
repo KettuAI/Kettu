@@ -357,8 +357,10 @@
       "description": "各项目允许 Agent 无需询问即可打开的站点。",
       "keywords": "浏览器 站点 来源 允许 始终 权限 browser sites origins allow always permissions",
       "empty": "尚未有始终允许的站点。",
+      "readFailed": "无法读取允许的站点",
       "remove": "移除",
       "removed": "已移除 {{origin}}",
+      "removeFailed": "无法移除 {{origin}}：{{reason}}",
       "in": "在 {{projects}} 中允许",
       "note": "Agent 无需询问即可打开这些站点。在站点卡片上选择“此项目始终允许”时，站点会添加到这里。"
     }
@@ -1191,7 +1193,11 @@
       "connects": "{{name}} 也会连接它自己配置的服务器。",
       "keywords": "配置文件 MCP",
       "ownWithCommand": "它自己的服务器也会连接。在会话中输入 {{command}} 可以查看，或在项目里添加 {{file}}。",
-      "ownFrom": "它自己的服务器也会连接，来自 {{path}} 和项目里的 {{file}}。"
+      "ownWithCommandFrom": "它自己的服务器也会连接，来自 {{path}}。在会话中输入 {{command}} 可以查看，或在项目里添加 {{file}}。",
+      "ownWithCommandMissing": "它自己的服务器也会连接。在会话中输入 {{command}} 可以查看，或在项目里添加 {{file}}。{{path}} 尚未创建。",
+      "ownFrom": "它自己的服务器也会连接，来自 {{path}} 和项目里的 {{file}}。",
+      "ownFromMissing": "它自己的服务器也会连接，来自项目里的 {{file}}。{{path}} 尚未创建。",
+      "pathNote": "{{path}}（{{note}}）"
     },
     "agents": "Agent",
     "tools": "工具",

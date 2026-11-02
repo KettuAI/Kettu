@@ -706,12 +706,12 @@ export function useGitSection(): SectionDef {
 export function useBrowserSection(): SectionDef {
   const { t } = useTranslation('settings')
   const en = english()
-  const { sites, error, busy, remove } = useAllowedSites()
+  const { sites, error, remove, reload } = useAllowedSites()
   const allowed = group('allowed-sites', t('browser.groups.allowedSites'), {
     count: sites?.length,
     note: (
       <>
-        {error && <GroupNote>{error}</GroupNote>}
+        {error && sites !== null && <GroupNote>{error}</GroupNote>}
         <GroupNote>{t('browser.allowedSites.note')}</GroupNote>
       </>
     ),
@@ -735,7 +735,13 @@ export function useBrowserSection(): SectionDef {
       searchOnly: !!sites?.length,
       group: allowed,
       layout: 'custom',
-      render: () => <AllowedSitesState loading={sites === null && error === null} />,
+      render: () => (
+        <AllowedSitesState
+          loading={sites === null && error === null}
+          error={sites === null ? error : null}
+          onRetry={reload}
+        />
+      ),
     },
     ...(sites ?? []).map((site): RowDef => ({
       id: `site-${site.origin}`,
@@ -743,13 +749,7 @@ export function useBrowserSection(): SectionDef {
       keywords: t('browser.allowedSites.keywords'),
       group: allowed,
       layout: 'custom',
-      render: () => (
-        <AllowedSiteRow
-          site={site}
-          busy={busy === site.origin}
-          onRemove={() => remove(site.origin)}
-        />
-      ),
+      render: () => <AllowedSiteRow site={site} onRemove={() => remove(site.origin)} />,
     })),
   ]
   return {
