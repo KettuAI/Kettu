@@ -104,6 +104,10 @@ const FIRST_LAUNCH_LINES = [
   },
   { y: 286.6, text: '首次打开被阻止？系统设置 › 隐私与安全性 › 仍要打开' },
 ]
+// The running dot's opacity at each step of its breath, and the waiting dot's fox orange, the
+// attention dot's token in each theme.
+const TRAY_BREATH = [1, 0.85, 0.69, 0.53, 0.38, 0.25]
+const TRAY_ATTENTION = { light: '#fa5615', dark: '#fa6e28' }
 // Ink at 22%, 50% and 100%, so the arrows grow toward the Applications folder.
 const CHEVRON_OPACITY = [0.22, 0.5, 1]
 
@@ -223,27 +227,43 @@ async function main() {
   }
   writeFileSync(join(build, 'icon.ico'), ico(pngs))
 
-  // The tray's images, read by src/main/tray.ts: the macOS menu bar's template images, shaded for
-  // a dark and a light ground, which macOS tints itself, and the glyph filling a square in black
-  // and in white for Windows (.ico) and Linux (PNG), each with the dot.
+  // The tray's images, read by src/main/tray.ts: the macOS menu bar's images, shaded for a dark and
+  // a light ground, and the glyph filling a square in black and in white for Windows (.ico) and
+  // Linux (PNG), each with the dot. On macOS the icon idles, fades while the host is down and
+  // breathes a dot while agents run, as template images macOS tints itself; the waiting dot keeps
+  // its fox orange, so that image is drawn in the bar's own ink, the label color at 85%.
   const tray = join(root, 'resources', 'tray')
   rmSync(tray, { recursive: true, force: true })
   mkdirSync(tray, { recursive: true })
-  for (const dot of [false, true]) {
-    for (const ground of ['dark', 'light']) {
+  const menubar = {
+    '': {},
+    '-off': { opacity: 0.45 },
+    ...Object.fromEntries(
+      TRAY_BREATH.map((dotOpacity, i) => [`-running-${i}`, { dot: 'running', dotOpacity }]),
+    ),
+  }
+  for (const ground of ['dark', 'light']) {
+    const variants = {
+      ...menubar,
+      '-attention': {
+        color: ground === 'dark' ? '#fff' : '#000',
+        opacity: 0.85,
+        dot: true,
+        dotColor: TRAY_ATTENTION[ground],
+      },
+    }
+    for (const [variant, options] of Object.entries(variants)) {
       for (const [scale, suffix] of [
         [1, ''],
         [2, '@2x'],
       ]) {
         const size = GLYPH_CANVAS * scale
-        const png = await render(
-          glyphSvg('menubar', { size, color: '#000', dot, ground }),
-          size,
-          size,
-        )
-        writeFileSync(join(tray, `tray-menubar-on-${ground}${dot ? '-dot' : ''}${suffix}.png`), png)
+        const png = await render(glyphSvg('menubar', { size, ground, ...options }), size, size)
+        writeFileSync(join(tray, `tray-menubar-on-${ground}${variant}${suffix}.png`), png)
       }
     }
+  }
+  for (const dot of [false, true]) {
     for (const [name, color] of [
       ['black', '#000'],
       ['white', '#fff'],

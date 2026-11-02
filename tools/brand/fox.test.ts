@@ -73,6 +73,20 @@ describe('glyphSvg', () => {
     }
   })
 
+  it('draws the running dot smaller and faded, and a colored dot outside the mask', () => {
+    const running = glyphSvg('menubar', { dot: 'running', dotOpacity: 0.5 })
+    expect(running).toContain('<circle cx="14.5" cy="14" r="3.3" fill="#000"/>')
+    expect(running).toContain('<circle cx="14.5" cy="14" r="2.1" fill="#fff" fill-opacity="0.5"/>')
+    const colored = glyphSvg('menubar', { color: '#fff', dot: true, dotColor: '#fa6e28' })
+    expect(colored.slice(colored.indexOf('</mask>'))).toBe(
+      '</mask><rect width="18" height="18" fill="#fff" mask="url(#glyph)"/>' +
+        '<circle cx="14.5" cy="14" r="2.5" fill="#fa6e28"/></svg>\n',
+    )
+    expect(glyphSvg('menubar', { opacity: 0.45 })).toContain(
+      '<rect width="18" height="18" fill="#000" opacity="0.45" mask="url(#glyph)"/>',
+    )
+  })
+
   it("sets the menu bar on an 18 pt canvas and the tray on the fox's 16 pt square", () => {
     expect(glyphSvg('menubar')).toMatch(/^<svg [^>]*width="18" height="18" viewBox="0 0 18 18"/)
     expect(glyphSvg('tray', { size: 48 })).toMatch(

@@ -47,6 +47,8 @@ export interface AgentHostDeps {
   onRoutinesWorking(working: boolean): void
   /** The host started and answers requests, at launch and after each restart. */
   onReady?(): void
+  /** The host stopped or crashed; it may start again, and `onReady` says when. */
+  onDown?(): void
   /** The artifacts service's port, which the browser's pages must never reach. */
   onServicePort?(port: number | null): void
   /**
@@ -540,6 +542,7 @@ export class AgentHost {
     this.deps.onRoutinesWorking(false)
     this.deps.onBadge(0)
     this.deps.onBusy({ running: 0, waiting: 0 })
+    this.deps.onDown?.()
     const roots = this.agentProcesses
     this.agentProcesses = []
     // After a clean stop the host has stopped every agent itself, or left it in its own record.

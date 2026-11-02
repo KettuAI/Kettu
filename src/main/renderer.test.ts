@@ -230,10 +230,11 @@ describe('isRendererUrl', () => {
   const builtEntry = join(dirname(fileURLToPath(import.meta.url)), '../renderer/index.html')
   const builtHref = pathToFileURL(builtEntry).href
 
-  it('in a packaged build, accepts only the index.html loadRenderer loads', async () => {
+  it('in a packaged build, accepts only the pages loadRenderer loads', async () => {
     const { isRendererUrl } = await importRenderer(false, 'http://localhost:5173')
     expect(isRendererUrl(builtHref)).toBe(true)
     expect(isRendererUrl(`${builtHref}#/settings`)).toBe(true)
+    expect(isRendererUrl(pathToFileURL(join(builtEntry, '../tray.html')).href)).toBe(true)
     expect(isRendererUrl(pathToFileURL(join(builtEntry, '../other.html')).href)).toBe(false)
     expect(isRendererUrl(pathToFileURL(fileURLToPath(import.meta.url)).href)).toBe(false)
     expect(isRendererUrl('file:///etc/passwd')).toBe(false)
@@ -245,6 +246,7 @@ describe('isRendererUrl', () => {
     const { isRendererUrl } = await importRenderer(true, 'http://localhost:5173')
     expect(isRendererUrl('http://localhost:5173/')).toBe(true)
     expect(isRendererUrl('http://localhost:5173/#/settings')).toBe(true)
+    expect(isRendererUrl('http://localhost:5173/tray.html')).toBe(true)
     expect(isRendererUrl('http://localhost:51730/')).toBe(false)
     expect(isRendererUrl('http://localhost:5173@evil.example.com/')).toBe(false)
     expect(isRendererUrl(builtHref)).toBe(false)

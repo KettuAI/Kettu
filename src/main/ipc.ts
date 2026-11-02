@@ -31,6 +31,7 @@ import type {
   UnsavedFile,
 } from '@shared/ipc'
 import { isHarnessId, type HarnessId } from '@shared/thread'
+import { isTrayTarget } from '@shared/tray'
 import type { Account } from './account'
 import type { AgentFolders } from './agent-folders'
 import type { AgentHost } from './agent-host'
@@ -53,6 +54,7 @@ import type { HostMedia } from './host-media'
 import type { HostSessions } from './host-sessions'
 import type { HostPairingListener, RemoteHost } from './remote-host'
 import { isRendererUrl } from './renderer'
+import type { TrayPanel } from './tray-panel'
 import type { SettingsStore } from './settings'
 import type { Sharing } from './sharing'
 import { framesSettled, isRevoked } from './subframes'
@@ -728,5 +730,21 @@ export function registerIpcHandlers({
     } else {
       log.info(`perf:interactive again (a reload) at ${ms} ms`)
     }
+  })
+}
+
+/** The menu bar panel's calls, taken from the panel's own page alone. */
+export function registerTrayIpc(panel: TrayPanel): void {
+  on('tray:open', (event, target) => {
+    if (panel.owns(event.sender) && isTrayTarget(target)) panel.open(target)
+  })
+  on('tray:quit', (event) => {
+    if (panel.owns(event.sender)) panel.quit()
+  })
+  on('tray:hide', (event) => {
+    if (panel.owns(event.sender)) panel.hide()
+  })
+  on('tray:resize', (event, height) => {
+    if (panel.owns(event.sender)) panel.resize(height)
   })
 }

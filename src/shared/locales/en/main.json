@@ -92,7 +92,10 @@
     "remoteOn_one": "Remote access on · {{count}} device online",
     "remoteOn_other": "Remote access on · {{count}} devices online",
     "open": "Open {{name}}",
-    "quit": "Quit {{name}}"
+    "newSession": "New session",
+    "quit": "Quit {{name}}",
+    "remoteAccess": "Remote access",
+    "checkForUpdates": "Check for updates…"
   },
   "agents": {
     "folderTaken": "This folder already belongs to {{agent}}. Choose another one, or let Kettu make a new one."

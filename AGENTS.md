@@ -66,7 +66,7 @@ The top of the tree:
 ```text
 src/
 ├── main/              Main process: lifecycle, windows, menus, IPC, settings, updates
-├── preload/           Sandboxed bridge exposed as window.kettu
+├── preload/           Sandboxed bridges exposed as window.kettu: the window's and the menu bar panel's
 ├── agent-host/        Utility process: agents, sessions, projects, git
 ├── terminal-host/     Utility process: the terminal's shells through node-pty
 ├── remote-host/       Utility process: paired devices' encrypted connections to the agent host
@@ -103,7 +103,7 @@ Kettu drives agents that run shell commands, so these are not negotiable:
 - Keep the permission handlers in `src/main/permissions.ts`: the clipboard is the only web permission granted, and only to the app's own page. Add another only with a stated reason.
 - Navigation away from the app and new windows stay blocked; external `http(s)` links open in the system browser.
 - The sandboxed preload can only `require('electron')`. Bundled source and type-only imports from `@shared` are fine; Node built-ins and npm packages are not.
-- Do not loosen the CSP in `src/renderer/index.html` without a stated reason.
+- Do not loosen the CSP in `src/renderer/index.html` and `src/renderer/tray.html` without a stated reason. The menu bar panel's page gets only what `src/preload/tray.ts` exposes, and main takes its `tray:*` calls from that page alone.
 
 ## Commands
 

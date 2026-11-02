@@ -614,6 +614,8 @@
   --composer-focus: var(--composer-hover);
   --queue-ring:
     0 0 0 var(--hairline) var(--border-subtle), var(--elevation-queue), var(--highlight);
+  /* The menu bar panel's inner edge, a faint light line over the system's material. */
+  --panel-highlight: rgb(255 255 255 / 8%);
   /* A card waiting on the user: a fox ring with a faint halo. */
   --attention-ring-shadow:
     0 0 0 var(--hairline) color-mix(in srgb, var(--attention-dot) 50%, transparent),

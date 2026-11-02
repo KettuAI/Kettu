@@ -33,6 +33,21 @@ export function devIcon(): string | null {
 
 let zoom: ZoomLevel = DEFAULT_SETTINGS.appearance.zoom
 
+// The menu bar panel's window: never the one to talk to, transparent over the system's material,
+// and sized for the menu bar rather than the app's zoom.
+const panels = new WeakSet<BrowserWindow>()
+
+export function markPanel(window: BrowserWindow): void {
+  panels.add(window)
+}
+
+/** The app's own windows, without the menu bar panel. */
+function appWindows(): BrowserWindow[] {
+  return BrowserWindow.getAllWindows().filter(
+    (window) => !window.isDestroyed() && !panels.has(window),
+  )
+}
+
 function colors(): WindowColors {
   const mode = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
   const fallback = { background: BACKGROUND_COLOR[mode], symbol: SYMBOL_COLOR[mode] }
@@ -52,8 +67,7 @@ function titleBarOverlay(): { color: string; symbolColor: string; height: number
 export function applyZoom(factor: ZoomLevel): void {
   if (factor === zoom) return
   zoom = factor
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (window.isDestroyed()) continue
+  for (const window of appWindows()) {
     window.webContents.setZoomFactor(zoom)
     if (process.platform === 'darwin') window.setWindowButtonPosition(trafficLightPosition(zoom))
     else window.setTitleBarOverlay(titleBarOverlay())
@@ -65,8 +79,7 @@ export function applyTheme(theme: SettingsFile['appearance']['theme']): void {
 }
 
 function repaint(): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (window.isDestroyed()) continue
+  for (const window of appWindows()) {
     window.setBackgroundColor(backgroundColor())
     if (process.platform !== 'darwin') window.setTitleBarOverlay(titleBarOverlay())
   }
@@ -209,8 +222,8 @@ export function createMainWindow(start: StartMode = 'window'): BrowserWindow {
 /** The window to talk to: the focused one, else the first open one. */
 export function currentWindow(): BrowserWindow | null {
   const focused = BrowserWindow.getFocusedWindow()
-  if (focused && !focused.isDestroyed()) return focused
-  return BrowserWindow.getAllWindows().find((window) => !window.isDestroyed()) ?? null
+  if (focused && !focused.isDestroyed() && !panels.has(focused)) return focused
+  return appWindows()[0] ?? null
 }
 
 /** Brings the main window forward, creating it if every window was closed. */
