@@ -1,16 +1,27 @@
-import type { ReactNode } from 'react'
-import { FolderIcon, GlobeIcon, SquareTerminalIcon, XIcon } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { EllipsisIcon, FolderIcon, GlobeIcon, SquareTerminalIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import type { SessionSummary } from '@shared/agent-host'
+import type { SessionView } from '@shared/thread'
 import { Button } from '@renderer/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@renderer/components/ui/dropdown-menu'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { GitStatusCluster } from '@renderer/features/git/git-status'
 import { usePane } from '@renderer/features/split/pane-context'
-import { formatShortcut, isWeb } from '@renderer/lib/platform'
+import {
+  DeleteSessionDialog,
+  SessionMenuHeader,
+  SessionMenuItems,
+} from '@renderer/features/sidebar/session-menu'
+import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-menu-model'
+import { formatShortcut, isMac, isWeb } from '@renderer/lib/platform'
 import { useBrowserStore } from '@renderer/stores/browser'
-import { useGitStore } from '@renderer/stores/git'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
-import { useSessionsStore } from '@renderer/stores/sessions'
+import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import {
   closeSplitPane,
   focusPane,
@@ -21,16 +32,36 @@ import {
 } from '@renderer/stores/view'
 import { NoDrag } from './top-bar'
 
+/** A top-bar tool: 30 px, its 17 px icon in the icon color, filled while its pane shows. */
+const TOOL =
+  'relative size-7.5 text-secondary aria-expanded:bg-pressed aria-expanded:text-foreground aria-pressed:shadow-none [&_svg:not([class*=size-])]:size-4.25'
+
 /**
- * The right end of the top bar: the project's git status, the side panel's panes and, in a split,
- * **Close pane**. The git status shrinks a thousand times faster than the session title, so in a
- * crowded bar the branch gives way first, down to its icon, and the title keeps its room.
+ * The right end of the top bar: the project's git status, the side panel's panes, a session's More
+ * menu and, in a split, **Close pane**. The git status shrinks a thousand times faster than the
+ * session title, so in a crowded bar the branch gives way first, down to its icon, and the title
+ * keeps its room.
  */
-export function HeaderTools({ projectPath }: { projectPath: string }) {
+export function HeaderTools({
+  projectPath,
+  summary,
+  session,
+  onRename,
+  onNewSubSession,
+  menu,
+}: {
+  projectPath: string
+  /** The session the bar belongs to, which adds its More menu. */
+  summary?: SessionSummary
+  session?: SessionView
+  onRename?: () => void
+  onNewSubSession?: () => void
+  /** The More menu's close hands the focus on, as the title field needs after Rename. */
+  menu?: { finalFocus: () => boolean; onOpenChangeComplete: (open: boolean) => void }
+}) {
   const { t } = useTranslation('shell')
   const pane = usePane()
   const terminal = useTerminalAllowed(projectPath)
-  const isRepo = useGitStore((s) => !!s.status[projectPath]?.repo)
   // An agent opened a session's page while another pane showed: a dot says to look.
   const unseen = useBrowserStore((s) => s.unseen)
   const sessions = useSessionsStore((s) => s.byId)
@@ -40,15 +71,7 @@ export function HeaderTools({ projectPath }: { projectPath: string }) {
     : Object.keys(unseen).some((id) => sessions[id]?.projectPath === projectPath)
   return (
     <>
-      {isRepo && (
-        <NoDrag className="min-w-8 shrink-1000 overflow-clip [overflow-clip-margin:3px]">
-          <GitStatusCluster projectPath={projectPath} />
-        </NoDrag>
-      )}
-      <NoDrag className="shrink-0 gap-0.5">
-        <PaneToggle projectPath={projectPath} pane="files" label={t('headerTools.files')}>
-          <FolderIcon />
-        </PaneToggle>
+      <NoDrag className="shrink-0 gap-2">
         {/* Another host's terminal opens only while its owner allows devices it. */}
         {terminal && (
           <PaneToggle
@@ -71,6 +94,18 @@ export function HeaderTools({ projectPath }: { projectPath: string }) {
           >
             <GlobeIcon />
           </PaneToggle>
+        )}
+        <PaneToggle projectPath={projectPath} pane="files" label={t('headerTools.files')}>
+          <FolderIcon />
+        </PaneToggle>
+        {summary && onRename && onNewSubSession && (
+          <MoreMenu
+            summary={summary}
+            session={session}
+            onRename={onRename}
+            onNewSubSession={onNewSubSession}
+            menu={menu}
+          />
         )}
         {pane?.split && (
           <ClosePaneButton
@@ -120,7 +155,7 @@ function PaneToggle({
               }
               toggleSidePane(projectPath, pane)
             }}
-            className="relative text-secondary"
+            className={TOOL}
           />
         }
       >
@@ -137,6 +172,73 @@ function PaneToggle({
         {shortcut && <Kbd>{formatShortcut(shortcut)}</Kbd>}
       </TooltipContent>
     </Tooltip>
+  )
+}
+
+/**
+ * The session's More menu: who runs it, then what can be done with it from here, as the sidebar
+ * row's menu does with what a row needs.
+ */
+function MoreMenu({
+  summary,
+  session,
+  onRename,
+  onNewSubSession,
+  menu,
+}: {
+  summary: SessionSummary
+  session: SessionView | undefined
+  onRename: () => void
+  onNewSubSession: () => void
+  menu?: { finalFocus: () => boolean; onOpenChangeComplete: (open: boolean) => void }
+}) {
+  const { t } = useTranslation('sidebar')
+  const [deleting, setDeleting] = useState(false)
+  return (
+    <>
+      <DropdownMenu onOpenChangeComplete={menu?.onOpenChangeComplete}>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="quiet"
+                    size="icon-compact"
+                    aria-label={t('row.more')}
+                    className={TOOL}
+                  />
+                }
+              />
+            }
+          >
+            <EllipsisIcon />
+          </TooltipTrigger>
+          <TooltipContent>{t('row.more')}</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent
+          align="end"
+          className="w-68"
+          finalFocus={menu?.finalFocus}
+          onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}
+        >
+          <SessionMenuHeader summary={summary} session={session} />
+          <SessionMenuItems
+            summary={summary}
+            place="more"
+            onRename={onRename}
+            onNewSubSession={onNewSubSession}
+            onDelete={() => setDeleting(true)}
+          />
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DeleteSessionDialog
+        sessionId={summary.id}
+        title={sessionTitle(summary)}
+        open={deleting}
+        onOpenChange={setDeleting}
+      />
+    </>
   )
 }
 
@@ -159,7 +261,7 @@ function ClosePaneButton({
             size="icon-compact"
             aria-label={label}
             onClick={() => closeSplitPane(paneId, focused)}
-            className="text-secondary"
+            className={TOOL}
           />
         }
       >

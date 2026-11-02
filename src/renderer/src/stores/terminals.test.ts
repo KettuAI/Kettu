@@ -21,18 +21,26 @@ vi.stubGlobal('window', {
 const { fromHostTerminalEvent } = await import('@renderer/lib/host')
 const { hostOfPath, onHost } = await import('@renderer/lib/host-paths')
 const {
+  createTerminal,
   endTerminals,
+  findLocalUrl,
+  focusTerminalSide,
   forgetTerminal,
   initTerminals,
+  interruptTerminal,
   killTerminal,
   reattachTerminals,
+  restartTerminal,
   setSink,
+  showTerminal,
+  takeOverTerminal,
   takeTerminalEvent,
   moveTerminal,
   orderTerminals,
   renameTerminal,
   replaceStale,
   terminalsOf,
+  toggleSplit,
   useTerminalsStore,
 } = await import('./terminals')
 
@@ -63,6 +71,8 @@ beforeEach(() => {
     byId: {},
     active: {},
     order: {},
+    split: {},
+    focusedSide: {},
     connection: 'connected',
     error: null,
   })
@@ -290,5 +300,227 @@ describe("another host's terminals", () => {
     endTerminals(['r2'])
     expect(state().byId.r1!.stale).toBe(false)
     expect(state().byId.r2!.stale).toBe(true)
+  })
+})
+
+describe('findLocalUrl', () => {
+  it('finds an address on this computer with a port', () => {
+    expect(findLocalUrl('  ➜  Local:   http://localhost:5173/\n')).toBe('http://localhost:5173/')
+    expect(findLocalUrl('Listening on http://127.0.0.1:8000/api?x=1#top')).toBe(
+      'http://127.0.0.1:8000/api?x=1#top',
+    )
+    expect(findLocalUrl('https://[::1]:8443 ready')).toBe('https://[::1]:8443')
+  })
+
+  it('reads through the colors a dev server prints', () => {
+    const vite =
+      '\x1b[32m➜\x1b[39m  \x1b[1mLocal\x1b[22m:   \x1b[36mhttp://localhost:\x1b[1m5173\x1b[22m/\x1b[39m'
+    expect(findLocalUrl(vite)).toBe('http://localhost:5173/')
+    expect(findLocalUrl('\x1b]0;title\x07http://localhost:3000\r\n')).toBe('http://localhost:3000')
+  })
+
+  it('opens 0.0.0.0 as localhost', () => {
+    expect(findLocalUrl('Server running at http://0.0.0.0:8080/')).toBe('http://localhost:8080/')
+  })
+
+  it('ignores other hosts, addresses without a port and a sentence end', () => {
+    expect(findLocalUrl('see https://example.com:8080/docs')).toBeNull()
+    expect(findLocalUrl('LAN http://192.168.1.4:3000')).toBeNull()
+    expect(findLocalUrl('http://localhost/ and http://localhost.example.com:80')).toBeNull()
+    expect(findLocalUrl('Open http://localhost:4321.')).toBe('http://localhost:4321')
+  })
+
+  it('takes the last address printed', () => {
+    expect(findLocalUrl('http://localhost:3000\nport taken, http://localhost:3001\n')).toBe(
+      'http://localhost:3001',
+    )
+  })
+})
+
+describe("a terminal's local address", () => {
+  const output = (id: string, data: string) => emit({ type: 'terminal.data', id, data })
+
+  // Each test's terminal starts with no output seen.
+  beforeEach(() => {
+    forgetTerminal('a')
+    setSink('a', () => {})
+  })
+
+  it('is found in output and kept when the host updates the terminal', () => {
+    add(info('a', 1))
+    expect(state().byId.a!.localUrl).toBeNull()
+    output('a', '  ➜  Local:   http://localhost:5173/\r\n')
+    expect(state().byId.a!.localUrl).toBe('http://localhost:5173/')
+    add(info('a', 1, { busy: true }))
+    expect(state().byId.a!.localUrl).toBe('http://localhost:5173/')
+  })
+
+  it('is found when split across chunks, inside a color too', () => {
+    add(info('a', 1))
+    output('a', 'ready at http://loc')
+    output('a', 'alhost:3000/\r\n')
+    expect(state().byId.a!.localUrl).toBe('http://localhost:3000/')
+    output('a', 'moved to \x1b[3')
+    output('a', '6mhttp:/')
+    output('a', '/0.0.0.0:3001\x1b[39m\r\n')
+    expect(state().byId.a!.localUrl).toBe('http://localhost:3001')
+  })
+
+  it('ignores other addresses and changes the state only for a new one', () => {
+    add(info('a', 1))
+    output('a', 'docs: https://vite.dev/guide\r\n')
+    expect(state().byId.a!.localUrl).toBeNull()
+    output('a', 'http://localhost:5173/\r\n')
+    const before = state()
+    output('a', 'hmr update /src/main.ts\r\n')
+    output('a', 'http://localhost:5173/\r\n')
+    expect(state()).toBe(before)
+  })
+})
+
+describe('an agent owning a terminal', () => {
+  const owner = { agentId: 'claude-code', sessionId: 's1' } as const
+
+  it('owns none by default', () => {
+    add(info('a', 1))
+    expect(state().byId.a!.owner).toBeNull()
+  })
+
+  it('owns the terminal it starts, across updates from the host', async () => {
+    request.mockResolvedValueOnce(info('n', 9))
+    await createTerminal('/repo', undefined, { text: 'pnpm dev', run: true, owner })
+    expect(request).toHaveBeenCalledWith('terminals.create', {
+      projectPath: '/repo',
+      cols: 100,
+      rows: 24,
+      command: { text: 'pnpm dev', run: true },
+    })
+    expect(state().byId.n!.owner).toEqual(owner)
+    add(info('n', 9, { busy: true, title: 'node' }))
+    expect(state().byId.n!.owner).toEqual(owner)
+  })
+
+  it('starts a plain shell without a command', async () => {
+    request.mockResolvedValueOnce(info('n', 9))
+    await createTerminal('/repo')
+    expect(request).toHaveBeenCalledWith('terminals.create', {
+      projectPath: '/repo',
+      cols: 100,
+      rows: 24,
+    })
+  })
+
+  it('gives it up when the user types into it', async () => {
+    request.mockResolvedValueOnce(info('n', 9))
+    await createTerminal('/repo', undefined, { owner })
+    takeOverTerminal('n')
+    expect(state().byId.n!.owner).toBeNull()
+    const before = state()
+    takeOverTerminal('n')
+    takeOverTerminal('missing')
+    expect(state()).toBe(before)
+  })
+
+  it('gives up a terminal the user restarts, with its address', async () => {
+    setSink('n', () => {})
+    request.mockResolvedValueOnce(info('n', 9))
+    await createTerminal('/repo', undefined, { owner })
+    emit({ type: 'terminal.data', id: 'n', data: 'http://localhost:3000\r\n' })
+    request.mockResolvedValueOnce(info('n', 9))
+    await restartTerminal('n')
+    expect(state().byId.n).toMatchObject({ owner: null, localUrl: null })
+    setSink('n', null)
+  })
+
+  it('stops its process with Ctrl+C', async () => {
+    request.mockResolvedValueOnce(undefined)
+    await interruptTerminal('a')
+    expect(request).toHaveBeenCalledWith('terminals.input', { id: 'a', data: '\x03' })
+  })
+})
+
+describe('splitting the panel', () => {
+  const split = async () => {
+    request.mockResolvedValueOnce(info('n', 9))
+    await toggleSplit('/repo')
+  }
+  const shown = () => ({
+    left: state().active['/repo'],
+    right: state().split['/repo'] ?? null,
+    side: state().focusedSide['/repo'] ?? 'left',
+  })
+
+  beforeEach(() => {
+    add(info('a', 1), info('b', 2), info('c', 3))
+  })
+
+  it('starts a terminal on the right, focused, beside the shown one', async () => {
+    showTerminal('/repo', 'b')
+    await split()
+    expect(shown()).toEqual({ left: 'b', right: 'n', side: 'right' })
+    expect(tabs()).toEqual(['a', 'b', 'c', 'n'])
+  })
+
+  it('unsplits on a second press, keeping the right one as a tab', async () => {
+    await split()
+    await toggleSplit('/repo')
+    expect(shown()).toEqual({ left: 'a', right: null, side: 'left' })
+    expect(tabs()).toContain('n')
+  })
+
+  it('shows a selected tab in the focused side', async () => {
+    await split()
+    showTerminal('/repo', 'b')
+    expect(shown()).toEqual({ left: 'a', right: 'b', side: 'right' })
+    focusTerminalSide('/repo', 'left')
+    showTerminal('/repo', 'c')
+    expect(shown()).toEqual({ left: 'c', right: 'b', side: 'left' })
+  })
+
+  it('focuses the other side for a tab shown there', async () => {
+    await split()
+    showTerminal('/repo', 'a')
+    expect(shown()).toEqual({ left: 'a', right: 'n', side: 'left' })
+    showTerminal('/repo', 'n')
+    expect(shown()).toEqual({ left: 'a', right: 'n', side: 'right' })
+  })
+
+  it('shows a new terminal in the focused side', async () => {
+    await split()
+    request.mockResolvedValueOnce(info('m', 10))
+    await createTerminal('/repo')
+    expect(shown()).toEqual({ left: 'a', right: 'm', side: 'right' })
+  })
+
+  it('unsplits when the right one goes', async () => {
+    await split()
+    emit({ type: 'terminal.removed', id: 'n' })
+    expect(shown()).toEqual({ left: 'a', right: null, side: 'left' })
+  })
+
+  it('moves the right one to the left when the left one goes', async () => {
+    await split()
+    forgetTerminal('a')
+    expect(shown()).toEqual({ left: 'n', right: null, side: 'left' })
+  })
+
+  it('keeps a restarted stale terminal on its side', async () => {
+    await split()
+    request.mockResolvedValueOnce(info('r', 11))
+    await replaceStale('n')
+    expect(shown()).toEqual({ left: 'a', right: 'r', side: 'right' })
+    expect(state().byId.n).toBeUndefined()
+  })
+
+  it('shows the new terminal alone when nothing was shown', async () => {
+    useTerminalsStore.setState({ byId: {}, active: {}, order: {} })
+    await split()
+    expect(shown()).toEqual({ left: 'n', right: null, side: 'left' })
+  })
+
+  it('has no side to focus while unsplit', () => {
+    const before = state()
+    focusTerminalSide('/repo', 'right')
+    expect(state()).toBe(before)
   })
 })

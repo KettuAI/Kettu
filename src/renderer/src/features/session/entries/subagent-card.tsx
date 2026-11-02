@@ -21,6 +21,7 @@ import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-me
 import { useRenaming } from '@renderer/features/sidebar/use-renaming'
 import { duration } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
+import { isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
@@ -227,7 +228,10 @@ function SubagentBlock({
   return (
     <ContextMenu onOpenChangeComplete={rename.menu.onOpenChangeComplete}>
       <ContextMenuTrigger render={block} className="select-auto" />
-      <ContextMenuContent finalFocus={rename.menu.finalFocus} onKeyDown={runSessionMenuAccelerator}>
+      <ContextMenuContent
+        finalFocus={rename.menu.finalFocus}
+        onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}
+      >
         {/* A sub-agent's menu has no Delete: it goes when its parent goes. */}
         <SessionMenuItems
           summary={child}

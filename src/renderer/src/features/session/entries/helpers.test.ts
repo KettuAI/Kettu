@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ToolEntry } from '@shared/thread'
 import {
   answeredBy,
+  codeSpans,
   commandOutput,
   forkBlocked,
   forkEntry,
@@ -414,5 +415,20 @@ describe('answeredBy', () => {
       undefined,
     )
     expect(answeredBy(new Error('offline'))).toBe(undefined)
+  })
+})
+
+describe('codeSpans', () => {
+  it('sets the backticked parts apart', () => {
+    expect(codeSpans('Always allow `pnpm dev` in this project')).toEqual([
+      { text: 'Always allow ', code: false },
+      { text: 'pnpm dev', code: true },
+      { text: ' in this project', code: false },
+    ])
+  })
+
+  it('reads a name without a pair of backticks as written', () => {
+    expect(codeSpans('Allow once')).toEqual([{ text: 'Allow once', code: false }])
+    expect(codeSpans('Run `x')).toEqual([{ text: 'Run `x', code: false }])
   })
 })

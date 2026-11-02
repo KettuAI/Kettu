@@ -20,7 +20,7 @@ import {
 } from '@shared/agent-host'
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { firstLine, outlineText } from '@shared/outline'
-import type { BrowserOriginAnswer, BrowserOriginDecision } from '@shared/browser'
+import { originLabel, type BrowserOriginAnswer, type BrowserOriginDecision } from '@shared/browser'
 import type { BusyCounts, BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { PortDevice } from '@shared/remote/device'
@@ -63,6 +63,7 @@ import {
   writePatch,
   type ArtifactWrite,
 } from './artifacts/entries'
+import { allowOnceOption, changedFiles, replySummary, requestText } from './attention'
 import { parseContextReport } from './acp/claude-reports'
 import { isValueOf, startOrder, type AgentOptionsStore, type ReplacedValue } from './agent-options'
 import {
@@ -190,6 +191,7 @@ export interface SessionEvents {
     kind: 'permission' | 'turn-ended' | 'error',
     title: string,
     body: string,
+    allowOnce?: { requestId: string; optionId: string },
   ): void
   badge(count: number): void
   busy(counts: BusyCounts): void
@@ -584,6 +586,8 @@ export class SessionManager {
   private readonly timings: SessionTimings
   private readonly now: () => number
   private requestCounter = 0
+  // A notification outlives the host that asked, so its answer must not fit the next run's ids.
+  private readonly requestPrefix = `p${randomUUID().slice(0, 8)}-`
   private badgeCount = 0
   private busyCounts: BusyCounts = { running: 0, waiting: 0 }
   /** Set once the host shuts down: the last checkpoints are written and no more follow. */
@@ -785,6 +789,7 @@ export class SessionManager {
       model: record.model ?? null,
       pinnedAt: record.pinnedAt ?? null,
       archivedAt: record.archivedAt ?? null,
+      acpSessionId: record.acpSessionId || null,
       ...(live?.prepared
         ? {
             prepared: {
@@ -923,13 +928,16 @@ export class SessionManager {
     live.origins.set(key, entry.id)
     this.originRequests.set(key, { sessionId, entryId: entry.id, owner, requestId, answer: null })
     this.emit(live, [{ op: 'entry.add', entry }])
+    const status = live.thread.session.status
+    if (status === 'running' || status === 'ready')
+      this.update(live, { status: 'awaiting_permission' })
     this.touch(live.id)
     this.updateBadge()
     this.deps.events.attention(
       live.id,
       'permission',
       this.titleOf(live),
-      t('attention.browserOrigin', { origin }),
+      t('attention.browserOrigin', { site: originLabel(origin) }),
     )
   }
 
@@ -973,6 +981,7 @@ export class SessionManager {
         },
       ])
     }
+    this.stopWaiting(live)
     this.touch(live.id)
     this.updateBadge()
   }
@@ -4381,7 +4390,17 @@ export class SessionManager {
     })
     // A run's end notifies as the routine's, once, so its session sends nothing here.
     if (!routineTurn) {
-      this.deps.events.attention(live.id, 'turn-ended', this.titleOf(live), turnEndText(stopReason))
+      const reply = stopReason === 'end_turn' ? replySummary(live.thread) : null
+      const changed = stopReason === 'end_turn' ? changedFiles(live.thread) : 0
+      const text = reply ?? turnEndText(stopReason)
+      this.deps.events.attention(
+        live.id,
+        'turn-ended',
+        stopReason === 'end_turn'
+          ? t('attention.done', { title: this.titleOf(live) })
+          : this.titleOf(live),
+        changed > 0 ? t('attention.withChanges', { text, count: changed }) : text,
+      )
     }
     if (stopReason === 'end_turn' || chosen) this.drainQueue(live, chosen)
     else this.pauseQueue(live)
@@ -4751,7 +4770,7 @@ export class SessionManager {
         return Promise.resolve({ optionId })
       }
     }
-    const requestId = `p${++this.requestCounter}`
+    const requestId = `${this.requestPrefix}${++this.requestCounter}`
     return new Promise<PermissionAnswer>((resolve, reject) => {
       const onAbort = (): void => {
         this.settlePermission(live, requestId, 'withdrawn')
@@ -4785,12 +4804,23 @@ export class SessionManager {
         this.update(live, { status: 'awaiting_permission' })
       this.touch(live.id)
       this.updateBadge()
-      const tool = live.thread.byId[request.toolEntryId]
-      const title = tool?.kind === 'tool' ? tool.title : t('attention.permission')
+      const entry = live.thread.byId[request.toolEntryId]
+      const tool = entry?.kind === 'tool' ? entry : undefined
       if (live.record.origin === 'routine' && !live.routineTurnEnded) {
-        this.deps.routine?.current?.waiting(live.id, true, title)
+        this.deps.routine?.current?.waiting(
+          live.id,
+          true,
+          tool ? tool.title : t('attention.permission'),
+        )
       } else {
-        this.deps.events.attention(live.id, 'permission', this.titleOf(live), title)
+        const optionId = allowOnceOption(tool, request.options)
+        this.deps.events.attention(
+          live.id,
+          'permission',
+          this.titleOf(live),
+          requestText(tool, live.record.projectPath),
+          optionId !== null ? { requestId, optionId } : undefined,
+        )
       }
     })
   }
@@ -4800,7 +4830,9 @@ export class SessionManager {
     live: Live,
     requestId: string,
     result:
-      { optionId: string; kind: PermissionKind; device?: FromDevice } | 'cancelled' | 'withdrawn',
+      | { optionId: string; kind: PermissionKind; device?: FromDevice; name?: string }
+      | 'cancelled'
+      | 'withdrawn',
   ): void {
     const pending = live.permissions.get(requestId)
     if (!pending) return
@@ -4814,9 +4846,7 @@ export class SessionManager {
         },
       ])
     }
-    if (live.permissions.size === 0 && live.thread.session.status === 'awaiting_permission') {
-      this.update(live, { status: live.turn || live.childRunning ? 'running' : 'ready' })
-    }
+    this.stopWaiting(live)
     if (live.permissions.size === 0 && live.record.origin === 'routine') {
       this.deps.routine?.current?.waiting(live.id, false)
     }
@@ -4838,6 +4868,14 @@ export class SessionManager {
         this.emit(live, [{ op: 'entry.update', id: entryId, changes: { decision: 'timeout' } }])
       }
     }
+    this.stopWaiting(live)
+  }
+
+  /** Once no request or new site waits for the user, the session goes back to its turn or rests. */
+  private stopWaiting(live: Live): void {
+    if (live.permissions.size > 0 || live.origins.size > 0) return
+    if (live.thread.session.status !== 'awaiting_permission') return
+    this.update(live, { status: live.turn || live.childRunning ? 'running' : 'ready' })
   }
 
   respond(sessionId: string, requestId: string, optionId: string, device?: FromDevice): void {
@@ -4853,9 +4891,13 @@ export class SessionManager {
     if (!live || !pending) throw notFound(`No pending permission request ${requestId}`)
     const option = pending.options.find((o) => o.id === optionId)
     if (!option) throw invalidParams(`${optionId} is not an option of request ${requestId}`)
+    const tool = live.thread.byId[pending.toolEntryId]
+    // A question's answer is what the card shows once answered; a permission's kind says enough.
+    const answered = tool?.kind === 'tool' && tool.question !== undefined
     this.settlePermission(live, requestId, {
       optionId,
       kind: option.kind,
+      ...(answered && option.kind !== 'reject_once' ? { name: option.name } : {}),
       ...(device ? { device } : {}),
     })
     live.answered.set(requestId, device ?? null)
@@ -5654,6 +5696,7 @@ export class SessionManager {
           sessionId: live.id,
           agentId: live.record.agentId,
           title: live.thread.session.title,
+          turnStartedAt: live.thread.session.turnStartedAt,
         })
       }
     }

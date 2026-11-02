@@ -37,6 +37,7 @@ import {
 } from '@renderer/components/ui/sidebar'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { HostSwitchBar } from '@renderer/features/account/host-switch'
 import { SidebarTitleBar } from '@renderer/features/shell/top-bar'
 import { strongestSignal, signalText } from '@renderer/features/routines/model'
 import { RunningDot } from '@renderer/features/routines/run-mark'
@@ -71,7 +72,7 @@ import {
   showAllRows,
   useViewStore,
 } from '@renderer/stores/view'
-import { HostEmpty, HostFilter, HostHeading, NeedsYouGroup } from './host-groups'
+import { HostEmpty, HostHeading, NeedsYouGroup } from './host-groups'
 import { useHostLabel } from './host-label'
 import { ImportSessionsDialog } from './import-sessions'
 import { ProjectMenuItems } from './project-menu'
@@ -151,6 +152,7 @@ export function AppSidebar() {
         <UsageNavRow />
       </div>
       <SidebarContent className="scroll-fade-y gap-0 px-2 pt-1.5 pb-2" onKeyDown={moveRowFocus}>
+        <HostSwitchBar />
         {/* No header row: projects are added with Mod+O, the File menu or New session. */}
         <SidebarGroup
           role="group"
@@ -181,7 +183,6 @@ export function AppSidebar() {
             </>
           ) : hosts ? (
             <>
-              <HostFilter />
               <NeedsYouGroup hosts={hosts} away={away} />
               <PinnedGroup stop={stop} hosts={hosts} />
               {hosts.map((hostId) => (
@@ -216,7 +217,7 @@ export function AppSidebar() {
           )}
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="gap-1.5 border-t p-2">
+      <SidebarFooter className="gap-1.5 p-2">
         <SidebarFooterContent />
       </SidebarFooter>
       {importing && (

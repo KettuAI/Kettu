@@ -12,6 +12,7 @@ import { Switch } from '@renderer/components/ui/switch'
 import { revealSubagent } from '@renderer/features/session/reveal-subagent'
 import { subagentRunning, useSubagentProgress } from '@renderer/features/session/subagent/progress'
 import { duration } from '@renderer/lib/format'
+import { isMac } from '@renderer/lib/platform'
 import { sessionTitle } from '@renderer/stores/sessions'
 import { setShowFinishedSubagents, useViewStore } from '@renderer/stores/view'
 import { SessionMenuItems } from './session-menu'
@@ -154,7 +155,7 @@ function SubagentItem({ parent, child }: { parent: SessionSummary; child: Sessio
           )}
         </span>
       </ContextMenuTrigger>
-      <ContextMenuContent onKeyDown={runSessionMenuAccelerator}>
+      <ContextMenuContent onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}>
         <SessionMenuItems
           summary={child}
           onRename={nothing}

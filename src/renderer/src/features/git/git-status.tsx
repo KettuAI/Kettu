@@ -2,10 +2,7 @@ import { useRef, useState, type KeyboardEvent } from 'react'
 import type { Popover as PopoverPrimitive } from '@base-ui/react/popover'
 import type { TFunction } from 'i18next'
 import {
-  ArrowDownIcon,
-  ArrowUpIcon,
   CloudUploadIcon,
-  FileDiffIcon,
   GitBranchIcon,
   GitCommitHorizontalIcon,
   TriangleAlertIcon,
@@ -15,13 +12,16 @@ import type { GitStatus, PullRequest } from '@shared/git'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { NoDrag } from '@renderer/features/shell/top-bar'
 import { host } from '@renderer/lib/host'
+import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { loadGitTools, receiveCurrentPr, receiveGitStatus, useGitStore } from '@renderer/stores/git'
 import { BranchPopover } from './branch-popover'
-import { GitDialogs } from './git-dialogs'
+import { BranchSwitcher } from './branch-switcher'
+import { useDialogReturn } from './dialog-focus'
 import { branchName, followPointer, popoverKeys } from './popover-keys'
-import { ChecksIcon, PrIcon } from './pr-icon'
+import { PrIcon } from './pr-icon'
 import { prStateText } from './pr-text'
 
 /** Middle truncation keeps both ends of a branch name, where the meaning usually is. */
@@ -32,29 +32,36 @@ function middleTruncate(text: string, max: number): string {
   return `${text.slice(0, head)}…${text.slice(text.length - (keep - head))}`
 }
 
-/** The branch chip: a quiet button at the small control height, filled under the pointer. */
+/** The branch chip: filled, and ringed while its popover or the switcher is open. */
 const CHIP =
-  'app-region-no-drag inline-flex h-control-sm items-center rounded-md px-2 text-xs whitespace-nowrap text-secondary tabular outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring aria-expanded:bg-hover aria-expanded:text-primary'
+  'app-region-no-drag inline-flex h-6.5 min-w-7.5 items-center gap-1.5 overflow-hidden rounded-lg bg-subtle px-2 text-hint whitespace-nowrap text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-selected hover:text-primary focus-ring aria-expanded:bg-selected aria-expanded:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] data-switching:bg-selected data-switching:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]'
+
+/** The session's repository beside its title: the branch chip, then the pull request's. */
+export function SessionGitChips({ projectPath }: { projectPath: string }) {
+  const isRepo = useGitStore((s) => !!s.status[projectPath]?.repo)
+  if (!isRepo) return null
+  return (
+    // The title truncates first; the chips keep their size up to a share of the bar.
+    <NoDrag className="max-w-[40cqw] min-w-8 shrink-0 overflow-clip [overflow-clip-margin:3px]">
+      <GitStatusCluster projectPath={projectPath} />
+    </NoDrag>
+  )
+}
 
 /** The project's repository at a glance: the branch and its state, then the pull request. */
 export function GitStatusCluster({ projectPath }: { projectPath: string }) {
   const { t } = useTranslation('git')
   const status = useGitStore((s) => s.status[projectPath])
   const pr = useGitStore((s) => s.currentPr[projectPath] ?? null)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState<'branch' | 'switch' | null>(null)
   const popup = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
+  useDialogReturn(projectPath, trigger)
   // A commit's card is a popup outside the popover's own, which the same Escape would close too.
   const cardEscape = useRef<Event | null>(null)
   if (!status?.repo) return null
 
-  const onOpenChange = (next: boolean, details: PopoverPrimitive.Root.ChangeEventDetails): void => {
-    if (!next && details.reason === 'escape-key' && details.event === cardEscape.current) {
-      details.cancel()
-      return
-    }
-    setOpen(next)
-    if (!next) return
+  const refresh = (): void => {
     // Opening shows the repository as it is now, not as the last watch event left it.
     void host('git.status', { projectPath }).then(receiveGitStatus, () => {})
     void host('git.currentPullRequest', { projectPath }).then(
@@ -64,26 +71,58 @@ export function GitStatusCluster({ projectPath }: { projectPath: string }) {
     if (!useGitStore.getState().tools) void loadGitTools()
   }
 
+  const onOpenChange = (next: boolean, details: PopoverPrimitive.Root.ChangeEventDetails): void => {
+    if (!next && details.reason === 'escape-key' && details.event === cardEscape.current) {
+      details.cancel()
+      return
+    }
+    // Option-click switches branches instead.
+    if (next && details.event instanceof MouseEvent && details.event.altKey) {
+      details.cancel()
+      setOpen('switch')
+      return
+    }
+    setOpen(next ? 'branch' : null)
+    if (next) refresh()
+  }
+
+  const onChipKeys = (event: KeyboardEvent<HTMLButtonElement>): void => {
+    if (event.altKey && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault()
+      setOpen('switch')
+    }
+  }
+
   return (
     <div
       role="group"
       aria-label={t('status.repository')}
-      className="inline-flex min-w-0 items-center gap-1"
+      className="inline-flex min-w-0 items-center gap-2"
       onKeyDown={arrowFocus}
     >
-      <Popover open={open} onOpenChange={onOpenChange}>
-        {/* Shrinks first in a crowded bar: the name gives way, then all but the icon. */}
-        <PopoverTrigger
-          ref={trigger}
-          className={cn(CHIP, 'min-w-7.5 gap-2.25 overflow-hidden')}
-          aria-label={branchLabel(status, t)}
-        >
-          <BranchSummary status={status} />
-        </PopoverTrigger>
+      <Popover open={open === 'branch'} onOpenChange={onOpenChange}>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <PopoverTrigger
+                ref={trigger}
+                className={CHIP}
+                aria-label={branchLabel(status, t)}
+                aria-keyshortcuts="Alt+Enter"
+                data-switching={open === 'switch' || undefined}
+                onKeyDown={onChipKeys}
+              />
+            }
+          >
+            <BranchSummary status={status} />
+          </TooltipTrigger>
+          <TooltipContent>{t('status.chipHint', { alt: formatShortcut('Alt') })}</TooltipContent>
+        </Tooltip>
         <PopoverContent
           ref={popup}
-          align="end"
-          sideOffset={6}
+          align="start"
+          // Clears the top bar's edge by 6px.
+          sideOffset={17}
           // From the keyboard the first row takes focus, as in a menu; from the pointer, none.
           initialFocus={(type) =>
             type === 'mouse' || type === 'touch' || type === 'pen'
@@ -101,12 +140,22 @@ export function GitStatusCluster({ projectPath }: { projectPath: string }) {
             popoverKeys(event, branchName(status))
           }}
           onPointerMove={followPointer}
-          className="max-h-[min(47rem,var(--available-height))] w-98 gap-0 overflow-y-auto p-0"
+          className="max-h-[min(47rem,var(--available-height))] w-89 gap-0 overflow-y-auto p-3.5"
         >
-          <BranchPopover status={status} pr={pr} onClose={() => setOpen(false)} />
+          <BranchPopover
+            status={status}
+            pr={pr}
+            onClose={() => setOpen(null)}
+            onSwitch={() => setOpen('switch')}
+          />
         </PopoverContent>
       </Popover>
-      <GitDialogs status={status} returnFocus={trigger} />
+      <BranchSwitcher
+        status={status}
+        open={open === 'switch'}
+        anchor={trigger}
+        onOpenChange={(next) => setOpen(next ? 'switch' : null)}
+      />
       {pr && <PrChip pr={pr} />}
     </div>
   )
@@ -124,9 +173,12 @@ const RUNNING_KEY = {
   push: 'status.running.push',
   publishBranch: 'status.running.publish',
   publishRepo: 'status.running.publish',
+  switch: 'status.running.switch',
+  commit: 'status.running.commit',
+  discard: 'status.running.discard',
 } as const
 
-/** Each part enters when its count changes, so a new commit or a pushed one is noticed. */
+/** Each count enters when it changes, so a new commit or a pushed one is noticed. */
 const ENTER =
   'animate-in animation-duration-(--duration-base) fade-in slide-in-from-bottom-1 motion-reduce:animate-none'
 
@@ -134,27 +186,24 @@ function BranchSummary({ status }: { status: GitStatus }) {
   const { t } = useTranslation('git')
   const running = useGitStore((s) => s.running[status.projectPath]?.kind ?? null)
   const { head, upstream, changes, operation } = status
-  const changed = changes.staged + changes.unstaged + changes.untracked
   const unborn = !head.oid
   const Icon = head.detached ? GitCommitHorizontalIcon : GitBranchIcon
   return (
     <>
-      <span className="inline-flex min-w-0 items-center gap-1.25">
-        <Icon aria-hidden className="size-3.5 shrink-0" />
-        {/* The name takes a quarter of the bar at most and truncates first; below 720 px
-            "Not published" keeps only its icon, so the title keeps room. */}
-        <span
-          className="max-w-[25cqw] min-w-0 truncate font-mono text-xs @max-[520px]/top-bar:max-w-24"
-          title={head.branch ?? undefined}
-        >
-          {head.detached
-            ? (head.oid?.slice(0, 7) ?? 'HEAD')
-            : middleTruncate(head.branch ?? 'HEAD', 28)}
-        </span>
+      <Icon aria-hidden className="size-3.25 shrink-0 text-tertiary" />
+      {/* The name takes a quarter of the bar at most and truncates first. */}
+      <span
+        className="max-w-[25cqw] min-w-0 truncate @max-[520px]/top-bar:max-w-24"
+        title={head.branch ?? undefined}
+      >
+        {head.detached
+          ? (head.oid?.slice(0, 7) ?? 'HEAD')
+          : middleTruncate(head.branch ?? 'HEAD', 28)}
       </span>
-      {head.detached && <span className="shrink-0">{t('status.detached')}</span>}
-      {unborn && !head.detached && <span className="shrink-0">{t('status.noCommits')}</span>}
-      {/* A pull, push or publish takes the place of the sync arrows, so the popover can close. */}
+      {unborn && !head.detached && (
+        <span className="shrink-0 text-tertiary">{t('status.noCommits')}</span>
+      )}
+      {/* A write takes the place of the counts, so the popover can close while it runs. */}
       {running && running !== 'fetch' ? (
         <span role="status" aria-label={t(RUNNING_KEY[running])} className="inline-flex shrink-0">
           <Spinner aria-hidden className="size-3 text-tertiary" />
@@ -162,52 +211,42 @@ function BranchSummary({ status }: { status: GitStatus }) {
       ) : (
         <>
           {!upstream && !head.detached && !unborn && (
-            <span className="inline-flex shrink-0 items-center gap-1 text-tertiary">
-              <CloudUploadIcon aria-hidden className="size-3.5" />
-              <span className="@max-[720px]/top-bar:sr-only">{t('status.notPublished')}</span>
+            <span className="inline-flex shrink-0 text-tertiary">
+              <CloudUploadIcon aria-hidden className="size-3.25" />
+              <span className="sr-only">{t('status.notPublished')}</span>
             </span>
           )}
           {upstream && upstream.ahead > 0 && (
             <span
               key={`a${upstream.ahead}`}
-              className={cn('inline-flex shrink-0 items-center gap-0.5 text-primary', ENTER)}
+              aria-label={t('status.ahead', { count: upstream.ahead })}
+              className={cn('shrink-0 text-tertiary', ENTER)}
             >
-              <ArrowUpIcon aria-hidden className="size-3" />
-              {upstream.ahead}
+              ↑{upstream.ahead}
             </span>
           )}
           {upstream && upstream.behind > 0 && (
             <span
               key={`b${upstream.behind}`}
-              className={cn('inline-flex shrink-0 items-center gap-0.5 text-tertiary', ENTER)}
+              aria-label={t('status.behind', { count: upstream.behind })}
+              className={cn('shrink-0 text-tertiary', ENTER)}
             >
-              <ArrowDownIcon aria-hidden className="size-3" />
-              {upstream.behind}
+              ↓{upstream.behind}
             </span>
           )}
         </>
       )}
       {operation && (
-        <span className="shrink-0">
+        <span className="shrink-0 text-tertiary">
           {t(OPERATION_KEY[operation.kind])}
           {operation.step && ` ${operation.step[0]}/${operation.step[1]}`}
         </span>
       )}
-      {changes.conflicted > 0 ? (
+      {changes.conflicted > 0 && (
         <span className="inline-flex shrink-0 items-center gap-1 text-danger">
-          <TriangleAlertIcon aria-hidden className="size-3.5" />
+          <TriangleAlertIcon aria-hidden className="size-3.25" />
           {changes.conflicted}
         </span>
-      ) : (
-        changed > 0 && (
-          <span
-            key={`c${changed}`}
-            className={cn('inline-flex shrink-0 items-center gap-1', ENTER)}
-          >
-            <FileDiffIcon aria-hidden className="size-3.5" />
-            {changed}
-          </span>
-        )
       )}
     </>
   )
@@ -226,7 +265,7 @@ const CHECKS_KEY = {
   pending: 'pr.checks.pending',
 } as const
 
-/** The branch's pull request as a chip with its checks; it opens the pull request. */
+/** The branch's pull request as a ringed chip; it opens the pull request. */
 function PrChip({ pr }: { pr: PullRequest }) {
   const { t } = useTranslation('git')
   const live = pr.state === 'open' || pr.state === 'draft'
@@ -243,12 +282,11 @@ function PrChip({ pr }: { pr: PullRequest }) {
             rel="noreferrer"
             tabIndex={-1}
             aria-label={label}
-            className="app-region-no-drag inline-flex h-6 shrink-0 items-center gap-1.25 rounded-md px-2 text-xs whitespace-nowrap text-secondary tabular shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring"
+            className="app-region-no-drag inline-flex h-6.5 shrink-0 items-center gap-1.5 rounded-lg px-2 text-hint whitespace-nowrap text-secondary shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring"
           />
         }
       >
-        <PrIcon state={pr.state} size={12} />#{pr.number}
-        {live && <ChecksIcon state={pr.checks.state} size={12} />}
+        <PrIcon state={pr.state} size={13} />#{pr.number}
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>

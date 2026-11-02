@@ -5,6 +5,7 @@
     "copy": "复制",
     "copyCommand": "复制命令",
     "copied": "已复制",
+    "dismiss": "关闭提示",
     "done": "完成",
     "retry": "重试"
   },
@@ -22,7 +23,8 @@
     "seconds": "{{s}} 秒",
     "minutesSeconds": "{{m}} 分 {{s}} 秒",
     "minutesLeft": "{{m}} 分钟",
-    "hoursMinutes": "{{h}} 小时 {{m}} 分"
+    "hoursMinutes": "{{h}} 小时 {{m}} 分",
+    "minutes": "{{m}} 分钟"
   },
   "errors": {
     "hostRestarted": "Kettu 的后台进程已重启，请重试。",

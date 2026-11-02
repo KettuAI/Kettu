@@ -85,24 +85,28 @@
     },
     "label": "权限请求",
     "answeredOn": "已在 {{device}} 上回答过。",
-    "answeredInWindow": "已在另一个窗口中回答过。"
+    "answeredInWindow": "已在另一个窗口中回答过。",
+    "needsYou": "需要你"
   },
   "browserOrigin": {
     "label": "新站点",
     "ask": "{{agent}} 想要在浏览器中打开此站点。",
     "answerGroup": "答复",
-    "waiting": "等待批准",
     "decision": {
-      "session": "本次会话允许",
-      "project": "此项目始终允许",
-      "deny": "拒绝"
+      "session": "本会话内允许",
+      "project": "在本项目中始终允许 {{site}}",
+      "deny": "不允许"
     },
     "answer": {
       "session": "本次会话已允许",
       "project": "此项目已始终允许",
       "deny": "已拒绝",
       "timeout": "未在限定时间内得到答复"
-    }
+    },
+    "open": "打开",
+    "newSite": "新网站",
+    "wants": "{{agent}} 想打开 <site>{{site}}</site>",
+    "where": "在本会话的浏览器里打开 · 带着你的登录状态"
   },
   "subagent": {
     "fallbackTitle": "子 Agent",
@@ -227,7 +231,6 @@
     "whatToWorkOn": "想让 {{agent}} 做什么？",
     "message": "消息",
     "messageAgent": "给 {{agent}} 发消息",
-    "askAgent": "让 {{agent}} 帮你…",
     "describeTask": "描述一个任务…",
     "send": "发送",
     "project": "项目",
@@ -242,7 +245,7 @@
     "searchProjectsLabel": "搜索项目",
     "recent": "最近",
     "noMatchingProjects": "没有匹配的项目",
-    "heading": "想做点什么？",
+    "heading": "要做点什么？",
     "branchHint": "会话从这个分支开始",
     "commitHint": "会话从这个提交开始",
     "missingLine": "这个项目的文件夹不见了，请换一个项目。",
@@ -252,8 +255,6 @@
     "noAgentOnHost": "{{host}} 上暂时没有可以启动的 Agent。",
     "noAgentNode_other": "暂时没有可以启动的 Agent：{{agents, list(style: narrow)}} 需要 Node.js 22 或更高版本。",
     "setUpAgents": "设置 Agent…",
-    "recentArtifacts": "最近的 Artifacts",
-    "viewAll": "查看全部",
     "agentMenu": {
       "label": "Agent 和模型",
       "search": "搜索 Agent 和模型",
@@ -311,6 +312,30 @@
       "repo": "Git 仓库",
       "note": "只列文件夹。路径按 {{host}} 的格式：",
       "open": "打开"
+    },
+    "picker": {
+      "search": "搜索 Agent",
+      "noMatch": "没有匹配的 Agent",
+      "agents": "Agent",
+      "other": "其他 Harness",
+      "signedOut": "已退出 · 登录后使用",
+      "failed": "启动失败",
+      "limitUsed": "已用 {{limit}}限额的 {{percent}}%",
+      "limitReached": "已达 {{limit}}限额",
+      "manage": "管理 Agent…"
+    },
+    "modelMenu": {
+      "label": "模型",
+      "search": "搜索模型",
+      "model": "模型"
+    },
+    "pickup": {
+      "title": "接着上次继续",
+      "waiting": "等待你批准",
+      "working": "进行中",
+      "failed": "出错停止",
+      "signIn": "等待登录",
+      "finished": "{{ago}}完成"
     }
   },
   "signIn": {
@@ -409,5 +434,11 @@
     "away": "{{name}} 没有连上",
     "awayBody": "{{state}}。它回来后，这里的会话会自动接上。",
     "awayComposer": "{{name}} 没有连上：{{state}}。它回来后才能接着发消息。"
+  },
+  "question": {
+    "label": "问题",
+    "ask": "{{agent}} 问你一个问题。",
+    "asksYou": "在问你",
+    "answeredOther": "其他回答"
   }
 }

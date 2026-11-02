@@ -4,7 +4,6 @@
     "pullRequestState": "Pull request #{{number}} · {{state}}",
     "detachedAt": "Detached at {{ref}}",
     "branch": "Branch {{name}}",
-    "detached": "detached",
     "noCommits": "no commits",
     "notPublished": "Not published",
     "operation": {
@@ -17,8 +16,16 @@
       "fetch": "Fetching",
       "pull": "Pulling",
       "push": "Pushing",
-      "publish": "Publishing"
-    }
+      "publish": "Publishing",
+      "switch": "Switching branch",
+      "commit": "Committing",
+      "discard": "Discarding changes"
+    },
+    "chipHint": "Branch, sync and pull request · {{alt}}-click to switch branch",
+    "ahead_one": "{{count}} commit to push",
+    "ahead_other": "{{count}} commits to push",
+    "behind_one": "{{count}} commit to pull",
+    "behind_other": "{{count}} commits to pull"
   },
   "pr": {
     "state": {
@@ -60,18 +67,21 @@
     "retry": "Retry"
   },
   "popover": {
-    "copyBranch": "Copy branch name",
-    "from": "from <branch>{{name}}</branch>",
-    "tracking": "tracking <branch>{{name}}</branch>",
     "notPublished": "not published",
     "detached": "Detached HEAD",
-    "unborn": "No commits yet"
+    "unborn": "No commits yet",
+    "ahead": "ahead",
+    "behind": "behind",
+    "switchBranch": "Switch branch",
+    "fromBase": "from {{base}} · {{fetched}}",
+    "changes": "Changes",
+    "commit": "Commit…",
+    "onBranch": "On this branch",
+    "commits_one": "{{count}} commit",
+    "commits_other": "{{count}} commits",
+    "copyPath": "Copy path"
   },
   "timeline": {
-    "incoming_one": "{{count}} new commit to pull",
-    "incoming_other": "{{count}} new commits to pull",
-    "incomingTitle": "Commits on {{upstream}} that this branch does not have",
-    "uncommitted": "Uncommitted changes",
     "files_one": "{{count}} file",
     "files_other": "{{count}} files",
     "openDiff": "Open the diff of {{name}}",
@@ -79,13 +89,9 @@
     "copyId": "Copy commit id",
     "copyMessage": "Copy message",
     "openOnGitHub": "Open on GitHub",
-    "more": "{{count}} more",
-    "baseAhead_one": "{{count}} new commit since branching",
-    "baseAhead_other": "{{count}} new commits since branching",
-    "baseEven": "No new commits since branching"
+    "more": "{{count}} more"
   },
   "prPart": {
-    "meta": "<state>{{state}}</state> · <nw><head/> → <base/></nw> · <nw>updated {{when}}</nw>",
     "queued": "Queued",
     "run": {
       "passed": "Passed",
@@ -99,11 +105,19 @@
     "none": "No pull request",
     "create": "Create pull request…",
     "blocked": {
-      "draft": "A draft cannot be merged until it is ready for review",
-      "conflicts": "Has conflicts with {{base}}",
-      "checks": "Cannot merge until the required checks pass",
-      "review": "Cannot merge until it is approved",
-      "rules": "Blocked by the repository's merge rules"
+      "conflicts": "Has conflicts with {{base}}"
+    },
+    "label": "Pull request",
+    "mergedAgo": "Merged {{when}}",
+    "closedAgo": "Closed {{when}}",
+    "checksPassed_one": "{{passed}} of {{count}} check",
+    "checksPassed_other": "{{passed}} of {{count}} checks",
+    "waiting": {
+      "draft": "Draft",
+      "failing": "Checks failing",
+      "review": "Waiting for review",
+      "checks": "Waiting for checks",
+      "ready": "Ready to merge"
     }
   },
   "sync": {
@@ -114,22 +128,16 @@
     "fetch": "Fetch",
     "pull": "Pull",
     "push": "Push",
-    "publishBranch": "Publish branch",
     "publishRepo": "Publish…",
     "waiting": "Waits for the running operation",
-    "running": {
-      "fetch": "Fetching… {{seconds}} s",
-      "pull": "Pulling… {{seconds}} s",
-      "push": "Pushing… {{seconds}} s",
-      "publish": "Publishing… {{seconds}} s"
-    },
     "step": {
       "merge": "Finish the merge first.",
       "rebase": "Finish the rebase first.",
       "cherryPick": "Finish the cherry-pick first.",
       "revert": "Finish the revert first.",
       "conflicts": "Resolve the conflicts first."
-    }
+    },
+    "fetching": "fetching…"
   },
   "reason": {
     "noBranch": "Not on a branch",
@@ -163,7 +171,10 @@
       "fetch": "Fetch",
       "pull": "Pull",
       "push": "Push",
-      "publish": "Publish"
+      "publish": "Publish",
+      "switch": "Switch",
+      "commit": "Commit",
+      "discard": "Discard"
     },
     "rejected": "{{operation}} was rejected: the remote has new commits.",
     "notFastForward": "{{operation}} stopped: the branches have diverged.",
@@ -200,18 +211,94 @@
     },
     "createPr": {
       "title": "Create pull request",
-      "description": "From <branch>{{head}}</branch> into {{repo}}, with the GitHub CLI.",
       "titleField": "Title",
       "body": "Description",
       "base": "Base",
-      "draft": "Draft",
-      "draftHint": "A draft cannot be merged until it is marked ready for review.",
-      "action": "Create"
+      "draft": "Open as a draft",
+      "action": "Create pull request",
+      "notOnGitHub": "The branch isn’t on GitHub yet.",
+      "commits_one": "{{count}} commit",
+      "commits_other": "{{count}} commits",
+      "commitsFiles_one": "{{count}} commit · {{files}}",
+      "commitsFiles_other": "{{count}} commits · {{files}}",
+      "files_one": "{{count}} file",
+      "files_other": "{{count}} files",
+      "pushesFirst": "Pushes first"
     },
     "log": {
       "title": "{{operation}} log",
       "copy": "Copy log",
       "empty": "No output"
+    },
+    "discard": {
+      "titleOne": "Discard the changes to {{name}}?",
+      "title_one": "Discard the changes to {{count}} file?",
+      "title_other": "Discard the changes to {{count}} files?",
+      "description_one": "The file goes back to how the last commit has it, or is deleted if it is new. This can’t be undone.",
+      "description_other": "The files go back to how the last commit has them, and new files are deleted. This can’t be undone.",
+      "action": "Discard"
+    },
+    "commit": {
+      "title": "Commit to {{branch}}",
+      "message": "Message",
+      "placeholder": "What changed, in one line\n\nWhy it changed",
+      "files": "Files",
+      "filesChosen_one": "{{chosen}} of {{count}} file",
+      "filesChosen_other": "{{chosen}} of {{count}} files",
+      "commit": "Commit",
+      "commitAndPush": "Commit and push"
+    },
+    "publishBranch": {
+      "title": "Publish {{branch}}?",
+      "description": "This branch isn’t on a remote yet. Kettu will push it to <remote>{{remote}}</remote> and track it.",
+      "remote": "Remote",
+      "action": "Publish"
+    },
+    "newBranch": {
+      "title": "New branch",
+      "from": "Starts from {{branch}} and switches to it; uncommitted changes come along.",
+      "fromCommit": "Starts from {{commit}} and switches to it; uncommitted changes come along.",
+      "name": "Name",
+      "invalid": "Git can’t use this as a branch name.",
+      "action": "Create branch"
     }
+  },
+  "switcher": {
+    "search": "Find or create a branch",
+    "searchLabel": "Find or create a branch",
+    "thisSession": "This session",
+    "recent": "Recent",
+    "default": "default",
+    "inWorktree": "in a worktree",
+    "newBranch": "New branch from here…",
+    "create": "Create {{name}} from here",
+    "checkedOutIn": "{{branch}} is checked out in {{folder}}"
+  },
+  "result": {
+    "fetched": "Fetched {{remote}}",
+    "fetchedNew_one": "Fetched · {{count}} new commit on {{branch}}",
+    "fetchedNew_other": "Fetched · {{count}} new commits on {{branch}}",
+    "fetchedNothing": "Fetched · nothing new on {{branch}}",
+    "pulled_one": "Pulled {{count}} commit",
+    "pulled_other": "Pulled {{count}} commits",
+    "pushed_one": "Pushed {{count}} commit to {{remote}}",
+    "pushed_other": "Pushed {{count}} commits to {{remote}}",
+    "pushedBranch": "Pushed {{branch}} to {{remote}}",
+    "published": "Published {{branch}} to {{remote}}",
+    "publishedRepo": "Published {{name}} to GitHub",
+    "created": "Created {{branch}}",
+    "switched": "Switched to {{branch}}",
+    "committed_one": "Committed {{count}} file to {{branch}}",
+    "committed_other": "Committed {{count}} files to {{branch}}",
+    "committedDetached_one": "Committed {{count}} file",
+    "committedDetached_other": "Committed {{count}} files",
+    "discardedOne": "Discarded the changes to {{name}}",
+    "discarded_one": "Discarded the changes to {{count}} file",
+    "discarded_other": "Discarded the changes to {{count}} files",
+    "pushRejected": "Push rejected · new commits on {{remote}}",
+    "prCreated": "Pull request #{{number}} created",
+    "createPr": "Create PR",
+    "openPr": "Open",
+    "pullAndRetry": "Pull and retry"
   }
 }

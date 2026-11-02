@@ -5,6 +5,7 @@
     "copy": "Copy",
     "copyCommand": "Copy command",
     "copied": "Copied",
+    "dismiss": "Dismiss",
     "done": "Done",
     "retry": "Retry"
   },
@@ -24,7 +25,8 @@
     "seconds": "{{s}} s",
     "minutesSeconds": "{{m}} m {{s}} s",
     "minutesLeft": "{{m}} min",
-    "hoursMinutes": "{{h}} h {{m}} m"
+    "hoursMinutes": "{{h}} h {{m}} m",
+    "minutes": "{{m}} m"
   },
   "errors": {
     "hostRestarted": "A background process of Kettu restarted. Try again.",

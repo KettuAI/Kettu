@@ -1,5 +1,14 @@
-import { memo, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { useTranslation } from 'react-i18next'
+import {
+  memo,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FocusEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
 import type { AgentId } from '@shared/thread'
 import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -12,7 +21,6 @@ import {
   barGap,
   BAR_WIDTH,
   heatLevels,
-  widest,
   type DayRange,
   type TrendBar,
 } from './model'
@@ -30,6 +38,23 @@ const HEAT_OUT = [
 const HEAT_CELLS = 'grid-rows-[repeat(7,auto)]'
 /** The weekday labels: seven rows sharing the cells' height, adding none of their own. */
 const HEAT_LABELS = 'grid-rows-[repeat(7,minmax(0,1fr))] contain-size'
+/** A heatmap cell is at most 14 px, and shrinks with the card. */
+const HEAT_CELL = 14
+
+/** The chosen bar or day: the fox ring, clear of it by a line of the card. */
+const BAR_OUTLINE = 'shadow-[0_0_0_2px_var(--bg-surface),0_0_0_3.5px_var(--focus)]'
+const CELL_OUTLINE = 'shadow-[0_0_0_1.5px_var(--bg-surface),0_0_0_3px_var(--focus)]'
+
+/**
+ * The trend's grid under the bars: a line atop each quarter, then the baseline. Borders, since an
+ * inset shadow for the baseline leaves faint side lines when the chart sits between pixels.
+ */
+const GRID_ROWS = [
+  'border-t border-subtle',
+  'border-t border-subtle',
+  'border-t border-subtle',
+  'border-y border-subtle border-b-default',
+] as const
 
 /** Where the arrow keys, Home and End take an index; `vertical` is how far up and down go. */
 function moveIndex(
@@ -58,19 +83,25 @@ function moveIndex(
   return Math.min(count - 1, Math.max(0, next))
 }
 
+/** Whether focus came from the keyboard, which then picks a bar or day to start from. */
+function keyboardFocus(event: FocusEvent<HTMLElement>): boolean {
+  return event.target === event.currentTarget && event.currentTarget.matches(':focus-visible')
+}
+
 /**
- * The range's amounts as bars, stacked by agent and scaled to `max`, on a baseline and under a grid
- * line at `max`. A bar chosen with the pointer or the arrow keys dims the others; the keys start
- * from the shown one.
+ * The range's amounts as bars, stacked by agent and scaled to `max`, over grid lines and a
+ * baseline. A bar chosen with the pointer or the arrow keys takes the fox ring and a tooltip
+ * beside it; the keys start from the busiest one.
  */
 export function TrendChart({
   bars,
   series,
   max,
-  shown,
+  start,
   chosen,
   label,
   future = 0,
+  tooltip,
   onChoose,
 }: {
   bars: TrendBar[]
@@ -78,31 +109,55 @@ export function TrendChart({
   series: readonly AgentId[]
   /** The tallest bar's amount from those series: the top of the scale. */
   max: number
-  /** The bar the header names. */
-  shown: number | null
+  /** The bar the arrow keys start from. */
+  start: number | null
   chosen: number | null
   label: string
   /** How many of the last bars are still to come: dimmed, and never chosen. */
   future?: number
+  /** What the chosen bar's tooltip says. */
+  tooltip: (index: number) => ReactNode
   onChoose: (index: number | null) => void
 }) {
   const begun = bars.length - future
+  const row = useRef<HTMLDivElement>(null)
+  const [place, setPlace] = useState<CSSProperties | null>(null)
+
+  useLayoutEffect(() => {
+    const el = row.current
+    const bar = chosen === null ? null : el?.querySelector<HTMLElement>(`[data-bar="${chosen}"]`)
+    if (!el || !bar) return setPlace(null)
+    // Beside the bar, on the side with more room, so it never leaves the chart.
+    const width = el.offsetWidth
+    const left = bar.offsetLeft
+    setPlace(
+      left + bar.offsetWidth / 2 <= width / 2
+        ? { left: left + bar.offsetWidth + 8 }
+        : { right: width - left + 8 },
+    )
+  }, [chosen, bars])
+
   return (
-    <div className="relative flex h-52 flex-col shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-default)]">
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 border-t border-dashed border-strong"
-      />
+    <div className="relative">
+      <div aria-hidden className="pointer-events-none absolute inset-0 grid grid-rows-4">
+        {GRID_ROWS.map((line, i) => (
+          <span key={i} className={line} />
+        ))}
+      </div>
       <div
+        ref={row}
         role="group"
         tabIndex={0}
         aria-label={label}
-        className="relative flex flex-1 items-end justify-center rounded-md outline-none focus-ring"
+        className="relative flex h-45 items-end justify-center rounded-xs outline-none focus-ring"
         style={{ gap: barGap(bars.length) }}
         onPointerLeave={() => onChoose(null)}
+        onFocus={(event) => {
+          if (keyboardFocus(event) && begun > 0) onChoose(Math.min(start ?? begun - 1, begun - 1))
+        }}
         onBlur={() => onChoose(null)}
         onKeyDown={(event) => {
-          const next = begun > 0 ? moveIndex(event, shown ?? 0, begun, 1, 0) : null
+          const next = begun > 0 ? moveIndex(event, chosen ?? start ?? 0, begun, 1, 0) : null
           if (next !== null) onChoose(next)
         }}
       >
@@ -112,18 +167,18 @@ export function TrendChart({
           return (
             <div
               key={bar.from}
-              className={cn(
-                'flex h-full min-w-0 flex-1 items-end transition-opacity duration-(--duration-fast)',
-                chosen !== null && chosen !== i && 'opacity-40',
-                i >= begun && 'opacity-35',
-              )}
+              data-bar={i}
+              className={cn('flex h-full min-w-0 flex-1 items-end', i >= begun && 'opacity-35')}
               // A few days stay bars, not blocks across the chart; the dates are placed by it too.
               style={{ maxWidth: BAR_WIDTH }}
               onPointerEnter={i < begun ? () => onChoose(i) : undefined}
             >
               {parts.length > 0 && (
                 <div
-                  className="flex w-full flex-col-reverse overflow-hidden rounded-t-xs"
+                  className={cn(
+                    'flex w-full flex-col-reverse overflow-hidden rounded-t-sm',
+                    chosen === i && BAR_OUTLINE,
+                  )}
                   // Each part keeps a pixel, so usage too small for one still shows.
                   style={{ height: `${(total / max) * 100}%`, minHeight: parts.length }}
                 >
@@ -144,13 +199,17 @@ export function TrendChart({
           )
         })}
       </div>
+      {chosen !== null && place && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute top-1 z-10 flex min-w-37.5 flex-col gap-1 rounded-xl bg-popover px-2.5 py-2 text-small text-secondary shadow-menu"
+          style={place}
+        >
+          {tooltip(chosen)}
+        </div>
+      )}
     </div>
   )
-}
-
-/** An agent's part of a bar; "—" for none, as the page writes a figure with nothing in it. */
-function partValue(value: number | undefined, format: (value: number) => string): string {
-  return value ? format(value) : '—'
 }
 
 /** Room between two dates under the trend, the 12 px spacing step. */
@@ -211,7 +270,11 @@ export const TrendAxis = memo(function TrendAxis({
     return axisLabels({ count, width, anchor, steps, pick, gap: LABEL_GAP, text, measure })
   }, [box, count, anchor, steps, pick, text])
   return (
-    <div ref={row} aria-hidden className="relative mt-1.5 h-5 text-meta text-tertiary tabular-nums">
+    <div
+      ref={row}
+      aria-hidden
+      className="relative mt-2 h-4 text-caption text-tertiary tabular-nums"
+    >
       {labels.map((l) => (
         <span key={l.index} className="absolute top-0 whitespace-nowrap" style={{ left: l.left }}>
           {l.text}
@@ -221,42 +284,21 @@ export const TrendAxis = memo(function TrendAxis({
   )
 })
 
-/**
- * The trend's series as toggle buttons that show or hide each one, the last one shown staying,
- * each with its amount in the bar the header names. A value keeps the room of the widest it takes
- * in any bar, so moving along the bars never moves a key.
- */
+/** The trend's series as toggle buttons that show or hide each one, the last one shown staying. */
 export const TrendLegend = memo(function TrendLegend({
-  bars,
-  index,
   series,
   shown,
   label,
   keepOne,
-  formatValue,
   onChange,
 }: {
-  bars: TrendBar[]
-  index: number | null
   series: readonly AgentId[]
   shown: readonly AgentId[]
   label: string
   /** Why the last key shown stays pressed, in its tooltip. */
   keepOne: string
-  formatValue: (value: number) => string
   onChange: (shown: AgentId[]) => void
 }) {
-  const { i18n } = useTranslation()
-  const room = useMemo(
-    () => {
-      const font = `500 12.5px ${getComputedStyle(document.body).fontFamily}`
-      const values = (id: AgentId) => bars.map((bar) => partValue(bar.byAgent[id], formatValue))
-      return new Map(series.map((id) => [id, widest(values(id), (t) => textWidth(t, font))]))
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the formatters follow the language
-    [bars, series, i18n.language, formatValue],
-  )
-  const bar = index === null ? null : bars[index]
   return (
     <ToggleGroup
       multiple
@@ -264,7 +306,7 @@ export const TrendLegend = memo(function TrendLegend({
       onValueChange={(next) => onChange(next as AgentId[])}
       aria-label={label}
       variant="legend"
-      className="min-w-0 flex-1 flex-wrap gap-x-2.5 gap-y-0.5"
+      className="-mr-1.5 min-w-0 flex-wrap gap-0.5"
     >
       {series.map((id) => {
         const on = shown.includes(id)
@@ -276,7 +318,7 @@ export const TrendLegend = memo(function TrendLegend({
                 <ToggleGroupItem
                   value={id}
                   className={cn(
-                    'h-6 min-w-0 gap-1.5 rounded-md px-1.5 text-command text-tertiary aria-pressed:text-secondary aria-pressed:hover:text-foreground',
+                    'h-6 min-w-0 gap-1.5 rounded-md px-1.5 text-hint text-tertiary aria-pressed:text-secondary aria-pressed:hover:text-foreground',
                     last && 'cursor-default hover:bg-transparent aria-pressed:hover:bg-transparent',
                   )}
                 />
@@ -285,24 +327,11 @@ export const TrendLegend = memo(function TrendLegend({
               <span
                 aria-hidden
                 className={cn(
-                  'size-2.25 rounded-xs',
+                  'size-2 rounded-xs',
                   on ? agentFill(id) : 'shadow-[inset_0_0_0_1.5px_var(--border-strong)]',
                 )}
               />
               {agentName(id)}
-              {/* The header reads the values out; the button's name stays the agent's. */}
-              <span
-                aria-hidden
-                className={cn(
-                  'grid text-left font-medium tabular-nums',
-                  on ? 'text-foreground' : 'text-tertiary',
-                )}
-              >
-                <span className="invisible col-start-1 row-start-1">{room.get(id)}</span>
-                <span className="col-start-1 row-start-1">
-                  {bar && partValue(bar.byAgent[id], formatValue)}
-                </span>
-              </span>
             </TooltipTrigger>
             <TooltipContent>{keepOne}</TooltipContent>
           </Tooltip>
@@ -328,7 +357,7 @@ const Cells = memo(function Cells({
           key={i}
           data-i={i}
           className={cn(
-            'aspect-square self-center rounded-xs',
+            'aspect-square self-center rounded-md',
             (outside[i] ? HEAT_OUT : HEAT_FILL)[level],
           )}
         />
@@ -344,9 +373,9 @@ const Cells = memo(function Cells({
 const LABELLED_WEEKDAYS = new Set([1, 3, 5])
 
 /**
- * 53 weeks of days, a column per week starting on the locale's first day, a row per weekday as
- * tall as its label. The shade is the day's quartile among the days with usage. One pointer
- * listener and the arrow keys pick a day; only the outline moves, so the 371 cells never
+ * 53 weeks of days, a column per week starting on the locale's first day, a row per weekday. The
+ * shade is the day's quartile among the days with usage. One pointer listener and the arrow keys
+ * pick a day, which takes the fox ring and a tooltip; only those move, so the 371 cells never
  * re-render on hover.
  */
 export function Heatmap({
@@ -356,7 +385,8 @@ export function Heatmap({
   label,
   monthLabel,
   weekdayLabel,
-  onShow,
+  tip,
+  spoken,
 }: {
   /** The heatmap's day starts, oldest first, starting on the first day of a week. */
   days: readonly number[]
@@ -366,12 +396,16 @@ export function Heatmap({
   label: string
   monthLabel: (day: number) => string
   weekdayLabel: (day: number) => string
-  /** The day the header names: the one chosen, else the busiest in the range. */
-  onShow: (index: number | null) => void
+  /** The chosen day's tooltip. */
+  tip: (index: number) => string
+  /** The chosen day for screen readers. */
+  spoken: (index: number) => string
 }) {
   const grid = useRef<HTMLDivElement>(null)
   const [chosen, setChosen] = useState<number | null>(null)
-  const [box, setBox] = useState<{ x: number; y: number; size: number } | null>(null)
+  const [box, setBox] = useState<{ x: number; y: number; size: number; column: number } | null>(
+    null,
+  )
   const levels = useMemo(() => heatLevels(values), [values])
   const outside = useMemo(() => days.map((d) => d < range.from || d >= range.to), [days, range])
   const busiest = useMemo(
@@ -382,19 +416,23 @@ export function Heatmap({
       ),
     [values, days.length, outside],
   )
-  const shown = chosen ?? busiest
   const future = (7 - (days.length % 7)) % 7
   const columns = Math.ceil(days.length / 7)
 
   useLayoutEffect(() => {
-    onShow(days.length > 0 ? shown : null)
-    const cell = grid.current?.querySelector<HTMLElement>(`[data-i="${shown}"]`)
+    const cell =
+      chosen === null ? null : grid.current?.querySelector<HTMLElement>(`[data-i="${chosen}"]`)
     setBox(
       chosen !== null && cell
-        ? { x: cell.offsetLeft, y: cell.offsetTop, size: cell.offsetWidth }
+        ? {
+            x: cell.offsetLeft,
+            y: cell.offsetTop,
+            size: cell.offsetWidth,
+            column: Math.floor(chosen / 7),
+          }
         : null,
     )
-  }, [shown, chosen, days, onShow])
+  }, [chosen, days])
 
   const months = useMemo(() => {
     const labels: { column: number; text: string }[] = []
@@ -410,12 +448,18 @@ export function Heatmap({
     return labels
   }, [days, columns, monthLabel])
   const weekStart = days[0] ?? 0
-  const template = { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }
+  const template = { gridTemplateColumns: `repeat(${columns}, minmax(0, ${HEAT_CELL}px))` }
+  // The tooltip starts at its day near the left edge, ends at it near the right, else centres.
+  const align = !box ? 0 : box.column < 4 ? 0 : box.column >= columns - 4 ? 1 : 0.5
 
   return (
-    <div className="grid grid-cols-[--spacing(7.5)_minmax(0,1fr)] gap-x-1.5">
+    <div className="grid grid-cols-[--spacing(6)_minmax(0,1fr)] gap-x-2 gap-y-1.5">
       <span />
-      <div aria-hidden className="grid h-4.5 text-meta text-tertiary" style={template}>
+      <div
+        aria-hidden
+        className="grid h-3.5 gap-x-0.75 text-[11px] leading-3.5 text-tertiary"
+        style={template}
+      >
         {months.map((m) => (
           <span
             key={m.column}
@@ -426,7 +470,7 @@ export function Heatmap({
           </span>
         ))}
       </div>
-      <div aria-hidden className={cn('grid gap-y-0.75 text-meta text-tertiary', HEAT_LABELS)}>
+      <div aria-hidden className={cn('grid gap-y-0.75 text-[10.5px] text-tertiary', HEAT_LABELS)}>
         {[0, 1, 2, 3, 4, 5, 6].map((row) => {
           const day = addDays(weekStart, row)
           return (
@@ -442,7 +486,7 @@ export function Heatmap({
         tabIndex={0}
         aria-label={label}
         className={cn(
-          'relative grid grid-flow-col gap-0.75 rounded-xs outline-none focus-ring',
+          'relative grid w-fit grid-flow-col gap-0.75 rounded-xs outline-none focus-ring',
           HEAT_CELLS,
         )}
         style={template}
@@ -451,26 +495,45 @@ export function Heatmap({
           if (index !== undefined) setChosen(Number(index))
         }}
         onPointerLeave={() => setChosen(null)}
+        onFocus={(event) => {
+          if (keyboardFocus(event) && days.length > 0) setChosen(busiest)
+        }}
         onBlur={() => setChosen(null)}
         onKeyDown={(event) => {
           // The columns are weeks: left and right move a week, up and down a day.
-          const next = moveIndex(event, shown, days.length, 7, 1)
+          const next = moveIndex(event, chosen ?? busiest, days.length, 7, 1)
           if (next !== null) setChosen(next)
         }}
       >
         <Cells levels={levels} outside={outside} future={future} />
-        {box && (
-          <span
-            aria-hidden
-            className="pointer-events-none absolute top-0 left-0 rounded-xs ring-[1.5px] ring-foreground"
-            style={{
-              width: box.size,
-              height: box.size,
-              transform: `translate(${box.x}px, ${box.y}px)`,
-            }}
-          />
+        {box && chosen !== null && (
+          <>
+            <span
+              aria-hidden
+              className={cn('pointer-events-none absolute top-0 left-0 rounded-md', CELL_OUTLINE)}
+              style={{
+                width: box.size,
+                height: box.size,
+                transform: `translate(${box.x}px, ${box.y}px)`,
+              }}
+            />
+            <span
+              aria-hidden
+              className="pointer-events-none absolute z-10 rounded-tile bg-foreground px-2 py-1.25 text-caption whitespace-nowrap text-background"
+              style={{
+                left: box.x + box.size * align,
+                top: box.y,
+                transform: `translate(${-align * 100}%, calc(-100% - 6px))`,
+              }}
+            >
+              {tip(chosen)}
+            </span>
+          </>
         )}
       </div>
+      <span role="status" className="sr-only">
+        {chosen !== null ? spoken(chosen) : ''}
+      </span>
     </div>
   )
 }
@@ -478,12 +541,12 @@ export function Heatmap({
 /** The heatmap's scale, from none to the top quartile. */
 export function HeatLegend({ less, more }: { less: string; more: string }) {
   return (
-    <span className="flex items-center gap-1 text-meta text-tertiary">
-      <span className="mx-0.75">{less}</span>
+    <span className="flex items-center gap-1 text-caption text-tertiary">
+      <span className="mr-0.5">{less}</span>
       {HEAT_FILL.map((fill) => (
-        <span key={fill} aria-hidden className={cn('size-2.75 rounded-xs', fill)} />
+        <span key={fill} aria-hidden className={cn('size-2.75 rounded-sm', fill)} />
       ))}
-      <span className="mx-0.75">{more}</span>
+      <span className="ml-0.5">{more}</span>
     </span>
   )
 }

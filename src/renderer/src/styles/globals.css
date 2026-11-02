@@ -2,6 +2,7 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/inter/opsz.css';
+@import '@fontsource-variable/inter/opsz-italic.css';
 @import '@fontsource-variable/source-serif-4/opsz.css';
 @import '@fontsource-variable/source-serif-4/opsz-italic.css';
 @import '@fontsource-variable/jetbrains-mono/wght.css';
@@ -165,10 +166,16 @@
   --color-mark: var(--mark);
   --color-toast: var(--toast);
   --color-toast-foreground: var(--toast-foreground);
+  --color-toast-success: var(--toast-success);
+  --color-toast-warning: var(--toast-warning);
+  --color-toast-info: var(--toast-info);
+  --color-toast-muted: var(--toast-muted);
   --color-diff-add: var(--diff-add);
   --color-diff-add-word: var(--diff-add-word);
   --color-diff-del: var(--diff-del);
   --color-diff-del-word: var(--diff-del-word);
+  --color-code-success: var(--code-success);
+  --color-code-danger: var(--code-danger);
   --color-brand-claude: var(--brand-claude);
   --color-agent-claude-code: var(--agent-claude-code);
   --color-agent-codex: var(--agent-codex);
@@ -305,6 +312,15 @@
   /* Tooltips and a menu item's shortcut. */
   --text-caption: 11.5px;
   --text-caption--line-height: 16px;
+  /* Mono beside interface text: commit ids, line counts, a worktree's path. */
+  --text-code-sm: 11px;
+  --text-code-sm--line-height: 16px;
+  /* The letter in a file's change tile. */
+  --text-badge: 9.5px;
+  --text-badge--line-height: 1;
+  /* The number on an answer's key cap. */
+  --text-key: 11px;
+  --text-key--line-height: 16px;
 }
 
 :root {
@@ -371,7 +387,8 @@
   --prose-face: var(--face-inter);
   --display-face: var(--face-manrope);
   --code-face: 'JetBrains Mono Variable', var(--face-system-mono);
-  /* Inter's single-storey a; another face keeps its own letters. */
+  /* Inter's single-storey a, where its files keep that variant: the bundled subsets do not, so
+     it draws Inter's default a. Another face keeps its own letters. */
   --ui-features: 'cv11';
   --prose-features: 'cv11';
   /* The serif reads about a size smaller than the sans faces at the same pixel size. */
@@ -801,7 +818,7 @@
   font-feature-settings: var(--prose-features);
   font-size: calc(var(--prose-size) * var(--prose-scale));
   line-height: 1.65;
-  /* Italics are the serif's own; Chinese, which has none, stays upright. */
+  /* Italics are the face's own; Chinese, which has none, stays upright. */
   font-synthesis-style: none;
   color: var(--text-primary);
   overflow-wrap: anywhere;
@@ -914,7 +931,7 @@
   }
 
   & [data-streamdown='inline-code'] {
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     background: var(--bg-code-inline);
     color: var(--text-primary);
     padding: 0.1em 0.35em;
@@ -1165,7 +1182,7 @@
   font-size: 13px;
   line-height: 1.55;
   letter-spacing: normal;
-  /* Inter's italic is not bundled. */
+  /* A theme's code face for the interface has no italic bundled. */
   font-synthesis-style: auto;
 
   /* This text is already Inter's small step, so a chip stays at its own size. */
@@ -1175,22 +1192,45 @@
 }
 
 /* Diffs sit on the code block surface, not on the Shiki theme's own background, with the
-   theme's line and word tints. Outer declarations win over the theme's :host rule inside the
-   diff's shadow root. */
-.diff,
-.file-preview {
+   theme's line and word tints over the whole row, numbers included, and line numbers in the
+   comment color. Outer declarations win over the theme's :host rule inside the diff's shadow
+   root; diff-impl.tsx lays the line tints on as they are. */
+.diff {
   --diffs-light-bg: var(--bg-code-block);
   --diffs-dark-bg: var(--bg-code-block);
-  --diffs-addition-color-override: var(--success);
-  --diffs-deletion-color-override: var(--danger);
+  --diffs-addition-color-override: var(--code-success);
+  --diffs-deletion-color-override: var(--code-danger);
   --diffs-bg-addition-override: var(--diff-add);
+  --diffs-bg-addition-number-override: var(--diff-add);
   --diffs-bg-addition-emphasis-override: var(--diff-add-word);
   --diffs-bg-deletion-override: var(--diff-del);
+  --diffs-bg-deletion-number-override: var(--diff-del);
   --diffs-bg-deletion-emphasis-override: var(--diff-del-word);
+  --diffs-fg-number-override: var(--syntax-comment);
+  --diffs-fg-number-addition-override: var(--syntax-comment);
+  --diffs-fg-number-deletion-override: var(--syntax-comment);
 }
 
-/* The Files pane's preview fills the pane, so a short file ends where the pane does. */
-.file-preview {
-  --diffs-light-bg: var(--background);
-  --diffs-dark-bg: var(--background);
+/* The Files pane's diff, tinted as .diff is, with roomier lines; lines picked to mention take the
+   selection's fox tint. */
+.files-diff {
+  --diffs-light-bg: var(--bg-code-block);
+  --diffs-dark-bg: var(--bg-code-block);
+  --diffs-addition-color-override: var(--code-success);
+  --diffs-deletion-color-override: var(--code-danger);
+  --diffs-bg-addition-override: var(--diff-add);
+  --diffs-bg-addition-number-override: var(--diff-add);
+  --diffs-bg-addition-emphasis-override: var(--diff-add-word);
+  --diffs-bg-deletion-override: var(--diff-del);
+  --diffs-bg-deletion-number-override: var(--diff-del);
+  --diffs-bg-deletion-emphasis-override: var(--diff-del-word);
+  --diffs-fg-number-override: var(--syntax-comment);
+  --diffs-fg-number-addition-override: var(--syntax-comment);
+  --diffs-fg-number-deletion-override: var(--syntax-comment);
+  --diffs-bg-selection-override: var(--selection);
+  --diffs-bg-selection-number-override: var(--selection);
+  --diffs-bg-separator-override: var(--bg-subtle);
+  --diffs-header-font-family: var(--font-mono);
+  --diffs-line-height: 21px;
+  font-variant-ligatures: none;
 }

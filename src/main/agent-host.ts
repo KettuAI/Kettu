@@ -47,6 +47,8 @@ export interface AgentHostDeps {
   onRoutinesWorking(working: boolean): void
   /** The host started and answers requests, at launch and after each restart. */
   onReady?(): void
+  /** The host stopped or crashed; it may start again, and `onReady` says when. */
+  onDown?(): void
   /** The artifacts service's port, which the browser's pages must never reach. */
   onServicePort?(port: number | null): void
   /**
@@ -144,11 +146,12 @@ function isMediaGrant(value: unknown): value is MediaGrantRecord {
 
 function isBusySession(value: unknown): value is BusySession {
   if (typeof value !== 'object' || value === null) return false
-  const { sessionId, agentId, title } = value as Record<string, unknown>
+  const { sessionId, agentId, title, turnStartedAt } = value as Record<string, unknown>
   return (
     typeof sessionId === 'string' &&
     typeof agentId === 'string' &&
-    (title === null || typeof title === 'string')
+    (title === null || typeof title === 'string') &&
+    (turnStartedAt === null || Number.isFinite(turnStartedAt))
   )
 }
 
@@ -240,6 +243,11 @@ export class AgentHost {
 
   pushSettings(settings: HostSettings): void {
     this.host.post({ type: 'host:settings', settings })
+  }
+
+  /** Allow once from a request's notification, which the host answers as its own window would. */
+  answerPermission(sessionId: string, requestId: string, optionId: string): void {
+    this.host.post({ type: 'host:permission-answer', sessionId, requestId, optionId })
   }
 
   /** The computer slept or woke, for the routines' schedule timer. */
@@ -540,6 +548,7 @@ export class AgentHost {
     this.deps.onRoutinesWorking(false)
     this.deps.onBadge(0)
     this.deps.onBusy({ running: 0, waiting: 0 })
+    this.deps.onDown?.()
     const roots = this.agentProcesses
     this.agentProcesses = []
     // After a clean stop the host has stopped every agent itself, or left it in its own record.

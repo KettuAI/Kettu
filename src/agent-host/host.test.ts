@@ -254,7 +254,14 @@ describe('main messages', () => {
     expect(t.sent.at(-1)).toEqual({
       type: 'host:busy',
       requestId: 7,
-      sessions: [{ sessionId: session.id, agentId: 'fake-agent', title: 'Run the login tests' }],
+      sessions: [
+        {
+          sessionId: session.id,
+          agentId: 'fake-agent',
+          title: 'Run the login tests',
+          turnStartedAt: expect.any(Number),
+        },
+      ],
     })
 
     await t.host.shutdown()
@@ -432,6 +439,21 @@ function fakeGit() {
       throw new Error('not used')
     },
     commit: async () => {
+      throw new Error('not used')
+    },
+    switchBranch: async () => {
+      throw new Error('not used')
+    },
+    publishBranch: async () => {
+      throw new Error('not used')
+    },
+    commitChanges: async () => {
+      throw new Error('not used')
+    },
+    discardChanges: async () => {
+      throw new Error('not used')
+    },
+    branches: async () => {
       throw new Error('not used')
     },
     changes: async (p) => (calls.push(`changes ${p}`), []),

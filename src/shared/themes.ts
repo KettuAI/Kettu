@@ -61,12 +61,15 @@ export const THEME_TOKENS = [
   'switch-thumb',
   'track',
   'control-on',
-  'control-on-tint',
   'scrollbar-thumb',
   'scrim',
   'viewer-scrim',
   'toast',
   'toast-foreground',
+  'toast-success',
+  'toast-warning',
+  'toast-info',
+  'toast-muted',
   'mark',
   'checker',
   'agent-opencode',
@@ -94,6 +97,8 @@ export const THEME_TOKENS = [
   'diff-add-word',
   'diff-del',
   'diff-del-word',
+  'code-success',
+  'code-danger',
   'terminal-background',
   'terminal-foreground',
   'terminal-cursor',
@@ -120,6 +125,36 @@ export type ThemeToken = (typeof THEME_TOKENS)[number]
 const TOKENS: ReadonlySet<string> = new Set(THEME_TOKENS)
 
 export const isThemeToken = (name: string): name is ThemeToken => TOKENS.has(name)
+
+/**
+ * Tokens added after themes were first made, or whose built-in value no longer follows another
+ * token, each with the token a theme's own palette gives it when the theme leaves it out: an older
+ * theme keeps its colors instead of the built-in theme's for these. In order, so one may take
+ * another's.
+ */
+const THEME_FALLBACKS: readonly (readonly [ThemeToken, ThemeToken])[] = [
+  ['primary-foreground', 'bg-surface'],
+  ['bg-raised', 'bg-surface'],
+  ['track', 'border-default'],
+  // The theme's orange for text, which reaches 4.5:1 on its pages.
+  ['control-on', 'attention'],
+  ['switch-on', 'control-on'],
+  ['code-success', 'success'],
+  ['code-danger', 'danger'],
+]
+
+/**
+ * The tokens a theme's variant leaves out that take another from its palette, each with the
+ * token it takes; only where the variant sets that one, or it takes one in turn.
+ */
+export function themeFallbacks(colors: ThemeColors): [ThemeToken, ThemeToken][] {
+  const taken = new Set<ThemeToken>()
+  return THEME_FALLBACKS.flatMap(([token, from]) => {
+    if (colors[token] !== undefined || (colors[from] === undefined && !taken.has(from))) return []
+    taken.add(token)
+    return [[token, from]]
+  })
+}
 
 /** The tokens a theme's tile draws, which the catalog's index carries for each theme. */
 export const PREVIEW_TOKENS = [

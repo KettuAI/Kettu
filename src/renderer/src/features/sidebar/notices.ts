@@ -1,25 +1,15 @@
-import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import {
-  agentUpdateLabel,
-  agentUpdateNotice,
-  type AgentUpdateNotice,
-} from '@renderer/features/updates/agent-updates'
-import {
-  appUpdateNotice,
-  appUpdateRow,
-  type AppUpdateNotice,
-} from '@renderer/features/updates/app-updates'
+import { updateCardLabel, type UpdateCard } from '@renderer/features/updates/card-model'
+import { useUpdates } from '@renderer/features/updates/use-updates'
 import { i18n } from '@renderer/lib/i18n'
-import { usableAgents, useAgentsStore } from '@renderer/stores/agents'
-import { useUpdatesStore } from '@renderer/stores/updates'
+import { useAgentsStore } from '@renderer/stores/agents'
 
 /** What the footer's notices show, each empty while it has nothing to say. */
 export interface Notices {
   /** The agents that need sign-in, by name. */
   signIn: string[]
-  agentUpdate: AgentUpdateNotice | null
-  appUpdate: AppUpdateNotice | null
+  /** The one update card, for Kettu and the harnesses alike. */
+  update: UpdateCard | null
 }
 
 /** What the collapsed sidebar's toggle says of the notices it hides. */
@@ -38,11 +28,10 @@ export function signInLabel(names: string[]): string {
 }
 
 /** The notices' words and their sentence; null while no notice shows. */
-export function noticeSummary({ signIn, agentUpdate, appUpdate }: Notices): NoticeSummary | null {
+export function noticeSummary({ signIn, update }: Notices): NoticeSummary | null {
   const labels = [
     signIn.length > 0 ? signInLabel(signIn) : null,
-    agentUpdate ? agentUpdateLabel(agentUpdate) : null,
-    appUpdate ? appUpdateRow(appUpdate).label : null,
+    update ? updateCardLabel(update) : null,
   ].filter((label) => label !== null)
   if (labels.length === 0) return null
   return {
@@ -55,21 +44,11 @@ export function noticeSummary({ signIn, agentUpdate, appUpdate }: Notices): Noti
 
 /** The sign-in and update notices, from the agents and the updater, and their summary. */
 export function useNotices(): Notices & { summary: NoticeSummary | null } {
-  // The labels come from i18n.t, so a language change has to render them again.
-  useTranslation()
   const signIn = useAgentsStore(
     useShallow((s) =>
       s.order.filter((id) => s.byId[id]?.signIn === 'required').map((id) => s.byId[id]!.name),
     ),
   )
-  const statuses = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
-  const taskErrors = useAgentsStore((s) => s.taskErrors)
-  const status = useUpdatesStore((s) => s.status)
-  const updatedSeen = useUpdatesStore((s) => s.updatedDismissed)
-  const notices: Notices = {
-    signIn,
-    agentUpdate: agentUpdateNotice(statuses, taskErrors),
-    appUpdate: appUpdateNotice(status, updatedSeen),
-  }
+  const notices: Notices = { signIn, update: useUpdates().card }
   return { ...notices, summary: noticeSummary(notices) }
 }

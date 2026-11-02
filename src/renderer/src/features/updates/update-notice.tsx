@@ -1,14 +1,9 @@
 import { cloneElement, type ReactElement, type ReactNode, type Ref } from 'react'
-import { CircleArrowUpIcon, CircleCheckIcon, ExternalLinkIcon, XIcon } from 'lucide-react'
+import { XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Button, buttonVariants } from '@renderer/components/ui/button'
-import { Progress } from '@renderer/components/ui/progress'
-import { Spinner } from '@renderer/components/ui/spinner'
+import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { errorMessage } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
-import { useUpdatesStore } from '@renderer/stores/updates'
-import { appUpdateRow, cardAction, type AppUpdateAction, type AppUpdateNotice } from './app-updates'
 
 interface NoticeCardProps {
   /** The card itself, which a popover beside it anchors to. */
@@ -36,7 +31,7 @@ interface NoticeCardProps {
   cancelLabel?: string
 }
 
-/** A notice in the sidebar footer: a raised card above Settings. */
+/** A notice in the sidebar footer other than an update: a raised card over the account row. */
 export function NoticeCard({
   ref,
   icon,
@@ -53,7 +48,7 @@ export function NoticeCard({
 }: NoticeCardProps) {
   const { t } = useTranslation('updates')
   const close = onCancel ?? onDismiss
-  const closeLabel = onCancel ? (cancelLabel ?? t('notice.cancel')) : t('notice.dismiss')
+  const closeLabel = onCancel ? (cancelLabel ?? t('app.cancel')) : t('close')
   const opens = !!(onOpen || opener)
   const hit = (
     <button
@@ -68,14 +63,14 @@ export function NoticeCard({
   return (
     <div
       data-notice=""
-      className="group/notice relative animate-in fade-in slide-in-from-bottom-1 animation-duration-(--duration-slow) ease-out-quint"
+      className="group/notice relative motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:animation-duration-(--duration-slow) motion-safe:ease-out-quint"
     >
       <div
         ref={ref}
         className={cn(
-          'relative flex min-h-11 items-center gap-2 rounded-xl bg-surface py-1.5 pr-1.5 pl-3 shadow-card transition-shadow duration-(--duration-fast)',
+          'relative flex min-h-11 items-center gap-2.5 rounded-xl bg-surface py-1.75 pr-1.75 pl-2.5 shadow-card transition-shadow duration-(--duration-fast)',
           opens &&
-            'has-[>[data-notice-hit]:hover]:shadow-outline-hover has-data-popup-open:shadow-outline-hover',
+            'has-[>[data-notice-hit]:hover]:shadow-(--card-lift) has-data-popup-open:shadow-(--card-open)',
         )}
       >
         {/* Buttons cannot nest, so the card opens through a button laid under its content. */}
@@ -93,14 +88,14 @@ export function NoticeCard({
         {/* Beside a second line the icon keeps to the first. */}
         <span
           className={cn(
-            'pointer-events-none relative grid size-3.5 shrink-0 place-items-center',
-            below && 'mt-0.75 self-start',
+            'pointer-events-none relative grid size-5.5 shrink-0 place-items-center rounded-tile bg-tile shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
+            below && 'self-start',
           )}
         >
           {icon}
         </span>
-        <span className="pointer-events-none relative flex min-w-0 flex-1 flex-col gap-1 py-0.5">
-          <span className="text-command leading-4 font-medium text-pretty">{text}</span>
+        <span className="pointer-events-none relative flex min-w-0 flex-1 flex-col gap-px">
+          <span className="text-hint leading-4 font-medium text-pretty text-primary">{text}</span>
           {below}
         </span>
         {action && <span className="relative flex shrink-0 items-center">{action}</span>}
@@ -122,115 +117,11 @@ export function NoticeCard({
               />
             }
           >
-            <XIcon />
+            <XIcon strokeWidth={1.8} />
           </TooltipTrigger>
           <TooltipContent>{closeLabel}</TooltipContent>
         </Tooltip>
       )}
     </div>
-  )
-}
-
-/** A version beside a notice's words, which never breaks across lines. */
-export function NoticeVersion({ children }: { children: ReactNode }) {
-  return <span className="font-normal whitespace-nowrap text-tertiary tabular">{children}</span>
-}
-
-/** The app's update notice as a card: an update ready, on offer, downloading or just installed. */
-export function UpdateNoticeCard({ notice }: { notice: AppUpdateNotice }) {
-  const { t } = useTranslation('updates')
-  const row = appUpdateRow(notice)
-  const version = <NoticeVersion>{notice.version}</NoticeVersion>
-
-  const dismiss = () => {
-    if (notice.kind === 'updated') useUpdatesStore.setState({ updatedDismissed: true })
-    else void window.kettu.updates.dismiss()
-  }
-
-  const run = (action: AppUpdateAction | null) => {
-    switch (action) {
-      case 'restart':
-        void window.kettu.updates.restart()
-        break
-      case 'update':
-        void window.kettu.updates
-          .download()
-          .catch((error: unknown) =>
-            console.warn(`Could not download the update: ${errorMessage(error)}`),
-          )
-        break
-      case 'download':
-      case 'whats-new':
-        if (row.href) window.open(row.href, '_blank', 'noopener')
-        break
-    }
-  }
-  const hit = cardAction(row)
-
-  // A download in progress is cancelled from the card's corner, so it has no action of its own.
-  const action =
-    row.action === null || row.action === 'cancel' ? null : row.href ? (
-      <a
-        href={row.href}
-        target="_blank"
-        rel="noreferrer"
-        className={buttonVariants({ variant: 'outline', size: 'xs' })}
-      >
-        {row.action === 'download' && <ExternalLinkIcon data-icon="inline-start" />}
-        {row.actionLabel}
-      </a>
-    ) : (
-      <Button size="xs" onClick={() => run(row.action)}>
-        {row.actionLabel}
-      </Button>
-    )
-
-  return (
-    <NoticeCard
-      icon={
-        notice.kind === 'updated' ? (
-          <CircleCheckIcon className="size-3.5 text-success" />
-        ) : notice.kind === 'moving' ? (
-          <Spinner aria-hidden className="size-3.5 text-info" />
-        ) : (
-          <CircleArrowUpIcon className="size-3.5 text-info" />
-        )
-      }
-      text={
-        notice.kind === 'moving' ? (
-          row.words
-        ) : row.versionFirst ? (
-          <>
-            {version} {row.words}
-          </>
-        ) : (
-          <>
-            {row.words} {version}
-          </>
-        )
-      }
-      label={row.label}
-      detail={row.detail}
-      below={
-        notice.kind === 'downloading' ? (
-          <span className="flex items-center gap-2">
-            <Progress
-              value={notice.percent}
-              aria-label={t('notice.downloadProgress')}
-              className="min-w-0 flex-1"
-            />
-            <span className="w-8 shrink-0 text-right font-mono text-meta text-tertiary tabular">
-              {notice.percent}%
-            </span>
-          </span>
-        ) : (
-          row.note && <span className="text-meta leading-4 text-tertiary">{row.note}</span>
-        )
-      }
-      onOpen={hit ? () => run(hit) : undefined}
-      action={action}
-      onDismiss={row.dismissible ? dismiss : undefined}
-      onCancel={row.action === 'cancel' ? () => void window.kettu.updates.cancel() : undefined}
-    />
   )
 }

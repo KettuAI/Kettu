@@ -2,11 +2,14 @@
 // Code takes it. The option ids are the ACP adapter's, so answers stored with a thread still read.
 
 import type { PendingPermission } from '@shared/thread'
+import { unsafeCommand, unsafeCommandPrefix } from '../command-safety'
 import { t } from '../i18n'
 import { modeName } from './config'
+import type { AskedQuestion } from './tools'
 import type {
   PermissionMode,
   PermissionResult,
+  PermissionRule,
   PermissionUpdate,
   RuleDestination,
   ToolPermissionContext,
@@ -29,18 +32,73 @@ const EXIT_PLAN_MODES: Record<string, PermissionMode> = {
   [OPTION.exitPlanDefault]: 'default',
 }
 
-function ruleText(rule: { toolName: string; ruleContent?: string }): string {
-  return rule.ruleContent ? `${rule.toolName}(${rule.ruleContent})` : rule.toolName
+const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
+const SHELL_TOOLS = new Set(['Bash', 'PowerShell'])
+
+/** `pnpm dev:*` and `pnpm dev *` allow `pnpm dev` and what follows it. */
+const PREFIX_RULE = /(?::\*|\s+\*)$/
+
+/** A rule's command as it reads, without the `*` that lets anything follow it. */
+function ruleCommand(content: string): string {
+  return content.replace(PREFIX_RULE, '').trim()
+}
+
+/**
+ * Whether a rule would let a shell run anything, or a command that deletes, gains rights or
+ * runs another that its text does not show.
+ */
+export function unsafeRule(rule: PermissionRule): boolean {
+  if (!SHELL_TOOLS.has(rule.toolName)) return false
+  const content = rule.ruleContent ?? ''
+  const command = ruleCommand(content)
+  // Claude Code reads a `*` anywhere in a rule as a wildcard.
+  if (command === '' || command.includes('*')) return true
+  const shell = rule.toolName === 'PowerShell' ? 'powershell' : 'posix'
+  return PREFIX_RULE.test(content)
+    ? unsafeCommandPrefix(command, shell)
+    : unsafeCommand(command, shell)
+}
+
+/**
+ * The suggestions "always allow" may apply: a rule for a command that deletes or gains rights is
+ * left out, so a request to run `rm -rf x && pnpm dev` offers to remember only `pnpm dev`.
+ */
+export function safeSuggestions(suggestions: readonly PermissionUpdate[]): PermissionUpdate[] {
+  const safe: PermissionUpdate[] = []
+  for (const update of suggestions) {
+    if (
+      (update.type !== 'addRules' && update.type !== 'replaceRules') ||
+      update.behavior !== 'allow'
+    ) {
+      safe.push(update)
+      continue
+    }
+    const rules = update.rules.filter((rule) => !unsafeRule(rule))
+    if (rules.length > 0) safe.push({ ...update, rules })
+  }
+  return safe
+}
+
+/** Text in backticks, which the option shows as code; null when a backtick in it would end that. */
+function code(text: string): string | null {
+  return text.includes('`') ? null : `\`${text}\``
+}
+
+/** A rule as the option shows it: a command as typed, another tool as Claude Code writes it. */
+function ruleText(rule: PermissionRule): string | null {
+  if (SHELL_TOOLS.has(rule.toolName) && rule.ruleContent) return code(ruleCommand(rule.ruleContent))
+  return code(rule.ruleContent ? `${rule.toolName}(${rule.ruleContent})` : rule.toolName)
 }
 
 function place(destination: RuleDestination): string {
   switch (destination) {
     case 'userSettings':
       return t('permission.place.user')
+    // The settings file committed with the project, which everyone working on it shares.
     case 'projectSettings':
-      return t('permission.place.project')
+      return t('permission.place.shared')
     case 'localSettings':
-      return t('permission.place.local')
+      return t('permission.place.project')
     default:
       return t('permission.place.session')
   }
@@ -51,19 +109,28 @@ function place(destination: RuleDestination): string {
  * folders it opens. Null when the suggestions hold nothing an option can name truthfully.
  */
 export function alwaysAllowName(suggestions: readonly PermissionUpdate[]): string | null {
+  const only = suggestions.length === 1 ? suggestions[0] : undefined
+  if (only?.type === 'setMode' && only.mode === 'acceptEdits' && only.destination === 'session') {
+    return t('permission.acceptEdits')
+  }
   const parts: string[] = []
+  const separator = t('permission.listSeparator')
   for (const update of suggestions) {
     if (update.type === 'addRules' && update.behavior === 'allow' && update.rules.length > 0) {
+      const rules = update.rules.map(ruleText)
+      if (!rules.every((rule) => rule !== null)) return null
       parts.push(
         t('permission.addRules', {
-          rules: update.rules.map(ruleText).join(', '),
+          rules: rules.join(separator),
           place: place(update.destination),
         }),
       )
     } else if (update.type === 'addDirectories' && update.directories.length > 0) {
+      const directories = update.directories.map(code)
+      if (!directories.every((directory) => directory !== null)) return null
       parts.push(
         t('permission.addDirectories', {
-          directories: update.directories.join(', '),
+          directories: directories.join(separator),
           place: place(update.destination),
         }),
       )
@@ -73,7 +140,9 @@ export function alwaysAllowName(suggestions: readonly PermissionUpdate[]): strin
       return null
     }
   }
-  return parts.length > 0 ? t('permission.allowAlways', { changes: parts.join('; ') }) : null
+  return parts.length > 0
+    ? t('permission.allowAlways', { changes: parts.join(t('permission.changeSeparator')) })
+    : null
 }
 
 /** The options of one request, in the order Claude Code offers them. */
@@ -103,9 +172,13 @@ export function permissionOptions(
     return options
   }
   const options: Options = [
-    { id: OPTION.allowOnce, name: t('permission.allowOnce'), kind: 'allow_once' },
+    {
+      id: OPTION.allowOnce,
+      name: t(EDIT_TOOLS.has(toolName) ? 'permission.allowEdit' : 'permission.allowOnce'),
+      kind: 'allow_once',
+    },
   ]
-  const suggestions = context.suggestions ?? []
+  const suggestions = safeSuggestions(context.suggestions ?? [])
   const always =
     context.suppressAlwaysAllowRule === true || suggestions.length === 0
       ? null
@@ -115,7 +188,9 @@ export function permissionOptions(
   return options
 }
 
-export const REJECTED = 'The user rejected this tool use.'
+// A denial stops the turn's plan: the user says what to do instead in their next message.
+export const REJECTED =
+  'The user denied this tool use and will say what to do instead. Do not try another way; stop and wait for their next message.'
 export const CANCELLED = 'The user cancelled this prompt.'
 
 /** The answer Claude Code gets for the option the user chose, or for none. */
@@ -140,11 +215,31 @@ export function permissionResult(
     return {
       behavior: 'allow',
       updatedInput: input,
-      updatedPermissions: context.suggestions ?? [],
+      updatedPermissions: safeSuggestions(context.suggestions ?? []),
       toolUseID,
     }
   }
   return { behavior: 'deny', message: REJECTED, toolUseID }
+}
+
+/** The option that lets the user answer a question in their own words, in their next message. */
+export const OTHER_ANSWER = 'other'
+export const ANSWER_IN_REPLY =
+  'The user will answer this question in their own words. Stop here and wait for their next message.'
+export const QUESTION_UNREADABLE =
+  'This question could not be shown to the user. Ask it in your reply instead.'
+
+/** A question's answers as options: each choice, then one to answer in the user's own words. */
+export function questionOptions(question: AskedQuestion): Options {
+  return [
+    ...question.options.map((option, index) => ({
+      id: `answer:${index}`,
+      name: option.label,
+      kind: 'allow_once' as const,
+      ...(option.description ? { description: option.description } : {}),
+    })),
+    { id: OTHER_ANSWER, name: t('question.other'), kind: 'reject_once' as const },
+  ]
 }
 
 /** The mode an answer moves the session to, for the mode option to show. */

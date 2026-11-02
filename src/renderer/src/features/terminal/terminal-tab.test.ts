@@ -20,6 +20,8 @@ const terminal: TerminalState = {
   activity: false,
   stale: false,
   name: null,
+  owner: null,
+  localUrl: null,
 }
 
 function render(state: Partial<TerminalState>, selected: boolean): string {
@@ -39,11 +41,12 @@ function render(state: Partial<TerminalState>, selected: boolean): string {
 }
 
 describe('TerminalTab', () => {
-  it('shows the title alone, with the close button as its only icon', () => {
+  it('shows the terminal icon and the title, with the close button', () => {
     const markup = render({}, true)
 
     expect(markup).toContain('>vim<')
-    expect(markup.match(/<svg/g)).toHaveLength(1)
+    expect(markup).toContain('lucide-square-terminal')
+    expect(markup.match(/<svg/g)).toHaveLength(2)
   })
 
   it('keeps the close button visible on the active tab', () => {
@@ -62,9 +65,29 @@ describe('TerminalTab', () => {
     expect(markup).toContain('group-focus-within/tab:opacity-100')
   })
 
-  it('fills the active tab like a selected row and leaves the others clear', () => {
-    expect(render({}, true)).toContain('bg-selected')
-    expect(render({}, false)).not.toContain('bg-selected')
+  it('raises the active tab like a selected row and leaves the others clear', () => {
+    expect(render({}, true)).toContain('bg-raised')
+    expect(render({}, true)).toContain('shadow-segment')
+    expect(render({}, false)).not.toContain('bg-raised')
+  })
+
+  it('makes room for the close button on the active tab only', () => {
+    expect(render({}, true)).toContain('pr-7.75')
+    expect(render({}, false)).not.toContain('pr-7.75')
+  })
+
+  it('names the agent that owns a tab, with a spinner while its command runs', () => {
+    const owner = { agentId: 'claude-code', sessionId: null } as const
+    const running = render({ owner, busy: true }, true)
+    expect(running).toContain('· Claude Code')
+    expect(running).toContain('data-slot="spinner"')
+    expect(running).not.toContain('lucide-square-terminal')
+    expect(running).not.toContain('bg-success')
+
+    const idle = render({ owner }, true)
+    expect(idle).toContain('lucide-square-terminal')
+    expect(idle).not.toContain('data-slot="spinner"')
+    expect(render({}, true)).not.toContain('Claude Code')
   })
 
   it('marks a tab whose command is running, in place of its new output', () => {

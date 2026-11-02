@@ -4,7 +4,6 @@
     "pullRequestState": "Pull Request #{{number}} · {{state}}",
     "detachedAt": "HEAD 已分离于 {{ref}}",
     "branch": "分支 {{name}}",
-    "detached": "已分离",
     "noCommits": "尚无提交",
     "notPublished": "未发布",
     "operation": {
@@ -17,8 +16,16 @@
       "fetch": "正在抓取",
       "pull": "正在拉取",
       "push": "正在推送",
-      "publish": "正在发布"
-    }
+      "publish": "正在发布",
+      "switch": "正在切换分支",
+      "commit": "正在提交",
+      "discard": "正在丢弃更改"
+    },
+    "chipHint": "分支、同步与拉取请求 · {{alt}} 点按切换分支",
+    "ahead_one": "{{count}} 个提交待推送",
+    "ahead_other": "{{count}} 个提交待推送",
+    "behind_one": "{{count}} 个提交待拉取",
+    "behind_other": "{{count}} 个提交待拉取"
   },
   "pr": {
     "state": {
@@ -60,29 +67,30 @@
     "retry": "重试"
   },
   "popover": {
-    "copyBranch": "复制分支名",
-    "from": "基于 <branch>{{name}}</branch>",
-    "tracking": "跟踪 <branch>{{name}}</branch>",
     "notPublished": "未发布",
     "detached": "HEAD 已分离",
-    "unborn": "尚无提交"
+    "unborn": "尚无提交",
+    "ahead": "领先",
+    "behind": "落后",
+    "switchBranch": "切换分支",
+    "fromBase": "来自 {{base}} · {{fetched}}",
+    "changes": "更改",
+    "commit": "提交…",
+    "onBranch": "此分支上",
+    "commits_one": "{{count}} 个提交",
+    "commits_other": "{{count}} 个提交",
+    "copyPath": "复制路径"
   },
   "timeline": {
-    "incoming_other": "有 {{count}} 个新提交可拉取",
-    "incomingTitle": "{{upstream}} 上有、此分支还没有的提交",
-    "uncommitted": "未提交的更改",
     "files_other": "{{count}} 个文件",
     "openDiff": "打开 {{name}} 的差异",
     "copied": "已复制",
     "copyId": "复制提交 ID",
     "copyMessage": "复制提交信息",
     "openOnGitHub": "在 GitHub 上打开",
-    "more": "还有 {{count}} 个",
-    "baseAhead_other": "分出后有 {{count}} 个新提交",
-    "baseEven": "分出后没有新提交"
+    "more": "还有 {{count}} 个"
   },
   "prPart": {
-    "meta": "<state>{{state}}</state> · <nw><head/> → <base/></nw> · <nw>{{when}}更新</nw>",
     "queued": "排队中",
     "run": {
       "passed": "已通过",
@@ -96,11 +104,19 @@
     "none": "没有 Pull Request",
     "create": "创建 Pull Request…",
     "blocked": {
-      "draft": "草稿需要标记为可审查后才能合并",
-      "conflicts": "与 {{base}} 有冲突",
-      "checks": "必需的检查通过后才能合并",
-      "review": "获得批准后才能合并",
-      "rules": "被仓库的合并规则阻止"
+      "conflicts": "与 {{base}} 有冲突"
+    },
+    "label": "拉取请求",
+    "mergedAgo": "{{when}}合并",
+    "closedAgo": "{{when}}关闭",
+    "checksPassed_one": "{{count}} 项检查通过 {{passed}} 项",
+    "checksPassed_other": "{{count}} 项检查通过 {{passed}} 项",
+    "waiting": {
+      "draft": "草稿",
+      "failing": "检查未通过",
+      "review": "等待审查",
+      "checks": "等待检查",
+      "ready": "可以合并"
     }
   },
   "sync": {
@@ -111,22 +127,16 @@
     "fetch": "抓取",
     "pull": "拉取",
     "push": "推送",
-    "publishBranch": "发布分支",
     "publishRepo": "发布…",
     "waiting": "等待正在进行的操作结束",
-    "running": {
-      "fetch": "正在抓取… {{seconds}} 秒",
-      "pull": "正在拉取… {{seconds}} 秒",
-      "push": "正在推送… {{seconds}} 秒",
-      "publish": "正在发布… {{seconds}} 秒"
-    },
     "step": {
       "merge": "请先完成合并。",
       "rebase": "请先完成变基。",
       "cherryPick": "请先完成拣选。",
       "revert": "请先完成还原。",
       "conflicts": "请先解决冲突。"
-    }
+    },
+    "fetching": "正在获取…"
   },
   "reason": {
     "noBranch": "不在任何分支上",
@@ -160,7 +170,10 @@
       "fetch": "抓取",
       "pull": "拉取",
       "push": "推送",
-      "publish": "发布"
+      "publish": "发布",
+      "switch": "切换",
+      "commit": "提交",
+      "discard": "丢弃"
     },
     "rejected": "{{operation}}被拒绝：远程仓库有新提交。",
     "notFastForward": "{{operation}}已停止：两边的分支已分叉。",
@@ -196,18 +209,94 @@
     },
     "createPr": {
       "title": "创建 Pull Request",
-      "description": "从 <branch>{{head}}</branch> 合入 {{repo}}，使用 GitHub CLI 创建。",
       "titleField": "标题",
       "body": "描述",
       "base": "目标分支",
-      "draft": "草稿",
-      "draftHint": "草稿需要标记为可审查后才能合并。",
-      "action": "创建"
+      "draft": "作为草稿创建",
+      "action": "创建拉取请求",
+      "notOnGitHub": "此分支还不在 GitHub 上。",
+      "commits_one": "{{count}} 个提交",
+      "commits_other": "{{count}} 个提交",
+      "commitsFiles_one": "{{count}} 个提交 · {{files}}",
+      "commitsFiles_other": "{{count}} 个提交 · {{files}}",
+      "files_one": "{{count}} 个文件",
+      "files_other": "{{count}} 个文件",
+      "pushesFirst": "会先推送"
     },
     "log": {
       "title": "{{operation}}日志",
       "copy": "复制日志",
       "empty": "没有输出"
+    },
+    "discard": {
+      "titleOne": "丢弃 {{name}} 的更改？",
+      "title_one": "丢弃 {{count}} 个文件的更改？",
+      "title_other": "丢弃 {{count}} 个文件的更改？",
+      "description_one": "文件会恢复到上次提交时的样子；如果是新文件，则会被删除。此操作无法撤销。",
+      "description_other": "文件会恢复到上次提交时的样子，新文件会被删除。此操作无法撤销。",
+      "action": "丢弃"
+    },
+    "commit": {
+      "title": "提交到 {{branch}}",
+      "message": "提交信息",
+      "placeholder": "用一行说明改了什么\n\n为什么改",
+      "files": "文件",
+      "filesChosen_one": "已选 {{chosen}} / {{count}} 个文件",
+      "filesChosen_other": "已选 {{chosen}} / {{count}} 个文件",
+      "commit": "提交",
+      "commitAndPush": "提交并推送"
+    },
+    "publishBranch": {
+      "title": "发布 {{branch}}？",
+      "description": "此分支还不在远程仓库上。Kettu 会把它推送到 <remote>{{remote}}</remote> 并跟踪它。",
+      "remote": "远程仓库",
+      "action": "发布"
+    },
+    "newBranch": {
+      "title": "新建分支",
+      "from": "从 {{branch}} 开始并切换过去；未提交的更改会一起带上。",
+      "fromCommit": "从 {{commit}} 开始并切换过去；未提交的更改会一起带上。",
+      "name": "名称",
+      "invalid": "Git 不能用它作为分支名。",
+      "action": "新建分支"
     }
+  },
+  "switcher": {
+    "search": "查找或新建分支",
+    "searchLabel": "查找或新建分支",
+    "thisSession": "此会话",
+    "recent": "最近",
+    "default": "默认",
+    "inWorktree": "在工作树中",
+    "newBranch": "从此处新建分支…",
+    "create": "从此处新建 {{name}}",
+    "checkedOutIn": "{{branch}} 已在 {{folder}} 中检出"
+  },
+  "result": {
+    "fetched": "已获取 {{remote}}",
+    "fetchedNew_one": "已获取 · {{branch}} 上有 {{count}} 个新提交",
+    "fetchedNew_other": "已获取 · {{branch}} 上有 {{count}} 个新提交",
+    "fetchedNothing": "已获取 · {{branch}} 上没有新内容",
+    "pulled_one": "已拉取 {{count}} 个提交",
+    "pulled_other": "已拉取 {{count}} 个提交",
+    "pushed_one": "已推送 {{count}} 个提交到 {{remote}}",
+    "pushed_other": "已推送 {{count}} 个提交到 {{remote}}",
+    "pushedBranch": "已推送 {{branch}} 到 {{remote}}",
+    "published": "已发布 {{branch}} 到 {{remote}}",
+    "publishedRepo": "已将 {{name}} 发布到 GitHub",
+    "created": "已新建 {{branch}}",
+    "switched": "已切换到 {{branch}}",
+    "committed_one": "已向 {{branch}} 提交 {{count}} 个文件",
+    "committed_other": "已向 {{branch}} 提交 {{count}} 个文件",
+    "committedDetached_one": "已提交 {{count}} 个文件",
+    "committedDetached_other": "已提交 {{count}} 个文件",
+    "discardedOne": "已丢弃 {{name}} 的更改",
+    "discarded_one": "已丢弃 {{count}} 个文件的更改",
+    "discarded_other": "已丢弃 {{count}} 个文件的更改",
+    "pushRejected": "推送被拒绝 · {{remote}} 上有新提交",
+    "prCreated": "已创建拉取请求 #{{number}}",
+    "createPr": "创建 PR",
+    "openPr": "打开",
+    "pullAndRetry": "拉取后重试"
   }
 }

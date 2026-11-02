@@ -11,8 +11,8 @@ export const MIN_RATIO = contrast.minRatio
 
 /**
  * Foreground tokens and the background tokens each is drawn on, in both themes, and the ratio a
- * group needs when it is not MIN_RATIO. The last two are inverted fills: the send button's icon,
- * tooltips, a count on the attention fill and the primary button's label.
+ * group needs when it is not MIN_RATIO. The last four are inverted fills: the send button's icon,
+ * tooltips, a count on the attention fill, the primary button's label and a toast.
  *
  * @type {{ fg: string, on: string[], minRatio?: number }[]}
  */

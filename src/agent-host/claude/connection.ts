@@ -52,8 +52,17 @@ import {
   SYNTHETIC_MODEL,
   type Delivery,
 } from './mapper'
-import { answeredMode, permissionOptions, permissionResult } from './permissions'
+import {
+  ANSWER_IN_REPLY,
+  answeredMode,
+  OTHER_ANSWER,
+  permissionOptions,
+  permissionResult,
+  QUESTION_UNREADABLE,
+  questionOptions,
+} from './permissions'
 import { mapAccount, mapAuthStatus, mapContextUsage, mapUsageLimits } from './reports'
+import { askedQuestions } from './tools'
 import type {
   AccountInfo,
   AssistantMessage,
@@ -766,8 +775,6 @@ export class ClaudeConnection implements AgentConnection {
       settingSources: sources,
       systemPrompt: { type: 'preset', preset: 'claude_code' },
       tools: { type: 'preset', preset: 'claude_code' },
-      // Kettu has no form for its questions, so Claude Code asks in its reply instead.
-      disallowedTools: ['AskUserQuestion'],
       permissionMode: mode,
       allowDangerouslySkipPermissions: allowBypass,
       canUseTool: (name, toolInput, permission) =>
@@ -1392,6 +1399,7 @@ export class ClaudeConnection implements AgentConnection {
     input: Record<string, unknown>,
     permission: ToolPermissionContext,
   ): Promise<PermissionResult> {
+    if (toolName === 'AskUserQuestion') return this.askQuestions(session, target, input, permission)
     const options = permissionOptions(toolName, permission, session.modes)
     const output = session.mapper.permissionTool(
       target.context(),
@@ -1421,6 +1429,58 @@ export class ClaudeConnection implements AgentConnection {
       if (mode) this.setChoice(session, 'mode', mode)
     }
     return result
+  }
+
+  /**
+   * AskUserQuestion's questions, each as a card of its answers and Something else, one after
+   * another; Claude Code takes the answers keyed by question. Something else lets the user answer
+   * in their next message instead.
+   */
+  private async askQuestions(
+    session: Session,
+    target: SessionTarget,
+    input: Record<string, unknown>,
+    permission: ToolPermissionContext,
+  ): Promise<PermissionResult> {
+    const { toolUseID } = permission
+    const questions = askedQuestions(input)
+    if (!questions) return { behavior: 'deny', message: QUESTION_UNREADABLE, toolUseID }
+    const block = { type: 'tool_use' as const, id: toolUseID, name: 'AskUserQuestion', input }
+    const entryId = `t:${toolUseID}`
+    const answers: Record<string, string> = {}
+    for (const [index, asked] of questions.entries()) {
+      const output =
+        index === 0
+          ? session.mapper.permissionTool(target.context(), block, session.id)
+          : {
+              patches: [
+                {
+                  op: 'entry.update' as const,
+                  id: entryId,
+                  changes: { title: asked.header || asked.question, question: asked.question },
+                },
+              ],
+              effects: [],
+            }
+      let optionId: string
+      try {
+        const answer = await target.requestPermission(
+          { toolCallId: toolUseID, toolEntryId: entryId, output, options: questionOptions(asked) },
+          permission.signal,
+        )
+        if (answer === 'cancelled') return permissionResult(null, input, permission)
+        optionId = answer.optionId
+      } catch {
+        return permissionResult(null, input, permission)
+      }
+      const chosen = asked.options[Number(optionId.replace(/^answer:/, ''))]
+      if (optionId === OTHER_ANSWER || !chosen) {
+        return { behavior: 'deny', message: ANSWER_IN_REPLY, toolUseID }
+      }
+      answers[asked.question] = chosen.label
+    }
+    target.apply(session.mapper.toolStatus(target.context(), toolUseID, 'in_progress'))
+    return { behavior: 'allow', updatedInput: { ...input, answers }, toolUseID }
   }
 
   // Reports.
