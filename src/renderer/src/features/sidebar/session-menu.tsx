@@ -1,24 +1,34 @@
-import { type CSSProperties, useRef, useState } from 'react'
+import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import {
+  AppWindowIcon,
   ArchiveIcon,
+  CheckIcon,
   CircleDotIcon,
   CircleIcon,
+  CodeIcon,
   Columns2Icon,
+  CopyIcon,
+  CornerDownRightIcon,
+  ExternalLinkIcon,
   FolderIcon,
+  GitBranchIcon,
+  GitForkIcon,
   PanelBottomIcon,
   PanelRightIcon,
   PencilIcon,
   PinIcon,
   PinOffIcon,
-  PlusIcon,
   RotateCwIcon,
-  SplitIcon,
+  SlidersHorizontalIcon,
   SquareIcon,
+  SquareTerminalIcon,
   TrashIcon,
 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
+import type { EditorList } from '@shared/editors'
+import type { SessionView } from '@shared/thread'
 import {
   archiveSession,
   deleteSession,
@@ -40,9 +50,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
+import { Button } from '@renderer/components/ui/button'
 import {
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuSub,
@@ -51,12 +63,17 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { toast } from '@renderer/components/ui/toast'
 import { PrIcon } from '@renderer/features/git/pr-icon'
+import { basename, tokens } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
-import { fileManagerName, isWeb } from '@renderer/lib/platform'
+import { i18n } from '@renderer/lib/i18n'
+import { fileManagerName, formatShortcut, isMac, isWeb, isWindows } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
-import { sessionTitle } from '@renderer/stores/sessions'
+import { useGitStore } from '@renderer/stores/git'
+import { useTerminalAllowed } from '@renderer/stores/hosts'
+import { clearSelection } from '@renderer/stores/session-selection'
+import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import {
   allPanes,
   canSplit,
@@ -65,21 +82,79 @@ import {
   type SplitReason,
 } from '@renderer/features/split/layout'
 import { splitSize } from '@renderer/features/split/session-drag-model'
-import { openInSplit, openNewSubSession, useViewStore } from '@renderer/stores/view'
-import { ACCELERATORS, sessionMenuGroups, type SessionMenuItem } from './session-menu-model'
+import {
+  openInSplit,
+  openNewSubSession,
+  openSession,
+  toggleTerminal,
+  useViewStore,
+} from '@renderer/stores/view'
+import {
+  ACCELERATORS,
+  isRunning,
+  MULTI_ACCELERATORS,
+  multiSessionMenuGroups,
+  QUICK_DELETE,
+  resumeCommand,
+  sessionMenuGroups,
+  type SessionMenuItem,
+  type SessionMenuPlace,
+} from './session-menu-model'
+
+/** An accelerator as the menu shows it: macOS's symbols, or the key names elsewhere. */
+function shortcutLabel(shortcut: string): string {
+  if (shortcut === 'Backspace') return isMac ? '⌫' : 'Backspace'
+  return formatShortcut(shortcut)
+}
+
+/** Whether a session in a pane in view shows the given session, which keeps it read. */
+function useInFront(sessionId: string): boolean {
+  return useViewStore(
+    (s) =>
+      !s.settings.open &&
+      allPanes(s.layout).some(
+        (pane) =>
+          s.visiblePanes.includes(pane.id) &&
+          pane.view.kind === 'session' &&
+          pane.view.sessionId === sessionId,
+      ),
+  )
+}
+
+/** Archives with a toast that undoes it for six seconds. */
+function archiveWithUndo(ids: readonly string[], title: string): void {
+  void Promise.all(ids.map((id) => archiveSession(id))).then(
+    () =>
+      toast(title, {
+        label: i18n.t('sidebar:row.undo'),
+        onClick: () => void Promise.all(ids.map((id) => unarchiveSession(id))),
+      }),
+    (error: unknown) => toast(errorMessage(error)),
+  )
+}
+
+/** Copies the text and says so in a toast. */
+function copyWithToast(text: string, done: string): void {
+  void navigator.clipboard.writeText(text).then(
+    () => toast(done),
+    (error: unknown) => toast(errorMessage(error)),
+  )
+}
 
 /**
- * A session's actions. A context menu is a Base UI menu, so the same items serve the row's
- * context menu, its More button and the top bar's title menu; each passes
- * `runSessionMenuAccelerator` as its popup's `onKeyDown`.
+ * A session's actions. A context menu is a Base UI menu, so the same items serve the row's context
+ * menu and the top bar's More menu (`place`); each passes `runSessionMenuAccelerator` as its
+ * popup's `onKeyDown`.
  */
 export function SessionMenuItems({
   summary,
+  place = 'row',
   onRename,
   onNewSubSession,
   onDelete,
 }: {
   summary: SessionSummary
+  place?: SessionMenuPlace
   onRename: () => void
   /** New session opens for a sub-session, and its composer takes the focus from the menu. */
   onNewSubSession: () => void
@@ -88,24 +163,22 @@ export function SessionMenuItems({
   const { t } = useTranslation(['sidebar', 'common'])
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   const canFork = useAgentsStore((s) => !!s.byId[summary.agentId]?.capabilities?.forkSession)
-  const inFront = useViewStore(
-    (s) =>
-      !s.settings.open &&
-      allPanes(s.layout).some(
-        (pane) =>
-          s.visiblePanes.includes(pane.id) &&
-          pane.view.kind === 'session' &&
-          pane.view.sessionId === summary.id,
-      ),
-  )
+  const inFront = useInFront(summary.id)
   // A session a pane shows already, in view or folded, has no Open in split view.
   const inSplit = useViewStore((s) => !!paneWithSession(s.layout, summary.id))
+  const terminal = useTerminalAllowed(summary.projectPath)
   const unread = summary.attention === 'unread'
+  const running = isRunning(summary)
+  // Only this computer's folders open in its file manager and its editors.
+  const local = !isWeb && hostOfPath(summary.projectPath) === null
+  const resume = resumeCommand(summary, isWindows)
   const { id } = summary
 
   const item = (name: SessionMenuItem) => {
     const accelerator = ACCELERATORS[name]
-    const shortcut = accelerator && <DropdownMenuShortcut>{accelerator}</DropdownMenuShortcut>
+    const shortcut = accelerator && (
+      <DropdownMenuShortcut>{shortcutLabel(accelerator)}</DropdownMenuShortcut>
+    )
     const props = { key: name, 'data-accelerator': accelerator }
     switch (name) {
       case 'stop':
@@ -114,7 +187,7 @@ export function SessionMenuItems({
             {...props}
             onClick={() => void host('sessions.cancel', { sessionId: id })}
           >
-            <SquareIcon className="fill-current" />
+            <SquareIcon />
             {t('row.stop')}
             {shortcut}
           </DropdownMenuItem>
@@ -128,6 +201,17 @@ export function SessionMenuItems({
             <RotateCwIcon />
             {t('row.retry')}
             {shortcut}
+          </DropdownMenuItem>
+        )
+      case 'open':
+        return (
+          <DropdownMenuItem
+            {...props}
+            disabled={inFront}
+            onClick={() => openSession(id, summary.projectPath)}
+          >
+            <ExternalLinkIcon />
+            {t('row.open')}
           </DropdownMenuItem>
         )
       case 'pin':
@@ -161,8 +245,8 @@ export function SessionMenuItems({
       case 'fork':
         return (
           <DropdownMenuItem {...props} onClick={() => void forkSession(id)}>
-            <SplitIcon />
-            {t('row.fork')}
+            <GitForkIcon />
+            {place === 'more' ? t('row.forkFromHere') : t('row.fork')}
             {shortcut}
           </DropdownMenuItem>
         )
@@ -170,23 +254,41 @@ export function SessionMenuItems({
         return (
           <DropdownMenuSub key={name}>
             <DropdownMenuSubTrigger>
-              <PlusIcon />
+              <CornerDownRightIcon />
               {t('row.newSubSession')}
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              {agents.map((agent) => (
-                <DropdownMenuItem
-                  key={agent.id}
-                  disabled={!isInstalled(agent)}
-                  onClick={() => {
-                    onNewSubSession()
-                    openNewSubSession(summary, agent.id)
-                  }}
-                >
-                  <AgentMark agent={agent.id} size={14} mono={!isInstalled(agent)} />
-                  {agent.name}
-                </DropdownMenuItem>
-              ))}
+            <DropdownMenuSubContent className="w-59">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>{t('row.runItWith')}</DropdownMenuLabel>
+                {agents.map((agent) => (
+                  <DropdownMenuItem
+                    key={agent.id}
+                    disabled={!isInstalled(agent)}
+                    onClick={() => {
+                      onNewSubSession()
+                      openNewSubSession(summary, agent.id)
+                    }}
+                  >
+                    <AgentMark agent={agent.id} size={15} mono={!isInstalled(agent)} />
+                    <span className="min-w-0 flex-1 truncate">{agent.harnessName}</span>
+                    {agent.name !== agent.harnessName && (
+                      <span className="max-w-24 shrink-0 truncate pl-4 text-small text-tertiary">
+                        {agent.name}
+                      </span>
+                    )}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  onNewSubSession()
+                  openNewSubSession(summary, summary.agentId)
+                }}
+              >
+                <SlidersHorizontalIcon />
+                {t('row.moreOptions')}
+              </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         )
@@ -205,9 +307,11 @@ export function SessionMenuItems({
             </DropdownMenuItem>
           )
         )
+      case 'openInEditor':
+        if (!local) return null
+        return <OpenInEditor key={name} path={summary.projectPath} />
       case 'showInFolder':
-        // Only this computer's folders open in its file manager.
-        if (isWeb || hostOfPath(summary.projectPath) !== null) return null
+        if (!local) return null
         return (
           <DropdownMenuItem
             {...props}
@@ -218,17 +322,56 @@ export function SessionMenuItems({
             {shortcut}
           </DropdownMenuItem>
         )
+      case 'openTerminal':
+        if (!terminal) return null
+        return (
+          <DropdownMenuItem {...props} onClick={() => toggleTerminal(summary.projectPath, true)}>
+            <SquareTerminalIcon />
+            {t('row.openTerminal')}
+            {shortcut}
+          </DropdownMenuItem>
+        )
+      case 'copyResume':
+        if (!resume) return null
+        return (
+          <DropdownMenuItem {...props} onClick={() => copyWithToast(resume, t('row.copiedResume'))}>
+            {place === 'more' ? <CopyIcon /> : <SquareTerminalIcon />}
+            {t('row.copyResume')}
+          </DropdownMenuItem>
+        )
+      case 'copySessionId':
+        return (
+          <DropdownMenuItem
+            {...props}
+            onClick={() =>
+              copyWithToast(summary.acpSessionId ?? summary.id, t('row.copiedSessionId'))
+            }
+          >
+            <CopyIcon />
+            {t('row.copySessionId')}
+          </DropdownMenuItem>
+        )
+      case 'showInParent':
+        return (
+          <DropdownMenuItem
+            {...props}
+            onClick={() => {
+              const parent = summary.parentId
+                ? useSessionsStore.getState().byId[summary.parentId]
+                : undefined
+              if (parent) openSession(parent.id, parent.projectPath)
+            }}
+          >
+            <CornerDownRightIcon />
+            {t('row.showInParent')}
+          </DropdownMenuItem>
+        )
       case 'archive':
         return (
           <DropdownMenuItem
             {...props}
             onClick={() =>
-              void archiveSession(id).then(() =>
-                toast(t('row.archived', { title: sessionTitle(summary) }), {
-                  label: t('row.undo'),
-                  onClick: () => void unarchiveSession(id),
-                }),
-              )
+              archiveWithUndo([id], t('row.archived', { title: sessionTitle(summary) }))
             }
           >
             <ArchiveIcon />
@@ -238,7 +381,17 @@ export function SessionMenuItems({
         )
       case 'delete':
         return (
-          <DropdownMenuItem {...props} variant="destructive" onClick={onDelete}>
+          <DropdownMenuItem
+            {...props}
+            data-quick-accelerator={QUICK_DELETE}
+            variant="destructive"
+            // A session cannot be removed mid-write; Stop comes first.
+            disabled={running}
+            onClick={(event) => {
+              if (event.metaKey || event.ctrlKey) void deleteUnlessAtStake([summary], onDelete)
+              else onDelete()
+            }}
+          >
             <TrashIcon />
             {t('row.deleteMenu')}
             {shortcut}
@@ -247,7 +400,7 @@ export function SessionMenuItems({
     }
   }
 
-  return sessionMenuGroups(summary, canFork, inSplit).map((group, index) => (
+  return sessionMenuGroups(summary, canFork, inSplit, place).map((group, index) => (
     <DropdownMenuGroup key={group[0]}>
       {index > 0 && <DropdownMenuSeparator />}
       {group.map(item)}
@@ -256,7 +409,248 @@ export function SessionMenuItems({
 }
 
 /**
- * **Open in split view** with its two sides, each disabled, saying why, when the split cannot take
+ * The More menu's head: the agent that runs the session, its model and the tokens the session has
+ * used, as far as the agent reports them.
+ */
+export function SessionMenuHeader({
+  summary,
+  session,
+}: {
+  summary: SessionSummary
+  session: SessionView | undefined
+}) {
+  const { t } = useTranslation('sidebar')
+  const agent = useAgentsStore((s) => s.byId[summary.agentId])
+  const harness = agent?.harnessName ?? agent?.name ?? ''
+  const name =
+    agent && agent.name !== agent.harnessName
+      ? t('row.agentOf', { harness, agent: agent.name })
+      : harness
+  const model = modelName(session)
+  const used = session?.usage?.tokens?.total
+  const detail = [
+    model,
+    used !== undefined && used > 0 ? t('row.tokensUsed', { tokens: tokens(used) }) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  return (
+    <>
+      <div className="flex gap-2.5 px-2 pt-2 pb-2.5">
+        <AgentMark agent={summary.agentId} size={28} />
+        <div className="min-w-0">
+          <div className="truncate text-ui font-semibold text-primary">{name}</div>
+          {detail && <div className="mt-0.5 truncate text-meta text-tertiary">{detail}</div>}
+        </div>
+      </div>
+      <DropdownMenuSeparator />
+    </>
+  )
+}
+
+function modelName(session: SessionView | undefined): string | null {
+  const option = session?.config.find((o) => o.category === 'model' && o.type === 'select')
+  if (!option) return null
+  return option.choices?.find((choice) => choice.value === option.value)?.name ?? null
+}
+
+/**
+ * **Open in editor**: the editors installed on this computer with their own icons, the last one
+ * used checked and named on the item, and **Choose app…** for one Kettu does not know.
+ */
+function OpenInEditor({ path }: { path: string }) {
+  const { t } = useTranslation('sidebar')
+  const [list, setList] = useState<EditorList | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    window.kettu.editors.list().then(
+      (next) => !cancelled && setList(next),
+      (failure: unknown) => !cancelled && setError(errorMessage(failure)),
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const current = list?.editors.find((editor) => editor.id === list.last) ?? null
+  const open = (editorId: string) =>
+    void window.kettu.editors
+      .open(editorId, path)
+      .catch((failure: unknown) => toast(errorMessage(failure)))
+  const choose = () =>
+    void window.kettu.editors.choose(path).catch((failure: unknown) => toast(errorMessage(failure)))
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <CodeIcon />
+        <span className="min-w-0 flex-1 truncate">{t('row.openInEditor')}</span>
+        {current && (
+          <span className="max-w-24 shrink-0 truncate pl-4 text-small text-tertiary">
+            {current.name}
+          </span>
+        )}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="w-50">
+        {error ? (
+          <DropdownMenuItem disabled>{error}</DropdownMenuItem>
+        ) : list === null ? (
+          <DropdownMenuItem disabled>{t('row.findingEditors')}</DropdownMenuItem>
+        ) : list.editors.length === 0 ? (
+          <DropdownMenuItem disabled>{t('row.noEditors')}</DropdownMenuItem>
+        ) : (
+          list.editors.map((editor) => (
+            <DropdownMenuItem key={editor.id} onClick={() => open(editor.id)}>
+              <span className="grid w-4 shrink-0 place-items-center">
+                {editor.id === current?.id && <CheckIcon strokeWidth={2} className="size-3!" />}
+              </span>
+              {editor.icon ? (
+                <img src={editor.icon} alt="" className="size-4 shrink-0" draggable={false} />
+              ) : (
+                <AppWindowIcon />
+              )}
+              <span className="min-w-0 truncate">{editor.name}</span>
+            </DropdownMenuItem>
+          ))
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={choose}>
+          <span className="w-4 shrink-0" />
+          <FolderIcon />
+          {t('row.chooseApp')}
+        </DropdownMenuItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  )
+}
+
+/**
+ * The menu for several sessions picked together: only the actions that apply to every one of them,
+ * each acting on all of them.
+ */
+export function MultiSessionMenuItems({
+  ids,
+  onDelete,
+}: {
+  ids: readonly string[]
+  onDelete: () => void
+}) {
+  const { t } = useTranslation('sidebar')
+  const summaries = useSessionsStore(
+    useShallow((s) => ids.map((id) => s.byId[id]).filter((x): x is SessionSummary => !!x)),
+  )
+  const front = useViewStore(
+    useShallow((s) =>
+      summaries.map(
+        (summary) =>
+          !s.settings.open &&
+          allPanes(s.layout).some(
+            (pane) =>
+              s.visiblePanes.includes(pane.id) &&
+              pane.view.kind === 'session' &&
+              pane.view.sessionId === summary.id,
+          ),
+      ),
+    ),
+  )
+  const count = summaries.length
+  const each = (run: (summary: SessionSummary) => Promise<unknown>) => () => {
+    clearSelection()
+    void Promise.all(summaries.map(run)).catch((error: unknown) => toast(errorMessage(error)))
+  }
+  const groups = multiSessionMenuGroups(summaries, (index) => front[index] ?? false)
+  const shortcut = (accelerator: string | undefined) =>
+    accelerator && <DropdownMenuShortcut>{shortcutLabel(accelerator)}</DropdownMenuShortcut>
+
+  return (
+    <>
+      <DropdownMenuLabel>{t('row.sessionsCount', { count })}</DropdownMenuLabel>
+      {groups.map((group, index) => (
+        <DropdownMenuGroup key={group[0]}>
+          {index > 0 && <DropdownMenuSeparator />}
+          {group.map((name) => {
+            const accelerator = MULTI_ACCELERATORS[name]
+            const props = { key: name, 'data-accelerator': accelerator }
+            switch (name) {
+              case 'stop':
+                return (
+                  <DropdownMenuItem
+                    {...props}
+                    onClick={each((s) => host('sessions.cancel', { sessionId: s.id }))}
+                  >
+                    <SquareIcon />
+                    {t('row.stopCount', { count })}
+                    {shortcut(accelerator)}
+                  </DropdownMenuItem>
+                )
+              case 'read':
+              case 'unread':
+                return (
+                  <DropdownMenuItem
+                    {...props}
+                    onClick={each((s) => markSessionUnread(s.id, name === 'unread'))}
+                  >
+                    {name === 'read' ? <CircleIcon /> : <CircleDotIcon />}
+                    {name === 'read' ? t('row.markRead') : t('row.markUnread')}
+                  </DropdownMenuItem>
+                )
+              case 'pin':
+              case 'unpin':
+                return (
+                  <DropdownMenuItem
+                    {...props}
+                    onClick={each((s) => pinSession(s.id, name === 'pin'))}
+                  >
+                    {name === 'pin' ? <PinIcon /> : <PinOffIcon />}
+                    {name === 'pin' ? t('row.pin') : t('row.unpin')}
+                  </DropdownMenuItem>
+                )
+              case 'archive':
+                return (
+                  <DropdownMenuItem
+                    {...props}
+                    onClick={() => {
+                      clearSelection()
+                      archiveWithUndo(
+                        summaries.map((s) => s.id),
+                        t('row.archivedCount', { count }),
+                      )
+                    }}
+                  >
+                    <ArchiveIcon />
+                    {t('row.archiveCount', { count })}
+                    {shortcut(accelerator)}
+                  </DropdownMenuItem>
+                )
+              case 'delete':
+                return (
+                  <DropdownMenuItem
+                    {...props}
+                    data-quick-accelerator={QUICK_DELETE}
+                    variant="destructive"
+                    onClick={(event) => {
+                      if (event.metaKey || event.ctrlKey) {
+                        void deleteUnlessAtStake(summaries, onDelete)
+                      } else onDelete()
+                    }}
+                  >
+                    <TrashIcon />
+                    {t('row.deleteCount', { count })}
+                    {shortcut(accelerator)}
+                  </DropdownMenuItem>
+                )
+            }
+          })}
+        </DropdownMenuGroup>
+      ))}
+    </>
+  )
+}
+
+/**
+ * **Open in split view** with its sides, each disabled, saying why, when the split cannot take
  * that side: a third column, a fourth pane, or no room in the window.
  */
 function OpenInSplit({ summary }: { summary: SessionSummary }) {
@@ -279,7 +673,7 @@ function OpenInSplit({ summary }: { summary: SessionSummary }) {
         <Columns2Icon />
         {t('row.openInSplit')}
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent>
+      <DropdownMenuSubContent className="w-49">
         <OpenInSplitItem
           side="right"
           label={t('row.splitRight')}
@@ -390,36 +784,164 @@ export function SessionTitleField({
   )
 }
 
+/** Uncommitted work in a session's folder, and whether that folder is a linked git worktree. */
+interface AtStake {
+  files: number
+  worktree: boolean
+}
+
+/**
+ * Reads what deleting would leave behind: the folder's uncommitted files, from a one-off look that
+ * starts no watch. A folder outside git, or one the host cannot read, has nothing to call out.
+ */
+async function readAtStake(projectPath: string): Promise<AtStake> {
+  const files = await host('git.changes', { projectPath }).then(
+    (changes) => changes.length,
+    () => 0,
+  )
+  const gitDir = useGitStore.getState().status[projectPath]?.repo?.gitDir ?? ''
+  return { files, worktree: /[\\/]worktrees[\\/][^\\/]+$/.test(gitDir) }
+}
+
+function useAtStake(paths: readonly string[], open: boolean): Map<string, AtStake> | null {
+  const key = paths.join('\n')
+  // Kept with the paths it was read for, so a dialog for other sessions never shows it.
+  const [read, setRead] = useState<{ key: string; stake: Map<string, AtStake> } | null>(null)
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    const unique = [...new Set(key.split('\n'))]
+    void Promise.all(unique.map(async (path) => [path, await readAtStake(path)] as const)).then(
+      (entries) => !cancelled && setRead({ key, stake: new Map(entries) }),
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [key, open])
+  return open && read?.key === key ? read.stake : null
+}
+
+/** The Delete item's second key or a Mod-click: deletes at once when nothing is at stake. */
+async function deleteUnlessAtStake(
+  summaries: readonly SessionSummary[],
+  confirm: () => void,
+): Promise<void> {
+  const paths = [...new Set(summaries.map((s) => s.projectPath))]
+  const stakes = await Promise.all(paths.map(readAtStake))
+  const withChildren = summaries.some((s) => descendantCount(s.id) > 0)
+  if (withChildren || stakes.some((stake) => stake.files > 0)) return confirm()
+  clearSelection()
+  try {
+    for (const summary of summaries) await deleteSession(summary.id)
+  } catch (error) {
+    toast(errorMessage(error))
+  }
+}
+
+/**
+ * Deletes one session or several after one confirmation, which calls out the uncommitted files in
+ * their folders and offers to archive instead, which keeps them.
+ */
 export function DeleteSessionDialog({
   sessionId,
   title,
   open,
   onOpenChange,
   onDeleted,
+  ids,
 }: {
   sessionId: string
   title: string
   open: boolean
   onOpenChange: (open: boolean) => void
   onDeleted?: () => void
+  /** Several sessions picked together, this one among them. */
+  ids?: readonly string[]
 }) {
   const { t } = useTranslation(['sidebar', 'common'])
-  const count = open ? descendantCount(sessionId) : 0
+  const targets = useSessionsStore(
+    useShallow((s) =>
+      (ids ?? [sessionId]).map((id) => s.byId[id]).filter((x): x is SessionSummary => !!x),
+    ),
+  )
+  const several = targets.length > 1
+  const count = open ? targets.reduce((sum, s) => sum + descendantCount(s.id), 0) : 0
+  const stake = useAtStake(
+    targets.map((s) => s.projectPath),
+    open,
+  )
+  // Archive keeps what it archives; a sub-session goes with its parent.
+  const canArchive = targets.length > 0 && targets.every((s) => s.parentId === null)
+  const remove = async () => {
+    clearSelection()
+    try {
+      for (const target of targets) await deleteSession(target.id)
+      onDeleted?.()
+    } catch (error) {
+      toast(errorMessage(error))
+    }
+  }
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent className="gap-3.5 px-5.5 sm:max-w-105">
         <AlertDialogHeader>
-          <AlertDialogTitle>{t('row.deleteTitle', { title })}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {count > 0 ? t('row.deleteBodyWithSub', { count }) : t('row.deleteBody')}
-          </AlertDialogDescription>
+          <AlertDialogTitle>
+            {several
+              ? t('row.deleteCountTitle', { count: targets.length })
+              : t('row.deleteTitle', { title })}
+          </AlertDialogTitle>
         </AlertDialogHeader>
-        <AlertDialogFooter>
+        {stake &&
+          [...stake.entries()]
+            .filter(([, { files }]) => files > 0)
+            .map(([path, { files, worktree }]) => (
+              <div
+                key={path}
+                className="flex gap-2.5 rounded-2xl bg-subtle px-3 py-2.5 text-control leading-normal text-secondary"
+              >
+                <GitBranchIcon className="mt-0.5 size-3.75 shrink-0 text-icon" />
+                <span>
+                  <Trans
+                    t={t}
+                    i18nKey={worktree ? 'row.atStakeWorktree' : 'row.atStakeFolder'}
+                    count={files}
+                    values={{ name: basename(path) }}
+                    components={{
+                      name: <span className="font-mono text-xs text-primary" />,
+                      files: <b className="font-semibold text-primary" />,
+                    }}
+                  />
+                </span>
+              </div>
+            ))}
+        <AlertDialogDescription className="text-small text-tertiary">
+          {count > 0
+            ? t('row.deleteBodyWithSub', { count })
+            : several
+              ? t('row.deleteBodyCount')
+              : t('row.deleteBody')}
+        </AlertDialogDescription>
+        <AlertDialogFooter className="pt-1">
+          {canArchive && (
+            <Button
+              variant="ghost"
+              className="mr-auto text-secondary"
+              onClick={() => {
+                onOpenChange(false)
+                clearSelection()
+                archiveWithUndo(
+                  targets.map((s) => s.id),
+                  several
+                    ? t('row.archivedCount', { count: targets.length })
+                    : t('row.archived', { title }),
+                )
+              }}
+            >
+              {t('row.archiveInstead')}
+            </Button>
+          )}
           <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
-          <AlertDialogAction
-            variant="destructive"
-            onClick={() => void deleteSession(sessionId).then(onDeleted)}
-          >
+          <AlertDialogAction variant="destructive" onClick={() => void remove()}>
             {t('row.delete')}
           </AlertDialogAction>
         </AlertDialogFooter>
