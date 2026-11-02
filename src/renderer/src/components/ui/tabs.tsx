@@ -18,7 +18,9 @@ const tabsListVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-muted',
+        // The segmented control's look: a quiet track, the chosen tab raised on it.
+        default:
+          'rounded-tile bg-segment-track p-0.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
         line: 'gap-1 bg-transparent',
         // A menu's rail of rows, as in New session's agent menu.
         rail: 'w-full gap-0.5 rounded-none bg-transparent p-0',
@@ -50,10 +52,10 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
     <TabsPrimitive.Tab
       data-slot="tabs-trigger"
       className={cn(
-        "relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-1.5 py-0.5 text-sm font-medium whitespace-nowrap text-tertiary transition-all group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start hover:text-foreground focus-ring focus-visible:border-strong disabled:pointer-events-none disabled:opacity-50 has-data-[icon=inline-end]:pr-1 has-data-[icon=inline-start]:pl-1 aria-disabled:pointer-events-none aria-disabled:opacity-50 dark:text-muted-foreground dark:hover:text-foreground group-data-[variant=default]/tabs-list:data-active:shadow-sm group-data-[variant=line]/tabs-list:data-active:shadow-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-2.75 py-0.5 text-hint font-medium whitespace-nowrap text-secondary transition-all group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start hover:text-foreground focus-ring focus-visible:border-strong disabled:pointer-events-none disabled:opacity-50 has-data-[icon=inline-end]:pr-1 has-data-[icon=inline-start]:pl-1 aria-disabled:pointer-events-none aria-disabled:opacity-50 dark:text-muted-foreground dark:hover:text-foreground group-data-[variant=default]/tabs-list:data-active:shadow-raised group-data-[variant=line]/tabs-list:data-active:shadow-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         'group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-active:bg-transparent dark:group-data-[variant=line]/tabs-list:data-active:border-transparent dark:group-data-[variant=line]/tabs-list:data-active:bg-transparent',
         'group-data-[variant=rail]/tabs-list:h-auto group-data-[variant=rail]/tabs-list:min-h-row group-data-[variant=rail]/tabs-list:flex-none group-data-[variant=rail]/tabs-list:rounded-lg group-data-[variant=rail]/tabs-list:border-0 group-data-[variant=rail]/tabs-list:px-2 group-data-[variant=rail]/tabs-list:py-1 group-data-[variant=rail]/tabs-list:text-ui group-data-[variant=rail]/tabs-list:font-normal group-data-[variant=rail]/tabs-list:text-foreground dark:group-data-[variant=rail]/tabs-list:text-foreground group-data-[variant=rail]/tabs-list:transition-colors group-data-[variant=rail]/tabs-list:hover:bg-accent group-data-[variant=rail]/tabs-list:data-active:bg-accent group-data-[variant=rail]/tabs-list:data-active:shadow-none dark:group-data-[variant=rail]/tabs-list:data-active:border-transparent dark:group-data-[variant=rail]/tabs-list:data-active:bg-accent',
-        'data-active:bg-background data-active:text-foreground dark:data-active:border-input dark:data-active:bg-input/30 dark:data-active:text-foreground',
+        'data-active:bg-raised data-active:text-foreground dark:data-active:text-foreground',
         'after:absolute after:bg-foreground after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:bottom-[-5px] group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100',
         className,
       )}

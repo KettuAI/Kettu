@@ -141,7 +141,7 @@ function ComboboxList({ className, ...props }: ComboboxPrimitive.List.Props) {
     <ComboboxPrimitive.List
       data-slot="combobox-list"
       className={cn(
-        'max-h-[min(calc(--spacing(72)---spacing(9)),calc(var(--available-height)---spacing(9)))] scroll-py-1.5 overflow-y-auto overscroll-contain p-1.5 data-empty:p-0',
+        'max-h-[min(calc(--spacing(72)---spacing(9)),calc(var(--available-height)---spacing(9)))] scroll-py-1 overflow-y-auto overscroll-contain p-1 data-empty:p-0',
         className,
       )}
       {...props}
@@ -154,7 +154,7 @@ function ComboboxItem({ className, children, ...props }: ComboboxPrimitive.Item.
     <ComboboxPrimitive.Item
       data-slot="combobox-item"
       className={cn(
-        "relative flex min-h-row w-full cursor-default items-center gap-2 rounded-md py-1 pr-8 pl-2 text-ui outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative flex min-h-control w-full cursor-default items-center gap-2 rounded-md py-1 pr-8 pl-2 text-ui outline-hidden select-none data-highlighted:bg-selected data-highlighted:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}
@@ -162,7 +162,7 @@ function ComboboxItem({ className, children, ...props }: ComboboxPrimitive.Item.
       {children}
       <ComboboxPrimitive.ItemIndicator
         render={
-          <span className="pointer-events-none absolute top-0 right-2 flex h-row items-center justify-center [&_svg]:size-3.5" />
+          <span className="pointer-events-none absolute top-0 right-2 flex h-control items-center justify-center [&_svg]:size-3.5" />
         }
       >
         <CheckIcon className="pointer-events-none" />
@@ -209,7 +209,7 @@ function ComboboxSeparator({ className, ...props }: ComboboxPrimitive.Separator.
   return (
     <ComboboxPrimitive.Separator
       data-slot="combobox-separator"
-      className={cn('mx-2 my-1 hairline-x bg-border-soft', className)}
+      className={cn('mx-0.5 my-1 hairline-x bg-border-soft', className)}
       {...props}
     />
   )
@@ -223,7 +223,7 @@ function ComboboxChips({
     <ComboboxPrimitive.Chips
       data-slot="combobox-chips"
       className={cn(
-        'flex min-h-8 flex-wrap items-center gap-1 rounded-lg border border-input bg-transparent bg-clip-padding px-2.5 py-1 text-sm transition-colors focus-within:border-strong has-aria-invalid:border-destructive has-aria-invalid:ring-3 has-aria-invalid:ring-destructive/20 has-data-[slot=combobox-chip]:px-1 dark:bg-input/30 dark:has-aria-invalid:border-destructive/50 dark:has-aria-invalid:ring-destructive/40',
+        'flex min-h-8 flex-wrap items-center gap-1 rounded-lg border border-input bg-card bg-clip-padding px-2.75 py-1 text-control shadow-field transition-[border-color,box-shadow] focus-within:border-focused focus-within:shadow-field-focus has-aria-invalid:border-destructive has-aria-invalid:ring-3 has-aria-invalid:ring-destructive/20 has-data-[slot=combobox-chip]:px-1 dark:has-aria-invalid:border-destructive/50 dark:has-aria-invalid:ring-destructive/40',
         className,
       )}
       {...props}
@@ -243,7 +243,7 @@ function ComboboxChip({
     <ComboboxPrimitive.Chip
       data-slot="combobox-chip"
       className={cn(
-        'flex h-[calc(--spacing(5.25))] w-fit items-center justify-center gap-1 rounded-sm bg-muted px-1.5 text-xs font-medium whitespace-nowrap text-foreground has-disabled:pointer-events-none has-disabled:cursor-not-allowed has-disabled:opacity-50 has-data-[slot=combobox-chip-remove]:pr-0',
+        'flex h-[calc(--spacing(5.25))] w-fit items-center justify-center gap-1 rounded-sm bg-muted px-1.5 text-xs font-medium whitespace-nowrap text-foreground has-disabled:pointer-events-none has-disabled:cursor-not-allowed has-disabled:opacity-40 has-data-[slot=combobox-chip-remove]:pr-0',
         className,
       )}
       {...props}

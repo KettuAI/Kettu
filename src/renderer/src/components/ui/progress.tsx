@@ -2,7 +2,7 @@ import { Progress as ProgressPrimitive } from '@base-ui/react/progress'
 import { cn } from 'cn'
 
 const TONE = {
-  default: 'bg-current text-tertiary',
+  default: 'bg-primary',
   success: 'bg-current text-tertiary',
   checked: 'bg-current text-tertiary',
   attention: 'bg-current text-warning',
@@ -36,7 +36,7 @@ function ProgressTrack({ className, ...props }: ProgressPrimitive.Track.Props) {
   return (
     <ProgressPrimitive.Track
       className={cn(
-        'relative flex h-1 w-full items-center overflow-x-hidden rounded-full bg-track',
+        'relative flex h-1.25 w-full items-center overflow-x-hidden rounded-full bg-border-soft',
         className,
       )}
       data-slot="progress-track"
