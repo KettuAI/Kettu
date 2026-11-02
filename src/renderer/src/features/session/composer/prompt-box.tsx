@@ -1,14 +1,6 @@
-import {
-  useCallback,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Popover } from '@base-ui/react/popover'
-import { AtSignIcon, FileIcon, FolderIcon, PlusIcon, SlashIcon } from 'lucide-react'
+import { AtSignIcon, CameraIcon, FolderIcon, ImageIcon, PlusIcon, SlashIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId, SlashCommand } from '@shared/thread'
 import {
@@ -19,16 +11,20 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
-import { InputGroup, InputGroupAddon, InputGroupButton } from '@renderer/components/ui/input-group'
+import { Button } from '@renderer/components/ui/button'
+import { InputGroup, InputGroupAddon } from '@renderer/components/ui/input-group'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { formatShortcut, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
+import { useBrowserStore } from '@renderer/stores/browser'
+import { shownSidePane, useViewStore } from '@renderer/stores/view'
 import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
+import { useAboveBox } from './above-box'
 import { AttachmentTray } from './attachment-tray'
 import { attachMention } from './attachments'
 import { ComposerEditor } from './editor'
-import { MentionFooter, MentionHeader, MentionItem } from './mention-popover'
+import { MentionFooter, MentionItem } from './mention-popover'
 import {
   insertAt,
   mentionAt,
@@ -39,6 +35,7 @@ import {
   replaceMention,
   type MentionRow,
 } from './mentions'
+import { usePromptChips } from './prompt-chips'
 import { orderSlashMatches } from './slash'
 import { useMentionList, type MentionList } from './use-mention-list'
 import type { PromptBoxState } from './use-prompt-box'
@@ -47,9 +44,6 @@ import type { PromptBoxState } from './use-prompt-box'
 // popovers, the attachments and **+**, kept in a draft. What sends, and how, is each one's own.
 
 type PopoverItem = SlashCommand | MentionRow
-
-// 8 px from the list: the rows sit 6 px inside its edge.
-const TIP_OFFSET = 14
 
 const isMentionRow = (item: PopoverItem): item is MentionRow => 'positions' in item
 
@@ -75,8 +69,8 @@ export function PromptBox({
   commands: SlashCommand[]
   placeholder: string
   label: string
-  /** The text's least height and its padding, as CSS lengths. */
-  size: { minHeight: string; padding: string }
+  /** The text's least height, its padding and its line height, as CSS lengths. */
+  size: { minHeight: string; padding: string; lineHeight?: string }
   /** What the box shows before the attachments, such as a notice; `wrap` while it shows. */
   top?: ReactNode
   wrap?: boolean
@@ -169,41 +163,30 @@ export function PromptBox({
     if (slashOpen) setSlashDismissed(true)
     if (mentionOpen && mention) setMentionDismissed(mention.start)
   }
-  const startMention = () => {
-    const current = editor.current?.text() ?? text
-    const { from, to } = editor.current?.selection() ?? { from: current.length, to: current.length }
-    const next = insertAt(current, from, to)
-    update(next.text, next.caret)
+  const [focused, setFocused] = useState(false)
+  const chips = usePromptChips({
+    draft,
+    sessionId: box.sessionId,
+    text,
+    attachments,
+    commands,
+    agentName,
+    projectPath,
+    editor,
+    anchor: group,
+    focused,
+    popoverOpen: open,
+  })
+
+  // Tab on a folder lists what is in it, as the query `folder/`.
+  const openFolder = (row: MentionRow) => {
+    if (!mention) return
+    const before = `${text.slice(0, mention.start)}@${row.path}/`
+    update(`${before}${text.slice(mention.start + 1 + mention.query.length)}`, before.length)
   }
-  const hint = (() => {
-    if (text === '/' && slashOpen) return t('slash.typeToFilter')
-    const match = /^\/(\S+)\s$/.exec(text)
-    return match ? commands.find((c) => c.name === match[1])?.inputHint : undefined
-  })()
-  const commandNames = useMemo(() => commands.map((c) => c.name), [commands])
 
-  // The highlighted command's description, in a tooltip 8 px beside the list, whichever row it is.
-  const tipText = slashOpen ? (rows[active] as SlashCommand | undefined)?.description : undefined
-  const tipOpen = !!tipText
-  const tipAnchor = useCallback(
-    () => document.getElementById(`${listId}-${active}`),
-    [listId, active],
-  )
-
-  const addMenu = (
-    <AddMenu
-      agentName={agentName}
-      disabled={disabled}
-      full={box.full}
-      remote={box.remote}
-      commands={commands.length > 0}
-      emptyDraft={text === ''}
-      onFocusBox={box.focus}
-      onPick={box.pick}
-      onSlash={() => update('/')}
-      onMention={startMention}
-    />
-  )
+  // The session's composer puts **+** in its control row; New session's stays in the box.
+  const addMenu = stacked && <AddMenu box={box} agentName={agentName} commands={commands} />
 
   const keyDown = (event: KeyboardEvent): boolean => {
     const modified = event.shiftKey || event.ctrlKey || event.altKey || event.metaKey
@@ -216,6 +199,7 @@ export function PromptBox({
     })
     // IME composition: no key reaches a popover, and Enter confirms the candidate, never sends.
     if (handling === 'block') return false
+    if (chips.keyDown(event)) return true
     if (
       open &&
       !modified &&
@@ -229,8 +213,13 @@ export function PromptBox({
       dismiss()
       return true
     }
+    const row = rows[active]
+    if (handling === 'choose' && row && isMentionRow(row) && row.folder) {
+      openFolder(row)
+      return true
+    }
     if (handling === 'popover' || handling === 'choose') {
-      chooseItem(rows[active])
+      chooseItem(row)
       return true
     }
     onKeyDown(event)
@@ -250,6 +239,7 @@ export function PromptBox({
   }
   // Focus leaving the box closes the popover.
   const blur = (event: FocusEvent) => {
+    setFocused(false)
     if (event.relatedTarget instanceof Node && popup.current?.contains(event.relatedTarget)) return
     dismiss()
   }
@@ -260,7 +250,10 @@ export function PromptBox({
         ref={group}
         variant="composer"
         data-disabled={disabled || undefined}
-        className={cn(!stacked && (attachments.length > 0 || wrap) && 'flex-wrap')}
+        className={cn(
+          !stacked && 'min-h-13 gap-1.5 py-2 pr-2 pl-4',
+          !stacked && (attachments.length > 0 || wrap) && 'flex-wrap',
+        )}
       >
         {top}
         <AttachmentTray
@@ -273,16 +266,8 @@ export function PromptBox({
           onPasteAsText={box.pasteAsText}
           onError={box.setError}
           onLeave={box.focus}
+          hidden={chips.hidden}
         />
-        {/* After the tiles in the DOM, so they keep the first row when the box wraps. */}
-        {!stacked && (
-          <InputGroupAddon
-            align="inline-start"
-            className="order-none self-end pb-2.5 pl-2 has-[>button]:ml-0"
-          >
-            {addMenu}
-          </InputGroupAddon>
-        )}
         {/* With a basis, the text wraps under the attachments instead of sharing their row. */}
         <div className={cn('min-w-0', stacked ? 'w-full' : 'flex-[1_1_12rem] self-stretch')}>
           <ComposerEditor
@@ -291,15 +276,17 @@ export function PromptBox({
             label={label}
             placeholder={placeholder}
             disabled={disabled}
-            hint={hint}
-            commands={commandNames}
+            chipContext={chips.chipContext}
             size={size}
             popover={open ? { listId, activeId: active >= 0 ? optionId(active) : undefined } : null}
             onChange={box.changed}
             onCaret={setCaret}
             onKeyDown={keyDown}
             onPaste={box.onPaste}
-            onFocus={() => box.onActivity?.()}
+            onFocus={() => {
+              setFocused(true)
+              box.onActivity?.()
+            }}
             onBlur={blur}
             onCompositionStart={() => setComposition({ open: mentionOpen })}
             onCompositionEnd={() => setComposition(null)}
@@ -315,7 +302,7 @@ export function PromptBox({
         ) : (
           <InputGroupAddon
             align="inline-end"
-            className="self-end gap-1.5 pr-2.5 pb-2.5 pl-1.5 has-[>button]:mr-0"
+            className="mb-0.5 gap-1.5 self-end p-0 has-[>button]:mr-0"
           >
             {end}
           </InputGroupAddon>
@@ -336,20 +323,30 @@ export function PromptBox({
               finalFocus={false}
               className={cn(
                 'flex max-h-[min(var(--available-height),320px)] origin-(--transform-origin) flex-col overflow-hidden bg-popover text-popover-foreground shadow-menu animation-duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
+                'rounded-xl p-1',
                 showing === 'slash'
-                  ? 'w-max max-w-80 min-w-40 rounded-xl'
-                  : 'w-[min(var(--anchor-width),420px)] rounded-xl',
+                  ? 'w-[min(var(--anchor-width),470px)]'
+                  : 'w-[min(var(--anchor-width),340px)]',
               )}
             >
-              {listing?.used && listing.rows.length > 0 && <MentionHeader id={`${draft}-used`} />}
+              {rows.length > 0 && (
+                <div
+                  id={`${listId}-label`}
+                  className="flex h-6.5 shrink-0 items-center px-2 text-small font-medium text-tertiary"
+                >
+                  {showing === 'slash'
+                    ? agentName
+                    : listing?.used
+                      ? t('mentions.used')
+                      : t('mentions.files')}
+                </div>
+              )}
               <div
                 role="listbox"
                 id={listId}
-                aria-labelledby={listing?.used ? `${draft}-used` : undefined}
-                aria-label={listing && !listing.used ? t('mentions.label') : undefined}
+                aria-labelledby={`${listId}-label`}
                 className={cn(
                   'min-h-0 flex-1 scroll-fade-y overflow-y-auto overscroll-contain',
-                  showing === 'slash' ? 'p-1.5' : 'p-1',
                   rows.length === 0 && 'hidden',
                 )}
               >
@@ -380,23 +377,13 @@ export function PromptBox({
           </Popover.Positioner>
         </Popover.Portal>
       </Popover.Root>
-      {/* Keyed by the row: a tooltip does not follow its anchor to another row on its own. */}
-      <Tooltip key={`${listKey}:${active}`} open={tipOpen}>
-        <TooltipContent
-          anchor={tipAnchor}
-          side="right"
-          sideOffset={TIP_OFFSET}
-          className="pointer-events-none motion-reduce:data-closed:animate-none motion-reduce:data-open:animate-none"
-        >
-          {tipText}
-        </TooltipContent>
-      </Tooltip>
+      {chips.overlays}
       <TextDialog target={viewing} onClose={() => setViewing(null)} />
     </>
   )
 }
 
-/** A slash command's row: its name alone; the description shows in a tooltip. */
+/** A slash command's row: its name in code type, then what it does. */
 function SlashItem({
   id,
   command,
@@ -415,57 +402,70 @@ function SlashItem({
       role="option"
       id={id}
       aria-selected={highlighted}
-      aria-description={command.description || undefined}
       data-highlighted={highlighted ? '' : undefined}
       // Pressing a row keeps the focus, and with it the caret, in the box.
       onMouseDown={(event) => event.preventDefault()}
       onMouseMove={onHighlight}
       onClick={onChoose}
-      className="flex min-h-row cursor-default items-center rounded-lg px-2 py-1 text-ui outline-none select-none data-highlighted:bg-accent"
+      className="flex min-h-control cursor-default items-center gap-2.5 rounded-md px-2 text-ui outline-none select-none data-highlighted:bg-selected"
     >
-      <span className="truncate">{command.name}</span>
+      <span className="shrink-0 font-mono text-hint">/{command.name}</span>
+      {command.description && (
+        <span className="min-w-0 truncate text-tertiary">{command.description}</span>
+      )}
     </div>
   )
 }
 
 /**
  * **+**: adds files, photos or a folder through the system dialog, or starts a mention or a
- * slash command.
+ * slash command. The session's composer shows it in its control row, New session's in its box.
  */
-function AddMenu({
+export function AddMenu({
+  box,
   agentName,
-  disabled,
-  full,
-  remote,
   commands,
-  emptyDraft,
-  onFocusBox,
-  onPick,
-  onSlash,
-  onMention,
 }: {
+  box: PromptBoxState
   agentName: string
-  disabled: boolean
-  full: boolean
-  /** The session is on another host, which takes files from here as uploads and no folder. */
-  remote: boolean
-  commands: boolean
-  emptyDraft: boolean
-  onFocusBox: () => void
-  onPick: (kind: 'files' | 'folder') => void
-  onSlash: () => void
-  onMention: () => void
+  commands: readonly SlashCommand[]
 }) {
   const { t } = useTranslation('composer')
+  const { disabled, full, remote, text, editor, update, sessionId } = box
   const shortcut = formatShortcut('Mod+U')
+  const [setAnchor, aboveBox] = useAboveBox()
+  const hasPage = useBrowserStore((s) => {
+    const page = sessionId ? s.bySession[sessionId] : undefined
+    // An evicted page keeps its address for the pane, with no live page behind it.
+    return !!page?.url && page.notice?.kind !== 'evicted'
+  })
+  // Only a page in front draws a frame to capture; the pane shows the main session's.
+  const pageShown = useViewStore(
+    (s) =>
+      shownSidePane(s) === 'browser' && s.main.kind === 'session' && s.main.sessionId === sessionId,
+  )
+  const emptyDraft = text === ''
+  const startMention = () => {
+    const current = editor.current?.text() ?? text
+    const { from, to } = editor.current?.selection() ?? { from: current.length, to: current.length }
+    const next = insertAt(current, from, to)
+    update(next.text, next.caret)
+  }
+  const button = {
+    variant: 'quiet',
+    size: 'icon-sm',
+    'aria-label': t('attachments.add'),
+    className: 'size-7.5 text-secondary',
+  } as const
+  const icon = <PlusIcon strokeWidth={1.35} className="size-4.25" />
   if (disabled) {
     // A disabled button takes no pointer, so the tooltip says why from around it.
     return (
       <Tooltip>
         <TooltipTrigger render={<span />}>
-          <InputGroupButton size="round" variant="quiet" aria-label={t('attachments.add')} disabled>
-            <PlusIcon className="size-5" />
-          </InputGroupButton>
+          <Button {...button} disabled>
+            {icon}
+          </Button>
         </TooltipTrigger>
         <TooltipContent>{t('attachments.waitForAgent', { agent: agentName })}</TooltipContent>
       </Tooltip>
@@ -475,15 +475,9 @@ function AddMenu({
     <DropdownMenu>
       <Tooltip>
         <TooltipTrigger
-          render={
-            <DropdownMenuTrigger
-              render={
-                <InputGroupButton size="round" variant="quiet" aria-label={t('attachments.add')} />
-              }
-            />
-          }
+          render={<DropdownMenuTrigger render={<Button {...button} ref={setAnchor} />} />}
         >
-          <PlusIcon className="size-5" />
+          {icon}
         </TooltipTrigger>
         <TooltipContent>
           {t('attachments.add')}
@@ -492,33 +486,50 @@ function AddMenu({
       </Tooltip>
       <DropdownMenuContent
         side="top"
-        sideOffset={6}
+        sideOffset={aboveBox}
+        className="w-max min-w-66"
         finalFocus={() => {
-          onFocusBox()
+          box.focus()
           return false
         }}
       >
-        <DropdownMenuItem disabled={full} onClick={() => onPick('files')}>
-          <FileIcon />
+        <DropdownMenuItem disabled={full} onClick={() => box.pick('files')}>
+          <ImageIcon />
           {t('attachments.addFiles')}
           <DropdownMenuShortcut>{full ? t('attachments.atMost') : shortcut}</DropdownMenuShortcut>
         </DropdownMenuItem>
         {/* A folder here, or a browser's, means nothing on the host. */}
         {!isWeb && !remote && (
-          <DropdownMenuItem disabled={full} onClick={() => onPick('folder')}>
+          <DropdownMenuItem disabled={full} onClick={() => box.pick('folder')}>
             <FolderIcon />
             {t('attachments.addFolder')}
             {full && <DropdownMenuShortcut>{t('attachments.atMost')}</DropdownMenuShortcut>}
           </DropdownMenuItem>
         )}
+        {/* The session's own browser tab, which New session and the web client have none of. */}
+        {!isWeb && sessionId && (
+          <DropdownMenuItem disabled={full || !hasPage || !pageShown} onClick={box.screenshot}>
+            <CameraIcon />
+            {t('attachments.screenshot')}
+            {(full || !hasPage || !pageShown) && (
+              <DropdownMenuShortcut>
+                {full
+                  ? t('attachments.atMost')
+                  : hasPage
+                    ? t('attachments.openBrowser')
+                    : t('attachments.noPage')}
+              </DropdownMenuShortcut>
+            )}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={onMention}>
+        <DropdownMenuItem onClick={startMention}>
           <AtSignIcon />
           {t('attachments.mentionFile')}
           <DropdownMenuShortcut>@</DropdownMenuShortcut>
         </DropdownMenuItem>
-        {commands && (
-          <DropdownMenuItem disabled={!emptyDraft} onClick={onSlash}>
+        {commands.length > 0 && (
+          <DropdownMenuItem disabled={!emptyDraft} onClick={() => update('/')}>
             <SlashIcon />
             {t('attachments.slashCommands')}
             <DropdownMenuShortcut>

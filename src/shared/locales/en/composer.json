@@ -4,18 +4,18 @@
     "placeholder": {
       "starting": "Starting {{agent}}…",
       "awaiting": "Waiting for your approval",
-      "steer": "Ask {{agent}} to…   {{queue}} to queue, {{steer}} to steer",
-      "queue": "Ask {{agent}} to…   {{queue}} to queue",
       "limitReached": "{{limit}} limit reached · resets {{time}}",
-      "ask": "Ask {{agent}} to…",
+      "ask": "Reply to {{agent}}…",
       "denied": "Tell {{agent}} what to do differently"
     },
-    "queue": "Queue",
     "stop": "Stop",
     "send": "Send",
-    "queueTooltip": "Queue <shortcut>{{queueShortcut}}</shortcut>",
-    "queueSteerTooltip": "Queue <shortcut>{{queueShortcut}}</shortcut> · Steer <shortcut>{{steerShortcut}}</shortcut>",
-    "stopTooltip": "Stop <shortcut>{{shortcut}}</shortcut>"
+    "stopTooltip": "Stop <shortcut>{{shortcut}}</shortcut>",
+    "stopHoldTooltip": "Stop <shortcut>{{shortcut}}</shortcut> · hold to queue or send now",
+    "queueIt": "Queue it",
+    "queueItHint": "Sends when this turn ends",
+    "sendNow": "Send now",
+    "sendNowHint": "Sends it into this turn straight away"
   },
   "controls": {
     "ultracodeOn": "Ultracode is on for this session: dynamic workflows on substantial tasks",
@@ -26,9 +26,15 @@
     "changesBetweenTurns": "Changes between turns",
     "useFallback": "Use {{name}}",
     "useDefault": "Use the agent's default",
-    "levelsHint": "Higher levels think longer and use more of your plan.",
+    "levelsHint": "Higher effort thinks longer and uses more of your plan. <shortcut>{{shortcut}}</shortcut> cycles it.",
     "moreModels": "More models",
-    "searchModels": "Search models"
+    "searchModels": "Search models",
+    "cyclesModes": "cycles modes",
+    "effort": "Effort",
+    "ultracodeHint": "Runs each task as a multi-agent workflow. Uses much more of your plan",
+    "modelsFrom": "From {{source}}",
+    "optionValue": "{{name}}: {{value}}",
+    "ultracodeSuffix": "· Ultracode"
   },
   "outOfCredit": {
     "modelTitle": "{{model}} is out of credit",
@@ -57,7 +63,10 @@
       "reasoning": "Reasoning",
       "cacheRead": "Cache read",
       "cacheWrite": "Cache write",
-      "compact": "Compact"
+      "compact": "Compact now",
+      "ofUsed": "of context used",
+      "compactsAt": "Compacts on its own at {{percent}}%",
+      "tokens": "{{tokens}} tokens"
     },
     "breakdown": {
       "loading": "Reading what fills the context",
@@ -69,7 +78,9 @@
       "tier": "{{plan}} ({{tier}})",
       "used": "{{limit}} used",
       "resets": "Resets {{time}}",
-      "updated": "Updated {{ago}}"
+      "updated": "Updated {{ago}}",
+      "planOf": "Plan · {{plan}}",
+      "resetsShort": "resets {{time}}"
     },
     "cache": {
       "title": "Prompt cache",
@@ -99,8 +110,22 @@
       "left": "Prompt cache lifetime left",
       "ifExpires": "If it expires, the next message reads about {{tokens}} tokens again at full price.",
       "costExpired": "The next message reads about {{tokens}} tokens again at full price.",
-      "ifExpired": "If it has expired, the next message reads about {{tokens}} tokens again at full price."
-    }
+      "ifExpired": "If it has expired, the next message reads about {{tokens}} tokens again at full price.",
+      "button": "Prompt cache: {{time}}",
+      "leftCached": "{{time}} left · {{tokens}} tokens cached",
+      "leftAbout": "About {{time}} left · {{tokens}} tokens cached",
+      "explain": "Reply before it runs out and the cached part costs about a tenth as much. After that, the next message writes the cache again.",
+      "lastReply": "Last reply {{time}}",
+      "lastsMinutesShort_one": "Lasts {{count}} min",
+      "lastsMinutesShort_other": "Lasts {{count}} min",
+      "lastsHoursShort_one": "Lasts {{count}} hour",
+      "lastsHoursShort_other": "Lasts {{count}} hours",
+      "estimateLastsMinutes_one": "Lasts about {{count}} min",
+      "estimateLastsMinutes_other": "Lasts about {{count}} min",
+      "estimateLastsHours_one": "Lasts about {{count}} hour",
+      "estimateLastsHours_other": "Lasts about {{count}} hours"
+    },
+    "openUsage": "Open Usage"
   },
   "attachments": {
     "label": "Attachments",
@@ -127,9 +152,13 @@
     "announceRemoved": "{{name}} removed",
     "add": "Add files, photos or a folder",
     "addFiles": "Add files or photos…",
-    "addFolder": "Add folder…",
+    "addFolder": "Add a folder…",
+    "screenshot": "Screenshot of the browser",
+    "noPage": "No page open",
+    "openBrowser": "Open the browser first",
+    "screenshotFailed": "Couldn't take a screenshot of this session's browser",
     "mentionFile": "Mention a file",
-    "slashCommands": "Slash commands",
+    "slashCommands": "Commands",
     "atMost": "20 attachments at most",
     "waitForAgent": "Wait for {{agent}} to start",
     "reading": "Reading…",
@@ -139,7 +168,7 @@
     "sentAsFileLink": "Sent as a link. {{agent}} reads it with its own tools.",
     "sentLinkedFolder": "Sent as a link to the folder",
     "dropTitle": "Drop to attach",
-    "dropHint": "Files, photos or folders · up to 20",
+    "dropHint": "Images, files and folders · up to {{count}} at once",
     "slashNeedsEmpty": "In an empty message",
     "notOnDisk": "It isn't a file on disk, so it can't be attached.",
     "theAgent": "The agent",
@@ -147,14 +176,27 @@
     "tooLargeOtherHost": "Over {{limit}}, too large to send to another host."
   },
   "mentions": {
-    "label": "Files and folders",
     "used": "Used in this session",
     "toSearch_one": "Type to search {{count, number}} file and its folders",
     "toSearch_other": "Type to search {{count, number}} files and their folders",
     "loading": "Listing the project's files…",
-    "chooseProject": "Choose a project to mention its files"
+    "chooseProject": "Choose a project to mention its files",
+    "files": "Files",
+    "folder": "Folder",
+    "keysMove": "↑↓ to move",
+    "keysInsert": "↵ to insert",
+    "keysFolder": "Tab opens a folder"
   },
-  "slash": {
-    "typeToFilter": "Type to filter"
+  "chips": {
+    "pastedLink": "Pasted as a link",
+    "pasteAsText": "Paste as text",
+    "opensInSession": "Opens in the session browser",
+    "opensInBrowser": "Opens in your browser",
+    "sentAsLink": "Sent as the link",
+    "missing": "This file can’t be read any more",
+    "folderSent": "The agent gets its tree, not every file",
+    "lines": "lines {{lines}}",
+    "clickToOpen": "Click to open",
+    "backspaceRemoves": "{{key}} removes it"
   }
 }

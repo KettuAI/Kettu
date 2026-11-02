@@ -495,6 +495,31 @@ describe('createSession with a first message', () => {
     expect(request).not.toHaveBeenCalledWith('attachments.remove', expect.anything())
   })
 
+  it('takes the message out of the draft when an attachment that failed was left out', async () => {
+    holdShot()
+    setDraftAttachments(NEW_SESSION_DRAFT, [
+      ...draftAttachments(NEW_SESSION_DRAFT),
+      {
+        key: 'k2',
+        name: 'broken.png',
+        kind: 'image',
+        status: 'failed',
+        attachment: null,
+        thumb: null,
+        size: null,
+        pixels: null,
+        scaled: null,
+        error: "It can't be read",
+      },
+    ])
+    request.mockImplementation(async (method: string) =>
+      method === 'sessions.create' ? created('running') : undefined,
+    )
+    await createSession('codex', '/repo', null, withShot)
+    expect(readDraft(NEW_SESSION_DRAFT)).toBe('')
+    expect(draftAttachments(NEW_SESSION_DRAFT)).toEqual([])
+  })
+
   it('sends its attachments through the prepared session it adopts', async () => {
     holdShot()
     request.mockImplementation(async (method: string) =>

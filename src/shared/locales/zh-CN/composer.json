@@ -4,18 +4,18 @@
     "placeholder": {
       "starting": "正在启动 {{agent}}…",
       "awaiting": "等待你的授权",
-      "steer": "让 {{agent}} 帮你…   {{queue}} 排队，{{steer}} 立即插入当前对话",
-      "queue": "让 {{agent}} 帮你…   {{queue}} 排队，本轮结束后发送",
       "limitReached": "限额已用完（{{limit}}）· {{time}} 重置",
-      "ask": "让 {{agent}} 帮你…",
+      "ask": "回复 {{agent}}…",
       "denied": "告诉 {{agent}} 改用什么做法"
     },
-    "queue": "加入队列",
     "stop": "停止",
     "send": "发送",
-    "queueTooltip": "加入队列 <shortcut>{{queueShortcut}}</shortcut>",
-    "queueSteerTooltip": "加入队列 <shortcut>{{queueShortcut}}</shortcut> · 立即插入 <shortcut>{{steerShortcut}}</shortcut>",
-    "stopTooltip": "停止 <shortcut>{{shortcut}}</shortcut>"
+    "stopTooltip": "停止 <shortcut>{{shortcut}}</shortcut>",
+    "stopHoldTooltip": "停止 <shortcut>{{shortcut}}</shortcut> · 按住可排队或立即发送",
+    "queueIt": "加入队列",
+    "queueItHint": "本轮结束后发送",
+    "sendNow": "立即发送",
+    "sendNowHint": "立即插入当前这一轮"
   },
   "controls": {
     "ultracodeOn": "本会话已开启 Ultracode：对较大的任务使用动态工作流",
@@ -26,9 +26,15 @@
     "changesBetweenTurns": "仅在两轮对话之间可更改",
     "useFallback": "使用 {{name}}",
     "useDefault": "使用 Agent 的默认值",
-    "levelsHint": "级别越高，思考越久，消耗的套餐额度也越多。",
+    "levelsHint": "强度越高，思考越久，消耗的套餐额度也越多。<shortcut>{{shortcut}}</shortcut> 可循环切换。",
     "moreModels": "更多模型",
-    "searchModels": "搜索模型"
+    "searchModels": "搜索模型",
+    "cyclesModes": "切换模式",
+    "effort": "思考强度",
+    "ultracodeHint": "以多 Agent 工作流运行每个任务，会消耗多得多的套餐额度",
+    "modelsFrom": "来自 {{source}}",
+    "optionValue": "{{name}}：{{value}}",
+    "ultracodeSuffix": "· Ultracode"
   },
   "outOfCredit": {
     "modelTitle": "{{model}} 余额不足",
@@ -57,7 +63,10 @@
       "reasoning": "推理",
       "cacheRead": "缓存读取",
       "cacheWrite": "缓存写入",
-      "compact": "压缩上下文"
+      "compact": "立即压缩",
+      "ofUsed": "上下文已用",
+      "compactsAt": "用到 {{percent}}% 时自动压缩",
+      "tokens": "{{tokens}} tokens"
     },
     "breakdown": {
       "loading": "正在读取上下文明细",
@@ -69,7 +78,9 @@
       "tier": "{{plan}} ({{tier}})",
       "used": "已使用：{{limit}}",
       "resets": "重置时间：{{time}}",
-      "updated": "{{ago}}更新"
+      "updated": "{{ago}}更新",
+      "planOf": "套餐 · {{plan}}",
+      "resetsShort": "{{time}} 重置"
     },
     "cache": {
       "title": "提示缓存",
@@ -95,8 +106,18 @@
       "left": "提示缓存剩余时间",
       "ifExpires": "如果过期，下一条消息会按全价重新读取约 {{tokens}} token。",
       "costExpired": "下一条消息会按全价重新读取约 {{tokens}} token。",
-      "ifExpired": "如果已过期，下一条消息会按全价重新读取约 {{tokens}} token。"
-    }
+      "ifExpired": "如果已过期，下一条消息会按全价重新读取约 {{tokens}} token。",
+      "button": "Prompt cache：{{time}}",
+      "leftCached": "剩余 {{time}} · 已缓存 {{tokens}} tokens",
+      "leftAbout": "约剩 {{time}} · 已缓存 {{tokens}} tokens",
+      "explain": "在它过期前回复，缓存部分的费用约为原来的十分之一。过期后，下一条消息会重新写入缓存。",
+      "lastReply": "上次回复 {{time}}",
+      "lastsMinutesShort_other": "有效 {{count}} 分钟",
+      "lastsHoursShort_other": "有效 {{count}} 小时",
+      "estimateLastsMinutes_other": "约有效 {{count}} 分钟",
+      "estimateLastsHours_other": "约有效 {{count}} 小时"
+    },
+    "openUsage": "打开用量"
   },
   "attachments": {
     "label": "附件",
@@ -123,8 +144,12 @@
     "add": "添加文件、照片或文件夹",
     "addFiles": "添加文件或照片…",
     "addFolder": "添加文件夹…",
+    "screenshot": "截取浏览器画面",
+    "noPage": "未打开网页",
+    "openBrowser": "先打开浏览器",
+    "screenshotFailed": "没能截取这个会话的浏览器画面",
     "mentionFile": "提及文件",
-    "slashCommands": "斜杠命令",
+    "slashCommands": "命令",
     "atMost": "最多 20 个附件",
     "waitForAgent": "等 {{agent}} 启动后再添加",
     "reading": "正在读取…",
@@ -134,7 +159,7 @@
     "sentAsFileLink": "以链接发送，{{agent}} 会用它自己的工具读取。",
     "sentLinkedFolder": "以文件夹链接发送",
     "dropTitle": "松手即可添加",
-    "dropHint": "文件、照片或文件夹 · 最多 20 个",
+    "dropHint": "图片、文件和文件夹 · 一次最多 {{count}} 个",
     "slashNeedsEmpty": "仅限空消息",
     "notOnDisk": "它不是磁盘上的文件，无法添加。",
     "theAgent": "Agent",
@@ -142,13 +167,26 @@
     "tooLargeOtherHost": "超过 {{limit}}，太大，无法发到另一台主机。"
   },
   "mentions": {
-    "label": "文件和文件夹",
     "used": "本会话用过",
     "toSearch_other": "输入以搜索 {{count, number}} 个文件及其文件夹",
     "loading": "正在列出项目文件…",
-    "chooseProject": "选择一个项目后才能提及其中的文件"
+    "chooseProject": "选择一个项目后才能提及其中的文件",
+    "files": "文件",
+    "folder": "文件夹",
+    "keysMove": "↑↓ 移动",
+    "keysInsert": "↵ 插入",
+    "keysFolder": "Tab 打开文件夹"
   },
-  "slash": {
-    "typeToFilter": "输入以筛选"
+  "chips": {
+    "pastedLink": "已粘贴为链接",
+    "pasteAsText": "粘贴为文本",
+    "opensInSession": "在会话浏览器中打开",
+    "opensInBrowser": "在你的浏览器中打开",
+    "sentAsLink": "以链接发送",
+    "missing": "这个文件已无法读取",
+    "folderSent": "Agent 收到的是目录结构，而不是每个文件",
+    "lines": "第 {{lines}} 行",
+    "clickToOpen": "点击打开",
+    "backspaceRemoves": "{{key}} 移除"
   }
 }
