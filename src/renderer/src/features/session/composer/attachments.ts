@@ -501,7 +501,8 @@ export function attachmentsBlock(
   text: string,
 ): AttachmentsBlock | null {
   if (items.length === 0) return null
-  if (items.some((item) => item.status === 'failed')) {
+  // What could not be added is left out of the message, unless it is all the message holds.
+  if (!text.trim() && items.every((item) => item.status === 'failed')) {
     return { message: i18n.t('composer:attachments.removeFailed'), notice: false }
   }
   if (items.some((item) => item.status === 'adding')) {

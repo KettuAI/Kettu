@@ -56,6 +56,7 @@ import { errorMessage, host } from '@renderer/lib/host'
 import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
+import { aboveBox } from './above-box'
 import { levelRows, levelsOf, splitName, tierOf, type SelectOption } from './levels'
 import { CheckColumn, DESCRIBED_ROW, ItemText, ROW_BUTTON } from './menu-parts'
 import { mainModels, numberedModel, shownChoice, shownValue, splitModels } from './model-list'
@@ -241,11 +242,13 @@ export function OptionMenu({
   const isMode = option.category === 'mode'
   const look = modeLook(value)
   const Icon = MODE_ICON[look]
+  const [trigger, setTrigger] = useState<HTMLButtonElement | null>(null)
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
           <Button
+            ref={setTrigger}
             variant="quiet"
             size="sm"
             aria-label={t('controls.optionValue', {
@@ -263,7 +266,7 @@ export function OptionMenu({
       <DropdownMenuContent
         side={side}
         align={align}
-        sideOffset={6}
+        sideOffset={side === 'top' ? aboveBox(trigger) : 6}
         aria-label={option.name}
         className={isMode ? 'w-85' : 'w-64'}
       >
@@ -670,6 +673,7 @@ function ModelMenu({
   }
 
   const label = model ? choiceName(model, modelValue) : undefined
+  const [trigger, setTrigger] = useState<HTMLButtonElement | null>(null)
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <Tooltip disabled={!ultracode}>
@@ -678,6 +682,7 @@ function ModelMenu({
             <DropdownMenuTrigger
               render={
                 <Button
+                  ref={setTrigger}
                   variant="quiet"
                   size="sm"
                   aria-label={outOfCredit ? t('controls.modelOutOfCredit') : t('controls.model')}
@@ -716,7 +721,7 @@ function ModelMenu({
       <DropdownMenuContent
         side="top"
         align="end"
-        sideOffset={6}
+        sideOffset={aboveBox(trigger)}
         onKeyDown={onKeyDown}
         className="w-72.5"
       >

@@ -276,6 +276,15 @@ describe('attachmentsBlock', () => {
       notice: false,
     })
     expect(attachmentsBlock([item({ status: 'adding' }), item({ status: 'failed' })], '')).toEqual({
+      message: 'Adding…',
+      notice: false,
+    })
+  })
+
+  it('leaves out what could not be added, unless that is all there is', () => {
+    expect(attachmentsBlock([item({ status: 'ready' }), item({ status: 'failed' })], '')).toBeNull()
+    expect(attachmentsBlock([item({ status: 'failed' })], 'hi')).toBeNull()
+    expect(attachmentsBlock([item({ status: 'failed' })], ' ')).toEqual({
       message: 'Remove the attachments that could not be added',
       notice: false,
     })

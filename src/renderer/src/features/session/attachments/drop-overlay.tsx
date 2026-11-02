@@ -18,7 +18,7 @@ export function DropOverlay({
     <div
       aria-hidden
       className={cn(
-        'pointer-events-none absolute inset-0 z-30 bg-app/88 p-4.5 transition-opacity duration-(--duration-fast) ease-out-quart',
+        'pointer-events-none absolute inset-0 z-30 bg-card p-4.5 transition-opacity duration-(--duration-fast) ease-out-quart',
         shown ? 'opacity-100' : 'opacity-0',
       )}
     >
@@ -27,7 +27,7 @@ export function DropOverlay({
           'flex size-full flex-col items-center justify-center gap-1.5 rounded-[14px] border-[1.5px] border-dashed text-center',
           starting
             ? 'border-border-strong text-secondary'
-            : 'border-control-on bg-control-on-tint text-control-on',
+            : 'border-control-on bg-control-on/6 text-control-on',
         )}
       >
         <ArrowDownToLineIcon strokeWidth={1.5} className="size-5" />

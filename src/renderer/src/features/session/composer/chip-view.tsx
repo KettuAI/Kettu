@@ -1,6 +1,7 @@
-import { useLayoutEffect } from 'react'
+import { useEffect, useLayoutEffect } from 'react'
 import { AppWindowIcon, FileIcon, FolderIcon, GlobeIcon, TriangleAlertIcon } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
+import { loadSiteIcons, useSiteIcon } from '@renderer/stores/site-icons'
 import type { Chip } from './chips'
 
 /** How a chip stands: as typed, under the pointer, chosen in the text, or naming what is gone. */
@@ -41,6 +42,21 @@ export function ChipView({
   )
 }
 
+/** The site's icon where Kettu's browser recorded one, which is never fetched for a chip. */
+function SiteIcon({ url }: { url: string }) {
+  const icon = useSiteIcon(url)
+  useEffect(loadSiteIcons, [])
+  if (!icon) return <GlobeIcon strokeWidth={1.4} className="size-3.5 shrink-0 text-tertiary" />
+  return (
+    <img
+      src={icon}
+      alt=""
+      draggable={false}
+      className="size-3.5 shrink-0 rounded-sm object-contain"
+    />
+  )
+}
+
 function ChipBody({ chip, missing }: { chip: Chip; missing: boolean }) {
   if (chip.kind === 'command') {
     return (
@@ -58,7 +74,7 @@ function ChipBody({ chip, missing }: { chip: Chip; missing: boolean }) {
             <AppWindowIcon strokeWidth={1.6} className="size-2.25" />
           </span>
         ) : (
-          <GlobeIcon strokeWidth={1.4} className="size-3.5 shrink-0 text-tertiary" />
+          <SiteIcon url={chip.url} />
         )}
         <span className="shrink-0 font-medium">{chip.host}</span>
         {chip.path && <span className="min-w-0 truncate text-tertiary">{chip.path}</span>}

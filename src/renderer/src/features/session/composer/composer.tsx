@@ -171,7 +171,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     : null
 
   return (
-    <div className="flex flex-col">
+    <div data-composer="" className="flex flex-col">
       <PromptBox
         box={box}
         agentId={session.agentId}

@@ -706,7 +706,7 @@
   --composer-hover:
     0 0 0 var(--hairline) var(--border-strong), var(--elevation-float), var(--highlight);
   /* The composer while typed in: the fox caret marks it, so the frame stays as it is. */
-  --composer-focus: var(--composer-hover);
+  --composer-focus: var(--composer-ring);
   --queue-ring:
     0 0 0 var(--hairline) var(--border-subtle), var(--elevation-queue), var(--highlight);
   /* The menu bar panel's inner edge, a faint light line over the system's material, and the ink

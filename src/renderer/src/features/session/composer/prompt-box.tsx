@@ -20,6 +20,7 @@ import { cn } from '@renderer/lib/utils'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { shownSidePane, useViewStore } from '@renderer/stores/view'
 import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
+import { aboveBox } from './above-box'
 import { AttachmentTray } from './attachment-tray'
 import { attachMention } from './attachments'
 import { ComposerEditor } from './editor'
@@ -162,8 +163,6 @@ export function PromptBox({
     if (slashOpen) setSlashDismissed(true)
     if (mentionOpen && mention) setMentionDismissed(mention.start)
   }
-  // A chosen command's own hint shows in the strip over the box.
-  const hint = text === '/' && slashOpen ? t('slash.typeToFilter') : undefined
   const [focused, setFocused] = useState(false)
   const chips = usePromptChips({
     draft,
@@ -277,7 +276,6 @@ export function PromptBox({
             label={label}
             placeholder={placeholder}
             disabled={disabled}
-            hint={hint}
             chipContext={chips.chipContext}
             size={size}
             popover={open ? { listId, activeId: active >= 0 ? optionId(active) : undefined } : null}
@@ -435,6 +433,7 @@ export function AddMenu({
   const { t } = useTranslation('composer')
   const { disabled, full, remote, text, editor, update, sessionId } = box
   const shortcut = formatShortcut('Mod+U')
+  const [trigger, setTrigger] = useState<HTMLButtonElement | null>(null)
   const hasPage = useBrowserStore((s) => {
     const page = sessionId ? s.bySession[sessionId] : undefined
     // An evicted page keeps its address for the pane, with no live page behind it.
@@ -475,7 +474,9 @@ export function AddMenu({
   return (
     <DropdownMenu>
       <Tooltip>
-        <TooltipTrigger render={<DropdownMenuTrigger render={<Button {...button} />} />}>
+        <TooltipTrigger
+          render={<DropdownMenuTrigger render={<Button {...button} ref={setTrigger} />} />}
+        >
           {icon}
         </TooltipTrigger>
         <TooltipContent>
@@ -485,7 +486,7 @@ export function AddMenu({
       </Tooltip>
       <DropdownMenuContent
         side="top"
-        sideOffset={6}
+        sideOffset={aboveBox(trigger)}
         className="w-max min-w-66"
         finalFocus={() => {
           box.focus()

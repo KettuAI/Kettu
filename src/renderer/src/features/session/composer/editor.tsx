@@ -13,13 +13,7 @@ import {
 } from 'react'
 import { history, insertNewline, redo, standardKeymap, undo } from '@codemirror/commands'
 import { Annotation, Compartment, EditorState, Prec, type Extension } from '@codemirror/state'
-import {
-  Decoration,
-  EditorView,
-  keymap,
-  placeholder as placeholderText,
-  WidgetType,
-} from '@codemirror/view'
+import { EditorView, keymap, placeholder as placeholderText } from '@codemirror/view'
 import { chipHooks, chips, keepAsText, type ChipHooks } from './editor-chips'
 import { markdownPreview } from './markdown-preview'
 
@@ -46,28 +40,6 @@ export interface PopoverAria {
 
 // Changes the box makes itself, which it does not report back as typing.
 const fromBox = Annotation.define<boolean>()
-
-class HintWidget extends WidgetType {
-  constructor(readonly text: string) {
-    super()
-  }
-  eq(other: HintWidget): boolean {
-    return other.text === this.text
-  }
-  toDOM(): HTMLElement {
-    const hint = document.createElement('span')
-    hint.className = 'cm-hint'
-    hint.setAttribute('aria-hidden', 'true')
-    hint.textContent = this.text
-    return hint
-  }
-}
-
-function hintAtEnd(hint: string | undefined): Extension {
-  if (!hint) return []
-  const widget = Decoration.widget({ widget: new HintWidget(hint), side: 1 })
-  return EditorView.decorations.of((view) => Decoration.set([widget.range(view.state.doc.length)]))
-}
 
 function editability(disabled: boolean): Extension {
   return [EditorView.editable.of(!disabled), EditorState.readOnly.of(disabled)]
@@ -113,7 +85,6 @@ const theme = EditorView.theme({
     whiteSpace: 'nowrap',
     color: 'var(--text-placeholder)',
   },
-  '.cm-hint': { color: 'var(--text-placeholder)' },
   // The command chip as marks: the padding sits inline, so the caret still moves through it.
   '.cm-chip-command': {
     background: 'var(--bg-subtle)',
@@ -176,7 +147,6 @@ export function ComposerEditor({
   label,
   placeholder,
   disabled,
-  hint,
   chipContext,
   size,
   popover,
@@ -194,8 +164,6 @@ export function ComposerEditor({
   label: string
   placeholder: string
   disabled: boolean
-  /** The slash command's input hint, after the text. */
-  hint: string | undefined
   /** What the chips resolve against, and what they report. */
   chipContext: ChipHooks
   /** The text's least height, its padding and its line height, as CSS lengths. */
@@ -220,11 +188,10 @@ export function ComposerEditor({
     placeholder: new Compartment(),
     editable: new Compartment(),
     attributes: new Compartment(),
-    hint: new Compartment(),
     chips: new Compartment(),
   }))
   // What the first render had, which the editor starts with.
-  const initial = useRef({ initialText, placeholder, disabled, label, popover, hint, chipContext })
+  const initial = useRef({ initialText, placeholder, disabled, label, popover, chipContext })
   const changed = useEffectEvent(onChange)
   const moved = useEffectEvent(onCaret)
   const keyDown = useEffectEvent(onKeyDown)
@@ -285,7 +252,6 @@ export function ComposerEditor({
           parts.placeholder.of(placeholderText(first.placeholder)),
           parts.editable.of(editability(first.disabled)),
           parts.attributes.of(attributes(first.label, first.popover)),
-          parts.hint.of(hintAtEnd(first.hint)),
           chips(),
           parts.chips.of(chipHooks.of(first.chipContext)),
           EditorView.updateListener.of((update) => {
@@ -312,9 +278,6 @@ export function ComposerEditor({
   useEffect(() => {
     view.current?.dispatch({ effects: parts.editable.reconfigure(editability(disabled)) })
   }, [parts, disabled])
-  useEffect(() => {
-    view.current?.dispatch({ effects: parts.hint.reconfigure(hintAtEnd(hint)) })
-  }, [parts, hint])
   useEffect(() => {
     view.current?.dispatch({ effects: parts.chips.reconfigure(chipHooks.of(chipContext)) })
   }, [parts, chipContext])

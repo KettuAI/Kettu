@@ -187,9 +187,7 @@
     "keysInsert": "↵ to insert",
     "keysFolder": "Tab opens a folder"
   },
-  "slash": {
-    "typeToFilter": "Type to filter"
-  },
+  "slash": {},
   "chips": {
     "pastedLink": "Pasted as a link",
     "pasteAsText": "Paste as text",
