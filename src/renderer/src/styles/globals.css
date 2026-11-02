@@ -169,6 +169,8 @@
   --color-diff-add-word: var(--diff-add-word);
   --color-diff-del: var(--diff-del);
   --color-diff-del-word: var(--diff-del-word);
+  --color-code-success: var(--code-success);
+  --color-code-danger: var(--code-danger);
   --color-brand-claude: var(--brand-claude);
   --color-agent-claude-code: var(--agent-claude-code);
   --color-agent-codex: var(--agent-codex);
@@ -914,7 +916,7 @@
   }
 
   & [data-streamdown='inline-code'] {
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     background: var(--bg-code-inline);
     color: var(--text-primary);
     padding: 0.1em 0.35em;
@@ -1175,22 +1177,21 @@
 }
 
 /* Diffs sit on the code block surface, not on the Shiki theme's own background, with the
-   theme's line and word tints. Outer declarations win over the theme's :host rule inside the
-   diff's shadow root. */
-.diff,
-.file-preview {
+   theme's line and word tints over the whole row, numbers included, and line numbers in the
+   comment color. Outer declarations win over the theme's :host rule inside the diff's shadow
+   root; diff-impl.tsx lays the line tints on as they are. */
+.diff {
   --diffs-light-bg: var(--bg-code-block);
   --diffs-dark-bg: var(--bg-code-block);
-  --diffs-addition-color-override: var(--success);
-  --diffs-deletion-color-override: var(--danger);
+  --diffs-addition-color-override: var(--code-success);
+  --diffs-deletion-color-override: var(--code-danger);
   --diffs-bg-addition-override: var(--diff-add);
+  --diffs-bg-addition-number-override: var(--diff-add);
   --diffs-bg-addition-emphasis-override: var(--diff-add-word);
   --diffs-bg-deletion-override: var(--diff-del);
+  --diffs-bg-deletion-number-override: var(--diff-del);
   --diffs-bg-deletion-emphasis-override: var(--diff-del-word);
-}
-
-/* The Files pane's preview fills the pane, so a short file ends where the pane does. */
-.file-preview {
-  --diffs-light-bg: var(--background);
-  --diffs-dark-bg: var(--background);
+  --diffs-fg-number-override: var(--syntax-comment);
+  --diffs-fg-number-addition-override: var(--syntax-comment);
+  --diffs-fg-number-deletion-override: var(--syntax-comment);
 }
