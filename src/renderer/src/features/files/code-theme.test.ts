@@ -3,6 +3,7 @@ import { tags, type Tag } from '@lezer/highlight'
 import { codeToTokens, normalizeTheme, type BundledTheme, type RawThemeSetting } from 'shiki'
 import { bundledThemes } from 'shiki/themes'
 import { describe, expect, it } from 'vitest'
+import { kettuCodeTheme } from '@renderer/features/session/markdown/code-themes'
 import { highlightSpecs } from './code-theme'
 
 const specFor = (specs: TagStyle[], tag: Tag) =>
@@ -32,6 +33,23 @@ describe('highlightSpecs', () => {
       expect(editor(tags.function(tags.variableName))).toBe(shiki('format'))
     })
   }
+
+  it("gives tokens the built-in theme's syntax colors, as Shiki does in a code block", async () => {
+    const theme = kettuCodeTheme('light')
+    const specs = highlightSpecs(normalizeTheme(theme))
+    const { tokens } = await codeToTokens(line, { lang: 'typescript', theme })
+    const shiki = (text: string) =>
+      tokens.flat().find((token) => token.content.includes(text))?.color
+    const editor = (tag: Tag) => specFor(specs, tag)?.color
+
+    expect(editor(tags.keyword)).toBe('var(--syntax-keyword)')
+    expect(shiki('return')).toBe('var(--syntax-keyword)')
+    expect(editor(tags.string)).toBe(shiki('Hello'))
+    expect(editor(tags.comment)).toBe(shiki('// greet'))
+    expect(editor(tags.number)).toBe(shiki('42'))
+    expect(editor(tags.function(tags.variableName))).toBe(shiki('format'))
+    expect(shiki('format')).toBe('var(--syntax-function)')
+  })
 
   it('takes the rule of the longest selector a scope starts with, in any order', () => {
     const specs = highlightSpecs(

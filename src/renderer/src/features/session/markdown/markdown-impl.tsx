@@ -40,7 +40,7 @@ import { HAN } from '@renderer/lib/han'
 import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { splitIntoChunks } from './chunks'
-import { useCodeThemes, type CodeThemes } from './code-themes'
+import { codeThemeInput, useCodeThemes, type CodeThemes } from './code-themes'
 import { localImageTarget, spacedImages } from './local-images'
 import { localTarget } from './local-links'
 import { remarkPlugins } from './remark'
@@ -49,7 +49,7 @@ import { useTableFit } from './table-fit'
 
 function createPlugins({ light, dark }: CodeThemes) {
   return {
-    code: createCodePlugin({ themes: [light, dark] }),
+    code: createCodePlugin({ themes: [codeThemeInput(light), codeThemeInput(dark)] }),
     cjk,
     renderers: [{ language: 'svg', component: SvgBlock }],
   }
