@@ -89,7 +89,10 @@ export async function connect(port, timeout = 60_000) {
   for (;;) {
     try {
       const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
-      const page = targets.find((t) => t.type === 'page' && !t.url.startsWith('devtools'))
+      // The browser pane's page and the menu bar panel are pages too; the window is index.html.
+      const page = targets.find(
+        (t) => t.type === 'page' && t.url.startsWith('file:') && t.url.endsWith('/index.html'),
+      )
       if (page) return open(page.webSocketDebuggerUrl)
     } catch {
       // Not listening yet.
