@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { BotIcon, CheckIcon, ChevronRightIcon, CircleAlertIcon, SquareIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
@@ -81,8 +81,14 @@ function SubagentBlock({
   className?: string
 }) {
   const { t } = useTranslation('session')
-  // State, not a ref: the root is a new element once the context menu wraps it.
+  // Both: the ref is current at once for a reveal, and the state lets the observer follow the
+  // root, a new element once the context menu wraps it.
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
+  const attachRoot = useCallback((element: HTMLDivElement | null) => {
+    rootRef.current = element
+    setRoot(element)
+  }, [])
   const header = useRef<HTMLButtonElement>(null)
   const waiting = !!child && (child.permissionCount > 0 || child.attention === 'permission')
   // Closed until the reader opens it, except while it waits for an answer the reader must give.
@@ -99,7 +105,7 @@ function SubagentBlock({
   const reveal = useRevealRequest(entryId)
   useRevealScroll(
     reveal,
-    () => root,
+    () => rootRef.current,
     (behavior) => scrollToMessage(entryId, { align: 'center', behavior }),
     () => setHighlight((n) => n + 1),
   )
@@ -124,7 +130,7 @@ function SubagentBlock({
 
   const block = (
     <div
-      ref={setRoot}
+      ref={attachRoot}
       className={cn(
         'relative overflow-hidden rounded-xl bg-card text-ui text-card-foreground shadow-card',
         // Open, the request's own card carries the ring.
