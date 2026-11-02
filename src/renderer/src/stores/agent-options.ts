@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { AgentOptions, SessionSummary } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
-import { host } from '@renderer/lib/host'
+import { host, hostAt } from '@renderer/lib/host'
 
 export type OptionValues = Record<string, string | boolean>
 
@@ -25,10 +25,14 @@ export interface FirstRead {
   error: string | null
 }
 
+type OptionsById = Partial<Record<AgentId, AgentOptions>>
+
 interface AgentOptionsStore {
   /** Each agent's cached options, for the agents with no prepared session and the first paint. */
-  byId: Partial<Record<AgentId, AgentOptions>>
+  byId: OptionsById
   loaded: boolean
+  /** Each other host's cached options, by its id, once read. */
+  hosts: Record<string, OptionsById>
   /** Why the last load failed; New session then starts each agent with its own defaults. */
   error: string | null
   /** What New session set for each agent and the agent has not answered yet. */
@@ -40,6 +44,7 @@ interface AgentOptionsStore {
 export const useAgentOptionsStore = create<AgentOptionsStore>()(() => ({
   byId: {},
   loaded: false,
+  hosts: {},
   error: null,
   picks: {},
   prepared: null,
@@ -60,8 +65,53 @@ export async function loadAgentOptions(): Promise<void> {
   }
 }
 
-export function receiveAgentOptions(options: AgentOptions): void {
-  useAgentOptionsStore.setState((s) => ({ byId: { ...s.byId, [options.agentId]: options } }))
+/** Reads another host's cached options, as when a connection to it opens. */
+export async function readHostAgentOptions(hostId: string): Promise<void> {
+  let byId: OptionsById | null = null
+  try {
+    const list = await hostAt(hostId, 'agents.options', undefined)
+    byId = Object.fromEntries(list.map((o) => [o.agentId, o]))
+  } finally {
+    // A failed read still counts as read, so the menu shows each agent's own defaults.
+    useAgentOptionsStore.setState((s) => ({
+      hosts: { ...s.hosts, [hostId]: byId ?? s.hosts[hostId] ?? {} },
+    }))
+  }
+}
+
+export function forgetHostAgentOptions(hostId: string): void {
+  useAgentOptionsStore.setState((s) => {
+    if (!(hostId in s.hosts)) return s
+    const hosts = { ...s.hosts }
+    delete hosts[hostId]
+    return { hosts }
+  })
+}
+
+const NO_OPTIONS: OptionsById = {}
+
+/** The cached options of the host named, null being this computer. */
+export function optionsOn(
+  s: Pick<AgentOptionsStore, 'byId' | 'hosts'>,
+  hostId: string | null,
+): OptionsById {
+  return hostId === null ? s.byId : (s.hosts[hostId] ?? NO_OPTIONS)
+}
+
+/** Whether the host's cached options were read, so a menu stops waiting for them. */
+export function optionsLoaded(
+  s: Pick<AgentOptionsStore, 'loaded' | 'hosts'>,
+  hostId: string | null,
+): boolean {
+  return hostId === null ? s.loaded : hostId in s.hosts
+}
+
+export function receiveAgentOptions(options: AgentOptions, hostId: string | null = null): void {
+  useAgentOptionsStore.setState((s) =>
+    hostId === null
+      ? { byId: { ...s.byId, [options.agentId]: options } }
+      : { hosts: { ...s.hosts, [hostId]: { ...s.hosts[hostId], [options.agentId]: options } } },
+  )
 }
 
 export function pickOption(agentId: AgentId, optionId: string, value: string | boolean): void {

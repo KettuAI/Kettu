@@ -14,14 +14,16 @@ import { OptionMenu } from '@renderer/features/session/composer/control-row'
 import type { SelectOption } from '@renderer/features/session/composer/levels'
 import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
+import { useHostLabel } from '@renderer/features/sidebar/host-label'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { usePane } from '@renderer/features/split/pane-context'
 import { basename, limitLabel, resetTime } from '@renderer/lib/format'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { isMod } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { useAgentOptionsStore } from '@renderer/stores/agent-options'
-import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import { optionsLoaded, optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
+import { agentName, agentsOn, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useGitStore } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
@@ -78,12 +80,15 @@ export function NewSessionView({
 }) {
   const { t } = useTranslation('session')
   const chosenId = useViewStore((s) => (paneId ? paneAgent(s.layout, paneId) : null))
+  const parent = useSessionsStore((s) => (parentId ? s.byId[parentId] : undefined))
+  // The agents listed are those of the host the session will be on.
+  const startPath = parent?.projectPath ?? (noProject ? null : (project?.path ?? null))
+  const hostId = startPath === null ? null : hostOfPath(startPath)
   const installed = useAgentsStore((s) => {
-    const status = chosenId ? s.byId[chosenId] : undefined
+    const status = chosenId ? agentsOn(s, hostId).byId[chosenId] : undefined
     return !!status && canStart(status)
   })
   const agentId = installed ? chosenId : null
-  const parent = useSessionsStore((s) => (parentId ? s.byId[parentId] : undefined))
   const toolsPath = project?.path ?? (parent?.scratch ? parent.projectPath : null)
   // From the kept draft, so a draft left on an earlier visit hides Recent artifacts from the start.
   const [holdsMessage, setHoldsMessage] = useState(() =>
@@ -123,6 +128,7 @@ export function NewSessionView({
         <DraftComposer
           paneId={paneId}
           agentId={agentId}
+          hostId={hostId}
           project={project}
           noProject={noProject}
           parent={parent}
@@ -141,6 +147,7 @@ const NO_COMMANDS: SlashCommand[] = []
 function DraftComposer({
   paneId,
   agentId,
+  hostId,
   project,
   noProject,
   parent,
@@ -149,6 +156,8 @@ function DraftComposer({
 }: {
   paneId: string | null
   agentId: AgentId | null
+  /** The other host the session will be on, null for this computer. */
+  hostId: string | null
   project: Project | null
   noProject: boolean
   parent: SessionSummary | undefined
@@ -160,12 +169,18 @@ function DraftComposer({
   const { t: tc } = useTranslation('composer')
   const [projectError, setProjectError] = useState<string | null>(null)
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
-  const limits = useAgentsStore((s) => (agentId ? s.byId[agentId]?.limits : undefined))
+  const limits = useAgentsStore((s) =>
+    agentId ? agentsOn(s, hostId).byId[agentId]?.limits : undefined,
+  )
   const waitingForNode = useAgentsStore(
-    useShallow((s) => (s.loaded ? noAgentCanStart(usableAgents(s.order, s.byId)) : null)),
+    useShallow((s) => {
+      if (hostId === null ? !s.loaded : !(hostId in s.hosts)) return null
+      const { order, byId } = agentsOn(s, hostId)
+      return noAgentCanStart(usableAgents(order, byId))
+    }),
   )
   const now = useNow()
-  const name = agentId ? agentName(agentId) : null
+  const name = agentId ? agentName(agentId, hostId) : null
   // A sub-session of a session started with No project shares its parent's scratch folder.
   const inScratch = noProject || !!parent?.scratch
   const projectPath = parent?.projectPath ?? (noProject ? null : (project?.path ?? null))
@@ -186,7 +201,7 @@ function DraftComposer({
   const sending = useRef(false)
   // An agent that must sign in first opens no session until it has.
   const signIn = useAgentsStore((s) => {
-    const status = agentId ? s.byId[agentId] : undefined
+    const status = agentId ? agentsOn(s, hostId).byId[agentId] : undefined
     return !!status && agentNeed(status) === 'sign-in'
   })
   const parentId = parent?.id ?? null
@@ -199,10 +214,12 @@ function DraftComposer({
 
   // Without a folder nothing is prepared, so an agent with no options cached reads them once, and
   // the menu lists its models before a project is chosen.
-  const optionsLoaded = useAgentOptionsStore((s) => s.loaded)
+  const cacheLoaded = useAgentOptionsStore((s) => optionsLoaded(s, hostId))
   useEffect(() => {
-    if (agentId && !ready && !signIn && optionsLoaded) void readFirstOptions(agentId)
-  }, [agentId, ready, signIn, optionsLoaded])
+    if (agentId && hostId === null && !ready && !signIn && cacheLoaded) {
+      void readFirstOptions(agentId)
+    }
+  }, [agentId, hostId, ready, signIn, cacheLoaded])
 
   useEffect(() => {
     editor.current?.focus()
@@ -216,8 +233,9 @@ function DraftComposer({
     sending.current = true
     try {
       await settleOptions()
-      const { byId, picks, prepared } = useAgentOptionsStore.getState()
-      const entry = byId[agentId]
+      const optionsState = useAgentOptionsStore.getState()
+      const { picks, prepared } = optionsState
+      const entry = optionsOn(optionsState, hostId)[agentId]
       // Without a prepared session, the values New session showed go with the create.
       const options = entry ? startValues(entry, picks[agentId]) : null
       const preparedId = prepared?.agentId === agentId ? (prepared.summary?.id ?? null) : null
@@ -241,11 +259,12 @@ function DraftComposer({
 
   const choose = (id: AgentId, model: string | null) => {
     if (paneId) choosePaneAgent(paneId, id)
-    const { byId, prepared } = useAgentOptionsStore.getState()
+    const state = useAgentOptionsStore.getState()
+    const { prepared } = state
     const config =
       prepared?.agentId === id && prepared.summary?.prepared
         ? prepared.summary.prepared.config
-        : byId[id]?.config
+        : optionsOn(state, hostId)[id]?.config
     const modelOption = config?.find((o) => o.category === 'model')
     if (model !== null && modelOption) setOption(id, modelOption.id, model)
     requestAnimationFrame(() => editor.current?.focus())
@@ -313,8 +332,8 @@ function DraftComposer({
           )}
           {!inScratch && project && <BranchLabel projectPath={project.path} />}
           <span className="min-w-2 flex-1" />
-          <AgentMenu agentId={agentId} onChoose={choose} folderless={!ready} />
-          <ModeMenu agentId={agentId} />
+          <AgentMenu agentId={agentId} onChoose={choose} folderless={!ready} hostId={hostId} />
+          <ModeMenu agentId={agentId} hostId={hostId} />
         </div>
         {(projectError || (project?.missing && !inScratch)) && (
           <p className="truncate px-2.75 text-xs text-danger" title={projectError ?? undefined}>
@@ -326,8 +345,8 @@ function DraftComposer({
             {box.error ?? held?.message}
           </p>
         )}
-        {agentId && <StartNotices agentId={agentId} />}
-        {waitingForNode && <NoAgentLine waitingForNode={waitingForNode} />}
+        {agentId && <StartNotices agentId={agentId} hostId={hostId} />}
+        {waitingForNode && <NoAgentLine waitingForNode={waitingForNode} hostId={hostId} />}
         {children}
       </div>
     </>
@@ -337,7 +356,7 @@ function DraftComposer({
 const NO_NOTICES: StartNotice[] = []
 
 /** Each value the session will not start with as chosen, and why, before the first message. */
-function StartNotices({ agentId }: { agentId: AgentId }) {
+function StartNotices({ agentId, hostId }: { agentId: AgentId; hostId: string | null }) {
   const { t } = useTranslation('session')
   const all = useAgentOptionsStore((s) =>
     s.prepared?.agentId === agentId
@@ -347,7 +366,7 @@ function StartNotices({ agentId }: { agentId: AgentId }) {
   // A switch meant to be off that the session lacks loses nothing.
   const notices = all.filter((n) => !(n.type === 'boolean' && n.actual === null && !n.wanted))
   if (notices.length === 0) return null
-  const agent = agentName(agentId)
+  const agent = agentName(agentId, hostId)
   return (
     <ul className="flex flex-col gap-0.5 px-2.75">
       {notices.map((notice) => {
@@ -388,26 +407,40 @@ function noticeText(
     : t(`newSession.startNotice.option.${reason}`, values)
 }
 
-/** While no agent can start: why, in one line, and the way to Settings › Agents to fix it. */
-function NoAgentLine({ waitingForNode }: { waitingForNode: string[] }) {
+/**
+ * While no agent can start: why, in one line, and the way to Settings › Agents to fix it; on
+ * another host only why, since this computer's Settings do not set up its agents.
+ */
+function NoAgentLine({
+  waitingForNode,
+  hostId,
+}: {
+  waitingForNode: string[]
+  hostId: string | null
+}) {
   const { t } = useTranslation('session')
+  const hostLabel = useHostLabel(hostId)
   const text =
-    waitingForNode.length > 0
-      ? t('newSession.noAgentNode', { agents: waitingForNode, count: waitingForNode.length })
-      : t('newSession.noAgent')
+    hostId !== null
+      ? t('newSession.noAgentOnHost', { host: hostLabel })
+      : waitingForNode.length > 0
+        ? t('newSession.noAgentNode', { agents: waitingForNode, count: waitingForNode.length })
+        : t('newSession.noAgent')
   return (
     <div className="flex min-w-0 items-center gap-2 px-2.75">
       <p className="truncate text-xs text-destructive" title={text}>
         {text}
       </p>
-      <Button
-        variant="outline"
-        size="xs"
-        className="shrink-0"
-        onClick={() => openHarnessSettings(null)}
-      >
-        {t('newSession.installHarness')}
-      </Button>
+      {hostId === null && (
+        <Button
+          variant="outline"
+          size="xs"
+          className="shrink-0"
+          onClick={() => openHarnessSettings(null)}
+        >
+          {t('newSession.installHarness')}
+        </Button>
+      )}
     </div>
   )
 }
@@ -474,8 +507,8 @@ function BranchLabel({ projectPath }: { projectPath: string }) {
 }
 
 /** The agent's mode for the session to start in, once its options are known. */
-function ModeMenu({ agentId }: { agentId: AgentId | null }) {
-  const config = useStartConfig(agentId)
+function ModeMenu({ agentId, hostId }: { agentId: AgentId | null; hostId: string | null }) {
+  const config = useStartConfig(agentId, undefined, hostId)
   const mode = config?.find(
     (o): o is SelectOption => o.category === 'mode' && o.type === 'select' && !!o.choices?.length,
   )

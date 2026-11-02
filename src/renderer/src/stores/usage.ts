@@ -17,7 +17,7 @@ import {
   type Metric,
   type RangeChoice,
 } from '@renderer/features/usage/model'
-import { errorMessage, host } from '@renderer/lib/host'
+import { errorMessage, host, hostAt } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
 
 export interface ContextReport {
@@ -119,8 +119,8 @@ export function loadContext(sessionId: string, key: string): void {
 }
 
 /** Asks the agent for the current use of its plan limits; they arrive in its status. */
-export function refreshLimits(agentId: AgentId): Promise<void> {
-  return host('agents.refreshLimits', { agentId })
+export function refreshLimits(agentId: AgentId, hostId: string | null = null): Promise<void> {
+  return hostAt(hostId, 'agents.refreshLimits', { agentId })
 }
 
 let pageOpen = false

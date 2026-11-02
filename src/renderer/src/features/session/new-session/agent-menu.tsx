@@ -43,12 +43,18 @@ import {
   usageTone,
 } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel } from '@renderer/lib/format'
-import { errorMessage, host } from '@renderer/lib/host'
+import { errorMessage, hostAt } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { useAgentOptionsStore, type OptionValues } from '@renderer/stores/agent-options'
-import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import {
+  optionsLoaded,
+  optionsOn,
+  useAgentOptionsStore,
+  type OptionValues,
+} from '@renderer/stores/agent-options'
+import { agentName, agentsOn, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { refreshLimits } from '@renderer/stores/usage'
+import { useHostLabel } from '@renderer/features/sidebar/host-label'
 import { openAgentSettings, openHarnessSettings } from '@renderer/stores/view'
 import {
   agentNeed,
@@ -91,6 +97,7 @@ export function AgentMenu({
   values,
   onValues,
   folderless = false,
+  hostId = null,
 }: {
   agentId: AgentId | null
   onChoose: (agentId: AgentId, model: string | null) => void
@@ -103,12 +110,20 @@ export function AgentMenu({
   onValues?: (optionId: string, value: string | boolean) => void
   /** New session has no folder yet, so an agent shown with no options cached reads them once. */
   folderless?: boolean
+  /** The other host New session's project is on, whose agents the menu lists; null for this computer. */
+  hostId?: string | null
 }) {
   const { t } = useTranslation('session')
-  const statuses = useAgentsStore(useShallow((s) => menuAgents(usableAgents(s.order, s.byId))))
-  const entries = useAgentOptionsStore((s) => s.byId)
+  const hostLabel = useHostLabel(hostId)
+  const statuses = useAgentsStore(
+    useShallow((s) => {
+      const { order, byId } = agentsOn(s, hostId)
+      return menuAgents(usableAgents(order, byId))
+    }),
+  )
+  const entries = useAgentOptionsStore((s) => optionsOn(s, hostId))
   const picks = useAgentOptionsStore((s) => s.picks)
-  const loaded = useAgentOptionsStore((s) => s.loaded)
+  const loaded = useAgentOptionsStore((s) => optionsLoaded(s, hostId))
   const prepared = useAgentOptionsStore((s) => s.prepared)
   const [open, setOpen] = useState(false)
   const [shown, setShown] = useState<AgentId | null>(agentId)
@@ -182,16 +197,17 @@ export function AgentMenu({
   const shownStatus = statuses.find((s) => s.id === shown)
   const shownNeed = shownStatus ? agentNeed(shownStatus) : null
   useEffect(() => {
-    if (!open || !folderless || !shown || !loaded) return
+    // Only this computer's agents are read without a folder.
+    if (!open || !folderless || hostId !== null || !shown || !loaded) return
     if (shownNeed === 'sign-in' || shownNeed === 'failed') return
     void readFirstOptions(shown)
-  }, [open, folderless, shown, loaded, shownNeed])
+  }, [open, folderless, hostId, shown, loaded, shownNeed])
 
   const label = (key: string) => {
     const { agentId: id, model } = parseItemKey(key)
     const choices = agents.find((a) => a.agentId === id)?.model?.choices
     const choice = choices && model !== null ? shownChoice(choices, model) : undefined
-    return choice ? `${agentName(id)} ${choice.name}` : agentName(id)
+    return choice ? `${agentName(id, hostId)} ${choice.name}` : agentName(id, hostId)
   }
 
   const onOpenChange = (next: boolean) => {
@@ -209,7 +225,7 @@ export function AgentMenu({
     setExpanded(chosenChoice?.older ? agentId : null)
     for (const status of statuses) {
       if (status.state !== 'ready' || !status.capabilities.reports) continue
-      refreshLimits(status.id).catch((error: unknown) =>
+      refreshLimits(status.id, hostId).catch((error: unknown) =>
         console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
       )
     }
@@ -268,7 +284,7 @@ export function AgentMenu({
           />
         }
       >
-        <AgentButtonLabel agentId={agentId} values={values} />
+        <AgentButtonLabel agentId={agentId} values={values} hostId={hostId} />
       </ComboboxTrigger>
       <ComboboxContent
         align="end"
@@ -287,7 +303,9 @@ export function AgentMenu({
         </ComboboxInput>
         {statuses.length === 0 ? (
           <p className="flex-1 px-3.5 py-3 text-ui text-muted-foreground">
-            {t('newSession.noAgent')}
+            {hostId === null
+              ? t('newSession.noAgent')
+              : t('newSession.noAgentOnHost', { host: hostLabel })}
           </p>
         ) : (
           <Tabs
@@ -325,6 +343,8 @@ export function AgentMenu({
               >
                 <Pane
                   status={shownStatus ?? null}
+                  hostId={hostId}
+                  hostLabel={hostLabel}
                   config={shown ? (configs.get(shown) ?? null) : null}
                   loaded={loaded}
                   opening={shownPrepared ? shownPrepared.opening : (firstRead?.reading ?? false)}
@@ -345,29 +365,42 @@ export function AgentMenu({
             </div>
           </Tabs>
         )}
-        <Separator className="bg-border-soft" />
-        <div className="p-1.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start px-2 text-ui font-normal"
-            onClick={() => {
-              close()
-              openAgentSettings(null)
-            }}
-          >
-            {t('newSession.setUpAgents')}
-          </Button>
-        </div>
+        {/* Settings set up this computer's agents, not another host's. */}
+        {hostId === null && (
+          <>
+            <Separator className="bg-border-soft" />
+            <div className="p-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start px-2 text-ui font-normal"
+                onClick={() => {
+                  close()
+                  openAgentSettings(null)
+                }}
+              >
+                {t('newSession.setUpAgents')}
+              </Button>
+            </div>
+          </>
+        )}
       </ComboboxContent>
     </Combobox>
   )
 }
 
 /** What the composer's button shows: the agent, the model it starts with and the level. */
-function AgentButtonLabel({ agentId, values }: { agentId: AgentId | null; values?: OptionValues }) {
+function AgentButtonLabel({
+  agentId,
+  values,
+  hostId,
+}: {
+  agentId: AgentId | null
+  values?: OptionValues
+  hostId: string | null
+}) {
   const { t } = useTranslation('session')
-  const config = useStartConfig(agentId, values)
+  const config = useStartConfig(agentId, values, hostId)
   if (!agentId) {
     return <span className="truncate text-foreground">{t('newSession.chooseAgentShort')}</span>
   }
@@ -384,8 +417,8 @@ function AgentButtonLabel({ agentId, values }: { agentId: AgentId | null; values
     <>
       <AgentMark agent={agentId} size={14} />
       {/* On a narrow window the model's name gives way first, the agent's only after it. */}
-      <span className="min-w-0 truncate text-foreground" title={agentName(agentId)}>
-        {agentName(agentId)}
+      <span className="min-w-0 truncate text-foreground" title={agentName(agentId, hostId)}>
+        {agentName(agentId, hostId)}
       </span>
       {modelName && (
         <span className="min-w-0 shrink-100 truncate text-secondary" title={modelName}>
@@ -487,6 +520,8 @@ function UsageNote({ limits, now }: { limits: AgentStatus['limits']; now: number
 /** The right side: the shown agent's models, level and switches, or the search's results. */
 function Pane({
   status,
+  hostId,
+  hostLabel,
   config,
   loaded,
   opening,
@@ -500,6 +535,9 @@ function Pane({
   onOption,
 }: {
   status: AgentStatus | null
+  /** The other host the agent is on, whose Settings this computer does not show; null for this one. */
+  hostId: string | null
+  hostLabel: string
   config: ConfigOption[] | null
   loaded: boolean
   /** The agent's prepared session, or its first read of options, is under way. */
@@ -556,7 +594,7 @@ function Pane({
           )}
           tone="neutral"
         >
-          {install}
+          {hostId === null && install}
         </Notice>
       )
     } else if (need === 'failed') {
@@ -569,7 +607,7 @@ function Pane({
             variant="outline"
             size="xs"
             onClick={() =>
-              void host('agents.retry', { agentId: status.id }).catch((error: unknown) =>
+              void hostAt(hostId, 'agents.retry', { agentId: status.id }).catch((error: unknown) =>
                 console.warn(`Could not retry ${status.id}: ${errorMessage(error)}`),
               )
             }
@@ -577,6 +615,13 @@ function Pane({
             {t('newSession.agentMenu.retry')}
           </Button>
         </Notice>
+      )
+    } else if (need === 'sign-in' && hostId !== null) {
+      notice = (
+        <Notice
+          text={t('newSession.agentMenu.signInOnHost', { agent: name, host: hostLabel })}
+          tone="warning"
+        />
       )
     } else if (need === 'sign-in') {
       notice = (

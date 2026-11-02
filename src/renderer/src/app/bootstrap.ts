@@ -19,7 +19,7 @@ import {
   preparedRemoved,
   receivePrepared,
 } from '@renderer/features/session/new-session/prepared'
-import { useAgentsStore } from '@renderer/stores/agents'
+import { hostAgentChanged, hostAgentRemoved, useAgentsStore } from '@renderer/stores/agents'
 import { artifactsChanged } from '@renderer/stores/artifacts'
 import { useConnectionStore } from '@renderer/stores/connection'
 import {
@@ -88,19 +88,21 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
     case 'git.pr':
       receiveCurrentPr(event.projectPath, event.pr)
       return
+    case 'agent.status':
+      if (hostId === null) useAgentsStore.getState().setOne(event.status)
+      else hostAgentChanged(hostId, event.status)
+      return
+    case 'agent.removed':
+      if (hostId === null) useAgentsStore.getState().remove(event.agentId)
+      else hostAgentRemoved(hostId, event.agentId)
+      return
+    case 'agent.options':
+      receiveAgentOptions(event.options, hostId)
+      return
   }
-  // The rest is this computer's alone: its agents, usage, artifacts and routines.
+  // The rest is this computer's alone: its environment, usage, artifacts and routines.
   if (hostId !== null) return
   switch (event.type) {
-    case 'agent.status':
-      useAgentsStore.getState().setOne(event.status)
-      break
-    case 'agent.removed':
-      useAgentsStore.getState().remove(event.agentId)
-      break
-    case 'agent.options':
-      receiveAgentOptions(event.options)
-      break
     case 'environment.changed':
       useAgentsStore.setState({ environment: event.info })
       break

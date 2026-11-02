@@ -2,9 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentStatus, EnvironmentInfo } from '@shared/agent-host'
 
 const request = vi.fn()
-vi.stubGlobal('window', { kettu: { agents: { request } } })
+const hostRequest = vi.fn()
+vi.stubGlobal('window', { kettu: { agents: { request }, hosts: { request: hostRequest } } })
 
-const { hasProgram, useAgentsStore } = await import('./agents')
+const {
+  agentName,
+  agentsOn,
+  forgetHostAgents,
+  hasProgram,
+  hostAgentChanged,
+  hostAgentRemoved,
+  readHostAgents,
+  useAgentsStore,
+} = await import('./agents')
 
 const info = (overrides: Partial<EnvironmentInfo>): EnvironmentInfo => ({
   source: 'pending',
@@ -144,5 +154,29 @@ describe('agents store', () => {
     ).toBe(true)
     expect(hasProgram(status({ cli: cli(null) }))).toBe(false)
     expect(hasProgram(status({}))).toBe(false)
+  })
+
+  it("keeps another host's agents apart from this computer's, and forgets them with the host", async () => {
+    const devBox = 'a'.repeat(32)
+    const status = (id: string, name: string) => ({ id, name }) as AgentStatus
+    useAgentsStore.setState({ byId: {}, order: [], hosts: {} })
+    useAgentsStore.getState().setAll([status('codex', 'Codex')])
+    hostRequest.mockResolvedValue([status('opencode', 'OpenCode'), status('claude-code', 'Claude')])
+    await readHostAgents(devBox)
+    expect(hostRequest).toHaveBeenCalledWith(devBox, 'agents.list', undefined)
+    const state = () => useAgentsStore.getState()
+    expect(agentsOn(state(), null).order).toEqual(['codex'])
+    expect(agentsOn(state(), devBox).order).toEqual(['claude-code', 'opencode'])
+    expect(agentName('claude-code', devBox)).toBe('Claude')
+    expect(agentName('claude-code')).toBe('Claude Code')
+
+    hostAgentChanged(devBox, status('claude-code~work', 'Work'))
+    hostAgentRemoved(devBox, 'opencode')
+    expect(agentsOn(state(), devBox).order).toEqual(['claude-code', 'claude-code~work'])
+    expect(agentsOn(state(), null).order).toEqual(['codex'])
+
+    forgetHostAgents(devBox)
+    expect(agentsOn(state(), devBox)).toEqual({ byId: {}, order: [] })
+    expect(state().hosts).toEqual({})
   })
 })
