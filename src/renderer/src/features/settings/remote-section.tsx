@@ -1,5 +1,5 @@
 import { useState, type KeyboardEvent, type ReactNode } from 'react'
-import { CircleAlertIcon, ClockIcon, PlusIcon, SmartphoneIcon } from 'lucide-react'
+import { CircleAlertIcon, ClockIcon, PlusIcon, ScanQrCodeIcon, SmartphoneIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { PairedDevice } from '@shared/remote/device'
 import type { RemoteStatus } from '@shared/remote/status'
@@ -31,14 +31,15 @@ import { errorMessage } from '@renderer/lib/host'
 import { useHostContext, useHostHas } from '@renderer/lib/host-features'
 import { isWeb } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
+import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { openSettingsItem } from '@renderer/stores/view'
 import { useWebHostStore } from '@renderer/stores/web-host'
-import { CONFIRM, ControlError, ROW_BUTTON, SettingSwitch } from './controls'
+import { CONFIRM, ControlError, ROW_BUTTON, ROW_FIELD, SettingSwitch } from './controls'
 import { PairDialog } from './remote-pairing'
 import { DeviceIcon, DeviceTile, OnlineDot } from './remote-parts'
-import { daysToRemoval, daysUnseen, deviceLine, focusDirectPort, lastSeen } from './remote-text'
-import { GroupNote, ItemRow } from './rows'
+import { daysToRemoval, daysUnseen, focusDirectPort, kindLabel, lastSeen } from './remote-text'
+import { GroupNote, ItemLine, ItemRow, PageHeader } from './rows'
 import { useApply } from './use-apply'
 
 /** The page's title and line, with remote access's switch at their end. */
@@ -58,17 +59,20 @@ export function RemoteHeader({ id }: { id: string }) {
     else apply({ remote: { enabled: on } })
   }
   return (
-    <header className="flex items-center gap-3.5 pb-7">
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <h2 id={id} className="font-display text-title font-bold text-balance">
-          {t('sections.remote')}
-        </h2>
-        <p className="text-small text-pretty text-tertiary">{t('pages.remote', onHost)}</p>
+    <>
+      <PageHeader id={id} title={t('sections.remote')}>
+        {t('pages.remote', onHost)}
+      </PageHeader>
+      <div className="mt-4 flex items-center gap-4 rounded-xl bg-subtle px-4.5 py-3.5">
+        <div className="min-w-0 flex-1">
+          <div className="text-label leading-tight font-semibold">{t('remote.switch')}</div>
+          <RemoteStatusLine on={enabled} />
+        </div>
+        <ControlError error={error} />
+        {switchable !== false && (
+          <SettingSwitch label={t('remote.switch')} checked={enabled} onChange={change} />
+        )}
       </div>
-      <ControlError error={error} />
-      {switchable !== false && (
-        <SettingSwitch label={t('remote.switch')} checked={enabled} onChange={change} />
-      )}
       <AlertDialog open={asking} onOpenChange={setAsking}>
         <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>
@@ -91,7 +95,7 @@ export function RemoteHeader({ id }: { id: string }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </header>
+    </>
   )
 }
 
@@ -113,13 +117,27 @@ export function ThisBrowserBadge({
   )
 }
 
-/** The first line of the page: whether remote access runs, and the devices online. */
+/** Under the status card's title: whether remote access runs, and the devices online. */
+function RemoteStatusLine({ on }: { on: boolean }) {
+  const { useRemoteStore } = useHostScope()
+  const { t } = useTranslation('settings')
+  const status = useRemoteStore((s) => s.status)
+  if (on) return <RemoteStatusRow status={status} />
+  return (
+    <StatusLine>
+      <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-border-strong" />
+      {t('remote.status.offLine')}
+    </StatusLine>
+  )
+}
+
+/** The status line while remote access is on: whether it runs, and the devices online. */
 export function RemoteStatusRow({ status }: { status: RemoteStatus | null }) {
   const { t } = useTranslation('settings')
   if (!status || status.state === 'starting' || status.state === 'off') {
     return (
       <StatusLine>
-        <Spinner className="size-3.5 text-icon" />
+        <Spinner className="size-3" />
         {t('remote.status.starting')}
       </StatusLine>
     )
@@ -127,7 +145,7 @@ export function RemoteStatusRow({ status }: { status: RemoteStatus | null }) {
   if (status.state === 'failed') {
     return (
       <StatusLine hint={t('remote.status.failedHint')}>
-        <CircleAlertIcon className="size-4 shrink-0 text-danger" />
+        <CircleAlertIcon className="size-3.5 shrink-0 text-danger" />
         {t('remote.status.failed')}
       </StatusLine>
     )
@@ -139,7 +157,7 @@ export function RemoteStatusRow({ status }: { status: RemoteStatus | null }) {
         hint={t(`remote.status.cannotListenHint.${direct.reason}`)}
         actions={<RetryDirect />}
       >
-        <CircleAlertIcon className="size-4 shrink-0 text-danger" />
+        <CircleAlertIcon className="size-3.5 shrink-0 text-danger" />
         {t('remote.status.cannotListen', { port: direct.port })}
       </StatusLine>
     )
@@ -203,12 +221,10 @@ function StatusLine({
   children: ReactNode
 }) {
   return (
-    <div className="flex min-h-13 items-center gap-6 py-2.5">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 text-ui font-medium">{children}</div>
-        {hint && <p className="mt-0.5 text-xs leading-4 text-pretty text-secondary">{hint}</p>}
-      </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+    <div className="mt-1.25 flex flex-col gap-2">
+      <div className="flex items-center gap-1.5 text-hint text-secondary">{children}</div>
+      {hint && <p className="text-hint text-pretty text-tertiary">{hint}</p>}
+      {actions && <div className="flex items-center gap-2">{actions}</div>}
     </div>
   )
 }
@@ -248,7 +264,7 @@ export function HostNameField({ label }: { label: string }) {
         maxLength={256}
         spellCheck={false}
         autoComplete="off"
-        className="h-7 w-50 text-ui md:text-ui"
+        className={cn(ROW_FIELD, 'w-55 md:text-lede')}
         onFocus={() => setDraft(shown)}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commit}
@@ -268,7 +284,7 @@ export function DeviceRow({ device, online }: { device: PairedDevice; online: bo
       item={device.id}
       label={device.name}
       onOpen={() => openSettingsItem('remote', device.id)}
-      tile={<DeviceTile icon={<DeviceIcon device={device} className="size-4" />} />}
+      tile={<DeviceTile icon={<DeviceIcon device={device} className="size-4.25" />} />}
       name={
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate">{device.name}</span>
@@ -277,44 +293,38 @@ export function DeviceRow({ device, online }: { device: PairedDevice; online: bo
       }
       right={
         online ? (
-          <span className="flex items-center gap-1.5 text-xs text-tertiary">
+          <span className="flex items-center gap-1.5 text-hint whitespace-nowrap text-secondary">
             <OnlineDot />
             {t('remote.devices.online')}
           </span>
         ) : removal !== null ? (
-          <span className="flex items-center gap-1.25 text-xs text-warning">
+          <span className="flex items-center gap-1.25 text-hint whitespace-nowrap text-warning">
             <ClockIcon className="size-3.5" />
             {t('remote.devices.removedIn', { count: removal })}
           </span>
         ) : (
-          <span className="text-xs text-tertiary">{lastSeen(t, device, now)}</span>
+          <span className="flex items-center gap-1.5 text-hint whitespace-nowrap text-secondary">
+            <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-border-strong" />
+            {lastSeen(t, device, now)}
+          </span>
         )
       }
     >
-      <span className="truncate text-command leading-4.5 text-secondary">
-        {deviceLine(t, device)}
-      </span>
+      <ItemLine>{kindLabel(t, device.kind)}</ItemLine>
     </ItemRow>
   )
 }
 
-/** The row at the list's end that opens Add device; disabled while remote access is off. */
-export function AddDeviceRow({ disabled = false }: { disabled?: boolean }) {
+/** Add device at the Devices heading's end; disabled while remote access is off. */
+export function AddDeviceButton({ disabled = false }: { disabled?: boolean }) {
   const { t } = useTranslation('settings')
   const [open, setOpen] = useState(false)
   return (
     <>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen(true)}
-        className="-mx-3 flex w-[calc(100%+1.5rem)] items-center gap-3 rounded-[inherit] py-3 pr-3 pl-4 text-left text-ui text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-visible:shadow-[inset_0_0_0_2px_var(--focus)] disabled:pointer-events-none disabled:opacity-50"
-      >
-        <span className="grid size-7.5 shrink-0 place-items-center rounded-lg border border-dashed border-strong">
-          <PlusIcon className="size-4" />
-        </span>
+      <Button className={ROW_BUTTON} disabled={disabled} onClick={() => setOpen(true)}>
+        <ScanQrCodeIcon data-icon="inline-start" />
         {t('remote.devices.add')}
-      </button>
+      </Button>
       <PairDialog open={open} onOpenChange={setOpen} />
     </>
   )
@@ -373,7 +383,7 @@ export function StaleNote() {
     .filter((device) => !status?.online.includes(device.id))
     .map((device) => ({ device, left: daysToRemoval(device, now) }))
     .filter((entry): entry is { device: PairedDevice; left: number } => entry.left !== null)
-  if (stale.length === 0) return null
+  if (stale.length === 0) return <GroupNote>{t('remote.devices.removalNote')}</GroupNote>
   if (stale.length > 1) {
     return <GroupNote>{t('remote.devices.staleMany', { count: stale.length })}</GroupNote>
   }
@@ -434,7 +444,6 @@ export function ResetRemote() {
       <Button
         className={ROW_BUTTON}
         variant="destructive-outline"
-
         disabled={!on || busy}
         onClick={() => setOpen(true)}
       >
@@ -454,7 +463,7 @@ export function ResetRemote() {
               {hostId !== null && ` ${t('remote.other.resetBody', onHost)}`}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {error && <p className="text-xs text-danger">{error}</p>}
+          {error && <p className="text-hint text-danger">{error}</p>}
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
             <AlertDialogAction variant="destructive" disabled={busy} onClick={() => void reset()}>

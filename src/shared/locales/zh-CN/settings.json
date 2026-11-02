@@ -697,8 +697,8 @@
     "about": "Kettu 的版本、更新和链接。",
     "archived": "从侧边栏移走但仍保留。恢复后会回到原来的项目里。",
     "sharing": "通过你自己的 Cloudflare 账号，把 artifact 发布为任何人都能打开的链接。",
-    "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑上的会话，东西都留在这台电脑上。",
-    "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 上的会话，东西都留在 {{host}} 上。",
+    "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑的会话，只走你自己的网络。",
+    "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 的会话，只走你自己的网络。",
     "browser": "侧边面板里的浏览器为所有会话保留同一个配置，网站只需登录一次。",
     "mcp": "Agent 通过这些 MCP 服务器使用工具：Kettu 自带的，以及各 Agent 自己配置的。",
     "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。在这里安装和更新；账号在 Agent 里。",
@@ -939,15 +939,14 @@
       "plainTextKey": "这台电脑的密钥存在只有当前用户能读的文件里，因为系统没有钥匙串。",
       "plainTextKey_web": "{{host}} 的密钥存在只有它的用户能读的文件里，因为系统没有钥匙串。",
       "serviceKey": "这台电脑的密钥存在只有当前用户能读的文件里，因为开机就启动的服务不能指望钥匙串已经解锁。",
-      "serviceKey_web": "{{host}} 的密钥存在只有它的用户能读的文件里，因为开机就启动的服务不能指望钥匙串已经解锁。"
+      "serviceKey_web": "{{host}} 的密钥存在只有它的用户能读的文件里，因为开机就启动的服务不能指望钥匙串已经解锁。",
+      "offLine": "已关闭"
     },
     "hostName": {
       "name": "这台电脑的名字",
       "name_web": "主机的名字",
-      "description": "设备上显示的名字，默认是系统里的电脑名。"
+      "description": "你的设备上显示的这台电脑的名字。"
     },
-    "background": "远程访问开着时，关掉窗口 Kettu 也在后台运行，设备才连得上；通用里的“在后台运行”这时关不掉。",
-    "background_web": "远程访问开着时，{{host}} 上的 Kettu 关掉窗口也继续运行，设备才连得上。",
     "devices": {
       "group": "设备",
       "emptyTitle": "还没有设备",
@@ -961,17 +960,17 @@
       "neverSeen": "还没连接过",
       "removedIn_other": "{{count}} 天后自动移除",
       "staleOne_other": "90 天没连过的设备会自动移除。“{{name}}”已经 {{days}} 天没连了，{{count}} 天内连上一次就会留下。",
-      "staleMany": "90 天没连过的设备会自动移除。有 {{count}} 台设备快满 90 天了，连上一次就会留下。"
+      "staleMany": "90 天没连过的设备会自动移除。有 {{count}} 台设备快满 90 天了，连上一次就会留下。",
+      "removalNote": "90 天没有连接的设备会被移除。"
     },
     "direct": {
       "group": "直连",
       "name": "直连",
-      "description": "没用 Kettu 中继，直连是设备唯一的路，所以随远程访问一起打开。",
-      "description_web": "没用 Kettu 中继，直连是设备连到 {{host}} 唯一的路，所以随远程访问一起打开。",
+      "description": "随远程访问一直开启。走的是普通 TCP，只转发 HTTPS 的隧道传不了。",
       "keywords": "直连 端口 地址 局域网 网络 VPN tailscale frp 转发 direct port address",
       "port": {
         "name": "端口",
-        "description": "第一次打开时随机选的，之后不变；做端口转发时，转发的就是它。",
+        "description": "第一次随机选定，之后保持不变。",
         "invalid": "端口要在 1024 到 65535 之间",
         "confirmTitle": "换成端口 {{port}}？",
         "confirmBody": "在线的设备会收到新端口；不在线的设备只认得旧端口，要重新添加才连得上。做了端口转发的话，也要跟着改。",
@@ -979,28 +978,27 @@
       },
       "found": {
         "name": "设备会试的地址",
-        "description": "这台电脑找到的私有地址和 VPN 地址，网络变了自动更新。",
-        "description_web": "{{host}} 找到的私有地址和 VPN 地址，网络变了自动更新。",
+        "description": "在这台电脑上找到的内网和 VPN 地址。",
+        "description_web": "在 {{host}} 上找到的内网和 VPN 地址。",
         "none": "还没找到私有地址或 VPN 地址。",
         "notListening": "端口监听上之后才有。"
       },
       "own": {
         "name": "自己的地址",
-        "description": "比如 frp 转发出来的公网地址，随配对码发给设备，和上面的一起试。",
+        "description": "比如 frp 转发到这里的公网地址。",
         "label": "添加自己的地址",
-        "placeholder": "主机名或 IP:端口",
+        "placeholder": "主机或 IP:端口",
         "add": "添加",
         "remove": "移除 {{address}}",
         "invalid": "<strong>格式不对：</strong>只填主机名或 IP 加端口，比如 <code>frp.example.com:60021</code>，不带 https://。",
         "repeat": "这个地址已经在列表里了。",
         "full_other": "最多加 {{count}} 个地址。"
-      },
-      "note": "直连是裸 TCP，只转发 HTTPS 的隧道（比如 Cloudflare Tunnel）接不上。"
+      }
     },
     "terminal": {
       "name": "允许终端",
-      "description": "设备能在这台电脑上运行任何命令，超出 Agent 要授权的范围。关掉时断开设备上的终端，终端本身继续运行。",
-      "description_web": "设备能在 {{host}} 上运行任何命令，超出 Agent 要授权的范围。关掉时断开设备上的终端，终端本身继续在 {{host}} 上运行。",
+      "description": "设备可以打开终端，在这台电脑上运行任何命令。",
+      "description_web": "设备可以打开终端，在 {{host}} 上运行任何命令。",
       "keywords": "终端 命令 命令行 terminal shell"
     },
     "kinds": {
@@ -1010,8 +1008,8 @@
     },
     "reset": {
       "name": "重置远程访问",
-      "description": "移除所有设备，换一个新的身份；之后每台设备都要重新添加。",
-      "description_web": "移除所有设备，给 {{host}} 换一个新的身份；之后每台设备都要重新添加。",
+      "description": "移除所有设备，并给这台电脑一个新身份。",
+      "description_web": "移除所有设备，并给 {{host}} 一个新身份。",
       "keywords": "身份 密钥 忘记 设备 reset identity",
       "button": "重置…",
       "title": "重置远程访问？",
@@ -1150,6 +1148,10 @@
       "offBody": "所有设备马上断开，这台电脑也一样。要等 {{host}} 上再打开远程访问才会重新连上。",
       "resetBody": "这台电脑也是其中之一，之后要重新添加到 {{host}}。",
       "portBody": "这台电脑也用旧端口连 {{host}}，可能会断开；没再连上的话，到 设置 › 主机 里 {{host}} 的页上改地址。"
+    },
+    "groups": {
+      "permissions": "权限",
+      "danger": "危险区"
     }
   },
   "usage": {

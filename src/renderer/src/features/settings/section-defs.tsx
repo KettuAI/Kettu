@@ -70,13 +70,12 @@ import { HostRow, HostsHeader, HostsLoading, HostsNote, SelfRow } from './hosts-
 import { DevicePage } from './remote-device'
 import { DirectPortField, FoundAddresses, OwnAddresses } from './remote-direct'
 import {
-  AddDeviceRow,
+  AddDeviceButton,
   DeviceRow,
   HostNameField,
   NoDevices,
   PlainKeyNote,
   RemoteHeader,
-  RemoteStatusRow,
   ResetRemote,
   StaleNote,
   TerminalSwitch,
@@ -1130,7 +1129,6 @@ export function useRemoteSection(): SectionDef {
   const en = english()
   const enabled = useSettingsStore((s) => s.settings.remote.enabled)
   const status = useRemoteStore((s) => s.status)
-  const switchable = useHostHas('remoteSwitch')
   const resettable = useHostHas('remoteReset')
   const switchRow: RowDef = {
     id: 'remote',
@@ -1153,6 +1151,7 @@ export function useRemoteSection(): SectionDef {
   const online = status?.online ?? []
   const list = group('devices', t('remote.devices.group'), {
     count: devices.length > 0 ? devices.length : undefined,
+    actions: devices.length > 0 && <AddDeviceButton disabled={!enabled} />,
     note: enabled ? (
       <StaleNote />
     ) : (
@@ -1179,8 +1178,9 @@ export function useRemoteSection(): SectionDef {
       english: en('remote.devices.add'),
       keywords: t('remote.keywords'),
       group: list,
-      layout: 'custom',
-      render: () => (devices.length === 0 ? <NoDevices /> : <AddDeviceRow disabled={!enabled} />),
+      layout: devices.length === 0 ? 'custom' : undefined,
+      searchOnly: devices.length > 0,
+      render: () => (devices.length === 0 ? <NoDevices /> : null),
     },
   ]
   // Off, the devices are still listed to rename and remove; only adding one waits.
@@ -1188,30 +1188,11 @@ export function useRemoteSection(): SectionDef {
     return { ...base, rows: devices.length > 0 ? [switchRow, ...deviceRows] : [switchRow] }
   const state = group('status', t('remote.switch'), {
     unlabeled: true,
-    note: (
-      <>
-        <PlainKeyNote />
-        {/* A host that always serves has no window to close. */}
-        {switchable !== false && <GroupNote>{t('remote.background', onHost)}</GroupNote>}
-      </>
-    ),
+    note: <PlainKeyNote />,
   })
-  const direct = group('direct', t('remote.direct.group'), {
-    note: <GroupNote>{t('remote.direct.note')}</GroupNote>,
-  })
+  const direct = group('direct', t('remote.direct.group'))
   const rows: RowDef[] = [
     switchRow,
-    {
-      id: 'status',
-      name: t('remote.switch'),
-      group: state,
-      layout: 'custom',
-      render: () => (
-        <div className="px-1">
-          <RemoteStatusRow status={status} />
-        </div>
-      ),
-    },
     {
       id: 'host-name',
       name: t('remote.hostName.name', onHost),
@@ -1225,7 +1206,7 @@ export function useRemoteSection(): SectionDef {
       id: 'direct',
       name: t('remote.direct.name'),
       english: en('remote.direct.name'),
-      description: t('remote.direct.description', onHost),
+      description: t('remote.direct.description'),
       keywords: t('remote.direct.keywords'),
       group: direct,
       render: () => (
@@ -1267,7 +1248,7 @@ export function useRemoteSection(): SectionDef {
       english: en('remote.terminal.name'),
       description: t('remote.terminal.description', onHost),
       keywords: t('remote.terminal.keywords'),
-      group: group('terminal', t('remote.terminal.name'), { unlabeled: true }),
+      group: group('permissions', t('remote.groups.permissions')),
       render: () => <TerminalSwitch label={t('remote.terminal.name')} />,
     },
   ]
@@ -1278,7 +1259,7 @@ export function useRemoteSection(): SectionDef {
       english: en('remote.reset.name'),
       description: t('remote.reset.description', onHost),
       keywords: t('remote.reset.keywords'),
-      group: group('reset', t('remote.reset.name'), { unlabeled: true }),
+      group: group('danger', t('remote.groups.danger')),
       render: () => <ResetRemote />,
     })
   }

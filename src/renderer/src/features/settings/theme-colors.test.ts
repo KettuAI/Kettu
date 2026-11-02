@@ -17,8 +17,9 @@ import {
 } from './theme-colors'
 
 // What tokens.css holds that a theme never changes: the white page under an SVG and a QR code's
-// ink on it, the shadows, the brand marks and the artifact kinds' colors.
-const KEPT_OUT = /^(?:canvas|canvas-ink|highlight|elevation-.+|brand-.+|kind-.+)$/
+// ink on it, the shadows, the brand marks, the artifact kinds' colors, the added agents' dots and
+// the system notification's tray in Settings, which follows the system rather than the theme.
+const KEPT_OUT = /^(?:canvas|canvas-ink|highlight|elevation-.+|brand-.+|kind-.+|agent-.+|bg-tray)$/
 
 const nord: Theme = {
   name: 'Nord',

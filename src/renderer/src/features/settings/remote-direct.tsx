@@ -23,9 +23,10 @@ import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { useHostContext } from '@renderer/lib/host-features'
 import { isWeb } from '@renderer/lib/platform'
+import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useOtherHost } from '@renderer/stores/hosts'
-import { CONFIRM, ControlError, ROW_BUTTON } from './controls'
+import { CONFIRM, ControlError, ROW_BUTTON, ROW_FIELD } from './controls'
 import { DIRECT_PORT_FIELD } from './remote-text'
 import { useApply } from './use-apply'
 
@@ -77,7 +78,7 @@ export function DirectPortField({ label }: { label: string }) {
         maxLength={5}
         spellCheck={false}
         autoComplete="off"
-        className="h-7 w-20 font-mono text-code md:text-code"
+        className={cn(ROW_FIELD, 'w-28 md:text-lede')}
         onFocus={() => setDraft((current) => current ?? shown)}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commit}
@@ -108,12 +109,16 @@ export function DirectPortField({ label }: { label: string }) {
 }
 
 function AddressList({ children }: { children: ReactNode }) {
-  return <ul className="mt-2 flex flex-col">{children}</ul>
+  return (
+    <ul className="mt-3.5 flex flex-col py-1 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
+      {children}
+    </ul>
+  )
 }
 
 function AddressLine({ address, children }: { address: DirectAddress; children?: ReactNode }) {
   return (
-    <li className="flex min-h-6 items-center gap-3">
+    <li className="flex min-h-8 items-center gap-3">
       <span data-selectable="" className="min-w-0 flex-1 truncate font-mono text-code">
         {addressText(address)}
       </span>
@@ -143,7 +148,7 @@ export function FoundAddresses({ text }: { text: ReactNode }) {
           ))}
         </AddressList>
       ) : (
-        <p className="mt-2 text-xs text-tertiary">
+        <p className="mt-2 text-hint text-tertiary">
           {direct?.state === 'listening'
             ? t('remote.direct.found.none')
             : t('remote.direct.found.notListening')}
@@ -179,9 +184,38 @@ export function OwnAddresses({ text }: { text: ReactNode }) {
         direct: { addresses: own.filter((kept) => addressKey(kept) !== addressKey(address)) },
       },
     })
+  const form = full ? (
+    <p className="text-hint text-tertiary">
+      {t('remote.direct.own.full', { count: MAX_OWN_ADDRESSES })}
+    </p>
+  ) : (
+    <form className="flex shrink-0 items-center gap-2" onSubmit={add}>
+      <Input
+        value={draft}
+        aria-label={t('remote.direct.own.label')}
+        aria-invalid={problem !== null || undefined}
+        aria-describedby={problem ? errorId : undefined}
+        placeholder={t('remote.direct.own.placeholder')}
+        spellCheck={false}
+        autoComplete="off"
+        maxLength={300}
+        className={cn(ROW_FIELD, 'w-50 md:text-lede')}
+        onChange={(event) => {
+          setDraft(event.target.value)
+          setProblem(null)
+        }}
+      />
+      <Button className={ROW_BUTTON} type="submit" variant="outline" disabled={draft.trim() === ''}>
+        {t('remote.direct.own.add')}
+      </Button>
+    </form>
+  )
   return (
     <>
-      {text}
+      <div className="flex items-center gap-x-7 gap-y-3">
+        <div className="min-w-0 flex-[1_1_280px]">{text}</div>
+        {form}
+      </div>
       {own.length > 0 && (
         <AddressList>
           {own.map((address) => {
@@ -201,39 +235,8 @@ export function OwnAddresses({ text }: { text: ReactNode }) {
           })}
         </AddressList>
       )}
-      {full ? (
-        <p className="mt-2 text-xs text-tertiary">
-          {t('remote.direct.own.full', { count: MAX_OWN_ADDRESSES })}
-        </p>
-      ) : (
-        <form className="mt-1.5 flex items-center gap-2" onSubmit={add}>
-          <Input
-            value={draft}
-            aria-label={t('remote.direct.own.label')}
-            aria-invalid={problem !== null || undefined}
-            aria-describedby={problem ? errorId : undefined}
-            placeholder={t('remote.direct.own.placeholder')}
-            spellCheck={false}
-            autoComplete="off"
-            maxLength={300}
-            className="h-7 font-mono text-code md:text-code"
-            onChange={(event) => {
-              setDraft(event.target.value)
-              setProblem(null)
-            }}
-          />
-          <Button
-            className={ROW_BUTTON}
-            type="submit"
-            variant="outline"
-            disabled={draft.trim() === ''}
-          >
-            {t('remote.direct.own.add')}
-          </Button>
-        </form>
-      )}
       {problem && (
-        <p id={errorId} className="mt-1.5 flex items-start gap-1.25 text-xs text-secondary">
+        <p id={errorId} className="mt-2 flex items-start gap-1.25 text-hint text-secondary">
           <CircleAlertIcon className="mt-px size-3.5 shrink-0 text-danger" />
           <span>
             {problem === 'repeat' ? (
@@ -251,7 +254,7 @@ export function OwnAddresses({ text }: { text: ReactNode }) {
           </span>
         </p>
       )}
-      {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
+      {error && <p className="mt-2 text-hint text-danger">{error}</p>}
     </>
   )
 }

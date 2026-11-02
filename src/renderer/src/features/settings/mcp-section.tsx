@@ -40,7 +40,7 @@ function ServerTile({ size, glyph }: { size: number; glyph: number }) {
     <span
       aria-hidden
       style={{ width: size, height: size }}
-      className="grid shrink-0 place-items-center rounded-segments bg-(image:--kettu-tile) text-(--on-kettu-tile)"
+      className="grid shrink-0 place-items-center rounded-segments bg-(image:--brand-kettu-tile) text-(--brand-tile-glyph)"
     >
       <PlugIcon style={{ width: glyph, height: glyph }} />
     </span>

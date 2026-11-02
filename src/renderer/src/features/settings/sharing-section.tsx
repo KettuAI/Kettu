@@ -121,7 +121,7 @@ export function SharingAccount() {
     <div className="flex items-center gap-3.5 py-4">
       <span
         aria-hidden
-        className="grid size-8.5 shrink-0 place-items-center rounded-segments bg-(--brand-cloudflare) text-(--on-kettu-tile)"
+        className="grid size-8.5 shrink-0 place-items-center rounded-segments bg-(--brand-cloudflare) text-(--brand-tile-glyph)"
       >
         <GlobeIcon className="size-4.25" />
       </span>
