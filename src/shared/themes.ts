@@ -94,6 +94,8 @@ export const THEME_TOKENS = [
   'diff-add-word',
   'diff-del',
   'diff-del-word',
+  'code-ok',
+  'code-bad',
   'terminal-background',
   'terminal-foreground',
   'terminal-cursor',

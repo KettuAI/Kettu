@@ -79,6 +79,15 @@
   --mark: oklch(0.88 0.14 92 / 55%);
   /* The squares behind a transparent picture, so a dark or light one shows on either theme. */
   --checker: rgb(20 26 34 / 5%);
+  /* Drawn over a picture or a clip, the same in both themes: a clip's play button and its glyph,
+     the white of its time and bar, the shade under them, a grid's +N and a preview's Open pill. */
+  --media-control: rgb(255 255 255 / 92%);
+  --media-control-ink: #10161e;
+  --media-foreground: #ffffff;
+  --media-track: rgb(255 255 255 / 30%);
+  --media-shade: rgb(10 14 20 / 55%);
+  --media-badge: rgb(16 22 30 / 65%);
+  --media-overlay: rgb(16 22 30 / 72%);
   /* A toast, dark in both themes; the dark blocks leave it to this one. */
   --toast: #161c24;
   --toast-foreground: #e9edf2;
@@ -100,6 +109,9 @@
   --elevation-raised: 0 1px 1px rgb(30 45 70 / 6%);
   --elevation-dialog: 0 28px 70px -20px rgb(30 45 70 / 35%), 0 8px 20px -8px rgb(20 26 34 / 12%);
   --elevation-primary: 0 1px 2px rgb(16 22 30 / 18%);
+  /* A picture's faint drop under its ring, and a clip's play button over its picture. */
+  --elevation-media: 0 1px 2px rgb(16 22 30 / 5%);
+  --elevation-media-control: 0 4px 14px rgb(0 0 0 / 25%);
   /* The top edge of a raised surface catching the light; only the primary button has one. */
   --highlight: 0 0 #0000;
 
@@ -140,6 +152,10 @@
   --diff-add-word: rgb(26 127 75 / 22%);
   --diff-del: rgb(207 34 46 / 7%);
   --diff-del-word: rgb(207 34 46 / 20%);
+  /* Green and red inside code: a diff's signs and counts, a command's exit code, a shell's
+     ANSI colors. */
+  --code-ok: #1a7f4b;
+  --code-bad: #cf222e;
 
   /* Agent marks: with the Kettu icon, the only brand colors in the interface. */
   --brand-claude: #d97757;
@@ -261,6 +277,13 @@
     --scrim: rgb(0 0 0 / 50%);
     --mark: oklch(0.8 0.13 88 / 32%);
     --checker: rgb(230 236 245 / 7%);
+    --media-control: rgb(255 255 255 / 92%);
+    --media-control-ink: #10161e;
+    --media-foreground: #ffffff;
+    --media-track: rgb(255 255 255 / 30%);
+    --media-shade: rgb(10 14 20 / 55%);
+    --media-badge: rgb(16 22 30 / 65%);
+    --media-overlay: rgb(16 22 30 / 72%);
 
     --elevation-queue: 0 1px 6px rgb(0 0 0 / 30%);
     --elevation-popover: 0 16px 40px -12px rgb(0 0 0 / 65%);
@@ -273,6 +296,8 @@
     --elevation-raised: 0 1px 2px rgb(0 0 0 / 40%);
     --elevation-dialog: 0 28px 70px -20px rgb(0 0 0 / 70%);
     --elevation-primary: 0 1px 2px rgb(0 0 0 / 30%);
+    --elevation-media: 0 1px 2px rgb(16 22 30 / 5%);
+    --elevation-media-control: 0 4px 14px rgb(0 0 0 / 25%);
     --highlight: 0 0 #0000;
 
     /* Inverted: a near-white button with dark text. */
@@ -303,6 +328,10 @@
     --diff-add-word: rgb(63 185 120 / 28%);
     --diff-del: rgb(248 81 73 / 10%);
     --diff-del-word: rgb(248 81 73 / 28%);
+    /* Green and red inside code: a diff's signs and counts, a command's exit code, a shell's
+       ANSI colors. */
+    --code-ok: #5cc08e;
+    --code-bad: #ff7b72;
 
     --brand-opencode-frame: #ffffff;
     --brand-opencode-fill: #5a5858;
@@ -400,6 +429,13 @@
   --scrim: rgb(0 0 0 / 50%);
   --mark: oklch(0.8 0.13 88 / 32%);
   --checker: rgb(230 236 245 / 7%);
+  --media-control: rgb(255 255 255 / 92%);
+  --media-control-ink: #10161e;
+  --media-foreground: #ffffff;
+  --media-track: rgb(255 255 255 / 30%);
+  --media-shade: rgb(10 14 20 / 55%);
+  --media-badge: rgb(16 22 30 / 65%);
+  --media-overlay: rgb(16 22 30 / 72%);
 
   --elevation-queue: 0 1px 6px rgb(0 0 0 / 30%);
   --elevation-popover: 0 16px 40px -12px rgb(0 0 0 / 65%);
@@ -412,6 +448,8 @@
   --elevation-raised: 0 1px 2px rgb(0 0 0 / 40%);
   --elevation-dialog: 0 28px 70px -20px rgb(0 0 0 / 70%);
   --elevation-primary: 0 1px 2px rgb(0 0 0 / 30%);
+  --elevation-media: 0 1px 2px rgb(16 22 30 / 5%);
+  --elevation-media-control: 0 4px 14px rgb(0 0 0 / 25%);
   --highlight: 0 0 #0000;
 
   /* Inverted: a near-white button with dark text. */
@@ -442,6 +480,10 @@
   --diff-add-word: rgb(63 185 120 / 28%);
   --diff-del: rgb(248 81 73 / 10%);
   --diff-del-word: rgb(248 81 73 / 28%);
+  /* Green and red inside code: a diff's signs and counts, a command's exit code, a shell's
+     ANSI colors. */
+  --code-ok: #5cc08e;
+  --code-bad: #ff7b72;
 
   --brand-opencode-frame: #ffffff;
   --brand-opencode-fill: #5a5858;

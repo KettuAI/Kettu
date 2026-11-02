@@ -1,14 +1,12 @@
-import { useContext, useMemo, useRef, useState } from 'react'
-import { BookOpenIcon, CodeIcon } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { DownloadIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import {
-  CodeBlock,
-  CodeBlockContainer,
-  CodeBlockCopyButton,
-  CodeBlockHeader,
-  StreamdownContext,
-  type CustomRendererProps,
-} from 'streamdown'
+import { CodeBlock } from 'streamdown'
+import { bytes } from '@renderer/lib/format'
+import { BlockAction, BlockFrame, BlockSpacer, PreviewSourceSwitch } from './block-frame'
+import { fenceFileName } from './code-meta'
+import { CodeFrame, type BlockProps } from './code-frame'
+import { downloadText } from './download'
 
 interface Picture {
   url: string
@@ -31,77 +29,71 @@ function pictureOf(code: string): Picture | null {
 }
 
 /**
- * An `svg` code block, shown as its picture once the block is complete. The picture is an
- * `<img>`, so none of its scripts run and nothing it references loads. While it streams, and when
- * it holds no `<svg>` or does not decode, it is an ordinary code block.
+ * An `svg` code block, shown as its picture on a checkerboard once the block is complete, so its
+ * transparent parts show. The picture is an `<img>`, so none of its scripts run and nothing it
+ * references loads. While it streams, and when it holds no `<svg>` or does not decode, it is an
+ * ordinary code block.
  */
-export function SvgBlock({ code, isIncomplete }: CustomRendererProps) {
+export function SvgBlock(props: BlockProps) {
+  const { code, language, meta, isIncomplete } = props
   const { t } = useTranslation('session')
-  const { lineNumbers } = useContext(StreamdownContext)
   const [source, setSource] = useState(false)
-  // Switching views mounts a new button, so the one that was pressed hands the focus to it.
-  const refocus = useRef(false)
   // The text that failed, so a block whose text changes gets another try.
   const [failed, setFailed] = useState<string | null>(null)
   const picture = useMemo(
     () => (isIncomplete || failed === code ? null : pictureOf(code)),
     [code, isIncomplete, failed],
   )
+  if (!picture) return <CodeFrame {...props} />
 
-  const toggle = picture && (
-    <button
-      type="button"
-      aria-label={source ? t('svg.showPreview') : t('svg.showSource')}
-      title={source ? t('svg.showPreview') : t('svg.showSource')}
-      ref={(button) => {
-        if (button && refocus.current) {
-          refocus.current = false
-          button.focus()
-        }
-      }}
-      onClick={() => {
-        refocus.current = true
-        setSource(!source)
-      }}
-    >
-      {source ? <BookOpenIcon aria-hidden /> : <CodeIcon aria-hidden />}
-    </button>
-  )
-
-  if (!picture || source) {
-    return (
-      <CodeBlock code={code} language="svg" isIncomplete={isIncomplete} lineNumbers={lineNumbers}>
-        {toggle}
-        <CodeBlockCopyButton code={code} />
-      </CodeBlock>
-    )
-  }
-  // The header's controls sit in the same wrapper Streamdown gives a code block's, so they share
-  // its styles in globals.css.
+  const file = fenceFileName(language, meta)
+  const name = file ?? picture.title
+  const size = bytes(new TextEncoder().encode(code).length)
   return (
-    <CodeBlockContainer language="svg">
-      <CodeBlockHeader language="svg" />
-      <div className="pointer-events-none absolute z-10 flex items-center">
-        <div
-          className="pointer-events-auto flex shrink-0 items-center gap-2"
-          data-streamdown="code-block-actions"
-        >
-          {toggle}
-          <CodeBlockCopyButton code={code} />
-        </div>
-      </div>
-      <div className="flex justify-center px-3.5 pb-3" data-streamdown="svg-preview">
-        {/* A margin of page around the picture, so a shape with round corners keeps them. */}
-        <div className="max-w-full rounded-md bg-canvas p-3">
+    <BlockFrame
+      header={
+        <>
+          <span className="block-frame-lang">svg</span>
+          <span className="block-frame-name" title={name ?? undefined}>
+            {name ? `${name} · ${size}` : size}
+          </span>
+          <BlockSpacer />
+          <PreviewSourceSwitch
+            source={source}
+            onChange={setSource}
+            labels={{
+              group: t('block.view'),
+              preview: t('block.preview'),
+              source: t('block.source'),
+            }}
+          />
+          <BlockAction
+            label={t('block.download')}
+            onClick={() => downloadText(code, downloadName(file ?? picture.title), 'image/svg+xml')}
+          >
+            <DownloadIcon />
+          </BlockAction>
+        </>
+      }
+    >
+      {source ? (
+        <CodeBlock code={code} language="svg" lineNumbers />
+      ) : (
+        <div className="block-frame-checker">
           <img
             src={picture.url}
             alt={picture.title ?? t('svg.alt')}
             decoding="async"
-            className="block h-auto max-w-full"
             onError={() => setFailed(code)}
           />
         </div>
-      </div>
-    </CodeBlockContainer>
+      )}
+    </BlockFrame>
   )
+}
+
+/** A file name for the saved picture: the fence's own, else its title, else a plain one. */
+function downloadName(name: string | null): string {
+  const base = (name ?? 'image').split(/[\\/]/).pop() || 'image'
+  return base.toLowerCase().endsWith('.svg') ? base : `${base.replace(/[^\w.-]+/g, '-')}.svg`
 }

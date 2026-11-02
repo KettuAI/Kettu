@@ -6,7 +6,7 @@ import { useCodeThemes } from './code-themes'
 import { diffsPool as pool } from './diff-pool'
 import type { DiffProps } from './index'
 
-function DiffImpl({ path, oldText, newText, className }: DiffProps) {
+function DiffImpl({ path, oldText, newText, className, framed = false }: DiffProps) {
   const dark = useDark()
   const theme = useCodeThemes()
   const files = useMemo(
@@ -22,13 +22,14 @@ function DiffImpl({ path, oldText, newText, className }: DiffProps) {
       themeType: dark ? ('dark' as const) : ('light' as const),
       diffStyle: 'unified' as const,
       overflow: 'wrap' as const,
-      diffIndicators: 'bars' as const,
-      hunkSeparators: 'line-info-basic' as const,
+      // A reply's block shows + and - signs and how many lines each fold hides.
+      diffIndicators: framed ? ('classic' as const) : ('bars' as const),
+      hunkSeparators: framed ? ('line-info' as const) : ('line-info-basic' as const),
       lineDiffType: 'word' as const,
       disableFileHeader: true,
       preferredHighlighter: 'shiki-js' as const,
     }),
-    [dark, theme],
+    [dark, theme, framed],
   )
   return (
     <WorkerPoolContext.Provider value={pool}>
