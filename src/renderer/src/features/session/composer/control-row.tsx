@@ -578,7 +578,7 @@ function SearchModels({
                       <ComboboxItem
                         value={key}
                         onClick={onClose}
-                        className="items-center pr-2 *:last:hidden"
+                        className="items-center pr-2 [&>.absolute]:hidden"
                       />
                     }
                   >
