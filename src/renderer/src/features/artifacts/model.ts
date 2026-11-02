@@ -6,6 +6,7 @@ import {
   type ArtifactSession,
   type ArtifactSummary,
 } from '@shared/artifacts'
+import type { AgentId } from '@shared/thread'
 import { basename } from '@renderer/lib/format'
 
 export type ArtifactGrouping = 'none' | 'project-session'
@@ -68,6 +69,10 @@ export interface ListFilter {
   kind: ArtifactKind | null
   /** A project's folder, or NO_PROJECT; null keeps every project. */
   project: string | null
+  /** The agent of the session it shows under; null keeps every artifact. */
+  agent?: AgentId | null
+  /** The agent of an artifact's session, null when it was imported or its session is gone. */
+  agentOf?: (sessionId: string) => AgentId | null
 }
 
 /** A group's heading; the page names it. */
@@ -111,18 +116,33 @@ export function foldForMatch(text: string): string {
 /** The artifacts the filter keeps: the title holds its text, of its kind, in its project. */
 export function filterArtifacts(
   list: readonly ArtifactSummary[],
-  { title, kind, project }: ListFilter,
+  { title, kind, project, agent = null, agentOf }: ListFilter,
 ): ArtifactSummary[] {
   const wanted = foldForMatch(title.trim())
   return list.filter(
     (artifact) =>
       (!wanted || foldForMatch(artifact.title).includes(wanted)) &&
       (!kind || artifactKind(artifact) === kind) &&
+      (agent === null || agentOf?.(artifact.sessionId) === agent) &&
       (project === null ||
         (project === NO_PROJECT
           ? artifact.scratch
           : !artifact.scratch && artifact.project === project)),
   )
+}
+
+/** The agents whose sessions made the artifacts, in the order given, for the agent filter. */
+export function agentsOf(
+  list: readonly ArtifactSummary[],
+  agentOf: (sessionId: string) => AgentId | null,
+  order: readonly AgentId[],
+): AgentId[] {
+  const found = new Set<AgentId>()
+  for (const artifact of list) {
+    const agent = agentOf(artifact.sessionId)
+    if (agent) found.add(agent)
+  }
+  return [...order.filter((id) => found.has(id)), ...[...found].filter((id) => !order.includes(id))]
 }
 
 /** The projects the artifacts are in, in the grouping's order, for the project filter. */

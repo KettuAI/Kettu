@@ -32,6 +32,10 @@ const SETTLE_MS = 160
 /** A press that moves less than this is a click. */
 const DRAG_SLOP = 3
 const LABEL_HEIGHT = 20
+/** The spacing of the ground's dots, in screen pixels. */
+const DOT_STEP = 20
+
+const mod = (value: number, step: number): number => (((value % step) + step) % step) - step
 const TITLE_ABOVE = 40
 
 /**
@@ -63,6 +67,7 @@ export const CanvasView = memo(function CanvasView({
   const { t } = useTranslation('artifacts')
   const stage = useRef<HTMLDivElement>(null)
   const layer = useRef<HTMLDivElement>(null)
+  const dots = useRef<HTMLDivElement>(null)
   const labels = useRef<(HTMLSpanElement | null)[]>([])
   const frames = useRef(new Map<number, HTMLIFrameElement>())
   const camera = useRef<Camera>({ x: 0, y: 0, z: 1 })
@@ -75,6 +80,9 @@ export const CanvasView = memo(function CanvasView({
   const liveFrame = useRef(0)
   const [live, setLive] = useState<ReadonlySet<number>>(new Set())
   const [picked, setSelected] = useState(0)
+  // The selection shows once a page is picked, or while the canvas has the keyboard's focus.
+  const [chosen, setChosen] = useState(false)
+  const [keyFocus, setKeyFocus] = useState(false)
   const [hovered, setHovered] = useState(-1)
   const [dragging, setDragging] = useState(false)
   const [focusedAt, setFocused] = useState<number | null>(null)
@@ -108,6 +116,10 @@ export const CanvasView = memo(function CanvasView({
   const draw = useCallback(() => {
     const { x, y, z } = camera.current
     const el = layer.current
+    // The ground's dots keep their spacing and follow the pan, a step of them at most.
+    if (dots.current) {
+      dots.current.style.transform = `translate(${mod(x, DOT_STEP)}px, ${mod(y, DOT_STEP)}px)`
+    }
     if (el) {
       el.style.transform = `translate(${x}px, ${y}px) scale(${z})`
       el.style.setProperty('--unscale', String(1 / z))
@@ -204,6 +216,7 @@ export const CanvasView = memo(function CanvasView({
       const p = pages[index]
       if (!p) return
       setSelected(index)
+      setChosen(true)
       if (show) {
         const box = {
           x: p.x,
@@ -272,7 +285,10 @@ export const CanvasView = memo(function CanvasView({
         zoomStep: (direction) => zoomAround(stepZoom(camera.current.z, direction)),
         fitAll: () => fitAll(true),
         focus: (index) => {
-          if (index !== null) setSelected(index)
+          if (index !== null) {
+            setSelected(index)
+            setChosen(true)
+          }
           setFocused(index)
         },
       }),
@@ -348,8 +364,10 @@ export const CanvasView = memo(function CanvasView({
       const next = pageInNextRow(pages, selected, key === 'ArrowUp' ? -1 : 1)
       if (next < 0) return
       select(next, true)
-    } else if (key === 'Enter') setFocused(selected)
-    else if (key === '+' || key === '=') zoomAround(stepZoom(camera.current.z, 1))
+    } else if (key === 'Enter') {
+      setChosen(true)
+      setFocused(selected)
+    } else if (key === '+' || key === '=') zoomAround(stepZoom(camera.current.z, 1))
     else if (key === '-') zoomAround(stepZoom(camera.current.z, -1))
     else if (key === 'Escape' && onEscape) onEscape()
     else return
@@ -358,9 +376,15 @@ export const CanvasView = memo(function CanvasView({
   }
 
   const shownPage = focused === null ? null : (pages[focused] ?? null)
+  const ringed = chosen || keyFocus ? selected : -1
 
   return (
     <div className="absolute inset-0 overflow-hidden bg-sidebar">
+      <div
+        ref={dots}
+        aria-hidden
+        className="absolute -inset-5 bg-[radial-gradient(var(--border-default)_1px,transparent_1px)] bg-size-[20px_20px]"
+      />
       <div
         ref={stage}
         tabIndex={0}
@@ -368,6 +392,14 @@ export const CanvasView = memo(function CanvasView({
         aria-roledescription={t('canvas.role')}
         aria-label={title}
         onKeyDown={onKeyDown}
+        onFocus={(event) => {
+          if (event.target === event.currentTarget) {
+            setKeyFocus(event.currentTarget.matches(':focus-visible'))
+          }
+        }}
+        onBlur={(event) => {
+          if (event.target === event.currentTarget) setKeyFocus(false)
+        }}
         className="absolute inset-0 outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--focus)]"
       >
         {/* In the overview the pages take no pointer and no focus, but their scripts keep running. */}
@@ -377,13 +409,13 @@ export const CanvasView = memo(function CanvasView({
               key={`${p.group}.${p.index}`}
               className={cn(
                 // Each page lies on the desk; its edge keeps a screen hairline at any zoom.
-                'absolute overflow-hidden bg-canvas',
-                i === selected
+                'absolute overflow-hidden rounded-[calc(6px*var(--unscale))] bg-canvas',
+                i === ringed
                   ? // A gap of the desk first, so the ring shows beside a page of any color.
-                    'shadow-[0_0_0_calc(2px*var(--unscale))_var(--bg-sidebar),0_0_0_calc(4px*var(--unscale))_var(--text-primary),var(--elevation-page)]'
+                    'shadow-[0_0_0_calc(2px*var(--unscale))_var(--bg-sidebar),0_0_0_calc(4px*var(--unscale))_var(--text-primary),var(--elevation-page),var(--elevation-queue)]'
                   : i === hovered
-                    ? 'shadow-[0_0_0_calc(var(--hairline)*var(--unscale))_var(--border-strong),var(--elevation-page)]'
-                    : 'shadow-[0_0_0_calc(var(--hairline)*var(--unscale))_var(--border-default),var(--elevation-page)]',
+                    ? 'shadow-[0_0_0_calc(var(--hairline)*var(--unscale))_var(--border-strong),var(--elevation-page),var(--elevation-queue)]'
+                    : 'shadow-[0_0_0_calc(var(--hairline)*var(--unscale))_var(--border-default),var(--elevation-page),var(--elevation-queue)]',
               )}
               style={{ left: p.x, top: p.y, width: p.width, height: p.height }}
             >
@@ -443,7 +475,10 @@ export const CanvasView = memo(function CanvasView({
             if (!held || held.moved) return
             const { sx, sy } = point(event)
             const index = pageAt(pages, camera.current, sx, sy)
-            if (index >= 0) setSelected(index)
+            if (index >= 0) {
+              setSelected(index)
+              setChosen(true)
+            }
             stage.current?.focus({ preventScroll: true })
           }}
           onPointerCancel={() => {
@@ -456,6 +491,7 @@ export const CanvasView = memo(function CanvasView({
             const index = pageAt(pages, camera.current, sx, sy)
             if (index < 0) return
             setSelected(index)
+            setChosen(true)
             setFocused(index)
           }}
         />
@@ -466,7 +502,7 @@ export const CanvasView = memo(function CanvasView({
               ref={(el) => {
                 labels.current[i] = el
               }}
-              className="absolute top-0 left-0 truncate text-xs whitespace-nowrap text-secondary"
+              className="absolute top-0 left-0 truncate text-xs whitespace-nowrap text-tertiary"
             >
               {name(p)}
             </span>
@@ -496,6 +532,7 @@ export const CanvasView = memo(function CanvasView({
             const next = focused! + step
             if (next < 0 || next >= pages.length) return
             setSelected(next)
+            setChosen(true)
             setFocused(next)
           }}
           onLeave={() => {

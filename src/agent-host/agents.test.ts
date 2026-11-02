@@ -2736,6 +2736,23 @@ describe('skipped updates', () => {
     expect(m.saved.at(-1)?.agents.codex).not.toHaveProperty('skipped')
   })
 
+  it('offers a skipped update again on undo, and forgets the skip', async () => {
+    const m = await updateManager()
+    await m.write('2.0.0', '2.0.0', '0.160.1', 1)
+    m.setCli('0.160.3')
+    await m.agents.checkUpdates()
+    await m.agents.skipUpdate('codex')
+    expect(m.status().updateSkipped).toBe(true)
+
+    await m.agents.unskipUpdate('codex')
+    expect(m.status()).toMatchObject({
+      update: { adapterVersion: '2.0.0', cliVersion: '0.160.3' },
+      updateSkipped: false,
+    })
+    expect(m.saved.at(-1)?.agents.codex).not.toHaveProperty('skipped')
+    expect(m.saved.at(-1)?.agents.codex).not.toHaveProperty('skippedCli')
+  })
+
   it('leaves the skip alone when the update is gone by the click', async () => {
     const m = await updateManager()
     await m.write('2.0.0', '2.0.0', '0.160.1', 1)

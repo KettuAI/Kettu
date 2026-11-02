@@ -123,11 +123,13 @@ const TOKENS: ReadonlySet<string> = new Set(THEME_TOKENS)
 export const isThemeToken = (name: string): name is ThemeToken => TOKENS.has(name)
 
 /**
- * Tokens that came after themes were first made, each with the token a theme's own palette gives
- * it when the theme leaves it out: an older theme keeps its colors instead of the built-in
- * theme's for these. In order, so one may take another's.
+ * Tokens added after themes were first made, or whose built-in value no longer follows another
+ * token, each with the token a theme's own palette gives it when the theme leaves it out: an older
+ * theme keeps its colors instead of the built-in theme's for these. In order, so one may take
+ * another's.
  */
 const THEME_FALLBACKS: readonly (readonly [ThemeToken, ThemeToken])[] = [
+  ['primary-foreground', 'bg-surface'],
   ['bg-raised', 'bg-surface'],
   ['track', 'border-default'],
   // The theme's orange for text, which reaches 4.5:1 on its pages.

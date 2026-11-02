@@ -236,7 +236,6 @@
     "whatToWorkOn": "What should {{agent}} work on?",
     "message": "Message",
     "messageAgent": "Message {{agent}}",
-    "askAgent": "Ask {{agent}} to…",
     "describeTask": "Describe a task…",
     "send": "Send",
     "project": "Project",
@@ -251,7 +250,7 @@
     "searchProjectsLabel": "Search projects",
     "recent": "Recent",
     "noMatchingProjects": "No matching projects",
-    "heading": "What should we work on?",
+    "heading": "What should we build?",
     "branchHint": "The session starts on this branch",
     "commitHint": "The session starts at this commit",
     "missingLine": "This project's folder is missing. Choose another project.",
@@ -262,8 +261,6 @@
     "noAgentNode_one": "No agent can start yet: {{agents, list}} needs Node.js 22 or later.",
     "noAgentNode_other": "No agent can start yet: {{agents, list}} need Node.js 22 or later.",
     "setUpAgents": "Set up agents…",
-    "recentArtifacts": "Recent artifacts",
-    "viewAll": "View all",
     "agentMenu": {
       "label": "Agent and model",
       "search": "Search agents and models",
@@ -321,6 +318,30 @@
       "repo": "Git repository",
       "note": "Only folders are listed, with paths as {{host}} writes them:",
       "open": "Open"
+    },
+    "picker": {
+      "search": "Search agents",
+      "noMatch": "No matching agents",
+      "agents": "Agents",
+      "other": "Other harnesses",
+      "signedOut": "Signed out · sign in to use",
+      "failed": "Failed to start",
+      "limitUsed": "{{percent}}% of {{limit}} limit",
+      "limitReached": "{{limit}} limit reached",
+      "manage": "Manage agents…"
+    },
+    "modelMenu": {
+      "label": "Model",
+      "search": "Search models",
+      "model": "Model"
+    },
+    "pickup": {
+      "title": "Pick up where you left off",
+      "waiting": "Waiting for your approval",
+      "working": "Working",
+      "failed": "Stopped with an error",
+      "signIn": "Waiting for sign-in",
+      "finished": "Finished {{ago}}"
     }
   },
   "signIn": {

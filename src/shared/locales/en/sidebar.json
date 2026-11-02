@@ -92,13 +92,6 @@
     "estimateHours_other": "estimated {{count}}-hour cache"
   },
   "footer": {
-    "settings": "Settings",
-    "archived": "Archived sessions",
-    "shortcuts": "Keyboard shortcuts",
-    "help": "Help",
-    "documentation": "Documentation",
-    "reportProblem": "Report a problem…",
-    "whatsNew": "What’s new",
     "signInOne": "{{name}} needs you to sign in",
     "signInMany": "{{count}} agents need you to sign in",
     "signInDetail": "Open Settings › Agents to sign in",
@@ -122,7 +115,39 @@
     "all": "All hosts",
     "thisComputer": "This computer",
     "unknown": "Another host",
-    "filterLabel": "Show one host: {{shown}} now",
     "empty": "No sessions on this host yet."
+  },
+  "account": {
+    "menuLabel": "Account and hosts",
+    "signedOut": "Not signed in",
+    "signedOutLine": "Kettu account",
+    "signingIn": "Finish signing in in your browser",
+    "editProfile": "Edit profile",
+    "remote_zero": "Remote access",
+    "remote_one": "Remote access: {{count}} device",
+    "remote_other": "Remote access: {{count}} devices",
+    "settings": "Settings",
+    "settingsAttention": "Settings: something needs you",
+    "controls": "This window controls",
+    "hostLine_one": "{{route}} · {{count}} session",
+    "hostLine_other": "{{route}} · {{count}} sessions",
+    "allHostsLine": "{{count}} hosts side by side",
+    "addHost": "Add host…",
+    "limits": "Plan limits",
+    "theme": "Theme",
+    "themes": {
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "shortcuts": "Keyboard shortcuts",
+    "whatsNew": "What’s new",
+    "docs": "Docs and help",
+    "signOut": "Sign out of remote access",
+    "signIn": "Sign in to Kettu…",
+    "cancelSignIn": "Cancel signing in",
+    "connecting": "Connecting to {{name}}…",
+    "escKey": "esc",
+    "cancelSwitch": "Go back to the host before"
   }
 }

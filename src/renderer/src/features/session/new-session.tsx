@@ -1,15 +1,15 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowUpIcon, CircleAlertIcon, FolderIcon, GitBranchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project, SessionSummary, StartNotice } from '@shared/agent-host'
-import { NO_SESSION, type ArtifactSummary } from '@shared/artifacts'
 import type { AgentId, SlashCommand, UserContent } from '@shared/thread'
 import { startNewSession } from '@renderer/app/actions'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
 import { InputGroupButton } from '@renderer/components/ui/input-group'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { ArtifactCard, CardSkeleton } from '@renderer/features/artifacts/artifact-card'
 import { OptionMenu } from '@renderer/features/session/composer/control-row'
 import type { SelectOption } from '@renderer/features/session/composer/levels'
 import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
@@ -17,14 +17,13 @@ import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { useHostLabel } from '@renderer/features/sidebar/host-label'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { usePane } from '@renderer/features/split/pane-context'
-import { basename, limitLabel, resetTime } from '@renderer/lib/format'
+import { basename, limitLabel, longAgo, resetTime } from '@renderer/lib/format'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { isMod } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { optionsLoaded, optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
 import { agentName, agentsOn, usableAgents, useAgentsStore } from '@renderer/stores/agents'
-import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useGitStore } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
@@ -32,7 +31,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import {
   choosePaneAgent,
   openHarnessSettings,
-  openArtifacts,
+  openSession,
   paneAgent,
   useViewStore,
 } from '@renderer/stores/view'
@@ -43,6 +42,7 @@ import { hasMessage, NEW_SESSION_DRAFT, readDraft, readDraftAttachments } from '
 import { PromptBox } from './composer/prompt-box'
 import { usePromptBox } from './composer/use-prompt-box'
 import { AgentMenu } from './new-session/agent-menu'
+import { AgentPicker } from './new-session/agent-picker'
 import { ProjectMenu } from './new-session/project-menu'
 import {
   enterNewSession,
@@ -53,7 +53,7 @@ import {
   setOption,
   settleOptions,
 } from './new-session/prepared'
-import { RECENT, recentCards } from './new-session/recent'
+import { pickupSessions, pickupState } from './new-session/picker'
 import { agentNeed, canStart, noAgentCanStart, startValues } from './new-session/start-options'
 import { useStartConfig } from './new-session/use-start-config'
 import { ParentLink } from './session-header'
@@ -119,23 +119,24 @@ export function NewSessionView({
         <span className="flex-1" />
         {toolsPath && <HeaderTools projectPath={toolsPath} />}
       </TopBar>
-      <ColumnScroller className="flex flex-col px-7">
-        <div className="mx-auto flex w-full max-w-reply flex-1 flex-col justify-end">
-          <h1 className="mt-6 mb-6.5 animate-in text-center font-display text-greeting font-bold text-balance fade-in animation-duration-(--duration-slow)">
+      <ColumnScroller className="flex flex-col px-8 pb-12">
+        {/* The heading sits a fixed share down the sheet, and moves up on a short one. */}
+        <div className="mx-auto flex w-full max-w-175 flex-col pt-[clamp(--spacing(6),calc(23vh-var(--top-bar)-8px),--spacing(38))]">
+          <h1 className="mb-7 animate-in text-center font-display text-[30px] leading-[1.2] font-bold tracking-[-0.02em] text-balance fade-in animation-duration-(--duration-slow)">
             {t('newSession.heading')}
           </h1>
+          <DraftComposer
+            paneId={paneId}
+            agentId={agentId}
+            hostId={hostId}
+            project={project}
+            noProject={noProject}
+            parent={parent}
+            onInput={setHoldsMessage}
+          >
+            <PickUp hidden={holdsMessage} />
+          </DraftComposer>
         </div>
-        <DraftComposer
-          paneId={paneId}
-          agentId={agentId}
-          hostId={hostId}
-          project={project}
-          noProject={noProject}
-          parent={parent}
-          onInput={setHoldsMessage}
-        >
-          <RecentArtifacts hidden={holdsMessage} />
-        </DraftComposer>
       </ColumnScroller>
       <DropOverlay shown={drop.over} starting={false} agentName="" />
     </div>
@@ -280,7 +281,8 @@ function DraftComposer({
 
   return (
     <>
-      <div className="mx-auto w-full max-w-reply shrink-0">
+      {/* Taller and rounder than a session's composer, which keeps its own look. */}
+      <div className="@container/draft w-full shrink-0 [&>[data-slot=input-group]]:rounded-[18px]">
         <PromptBox
           box={box}
           agentId={agentId}
@@ -292,49 +294,61 @@ function DraftComposer({
                   limit: limitLabel(reached),
                   time: resetTime(reached.resetsAt),
                 })
-              : name
-                ? t('newSession.askAgent', { agent: name })
-                : t('newSession.describeTask')
+              : t('newSession.describeTask')
           }
           label={name ? t('newSession.messageAgent', { agent: name }) : t('newSession.message')}
-          // 112 px high empty, with the row of + and Send under the text.
-          size={{ minHeight: '62px', padding: '15px 16px 2px 16px' }}
+          // Three lines high empty, with the row of +, the pickers and Send under the text.
+          size={{ minHeight: '96px', padding: '16px 12px 14px 18px' }}
           stacked
           onKeyDown={onKeyDown}
+          lead={
+            <>
+              {parent ? (
+                <ParentProject project={project} scratch={parent.scratch} />
+              ) : (
+                <ProjectMenu
+                  project={project}
+                  noProject={noProject}
+                  onError={setProjectError}
+                  chip
+                />
+              )}
+              <AgentPicker agentId={agentId} onChoose={(id) => choose(id, null)} hostId={hostId} />
+              {!inScratch && project && <BranchLabel projectPath={project.path} />}
+            </>
+          }
           end={
-            <Tooltip>
-              <TooltipTrigger render={<span />}>
-                <InputGroupButton
-                  size="round"
-                  variant={canSend ? 'default' : 'secondary'}
-                  aria-label={t('newSession.send')}
-                  disabled={!canSend}
-                  onClick={() => void send()}
-                  className="disabled:text-disabled disabled:opacity-100"
-                >
-                  <ArrowUpIcon />
-                </InputGroupButton>
-              </TooltipTrigger>
-              <TooltipContent>{blocked ?? t('newSession.send')}</TooltipContent>
-            </Tooltip>
+            <>
+              <ModeMenu agentId={agentId} hostId={hostId} />
+              {agentId && (
+                <AgentMenu
+                  agentId={agentId}
+                  onChoose={choose}
+                  folderless={!ready}
+                  hostId={hostId}
+                  modelOnly
+                />
+              )}
+              <Tooltip>
+                <TooltipTrigger render={<span />}>
+                  <InputGroupButton
+                    size="round"
+                    variant={canSend ? 'default' : 'secondary'}
+                    aria-label={t('newSession.send')}
+                    disabled={!canSend}
+                    onClick={() => void send()}
+                    className="disabled:text-disabled disabled:opacity-100"
+                  >
+                    <ArrowUpIcon />
+                  </InputGroupButton>
+                </TooltipTrigger>
+                <TooltipContent>{blocked ?? t('newSession.send')}</TooltipContent>
+              </Tooltip>
+            </>
           }
         />
       </div>
-      {/* The lower part starts the top bar's height taller: the column begins that far below the
-          sheet's top, so an even split of the rest about the box centres it on the sheet. */}
-      <div className="mx-auto flex w-full max-w-reply flex-1 basis-(--top-bar) flex-col">
-        {/* Where and with what the session starts, under the box as in the reference. */}
-        <div className="flex h-9.5 min-w-0 items-center gap-0.5 px-0.5 pt-1">
-          {parent ? (
-            <ParentProject project={project} scratch={parent.scratch} />
-          ) : (
-            <ProjectMenu project={project} noProject={noProject} onError={setProjectError} />
-          )}
-          {!inScratch && project && <BranchLabel projectPath={project.path} />}
-          <span className="min-w-2 flex-1" />
-          <AgentMenu agentId={agentId} onChoose={choose} folderless={!ready} hostId={hostId} />
-          <ModeMenu agentId={agentId} hostId={hostId} />
-        </div>
+      <div className="flex w-full flex-col gap-1 pt-2 empty:hidden">
         {(projectError || (project?.missing && !inScratch)) && (
           <p className="truncate px-2.75 text-xs text-danger" title={projectError ?? undefined}>
             {projectError ?? t('newSession.missingLine')}
@@ -347,8 +361,8 @@ function DraftComposer({
         )}
         {agentId && <StartNotices agentId={agentId} hostId={hostId} />}
         {waitingForNode && <NoAgentLine waitingForNode={waitingForNode} hostId={hostId} />}
-        {children}
       </div>
+      {children}
     </>
   )
 }
@@ -445,14 +459,6 @@ function NoAgentLine({
   )
 }
 
-function Slash() {
-  return (
-    <span aria-hidden className="mx-0.5 shrink-0 text-control text-border-strong">
-      /
-    </span>
-  )
-}
-
 /** A sub-session's project, shown and not chosen: it works in its parent's. */
 function ParentProject({ project, scratch }: { project: Project | null; scratch: boolean }) {
   const { t } = useTranslation('session')
@@ -460,11 +466,11 @@ function ParentProject({ project, scratch }: { project: Project | null; scratch:
     <Tooltip>
       <TooltipTrigger
         render={
-          <span className="flex h-7 min-w-12 shrink-10 items-center gap-1 overflow-hidden px-2.25 text-control text-muted-foreground" />
+          <span className="flex h-7.5 min-w-12 shrink-10 items-center gap-1.5 overflow-hidden rounded-xl bg-subtle px-2.25 text-control text-secondary" />
         }
       >
-        <FolderIcon className="size-3.5 shrink-0" />
-        <span className="truncate text-foreground">
+        <FolderIcon className="size-3.75 shrink-0" />
+        <span className="truncate text-primary">
           {scratch ? t('newSession.noProject') : project?.name}
         </span>
         {project?.missing && !scratch && (
@@ -476,7 +482,10 @@ function ParentProject({ project, scratch }: { project: Project | null; scratch:
   )
 }
 
-/** The branch the session starts on, shown and not chosen: the top bar's git status owns it. */
+/**
+ * The branch the session starts on, shown and not chosen: the top bar's git status owns it, so a
+ * narrow composer leaves it out before its pickers run short.
+ */
 function BranchLabel({ projectPath }: { projectPath: string }) {
   const { t } = useTranslation('session')
   const head = useGitStore((s) => {
@@ -487,22 +496,19 @@ function BranchLabel({ projectPath }: { projectPath: string }) {
   const name = head.branch ?? head.oid?.slice(0, 7)
   if (!name) return null
   return (
-    <>
-      <Slash />
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <span className="flex h-7 min-w-7.75 shrink-1000 items-center gap-1.25 overflow-hidden px-1.5 text-muted-foreground" />
-          }
-        >
-          <GitBranchIcon className="size-3.5 shrink-0" />
-          <span className="truncate font-mono text-code">{name}</span>
-        </TooltipTrigger>
-        <TooltipContent>
-          {name} · {head.branch ? t('newSession.branchHint') : t('newSession.commitHint')}
-        </TooltipContent>
-      </Tooltip>
-    </>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span className="flex h-7.5 max-w-44 min-w-7.75 shrink-1000 items-center gap-1.5 overflow-hidden px-2.25 text-control text-primary @max-[34rem]/draft:hidden" />
+        }
+      >
+        <GitBranchIcon className="size-3.75 shrink-0 text-secondary" />
+        <span className={cn('truncate', !head.branch && 'font-mono text-code')}>{name}</span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {name} · {head.branch ? t('newSession.branchHint') : t('newSession.commitHint')}
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -528,82 +534,80 @@ function ModeMenu({ agentId, hostId }: { agentId: AgentId | null; hostId: string
 }
 
 /**
- * The artifacts changed last, in any project, to open again; with none, nothing shows. Hidden, it
- * stays mounted, so it keeps loading and comes back with its cards.
+ * The sessions changed last, each with what it is doing and its project, to open again; with none,
+ * nothing shows. Hidden while a message is written, as the draft is the work at hand.
  */
-function RecentArtifacts({ hidden }: { hidden: boolean }) {
+function PickUp({ hidden }: { hidden: boolean }) {
   const { t } = useTranslation('session')
-  const { t: ta } = useTranslation('artifacts')
-  const recent = useArtifactsStore(useShallow((s) => s.list?.slice(0, RECENT) ?? null))
-  const failed = useArtifactsStore((s) => s.error !== null)
+  const byId = useSessionsStore((s) => s.byId)
+  const sessions = useMemo(() => pickupSessions(byId), [byId])
   const projects = useProjectsStore((s) => s.projects)
-  // Only the cards' session names, so other sessions' updates do not re-render the list.
-  const sessions = useSessionsStore(
-    useShallow((s) =>
-      (recent ?? []).map(({ sessionId }) => {
-        if (sessionId === NO_SESSION) return ta('page.imported')
-        const summary = s.byId[sessionId]
-        return summary ? sessionTitle(summary) : ta('page.deletedSession')
-      }),
-    ),
-  )
-
-  useEffect(() => {
-    artifactListShown(true)
-    return () => artifactListShown(false)
-  }, [])
-
-  const { cards, shown } = recentCards(recent, failed, hidden)
-  const where = (artifact: ArtifactSummary) =>
-    artifact.scratch
-      ? t('newSession.noProject')
-      : (projects.find((p) => p.path === artifact.project)?.name ?? basename(artifact.project))
+  const now = useNow()
+  if (sessions.length === 0) return null
   return (
     <section
-      aria-label={t('newSession.recentArtifacts')}
-      inert={!shown}
+      aria-labelledby="new-session-pickup"
+      inert={hidden}
       className={cn(
-        '@container mt-12 mb-6 flex flex-col gap-1.5 transition-[opacity,translate,visibility] duration-(--duration-slow) ease-out-quart',
-        !shown &&
-          'invisible translate-y-2 opacity-0 motion-reduce:translate-y-0 **:data-[slot=skeleton]:animate-none',
+        'mt-10 flex flex-col transition-[opacity,translate,visibility] duration-(--duration-slow) ease-out-quart',
+        hidden && 'invisible translate-y-2 opacity-0 motion-reduce:translate-y-0',
       )}
     >
-      <div className="flex items-center justify-between">
-        <h2 className="flex h-7.5 items-center px-1 text-xs font-medium text-tertiary">
-          {t('newSession.recentArtifacts')}
-        </h2>
-        <Button
-          variant="quiet"
-          size="sm"
-          onClick={openArtifacts}
-          className="px-2.25 text-ui font-normal text-secondary"
+      <h2 id="new-session-pickup" className="mb-1.5 px-2.5 text-hint font-medium text-tertiary">
+        {t('newSession.pickup.title')}
+      </h2>
+      {sessions.map((session) => (
+        <button
+          key={session.id}
+          type="button"
+          onClick={() => openSession(session.id, session.projectPath)}
+          className="flex h-10.5 min-w-0 items-center gap-3 rounded-xl px-2.5 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
         >
-          {t('newSession.viewAll')}
-        </Button>
-      </div>
-      {/* Two across in a narrow window, so a canvas's pages still read. */}
-      <div className="grid grid-cols-3 gap-4 @max-[32.5rem]:grid-cols-2">
-        {cards.map((artifact, index) => (
-          <div
-            key={artifact?.id ?? index}
-            className={cn('min-w-0', index === RECENT - 1 && '@max-[32.5rem]:hidden')}
-          >
-            {artifact ? (
-              <ArtifactCard
-                artifact={artifact}
-                lead={where(artifact)}
-                time={{ at: artifact.updatedAt, opened: false }}
-                project={where(artifact)}
-                session={sessions[index] ?? ''}
-                tabbable
-                variant="recent"
-              />
-            ) : (
-              <CardSkeleton variant="recent" />
-            )}
-          </div>
-        ))}
-      </div>
+          <AgentMark agent={session.agentId} size={16} className="shrink-0" />
+          <span className="min-w-0 flex-1 truncate text-row text-primary">
+            {sessionTitle(session)}
+          </span>
+          <PickupStatus session={session} now={now} />
+          <span className="w-16 shrink-0 truncate text-right text-control text-tertiary">
+            {session.scratch
+              ? t('newSession.noProject')
+              : (projects.find((p) => p.path === session.projectPath)?.name ??
+                basename(session.projectPath))}
+          </span>
+        </button>
+      ))}
     </section>
   )
+}
+
+function PickupStatus({ session, now }: { session: SessionSummary; now: number }) {
+  const { t } = useTranslation('session')
+  const state = pickupState(session)
+  const line = 'flex shrink-0 items-center gap-1.5 text-control'
+  switch (state) {
+    case 'waiting':
+      return (
+        <span className={cn(line, 'text-attention')}>
+          <span aria-hidden className="size-1.75 rounded-full bg-attention-dot" />
+          {t('newSession.pickup.waiting')}
+        </span>
+      )
+    case 'working':
+      return (
+        <span className={cn(line, 'text-secondary')}>
+          <Spinner aria-hidden className="size-3" />
+          {t('newSession.pickup.working')}
+        </span>
+      )
+    case 'failed':
+      return <span className={cn(line, 'text-danger')}>{t('newSession.pickup.failed')}</span>
+    case 'signIn':
+      return <span className={cn(line, 'text-attention')}>{t('newSession.pickup.signIn')}</span>
+    case 'finished':
+      return (
+        <span className={cn(line, 'text-tertiary')}>
+          {t('newSession.pickup.finished', { ago: longAgo(session.updatedAt, now) })}
+        </span>
+      )
+  }
 }

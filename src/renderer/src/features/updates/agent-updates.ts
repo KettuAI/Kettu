@@ -1,6 +1,5 @@
 import type { AgentInstallMethod, AgentStatus, AgentTask } from '@shared/agent-host'
-import type { AgentId } from '@shared/thread'
-import { i18n } from '@renderer/lib/i18n'
+import type { AgentId, HarnessId } from '@shared/thread'
 
 /** One harness's update on offer, as the card and its popover name it. */
 export interface AgentUpdateOffer {
@@ -20,45 +19,73 @@ export interface AgentUpdateOffer {
 /** How an update runs: the user's program's own command, or Kettu installing its package. */
 export type AgentUpdateRoute = 'cli' | 'package'
 
-/** What the agent update card shows: an update running, one that failed, or those on offer. */
-export type AgentUpdateNotice =
-  | { kind: 'one'; offer: AgentUpdateOffer }
-  | { kind: 'many'; offers: AgentUpdateOffer[] }
-  | { kind: 'running'; agentId: AgentId; name: string; command: string }
-  | { kind: 'failed'; agentId: AgentId; name: string; error: string; retry: AgentUpdateRoute }
-
 /** Why a request did not run when no failed task says why, as the agents store keeps it. */
 export type AgentTaskErrors = Partial<Record<AgentId, { kind: AgentTask['kind']; message: string }>>
 
-/**
- * The card for the harnesses' updates, once each through its default agent: an update running
- * first, then one that failed, then those on offer that the user has not skipped.
- */
-export function agentUpdateNotice(
+/** An update installing now, with the lines its command printed last. */
+export interface HarnessRun {
+  agentId: AgentId
+  harnessId: HarnessId
+  name: string
+  command: string
+  output: string[]
+}
+
+/** An update that failed, waiting to be retried or closed. */
+export interface HarnessFailure {
+  agentId: AgentId
+  harnessId: HarnessId
+  name: string
+  error: string
+  retry: AgentUpdateRoute
+  /** The command that ran and its last lines; null when the request failed before running. */
+  command: string | null
+  output: string[]
+}
+
+/** The harnesses' updates, once each through its default agent. */
+export interface HarnessUpdates {
+  running: HarnessRun | null
+  failed: HarnessFailure | null
+  /** Those on offer, apart from the running and the failed one, the skipped ones too. */
+  offers: { offer: AgentUpdateOffer; skipped: boolean }[]
+}
+
+/** The harnesses' updates: one running first, then one that failed, then those on offer. */
+export function harnessUpdates(
   statuses: AgentStatus[],
   taskErrors: AgentTaskErrors = {},
-): AgentUpdateNotice | null {
+): HarnessUpdates {
   const defaults = statuses.filter((status) => status.isDefault)
-  const running = defaults.find((s) => s.task?.kind === 'update' && s.task.state === 'running')
-  if (running?.task) {
-    return {
-      kind: 'running',
-      agentId: running.id,
-      name: running.harnessName,
-      command: running.task.command,
-    }
-  }
+  const busy = defaults.find((s) => s.task?.kind === 'update' && s.task.state === 'running')
+  const running =
+    busy?.task != null
+      ? {
+          agentId: busy.id,
+          harnessId: busy.harnessId,
+          name: busy.harnessName,
+          command: busy.task.command,
+          output: busy.task.progress,
+        }
+      : null
+  let failed: HarnessFailure | null = null
   for (const status of defaults) {
-    const failed = failure(status, taskErrors[status.id])
-    if (failed) return { kind: 'failed', agentId: status.id, name: status.harnessName, ...failed }
+    const failure = failureOf(status, taskErrors[status.id])
+    if (!failure) continue
+    failed = {
+      agentId: status.id,
+      harnessId: status.harnessId,
+      name: status.harnessName,
+      ...failure,
+    }
+    break
   }
   const offers = defaults.flatMap((status) => {
-    const offer = status.updateSkipped ? null : updateOffer(status)
-    return offer ? [offer] : []
+    if (status.id === running?.agentId || status.id === failed?.agentId) return []
+    const offer = updateOffer(status)
+    return offer ? [{ offer, skipped: status.updateSkipped }] : []
   })
-  if (offers.length === 0) return null
-  if (offers.length === 1) return { kind: 'one', offer: offers[0]! }
-  return { kind: 'many', offers }
+  return { running, failed, offers }
 }
 
 /** The route an offered update runs; the user's program comes first, as the harness page has it. */
@@ -66,22 +93,33 @@ export function offerRoute(offer: AgentUpdateOffer): AgentUpdateRoute {
   return offer.command === null ? 'package' : 'cli'
 }
 
-function failure(
+function failureOf(
   status: AgentStatus,
   error: AgentTaskErrors[AgentId],
-): { error: string; retry: AgentUpdateRoute } | null {
+): Pick<HarnessFailure, 'error' | 'retry' | 'command' | 'output'> | null {
   const { task } = status
   if (task?.kind === 'update' && task.state === 'failed') {
     // An update with a route is the program's own.
-    return { error: task.error ?? task.command, retry: task.method ? 'cli' : 'package' }
+    return {
+      error: task.error ?? task.command,
+      retry: task.method ? 'cli' : 'package',
+      command: task.command,
+      output: task.progress,
+    }
   }
   if (!task && error?.kind === 'update') {
-    return { error: error.message, retry: status.cli?.update ? 'cli' : 'package' }
+    return {
+      error: error.message,
+      retry: status.cli?.update ? 'cli' : 'package',
+      command: null,
+      output: [],
+    }
   }
   return null
 }
 
-function updateOffer(status: AgentStatus): AgentUpdateOffer | null {
+/** The update a harness offers through this agent, or null when it is up to date. */
+export function updateOffer(status: AgentStatus): AgentUpdateOffer | null {
   const base = { agentId: status.id, name: status.harnessName }
   const cli = status.cli
   if (cli?.update) {
@@ -107,22 +145,5 @@ function updateOffer(status: AgentStatus): AgentUpdateOffer | null {
     command: null,
     method: null,
     package: { name: status.package.name, versions: !agent },
-  }
-}
-
-/** The card's words as one string, its name: "Claude Code can be updated to 2.1.316". */
-export function agentUpdateLabel(notice: AgentUpdateNotice): string {
-  switch (notice.kind) {
-    case 'one':
-      return i18n.t('updates:agentNotice.oneLabel', {
-        name: notice.offer.name,
-        version: notice.offer.to,
-      })
-    case 'many':
-      return `${i18n.t('updates:agentNotice.many')} ${notice.offers.length}`
-    case 'running':
-      return i18n.t('updates:agentNotice.running', { name: notice.name })
-    case 'failed':
-      return i18n.t('updates:agentNotice.failed', { name: notice.name })
   }
 }
