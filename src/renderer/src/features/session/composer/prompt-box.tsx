@@ -306,11 +306,11 @@ export function PromptBox({
           />
         </div>
         {stacked ? (
-          <InputGroupAddon align="block-end" className="gap-1.5 px-3 pb-3">
+          <InputGroupAddon align="block-end" className="flex-wrap gap-1.5 px-3 pb-3">
             {addMenu}
             {lead}
-            <span className="flex-1" />
-            {end}
+            {/* Kept together at the end, on a line of its own when the row runs out of room. */}
+            <div className="ml-auto flex items-center gap-1.5">{end}</div>
           </InputGroupAddon>
         ) : (
           <InputGroupAddon

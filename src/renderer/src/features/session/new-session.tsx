@@ -282,7 +282,7 @@ function DraftComposer({
   return (
     <>
       {/* Taller and rounder than a session's composer, which keeps its own look. */}
-      <div className="w-full shrink-0 [&>[data-slot=input-group]]:rounded-[18px]">
+      <div className="@container/draft w-full shrink-0 [&>[data-slot=input-group]]:rounded-[18px]">
         <PromptBox
           box={box}
           agentId={agentId}
@@ -482,7 +482,10 @@ function ParentProject({ project, scratch }: { project: Project | null; scratch:
   )
 }
 
-/** The branch the session starts on, shown and not chosen: the top bar's git status owns it. */
+/**
+ * The branch the session starts on, shown and not chosen: the top bar's git status owns it, so a
+ * narrow composer leaves it out before its pickers run short.
+ */
 function BranchLabel({ projectPath }: { projectPath: string }) {
   const { t } = useTranslation('session')
   const head = useGitStore((s) => {
@@ -496,7 +499,7 @@ function BranchLabel({ projectPath }: { projectPath: string }) {
     <Tooltip>
       <TooltipTrigger
         render={
-          <span className="flex h-7.5 min-w-7.75 shrink-1000 items-center gap-1.5 overflow-hidden px-2.25 text-control text-primary" />
+          <span className="flex h-7.5 max-w-44 min-w-7.75 shrink-1000 items-center gap-1.5 overflow-hidden px-2.25 text-control text-primary @max-[34rem]/draft:hidden" />
         }
       >
         <GitBranchIcon className="size-3.75 shrink-0 text-secondary" />
