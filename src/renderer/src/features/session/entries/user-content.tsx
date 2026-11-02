@@ -1,17 +1,28 @@
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { FileIcon, LinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { readTextThumb } from '@shared/attachments'
-import type { Attachment, ContentRef, UserContent } from '@shared/thread'
+import type { Attachment, ContentRef, ThreadEntry, UserContent } from '@shared/thread'
 import { basename, bytes } from '@renderer/lib/format'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { host } from '@renderer/lib/host'
+import { isWeb } from '@renderer/lib/platform'
+import { cn } from '@renderer/lib/utils'
+import { ensureFiles, openFile, useFilesStore } from '@renderer/stores/files'
+import { useSettingsStore } from '@renderer/stores/settings'
+import { useThreadsStore } from '@renderer/stores/threads'
+import { toggleSidePane } from '@renderer/stores/view'
 import { openViewer } from '@renderer/stores/viewer'
 import { AttachmentTile, type TileView } from '../attachments/attachment-tile'
 import { openAttachmentPath } from '../attachments/open-attachment'
 import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
 import { replayThumb } from '../attachments/thumb'
 import { Clamp } from '../clamp'
+import { ChipView } from '../composer/chip-view'
+import { findChips, mentioned, mentionResolver, type Chip } from '../composer/chips'
+import { projectOf } from '../composer/prompt-chips'
+import { LinkConfirm } from '../link-confirm'
+import { asksBeforeOpening } from '../link-open'
 import { CarriedImage } from '../media/carried-image'
 import { CarriedMedia } from '../media/carried-media'
 import { attachmentKey } from '../media/viewer-items'
@@ -34,19 +45,14 @@ export function UserContentView({
   sessionId?: string
   entryId?: string
 }) {
-  const text = content
-    .filter((c): c is Extract<UserContent, { type: 'text' }> => c.type === 'text')
-    .map((c) => c.text)
-    .join('\n\n')
+  const text = textOf(content)
   const refs = content.flatMap((c) => (c.type === 'ref' ? [c.ref] : []))
   return (
     <div className="flex flex-col gap-2">
       {text && (
         <div className="flex flex-col gap-1">
           <Clamp maxHeight={COLLAPSED_HEIGHT} buttonClassName="-mx-1.5 -mb-0.5">
-            <div className="whitespace-pre-wrap" data-selectable="">
-              {text}
-            </div>
+            <ChipText text={text} sessionId={sessionId} entryId={entryId} />
           </Clamp>
         </div>
       )}
@@ -85,6 +91,166 @@ export function UserContentView({
             ),
           )}
         </div>
+      )}
+    </div>
+  )
+}
+
+function textOf(content: readonly UserContent[]): string {
+  return content
+    .filter((c): c is Extract<UserContent, { type: 'text' }> => c.type === 'text')
+    .map((c) => c.text)
+    .join('\n\n')
+}
+
+/** The attachments a sent prompt carried. */
+function attachmentsOf(entry: ThreadEntry | undefined): Attachment[] {
+  if (entry?.kind !== 'user') return []
+  return entry.content.flatMap((c) =>
+    c.type === 'ref' && c.ref.kind === 'attachment' ? [c.ref.attachment] : [],
+  )
+}
+
+function useSentEntry(sessionId: string | null | undefined, entryId: string | null | undefined) {
+  return useThreadsStore((s) =>
+    sessionId && entryId ? s.replicas[sessionId]?.state?.byId[entryId] : undefined,
+  )
+}
+
+/** Resolves a sent prompt's mentions against what it carried, then the project's files. */
+function useSentResolver(attachments: readonly Attachment[], text: string) {
+  const projectPath = useContext(ProjectPathContext)
+  const files = useFilesStore((s) => (projectPath ? s.byProject[projectPath] : undefined))
+  const mentions = /[@＠]/.test(text)
+  useEffect(() => {
+    if (projectPath && mentions) ensureFiles(projectPath)
+  }, [projectPath, mentions])
+  return useMemo(
+    () =>
+      mentionResolver(
+        attachments.map((a) => ({ key: a.id, name: a.name, kind: a.type, thumb: a.thumb })),
+        files ? projectOf(files.paths, files.known) : null,
+      ),
+    [attachments, files],
+  )
+}
+
+/** Opens a sent attachment as its tile does: an image in the viewer, a file or folder itself. */
+function openSent(
+  attachment: Attachment,
+  from: HTMLElement,
+  where: { sessionId: string | null; entryId: string | null; projectPath: string | null },
+) {
+  if (attachment.type === 'image') {
+    openViewer({
+      sessionId: where.sessionId,
+      projectPath: where.projectPath,
+      draft: where.sessionId,
+      item: {
+        key: attachmentKey(where.entryId ?? '', attachment.id),
+        source: { kind: 'attachment', attachment },
+        name: attachment.name,
+        alt: '',
+      },
+      from,
+    })
+    return
+  }
+  openAttachmentPath(attachment, where.projectPath).catch((error: unknown) =>
+    console.warn(`Could not open ${attachment.name}`, error),
+  )
+}
+
+/**
+ * A prompt's text with its command, mentions and links as the composer showed them: chips that
+ * open what they name. A local address opens in the session's browser.
+ */
+function ChipText({
+  text,
+  sessionId,
+  entryId,
+}: {
+  text: string
+  sessionId?: string
+  entryId?: string
+}) {
+  const projectPath = useContext(ProjectPathContext)
+  const entry = useSentEntry(sessionId, entryId)
+  const attachments = useMemo(() => attachmentsOf(entry), [entry])
+  const resolve = useSentResolver(attachments, text)
+  const commands = useThreadsStore((s) =>
+    sessionId ? s.replicas[sessionId]?.state?.session.commands : undefined,
+  )
+  const chips = useMemo(
+    () => findChips(text, { commands: commands?.map((c) => c.name) ?? [], resolve }),
+    [text, commands, resolve],
+  )
+  const [confirming, setConfirming] = useState<string | null>(null)
+
+  const openLink = (url: string, local: boolean) => {
+    if (local && !isWeb && sessionId && projectPath) {
+      void window.kettu.browser.navigate(sessionId, url)
+      toggleSidePane(projectPath, 'browser', true)
+      return
+    }
+    const { confirmLinks } = useSettingsStore.getState().settings.thread
+    if (asksBeforeOpening(url, confirmLinks)) setConfirming(url)
+    else window.open(url, '_blank', 'noreferrer')
+  }
+  const opener = (chip: Chip): ((from: HTMLElement) => void) | null => {
+    if (chip.kind === 'command') return null
+    if (chip.kind === 'link') return () => openLink(chip.url, chip.local)
+    const attachment = attachments.find((a) => a.id === chip.attachmentKey)
+    if (attachment) {
+      return (from) =>
+        openSent(attachment, from, {
+          sessionId: sessionId ?? null,
+          entryId: entryId ?? null,
+          projectPath,
+        })
+    }
+    if (chip.kind !== 'file' || !chip.path || !projectPath) return null
+    const path = chip.path
+    const line = chip.lines ? Number(chip.lines.split('–')[0]) : null
+    return () => openFile(projectPath, path, line)
+  }
+
+  const parts: ReactNode[] = []
+  let at = 0
+  for (const chip of chips) {
+    if (chip.from > at) parts.push(text.slice(at, chip.from))
+    const open = opener(chip)
+    parts.push(
+      open ? (
+        <button
+          key={chip.from}
+          type="button"
+          title={chip.kind === 'link' ? chip.url : undefined}
+          onClick={(event) => open(event.currentTarget)}
+          className="rounded-lg align-middle outline-none focus-visible:focus-ring"
+        >
+          <ChipView chip={chip} surface />
+        </button>
+      ) : (
+        <ChipView key={chip.from} chip={chip} surface />
+      ),
+    )
+    at = chip.to
+  }
+  if (at < text.length) parts.push(text.slice(at))
+  return (
+    <div
+      className={cn('whitespace-pre-wrap', chips.length > 0 && 'leading-7.5')}
+      data-selectable=""
+    >
+      {parts}
+      {confirming && (
+        <LinkConfirm
+          url={confirming}
+          isOpen
+          onClose={() => setConfirming(null)}
+          onConfirm={() => window.open(confirming, '_blank', 'noreferrer')}
+        />
       )}
     </div>
   )
@@ -136,26 +302,15 @@ export function SentAttachments({
   const [viewing, setViewing] = useState<TextDialogTarget | null>(null)
   const projectPath = useContext(ProjectPathContext)
   const viewerKey = (attachment: Attachment) => attachmentKey(entryId ?? '', attachment.id)
+  // A file or folder the text names is its chip there; images stay above as thumbnails.
+  const entry = useSentEntry(sessionId, entryId)
+  const text = entry?.kind === 'user' ? textOf(entry.content) : ''
+  const resolve = useSentResolver(attachments, text)
+  const named = useMemo(() => mentioned(text, resolve), [text, resolve])
+  const shown = attachments.filter((a) => a.type === 'image' || !named.has(a.id))
   const open = (attachment: Attachment, from: HTMLElement) => {
-    if (attachment.type === 'file' || attachment.type === 'folder') {
-      openAttachmentPath(attachment, projectPath).catch((error: unknown) =>
-        console.warn(`Could not open ${attachment.name}`, error),
-      )
-      return
-    }
-    if (attachment.type === 'image') {
-      openViewer({
-        sessionId,
-        projectPath,
-        draft: sessionId,
-        item: {
-          key: viewerKey(attachment),
-          source: { kind: 'attachment', attachment },
-          name: attachment.name,
-          alt: '',
-        },
-        from,
-      })
+    if (attachment.type !== 'text') {
+      openSent(attachment, from, { sessionId, entryId, projectPath })
       return
     }
     const hash = attachment.blob
@@ -167,9 +322,10 @@ export function SentAttachments({
           : host('attachments.read', { id: attachment.id }),
     })
   }
+  if (shown.length === 0) return null
   return (
     <div role="list" className="flex max-w-[85%] flex-wrap justify-end gap-1.5">
-      {attachments.map((attachment) => (
+      {shown.map((attachment) => (
         <div key={attachment.id} role="listitem">
           <SentAttachment
             sessionId={sessionId}

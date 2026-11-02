@@ -12,7 +12,7 @@ import { openAttachmentPath } from '../attachments/open-attachment'
 import { draftKey } from '../media/viewer-items'
 import { ChipPreview } from './chip-preview'
 import { ChipView } from './chip-view'
-import { findChips, mentionResolver, type Chip, type MentionTarget } from './chips'
+import { findChips, mentioned, mentionResolver, type Chip } from './chips'
 import type { ComposerEditorHandle } from './editor'
 import type { ChipHooks } from './editor-chips'
 import { removeAttachment } from './attachments'
@@ -30,22 +30,13 @@ const projectSets = new WeakMap<
   readonly string[],
   { files: ReadonlySet<string>; folders: ReadonlySet<string> }
 >()
-function projectOf(paths: readonly string[], known: ReadonlySet<string>) {
+export function projectOf(paths: readonly string[], known: ReadonlySet<string>) {
   let sets = projectSets.get(paths)
   if (!sets) {
     sets = { files: known, folders: new Set(foldersOf(paths)) }
     projectSets.set(paths, sets)
   }
   return sets
-}
-
-/** The attachments the text mentions, by key. */
-function mentioned(text: string, resolve: (token: string) => MentionTarget | null): Set<string> {
-  const keys = new Set<string>()
-  for (const chip of findChips(text, { commands: [], resolve })) {
-    if ('attachmentKey' in chip && chip.attachmentKey) keys.add(chip.attachmentKey)
-  }
-  return keys
 }
 
 /**

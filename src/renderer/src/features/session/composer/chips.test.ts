@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findChips, findLinks, linkParts, mentionResolver, splitLines } from './chips'
+import { findChips, findLinks, linkParts, mentioned, mentionResolver, splitLines } from './chips'
 
 const project = {
   files: new Set(['src/usage/usage-store.ts', 'README.md']),
@@ -97,5 +97,15 @@ describe('findChips', () => {
 
   it('never takes a pasted text for a mention', () => {
     expect(findChips('@Pasted', context)).toEqual([])
+  })
+})
+
+describe('mentioned', () => {
+  it('names the attachments a chip in the text stands for', () => {
+    const keys = mentioned(
+      '看 @usage-store.ts:3 和 @usage/ 还有 @src/usage/usage-store.ts',
+      context.resolve,
+    )
+    expect([...keys]).toEqual(['a', 'c'])
   })
 })

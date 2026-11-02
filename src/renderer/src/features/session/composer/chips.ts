@@ -109,6 +109,18 @@ export function findChips(text: string, context: ChipContext): Chip[] {
   return chips.sort((a, b) => a.from - b.from)
 }
 
+/** The attachments the text mentions, by key. */
+export function mentioned(
+  text: string,
+  resolve: (token: string) => MentionTarget | null,
+): Set<string> {
+  const keys = new Set<string>()
+  for (const chip of findChips(text, { commands: [], resolve })) {
+    if ('attachmentKey' in chip && chip.attachmentKey) keys.add(chip.attachmentKey)
+  }
+  return keys
+}
+
 function basename(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1)
 }
