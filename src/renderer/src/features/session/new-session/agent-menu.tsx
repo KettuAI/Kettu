@@ -474,9 +474,9 @@ function RailRow({ status }: { status: AgentStatus }) {
 }
 
 const RING_TONE = {
-  ok: 'success',
-  warn: 'attention',
-  bad: 'destructive',
+  ok: 'limit-ok',
+  warn: 'limit-warn',
+  bad: 'limit-bad',
 } as const satisfies Record<LimitLevel, string>
 
 /** The tightest window's pie and percentage, with every window in the tooltip. */
