@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon, HistoryIcon } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import {
@@ -20,7 +20,6 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
-import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { formatShortcut } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
@@ -58,6 +57,7 @@ function HistoryButton({ direction }: { direction: Direction }) {
   const label = direction === 'back' ? t('topBar.back') : t('topBar.forward')
   const Icon = direction === 'back' ? ChevronLeftIcon : ChevronRightIcon
   const release = () => clearTimeout(hold.current)
+  useEffect(() => () => clearTimeout(hold.current), [])
   return (
     <DropdownMenu
       open={menu}
@@ -106,9 +106,17 @@ function HistoryButton({ direction }: { direction: Direction }) {
         >
           <Icon strokeWidth={1.4} className="size-4.25" />
         </TooltipTrigger>
-        <TooltipContent side="bottom" align="start" alignOffset={-8}>
+        {/* The keys follow the name as plain text, a space after it, outside its truncation. */}
+        <TooltipContent
+          side="bottom"
+          align="start"
+          alignOffset={-8}
+          className="gap-0 px-2.25 py-1.5"
+        >
           <Destination direction={direction} label={label} />
-          <Kbd>{formatShortcut(HISTORY_SHORTCUTS[direction])}</Kbd>
+          <span className="shrink-0 whitespace-pre opacity-60">
+            {` ${formatShortcut(HISTORY_SHORTCUTS[direction])}`}
+          </span>
         </TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="start" alignOffset={-8} className="w-82.5">

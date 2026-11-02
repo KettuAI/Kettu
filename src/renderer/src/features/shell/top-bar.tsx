@@ -2,7 +2,6 @@ import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { PanelLeftIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
-import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { BackForward } from '@renderer/features/shell/back-forward'
 import { HistoryDialog } from '@renderer/features/shell/history-dialog'
@@ -32,7 +31,7 @@ export function TopBar({
   return (
     <header
       className={cn(
-        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 bg-app pr-3 pl-4 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
+        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 bg-app pr-3 pl-4.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
         cornered && 'pl-(--corner-inset)',
         className,
       )}
@@ -64,12 +63,12 @@ export function TitleBand() {
  */
 export function SidebarTitleBar() {
   return (
-    // On macOS 52 px, its buttons centred on the traffic lights, which main puts level with the
+    // On macOS 56 px, its buttons centred on the traffic lights, which main puts level with the
     // top bar's centre; elsewhere in the band.
     <div
       className={cn(
         'app-region-drag flex shrink-0 items-center gap-0.5 pr-2 pl-4.5',
-        hasBand ? 'h-(--title-bar)' : 'h-13 pt-3',
+        hasBand ? 'h-(--title-bar)' : 'h-14 pt-2',
       )}
     >
       {!hasBand && <span aria-hidden className="w-(--traffic-lights)" />}
@@ -164,13 +163,10 @@ export function SidebarToggle({ className }: { className?: string }) {
           />
         )}
       </TooltipTrigger>
-      {/* Notice lines end in text, not the keycap, so they keep the full end padding. */}
-      <TooltipContent
-        className={notices ? 'flex-col items-start gap-0.5 has-data-[slot=kbd]:pr-3' : undefined}
-      >
-        <span className="inline-flex items-center gap-1.5">
-          {label}
-          <Kbd>{formatShortcut('Mod+B')}</Kbd>
+      {/* As Back's and Forward's beside it: the keys as plain text after the label. */}
+      <TooltipContent className={cn('px-2.25 py-1.5', notices && 'flex-col items-start gap-0.5')}>
+        <span>
+          {label} <span className="opacity-60">{formatShortcut('Mod+B')}</span>
         </span>
         {notices?.labels.map((notice) => (
           <span key={notice} className="opacity-60">
