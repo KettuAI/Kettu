@@ -69,9 +69,12 @@ const isWork = (char: string | undefined): boolean =>
   char === 'w' ||
   char === 'p'
 
-/** Tool calls, plans, compactions and long thoughts fold into a run; other thoughts end it. */
+/**
+ * Tool calls, plans, compactions and long thoughts fold into a run; other thoughts end it, and so
+ * does a request for permission, which waits for the user below the work before it.
+ */
 const foldsIntoRun = (char: string | undefined): boolean =>
-  char === 'r' || char === 'g' || char === 't' || char === 'w' || char === 'p'
+  char === 'r' || char === 'g' || char === 't' || char === 'p'
 
 /**
  * Marks progress notes as c: an agent message that more work in its turn follows, as Codex's
@@ -133,7 +136,7 @@ export function buildItems(order: string[], shape: string, live = false, notes =
       while (foldsIntoRun(signature[end + 1])) end++
       const ids = order.slice(i, end + 1)
       // A lone tool call or long thought folds too, so every piece of work reads as one quiet
-      // line; a request for permission and a plan or compaction show as they are.
+      // line; a plan or compaction shows as it is.
       const lone =
         end === i && (signature[i] === 'g' || signature[i] === 't' || signature[i] === 'r')
       if (end > i || lone) {

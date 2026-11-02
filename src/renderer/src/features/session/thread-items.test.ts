@@ -158,6 +158,17 @@ describe('buildItems', () => {
     ])
   })
 
+  it('keeps a permission request out of the run of work before it', () => {
+    const waiting: ToolEntry = {
+      ...tool('x3', 'edit', 'in_progress'),
+      permission: { requestId: 'p', options: [] },
+    }
+    const s = state([user('u1'), tool('x1', 'execute'), tool('x2', 'execute'), waiting])
+    const result = buildItems(s.order, signatureOf(s), true)
+    expect(result.map((i) => i.key)).toEqual(['u1', 'run:x1', 'x3', 'status'])
+    expect(result[1]).toMatchObject({ type: 'run', ids: ['x1', 'x2'] })
+  })
+
   it('never folds an agent message', () => {
     const result = items([
       user('u1'),
