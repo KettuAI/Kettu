@@ -101,7 +101,7 @@ const theme = EditorView.theme({
     padding: 'var(--box-padding)',
     minHeight: 'var(--box-min-height)',
     fontSize: 'var(--prose-size)',
-    caretColor: 'var(--text-primary)',
+    caretColor: 'var(--control-on)',
     // Otherwise the content grows to its longest line, and the placeholder's 100% would be its
     // own text, which runs under the buttons beside the box.
     width: '100%',

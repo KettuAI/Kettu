@@ -120,8 +120,8 @@ export function NewSessionView({
         {toolsPath && <HeaderTools projectPath={toolsPath} />}
       </TopBar>
       <ColumnScroller className="flex flex-col px-7">
-        <div className="mx-auto flex w-full max-w-thread flex-1 flex-col justify-end">
-          <h1 className="mt-6 mb-6.5 animate-in text-center font-heading text-greeting font-medium text-balance fade-in animation-duration-(--duration-slow)">
+        <div className="mx-auto flex w-full max-w-reply flex-1 flex-col justify-end">
+          <h1 className="mt-6 mb-6.5 animate-in text-center font-display text-greeting font-bold text-balance fade-in animation-duration-(--duration-slow)">
             {t('newSession.heading')}
           </h1>
         </div>
@@ -280,7 +280,7 @@ function DraftComposer({
 
   return (
     <>
-      <div className="mx-auto w-full max-w-thread shrink-0">
+      <div className="mx-auto w-full max-w-reply shrink-0">
         <PromptBox
           box={box}
           agentId={agentId}
@@ -322,7 +322,7 @@ function DraftComposer({
       </div>
       {/* The lower part starts the top bar's height taller: the column begins that far below the
           sheet's top, so an even split of the rest about the box centres it on the sheet. */}
-      <div className="mx-auto flex w-full max-w-thread flex-1 basis-(--top-bar) flex-col">
+      <div className="mx-auto flex w-full max-w-reply flex-1 basis-(--top-bar) flex-col">
         {/* Where and with what the session starts, under the box as in the reference. */}
         <div className="flex h-9.5 min-w-0 items-center gap-0.5 px-0.5 pt-1">
           {parent ? (

@@ -353,7 +353,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                 </TooltipContent>
               </Tooltip>
               <header>
-                <h1 className="font-heading text-title font-medium">{t('page.recentlyDeleted')}</h1>
+                <h1 className="font-display text-title font-bold">{t('page.recentlyDeleted')}</h1>
                 <p className="mt-1.5 text-small leading-5.5 text-secondary">
                   {t('page.deletedDescription')}
                 </p>
@@ -362,7 +362,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
           ) : (
             <>
               <header className="flex h-7.5 items-center gap-2">
-                <h1 className="min-w-0 flex-1 font-heading text-title font-medium">
+                <h1 className="min-w-0 flex-1 font-display text-title font-bold">
                   {t('page.title')}
                 </h1>
                 <div className="flex items-center gap-0.5">
@@ -463,7 +463,7 @@ function DragStrip() {
     <div
       className={cn(
         'app-region-drag flex h-top-bar shrink-0 items-end',
-        cornered && 'pl-[calc(36px+var(--traffic-lights))]',
+        cornered && 'pl-(--corner-inset)',
       )}
     >
       {cornered && <CornerControls className="-ml-1" />}

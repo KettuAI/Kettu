@@ -378,7 +378,7 @@ function ContextBar({
     <div
       role="img"
       aria-label={t('usage.context.used')}
-      className="flex h-2 gap-px overflow-hidden rounded-full bg-track"
+      className="flex h-2 gap-px overflow-hidden rounded-full bg-border"
     >
       {segments.map((segment) => (
         <div

@@ -116,7 +116,7 @@ function Workbench() {
       const width = mainWidth - parseFloat(padding.paddingLeft) - parseFloat(padding.paddingRight)
       mainContent.current.style.width = `${width}px`
       box.style.overflow = 'clip'
-      box.style.boxShadow = 'var(--elevation-sheet)'
+      box.style.boxShadow = 'var(--sheet-ring)'
       // Over the sheets' rounded left edge, so the two meet as one sheet.
       const overlap = parseFloat(getComputedStyle(box).borderTopLeftRadius)
       wing.current.style.right = `${width - overlap}px`
@@ -208,20 +208,30 @@ function Workbench() {
           <AppSidebar />
         </div>
       </ResizablePanel>
-      {/* The line between the two. Collapsed, the handle takes no width and leaves the tab
+      {/* On the main sheet's edge. Collapsed, the handle takes no width and leaves the tab
           order. */}
       <ResizableHandle
         withHandle={!collapsed}
         disabled={collapsed}
-        className={cn('bg-border', collapsed && 'pointer-events-none w-0')}
+        className={cn(collapsed && 'pointer-events-none w-0')}
         onPointerDown={() => sliding.current && endSlide()}
       />
       <ResizablePanel id="main" minSize="560px" className={SLIDING_PANEL} style={SHEET_PANEL}>
-        {/* Under the main area's columns, which drags the window. On Windows and Linux the band
-            above them holds the window controls. */}
-        <main ref={desk} className={cn(PANEL_CONTENT, DESK, hasBand && 'pt-(--title-bar)')}>
+        {/* The desk around the main area's sheets, which drags the window; its left side only
+            while the sidebar is collapsed. On Windows and Linux the band above them holds the
+            window controls. */}
+        <main
+          ref={desk}
+          className={cn(
+            PANEL_CONTENT,
+            DESK,
+            'py-(--sheet-gap) pr-(--sheet-gap)',
+            collapsed && 'pl-(--sheet-gap)',
+            hasBand && 'pt-[calc(var(--title-bar)+var(--sheet-gap))]',
+          )}
+        >
           <TitleBand />
-          <div ref={frame} className="relative flex h-full justify-end">
+          <div ref={frame} className="relative flex h-full justify-end rounded-xl">
             <div ref={mainContent} className="isolate h-full w-full min-w-0 shrink-0">
               <MainArea />
             </div>

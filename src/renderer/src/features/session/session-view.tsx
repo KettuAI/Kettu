@@ -170,7 +170,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
       {/* Leaves the width the column's scrollbar takes, so the composer centres on the column. */}
       <div style={{ paddingRight: gutter }}>
         <div className="px-7 pb-3.5">
-          <div className="mx-auto flex w-full max-w-thread flex-col gap-2">
+          <div className="mx-auto flex w-full max-w-reply flex-col gap-2">
             {session && status === 'failed' && (
               <FailedState
                 title={t('view.stopped', { agent: name })}

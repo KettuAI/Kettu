@@ -135,7 +135,9 @@ export function AppSidebar() {
       <div
         className={cn(
           'app-region-drag flex shrink-0 items-center pr-2.5 pl-5',
-          hasBand ? 'h-(--title-bar)' : 'h-top-bar',
+          hasBand
+            ? 'h-(--title-bar)'
+            : 'h-[calc(var(--sheet-gap)+var(--top-bar))] pt-(--sheet-gap)',
         )}
       >
         {!hasBand && <span aria-hidden className="w-(--traffic-lights)" />}

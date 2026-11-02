@@ -308,7 +308,7 @@ export function ItemPageHeader({
           {icon}
         </span>
         <div className="relative flex min-w-0 flex-1 flex-col gap-0.75">
-          <h2 className="flex min-w-0 font-heading text-title font-medium">{title}</h2>
+          <h2 className="flex min-w-0 font-display text-title font-bold">{title}</h2>
           {children && <div className="flex min-w-0 items-center gap-1.75">{children}</div>}
         </div>
         {actions && <div className="relative flex shrink-0 items-center gap-1.5">{actions}</div>}

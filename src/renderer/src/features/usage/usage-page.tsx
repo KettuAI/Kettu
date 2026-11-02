@@ -157,7 +157,7 @@ export default function UsagePage() {
       <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
         <div className="@container mx-auto w-full max-w-275 px-10 pb-20">
           <header className="mb-5 flex min-h-7.5 items-center gap-3">
-            <h1 className="truncate font-heading text-title font-medium">{t('page.title')}</h1>
+            <h1 className="truncate font-display text-title font-bold">{t('page.title')}</h1>
             <span className="flex-1" />
             {!unavailable && !empty && <SyncState />}
           </header>
@@ -178,7 +178,7 @@ function PageBar() {
     <div
       className={cn(
         'app-region-drag flex shrink-0 items-center',
-        cornered ? 'h-top-bar pl-[calc(36px+var(--traffic-lights))]' : 'h-9',
+        cornered ? 'h-top-bar pl-(--corner-inset)' : 'h-9',
       )}
     >
       {cornered && <CornerControls className="-ml-1" />}
@@ -1167,7 +1167,7 @@ function Composition({ facts }: { facts: ReturnType<typeof figures> }) {
       <div
         role="img"
         aria-label={`${t('parts.title')}: ${spoken}`}
-        className="mt-2.25 flex h-2 gap-0.5 overflow-hidden rounded-xs bg-track"
+        className="mt-2.25 flex h-2 gap-0.5 overflow-hidden rounded-xs bg-border"
       >
         {parts.map(
           ({ part, share }) =>
@@ -1284,7 +1284,7 @@ function BreakdownCard({
                     <span className="flex items-center justify-end gap-2.5 text-secondary">
                       <span
                         aria-hidden
-                        className="h-1 w-11 shrink-0 overflow-hidden rounded-full bg-track"
+                        className="h-1 w-11 shrink-0 overflow-hidden rounded-full bg-border"
                       >
                         <span
                           className="block h-full rounded-full bg-heat-4"

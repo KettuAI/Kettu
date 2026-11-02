@@ -60,7 +60,7 @@ export function RemoteHeader({ id }: { id: string }) {
   return (
     <header className="flex items-center gap-3.5 pb-7">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <h2 id={id} className="font-heading text-title font-medium text-balance">
+        <h2 id={id} className="font-display text-title font-bold text-balance">
           {t('sections.remote')}
         </h2>
         <p className="text-small text-pretty text-tertiary">{t('pages.remote', onHost)}</p>

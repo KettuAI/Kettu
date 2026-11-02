@@ -10,8 +10,8 @@ export const DESK =
 export const ON_DESK =
   'relative before:pointer-events-none before:absolute before:inset-0 before:app-region-no-drag'
 
-/** A flat column: the main area, a page or a side pane, divided from the next by a hairline. */
-export const SHEET = `${ON_DESK} overflow-clip bg-app`
+/** A sheet laid on the desk: the main area, a page or a side pane. */
+export const SHEET = `${ON_DESK} overflow-clip rounded-xl bg-app shadow-sheet`
 
-/** The style of a resizable panel that holds a sheet, whose focus ring it would clip. */
+/** The style of a resizable panel that holds a sheet, whose ring and shadow it would clip. */
 export const SHEET_PANEL = { overflow: 'visible' } as const

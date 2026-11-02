@@ -221,7 +221,7 @@ function SettingsLayout({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  // The desk drags the window; the column and the page on it opt out.
+  // The desk drags the window; the column and the page's sheet on it opt out.
   return (
     <div
       className={cn(
@@ -229,12 +229,14 @@ function SettingsLayout({
         DESK,
       )}
     >
-      <aside className={cn('flex w-64 shrink-0 flex-col border-r pb-2', ON_DESK)}>
+      <aside className={cn('flex w-64 shrink-0 flex-col pb-2', ON_DESK)}>
         {/* As the sidebar's header: level with the top bar on macOS, in the band elsewhere. */}
         <div
           className={cn(
             'app-region-drag flex shrink-0 items-center px-2',
-            hasBand ? 'h-(--title-bar)' : 'h-top-bar',
+            hasBand
+              ? 'h-(--title-bar)'
+              : 'h-[calc(var(--sheet-gap)+var(--top-bar))] pt-(--sheet-gap)',
           )}
         >
           {!hasBand && (
@@ -282,8 +284,15 @@ function SettingsLayout({
         <AppFooter />
       </aside>
 
-      <main className={cn('flex min-w-0 flex-1 flex-col', hasBand && 'mt-(--title-bar)', SHEET)}>
-        <div className="app-region-drag h-top-bar shrink-0" />
+      <main
+        className={cn(
+          'my-(--sheet-gap) mr-(--sheet-gap) flex min-w-0 flex-1 flex-col',
+          hasBand && 'mt-[calc(var(--title-bar)+var(--sheet-gap))]',
+          SHEET,
+        )}
+      >
+        {/* A drag region; with the desk above the sheet it spans a top bar's height. */}
+        <div className="app-region-drag h-[calc(var(--top-bar)-var(--sheet-gap))] shrink-0" />
         <div
           ref={scroller}
           className="min-h-0 flex-1 overflow-y-auto px-8 [scrollbar-gutter:stable_both-edges]"
@@ -334,7 +343,7 @@ export function PageHeader({
 }) {
   return (
     <header className="flex flex-col gap-1 pb-7">
-      <h2 id={id} className="font-heading text-title font-medium text-balance">
+      <h2 id={id} className="font-display text-title font-bold text-balance">
         {title}
       </h2>
       {children && <p className="text-small text-pretty text-tertiary">{children}</p>}
@@ -364,7 +373,7 @@ function NavRow({
       onClick={onChoose}
       className={cn(
         'group flex h-row shrink-0 items-center gap-2.5 rounded-lg px-2.5 text-left text-ui text-primary outline-none transition-[background-color,opacity] duration-(--duration-fast) focus-ring',
-        selected ? 'bg-selected' : 'hover:bg-hover',
+        selected ? 'bg-raised font-medium shadow-raised' : 'hover:bg-hover',
         dim && 'opacity-42',
       )}
     >
