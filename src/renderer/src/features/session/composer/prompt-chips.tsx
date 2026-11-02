@@ -230,7 +230,7 @@ export function usePromptChips({
             }
             side="top"
             align="start"
-            sideOffset={10}
+            sideOffset={4}
             className="isolate z-50 outline-none"
           >
             <Popover.Popup
@@ -258,7 +258,7 @@ export function usePromptChips({
             anchor={anchor}
             side="top"
             align="start"
-            sideOffset={8}
+            sideOffset={4}
             className="pointer-events-none isolate z-40 w-(--anchor-width) outline-none"
           >
             <Popover.Popup

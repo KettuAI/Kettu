@@ -266,6 +266,8 @@ export function OptionMenu({
       <DropdownMenuContent
         side={side}
         align={align}
+        // The mode menu starts at the row's inset, left of its trigger's label, as drawn.
+        alignOffset={isMode && side === 'top' ? -8 : 0}
         sideOffset={side === 'top' ? aboveBox : 6}
         aria-label={option.name}
         className={isMode ? 'w-85' : 'w-64'}

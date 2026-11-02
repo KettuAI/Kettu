@@ -98,6 +98,9 @@ const theme = EditorView.theme({
     fontSize: 'var(--text-hint)',
   },
   '.cm-chip-slash': { color: 'var(--control-on)' },
+  // A selected chip shows its own fill, not the text selection behind its label.
+  '.cm-chip::selection': { backgroundColor: 'transparent' },
+  '.cm-chip ::selection': { backgroundColor: 'transparent' },
   // A line with chips opens up, so chips on two lines do not touch.
   // Two rules: the theme splits a selector list at its commas.
   '.cm-line:has(.cm-chip)': { lineHeight: 'calc(var(--spacing) * 7.5)' },
