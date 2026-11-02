@@ -115,7 +115,7 @@ describe('appUpdateText', () => {
 
   it('names the version an update came from and links to what is new', () => {
     expect(appUpdateText({ kind: 'updated', version: '0.3.0', from: '0.2.0' })).toMatchObject({
-      title: 'Updated to Kettu 0.3.0',
+      title: 'Kettu 0.3.0',
       note: 'Updated from 0.2.0',
       action: 'whats-new',
       href: 'https://github.com/KettuAI/Kettu/releases/tag/v0.3.0',

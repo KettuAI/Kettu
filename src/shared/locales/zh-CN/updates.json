@@ -9,7 +9,7 @@
     "updateNote": "下载后重启",
     "moveNote": "移到“应用程序”后重启",
     "downloadNote": "从发布页面下载",
-    "updated": "已更新到 Kettu {{version}}",
+    "updated": "Kettu {{version}}",
     "updatedNote": "从 {{version}} 更新而来",
     "installing": "正在更新 Kettu",
     "downloading": "正在下载 {{version}}",
