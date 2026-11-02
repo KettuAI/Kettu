@@ -148,7 +148,8 @@ export function BrowserPane({
 
   const hasPage = !!state?.url
   const driving = state?.control.kind === 'agent'
-  const userControl = state?.control.kind === 'user'
+  // The user keeps control after Hand back's 10 s; only the pill goes until the next call.
+  const userControl = state?.control.kind === 'user' && state.control.bar
 
   return (
     <div
