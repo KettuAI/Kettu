@@ -28,6 +28,10 @@ export type BrowserControlState =
 /** What the user answered a request to open a new origin. */
 export type BrowserOriginDecision = 'session' | 'project' | 'deny'
 
+export function isOriginDecision(value: unknown): value is BrowserOriginDecision {
+  return value === 'session' || value === 'project' || value === 'deny'
+}
+
 /** The answer to a request to open a new origin; `timeout` when the user did not answer. */
 export type BrowserOriginAnswer = BrowserOriginDecision | 'timeout'
 

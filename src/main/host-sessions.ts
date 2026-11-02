@@ -75,6 +75,8 @@ export interface HostSessionsOptions {
   holdMs?: number
   /** A host's `browser.call` event, for this computer's page of its session; windows never see it. */
   browserCall?(hostId: string, call: unknown): void
+  /** A host's `browser.originDecided` event, for that page too. */
+  originDecided?(hostId: string, event: unknown): void
   /** The host's session ended. */
   ended?(hostId: string): void
   media?: HostMediaGrants
@@ -385,6 +387,10 @@ export class HostSessions {
     const event = message.event as { type?: unknown; call?: unknown } | undefined
     if (message.type === 'event' && event?.type === 'browser.call') {
       this.options.browserCall?.(hostId, event.call)
+      return
+    }
+    if (message.type === 'event' && event?.type === 'browser.originDecided') {
+      this.options.originDecided?.(hostId, event)
       return
     }
     for (const window of this.windows) {
