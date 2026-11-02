@@ -430,6 +430,8 @@ export interface HostContract {
   'agents.checkUpdates': { params: void; result: AgentStatus[] }
   // Skips the agent's current update in the sidebar's notice, until a newer one.
   'agents.skipUpdate': { params: { agentId: AgentId }; result: void }
+  // Offers the skipped update in the sidebar's notice again.
+  'agents.unskipUpdate': { params: { agentId: AgentId }; result: void }
   // Both resolve once the task is done or cancelled, and reject with its error.
   'agents.update': { params: { agentId: AgentId }; result: void }
   // Updates the user's own program (Claude Code, Codex, OpenCode) the way it was installed.
@@ -728,6 +730,7 @@ export const HOST_METHODS = [
   'agents.reinstall',
   'agents.checkUpdates',
   'agents.skipUpdate',
+  'agents.unskipUpdate',
   'agents.update',
   'agents.updateCli',
   'agents.setApiKey',
