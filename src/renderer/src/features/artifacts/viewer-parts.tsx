@@ -74,7 +74,11 @@ export function BarButton({
             disabled={disabled}
             onClick={onClick}
             className={cn(
-              size === 'compact' ? 'size-7.5 rounded-tile text-secondary' : 'text-foreground',
+              size === 'compact'
+                ? 'size-7.5 rounded-tile text-secondary'
+                : size === 'group'
+                  ? 'text-secondary'
+                  : 'text-foreground',
             )}
           />
         }
@@ -227,7 +231,7 @@ export function ZoomPill({ controls }: { controls: CanvasControls }) {
               size="sm"
               aria-pressed={state.fitted}
               onClick={() => commands?.fitAll()}
-              className="h-7 rounded-tile px-2.5 text-hint font-normal text-secondary aria-pressed:bg-transparent aria-pressed:text-primary aria-pressed:shadow-none"
+              className="h-7 rounded-tile px-2.5 text-hint font-normal text-secondary aria-pressed:bg-transparent aria-pressed:text-secondary aria-pressed:shadow-none"
             />
           }
         >

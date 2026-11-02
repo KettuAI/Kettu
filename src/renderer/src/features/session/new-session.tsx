@@ -13,7 +13,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { OptionMenu } from '@renderer/features/session/composer/control-row'
 import type { SelectOption } from '@renderer/features/session/composer/levels'
 import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
-import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { useHostLabel } from '@renderer/features/sidebar/host-label'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { usePane } from '@renderer/features/split/pane-context'
@@ -89,7 +88,6 @@ export function NewSessionView({
     return !!status && canStart(status)
   })
   const agentId = installed ? chosenId : null
-  const toolsPath = project?.path ?? (parent?.scratch ? parent.projectPath : null)
   // From the kept draft, so a draft left on an earlier visit hides Recent artifacts from the start.
   const [holdsMessage, setHoldsMessage] = useState(() =>
     hasMessage(readDraft(NEW_SESSION_DRAFT), readDraftAttachments(NEW_SESSION_DRAFT)),
@@ -117,7 +115,6 @@ export function NewSessionView({
           </NoDrag>
         )}
         <span className="flex-1" />
-        {toolsPath && <HeaderTools projectPath={toolsPath} />}
       </TopBar>
       <ColumnScroller className="flex flex-col px-8 pb-12">
         {/* The heading sits a fixed share down the sheet, and moves up on a short one. */}
@@ -562,14 +559,14 @@ function PickUp({ hidden }: { hidden: boolean }) {
           key={session.id}
           type="button"
           onClick={() => openSession(session.id, session.projectPath)}
-          className="flex h-10.5 min-w-0 items-center gap-3 rounded-xl px-2.5 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
+          className="flex h-10.5 min-w-0 items-center gap-3 rounded-segments px-2.5 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
         >
           <AgentMark agent={session.agentId} size={16} className="shrink-0" />
           <span className="min-w-0 flex-1 truncate text-row text-primary">
             {sessionTitle(session)}
           </span>
           <PickupStatus session={session} now={now} />
-          <span className="w-24 shrink-0 truncate text-right text-control text-tertiary">
+          <span className="w-16 shrink-0 truncate text-right text-control text-tertiary">
             {session.scratch
               ? t('newSession.noProject')
               : (projects.find((p) => p.path === session.projectPath)?.name ??
