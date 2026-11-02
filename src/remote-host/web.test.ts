@@ -34,6 +34,7 @@ const BUILD: Record<string, string> = {
   'favicon.ico': 'icon',
   'manifest.webmanifest': '{}',
   'assets/index-B4x9.js': SCRIPT,
+  'assets/media-worker-D3f1.js': SCRIPT,
   'assets/index-C2e1.css': 'body{}',
   'assets/fonts/inter.woff2': 'font',
 }
@@ -180,6 +181,13 @@ describe('the web server', () => {
       'cache-control': 'public, max-age=31536000, immutable',
       'x-content-type-options': 'nosniff',
       'x-frame-options': 'DENY',
+    })
+    expect(script.headers['service-worker-allowed']).toBeUndefined()
+    // The media worker serves the whole page, from its folder of assets.
+    const worker = await fetchRaw(port, '/assets/media-worker-D3f1.js')
+    expect(worker.headers).toMatchObject({
+      'content-type': 'text/javascript; charset=utf-8',
+      'service-worker-allowed': '/',
     })
     expect((await fetchRaw(port, '/assets/index-C2e1.css')).headers['content-type']).toBe(
       'text/css; charset=utf-8',

@@ -26,6 +26,28 @@ export function toast(title: string, action?: { label: string; onClick: () => vo
   })
 }
 
+/**
+ * A toast that stays while work goes on, with an action such as Cancel, which closes it; the
+ * caller updates its title and closes it once the work is done.
+ */
+export function lastingToast(title: string, action: { label: string; onClick: () => void }) {
+  const id: string = manager.add({
+    title,
+    timeout: 0,
+    actionProps: {
+      children: action.label,
+      onClick: () => {
+        manager.close(id)
+        action.onClick()
+      },
+    },
+  })
+  return {
+    update: (next: string) => manager.update(id, { title: next }),
+    close: () => manager.close(id),
+  }
+}
+
 /** The toasts' layer, mounted once at the app's root. */
 export function Toaster() {
   return (

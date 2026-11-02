@@ -82,6 +82,11 @@ function linkError(code: PortErrorCode, message: string, data?: unknown): LinkEr
   return { name: 'PortRequestError', code, message, ...(data === undefined ? {} : { data }) }
 }
 
+/** The DOMException an aborted fetch rejects with, so callers tell it apart as they do there. */
+function aborted(): DOMException {
+  return new DOMException('The request was aborted', 'AbortError')
+}
+
 /** The WebSocket address of the channel on this page's own origin. */
 export function channelUrl(location: { protocol: string; host: string }): string {
   return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${CHANNEL_PATH}`
@@ -102,7 +107,8 @@ export function dialWebSocket(url: string): Dial {
 
 interface Pending {
   resolve(value: unknown): void
-  reject(error: LinkError): void
+  // An AbortError once its caller gave it up.
+  reject(error: LinkError | DOMException): void
 }
 
 /** A request not answered yet; its id once its message went, on the session it went on. */
@@ -111,6 +117,10 @@ interface Outgoing {
   params: unknown
   pending: Pending
   id: number | null
+  /** Its caller gave it up: what its answer brings is cancelled, not read. */
+  aborted: boolean
+  /** The byte streams its answer brings, while they come. */
+  streams: number[]
 }
 
 interface Download {
@@ -320,17 +330,50 @@ export class HostLink {
     void this.session?.channel.send(message).catch(() => {})
   }
 
-  request(method: string, params: unknown): Promise<unknown> {
+  /**
+   * A request to the host. Once `signal` aborts, it fails at once: a request not sent yet is not
+   * sent, and the byte streams of its answer, whether coming or still to come, are cancelled.
+   */
+  request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
     if (this.stopped) {
       return Promise.reject(
         linkError('host_restarted', 'This browser no longer connects to the host'),
       )
     }
+    if (signal?.aborted) return Promise.reject(aborted())
     return new Promise((resolve, reject) => {
-      const outgoing: Outgoing = { method, params, pending: { resolve, reject }, id: null }
+      const outgoing: Outgoing = {
+        method,
+        params,
+        pending: { resolve, reject },
+        id: null,
+        aborted: false,
+        streams: [],
+      }
       this.outgoing.add(outgoing)
       if (this.session) void this.post(this.session, outgoing)
+      signal?.addEventListener('abort', () => this.abort(outgoing), { once: true })
     })
+  }
+
+  private abort(outgoing: Outgoing): void {
+    if (outgoing.aborted) return
+    outgoing.aborted = true
+    const { reject } = outgoing.pending
+    outgoing.pending = { resolve: () => {}, reject: () => {} }
+    reject(aborted())
+    // Not sent, or sent and not answered yet: nothing more goes, and the answer finds it aborted.
+    if (outgoing.id === null) this.settle(outgoing)
+    for (const stream of outgoing.streams) this.cancelDownload(stream)
+  }
+
+  /** Gives up a download the page no longer wants, so the host stops sending it. */
+  private cancelDownload(stream: number): void {
+    const download = this.downloads.get(stream)
+    if (!download) return
+    this.downloads.delete(stream)
+    download.reject(linkError('internal', 'The download was cancelled'))
+    this.send({ type: 'stream.cancel', stream })
   }
 
   private setState(state: LinkState): void {
@@ -445,7 +488,12 @@ export class HostLink {
     this.setState({ kind: 'connected', welcome })
     // The host read the requests up to the one it names; the rest go again, as new ones.
     const read = resumed ? welcome.resumed!.request : 0
-    for (const outgoing of this.outgoing) {
+    for (const outgoing of [...this.outgoing]) {
+      // Given up while the host was away: its answer is not wanted.
+      if (outgoing.aborted) {
+        this.settle(outgoing)
+        continue
+      }
       if (outgoing.id !== null && outgoing.id <= read) continue
       if (outgoing.id !== null) this.inFlight.delete(outgoing.id)
       outgoing.id = null
@@ -570,14 +618,23 @@ export class HostLink {
     if (message.type !== 'closing' && resumable(session)) this.acks.counted()
     switch (message.type) {
       case 'response': {
-        const pending = this.takePending(message.id)
-        if (!pending) return
+        const outgoing = this.takeOutgoing(message.id)
+        if (!outgoing) return
         // Registered now, before the bytes that follow the result on the channel.
-        void this.withDownloads(message.result, 0).then(pending.resolve, pending.reject)
+        const done = this.withDownloads(message.result, 0, outgoing.streams)
+        if (outgoing.aborted) {
+          for (const stream of outgoing.streams) this.cancelDownload(stream)
+          done.catch(() => {})
+          return
+        }
+        void done.then(
+          (result) => outgoing.pending.resolve(result),
+          (error: LinkError) => outgoing.pending.reject(error),
+        )
         return
       }
       case 'error': {
-        const pending = this.takePending(message.id)
+        const pending = this.takeOutgoing(message.id)?.pending
         if (!pending) return
         const error = message.error as Partial<PortError> | undefined
         pending.reject(
@@ -634,19 +691,24 @@ export class HostLink {
     download.size += data.length
   }
 
-  private takePending(id: unknown): Pending | null {
+  private takeOutgoing(id: unknown): Outgoing | null {
     if (typeof id !== 'number') return null
     const outgoing = this.inFlight.get(id)
     if (!outgoing) return null
-    return this.settle(outgoing)
+    this.settle(outgoing)
+    return outgoing
   }
 
-  /** `value` with each stream it names replaced by that stream's bytes, once they all came. */
-  private withDownloads(value: unknown, depth: number): Promise<unknown> {
+  /**
+   * `value` with each stream it names replaced by that stream's bytes, once they all came; the
+   * streams' ids go into `streams`.
+   */
+  private withDownloads(value: unknown, depth: number, streams: number[]): Promise<unknown> {
     if (typeof value !== 'object' || value === null || depth >= MAX_DEPTH) {
       return Promise.resolve(value)
     }
     if (isStreamRef(value)) {
+      streams.push(value.$stream)
       return new Promise((resolve, reject) => {
         this.downloads.set(value.$stream, { chunks: [], size: 0, resolve, reject })
       })
@@ -655,7 +717,7 @@ export class HostLink {
       ? value.map((item, i) => [i, item] as const)
       : Object.entries(value)
     const resolved = entries.map(([key, item]) =>
-      this.withDownloads(item, depth + 1).then((done) => [key, done] as const),
+      this.withDownloads(item, depth + 1, streams).then((done) => [key, done] as const),
     )
     return Promise.all(resolved).then((done) => {
       if (Array.isArray(value)) return done.map(([, item]) => item)

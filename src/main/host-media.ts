@@ -8,6 +8,7 @@ import { open, rm } from 'node:fs/promises'
 import {
   mediaUrl,
   mediaUrlToken,
+  parseRange,
   type MediaFile,
   type MediaGrant,
   type MediaType,
@@ -15,7 +16,6 @@ import {
 import type { MediaReadParams } from '@shared/remote/streams'
 import { mediaToken } from '../agent-host/media'
 import type { HostMediaFile, HostMediaGrants } from './host-sessions'
-import { parseRange } from './media'
 
 /** The most one read asks of the host. */
 export const PART_BYTES = 1024 * 1024

@@ -42,6 +42,7 @@
     "binaryDescription": "{{size}}，不显示预览。",
     "tooLargeTitle": "文件过大，无法预览",
     "tooLargeDescription": "{{size}}；预览仅支持不超过 {{limit}} 的文件。",
+    "mediaTooLargeTitle": "文件太大，无法在这里显示",
     "unsaved": "有未保存的更改",
     "save": "保存",
     "changedOnDisk": "这个文件在磁盘上被改动了。",
