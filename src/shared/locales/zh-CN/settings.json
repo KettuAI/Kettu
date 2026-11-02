@@ -80,11 +80,6 @@
       "unavailable": "仅在已安装的应用中可用。",
       "keywords": "登录 启动 开机 例程 login startup launch routine"
     },
-    "confirmLinks": {
-      "name": "打开链接前先询问",
-      "description": "在默认浏览器中打开前，先显示链接的去向。",
-      "keywords": "链接 网址 浏览器 打开 确认 link url browser"
-    },
     "outlineSummaries": {
       "name": "在大纲中总结消息",
       "description": "大纲打开且有尚未总结的消息时，使用该会话 Agent 的小模型，并消耗其套餐额度或积分。",
@@ -342,8 +337,22 @@
       "cleared": "浏览数据已清除"
     },
     "groups": {
+      "links": "Agent 给出的链接",
       "siteData": "站点数据",
       "allowedSites": "允许的站点"
+    },
+    "openLinksIn": {
+      "name": "链接打开方式",
+      "description": "Agent 回复中的链接在哪里打开。按住 {{mod}} 点击则用另一种方式。本地地址始终在会话浏览器中打开。",
+      "keywords": "链接 网址 浏览器 打开 默认 会话 link url browser open default session",
+      "defaultBrowser": "默认浏览器",
+      "session": "会话浏览器",
+      "ask": "每次询问"
+    },
+    "confirmLinks": {
+      "name": "首次打开站点前先询问",
+      "description": "显示完整地址，并让你选择在哪里打开。",
+      "keywords": "链接 网址 浏览器 打开 确认 询问 首次 link url browser open confirm ask"
     },
     "allowedSites": {
       "name": "始终允许的站点",

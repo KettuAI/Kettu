@@ -51,6 +51,7 @@ import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agen
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
+import { loadSiteIcons, useDefaultBrowser } from '@renderer/stores/site-icons'
 import { browserNotifications, notificationsProblem } from '@renderer/web/notifications'
 import {
   CONFIRM,
@@ -176,6 +177,29 @@ export function ConfirmLinks({ label }: { label: string }) {
         label={label}
         checked={checked}
         onChange={(v) => apply({ thread: { confirmLinks: v } })}
+      />
+    </>
+  )
+}
+
+export function OpenLinksIn({ label }: { label: string }) {
+  const { t } = useTranslation('settings')
+  const value = useSettings().thread.openLinksIn
+  const browser = useDefaultBrowser()
+  const [apply, error] = useApply()
+  useEffect(loadSiteIcons, [])
+  return (
+    <>
+      <ControlError error={error} />
+      <Segmented
+        label={label}
+        value={value}
+        options={[
+          { value: 'browser', label: browser.name ?? t('browser.openLinksIn.defaultBrowser') },
+          { value: 'session', label: t('browser.openLinksIn.session') },
+          { value: 'ask', label: t('browser.openLinksIn.ask') },
+        ]}
+        onChange={(v) => apply({ thread: { openLinksIn: v } })}
       />
     </>
   )

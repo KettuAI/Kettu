@@ -105,6 +105,7 @@ import {
   NotificationPreview,
   NotificationSwitch,
   OpenAtLogin,
+  OpenLinksIn,
   OutlineSummaries,
   Proxy,
   ReduceMotion,
@@ -231,15 +232,6 @@ export function useGeneralSection(): SectionDef {
             disabled={remoteOn}
           />
         ),
-      },
-      {
-        id: 'confirm-links',
-        name: t('general.confirmLinks.name'),
-        english: en('general.confirmLinks.name'),
-        description: t('general.confirmLinks.description'),
-        keywords: t('general.confirmLinks.keywords'),
-        group: thread,
-        render: () => <ConfirmLinks label={t('general.confirmLinks.name')} />,
       },
       {
         id: 'outline-summaries',
@@ -707,12 +699,31 @@ export function useGitSection(): SectionDef {
 export function useBrowserSection(): SectionDef {
   const { t } = useTranslation('settings')
   const en = english()
+  const links = group('links-from-agents', t('browser.groups.links'))
   return {
     id: 'browser',
     title: t('sections.browser'),
     description: t('pages.browser'),
     icon: GlobeIcon,
     rows: [
+      {
+        id: 'open-links-in',
+        name: t('browser.openLinksIn.name'),
+        english: en('browser.openLinksIn.name'),
+        description: t('browser.openLinksIn.description', { mod: formatShortcut('Mod') }),
+        keywords: t('browser.openLinksIn.keywords'),
+        group: links,
+        render: () => <OpenLinksIn label={t('browser.openLinksIn.name')} />,
+      },
+      {
+        id: 'confirm-links',
+        name: t('browser.confirmLinks.name'),
+        english: en('browser.confirmLinks.name'),
+        description: t('browser.confirmLinks.description'),
+        keywords: t('browser.confirmLinks.keywords'),
+        group: links,
+        render: () => <ConfirmLinks label={t('browser.confirmLinks.name')} />,
+      },
       {
         id: 'clear-data',
         name: t('browser.clearData.name'),

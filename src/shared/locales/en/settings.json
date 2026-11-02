@@ -81,11 +81,6 @@
       "unavailable": "Available in the installed app.",
       "keywords": "login startup launch start routine"
     },
-    "confirmLinks": {
-      "name": "Ask before opening links",
-      "description": "Shows where a link goes before it opens in your default browser.",
-      "keywords": "link url browser open confirm"
-    },
     "outlineSummaries": {
       "name": "Summarize messages in the outline",
       "description": "Uses a small model of each session's agent, and its plan or credits, when the outline opens with messages it has not summarized.",
@@ -343,8 +338,22 @@
       "cleared": "Browsing data cleared"
     },
     "groups": {
+      "links": "Links from agents",
       "siteData": "Site data",
       "allowedSites": "Allowed sites"
+    },
+    "openLinksIn": {
+      "name": "Open links in",
+      "description": "Where links in an agent’s reply open. {{mod}}-click uses the other one. Local addresses always open in the session browser.",
+      "keywords": "link url browser open default chrome safari session",
+      "defaultBrowser": "Default browser",
+      "session": "Session browser",
+      "ask": "Ask"
+    },
+    "confirmLinks": {
+      "name": "Ask before opening a site for the first time",
+      "description": "Shows the full address and lets you pick where it opens.",
+      "keywords": "link url browser open confirm ask first visit"
     },
     "allowedSites": {
       "name": "Always allowed sites",

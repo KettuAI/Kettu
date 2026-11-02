@@ -2,6 +2,7 @@ import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { app, powerMonitor, protocol, safeStorage, session, shell } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
+import { BROWSER_PARTITION } from '@shared/browser'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import { HOSTS_FILE, type HostsStatus } from '@shared/remote/hosts'
 import type { RemoteStatus } from '@shared/remote/status'
@@ -20,6 +21,7 @@ import { RemoteBrowser } from './browser/remote'
 import { BrowserViews } from './browser/views'
 import { BrowserTools } from './browser/tools'
 import { BrowserOriginStore } from './browser/origins'
+import { SiteIcons } from './browser/site-icons'
 import { broadcast } from './events'
 import { HostAdmin } from './host-admin'
 import { HostMedia } from './host-media'
@@ -185,6 +187,12 @@ async function start(): Promise<void> {
 
   const mediaGrants = new MediaGrants()
   const browserOrigins = await BrowserOriginStore.load(userDataPath)
+  // From the pages' own partition, with the cache and cookies they loaded the icon with.
+  const browserSession = session.fromPartition(BROWSER_PARTITION)
+  const siteIcons = await SiteIcons.load(userDataPath, {
+    fetch: (url, init) => browserSession.fetch(url, init) as unknown as Promise<Response>,
+    changed: (event) => broadcast('browser:site-icon', event),
+  })
   // The browser tools need the host to answer them, and the pages need the window, so each takes
   // the other's work through this one late binding.
   let browserTools: BrowserTools | null = null
@@ -209,6 +217,10 @@ async function start(): Promise<void> {
       if (!remoteBrowser.originAnswered(request)) hostRef.current?.originAnswered(request)
     },
     removed: (sessionId) => remoteBrowser.pageRemoved(sessionId),
+    siteOpened: (pageUrl, favicons) => {
+      if (favicons) void siteIcons.favicons(pageUrl, favicons)
+      else siteIcons.visited(pageUrl)
+    },
   })
   browserTools = new BrowserTools({
     views: browserViews,
@@ -528,6 +540,7 @@ async function start(): Promise<void> {
     terminalHost,
     artifacts,
     browserViews,
+    siteIcons,
     mediaGrants,
     sharing,
     remoteHost,

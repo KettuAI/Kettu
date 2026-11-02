@@ -242,6 +242,8 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
     app: {
       // The web client is the host's own build, so its version is the host's.
       getInfo: () => hostInfo(),
+      // Links open in this browser itself, which the page cannot name.
+      defaultBrowser: async () => ({ name: null, icon: null }),
       respondQuit: async () => {},
       onConfirmQuit: never,
       setUnsaved: () => {},
@@ -444,6 +446,8 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       allowedSites: async () => [],
       removeAllowedSite: () => unsupported('show the browser'),
       clearData: () => unsupported('show the browser'),
+      siteIcons: async () => ({}),
+      onSiteIcon: never,
       setSessions: () => {},
       onState: never,
       onOpened: never,

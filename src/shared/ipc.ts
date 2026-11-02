@@ -30,6 +30,21 @@ export interface AppInfo {
   isPackaged: boolean
 }
 
+/** The system's default browser: its name and a small PNG of its icon; null where unknown. */
+export interface DefaultBrowser {
+  name: string | null
+  icon: string | null // a `data:image/png` URL
+}
+
+/** The icon of each site Kettu's browser opened, as a `data:` URL by origin; null for none. */
+export type SiteIconMap = Record<string, string | null>
+
+/** A change to the sites' icons. */
+export type SiteIconEvent =
+  | { kind: 'set'; origin: string; icon: string | null }
+  | { kind: 'removed'; origin: string }
+  | { kind: 'cleared' }
+
 /** Whether the app can register a login item, and whether macOS waits for the user's approval. */
 export interface LoginItemStatus {
   /** A development build cannot register one. */
@@ -109,6 +124,7 @@ export interface ForwardedKey {
 /** Request/response contract of every `ipcRenderer.invoke` channel, keyed by channel name. */
 export interface IpcInvokeContract {
   'app:get-info': { args: []; result: AppInfo }
+  'app:default-browser': { args: []; result: DefaultBrowser }
   'app:respond-quit': { args: [id: number, confirmed: boolean]; result: void }
   'settings:get': { args: []; result: SettingsFile }
   'settings:update': { args: [patch: SettingsPatch]; result: SettingsFile }
@@ -256,6 +272,7 @@ export interface IpcInvokeContract {
   'browser:allowed-sites': { args: []; result: AllowedSites[] }
   'browser:remove-allowed-site': { args: [projectPath: string, origin: string]; result: void }
   'browser:clear-data': { args: []; result: void }
+  'browser:site-icons': { args: []; result: SiteIconMap }
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeContract
@@ -283,6 +300,7 @@ export interface IpcEventContract {
   'browser:state': BrowserState
   /** An agent's first navigation opened a session's page, so the pane may show it. */
   'browser:opened': { sessionId: string }
+  'browser:site-icon': SiteIconEvent
 }
 
 export type IpcEventChannel = keyof IpcEventContract
@@ -341,6 +359,8 @@ export interface KettuApi {
   systemLocale: Locale
   app: {
     getInfo(): Promise<AppInfo>
+    /** The browser links open in outside Kettu, read once per run. */
+    defaultBrowser(): Promise<DefaultBrowser>
     respondQuit(id: number, confirmed: boolean): Promise<void>
     onConfirmQuit(listener: (request: QuitRequest) => void): () => void
     setUnsaved(files: UnsavedFile[]): void
@@ -563,8 +583,11 @@ export interface KettuApi {
     /** The sites each project always lets agents open. */
     allowedSites(): Promise<AllowedSites[]>
     removeAllowedSite(projectPath: string, origin: string): Promise<void>
-    /** Clears the profile's cookies, site storage and cache. */
+    /** Clears the profile's cookies, site storage and cache, and the sites' icons. */
     clearData(): Promise<void>
+    /** The icons of the sites the pages opened, which links in replies show. */
+    siteIcons(): Promise<SiteIconMap>
+    onSiteIcon(listener: (event: SiteIconEvent) => void): () => void
     /** The sessions that still exist; a page whose session does not is closed. */
     setSessions(sessionIds: string[]): void
     onState(listener: (state: BrowserState) => void): () => void
