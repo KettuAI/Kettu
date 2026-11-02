@@ -429,7 +429,7 @@ export function TerminalTab({
         className={cn(
           'group/tab relative flex h-7 items-center rounded-lg text-hint transition-[color,background-color,box-shadow] duration-(--duration-fast)',
           // An agent's tab is the widest, so it would shrink the most: it keeps room for its name.
-          owner ? 'max-w-64 min-w-28' : 'max-w-48 min-w-20',
+          owner ? 'max-w-64 min-w-28' : 'max-w-48 min-w-14',
           editing
             ? 'bg-surface text-primary ring-1 ring-border-strong ring-inset'
             : selected || isDragging

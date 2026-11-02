@@ -79,7 +79,7 @@ export function HeaderTools({
           <GitStatusCluster projectPath={projectPath} />
         </NoDrag>
       )}
-      <NoDrag className="shrink-0 gap-0.5">
+      <NoDrag className="shrink-0 gap-2">
         {/* Another host's terminal opens only while its owner allows devices it. */}
         {terminal && (
           <PaneToggle
