@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TerminalEvent, TerminalInfo } from '@shared/terminal-host'
 
 const request = vi.fn()
+const hostRequest = vi.fn()
 let emit!: (event: TerminalEvent) => void
 vi.stubGlobal('window', {
   kettu: {
+    hosts: { request: hostRequest },
     terminals: {
       request,
       onEvent: (handler: (event: TerminalEvent) => void) => {
@@ -16,9 +18,16 @@ vi.stubGlobal('window', {
   },
 })
 
+const { fromHostTerminalEvent } = await import('@renderer/lib/host')
+const { hostOfPath, onHost } = await import('@renderer/lib/host-paths')
 const {
+  endTerminals,
   forgetTerminal,
   initTerminals,
+  killTerminal,
+  reattachTerminals,
+  setSink,
+  takeTerminalEvent,
   moveTerminal,
   orderTerminals,
   renameTerminal,
@@ -49,6 +58,7 @@ const tabs = (projectPath = '/repo') =>
 
 beforeEach(() => {
   request.mockReset()
+  hostRequest.mockReset()
   useTerminalsStore.setState({
     byId: {},
     active: {},
@@ -218,5 +228,67 @@ describe('replaceStale', () => {
     request.mockResolvedValueOnce(info('n', 9))
     await replaceStale('a')
     expect(tabs()).toEqual(['n', 'b', 'c'])
+  })
+})
+
+describe("another host's terminals", () => {
+  const studio = 'c'.repeat(32)
+  const fromStudio = (event: TerminalEvent) =>
+    takeTerminalEvent(fromHostTerminalEvent(studio, event))
+
+  it('lists them under the project as the window names it, and asks that host of them', async () => {
+    fromStudio({ type: 'terminal.info', info: info('r1', 1, { projectPath: '/srv/app' }) })
+    const projectPath = onHost(studio, '/srv/app')
+    expect(tabs(projectPath)).toEqual(['r1'])
+    expect(hostOfPath(state().byId.r1!.projectPath)).toBe(studio)
+    hostRequest.mockResolvedValueOnce(undefined)
+    await killTerminal('r1')
+    expect(hostRequest).toHaveBeenCalledWith(studio, 'terminals.kill', { id: 'r1' })
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it('starts a screen over from the replay of a terminal it fell behind on', () => {
+    fromStudio({ type: 'terminal.info', info: info('r1', 1, { projectPath: '/srv/app' }) })
+    const replayed: string[] = []
+    setSink(
+      'r1',
+      () => {},
+      (replay) => replayed.push(replay),
+    )
+    fromStudio({ type: 'terminal.replay', id: 'r1', replay: '$ ls' })
+    expect(replayed).toEqual(['$ ls'])
+    setSink('r1', null)
+  })
+
+  it('attaches again on a new connection, and ends the ones the host no longer has', async () => {
+    fromStudio({ type: 'terminal.info', info: info('r1', 1, { projectPath: '/srv/app' }) })
+    fromStudio({ type: 'terminal.info', info: info('r2', 2, { projectPath: '/srv/app' }) })
+    add(info('mine', 3))
+    const replayed: string[] = []
+    setSink(
+      'r1',
+      () => {},
+      (replay) => replayed.push(replay),
+    )
+    hostRequest.mockImplementation(async (_: string, method: string) => {
+      if (method === 'terminals.list') return [info('r1', 1, { projectPath: '/srv/app' })]
+      if (method === 'terminals.attach') return { replay: 'again' }
+    })
+    await reattachTerminals(studio)
+    expect(hostRequest).toHaveBeenCalledWith(studio, 'terminals.list', {})
+    expect(hostRequest).toHaveBeenCalledWith(studio, 'terminals.attach', { id: 'r1' })
+    expect(replayed).toEqual(['again'])
+    expect(state().byId.r1!.stale).toBe(false)
+    expect(state().byId.r2!.stale).toBe(true)
+    expect(state().byId.mine!.stale).toBe(false)
+    setSink('r1', null)
+  })
+
+  it('ends the terminals a restart of its terminal host took', () => {
+    fromStudio({ type: 'terminal.info', info: info('r1', 1, { projectPath: '/srv/app' }) })
+    fromStudio({ type: 'terminal.info', info: info('r2', 2, { projectPath: '/srv/app' }) })
+    endTerminals(['r2'])
+    expect(state().byId.r1!.stale).toBe(false)
+    expect(state().byId.r2!.stale).toBe(true)
   })
 })

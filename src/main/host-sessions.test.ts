@@ -321,6 +321,23 @@ describe('HostSessions', () => {
     })
   })
 
+  it("passes a host's terminal requests, events and restarts as its sessions'", () => {
+    const { relay, window } = setup()
+    const host = new FakePort()
+    relay.opened(devBox, host)
+    window.deliver(request(devBox, 1, 'terminals.attach', { id: 't1' }))
+    expect(host.posted).toEqual([
+      { type: 'request', id: 1, method: 'terminals.attach', params: { id: 't1' } },
+    ])
+    const data = { type: 'event', event: { type: 'terminal.data', id: 't1', data: 'ls' } }
+    host.deliver(data)
+    host.deliver({ type: 'terminals.restarted', ids: ['t1'] })
+    expect(window.posted.slice(1)).toEqual([
+      { kind: 'message', hostId: devBox, message: data },
+      { kind: 'message', hostId: devBox, message: { type: 'terminals.restarted', ids: ['t1'] } },
+    ])
+  })
+
   it('closes every port when Kettu quits', () => {
     const { relay, window } = setup()
     const port = new FakePort()

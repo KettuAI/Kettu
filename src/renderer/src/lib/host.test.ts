@@ -3,12 +3,26 @@ import type { HostEvent, Project, SessionSummary } from '@shared/agent-host'
 
 const local = vi.fn()
 const remote = vi.fn()
+const localTerminals = vi.fn()
 vi.stubGlobal('window', {
-  kettu: { agents: { request: local }, hosts: { request: remote } },
+  kettu: {
+    agents: { request: local },
+    hosts: { request: remote },
+    terminals: { request: localTerminals },
+  },
 })
 
-const { forgetHostSessions, fromHostEvent, host, hostAt, routeOf, sessionHost, toHost } =
-  await import('./host')
+const {
+  forgetHostSessions,
+  fromHostEvent,
+  host,
+  hostAt,
+  routeOf,
+  sessionHost,
+  terminalHost,
+  terminals,
+  toHost,
+} = await import('./host')
 const { hostOfPath, hostPath, onHost } = await import('./host-paths')
 
 const devBox = 'a'.repeat(32)
@@ -138,5 +152,28 @@ describe('host', () => {
       path: 'logo.png',
     })
     expect(read).toEqual({ kind: 'media', path: 'logo.png', grant })
+  })
+
+  it('sends a terminal request to the host its project or terminal is on', async () => {
+    const project = onHost(devBox, '/srv/app')
+    remote.mockResolvedValueOnce({ id: 't1', projectPath: '/srv/app', shell: 'zsh' })
+    const created = await terminals('terminals.create', {
+      projectPath: project,
+      cols: 80,
+      rows: 24,
+    })
+    expect(remote).toHaveBeenLastCalledWith(devBox, 'terminals.create', {
+      projectPath: '/srv/app',
+      cols: 80,
+      rows: 24,
+    })
+    expect(created.projectPath).toBe(project)
+    expect(terminalHost('t1')).toBe(devBox)
+    await terminals('terminals.input', { id: 't1', data: 'ls' })
+    expect(remote).toHaveBeenLastCalledWith(devBox, 'terminals.input', { id: 't1', data: 'ls' })
+    await terminals('terminals.input', { id: 'mine', data: 'ls' })
+    expect(localTerminals).toHaveBeenLastCalledWith('terminals.input', { id: 'mine', data: 'ls' })
+    forgetHostSessions(devBox)
+    expect(terminalHost('t1')).toBeNull()
   })
 })

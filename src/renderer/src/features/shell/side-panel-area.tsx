@@ -16,6 +16,7 @@ import {
   terminalsOf,
   useTerminalsStore,
 } from '@renderer/stores/terminals'
+import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { shownSidePane, toggleTerminal, useViewStore } from '@renderer/stores/view'
 import { SHEET, SHEET_PANEL } from './sheet'
 
@@ -49,10 +50,13 @@ export function SidePanelArea({
   children: ReactNode
 }) {
   const remote = hostOfPath(projectPath) !== null
-  // Another host's project has its files through its connection, and this computer's browser.
+  const terminal = useTerminalAllowed(projectPath)
+  // Another host's project has its files and this computer's browser through its connection, and
+  // its terminal while the host allows it.
   const pane = useViewStore((s) => {
     const shown = shownSidePane(s)
-    return remote && shown !== 'files' && shown !== 'browser' ? undefined : shown
+    if (!remote || shown === 'files' || shown === 'browser') return shown
+    return shown === 'terminal' && terminal ? shown : undefined
   })
   const artifact = useViewStore((s) => s.sideArtifact[projectPath])
   const splitArtifact = useViewStore((s) => s.splitSideArtifact)
@@ -83,7 +87,7 @@ export function SidePanelArea({
   useEffect(
     () =>
       onAppEvent((event) => {
-        if (remote) return
+        if (!terminal) return
         if (event.kind === 'new-terminal') {
           toggleTerminal(projectPath, true)
           void createTerminal(projectPath)
@@ -99,7 +103,7 @@ export function SidePanelArea({
           })
         }
       }),
-    [projectPath, remote],
+    [projectPath, terminal],
   )
 
   return (

@@ -1,5 +1,10 @@
 import type { HostEvent, HostMethod, HostParams, HostResult } from '@shared/agent-host'
-import type { TerminalMethod, TerminalParams, TerminalResult } from '@shared/terminal-host'
+import type {
+  TerminalEvent,
+  TerminalMethod,
+  TerminalParams,
+  TerminalResult,
+} from '@shared/terminal-host'
 import { hostOfPath, hostPath, onHost } from './host-paths'
 import { i18n } from './i18n'
 
@@ -12,6 +17,9 @@ const sessionHosts = new Map<string, string>()
 
 /** The other host an attachment was added on, for the requests that name it by id. */
 const attachmentHosts = new Map<string, string>()
+
+/** The other host a terminal runs on, learned from what that host says of it. */
+const terminalHosts = new Map<string, string>()
 
 /** The other hosts that last heard which of their sessions the window shows. */
 let showing = new Set<string>()
@@ -47,7 +55,13 @@ export function forgetSessionHost(sessionId: string): void {
 /** Forgets every session of a host this computer no longer connects to. */
 export function forgetHostSessions(hostId: string): void {
   for (const [sessionId, on] of sessionHosts) if (on === hostId) sessionHosts.delete(sessionId)
+  for (const [id, on] of terminalHosts) if (on === hostId) terminalHosts.delete(id)
   showing.delete(hostId)
+}
+
+/** The other host a terminal runs on, or null for this computer's and the unknown. */
+export function terminalHost(id: string): string | null {
+  return terminalHosts.get(id) ?? null
 }
 
 /** The host a request is for: its session's, its project's, or this computer. */
@@ -182,11 +196,51 @@ function qualify(hostId: string, value: unknown, depth: number): void {
   }
 }
 
+/** A terminal request to the host its terminal or project is on. */
 export function terminals<M extends TerminalMethod>(
   method: M,
   params: TerminalParams<M>,
 ): Promise<TerminalResult<M>> {
-  return window.kettu.terminals.request(method, params)
+  const { id, projectPath } = (params ?? {}) as { id?: unknown; projectPath?: unknown }
+  const hostId =
+    typeof id === 'string'
+      ? terminalHost(id)
+      : typeof projectPath === 'string'
+        ? hostOfPath(projectPath)
+        : null
+  return terminalsAt(hostId, method, params)
+}
+
+/** A terminal request to the host named, null being this computer. */
+export function terminalsAt<M extends TerminalMethod>(
+  hostId: string | null,
+  method: M,
+  params: TerminalParams<M>,
+): Promise<TerminalResult<M>> {
+  if (hostId === null) return window.kettu.terminals.request(method, params)
+  return window.kettu.hosts.request(hostId, method, toHost(method, params, 0)).then((result) => {
+    learnTerminals(hostId, result)
+    return result as TerminalResult<M>
+  })
+}
+
+/** A host's terminal event as the window names folders, with the terminal it names learned. */
+export function fromHostTerminalEvent(hostId: string, event: TerminalEvent): TerminalEvent {
+  if (event.type === 'terminal.info') learnTerminals(hostId, event.info)
+  else terminalHosts.set(event.id, hostId)
+  return event
+}
+
+/** Qualifies the folders of the terminals a host describes, in place, and learns their host. */
+function learnTerminals(hostId: string, value: unknown): void {
+  for (const info of Array.isArray(value) ? value : [value]) {
+    const record = info as { id?: unknown; projectPath?: unknown } | null
+    if (typeof record?.id !== 'string' || typeof record.projectPath !== 'string') continue
+    if (hostOfPath(record.projectPath) === null) {
+      record.projectPath = onHost(hostId, record.projectPath)
+    }
+    terminalHosts.set(record.id, hostId)
+  }
 }
 
 /** The code of a host or port error, if it has one. */

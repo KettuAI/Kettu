@@ -4,12 +4,15 @@
 import { HOST_METHODS, type HostEvent } from './agent-host'
 import type { FromPort, ToPort } from './port-rpc'
 import { isHostAdminMethod } from './remote/host-admin'
+import type { TerminalsRestarted } from './remote/protocol'
+import { TERMINAL_METHODS, type TerminalEvent } from './terminal-host'
 
-const METHODS: ReadonlySet<string> = new Set(HOST_METHODS)
+const METHODS: ReadonlySet<string> = new Set([...HOST_METHODS, ...TERMINAL_METHODS])
 
 /**
- * What a window may ask another host: its agent host's methods and its owner's calls to it, but
- * not the answers to the host's browser calls, which main gives.
+ * What a window may ask another host: its agent host's and terminal host's methods, and its
+ * owner's calls to it, but not the answers to the host's browser calls, which main gives. The host
+ * refuses the terminal's while its owner does not allow it.
  */
 export function isOtherHostMethod(method: unknown): method is string {
   if (typeof method !== 'string' || method.startsWith('browser.')) return false
@@ -22,8 +25,12 @@ export interface ToHosts {
   message: ToPort
 }
 
-/** What a host's session sends beyond the host protocol: a resync, after the host dropped patches. */
-export type HostSessionMessage = FromPort<HostEvent> | { type: 'resync' }
+/**
+ * What a host's session sends beyond the host protocol: a resync, after the host dropped patches,
+ * and the terminals that ended when its terminal host did.
+ */
+export type HostSessionMessage =
+  FromPort<HostEvent | TerminalEvent> | { type: 'resync' } | TerminalsRestarted
 
 /** What main sends a window. */
 export type FromHosts =
@@ -39,4 +46,6 @@ export type HostSessionChange =
   | { kind: 'closed' }
   /** The host dropped patches for this computer, which fell behind: what it shows is read again. */
   | { kind: 'resync' }
-  | { kind: 'event'; event: HostEvent }
+  | { kind: 'event'; event: HostEvent | TerminalEvent }
+  /** The host's terminal host stopped or restarted, ending these terminals of this computer's. */
+  | { kind: 'terminals-restarted'; ids: string[] }

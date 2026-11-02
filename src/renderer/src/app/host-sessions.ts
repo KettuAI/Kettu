@@ -2,11 +2,19 @@
 // computer's in the same stores. They are read whenever a new connection to a host opens, followed
 // through its events, and kept in this computer's storage, which lists an offline host's sessions
 // also after a restart. A host forgotten here, or one that removed this computer, takes them along.
-// Its agents and their cached options are read and followed the same way, but kept in memory only.
+// Its agents and their cached options are read and followed the same way, but kept in memory only,
+// and its terminals' events go to the terminals, which attach again on each new connection.
 
 import type { HostEvent, Project, SessionSummary } from '@shared/agent-host'
 import type { HostStatus } from '@shared/remote/hosts'
-import { forgetHostSessions, fromHostEvent, hostAt, learnSessionHosts } from '@renderer/lib/host'
+import type { TerminalEvent } from '@shared/terminal-host'
+import {
+  forgetHostSessions,
+  fromHostEvent,
+  fromHostTerminalEvent,
+  hostAt,
+  learnSessionHosts,
+} from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { forgetHostAgentOptions, readHostAgentOptions } from '@renderer/stores/agent-options'
@@ -14,6 +22,7 @@ import { forgetHostAgents, readHostAgents, useAgentsStore } from '@renderer/stor
 import { useHostsStore } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { endTerminals, reattachTerminals, takeTerminalEvent } from '@renderer/stores/terminals'
 
 const CACHE_KEY = 'hosts.sessions'
 
@@ -130,12 +139,20 @@ export function initHostSessions(handlers: HostSessionHandlers): void {
       case 'open':
         readAgents(hostId)
         void readLists(hostId).then(() => handlers.opened(hostId))
+        void reattachTerminals(hostId)
         break
       case 'resync':
         handlers.resync(hostId)
         break
       case 'event':
-        handlers.event(hostId, fromHostEvent(hostId, change.event))
+        if (change.event.type.startsWith('terminal.')) {
+          takeTerminalEvent(fromHostTerminalEvent(hostId, change.event as TerminalEvent))
+        } else {
+          handlers.event(hostId, fromHostEvent(hostId, change.event as HostEvent))
+        }
+        break
+      case 'terminals-restarted':
+        endTerminals(change.ids)
         break
     }
   })

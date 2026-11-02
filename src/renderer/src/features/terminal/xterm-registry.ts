@@ -181,10 +181,18 @@ async function create(id: string): Promise<Instance> {
     })
     if (!instance.visible) markActivity(id)
   }
-  setSink(id, (data) => {
-    if (replayed) write(data)
-    else early.push(data)
-  })
+  setSink(
+    id,
+    (data) => {
+      if (replayed) write(data)
+      else early.push(data)
+    },
+    // Another host's terminal, attached again or caught up after falling behind.
+    (replay) => {
+      term.reset()
+      term.write(replay)
+    },
+  )
   try {
     const { replay } = await terminals('terminals.attach', { id })
     if (replay) term.write(replay)

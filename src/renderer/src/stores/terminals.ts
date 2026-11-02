@@ -2,10 +2,11 @@ import { create } from 'zustand'
 import type { PortConnectionState } from '@shared/port-rpc'
 import type { TerminalCommand, TerminalEvent, TerminalInfo } from '@shared/terminal-host'
 import { emitAppEvent } from '@renderer/app/events'
-import { errorMessage, terminals } from '@renderer/lib/host'
+import { errorMessage, terminalHost, terminals, terminalsAt } from '@renderer/lib/host'
 
-// The terminals the renderer knows, per project. Output goes straight to the xterm.js instances
-// through `sinks`, never through this store, so a flood of output re-renders nothing.
+// The terminals the renderer knows, per project, this computer's and other hosts' alike. Output
+// goes straight to the xterm.js instances through `sinks`, never through this store, so a flood of
+// output re-renders nothing.
 
 export interface TerminalState extends TerminalInfo {
   activity: boolean // printed while its tab was not shown
@@ -31,13 +32,17 @@ export const useTerminalsStore = create<TerminalsStore>()(() => ({
 
 type Sink = (data: string) => void
 const sinks = new Map<string, Sink>()
+/** Starts a drawn terminal's screen over from a replay of its recent output. */
+const replays = new Map<string, Sink>()
 
 /** Terminals started to sign in an agent; when their command returns, the session retries. */
 const signIns = new Map<string, { agentId: string; sawBusy: boolean }>()
 
-export function setSink(id: string, sink: Sink | null): void {
+export function setSink(id: string, sink: Sink | null, replay: Sink | null = null): void {
   if (sink) sinks.set(id, sink)
   else sinks.delete(id)
+  if (replay) replays.set(id, replay)
+  else replays.delete(id)
 }
 
 /** The terminals in tab order: those the order names first, then the rest by creation. */
@@ -96,6 +101,7 @@ function upsert(info: TerminalInfo): void {
 /** Drops a terminal from the renderer, such as a stale tab the user restarts or closes. */
 export function forgetTerminal(id: string): void {
   sinks.delete(id)
+  replays.delete(id)
   signIns.delete(id)
   useTerminalsStore.setState((s) => {
     const gone = s.byId[id]
@@ -116,7 +122,8 @@ export function forgetTerminal(id: string): void {
   })
 }
 
-function onEvent(event: TerminalEvent): void {
+/** A terminal event, from this computer's terminal host or, its folders named, another host's. */
+export function takeTerminalEvent(event: TerminalEvent): void {
   switch (event.type) {
     case 'terminal.data': {
       const sink = sinks.get(event.id)
@@ -139,6 +146,10 @@ function onEvent(event: TerminalEvent): void {
     case 'terminal.info':
       upsert(event.info)
       return
+    // Another host's, after this computer fell behind on it and missed output.
+    case 'terminal.replay':
+      replays.get(event.id)?.(event.replay)
+      return
     case 'terminal.removed':
       forgetTerminal(event.id)
   }
@@ -146,11 +157,12 @@ function onEvent(event: TerminalEvent): void {
 
 export function initTerminals(): void {
   const api = window.kettu.terminals
-  api.onEvent(onEvent)
+  api.onEvent(takeTerminalEvent)
   api.onConnection((connection) => {
     const was = useTerminalsStore.getState().connection
     useTerminalsStore.setState({ connection })
-    if (connection === 'failed') markStale(() => true)
+    // This computer's terminal host gave up; other hosts' terminals go on.
+    if (connection === 'failed') markStale((id) => terminalHost(id) === null)
     if (connection === 'connected' && was !== 'connected' && was !== 'resuming') {
       void reconcileTerminals()
     }
@@ -249,13 +261,46 @@ function markStale(test: (id: string) => boolean): void {
   })
 }
 
+/** Another host's terminal host stopped or restarted: these terminals ended with it. */
+export function endTerminals(ids: readonly string[]): void {
+  const ended = new Set(ids)
+  markStale((id) => ended.has(id))
+}
+
+/**
+ * A new connection to another host opened, or the host allows the terminal again: its terminals
+ * still running there attach again, those drawn here starting their screens over from the replay,
+ * and the ones it no longer has end.
+ */
+export async function reattachTerminals(hostId: string): Promise<void> {
+  const known = Object.values(useTerminalsStore.getState().byId).filter(
+    (t) => !t.stale && terminalHost(t.id) === hostId,
+  )
+  if (known.length === 0) return
+  try {
+    const list = await terminalsAt(hostId, 'terminals.list', {})
+    const alive = new Set(list.map((t) => t.id))
+    markStale((id) => terminalHost(id) === hostId && !alive.has(id))
+    for (const info of list) upsert(info)
+    await Promise.all(
+      known.map(async ({ id }) => {
+        const replay = replays.get(id)
+        if (!alive.has(id) || !replay) return
+        replay((await terminals('terminals.attach', { id })).replay)
+      }),
+    )
+  } catch (error) {
+    useTerminalsStore.setState({ error: errorMessage(error) })
+  }
+}
+
 /** After the terminal host restarted, marks the terminals it no longer has as stale. */
 async function reconcileTerminals(): Promise<void> {
   if (Object.keys(useTerminalsStore.getState().byId).length === 0) return
   try {
     const list = await terminals('terminals.list', {})
     const alive = new Set(list.map((t) => t.id))
-    markStale((id) => !alive.has(id))
+    markStale((id) => terminalHost(id) === null && !alive.has(id))
     for (const info of list) upsert(info)
   } catch (error) {
     useTerminalsStore.setState({ error: errorMessage(error) })
@@ -267,8 +312,8 @@ export async function replaceStale(id: string): Promise<void> {
   const { byId, connection } = useTerminalsStore.getState()
   const old = byId[id]
   if (!old) return
-  // A host that crashed too often stays down until asked to start again.
-  if (connection === 'failed') {
+  // This computer's host that crashed too often stays down until asked to start again.
+  if (connection === 'failed' && terminalHost(id) === null) {
     try {
       await window.kettu.terminals.restart()
     } catch (error) {

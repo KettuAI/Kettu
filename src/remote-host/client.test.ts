@@ -493,6 +493,26 @@ describe('a known host', () => {
     await expect.poll(() => t.connection()).toEqual({ state: 'online', address: STUDIO })
   })
 
+  it('says whether the host allows the terminal, from its welcome and as the owner changes it', async () => {
+    const t = await setup()
+    t.host.server.setTerminal(true)
+    await t.paired()
+    await expect
+      .poll(() => t.connection())
+      .toEqual({ state: 'online', address: STUDIO, terminal: true })
+    await expect.poll(() => t.mainPorts.length).toBe(1)
+    const heard: unknown[] = []
+    t.mainPorts[0]!.onMessage((data) => heard.push(data))
+    t.host.server.setTerminal(false)
+    await expect.poll(() => t.connection()).toEqual({ state: 'online', address: STUDIO })
+    t.host.server.setTerminal(true)
+    await expect
+      .poll(() => t.connection())
+      .toEqual({ state: 'online', address: STUDIO, terminal: true })
+    // The host's word is the link's own; main hears of it through the status.
+    expect(heard).toEqual([])
+  })
+
   it('renames this computer on the host, and hears the owner rename it', async () => {
     const t = await setup()
     await t.paired()
