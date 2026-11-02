@@ -250,6 +250,63 @@ describe('createValidators', () => {
     rejects(() => create({ ...draft, body: 'x'.repeat(65_537) }))
   })
 
+  it('checks the branch and change writes', () => {
+    expect(posix['git.branches']({ projectPath: '/p', extra: 1 })).toEqual({ projectPath: '/p' })
+    rejects(() => posix['git.branches']({ projectPath: 'p' }))
+
+    const switchTo = posix['git.switchBranch']
+    const target = { projectPath: '/p', branch: 'feat/login', create: false }
+    expect(switchTo(target)).toEqual(target)
+    expect(switchTo({ ...target, create: true })).toEqual({ ...target, create: true })
+    rejects(() => switchTo({ ...target, branch: '-f' }))
+    rejects(() => switchTo({ ...target, branch: 'a b' }))
+    rejects(() => switchTo({ ...target, branch: '' }))
+    rejects(() => switchTo({ ...target, create: 'yes' }))
+    rejects(() => switchTo({ projectPath: '/p', branch: 'main' }))
+
+    const publish = posix['git.publishBranch']
+    expect(publish({ projectPath: '/p', remote: 'fork' })).toEqual({
+      projectPath: '/p',
+      remote: 'fork',
+    })
+    rejects(() => publish({ projectPath: '/p', remote: '--receive-pack=evil' }))
+    rejects(() => publish({ projectPath: '/p' }))
+
+    const commit = posix['git.commitChanges']
+    const draft = { projectPath: '/p', message: 'feat: a\n\nBody', paths: ['a.ts', 'src/*.ts'] }
+    expect(commit(draft)).toEqual(draft)
+    expect(commit({ ...draft, message: '-n' })).toMatchObject({ message: '-n' })
+    rejects(() => commit({ ...draft, message: '' }))
+    rejects(() => commit({ ...draft, message: ' \n\t' }))
+    rejects(() => commit({ ...draft, message: 'a\0b' }))
+    rejects(() => commit({ ...draft, message: 'x'.repeat(65_537) }))
+    rejects(() => commit({ ...draft, message: 7 }))
+
+    const discard = posix['git.discardChanges']
+    expect(discard({ projectPath: '/p', paths: ['a.ts'] })).toEqual({
+      projectPath: '/p',
+      paths: ['a.ts'],
+    })
+    const many = Array.from({ length: 1000 }, (_, i) => `f${i}.ts`)
+    expect(discard({ projectPath: '/p', paths: many }).paths).toHaveLength(1000)
+    for (const paths of [
+      [],
+      [...many, 'one-more.ts'],
+      ['a.ts', 'a.ts'],
+      ['../x'],
+      ['/etc/hosts'],
+      ['C:/x'],
+      ['a\0b'],
+      [''],
+      [7],
+      'a.ts',
+    ]) {
+      rejects(() => discard({ projectPath: '/p', paths }))
+      rejects(() => commit({ ...draft, paths }))
+    }
+    rejects(() => discard({ projectPath: '/p' }))
+  })
+
   it('checks the git reads', () => {
     expect(posix['git.commit']({ projectPath: '/p', oid: '3f2a1c1' })).toEqual({
       projectPath: '/p',

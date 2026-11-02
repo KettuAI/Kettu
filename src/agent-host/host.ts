@@ -1016,6 +1016,16 @@ export class AgentHost {
         this.gitProjectCall(projectPath, (g, p) => g.incoming(p, from)),
       'git.fileDiff': ({ projectPath, path, oldPath, ref }) =>
         this.gitProjectCall(projectPath, (g, p) => g.fileDiff(p, path, oldPath, ref)),
+      'git.branches': ({ projectPath }) =>
+        this.gitProjectCall(projectPath, (g, p) => g.branches(p)),
+      'git.switchBranch': ({ projectPath, branch, create }) =>
+        this.gitProjectCall(projectPath, (g, p) => g.switchBranch(p, branch, create)),
+      'git.publishBranch': ({ projectPath, remote }) =>
+        this.gitProjectCall(projectPath, (g, p) => g.publishBranch(p, remote)),
+      'git.commitChanges': ({ projectPath, message, paths }) =>
+        this.gitProjectCall(projectPath, (g, p) => g.commitChanges(p, message, paths)),
+      'git.discardChanges': ({ projectPath, paths }) =>
+        this.gitProjectCall(projectPath, (g, p) => g.discardChanges(p, paths)),
       'git.pullRequest': ({ url }) => this.gitCall((g) => g.pullRequest(url)),
       'git.avatarUrl': ({ login }) => this.gitCall((g) => g.avatarUrl(login)),
       'git.currentPullRequest': ({ projectPath }) =>

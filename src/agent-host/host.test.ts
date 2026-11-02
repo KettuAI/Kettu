@@ -434,6 +434,21 @@ function fakeGit() {
     commit: async () => {
       throw new Error('not used')
     },
+    switchBranch: async () => {
+      throw new Error('not used')
+    },
+    publishBranch: async () => {
+      throw new Error('not used')
+    },
+    commitChanges: async () => {
+      throw new Error('not used')
+    },
+    discardChanges: async () => {
+      throw new Error('not used')
+    },
+    branches: async () => {
+      throw new Error('not used')
+    },
     changes: async (p) => (calls.push(`changes ${p}`), []),
     incoming: async () => [],
     fileDiff: async (_p, path) => ({
