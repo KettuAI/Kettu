@@ -81,6 +81,7 @@ describe('themeColors', () => {
   it("gives a token a theme leaves out the one of its own it takes, not the built-in's", () => {
     const light = themeColors(older, 'light')
     expect(light['bg-raised']).toBe('#eff1f5')
+    expect(light['primary-foreground']).toBe('#eff1f5')
     expect(light.track).toBe('rgb(76 79 105 / 14%)')
     expect(light['control-on']).toBe('#a8411b')
     expect(light['switch-on']).toBe('#a8411b')

@@ -73,7 +73,12 @@ function Body({ diff }: { diff: DiffView }) {
       className="absolute inset-0 overflow-y-auto overscroll-contain bg-code-block"
       data-selectable=""
     >
-      <Diff path={result.path} oldText={result.oldText} newText={result.newText ?? ''} />
+      <Diff
+        path={result.path}
+        oldText={result.oldText}
+        newText={result.newText ?? ''}
+        className="file-preview"
+      />
     </div>
   )
 }
