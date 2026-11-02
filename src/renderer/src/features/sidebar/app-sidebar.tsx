@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import {
-  CalendarClockIcon,
   ChartNoAxesColumnIcon,
   ChevronDownIcon,
-  ChevronRightIcon,
+  ClockIcon,
   CircleAlertIcon,
   EllipsisIcon,
-  HistoryIcon,
   PlusIcon,
   ShapesIcon,
 } from 'lucide-react'
@@ -24,10 +22,8 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
-import { Kbd } from '@renderer/components/ui/kbd'
 import {
   Sidebar,
   SidebarContent,
@@ -42,14 +38,13 @@ import {
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { HostSwitchBar } from '@renderer/features/account/host-switch'
-import { BackForward } from '@renderer/features/shell/back-forward'
-import { SidebarToggle } from '@renderer/features/shell/top-bar'
+import { SidebarTitleBar } from '@renderer/features/shell/top-bar'
 import { strongestSignal, signalText } from '@renderer/features/routines/model'
 import { RunningDot } from '@renderer/features/routines/run-mark'
 import { dayOf } from '@renderer/features/usage/model'
 import { limitLabel, tokens } from '@renderer/lib/format'
 import { LIMIT_TEXT, limitLevel } from '@renderer/lib/plan-limit'
-import { formatShortcut, hasBand } from '@renderer/lib/platform'
+import { formatShortcut, isMac } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
@@ -74,13 +69,18 @@ import {
   openRoutines,
   openUsage,
   PINNED_GROUP,
+  showAllRows,
   useViewStore,
 } from '@renderer/stores/view'
 import { HostEmpty, HostHeading, NeedsYouGroup } from './host-groups'
 import { useHostLabel } from './host-label'
 import { ImportSessionsDialog } from './import-sessions'
+import { ProjectMenuItems } from './project-menu'
 import { tightestLimit } from './plan-usage'
 import { visibleProjects } from './project-group'
+import { keepInSight, limitRows, ROWS_SHOWN } from './row-limit'
+import { GroupRenameHints } from './rename-hints'
+import { RenameScope } from './rename-scope'
 import { SessionRow } from './session-row'
 import { SidebarFooterContent } from './sidebar-footer'
 import { costText } from './usage-row'
@@ -133,21 +133,7 @@ export function AppSidebar() {
       className="w-full bg-transparent"
       aria-label={t('nav.label')}
     >
-      {/* On macOS level with the top bar; elsewhere in the band. */}
-      <div
-        className={cn(
-          'app-region-drag flex shrink-0 items-center pr-2.5 pl-5',
-          hasBand
-            ? 'h-(--title-bar)'
-            : 'h-[calc(var(--sheet-gap)+var(--top-bar))] pt-(--sheet-gap)',
-        )}
-      >
-        {!hasBand && <span aria-hidden className="w-(--traffic-lights)" />}
-        <BackForward className={cn(!hasBand && 'ml-2')} />
-        {/* The window's drag region, 18 px of it at the sidebar's narrowest. */}
-        <span className="flex-1" />
-        <SidebarToggle />
-      </div>
+      <SidebarTitleBar />
       <div className="flex shrink-0 flex-col gap-0.5 px-2 pt-0.5">
         <NavRow
           icon={<PlusIcon />}
@@ -162,8 +148,8 @@ export function AppSidebar() {
           current={artifactsShown}
           onClick={openArtifacts}
         />
-        <UsageNavRow />
         <RoutinesNavRow />
+        <UsageNavRow />
       </div>
       <SidebarContent className="scroll-fade-y gap-0 px-2 pt-1.5 pb-2" onKeyDown={moveRowFocus}>
         <HostSwitchBar />
@@ -263,31 +249,24 @@ export function NavRow({
   /** The row's name in words, when `extra` says more than its marks. */
   ariaLabel?: string
 }) {
-  const row = (
+  return (
     <SidebarMenuButton
       size="row"
       isActive={current}
       onClick={onClick}
       aria-label={ariaLabel}
-      className="[&_svg]:size-4"
+      aria-keyshortcuts={shortcut?.replace('Mod', isMac ? 'Meta' : 'Control')}
+      className="gap-2.5 pr-2.5 text-row [&_svg]:size-[18px]"
     >
-      <span className="contents text-secondary group-data-active/menu-button:text-primary">
-        {icon}
-      </span>
+      {icon}
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {extra}
+      {shortcut && (
+        <span aria-hidden className="shrink-0 text-meta font-normal text-tertiary">
+          {formatShortcut(shortcut)}
+        </span>
+      )}
     </SidebarMenuButton>
-  )
-  // A shortcut shows in the row's tooltip, never as a hint on the row.
-  if (!shortcut) return row
-  return (
-    <Tooltip>
-      <TooltipTrigger render={row} delay={700} />
-      <TooltipContent side="right">
-        {label}
-        <Kbd>{formatShortcut(shortcut)}</Kbd>
-      </TooltipContent>
-    </Tooltip>
   )
 }
 
@@ -312,7 +291,7 @@ function RoutinesNavRow() {
 
   return (
     <NavRow
-      icon={<CalendarClockIcon />}
+      icon={<ClockIcon />}
       label={t('nav.routines')}
       current={current}
       onClick={openRoutines}
@@ -529,6 +508,8 @@ function ProjectGroup({
   const { t } = useTranslation('sidebar')
   const name = project?.name ?? t('project.noProject')
   const open = useViewStore((s) => !s.collapsedProjects[key])
+  const allShown = useViewStore((s) => !!s.allRowsShown[key])
+  const shownId = useViewStore((s) => (s.main.kind === 'session' ? s.main.sessionId : null))
   const [moreOpen, setMoreOpen] = useState(false)
   const summaries = useSessionsStore(
     useShallow((s) =>
@@ -543,6 +524,7 @@ function ProjectGroup({
     [summaries, projectPath, hostId],
   )
   if (!project && tree.length === 0) return null
+  const limited = limitRows(tree, allShown, (node) => keepInSight(node, shownId))
   // Importing reads the agents' own lists, which only this computer's do.
   const local = hostId === null
 
@@ -567,10 +549,10 @@ function ProjectGroup({
       }}
       className={cn(
         GROUP_LABEL,
-        project?.missing ? 'text-disabled' : away ? 'text-tertiary' : 'hover:text-secondary',
+        project?.missing ? 'text-disabled' : away ? 'text-tertiary' : 'text-primary',
       )}
     >
-      <span className="min-w-0 truncate font-heading text-group font-medium">{name}</span>
+      <span className="min-w-0 truncate text-group font-semibold">{name}</span>
       <FoldChevron open={open} />
     </SidebarMenuButton>
   )
@@ -581,7 +563,9 @@ function ProjectGroup({
   ) : (
     <TooltipContent side="right">{t('project.noProjectTooltip')}</TooltipContent>
   )
-  const menuItems = project && local && <ProjectMenuItems onImport={() => onImport(project)} />
+  const menuItems = project && local && (
+    <ProjectMenuItems project={project} onImport={() => onImport(project)} />
+  )
 
   return (
     <div className="flex flex-col gap-0.5">
@@ -593,7 +577,7 @@ function ProjectGroup({
               <TooltipTrigger render={<ContextMenuTrigger render={row} />} delay={700} />
               {tooltip}
             </Tooltip>
-            <ContextMenuContent>{menuItems}</ContextMenuContent>
+            <ContextMenuContent className="w-67.5">{menuItems}</ContextMenuContent>
           </ContextMenu>
         ) : (
           <Tooltip>
@@ -617,7 +601,11 @@ function ProjectGroup({
                         showOnHover
                         tabIndex={-1}
                         aria-label={t('row.more')}
-                        className={cn(GROUP_ACTION, !project.missing && 'right-7.5')}
+                        className={cn(
+                          GROUP_ACTION,
+                          'data-popup-open:bg-selected data-popup-open:text-primary',
+                          !project.missing && !moreOpen && 'right-7.5',
+                        )}
                       />
                     }
                   />
@@ -627,11 +615,13 @@ function ProjectGroup({
               </TooltipTrigger>
               <TooltipContent>{t('row.more')}</TooltipContent>
             </Tooltip>
-            <DropdownMenuContent align="start">{menuItems}</DropdownMenuContent>
+            <DropdownMenuContent align="start" className="w-67.5">
+              {menuItems}
+            </DropdownMenuContent>
           </DropdownMenu>
         )}
         {/* New session starts No project sessions on this computer only. */}
-        {!project?.missing && !away && (project || local) && (
+        {!project?.missing && !away && (project || local) && !moreOpen && (
           <Tooltip>
             <TooltipTrigger
               render={
@@ -645,7 +635,7 @@ function ProjectGroup({
                 />
               }
             >
-              <PlusIcon />
+              <PlusIcon strokeWidth={1.5} />
             </TooltipTrigger>
             <TooltipContent>
               {project ? t('project.newSessionIn', { name }) : t('project.newSessionNoProject')}
@@ -655,9 +645,24 @@ function ProjectGroup({
       </div>
       {open && tree.length > 0 && (
         <SidebarMenu className="gap-0.5">
-          {tree.map((node) => (
-            <SessionRow key={node.summary.id} node={node} tabStopId={tabStopId} />
-          ))}
+          <RenameScope value={key}>
+            {limited.rows.map((node) => (
+              <SessionRow key={node.summary.id} node={node} tabStopId={tabStopId} />
+            ))}
+          </RenameScope>
+          {(limited.hidden > 0 || allShown) && tree.length > ROWS_SHOWN && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                data-sidebar-row=""
+                tabIndex={-1}
+                onClick={() => showAllRows(key, !allShown)}
+                className="h-[30px] pr-2.5 pl-[35px] text-[13px] text-tertiary hover:text-secondary"
+              >
+                {allShown ? t('list.showLess') : t('list.showMore', { count: limited.hidden })}
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+          <GroupRenameHints scope={key} />
         </SidebarMenu>
       )}
     </div>
@@ -671,11 +676,17 @@ const GROUP_LABEL = '-ml-1.5 min-w-0 group-has-data-[sidebar=menu-action]/menu-i
 const GROUP_ACTION =
   'top-[3px] right-1 w-6 text-tertiary peer-hover/menu-button:text-tertiary [&>svg]:size-3.5'
 
-function FoldChevron({ open }: { open: boolean }) {
+function FoldChevron({ open, className }: { open: boolean; className?: string }) {
   return (
-    <span className="grid size-3 shrink-0 place-items-center text-icon">
-      {open ? <ChevronDownIcon className="size-3!" /> : <ChevronRightIcon className="size-3!" />}
-    </span>
+    <ChevronDownIcon
+      aria-hidden
+      strokeWidth={1.6}
+      className={cn(
+        'size-3! shrink-0 text-tertiary transition-transform duration-(--duration-fast) ease-standard',
+        !open && '-rotate-90',
+        className,
+      )}
+    />
   )
 }
 
@@ -727,36 +738,34 @@ function PinnedGroup({
             if (event.key === 'ArrowRight' && !open) toggle()
             else if (event.key === 'ArrowLeft' && open) toggle()
           }}
-          className={cn(GROUP_LABEL, 'text-xs font-medium text-tertiary hover:text-secondary')}
+          className={cn(GROUP_LABEL, 'text-small font-medium text-tertiary')}
         >
           <span className="min-w-0 truncate">{t('pinned.label')}</span>
-          <FoldChevron open={open} />
+          <FoldChevron
+            open={open}
+            className={cn(
+              open &&
+                'opacity-0 group-hover/menu-button:opacity-100 group-focus-visible/menu-button:opacity-100',
+            )}
+          />
         </SidebarMenuButton>
       </div>
       {open && (
         <SidebarMenu className="gap-0.5">
-          {tree.map((node) => (
-            <SessionRow
-              key={node.summary.id}
-              node={node}
-              tabStopId={tabStopId}
-              showHost={!!hosts}
-            />
-          ))}
+          <RenameScope value={PINNED_GROUP}>
+            {tree.map((node) => (
+              <SessionRow
+                key={node.summary.id}
+                node={node}
+                tabStopId={tabStopId}
+                showHost={!!hosts}
+              />
+            ))}
+          </RenameScope>
+          <GroupRenameHints scope={PINNED_GROUP} />
         </SidebarMenu>
       )}
     </div>
-  )
-}
-
-/** A project's actions, one list for its row's context menu and its More button. */
-function ProjectMenuItems({ onImport }: { onImport: () => void }) {
-  const { t } = useTranslation('sidebar')
-  return (
-    <DropdownMenuItem onClick={onImport}>
-      <HistoryIcon />
-      {t('project.importSessions')}
-    </DropdownMenuItem>
   )
 }
 

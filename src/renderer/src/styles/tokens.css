@@ -689,6 +689,11 @@
   --agent-omp: color-mix(in oklch, var(--brand-omp-2) 86%, var(--bg-surface));
   --agent-muse: color-mix(in oklch, var(--brand-muse) 86%, var(--bg-surface));
   --agent-codewhale: color-mix(in oklch, var(--brand-codewhale-1) 86%, var(--bg-surface));
+  /* The halo around a needs-you dot, a little stronger on dark. */
+  --attention-halo: light-dark(
+    color-mix(in srgb, var(--attention-dot) 18%, transparent),
+    color-mix(in srgb, var(--attention-dot) 22%, transparent)
+  );
   /* Amounts deepen in the fox orange laid over the card, mixed so each step is opaque. */
   --heat-hue: var(--attention-dot);
   --heat-1: color-mix(in srgb, var(--heat-hue) var(--heat-step-1), var(--bg-surface));

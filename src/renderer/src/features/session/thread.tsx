@@ -20,6 +20,7 @@ import { RunGroup } from './entries/run-group'
 import { ToolGroup } from './entries/tool-group'
 import { MessageOutline } from './outline/message-outline'
 import { hoverReply } from './reply-hover'
+import { SubSessionStart } from './subagent/sub-session-start'
 import { TurnStatus } from './turn-status'
 import {
   buildItems,
@@ -203,6 +204,7 @@ export const Thread = memo(function Thread({
             className="mx-auto w-full max-w-thread gap-0 px-7 pt-7 pb-5"
             onPointerLeave={() => hoverReply(null)}
           >
+            {shownFrom === 0 && !hasOlder && <SubSessionStart sessionId={sessionId} />}
             {items.slice(shownFrom).map((item, shownIndex) => {
               const index = shownFrom + shownIndex
               return (

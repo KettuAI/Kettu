@@ -14,7 +14,13 @@
     "noProject": "No project",
     "noProjectTooltip": "Each runs in a scratch folder of its own",
     "newSessionNoProject": "New session with No project",
-    "importSessions": "Import sessions…"
+    "importSessions": "Import sessions…",
+    "menu": {
+      "newSession": "New session",
+      "openInTerminal": "Open in terminal",
+      "showIn": "Show in {{name}}",
+      "showArchived": "Show archived"
+    }
   },
   "row": {
     "collapse": "Collapse sub-sessions",
@@ -84,16 +90,31 @@
     "archivedCount_one": "Archived {{count}} session",
     "archivedCount_other": "Archived {{count}} sessions",
     "archivedSome": "Archived {{done}} of {{total}} sessions. {{error}}",
-    "deleteCount": "Delete {{count}}…"
+    "deleteCount": "Delete {{count}}…",
+    "moreFor": "More for {{title}}"
   },
   "import": {
-    "title": "Import sessions",
-    "description": "Sessions the agents already have for {{project}}, such as ones you started in a terminal. Imported sessions open with their full history.",
+    "title": "Import sessions into {{project}}",
+    "description": "Sessions you started in a terminal for this folder.",
     "noAgents": "No agent here can list its sessions.",
     "noSessions": "No sessions for this folder.",
-    "added": "Added",
     "import": "Import",
-    "showMore": "Show more"
+    "showMore": "Show more",
+    "agents": "Agents",
+    "tab": "{{agent}} · {{count}}",
+    "tabMore": "{{agent}} · {{count}}+",
+    "imported": "Imported",
+    "footnote": "Imported sessions can continue in Kettu.",
+    "selectAll": "Select all {{count}}",
+    "importCount": "Import {{count}}",
+    "importing": "Importing…",
+    "ago": {
+      "now": "just now",
+      "minutes": "{{count}} m ago",
+      "hours": "{{count}} h ago",
+      "days": "{{count}} d ago",
+      "weeks": "{{count}} w ago"
+    }
   },
   "indicator": {
     "waiting_one": "Waiting for you, {{count}} request",
@@ -182,5 +203,44 @@
     "connecting": "Connecting to {{name}}…",
     "escKey": "esc",
     "cancelSwitch": "Go back to the host before"
+  },
+  "rename": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "undo": "Undo"
+  },
+  "list": {
+    "showMore_one": "Show {{count}} more",
+    "showMore_other": "Show {{count}} more",
+    "showLess": "Show less"
+  },
+  "card": {
+    "model": "Model",
+    "branch": "Branch",
+    "cache": "Prompt cache",
+    "lastTurn": "Last turn",
+    "cacheNone": "None",
+    "cacheExpired": "Expired",
+    "cacheLikelyExpired": "Probably expired",
+    "minutesLeft_one": "{{count}} min left",
+    "minutesLeft_other": "{{count}} min left",
+    "minutesLeftAbout_one": "About {{count}} min left",
+    "minutesLeftAbout_other": "About {{count}} min left",
+    "timeLeft": "{{time}} left",
+    "timeLeftAbout": "About {{time}} left"
+  },
+  "subagents": {
+    "title": "Sub-agents of this session",
+    "runningShort_one": "{{count}} running",
+    "runningShort_other": "{{count}} running",
+    "running_one": "{{count}} sub-agent running",
+    "running_other": "{{count}} sub-agents running",
+    "count_one": "{{count}} sub-agent",
+    "count_other": "{{count}} sub-agents",
+    "tools_one": "{{count}} tool",
+    "tools_other": "{{count}} tools",
+    "done": "Done",
+    "failed": "Failed",
+    "showFinished": "Show finished sub-agents"
   }
 }

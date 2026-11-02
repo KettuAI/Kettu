@@ -54,6 +54,31 @@
     "showSidebar": "Show sidebar",
     "hideSidebar": "Hide sidebar",
     "back": "Back",
-    "forward": "Forward"
+    "forward": "Forward",
+    "backTo": "Back to <title/>",
+    "forwardTo": "Forward to <title/>"
+  },
+  "history": {
+    "title": "History",
+    "showAll": "Show all history",
+    "search": "Search history",
+    "noMatch": "No places match “{{query}}”",
+    "current": "Current",
+    "ago": {
+      "now": "just now",
+      "minutes": "{{count}} min",
+      "hours": "{{count}} h"
+    },
+    "places": {
+      "newSession": "New session",
+      "usage": "Usage",
+      "routines": "Routines",
+      "newRoutine": "New routine",
+      "artifacts": "Artifacts",
+      "recentlyDeleted": "Artifacts › Recently deleted",
+      "artifact": "Artifact",
+      "settings": "Settings › {{section}}",
+      "settingsItem": "Settings › {{section}} › {{item}}"
+    }
   }
 }

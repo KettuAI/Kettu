@@ -273,7 +273,7 @@ describe('history', async () => {
   const view = await import('./view')
   const { allPanes, createLayout, findPane, paneOrder, splitAt } =
     await import('@renderer/features/split/layout')
-  const { goBack, goForward, stepBackTo, useViewStore } = view
+  const { goBack, goForward, goTo, stepBackTo, useViewStore } = view
   const any = () => true
   const state = () => useViewStore.getState()
   const session = (sessionId: string) => ({
@@ -427,20 +427,99 @@ describe('history', async () => {
     expect(state().main).toEqual({ kind: 'routines' })
   })
 
-  it("goes back as Settings' own back while Settings shows, and not forward", () => {
+  it("goes back through Settings' pages and out of Settings to what showed before", () => {
     start()
-    view.openSession('s2', '/repo')
-    goBack(any)
+    view.openSettings('general')
+    view.openSettings('agents')
     view.openSettingsItem('agents', 'codex')
+    expect(state().history.back).toHaveLength(3)
     goBack(any)
     expect(state().settings).toEqual({ open: true, section: 'agents', item: null })
-    goForward(any)
-    expect(state().settings.open).toBe(true)
-    expect(state().main).toEqual(shown('s1'))
+    goBack(any)
+    expect(state().settings).toEqual({ open: true, section: 'general', item: null })
     goBack(any)
     expect(state().settings.open).toBe(false)
     expect(state().main).toEqual(shown('s1'))
+    goForward(any)
+    goForward(any)
+    expect(state().settings).toEqual({ open: true, section: 'agents', item: null })
     expect(state().history.forward).toHaveLength(1)
+  })
+
+  it('goes back from a session to the Settings page it left, over what showed under it', () => {
+    start()
+    view.openSettings('agents')
+    view.openSession('s2', '/repo')
+    expect(state().settings.open).toBe(false)
+    goBack(any)
+    expect(state().settings).toMatchObject({ open: true, section: 'agents' })
+    expect(state().main).toEqual(shown('s1'))
+    goForward(any)
+    expect(state().settings.open).toBe(false)
+    expect(state().main).toEqual(shown('s2'))
+  })
+
+  it('records nothing while the main area changes under the same Settings page', () => {
+    start()
+    view.openSettings('general')
+    view.placeNewSession('/repo', null)
+    view.openSettings('general')
+    expect(state().history.back).toHaveLength(1)
+  })
+
+  it('names what each step showed and when it was left', () => {
+    vi.useFakeTimers({ now: 1000 })
+    start()
+    view.openSettings('agents')
+    vi.setSystemTime(5000)
+    view.openUsage()
+    expect(state().history.back.map((step) => [step.place, step.at])).toEqual([
+      [shown('s1'), 1000],
+      [{ kind: 'settings', section: 'agents', item: null }, 5000],
+    ])
+    vi.useRealTimers()
+  })
+
+  it('goes back several places at once, which go forward as they were left', () => {
+    vi.useFakeTimers({ now: 0 })
+    start()
+    for (const [i, id] of ['s2', 's3', 's4'].entries()) {
+      vi.setSystemTime((i + 1) * 1000)
+      view.openSession(id, '/repo')
+    }
+    vi.setSystemTime(9000)
+    expect(goTo('back', state().history.back[0]!, any)).toBe(true)
+    expect(state().main).toEqual(shown('s1'))
+    expect(state().history.back).toEqual([])
+    expect(state().history.forward.map((step) => [step.place, step.at])).toEqual([
+      [shown('s4'), 9000],
+      [shown('s3'), 3000],
+      [shown('s2'), 2000],
+    ])
+    goForward(any)
+    expect(state().main).toEqual(shown('s2'))
+    vi.useRealTimers()
+  })
+
+  it('goes forward several places at once', () => {
+    start()
+    for (const id of ['s2', 's3', 's4']) view.openSession(id, '/repo')
+    for (let i = 0; i < 3; i++) goBack(any)
+    expect(goTo('forward', state().history.forward[0]!, any)).toBe(true)
+    expect(state().main).toEqual(shown('s4'))
+    expect(state().history.forward).toEqual([])
+    expect(state().history.back.map((step) => step.place)).toEqual(['s1', 's2', 's3'].map(shown))
+  })
+
+  it('jumps over a place that can no longer show, and to none that cannot', () => {
+    start()
+    for (const id of ['s2', 's3']) view.openSession(id, '/repo')
+    const [first, second] = state().history.back
+    const gone: Parameters<typeof goTo>[2] = (v) => !(v.kind === 'session' && v.sessionId === 's2')
+    expect(goTo('back', second!, gone)).toBe(false)
+    expect(goTo('back', first!, gone)).toBe(true)
+    expect(state().main).toEqual(shown('s1'))
+    expect(state().history.forward.map((step) => step.place)).toEqual([shown('s3')])
   })
 
   it("steps back for a page's own Back only when the step before leads there", () => {
@@ -453,5 +532,15 @@ describe('history', async () => {
     expect(state().main).toEqual({ kind: 'artifacts' })
     goForward(any)
     expect(state().main).toMatchObject({ kind: 'artifact', id: 'a1' })
+  })
+
+  it("leaves a page's own Back to the page when the step before reopens Settings", () => {
+    start()
+    view.openArtifacts()
+    view.openArtifact('a1')
+    view.openSettings('general')
+    view.closeSettings()
+    expect(stepBackTo({ kind: 'artifacts' }, any)).toBe(false)
+    expect(state().settings.open).toBe(false)
   })
 })
