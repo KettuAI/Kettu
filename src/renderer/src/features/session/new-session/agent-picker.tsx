@@ -26,7 +26,7 @@ import { cn } from '@renderer/lib/utils'
 import { agentName, agentsOn, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { refreshLimits } from '@renderer/stores/usage'
 import { openAgentSettings } from '@renderer/stores/view'
-import { menuAgents } from './agent-menu'
+import { menuAgents } from './start-options'
 import { agentGroups, agentLine, type AgentGroup, type LineTone } from './picker'
 import { refreshOnMenu } from './prepared'
 

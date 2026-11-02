@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeftIcon, CircleAlertIcon, EllipsisIcon, TrashIcon } from 'lucide-react'
+import {
+  ArrowLeftIcon,
+  ChevronLeftIcon,
+  CircleAlertIcon,
+  EllipsisIcon,
+  ExternalLinkIcon,
+  HistoryIcon,
+  TrashIcon,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { backTo } from '@renderer/app/history'
 import { Button } from '@renderer/components/ui/button'
@@ -19,6 +27,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { useHostHas } from '@renderer/lib/host-features'
+import { isWeb } from '@renderer/lib/platform'
 import { restoreArtifact, restoreVersion } from '@renderer/stores/artifacts'
 import { closeArtifact, useViewStore } from '@renderer/stores/view'
 import { ArtifactMenuItems } from './artifact-menu'
@@ -36,9 +45,10 @@ import {
   DaysLeft,
   EarlierDetails,
   Presence,
-  ReloadButton,
   StatusBar,
+  VersionChip,
   ViewerTitle,
+  ZoomPill,
 } from './viewer-parts'
 
 /** The bar over the page, for an earlier version or one in Recently deleted, and a gap under it. */
@@ -65,6 +75,9 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
   const { summary, shown, url } = artifact
   const head = summary?.version ?? null
   const { versions, error: versionsError } = useVersions(id, head)
+  const backToList = useViewStore(
+    (s) => s.main.kind === 'artifact' && s.main.back.kind === 'artifacts',
+  )
   const states = useArtifactStates(artifact, listsRead)
   const earlier = picked !== null && head !== null && picked < head ? picked : null
   const title = summary?.title ?? shown?.title ?? ''
@@ -176,6 +189,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
           top={bar ? BAR_ROOM : 0}
           onEscape={leaveArtifact}
         />
+        {shown.canvas && <ZoomPill controls={controls} />}
         {bar}
       </>
     )
@@ -194,23 +208,44 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <TopBar>
-        <NoDrag className="-ml-2.5 min-w-0 gap-0.5">
-          <BarButton label={t('viewer.back')} shortcut="Esc" onClick={leaveArtifact}>
-            <ArrowLeftIcon />
-          </BarButton>
-          <ViewerTitle
-            title={title}
-            version={shown ? t('viewer.version', { version: shown.version }) : null}
-            controls={controls}
-            pageName={showing ? pageName : null}
-          />
+      <TopBar className="gap-2 pr-2.5 pl-3">
+        <NoDrag className="min-w-0 gap-2">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  onClick={leaveArtifact}
+                  className="flex h-7 shrink-0 items-center gap-1 rounded-tile pr-2 pl-1 text-[13.5px] text-tertiary outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-secondary focus-ring"
+                />
+              }
+            >
+              <ChevronLeftIcon className="size-4" />
+              {backToList ? t('page.title') : t('viewer.back')}
+            </TooltipTrigger>
+            <TooltipContent>
+              {backToList ? t('page.backToArtifacts') : t('viewer.back')}{' '}
+              <span className="opacity-60">Esc</span>
+            </TooltipContent>
+          </Tooltip>
+          <span aria-hidden className="text-border-strong">
+            /
+          </span>
+          <ViewerTitle title={title} controls={controls} pageName={showing ? pageName : null} />
+          {shown && (
+            <VersionChip
+              version={shown.version}
+              at={versions?.find((v) => v.version === shown.version)?.createdAt ?? null}
+              open={historyOpen}
+              onClick={() => (historyOpen ? closeHistory() : setHistoryOpen(true))}
+            />
+          )}
         </NoDrag>
         <span className="min-w-2 flex-1" />
         {showing && (
-          <NoDrag className="min-w-0 shrink-0 gap-0.5">
+          <NoDrag className="min-w-0 shrink-0 gap-1">
             <Presence id={id} presence={artifact.presence} deleted={summary?.deletedAt != null} />
-            {pageName && <CanvasBarControls controls={controls} pageName={pageName} />}
+            {pageName && <CanvasBarControls controls={controls} pageName={pageName} zoom={false} />}
             {shown && shares && (
               <ShareButton
                 id={id}
@@ -219,7 +254,26 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
                 head={head ?? shown.version}
               />
             )}
-            <ReloadButton reloads={artifact.reloads} onClick={artifact.reload} />
+            {/* The web client shows it in a browser already. */}
+            {shown && !isWeb && (
+              <BarButton
+                label={t('viewer.openInBrowser')}
+                onClick={() =>
+                  void window.kettu.artifacts
+                    .openExternal(id, shown.version)
+                    .catch((error: unknown) => console.error(`Could not open ${id}`, error))
+                }
+              >
+                <ExternalLinkIcon />
+              </BarButton>
+            )}
+            <BarButton
+              label={t('viewer.history')}
+              pressed={historyOpen}
+              onClick={() => (historyOpen ? closeHistory() : setHistoryOpen(true))}
+            >
+              <HistoryIcon />
+            </BarButton>
             {summary && (
               <DropdownMenu>
                 <Tooltip>
@@ -229,9 +283,9 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
                         render={
                           <Button
                             variant="quiet"
-                            size="icon-compact"
+                            size="icon-sm"
                             aria-label={t('viewer.more')}
-                            className="text-foreground"
+                            className="size-7.5 rounded-tile text-secondary"
                           />
                         }
                       />
@@ -251,6 +305,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
                       sessionId: summary.sessionId,
                       deletedAt: summary.deletedAt,
                     }}
+                    onReload={artifact.reload}
                     historyOpen={historyOpen}
                     onVersionHistory={() => (historyOpen ? closeHistory() : setHistoryOpen(true))}
                     onDeleted={closeArtifact}
@@ -262,14 +317,13 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
         )}
       </TopBar>
       <div className="flex min-h-0 flex-1">
-        <div className="relative min-w-0 flex-1 bg-background">{body}</div>
+        <div className="relative min-w-0 flex-1 bg-sidebar">{body}</div>
         {historyOpen && (
           <VersionHistory
             versions={versions}
             error={versionsError}
             shown={picked}
             onPick={(version) => setPicked(version === head ? null : version)}
-            onClose={closeHistory}
           />
         )}
       </div>

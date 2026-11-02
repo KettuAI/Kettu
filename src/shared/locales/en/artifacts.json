@@ -144,7 +144,9 @@
     "using": "Using this artifact",
     "moreSessions_other": "{{count}} more sessions",
     "places_other": "Open in {{count}} places",
-    "placesTip_other": "This artifact is open in {{count}} places in Kettu"
+    "placesTip_other": "This artifact is open in {{count}} places in Kettu",
+    "history": "History",
+    "versionChip": "Version {{version}}, history"
   },
   "canvas": {
     "role": "Canvas",
@@ -158,13 +160,12 @@
     "next": "Next page",
     "pages": "Pages",
     "counter": "{{number}} / {{count}}",
-    "backToCanvas": "Back to the canvas"
+    "backToCanvas": "Back to the canvas",
+    "fit": "Fit"
   },
   "history": {
-    "title": "Version history",
-    "close": "Close version history",
+    "title": "History",
     "version": "Version {{version}}",
-    "latest": "Latest",
     "you": "You"
   },
   "share": {
@@ -204,6 +205,7 @@
       "not_found": "The page is no longer on Cloudflare. Publish it again.",
       "unavailable": "The agent host did not answer. Try again in a moment.",
       "failed": "Something went wrong. Try again."
-    }
+    },
+    "button": "Share"
   }
 }

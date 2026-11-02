@@ -32,6 +32,10 @@ const SETTLE_MS = 160
 /** A press that moves less than this is a click. */
 const DRAG_SLOP = 3
 const LABEL_HEIGHT = 20
+/** The spacing of the ground's dots, in screen pixels. */
+const DOT_STEP = 20
+
+const mod = (value: number, step: number): number => (((value % step) + step) % step) - step
 const TITLE_ABOVE = 40
 
 /**
@@ -63,6 +67,7 @@ export const CanvasView = memo(function CanvasView({
   const { t } = useTranslation('artifacts')
   const stage = useRef<HTMLDivElement>(null)
   const layer = useRef<HTMLDivElement>(null)
+  const dots = useRef<HTMLDivElement>(null)
   const labels = useRef<(HTMLSpanElement | null)[]>([])
   const frames = useRef(new Map<number, HTMLIFrameElement>())
   const camera = useRef<Camera>({ x: 0, y: 0, z: 1 })
@@ -108,6 +113,10 @@ export const CanvasView = memo(function CanvasView({
   const draw = useCallback(() => {
     const { x, y, z } = camera.current
     const el = layer.current
+    // The ground's dots keep their spacing and follow the pan, a step of them at most.
+    if (dots.current) {
+      dots.current.style.transform = `translate(${mod(x, DOT_STEP)}px, ${mod(y, DOT_STEP)}px)`
+    }
     if (el) {
       el.style.transform = `translate(${x}px, ${y}px) scale(${z})`
       el.style.setProperty('--unscale', String(1 / z))
@@ -362,6 +371,11 @@ export const CanvasView = memo(function CanvasView({
   return (
     <div className="absolute inset-0 overflow-hidden bg-sidebar">
       <div
+        ref={dots}
+        aria-hidden
+        className="absolute -inset-5 bg-[radial-gradient(var(--border-default)_1px,transparent_1px)] bg-size-[20px_20px]"
+      />
+      <div
         ref={stage}
         tabIndex={0}
         role="region"
@@ -377,7 +391,7 @@ export const CanvasView = memo(function CanvasView({
               key={`${p.group}.${p.index}`}
               className={cn(
                 // Each page lies on the desk; its edge keeps a screen hairline at any zoom.
-                'absolute overflow-hidden bg-canvas',
+                'absolute overflow-hidden rounded-[calc(6px*var(--unscale))] bg-canvas',
                 i === selected
                   ? // A gap of the desk first, so the ring shows beside a page of any color.
                     'shadow-[0_0_0_calc(2px*var(--unscale))_var(--bg-sidebar),0_0_0_calc(4px*var(--unscale))_var(--text-primary),var(--elevation-page)]'
@@ -466,7 +480,7 @@ export const CanvasView = memo(function CanvasView({
               ref={(el) => {
                 labels.current[i] = el
               }}
-              className="absolute top-0 left-0 truncate text-xs whitespace-nowrap text-secondary"
+              className="absolute top-0 left-0 truncate text-xs whitespace-nowrap text-tertiary"
             >
               {name(p)}
             </span>
