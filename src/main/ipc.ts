@@ -267,6 +267,17 @@ function absolutePath(value: unknown): string {
   return value
 }
 
+/** A project's path as the window names it: this computer's, absolute, or another host's. */
+function projectPathArg(value: unknown): string {
+  if (typeof value === 'string' && /^kettu-host:[0-9a-f]{32}:./.test(value)) {
+    if (value.length > SHOW_ITEM_MAX_CHARS || value.includes('\0')) {
+      throw new Error('A path must be a string without NUL characters')
+    }
+    return value
+  }
+  return absolutePath(value)
+}
+
 /**
  * `shell:open-notices`: third-party-notices.txt from the resources folder, or the last build's in
  * a development run, in the system's app for text files.
@@ -673,7 +684,7 @@ export function registerIpcHandlers({
   })
   handle('browser:allowed-sites', 0, () => browserViews.allowedSites())
   handle('browser:remove-allowed-site', 2, (_, projectPath, origin) => {
-    browserViews.removeAllowedSite(absolutePath(projectPath), browserOrigin(origin))
+    browserViews.removeAllowedSite(projectPathArg(projectPath), browserOrigin(origin))
   })
   handle('browser:clear-data', 0, () => browserViews.clearData())
 

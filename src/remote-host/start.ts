@@ -10,6 +10,7 @@ import type {
   RemoteHostStatus,
   RemoteHostToMain,
 } from '@shared/host-control'
+import { isBrowserForward } from '@shared/browser'
 import type { ControlChannel, PortChannel } from '@shared/port-channel'
 import { isPortError } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
@@ -454,6 +455,30 @@ export function startRemoteHost(
         break
       case 'remote-host:remove-host':
         if (typeof message.id === 'string') withClient((c) => c.remove(message.id))
+        break
+      case 'remote-host:forward': {
+        const { requestId, hostId, sessionId, forward } = message
+        if (!Number.isSafeInteger(requestId)) break
+        const answer = (port: number | null): void =>
+          send({ type: 'remote-host:forwarding', requestId, port })
+        if (
+          typeof hostId !== 'string' ||
+          typeof sessionId !== 'string' ||
+          !isBrowserForward(forward)
+        ) {
+          answer(null)
+          break
+        }
+        const started = withRunning(async () =>
+          answer(client ? await client.forward(hostId, sessionId, forward) : null),
+        )
+        if (!started) answer(null)
+        break
+      }
+      case 'remote-host:forward-close':
+        if (typeof message.hostId === 'string' && typeof message.sessionId === 'string') {
+          client?.closeForwards(message.hostId, message.sessionId)
+        }
         break
       case 'remote-host:shutdown': {
         const reason = message.reason === 'remote_off' ? 'remote_off' : 'stopping'

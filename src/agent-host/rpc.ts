@@ -73,6 +73,20 @@ export class PortHub {
     return this.ports.has(portId)
   }
 
+  /** The paired device an open port serves; null for a window's and for a closed port. */
+  deviceOf(portId: string): PortDevice | null {
+    return this.devices.get(portId) ?? null
+  }
+
+  /** The latest open port of `deviceId` that runs browser calls, or null when it has none. */
+  browserPort(deviceId: string): string | null {
+    let found: string | null = null
+    for (const [portId, device] of this.devices) {
+      if (device.id === deviceId && device.browser) found = portId
+    }
+    return found
+  }
+
   broadcast(event: HostEvent): void {
     for (const channel of this.ports.values()) channel.send({ type: 'event', event })
   }

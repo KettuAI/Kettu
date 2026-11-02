@@ -1,6 +1,7 @@
 // The contract between the renderer and the agent host, over the agent host port.
 
 import type { ArtifactContent, ArtifactSession, ArtifactSummary, VersionSummary } from './artifacts'
+import type { BrowserCallAnswer, BrowserDeviceCall, BrowserOriginAnswer } from './browser'
 import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { MediaAuthorization, MediaOpenResult } from './media'
 import type {
@@ -681,6 +682,19 @@ export interface HostContract {
   // Each watch counts as a viewer, and brings `artifacts.version`.
   'artifacts.watch': { params: { id: string }; result: void }
   'artifacts.unwatch': { params: { id: string }; result: void }
+  // A desktop app's side of the browser calls the host sent its port, as main's is for the host's
+  // own windows: the answer, the call's wait on a new site, and the site's question and its end,
+  // which the session's thread shows. A window is refused them.
+  'browser.answer': { params: { callId: number; answer: BrowserCallAnswer }; result: void }
+  'browser.waiting': { params: { callId: number; waiting: boolean }; result: void }
+  'browser.origin': {
+    params: { sessionId: string; requestId: number; origin: string }
+    result: void
+  }
+  'browser.originSettled': {
+    params: { requestId: number; decision: BrowserOriginAnswer }
+    result: void
+  }
 }
 
 export type HostMethod = keyof HostContract
@@ -808,6 +822,10 @@ export const HOST_METHODS = [
   'artifacts.restoreVersion',
   'artifacts.watch',
   'artifacts.unwatch',
+  'browser.answer',
+  'browser.waiting',
+  'browser.origin',
+  'browser.originSettled',
 ] as const satisfies readonly HostMethod[]
 
 /** One that has a session in front: the host's own windows as one, or a paired device. */
@@ -837,6 +855,9 @@ export type HostEvent =
   | { type: 'routine.changed'; routine: RoutineView } // a routine, its state or its next run
   | { type: 'routine.removed'; routineId: string }
   | { type: 'routine.run'; run: RoutineRun } // a run's status changed
+  // To the port of the desktop app that sent the turn: a call for its main to run on the session's
+  // page, answered by `browser.answer`.
+  | { type: 'browser.call'; call: BrowserDeviceCall }
 
 export interface AgentsApi {
   request<M extends HostMethod>(method: M, params: HostParams<M>): Promise<HostResult<M>>

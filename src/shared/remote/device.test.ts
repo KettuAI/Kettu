@@ -36,6 +36,15 @@ describe('parsePortDevice', () => {
     expect(parsePortDevice({ id, name: 'Phone', extra: true })).toEqual({ id, name: 'Phone' })
   })
 
+  it('keeps that a desktop app runs browser calls, and nothing else in its place', () => {
+    expect(parsePortDevice({ id, name: 'Laptop', browser: true })).toEqual({
+      id,
+      name: 'Laptop',
+      browser: true,
+    })
+    expect(parsePortDevice({ id, name: 'Phone', browser: 'yes' })).toEqual({ id, name: 'Phone' })
+  })
+
   it.each([
     null,
     { id },
