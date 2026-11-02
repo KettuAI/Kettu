@@ -22,6 +22,7 @@ export function SettingsDialogContent({
   return (
     <DialogContent
       showCloseButton={false}
+      forceOverlay
       className={cn(
         'top-33 max-h-[calc(100%-164px)] max-w-[calc(100%-64px)] translate-y-0 grid-cols-1 gap-0 overflow-hidden overflow-y-auto rounded-dialog p-0 data-open:slide-in-from-bottom-1 data-open:zoom-in-100 sm:max-w-130',
         className,
@@ -52,7 +53,7 @@ export function SettingsDialogHeader({
             <Button
               variant="ghost"
               size="icon"
-              className="-my-1 size-7.5 rounded-segment text-tertiary"
+              className="size-7.5 rounded-segment text-tertiary"
               aria-label={t('actions.close')}
             />
           }

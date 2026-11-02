@@ -74,9 +74,9 @@ function RowFrame({
       {tile}
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-label leading-[normal] font-medium">{name}</span>
-        <span className="text-group leading-normal text-pretty text-tertiary">{line}</span>
+        <span className="text-group leading-[normal] text-pretty text-tertiary">{line}</span>
       </div>
-      <div className="flex shrink-0 items-center gap-2">{children}</div>
+      <div className="flex shrink-0 items-center gap-3.5">{children}</div>
     </div>
   )
 }

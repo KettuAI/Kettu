@@ -228,7 +228,7 @@ function ThemeTile({
     <div className="group/tile relative min-w-0">
       <ToggleGroupItem
         value={id}
-        className="h-auto w-full flex-col items-stretch gap-2 rounded-2xl bg-transparent p-0 text-left font-normal whitespace-normal hover:bg-transparent aria-pressed:bg-transparent"
+        className="h-auto w-full flex-col items-stretch gap-2 rounded-2xl bg-transparent p-0 text-left font-normal whitespace-normal group-data-[spacing=0]/toggle-group:rounded-2xl group-data-[spacing=0]/toggle-group:px-0 hover:bg-transparent aria-pressed:bg-transparent"
       >
         <ThemePreview light={theme?.light.colors} dark={theme?.dark.colors} />
         <span className="flex min-w-0 items-center gap-1.5 text-lede text-primary">

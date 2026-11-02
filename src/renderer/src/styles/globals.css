@@ -331,14 +331,16 @@
   /* A Settings section's title in the display face, and the 13.5 px of its list, its line under
      the title and its choices. */
   --text-section: 19px;
-  --text-section--line-height: 1.2;
+  --text-section--line-height: normal;
   --text-section--letter-spacing: -0.012em;
   --text-lede: 13.5px;
   --text-lede--line-height: 1.5;
+  /* Kettu's name on the About page. */
+  --text-app-name: 20px;
+  --text-app-name--line-height: 1.2;
   /* A dialog's title over Settings. */
   --text-sheet-title: 18px;
   --text-sheet-title--line-height: 1.3;
-  --text-sheet-title--letter-spacing: -0.012em;
 }
 
 :root {

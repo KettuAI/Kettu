@@ -41,12 +41,14 @@ export function ArchivedRow({ summary, where }: { summary: SessionSummary; where
         </ItemLine>
       </div>
       <ControlError error={error} />
-      <Button className={ROW_BUTTON} variant="outline" onClick={() => void restore()}>
-        {t('archived.restore')}
-      </Button>
-      <Button variant="ghost" className={GROUP_ACTION} onClick={() => setDeleting(true)}>
-        {t('archived.delete')}
-      </Button>
+      <div className="flex shrink-0 items-center gap-2">
+        <Button className={ROW_BUTTON} variant="outline" onClick={() => void restore()}>
+          {t('archived.restore')}
+        </Button>
+        <Button variant="ghost" className={GROUP_ACTION} onClick={() => setDeleting(true)}>
+          {t('archived.delete')}
+        </Button>
+      </div>
       <DeleteSessionDialog
         sessionId={summary.id}
         title={title}

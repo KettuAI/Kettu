@@ -162,7 +162,10 @@ export function LogRow({ agentId }: { agentId: AgentId }) {
                   <span
                     title={locations.join('\n')}
                     data-selectable=""
-                    className={cn('font-mono text-code', log.found === false && 'text-tertiary')}
+                    className={cn(
+                      'font-mono text-code leading-[normal]',
+                      log.found === false && 'text-tertiary',
+                    )}
                   >
                     {locations.join(', ')}
                   </span>

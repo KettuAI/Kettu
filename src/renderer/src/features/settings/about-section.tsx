@@ -35,7 +35,7 @@ export function AboutHero({ info }: { info: AppInfo | null }) {
         <BrandIcon size={56} className="shrink-0" />
         <div className="min-w-0">
           <div className="flex items-baseline gap-1.5">
-            <span className="font-display text-sheet-title font-extrabold">Kettu</span>
+            <span className="font-display text-app-name font-extrabold">Kettu</span>
             {info ? (
               <span
                 data-selectable=""
@@ -256,6 +256,7 @@ export function AutomaticUpdates() {
         value={value}
         options={options}
         onChange={(v) => apply({ updates: { automatic: v } })}
+        className="w-57.5"
       />
     </>
   )
@@ -282,11 +283,11 @@ export function LinkRow({
       <span className="relative flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-label leading-[normal]">{name}</span>
         {error ? (
-          <span className="truncate text-group text-danger" title={error}>
+          <span className="truncate text-group leading-[normal] text-danger" title={error}>
             {error}
           </span>
         ) : (
-          <span className="truncate text-group text-tertiary">
+          <span className="truncate text-group leading-[normal] text-tertiary">
             {detail ?? target.url?.replace(/^https?:\/\//, '')}
           </span>
         )}

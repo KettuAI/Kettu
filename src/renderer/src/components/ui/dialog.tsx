@@ -50,14 +50,17 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  forceOverlay = false,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  /** Dims the window again over another dialog, which Base UI leaves to the first one. */
+  forceOverlay?: boolean
 }) {
   const { t } = useTranslation('common')
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay forceRender={forceOverlay} />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         data-overlay-layer=""

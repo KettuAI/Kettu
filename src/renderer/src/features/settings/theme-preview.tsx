@@ -1,7 +1,7 @@
 import { useMemo, type CSSProperties } from 'react'
 import type { ThemeColors, ThemeMode } from '@shared/themes'
 import { useDark } from '@renderer/hooks/use-dark'
-import { previewColors } from './theme-colors'
+import { BUILTIN_COLORS, previewColors } from './theme-colors'
 
 /**
  * A theme as a small window: the desk with the sidebar's rows, and a sheet with a title, two lines
@@ -14,7 +14,11 @@ export function ThemePreview({ light, dark }: { light?: ThemeColors; dark?: Them
   const style = useMemo(
     () =>
       Object.fromEntries(
-        Object.entries(previewColors(colors, mode)).map(([token, color]) => [`--${token}`, color]),
+        Object.entries({
+          ...previewColors(colors, mode),
+          // The button in its accent, which an installed theme has and a catalog entry does not.
+          'control-on': colors?.['control-on'] ?? BUILTIN_COLORS[mode]['control-on'],
+        }).map(([token, color]) => [`--${token}`, color]),
       ) as CSSProperties,
     [colors, mode],
   )
@@ -38,7 +42,7 @@ export function ThemePreview({ light, dark }: { light?: ThemeColors; dark?: Them
           <span className="h-1.25 w-1/2 rounded-sm bg-(--primary-to)" />
           <span className="h-1 w-4/5 rounded-sm bg-(--primary-to) opacity-25" />
           <span className="h-1 w-[64%] rounded-sm bg-(--primary-to) opacity-25" />
-          <span className="mt-auto h-2 w-[26%] self-end rounded-full bg-(image:--primary-gradient)" />
+          <span className="mt-auto h-2 w-[26%] self-end rounded-full bg-(--control-on)" />
         </span>
       </span>
     </span>

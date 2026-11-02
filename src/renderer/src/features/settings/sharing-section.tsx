@@ -1,7 +1,7 @@
 // Settings › Sharing: the Cloudflare account main publishes with, and the pages it has published.
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { CircleAlertIcon, GlobeIcon, Link2Icon, LockIcon, ShareIcon } from 'lucide-react'
+import { CircleAlertIcon, GlobeIcon, LockIcon, ShapesIcon, ShareIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   CLOUDFLARE_DASHBOARD_URL,
@@ -443,7 +443,7 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
   })
   return (
     <div className="flex items-center gap-3.5 py-3.25">
-      <DeviceTile icon={<Link2Icon className="size-4.25" />} />
+      <DeviceTile icon={<ShapesIcon className="size-4.25" />} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-label leading-[normal]">{title ?? page.url}</span>
         <ItemLine>
@@ -452,7 +452,7 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
             target="_blank"
             rel="noreferrer"
             dir="ltr"
-            className="rounded-sm font-mono text-code underline-offset-2 outline-none hover:text-primary hover:underline focus-ring"
+            className="rounded-sm font-mono text-code leading-[normal] underline-offset-2 outline-none hover:text-primary hover:underline focus-ring"
           >
             {page.url.replace(/^https:\/\//, '')}
           </a>
@@ -466,18 +466,20 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
           })}
         />
       )}
-      <Button variant="ghost" className={GROUP_ACTION} onClick={copy}>
-        {t('sharing.published.copyLink')}
-      </Button>
-      {page.otherAccount ? (
-        <Tooltip>
-          {/* A disabled button gets no pointer events, so a wrapper holds the tooltip. */}
-          <TooltipTrigger render={<span className="flex" />}>{button}</TooltipTrigger>
-          <TooltipContent>{t('sharing.published.otherAccount')}</TooltipContent>
-        </Tooltip>
-      ) : (
-        button
-      )}
+      <div className="flex shrink-0 items-center gap-2">
+        <Button variant="ghost" className={GROUP_ACTION} onClick={copy}>
+          {t('sharing.published.copyLink')}
+        </Button>
+        {page.otherAccount ? (
+          <Tooltip>
+            {/* A disabled button gets no pointer events, so a wrapper holds the tooltip. */}
+            <TooltipTrigger render={<span className="flex" />}>{button}</TooltipTrigger>
+            <TooltipContent>{t('sharing.published.otherAccount')}</TooltipContent>
+          </Tooltip>
+        ) : (
+          button
+        )}
+      </div>
       <AlertDialog open={asking} onOpenChange={setAsking}>
         <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>
