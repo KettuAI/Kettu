@@ -9,6 +9,7 @@ const {
   agentName,
   agentsOn,
   forgetHostAgents,
+  awaitsPackage,
   hasProgram,
   hostAgentChanged,
   hostAgentRemoved,
@@ -154,6 +155,20 @@ describe('agents store', () => {
     ).toBe(true)
     expect(hasProgram(status({ cli: cli(null) }))).toBe(false)
     expect(hasProgram(status({}))).toBe(false)
+  })
+
+  it("counts an adapter or SDK Kettu has yet to install as not installed, not the user's own CLI", () => {
+    const status = (overrides: Partial<AgentStatus>) =>
+      ({ id: 'opencode', state: 'available', cli: null, ...overrides }) as AgentStatus
+    const pkg = (installed: boolean, isSdk = false) =>
+      ({ installed, isSdk }) as AgentStatus['package']
+    const cli = { command: 'claude', installed: { path: '/x/claude' } } as AgentStatus['cli']
+    expect(awaitsPackage(status({ package: pkg(false) }))).toBe(true)
+    expect(awaitsPackage(status({ package: pkg(true) }))).toBe(false)
+    expect(awaitsPackage(status({ package: pkg(false), state: 'installing' }))).toBe(false)
+    expect(awaitsPackage(status({ package: pkg(false, true) }))).toBe(true)
+    expect(awaitsPackage(status({ package: pkg(false, true), cli }))).toBe(false)
+    expect(awaitsPackage(status({ package: null }))).toBe(false)
   })
 
   it("keeps another host's agents apart from this computer's, and forgets them with the host", async () => {

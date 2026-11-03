@@ -1953,6 +1953,15 @@ describe('agents added to a harness', () => {
     await m.agents.stopAll()
   })
 
+  it("reports an added agent's dot color, and follows a change of it", async () => {
+    const m = addedManager(settingsWith([{ ...WORK, color: 'rose' }]))
+    await m.agents.list()
+    expect(m.agents.status('claude-code~work').color).toBe('rose')
+    expect(m.agents.status('claude-code').color).toBeUndefined()
+    await m.change(settingsWith([{ ...WORK, color: 'green' }]))
+    expect(m.agents.status('claude-code~work').color).toBe('green')
+  })
+
   it('hides a default agent the settings hide, and only that one', async () => {
     const m = addedManager(settingsWith([WORK], { 'claude-code': { hidden: true } }))
     await m.agents.list()
@@ -2734,6 +2743,23 @@ describe('skipped updates', () => {
     await m.agents.update('codex')
     expect(m.status()).toMatchObject({ update: null, updateSkipped: false })
     expect(m.saved.at(-1)?.agents.codex).not.toHaveProperty('skipped')
+  })
+
+  it('offers a skipped update again on undo, and forgets the skip', async () => {
+    const m = await updateManager()
+    await m.write('2.0.0', '2.0.0', '0.160.1', 1)
+    m.setCli('0.160.3')
+    await m.agents.checkUpdates()
+    await m.agents.skipUpdate('codex')
+    expect(m.status().updateSkipped).toBe(true)
+
+    await m.agents.unskipUpdate('codex')
+    expect(m.status()).toMatchObject({
+      update: { adapterVersion: '2.0.0', cliVersion: '0.160.3' },
+      updateSkipped: false,
+    })
+    expect(m.saved.at(-1)?.agents.codex).not.toHaveProperty('skipped')
+    expect(m.saved.at(-1)?.agents.codex).not.toHaveProperty('skippedCli')
   })
 
   it('leaves the skip alone when the update is gone by the click', async () => {

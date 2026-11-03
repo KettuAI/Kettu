@@ -77,7 +77,12 @@ export const RunGroup = memo(function RunGroup({
       onOpenChange={(next) => setUserOpen(next)}
       className={cn('min-w-0', animation)}
     >
-      <CollapsibleTrigger className="group/run -ml-2 flex min-h-7 max-w-[calc(100%+0.5rem)] items-center gap-1 rounded-md px-2 py-0.75 text-left text-ui text-muted-foreground outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring">
+      <CollapsibleTrigger className="group/run -ml-2 flex min-h-7 max-w-[calc(100%+0.5rem)] items-center gap-1.5 rounded-tile px-2 py-0.75 text-left text-control text-tertiary outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring">
+        <ChevronRightIcon
+          aria-hidden
+          strokeWidth={1.75}
+          className="size-3 shrink-0 transition-transform duration-(--duration-fast) group-data-panel-open/run:rotate-90 motion-reduce:transition-none"
+        />
         <CutLabel
           className="min-w-0 truncate"
           full={<Summary parts={parts} failed={failed} plain />}
@@ -87,10 +92,6 @@ export const RunGroup = memo(function RunGroup({
         {running && (
           <Spinner aria-label={t('status.running')} className="size-3 shrink-0 text-info" />
         )}
-        <ChevronRightIcon
-          aria-hidden
-          className="size-3.5 shrink-0 transition-transform duration-(--duration-fast) group-data-panel-open/run:rotate-90"
-        />
       </CollapsibleTrigger>
       <CollapsibleContent className={PANEL}>
         <div className="mt-1 ml-1.5 flex flex-col gap-0.5 border-l border-subtle pl-3.5">
@@ -136,19 +137,25 @@ function Summary({
     <>
       {parts.map((part, i) => (
         <span key={i}>
-          {i > 0 && t('summary.separator')}
+          {i > 0 && <Separator plain={plain} />}
           <PartText part={part} plain={plain} />
           {part.diffs && <PartStats diffs={part.diffs} plain={plain} />}
         </span>
       ))}
       {failed > 0 && (
         <span className={cn(!plain && 'text-danger')}>
-          {t('summary.separator')}
+          <Separator plain={plain} />
           {t('summary.failed', { failed })}
         </span>
       )}
     </>
   )
+}
+
+/** The dot between parts, faint so the parts lead. */
+function Separator({ plain }: { plain: boolean }) {
+  const { t } = useTranslation('session')
+  return <span className={cn(!plain && 'text-(--border-strong)')}>{t('summary.separator')}</span>
 }
 
 /** A part's words, its file names in the primary text color. */

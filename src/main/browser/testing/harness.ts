@@ -23,17 +23,22 @@ interface Result {
   dialog?: string | null
   evicted?: string | null
   forbidden?: boolean
+  capturedShown?: boolean
+  capturedHidden?: boolean
+  capturedNone?: Uint8Array | null
   layout?: { bounds: Rectangle; children: Rectangle[] }[]
 }
 
 async function main(): Promise<Result> {
   await app.whenReady()
+  // Shown, so Chromium renders the frames a capture reads; not activated, so it takes no focus.
   const window = new BrowserWindow({
     show: false,
     width: 900,
     height: 700,
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
   })
+  window.showInactive()
   const states = new Map<string, BrowserState>()
   const waiting: ((state: BrowserState) => void)[] = []
   const views = new BrowserViews({
@@ -83,6 +88,15 @@ async function main(): Promise<Result> {
 
   views.navigate(session, `${FIXTURE}/two`)
   result.two = (await loaded(session, '/two')).title
+
+  // A still for a message comes from the page the pane shows: a hidden view draws no frame.
+  const isPng = (bytes: Uint8Array | null) =>
+    !!bytes && String.fromCharCode(...bytes.subarray(1, 4)) === 'PNG'
+  result.capturedShown = isPng(await views.capture(session))
+  views.hide(session)
+  result.capturedHidden = isPng(await views.capture(session))
+  views.show(session)
+  result.capturedNone = await views.capture('nobody')
 
   views.back(session)
   result.back = (await loaded(session, '/one')).url

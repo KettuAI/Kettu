@@ -17,7 +17,10 @@ export interface SettingsFile {
   }
   thread: {
     outlineSummaries: boolean // a small model titles the outline's messages
-    confirmLinks: boolean // show where a link goes before it opens in the default browser
+    confirmLinks: boolean // ask before opening a site that has no `alwaysOpenIn` entry
+    openLinksIn: OpenLinksIn // where a click on a link in a reply opens it
+    // By site: its registrable domain, or the whole host when that is the domain. Replaced whole.
+    alwaysOpenIn: Record<string, LinkDestination>
   }
   appearance: {
     theme: 'system' | 'light' | 'dark' // the color mode, which picks a theme's variant
@@ -68,12 +71,49 @@ export interface DirectSettings {
   addresses: DirectAddress[] // the owner's own, such as a forwarded port, listed before the found
 }
 
+/** Where a link opens: the system's default browser, or the session's page in Kettu's browser. */
+export type LinkDestination = 'browser' | 'session'
+export type OpenLinksIn = LinkDestination | 'ask'
+
+/** The most sites the "Always open" choice remembers. */
+export const MAX_LINK_SITES = 500
+
+// Lowercase labels of letters, digits and hyphens, or an IPv6 address in brackets.
+const LINK_SITE = /^(?:[a-z0-9-]+(?:\.[a-z0-9-]+)*|\[[0-9a-f:.]+\])$/
+
+/** Whether a host can be remembered for "Always open", as the URL parser writes hosts. */
+export function isLinkSite(site: string): boolean {
+  return site.length <= 253 && LINK_SITE.test(site)
+}
+
 /** An agent added beside a harness's default one, with a configuration folder of its own. */
 export interface AddedAgent {
   id: AgentId // `<harness>~<slug>`, see `addedAgentId`
   name: string
   configDir: string // Kettu's own new folder, or one picked in a native dialog
   created: boolean // Kettu made the folder, so removing the agent offers to move it to the trash
+  color?: AgentColor // the dot on its mark; absent in files from before it, see `agentColor`
+}
+
+/** The colors of the dot that sets an added agent's mark apart from its harness's default. */
+export const AGENT_COLORS = ['teal', 'violet', 'amber', 'rose', 'green', 'slate'] as const
+export type AgentColor = (typeof AGENT_COLORS)[number]
+
+export function isAgentColor(value: unknown): value is AgentColor {
+  return (AGENT_COLORS as readonly unknown[]).includes(value)
+}
+
+/** An added agent's dot: its own color, else one by its place in the list; null for a default agent. */
+export function agentColor(agents: readonly AddedAgent[], id: AgentId): AgentColor | null {
+  const index = agents.findIndex((agent) => agent.id === id)
+  if (index < 0) return null
+  return agents[index]!.color ?? AGENT_COLORS[index % AGENT_COLORS.length]!
+}
+
+/** The color a new agent gets: the first no other added agent has, else the first. */
+export function nextAgentColor(agents: readonly AddedAgent[]): AgentColor {
+  const taken = new Set(agents.map((agent) => agentColor(agents, agent.id)))
+  return AGENT_COLORS.find((color) => !taken.has(color)) ?? AGENT_COLORS[0]
 }
 
 /** The longest name an added agent may have. */
@@ -105,7 +145,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     background: false,
     sessionTitles: true,
   },
-  thread: { outlineSummaries: true, confirmLinks: true },
+  thread: { outlineSummaries: true, confirmLinks: true, openLinksIn: 'browser', alwaysOpenIn: {} },
   appearance: {
     theme: 'system',
     colorTheme: BUILTIN_THEME_ID,

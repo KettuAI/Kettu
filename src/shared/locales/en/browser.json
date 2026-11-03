@@ -18,7 +18,8 @@
     "tryAgain": "Try again",
     "openExternal": "Open in browser",
     "maximize": "Maximize",
-    "restore": "Restore"
+    "restore": "Restore",
+    "closeBrowser": "Close browser"
   },
   "notice": {
     "downloadBlocked": "Downloads are blocked in Kettu's browser",
@@ -26,10 +27,10 @@
     "loadFailed": "This page did not load: {{error}}"
   },
   "control": {
-    "using": "{{agent}} is using the browser",
-    "stop": "Stop",
-    "you": "You have control",
-    "handBack": "Hand back"
+    "using": "{{agent}} is driving",
+    "you": "You’re driving",
+    "handBack": "Hand back",
+    "takeOver": "Take over"
   },
   "origin": {
     "decision": {
@@ -44,5 +45,6 @@
       "timeout": "Not answered in time"
     },
     "asks": "{{agent}} wants to open"
-  }
+  },
+  "tabs": "Pages"
 }

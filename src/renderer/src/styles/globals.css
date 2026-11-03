@@ -2,9 +2,11 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/inter/opsz.css';
+@import '@fontsource-variable/inter/opsz-italic.css';
 @import '@fontsource-variable/source-serif-4/opsz.css';
 @import '@fontsource-variable/source-serif-4/opsz-italic.css';
 @import '@fontsource-variable/jetbrains-mono/wght.css';
+@import '@fontsource-variable/manrope/wght.css';
 @import './tokens.css';
 
 /* Chinese: the platform's face with pinned weights, since CSS would match the dark theme's 360 to
@@ -55,9 +57,11 @@
 }
 
 @theme inline {
-  /* The faces the theme gives each kind of text, below; titles take the prose face. */
+  /* The faces the theme gives each kind of text, below. Page titles, a reply's first heading and
+     dialog titles take the display face; other headings the prose face. */
   --font-sans: var(--ui-face);
   --font-heading: var(--prose-face);
+  --font-display: var(--display-face);
   --font-prose: var(--prose-face);
   --font-mono: var(--code-face);
 
@@ -65,8 +69,10 @@
   --background-color-app: var(--bg-app);
   --background-color-surface: var(--bg-surface);
   --background-color-subtle: var(--bg-subtle);
+  --background-color-tray: var(--bg-tray);
   --background-color-hover: var(--bg-hover);
   --background-color-selected: var(--bg-selected);
+  --background-color-raised: var(--bg-raised);
   --background-color-code-inline: var(--bg-code-inline);
   --background-color-code-block: var(--bg-code-block);
   --background-color-scrim: var(--scrim);
@@ -80,6 +86,8 @@
   --border-color-default: var(--border-default);
   --border-color-subtle: var(--border-subtle);
   --border-color-strong: var(--border-strong);
+  /* A focused field's line: the fox at full strength. */
+  --border-color-focused: var(--focus);
   --color-attention: var(--attention);
   --color-attention-dot: var(--attention-dot);
   --color-attention-foreground: var(--attention-foreground);
@@ -100,7 +108,7 @@
   --color-warning-tint: var(--warning-tint);
   --color-link: var(--link);
   --color-link-hover: var(--link-hover);
-  --color-focus: var(--focus);
+  --color-focus: var(--focus-ring-color);
   --color-edit-ring: var(--edit-ring);
   --color-edit-selection: var(--edit-selection);
 
@@ -144,8 +152,12 @@
   --color-tile: var(--tile);
   --color-track: var(--track);
   --color-switch-on: var(--switch-on);
-  --color-switch-on-focus: var(--switch-on-focus);
-  --color-switch-off-focus: var(--switch-off-focus);
+  --color-switch-thumb: var(--switch-thumb);
+  --color-control-on: var(--control-on);
+  --color-control-on-tint: var(--control-on-tint);
+  --color-limit-ok: var(--limit-ok);
+  --color-limit-warn: var(--limit-warn);
+  --color-limit-bad: var(--limit-bad);
   --color-segment-track: var(--segment-track);
   --color-segment-thumb: var(--segment-thumb);
   --color-canvas: var(--canvas);
@@ -153,8 +165,19 @@
   --color-pressed: var(--pressed);
   --color-pressed-hover: var(--pressed-hover);
   --color-mark: var(--mark);
+  --color-match: var(--match);
+  --color-toast: var(--toast);
+  --color-toast-foreground: var(--toast-foreground);
+  --color-toast-success: var(--toast-success);
+  --color-toast-warning: var(--toast-warning);
+  --color-toast-info: var(--toast-info);
+  --color-toast-muted: var(--toast-muted);
   --color-diff-add: var(--diff-add);
+  --color-diff-add-word: var(--diff-add-word);
   --color-diff-del: var(--diff-del);
+  --color-diff-del-word: var(--diff-del-word);
+  --color-code-success: var(--code-success);
+  --color-code-danger: var(--code-danger);
   --color-brand-claude: var(--brand-claude);
   --color-agent-claude-code: var(--agent-claude-code);
   --color-agent-codex: var(--agent-codex);
@@ -181,13 +204,24 @@
   --color-heat-out-3: var(--heat-out-3);
   --color-heat-out-4: var(--heat-out-4);
 
-  --radius-sm: calc(var(--radius) * 0.5);
-  --radius-md: calc(var(--radius) * 0.75);
+  /* Scale B from --radius, 5 px: 3.5 check boxes and inline code, 4 menu items, 5 buttons, fields
+     and rows, 6 option tiles, 8 cards, menus, popovers and code, 10 dialogs and the composer. A
+     nested corner is the outer one less the padding between. */
+  --radius-sm: calc(var(--radius) * 0.7);
+  --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
-  --radius-code: calc(var(--radius) * 1.25);
-  --radius-xl: calc(var(--radius) * 1.5);
-  --radius-2xl: calc(var(--radius) * 1.75);
+  --radius-tile: calc(var(--radius) * 1.2);
+  --radius-code: calc(var(--radius) * 1.6);
+  --radius-xl: calc(var(--radius) * 1.6);
+  --radius-2xl: calc(var(--radius) * 2);
   --radius-3xl: calc(var(--radius) * 2);
+  /* Settings over the app, a card in it such as Remote access's status, and a dialog over
+     Settings; Settings' segmented choices, whose chosen segment sits 2 px inside the track. */
+  --radius-modal: 14px;
+  --radius-card: 12px;
+  --radius-dialog: 16px;
+  --radius-segments: 9px;
+  --radius-segment: 7px;
 
   --shadow-sm: var(--elevation-sm);
   --shadow-md: var(--elevation-md);
@@ -197,26 +231,37 @@
   --shadow-outline-hover: var(--outline-hover);
   --shadow-sunk: var(--sunk-ring);
   --shadow-field: var(--field-shadow);
+  --shadow-field-focus: var(--field-focus-shadow);
   --shadow-primary: var(--primary-shadow);
   --shadow-destructive: var(--destructive-shadow);
+  --shadow-destructive-ring: var(--destructive-ring);
+  --shadow-destructive-ring-hover: var(--destructive-ring-hover);
   --shadow-float: var(--float-shadow);
   --shadow-menu: var(--menu-ring);
   --shadow-dialog: var(--dialog-ring);
   --shadow-composer: var(--composer-ring);
   --shadow-composer-hover: var(--composer-hover);
   --shadow-composer-focus: var(--composer-focus);
-  --shadow-queue: var(--queue-ring);
   --shadow-attention: var(--attention-ring-shadow);
   --shadow-segment: var(--segment-ring);
+  --shadow-raised: var(--raised-ring);
   --shadow-thumb: var(--thumb-shadow);
-  --shadow-sheet: var(--elevation-sheet);
-  --shadow-sheet-focused: var(--elevation-sheet-focused);
+  --shadow-toast: var(--elevation-toast);
+  --shadow-sheet: var(--sheet-ring);
+  --shadow-sheet-focused: var(--sheet-focused-ring);
+  --shadow-media: var(--elevation-media);
+  --shadow-media-control: var(--elevation-media-control);
 
   --font-weight-normal: var(--weight-normal);
   --font-weight-medium: var(--weight-medium);
   --font-weight-semibold: var(--weight-semibold);
 
   --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
+  /* The interface's own curve: quick out of the gate, a long settle, no overshoot. */
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --default-transition-duration: var(--duration-fast);
+  --default-transition-timing-function: var(--ease-standard);
+  --animate-spin: spin var(--duration-spin) linear infinite;
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
@@ -224,78 +269,140 @@
   --blur-mask: 3px;
 
   --text-prose: var(--prose-size);
-  /* The thread's column, 28 px gutters included: 48em of prose, 720 px at the default size. */
-  --container-thread: calc(48 * var(--prose-size));
+  /* A reply's measure: 48em of prose, 720 px at the default size. The composer takes it. */
+  --container-reply: calc(48 * var(--prose-size));
+  /* The thread's column: the reply's measure with its 28 px gutters. */
+  --container-thread: calc(48 * var(--prose-size) + 56px);
   --text-ui: var(--ui-size);
-  --text-prose--line-height: 1.45;
-  /* The type scale of the design system. Titles take the prose face, through font-heading. */
+  --text-ui--letter-spacing: -0.003em;
+  --text-prose--line-height: 1.65;
+  /* The type scale of the design system. Page and dialog titles take the display face through
+     font-display, at weight 700. */
   --text-greeting: 28px;
-  --text-greeting--line-height: 36px;
-  --text-greeting--letter-spacing: -0.01em;
+  --text-greeting--line-height: 1.2;
+  --text-greeting--letter-spacing: -0.015em;
   /* A figure on the usage page, at weight 500 with tabular figures. */
   --text-figure: 24px;
   --text-figure--line-height: 30px;
   --text-figure--letter-spacing: -0.01em;
   --text-title: 22px;
-  --text-title--line-height: 30px;
-  --text-title--letter-spacing: -0.006em;
-  --text-heading: 16px;
-  --text-heading--line-height: 22px;
+  --text-title--line-height: 1.2;
+  --text-title--letter-spacing: -0.015em;
+  --text-dialog-title: 17px;
+  --text-dialog-title--line-height: 1.35;
+  --text-dialog-title--letter-spacing: -0.012em;
+  --text-heading: 16.5px;
+  --text-heading--line-height: 1.4;
+  --text-heading--letter-spacing: -0.008em;
+  /* The session's title in its top bar, at weight 600. */
   --text-subheading: 15px;
   --text-subheading--line-height: 20px;
-  --text-subheading--letter-spacing: -0.003em;
+  --text-subheading--letter-spacing: -0.006em;
+  /* A sidebar row, and a settings row's label. */
+  --text-row: 14px;
+  --text-row--line-height: 20px;
+  --text-label: 14.5px;
+  --text-label--line-height: 20px;
   --text-group: 13px;
   --text-group--line-height: 18px;
   --text-small: 12px;
   --text-small--line-height: 1.45;
+  /* Hints and a segmented control's segments. */
+  --text-hint: 12.5px;
+  --text-hint--line-height: 18px;
   --text-control: 13px;
   --text-control--line-height: 18px;
+  --text-control--letter-spacing: -0.003em;
   --text-command: 12px;
   --text-command--line-height: 18px;
   --text-code: 12px;
   --text-code--line-height: 20px;
   --text-meta: 12px;
   --text-meta--line-height: 16px;
+  /* Tooltips and a menu item's shortcut. */
+  --text-caption: 11.5px;
+  --text-caption--line-height: 16px;
+  /* A file card's name in a reply. */
+  --text-file: 13.5px;
+  --text-file--line-height: 18px;
+  /* A menu item, and rows read like one. */
+  --text-menu: 13.5px;
+  --text-menu--line-height: 18px;
+  --text-menu--letter-spacing: -0.003em;
+  /* A count over a picture, such as a grid's +3. */
+  --text-count: 11px;
+  --text-count--line-height: 14px;
+  /* The extension at the foot of a file card's type tile, in bold. */
+  --text-file-type: 9px;
+  --text-file-type--line-height: 11px;
+  /* Mono beside interface text: commit ids, line counts, a worktree's path. */
+  --text-code-sm: 11px;
+  --text-code-sm--line-height: 16px;
+  /* The letter in a file's change tile. */
+  --text-badge: 9.5px;
+  --text-badge--line-height: 1;
+  /* The number on an answer's key cap. */
+  --text-key: 11px;
+  --text-key--line-height: 16px;
+  /* A Settings section's title in the display face, and the 13.5 px of its list, its line under
+     the title and its choices. */
+  --text-section: 19px;
+  --text-section--line-height: normal;
+  --text-section--letter-spacing: -0.012em;
+  --text-lede: 13.5px;
+  --text-lede--line-height: 1.5;
+  /* Kettu's name on the About page. */
+  --text-app-name: 20px;
+  --text-app-name--line-height: 1.2;
+  /* A dialog's title over Settings. */
+  --text-sheet-title: 18px;
+  --text-sheet-title--line-height: 1.3;
 }
 
 :root {
   --hairline: 1px;
 
-  /* Density: a native macOS app's. */
-  --radius: 8px;
+  /* Density: heights on 4 px steps. */
+  --radius: 5px;
   --control-height: 28px;
   --control-height-sm: 24px;
-  --row-height: 30px;
+  --row-height: 32px;
   /* Interface text: the sidebar, menus and controls. Prose has its own size below. */
   --ui-size: 13px;
   --card-header: 40px;
   --composer-min: 56px;
   --icon-size: 16px;
-  --top-bar: 44px;
+  --top-bar: 48px;
+  /* The desk around the sheets: from the window's edges and between two sheets. */
+  --sheet-gap: 8px;
   /* Windows and Linux: the band across the window's top, where the window controls sit;
      main's title bar overlay has the same height. */
   --title-bar: 40px;
   /* The page zoom, from settings; the macOS traffic lights keep their size under it. */
   --zoom: 1;
   --traffic-lights: calc(52px / var(--zoom));
+  /* A top bar in the window's top left corner starts clear of the traffic lights, from the edge
+     of its sheet. */
+  --corner-inset: calc(36px - var(--sheet-gap) + var(--traffic-lights));
   --scroll-fade-size: 28px;
   /* Windows only, where the app draws its scrollbars: a 4 px thumb in a 10 px gutter. */
   --scrollbar-size: 10px;
   --scrollbar-inset: 3px;
 
-  /* Motion. */
+  /* Motion: 150 to 220 ms on --ease-standard; spinners turn once in 0.9 s. */
   --duration-instant: 60ms;
-  --duration-fast: 120ms;
-  --duration-base: 200ms;
-  --duration-slow: 300ms;
+  --duration-fast: 150ms;
+  --duration-base: 180ms;
+  --duration-slow: 220ms;
   --duration-slower: 450ms;
+  --duration-spin: 0.9s;
   /* One breath of the launch cover's fox, slow enough to read as calm. */
   --duration-breath: 2400ms;
 
   /* Type. */
-  --prose-size: 14px;
+  --prose-size: 15px;
   /* The faces a theme may name, each with Chinese in the platform's face. A face's files are
-     only fetched once text uses it, so the built-in theme never loads Inter or Source Serif 4. */
+     only fetched once text uses it, so the built-in theme never loads Source Serif 4. */
   --face-system:
     system-ui, 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   --face-inter:
@@ -308,10 +415,18 @@
     'JetBrains Mono Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
     'Noto Sans CJK SC', ui-monospace, monospace;
   --face-system-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+  --face-manrope:
+    'Manrope Variable', 'Inter Variable', 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei',
+    'Noto Sans CJK SC', system-ui, sans-serif;
 
-  --ui-face: var(--face-system);
-  --prose-face: var(--face-system);
+  --ui-face: var(--face-inter);
+  --prose-face: var(--face-inter);
+  --display-face: var(--face-manrope);
   --code-face: 'JetBrains Mono Variable', var(--face-system-mono);
+  /* Inter's single-storey a, where its files keep that variant: the bundled subsets do not, so
+     it draws Inter's default a. Another face keeps its own letters. */
+  --ui-features: 'cv11';
+  --prose-features: 'cv11';
   /* The serif reads about a size smaller than the sans faces at the same pixel size. */
   --prose-scale: 1;
   --weight-normal: 400;
@@ -325,6 +440,9 @@
   --diffs-header-font-family: var(--font-sans);
 }
 
+:root[data-font-ui='system'] {
+  --ui-face: var(--face-system);
+}
 :root[data-font-ui='inter'] {
   --ui-face: var(--face-inter);
 }
@@ -333,6 +451,12 @@
 }
 :root[data-font-ui='jetbrains-mono'] {
   --ui-face: var(--face-jetbrains-mono);
+}
+:root[data-font-ui]:not([data-font-ui='inter']) {
+  --ui-features: normal;
+}
+:root[data-font-prose='system'] {
+  --prose-face: var(--face-system);
 }
 :root[data-font-prose='inter'] {
   --prose-face: var(--face-inter);
@@ -344,22 +468,18 @@
 :root[data-font-prose='jetbrains-mono'] {
   --prose-face: var(--face-jetbrains-mono);
 }
+:root[data-font-prose]:not([data-font-prose='inter']) {
+  --prose-features: normal;
+}
 :root[data-font-code='system'] {
   --code-face: var(--face-system-mono);
 }
 
-/* Light text on a dark surface looks heavier than it is. */
-[data-theme='dark'] {
-  --weight-normal: 360;
-  --weight-medium: 460;
-  --weight-semibold: 560;
-}
-
 :root[data-text-size='small'] {
-  --prose-size: 13px;
+  --prose-size: 14px;
 }
 :root[data-text-size='large'] {
-  --prose-size: 15px;
+  --prose-size: 16px;
 }
 
 @layer base {
@@ -368,6 +488,7 @@
   }
   html {
     @apply font-sans;
+    font-feature-settings: var(--ui-features);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     scrollbar-color: var(--scrollbar-thumb) transparent;
@@ -408,6 +529,16 @@
   ::selection {
     background-color: var(--selection);
   }
+  input,
+  textarea,
+  [contenteditable] {
+    caret-color: var(--control-on);
+  }
+  /* Keyboard focus only: a pointer never shows the ring. */
+  :focus-visible {
+    outline: 1.5px solid var(--focus-ring-color);
+    outline-offset: 2px;
+  }
   kbd {
     font-family: var(--font-mono);
   }
@@ -436,17 +567,17 @@
   background: repeating-conic-gradient(var(--checker) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
 }
 
-/* The keyboard focus ring: 2 px, 2 px clear of the element. */
+/* The keyboard focus ring: the fox at half strength, 1.5 px, 2 px clear of the element. */
 @utility focus-ring {
   &:focus-visible {
-    outline: 2px solid var(--focus);
+    outline: 1.5px solid var(--focus-ring-color);
     outline-offset: 2px;
   }
 }
 /* The same ring on a container while something inside it has keyboard focus. */
 @utility focus-ring-within {
   &:has(:focus-visible) {
-    outline: 2px solid var(--focus);
+    outline: 1.5px solid var(--focus-ring-color);
     outline-offset: 2px;
   }
 }
@@ -455,18 +586,38 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* A link in the thread: a reply's, or a web address in a notice. */
+/* Marks a reply's last block for its children's style query (.markdown); not inherited, so only
+   the block's own children see it. */
+@property --markdown-last-block {
+  syntax: '*';
+  inherits: false;
+}
+
+/* The color of a thread link's line, registered so a hover can fade it. */
+@property --thread-link-line {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+
+/* A link in the thread: a reply's, or a web address in a notice. Ink, with one gray line 3 px
+   below that runs under its site's icon and its text and darkens to the ink on hover. A
+   background draws the line, so it goes on under every line a long link wraps to. */
 @utility thread-link {
+  --thread-link-line: var(--border-strong);
   color: var(--link);
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--link) 40%, transparent);
-  text-underline-offset: 3px;
+  text-decoration: none;
+  padding-bottom: 3px;
+  background-image: linear-gradient(var(--thread-link-line), var(--thread-link-line));
+  background-size: 100% 1px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
   transition:
     color var(--duration-fast),
-    text-decoration-color var(--duration-fast);
+    --thread-link-line var(--duration-fast);
   &:hover {
+    --thread-link-line: var(--link-hover);
     color: var(--link-hover);
-    text-decoration-color: currentColor;
   }
 }
 
@@ -481,6 +632,9 @@
 }
 @utility min-h-row {
   min-height: var(--row-height);
+}
+@utility min-h-control {
+  min-height: var(--control-height);
 }
 @utility h-card-header {
   height: var(--card-header);
@@ -712,24 +866,24 @@
 
 /* Agent prose, rendered by Streamdown, set to the thread's measurements. These rules are not in a layer, so they win over the utility
    classes Streamdown puts on each element. Sizes are in em of the prose size, so Text size
-   scales them; the spec's pixel values are those of the default 16.5 px. */
+   scales them; the spec's pixel values are those of the default 15 px. */
 .markdown {
   font-family: var(--font-prose);
+  font-feature-settings: var(--prose-features);
   font-size: calc(var(--prose-size) * var(--prose-scale));
-  line-height: 1.56;
-  letter-spacing: -0.002em;
-  /* Italics are the serif's own; Chinese, which has none, stays upright. */
+  line-height: 1.65;
+  /* Italics are the face's own; Chinese, which has none, stays upright. */
   font-synthesis-style: none;
   color: var(--text-primary);
   overflow-wrap: anywhere;
   user-select: text;
 
   & :where(p) {
-    margin: 0 0 0.75em;
+    margin: 0 0 0.8em;
     text-wrap: pretty;
   }
   & :where(ul, ol, blockquote, table, pre) {
-    margin-block: 0.75em;
+    margin-block: 0.8em;
   }
   /* Blocks sit in the chunks of markdown-impl.tsx, whose margins collapse through them. These
      rules outrank the block rules below, so not even a heading adds space above the first block
@@ -738,9 +892,18 @@
   & > :first-child > :first-child > :first-child {
     margin-top: 0;
   }
-  & > :last-child > :nth-last-child(1 of :not([data-media-block]:empty)),
-  & > :last-child > :nth-last-child(1 of :not([data-media-block]:empty)) > :last-child {
+  /* Adding a child to a parent whose children a structural pseudo-class was tested on restyles
+     all of them in Chromium, with their whole subtrees when the selector goes on after it. So the
+     chunk class keeps the chunks out of that test, and the last block's own last child finds the
+     block by its mark, not by position; otherwise each new chunk restyled the whole reply. */
+  & > :where(.markdown-chunk):last-child > :nth-last-child(1 of :not([data-media-block]:empty)) {
     margin-bottom: 0;
+    --markdown-last-block: 1;
+  }
+  @container style(--markdown-last-block: 1) {
+    & > :where(.markdown-chunk):last-child > :not([data-media-block]:empty) > :last-child {
+      margin-bottom: 0;
+    }
   }
   /* Media a block's file references name, under it (markdown-impl.tsx). Its captions and
      buttons are interface, so they stay Inter. */
@@ -752,7 +915,8 @@
     display: none;
   }
 
-  /* More space above than below, so a heading sits on its content. */
+  /* More space above than below, so a heading sits on its content: three steps only, 20, 16.5
+     and 15 px, the first in the display face. Margins are in em of each heading's own size. */
   & [data-streamdown^='heading-'] {
     color: var(--foreground);
     font-weight: var(--font-weight-semibold);
@@ -760,16 +924,22 @@
     text-wrap: balance;
   }
   & [data-streamdown='heading-1'] {
-    margin: 1.8em 0 0.4em;
+    margin: 1.2em 0 0.6em;
+    font-family: var(--font-display);
     font-size: 1.3333em;
+    font-weight: 700;
+    line-height: 1.35;
+    letter-spacing: -0.012em;
   }
   & [data-streamdown='heading-2'] {
-    margin: 1.75em 0 0.4em;
-    font-size: 1.1333em;
+    margin: 1.3333em 0 0.4848em;
+    font-size: 1.1em;
+    letter-spacing: -0.008em;
   }
   & [data-streamdown='heading-3'] {
-    margin: 1.5em 0 0.3em;
+    margin: 1.2em 0 0.4em;
     font-size: 1em;
+    line-height: 1.5;
   }
   &
     :is(
@@ -777,36 +947,117 @@
       [data-streamdown='heading-5'],
       [data-streamdown='heading-6']
     ) {
-    margin: 1.5em 0 0.3em;
-    color: var(--muted-foreground);
+    margin: 1.2em 0 0.4em;
+    color: var(--text-secondary);
     font-size: 1em;
+    line-height: 1.5;
   }
 
+  /* Bullets and numbers are gray, so the text leads: a 5 px dot in a 16 px column, a ring one
+     level down, 22 px in; numbers right-aligned in tabular figures. */
   & :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list']) {
-    padding-left: 1.25em;
-    list-style-position: outside;
+    padding-left: 0;
+    list-style: none;
   }
   & [data-streamdown='ordered-list'] {
     font-variant-numeric: tabular-nums;
   }
-  & [data-streamdown='list-item'] {
-    margin-block: 0.3em;
-    padding-block: 0;
+  & [data-streamdown='ordered-list'] > [data-streamdown='list-item'] {
+    position: relative;
+    padding-left: 1.8667em;
   }
-  & [data-streamdown='list-item']::marker {
-    color: var(--muted-foreground);
+  & [data-streamdown='ordered-list'] > [data-streamdown='list-item']::before {
+    content: counter(list-item) '.';
+    position: absolute;
+    left: 0;
+    width: 1.2em;
+    color: var(--text-tertiary);
+    text-align: right;
+  }
+  /* A list hangs under its lead-in and leaves more room before what follows. */
+  & :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list']) {
+    margin-bottom: 1.0667em;
+  }
+  & p:has(+ :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list'])) {
+    margin-bottom: 0;
+  }
+  & p + :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list']) {
+    margin-top: 0;
+  }
+  & [data-streamdown='list-item'] {
+    margin-block: 0.4em 0;
+    padding-block: 0;
+    line-height: 1.6;
+  }
+  & [data-streamdown='unordered-list'] > [data-streamdown='list-item'] {
+    position: relative;
+    padding-left: 1.7333em;
+  }
+  & [data-streamdown='unordered-list'] > [data-streamdown='list-item']::before {
+    content: '';
+    position: absolute;
+    top: 0.6667em;
+    left: calc(0.5333em - 2.5px);
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--text-tertiary);
+  }
+  &
+    [data-streamdown='list-item']
+    [data-streamdown='unordered-list']
+    > [data-streamdown='list-item']::before {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.2px var(--text-tertiary);
   }
   &
     [data-streamdown='list-item']
     > :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list']) {
-    margin-block: 0.25em;
+    margin-block: 0.4em 0;
+  }
+  &
+    [data-streamdown='unordered-list']
+    > [data-streamdown='list-item']
+    > [data-streamdown='unordered-list'] {
+    margin-left: -0.2667em;
   }
   /* Loose lists keep the spacing of tight ones. */
   & [data-streamdown='list-item'] > p {
     margin: 0;
   }
   & [data-streamdown='list-item'] > [data-media-block] {
-    margin-block: 0.3em;
+    margin-block: 0.4em;
+  }
+  /* A task's box takes the bullet's place; a done task's text turns gray and struck through. */
+  & .task-list-item::before {
+    content: none;
+  }
+  & [data-task-box] {
+    position: absolute;
+    top: 0.2667em;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    box-shadow: inset 0 0 0 1.5px var(--border-strong);
+    color: var(--switch-thumb);
+    & svg {
+      width: 10px;
+      height: 10px;
+    }
+  }
+  & [data-task-box][aria-checked='true'] {
+    background: var(--control-on);
+    box-shadow: none;
+  }
+  & .task-list-item:has(> [data-task-box][aria-checked='true']) {
+    color: var(--text-tertiary);
+    text-decoration: line-through;
+    text-decoration-color: var(--border-strong);
   }
 
   & [data-streamdown='strong'] {
@@ -824,34 +1075,39 @@
   }
 
   & [data-streamdown='inline-code'] {
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     background: var(--bg-code-inline);
     color: var(--text-primary);
-    padding: 0.1em 0.35em;
+    padding: 0.0667em 0.3333em;
     font-family: var(--font-mono);
-    /* The mono face's x-height is larger, so this reaches about 95% of the serif's. */
-    font-size: 0.84em;
+    font-variant-ligatures: none;
+    font-size: 0.8667em;
+  }
+  & del {
+    color: var(--text-tertiary);
   }
 
-  /* A file reference is a chip, not a link: its type's icon and its name, the path in its
-     tooltip. It opens the file in the Files pane. */
+  /* A file reference is a chip, not a link: a document icon and its name on a subtle ground in a
+     thin ring, the path in its tooltip. It opens the file in the Files pane. */
   & [data-file-ref] {
+    position: relative;
+    top: -1px;
     display: inline-flex;
     vertical-align: middle;
     align-items: center;
-    gap: 4px;
+    gap: 5px;
     margin-inline: 1px;
-    /* The line counts the chip as 18 px, so it never makes a 1.45 line taller, down to 14 px. */
+    /* The line counts the chip as 18 px, so it never makes a line taller. */
     margin-block: -2px;
-    border-radius: var(--radius-md);
-    background: var(--bg-code-inline);
-    padding: 0 6px;
+    border-radius: var(--radius-lg);
+    background: var(--bg-subtle);
+    box-shadow: inset 0 0 0 1px var(--border-subtle);
+    padding: 0 6px 0 5px;
     height: 22px;
     color: var(--text-primary);
     font-family: var(--font-sans);
-    /* Follows Text size; about 96% of the serif's x-height beside the prose. */
-    font-size: 0.85em;
-    font-weight: var(--font-weight-medium);
+    font-size: 0.9em;
+    font-weight: var(--font-weight-normal);
     line-height: 1;
     white-space: nowrap;
     cursor: pointer;
@@ -861,200 +1117,216 @@
       background: var(--bg-selected);
     }
     &:focus-visible {
-      outline: 2px solid var(--focus);
+      outline: 1.5px solid var(--focus-ring-color);
       outline-offset: 2px;
+    }
+    & svg {
+      color: var(--text-tertiary);
     }
     /* The line it points at, after the name. */
     & > span + span {
       color: var(--text-tertiary);
-      font-weight: var(--font-weight-normal);
     }
   }
 
-  & [data-streamdown='code-block'] {
-    margin-block: 1em;
-    gap: 0;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-code);
-    background: var(--bg-code-block);
-    padding: 0;
-    overflow: hidden;
-  }
-  & [data-streamdown='code-block-header'] {
-    height: 32px;
-    padding-inline: 14px 6px;
-    color: var(--muted-foreground);
-    font-size: 12px;
-  }
-  /* The copy control sits in the header row as a ghost button, without Streamdown's frosted box. */
-  & [data-streamdown='code-block'] > div:not([data-streamdown]) {
-    top: 4px;
-    right: 4px;
-  }
-  & [data-streamdown='code-block'] > div:not([data-streamdown]) > div {
-    border: 0;
-    background: transparent;
-    backdrop-filter: none;
-    padding: 0;
-  }
-  &
-    :is(
-      [data-streamdown='code-block'] > div:not([data-streamdown]),
-      [data-streamdown='table-wrapper'] > div:first-child:not(:last-child)
-    )
-    button {
-    display: grid;
-    place-items: center;
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    border-radius: var(--radius-md);
-    color: var(--muted-foreground);
-    transition:
-      color var(--duration-fast) ease-out,
-      background-color var(--duration-fast) ease-out;
-    &:hover {
-      background: var(--accent);
-      color: var(--foreground);
-    }
-    &:focus-visible {
-      outline: 2px solid var(--focus);
-      outline-offset: 2px;
-    }
-    & svg {
-      width: 14px;
-      height: 14px;
-    }
-  }
-  & [data-streamdown='code-block-body'] {
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    padding: 0 14px 12px;
-    @apply text-code;
-    overflow-x: auto;
-  }
-  & [data-streamdown='code-block-body'] pre {
-    margin: 0;
-    background: transparent !important;
-    white-space: pre;
-    overflow-wrap: normal;
+  /* Blocks in the prose: code, diagrams and maths (the frame itself is .block-frame). */
+  & [data-block-frame],
+  & [data-math-block],
+  & [data-table-frame] {
+    margin-block: 0.8em;
   }
 
   & [data-streamdown='blockquote'] {
-    border-left: 2px solid var(--border);
-    padding-left: 12px;
-    color: var(--muted-foreground);
+    margin-block: 0.9333em;
+    border: 0;
+    box-shadow: inset 2px 0 0 var(--border-default);
+    padding: 2px 0 2px 14px;
+    color: var(--text-secondary);
     font-style: normal;
   }
 
-  & [data-streamdown='horizontal-rule'] {
-    margin-block: 1.5em;
-    border: 0;
-    border-top: 1px solid var(--border);
+  & [data-streamdown='blockquote'] > :last-child {
+    margin-bottom: 0;
   }
 
-  & [data-streamdown='table-wrapper'] {
+  & [data-streamdown='horizontal-rule'] {
+    margin-block: 1.3333em 0.9333em;
+    border: 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  /* A table sits in a thin frame that scrolls sideways when it is wider than the reply, its
+     hidden edge fading (markdown-table.tsx); numbers line up on the right. */
+  & [data-table-frame] {
     position: relative;
-    gap: 0;
-    margin-block: 1em;
-    border: 0;
-    background: transparent;
-    padding: 0;
+    overflow: hidden;
+    border-radius: var(--radius-code);
+    font-family: var(--font-sans);
   }
-  /* The copy control floats over the corner on hover instead of taking a row of its own. */
-  & [data-streamdown='table-wrapper'] > div:first-child:not(:last-child) {
-    position: absolute;
-    top: 3px;
-    right: 3px;
-    z-index: 1;
-    border-radius: var(--radius-md);
-    background: var(--background);
-    opacity: 0;
-    transition: opacity var(--duration-fast) ease-out;
+  & [data-table-scroll] {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
   }
-  & [data-streamdown='table-wrapper']:is(:hover, :focus-within) > div:first-child:not(:last-child) {
-    opacity: 1;
+  & [data-table-scroll][data-fade-right] {
+    mask-image: linear-gradient(to right, black calc(100% - 32px), transparent);
   }
-  /* A table never scrolls inside itself: every row and column shows, and one too wide for its
-     room is fitted by table-fit.ts. */
-  & [data-streamdown='table-wrapper'] > div:last-child {
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    overflow: visible;
+  & [data-table-scroll][data-fade-left] {
+    mask-image: linear-gradient(to left, black calc(100% - 32px), transparent);
+  }
+  & [data-table-scroll][data-fade-left][data-fade-right] {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black 32px,
+      black calc(100% - 32px),
+      transparent
+    );
   }
   & [data-streamdown='table'] {
+    width: 100%;
     margin: 0;
     border: 0;
-    font-size: 0.9333em;
+    border-collapse: collapse;
     font-variant-numeric: tabular-nums;
     overflow-wrap: normal;
   }
   & [data-streamdown='table-header'] {
-    background: var(--bg-code-block);
+    background: transparent;
   }
+  /* Rows of 34 px and a 30 px header, each with its 1 px line under it. */
   & :is([data-streamdown='table-header-cell'], [data-streamdown='table-cell']) {
     border: 0;
     padding: 8px 12px;
-    line-height: 1.5;
+    line-height: 18px;
+    white-space: nowrap;
+    text-align: left;
   }
   & [data-streamdown='table-header-cell'] {
-    border-bottom: 1px solid var(--border-subtle);
-    color: var(--muted-foreground);
+    color: var(--text-secondary);
+    font-size: 12.5px;
     font-weight: var(--font-weight-medium);
-    text-align: left;
-    /* Headers wrap between words, and Chinese and Japanese text never breaks between its
-       characters. */
-    white-space: normal;
-    word-break: keep-all;
+    line-height: 14px;
   }
   & [data-streamdown='table-cell'] {
-    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    font-size: 13.5px;
   }
-  & [data-streamdown='table-body'] > tr:last-child > [data-streamdown='table-cell'] {
-    border-bottom: 0;
+  /* A column of sentences wraps instead of stretching the table (markdown-table.tsx). */
+  & [data-streamdown='table-cell'][data-prose] {
+    min-width: 16em;
+    white-space: normal;
   }
-  /* A fitted table's cells break inside a word once the table no longer fits as it is. */
-  & [data-fit] :is(th, td) {
-    overflow-wrap: anywhere;
+  & :is([data-streamdown='table-header-cell'], [data-streamdown='table-cell'])[data-numeric] {
+    text-align: right;
   }
-  /* No room even for whole words: each row lists its cells under its first one, the header
-     hidden and each value after its column's name. */
-  & [data-fit='stack'] {
-    display: block;
-  }
-  & [data-fit='stack'] > tbody,
-  & [data-fit='stack'] > tbody > tr,
-  & [data-fit='stack'] > tbody > tr > td {
-    display: block;
-  }
-  & [data-fit='stack'] > thead {
-    display: none;
-  }
-  & [data-fit='stack'] > tbody > tr {
-    border-top: 0;
-    border-bottom: 1px solid var(--border-subtle);
-    padding: 8px 12px;
-  }
-  & [data-fit='stack'] > tbody > tr:last-child {
-    border-bottom: 0;
-  }
-  & [data-fit='stack'] > tbody > tr > td {
+  /* Lines on the rows, not the cells, so they run unbroken across the columns. */
+  & [data-streamdown='table-row'] {
     border: 0;
-    padding: 0;
+    border-bottom: 1px solid var(--border-subtle);
+    transition: background-color var(--duration-fast);
   }
-  & [data-fit='stack'] > tbody > tr > td:first-child {
-    color: var(--foreground);
-    font-weight: var(--font-weight-semibold);
+  & [data-streamdown='table-header'] > [data-streamdown='table-row'] {
+    border-bottom-color: var(--border-default);
   }
-  & [data-fit='stack'] > tbody > tr > td:empty {
-    display: none;
+  & [data-streamdown='table-body'] > [data-streamdown='table-row']:hover {
+    background: var(--bg-hover);
   }
-  & [data-fit='stack'] > tbody > tr > td:not(:first-child)::before {
-    content: attr(data-label);
-    color: var(--muted-foreground);
-    font-weight: var(--font-weight-medium);
+  & [data-streamdown='table-cell'] [data-streamdown='inline-code'] {
+    font-size: 13px;
+  }
+  & [data-table-footer] {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 32px;
+    padding: 0 8px 0 12px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    line-height: 1;
+    & .block-frame-action {
+      width: 24px;
+      height: 24px;
+      /* The button's own padding would hold it at 28 px wide. */
+      padding: 0;
+    }
+  }
+
+  /* Maths: inline formulas keep the line's height; one on its own line is centered on a subtle
+     ground and numbered in the message's order, with Copy LaTeX on hover. A formula KaTeX cannot
+     read shows its source, with the part it stopped at in red. */
+  counter-reset: equation;
+  & .katex {
+    font-size: 1.06em;
+    line-height: 1;
+  }
+  & p + [data-table-frame] {
+    margin-top: 0.9333em;
+  }
+  & p + [data-math-block] {
+    margin-top: 1.0667em;
+  }
+  & [data-math-block]:has(+ [data-math-block]) {
+    margin-bottom: 0;
+  }
+  & [data-math-block] + [data-math-block] {
+    margin-top: 0.6667em;
+  }
+  & [data-math-block] {
+    position: relative;
+    counter-increment: equation;
+    overflow-x: auto;
+    border-radius: var(--radius-code);
+    background: var(--bg-subtle);
+    padding: 17px 52px;
+    color: var(--text-primary);
+    text-align: center;
+    & .katex-display {
+      margin: 0;
+    }
+    & .katex-display > .katex {
+      font-size: 1.27em;
+    }
+    &::after {
+      content: '(' counter(equation) ')';
+      position: absolute;
+      top: 50%;
+      right: 14px;
+      translate: 0 -50%;
+      color: var(--text-tertiary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+    & > code {
+      font-family: var(--font-mono);
+      font-size: 0.8667em;
+      white-space: pre-wrap;
+    }
+  }
+  & .math-copy {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    opacity: 0;
+    transition: opacity var(--duration-fast);
+  }
+  & [data-math-block]:is(:hover, :focus-within) .math-copy {
+    opacity: 1;
+  }
+  & [data-math-block]:is(:hover, :focus-within)::after {
+    opacity: 0;
+  }
+  & [data-math-error] {
+    font-family: var(--font-mono);
+    font-variant-ligatures: none;
+    font-size: 0.8667em;
+    & mark {
+      border-radius: 2px;
+      background: var(--danger-tint);
+      color: var(--danger);
+      text-decoration: underline wavy var(--danger);
+      text-underline-offset: 3px;
+    }
   }
 }
 
@@ -1075,7 +1347,7 @@
   font-size: 13px;
   line-height: 1.55;
   letter-spacing: normal;
-  /* Inter's italic is not bundled. */
+  /* A theme's code face for the interface has no italic bundled. */
   font-synthesis-style: auto;
 
   /* This text is already Inter's small step, so a chip stays at its own size. */
@@ -1084,15 +1356,289 @@
   }
 }
 
-/* Diffs sit on the code block surface, not on the Shiki theme's own background. Outer
-   declarations win over the theme's :host rule inside the diff's shadow root. */
+/* The frame every block in a reply shares: code, diffs, shell output, SVG and diagrams, with a
+   34 px header that names the block on the left and holds its actions on the right
+   (block-frame.tsx). */
+.block-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-code);
+  background: var(--bg-code-block);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-style: normal;
+  line-height: normal;
+  overflow-wrap: normal;
+  user-select: text;
+}
+/* The frame's edge, drawn over its content so a preview's ground cannot cover it. */
+.block-frame::after,
+.markdown [data-table-frame]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  pointer-events: none;
+}
+/* In a request's card a block runs edge to edge, with only a line under it. */
+.block-frame[data-bleed] {
+  border-radius: 0;
+}
+.block-frame[data-bleed]::after {
+  box-shadow: inset 0 -1px 0 var(--border-soft);
+}
+.block-frame-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 6px 0 12px;
+  box-shadow: inset 0 -1px 0 var(--border-subtle);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.block-frame-lang {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-variant-ligatures: none;
+}
+.block-frame-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.block-frame-action {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-tile);
+  color: var(--text-tertiary);
+  & svg {
+    width: 13px;
+    height: 13px;
+  }
+}
+/* Folds a long block, or opens it again: the full width of the frame's foot. */
+.block-frame-more {
+  display: block;
+  width: 100%;
+  height: 30px;
+  box-shadow: inset 0 1px 0 var(--border-subtle);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  outline: none;
+  transition:
+    color var(--duration-fast),
+    background-color var(--duration-fast);
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+  }
+  &:focus-visible {
+    outline: 1.5px solid var(--focus-ring-color);
+    outline-offset: -2px;
+  }
+}
+.block-frame-error {
+  margin: 0;
+  padding: 8px 14px 10px;
+  box-shadow: inset 0 1px 0 var(--border-subtle);
+  color: var(--danger);
+  font-size: 12px;
+}
+/* An SVG on a checkerboard, so its transparent parts show. */
+.block-frame-checker {
+  display: flex;
+  justify-content: center;
+  padding: 12px 16px;
+  background-color: var(--bg-surface);
+  background-image:
+    linear-gradient(45deg, var(--bg-subtle) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--bg-subtle) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--bg-subtle) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--bg-subtle) 75%);
+  background-position:
+    0 0,
+    0 6px,
+    6px -6px,
+    -6px 0;
+  background-size: 12px 12px;
+  & img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+}
+.block-frame-diagram {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  padding: 16px 14px 10px;
+  background: var(--bg-surface);
+  & img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+}
+/* Streamdown's code block inside the frame: only its highlighted body, with the line numbers in
+   an 18 px column 14 px from the edge. */
+.block-frame [data-streamdown='code-block'] {
+  margin: 0;
+  gap: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+.block-frame [data-streamdown='code-block-header'],
+.block-frame [data-streamdown='code-block'] > div:not([data-streamdown]) {
+  display: none;
+}
+.block-frame [data-streamdown='code-block-body'] {
+  max-height: none;
+  overflow-x: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-variant-ligatures: none;
+  line-height: 1.7;
+}
+.block-frame [data-streamdown='code-block-body'] pre {
+  margin: 0;
+  background: transparent !important;
+  font: inherit;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.block-frame [data-streamdown='code-block-body'] code > span {
+  position: relative;
+  display: block;
+  padding: 0 14px 0 46px;
+}
+.block-frame [data-streamdown='code-block-body'] code > span::before {
+  position: absolute;
+  left: 14px;
+  width: 18px;
+  margin: 0;
+  color: var(--syntax-comment);
+  font-size: inherit;
+  opacity: 1;
+}
+.block-frame[data-wrap] [data-streamdown='code-block-body'] pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A shell block: the exit code as a small tinted badge, the output's last lines under the
+   header, and a quiet line that opens the earlier ones (shell-block.tsx). */
+.shell-exit {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  font-size: 11.5px;
+  font-weight: var(--font-weight-semibold);
+  & svg {
+    width: 11px;
+    height: 11px;
+  }
+}
+.shell-command,
+.shell-output {
+  margin: 0;
+  overflow-x: auto;
+  padding: 8px 14px 10px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-ligatures: none;
+  line-height: 1.65;
+  white-space: pre;
+}
+.shell-command {
+  box-shadow: inset 0 -1px 0 var(--border-subtle);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.shell-earlier {
+  display: block;
+  padding: 6px 14px 0;
+  color: var(--syntax-comment);
+  font-size: 11.5px;
+  outline: none;
+  &:hover {
+    color: var(--text-secondary);
+  }
+  &:focus-visible {
+    border-radius: var(--radius-md);
+    outline: 1.5px solid var(--focus-ring-color);
+  }
+}
+/* A diff in the block frame: code type, the code's own green and red for its signs, and a changed
+   line's tint across its number too, with no gap after the number (diff-impl.tsx). */
+.block-frame .diff {
+  --diffs-font-family: var(--font-mono);
+  --diffs-font-size: 12.5px;
+  --diffs-line-height: 1.7;
+  --diffs-gap-style: none;
+  --diffs-bg-separator-override: var(--bg-subtle);
+}
+
+/* Diffs sit on the code block surface, not on the Shiki theme's own background, with the
+   theme's line and word tints over the whole row, numbers included, and line numbers in the
+   comment color. Outer declarations win over the theme's :host rule inside the diff's shadow
+   root; diff-impl.tsx lays the line tints on as they are. */
 .diff {
   --diffs-light-bg: var(--bg-code-block);
   --diffs-dark-bg: var(--bg-code-block);
+  --diffs-addition-color-override: var(--code-success);
+  --diffs-deletion-color-override: var(--code-danger);
+  --diffs-bg-addition-override: var(--diff-add);
+  --diffs-bg-addition-number-override: var(--diff-add);
+  --diffs-bg-addition-emphasis-override: var(--diff-add-word);
+  --diffs-bg-deletion-override: var(--diff-del);
+  --diffs-bg-deletion-number-override: var(--diff-del);
+  --diffs-bg-deletion-emphasis-override: var(--diff-del-word);
+  --diffs-fg-number-override: var(--syntax-comment);
+  --diffs-fg-number-addition-override: var(--syntax-comment);
+  --diffs-fg-number-deletion-override: var(--syntax-comment);
 }
 
-/* The Files pane's preview fills the pane, so a short file ends where the pane does. */
-.file-preview {
-  --diffs-light-bg: var(--background);
-  --diffs-dark-bg: var(--background);
+/* The Files pane's diff, tinted as .diff is, with roomier lines; lines picked to mention take the
+   selection's fox tint. */
+.files-diff {
+  --diffs-light-bg: var(--bg-code-block);
+  --diffs-dark-bg: var(--bg-code-block);
+  --diffs-addition-color-override: var(--code-success);
+  --diffs-deletion-color-override: var(--code-danger);
+  --diffs-bg-addition-override: var(--diff-add);
+  --diffs-bg-addition-number-override: var(--diff-add);
+  --diffs-bg-addition-emphasis-override: var(--diff-add-word);
+  --diffs-bg-deletion-override: var(--diff-del);
+  --diffs-bg-deletion-number-override: var(--diff-del);
+  --diffs-bg-deletion-emphasis-override: var(--diff-del-word);
+  --diffs-fg-number-override: var(--syntax-comment);
+  --diffs-fg-number-addition-override: var(--syntax-comment);
+  --diffs-fg-number-deletion-override: var(--syntax-comment);
+  --diffs-bg-selection-override: var(--selection);
+  --diffs-bg-selection-number-override: var(--selection);
+  --diffs-bg-separator-override: var(--bg-subtle);
+  --diffs-header-font-family: var(--font-mono);
+  --diffs-line-height: 21px;
+  /* A changed line's tint runs from the numbers into the code without a seam. */
+  --diffs-gap-style: none;
+  font-variant-ligatures: none;
 }

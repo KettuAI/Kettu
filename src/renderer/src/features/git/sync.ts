@@ -12,7 +12,6 @@ export type SyncReason =
   | 'operation'
   | 'noRemote'
   | 'noUpstream'
-  | 'nothingToPull'
   | 'nothingToPush'
   | 'diverged'
   | 'ghMissing'
@@ -100,11 +99,14 @@ const on = (kind: OperationKind, count: number): SyncButton => ({
   reason: null,
 })
 
-/** Pull, by the upstream alone: a fast-forward when the branch is only behind. */
+/**
+ * Pull, by the upstream alone: a fast-forward when the branch is only behind. It stays on with
+ * nothing known to pull, since a pull fetches first and may find more than the last fetch did.
+ */
 function pullButton(upstream: GitStatus['upstream']): SyncButton {
   if (!upstream) return off('pull', 'noUpstream')
-  if (upstream.behind === 0) return off('pull', 'nothingToPull')
-  if (upstream.ahead > 0) return off('pull', 'diverged', upstream.behind)
+  if (upstream.ahead > 0 && upstream.behind > 0) return off('pull', 'diverged', upstream.behind)
+  if (upstream.behind === 0) return { ...on('pull', 0), next: false }
   return on('pull', upstream.behind)
 }
 

@@ -1,0 +1,79 @@
+{
+  "label": "Menu bar panel",
+  "newSession": "New session",
+  "settings": "Settings",
+  "openKettu": "Open Kettu",
+  "quit": "Quit",
+  "headline": {
+    "needsYou": "{{count}} needs you",
+    "running": "{{count}} running",
+    "finished": "{{count}} finished",
+    "quiet": "All quiet"
+  },
+  "lastSession": "{{host}} · last session {{ago}}",
+  "group": {
+    "needsYou": "Needs you",
+    "running": "Running",
+    "finished": "Finished",
+    "recent": "Recent",
+    "limits": "Plan limits"
+  },
+  "review": "Review",
+  "back": "Back",
+  "untitled": "New session",
+  "working": "Working",
+  "routine": "Routine",
+  "elapsedMinutes": "{{count}} m",
+  "elapsedHours": "{{h}} h {{m}} m",
+  "doneAgo": "Done {{ago}}",
+  "failedAgo": "Stopped {{ago}}",
+  "files_one": "{{count}} file",
+  "files_other": "{{count}} files",
+  "status": {
+    "running": "Running",
+    "needsYou": "Needs you",
+    "unread": "Not seen yet",
+    "failed": "Failed",
+    "done": "Done"
+  },
+  "wants": {
+    "read": "Wants to read",
+    "edit": "Wants to edit",
+    "delete": "Wants to delete",
+    "move": "Wants to move",
+    "search": "Wants to search",
+    "execute": "Wants to run",
+    "fetch": "Wants to fetch",
+    "switchMode": "Wants to switch modes",
+    "other": "Wants to use",
+    "origin": "Wants to open"
+  },
+  "answerGroup": "Answer",
+  "moreWaiting_one": "{{count}} more waiting",
+  "moreWaiting_other": "{{count}} more waiting",
+  "openInKettu": "Open in Kettu",
+  "answeredElsewhere": "Answered elsewhere: {{title}}",
+  "answerFailed": "Could not answer: {{message}}",
+  "remote": {
+    "off": "Remote · off",
+    "starting": "Remote · starting",
+    "failed": "Remote · could not start",
+    "devices_one": "Remote · {{count}} device",
+    "devices_other": "Remote · {{count}} devices"
+  },
+  "hostDown": "Kettu's background process is not running",
+  "limitLabel": "{{agent}} · {{plan}}",
+  "ago": {
+    "justNow": "just now",
+    "minutes": "{{count}} min ago",
+    "hours": "{{count}} h ago",
+    "yesterday": "yesterday",
+    "onDate": "on {{date}}"
+  },
+  "when": {
+    "justNow": "Just now",
+    "minutes": "{{count}} min ago",
+    "hours": "{{count}} h ago",
+    "yesterday": "Yesterday"
+  }
+}

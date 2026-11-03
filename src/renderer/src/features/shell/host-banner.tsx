@@ -42,7 +42,9 @@ export function HostBanner() {
     <div
       className={cn(
         'pointer-events-none absolute inset-x-0 z-50 flex justify-center',
-        hasBand ? 'top-[calc((var(--title-bar)-26px)/2)]' : 'top-[calc((var(--top-bar)-26px)/2)]',
+        hasBand
+          ? 'top-[calc((var(--title-bar)-26px)/2)]'
+          : 'top-[calc(var(--sheet-gap)+(var(--top-bar)-26px)/2)]',
       )}
     >
       <AnimatePresence initial={false}>

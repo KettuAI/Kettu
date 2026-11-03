@@ -2,14 +2,16 @@
   "panel": {
     "filterPlaceholder": "Filter, or ? to search in files",
     "filterLabel": "Filter files",
-    "showTree": "Show as a tree",
-    "showList": "Show as a list",
-    "hideFiles": "Hide the file list",
-    "showFiles": "Show the file list",
     "emptyTitle": "No files yet",
     "emptyDescription": "Files in this folder show up here once there are any.",
     "restore": "Restore",
-    "maximize": "Maximize"
+    "maximize": "Maximize",
+    "show": "Show",
+    "changes": "Changes",
+    "allFiles": "All files",
+    "findFile": "Find file",
+    "openInEditor": "Open in editor",
+    "close": "Close panel"
   },
   "browser": {
     "empty": "No files in this project.",
@@ -90,14 +92,33 @@
     "completions": "Completions"
   },
   "diff": {
-    "uncommitted": "uncommitted",
-    "openFile": "Open file",
-    "close": "Close diff",
     "failed": "Couldn't show this change",
     "binaryDescription": "A binary file's change is not shown.",
     "tooLargeTitle": "Too large to compare",
     "tooLargeDescription": "One side of this change is over 1 MB.",
     "sameTitle": "No changes to show",
-    "sameDescription": "Both sides of this file are the same now."
+    "sameDescription": "Both sides of this file are the same now.",
+    "view": "View",
+    "diff": "Diff",
+    "file": "File",
+    "mentionLine": "Mention line {{line}}",
+    "mentionLines": "Mention lines {{start}}–{{end}}",
+    "selectHint": "Select lines to mention them",
+    "atCommit": "As this commit changed it",
+    "noComposer": "Open a session to mention lines in",
+    "hunks_one": "{{count}} hunk",
+    "hunks_other": "{{count}} hunks",
+    "previous": "Previous change",
+    "next": "Next change"
+  },
+  "changes": {
+    "emptyTitle": "No uncommitted changes",
+    "emptyDescription": "Files the agent or you change show up here.",
+    "files_one": "{{count}} file",
+    "files_other": "{{count}} files",
+    "commit": "Commit…",
+    "discard": "Discard",
+    "discardFile": "Discard the changes to {{name}}",
+    "discardPick": "Pick a file to discard its changes"
   }
 }

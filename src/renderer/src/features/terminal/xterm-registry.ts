@@ -5,7 +5,7 @@ import { emitAppEvent } from '@renderer/app/events'
 import { terminals } from '@renderer/lib/host'
 import { isMac, isMod } from '@renderer/lib/platform'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { setSink, useTerminalsStore } from '@renderer/stores/terminals'
+import { setSink, takeOverTerminal, useTerminalsStore } from '@renderer/stores/terminals'
 import { onColorsChange } from '@renderer/stores/themes'
 
 // One xterm.js instance per terminal for the terminal's whole life. A tab that is hidden, or a
@@ -165,6 +165,12 @@ async function create(id: string): Promise<Instance> {
   term.attachCustomKeyEventHandler((event) => keyHandler(instance, event))
   // Input, acks and resizes fail only for a terminal that has ended, which its tab already shows.
   term.onData((data) => void terminals('terminals.input', { id, data }).catch(() => undefined))
+  // What the user types takes an agent's terminal over. onData also carries xterm.js's answers to
+  // the program, such as focus and cursor reports, so keys, IME text and pastes are read instead;
+  // xterm.js stops a paste event's propagation, hence the capture phase.
+  term.onKey(() => takeOverTerminal(id))
+  element.addEventListener('compositionend', () => takeOverTerminal(id), true)
+  element.addEventListener('paste', () => takeOverTerminal(id), true)
 
   // Output written before the replay arrives would be duplicated by it, so it waits.
   let unacked = 0
@@ -270,7 +276,9 @@ export async function copySelection(instance: Instance): Promise<void> {
 
 export async function pasteClipboard(instance: Instance): Promise<void> {
   const text = await navigator.clipboard.readText()
-  if (text) instance.term.paste(text)
+  if (!text) return
+  takeOverTerminal(instance.id)
+  instance.term.paste(text)
 }
 
 /** The selection as a fenced block for the composer. */

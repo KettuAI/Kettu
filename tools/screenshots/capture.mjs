@@ -200,6 +200,9 @@ async function run() {
   }
   const byText = (selector, text) =>
     `return [...document.querySelectorAll(${JSON.stringify(selector)})].find((el) => el.textContent.includes(${JSON.stringify(text)}))`
+  // The launch cover lies over the window, taking its clicks, until it has faded out.
+  const coverLifted = () =>
+    waitFor(`!document.querySelector('[role=status].fixed.inset-0')`, 'the launch cover to lift')
 
   await setup()
   // With no projects yet, the app opens on New session with none chosen.
@@ -221,8 +224,9 @@ async function run() {
     }
     check()
   })`)
-  // The heading's serif face loads with the first text the app draws; a capture before that
-  // shows a fallback face.
+  await coverLifted()
+  // The heading's face loads with the first text the app draws; a capture before that shows a
+  // fallback face.
   await cdp.evaluate('document.fonts.ready.then(() => true)')
   log(`window ${await cdp.evaluate('`${innerWidth} x ${innerHeight}`')}`)
   await shoot('first-run')
@@ -234,6 +238,7 @@ async function run() {
     `[...document.querySelectorAll('h1')].some((h) => h.textContent.startsWith('What should'))`,
     'New session at launch',
   )
+  await coverLifted()
 
   // A click, not the shortcut: on macOS the app menu owns Cmd+N, and input from here skips it.
   const openNewSession = async () => {
@@ -246,26 +251,25 @@ async function run() {
       'the New session screen',
     )
   }
-  const agentButton = `document.querySelector('button[aria-label="Agent and model"]')`
-  // The rail opens on the agent chosen, or the first installed one, which need not be the fake one.
+  const agentButton = `document.querySelector('button[aria-label="Agent"]')`
+  const fakeAgentListed = `[...document.querySelectorAll('[role=option]')].some((o) => o.textContent.includes('Fake agent'))`
+  // The picker lists every agent found on the computer, which need not be the fake one alone.
   const openAgentMenu = async () => {
-    await click(`return ${agentButton}`, 'the agent menu')
-    // Right after launch the menu can open before the agents are listed.
+    await click(`return ${agentButton}`, 'the agent picker')
+    // Right after launch the picker can open before the agents are listed.
+    await waitFor(fakeAgentListed, 'the fake agent in the agent picker')
+  }
+  const pickFakeAgent = async () => {
+    await click(byText('[role=option]', 'Fake agent'), 'the fake agent in the picker')
     await waitFor(
-      `[...document.querySelectorAll('[role=tab]')].some((t) => t.textContent.includes('Fake agent'))`,
-      'the fake agent in the agent menu',
+      `${agentButton}?.textContent.includes('Fake agent') && !document.querySelector('[role=listbox]')`,
+      'the fake agent on the New session screen',
     )
-    await click(byText('[role=tab]', 'Fake agent'), 'the fake agent in the menu')
   }
 
   await openNewSession()
   await openAgentMenu()
-  // Until the fake agent has started its models are unknown, so its pane offers the agent.
-  await click(byText('[role=option]', 'Use Fake agent'), 'Use Fake agent')
-  await waitFor(
-    `${agentButton}?.textContent.includes('Fake agent') && !document.querySelector('[role=tablist]')`,
-    'the fake agent on the New session screen',
-  )
+  await pickFakeAgent()
   await sleep(400)
   await shoot('new-session')
 
@@ -310,9 +314,15 @@ async function run() {
     'the fixture page',
   )
   await sleep(1200)
+  // The link sits in the turn's steps, which fold under its "Worked for" row once it has ended.
+  await click(byText('button[aria-expanded=false]', 'Worked'), "the finished turn's row")
+  await waitFor(
+    `[...document.querySelectorAll('p a')].some((a) => a.textContent.includes('Node.js timers guide'))`,
+    'the link in the unfolded turn',
+  )
   // The reply's link asks first, in a dialog centred over the pane. A tooltip in the pane's header
   // would not do: below a title bar it opens above its button, clear of the page.
-  await click(byText('p button', 'Node.js timers guide'), 'the link in the reply')
+  await click(byText('p a', 'Node.js timers guide'), 'the link in the reply')
   await waitFor(
     `Boolean(document.querySelector('[data-browser-panel] img[aria-hidden]'))`,
     'the still of the page',
@@ -332,7 +342,7 @@ async function run() {
   )
   await sleep(400)
   await click(
-    `return [...document.querySelectorAll('[data-browser-panel] button')].find((b) => b.getAttribute('aria-label') === 'Close')`,
+    `return [...document.querySelectorAll('[data-browser-panel] button')].find((b) => b.getAttribute('aria-label') === 'Close browser')`,
     'the browser pane close button',
   )
   await sleep(400)
@@ -487,18 +497,13 @@ async function run() {
   await press('Escape', 27)
   await sleep(300)
 
-  // The branch popover, with the uncommitted files open, a commit's card, then a file's diff.
+  // The branch popover with the uncommitted files, a commit's card, then a file's diff.
+  const branchFile = (name) =>
+    `[...document.querySelectorAll('[data-git-row]')].find((r) => r.textContent.includes(${JSON.stringify(name)}))`
   await click(`return document.querySelector('button[aria-label^="Branch "]')`, 'the branch')
-  await waitFor(`document.querySelector('[data-git-row]')`, 'the branch popover')
+  await waitFor(branchFile('session.ts'), 'the branch popover')
   await sleep(600)
   await shoot('git-popover')
-  await click(byText('[data-git-row]', 'Uncommitted changes'), 'the uncommitted changes')
-  await waitFor(
-    `[...document.querySelectorAll('[data-git-row]')].some((r) => r.textContent.includes('session.ts'))`,
-    'the uncommitted files',
-  )
-  await sleep(400)
-  await shoot('git-popover-files')
   const commitRow = await cdp.evaluate(`(() => {
     const row = [...document.querySelectorAll('[data-git-row]')].find((r) => r.textContent.includes('read the clock once'))
     const r = row.getBoundingClientRect()
@@ -508,34 +513,46 @@ async function run() {
   await waitFor(`document.querySelector('[data-slot=hover-card-content]')`, 'the commit card')
   await sleep(600)
   await shoot('git-commit-card')
-  await click(byText('[data-git-row]', 'login.ts'), 'the changed file')
-  await waitFor(`document.querySelector('.diff.file-preview')`, 'the diff in the Files pane')
+  // The diff opens in the Files pane, drawn in a shadow root.
+  await click(`return ${branchFile('login.ts')}`, 'the changed file')
+  await waitFor(
+    `document.querySelector('.files-diff')?.shadowRoot?.textContent.includes('login')`,
+    'the diff in the Files pane',
+  )
   await sleep(1500)
   await shoot('git-diff')
-  await click(`return document.querySelector('button[aria-label="Close diff"]')`, 'Close diff')
+  await click(`return document.querySelector('button[aria-label="Close panel"]')`, 'Close panel')
   await sleep(300)
   // Push for real, to the scratch remote, then the popover in sync.
   await click(`return document.querySelector('button[aria-label^="Branch "]')`, 'the branch')
   await waitFor(`document.querySelector('[data-git-row]')`, 'the branch popover')
   await click(byText('button', 'Push'), 'Push')
   await waitFor(
-    `[...document.querySelectorAll('p')].some((p) => p.textContent.startsWith('Up to date with'))`,
+    `document.querySelector('[data-slot=popover-content]')?.innerText.includes('\\n0 ahead\\n0 behind')`,
     'the push to finish',
   )
   await sleep(600)
   await shoot('git-popover-synced')
   await press('Escape', 27)
+  // The push's toast would otherwise show in the screens after this one.
+  const toastClose = `document.querySelector('[data-overlay-layer] button[aria-label="Dismiss"]')`
+  if (await cdp.evaluate(`Boolean(${toastClose})`)) await click(`return ${toastClose}`, 'the toast')
   await sleep(300)
 
-  // With a session behind it, the menu lists the fake agent's models, levels and switches.
+  // The agents, then, with a session behind it, the fake agent's models, levels and switches.
   await openNewSession()
   await openAgentMenu()
+  await sleep(400)
+  await shoot('new-session-agent-menu')
+  // New session asks for an agent each time, as no default agent is set.
+  await pickFakeAgent()
+  await click(`return document.querySelector('button[aria-label=Model]')`, 'the model picker')
   await waitFor(
     `[...document.querySelectorAll('[role=option]')].some((o) => o.textContent.includes('Fake Deep'))`,
     "the fake agent's models",
   )
   await sleep(400)
-  await shoot('new-session-agent-menu')
+  await shoot('new-session-model-menu')
   await press('Escape', 27)
   await sleep(300)
 
@@ -545,7 +562,7 @@ async function run() {
     'the Usage row',
   )
   await waitFor(
-    `[...document.querySelectorAll('h2')].some((h) => h.textContent.startsWith('Tokens per'))`,
+    `[...document.querySelectorAll('h2')].some((h) => h.textContent === 'Over time')`,
     'the usage dashboard',
   )
   await sleep(600)
@@ -629,8 +646,17 @@ async function run() {
   await cdp.send('Input.insertText', {
     text: "Summarize yesterday's commits and list anything that needs a follow-up",
   })
-  // A fresh data folder has no default agent, so the form starts with none.
-  await openAgentMenu()
+  // A fresh data folder has no default agent, so the form starts with none. The form keeps the
+  // agent and model rail, a tab per agent.
+  await click(
+    `return document.querySelector('button[aria-label="Agent and model"]')`,
+    'the agent and model menu',
+  )
+  await waitFor(
+    `[...document.querySelectorAll('[role=tab]')].some((t) => t.textContent.includes('Fake agent'))`,
+    'the fake agent in the agent and model menu',
+  )
+  await click(byText('[role=tab]', 'Fake agent'), 'the fake agent in the menu')
   await waitFor(
     `[...document.querySelectorAll('[role=option]')].some((o) => o.textContent.includes('Fake Balanced'))`,
     "the fake agent's models",
@@ -678,11 +704,13 @@ async function run() {
   await sleep(600)
   await shoot('routines')
 
-  // The shortcuts dialog, over the screen, from the footer's button; Esc puts it away.
-  await click(
-    `return document.querySelector('[data-sidebar=footer] button[aria-label="Keyboard shortcuts"]')`,
-    'Keyboard shortcuts',
-  )
+  // The account menu over the footer, then the shortcuts dialog from it; Esc puts it away.
+  await click(`return document.querySelector('[data-account-trigger]')`, 'the account row')
+  await waitFor(`document.querySelector('[role=menu]')`, 'the account menu')
+  await moveAway()
+  await sleep(400)
+  await shoot('account-menu')
+  await click(byText('[role=menuitem]', 'Keyboard shortcuts'), 'Keyboard shortcuts')
   await waitFor(`document.querySelector('[role=dialog]')`, 'the shortcuts dialog')
   await sleep(600)
   await shoot('shortcuts')
@@ -701,13 +729,18 @@ async function run() {
     'General',
     'Appearance',
     'Notifications',
+    'Account',
+    'Hosts',
+    'Browser',
     'Agents',
+    'Harnesses',
     'Usage',
-    'Terminal',
     'Git',
     'MCP servers',
-    'Browser',
+    'Archived sessions',
     'Sharing',
+    'Terminal',
+    'Remote access',
     'Advanced',
     'About',
   ]
@@ -730,19 +763,20 @@ async function run() {
     'the fake agent row',
   )
   await waitFor(
-    `[...document.querySelectorAll('main h2')].some((h) => h.textContent.includes('Fake agent'))`,
+    `[...document.querySelectorAll('[role=dialog] h2')].some((h) => h.textContent.includes('Fake agent'))`,
     'the fake agent page',
   )
   await sleep(600)
   await shoot('settings-agent')
 
-  // Both again with Hide accounts on, each account behind its mask; then off for what follows.
+  // Both again with Hide accounts on, the agent's account behind its mask; then off again.
   const agents = `return [...document.querySelectorAll('nav button, aside button')].find((b) => b.textContent.trim() === 'Agents')`
-  const mainButton = (label) =>
-    `return [...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`
+  const settingsButton = (label) =>
+    `return [...document.querySelectorAll('[role=dialog] button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`
   await click(agents, 'Settings › Agents')
-  await click(mainButton('Hide accounts'), 'Hide accounts')
-  await waitFor(`document.querySelector('main [data-slot=masked]')`, 'the masked account')
+  await click(settingsButton('Hide accounts'), 'Hide accounts')
+  // The list names plans, not accounts, so only its button says they are hidden.
+  await waitFor(settingsButton('Show accounts').slice('return '.length), 'Show accounts')
   await sleep(600)
   await shoot('settings-agents-hidden')
   await click(
@@ -750,15 +784,21 @@ async function run() {
     'the fake agent row',
   )
   await waitFor(
-    `[...document.querySelectorAll('main h2')].some((h) => h.textContent.includes('Fake agent'))`,
+    `[...document.querySelectorAll('[role=dialog] h2')].some((h) => h.textContent.includes('Fake agent'))`,
     'the fake agent page',
   )
-  await waitFor(`document.querySelector('main [data-slot=masked]')`, "the agent's masked email")
+  await waitFor(
+    `document.querySelector('[role=dialog] [data-slot=masked]')`,
+    "the agent's masked email",
+  )
   await sleep(600)
   await shoot('settings-agent-hidden')
   await click(agents, 'Settings › Agents')
-  await click(mainButton('Show accounts'), 'Show accounts')
-  await waitFor(`!document.querySelector('main [data-slot=masked]')`, 'the accounts shown again')
+  await click(settingsButton('Show accounts'), 'Show accounts')
+  await waitFor(
+    `!document.querySelector('[role=dialog] [data-slot=masked]')`,
+    'the accounts shown again',
+  )
 
   // Kettu's own MCP server, opened from its row in MCP servers.
   await click(
@@ -773,10 +813,13 @@ async function run() {
   await sleep(600)
   await shoot('settings-mcp-server')
 
-  await click(`return document.querySelector('aside input')`, 'the Settings search')
+  await click(
+    `return document.querySelector('input[aria-label="Search settings"]')`,
+    'the Settings search',
+  )
   await cdp.send('Input.insertText', { text: 'proxy' })
   await waitFor(
-    `[...document.querySelectorAll('main h2')].some((h) => h.textContent === 'Search results')`,
+    `[...document.querySelectorAll('[role=dialog] h2')].some((h) => h.textContent === 'Search results')`,
     'the search results',
   )
   await sleep(400)
@@ -789,7 +832,7 @@ async function run() {
     'Settings › General',
   )
   await click(
-    `return document.querySelector('[data-slot=select-trigger]')`,
+    `return document.querySelector('[data-slot=select-trigger][aria-label="Default agent"]')`,
     'the Default agent select',
   )
   await waitFor(`document.querySelector('[data-slot=select-content]')`, 'the select list')
@@ -800,9 +843,11 @@ async function run() {
 
   // Last, since the crash closes the fake agent's sessions: a running turn's status line, then
   // the line that ends a turn the agent's exit cut short.
-  // Escape outside a field closes Settings, so the one above may have closed it already.
-  const back = `[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Back')`
-  if (await cdp.evaluate(`Boolean(${back})`)) await click(`return ${back}`, 'Back')
+  // Escape outside a field closes Settings, which the one above may have done already.
+  if (await cdp.evaluate(`Boolean(document.querySelector('[role=dialog]'))`)) {
+    await press('Escape', 27)
+    await waitFor(`!document.querySelector('[role=dialog]')`, 'Settings to close')
+  }
   await click(
     `return [...document.querySelectorAll('[data-sidebar=menu-button]')].find((b) => b.textContent.includes('Fix the flaky login test'))`,
     'the session row',
@@ -821,9 +866,9 @@ async function run() {
   await sleep(600)
   await shoot('session-agent-exited')
 
-  // The sidebar footer and its notices, in a launch after an update, so the "Updated to" notice
-  // shows beside the fake agent's sign-in; agent updates need a package agent's npm check and the
-  // other update notices a packaged build. The steps also check how the notice cards behave.
+  // The sidebar footer and its cards, in a launch after an update, so the "Updated to" card shows
+  // under the fake agent's sign-in notice; harness updates need a package agent's npm check and the
+  // other update cards a packaged build. The steps also check how the cards behave.
   cdp.close()
   await stopApp(app)
   const { version } = JSON.parse(readFileSync(resolve(import.meta.dirname, '../../package.json')))
@@ -840,22 +885,23 @@ async function run() {
       `window.kettu.agents.request('agents.${method}', { agentId: 'fake-agent'${params} })`,
     )
   await fake('logout')
-  await footerScreens({ suffix: '', dismiss: 'Dismiss', agents: 'Agents' })
+  await footerScreens({ suffix: '', close: 'Close', agents: 'Agents' })
   await cdp.evaluate(`window.kettu.settings.update({ general: { language: 'zh-CN' } })`)
-  // A reload brings back the dismissed "Updated to" notice, which is dismissed for the page only.
+  // A reload brings back the closed "Updated to" card, which is closed for the page only.
   await cdp.send('Page.reload')
   cdp.close()
   await sleep(1500)
   cdp = await connect(port)
   await setup()
-  await footerScreens({ suffix: '-zh', dismiss: '忽略', agents: 'Agent' })
+  await footerScreens({ suffix: '-zh', close: '关闭', agents: 'Agent' })
   cdp.close()
 
   // Starts with the fake agent signed out and "Updated to" showing, and ends signed out.
-  async function footerScreens({ suffix, dismiss, agents }) {
+  async function footerScreens({ suffix, close, agents }) {
     const footer = '[data-sidebar=footer]'
-    const cards = `[...document.querySelectorAll('${footer} [data-notice]')]`
-    const names = `${cards}.map((c) => c.querySelector('[data-notice-hit]')?.getAttribute('aria-label') ?? '')`
+    const cards = `[...document.querySelectorAll('${footer} [data-notice], ${footer} [data-update-card]')]`
+    // A notice names itself on the button that covers it, the update card on itself.
+    const names = `${cards}.map((c) => (c.querySelector('[data-notice-hit]') ?? c).getAttribute('aria-label') ?? '')`
     const shootFooter = async (name) => {
       const clip = await cdp.evaluate(`(() => {
         const f = document.querySelector('${footer}').getBoundingClientRect()
@@ -866,15 +912,16 @@ async function run() {
 
     await waitFor(
       `(() => { const n = ${names}; return n.length === 2 && n[0].startsWith('Fake agent') })()`,
-      'the sign-in notice over the update notice',
+      'the sign-in notice over the update card',
     )
+    await coverLifted()
     await sleep(300)
     await shootFooter('two')
     await click(
-      `return ${cards}[1].querySelector('button[aria-label="${dismiss}"]')`,
-      'the dismiss button of the update notice',
+      `return ${cards}[1].querySelector('button[aria-label="${close}"]')`,
+      'the close button of the update card',
     )
-    await waitFor(`${cards}.length === 1`, 'the dismissed notice to go')
+    await waitFor(`${cards}.length === 1`, 'the closed card to go')
     // Off the cards, so none shows its hover.
     await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 700, y: 450 })
     await sleep(300)

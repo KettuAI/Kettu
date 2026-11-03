@@ -5,7 +5,7 @@
 import type { ThumbnailPage } from '../artifacts'
 import type { HostToMain } from '../host-control'
 import type { AppInfo, RemotePairingEvent } from '../ipc'
-import type { SettingsFile, SettingsPatch } from '../settings'
+import type { AgentColor, SettingsFile, SettingsPatch } from '../settings'
 import type { SharingConnectResult, SharingResult, SharingStatus } from '../sharing'
 import type { AgentId, HarnessId } from '../thread'
 import type {
@@ -160,6 +160,7 @@ export interface HostAdminContract {
     result: AgentId
   }
   'settings.renameAgent': { params: { agentId: AgentId; name: string }; result: null }
+  'settings.setAgentColor': { params: { agentId: AgentId; color: AgentColor }; result: null }
   'settings.removeAgent': { params: { agentId: AgentId; trash: boolean }; result: null }
   /** A program on the host for the harness; the host checks it is a file it may run. */
   'settings.setAgentBinary': {
@@ -226,6 +227,7 @@ const METHODS: Record<HostAdminMethod, true> = {
   'settings.update': true,
   'settings.addAgent': true,
   'settings.renameAgent': true,
+  'settings.setAgentColor': true,
   'settings.removeAgent': true,
   'settings.setAgentBinary': true,
   'settings.setShellPath': true,

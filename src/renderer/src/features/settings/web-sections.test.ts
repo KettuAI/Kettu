@@ -32,7 +32,7 @@ describe('webClusters', () => {
         section('hosts', ['list']),
       ],
       // A group with nothing the web client keeps leaves no gap in the list.
-      [section('browser', ['clear-data', 'allowed-sites'])],
+      [section('browser', ['open-links-in', 'clear-data', 'allowed-sites'])],
       [section('agents', ['list']), section('terminal', ['shell', 'font-size'])],
       [section('sharing', ['cloudflare']), section('remote', ['remote', 'reset'])],
       [section('about', ['update', 'source', 'notices', 'issues'])],
@@ -54,6 +54,21 @@ describe('webClusters', () => {
       ],
       [['about', ['update', 'source', 'issues']]],
     ])
+  })
+
+  it('keeps how links from agents open, but not the browser it lacks', () => {
+    const kept = webClusters([
+      [
+        section('browser', [
+          'open-links-in',
+          'confirm-links',
+          'remembered-sites',
+          'clear-data',
+          'allowed-sites',
+        ]),
+      ],
+    ])
+    expect(ids(kept)).toEqual([[['browser', ['confirm-links', 'remembered-sites']]]])
   })
 
   it('keeps a section or row it has never heard of', () => {

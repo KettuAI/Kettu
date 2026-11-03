@@ -1,31 +1,37 @@
 import { describe, expect, it } from 'vitest'
 import css from '@renderer/styles/globals.css?raw'
-import { breakdownView, contextRows, contextSegments, partFill } from './context-bar'
+import { breakdownView, compactsAt, contextRows, contextSegments, partFill } from './context-bar'
 
 const category = (name: string, tokens: number) => ({ name, tokens, share: null })
 
 describe('contextRows', () => {
-  it('colors the sources in the report order and puts free space, then the buffer, last', () => {
+  it('puts the four kinds first in their fixed colors, the rest in grays, then the buffer and free space', () => {
     const rows = contextRows([
       category('System prompt', 4_600),
       category('Free space', 534_900),
+      category('MCP tools', 2_000),
       category('Messages', 750),
       category('Autocompact buffer', 33_000),
       category('Skills', 9_500),
+      category('System tools', 9_800),
+      category('Memory files', 6_100),
     ])
     expect(rows.map((row) => [row.name, row.part])).toEqual([
-      ['System prompt', { kind: 'source', color: 1 }],
-      ['Messages', { kind: 'source', color: 2 }],
-      ['Skills', { kind: 'source', color: 3 }],
-      ['Free space', { kind: 'free' }],
+      ['Messages', { kind: 'source', color: 1 }],
+      ['Memory files', { kind: 'source', color: 2 }],
+      ['System tools', { kind: 'source', color: 3 }],
+      ['MCP tools', { kind: 'source', color: 4 }],
+      ['System prompt', { kind: 'source', color: 5 }],
+      ['Skills', { kind: 'source', color: 6 }],
       ['Autocompact buffer', { kind: 'buffer' }],
+      ['Free space', { kind: 'free' }],
     ])
   })
 
-  it('reuses the last color for a source past the seventh', () => {
-    const rows = contextRows(Array.from({ length: 9 }, (_, i) => category(`Source ${i}`, 1)))
+  it('reuses the last gray for the small costs past the third', () => {
+    const rows = contextRows(Array.from({ length: 5 }, (_, i) => category(`Source ${i}`, 1)))
     expect(rows.map((row) => row.part)).toEqual(
-      [1, 2, 3, 4, 5, 6, 7, 7, 7].map((color) => ({ kind: 'source', color })),
+      [5, 6, 7, 7, 7].map((color) => ({ kind: 'source', color })),
     )
   })
 
@@ -45,8 +51,8 @@ describe('contextSegments', () => {
     ])
     expect(contextSegments(rows, 750, 900).map((s) => [s.part.kind, s.tokens])).toEqual([
       ['source', 750],
-      ['free', 100],
       ['buffer', 50],
+      ['free', 100],
     ])
   })
 
@@ -177,5 +183,18 @@ describe('part fills', () => {
     const text = fill.filter((name) => name.startsWith('text-'))
     expect(text, 'no text color sets the fill').not.toHaveLength(0)
     for (const name of text) expect(colorOf(name), `${name} names no color`).toBe(true)
+  })
+})
+
+describe('compactsAt', () => {
+  it('is the share of the context left once the buffer is set aside, rounded down', () => {
+    const rows = contextRows([category('Messages', 10), category('Autocompact buffer', 33_000)])
+    expect(compactsAt(rows, 200_000)).toBe(83)
+  })
+
+  it('is unknown without a buffer or a context size', () => {
+    expect(compactsAt(contextRows([category('Messages', 10)]), 200_000)).toBeNull()
+    expect(compactsAt(null, 200_000)).toBeNull()
+    expect(compactsAt(contextRows([category('Autocompact buffer', 10)]), 0)).toBeNull()
   })
 })

@@ -1,7 +1,7 @@
 // Settings › Account: the Kettu account this computer signs in to through the system browser.
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { CircleAlertIcon, CircleUserRoundIcon, ExternalLinkIcon, LogOutIcon } from 'lucide-react'
+import { CircleAlertIcon, ExternalLinkIcon, LogOutIcon, UserRoundIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AccountStatus } from '@shared/account'
 import { Avatar, AvatarFallback, AvatarImage } from '@renderer/components/ui/avatar'
@@ -17,8 +17,7 @@ import {
   signOut,
   useAccountStore,
 } from '@renderer/stores/account'
-import { Masked } from './controls'
-import { DeviceTile } from './remote-parts'
+import { Masked, Pill, ROW_BUTTON } from './controls'
 import { subscriptionLabel } from './subscription-label'
 
 type SignedIn = Extract<AccountStatus, { state: 'signed-in' }>
@@ -71,18 +70,22 @@ function RowFrame({
   children: ReactNode
 }) {
   return (
-    <div className="-mx-3 flex min-h-15 items-center gap-3 py-3 pr-3 pl-4">
+    <div className="flex items-center gap-3.5 py-4.5">
       {tile}
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-ui font-medium">{name}</span>
-        <span className="text-xs leading-4 text-pretty text-secondary">{line}</span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-label leading-[normal] font-medium">{name}</span>
+        <span className="text-group leading-[normal] text-pretty text-tertiary">{line}</span>
       </div>
-      <div className="flex shrink-0 items-center gap-2">{children}</div>
+      <div className="flex shrink-0 items-center gap-3.5">{children}</div>
     </div>
   )
 }
 
-const ACCOUNT_TILE = <DeviceTile icon={<CircleUserRoundIcon className="size-4" />} />
+const ACCOUNT_TILE = (
+  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-selected text-secondary">
+    <UserRoundIcon className="size-4.5" />
+  </span>
+)
 
 function SignedOutRow({
   status,
@@ -112,7 +115,7 @@ function SignedOutRow({
           {t('account.notSignedIn')}
         </Badge>
       )}
-      <Button size="sm" data-account-action="" onClick={onSignIn}>
+      <Button className={ROW_BUTTON} data-account-action="" onClick={onSignIn}>
         {t('account.signIn')}
       </Button>
     </RowFrame>
@@ -127,7 +130,7 @@ function SigningInRow({ onCancel }: { onCancel: () => void }) {
         <Spinner />
         {t('account.waiting')}
       </Badge>
-      <Button variant="outline" size="sm" data-account-action="" onClick={onCancel}>
+      <Button variant="ghost" className={ROW_BUTTON} data-account-action="" onClick={onCancel}>
         {t('account.cancel')}
       </Button>
     </RowFrame>
@@ -141,11 +144,11 @@ function SignedInRow({ status, onSignOut }: { status: SignedIn; onSignOut: () =>
   const { account } = status
   const initial = (account.name ?? account.email).trim().charAt(0).toUpperCase()
   const tile = (
-    <Avatar aria-hidden className="size-7.5 after:border-subtle">
+    <Avatar aria-hidden className="size-10 after:border-transparent">
       {/* A face or a letter tells who it is, so hiding accounts hides them too. */}
       {account.avatar && !hidden && <AvatarImage src={account.avatar} alt="" />}
-      <AvatarFallback className="bg-subtle text-xs font-medium text-secondary">
-        {hidden ? <CircleUserRoundIcon className="size-4" /> : initial}
+      <AvatarFallback className="bg-selected text-subheading font-semibold text-secondary">
+        {hidden ? <UserRoundIcon className="size-4.5" /> : initial}
       </AvatarFallback>
     </Avatar>
   )
@@ -159,14 +162,14 @@ function SignedInRow({ status, onSignOut }: { status: SignedIn; onSignOut: () =>
         href={status.manageUrl}
         target="_blank"
         rel="noreferrer"
-        className={buttonVariants({ variant: 'outline', size: 'sm' })}
+        className={buttonVariants({ variant: 'outline', className: ROW_BUTTON })}
       >
+        <ExternalLinkIcon data-icon="inline-start" className="size-3.5" />
         {t('account.manage')}
-        <ExternalLinkIcon data-icon="inline-end" />
       </a>
       <Button
-        variant="outline"
-        size="sm"
+        variant="ghost"
+        className={ROW_BUTTON}
         data-account-action=""
         disabled={busy}
         onClick={() => {
@@ -185,5 +188,15 @@ function SignedInRow({ status, onSignOut }: { status: SignedIn; onSignOut: () =>
 export function SubscriptionState({ status }: { status: string }) {
   const { t } = useTranslation('settings')
   const label = subscriptionLabel(status)
-  return <span className="text-small text-secondary">{label ? t(label) : status}</span>
+  return <Pill>{label ? t(label) : status}</Pill>
+}
+
+/** Under the account: what works without one. */
+export function AccountNote() {
+  const { t } = useTranslation('settings')
+  return (
+    <p className="mt-7 rounded-2xl bg-subtle px-4 py-3.5 text-group leading-normal text-secondary">
+      {t('account.note')}
+    </p>
+  )
 }

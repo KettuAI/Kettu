@@ -43,7 +43,17 @@ function useAskLabel(): string {
   return agentId ? t('view.askAgent', { agent: agentName(agentId) }) : t('view.askGeneric')
 }
 
-export function TerminalView({ terminal }: { terminal: TerminalState }) {
+/**
+ * A terminal's screen. Two show at once while the panel is split; only the focused one takes the
+ * keyboard when it shows.
+ */
+export function TerminalView({
+  terminal,
+  focused = true,
+}: {
+  terminal: TerminalState
+  focused?: boolean
+}) {
   const { t } = useTranslation(['terminal', 'common'])
   const container = useRef<HTMLDivElement>(null)
   const [instance, setInstance] = useState<Instance | null>(null)
@@ -58,7 +68,6 @@ export function TerminalView({ terminal }: { terminal: TerminalState }) {
       if (!live || !container.current) return
       attached = inst
       mount(inst, container.current, true)
-      inst.term.focus()
       setInstance(inst)
     })
     return () => {
@@ -66,6 +75,10 @@ export function TerminalView({ terminal }: { terminal: TerminalState }) {
       if (attached) unmount(attached)
     }
   }, [terminal.id])
+
+  useEffect(() => {
+    if (instance && focused) instance.term.focus()
+  }, [instance, focused])
 
   // Fit while the panel is resized, at most every 50 ms.
   useEffect(() => {
@@ -125,10 +138,15 @@ export function TerminalView({ terminal }: { terminal: TerminalState }) {
   const exited = terminal.exitCode !== null
 
   return (
-    <div className="absolute inset-0 flex flex-col">
+    <div className="absolute inset-0 flex flex-col bg-code-block">
       <ContextMenu>
         <ContextMenuTrigger
-          render={<div className="relative min-h-0 flex-1 px-3.5 py-3" data-terminal="" />}
+          render={
+            <div
+              className="relative min-h-0 flex-1 bg-(--terminal-background) px-4 py-3.5"
+              data-terminal=""
+            />
+          }
         >
           <div ref={container} className="size-full" />
           {selection && instance && (
@@ -180,7 +198,7 @@ export function TerminalView({ terminal }: { terminal: TerminalState }) {
         </ContextMenuContent>
       </ContextMenu>
       {(exited || stopped) && (
-        <div className="flex h-8 shrink-0 animate-in items-center gap-2 border-t border-subtle px-3.5 text-xs text-tertiary fade-in animation-duration-(--duration-base)">
+        <div className="flex h-8 shrink-0 animate-in items-center gap-2 border-t border-subtle bg-(--terminal-background) px-3.5 text-xs text-tertiary fade-in animation-duration-(--duration-base)">
           <span className={cn(stopped && 'text-danger')}>
             {stopped ? t('view.stopped') : t('view.exited', { code: terminal.exitCode })}
           </span>

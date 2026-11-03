@@ -5,14 +5,18 @@
     "newTerminal": "新建终端",
     "restore": "还原",
     "maximize": "最大化",
-    "empty": "此项目还没有终端。"
+    "empty": "此项目还没有终端。",
+    "split": "拆分",
+    "unsplit": "取消拆分",
+    "close": "关闭面板"
   },
   "tab": {
     "rename": "重命名",
     "nameLabel": "终端名称",
     "newOutput": "有新输出",
     "running": "正在运行",
-    "close": "关闭 {{name}}"
+    "close": "关闭 {{name}}",
+    "owner": "· {{agent}}"
   },
   "closeDialog": {
     "title": "结束此终端？",
@@ -28,5 +32,12 @@
     "stopped": "终端意外停止",
     "exited": "已退出，退出码 {{code}}",
     "restart": "重启"
+  },
+  "owner": {
+    "startedBy": "由 {{agent}} 启动 · {{time}}",
+    "openInBrowser": "在浏览器中打开",
+    "stop": "停止",
+    "notice": "{{agent}} 正在使用此终端。在这里输入即可接管。",
+    "stops": "停止它"
   }
 }

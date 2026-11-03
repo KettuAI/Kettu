@@ -37,3 +37,19 @@ describe('remarkPlugins', () => {
     expect(html).not.toMatch(/<br/)
   })
 })
+
+describe('maths', () => {
+  it('reads $$ on lines of their own as a display formula', () => {
+    expect(render('$$\nx^2\n$$')).toMatch(/data-language="math"/)
+  })
+
+  it('reads $$ in a line as an inline formula', () => {
+    expect(render('cost $$c_{hit}$$ each')).toMatch(
+      /<code class="[^"]*language-math[^"]*"[^>]*>c_\{hit\}/,
+    )
+  })
+
+  it('leaves single dollars as text', () => {
+    expect(render('from $5 to $10')).not.toMatch(/language-math/)
+  })
+})

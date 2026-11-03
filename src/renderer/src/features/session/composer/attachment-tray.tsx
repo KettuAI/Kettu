@@ -21,7 +21,7 @@ import { removeAttachment } from './attachments'
 const EASE_OUT_QUART = [0.165, 0.84, 0.44, 1] as const
 
 /**
- * The composer's attachments, one row of tiles above the text: a listbox that is one Tab stop,
+ * The composer's attachments, tiles that wrap above the text: a listbox that is one Tab stop,
  * moved through with the arrow keys. See attachments in the interface design.
  */
 export function AttachmentTray({
@@ -34,6 +34,7 @@ export function AttachmentTray({
   onPasteAsText,
   onError,
   onLeave,
+  hidden,
 }: {
   draft: string
   /** The session whose thread's pictures the viewer steps through with the draft's. */
@@ -49,9 +50,12 @@ export function AttachmentTray({
   onError: (message: string) => void
   /** Focus leaves the row, as when its last tile is removed. */
   onLeave: () => void
+  /** The keys of the attachments a chip in the text stands for, which need no tile. */
+  hidden?: ReadonlySet<string>
 }) {
   const { t } = useTranslation('composer')
-  const items = useAttachmentsStore(selectDraft(draft))
+  const all = useAttachmentsStore(selectDraft(draft))
+  const items = hidden?.size ? all.filter((item) => !hidden.has(item.key)) : all
   const takesImages = useAgentsStore((s) =>
     agentId ? (s.byId[agentId]?.capabilities.prompt?.image ?? null) : null,
   )
@@ -76,20 +80,6 @@ export function AttachmentTray({
       added.map((item) => t('attachments.announceAdded', { name: item.name })).join(' '),
     )
   }, [items, t])
-
-  // A vertical wheel scrolls the row sideways; React's wheel listener is passive, so it cannot.
-  useEffect(() => {
-    const el = row.current
-    if (!el) return
-    const onWheel = (event: WheelEvent) => {
-      if (el.scrollWidth <= el.clientWidth) return
-      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
-      el.scrollLeft += event.deltaY
-      event.preventDefault()
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [shown])
 
   // By key: a removed tile stays in the row while it fades out, so an index could land on it.
   const focusTile = (key: string, i: number) => {
@@ -182,7 +172,7 @@ export function AttachmentTray({
           aria-label={t('attachments.label')}
           aria-orientation="horizontal"
           onKeyDown={onKeyDown}
-          className="flex w-full gap-1.5 overflow-x-auto px-1.5 pt-1.5 [scrollbar-width:none] scroll-fade-x"
+          className="flex w-full flex-wrap gap-2 pt-0.5 pb-1.5"
         >
           <AnimatePresence initial={false}>
             {items.map((item, i) => (

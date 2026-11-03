@@ -218,9 +218,10 @@ describe('the real token file', () => {
     expect(rows.every((row) => row.ratio !== null && row.ratio >= row.min)).toBe(true)
   })
 
-  it("checks a switch's fill at 3:1 on the page and on its thumb, text at 4.5:1", () => {
+  it("checks a switch's fill at 3:1 on every surface it sits on, text at 4.5:1", () => {
     expect(PAIRS.filter(({ fg }) => fg === '--switch-on')).toEqual([
       { fg: '--switch-on', bg: '--bg-app', min: 3 },
+      { fg: '--switch-on', bg: '--bg-sidebar', min: 3 },
       { fg: '--switch-on', bg: '--bg-surface', min: 3 },
     ])
     expect(PAIRS.find(({ fg }) => fg === '--text-primary')?.min).toBe(MIN_RATIO)

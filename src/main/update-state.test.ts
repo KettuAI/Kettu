@@ -10,6 +10,7 @@ import {
   nextState,
   offReason,
   readOnlyVolume,
+  releaseHighlights,
   type TransitionContext,
   updatedFrom,
   updateMode,
@@ -370,5 +371,56 @@ describe('errorMessage', () => {
     )
     expect(errorMessage('x'.repeat(500))).toHaveLength(300)
     expect(errorMessage(new Error(''))).toBe('Unknown error')
+  })
+})
+
+describe('releaseHighlights', () => {
+  const html = `<p>Kettu 0.0.9 runs on servers.</p>
+<table><tr><td>macOS</td></tr></table>
+<h2>What changed</h2>
+<ul>
+<li>Kettu runs as a daemon on a server without a desktop. <code>curl -fsSL https://kettu.sh/install | sh</code> installs it. (#658)</li>
+<li>Claude Code sessions start on the daemon; before, every one failed to load the SDK &amp; more. (#717)</li>
+</ul>
+<p>Kettu checks for updates.</p>
+<h2>中文</h2>
+<p>Kettu 0.0.9 能在服务器上运行。</p>
+<ul>
+<li>Kettu 能以 daemon 运行在服务器上。<code>kettu pair</code> 添加设备。</li>
+</ul>`
+
+  it("lists each language's bullets by their first sentence, without issue links or a full stop", () => {
+    expect(releaseHighlights(html)).toEqual({
+      en: [
+        'Kettu runs as a daemon on a server without a desktop',
+        'Claude Code sessions start on the daemon; before, every one failed to load the SDK & more',
+      ],
+      'zh-CN': ['Kettu 能以 daemon 运行在服务器上'],
+    })
+  })
+
+  it('reads Markdown notes too, and keeps to five', () => {
+    const markdown = `Intro\n\n## What changed\n\n${Array.from({ length: 7 }, (_, i) => `- Change ${i} landed. More words.`).join('\n')}\n`
+    expect(releaseHighlights(markdown).en).toEqual([
+      'Change 0 landed',
+      'Change 1 landed',
+      'Change 2 landed',
+      'Change 3 landed',
+      'Change 4 landed',
+    ])
+  })
+
+  it('keeps an entity outside Unicode as written', () => {
+    expect(
+      releaseHighlights('## What changed\n- Shows &#x110000; and &#99999999; as is.').en,
+    ).toEqual(['Shows &#x110000; and &#99999999; as is'])
+  })
+
+  it('finds none in notes without those sections', () => {
+    expect(releaseHighlights('<ul><li>Loose bullet</li></ul>')).toEqual({})
+    expect(releaseHighlights(null)).toEqual({})
+    expect(releaseHighlights([{ version: '1.0.0', note: '## What changed\n- One.' }])).toEqual({
+      en: ['One'],
+    })
   })
 })

@@ -4,6 +4,7 @@ import {
   parseColor,
   THEME_FONT_ROLES,
   THEME_MODES,
+  themeFallbacks,
   type Theme,
 } from '@shared/themes'
 
@@ -11,16 +12,21 @@ import {
  * A theme's tokens as one rule per variant. The first selector outranks tokens.css on <html>, its
  * prefers-color-scheme block included, and the second its [data-theme] blocks on any subtree with
  * a mode of its own, whatever the order of the style sheets. Only listed tokens with values that
- * pass the color check are written, so nothing can end the rule or add a declaration.
+ * pass the color check are written, so nothing can end the rule or add a declaration; a token the
+ * theme leaves out that takes another of its own follows it.
  */
 export function themeCss(theme: Theme | null): string {
   if (!theme) return ''
   return THEME_MODES.flatMap((mode) => {
-    const lines = Object.entries(theme[mode].colors).flatMap(([token, value]) =>
-      isThemeToken(token) && typeof value === 'string' && parseColor(value)
-        ? [`  --${token}: ${value.trim()};`]
-        : [],
-    )
+    const colors = theme[mode].colors
+    const lines = [
+      ...Object.entries(colors).flatMap(([token, value]) =>
+        isThemeToken(token) && typeof value === 'string' && parseColor(value)
+          ? [`  --${token}: ${value.trim()};`]
+          : [],
+      ),
+      ...themeFallbacks(colors).map(([token, from]) => `  --${token}: var(--${from});`),
+    ]
     if (lines.length === 0) return []
     return [
       `html:root[data-theme='${mode}'],\n[data-theme='${mode}'][data-theme] {\n${lines.join('\n')}\n}\n`,

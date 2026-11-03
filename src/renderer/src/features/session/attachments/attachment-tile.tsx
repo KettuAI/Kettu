@@ -1,7 +1,6 @@
 import type { ComponentProps, MouseEvent } from 'react'
-import { CircleAlertIcon, TriangleAlertIcon, XIcon } from 'lucide-react'
+import { FileTextIcon, TriangleAlertIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { readTextThumb } from '@shared/attachments'
 import type { Attachment } from '@shared/thread'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
@@ -25,25 +24,28 @@ export interface TileView {
 }
 
 /**
- * A 112 px attachment tile: an image's thumbnail, a file's name and size, or a pasted text's first
- * lines over its name and line count. See attachments in the design system.
+ * An attachment: an image as its picture, 40 px square in the composer and 92 by 64 in a sent
+ * message, anything else as a 40 px tile with its icon, name and size. One that cannot be sent
+ * has a red edge and says why.
  */
 export function AttachmentTile({
   view,
+  picture = 'small',
   onRemove,
   removeLabel,
   className,
   ...props
 }: {
   view: TileView
+  /** An image's size: the composer's square, or the thread's larger picture. */
+  picture?: 'small' | 'large'
   onRemove?: () => void
   removeLabel?: string
 } & ComponentProps<'div'>) {
   const { t } = useTranslation('composer')
-  const picture = view.status !== 'failed' && view.kind !== 'text' && view.thumb
-  const preview =
-    view.status !== 'failed' && view.kind === 'text' ? readTextThumb(view.thumb) : null
+  const failed = view.status === 'failed'
   const adding = view.status === 'adding'
+  const image = view.kind === 'image' && !failed && (view.thumb || adding)
   const remove = (event: MouseEvent) => {
     event.stopPropagation()
     onRemove?.()
@@ -55,82 +57,101 @@ export function AttachmentTile({
           <div
             {...props}
             className={cn(
-              'group/tile relative size-28 shrink-0 cursor-default rounded-code outline-none select-none focus-ring',
+              'group/tile relative shrink-0 cursor-default rounded-2xl outline-none select-none focus-ring',
+              image
+                ? picture === 'large'
+                  ? 'h-16 w-23 rounded-code'
+                  : 'size-10'
+                : 'flex h-10 max-w-60 items-center gap-2.25 bg-subtle pr-1.5 pl-2.5',
               className,
             )}
           />
         }
       >
-        {picture ? (
-          <img
-            src={view.thumb!}
-            alt=""
-            draggable={false}
-            className="size-full rounded-[inherit] object-cover"
-          />
-        ) : adding && view.kind === 'image' ? (
-          // Shown only when reading takes a while, so a quick one never flashes.
-          <div className="absolute inset-0 animate-in fade-in fill-mode-both delay-200 duration-(--duration-fast)">
-            <Skeleton className="size-full rounded-[inherit]" />
-          </div>
+        {image ? (
+          view.thumb ? (
+            <img
+              src={view.thumb}
+              alt=""
+              draggable={false}
+              className="size-full rounded-[inherit] object-cover"
+            />
+          ) : (
+            // Shown only when reading takes a while, so a quick one never flashes.
+            <div className="absolute inset-0 animate-in fade-in fill-mode-both delay-200 duration-(--duration-fast)">
+              <Skeleton className="size-full rounded-[inherit]" />
+            </div>
+          )
         ) : (
-          <div className="flex size-full flex-col justify-between p-2.5">
-            {view.status === 'failed' ? (
-              <CircleAlertIcon className="size-4 text-danger" />
-            ) : preview ? (
-              <div className="overflow-hidden font-mono text-meta whitespace-pre text-secondary">
-                {preview.lines.map((line, i) => (
-                  <div key={i} className="truncate">
-                    {line || ' '}
-                  </div>
-                ))}
-              </div>
-            ) : adding ? (
-              <Spinner className="size-4 animate-in text-icon fade-in fill-mode-both delay-200 duration-(--duration-fast)" />
-            ) : view.kind === 'file' || view.kind === 'folder' ? (
-              <FileTypeIcon path={view.name} folder={view.kind === 'folder'} className="size-4" />
-            ) : (
-              <span className="size-4" />
-            )}
-            <div className="min-w-0">
+          <>
+            <span className={cn('flex shrink-0', failed ? 'text-danger' : 'text-tertiary')}>
+              {failed ? (
+                <TriangleAlertIcon strokeWidth={1.4} className="size-4" />
+              ) : adding ? (
+                <Spinner className="size-4 animate-in fade-in fill-mode-both delay-200 duration-(--duration-fast)" />
+              ) : view.kind === 'text' ? (
+                <FileTextIcon strokeWidth={1.4} className="size-4" />
+              ) : (
+                <FileTypeIcon path={view.name} folder={view.kind === 'folder'} className="size-4" />
+              )}
+            </span>
+            <span className="flex min-w-0 flex-col">
               <MiddleCutName name={view.name} />
               {adding ? (
-                <div className="truncate text-meta text-tertiary animate-in fade-in fill-mode-both delay-200 duration-(--duration-fast)">
+                <span className="truncate text-caption text-tertiary animate-in fade-in fill-mode-both delay-200 duration-(--duration-fast)">
                   {t('attachments.reading')}
-                </div>
+                </span>
               ) : (
                 view.detail && (
-                  <div
+                  <span
                     className={cn(
-                      'truncate text-meta tabular',
-                      view.status === 'failed' ? 'text-danger' : 'text-tertiary',
+                      'truncate text-caption tabular',
+                      failed ? 'text-danger' : 'text-tertiary',
                     )}
                   >
                     {view.detail}
-                  </div>
+                  </span>
                 )
               )}
-            </div>
-          </div>
+            </span>
+            {onRemove ? (
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label={removeLabel}
+                onClick={remove}
+                className="grid size-5 shrink-0 place-items-center rounded-sm text-tertiary hover:text-primary"
+              >
+                <XIcon strokeWidth={1.6} className="size-3" />
+              </button>
+            ) : (
+              <span className="w-1" />
+            )}
+          </>
         )}
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-card transition-shadow duration-(--duration-fast) group-hover/tile:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)]"
+          className={cn(
+            'pointer-events-none absolute inset-0 rounded-[inherit] transition-shadow duration-(--duration-fast)',
+            failed
+              ? 'shadow-[inset_0_0_0_var(--hairline)_var(--danger-border)]'
+              : 'shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] group-hover/tile:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)]',
+          )}
         />
         {view.warn && (
-          <span className="absolute bottom-1 left-1 grid size-5 place-items-center rounded-full bg-surface text-primary shadow-card">
-            <TriangleAlertIcon className="size-3" />
+          <span className="absolute bottom-0.5 left-0.5 grid size-4 place-items-center rounded-full bg-surface text-primary shadow-card">
+            <TriangleAlertIcon className="size-2.5" />
           </span>
         )}
-        {onRemove && (
+        {image && onRemove && (
           <button
             type="button"
             tabIndex={-1}
             aria-label={removeLabel}
             onClick={remove}
-            className="absolute top-1 right-1 grid size-5 place-items-center rounded-full bg-surface text-icon opacity-0 shadow-card transition-opacity duration-(--duration-fast) group-focus-visible/tile:opacity-100 group-hover/tile:opacity-100 hover:text-primary"
+            className="absolute -top-1.5 -right-1.5 grid size-4.5 place-items-center rounded-full bg-surface text-icon opacity-0 shadow-card transition-opacity duration-(--duration-fast) group-focus-visible/tile:opacity-100 group-hover/tile:opacity-100 hover:text-primary"
           >
-            <XIcon className="size-3" />
+            <XIcon strokeWidth={1.6} className="size-2.5" />
           </button>
         )}
       </TooltipTrigger>
@@ -143,9 +164,9 @@ export function AttachmentTile({
 function MiddleCutName({ name }: { name: string }) {
   const [head, tail] = cutName(name)
   return (
-    <div className="flex min-w-0 text-xs leading-4 font-medium text-primary">
+    <span className="flex min-w-0 text-hint leading-4 text-primary">
       <span className="truncate">{head}</span>
       <span className="max-w-[70%] shrink-0 truncate">{tail}</span>
-    </div>
+    </span>
   )
 }

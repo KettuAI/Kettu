@@ -1,22 +1,23 @@
 import { useContext, useMemo, useState } from 'react'
-import { FileDownIcon } from 'lucide-react'
+import { ArrowDownToLineIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ContentRef } from '@shared/thread'
-import { Button } from '@renderer/components/ui/button'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
+import { bytes } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { openViewer } from '@renderer/stores/viewer'
 import { saveCarried, type PlayedMedia } from './carried'
+import { FileCard, FileCardButton } from './file-card'
+import { fileType, REASONS } from './layout'
 import { LocalAudio } from './local-audio'
-import { MediaTitle, Placeholder, UnsupportedReason } from './local-media'
 import { LocalVideo } from './local-video'
 import { refKey } from './viewer-items'
 
 /**
  * A sound or a clip the thread carries as bytes, by its index among its entry's refs, with the
  * players and caption row of files. Named by its resource's file name, or else by its kind. One
- * that cannot play says so and offers Save as…, since there is no file to open elsewhere. Without
- * a session and an entry, a clip opens no viewer.
+ * that cannot play becomes a file card that offers Download, since there is no file to open
+ * elsewhere. Without a session and an entry, a clip opens no viewer.
  */
 export function CarriedMedia({
   sessionId,
@@ -42,26 +43,21 @@ export function CarriedMedia({
 
   if (failed) {
     return (
-      <Placeholder
-        title={<MediaTitle name={name} />}
-        detail={
-          <>
-            <UnsupportedReason kind={kind} />
-            {error && <span className="block text-danger">{error}</span>}
-          </>
-        }
-        action={
-          <Button
-            variant="outline"
-            size="xs"
+      <FileCard
+        name={name}
+        type={fileType(carried.name ?? '', mimeType)}
+        meta={error ?? `${bytes(size)} · ${t(REASONS[kind])}`}
+        danger={error !== null}
+        actions={
+          <FileCardButton
+            label={t('media.download')}
             onClick={() => {
               setError(null)
               saveCarried(mimeType, data, name).catch((e: unknown) => setError(errorMessage(e)))
             }}
           >
-            <FileDownIcon />
-            {t('media.saveAs')}
-          </Button>
+            <ArrowDownToLineIcon className="size-3.5" />
+          </FileCardButton>
         }
       />
     )

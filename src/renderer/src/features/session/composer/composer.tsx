@@ -1,13 +1,11 @@
-import { useEffect, useState } from 'react'
-import { ArrowUpIcon, ListPlusIcon, SquareIcon } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence } from 'motion/react'
-import { Trans, useTranslation } from 'react-i18next'
+import { useTranslation } from 'react-i18next'
 import type { SessionView, UserContent } from '@shared/thread'
-import { InputGroupButton } from '@renderer/components/ui/input-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { limitLabel, resetTime } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
-import { formatShortcut, isMod } from '@renderer/lib/platform'
+import { isMod } from '@renderer/lib/platform'
 import { usePane } from '@renderer/features/split/pane-context'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -16,8 +14,11 @@ import { endedOnRejection } from '../turn-phase'
 import { attachmentContent, attachmentsBlock } from './attachments'
 import { ControlRow } from './control-row'
 import { hasMessage } from './drafts'
+import { levelsOf, type SelectOption } from './levels'
+import { nextChoice, nextMode } from './modes'
 import { OutOfCreditStrip } from './out-of-credit-strip'
-import { PromptBox } from './prompt-box'
+import { AddMenu, PromptBox } from './prompt-box'
+import { RunningButton, SendButton } from './send-button'
 import { useOutOfCredit } from './use-out-of-credit'
 import { usePromptBox } from './use-prompt-box'
 
@@ -90,7 +91,42 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     host('sessions.cancel', { sessionId }).catch((e: unknown) => setError(errorMessage(e)))
   }
 
+  // A step asked for and not yet reported, so quick presses keep stepping from it.
+  const stepped = useRef<Record<string, { from: string | undefined; to: string }>>({})
+  // Shift+Tab steps through the permission modes and Alt+E through the effort levels.
+  const cycle = (category: 'mode' | 'thought_level') => {
+    const option = session.config.find((o) => o.category === category && o.type === 'select')
+    if (!option?.choices?.length) return false
+    const reported = option.value === undefined ? undefined : String(option.value)
+    const asked = stepped.current[option.id]
+    const current = asked && asked.from === reported ? asked.to : reported
+    const next =
+      category === 'mode'
+        ? nextMode(option.choices, current)
+        : nextChoice(levelsOf(option as SelectOption, current).levels, current)
+    if (next === undefined || next === current) return true
+    stepped.current[option.id] = { from: reported, to: next }
+    host('sessions.setConfigOption', { sessionId, optionId: option.id, value: next }).catch(
+      (e: unknown) => setError(errorMessage(e)),
+    )
+    return true
+  }
+
   const onKeyDown = (event: KeyboardEvent) => {
+    const plain = !isMod(event) && !event.altKey
+    if (
+      (event.key === 'Tab' && event.shiftKey && plain && cycle('mode')) ||
+      (event.code === 'KeyE' &&
+        event.altKey &&
+        !event.shiftKey &&
+        !isMod(event) &&
+        // A layout whose Option+E types a character, as the euro sign, keeps it.
+        !(event.key.length === 1 && event.key.toLowerCase() !== 'e') &&
+        cycle('thought_level'))
+    ) {
+      event.preventDefault()
+      return
+    }
     if (event.key === 'Escape' && running) {
       event.preventDefault()
       cancel()
@@ -116,20 +152,14 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     ? t('prompt.placeholder.starting', { agent: agentName })
     : awaiting
       ? t('prompt.placeholder.awaiting')
-      : running
-        ? t(steering ? 'prompt.placeholder.steer' : 'prompt.placeholder.queue', {
-            agent: agentName,
-            queue: formatShortcut(queueKey),
-            steer: formatShortcut(steerKey),
+      : !running && reached?.resetsAt
+        ? t('prompt.placeholder.limitReached', {
+            limit: limitLabel(reached),
+            time: resetTime(reached.resetsAt),
           })
-        : reached?.resetsAt
-          ? t('prompt.placeholder.limitReached', {
-              limit: limitLabel(reached),
-              time: resetTime(reached.resetsAt),
-            })
-          : rejected
-            ? t('prompt.placeholder.denied', { agent: agentName })
-            : t('prompt.placeholder.ask', { agent: agentName })
+        : !running && rejected
+          ? t('prompt.placeholder.denied', { agent: agentName })
+          : t('prompt.placeholder.ask', { agent: agentName })
 
   const compact = session.commands.some((c) => c.name === 'compact')
     ? () => {
@@ -141,7 +171,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     : null
 
   return (
-    <div className="flex flex-col">
+    <div data-composer="" className="flex flex-col">
       <PromptBox
         box={box}
         agentId={session.agentId}
@@ -149,7 +179,11 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
         commands={session.commands}
         placeholder={placeholder}
         label={t('prompt.label', { agent: agentName })}
-        size={{ minHeight: 'var(--composer-min)', padding: '16px 4px 16px 10px' }}
+        size={{
+          minHeight: 'calc(var(--spacing) * 9)',
+          padding: 'calc(var(--spacing) * 2) 0',
+          lineHeight: 'calc(var(--spacing) * 5)',
+        }}
         onKeyDown={onKeyDown}
         wrap={!!outOfCredit}
         top={
@@ -166,91 +200,27 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
           </AnimatePresence>
         }
         end={
-          <>
-            {canQueue && (
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <InputGroupButton
-                      key="queue"
-                      size="round"
-                      variant="quiet"
-                      aria-label={t('prompt.queue')}
-                      onClick={() => queue(false)}
-                      className="animate-in zoom-in-75 fade-in animation-duration-(--duration-fast)"
-                    />
-                  }
-                >
-                  <ListPlusIcon />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <Trans
-                    t={t}
-                    i18nKey={steering ? 'prompt.queueSteerTooltip' : 'prompt.queueTooltip'}
-                    values={{
-                      queueShortcut: formatShortcut(queueKey),
-                      steerShortcut: formatShortcut(steerKey),
-                    }}
-                    components={{ shortcut: <span className="opacity-60" /> }}
-                  />
-                </TooltipContent>
-              </Tooltip>
-            )}
-            {running ? (
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <InputGroupButton
-                      key="stop"
-                      size="round"
-                      variant="default"
-                      aria-label={t('prompt.stop')}
-                      onClick={cancel}
-                      className="animate-in zoom-in-75 fade-in animation-duration-(--duration-fast)"
-                    />
-                  }
-                >
-                  <SquareIcon className="size-3 fill-current" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <Trans
-                    t={t}
-                    i18nKey="prompt.stopTooltip"
-                    values={{ shortcut: 'Esc' }}
-                    components={{ shortcut: <span className="opacity-60" /> }}
-                  />
-                </TooltipContent>
-              </Tooltip>
-            ) : blocked && holdsMessage ? (
-              // A disabled button takes no pointer, so the tooltip says why from around it.
-              <Tooltip>
-                <TooltipTrigger render={<span key="send" />}>
-                  <InputGroupButton
-                    size="round"
-                    variant="secondary"
-                    aria-label={t('prompt.send')}
-                    disabled
-                    className="disabled:text-disabled disabled:opacity-100"
-                  >
-                    <ArrowUpIcon />
-                  </InputGroupButton>
-                </TooltipTrigger>
-                <TooltipContent>{blocked.message}</TooltipContent>
-              </Tooltip>
-            ) : (
-              <InputGroupButton
-                key="send"
-                size="round"
-                variant={canSend ? 'default' : 'secondary'}
-                aria-label={t('prompt.send')}
-                disabled={!canSend}
-                onClick={send}
-                className="animate-in zoom-in-75 fade-in animation-duration-(--duration-fast) disabled:text-disabled disabled:opacity-100"
-              >
-                <ArrowUpIcon />
-              </InputGroupButton>
-            )}
-          </>
+          running ? (
+            <RunningButton
+              holds={canQueue}
+              steering={steering}
+              queueKey={queueKey}
+              steerKey={steerKey}
+              onStop={cancel}
+              onQueue={() => queue(false)}
+              onSteer={() => queue(true)}
+            />
+          ) : blocked && holdsMessage ? (
+            // A disabled button takes no pointer, so the tooltip says why from around it.
+            <Tooltip>
+              <TooltipTrigger render={<span key="send" />}>
+                <SendButton disabled label={t('prompt.send')} />
+              </TooltipTrigger>
+              <TooltipContent>{blocked.message}</TooltipContent>
+            </Tooltip>
+          ) : (
+            <SendButton key="send" disabled={!canSend} label={t('prompt.send')} onClick={send} />
+          )
         }
       />
       {/* Holds the row's height while the agent starts, so nothing jumps when the options arrive. */}
@@ -263,6 +233,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
         {!starting && (
           <ControlRow
             session={session}
+            addMenu={<AddMenu box={box} agentName={agentName} commands={session.commands} />}
             onCompact={compact}
             ultracode={ultracode}
             modelMenu={{ open: modelMenuOpen, onOpenChange: setModelMenuOpen }}

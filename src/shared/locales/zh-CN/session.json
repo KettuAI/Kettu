@@ -54,6 +54,13 @@
       "move": "移动",
       "run": "运行"
     },
+    "verbDone": {
+      "read": "读取了",
+      "edit": "编辑了",
+      "delete": "删除了",
+      "move": "移动了",
+      "run": "运行了"
+    },
     "runInTerminal": "在终端中运行",
     "copyCommand": "复制命令",
     "showAll": "显示全部",
@@ -85,27 +92,35 @@
     },
     "label": "权限请求",
     "answeredOn": "已在 {{device}} 上回答过。",
-    "answeredInWindow": "已在另一个窗口中回答过。"
+    "answeredInWindow": "已在另一个窗口中回答过。",
+    "needsYou": "需要你"
   },
   "browserOrigin": {
     "label": "新站点",
     "ask": "{{agent}} 想要在浏览器中打开此站点。",
     "answerGroup": "答复",
-    "waiting": "等待批准",
     "decision": {
-      "session": "本次会话允许",
-      "project": "此项目始终允许",
-      "deny": "拒绝"
+      "session": "本会话内允许",
+      "project": "在本项目中始终允许 {{site}}",
+      "deny": "不允许"
     },
     "answer": {
       "session": "本次会话已允许",
       "project": "此项目已始终允许",
       "deny": "已拒绝",
       "timeout": "未在限定时间内得到答复"
-    }
+    },
+    "open": "打开",
+    "newSite": "新网站",
+    "wants": "{{agent}} 想打开 <site>{{site}}</site>",
+    "where": "在本会话的浏览器里打开 · 带着你的登录状态"
   },
   "subagent": {
-    "fallbackTitle": "子 Agent"
+    "fallbackTitle": "子 Agent",
+    "tools_other": "{{count}} 个工具",
+    "earlier_other": "前面还有 {{count}} 步",
+    "stop": "停止",
+    "openLog": "打开完整记录"
   },
   "subagentBar": {
     "runsFor": "{{agent}} 正在为 <parent/> 运行这个子 Agent",
@@ -113,6 +128,10 @@
     "stop": "停止",
     "back": "返回 {{title}}",
     "backShort": "返回"
+  },
+  "subSession": {
+    "back": "返回 {{title}}",
+    "startedFrom": "从 <parent>{{title}}</parent> 开始"
   },
   "sessionMessage": {
     "from": "来自 {{title}}",
@@ -145,16 +164,20 @@
     "copyCommitId": "复制提交 ID"
   },
   "artifactEntry": {
-    "create": "已创建",
-    "update": "已更新",
-    "restore": "已恢复",
-    "delete": "已删除",
     "version": "v{{version}}",
+    "createdAgo": "{{time}}创建",
+    "updatedAgo": "{{time}}更新",
+    "restoredAgo": "{{time}}恢复",
+    "writing": "正在写入…",
+    "writingPill": "正在写入…",
     "writes_other": "本轮 {{count}} 个版本",
+    "published": "已发布",
+    "private": "未发布",
     "deleted": "已删除",
     "erased": "已永久删除",
     "open": "打开 {{title}}",
     "openShort": "打开",
+    "stop": "停止",
     "deletedLine": "已删除 artifact <title/>"
   },
   "plan": {
@@ -172,18 +195,31 @@
   },
   "replyFooter": {
     "copyReply": "复制回复",
-    "fork": "分叉为新会话",
+    "fork": "从这里分叉",
     "forking": "正在分叉…",
     "forkBetweenTurns": "仅在两轮对话之间可分叉",
     "forkNotReady": "会话就绪后才能分叉"
   },
+  "worked": {
+    "for": "工作了 {{duration}}",
+    "untimed": "工作过程",
+    "read_other": "读了 {{count}} 个文件",
+    "edited_other": "改了 {{count}} 个文件",
+    "editedAfter": "改了 {{count}} 个",
+    "both": "{{read}}，{{edited}}"
+  },
+  "changes": {
+    "label": "改动",
+    "files_other": "{{count}} 个文件有改动",
+    "review": "查看",
+    "commit": "提交并创建 PR"
+  },
   "queue": {
     "label": "排队中的消息：{{count}} 条",
-    "next": "下一条",
-    "number": "#{{number}}",
-    "queued": "{{count}} 条排队中",
-    "pausedCount": "已暂停 · {{count}} 条排队中",
+    "paused": "已暂停",
     "position": "{{number}} / {{count}}",
+    "previous": "上一条排队消息",
+    "following": "下一条排队消息",
     "resume": "继续",
     "attachment": "附件",
     "from": "来自 {{device}}",
@@ -219,7 +255,6 @@
     "whatToWorkOn": "想让 {{agent}} 做什么？",
     "message": "消息",
     "messageAgent": "给 {{agent}} 发消息",
-    "askAgent": "让 {{agent}} 帮你…",
     "describeTask": "描述一个任务…",
     "send": "发送",
     "project": "项目",
@@ -234,7 +269,7 @@
     "searchProjectsLabel": "搜索项目",
     "recent": "最近",
     "noMatchingProjects": "没有匹配的项目",
-    "heading": "想做点什么？",
+    "heading": "要做点什么？",
     "branchHint": "会话从这个分支开始",
     "commitHint": "会话从这个提交开始",
     "missingLine": "这个项目的文件夹不见了，请换一个项目。",
@@ -244,8 +279,6 @@
     "noAgentOnHost": "{{host}} 上暂时没有可以启动的 Agent。",
     "noAgentNode_other": "暂时没有可以启动的 Agent：{{agents, list(style: narrow)}} 需要 Node.js 22 或更高版本。",
     "setUpAgents": "设置 Agent…",
-    "recentArtifacts": "最近的 Artifacts",
-    "viewAll": "查看全部",
     "agentMenu": {
       "label": "Agent 和模型",
       "search": "搜索 Agent 和模型",
@@ -303,6 +336,30 @@
       "repo": "Git 仓库",
       "note": "只列文件夹。路径按 {{host}} 的格式：",
       "open": "打开"
+    },
+    "picker": {
+      "search": "搜索 Agent",
+      "noMatch": "没有匹配的 Agent",
+      "agents": "Agent",
+      "other": "其他 Harness",
+      "signedOut": "已退出 · 登录后使用",
+      "failed": "启动失败",
+      "limitUsed": "已用 {{limit}}限额的 {{percent}}%",
+      "limitReached": "已达 {{limit}}限额",
+      "manage": "管理 Agent…"
+    },
+    "modelMenu": {
+      "label": "模型",
+      "search": "搜索模型",
+      "model": "模型"
+    },
+    "pickup": {
+      "title": "接着上次继续",
+      "waiting": "等待你批准",
+      "working": "进行中",
+      "failed": "出错停止",
+      "signIn": "等待登录",
+      "finished": "{{ago}}完成"
     }
   },
   "signIn": {
@@ -357,25 +414,74 @@
     "catchUp": "由 {{name}} 发送 · 补运行 {{when}}"
   },
   "link": {
-    "title": "打开这个 {{host}} 链接？",
-    "opens": "将在默认浏览器中打开。",
+    "title": "打开链接？",
     "userinfo": "链接中“@”之前的文字并不是它的去向。",
     "copy": "复制链接",
-    "open": "在浏览器中打开"
+    "copyMarkdown": "复制为 Markdown",
+    "firstVisit": "首次访问",
+    "firstVisitNote": "你还没有从 Kettu 打开过这个站点。会话浏览器打开它之后才会显示它的图标。",
+    "defaultBrowser": "默认浏览器",
+    "yourBrowser": "默认浏览器",
+    "sessionBrowser": "会话浏览器",
+    "browserHint": "你自己的浏览器和登录状态",
+    "sessionHint": "{{agent}} 可以查看和操作",
+    "sessionHintGeneric": "会话的 Agent 可以查看和操作",
+    "writtenBy": "由 {{agent}} 写在 <title>{{title}}</title> 中",
+    "openIn": "在 {{browser}} 中打开",
+    "openInSession": "在会话浏览器中打开",
+    "opensIn": "{{url}} · 将在 {{browser}} 中打开",
+    "opensInSession": "{{url}} · 将在会话浏览器中打开",
+    "alwaysSite": "始终在 {{browser}} 中打开 {{site}} 的链接",
+    "alwaysSiteSession": "始终在会话浏览器中打开 {{site}} 的链接",
+    "alwaysHost": "始终在 {{browser}} 中打开这个站点",
+    "alwaysHostSession": "始终在会话浏览器中打开这个站点",
+    "openFailed": "无法打开链接：{{error}}"
   },
   "svg": {
-    "alt": "SVG 图片",
-    "showSource": "查看源码",
-    "showPreview": "查看预览"
+    "alt": "SVG 图片"
+  },
+  "block": {
+    "exit": "退出码 {{code}}",
+    "openInTerminal": "在终端中打开",
+    "showEarlier_other": "显示前面的 {{count}} 行",
+    "openDiff": "打开 diff",
+    "copyNew": "复制新内容",
+    "copy": "复制",
+    "wrap": "自动换行",
+    "showMore_other": "再显示 {{count}} 行",
+    "showLess": "收起",
+    "view": "查看方式",
+    "preview": "预览",
+    "source": "源码",
+    "download": "下载",
+    "diagram": "图表",
+    "diagramFailed": "无法绘制这个图表。",
+    "copyLatex": "复制 LaTeX",
+    "copyMarkdown": "复制为 Markdown",
+    "downloadCsv": "下载 CSV",
+    "tableSize": "{{rows}} · {{columns}}",
+    "rows_other": "{{count}} 行",
+    "columns_other": "{{count}} 列"
   },
   "media": {
     "openImage": "打开图片 {{name}}",
+    "openImageMore_other": "打开图片 {{name}}，另有 {{count}} 张",
+    "moreBadge": "+{{count}}",
+    "pixels": "{{width}} × {{height}}",
+    "retryFile": "重试 {{name}}",
     "notFound": "在 {{path}} 找不到。",
-    "cannotRead": "无法读取 {{name}}",
+    "cannotReadShort": "无法读取：{{message}}",
     "unsupported": "这种图片格式无法在这里显示。",
     "unsupportedVideo": "这种视频格式无法在这里播放。",
     "unsupportedAudio": "这种音频格式无法在这里播放。",
-    "tooLarge": "文件太大，无法在这里显示：{{size}}。",
+    "unsupportedShort": "无法在这里显示",
+    "unsupportedPlayShort": "无法在这里播放",
+    "tooLargeShort": "文件太大，无法在这里显示",
+    "inProject": "已写入项目文件夹",
+    "download": "下载",
+    "play": "播放 {{name}}",
+    "speed": "播放速度 {{rate}}×",
+    "rate": "{{rate}}×",
     "openLarger": "放大查看",
     "showInFiles": "在文件面板中显示",
     "showIn": "在{{name}}中显示",
@@ -401,5 +507,11 @@
     "away": "{{name}} 没有连上",
     "awayBody": "{{state}}。它回来后，这里的会话会自动接上。",
     "awayComposer": "{{name}} 没有连上：{{state}}。它回来后才能接着发消息。"
+  },
+  "question": {
+    "label": "问题",
+    "ask": "{{agent}} 问你一个问题。",
+    "asksYou": "在问你",
+    "answeredOther": "其他回答"
   }
 }

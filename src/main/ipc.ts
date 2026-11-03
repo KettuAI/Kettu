@@ -31,6 +31,7 @@ import type {
   UnsavedFile,
 } from '@shared/ipc'
 import { isHarnessId, type HarnessId } from '@shared/thread'
+import { isTrayTarget } from '@shared/tray'
 import type { Account } from './account'
 import type { AgentFolders } from './agent-folders'
 import type { AgentHost } from './agent-host'
@@ -38,8 +39,11 @@ import { grantClipboardFiles, grantPaths } from './attachments'
 import type { Artifacts } from './artifacts'
 import type { Avatars } from './avatars'
 import type { BrowserViews } from './browser/views'
+import type { SiteIcons } from './browser/site-icons'
 import { originOf } from './browser/origins'
+import { defaultBrowser } from './default-browser'
 import { mainDiagnostics, saveDiagnostics } from './diagnostics'
+import { Editors } from './editors'
 import { sendEvent } from './events'
 import { deviceIdArg, deviceName, pairingCode, runnableProgram } from './host-admin'
 import { t } from './i18n'
@@ -52,7 +56,8 @@ import type { QuitFlow } from './quit'
 import type { HostMedia } from './host-media'
 import type { HostSessions } from './host-sessions'
 import type { HostPairingListener, RemoteHost } from './remote-host'
-import { isRendererUrl } from './renderer'
+import { isRendererUrl, rendererPage } from './renderer'
+import type { TrayPanel } from './tray-panel'
 import type { SettingsStore } from './settings'
 import type { Sharing } from './sharing'
 import { framesSettled, isRevoked } from './subframes'
@@ -61,6 +66,7 @@ import type { TerminalHost } from './terminal-host'
 import { exportThemeFile, installThemeFile, revealThemeFile } from './theme-dialogs'
 import type { ThemeStore } from './themes'
 import type { Updater } from './updater'
+import { isPanel } from './window'
 
 const log = createLogger('ipc')
 
@@ -74,6 +80,7 @@ export interface IpcDeps {
   terminalHost: TerminalHost
   artifacts: Artifacts
   browserViews: BrowserViews
+  siteIcons: SiteIcons
   mediaGrants: MediaGrants
   sharing: Sharing
   remoteHost: RemoteHost
@@ -122,6 +129,28 @@ export function whenSettled<T>(
   return settling ? settling.then<T>(() => run(isTrusted(event))) : run(isTrusted(event))
 }
 
+// What the menu bar panel's page may call: the reads it shares with the window, its host port and
+// its own calls. Its preload exposes no other, and main refuses the rest from it all the same.
+const PANEL_CHANNELS = new Set<string>([
+  'settings:get',
+  'themes:get',
+  'remote:status',
+  'agent-host:connect',
+  'tray:open',
+  'tray:quit',
+  'tray:hide',
+  'tray:resize',
+])
+
+/**
+ * Whether the sender may use `channel`: any for the window's page, the panel's few for its own.
+ * The panel is told by its window, since a page can change its URL with history.pushState.
+ */
+export function mayUse(event: IpcMainInvokeEvent | IpcMainEvent, channel: string): boolean {
+  const panel = isPanel(event.sender) || rendererPage(event.senderFrame?.url) === 'tray'
+  return !panel || PANEL_CHANNELS.has(channel)
+}
+
 function handle<C extends IpcInvokeChannel>(
   channel: C,
   arity: number,
@@ -129,7 +158,9 @@ function handle<C extends IpcInvokeChannel>(
 ): void {
   ipcMain.handle(channel, async (event, ...args: unknown[]) =>
     whenSettled(event, (trusted) => {
-      if (!trusted) throw new Error(`Rejected "${channel}" call from untrusted sender`)
+      if (!trusted || !mayUse(event, channel)) {
+        throw new Error(`Rejected "${channel}" call from untrusted sender`)
+      }
       if (args.length !== arity) {
         throw new Error(`"${channel}" takes ${arity} argument(s), got ${args.length}`)
       }
@@ -144,7 +175,7 @@ function on<C extends keyof IpcSendContract>(
 ): void {
   ipcMain.on(channel, (event, ...args: unknown[]) => {
     void whenSettled(event, (trusted) => {
-      if (trusted) handler(event, ...args)
+      if (trusted && mayUse(event, channel)) handler(event, ...args)
       else log.warn(`Rejected "${channel}" message from untrusted sender`)
     })
   })
@@ -363,6 +394,7 @@ export function registerIpcHandlers({
   terminalHost,
   artifacts,
   browserViews,
+  siteIcons,
   mediaGrants,
   sharing,
   remoteHost,
@@ -376,12 +408,13 @@ export function registerIpcHandlers({
   perf,
 }: IpcDeps): void {
   handle('app:get-info', 0, () => appInfo())
+  handle('app:default-browser', 0, () => defaultBrowser(app))
 
-  handle('app:respond-quit', 2, (_, id, confirmed) => {
-    if (!Number.isSafeInteger(id) || typeof confirmed !== 'boolean') {
-      throw new Error('"app:respond-quit" takes a request id and a boolean')
+  handle('app:respond-quit', 2, (_, id, answer) => {
+    if (!Number.isSafeInteger(id) || (typeof answer !== 'boolean' && answer !== 'background')) {
+      throw new Error('"app:respond-quit" takes a request id and a boolean or "background"')
     }
-    quit.respond(id as number, confirmed)
+    quit.respond(id as number, answer)
   })
 
   handle('settings:get', 0, () => settings.get())
@@ -390,6 +423,9 @@ export function registerIpcHandlers({
     agentFolders.add(harness, name, folder),
   )
   handle('settings:rename-agent', 2, (_, id, name) => agentFolders.rename(id, name))
+  handle('settings:set-agent-color', 2, (_, id, color) => {
+    settings.colorAgent(id, color)
+  })
   handle('settings:remove-agent', 2, (_, id, trash) => agentFolders.remove(id, trash))
   handle('login-item:status', 0, () => loginItemStatus())
 
@@ -493,6 +529,11 @@ export function registerIpcHandlers({
   })
 
   handle('shell:open-notices', 0, () => openNotices())
+
+  const editors = new Editors({ file: join(app.getPath('userData'), 'editors.json') })
+  handle('editors:list', 0, () => editors.list())
+  handle('editors:open', 2, (_, editorId, target) => editors.open(editorId, target))
+  handle('editors:choose', 1, ({ window }, target) => editors.choose(window, target))
 
   handle('media:copy-image', 1, (_, source) => copyImage(source, mediaGrants, hostMedia))
   handle('media:save-as', 1, ({ window }, source) =>
@@ -682,6 +723,7 @@ export function registerIpcHandlers({
   handle('browser:open-external', 1, (_, id) => browserViews.openExternal(sessionId(id)))
   handle('browser:freeze', 1, (_, id) => browserViews.freeze(sessionId(id)))
   handle('browser:thaw', 1, (_, id) => browserViews.thaw(sessionId(id)))
+  handle('browser:capture', 1, (_, id) => browserViews.capture(sessionId(id)))
   handle('browser:hand-back', 1, (_, id) => browserViews.handBack(sessionId(id)))
   handle('browser:stop-driving', 1, (_, id) => browserViews.stopDriving(sessionId(id)))
   // The pane's bar and the thread's card both answer through main, so the page and the thread agree.
@@ -692,7 +734,13 @@ export function registerIpcHandlers({
   handle('browser:remove-allowed-site', 2, (_, projectPath, origin) => {
     browserViews.removeAllowedSite(projectPathArg(projectPath), browserOrigin(origin))
   })
-  handle('browser:clear-data', 0, () => browserViews.clearData())
+  handle('browser:clear-data', 0, async () => {
+    await siteIcons.clear()
+    await browserViews.clearData()
+  })
+  handle('browser:site-icons', 0, () => siteIcons.all())
+  // Records only the site, never an icon: those come from the browser's own pages.
+  handle('browser:site-opened', 1, (_, url) => siteIcons.visited(browserUrl(url)))
 
   on('agent-host:connect', (event) => agentHost.connect(event.sender))
   on('terminal-host:connect', (event) => terminalHost.connect(event.sender))
@@ -728,5 +776,21 @@ export function registerIpcHandlers({
     } else {
       log.info(`perf:interactive again (a reload) at ${ms} ms`)
     }
+  })
+}
+
+/** The menu bar panel's calls, taken from the panel's own page alone. */
+export function registerTrayIpc(panel: TrayPanel): void {
+  on('tray:open', (event, target) => {
+    if (panel.owns(event.sender) && isTrayTarget(target)) panel.open(target)
+  })
+  on('tray:quit', (event) => {
+    if (panel.owns(event.sender)) panel.quit()
+  })
+  on('tray:hide', (event) => {
+    if (panel.owns(event.sender)) panel.hide()
+  })
+  on('tray:resize', (event, height) => {
+    if (panel.owns(event.sender)) panel.resize(height)
   })
 }

@@ -22,16 +22,15 @@
     "search": "Search settings",
     "clearSearch": "Clear search",
     "sections": "Sections",
-    "back": "Back",
-    "waiting": "{{count}} waiting for approval",
     "noMatch": "No settings match “{{query}}”",
     "noMatchHint": "Try another word, such as theme, proxy or shell.",
     "results": "Search results",
     "resultsLine_one": "{{count}} setting matches “{{query}}”. Esc clears the search.",
-    "resultsLine_other": "{{count}} settings match “{{query}}”. Esc clears the search."
+    "resultsLine_other": "{{count}} settings match “{{query}}”. Esc clears the search.",
+    "close": "Close settings"
   },
   "hostPicker": {
-    "label": "Host settings",
+    "label": "Settings for",
     "self": "This computer · {{name}}",
     "selfUnnamed": "This computer",
     "offline": "Offline"
@@ -39,18 +38,18 @@
   "general": {
     "language": {
       "name": "Language",
-      "description": "The language of menus, settings and Kettu's own messages. What agents write is not translated.",
+      "description": "Menus, settings and Kettu’s own messages. Agents keep replying in the language you write to them.",
       "keywords": "language locale chinese english translation",
-      "system": "System"
+      "systemNamed": "System ({{name}})"
     },
     "defaultAgent": {
       "name": "Default agent",
-      "description": "The agent New session starts. With Ask each time, you choose one there.",
+      "description": "Which agent New session starts with.",
       "askEachTime": "Ask each time"
     },
     "sendKey": {
       "name": "Send with",
-      "description": "The other key inserts a new line.",
+      "description": "The other key adds a new line.",
       "keywords": "enter newline composer"
     },
     "restore": {
@@ -58,21 +57,22 @@
       "description": "A split view comes back with its panes."
     },
     "confirmQuit": {
-      "name": "Ask before quitting while agents or terminal commands are running",
-      "keywords": "quit confirm"
+      "name": "Ask before quitting",
+      "keywords": "quit confirm",
+      "description": "Only while an agent or a terminal command is still running."
     },
     "sessionTitles": {
       "name": "Write titles for new sessions",
-      "description": "For agents that do not title their sessions themselves, uses a small model of the agent, and its plan or credits, once for each new session.",
+      "description": "A small model names each session once. Uses a little of the agent’s plan.",
       "keywords": "title name session model credits"
     },
     "background": {
       "name": "Run in the background",
-      "descriptionMac": "Keeps Kettu running with its icon in the menu bar after you close its window, so sessions and routines keep working.",
-      "descriptionWindows": "Keeps Kettu running with its icon in the notification area after you close its window, so sessions and routines keep working.",
-      "descriptionLinux": "Keeps Kettu running with its icon in the system tray after you close its window, so sessions and routines keep working.",
+      "descriptionMac": "Keeps sessions and routines running in the menu bar after you close the window.",
+      "descriptionWindows": "Keeps sessions and routines running in the notification area after you close the window.",
+      "descriptionLinux": "Keeps sessions and routines running in the system tray after you close the window.",
       "keywords": "background tray menu bar notification area close window keep running",
-      "lockedByRemote": "On while remote access is, so devices can reach this computer after you close its window."
+      "lockedByRemote": "On while remote access is on."
     },
     "openAtLogin": {
       "name": "Open at login",
@@ -81,14 +81,9 @@
       "unavailable": "Available in the installed app.",
       "keywords": "login startup launch start routine"
     },
-    "confirmLinks": {
-      "name": "Ask before opening links",
-      "description": "Shows where a link goes before it opens in your default browser.",
-      "keywords": "link url browser open confirm"
-    },
     "outlineSummaries": {
       "name": "Summarize messages in the outline",
-      "description": "Uses a small model of each session's agent, and its plan or credits, when the outline opens with messages it has not summarized.",
+      "description": "A small model writes the outline when you open it.",
       "keywords": "outline titles summary model credits"
     },
     "groups": {
@@ -109,44 +104,44 @@
       "export": "Export…",
       "exported": "Saved {{file}} to {{folder}}",
       "remove": "Remove…",
-      "install": "Install from file…",
+      "install": "Install file…",
       "moreThemes": "More themes",
-      "moreDescription": "Browse the Kettu catalog, or install a .json theme file.",
+      "moreDescription": "From the Kettu catalog, or a .json file.",
       "lowContrast": "Low contrast",
       "contrastPair": "{{mode}}: {{fg}} on {{bg}}, {{ratio}}:1",
       "contrastMore": "and {{count}} more",
       "installed": "Installed “{{name}}” and switched to it.",
-      "unused": "This version doesn't use: {{list}}.",
-      "lowContrastNotice": "Some text or controls don't stand out enough from their background and may be hard to see.",
+      "unused": "This version doesn’t use: {{list}}.",
+      "lowContrastNotice": "Some text or controls don’t stand out enough from their background and may be hard to see.",
       "gotIt": "Got it",
-      "installFailed": "Couldn't install {{file}}: {{reason}}.",
+      "installFailed": "Couldn’t install {{file}}: {{reason}}.",
       "replaceTitle": "Replace the theme “{{name}}”?",
       "replaceDescription": "“{{name}}” takes the place of the installed file.",
       "replace": "Replace",
       "removeTitle": "Remove the theme “{{name}}”?",
-      "removeDescription": "Its installed file is deleted. If you're using it, Kettu's theme takes its place.",
+      "removeDescription": "Its installed file is deleted. If you’re using it, Kettu’s theme takes its place.",
       "removeConfirm": "Remove",
       "removed": "{{name}} is removed",
-      "loadFailed": "The theme “{{id}}” couldn't load",
-      "loadFailedDescription": "Kettu's theme shows instead: {{reason}}.",
+      "loadFailed": "The theme “{{id}}” couldn’t load",
+      "loadFailedDescription": "Kettu’s theme shows instead: {{reason}}.",
       "useBuiltIn": "Use Kettu",
       "errors": {
-        "too-large": "it's larger than 256 KB",
-        "not-json": "it isn't a JSON file",
-        "not-theme": "it isn't a Kettu theme",
+        "too-large": "it’s larger than 256 KB",
+        "not-json": "it isn’t a JSON file",
+        "not-theme": "it isn’t a Kettu theme",
         "newer-format": "it needs a newer version of Kettu",
-        "reserved-name": "its name is the built-in theme's",
+        "reserved-name": "its name is the built-in theme’s",
         "missing-variant": "it has no {{variant}} variant",
-        "invalid-field": "{{path}} isn't valid",
-        "invalid-color": "{{path}} isn't a color",
-        "unreadable": "its file can't be read",
+        "invalid-field": "{{path}} isn’t valid",
+        "invalid-color": "{{path}} isn’t a color",
+        "unreadable": "its file can’t be read",
         "missing": "its file is gone",
-        "unreachable": "it couldn't be downloaded",
-        "mismatch": "the download doesn't match the catalog"
+        "unreachable": "it couldn’t be downloaded",
+        "mismatch": "the download doesn’t match the catalog"
       }
     },
     "catalog": {
-      "browse": "Browse themes",
+      "browse": "Browse",
       "title": "Browse themes",
       "description": "Themes from the Kettu catalog on GitHub. Installing one applies it.",
       "search": "Search themes",
@@ -160,12 +155,13 @@
       "none": "The catalog has no themes yet.",
       "noMatch": "No themes match “{{query}}”.",
       "tryAgain": "Try again",
-      "installFailed": "Couldn't install {{name}}: {{reason}}.",
+      "installFailed": "Couldn’t install {{name}}: {{reason}}.",
       "errors": {
-        "unreachable": "Couldn't reach the theme catalog. Check your connection or proxy, then try again.",
-        "invalid": "The theme catalog couldn't be read.",
+        "unreachable": "Couldn’t reach the theme catalog. Check your connection or proxy, then try again.",
+        "invalid": "The theme catalog couldn’t be read.",
         "newer-format": "The theme catalog needs a newer version of Kettu."
-      }
+      },
+      "done": "Done"
     },
     "colorMode": {
       "name": "Color mode",
@@ -176,20 +172,20 @@
     },
     "textSize": {
       "name": "Text size",
-      "description": "For the thread and the composer: 13, 14 or 15 px.",
+      "description": "The thread and the composer: 14, 15 or 16 px.",
       "keywords": "font",
       "small": "Small",
       "default": "Default",
       "large": "Large",
-      "previewUser": "Make the settings page high fidelity, in light and dark.",
-      "previewAgent": "Sure. I'll read <code>settings-page.tsx</code> and the design doc first, then go page by page."
+      "previewAgent": "Sure. I’ll read <code>settings-page.tsx</code> and the design doc first, then go page by page."
     },
     "reduceMotion": {
       "name": "Reduce motion",
-      "description": "System follows your operating system; Always removes movement everywhere.",
+      "description": "System follows macOS. Always removes movement everywhere.",
       "keywords": "animation accessibility",
       "system": "System",
-      "always": "Always"
+      "always": "Always",
+      "descriptionOther": "System follows your operating system. Always removes movement everywhere."
     },
     "groups": {
       "theme": "Theme",
@@ -198,7 +194,7 @@
     },
     "zoom": {
       "name": "Zoom",
-      "description": "How large the whole window draws. {{zoomIn}} and {{zoomOut}} change it too.",
+      "description": "How large the whole window draws. {{zoomIn}} and {{zoomOut}} work anywhere.",
       "keywords": "zoom scale size bigger smaller",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
@@ -208,7 +204,7 @@
   "terminal": {
     "shell": {
       "name": "Shell",
-      "description": "Your login shell ($SHELL), so the terminal sees the same tools; or a program you pick.",
+      "description": "Your login shell, or a program you pick.",
       "descriptionWindows": "pwsh when it is installed, else Windows PowerShell; or a program you pick.",
       "loginShell": "Login shell",
       "reset": "Reset",
@@ -238,7 +234,8 @@
       "signedOut": "Not signed in",
       "copyCommand": "Copy command",
       "signedInAs": "Signed in as {{account}}",
-      "signedIn": "Signed in"
+      "signedIn": "Signed in",
+      "ready": "Ready"
     },
     "fetch": {
       "name": "Fetch in the background",
@@ -252,33 +249,33 @@
   "notifications": {
     "permission": {
       "name": "Needs approval",
-      "description": "When an agent waits for you to allow something.",
+      "description": "An agent is waiting for you to allow something.",
       "keywords": "permission"
     },
     "turnEnded": {
       "name": "Turn finished",
-      "description": "When an agent finishes what you asked."
+      "description": "An agent finished and is waiting for your next message."
     },
     "routines": {
       "name": "Routine runs",
-      "description": "A routine's run ended, or its routines paused at a plan limit.",
+      "description": "A run ended, or paused near a plan limit.",
       "keywords": "routine schedule background"
     },
     "error": {
       "name": "Errors",
-      "description": "When a session fails or an agent stops unexpectedly."
+      "description": "A session failed or an agent stopped."
     },
     "sound": {
       "name": "Play a sound",
-      "description": "The system notification sound."
+      "description": "The system’s notification sound."
     },
     "badge": {
       "nameDock": "Show a count on the Dock icon",
       "nameTaskbar": "Show a count on the taskbar button",
-      "description": "How many sessions wait for your approval.",
+      "description": "Sessions waiting for your approval.",
       "keywords": "badge"
     },
-    "footer": "Shown only while no Kettu window is focused.",
+    "footer": "Shows only while no Kettu window is in front.",
     "groups": {
       "preview": "Preview",
       "when": "Notify me",
@@ -289,7 +286,8 @@
     "sent": "Sent",
     "previewTitle": "Claude Code needs your approval",
     "previewBody": "kettu · run {{command}}",
-    "previewTime": "now"
+    "previewTime": "now",
+    "footerWeb": "Shows only while this page is not in front."
   },
   "account": {
     "name": "Kettu account",
@@ -321,7 +319,7 @@
     "plainText": "This system has no keyring, so the sign-in is stored without the system’s encryption.",
     "subscription": {
       "name": "Subscription",
-      "description": "Kettu’s cloud services will need one. You buy and manage it on the website.",
+      "description": "Kettu’s cloud services will need one. Nothing else does.",
       "keywords": "subscription plan billing",
       "none": "Not subscribed",
       "trialing": "Trial",
@@ -329,30 +327,57 @@
       "pastDue": "Payment failed",
       "paused": "Paused",
       "canceled": "Ended"
-    }
+    },
+    "note": "Sessions, agents and remote access on your own network all work without an account. It only matters for the official relay and the web client."
   },
   "browser": {
     "clearData": {
       "name": "Clear browsing data",
-      "description": "Cookies, site storage and cache of the browser in the side panel.",
+      "description": "Cookies, storage and cache for every site the browser has opened.",
       "keywords": "browser cookies cache storage site data privacy",
       "button": "Clear…",
       "dialogTitle": "Clear browsing data?",
-      "dialogDescription": "Sign-ins and saved form entries in the browser's pages will be lost. Pages that are open stay open.",
+      "dialogDescription": "Sign-ins and saved form entries in the browser’s pages will be lost. Pages that are open stay open.",
       "confirm": "Clear",
       "cleared": "Browsing data cleared"
     },
     "groups": {
+      "links": "Links from agents",
       "siteData": "Site data",
-      "allowedSites": "Allowed sites"
+      "allowedSites": "Always allowed"
+    },
+    "openLinksIn": {
+      "name": "Open links in",
+      "description": "Where links in an agent’s reply open. {{mod}}-click uses the other one. Local addresses always open in the session browser.",
+      "keywords": "link url browser open default chrome safari session",
+      "defaultBrowser": "Default browser",
+      "session": "Session browser",
+      "ask": "Ask"
+    },
+    "confirmLinks": {
+      "name": "Ask before opening a site for the first time",
+      "description": "Shows the full address and lets you pick where it opens.",
+      "keywords": "link url browser open confirm ask first visit"
+    },
+    "rememberedSites": {
+      "name": "Remembered sites",
+      "description": "Sites you chose to always open in one place, without asking.",
+      "keywords": "link url site always open remember forget browser session",
+      "empty": "No site is remembered yet.",
+      "remove": "Remove",
+      "removed": "Removed {{site}}"
     },
     "allowedSites": {
       "name": "Always allowed sites",
       "description": "Sites the projects let agents open without asking.",
       "keywords": "browser sites origins allow always permissions",
       "empty": "No site is always allowed yet.",
+      "readFailed": "Couldn’t read the allowed sites",
       "remove": "Remove",
-      "removed": "Removed {{origin}}"
+      "removed": "Removed {{origin}}",
+      "removeFailed": "Couldn’t remove {{origin}}: {{reason}}",
+      "in": "Allowed in {{projects}}",
+      "note": "Agents open these without asking. A site is added here when you choose “Always for this project” on its card."
     }
   },
   "advanced": {
@@ -365,12 +390,11 @@
       "url": "URL",
       "noProxyFor": "No proxy for",
       "invalid": "Enter a URL such as http://proxy.example.com:8080",
-      "environmentNote": "The environment's proxy stays in use until a URL is in.",
-      "inUse": "In use for new connections."
+      "environmentNote": "The environment’s proxy stays in use until a URL is in."
     },
     "diagnostics": {
       "name": "Diagnostics",
-      "description": "A file with recent agent messages, logs and paths, for a bug report. It can contain code and prompts, so share it only with people you trust.",
+      "description": "A file with recent messages, logs and paths for a bug report. Look through it before sharing.",
       "keywords": "logs bug report",
       "export": "Export diagnostics",
       "saved": "Saved to {{path}}",
@@ -384,12 +408,12 @@
     },
     "removeSessions": {
       "name": "Remove all sessions from Kettu",
-      "description": "Clears Kettu's session list. The agents' transcripts stay.",
+      "description": "Clears the list. Agents keep their own transcripts.",
       "keywords": "delete clear",
       "button": "Remove all sessions…",
       "dialogTitle_one": "Remove the only session from Kettu?",
       "dialogTitle_other": "Remove all {{count}} sessions from Kettu?",
-      "dialogDescription": "The sidebar starts empty. The agents keep their transcripts, so you can import the sessions again from each project's menu in the sidebar.",
+      "dialogDescription": "The sidebar starts empty. The agents keep their transcripts, so you can import the sessions again from each project’s menu in the sidebar.",
       "confirm": "Remove all",
       "removed": "Every session is removed from Kettu"
     },
@@ -432,32 +456,31 @@
       "list": "On this computer",
       "list_web": "On {{host}}"
     },
-    "search": "Search agents",
-    "noMatch": "No matching agents",
     "plan": "Plan",
     "loginMethod": "Login method",
     "email": "Email",
     "notReported": "Not reported",
     "planLimits": "Plan limits",
     "usageNotReported": "{{name}} does not report plan usage.",
+    "spend": {
+      "group": "Spend",
+      "month": "This month",
+      "description": "{{name}} doesn’t report plan limits for API keys. Kettu counts what it sent.",
+      "unpriced": "Not priced"
+    },
     "configuration": "Configuration",
     "config": {
       "folder": "Folder",
       "settings": "Settings file",
       "instructions": "Instructions file"
     },
-    "configFolder": {
-      "description": "Where {{name}} keeps its sign-in, settings and history.",
-      "chosen": "Chosen in Kettu"
-    },
     "setBy": "Set by {{env}}",
-    "notCreated": "Not created yet",
     "showIn": "Show in {{name}}",
     "noConfig": "No configuration files to show.",
     "advanced": "Advanced",
     "readingAccount": "Reading the account…",
     "readingUsage": "Reading plan usage…",
-    "noUsage": "No plan usage reported",
+    "noUsage": "No plan usage",
     "usageOnceRunning": "Plan usage shows once it runs",
     "hidden": "Hidden",
     "revealAccount": "Click to show",
@@ -484,7 +507,7 @@
       "justChecked_one": "Checked just now · {{count}} update",
       "justChecked_other": "Checked just now · {{count}} updates",
       "allCurrent": "Checked just now · all up to date",
-      "checkFailed": "Couldn't check for updates",
+      "checkFailed": "Couldn’t check for updates",
       "notChecked": "Not checked yet",
       "available": "Update",
       "updating": "Updating…",
@@ -518,8 +541,8 @@
       "installing": "Installing…",
       "cancel": "Cancel install",
       "failed": "Install failed, retry",
-      "missingLineAdapter": "Not installed yet. Install puts its adapter in Kettu's data folder.",
-      "missingLineSdk": "Not installed yet. Install puts its SDK in Kettu's data folder.",
+      "missingLineAdapter": "Not installed yet. Install puts its adapter in Kettu’s data folder.",
+      "missingLineSdk": "Not installed yet. Install puts its SDK in Kettu’s data folder.",
       "title": "Install {{name}}",
       "body": "Kettu installs it in the background; when it is done, this page shows it as installed.",
       "adapterBody": "Kettu installs {{package}} into its own data folder and runs it on your Node.js.",
@@ -527,19 +550,17 @@
       "progressTitle": "Installing {{name}}",
       "failedTitle": "Install failed",
       "elsewhere": "Installed somewhere else? Choose the program…",
-      "copyLog": "Copy log"
+      "copyLog": "Copy log",
+      "buttonDialog": "Install…"
     },
     "default": "Default",
     "hiddenTag": "Hidden",
     "footerBefore": "To use another program, install it in ",
     "footerAfter": ".",
-    "onHarness": "On {{harness}}",
+    "onHarness": "on {{harness}}",
     "openHarness": "Open {{harness}} in Harnesses",
     "openHarnessButton": "Open",
     "harness": "Harness",
-    "folderDefault": "{{name}}'s own folder, shared with the {{name}} you run in a terminal.",
-    "folderOwn": "This agent's own folder, which keeps its sign-in, settings and history.",
-    "folderCreated": "Made by Kettu for this agent; it keeps its sign-in, settings and history.",
     "signInRow": "Sign-in",
     "signInRowHint": "The harness signs in itself, in a terminal; Kettu never sees the credentials.",
     "signInAgain": "Sign in again in terminal",
@@ -549,13 +570,14 @@
     },
     "remove": {
       "name": "Delete agent",
-      "description": "Its sessions stay, but cannot continue.",
+      "description": "Its sessions stay, but can’t continue.",
       "button": "Delete",
       "title": "Delete {{name}}?",
       "body": "Its sessions stay in the list and say the agent was deleted; they cannot continue.",
       "trash": "Move its folder to the trash",
-      "trashHint": "Kettu made the folder; it holds the agent's sign-in and the harness's own session records.",
-      "keepsFolder": "You picked its folder, so it stays as it is."
+      "trashHint": "Kettu made the folder; it holds the agent’s sign-in and the harness’s own session records.",
+      "keepsFolder": "You picked its folder, so it stays as it is.",
+      "buttonEllipsis": "Delete…"
     },
     "rename": {
       "button": "Rename",
@@ -568,7 +590,7 @@
       "title": "Add agent",
       "description": "Another account on the same harness, in a configuration folder of its own.",
       "harness": "Harness",
-      "harnessHint": "Only harnesses that keep their sign-in in a folder can have more agents; OpenCode, Pi and the others have the default one.",
+      "harnessHint": "Only harnesses that keep their sign-in in a folder can have more agents; opencode, Pi and the others have the default one.",
       "name": "Name",
       "namePlaceholder": "Such as Company API",
       "nameTooLong_one": "At most {{count}} character",
@@ -577,19 +599,19 @@
       "folderNew": "A new folder",
       "folderNewHint": "Kettu makes it in its data folder; sign in once the agent is added.",
       "folderExisting": "A folder you already use",
-      "folderExistingHint": "A folder {{variable}} pointed at in a terminal; its sign-in and settings carry over.",
+      "folderExistingHint": "Choose one to share its settings and sign-in.",
       "choose": "Choose…",
-      "login": "Sign-in",
-      "loginTerminal": "Sign in in a terminal",
-      "loginTerminalHint": "With a subscription or a console account, as the harness asks.",
-      "loginKey": "API key",
-      "loginKeyHint": "Your own key, for Anthropic or a gateway that speaks its API.",
+      "login": "Sign in",
+      "loginTerminal": "In a terminal",
+      "loginTerminalHint": "{{name}} signs in itself, with your plan.",
+      "loginKey": "With an API key",
+      "loginKeyHint": "Your own key and provider.",
       "loginKeyHintOpenAi": "An OpenAI API key.",
       "submit": "Add agent"
     },
     "key": {
       "row": "API key",
-      "set": "Set; {{name}} keeps it, Kettu has no copy.",
+      "set": "Set. {{name}} keeps it in its own configuration folder.",
       "notSet": "Your own key and provider, in place of a sign-in.",
       "notSetOpenAi": "An OpenAI API key, in place of a sign-in.",
       "setButton": "Set…",
@@ -602,19 +624,37 @@
       "baseUrlHint": "Leave it empty for Anthropic; for a gateway, the address it gives you.",
       "key": "API key",
       "model": "Model",
-      "modelPlaceholder": "Optional; {{name}}'s default when empty",
-      "noteClaude": "Claude Code keeps the key in the settings.json of this agent's folder; Kettu keeps no copy and never reads it back. {{command}} in a terminal with this folder uses it too.",
-      "noteCodex": "Codex keeps the key through its own codex login; Kettu keeps no copy. For another provider, set it up in this folder's config.toml."
+      "modelPlaceholder": "Optional; {{name}}’s default when empty",
+      "noteClaude": "Claude Code keeps the key in the settings.json of this agent’s folder; Kettu keeps no copy and never reads it back. {{command}} in a terminal with this folder uses it too.",
+      "noteCodex": "Codex keeps the key through its own codex login; Kettu keeps no copy. For another provider, set it up in this folder’s config.toml.",
+      "baseUrlOptional": "Base URL (optional)",
+      "modelOptional": "Model (optional)"
+    },
+    "needsSignInLine": "needs you to sign in",
+    "signInPill": "Sign in",
+    "notCreatedLine": "Not created yet.",
+    "createdByKettu": "created by Kettu",
+    "chosenInKettu": "chosen in Kettu",
+    "setByLine": "set by {{env}}",
+    "color": {
+      "name": "Color",
+      "description": "The dot on its mark, wherever its sessions show.",
+      "teal": "Teal",
+      "violet": "Violet",
+      "amber": "Amber",
+      "rose": "Rose",
+      "green": "Green",
+      "slate": "Slate"
     }
   },
   "about": {
     "version": {
-      "description": "A desktop workbench for Claude Code, Codex, OpenCode and Pi."
+      "description": "A desktop workbench for Claude Code, Codex, opencode and Pi."
     },
     "updates": {
       "name": "Updates",
       "keywords": "update check download restart version",
-      "upToDate": "You're up to date",
+      "upToDate": "You’re up to date",
       "notChecked": "Not checked yet",
       "checkedAgo": "Checked {{ago}}",
       "checking": "Checking for updates…",
@@ -622,10 +662,10 @@
       "downloadProgress": "Download progress",
       "ready": "{{version}} is ready to install",
       "available": "{{version}} is out",
-      "movesFirst": "Kettu can't update where it is, so Update moves it to Applications first.",
+      "movesFirst": "Kettu can’t update where it is, so Update moves it to Applications first.",
       "moving": "Moving Kettu to Applications…",
-      "failed": "Couldn't check for updates",
-      "moveFailed": "Couldn't move Kettu to Applications",
+      "failed": "Couldn’t check for updates",
+      "moveFailed": "Couldn’t move Kettu to Applications",
       "offDevelopment": "Updates are off in development builds",
       "offPackageManager": "Updates are installed by your package manager",
       "check": "Check for updates",
@@ -633,16 +673,17 @@
       "restart": "Restart to update",
       "update": "Update",
       "download": "Download",
-      "whatsNew": "What's new",
+      "whatsNew": "What’s new",
       "none": "Kettu on this computer is not updated from here",
       "none_web": "Kettu on {{host}} is not updated from here",
       "noneDetail": "Kettu on this computer is updated the way it was installed.",
-      "noneDetail_web": "Kettu on {{host}} is updated the way it was installed."
+      "noneDetail_web": "Kettu on {{host}} is updated the way it was installed.",
+      "readyDetail": "Restart to finish. Your sessions come back."
     },
     "automatic": {
       "name": "Automatic updates",
       "description": "When new versions download, and when they install.",
-      "download": "Download and install on quit",
+      "download": "Download, install on quit",
       "restart": "Download, install when I restart",
       "notify": "Ask before downloading",
       "off": "Off: check only when I ask",
@@ -669,34 +710,28 @@
     }
   },
   "pages": {
-    "general": "The interface language, how you type, and what new sessions and launches do.",
+    "general": "Language, how you type, and what new sessions and launches do.",
     "appearance": "Theme, color mode, zoom and text size. Changes apply at once.",
-    "notifications": "They show only while no Kettu window is in front, so they never interrupt what you are reading.",
-    "notifications_web": "They show only while this page is not in front, so they never interrupt what you are reading.",
-    "account": "Your Kettu account, for Kettu’s cloud services. Everything else works without signing in.",
-    "agents": "The agents you pick to work with, each with its own account and limits. One harness can have several agents, such as one on a subscription and one on a company API key.",
-    "agents_web": "The agents on {{host}} you pick to work with, each with its own account and limits on {{host}}. One harness can have several agents, such as one on a subscription and one on a company API key.",
-    "terminal": "Which shell the side panel's terminal runs, and its font size.",
-    "git": "The top bar's branch and changes, pull requests and their checks all come from these two tools.",
+    "notifications": "How Kettu reaches you when an agent needs you or finishes.",
+    "notifications_web": "How this page reaches you when an agent on {{host}} needs you or finishes.",
+    "account": "Your Kettu account, for Kettu’s cloud services.",
+    "agents": "An agent is a harness signed in to one account. Add a harness twice to keep a personal plan and a work key apart.",
+    "agents_web": "An agent on {{host}} is a harness signed in to one account there. Add a harness twice to keep a personal plan and a work key apart.",
+    "terminal": "Which shell the side panel’s terminal runs, and how it looks.",
+    "git": "The top bar’s branch and changes, pull requests and their checks all come from these two tools.",
     "advanced": "Network proxy, diagnostics and the data Kettu keeps on this computer.",
     "advanced_web": "Network proxy, diagnostics and the data Kettu keeps on {{host}}.",
-    "about": "Kettu's version, updates and links.",
-    "archived": "Sessions you archived, off the sidebar but kept. Restore one to put it back in its project.",
+    "about": "Kettu’s version, updates and links.",
+    "archived": "Off the sidebar but kept. Restore one to put it back in its project.",
     "sharing": "Publish artifacts to links anyone can open, through your own Cloudflare account.",
-    "remote": "Use this computer's sessions in Kettu on an iPhone, an iPad or another computer; everything stays on this computer.",
-    "remote_web": "Use {{host}}'s sessions in Kettu on an iPhone, an iPad or another computer; everything stays on {{host}}.",
-    "browser": "The browser in the side panel keeps one profile for every session: sign-ins, site data and cache.",
-    "mcp": "Agents reach tools through these MCP servers. Kettu's own is here, and where each agent keeps its own.",
-    "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Install and update them here; accounts are in Agents.",
-    "hosts": "The hosts Kettu on this computer connects to. Sessions, projects and agents stay on each host; this is only how to reach them.",
+    "remote": "Use this computer’s sessions from Kettu on an iPhone, an iPad or another computer, on your own network.",
+    "remote_web": "Use {{host}}’s sessions from Kettu on an iPhone, an iPad or another computer, on your own network.",
+    "browser": "The browser in the side panel keeps one profile for every session, so you sign in to a site once.",
+    "browserWeb": "Links in agents’ replies open in a new tab.",
+    "mcp": "Agents reach tools through these MCP servers: Kettu’s own, and the ones each agent keeps.",
+    "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Kettu installs and updates them for you.",
+    "hosts": "Other computers running Kettu that this one connects to. Their sessions show up in your sidebar.",
     "hostsWeb": "The computer this page connects to. Its sessions, projects and agents stay on it; here is only how this browser reaches it."
-  },
-  "footer": {
-    "about": "About Kettu",
-    "upToDate": "Up to date",
-    "ready": "{{version}} ready",
-    "available": "{{version}} is out",
-    "downloading": "{{percent}}% downloaded"
   },
   "archived": {
     "description": "{{project}} · archived {{when}}",
@@ -712,7 +747,7 @@
   "sharing": {
     "groups": {
       "account": "Cloudflare",
-      "published": "Published artifacts"
+      "published": "Published"
     },
     "account": {
       "name": "Cloudflare account",
@@ -725,7 +760,7 @@
       "checking": "Checking…",
       "kept": "Kept encrypted by the system, only on this computer.",
       "kept_web": "Kept encrypted by the system, only on {{host}}.",
-      "refused": "Cloudflare refused the API token. Check that it has Workers Scripts Edit and hasn't expired.",
+      "refused": "Cloudflare refused the API token. Check that it has Workers Scripts Edit and hasn’t expired.",
       "account": "Account",
       "choose": "Choose an account",
       "chooseHint": "This token reaches more than one account. Choose the one to publish with.",
@@ -735,17 +770,21 @@
       "removeTitle": "Remove the Cloudflare account?",
       "removeBody": "Kettu forgets the token. Published pages stay online; unpublishing them needs the account again.",
       "removed": "The Cloudflare account is removed",
-      "plainText": "This system has no keyring, so the token is stored without the system's encryption.",
-      "dashboard": "Choose a subdomain in Cloudflare"
+      "plainText": "This system has no keyring, so the token is stored without the system’s encryption.",
+      "dashboard": "Choose a subdomain in Cloudflare",
+      "keptConnected": "The token is kept encrypted by the system, only on this computer.",
+      "keptConnected_web": "The token is kept encrypted by the system, only on {{host}}."
     },
     "published": {
-      "version": "Version {{version}}, published {{ago}}",
+      "version": "version {{version}}, published {{ago}}",
       "keywords": "share published link url",
       "unpublish": "Unpublish",
       "unpublishTitle": "Unpublish “{{title}}”?",
       "unpublished": "Unpublished",
       "otherAccount": "Published with another Cloudflare account. Connect that account to change it.",
-      "empty": "Nothing is published yet."
+      "empty": "Nothing is published yet.",
+      "copyLink": "Copy link",
+      "copied": "Link copied"
     },
     "none": {
       "title": "Sharing needs the desktop app",
@@ -761,13 +800,13 @@
     "version": "Kettu {{version}}",
     "via": {
       "direct": "Direct",
-      "directAt": "Direct {{address}}",
+      "directAt": "Direct · {{address}}",
       "ssh": "SSH",
-      "sshAt": "SSH {{target}}"
+      "sshAt": "SSH · {{target}}"
     },
     "failed": {
       "not_connected": "{{name}} is not connected. Try again once it is online.",
-      "unknown_host": "{{name}} is no longer in this computer's list."
+      "unknown_host": "{{name}} is no longer in this computer’s list."
     },
     "state": {
       "online": "Online",
@@ -778,7 +817,7 @@
       "update_client": "Update Kettu here",
       "update_host": "Update Kettu on it"
     },
-    "note": "To connect to this computer from a phone or another computer, add the device in <link>Remote access</link>.",
+    "note": "To reach this computer from a phone or another computer, add the device in <link>Remote access</link>.",
     "plainTextKey": "The key this computer connects to other hosts with is kept in a file only you can read, because the system has no keyring.",
     "keyFailed": "The system could not decrypt the key this computer connects to other hosts with, so it connects to none.",
     "add": {
@@ -796,13 +835,13 @@
       "void": "This pairing code no longer works: it expired, was used, or the host made a new one. Click Add device on the host for a new code and paste that.",
       "rejected": "The host did not add this computer.",
       "unreachable": "Could not reach the host within 15 seconds. Check that both computers are on the same network or VPN and that remote access is on there; for an address you added for the host, check that the port forwarding still works.",
-      "self": "This is this computer's own pairing code. To connect another device to this computer, scan or paste it on that device.",
+      "self": "This is this computer’s own pairing code. To connect another device to this computer, scan or paste it on that device.",
       "update_client": "Kettu on this computer is too old for this host. Update it and try again.",
       "update_host": "Kettu on the host is too old for this computer. Update it there and try again.",
       "retry": "Retry",
       "newLink": "Paste a new link",
       "added": "Added {{name}}",
-      "nameLabel": "This computer's name on {{name}}",
+      "nameLabel": "This computer’s name on {{name}}",
       "nameHint": "{{name}} lists this computer under this name; change it later in Settings › Hosts › {{name}}.",
       "done": "Done",
       "tabs": {
@@ -811,10 +850,9 @@
         "ssh": "SSH"
       },
       "ssh": {
-        "hint": "Kettu uses your own SSH config and agent, so jump hosts, ports and aliases work as usual. If Kettu is not on that machine yet, it is installed.",
         "label": "SSH address",
         "placeholder": "lin@dev-box",
-        "note": "Kettu never reads or stores your SSH keys.",
+        "note": "Kettu uses your ssh setup and never reads or stores your keys.",
         "connect": "Connect",
         "steps": {
           "label": "Progress",
@@ -824,16 +862,17 @@
           "adding": "Add this computer",
           "opening": "Open the encrypted channel",
           "done": "done",
-          "failed": "failed"
+          "failed": "failed",
+          "installingDetail": "It runs as a daemon and starts at boot or login."
         },
         "output": "The last lines it printed",
         "errors": {
           "missing": "This computer has no ssh program. Install the OpenSSH client and try again.",
           "unreachable": "Could not reach {{target}}. Check the address, and that this computer can reach the machine, such as over your VPN.",
           "auth": "{{target}} did not accept the login. Kettu logs in with your ssh-agent or the key your SSH config names for this host, and cannot type a password; check that <code>ssh {{target}}</code> logs in without one in a terminal.",
-          "host_unknown": "This computer does not know {{target}}'s host key yet. Connect once in a terminal with <code>ssh {{target}}</code>, check the fingerprint and accept it, then try again.",
-          "host_changed": "{{target}}'s host key is not the one this computer knows: someone may be intercepting the connection, or the machine was set up again. Check with whoever runs it and fix your known hosts in a terminal before you try again.",
-          "forwarding": "{{target}}'s SSH server does not forward connections, which Kettu needs. Allow it there with <code>AllowTcpForwarding</code> in the server's config and try again.",
+          "host_unknown": "This computer does not know {{target}}’s host key yet. Connect once in a terminal with <code>ssh {{target}}</code>, check the fingerprint and accept it, then try again.",
+          "host_changed": "{{target}}’s host key is not the one this computer knows: someone may be intercepting the connection, or the machine was set up again. Check with whoever runs it and fix your known hosts in a terminal before you try again.",
+          "forwarding": "{{target}}’s SSH server does not forward connections, which Kettu needs. Allow it there with <code>AllowTcpForwarding</code> in the server’s config and try again.",
           "unsupported": "Kettu has no daemon for {{system}}, which {{target}} runs. It runs on Linux on x64 and arm64, and on Macs with Apple silicon.",
           "noShell": "{{target}} has no POSIX shell, so Kettu cannot be installed on it. The daemon runs on Linux on x64 and arm64, and on Macs with Apple silicon.",
           "install": "Installing Kettu on {{target}} failed.",
@@ -857,9 +896,9 @@
       "nameDescription": "{{name}} lists this computer under this name.",
       "nameOffline": "{{name}} lists this computer under this name, which can be changed while it is online.",
       "settings": {
-        "name": "{{name}}'s settings",
+        "name": "{{name}}’s settings",
         "description": "Agents, harnesses, usage, the terminal, remote access and the rest belong to {{name}}: choose it under Host settings at the left of Settings. Only its owner can change them.",
-        "open": "Open {{name}}'s settings"
+        "open": "Open {{name}}’s settings"
       },
       "editTitle": "Addresses of {{name}}",
       "editBody": "This computer tries all of them at once and uses the first that answers.",
@@ -880,7 +919,7 @@
       },
       "update_client": {
         "title": "Update Kettu on this computer",
-        "body": "Kettu on {{name}} no longer takes this computer's version. It connects again once Kettu here is updated."
+        "body": "Kettu on {{name}} no longer takes this computer’s version. It connects again once Kettu here is updated."
       },
       "update_host": {
         "title": "Update Kettu on {{name}}",
@@ -911,14 +950,14 @@
     "switch": "Remote access",
     "status": {
       "on": "On",
-      "listening": "Listening on port {{port}}",
+      "listening": "listening on port {{port}}",
       "online_one": "{{count}} device online",
       "online_other": "{{count}} devices online",
       "noneOnline": "No device online",
       "noDevices": "No devices yet",
       "starting": "Starting…",
       "failed": "Remote access could not start",
-      "failedHint": "The system could not unlock this computer's key. Turn remote access off and on again to retry.",
+      "failedHint": "The system could not unlock this computer’s key. Turn remote access off and on again to retry.",
       "cannotListen": "Could not listen on port {{port}}",
       "cannotListenHint": {
         "port_in_use": "Another program is using this port. Pick another port, or close that program and retry.",
@@ -927,18 +966,17 @@
       },
       "changePort": "Change port",
       "retry": "Retry",
-      "plainTextKey": "This computer's key is kept in a file only your user can read, because the system has no keyring.",
-      "plainTextKey_web": "{{host}}'s key is kept in a file only its user can read, because the system has no keyring.",
-      "serviceKey": "This computer's key is kept in a file only your user can read, because a service that starts with the computer cannot count on an unlocked keyring.",
-      "serviceKey_web": "{{host}}'s key is kept in a file only its user can read, because a service that starts with the computer cannot count on an unlocked keyring."
+      "plainTextKey": "This computer’s key is kept in a file only your user can read, because the system has no keyring.",
+      "plainTextKey_web": "{{host}}’s key is kept in a file only its user can read, because the system has no keyring.",
+      "serviceKey": "This computer’s key is kept in a file only your user can read, because a service that starts with the computer cannot count on an unlocked keyring.",
+      "serviceKey_web": "{{host}}’s key is kept in a file only its user can read, because a service that starts with the computer cannot count on an unlocked keyring.",
+      "offLine": "Off"
     },
     "hostName": {
-      "name": "This computer's name",
-      "name_web": "The host's name",
-      "description": "The name devices show, the computer's own name until you change it."
+      "name": "This computer’s name",
+      "name_web": "The host’s name",
+      "description": "What your devices show for it."
     },
-    "background": "While remote access is on, Kettu keeps running in the background after you close its window, so devices can connect; Run in the background in General stays on.",
-    "background_web": "While remote access is on, Kettu on {{host}} keeps running after its window is closed, so devices can connect.",
     "devices": {
       "group": "Devices",
       "emptyTitle": "No devices yet",
@@ -955,17 +993,17 @@
       "removedIn_other": "Removed in {{count}} days",
       "staleOne_one": "Devices not connected for 90 days are removed. “{{name}}” has not connected for {{days}} days; connecting once within a day keeps it.",
       "staleOne_other": "Devices not connected for 90 days are removed. “{{name}}” has not connected for {{days}} days; connecting once in the next {{count}} days keeps it.",
-      "staleMany": "Devices not connected for 90 days are removed. {{count}} devices are close to it; connecting once keeps each of them."
+      "staleMany": "Devices not connected for 90 days are removed. {{count}} devices are close to it; connecting once keeps each of them.",
+      "removalNote": "A device that doesn’t connect for 90 days is removed."
     },
     "direct": {
-      "group": "Direct",
+      "group": "Direct connections",
       "name": "Direct connections",
-      "description": "Without a Kettu relay, direct connections are the only way devices reach this computer, so they turn on with remote access.",
-      "description_web": "Without a Kettu relay, direct connections are the only way devices reach {{host}}, so they turn on with remote access.",
+      "description": "Always on with remote access. Plain TCP, so a tunnel that only forwards HTTPS can’t carry them.",
       "keywords": "direct connection port address lan network vpn tailscale frp forward forwarding",
       "port": {
         "name": "Port",
-        "description": "Picked at random the first time, then kept; it is the port to forward.",
+        "description": "Picked at random the first time, then kept.",
         "invalid": "Use a port from 1024 to 65535",
         "confirmTitle": "Change the port to {{port}}?",
         "confirmBody": "Devices online now learn the new port. Devices that are not connected only know the old one and cannot connect until you add them again. A port you forward has to change too.",
@@ -973,29 +1011,28 @@
       },
       "found": {
         "name": "Addresses devices try",
-        "description": "The private and VPN addresses this computer found, updated when the network changes.",
-        "description_web": "The private and VPN addresses {{host}} found, updated when the network changes.",
+        "description": "Private and VPN addresses found on this computer.",
+        "description_web": "Private and VPN addresses found on {{host}}.",
         "none": "No private or VPN address found yet.",
         "notListening": "Shown once the port is listening."
       },
       "own": {
         "name": "Your own addresses",
-        "description": "Such as a public address frp forwards. Devices get them with the pairing code and try them with the ones above.",
+        "description": "Such as a public address that frp forwards here.",
         "label": "Add an address of your own",
-        "placeholder": "Host name or IP:port",
+        "placeholder": "Host or IP:port",
         "add": "Add",
         "remove": "Remove {{address}}",
         "invalid": "<strong>Not an address:</strong> enter only a host name or IP address and a port, such as <code>frp.example.com:60021</code>, without https://.",
         "repeat": "This address is already in the list.",
         "full_one": "You can add up to {{count}} address.",
         "full_other": "You can add up to {{count}} addresses."
-      },
-      "note": "Direct connections are plain TCP, so a tunnel that only forwards HTTPS, such as Cloudflare Tunnel, cannot carry them."
+      }
     },
     "terminal": {
       "name": "Allow terminal",
-      "description": "Devices can run any command on this computer, beyond what an agent asks to run. Turning it off closes devices' terminals; the terminals keep running here.",
-      "description_web": "Devices can run any command on {{host}}, beyond what an agent asks to run. Turning it off closes devices' terminals; the terminals keep running on {{host}}.",
+      "description": "Devices can open a terminal and run any command on this computer.",
+      "description_web": "Devices can open a terminal and run any command on {{host}}.",
       "keywords": "terminal shell command console"
     },
     "kinds": {
@@ -1005,8 +1042,8 @@
     },
     "reset": {
       "name": "Reset remote access",
-      "description": "Removes every device and gives this computer a new identity; every device has to be added again.",
-      "description_web": "Removes every device and gives {{host}} a new identity; every device has to be added again.",
+      "description": "Removes every device and gives this computer a new identity.",
+      "description_web": "Removes every device and gives {{host}} a new identity.",
       "keywords": "identity key forget devices",
       "button": "Reset…",
       "title": "Reset remote access?",
@@ -1021,7 +1058,7 @@
     "pair": {
       "title": "Add device",
       "scan": "Scan this code with Kettu on an iPhone or iPad.",
-      "otherComputer": "On another computer, open Settings › Hosts › Add host… in its Kettu and paste this link.",
+      "otherComputer": "On another computer, open Settings › Hosts › Add host and paste the link.",
       "target": "Open with",
       "targets": {
         "app": "App",
@@ -1032,8 +1069,6 @@
       "address": "Address",
       "copy": "Copy",
       "copied": "Copied",
-      "expires": "It adds one device and expires in <time>{{time}}</time>. The device has to reach this computer directly: on the same network, the same VPN, or through an address you added.",
-      "expires_web": "It adds one device and expires in <time>{{time}}</time>. The device has to reach {{host}} directly: on the same network, the same VPN, or through an address you added.",
       "waiting": "Waiting for a device to scan…",
       "qr": "Pairing QR code",
       "failed": "Kettu could not make a code: {{message}}",
@@ -1075,7 +1110,10 @@
         "reject": "Reject",
         "add": "Add"
       },
-      "added": "“{{name}}” is added"
+      "added": "“{{name}}” is added",
+      "description": "It adds one device. Anyone who sees the code before then could use it.",
+      "description_web": "It adds one device. Anyone who sees the code before then could use it.",
+      "expiresIn": "Expires in {{time}}"
     },
     "device": {
       "rename": "Rename",
@@ -1146,17 +1184,22 @@
     "other": {
       "offBody": "Every device disconnects at once, this computer too. It connects again only once remote access is turned on again on {{host}}.",
       "resetBody": "This computer is one of them, so it has to be added to {{host}} again.",
-      "portBody": "This computer reaches {{host}} at the old port too, so it may disconnect; if it does not connect again, change the address on {{host}}'s page in Settings > Hosts."
+      "portBody": "This computer reaches {{host}} at the old port too, so it may disconnect; if it does not connect again, change the address on {{host}}’s page in Settings > Hosts."
+    },
+    "groups": {
+      "permissions": "Permissions",
+      "danger": "Danger zone"
     }
   },
   "usage": {
-    "cleared": "Kettu's record is cleared"
+    "cleared": "Kettu’s record is cleared"
   },
   "mcp": {
     "keywords": "MCP server tools artifacts sessions browser",
     "groups": {
       "kettu": "From Kettu",
-      "own": "In each agent's own configuration"
+      "own": "In each agent’s own configuration",
+      "kettuNote": "Artifacts, sessions and the browser reach every agent through this server."
     },
     "state": {
       "running": "Running",
@@ -1169,30 +1212,34 @@
       "offEvery": "Off for every agent"
     },
     "error": {
-      "title": "Couldn't read the MCP servers"
+      "title": "Couldn’t read the MCP servers"
     },
     "server": {
-      "builtIn": "Built into Kettu",
       "notRunning": {
-        "title": "Kettu's server isn't running",
+        "title": "Kettu’s server isn’t running",
         "body": "Sessions start without its tools until it runs."
       }
     },
     "place": {
       "connects": "{{name}} also connects to the servers it keeps itself.",
-      "list": "Type {{command}} in a session to see them with their status.",
-      "project": "And {{file}} in a project's folder.",
-      "keywords": "configuration file MCP"
+      "keywords": "configuration file MCP",
+      "ownWithCommand": "Its own servers too. Type {{command}} in a session to see them, or add {{file}} to a project.",
+      "ownWithCommandFrom": "Its own servers too, from {{path}}. Type {{command}} in a session to see them, or add {{file}} to a project.",
+      "ownWithCommandMissing": "Its own servers too. Type {{command}} in a session to see them, or add {{file}} to a project. {{path}} is not created yet.",
+      "ownFrom": "Its own servers too, from {{path}} and {{file}} in a project.",
+      "ownFromMissing": "Its own servers too, from {{file}} in a project. {{path}} is not created yet.",
+      "pathNote": "{{path}} ({{note}})"
     },
     "agents": "Agents",
     "tools": "Tools",
     "agent": {
-      "switch": "Kettu's tools in {{name}}",
+      "switch": "Kettu’s tools in {{name}}",
       "on": "Adds these tools to its sessions.",
       "off": "Its sessions start without these tools.",
       "takesNone": "{{name}} takes no MCP servers over HTTP.",
-      "nextStart": "Takes effect from {{name}}'s next start."
-    }
+      "nextStart": "Takes effect from {{name}}’s next start."
+    },
+    "builtIn": "Built in"
   },
   "harnesses": {
     "groups": {
@@ -1200,8 +1247,6 @@
       "notInstalled": "Not installed"
     },
     "keywords": "install update program binary cli node npm",
-    "search": "Search harnesses",
-    "noMatch": "No matching harnesses",
     "methods": {
       "archive": "Download",
       "brew": "Homebrew",
@@ -1210,16 +1255,12 @@
       "winget": "WinGet"
     },
     "updateTo": "Update to {{version}}",
-    "yours": "your {{command}}",
-    "sdkOnFirstUse": "SDK installs on first use",
-    "picked": "the program you chose",
-    "kettus": "{{name}} installed by Kettu",
     "agentCount_one": "{{count}} agent",
     "agentCount_other": "{{count}} agents",
-    "missingLine": "Not installed. Install shows the ways {{name}}'s maker documents.",
+    "missingLine": "Not installed. Install shows the ways {{name}}’s maker documents.",
     "install": {
       "title": "Install {{name}}",
-      "body": "Kettu brings no {{name}} of its own: it uses the one on your computer. Pick one of {{vendor}}'s documented ways; Kettu runs it in the background and detects {{name}} again when it is done.",
+      "body": "Kettu brings no {{name}} of its own: it uses the one on your computer. Pick one of {{vendor}}’s documented ways; Kettu runs it in the background and detects {{name}} again when it is done.",
       "bodyPlain": "Pick one of the documented ways; Kettu runs it in the background and detects {{name}} again when it is done.",
       "method": "Install with",
       "recommended": "Recommended",
@@ -1233,18 +1274,19 @@
     "cliUpdateBody": "You have {{current}}. The update runs the way you installed {{name}}; the command shows below.",
     "cliUpdateBodySdk": "You have {{current}}. The update runs the way you installed {{name}}, and moves Claude Agent SDK to the version that matches; the command shows below.",
     "reinstall": "{{name}}",
-    "reinstallBody": "Delete Kettu's install and install it again.",
+    "reinstallBody": "Delete Kettu’s install and install it again.",
     "programName": "{{command}}",
     "installedWith": "Your own · {{method}}",
     "programSdk": "Your own, which the SDK runs.",
     "programOwn": "Your own, which Kettu runs.",
     "packageGroup": "Installed by Kettu",
-    "sdkLine": "{{version}} · in Kettu's data folder, without the CLI",
-    "adapterLine": "{{version}} · in Kettu's data folder",
+    "sdkLine": "{{version}} · in Kettu’s data folder, without the CLI",
+    "adapterLine": "{{version}} · in Kettu’s data folder",
     "sdkNote": "Kettu brings no {{name}}, only the SDK that drives it; updates stay within {{range}}.",
     "adapterNote": "The adapter Kettu runs {{name}} through, on your Node.js.",
     "usedBy": "Used by",
     "listSeparator": ", ",
-    "manageAgents": "Manage in Agents"
+    "manageAgents": "Manage in Agents",
+    "versionOut": "{{version}} is out"
   }
 }

@@ -1,5 +1,5 @@
 import { useId } from 'react'
-import { ServerIcon } from 'lucide-react'
+import { LaptopIcon, ServerIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   Select,
@@ -29,8 +29,8 @@ export function HostPicker({ hostId }: { hostId: string | null }) {
     ...hosts.map((host) => ({ value: host.id, label: host.name, away: isAway(host.connection) })),
   ]
   return (
-    <div className="flex flex-col gap-1 px-0.5">
-      <div id={label} className="px-2 text-xs text-tertiary">
+    <div className="mx-0.5 mt-3.5 mb-1.5 flex flex-col px-2 pt-2.5 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
+      <div id={label} className="mb-1.5 text-caption leading-[normal] font-medium text-tertiary">
         {t('hostPicker.label')}
       </div>
       <Select
@@ -41,10 +41,21 @@ export function HostPicker({ hostId }: { hostId: string | null }) {
           openHostSettings(next === THIS_COMPUTER ? null : (next as string))
         }}
       >
-        <SelectTrigger aria-labelledby={label} className="h-row w-full text-ui">
-          <ServerIcon className="size-3.5 text-icon" />
+        <SelectTrigger
+          aria-labelledby={label}
+          className="h-row w-full gap-2 rounded-xl bg-subtle pr-2 pl-2.5 text-control text-primary shadow-none hover:bg-selected [&>svg:last-child]:stroke-[1.75] [&>svg:last-child]:text-tertiary"
+        >
+          {hostId === null ? (
+            <LaptopIcon className="size-3.75 text-secondary" />
+          ) : (
+            <ServerIcon className="size-3.75 text-secondary" />
+          )}
           <SelectValue className="min-w-0 flex-1 truncate">
-            {(current: string) => options.find((o) => o.value === current)?.label}
+            {(current: string) =>
+              current === THIS_COMPUTER
+                ? t('hostPicker.selfUnnamed')
+                : options.find((o) => o.value === current)?.label
+            }
           </SelectValue>
         </SelectTrigger>
         <SelectContent>

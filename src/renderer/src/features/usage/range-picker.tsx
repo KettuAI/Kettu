@@ -31,7 +31,7 @@ function iso(day: number): string {
 const ordered = (a: number, b: number): [number, number] => (a <= b ? [a, b] : [b, a])
 
 /**
- * The Custom button and its popover: presets on the left, two months to click a start and an
+ * The calendar button and its popover: presets on the left, two months to click a start and an
  * end in either order, and the dates as text below. Nothing changes until Apply.
  */
 export function RangePicker({
@@ -48,7 +48,7 @@ export function RangePicker({
   value: { from: number; to: number } | null
   /** The range the page shows, both ends included, which the picker opens with. */
   shown: { from: number; to: number } | null
-  /** The button's text for that range. */
+  /** The button's text for the custom range applied now; without one it shows only its icon. */
   label: string | null
   today: number
   firstDay: number
@@ -143,16 +143,18 @@ export function RangePicker({
       <PopoverTrigger
         render={
           <Button
-            variant="outline"
-            size="compact"
+            variant="ghost"
             aria-pressed={value !== null}
             aria-label={t('picker.label')}
-            className="aria-pressed:shadow-outline-hover"
+            className={cn(
+              'h-7.5 gap-1.5 text-hint text-secondary shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] aria-pressed:bg-pressed aria-pressed:text-foreground',
+              label ? 'px-2.5' : 'w-7.5 px-0',
+            )}
           />
         }
       >
-        <CalendarIcon data-icon="inline-start" className="size-3.5 text-tertiary" />
-        <span className="tabular-nums">{label ?? t('picker.button')}</span>
+        <CalendarIcon className="size-3.75" />
+        {label && <span className="tabular-nums">{label}</span>}
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={6} className="w-auto gap-0 p-0">
         <div className="flex">

@@ -86,15 +86,24 @@
     }
   },
   "attention": {
-    "browserOrigin": "{{origin}} waits for your answer",
-    "permission": "The agent asks for permission",
+    "browserOrigin": "Wants to open {{site}}",
+    "permission": "Asks for permission",
     "turnEnd": {
       "end_turn": "Finished",
       "cancelled": "Cancelled",
       "max_tokens": "Stopped at the token limit",
       "max_turn_requests": "Stopped at the request limit",
       "refusal": "The agent refused"
-    }
+    },
+    "wantsToRun": "Wants to run {{command}}",
+    "wantsToEdit": "Wants to edit {{target}}",
+    "wantsToDelete": "Wants to delete {{target}}",
+    "wantsToMove": "Wants to move {{target}}",
+    "wantsToUse": "Wants to use {{tool}}",
+    "asks": "Asks: {{question}}",
+    "done": "{{title}} · done",
+    "withChanges_one": "{{text}} {{count}} file changed.",
+    "withChanges_other": "{{text}} {{count}} files changed."
   },
   "routines": {
     "busy": "This routine already has a run working",
@@ -227,6 +236,11 @@
     "busy": "Another git operation is running in this project; try again when it ends",
     "notRepository": "This folder is not a git repository",
     "operationInProgress": "Finish the merge or rebase in progress first",
+    "conflicts": "Resolve the conflicts first",
+    "notAChange": "{{path}} has no uncommitted changes",
+    "nestedRepository": "{{path}} is a repository of its own; handle it from the terminal",
+    "alreadyPublished": "The branch already tracks {{upstream}}",
+    "remoteNotFound": "This repository has no remote named {{remote}}",
     "noBranch": "Check out a branch first: HEAD is detached or has no commits",
     "noUpstream": "The branch is not published yet",
     "diverged": "The branch and {{upstream}} have diverged; rebase or merge first, then push",
@@ -246,19 +260,23 @@
     "addRules": "{{rules}} {{place}}",
     "addDirectories": "access to {{directories}} {{place}}",
     "setMode": "switch to {{mode}}",
-    "reject": "Reject",
+    "reject": "Deny, and say what to do instead",
     "place": {
-      "user": "in user settings",
-      "project": "in project settings (.claude/settings.json)",
-      "local": "in local settings (.claude/settings.local.json)",
+      "user": "in every project",
+      "project": "in this project",
+      "shared": "in this project's shared settings",
       "session": "for this session"
     },
+    "listSeparator": ", ",
+    "changeSeparator": "; ",
     "exitPlan": {
       "auto": "Yes, and use Auto mode",
       "acceptEdits": "Yes, and accept edits",
       "manual": "Yes, and approve edits manually",
       "keepPlanning": "No, keep planning"
-    }
+    },
+    "allowEdit": "Allow this edit",
+    "acceptEdits": "Allow all edits in this session"
   },
   "content": {
     "audioTooLarge": "Audio, {{size}}, too large to show",
@@ -330,14 +348,15 @@
       "gateway": "Custom model provider"
     },
     "approval": {
-      "allowOnce": "Yes",
-      "allowSession": "Yes, for this session",
-      "allowTurn": "Yes, for this turn",
-      "allowPrefix": "Yes, and don't ask again for `{{command}}`",
-      "allowHost": "Yes, and allow {{host}} from now on",
-      "denyHost": "No, and block {{host}} from now on",
-      "decline": "No",
-      "cancel": "No, and stop",
+      "allowOnce": "Allow once",
+      "allowSession": "Allow for this session",
+      "allowTurn": "Allow for this turn",
+      "allowPrefix": "Always allow `{{command}}`",
+      "allowHost": "Always allow {{host}}",
+      "denyHost": "Always block {{host}}",
+      "decline": "Deny, and keep going",
+      "cancel": "Deny, and say what to do instead",
+      "dismiss": "Dismiss without answering",
       "accept": "Continue",
       "network": "Network access",
       "networkHost": "{{protocol}} access to {{host}}",
@@ -345,7 +364,8 @@
       "read": "Read {{path}}",
       "write": "Write {{path}}",
       "permissionsTitle": "More permissions",
-      "elicitationTitle": "{{server}} asks to continue"
+      "elicitationTitle": "{{server}} asks to continue",
+      "allowEdit": "Allow this edit"
     },
     "tool": {
       "readFile": "Read file '{{path}}'",
@@ -466,5 +486,8 @@
       "unknownError": "unknown MCP startup error",
       "unnamed": "(unnamed)"
     }
+  },
+  "question": {
+    "other": "Something else…"
   }
 }

@@ -401,6 +401,7 @@ export class ClaudeMapper {
           : {}),
         ...(raw !== undefined ? { rawInput: raw } : {}),
         ...(description !== undefined ? { description } : {}),
+        ...(view.question !== undefined ? { question: view.question } : {}),
       }
       out.patches.push({ op: 'entry.update', id, changes })
       return out
@@ -420,6 +421,7 @@ export class ClaudeMapper {
       permissionResult: null,
       ...(raw !== undefined ? { rawInput: raw } : {}),
       ...(description !== undefined ? { description } : {}),
+      ...(view.question !== undefined ? { question: view.question } : {}),
     }
     addEntry(ctx, out, entry)
     return out

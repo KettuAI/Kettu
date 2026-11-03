@@ -24,6 +24,13 @@ import {
   CLOCK_TEST,
   COMMANDS,
   SVG_REPLY,
+  CONTENT_BLOCKS,
+  CONTENT_FAILING,
+  CONTENT_NEW,
+  CONTENT_OLD,
+  CONTENT_PASSING,
+  CONTENT_TEXT,
+  MEDIA_REPLY,
   TABLES_REPLY,
   THINKING_ANSWER,
   THOUGHT_TEXT,
@@ -389,6 +396,91 @@ const parallelPermissions: Scenario = async (turn) => {
   }
   await stream(turn, `Answers: ${outcomes.map((o) => `\`${o}\``).join(', ')}.`)
   await sendUsage(turn)
+  return 'end_turn'
+}
+
+// Worded as Claude Code's requests are in Kettu: allowing always names only the safe step.
+const COMMAND_OPTIONS: PermissionOption[] = [
+  { optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' },
+  {
+    optionId: 'allow-always',
+    name: 'Always allow `pnpm dev` in this project',
+    kind: 'allow_always',
+  },
+  { optionId: 'reject-once', name: 'Deny, and say what to do instead', kind: 'reject_once' },
+]
+const EDIT_OPTIONS: PermissionOption[] = [
+  { optionId: 'allow-once', name: 'Allow this edit', kind: 'allow_once' },
+  { optionId: 'allow-always', name: 'Allow all edits in this session', kind: 'allow_always' },
+  { optionId: 'reject-once', name: 'Deny, and say what to do instead', kind: 'reject_once' },
+]
+const DAY_KEY_BEFORE = `export function dayKey(ts: number) {
+  return new Date(ts).toISOString().slice(0, 10)
+}
+`
+const DAY_KEY_AFTER = `export function dayKey(ts: number) {
+  const d = new Date(ts)
+  return format(d, "yyyy-MM-dd")
+}
+`
+
+const approvals: Scenario = async (turn) => {
+  // `/approvals single` asks for one plain command and stops there.
+  const single = turn.text.trim() === 'single'
+  const intro = single
+    ? 'I will run the usage tests to check the fix.\n\n'
+    : 'The cache is stale, so I will clear it and start the dev server.\n\n'
+  if (!(await stream(turn, intro))) return 'cancelled'
+  const commandId = `cmd-${turn.id}`
+  const command = single
+    ? 'pnpm vitest run src/usage'
+    : 'rm -rf node_modules/.vite && pnpm dev --port 5173'
+  await turn.send({
+    sessionUpdate: 'tool_call',
+    toolCallId: commandId,
+    title: `Run ${command}`,
+    kind: 'execute',
+    status: 'pending',
+    rawInput: { command },
+  })
+  const ran = await turn.requestPermission(
+    { toolCallId: commandId, title: `Run ${command}`, kind: 'execute', rawInput: { command } },
+    single
+      ? COMMAND_OPTIONS.map((option) =>
+          option.kind === 'allow_always'
+            ? { ...option, name: 'Always allow `pnpm vitest` in this project' }
+            : option,
+        )
+      : COMMAND_OPTIONS,
+  )
+  if (ran === 'cancelled') return 'cancelled'
+  await runCommand(turn, commandId, command, ran)
+  if (single) {
+    await stream(turn, `Answer: \`${ran}\`.`)
+    return 'end_turn'
+  }
+  const editId = `edit-${turn.id}`
+  const path = filePath(turn, 'src/usage/usage-store.ts')
+  await turn.send({
+    sessionUpdate: 'tool_call',
+    toolCallId: editId,
+    title: 'Edit src/usage/usage-store.ts',
+    kind: 'edit',
+    status: 'pending',
+    locations: [{ path, line: 41 }],
+    content: [{ type: 'diff', path, oldText: DAY_KEY_BEFORE, newText: DAY_KEY_AFTER }],
+  })
+  const edited = await turn.requestPermission(
+    { toolCallId: editId, title: 'Edit src/usage/usage-store.ts', kind: 'edit' },
+    EDIT_OPTIONS,
+  )
+  if (edited === 'cancelled') return 'cancelled'
+  await turn.send({
+    sessionUpdate: 'tool_call_update',
+    toolCallId: editId,
+    status: edited.startsWith('allow') ? 'completed' : 'failed',
+  })
+  await stream(turn, `Answers: \`${ran}\`, \`${edited}\`.`)
   return 'end_turn'
 }
 
@@ -1339,6 +1431,51 @@ const report: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+const content: Scenario = async (turn) => {
+  let n = 0
+  const id = () => `content-${turn.id}-${n++}`
+  const say = (text: string) =>
+    stream(turn, text, { messageId: turn.messageId(), chunks: [text], delayMs: 0 })
+  const command = async (command: string, output: string, failed: boolean) => {
+    const toolCallId = id()
+    await turn.send({
+      sessionUpdate: 'tool_call',
+      toolCallId,
+      title: command,
+      kind: 'execute',
+      status: 'pending',
+      rawInput: { command },
+    })
+    await turn.send({
+      sessionUpdate: 'tool_call_update',
+      toolCallId,
+      status: failed ? 'failed' : 'completed',
+      content: [{ type: 'content', content: { type: 'text', text: '```\n' + output + '```' } }],
+    })
+  }
+  if (!(await say(CONTENT_TEXT))) return 'cancelled'
+  await command('pnpm vitest run src/usage', CONTENT_PASSING, false)
+  await command('pnpm e2e usage', CONTENT_FAILING, true)
+  const path = filePath(turn, 'src/usage/usage-store.ts')
+  await turn.send({
+    sessionUpdate: 'tool_call',
+    toolCallId: id(),
+    title: 'Edit src/usage/usage-store.ts',
+    kind: 'edit',
+    status: 'completed',
+    locations: [{ path }],
+    rawInput: { path },
+    content: [{ type: 'diff', path, oldText: CONTENT_OLD, newText: CONTENT_NEW }],
+  })
+  if (!(await say(CONTENT_BLOCKS))) return 'cancelled'
+  return 'end_turn'
+}
+
+const media: Scenario = async (turn) => {
+  if (!(await stream(turn, MEDIA_REPLY, { messageId: turn.messageId() }))) return 'cancelled'
+  return 'end_turn'
+}
+
 export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   'basic-turn': basicTurn,
   'long-stream': longStream,
@@ -1371,6 +1508,9 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   report,
   tables,
   'open-site': openSite,
+  approvals,
+  content,
+  media,
 }
 
 export const compact: Scenario = async (turn) => {

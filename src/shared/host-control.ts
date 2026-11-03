@@ -20,6 +20,7 @@ export interface BusySession {
   sessionId: string
   agentId: AgentId
   title: string | null
+  turnStartedAt: number | null // when its running turn started, for how long it has run
 }
 
 /** Sessions whose turn is running, and how many of them wait for the user to approve something. */
@@ -81,6 +82,8 @@ export type MainToHost =
       project: string | null
     }
   | { type: 'host:power'; state: 'suspend' | 'resume' }
+  // Allow once, from a request's notification: answered as one of the host's own windows would.
+  | { type: 'host:permission-answer'; sessionId: string; requestId: string; optionId: string }
   // The answer to a host:browser-call, its result or the error that refused it.
   | { type: 'browser-result'; callId: number; result?: unknown; error?: unknown }
   // A browser call now waits for the user to answer a new origin, so its limit grows to that wait.
@@ -118,6 +121,8 @@ export type HostToMain =
       kind: 'permission' | 'turn-ended' | 'error' | 'routine-ended'
       title: string
       body: string
+      // A request the notification may allow once itself, without opening the session.
+      allowOnce?: { requestId: string; optionId: string }
     }
   // An agent's routines paused at a plan limit; it has no session and opens the Routines page.
   | {

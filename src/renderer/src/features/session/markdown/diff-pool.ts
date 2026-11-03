@@ -1,7 +1,13 @@
+import { registerCustomTheme } from '@pierre/diffs'
 import { getOrCreateWorkerPoolSingleton } from '@pierre/diffs/worker'
 import DiffsWorker from '@pierre/diffs/worker/worker.js?worker'
+import { THEME_MODES } from '@shared/themes'
 import { useThemesStore } from '@renderer/stores/themes'
-import { codeThemes } from './code-themes'
+import { codeThemes, KETTU_CODE_THEMES, kettuCodeTheme } from './code-themes'
+
+for (const mode of THEME_MODES) {
+  registerCustomTheme(KETTU_CODE_THEMES[mode], () => Promise.resolve(kettuCodeTheme(mode)))
+}
 
 // One pool for the app's lifetime, shared by diffs and the Files pane's preview: the provider
 // component would terminate it whenever the last diff unmounts, which happens every time a tool

@@ -1,6 +1,6 @@
 import type { TFunction } from 'i18next'
 import type { EnvironmentInfo } from '@shared/agent-host'
-import { longAgo } from '@renderer/lib/format'
+import { mediumAgo } from '@renderer/lib/format'
 
 /** Where the agents' environment was read from, as the line under the agent list says it. */
 export function environmentText(
@@ -14,7 +14,7 @@ export function environmentText(
     return environment.shell && environment.resolvedAt && environment.durationMs
       ? t('agents.environment.loginShell', {
           shell: environment.shell,
-          ago: longAgo(environment.resolvedAt, now),
+          ago: mediumAgo(environment.resolvedAt, now),
           ms: environment.durationMs,
         })
       : t('agents.environment.loginShellPlain')

@@ -10,6 +10,7 @@ import type {
 import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { MediaAuthorization, MediaOpenResult } from './media'
 import type {
+  BranchList,
   ChangedFile,
   CommitDetails,
   FileDiff,
@@ -32,6 +33,7 @@ import type {
   RunPage,
   RoutinesProblem,
 } from './routines'
+import type { AgentColor } from './settings'
 import type { UsageScope, UsageStatus, UsageSummary, UsageTotal } from './usage'
 import type {
   AgentId,
@@ -171,6 +173,7 @@ export interface AgentStatus {
   harnessName: string
   isDefault: boolean
   hidden: boolean // a default agent hidden from the agent menu
+  color?: AgentColor // an added agent's dot on its mark; absent for a harness's default agent
   // Whether Kettu handed this agent's harness an API key; null for a harness that takes none.
   apiKey: { set: boolean; providers: boolean } | null
   state: AgentState
@@ -347,6 +350,7 @@ export interface SessionSummary {
   model: string | null // the model option then, for an estimate of the cache's lifetime
   pinnedAt: number | null // when the user pinned it; a top-level session only
   archivedAt: number | null // when the user archived it; off the sidebar while set
+  acpSessionId: string | null // the harness's own id for it, which its CLI resumes; null until known
   prepared?: PreparedInfo // a prepared session, outside the index until its first message
 }
 
@@ -430,6 +434,8 @@ export interface HostContract {
   'agents.checkUpdates': { params: void; result: AgentStatus[] }
   // Skips the agent's current update in the sidebar's notice, until a newer one.
   'agents.skipUpdate': { params: { agentId: AgentId }; result: void }
+  // Offers the skipped update in the sidebar's notice again.
+  'agents.unskipUpdate': { params: { agentId: AgentId }; result: void }
   // Both resolve once the task is done or cancelled, and reject with its error.
   'agents.update': { params: { agentId: AgentId }; result: void }
   // Updates the user's own program (Claude Code, Codex, OpenCode) the way it was installed.
@@ -602,6 +608,21 @@ export interface HostContract {
     params: { projectPath: string; path: string; oldPath: string | null; ref: string | null }
     result: FileDiff
   }
+  'git.branches': { params: { projectPath: string }; result: BranchList }
+  // Switches to a local branch, or creates it from HEAD and switches to it.
+  'git.switchBranch': {
+    params: { projectPath: string; branch: string; create: boolean }
+    result: GitOperation
+  }
+  // Pushes the branch, which has no upstream yet, to one of the repository's remotes and tracks it.
+  'git.publishBranch': { params: { projectPath: string; remote: string }; result: GitOperation }
+  // Commits the files' working tree changes, paths relative to the repository root, and nothing else.
+  'git.commitChanges': {
+    params: { projectPath: string; message: string; paths: string[] }
+    result: GitOperation
+  }
+  // Puts the files back as HEAD has them; an untracked or added file is removed.
+  'git.discardChanges': { params: { projectPath: string; paths: string[] }; result: GitOperation }
   'git.pullRequest': { params: { url: string }; result: PullRequest }
   // A chip's author; null when GitHub's avatar host has no picture for the login.
   'git.avatarUrl': { params: { login: string }; result: string | null }
@@ -728,6 +749,7 @@ export const HOST_METHODS = [
   'agents.reinstall',
   'agents.checkUpdates',
   'agents.skipUpdate',
+  'agents.unskipUpdate',
   'agents.update',
   'agents.updateCli',
   'agents.setApiKey',
@@ -804,6 +826,11 @@ export const HOST_METHODS = [
   'git.changes',
   'git.incoming',
   'git.fileDiff',
+  'git.branches',
+  'git.switchBranch',
+  'git.publishBranch',
+  'git.commitChanges',
+  'git.discardChanges',
   'git.pullRequest',
   'git.avatarUrl',
   'git.currentPullRequest',

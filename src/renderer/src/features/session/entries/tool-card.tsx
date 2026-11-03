@@ -1,15 +1,16 @@
-import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type Ref } from 'react'
 import {
   ArrowRightLeftIcon,
   BanIcon,
   BrainIcon,
-  CheckIcon,
   ChevronRightIcon,
   CircleIcon,
   CopyIcon,
   FilePenIcon,
   FileTextIcon,
   GlobeIcon,
+  HandIcon,
+  PencilIcon,
   RepeatIcon,
   SearchIcon,
   SquareTerminalIcon,
@@ -19,15 +20,14 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type {
-  PendingPermission,
-  PermissionKind,
-  ToolContent,
-  ToolEntry,
-  ToolKind,
+import {
+  previewsCommand,
+  type PermissionKind,
+  type ToolContent,
+  type ToolEntry,
+  type ToolKind,
 } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
-import { Card } from '@renderer/components/ui/card'
 import {
   Collapsible,
   CollapsibleContent,
@@ -39,10 +39,9 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
-import { Kbd } from '@renderer/components/ui/kbd'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { basename, dirname, relativePath } from '@renderer/lib/format'
+import { basename, dirname } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { cn } from '@renderer/lib/utils'
@@ -52,13 +51,14 @@ import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useWebHostStore } from '@renderer/stores/web-host'
 import { Clamp } from '../clamp'
-import { Diff, Markdown } from '../markdown'
+import { Markdown } from '../markdown'
 import { CarriedImage } from '../media/carried-image'
 import { CarriedMedia } from '../media/carried-media'
 import { EntryIdContext, SessionIdContext } from '../media/grants'
 import { LocalMedia } from '../media/local-media'
 import { toolMedia } from '../media/named'
 import { useEntry, useEntryAnimation } from '../use-thread'
+import { AnswerList, OptionName, WaitingCard, WaitingHeader, WaitingStatus } from './answer-list'
 import {
   answeredBy,
   commandOutput,
@@ -67,6 +67,8 @@ import {
   respondToPermission,
   toolLabel,
 } from './helpers'
+import { DiffBlock } from './diff-block'
+import { ShellBlock } from './shell-block'
 import { useDiffStats } from './use-diff-stats'
 
 const KIND_ICON: Record<ToolKind, LucideIcon> = {
@@ -94,8 +96,6 @@ const ASK_KEY = {
   switch_mode: 'switchMode',
   other: 'other',
 } as const satisfies Record<ToolKind, string>
-
-type PermissionOption = PendingPermission['options'][number]
 
 const ANSWER_KEY = {
   allow_once: 'allowOnce',
@@ -134,7 +134,23 @@ export const ToolCard = memo(function ToolCard({
   }, [permission])
 
   if (!entry) return null
-  const label = toolLabel(entry, projectPath)
+  if (permission) {
+    // Each request gets a card of its own, so an agent's next question in the same entry starts
+    // unanswered rather than inheriting the last one's pending answer.
+    return (
+      <PermissionCard
+        key={permission.requestId}
+        ref={ref}
+        sessionId={sessionId}
+        entry={entry}
+        projectPath={projectPath}
+        agentName={agentName}
+        media={media}
+        className={animation}
+      />
+    )
+  }
+  const label = toolLabel(entry, projectPath, entry.status === 'completed')
   const command = label.kind === 'command' ? label.target : null
   // A command's output shows under it, in the same block, as a terminal prints it.
   const output = command ? commandOutput(entry.content) : null
@@ -142,78 +158,42 @@ export const ToolCard = memo(function ToolCard({
   const hasBody =
     entry.content.length > 0 ||
     media.length > 0 ||
-    !!permission ||
     (!!command && (command.length > 60 || command.includes('\n')))
   const autoOpen =
     hasBody &&
-    (!!permission ||
-      entry.status === 'pending' ||
-      entry.status === 'in_progress' ||
-      entry.status === 'failed')
-  const open = hasBody && (permission ? true : (userOpen ?? autoOpen))
-  const framed = !!permission
+    (entry.status === 'pending' || entry.status === 'in_progress' || entry.status === 'failed')
+  const open = hasBody && (userOpen ?? autoOpen)
 
   const card = (
     <Collapsible
       open={open}
       onOpenChange={(next) => setUserOpen(next)}
-      render={
-        framed ? (
-          <Card
-            ref={ref}
-            variant="tool"
-            role="group"
-            aria-label={t('permission.label')}
-            data-entry-id={entryId}
-            className={cn('animate-attention shadow-attention', animation)}
-          />
-        ) : (
-          <div ref={ref} data-entry-id={entryId} className={cn('min-w-0', animation)} />
-        )
-      }
+      render={<div ref={ref} data-entry-id={entryId} className={cn('min-w-0', animation)} />}
     >
-      <ToolHeader
-        entry={entry}
-        label={label}
-        toggle={hasBody && !permission}
-        open={open}
-        framed={framed}
-      />
+      <ToolHeader entry={entry} label={label} toggle={hasBody} open={open} />
       {hasBody && (
         <CollapsibleContent className={PANEL} keepMounted={false}>
-          <div
-            className={cn(
-              'flex flex-col',
-              framed ? 'border-t border-border-soft p-3' : 'gap-1.5 pt-1.5 pb-0.5 pl-5.5',
+          <div className="flex flex-col gap-1.5 pt-1.5 pb-0.5 pl-5.5">
+            {command && (
+              <ShellBlock
+                sessionId={sessionId}
+                projectPath={projectPath}
+                command={command}
+                output={output}
+                status={entry.status}
+              />
             )}
-          >
-            <div className={cn('flex flex-col', framed && 'gap-2')}>
-              {command && <CommandBlock command={command} output={output} />}
-              {content.map((c, i) => (
-                <ContentBlock
-                  key={i}
-                  sessionId={sessionId}
-                  entryId={entryId}
-                  index={output === null ? i : i + 1}
-                  content={c}
-                  projectPath={projectPath}
-                />
-              ))}
-              {media.length > 0 && (
-                <SessionIdContext value={sessionId}>
-                  <EntryIdContext value={entryId}>
-                    <div className="flex flex-col items-start gap-3 empty:hidden">
-                      {media.map((path) => (
-                        <LocalMedia key={path} path={path} imageHeight={MEDIA_IMAGE_HEIGHT} />
-                      ))}
-                    </div>
-                  </EntryIdContext>
-                </SessionIdContext>
-              )}
-            </div>
-            {permission && (
-              <PermissionPrompt sessionId={sessionId} entry={entry} agentName={agentName} />
-            )}
+            {content.map((c, i) => (
+              <ContentBlock
+                key={i}
+                sessionId={sessionId}
+                entryId={entryId}
+                index={output === null ? i : i + 1}
+                content={c}
+                projectPath={projectPath}
+              />
+            ))}
+            <ToolMedia sessionId={sessionId} entryId={entryId} media={media} />
           </div>
         </CollapsibleContent>
       )}
@@ -245,62 +225,53 @@ function ToolHeader({
   label,
   toggle,
   open,
-  framed,
 }: {
   entry: ToolEntry
   label: ReturnType<typeof toolLabel>
   toggle: boolean
   open: boolean
-  framed: boolean
 }) {
-  const Icon = KIND_ICON[entry.toolKind]
   const stats = useDiffStats(entry.content)
   const content = (
     <>
-      <span className="relative flex size-3.5 shrink-0 items-center justify-center text-icon">
-        <Icon
-          className={cn(
-            'size-3.5 transition-opacity duration-(--duration-fast)',
-            toggle && 'group-hover/tool:opacity-0',
-          )}
-        />
+      {/* A row leads with its disclosure chevron, as the reply's other steps do. */}
+      <span className="flex size-3 shrink-0 items-center justify-center text-tertiary">
         {toggle && (
           <ChevronRightIcon
             aria-hidden
+            strokeWidth={1.75}
             className={cn(
-              'absolute size-3.5 opacity-0 transition-[opacity,rotate] duration-(--duration-fast) group-hover/tool:opacity-100',
+              'size-3 transition-[rotate] duration-(--duration-fast) motion-reduce:transition-none',
               open && 'rotate-90',
             )}
           />
         )}
       </span>
-      <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+      <span className="flex min-w-0 flex-1 items-baseline gap-2">
         {label.verb && <span className="shrink-0 font-medium text-secondary">{label.verb}</span>}
         {label.target && <Target label={label} />}
       </span>
       {stats && (stats.insertions > 0 || stats.deletions > 0) && (
-        <span className="flex shrink-0 animate-in gap-2 tabular animation-duration-(--duration-base) fade-in">
+        <span className="flex shrink-0 animate-in gap-2 font-mono text-xs tabular animation-duration-(--duration-base) fade-in">
           <span className="text-success">+{stats.insertions}</span>
           <span className="text-danger">−{stats.deletions}</span>
         </span>
       )}
-      {!entry.permission && entry.permissionResult && (
-        <PermissionAnswer result={entry.permissionResult} />
+      {entry.permissionResult && (
+        <PermissionAnswer result={entry.permissionResult} question={entry.question !== undefined} />
       )}
       <ToolStatus entry={entry} />
     </>
   )
   // A flat row reaches past the column by its padding, so its icon lines up with the prose.
-  const row = framed
-    ? 'group/tool flex h-card-header w-full min-w-0 items-center gap-2 px-3 text-left text-tertiary outline-none'
-    : 'group/tool -mx-1.5 flex h-6.5 w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-small text-muted-foreground outline-none'
+  const row =
+    'group/tool -mx-1.5 flex h-7 w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-tile px-1.5 text-left text-control text-tertiary outline-none'
   if (!toggle) return <div className={row}>{content}</div>
   return (
     <CollapsibleTrigger
       className={cn(
         row,
-        'cursor-default transition-colors duration-(--duration-fast) focus-ring',
-        framed ? 'rounded-[inherit] hover:bg-hover' : 'hover:bg-hover',
+        'cursor-default transition-colors duration-(--duration-fast) hover:bg-hover focus-ring',
       )}
     >
       {content}
@@ -338,14 +309,6 @@ function Target({ label }: { label: ReturnType<typeof toolLabel> }) {
 
 function ToolStatus({ entry }: { entry: ToolEntry }) {
   const { t } = useTranslation('session')
-  if (entry.permission) {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-1.75 text-xs font-medium text-primary">
-        <span aria-hidden className="size-2 rounded-full bg-attention-dot" />
-        {t('status.needsApproval')}
-      </span>
-    )
-  }
   const icon = 'size-3.5 shrink-0 animate-in fade-in animation-duration-(--duration-fast)'
   switch (entry.status) {
     case 'pending':
@@ -361,15 +324,9 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
       return (
         <Spinner key="running" aria-label={t('status.running')} className={cn(icon, 'text-info')} />
       )
+    // A finished step shows nothing: the past-tense verb says it is done.
     case 'completed':
-      return (
-        <CheckIcon
-          key="done"
-          role="img"
-          aria-label={t('status.done')}
-          className={cn(icon, 'zoom-in-75 text-icon')}
-        />
-      )
+      return null
     case 'failed':
       return (
         <XIcon
@@ -391,33 +348,6 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
   }
 }
 
-/** The command, and what it printed under it once it has run, as a terminal shows them. */
-function CommandBlock({ command, output }: { command: string; output: string | null }) {
-  const { t } = useTranslation('session')
-  const printed = !!output
-  return (
-    <div
-      data-selectable=""
-      className={cn(
-        'flex flex-col rounded-code bg-code-block px-3 font-mono shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
-        printed ? 'py-2.25 text-code' : 'py-2 text-command',
-      )}
-    >
-      <pre className="overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
-        <span className="mr-2 text-tertiary select-none">$</span>
-        {command}
-      </pre>
-      {printed && (
-        <Clamp maxHeight={260} more={t('tool.showAll')} buttonClassName="-mx-1.5">
-          <pre className="overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
-            {output}
-          </pre>
-        </Clamp>
-      )}
-    </div>
-  )
-}
-
 /** The tallest an image shows in a tool call's details. */
 const MEDIA_IMAGE_HEIGHT = 160
 
@@ -427,6 +357,8 @@ function ContentBlock({
   index,
   content,
   projectPath,
+  bleed = false,
+  proposed = false,
 }: {
   sessionId: string
   entryId: string
@@ -434,6 +366,10 @@ function ContentBlock({
   index: number
   content: ToolContent
   projectPath: string
+  /** In a request's card: a diff spans the card's width. */
+  bleed?: boolean
+  /** The call still waits for permission, so a diff in it is not applied yet. */
+  proposed?: boolean
 }) {
   const { t } = useTranslation('session')
   switch (content.type) {
@@ -446,17 +382,9 @@ function ContentBlock({
         </div>
       )
     case 'diff':
-      // Framed like a code block, in a row's details and in a request's card alike.
+      // In the block frame in a row's details; in a request's card it runs edge to edge.
       return (
-        <div className="flex flex-col overflow-hidden rounded-code border border-subtle">
-          <Clamp maxHeight={480} more={t('tool.showFullDiff')} buttonClassName="mx-2 my-1">
-            <Diff
-              path={relativePath(content.path, projectPath)}
-              oldText={content.oldText}
-              newText={content.newText}
-            />
-          </Clamp>
-        </div>
+        <DiffBlock diff={content} projectPath={projectPath} proposed={proposed} bleed={bleed} />
       )
     case 'ref':
       if (content.ref.kind === 'image') {
@@ -493,19 +421,51 @@ function ContentBlock({
   }
 }
 
-/**
- * The agent's sentence and its options, one per line in the agent's order, each with its number.
- * The usual answer is drawn as the primary row and starts highlighted; the arrow keys move the
- * highlight and Enter answers it. Outside a field, the number keys and Enter answer too.
- */
-function PermissionPrompt({
+/** Pictures a tool call made or read, under its details. */
+function ToolMedia({
   sessionId,
-  entry,
-  agentName,
+  entryId,
+  media,
 }: {
   sessionId: string
+  entryId: string
+  media: string[]
+}) {
+  if (media.length === 0) return null
+  return (
+    <SessionIdContext value={sessionId}>
+      <EntryIdContext value={entryId}>
+        <div className="flex flex-col items-start gap-3 empty:hidden">
+          {media.map((path) => (
+            <LocalMedia key={path} path={path} imageHeight={MEDIA_IMAGE_HEIGHT} />
+          ))}
+        </div>
+      </EntryIdContext>
+    </SessionIdContext>
+  )
+}
+
+/**
+ * A request waiting for the user: what the call would do, then its options, one per line in the
+ * agent's order, each with its number. A question shows the agent's words and its answers, the
+ * last of which lets the user answer in the composer instead.
+ */
+function PermissionCard({
+  ref,
+  sessionId,
+  entry,
+  projectPath,
+  agentName,
+  media,
+  className,
+}: {
+  ref: Ref<HTMLDivElement>
+  sessionId: string
   entry: ToolEntry
+  projectPath: string
   agentName: string
+  media: string[]
+  className?: string
 }) {
   const { t } = useTranslation(['session', 'routines'])
   const routine = useSessionsStore((s) => s.byId[sessionId]?.routine ?? null)
@@ -517,21 +477,33 @@ function PermissionPrompt({
   const other = useOtherHost(hostId)
   const away = isAway(other?.connection ?? null)
   const served = useWebHostStore((s) => s.host?.name ?? null)
-  const permission = entry.permission!
-  const primary = primaryOption(permission.options)
-  const [highlight, setHighlight] = useState(primary)
   const [answering, setAnswering] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const list = useRef<HTMLDivElement>(null)
+  const permission = entry.permission!
+  const question = entry.question
+  const label = toolLabel(entry, projectPath)
+  const command = label.kind === 'command' ? label.target : null
+  const Icon =
+    question !== undefined
+      ? HandIcon
+      : entry.toolKind === 'edit'
+        ? PencilIcon
+        : KIND_ICON[entry.toolKind]
 
-  const respond = async (option: PermissionOption) => {
-    // An answer from the card's own rows would leave the focus on nothing once the card goes.
+  const respond = async (index: number) => {
+    const option = permission.options[index]
+    if (!option) return
+    // An answer from the card's own rows would leave the focus on nothing once the card goes;
+    // a denial or Something else goes on in the composer, where the user says what instead.
     const focused = !!list.current?.contains(document.activeElement)
     setAnswering(option.id)
     setError(null)
     try {
       await respondToPermission(sessionId, permission.requestId, option.id)
-      if (focused) emitAppEvent({ kind: 'focus-composer' })
+      if (focused || option.kind === 'reject_once' || option.kind === 'reject_always') {
+        emitAppEvent({ kind: 'focus-composer' })
+      }
     } catch (e) {
       const by = answeredBy(e)
       if (by !== undefined) {
@@ -551,101 +523,129 @@ function PermissionPrompt({
     }
   }
 
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button'))
-    const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
-    if (at < 0) return
-    const last = buttons.length - 1
-    const next =
-      event.key === 'ArrowDown' || event.key === 'ArrowRight'
-        ? at === last
-          ? 0
-          : at + 1
-        : event.key === 'ArrowUp' || event.key === 'ArrowLeft'
-          ? at === 0
-            ? last
-            : at - 1
-          : event.key === 'Home'
-            ? 0
-            : event.key === 'End'
-              ? last
-              : null
-    if (next === null) return
-    event.preventDefault()
-    buttons[next]?.focus()
-  }
-
   return (
-    <div className="flex flex-col">
-      <p className="mx-0.5 my-2.5 text-ui text-secondary">
-        {t(`permission.ask.${ASK_KEY[entry.toolKind]}`, { agent: agentName })}
-      </p>
+    <WaitingCard
+      ref={ref}
+      entryId={entry.id}
+      label={question !== undefined ? t('question.label') : t('permission.label')}
+      description={
+        question !== undefined
+          ? t('question.ask', { agent: agentName })
+          : t(`permission.ask.${ASK_KEY[entry.toolKind]}`, { agent: agentName })
+      }
+      className={className}
+    >
+      <WaitingHeader>
+        <Icon aria-hidden className="size-3.75 shrink-0" />
+        {question !== undefined ? (
+          <span className="min-w-0 flex-1 truncate text-ui font-medium text-secondary">
+            {t('question.label')}
+          </span>
+        ) : label.verb ? (
+          <span className="flex min-w-0 flex-1 items-baseline gap-2">
+            <span className="shrink-0 text-ui font-medium text-secondary">{label.verb}</span>
+            {label.target && <Target label={label} />}
+          </span>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-ui font-medium text-secondary">
+            {label.target}
+          </span>
+        )}
+        <WaitingStatus>
+          {question !== undefined ? t('question.asksYou') : t('permission.needsYou')}
+        </WaitingStatus>
+      </WaitingHeader>
+      {question !== undefined && (
+        <p data-selectable="" className="px-3.5 pt-3 pb-1 text-row leading-normal text-foreground">
+          {question}
+        </p>
+      )}
+      {command && previewsCommand(command) && (
+        <pre
+          data-selectable=""
+          className="border-b border-border-soft bg-code-block px-3.5 py-2.5 font-mono text-command leading-relaxed whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]"
+        >
+          {command}
+        </pre>
+      )}
+      {entry.content.map((content, i) =>
+        content.type === 'diff' ? (
+          <ContentBlock
+            key={i}
+            sessionId={sessionId}
+            entryId={entry.id}
+            index={i}
+            content={content}
+            projectPath={projectPath}
+            bleed
+            proposed
+          />
+        ) : (
+          <div key={i} className="border-b border-border-soft px-3.5 py-2.5">
+            <ContentBlock
+              sessionId={sessionId}
+              entryId={entry.id}
+              index={i}
+              content={content}
+              projectPath={projectPath}
+            />
+          </div>
+        ),
+      )}
+      {media.length > 0 && (
+        <div className="border-b border-border-soft px-3.5 py-2.5">
+          <ToolMedia sessionId={sessionId} entryId={entry.id} media={media} />
+        </div>
+      )}
       {level && (
-        <p className="mx-0.5 -mt-1 mb-2.5 text-xs text-tertiary">
+        <p className="px-3.5 pt-2.5 text-xs text-tertiary">
           {t('permission.outsideScope', {
             level: t(`routines:permission.level.${level}.name`),
           })}
         </p>
       )}
-      <div
+      <AnswerList
         ref={list}
-        role="group"
-        aria-label={t('permission.answerGroup')}
-        className="-mx-1.5 mt-0.5 -mb-1 flex flex-col gap-px"
-        onKeyDown={onKeyDown}
-      >
-        {permission.options.map((option, i) => (
-          <button
-            key={option.id}
-            type="button"
-            disabled={answering !== null || away}
-            data-permission-option={i + 1}
-            data-highlighted={i === highlight ? '' : undefined}
-            aria-keyshortcuts={i < 4 ? String(i + 1) : undefined}
-            onPointerEnter={() => setHighlight(i)}
-            onFocus={() => setHighlight(i)}
-            onClick={() => void respond(option)}
-            className="flex h-8.5 w-full min-w-0 cursor-default items-center gap-2.5 rounded-lg pr-2.5 pl-2 text-left text-ui text-foreground outline-none transition-colors duration-(--duration-fast) focus-ring disabled:opacity-60 data-highlighted:bg-selected"
-          >
-            {answering === option.id ? (
-              <span className="flex size-5 shrink-0 items-center justify-center">
-                <Spinner className="size-3.5" />
-              </span>
-            ) : i < 4 ? (
-              <Kbd aria-hidden variant={i === primary ? 'primary' : 'default'}>
-                {i + 1}
-              </Kbd>
-            ) : (
-              <span aria-hidden className="size-5 shrink-0" />
-            )}
-            <span className="min-w-0 flex-1 truncate">{option.name}</span>
-            {i === highlight && answering === null && !away && (
-              <span aria-hidden className="shrink-0 text-tertiary">
-                ↵
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-      {error && <p className="mx-0.5 mt-2 text-xs text-danger">{error}</p>}
-    </div>
+        label={t('permission.answerGroup')}
+        answers={permission.options.map((option) => ({
+          key: option.id,
+          label: <OptionName name={option.name} />,
+          ...(option.description ? { description: option.description } : {}),
+        }))}
+        primary={primaryOption(permission.options)}
+        answering={answering}
+        disabled={away}
+        onAnswer={(index) => void respond(index)}
+      />
+      {error && <p className="mx-3.5 mb-2.5 text-xs text-danger">{error}</p>}
+    </WaitingCard>
   )
 }
 
-function PermissionAnswer({ result }: { result: NonNullable<ToolEntry['permissionResult']> }) {
+function PermissionAnswer({
+  result,
+  question,
+}: {
+  result: NonNullable<ToolEntry['permissionResult']>
+  question: boolean
+}) {
   const { t } = useTranslation('session')
   const answer =
     result === 'cancelled'
       ? t('permission.answer.cancelled')
       : result === 'withdrawn'
         ? t('permission.answer.withdrawn')
-        : result.by === 'routine'
-          ? t('permission.answer.allowedByRoutine')
-          : t(`permission.answer.${ANSWER_KEY[result.kind]}`)
+        : result.name
+          ? result.name
+          : question && result.kind === 'reject_once'
+            ? t('question.answeredOther')
+            : result.by === 'routine'
+              ? t('permission.answer.allowedByRoutine')
+              : t(`permission.answer.${ANSWER_KEY[result.kind]}`)
   const device = typeof result === 'object' ? result.device : undefined
   const text = device ? t('permission.answer.onDevice', { answer, device: device.name }) : answer
   return (
-    <span className="shrink-0 animate-in text-xs text-tertiary animation-duration-(--duration-base) fade-in">
+    <span className="min-w-0 shrink animate-in truncate text-xs text-tertiary animation-duration-(--duration-base) fade-in">
       {text}
     </span>
   )

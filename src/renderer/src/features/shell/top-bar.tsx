@@ -2,9 +2,10 @@ import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { PanelLeftIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
-import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { BackForward } from '@renderer/features/shell/back-forward'
+import { HistoryDialog } from '@renderer/features/shell/history-dialog'
+import { TITLE_BUTTON } from '@renderer/features/shell/title-button'
 import { useNotices } from '@renderer/features/sidebar/notices'
 import { formatShortcut, hasBand } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -12,8 +13,8 @@ import { toggleSidebar, useViewStore } from '@renderer/stores/view'
 
 /**
  * The top bar of the main area, at the top of its sheet: the window's drag region. On macOS with
- * the sidebar collapsed it leaves room for the traffic lights and carries the sidebar toggle with
- * Back and Forward, which on Windows and Linux sit in the band above the sheets instead.
+ * the sidebar collapsed it leaves room for the traffic lights and carries Back, Forward and the
+ * sidebar toggle, which on Windows and Linux sit in the band above the sheets instead.
  */
 export function TopBar({
   children,
@@ -30,12 +31,12 @@ export function TopBar({
   return (
     <header
       className={cn(
-        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 bg-app pr-3 pl-4',
-        cornered && 'pl-[calc(36px+var(--traffic-lights))]',
+        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 bg-app pr-3 pl-4.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
+        cornered && 'pl-(--corner-inset)',
         className,
       )}
     >
-      {cornered && <CornerControls className="-ml-1" />}
+      {cornered && <CornerControls divided={children != null} className="-ml-0.5" />}
       {children}
     </header>
   )
@@ -43,25 +44,66 @@ export function TopBar({
 
 /**
  * Windows and Linux: the band across the top of the main area, beside the window controls.
- * It drags the window and, while the sidebar is collapsed, holds the sidebar toggle with Back and
- * Forward.
+ * It drags the window and, while the sidebar is collapsed, holds Back, Forward and the sidebar
+ * toggle.
  */
 export function TitleBand() {
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
   if (!hasBand) return null
   return (
-    <div className="app-region-drag absolute inset-x-0 top-0 flex h-(--title-bar) items-center pl-2">
+    <div className="app-region-drag absolute inset-x-0 top-0 flex h-(--title-bar) items-center pl-(--sheet-gap)">
       {collapsed && <CornerControls />}
     </div>
   )
 }
 
-/** Where the collapsed sidebar's toggle shows: the toggle, then Back and Forward. */
-export function CornerControls({ className }: { className?: string }) {
+/**
+ * The sidebar's top row: room for the traffic lights, the drag region, then Back, Forward and the
+ * toggle at its end. It holds the whole history's dialog, since the sidebar stays mounted.
+ */
+export function SidebarTitleBar() {
   return (
-    <div className={cn('flex items-center gap-0.5', className)}>
-      <SidebarToggle />
+    // On macOS 56 px, its buttons centred on the traffic lights, which main puts level with the
+    // top bar's centre; elsewhere in the band.
+    <div
+      className={cn(
+        'app-region-drag flex shrink-0 items-center gap-0.5 pr-2 pl-4.5',
+        hasBand ? 'h-(--title-bar)' : 'h-14 pt-2',
+      )}
+    >
+      {!hasBand && <span aria-hidden className="w-(--traffic-lights)" />}
+      {/* The window's drag region. */}
+      <span className="flex-1" />
       <BackForward />
+      <SidebarToggle />
+      <HistoryDialog />
+    </div>
+  )
+}
+
+/**
+ * Back, Forward and the toggle where the collapsed sidebar's row would have them, in the same
+ * order; `divided` sets them off with a line from what follows in the bar.
+ */
+export function CornerControls({
+  className,
+  divided = false,
+}: {
+  className?: string
+  divided?: boolean
+}) {
+  return (
+    <div
+      className={cn(
+        'flex shrink-0 items-center gap-0.5',
+        // No line before the bar's spacer, as on New session, where nothing follows on the left.
+        divided &&
+          'mr-1.5 pr-2.5 shadow-[inset_calc(-1*var(--hairline))_0_0_var(--border-subtle)] [&:has(+_.flex-1)]:shadow-none',
+        className,
+      )}
+    >
+      <BackForward />
+      <SidebarToggle />
     </div>
   )
 }
@@ -109,11 +151,11 @@ export function SidebarToggle({ className }: { className?: string }) {
             aria-label={label}
             aria-description={notices?.name}
             onClick={toggleSidebar}
-            className={cn('app-region-no-drag relative text-secondary', className)}
+            className={cn(TITLE_BUTTON, 'relative', className)}
           />
         }
       >
-        <PanelLeftIcon />
+        <PanelLeftIcon className="size-4.5" />
         {notices && (
           <span
             aria-hidden
@@ -121,13 +163,10 @@ export function SidebarToggle({ className }: { className?: string }) {
           />
         )}
       </TooltipTrigger>
-      {/* Notice lines end in text, not the keycap, so they keep the full end padding. */}
-      <TooltipContent
-        className={notices ? 'flex-col items-start gap-0.5 has-data-[slot=kbd]:pr-3' : undefined}
-      >
-        <span className="inline-flex items-center gap-1.5">
-          {label}
-          <Kbd>{formatShortcut('Mod+B')}</Kbd>
+      {/* As Back's and Forward's beside it: the keys as plain text after the label. */}
+      <TooltipContent className={cn('px-2.25 py-1.5', notices && 'flex-col items-start gap-0.5')}>
+        <span>
+          {label} <span className="opacity-60">{formatShortcut('Mod+B')}</span>
         </span>
         {notices?.labels.map((notice) => (
           <span key={notice} className="opacity-60">
