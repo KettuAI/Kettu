@@ -1,12 +1,6 @@
-import {
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type PointerEvent,
-  type ReactNode,
-} from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
+import { useSegmentThumb, type SegmentBox } from '@renderer/hooks/use-segment-thumb'
 import { cn } from '@renderer/lib/utils'
 
 export interface Segment<T extends string> {
@@ -15,21 +9,44 @@ export interface Segment<T extends string> {
   label: ReactNode | ((active: boolean) => ReactNode)
 }
 
-interface Box {
-  x: number
-  width: number
+/** The raised thumb under the chosen segment, sliding by `translate` from one to the next. */
+export function SegmentThumb({
+  box,
+  placed,
+  pressed,
+  className,
+  children,
+}: {
+  box: SegmentBox | null
+  placed: boolean
+  pressed: boolean
+  className?: string
+  children?: ReactNode
+}) {
+  if (!box) return null
+  // Its width changes only between segments of different widths, and containment keeps that
+  // layout to itself.
+  return (
+    <span
+      aria-hidden
+      data-slot="segmented-thumb"
+      className={cn(
+        'pointer-events-none absolute inset-y-0.5 left-0 overflow-hidden rounded-segment bg-segment-thumb shadow-segment contain-strict',
+        placed &&
+          'transition-[translate,width,scale,box-shadow] duration-(--duration-base) ease-standard motion-reduce:transition-none',
+        pressed && 'scale-97',
+        className,
+      )}
+      style={{ width: box.width, translate: `${box.x}px 0` } satisfies CSSProperties}
+    >
+      {children}
+    </span>
+  )
 }
-
-const segmentsOf = (group: HTMLElement): HTMLElement[] => [
-  ...group.querySelectorAll<HTMLElement>(':scope > [data-slot=toggle-group-item]'),
-]
 
 /**
  * Segments on a recessed track, each as wide as its label and sharing any room left, with one
- * thumb that slides to the chosen segment. Pressing and dragging moves the thumb segment by
- * segment, and the segment under the pointer is chosen on release. The thumb is placed from the
- * segments' measured boxes and moves by `translate`; its width changes only between segments of
- * different widths, and its containment keeps that layout to itself.
+ * thumb that slides to the chosen segment and follows a press dragged across them.
  */
 export function SegmentedControl<T extends string>({
   value,
@@ -57,78 +74,13 @@ export function SegmentedControl<T extends string>({
   'aria-label'?: string
   'aria-labelledby'?: string
 }) {
-  const group = useRef<HTMLDivElement>(null)
-  // The segment under the pointer while it is pressed.
-  const [pressed, setPressed] = useState<number | null>(null)
-  const [box, setBox] = useState<Box | null>(null)
-  // The first placement is not animated, so the thumb never slides in from the track's edge.
-  const [placed, setPlaced] = useState(false)
   const index = segments.findIndex((s) => s.value === value)
-  const active = pressed ?? index
-
-  useLayoutEffect(() => {
-    const el = group.current
-    if (!el) return
-    const measure = () => {
-      const item = segmentsOf(el)[active]
-      if (!item) return setBox(null)
-      // offsetLeft and offsetWidth round to whole pixels, and rects carry the transforms of
-      // ancestors such as a menu zooming in, so rects are scaled back to the group's layout width.
-      const group = el.getBoundingClientRect()
-      const rect = item.getBoundingClientRect()
-      const scale = group.width / parseFloat(getComputedStyle(el).width) || 1
-      const x = (rect.left - group.left) / scale - el.clientLeft
-      const width = rect.width / scale
-      setBox((b) =>
-        b && Math.abs(b.x - x) < 0.01 && Math.abs(b.width - width) < 0.01 ? b : { x, width },
-      )
-    }
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
-    for (const item of segmentsOf(el)) observer.observe(item)
-    return () => observer.disconnect()
-  }, [active, segments.length])
-
-  useLayoutEffect(() => {
-    if (!box || placed) return
-    const frame = requestAnimationFrame(() => setPlaced(true))
-    return () => cancelAnimationFrame(frame)
-  }, [box, placed])
-
-  const segmentAt = (clientX: number): number => {
-    const items = group.current ? segmentsOf(group.current) : []
-    let nearest = Math.max(0, index)
-    let distance = Infinity
-    items.forEach((item, i) => {
-      const r = item.getBoundingClientRect()
-      const d = clientX < r.left ? r.left - clientX : clientX > r.right ? clientX - r.right : 0
-      if (d < distance) {
-        distance = d
-        nearest = i
-      }
-    })
-    return nearest
-  }
-
-  // With the pointer captured, the click lands on the group rather than a segment, so the pointer
-  // handlers alone choose; the keyboard still goes through the toggle group.
-  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return
-    event.currentTarget.setPointerCapture(event.pointerId)
-    setPressed(segmentAt(event.clientX))
-  }
-  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (pressed === null) return
-    const at = segmentAt(event.clientX)
-    if (at !== pressed) setPressed(at)
-  }
-  const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
-    if (pressed === null) return
-    setPressed(null)
-    const picked = segments[segmentAt(event.clientX)]
-    if (picked.value !== value) onChange(picked.value)
-  }
+  const {
+    group,
+    active,
+    handlers,
+    thumb: place,
+  } = useSegmentThumb(index, segments.length, (at) => onChange(segments[at].value))
 
   return (
     <ToggleGroup
@@ -141,10 +93,7 @@ export function SegmentedControl<T extends string>({
         const picked = segments.find((s) => s.value === next[0])
         if (picked && picked.value !== value) onChange(picked.value)
       }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={() => setPressed(null)}
+      {...handlers}
       className={cn(
         'relative',
         size === 'small' &&
@@ -152,23 +101,15 @@ export function SegmentedControl<T extends string>({
         className,
       )}
     >
-      {box && active >= 0 && (
-        <span
-          aria-hidden
-          data-slot="segmented-thumb"
-          className={cn(
-            'pointer-events-none absolute inset-y-0.5 left-0 overflow-hidden rounded-segment bg-segment-thumb shadow-segment contain-strict',
-            placed &&
-              'transition-[translate,width,scale,box-shadow] duration-(--duration-base) ease-standard motion-reduce:transition-none',
-            pressed !== null && 'scale-97',
-            size === 'small' && 'rounded-md',
-            thumbClassName?.(segments[active].value),
-          )}
-          style={{ width: box.width, translate: `${box.x}px 0` } satisfies CSSProperties}
-        >
-          {thumb}
-        </span>
-      )}
+      <SegmentThumb
+        {...place}
+        className={cn(
+          size === 'small' && 'rounded-md',
+          active >= 0 && thumbClassName?.(segments[active].value),
+        )}
+      >
+        {thumb}
+      </SegmentThumb>
       {segments.map((s, i) => (
         <ToggleGroupItem
           key={s.value}

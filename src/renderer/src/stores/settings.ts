@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { DEFAULT_SETTINGS, type SettingsFile, type SettingsPatch } from '@shared/settings'
+import { showColorMode } from '@renderer/lib/color-mode'
 import { applyLanguage } from '@renderer/lib/i18n'
 
 export interface SettingsStore {
@@ -19,11 +20,11 @@ export const useSettingsStore = create<SettingsStore>()(() => ({
 
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)')
 
-function applyAppearance(settings: SettingsFile): void {
+function applyAppearance(settings: SettingsFile, fade = false): void {
   const root = document.documentElement
   const { theme, textSize, reduceMotion, zoom } = settings.appearance
   const dark = theme === 'dark' || (theme === 'system' && darkQuery.matches)
-  root.dataset.theme = dark ? 'dark' : 'light'
+  showColorMode(dark ? 'dark' : 'light', fade)
   root.dataset.textSize = textSize
   root.dataset.reduceMotion = reduceMotion
   root.style.setProperty('--zoom', String(zoom))
@@ -35,9 +36,15 @@ function applyAppearance(settings: SettingsFile): void {
  */
 export async function initSettings(): Promise<void> {
   applyAppearance(DEFAULT_SETTINGS)
-  darkQuery.addEventListener('change', () => applyAppearance(useSettingsStore.getState().settings))
+  darkQuery.addEventListener('change', () => {
+    const { settings, loaded } = useSettingsStore.getState()
+    applyAppearance(settings, loaded)
+  })
   useSettingsStore.subscribe((state, previous) => {
-    if (state.settings.appearance !== previous.settings.appearance) applyAppearance(state.settings)
+    // The settings read at launch replace the defaults at once; later changes fade.
+    if (state.settings.appearance !== previous.settings.appearance) {
+      applyAppearance(state.settings, previous.loaded)
+    }
     if (state.settings.general.language !== previous.settings.general.language) {
       applyLanguage(state.settings.general.language)
     }

@@ -857,6 +857,20 @@
   }
 }
 
+/* Another color mode (lib/color-mode.ts): every color changes in the same frame, so elements' own
+   transitions wait, except a segmented control's thumb, still sliding to the mode just picked.
+   The window cross-fades from the old colors; with reduced motion too, as opacity remains. */
+:root[data-switching-theme] :not([data-slot='segmented-thumb']),
+:root[data-switching-theme] ::before,
+:root[data-switching-theme] ::after {
+  transition: none !important;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--duration-slow);
+  animation-timing-function: var(--ease-standard);
+}
+
 /* A sidebar toggle in the workbench (app.tsx); resizing by drag follows the pointer at once. The
    sidebar's panel cuts off the content held against its right edge, and the main panel's frame
    cuts its sheets. */
