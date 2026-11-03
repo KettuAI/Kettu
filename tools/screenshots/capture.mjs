@@ -328,11 +328,20 @@ async function run() {
   )
   // The reply's link asks first, in a dialog centred over the pane. A tooltip in the pane's header
   // would not do: below a title bar it opens above its button, clear of the page.
-  await click(byText('p a', 'Node.js timers guide'), 'the link in the reply')
-  await waitFor(
-    `Boolean(document.querySelector('[data-browser-panel] img[aria-hidden]'))`,
-    'the still of the page',
-  )
+  // A page that has not painted yet gives no still, so the dialog is opened again until it does.
+  const stillShown = `Boolean(document.querySelector('[data-browser-panel] img[aria-hidden]'))`
+  for (let attempt = 1; ; attempt++) {
+    await click(byText('p a', 'Node.js timers guide'), 'the link in the reply')
+    const shown = await waitFor(stillShown, 'the still of the page', 5000).then(
+      () => true,
+      () => false,
+    )
+    if (shown) break
+    if (attempt === 3) throw new Error('Timed out waiting for the still of the page')
+    await press('Escape', 27)
+    await waitFor(`!document.querySelector('[role=dialog]')`, 'the link dialog to close')
+    await sleep(500)
+  }
   await sleep(500)
   await shoot('browser-overlay')
   // The same still without the dialog that asked for it.
@@ -716,12 +725,17 @@ async function run() {
   await sleep(600)
   await shoot('routines')
 
-  // The account menu over the footer, then the shortcuts dialog from it; Esc puts it away.
+  // The account menu over the footer, then the shortcuts dialog from its Help submenu.
   await click(`return document.querySelector('[data-account-trigger]')`, 'the account row')
   await waitFor(`document.querySelector('[role=menu]')`, 'the account menu')
   await moveAway()
   await sleep(400)
   await shoot('account-menu')
+  await click(byText('[role=menuitem]', 'Help'), 'the Help submenu')
+  await waitFor(
+    `[...document.querySelectorAll('[role=menuitem]')].some((el) => el.textContent.includes('Keyboard shortcuts'))`,
+    'Keyboard shortcuts in the Help submenu',
+  )
   await click(byText('[role=menuitem]', 'Keyboard shortcuts'), 'Keyboard shortcuts')
   await waitFor(`document.querySelector('[role=dialog]')`, 'the shortcuts dialog')
   await sleep(600)
@@ -780,37 +794,6 @@ async function run() {
   )
   await sleep(600)
   await shoot('settings-agent')
-
-  // Both again with Hide accounts on, the agent's account behind its mask; then off again.
-  const agents = `return [...document.querySelectorAll('nav button, aside button')].find((b) => b.textContent.trim() === 'Agents')`
-  const settingsButton = (label) =>
-    `return [...document.querySelectorAll('[role=dialog] button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`
-  await click(agents, 'Settings › Agents')
-  await click(settingsButton('Hide accounts'), 'Hide accounts')
-  // The list names plans, not accounts, so only its button says they are hidden.
-  await waitFor(settingsButton('Show accounts').slice('return '.length), 'Show accounts')
-  await sleep(600)
-  await shoot('settings-agents-hidden')
-  await click(
-    `return document.querySelector('button[aria-label="Fake agent"]')`,
-    'the fake agent row',
-  )
-  await waitFor(
-    `[...document.querySelectorAll('[role=dialog] h2')].some((h) => h.textContent.includes('Fake agent'))`,
-    'the fake agent page',
-  )
-  await waitFor(
-    `document.querySelector('[role=dialog] [data-slot=masked]')`,
-    "the agent's masked email",
-  )
-  await sleep(600)
-  await shoot('settings-agent-hidden')
-  await click(agents, 'Settings › Agents')
-  await click(settingsButton('Show accounts'), 'Show accounts')
-  await waitFor(
-    `!document.querySelector('[role=dialog] [data-slot=masked]')`,
-    'the accounts shown again',
-  )
 
   // Kettu's own MCP server, opened from its row in MCP servers.
   await click(
@@ -899,7 +882,8 @@ async function run() {
   await fake('logout')
   await footerScreens({ suffix: '', close: 'Close', agents: 'Agents' })
   await cdp.evaluate(`window.kettu.settings.update({ general: { language: 'zh-CN' } })`)
-  // A reload brings back the closed "Updated to" card, which is closed for the page only.
+  // A reload counts as a later window, which skips "Updated to"; forget the record to show it.
+  await cdp.evaluate(`localStorage.removeItem('updates.updatedNotice')`)
   await cdp.send('Page.reload')
   cdp.close()
   await sleep(1500)
