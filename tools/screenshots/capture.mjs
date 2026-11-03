@@ -14,6 +14,7 @@ import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { connect, launchApp, makeProject, openProject, stopApp } from '../launch.mjs'
+import { checkProjectMenu } from './project-menu.mjs'
 
 const args = process.argv.slice(2)
 const valueOf = (flag) => {
@@ -477,6 +478,12 @@ async function run() {
   await shoot('context-menu')
   await press('Escape', 27)
   await sleep(300)
+
+  for (const theme of ['light', 'dark']) {
+    await cdp.evaluate(`document.documentElement.dataset.theme = '${theme}'`)
+    await checkProjectMenu(cdp, 'demo-project')
+  }
+  await cdp.evaluate(`document.documentElement.dataset.theme = 'light'`)
 
   // The project row's menu, then the sessions the fake agent already has for the folder.
   await click(
