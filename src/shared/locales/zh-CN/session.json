@@ -195,10 +195,24 @@
   },
   "replyFooter": {
     "copyReply": "复制回复",
-    "fork": "分叉为新会话",
+    "fork": "从这里分叉",
     "forking": "正在分叉…",
     "forkBetweenTurns": "仅在两轮对话之间可分叉",
     "forkNotReady": "会话就绪后才能分叉"
+  },
+  "worked": {
+    "for": "工作了 {{duration}}",
+    "untimed": "工作过程",
+    "read_other": "读了 {{count}} 个文件",
+    "edited_other": "改了 {{count}} 个文件",
+    "editedAfter": "改了 {{count}} 个",
+    "both": "{{read}}，{{edited}}"
+  },
+  "changes": {
+    "label": "改动",
+    "files_other": "{{count}} 个文件有改动",
+    "review": "查看",
+    "commit": "提交并创建 PR"
   },
   "queue": {
     "label": "排队中的消息：{{count}} 条",

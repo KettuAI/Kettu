@@ -112,7 +112,8 @@ export function LinkConfirm({
         className="gap-0 p-0 data-[size=default]:sm:max-w-105"
       >
         <AlertDialogTitle className="px-5.5 pt-5">{t('link.title')}</AlertDialogTitle>
-        <div className="px-5.5 pt-3.5">
+        {/* Without min-w-0 a long path's nowrap width would widen the dialog's grid column. */}
+        <div className="min-w-0 px-5.5 pt-3.5">
           <div className="flex items-start gap-3 rounded-xl bg-subtle py-3 pr-2.5 pl-3">
             <SiteIcon url={url} />
             <div dir="ltr" className="min-w-0 flex-1" data-selectable="">

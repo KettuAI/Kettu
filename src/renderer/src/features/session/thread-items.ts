@@ -111,21 +111,49 @@ export type Item =
   | { key: string; type: 'group'; ids: string[] }
   // The work between messages, two or more steps or a lone tool call, folded into one line.
   | { key: string; type: 'run'; ids: string[]; signature: string }
-  // The actions under a turn's reply, with its turn-end marker when it has one.
-  | { key: string; type: 'reply'; agentIds: string[]; endId: string | null; latest: boolean }
+  // The actions under a turn's reply, with its turn-end marker when it has one, and the turn's
+  // tool calls, whose edits it lists.
+  | {
+      key: string
+      type: 'reply'
+      agentIds: string[]
+      endId: string | null
+      latest: boolean
+      toolIds: string[]
+    }
+  // A finished turn's work before its answer, folded into one row unless it is open.
+  | {
+      key: string
+      type: 'worked'
+      toolIds: string[]
+      endId: string | null
+      open: boolean
+    }
   // The running turn's status, where the reply will start: right after a message you sent.
   | { key: string; type: 'status'; afterSent: boolean }
 
 /**
  * The thread's items. Work folds as it happens, so a running turn already reads as it will once it
  * ends. With `live`, a turn is running and gets its reply footer only when it ends. With `notes`,
- * the agent's messages that more work follows are progress notes and show between the runs.
+ * the agent's messages that more work follows are progress notes and show between the runs. With
+ * `open`, each finished turn's work before its answer folds into one row, which shows the work
+ * when its key is in `open`.
  */
-export function buildItems(order: string[], shape: string, live = false, notes = false): Item[] {
+export function buildItems(
+  order: string[],
+  shape: string,
+  live = false,
+  notes = false,
+  open: ReadonlySet<string> | null = null,
+): Item[] {
   const signature = notes ? markNotes(shape) : shape
   const items: Item[] = []
   const { replacing, after } = replyFooters(order, signature, live)
+  const { rows, hidden } = open ? turnFolds(order, signature, live, open) : NO_FOLDS
   for (let i = 0; i < order.length; i++) {
+    const row = rows.get(i)
+    if (row) items.push(row)
+    if (hidden.has(i)) continue
     const footer = replacing.get(i)
     if (footer) {
       items.push(footer)
@@ -179,13 +207,76 @@ export function buildItems(order: string[], shape: string, live = false, notes =
   return items
 }
 
+/** A tool call's character in the signature. */
+const isTool = (char: string | undefined): boolean => char === 'g' || char === 't' || char === 'w'
+
+/** The turns starting at each user message: [start, end) indexes into the signature. */
+function turnsOf(signature: string): [number, number][] {
+  const starts = [0]
+  for (let i = 1; i < signature.length; i++) if (signature[i] === 'u') starts.push(i)
+  return starts.map((start, n) => [start, starts[n + 1] ?? signature.length])
+}
+
+type Folds = { rows: Map<number, Item>; hidden: Set<number> }
+
+const NO_FOLDS: Folds = { rows: new Map(), hidden: new Set() }
+
+/**
+ * What a finished turn's row folds: its work, thoughts and the agent's messages. A message you
+ * steered in, a card, a notice or anything else of its own stays in view, which also keeps every
+ * message the outline jumps to out of a fold.
+ */
+const foldsIntoTurn = (char: string | undefined): boolean =>
+  char !== undefined && char !== 'o' && char !== 's' && char !== 'u'
+
+/**
+ * Each finished turn's folded row, by the index it goes before, and the indexes it hides while
+ * closed: what folds between the user message and the answer, the turn's last run of messages;
+ * the rest shows under the row. A turn with nothing to fold, or no answer, has no row; the
+ * running turn shows as it is.
+ */
+function turnFolds(
+  order: string[],
+  signature: string,
+  live: boolean,
+  open: ReadonlySet<string>,
+): Folds {
+  const folds: Folds = { rows: new Map(), hidden: new Set() }
+  for (const [start, end] of turnsOf(signature)) {
+    if (signature[start] !== 'u' || (live && end === signature.length)) continue
+    let answer = signature.lastIndexOf('a', end - 1)
+    if (answer <= start) continue
+    while (signature[answer - 1] === 'a') answer--
+    const folded: number[] = []
+    for (let i = start + 1; i < answer; i++) if (foldsIntoTurn(signature[i])) folded.push(i)
+    if (folded.length === 0) continue
+    const key = `worked:${order[start]}`
+    const toolIds: string[] = []
+    let endId: string | null = null
+    for (let i = start; i < end; i++) {
+      if (isTool(signature[i])) toolIds.push(order[i]!)
+      else if (signature[i] === 'e') endId = order[i]!
+    }
+    const shut = !open.has(key)
+    folds.rows.set(start + 1, {
+      key,
+      type: 'worked',
+      toolIds,
+      endId,
+      open: !shut,
+    })
+    if (shut) for (const i of folded) folds.hidden.add(i)
+  }
+  return folds
+}
+
 /** The item before the status: a message you sent, steered or not, sets its gap. */
 function sentItem(item: Item | undefined): boolean {
   return item?.type === 'entry' && (item.char === 'u' || item.char === 's')
 }
 
 /** An item's height in px before it renders: its kind's shortest rendered height. */
-export type Estimate = 16 | 18 | 20 | 24 | 28 | 69
+export type Estimate = 16 | 18 | 20 | 24 | 28 | 37 | 69
 
 /**
  * The height an item is laid out at until it renders: the shortest its kind renders at, at any
@@ -193,11 +284,13 @@ export type Estimate = 16 | 18 | 20 | 24 | 28 | 69
  * never takes more room than it will.
  */
 export function estimateOf(item: Item): Estimate {
-  if (item.type === 'run') return 28
+  if (item.type === 'run' || item.type === 'worked') return 28
   if (item.type === 'group' || item.type === 'reply' || item.type === 'status') return 24
   switch (item.char) {
-    // One line of bubble and the row under it.
+    // One line of bubble, whose actions sit beside it.
     case 'u':
+      return 37
+    // One line of bubble and the row under it that says it was steered.
     case 's':
       return 69
     case 'a':
@@ -258,28 +351,28 @@ function replyFooters(
 ): { replacing: Map<number, Item>; after: Map<number, Item> } {
   const replacing = new Map<number, Item>()
   const after = new Map<number, Item>()
-  const starts = [0]
-  for (let i = 1; i < signature.length; i++) if (signature[i] === 'u') starts.push(i)
-  starts.forEach((start, n) => {
-    const end = starts[n + 1] ?? signature.length
+  for (const [start, end] of turnsOf(signature)) {
     const latest = end === signature.length
     const agentIds: string[] = []
+    const toolIds: string[] = []
     let endAt = -1
     for (let i = start; i < end; i++) {
       if (signature[i] === 'a') agentIds.push(order[i]!)
       else if (signature[i] === 'e') endAt = i
+      else if (isTool(signature[i])) toolIds.push(order[i]!)
     }
-    if (agentIds.length === 0 || (latest && live && endAt === -1)) return
+    if (agentIds.length === 0 || (latest && live && endAt === -1)) continue
     const footer: Item = {
       key: `reply:${order[start]}`,
       type: 'reply',
       agentIds,
       endId: endAt === -1 ? null : order[endAt]!,
       latest,
+      toolIds,
     }
     if (endAt === -1) after.set(end - 1, footer)
     else replacing.set(endAt, footer)
-  })
+  }
   return { replacing, after }
 }
 
