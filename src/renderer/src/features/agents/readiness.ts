@@ -1,5 +1,6 @@
 import type { AgentStatus } from '@shared/agent-host'
 import { i18n } from '@renderer/lib/i18n'
+import { awaitsPackage, hasProgram } from '@renderer/stores/agents'
 
 export type AgentReadiness =
   | { kind: 'ready' }
@@ -43,4 +44,13 @@ export function readiness(status: AgentStatus): AgentReadiness {
  */
 export function listedInstalled(status: AgentStatus): boolean {
   return readiness(status).kind !== 'missing' && !(status.package && !status.package.installed)
+}
+
+/**
+ * Up to date only once the harness is on the machine. A check from when it could run does not make
+ * a missing program, such as Pi's `pi`, current.
+ */
+export function showsCurrent(status: AgentStatus): boolean {
+  if (status.uninstalled || !hasProgram(status) || awaitsPackage(status)) return false
+  return status.updateCheckedAt !== null || status.cli !== null
 }
