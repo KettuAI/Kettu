@@ -431,6 +431,7 @@
     "reinstall": "重新安装",
     "installsOnFirstUse": "首次使用时安装",
     "account": "账号",
+    "refreshAccount": "重新读取账号",
     "usage": "套餐用量",
     "checkLimits": "查看套餐限额",
     "program": "程序",
