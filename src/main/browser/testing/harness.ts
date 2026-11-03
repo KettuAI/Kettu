@@ -31,12 +31,14 @@ interface Result {
 
 async function main(): Promise<Result> {
   await app.whenReady()
+  // Shown, so Chromium renders the frames a capture reads; not activated, so it takes no focus.
   const window = new BrowserWindow({
     show: false,
     width: 900,
     height: 700,
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
   })
+  window.showInactive()
   const states = new Map<string, BrowserState>()
   const waiting: ((state: BrowserState) => void)[] = []
   const views = new BrowserViews({
