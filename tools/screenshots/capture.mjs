@@ -786,37 +786,6 @@ async function run() {
   await sleep(600)
   await shoot('settings-agent')
 
-  // Both again with Hide accounts on, the agent's account behind its mask; then off again.
-  const agents = `return [...document.querySelectorAll('nav button, aside button')].find((b) => b.textContent.trim() === 'Agents')`
-  const settingsButton = (label) =>
-    `return [...document.querySelectorAll('[role=dialog] button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`
-  await click(agents, 'Settings › Agents')
-  await click(settingsButton('Hide accounts'), 'Hide accounts')
-  // The list names plans, not accounts, so only its button says they are hidden.
-  await waitFor(settingsButton('Show accounts').slice('return '.length), 'Show accounts')
-  await sleep(600)
-  await shoot('settings-agents-hidden')
-  await click(
-    `return document.querySelector('button[aria-label="Fake agent"]')`,
-    'the fake agent row',
-  )
-  await waitFor(
-    `[...document.querySelectorAll('[role=dialog] h2')].some((h) => h.textContent.includes('Fake agent'))`,
-    'the fake agent page',
-  )
-  await waitFor(
-    `document.querySelector('[role=dialog] [data-slot=masked]')`,
-    "the agent's masked email",
-  )
-  await sleep(600)
-  await shoot('settings-agent-hidden')
-  await click(agents, 'Settings › Agents')
-  await click(settingsButton('Show accounts'), 'Show accounts')
-  await waitFor(
-    `!document.querySelector('[role=dialog] [data-slot=masked]')`,
-    'the accounts shown again',
-  )
-
   // Kettu's own MCP server, opened from its row in MCP servers.
   await click(
     `return [...document.querySelectorAll('nav button, aside button')].find((b) => b.textContent.trim() === 'MCP servers')`,
@@ -904,7 +873,8 @@ async function run() {
   await fake('logout')
   await footerScreens({ suffix: '', close: 'Close', agents: 'Agents' })
   await cdp.evaluate(`window.kettu.settings.update({ general: { language: 'zh-CN' } })`)
-  // A reload brings back the closed "Updated to" card, which is closed for the page only.
+  // A reload counts as a later window, which skips "Updated to"; forget the record to show it.
+  await cdp.evaluate(`localStorage.removeItem('updates.updatedNotice')`)
   await cdp.send('Page.reload')
   cdp.close()
   await sleep(1500)
