@@ -95,7 +95,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
       {/* Leaves the width the column's scrollbar takes, as the session's composer row does. */}
       <div style={{ paddingRight: gutter }}>
         <div className="px-7 pb-3.5">
-          <div className="mx-auto w-full max-w-thread">
+          <div className="mx-auto w-full max-w-reply">
             <InputGroup variant="composer" data-disabled>
               <InputGroupTextarea
                 rows={1}

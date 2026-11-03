@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Button } from '@renderer/components/ui/button'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { cn } from '@renderer/lib/utils'
 
 /** An icon button in a side pane's header, which is a window drag region. */
 export function PanelButton({
@@ -10,6 +11,7 @@ export function PanelButton({
   pressed,
   disabled,
   size = 'icon-xs',
+  className,
   onClick,
   children,
 }: {
@@ -18,6 +20,7 @@ export function PanelButton({
   pressed?: boolean
   disabled?: boolean
   size?: 'icon-xs' | 'icon-sm'
+  className?: string
   onClick: () => void
   children: ReactNode
 }) {
@@ -32,7 +35,7 @@ export function PanelButton({
             aria-pressed={pressed}
             disabled={disabled}
             onClick={onClick}
-            className="app-region-no-drag"
+            className={cn('app-region-no-drag text-secondary', className)}
           />
         }
       >

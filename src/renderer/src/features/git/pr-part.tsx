@@ -1,33 +1,21 @@
-import { useState, type ReactNode } from 'react'
-import {
-  CircleCheckIcon,
-  CircleDashedIcon,
-  CircleXIcon,
-  ExternalLinkIcon,
-  GitPullRequestIcon,
-  LockIcon,
-} from 'lucide-react'
+import type { ReactNode } from 'react'
+import { CheckIcon, CircleDashedIcon, ExternalLinkIcon, XIcon } from 'lucide-react'
+import type { TFunction } from 'i18next'
 import { Trans, useTranslation } from 'react-i18next'
-import type { CheckRun, GitStatus, PullRequest } from '@shared/git'
+import type { CheckRun, GitStatus, PullRequest, PullRequestState } from '@shared/git'
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { duration, longAgo } from '@renderer/lib/format'
+import { longAgo, shortDuration } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { openGitDialog, useGitStore } from '@renderer/stores/git'
 import { CopyButton } from './copy-button'
-import { ChecksIcon, PrIcon, ReviewIcon } from './pr-icon'
-import { checkCountText, prStateText, REVIEW_KEY } from './pr-text'
+import { PrIcon } from './pr-icon'
+import { prStateText, REVIEW_KEY } from './pr-text'
+import { PartHead, PartRule, ROW } from './rows'
 import { pullRequestHead, pushTargetOf } from './sync'
-import { disclosureKeys, kidKeys } from './popover-keys'
-import { Chevron, KID, Kids, Part, ROW } from './timeline'
 
-/** The leading column of the part's rows, where a row's icon sits on the lane's line. */
-function Lead({ children }: { children: ReactNode }) {
-  return <span className="flex w-4 shrink-0 justify-center">{children}</span>
-}
-
-/** The branch's pull request, or how to get one; only for a GitHub remote. */
+/** The branch's pull request with its checks, or how to get one; only for a GitHub remote. */
 export function PullRequestPart({
   status,
   pr,
@@ -41,13 +29,7 @@ export function PullRequestPart({
   const gh = useGitStore((s) => s.tools?.gh.state ?? null)
   const github = status.remote?.github
   if (!github) return null
-  if (pr) {
-    return (
-      <Part>
-        <PullRequestDetails pr={pr} onOpen={onClose} />
-      </Part>
-    )
-  }
+  if (pr) return <PullRequestDetails pr={pr} onOpen={onClose} />
 
   const branch = status.head.branch
   const head = pullRequestHead(status)
@@ -59,175 +41,215 @@ export function PullRequestPart({
 
   if (gh === 'not-installed') {
     return (
-      <Line>
-        <span className="min-w-0 flex-1">
-          <Trans
-            t={t}
-            i18nKey="prPart.installGh"
-            components={{
-              cli: (
-                <a
-                  href="https://cli.github.com"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline decoration-border-strong underline-offset-2 hover:text-primary hover:decoration-current"
-                />
-              ),
-            }}
-          />
-        </span>
-        {compare && (
-          <a
-            href={compare}
-            target="_blank"
-            rel="noreferrer"
-            className={buttonVariants({ variant: 'outline', size: 'xs' })}
-          >
-            {t('pr.openOnGitHub')}
-          </a>
-        )}
+      <Line
+        action={
+          compare && (
+            <a
+              href={compare}
+              target="_blank"
+              rel="noreferrer"
+              className={buttonVariants({ variant: 'outline', size: 'sm', className: 'text-hint' })}
+            >
+              {t('pr.openOnGitHub')}
+            </a>
+          )
+        }
+      >
+        <Trans
+          t={t}
+          i18nKey="prPart.installGh"
+          components={{
+            cli: (
+              <a
+                href="https://cli.github.com"
+                target="_blank"
+                rel="noreferrer"
+                className="underline decoration-border-strong underline-offset-2 hover:text-primary hover:decoration-current"
+              />
+            ),
+          }}
+        />
       </Line>
     )
   }
   if (gh === 'signed-out') {
     return (
-      <Line>
-        <span className="min-w-0 flex-1">{t('prPart.signInGh')}</span>
-        <code className="rounded-sm bg-code-inline px-1.5 py-0.5 font-mono text-meta text-primary">
-          gh auth login
-        </code>
-        <CopyButton text="gh auth login" label={t('prPart.copyCommand')} />
+      <Line
+        action={
+          <span className="inline-flex items-center gap-1">
+            <code className="rounded-sm bg-code-inline px-1.5 py-0.5 font-mono text-code-sm text-primary">
+              gh auth login
+            </code>
+            <CopyButton text="gh auth login" label={t('prPart.copyCommand')} />
+          </span>
+        }
+      >
+        {t('prPart.signInGh')}
       </Line>
     )
   }
   if (!target || target.setUpstream) {
     if (status.head.detached || !branch || !target) return null
-    return (
-      <Line>
-        <span className="min-w-0 flex-1">{t('prPart.publishFirst')}</span>
-      </Line>
-    )
+    return <Line>{t('prPart.publishFirst')}</Line>
   }
   if (head === null) return null
   return (
-    <Line>
-      <span className="min-w-0 flex-1 truncate">{t('prPart.none')}</span>
-      <Button
-        variant="outline"
-        size="xs"
-        data-git-row=""
-        onClick={() => {
-          onClose()
-          openGitDialog(status.projectPath, { kind: 'createPr' })
-        }}
-      >
-        {t('prPart.create')}
-      </Button>
+    <Line
+      action={
+        <Button
+          variant="outline"
+          size="sm"
+          data-git-row=""
+          className="px-2.5 text-hint"
+          onClick={() => {
+            onClose()
+            openGitDialog(status.projectPath, { kind: 'createPr' })
+          }}
+        >
+          {t('prPart.create')}
+        </Button>
+      }
+    >
+      {t('prPart.none')}
     </Line>
   )
 }
 
 /** The part when there is no pull request to show: why, and what to do about it. */
-function Line({ children }: { children: ReactNode }) {
+function Line({ children, action }: { children: ReactNode; action?: ReactNode }) {
+  const { t } = useTranslation('git')
   return (
-    <Part>
-      <div className="shrink-0 p-1.5">
-        <div className="flex min-h-10 items-center gap-2 py-1 pr-1.5 pl-2 text-small text-secondary">
-          <Lead>
-            <GitPullRequestIcon aria-hidden className="size-4 text-icon" />
-          </Lead>
-          {children}
-        </div>
+    <>
+      <PartRule />
+      <PartHead>
+        <span className="font-medium">{t('prPart.label')}</span>
+      </PartHead>
+      <div className="flex min-h-7 items-center gap-2 text-hint text-secondary">
+        <span className="min-w-0 flex-1">{children}</span>
+        {action}
       </div>
-    </Part>
+    </>
   )
+}
+
+const BADGE: Record<PullRequestState, string> = {
+  open: 'bg-success/10 text-success',
+  draft: 'bg-subtle text-secondary',
+  merged: 'bg-merged/10 text-merged',
+  closed: 'bg-danger/10 text-danger',
 }
 
 function PullRequestDetails({ pr, onOpen }: { pr: PullRequest; onOpen: () => void }) {
   const { t } = useTranslation('git')
   const now = useNow()
-  const [checksOpen, setChecksOpen] = useState(false)
-  const toggleChecks = (): void => setChecksOpen((open) => !open)
   const done = pr.state === 'merged' || pr.state === 'closed'
   const { checks } = pr
-  const blocked = done ? null : blockReason(pr)
+  const total = checks.passed + checks.failed + checks.pending
+  const note = done
+    ? t(pr.state === 'merged' ? 'prPart.mergedAgo' : 'prPart.closedAgo', {
+        when: longAgo(pr.mergedAt ?? pr.closedAt ?? pr.updatedAt, now),
+      })
+    : waitingFor(pr, t)
   return (
-    <div className="shrink-0 p-1.5">
+    <>
+      <PartRule />
+      <PartHead>
+        <span className="font-medium">{t('prPart.label')}</span>
+        <span className="flex-1" />
+        <span
+          className={cn(
+            'inline-flex h-4.5 items-center gap-1.25 rounded-lg px-1.5 text-code-sm font-semibold',
+            BADGE[pr.state],
+          )}
+        >
+          <PrIcon state={pr.state} size={12} className="size-2.75 text-current" />
+          {prStateText(pr.state)}
+        </span>
+      </PartHead>
       <a
         href={pr.url}
         target="_blank"
         rel="noreferrer"
         tabIndex={-1}
         data-git-row=""
-        className="group/pr grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2 gap-y-0.75 rounded-md px-2 pt-2 pb-2.25 text-left text-small outline-none transition-colors duration-(--duration-fast) focus:bg-hover"
         title={pr.title}
         onClick={onOpen}
+        className={cn(ROW, 'mt-0.5 py-0.5 text-control font-medium tracking-[-0.004em]')}
       >
-        <PrIcon state={pr.state} size={16} className="mt-0.75" />
-        <span className="line-clamp-2 font-heading text-subheading font-medium">{pr.title}</span>
-        <span className="mt-0.75 inline-flex items-center gap-0.5 text-xs text-tertiary tabular group-focus/pr:text-primary">
-          #{pr.number}
-          <ExternalLinkIcon aria-hidden className="size-3" />
-        </span>
-        <span className="col-span-2 col-start-2 text-xs text-tertiary">
-          <Trans
-            t={t}
-            i18nKey="prPart.meta"
-            values={{ state: prStateText(pr.state), when: longAgo(pr.updatedAt, now) }}
-            components={{
-              state: <span className="font-medium text-secondary" />,
-              nw: <span className="whitespace-nowrap" />,
-              head: <span className="font-mono text-meta">{pr.head}</span>,
-              base: <span className="font-mono text-meta">{pr.base}</span>,
-            }}
-          />
+        <span className="line-clamp-2">
+          <span className="font-normal text-tertiary tabular">#{pr.number}</span>
+          {'  '}
+          {pr.title}
         </span>
       </a>
-      {!done && checks.state !== 'none' && (
+      {total > 0 && (
         <>
-          <button
-            type="button"
-            tabIndex={-1}
-            data-git-row=""
-            className={ROW}
-            aria-expanded={checksOpen}
-            onClick={toggleChecks}
-            onKeyDown={disclosureKeys(checksOpen, toggleChecks)}
-          >
-            <Lead>
-              <ChecksIcon state={checks.state} size={14} />
-            </Lead>
-            <span className="min-w-0 flex-1 truncate tabular">{checkCountText(checks)}</span>
-            <Chevron open={checksOpen} />
-          </button>
-          {checksOpen && (
-            <Kids>
-              {/* Two workflows can name a job alike; the list is whole each time, so its order is the key. */}
+          <div className="mt-2.5 flex items-center gap-2.5">
+            <div className="flex flex-1 gap-0.75" aria-hidden>
               {checks.runs.map((run, i) => (
-                <CheckRow key={`${i}:${run.name}`} run={run} now={now} />
+                <span
+                  key={`${i}:${run.name}`}
+                  className={cn('h-1 flex-1 rounded-sm', SEGMENT[run.outcome])}
+                />
               ))}
-            </Kids>
-          )}
+            </div>
+            <span className="shrink-0 text-small text-tertiary tabular">
+              {t('prPart.checksPassed', { passed: checks.passed, count: total })}
+            </span>
+          </div>
+          <div className="mt-1.5">
+            {/* Two workflows can name a job alike; the list is whole each time, so its order is the key. */}
+            {checks.runs.map((run, i) => (
+              <CheckRow key={`${i}:${run.name}`} run={run} now={now} />
+            ))}
+          </div>
         </>
       )}
-      {!done && pr.review && <ReviewRow review={pr.review} />}
-      {blocked && (
-        <div
-          className={cn(
-            'flex min-h-6.5 items-center gap-2 px-2 pb-0.75 text-xs',
-            blocked === 'prPart.blocked.conflicts' ? 'text-danger' : 'text-tertiary',
-          )}
+      <div className="mt-2.5 flex items-center gap-1.5">
+        <a
+          href={pr.url}
+          target="_blank"
+          rel="noreferrer"
+          data-git-row=""
+          tabIndex={-1}
+          onClick={onOpen}
+          className={buttonVariants({ variant: 'outline', size: 'sm', className: 'text-hint' })}
         >
-          <Lead>
-            <LockIcon aria-hidden className="size-3" />
-          </Lead>
-          <span className="min-w-0 flex-1 truncate" title={t(blocked, { base: pr.base })}>
-            {t(blocked, { base: pr.base })}
+          <ExternalLinkIcon />
+          {t('pr.openOnGitHub')}
+        </a>
+        <span className="flex-1" />
+        {note && (
+          <span
+            className={cn(
+              'min-w-0 truncate text-small',
+              pr.mergeable === 'conflicting' && !done ? 'text-danger' : 'text-tertiary',
+            )}
+            title={note}
+          >
+            {note}
           </span>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </>
   )
+}
+
+const SEGMENT = {
+  passed: 'bg-success',
+  failed: 'bg-danger',
+  pending: 'bg-border',
+} as const
+
+/** What an open pull request waits for, in the fewest words, or null when nothing is known. */
+function waitingFor(pr: PullRequest, t: TFunction<'git'>): string | null {
+  if (pr.state === 'draft') return t('prPart.waiting.draft')
+  if (pr.mergeable === 'conflicting') return t('prPart.blocked.conflicts', { base: pr.base })
+  if (pr.checks.state === 'failing') return t('prPart.waiting.failing')
+  if (pr.review === 'review_required') return t('prPart.waiting.review')
+  if (pr.review) return t(REVIEW_KEY[pr.review])
+  if (pr.checks.state === 'pending') return t('prPart.waiting.checks')
+  return pr.mergeable === 'clean' ? t('prPart.waiting.ready') : null
 }
 
 /** A check's state; one that has not started yet is drawn apart from one running. */
@@ -235,31 +257,35 @@ function CheckRunIcon({ run }: { run: CheckRun }) {
   const { t } = useTranslation('git')
   if (run.outcome === 'passed') {
     return (
-      <CircleCheckIcon
+      <CheckIcon
         role="img"
         aria-label={t('prPart.run.passed')}
-        className="size-3 shrink-0 text-success"
+        strokeWidth={2}
+        className="size-3 text-success"
       />
     )
   }
   if (run.outcome === 'failed') {
     return (
-      <CircleXIcon
+      <XIcon
         role="img"
         aria-label={t('prPart.run.failed')}
-        className="size-3 shrink-0 text-danger"
+        strokeWidth={2}
+        className="size-3 text-danger"
       />
     )
   }
   if (run.startedAt === null) {
-    return <CircleDashedIcon aria-hidden className="size-3 shrink-0 text-icon" />
+    return (
+      <CircleDashedIcon
+        role="img"
+        aria-label={t('prPart.queued')}
+        className="size-3 text-tertiary"
+      />
+    )
   }
   return (
-    <Spinner
-      role="img"
-      aria-label={t('prPart.run.running')}
-      className="size-3 shrink-0 text-info"
-    />
+    <Spinner role="img" aria-label={t('prPart.run.running')} className="size-3 text-tertiary" />
   )
 }
 
@@ -268,20 +294,22 @@ function CheckRow({ run, now }: { run: CheckRun; now: number }) {
   const took =
     run.outcome === 'pending'
       ? run.startedAt
-        ? duration(now - run.startedAt)
+        ? shortDuration(now - run.startedAt)
         : t('prPart.queued')
       : run.startedAt && run.completedAt
-        ? duration(run.completedAt - run.startedAt)
+        ? shortDuration(run.completedAt - run.startedAt)
         : null
   const body = (
     <>
-      <CheckRunIcon run={run} />
-      <span className="min-w-0 flex-1 truncate text-primary">{run.name}</span>
-      {took && <span className="shrink-0 text-xs text-tertiary tabular">{took}</span>}
+      <span className="flex w-3.25 shrink-0 justify-center">
+        <CheckRunIcon run={run} />
+      </span>
+      <span className="min-w-0 flex-1 truncate text-secondary">{run.name}</span>
+      {took && <span className="shrink-0 text-tertiary tabular">{took}</span>}
     </>
   )
   if (!run.url) {
-    return <div className="flex h-7 min-w-0 items-center gap-2 pr-2 pl-8 text-small">{body}</div>
+    return <div className="flex h-6 min-w-0 items-center gap-2.25 text-hint">{body}</div>
   }
   return (
     <a
@@ -290,41 +318,10 @@ function CheckRow({ run, now }: { run: CheckRun; now: number }) {
       rel="noreferrer"
       tabIndex={-1}
       data-git-row=""
-      className={cn(KID, 'pl-8')}
+      className={cn(ROW, 'h-6 gap-2.25 text-hint')}
       title={run.name}
-      onKeyDown={kidKeys}
     >
       {body}
     </a>
   )
-}
-
-function ReviewRow({ review }: { review: NonNullable<PullRequest['review']> }) {
-  const { t } = useTranslation('git')
-  return (
-    <div className="flex h-row items-center gap-2 px-2 text-small">
-      <Lead>
-        <ReviewIcon review={review} size={14} />
-      </Lead>
-      <span className="min-w-0 flex-1 truncate">{t(REVIEW_KEY[review])}</span>
-    </div>
-  )
-}
-
-type BlockKey =
-  | 'prPart.blocked.draft'
-  | 'prPart.blocked.conflicts'
-  | 'prPart.blocked.checks'
-  | 'prPart.blocked.review'
-  | 'prPart.blocked.rules'
-
-/** Why an open pull request cannot merge yet, or null when nothing is known to stop it. */
-function blockReason(pr: PullRequest): BlockKey | null {
-  if (pr.state === 'draft') return 'prPart.blocked.draft'
-  if (pr.mergeable === 'conflicting') return 'prPart.blocked.conflicts'
-  if (pr.mergeable !== 'blocked') return null
-  if (pr.checks.state === 'failing' || pr.checks.state === 'pending') return 'prPart.blocked.checks'
-  if (pr.review === 'changes_requested' || pr.review === 'review_required')
-    return 'prPart.blocked.review'
-  return 'prPart.blocked.rules'
 }

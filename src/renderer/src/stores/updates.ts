@@ -1,5 +1,7 @@
 import { create } from 'zustand'
+import type { AgentId } from '@shared/thread'
 import type { UpdateStatus } from '@shared/updates'
+import { readJson, writeJson } from '@renderer/lib/storage'
 
 interface UpdatesStore {
   status: UpdateStatus | null
@@ -7,15 +9,49 @@ interface UpdatesStore {
   justChecked: boolean
   /** The "Updated to" notice was dismissed; it shows for one launch only anyway. */
   updatedDismissed: boolean
+  /** The dialog that restarts into a downloaded update, which only Restart opens. */
+  dialogOpen: boolean
+  /** Harness updates asked for that wait for the harness's running sessions to end. */
+  harnessWaiting: AgentId[]
+  /** Harness updates asked for that wait their turn behind the one installing. */
+  harnessQueued: AgentId[]
+  /** The update card was closed on updates still to do, so Settings shows a dot until opened. */
+  settingsDot: boolean
 }
+
+const SETTINGS_DOT_KEY = 'updates.settingsDot'
 
 export const useUpdatesStore = create<UpdatesStore>()(() => ({
   status: null,
   justChecked: false,
   updatedDismissed: false,
+  dialogOpen: false,
+  harnessWaiting: [],
+  harnessQueued: [],
+  settingsDot: readJson<unknown>(SETTINGS_DOT_KEY, false) === true,
 }))
 
+/** Shows what the downloaded update brings, with Restart now and Later. */
+export function openUpdateDialog(open = true): void {
+  useUpdatesStore.setState({ dialogOpen: open })
+}
+
+export function setSettingsDot(on: boolean): void {
+  if (useUpdatesStore.getState().settingsDot === on) return
+  useUpdatesStore.setState({ settingsDot: on })
+  writeJson(SETTINGS_DOT_KEY, on)
+}
+
 let justCheckedTimer: ReturnType<typeof setTimeout> | undefined
+
+/**
+ * Restart on the update card and in its list: the dialog that shows what the downloaded update
+ * brings, whose Restart now installs it. Running sessions are asked about by main's quit
+ * confirmation.
+ */
+export function restartToUpdate(): void {
+  openUpdateDialog()
+}
 
 export async function checkForUpdates(): Promise<void> {
   const status = await window.kettu.updates.check()

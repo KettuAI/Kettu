@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ChangedFile, CommitDetails, LogCommit } from '@shared/git'
+import type { ChangedFile, CommitDetails } from '@shared/git'
 import { errorMessage, host } from '@renderer/lib/host'
 import { useGitStore } from '@renderer/stores/git'
 
@@ -33,19 +33,6 @@ function useLive<T>(projectPath: string, enabled: boolean, load: () => Promise<T
 
 export function useChanges(projectPath: string, enabled: boolean): Loaded<ChangedFile[]> {
   return useLive(projectPath, enabled, () => host('git.changes', { projectPath }), projectPath)
-}
-
-export function useIncoming(
-  projectPath: string,
-  from: 'upstream' | 'base',
-  enabled: boolean,
-): Loaded<LogCommit[]> {
-  return useLive(
-    projectPath,
-    enabled,
-    () => host('git.incoming', { projectPath, from }),
-    `${projectPath}\0${from}`,
-  )
 }
 
 // A commit never changes, so its details are kept for the session.

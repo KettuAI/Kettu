@@ -1,7 +1,7 @@
 // Settings › Sharing: the Cloudflare account main publishes with, and the pages it has published.
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { CheckIcon, CircleAlertIcon, GlobeIcon, LockIcon, ShareIcon } from 'lucide-react'
+import { CircleAlertIcon, GlobeIcon, LockIcon, ShapesIcon, ShareIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   CLOUDFLARE_DASHBOARD_URL,
@@ -22,7 +22,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
-import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import {
   Empty,
@@ -44,14 +43,24 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { longAgo } from '@renderer/lib/format'
+import { mediumAgo } from '@renderer/lib/format'
 import { useHostContext } from '@renderer/lib/host-features'
 import { hostPlatform } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
-import { CONFIRM, ControlError, FIELD_LABEL, Masked } from './controls'
-import { RowLine, RowText } from './rows'
+import {
+  CONFIRM,
+  ControlError,
+  FIELD_LABEL,
+  GROUP_ACTION,
+  Masked,
+  Pill,
+  ROW_BUTTON,
+  ROW_FIELD,
+} from './controls'
+import { DeviceTile } from './remote-parts'
+import { ItemLine, RowText } from './rows'
 
 type Failure = Extract<SharingResult, { failed: string }>
 
@@ -89,6 +98,7 @@ export function SharingAccount() {
   const { t } = useTranslation(['settings', 'common', 'artifacts'])
   const account = sharing.useSharingStore((s) => s.status?.cloudflare ?? null)
   const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
+  const onHost = useHostContext()
   const [asking, setAsking] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
@@ -108,53 +118,46 @@ export function SharingAccount() {
   }
   if (!account) return <ConnectForm focus={removed} />
   return (
-    <div className="pl-1">
-      <RowLine
-        text={
-          <RowText
-            name={t('sharing.account.name')}
-            description={
-              <>
-                {/* The ID gives way first, so the subdomain stays whole. */}
-                <span className="flex min-w-0 whitespace-nowrap">
-                  <span className="min-w-0 truncate" title={hidden ? undefined : account.accountId}>
-                    <Masked>{account.accountId}</Masked>
-                  </span>
-                  <span className="whitespace-pre">{' · '}</span>
-                  <span dir="ltr" className="shrink-0 font-mono">
-                    {account.subdomain}.workers.dev
-                  </span>
-                </span>
-                {account.plainText && (
-                  <span className="mt-1 block">{t('sharing.account.plainText')}</span>
-                )}
-              </>
-            }
-          />
-        }
+    <div className="flex items-center gap-3.5 py-4">
+      <span
+        aria-hidden
+        className="grid size-8.5 shrink-0 place-items-center rounded-segments bg-(--brand-cloudflare) text-(--on-fill)"
       >
-        {failure && (
-          <ControlError
-            error={t(`artifacts:share.failures.${failure.failed}`, {
-              count: CLOUDFLARE_FREE_WORKERS,
-            })}
-          />
-        )}
-        <Badge variant="success">
-          <CheckIcon />
-          {t('sharing.account.connected')}
-        </Badge>
-        <Button
-          variant="quiet"
-          size="sm"
-          className="text-secondary"
-          disabled={busy}
-          onClick={() => setAsking(true)}
-        >
-          {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
-          {t('sharing.account.remove')}
-        </Button>
-      </RowLine>
+        <GlobeIcon className="size-4.25" />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex min-w-0 items-center gap-2 text-label leading-[normal]">
+          <span
+            dir="ltr"
+            className="truncate font-mono text-[length:inherit]"
+            title={hidden ? undefined : account.accountId}
+          >
+            {account.subdomain}.workers.dev
+          </span>
+          <Pill tone="success">{t('sharing.account.connected')}</Pill>
+        </span>
+        <ItemLine>
+          {account.plainText
+            ? t('sharing.account.plainText')
+            : t('sharing.account.keptConnected', onHost)}
+        </ItemLine>
+      </div>
+      {failure && (
+        <ControlError
+          error={t(`artifacts:share.failures.${failure.failed}`, {
+            count: CLOUDFLARE_FREE_WORKERS,
+          })}
+        />
+      )}
+      <Button
+        variant="ghost"
+        className={GROUP_ACTION}
+        disabled={busy}
+        onClick={() => setAsking(true)}
+      >
+        {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
+        {t('sharing.account.remove')}
+      </Button>
       <AlertDialog open={asking} onOpenChange={setAsking}>
         <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>
@@ -242,13 +245,12 @@ function ConnectForm({ focus }: { focus: boolean }) {
 
   return (
     <form
-      className="pl-1"
       onSubmit={(event: FormEvent) => {
         event.preventDefault()
         void connect(chosen)
       }}
     >
-      <div className="flex flex-col gap-3 py-2.5">
+      <div className="flex flex-col gap-3 pt-3.75 pb-3">
         <RowText name={t('sharing.account.name')} description={t('sharing.account.description')} />
         <label className={FIELD_LABEL}>
           {t('sharing.account.token')}
@@ -261,7 +263,7 @@ function ConnectForm({ focus }: { focus: boolean }) {
             spellCheck={false}
             disabled={checking}
             aria-invalid={refused || undefined}
-            className="h-8 text-small md:text-small"
+            className={cn(ROW_FIELD, 'md:text-lede')}
             onChange={(event) => edit(event.target.value)}
             onPaste={(event) => {
               const pasted = event.clipboardData.getData('text').trim()
@@ -279,13 +281,13 @@ function ConnectForm({ focus }: { focus: boolean }) {
           href={CLOUDFLARE_TOKENS_URL}
           target="_blank"
           rel="noreferrer"
-          className={cn('self-start text-xs text-secondary', LINK)}
+          className={cn('self-start text-hint text-secondary', LINK)}
         >
           {t('sharing.account.createToken')}
         </a>
         {accounts && (
           <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-secondary">
+            <span className="text-control font-medium text-primary">
               {t('sharing.account.account')}
             </span>
             <Select
@@ -353,23 +355,23 @@ function ConnectForm({ focus }: { focus: boolean }) {
                 </SelectGroup>
               </SelectContent>
             </Select>
-            <span className="text-xs text-tertiary">{t('sharing.account.chooseHint')}</span>
+            <span className="text-hint text-tertiary">{t('sharing.account.chooseHint')}</span>
           </div>
         )}
         {failure && <FailureBox failure={failure} />}
       </div>
-      <div className="relative flex min-h-13 items-center gap-4 before:absolute before:top-0 before:-right-3 before:left-0 before:h-(--hairline) before:bg-border-soft">
+      <div className="flex items-center gap-4 pb-3.75">
         {keyring && (
-          <span className="flex min-w-0 items-center gap-1.5 text-xs text-tertiary">
+          <span className="flex min-w-0 items-center gap-1.5 text-hint text-tertiary">
             <LockIcon className="size-3.5 shrink-0" />
             {t('sharing.account.kept', onHost)}
           </span>
         )}
         <Button
           type="submit"
-          size="sm"
+
           disabled={!secret || checking || (accounts !== null && chosen === null)}
-          className="ml-auto min-w-26"
+          className={cn(ROW_BUTTON, 'ml-auto')}
         >
           {checking && <Spinner data-icon="inline-start" className="size-3.5" />}
           {t(checking ? 'sharing.account.checking' : 'sharing.account.connect')}
@@ -385,7 +387,7 @@ function FailureBox({ failure }: { failure: Failure }) {
   return (
     <div
       role="alert"
-      className="flex items-start gap-2 rounded-code bg-danger-tint px-3 py-2.5 text-command text-danger"
+      className="flex items-start gap-2 rounded-segments bg-danger-tint px-3 py-2.5 text-hint text-danger"
     >
       <CircleAlertIcon className="mt-0.75 size-3.5 shrink-0" />
       <span className="min-w-0">
@@ -421,22 +423,13 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
     if ('failed' in result) setFailure(result)
     else toast(t('sharing.published.unpublished'))
   }
-  const link = (
-    <a
-      href={page.url}
-      target="_blank"
-      rel="noreferrer"
-      dir="ltr"
-      className={cn('block truncate font-mono text-xs text-secondary hover:text-primary', LINK)}
-    >
-      {page.url}
-    </a>
-  )
+  const copy = (): void => {
+    void navigator.clipboard.writeText(page.url).then(() => toast(t('sharing.published.copied')))
+  }
   const button = (
     <Button
-      variant="quiet"
-      size="sm"
-      className="text-secondary"
+      variant="ghost"
+      className={GROUP_ACTION}
       disabled={busy || page.otherAccount}
       onClick={() => setAsking(true)}
     >
@@ -444,40 +437,39 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
       {t('sharing.published.unpublish')}
     </Button>
   )
+  const version = t('sharing.published.version', {
+    version: page.version,
+    ago: mediumAgo(page.publishedAt, now),
+  })
   return (
-    <div className="pl-1">
-      <RowLine
-        text={
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-subtle text-icon">
-              <GlobeIcon className="size-3.5" />
-            </span>
-            <div className="flex min-w-0 flex-col">
-              {title ? (
-                <>
-                  <span className="truncate text-ui font-medium">{title}</span>
-                  <span className="mt-0.5 flex leading-4">{link}</span>
-                </>
-              ) : (
-                <span className="flex">{link}</span>
-              )}
-              <span className="text-xs leading-4 text-secondary">
-                {t('sharing.published.version', {
-                  version: page.version,
-                  ago: longAgo(page.publishedAt, now),
-                })}
-              </span>
-            </div>
-          </div>
-        }
-      >
-        {failure && (
-          <ControlError
-            error={t(`artifacts:share.failures.${failure.failed}`, {
-              count: CLOUDFLARE_FREE_WORKERS,
-            })}
-          />
-        )}
+    <div className="flex items-center gap-3.5 py-3.25">
+      <DeviceTile icon={<ShapesIcon className="size-4.25" />} />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-label leading-[normal]">{title ?? page.url}</span>
+        <ItemLine>
+          <a
+            href={page.url}
+            target="_blank"
+            rel="noreferrer"
+            dir="ltr"
+            className="rounded-sm font-mono text-code leading-[normal] underline-offset-2 outline-none hover:text-primary hover:underline focus-ring"
+          >
+            {page.url.replace(/^https:\/\//, '')}
+          </a>
+          {` · ${version}`}
+        </ItemLine>
+      </div>
+      {failure && (
+        <ControlError
+          error={t(`artifacts:share.failures.${failure.failed}`, {
+            count: CLOUDFLARE_FREE_WORKERS,
+          })}
+        />
+      )}
+      <div className="flex shrink-0 items-center gap-2">
+        <Button variant="ghost" className={GROUP_ACTION} onClick={copy}>
+          {t('sharing.published.copyLink')}
+        </Button>
         {page.otherAccount ? (
           <Tooltip>
             {/* A disabled button gets no pointer events, so a wrapper holds the tooltip. */}
@@ -487,7 +479,7 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
         ) : (
           button
         )}
-      </RowLine>
+      </div>
       <AlertDialog open={asking} onOpenChange={setAsking}>
         <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>

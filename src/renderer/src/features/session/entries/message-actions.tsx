@@ -1,5 +1,5 @@
 import { memo, useState, type ReactNode } from 'react'
-import { CornerDownRightIcon, SplitIcon } from 'lucide-react'
+import { CornerDownRightIcon, GitForkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { UserContent } from '@shared/thread'
 import { forkSession } from '@renderer/app/actions'
@@ -7,7 +7,7 @@ import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { CopyButton } from '@renderer/features/git/branch-popover'
-import { longAgo } from '@renderer/lib/format'
+import { longAgo, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -15,6 +15,7 @@ import { useAgentsStore } from '@renderer/stores/agents'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { useReplyHover } from '../reply-hover'
 import { useEntry, useEntryAnimation, useSessionView } from '../use-thread'
+import { ChangesCard } from './changes-card'
 import { forkBlocked, forkEntry, stopReasonText } from './helpers'
 
 // Rows under messages: hidden until the message is hovered or focused.
@@ -25,6 +26,18 @@ function Ago({ at }: { at: number }) {
   useTranslation()
   const now = useNow()
   return <span className="tabular">{longAgo(at, now)}</span>
+}
+
+/** When a reply came, on its own: "Just now", "12 min ago", "Oct 3". */
+function Came({ at }: { at: number }) {
+  const { i18n } = useTranslation()
+  const now = useNow()
+  const text = mediumAgo(at, now)
+  return (
+    <span className="tabular">
+      {text.charAt(0).toLocaleUpperCase(i18n.language) + text.slice(1)}
+    </span>
+  )
 }
 
 function ActionButton({
@@ -43,13 +56,7 @@ function ActionButton({
       {disabled ? (
         // A disabled button takes no pointer, so its tooltip opens from around it.
         <TooltipTrigger render={<span className="inline-flex" />}>
-          <Button
-            variant="quiet"
-            size="icon-message"
-            aria-label={label}
-            disabled
-            className="shrink-0"
-          >
+          <Button variant="quiet" size="icon-sm" aria-label={label} disabled className="shrink-0">
             {children}
           </Button>
         </TooltipTrigger>
@@ -58,7 +65,7 @@ function ActionButton({
           render={
             <Button
               variant="quiet"
-              size="icon-message"
+              size="icon-sm"
               aria-label={label}
               onClick={onClick}
               className="shrink-0"
@@ -95,7 +102,7 @@ export function UserActions({
 }) {
   const { t } = useTranslation('session')
   return (
-    <div className="-mr-1 flex h-6 items-center gap-1 text-xs text-muted-foreground">
+    <div className="-mr-1.5 flex h-7 items-center gap-1 text-hint whitespace-nowrap text-tertiary">
       {steered && (
         <span className="mr-1 inline-flex items-center gap-1">
           <CornerDownRightIcon className="size-3" />
@@ -107,7 +114,7 @@ export function UserActions({
         <CopyButton
           text={() => userText(content)}
           label={t('userActions.copyMessage')}
-          size="icon-message"
+          size="icon-sm"
         />
       </span>
     </div>
@@ -115,20 +122,25 @@ export function UserActions({
 }
 
 /**
- * Under a turn's reply: Copy for the turn's messages, Fork where the agent can fork from it, then
- * how the turn ended and when the reply came. It shows while the pointer is over the reply.
+ * Under a turn's reply: the files the turn changed, then Copy for the turn's messages, Fork where
+ * the agent can fork from it, how the turn ended when it did not end on its own and when the reply
+ * came. The actions show while the pointer is over the reply.
  */
 export const ReplyFooter = memo(
   function ReplyFooter({
     replyKey,
     sessionId,
+    projectPath,
     agentIds,
+    toolIds,
     endId,
     latest,
   }: {
     replyKey: string
     sessionId: string
+    projectPath: string
     agentIds: string[]
+    toolIds: string[]
     endId: string | null
     latest: boolean
   }) {
@@ -179,51 +191,67 @@ export const ReplyFooter = memo(
           ? t('replyFooter.forkNotReady')
           : t('replyFooter.fork')
 
+    // A turn that ended on its own says how long it took in its folded work's row.
+    const ending =
+      end && end.stopReason !== 'end_turn' ? stopReasonText(end.stopReason, end.durationMs) : null
     return (
-      <div
-        className={cn(
-          'group/actions -ml-1 flex h-6 min-w-0 items-center gap-0.5 text-xs text-muted-foreground',
-          animation,
-        )}
-      >
+      <>
+        <ChangesCard
+          sessionId={sessionId}
+          projectPath={projectPath}
+          toolIds={toolIds}
+          className="mt-3 mb-2.5"
+        />
         <div
           className={cn(
-            'flex min-w-0 items-center gap-0.5',
-            REVEAL,
-            (hovered || forking) && 'opacity-100',
+            'group/actions -ml-1.5 flex h-7 min-w-0 items-center gap-0.5 text-hint text-tertiary',
+            animation,
           )}
         >
-          <CopyButton text={text} label={t('replyFooter.copyReply')} size="icon-message" />
-          {showFork && (
-            <ActionButton
-              label={forkLabel}
-              disabled={forking || blocked !== null}
-              onClick={() => void fork()}
-            >
-              {forking ? <Spinner /> : <SplitIcon />}
-            </ActionButton>
-          )}
-          {(end || at !== undefined) && (
-            <span className="ml-1 flex min-w-0 items-center gap-1.5 truncate tabular">
-              {end && <span>{stopReasonText(end.stopReason, end.durationMs)}</span>}
-              {end && at !== undefined && <span aria-hidden>·</span>}
-              {at !== undefined && <Ago at={at} />}
+          <div
+            className={cn(
+              'flex min-w-0 items-center gap-0.5',
+              REVEAL,
+              // The latest reply keeps its actions in view, under the turn's end.
+              (hovered || forking || latest) && 'opacity-100',
+            )}
+          >
+            <CopyButton text={text} label={t('replyFooter.copyReply')} size="icon-sm" />
+            {showFork && (
+              <ActionButton
+                label={forkLabel}
+                disabled={forking || blocked !== null}
+                onClick={() => void fork()}
+              >
+                {forking ? <Spinner /> : <GitForkIcon />}
+              </ActionButton>
+            )}
+            {(ending || at !== undefined) && (
+              <span className="ml-1.5 flex min-w-0 items-center gap-1.5 truncate tabular">
+                {ending && <span>{ending}</span>}
+                {ending && at !== undefined && <span aria-hidden>·</span>}
+                {at !== undefined && (ending ? <Ago at={at} /> : <Came at={at} />)}
+              </span>
+            )}
+          </div>
+          {error && (
+            <span className="ml-2 min-w-0 truncate text-danger" title={error}>
+              {error}
             </span>
           )}
         </div>
-        {error && (
-          <span className="ml-2 min-w-0 truncate text-danger" title={error}>
-            {error}
-          </span>
-        )}
-      </div>
+      </>
     )
   },
   (a, b) =>
     a.replyKey === b.replyKey &&
     a.sessionId === b.sessionId &&
+    a.projectPath === b.projectPath &&
     a.endId === b.endId &&
     a.latest === b.latest &&
-    a.agentIds.length === b.agentIds.length &&
-    a.agentIds.every((id, i) => id === b.agentIds[i]),
+    sameIds(a.agentIds, b.agentIds) &&
+    sameIds(a.toolIds, b.toolIds),
 )
+
+const sameIds = (a: string[], b: string[]): boolean =>
+  a.length === b.length && a.every((id, i) => id === b[i])

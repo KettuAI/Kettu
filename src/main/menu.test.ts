@@ -4,6 +4,7 @@ import type { ZoomStep } from '@shared/settings'
 
 const electron = vi.hoisted(() => ({
   template: [] as MenuItemConstructorOptions[],
+  sent: [] as unknown[],
 }))
 
 vi.mock('electron', () => ({
@@ -16,8 +17,11 @@ vi.mock('electron', () => ({
     setApplicationMenu: () => {},
   },
 }))
-vi.mock('./events', () => ({ sendCommand: () => {}, sendEvent: () => {} }))
-vi.mock('./window', () => ({ currentWindow: () => null }))
+vi.mock('./events', () => ({
+  sendCommand: () => {},
+  sendEvent: (_: unknown, _channel: string, command: unknown) => electron.sent.push(command),
+}))
+vi.mock('./window', () => ({ currentWindow: () => ({ webContents: {} }) }))
 
 const { installMenu } = await import('./menu')
 const { setLocale } = await import('./i18n')
@@ -82,5 +86,24 @@ describe('the macOS menu', () => {
     ])
     for (const item of zoomItems) item.click?.({} as never, undefined, {} as never)
     expect(steps).toEqual([0, 1, -1, 1, -1])
+  })
+
+  it('goes back, forward and to the whole history from the History menu', () => {
+    installMenu(deps())
+    const history = electron.template.find((item) => item.label === 'History')!
+    const items = (history.submenu as MenuItemConstructorOptions[]).filter(
+      (item) => item.type !== 'separator',
+    )
+    expect(items.map((item) => [item.label, item.accelerator])).toEqual([
+      ['Back', 'Cmd+['],
+      ['Forward', 'Cmd+]'],
+      ['Show All History', 'Cmd+Y'],
+    ])
+    for (const item of items) item.click?.({} as never, undefined, {} as never)
+    expect(electron.sent).toEqual([
+      { kind: 'go-back' },
+      { kind: 'go-forward' },
+      { kind: 'show-history' },
+    ])
   })
 })

@@ -11,6 +11,14 @@ export interface ToolView {
   toolKind: ToolKind
   locations: ToolEntry['locations']
   content: ToolContent[]
+  question?: string
+}
+
+/** One of the questions AskUserQuestion puts to the user, with the answers it offers. */
+export interface AskedQuestion {
+  question: string
+  header: string
+  options: { label: string; description: string }[]
 }
 
 type Input = Record<string, unknown>
@@ -60,6 +68,29 @@ function grepTitle(input: Input): string {
   if (text(input.pattern)) label += ` "${String(input.pattern)}"`
   if (text(input.path)) label += ` ${String(input.path)}`
   return label
+}
+
+/** AskUserQuestion's questions, or null when its input holds none that can be answered. */
+export function askedQuestions(raw: unknown): AskedQuestion[] | null {
+  const questions = asInput(raw).questions
+  if (!Array.isArray(questions) || questions.length === 0) return null
+  const asked: AskedQuestion[] = []
+  for (const item of questions) {
+    const fields = asInput(item)
+    const question = text(fields.question)
+    const options = Array.isArray(fields.options)
+      ? fields.options
+          .map((option) => asInput(option))
+          .filter((option) => text(option.label))
+          .map((option) => ({
+            label: String(option.label),
+            description: text(option.description) ?? '',
+          }))
+      : []
+    if (!question || options.length === 0) return null
+    asked.push({ question, header: text(fields.header) ?? '', options })
+  }
+  return asked
 }
 
 /** What a tool call shows from its input. */
@@ -136,6 +167,12 @@ export function toolView(name: string, raw: unknown, cwd: string): ToolView {
       })
     case 'EnterPlanMode':
       return view('Plan', 'switch_mode')
+    case 'AskUserQuestion': {
+      const first = askedQuestions(input)?.[0]
+      return first
+        ? view(first.header || first.question, 'other', { question: first.question })
+        : view('Question', 'other')
+    }
     case 'Skill':
       return view(text(input.skill) ? `Load skill: ${String(input.skill)}` : 'Load skill', 'other')
     default:

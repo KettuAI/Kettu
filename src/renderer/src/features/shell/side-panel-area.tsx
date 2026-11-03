@@ -28,13 +28,13 @@ const BrowserPane = lazy(() =>
   })),
 )
 
-// Each pane is a panel of its own, so each keeps its width: the terminal needs less room than a
-// file beside its tree. The terminal keeps the id it had when it was the only pane.
+// Each pane is a panel of its own, so each keeps the width the user gives it. The terminal keeps
+// the id it had when it was the only pane.
 const PANES = {
-  terminal: { id: 'side-panel', defaultSize: '340px', minSize: '280px' },
-  files: { id: 'side-panel-files', defaultSize: '560px', minSize: '360px' },
+  terminal: { id: 'side-panel', defaultSize: '600px', minSize: '280px' },
+  files: { id: 'side-panel-files', defaultSize: '600px', minSize: '360px' },
   artifact: { id: 'side-panel-artifact', defaultSize: '560px', minSize: '360px' },
-  browser: { id: 'side-panel-browser', defaultSize: '560px', minSize: '360px' },
+  browser: { id: 'side-panel-browser', defaultSize: '600px', minSize: '360px' },
 } as const
 
 /**
@@ -123,10 +123,10 @@ export function SidePanelArea({
       </ResizablePanel>
       {pane && (
         <>
-          {/* The line between the two columns. */}
+          {/* The desk between the two sheets. */}
           <ResizableHandle
             withHandle={!maximized}
-            className={cn('app-region-no-drag bg-border', maximized && 'pointer-events-none')}
+            className={cn('app-region-no-drag w-(--sheet-gap)', maximized && 'pointer-events-none')}
           />
           <ResizablePanel
             key={pane}

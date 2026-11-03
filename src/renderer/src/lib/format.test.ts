@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  bytes,
   clock,
   countdown,
   duration,
@@ -7,10 +8,13 @@ import {
   fileUrlPath,
   limitLabel,
   longAgo,
+  mediumAgo,
   percent,
   resetTime,
   shortAgo,
+  shortDuration,
   tokens,
+  runningFor,
 } from './format'
 import { i18n } from './i18n'
 
@@ -21,17 +25,50 @@ afterEach(() => i18n.changeLanguage('en'))
 
 describe('format in the interface language', () => {
   it('writes relative times and durations in English', () => {
-    expect(shortAgo(NOW - 4 * MINUTE, NOW)).toBe('4m')
-    expect(longAgo(NOW - MINUTE, NOW)).toBe('1 minute ago')
-    expect(longAgo(NOW - 5 * MINUTE, NOW)).toBe('5 minutes ago')
+    expect(longAgo(NOW - MINUTE, NOW)).toBe('1 min ago')
+    expect(longAgo(NOW - 5 * MINUTE, NOW)).toBe('5 min ago')
     expect(duration(133_000)).toBe('2 m 13 s')
+  })
+
+  it('writes a list time in minutes, hours, days and weeks, then the date', () => {
+    const DAY = 24 * 60 * MINUTE
+    expect(shortAgo(NOW - 20_000, NOW)).toBe('now')
+    expect(shortAgo(NOW - 4 * MINUTE, NOW)).toBe('4 min')
+    expect(shortAgo(NOW - 2 * 60 * MINUTE, NOW)).toBe('2 h')
+    expect(shortAgo(NOW - 3 * DAY, NOW)).toBe('3 d')
+    expect(shortAgo(NOW - 9 * DAY, NOW)).toBe('1 w')
+    expect(shortAgo(NOW - 40 * DAY, NOW)).toBe('Sep 11')
+  })
+
+  it('writes a status line time as a sentence does, with the date alone', () => {
+    const DAY = 24 * 60 * MINUTE
+    expect(mediumAgo(NOW - 20_000, NOW)).toBe('just now')
+    expect(mediumAgo(NOW - 12 * MINUTE, NOW)).toBe('12 min ago')
+    expect(mediumAgo(NOW - 2 * 60 * MINUTE, NOW)).toBe('2 h ago')
+    expect(mediumAgo(NOW - DAY, NOW)).toBe('yesterday')
+    expect(mediumAgo(NOW - 3 * DAY, NOW)).toBe('3 days ago')
+    expect(mediumAgo(NOW - 9 * DAY, NOW)).toBe('Oct 12')
+    expect(longAgo(NOW - DAY, NOW)).toBe('yesterday')
+    expect(longAgo(NOW - 3 * DAY, NOW)).toBe('3 days ago')
+    expect(longAgo(NOW - 9 * DAY, NOW)).toBe('on Oct 12')
+  })
+
+  it('writes a short duration for a column of them', () => {
+    expect(shortDuration(38_000)).toBe('38s')
+    expect(shortDuration(72_000)).toBe('1m 12s')
+    expect(shortDuration(124_000)).toBe('2m 4s')
+    expect(shortDuration(65 * MINUTE)).toBe('1h 5m')
+    expect(shortDuration(-5)).toBe('0s')
   })
 
   it('switches to Chinese with the language', async () => {
     await i18n.changeLanguage('zh-CN')
     expect(shortAgo(NOW - 4 * MINUTE, NOW)).toBe('4 分钟')
+    expect(shortAgo(NOW - 3 * 24 * 60 * MINUTE, NOW)).toBe('3 天')
     expect(longAgo(NOW - 5 * MINUTE, NOW)).toBe('5 分钟前')
+    expect(mediumAgo(NOW - 3 * 24 * 60 * MINUTE, NOW)).toBe('3 天前')
     expect(duration(133_000)).toBe('2 分 13 秒')
+    expect(shortDuration(72_000)).toBe('1 分 12 秒')
   })
 
   it('writes a reset as the time today, the weekday this week, and the date beyond', () => {
@@ -51,6 +88,15 @@ describe('format in the interface language', () => {
     expect(limitLabel({ window: 'seven_day_fable', label: 'Weekly · Fable' })).toBe('每周 · Fable')
     expect(limitLabel({ window: 'monthly', label: 'Monthly' })).toBe('每月')
     expect(limitLabel({ window: '2_day', label: '2-day' })).toBe('2-day')
+  })
+
+  it('gives a size in B, KB and MB', async () => {
+    expect(bytes(472)).toBe('472 B')
+    expect(bytes(2_100)).toBe('2.1 KB')
+    expect(bytes(4_000)).toBe('4 KB')
+    expect(bytes(6_200_000)).toBe('6.2 MB')
+    await i18n.changeLanguage('zh-CN')
+    expect(bytes(840_500)).toBe('840.5 KB')
   })
 
   it('gives a length as a clock', () => {
@@ -96,5 +142,14 @@ describe('fileUrlPath', () => {
     expect(fileUrlPath('file://server/share/a.txt', 'win32')).toBe('\\\\server\\share\\a.txt')
     expect(fileUrlPath('https://example.com/a', 'darwin')).toBeNull()
     expect(fileUrlPath('not a uri', 'darwin')).toBeNull()
+  })
+})
+
+describe('runningFor', () => {
+  it('says seconds under a minute, then whole minutes, then hours and minutes', () => {
+    expect(runningFor(45_400)).toBe('45 s')
+    expect(runningFor(4 * 60_000 + 59_000)).toBe('4 m')
+    expect(runningFor(80 * 60_000)).toBe('1 h 20 m')
+    expect(runningFor(-5)).toBe('0 s')
   })
 })

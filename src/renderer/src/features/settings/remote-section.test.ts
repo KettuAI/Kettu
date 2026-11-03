@@ -45,7 +45,7 @@ vi.mock('@renderer/lib/use-now', () => ({ useNow: () => Date.now(), useSeconds: 
 const { i18n } = await import('@renderer/lib/i18n')
 const { Dialog } = await import('@renderer/components/ui/dialog')
 const {
-  AddDeviceRow,
+  AddDeviceButton,
   DeviceRow,
   NoDevices,
   PlainKeyNote,
@@ -116,10 +116,10 @@ afterEach(async () => {
 describe('the status line', () => {
   it('says remote access is on, the port it listens on and how many devices are online', () => {
     expect(text(createElement(RemoteStatusRow, { status: status() }))).toBe(
-      'On · Listening on port 47821 · No device online',
+      'On · listening on port 47821 · No device online',
     )
     expect(text(createElement(RemoteStatusRow, { status: status({ online: [phone.id] }) }))).toBe(
-      'On · Listening on port 47821 · 1 device online',
+      'On · listening on port 47821 · 1 device online',
     )
     expect(
       text(
@@ -163,7 +163,7 @@ describe('the key kept in a file', () => {
   it('is noted only when the system has no keyring', () => {
     remote.status = status({ plainTextKey: true })
     expect(text(createElement(PlainKeyNote))).toBe(
-      "This computer's key is kept in a file only your user can read, because the system has no keyring.",
+      'This computer’s key is kept in a file only your user can read, because the system has no keyring.',
     )
     remote.status = status()
     expect(renderToStaticMarkup(createElement(PlainKeyNote))).toBe('')
@@ -172,7 +172,7 @@ describe('the key kept in a file', () => {
   it('says why a service keeps it there on every system', () => {
     remote.status = status({ plainTextKey: true, service: true })
     expect(text(createElement(PlainKeyNote))).toBe(
-      "This computer's key is kept in a file only your user can read, because a service that starts with the computer cannot count on an unlocked keyring.",
+      'This computer’s key is kept in a file only your user can read, because a service that starts with the computer cannot count on an unlocked keyring.',
     )
   })
 })
@@ -188,7 +188,7 @@ describe('the Direct group', () => {
     settings.own = [FRP]
     remote.status = status({ direct: { state: 'listening', port: 47821, addresses: [FRP, WIFI] } })
     expect(text(createElement(FoundAddresses, { text: 'Found' }))).toBe('Found 192.168.1.8:47821')
-    expect(text(createElement(OwnAddresses, { text: 'Own' }))).toBe('Own 203.0.113.24:60021 Add')
+    expect(text(createElement(OwnAddresses, { text: 'Own' }))).toBe('Own Add 203.0.113.24:60021')
     remote.status = status({ direct: { state: 'failed', port: 47821, reason: 'other' } })
     expect(text(createElement(FoundAddresses, { text: 'Found' }))).toBe(
       'Found Shown once the port is listening.',
@@ -198,7 +198,7 @@ describe('the Direct group', () => {
   it("takes no address beyond the owner's tenth", () => {
     settings.own = Array.from({ length: 10 }, (_, i) => ({ host: 'a.example', port: 1000 + i }))
     expect(text(createElement(OwnAddresses, { text: 'Own' }))).toMatch(
-      /You can add up to 10 addresses\.$/,
+      /^Own You can add up to 10 addresses\./,
     )
   })
 })
@@ -239,14 +239,10 @@ describe('Allow terminal', () => {
     ]
     expect(row()).toEqual([
       'Allow terminal',
-      'Devices can run any command on this computer, beyond what an agent asks to run. Turning ' +
-        "it off closes devices' terminals; the terminals keep running here.",
+      'Devices can open a terminal and run any command on this computer.',
     ])
     await i18n.changeLanguage('zh-CN')
-    expect(row()).toEqual([
-      '允许终端',
-      '设备能在这台电脑上运行任何命令，超出 Agent 要授权的范围。关掉时断开设备上的终端，终端本身继续运行。',
-    ])
+    expect(row()).toEqual(['允许终端', '设备可以打开终端，在这台电脑上运行任何命令。'])
   })
 })
 
@@ -291,9 +287,9 @@ describe('addresses as the owner types them', () => {
 })
 
 describe('a device row', () => {
-  it('names the device, what it runs, and that it is online', () => {
+  it('names the device, its kind, and that it is online', () => {
     const row = text(createElement(DeviceRow, { device: phone, online: true }))
-    expect(row).toBe('My iPhone iOS app · iPhone 17 Pro · iOS Online')
+    expect(row).toBe('My iPhone iOS app Online')
   })
 
   it('names the platform as people do, in either language', async () => {
@@ -353,11 +349,11 @@ describe('the list', () => {
     const rows = section!.rows
     expect(rows.map((row) => row.id)).toEqual(['remote', phone.id, 'add-device'])
     expect(text(rows[1]!.render('') as ReactElement)).toContain('Connected 3 days ago')
-    expect(renderToStaticMarkup(rows[2]!.render('') as ReactElement)).toContain(
-      '<button type="button" disabled=""',
-    )
+    // Add device waits at the list's heading; its row is there for search only.
+    expect(rows[2]!.searchOnly).toBe(true)
+    expect(renderToStaticMarkup(rows[1]!.group!.actions as ReactElement)).toContain('disabled=""')
     expect(text(rows[1]!.group!.note as ReactElement)).toBe(
-      'Turn on remote access to add a device.',
+      'A device that doesn’t connect for 90 days is removed. Turn on remote access to add a device.',
     )
     // With no device to show, the page is the switch alone.
     remote.status = status({ state: 'off', devices: [] })
@@ -366,7 +362,7 @@ describe('the list', () => {
   })
 
   it('opens Add device while remote access is on', () => {
-    expect(renderToStaticMarkup(createElement(AddDeviceRow))).not.toContain('disabled=""')
+    expect(renderToStaticMarkup(createElement(AddDeviceButton))).not.toContain('disabled=""')
   })
 
   it('notes a device in its last days', () => {
@@ -375,8 +371,11 @@ describe('the list', () => {
     expect(text(createElement(StaleNote))).toBe(
       'Devices not connected for 90 days are removed. “My iPhone” has not connected for 85 days; connecting once in the next 5 days keeps it.',
     )
+    // With none in its last days, it says when a device is removed.
     remote.status = status({ devices: [stale], online: [stale.id] })
-    expect(renderToStaticMarkup(createElement(StaleNote))).toBe('')
+    expect(text(createElement(StaleNote))).toBe(
+      'A device that doesn’t connect for 90 days is removed.',
+    )
   })
 })
 
@@ -396,10 +395,10 @@ describe('Add device', () => {
     expect(body).toContain('Scan this code with Kettu on an iPhone or iPad.')
     // Another computer pastes the link where it adds hosts.
     expect(body).toContain(
-      'On another computer, open Settings › Hosts › Add host… in its Kettu and paste this link.',
+      'On another computer, open Settings › Hosts › Add host and paste the link.',
     )
     expect(body).toContain(link)
-    expect(body).toMatch(/expires in 4:3[12] ?\./)
+    expect(body).toMatch(/Expires in 4:3[12]$/)
   })
 
   it('offers a browser link for each address a browser can open', () => {
@@ -440,7 +439,7 @@ describe('Add device', () => {
     const body = text(createElement(CodeBody, { shown, link }))
     // The QR code's overlay names the reason, then the text beside it says more.
     expect(body).toMatch(new RegExp(`^${label} ${title} `))
-    expect(body).not.toContain('expires in')
+    expect(body).not.toContain('Expires in')
     // The link stays, greyed out, and copies no more.
     expect(renderToStaticMarkup(createElement(CodeBody, { shown, link }))).toMatch(
       /text-disabled[^>]*>https:\/\/kettu\.sh\/pair#AQID/,

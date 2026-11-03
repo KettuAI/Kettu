@@ -14,8 +14,15 @@ type Attention = Extract<HostToMain, { type: 'host:attention' }>
 // agent for a pause, so a newer notice replaces the older one instead of stacking.
 const shown = new Map<string, Notification>()
 
-/** An OS notification for what needs the user, shown only when no window is focused. */
-export function notifyAttention(message: Attention, settings: SettingsFile): void {
+/**
+ * An OS notification for what needs the user, shown only when no window is focused. A request
+ * that can be allowed once offers that and Open; clicking it, or Open, opens its session.
+ */
+export function notifyAttention(
+  message: Attention,
+  settings: SettingsFile,
+  allowOnce: (sessionId: string, requestId: string, optionId: string) => void,
+): void {
   const target = attentionTarget(message)
   if (!target) {
     log.warn('Ignored a malformed attention message')
@@ -26,10 +33,19 @@ export function notifyAttention(message: Attention, settings: SettingsFile): voi
   if (!Notification.isSupported()) return
 
   const { key, command } = target
+  const answer = message.kind === 'permission' ? validAnswer(message.allowOnce) : null
   shown.get(key)?.close()
   const notification = new Notification({
     ...attentionText(message),
     silent: !settings.notifications.sound,
+    ...(answer
+      ? {
+          actions: [
+            { type: 'button' as const, text: t('notifications.allowOnce') },
+            { type: 'button' as const, text: t('notifications.open') },
+          ],
+        }
+      : {}),
   })
   const forget = (): void => {
     if (shown.get(key) === notification) shown.delete(key)
@@ -38,6 +54,14 @@ export function notifyAttention(message: Attention, settings: SettingsFile): voi
     forget()
     sendCommand(command)
   })
+  notification.on('action', (details) => {
+    forget()
+    if (details.actionIndex === 0 && answer && message.kind === 'permission') {
+      allowOnce(message.sessionId, answer.requestId, answer.optionId)
+    } else {
+      sendCommand(command)
+    }
+  })
   notification.on('close', forget)
   notification.on('failed', (_, error) => {
     forget()
@@ -45,6 +69,18 @@ export function notifyAttention(message: Attention, settings: SettingsFile): voi
   })
   shown.set(key, notification)
   notification.show()
+}
+
+/** The request a notification may allow once, when the host sent one that reads as one. */
+function validAnswer(value: unknown): { requestId: string; optionId: string } | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { requestId, optionId } = value as Record<string, unknown>
+  return typeof requestId === 'string' &&
+    typeof optionId === 'string' &&
+    requestId.length <= 200 &&
+    optionId.length <= 200
+    ? { requestId, optionId }
+    : null
 }
 
 /** A sample from Settings › Notifications, shown even while a window is focused. */

@@ -15,9 +15,9 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
 
 /** The steps of the icon scale these icons are drawn at. */
-export type IconSize = 12 | 14 | 16
+export type IconSize = 12 | 13 | 14 | 16
 
-const ICON_SIZE = { 12: 'size-3', 14: 'size-3.5', 16: 'size-4' } as const
+const ICON_SIZE = { 12: 'size-3', 13: 'size-3.25', 14: 'size-3.5', 16: 'size-4' } as const
 
 const STATE = {
   open: { Icon: GitPullRequestIcon, color: 'text-success', label: 'pr.icon.open' },

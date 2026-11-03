@@ -1,10 +1,10 @@
 import {
+  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   Minimize2Icon,
   MinusIcon,
   PlusIcon,
-  RefreshCwIcon,
   RotateCcwIcon,
   ScanIcon,
 } from 'lucide-react'
@@ -68,12 +68,18 @@ export function BarButton({
         render={
           <Button
             variant="quiet"
-            size={size === 'pane' ? 'icon-xs' : size === 'group' ? 'icon-sm' : 'icon-compact'}
+            size={size === 'pane' ? 'icon-xs' : 'icon-sm'}
             aria-label={label}
             aria-pressed={pressed}
             disabled={disabled}
             onClick={onClick}
-            className="text-foreground"
+            className={cn(
+              size === 'compact'
+                ? 'size-7.5 rounded-tile text-secondary'
+                : size === 'group'
+                  ? 'text-secondary'
+                  : 'text-foreground',
+            )}
           />
         }
       >
@@ -92,7 +98,11 @@ function Rule({ size }: { size: Size }) {
   return (
     <span
       aria-hidden
-      className={cn('mx-1.5 w-(--hairline) shrink-0 bg-border', size === 'pane' ? 'h-4' : 'h-4.5')}
+      // The top bar spaces its controls 8 px apart, the pane's header 2 px.
+      className={cn(
+        'w-(--hairline) shrink-0 bg-border',
+        size === 'pane' ? 'mx-1.5 h-4' : 'mx-0.5 h-4.5',
+      )}
     />
   )
 }
@@ -122,17 +132,15 @@ function ControlGroup({
 }
 
 /**
- * The viewer's title: the artifact's and the version shown, or on a focused page the page's name
- * and then the artifact's.
+ * The viewer's title: the artifact's, or on a focused page the page's name and then the
+ * artifact's. The version shown has its own chip after it.
  */
 export function ViewerTitle({
   title,
-  version,
   controls,
   pageName,
 }: {
   title: string
-  version: string | null
   controls: CanvasControls
   /** A canvas's page names; null for a single page. */
   pageName: ((index: number) => string) | null
@@ -141,18 +149,99 @@ export function ViewerTitle({
   const page = focused !== null && pageName ? pageName(focused) : null
   if (page !== null) {
     return (
-      <h1 className="ml-1.5 flex min-w-0 items-baseline gap-2">
-        <span className="max-w-60 shrink-0 truncate text-ui font-medium">{page}</span>
+      <h1 className="mx-1 flex min-w-0 items-baseline gap-2">
+        <span className="max-w-60 shrink-0 truncate text-subheading font-semibold">{page}</span>
         <span className="min-w-0 truncate text-small text-secondary">{title}</span>
       </h1>
     )
   }
+  return title ? (
+    <h1 className="mx-1 min-w-0 truncate text-subheading font-semibold">{title}</h1>
+  ) : null
+}
+
+/** The version shown and how long ago it was made; it opens and closes the history. */
+export function VersionChip({
+  version,
+  at,
+  open,
+  onClick,
+}: {
+  version: number
+  at: number | null
+  open: boolean
+  onClick: () => void
+}) {
+  const { t } = useTranslation('artifacts')
+  const now = useNow()
   return (
-    <div className="ml-1.5 flex min-w-0 items-baseline gap-2">
-      {title && <h1 className="min-w-0 truncate text-ui font-medium">{title}</h1>}
-      {version && (
-        <span className="shrink-0 text-small text-secondary tabular-nums">{version}</span>
-      )}
+    <button
+      type="button"
+      aria-expanded={open}
+      aria-label={t('viewer.versionChip', { version })}
+      onClick={onClick}
+      className="flex h-6.5 shrink-0 items-center gap-1.25 rounded-tile bg-subtle px-2 text-hint whitespace-nowrap text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-selected focus-ring"
+    >
+      {t('viewer.version', { version })}
+      {at !== null && <span className="text-tertiary">· {longAgo(at, now)}</span>}
+      <ChevronDownIcon strokeWidth={1.75} className="size-3 text-tertiary" />
+    </button>
+  )
+}
+
+/** The overview's zoom, floating over the canvas's foot: out, the zoom, in, and Fit. */
+export function ZoomPill({ controls }: { controls: CanvasControls }) {
+  const { t } = useTranslation('artifacts')
+  const state = useCanvasState(controls)
+  const commands = controls.commands
+  if (state.focused !== null) return null
+  return (
+    <div
+      role="group"
+      aria-label={t('canvas.zoomGroup')}
+      className="absolute bottom-5 left-1/2 z-10 flex h-9 -translate-x-1/2 items-center gap-0.5 rounded-2xl bg-surface px-1 shadow-menu"
+    >
+      <BarButton
+        label={t('canvas.zoomOut')}
+        shortcut="−"
+        size="group"
+        disabled={atMinZoom(state.zoom)}
+        onClick={() => commands?.zoomStep(-1)}
+      >
+        <MinusIcon className="size-3.75" />
+      </BarButton>
+      <span className="min-w-11 text-center text-hint text-secondary tabular-nums">
+        {t('canvas.zoom', { percent: Math.round(state.zoom * 100) })}
+      </span>
+      <BarButton
+        label={t('canvas.zoomIn')}
+        shortcut="+"
+        size="group"
+        disabled={atMaxZoom(state.zoom)}
+        onClick={() => commands?.zoomStep(1)}
+      >
+        <PlusIcon className="size-3.75" />
+      </BarButton>
+      <span aria-hidden className="mx-1 h-4 w-px bg-border" />
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="quiet"
+              size="sm"
+              aria-pressed={state.fitted}
+              onClick={() => commands?.fitAll()}
+              className="h-7 rounded-tile px-2.5 text-hint font-normal text-secondary aria-pressed:bg-transparent aria-pressed:text-secondary aria-pressed:shadow-none"
+            />
+          }
+        >
+          {t('canvas.fit')}
+        </TooltipTrigger>
+        <TooltipContent>
+          {t('canvas.zoomToFit')}
+          <Kbd>⇧1</Kbd>
+        </TooltipContent>
+      </Tooltip>
     </div>
   )
 }
@@ -423,21 +512,6 @@ export function CanvasBarControls({
       </BarButton>
       {size === 'compact' && <Rule size={size} />}
     </>
-  )
-}
-
-/** Reload, whose icon turns once at each press. */
-export function ReloadButton({ reloads, onClick }: { reloads: number; onClick: () => void }) {
-  const { t } = useTranslation('artifacts')
-  return (
-    <BarButton label={t('viewer.reload')} onClick={onClick}>
-      <RefreshCwIcon
-        key={reloads}
-        className={cn(
-          reloads > 0 && 'motion-safe:animate-[spin_var(--duration-slower)_var(--ease-out-quart)]',
-        )}
-      />
-    </BarButton>
   )
 }
 

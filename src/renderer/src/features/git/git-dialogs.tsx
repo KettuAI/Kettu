@@ -1,7 +1,21 @@
-import { useState, type FormEvent, type ReactNode, type RefObject } from 'react'
-import { CheckIcon, GlobeIcon, LockIcon } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import {
+  ArrowLeftIcon,
+  ArrowUpFromLineIcon,
+  CheckIcon,
+  GitBranchIcon,
+  GlobeIcon,
+  LockIcon,
+} from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
-import { isRepositoryName, type GitStatus, type RepositoryVisibility } from '@shared/git'
+import { useShallow } from 'zustand/react/shallow'
+import {
+  isRepositoryName,
+  type ChangedFile,
+  type GitRemote,
+  type GitStatus,
+  type RepositoryVisibility,
+} from '@shared/git'
 import { SegmentedControl } from '@renderer/components/segmented-control'
 import {
   AlertDialog,
@@ -14,6 +28,7 @@ import {
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
+import { Checkbox } from '@renderer/components/ui/checkbox'
 import {
   Dialog,
   DialogClose,
@@ -31,10 +46,19 @@ import {
   FieldLabel,
 } from '@renderer/components/ui/field'
 import { Input } from '@renderer/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@renderer/components/ui/select'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { Switch } from '@renderer/components/ui/switch'
 import { Textarea } from '@renderer/components/ui/textarea'
-import { errorMessage } from '@renderer/lib/host'
+import { errorMessage, host } from '@renderer/lib/host'
+import { isMod } from '@renderer/lib/platform'
+import { cn } from '@renderer/lib/utils'
 import {
   closeGitDialog,
   createPullRequest,
@@ -43,23 +67,38 @@ import {
   type GitDialog,
 } from '@renderer/stores/git'
 import { CopyButton } from './copy-button'
-import { failureOf, lastLine, pullRequestHead, suggestPullRequest } from './sync'
+import { dialogReturn } from './dialog-focus'
+import { LineCounts } from './rows'
+import { pushNow, pushRequest, runStep, showCreatedPr } from './steps'
+import { failureOf, lastLine, pullRequestHead, pushTargetOf, suggestPullRequest } from './sync'
+import { isBranchName } from './switcher-model'
+import { loadCommit, useChanges } from './use-git-data'
 
-type ReturnFocus = RefObject<HTMLElement | null>
+type ReturnFocus = () => HTMLElement | true
 
 /**
- * The branch popover's dialogs, kept outside it so the popover can close under them. The popover's
- * button is gone when one closes, so focus goes back to `returnFocus`.
+ * Every project's git dialogs, mounted once for the window: the branch popover, the Files pane
+ * and toasts open them, on any page, and the opener may be gone before one closes.
  */
-export function GitDialogs({
-  status,
-  returnFocus,
-}: {
-  status: GitStatus
-  returnFocus?: ReturnFocus
-}) {
+export function GitDialogsHost() {
+  const projects = useGitStore(useShallow((s) => Object.keys(s.status)))
+  return projects.map((projectPath) => (
+    <ProjectDialogs key={projectPath} projectPath={projectPath} />
+  ))
+}
+
+function ProjectDialogs({ projectPath }: { projectPath: string }) {
+  const status = useGitStore((s) => s.status[projectPath])
+  const returnFocus = useCallback(() => dialogReturn(projectPath), [projectPath])
+  if (!status?.repo) return null
+  return <GitDialogs status={status} returnFocus={returnFocus} />
+}
+
+function GitDialogs({ status, returnFocus }: { status: GitStatus; returnFocus: ReturnFocus }) {
   const dialog = useGitStore((s) => s.dialogs[status.projectPath] ?? null)
   const close = (): void => closeGitDialog(status.projectPath)
+  const shown = (kind: GitDialog['kind']) => dialog?.kind === kind
+  const onOpenChange = (open: boolean) => !open && close()
   return (
     <>
       <ConfirmPushDialog
@@ -68,22 +107,101 @@ export function GitDialogs({
         returnFocus={returnFocus}
         onClose={close}
       />
-      <Dialog open={dialog?.kind === 'publishRepo'} onOpenChange={(open) => !open && close()}>
+      <DiscardDialog status={status} dialog={dialog} returnFocus={returnFocus} onClose={close} />
+      <Dialog open={shown('publishRepo')} onOpenChange={onOpenChange}>
         <DialogContent finalFocus={returnFocus} showCloseButton={false}>
-          {dialog?.kind === 'publishRepo' && <PublishForm status={status} onClose={close} />}
+          {dialog?.kind === 'publishRepo' && <PublishRepoForm status={status} onClose={close} />}
         </DialogContent>
       </Dialog>
-      <Dialog open={dialog?.kind === 'createPr'} onOpenChange={(open) => !open && close()}>
-        <DialogContent finalFocus={returnFocus} showCloseButton={false} className="sm:max-w-115">
+      <Dialog open={shown('publishBranch')} onOpenChange={onOpenChange}>
+        <DialogContent finalFocus={returnFocus} showCloseButton={false} className={SHEET_100}>
+          {dialog?.kind === 'publishBranch' && (
+            <PublishBranchForm status={status} onClose={close} />
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={shown('commit')} onOpenChange={onOpenChange}>
+        <DialogContent finalFocus={returnFocus} showCloseButton={false} className={SHEET_115}>
+          {dialog?.kind === 'commit' && (
+            <CommitForm status={status} dialog={dialog} onClose={close} />
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={shown('createPr')} onOpenChange={onOpenChange}>
+        <DialogContent finalFocus={returnFocus} showCloseButton={false} className={SHEET_120}>
           {dialog?.kind === 'createPr' && <CreatePrForm status={status} onClose={close} />}
         </DialogContent>
       </Dialog>
-      <Dialog open={dialog?.kind === 'log'} onOpenChange={(open) => !open && close()}>
+      <Dialog open={shown('newBranch')} onOpenChange={onOpenChange}>
+        <DialogContent finalFocus={returnFocus} showCloseButton={false} className={SHEET_100}>
+          {dialog?.kind === 'newBranch' && <NewBranchForm status={status} onClose={close} />}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={shown('log')} onOpenChange={onOpenChange}>
         <DialogContent finalFocus={returnFocus} showCloseButton={false} className="sm:max-w-160">
           {dialog?.kind === 'log' && <LogView projectPath={status.projectPath} />}
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+// The git dialogs lay out their own padding: a title, the fields under it, the buttons apart.
+const SHEET = 'gap-0 p-0'
+const SHEET_100 = cn(SHEET, 'sm:max-w-100')
+const SHEET_115 = cn(SHEET, 'sm:max-w-115')
+const SHEET_120 = cn(SHEET, 'sm:max-w-120')
+
+function Head({ children }: { children: ReactNode }) {
+  return (
+    <DialogHeader className="px-5.5 pt-5">
+      <DialogTitle className="truncate">{children}</DialogTitle>
+    </DialogHeader>
+  )
+}
+
+function Body({ children }: { children: ReactNode }) {
+  return <div className="flex min-h-0 flex-col px-5.5 pt-3.5">{children}</div>
+}
+
+function Foot({ children, note }: { children: ReactNode; note?: ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 px-5.5 py-4.5 *:data-[slot=button]:h-7.5">
+      <span className="min-w-0 flex-1 truncate text-hint text-tertiary">{note}</span>
+      {children}
+    </div>
+  )
+}
+
+/** A field's label, with an action at its end. */
+function Label({
+  htmlFor,
+  children,
+  action,
+}: {
+  htmlFor?: string
+  children: ReactNode
+  action?: ReactNode
+}) {
+  return (
+    <div className="mt-3 mb-1.5 flex items-center">
+      <label htmlFor={htmlFor} className="flex-1 text-control font-medium text-primary">
+        {children}
+      </label>
+      {action}
+    </div>
+  )
+}
+
+function FailureText({ log }: { log: string }) {
+  return (
+    <p
+      role="alert"
+      className="mt-3 text-small leading-normal text-danger [overflow-wrap:anywhere]"
+      title={log}
+    >
+      {lastLine(log)}
+    </p>
   )
 }
 
@@ -95,7 +213,7 @@ function ConfirmPushDialog({
 }: {
   status: GitStatus
   dialog: GitDialog | null
-  returnFocus?: ReturnFocus
+  returnFocus: ReturnFocus
   onClose: () => void
 }) {
   const { t } = useTranslation(['git', 'common'])
@@ -120,7 +238,7 @@ function ConfirmPushDialog({
             onClick={() => {
               if (!confirm) return
               onClose()
-              void runGitOperation(status.projectPath, confirm.operation)
+              void runStep(status.projectPath, confirm.operation)
             }}
           >
             {t('dialog.confirmPush.action', { branch })}
@@ -128,6 +246,516 @@ function ConfirmPushDialog({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  )
+}
+
+function DiscardDialog({
+  status,
+  dialog,
+  returnFocus,
+  onClose,
+}: {
+  status: GitStatus
+  dialog: GitDialog | null
+  returnFocus: ReturnFocus
+  onClose: () => void
+}) {
+  const { t } = useTranslation(['git', 'common'])
+  const discard = dialog?.kind === 'discard' ? dialog : null
+  const paths = discard?.paths ?? []
+  const name = paths.length === 1 ? paths[0]!.slice(paths[0]!.lastIndexOf('/') + 1) : ''
+  return (
+    <AlertDialog open={!!discard} onOpenChange={(open) => !open && onClose()}>
+      <AlertDialogContent finalFocus={returnFocus} className="sm:max-w-sm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {paths.length === 1
+              ? t('dialog.discard.titleOne', { name })
+              : t('dialog.discard.title', { count: paths.length })}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {t('dialog.discard.description', { count: paths.length })}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={() => {
+              if (!discard) return
+              onClose()
+              void runStep(status.projectPath, { kind: 'discard', paths: discard.paths })
+            }}
+          >
+            {t('dialog.discard.action')}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+/** The files a commit can take: everything changed but a conflicted file. */
+function committable(files: readonly ChangedFile[]): ChangedFile[] {
+  return files.filter((file) => file.status !== 'conflicted')
+}
+
+function CommitForm({
+  status,
+  dialog,
+  onClose,
+}: {
+  status: GitStatus
+  dialog: Extract<GitDialog, { kind: 'commit' }>
+  onClose: () => void
+}) {
+  const { t } = useTranslation(['git', 'common'])
+  const { projectPath } = status
+  const { data, error: loadError } = useChanges(projectPath, true)
+  const files = useMemo(() => committable(data ?? []), [data])
+  const [message, setMessage] = useState('')
+  // Null until the changes load: then the files the opener chose, or all of them.
+  const [ticked, setTicked] = useState<ReadonlySet<string> | null>(null)
+  if (data && ticked === null) {
+    const all = files.map((file) => file.path)
+    setTicked(new Set(dialog.paths ? all.filter((path) => dialog.paths!.includes(path)) : all))
+  }
+  const [busy, setBusy] = useState<'commit' | 'push' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const chosen = files.filter((file) => ticked?.has(file.path))
+  const ready = message.trim() !== '' && chosen.length > 0 && !busy
+
+  const toggle = (path: string, on: boolean): void => {
+    const next = new Set(ticked ?? [])
+    if (on) next.add(path)
+    else next.delete(path)
+    setTicked(next)
+  }
+
+  const commit = async (andPush: boolean): Promise<void> => {
+    if (!ready) return
+    setBusy(andPush ? 'push' : 'commit')
+    setError(null)
+    const done = await runStep(
+      projectPath,
+      { kind: 'commit', message: message.trim(), paths: chosen.map((file) => file.path) },
+      { quietFailure: true, noNext: andPush },
+    )
+    setBusy(null)
+    if (!done) {
+      setError(useGitStore.getState().failed[projectPath]?.log ?? '')
+      return
+    }
+    onClose()
+    if (andPush) pushNow(projectPath)
+  }
+
+  return (
+    <form
+      className="contents"
+      onSubmit={(event: FormEvent) => {
+        event.preventDefault()
+        void commit(false)
+      }}
+    >
+      <Head>{t('dialog.commit.title', { branch: status.head.branch ?? 'HEAD' })}</Head>
+      <Body>
+        <Label htmlFor="commit-message">{t('dialog.commit.message')}</Label>
+        <Textarea
+          id="commit-message"
+          value={message}
+          autoFocus
+          rows={4}
+          placeholder={t('dialog.commit.placeholder')}
+          className="max-h-60 min-h-27.5 resize-none text-control leading-[1.55]"
+          onChange={(event) => setMessage(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing || event.keyCode === 229) return
+            if (event.key === 'Enter' && isMod(event)) {
+              event.preventDefault()
+              void commit(false)
+            }
+          }}
+        />
+        <Label>
+          {ticked
+            ? t('dialog.commit.filesChosen', { count: files.length, chosen: chosen.length })
+            : t('dialog.commit.files')}
+        </Label>
+        <div className="-mx-1 max-h-50 overflow-y-auto px-1">
+          {loadError && <p className="text-small text-danger">{loadError.split('\n')[0]}</p>}
+          {files.map((file) => (
+            <label key={file.path} className="flex h-7.5 items-center gap-2.25" title={file.path}>
+              <Checkbox
+                checked={ticked?.has(file.path) ?? false}
+                onCheckedChange={(on) => toggle(file.path, on)}
+              />
+              <span className="min-w-0 flex-1 truncate font-mono text-code text-primary">
+                {file.path}
+              </span>
+              <LineCounts insertions={file.insertions} deletions={file.deletions} />
+            </label>
+          ))}
+        </div>
+        {error !== null && <FailureText log={error} />}
+      </Body>
+      <Foot>
+        <DialogClose render={<Button variant="outline" size="compact" />}>
+          {t('common:actions.cancel')}
+        </DialogClose>
+        <Button type="submit" variant="outline" size="compact" disabled={!ready}>
+          {busy === 'commit' && <Spinner data-icon="inline-start" />}
+          {t('dialog.commit.commit')}
+        </Button>
+        <Button
+          type="button"
+          size="compact"
+          disabled={!ready || status.push === null}
+          onClick={() => void commit(true)}
+        >
+          {busy === 'push' && <Spinner data-icon="inline-start" />}
+          {t('dialog.commit.commitAndPush')}
+        </Button>
+      </Foot>
+    </form>
+  )
+}
+
+/** The repository's remotes, loaded while a dialog that picks one shows. */
+function useRemotes(projectPath: string): { remotes: GitRemote[] | null; error: string | null } {
+  const [state, setState] = useState<{ remotes: GitRemote[] | null; error: string | null }>({
+    remotes: null,
+    error: null,
+  })
+  useEffect(() => {
+    let live = true
+    host('git.branches', { projectPath }).then(
+      (list) => live && setState({ remotes: list.remotes, error: null }),
+      (error: unknown) => live && setState({ remotes: null, error: errorMessage(error) }),
+    )
+    return () => {
+      live = false
+    }
+  }, [projectPath])
+  return state
+}
+
+/** "github.com/owner/repo" for a GitHub remote, else its URL. */
+function remoteWhere(remote: GitRemote): string {
+  return remote.github ? `github.com/${remote.github.owner}/${remote.github.repo}` : remote.url
+}
+
+function PublishBranchForm({ status, onClose }: { status: GitStatus; onClose: () => void }) {
+  const { t } = useTranslation(['git', 'common'])
+  const { projectPath } = status
+  const branch = status.head.branch ?? ''
+  const { remotes, error: loadError } = useRemotes(projectPath)
+  const [picked, setPicked] = useState<string | null>(null)
+  const remote = picked ?? pushTargetOf(status)?.remote ?? remotes?.[0]?.name ?? null
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async (event: FormEvent): Promise<void> => {
+    event.preventDefault()
+    if (!remote || busy) return
+    setBusy(true)
+    setError(null)
+    const done = await runStep(
+      projectPath,
+      { kind: 'publishBranch', remote },
+      { quietFailure: true },
+    )
+    setBusy(false)
+    if (done) onClose()
+    else setError(useGitStore.getState().failed[projectPath]?.log ?? '')
+  }
+
+  return (
+    <form className="contents" onSubmit={(event) => void submit(event)}>
+      <Head>{t('dialog.publishBranch.title', { branch })}</Head>
+      <Body>
+        <p className="text-control leading-normal text-secondary">
+          <Trans
+            t={t}
+            i18nKey="dialog.publishBranch.description"
+            values={{ remote: remote ?? 'origin' }}
+            components={{ remote: <span className="font-mono text-command text-primary" /> }}
+          />
+        </p>
+        <Label htmlFor="publish-remote">{t('dialog.publishBranch.remote')}</Label>
+        {loadError ? (
+          <p className="text-small text-danger">{loadError.split('\n')[0]}</p>
+        ) : (
+          <Select
+            value={remote}
+            items={(remotes ?? []).map((r) => ({ value: r.name, label: r.name }))}
+            onValueChange={(next) => next && setPicked(next as string)}
+          >
+            <SelectTrigger
+              id="publish-remote"
+              className="w-full text-control data-[size=default]:h-8.5 [&>svg:last-child]:size-3.25 [&>svg:last-child]:text-tertiary"
+            >
+              <SelectValue>
+                {(name: string | null) => {
+                  const r = remotes?.find((item) => item.name === name)
+                  return r ? <RemoteLabel remote={r} /> : name
+                }}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {(remotes ?? []).map((r) => (
+                  <SelectItem key={r.name} value={r.name}>
+                    <RemoteLabel remote={r} />
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        )}
+        {error !== null && <FailureText log={error} />}
+      </Body>
+      <Foot>
+        <DialogClose render={<Button variant="outline" size="compact" />}>
+          {t('common:actions.cancel')}
+        </DialogClose>
+        <Button type="submit" size="compact" disabled={!remote || busy}>
+          {busy ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <ArrowUpFromLineIcon data-icon="inline-start" />
+          )}
+          {t('dialog.publishBranch.action')}
+        </Button>
+      </Foot>
+    </form>
+  )
+}
+
+function RemoteLabel({ remote }: { remote: GitRemote }) {
+  return (
+    <span className="min-w-0 truncate">
+      {remote.name} <span className="text-tertiary">· {remoteWhere(remote)}</span>
+    </span>
+  )
+}
+
+function NewBranchForm({ status, onClose }: { status: GitStatus; onClose: () => void }) {
+  const { t } = useTranslation(['git', 'common'])
+  const [name, setName] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const typed = name.trim()
+  const valid = isBranchName(typed)
+
+  const submit = async (event: FormEvent): Promise<void> => {
+    event.preventDefault()
+    if (!valid || busy) return
+    setBusy(true)
+    setError(null)
+    const done = await runStep(
+      status.projectPath,
+      { kind: 'switch', branch: typed, create: true },
+      { quietFailure: true },
+    )
+    setBusy(false)
+    if (done) onClose()
+    else setError(useGitStore.getState().failed[status.projectPath]?.log ?? '')
+  }
+
+  return (
+    <form className="contents" onSubmit={(event) => void submit(event)}>
+      <Head>{t('dialog.newBranch.title')}</Head>
+      <Body>
+        <p className="text-control leading-normal text-secondary">
+          {status.head.detached
+            ? t('dialog.newBranch.fromCommit', { commit: status.head.oid?.slice(0, 7) ?? 'HEAD' })
+            : t('dialog.newBranch.from', { branch: status.head.branch ?? 'HEAD' })}
+        </p>
+        <Label htmlFor="new-branch">{t('dialog.newBranch.name')}</Label>
+        <Input
+          id="new-branch"
+          value={name}
+          autoFocus
+          spellCheck={false}
+          aria-invalid={(typed !== '' && !valid) || undefined}
+          className="h-8.5 text-control"
+          onChange={(event) => setName(event.target.value)}
+        />
+        {typed !== '' && !valid && (
+          <p className="mt-1.5 text-small text-danger">{t('dialog.newBranch.invalid')}</p>
+        )}
+        {error !== null && <FailureText log={error} />}
+      </Body>
+      <Foot>
+        <DialogClose render={<Button variant="outline" size="compact" />}>
+          {t('common:actions.cancel')}
+        </DialogClose>
+        <Button type="submit" size="compact" disabled={!valid || busy}>
+          {busy && <Spinner data-icon="inline-start" />}
+          {t('dialog.newBranch.action')}
+        </Button>
+      </Foot>
+    </form>
+  )
+}
+
+/** The paths the branch's commits change, from their cached details. */
+function useBranchFiles(status: GitStatus): number | null {
+  const [count, setCount] = useState<number | null>(null)
+  const key = status.commits.map((c) => c.oid).join(',')
+  useEffect(() => {
+    let live = true
+    Promise.all(status.commits.map((c) => loadCommit(status.projectPath, c.oid))).then(
+      (details) => {
+        if (!live) return
+        setCount(new Set(details.flatMap((d) => d.files.map((f) => f.path))).size)
+      },
+      () => live && setCount(null),
+    )
+    return () => {
+      live = false
+    }
+    // `key` names the commits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status.projectPath, key])
+  return count
+}
+
+function CreatePrForm({ status, onClose }: { status: GitStatus; onClose: () => void }) {
+  const { t } = useTranslation(['git', 'common'])
+  const { projectPath } = status
+  const target = pushTargetOf(status)
+  const headBranch = target?.branch ?? status.head.branch ?? ''
+  const [initial] = useState(() => suggestPullRequest(status.head.branch ?? '', status.commits))
+  const [title, setTitle] = useState(initial.title)
+  const [body, setBody] = useState(initial.body)
+  const [base, setBase] = useState(status.defaultBranch ?? '')
+  const [draft, setDraft] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const files = useBranchFiles(status)
+  const [branches, setBranches] = useState<string[]>([])
+  useEffect(() => {
+    let live = true
+    host('git.branches', { projectPath }).then(
+      (list) => live && setBranches(list.branches.map((b) => b.name)),
+      () => {},
+    )
+    return () => {
+      live = false
+    }
+  }, [projectPath])
+  // Unpublished, or with commits the remote does not have yet, it is pushed before it is opened.
+  const pushesFirst = !!target && (target.setUpstream || (status.upstream?.ahead ?? 0) > 0)
+  const valid = target !== null && title.trim() !== '' && base.trim() !== '' && base !== headBranch
+
+  const submit = async (event: FormEvent): Promise<void> => {
+    event.preventDefault()
+    if (!valid || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      if (pushesFirst) {
+        const request = pushRequest(status)
+        if (!request || !(await runGitOperation(projectPath, request))) {
+          setError(useGitStore.getState().failed[projectPath]?.log ?? '')
+          return
+        }
+      }
+      if (!pullRequestHead(useGitStore.getState().status[projectPath] ?? status)) {
+        setError(t('dialog.createPr.notOnGitHub'))
+        return
+      }
+      const pr = await createPullRequest(projectPath, {
+        title: title.trim(),
+        body,
+        base: base.trim(),
+        draft,
+      })
+      onClose()
+      showCreatedPr(projectPath, pr.number)
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const choices = [...new Set([base, ...branches.filter((b) => b !== headBranch)])].filter(Boolean)
+  return (
+    <form className="contents" onSubmit={(event) => void submit(event)}>
+      <Head>{t('dialog.createPr.title')}</Head>
+      <Body>
+        <div className="flex items-center gap-2 text-control text-secondary">
+          <Select
+            value={base}
+            items={choices.map((name) => ({ value: name, label: name }))}
+            onValueChange={(next) => next && setBase(next as string)}
+          >
+            <SelectTrigger
+              aria-label={t('dialog.createPr.base')}
+              variant="quiet"
+              size="sm"
+              className="gap-1.5 rounded-xl px-2.5 text-control font-medium text-primary data-[size=sm]:h-6.5 data-[variant=quiet]:bg-subtle [&>svg:last-child]:hidden"
+            >
+              <GitBranchIcon className="size-3.25" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {choices.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <ArrowLeftIcon aria-hidden className="size-3.5 shrink-0 text-tertiary" />
+          <span className="min-w-0 truncate font-mono text-command text-primary">{headBranch}</span>
+          <span className="flex-1" />
+          <span className="shrink-0 text-hint text-tertiary tabular">
+            {files === null
+              ? t('dialog.createPr.commits', { count: status.commits.length })
+              : t('dialog.createPr.commitsFiles', {
+                  count: status.commits.length,
+                  files: t('dialog.createPr.files', { count: files }),
+                })}
+          </span>
+        </div>
+        <Label htmlFor="pr-title">{t('dialog.createPr.titleField')}</Label>
+        <Input
+          id="pr-title"
+          value={title}
+          autoFocus
+          className="h-8.5 text-control"
+          onChange={(e) => setTitle(e.target.value)}
+        />
+        <Label htmlFor="pr-body">{t('dialog.createPr.body')}</Label>
+        <Textarea
+          id="pr-body"
+          value={body}
+          rows={7}
+          className="max-h-75 min-h-42.5 resize-none text-control leading-[1.55]"
+          onChange={(e) => setBody(e.target.value)}
+        />
+        <label className="mt-3 flex items-center gap-2.25 text-control text-primary">
+          <Checkbox checked={draft} onCheckedChange={setDraft} />
+          {t('dialog.createPr.draft')}
+        </label>
+        {error !== null && <FailureText log={error} />}
+      </Body>
+      <Foot note={pushesFirst ? t('dialog.createPr.pushesFirst') : undefined}>
+        <DialogClose render={<Button variant="outline" size="compact" />}>
+          {t('common:actions.cancel')}
+        </DialogClose>
+        <Button type="submit" size="compact" disabled={!valid || busy}>
+          {busy && <Spinner data-icon="inline-start" />}
+          {t('dialog.createPr.action')}
+        </Button>
+      </Foot>
+    </form>
   )
 }
 
@@ -141,12 +769,10 @@ function Rows({ children }: { children: ReactNode }) {
 function Row({
   label,
   description,
-  htmlFor,
   children,
 }: {
   label: string
   description?: ReactNode
-  htmlFor?: string
   children: ReactNode
 }) {
   return (
@@ -155,7 +781,7 @@ function Row({
       className="min-h-12 gap-4 py-1.5 has-[>[data-slot=field-content]]:items-center"
     >
       <FieldContent>
-        <FieldLabel htmlFor={htmlFor}>{label}</FieldLabel>
+        <FieldLabel>{label}</FieldLabel>
         {description && (
           <FieldDescription className="text-xs text-tertiary">{description}</FieldDescription>
         )}
@@ -170,7 +796,7 @@ function folderName(root: string): string {
   return name.replace(/[^A-Za-z0-9_.-]+/g, '-')
 }
 
-function PublishForm({ status, onClose }: { status: GitStatus; onClose: () => void }) {
+function PublishRepoForm({ status, onClose }: { status: GitStatus; onClose: () => void }) {
   const { t } = useTranslation(['git', 'common'])
   const gh = useGitStore((s) => s.tools?.gh ?? null)
   const busy = useGitStore((s) => s.running[status.projectPath]?.kind === 'publishRepo')
@@ -184,9 +810,12 @@ function PublishForm({ status, onClose }: { status: GitStatus; onClose: () => vo
   const submit = async (event: FormEvent): Promise<void> => {
     event.preventDefault()
     if (!valid || busy) return
-    if (await runGitOperation(status.projectPath, { kind: 'publishRepo', name, visibility })) {
-      onClose()
-    }
+    const done = await runStep(
+      status.projectPath,
+      { kind: 'publishRepo', name, visibility },
+      { quietFailure: true },
+    )
+    if (done) onClose()
   }
 
   if (gh?.state !== 'ready') {
@@ -289,112 +918,15 @@ function PublishForm({ status, onClose }: { status: GitStatus; onClose: () => vo
   )
 }
 
-function CreatePrForm({ status, onClose }: { status: GitStatus; onClose: () => void }) {
-  const { t } = useTranslation(['git', 'common'])
-  const head = pullRequestHead(status) ?? ''
-  const github = status.remote?.github
-  const [initial] = useState(() => suggestPullRequest(status.head.branch ?? '', status.commits))
-  const [title, setTitle] = useState(initial.title)
-  const [body, setBody] = useState(initial.body)
-  const [base, setBase] = useState(status.defaultBranch ?? '')
-  const [draft, setDraft] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const valid = head !== '' && title.trim() !== '' && base.trim() !== '' && base !== head
-
-  const submit = async (event: FormEvent): Promise<void> => {
-    event.preventDefault()
-    if (!valid || busy) return
-    setBusy(true)
-    setError(null)
-    try {
-      await createPullRequest(status.projectPath, {
-        title: title.trim(),
-        body,
-        base: base.trim(),
-        draft,
-      })
-      onClose()
-    } catch (e) {
-      setError(errorMessage(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <form className="contents" onSubmit={(event) => void submit(event)}>
-      <DialogHeader>
-        <DialogTitle>{t('dialog.createPr.title')}</DialogTitle>
-        <DialogDescription>
-          <Trans
-            t={t}
-            i18nKey="dialog.createPr.description"
-            values={{ head, repo: github ? `${github.owner}/${github.repo}` : '' }}
-            components={{ branch: <span className="font-mono text-command text-primary" /> }}
-          />
-        </DialogDescription>
-      </DialogHeader>
-      <Field>
-        <FieldLabel htmlFor="pr-title">{t('dialog.createPr.titleField')}</FieldLabel>
-        <Input id="pr-title" value={title} autoFocus onChange={(e) => setTitle(e.target.value)} />
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="pr-body">{t('dialog.createPr.body')}</FieldLabel>
-        <Textarea
-          id="pr-body"
-          value={body}
-          rows={5}
-          className="max-h-60"
-          onChange={(e) => setBody(e.target.value)}
-        />
-      </Field>
-      <Rows>
-        <Row label={t('dialog.createPr.base')} htmlFor="pr-base">
-          <Input
-            id="pr-base"
-            value={base}
-            spellCheck={false}
-            className="w-40 shrink-0 font-mono text-command"
-            onChange={(e) => setBase(e.target.value.trim())}
-          />
-        </Row>
-        <Row
-          label={t('dialog.createPr.draft')}
-          description={t('dialog.createPr.draftHint')}
-          htmlFor="pr-draft"
-        >
-          <Switch id="pr-draft" checked={draft} onCheckedChange={setDraft} />
-        </Row>
-      </Rows>
-      {error && <FailureText log={error} />}
-      <DialogFooter>
-        <DialogClose render={<Button variant="outline" />}>
-          {t('common:actions.cancel')}
-        </DialogClose>
-        <Button type="submit" disabled={!valid || busy}>
-          {busy && <Spinner data-icon="inline-start" />}
-          {t('dialog.createPr.action')}
-        </Button>
-      </DialogFooter>
-    </form>
-  )
-}
-
-function FailureText({ log }: { log: string }) {
-  return (
-    <p className="text-xs leading-normal text-danger [overflow-wrap:anywhere]" title={log}>
-      {lastLine(log)}
-    </p>
-  )
-}
-
 const LOG_TITLE = {
   fetch: 'failure.operation.fetch',
   pull: 'failure.operation.pull',
   push: 'failure.operation.push',
   publishBranch: 'failure.operation.publish',
   publishRepo: 'failure.operation.publish',
+  switch: 'failure.operation.switch',
+  commit: 'failure.operation.commit',
+  discard: 'failure.operation.discard',
 } as const
 
 /** The failed operation's whole output, as git wrote it, with Copy. */

@@ -40,7 +40,7 @@ import { useWebHostStore } from './web-host'
 
 /** What the host sections ask of their host beyond its agent host. */
 export interface ScopeApi {
-  settings: Pick<KettuApi['settings'], 'addAgent' | 'renameAgent' | 'removeAgent'>
+  settings: Pick<KettuApi['settings'], 'addAgent' | 'renameAgent' | 'setAgentColor' | 'removeAgent'>
   remote: KettuApi['remote']
   dialogs: Pick<KettuApi['dialogs'], 'chooseAgentFolder' | 'chooseAgentBinary' | 'chooseShell'>
   /** Shows a file of the host in this computer's file manager, or copies a path it cannot show. */
@@ -301,6 +301,8 @@ function createScope(hostId: string): OtherScope {
         addAgent: (harnessId, name, folder) =>
           admin('settings.addAgent', { harnessId, name, folder }),
         renameAgent: (agentId, name) => done(admin('settings.renameAgent', { agentId, name })),
+        setAgentColor: (agentId, color) =>
+          done(admin('settings.setAgentColor', { agentId, color })),
         removeAgent: (agentId, trash) => done(admin('settings.removeAgent', { agentId, trash })),
       },
       remote: remoteApi,

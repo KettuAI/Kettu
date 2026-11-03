@@ -221,19 +221,30 @@ const GLYPH_INK_SHADE = { slope: -0.95, intercept: 1.38 }
 // from it to the fox's width.
 export const GLYPH_CANVAS = 18
 const GLYPH_WIDTH = 16
-// The dot of a waiting permission request, at the bottom right, with a gap around it.
-const DOT = { cx: 14.5, cy: 14, r: 2.5, gap: 1.2 }
+// The dot of a waiting permission request, at the bottom right, with a gap around it; the running
+// dot is the smaller one there.
+const DOT = { cx: 14.5, cy: 14, r: 3, gap: 1.5 }
+const RUNNING_DOT_R = 2.5
 
 /** `menubar`, the 18 pt canvas of a macOS template image; `tray`, the fox filling a square. */
 export const GLYPH_FRAMINGS = ['menubar', 'tray']
 
 /**
- * The glyph as SVG text, `size` px wide, in `color`, with the dot when `dot` is set, shaded for a
- * `dark` or `light` ground.
+ * The glyph as SVG text, `size` px wide, in `color` at `opacity`, shaded for a `dark` or `light`
+ * ground. `dot` adds the waiting dot (true) or the running one ('running') at `dotOpacity`, in the
+ * glyph's color, or in `dotColor` for an image that is no template.
  */
 export function glyphSvg(
   framing = 'menubar',
-  { size, color = '#000', dot = false, ground = 'dark' } = {},
+  {
+    size,
+    color = '#000',
+    opacity = 1,
+    dot = false,
+    dotOpacity = 1,
+    dotColor = null,
+    ground = 'dark',
+  } = {},
 ) {
   if (!GLYPH_FRAMINGS.includes(framing)) throw new Error(`Unknown framing: ${framing}`)
   if (!['dark', 'light'].includes(ground)) throw new Error(`Unknown ground: ${ground}`)
@@ -252,10 +263,13 @@ export function glyphSvg(
     `<feComponentTransfer><feFuncA type="linear" slope="${slope}" intercept="${intercept}"/></feComponentTransfer>` +
     '<feComposite in2="SourceAlpha" operator="in" result="opacity"/>' +
     '<feFlood flood-color="#fff"/><feComposite in2="opacity" operator="in"/></filter>'
-  const badge = dot
-    ? `<circle cx="${DOT.cx}" cy="${DOT.cy}" r="${DOT.r + DOT.gap}" fill="#000"/>` +
-      `<circle cx="${DOT.cx}" cy="${DOT.cy}" r="${DOT.r}" fill="#fff"/>`
-    : ''
+  const r = dot === 'running' ? RUNNING_DOT_R : DOT.r
+  const circle = (radius, fill, extra = '') =>
+    `<circle cx="${DOT.cx}" cy="${DOT.cy}" r="${+radius.toFixed(3)}" fill="${fill}"${extra}/>`
+  const gap = dot ? circle(r + DOT.gap, '#000') : ''
+  const badge =
+    dot && !dotColor ? circle(r, '#fff', dotOpacity < 1 ? ` fill-opacity="${dotOpacity}"` : '') : ''
+  const colored = dot && dotColor ? circle(r, dotColor) : ''
   const m = framing === 'tray' ? (GLYPH_CANVAS - GLYPH_WIDTH) / 2 : 0
   const side = GLYPH_CANVAS - 2 * m
   const px = size ?? side
@@ -263,7 +277,7 @@ export function glyphSvg(
     `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${px}" height="${px}" viewBox="${m} ${m} ${side} ${side}">` +
     `<defs>${FOX_DEFS}${shade}</defs>` +
     `<mask id="glyph" maskUnits="userSpaceOnUse" x="0" y="0" width="${GLYPH_CANVAS}" height="${GLYPH_CANVAS}">` +
-    `<g transform="${transform}" filter="url(#shade)">${FOX}</g>${badge}</mask>` +
-    `<rect width="${GLYPH_CANVAS}" height="${GLYPH_CANVAS}" fill="${color}" mask="url(#glyph)"/></svg>\n`
+    `<g transform="${transform}" filter="url(#shade)">${FOX}</g>${gap}${badge}</mask>` +
+    `<rect width="${GLYPH_CANVAS}" height="${GLYPH_CANVAS}" fill="${color}"${opacity < 1 ? ` opacity="${opacity}"` : ''} mask="url(#glyph)"/>${colored}</svg>\n`
   )
 }

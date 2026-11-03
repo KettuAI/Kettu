@@ -8,7 +8,6 @@ import { useSessionsStore, visibleOrder } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
   focusPaneAt,
-  settingsBack,
   openSession,
   openSettings,
   toggleShortcuts,
@@ -19,13 +18,13 @@ import {
 import { paneOrder } from '@renderer/features/split/layout'
 import { newSession, openProjectDialog } from './actions'
 import { emitAppEvent } from './events'
-import { back, forward } from './history'
+import { back, forward, historyKey, toggleHistory } from './history'
 
 const client = window.kettu.client
 
 /**
- * Whether the page handles Mod+O, Mod+N, Mod+, and Mod+B: the desktop app's menu has them on
- * macOS, and a browser has no such menu.
+ * Whether the page handles Mod+O, Mod+N, Mod+, and Mod+B, and the whole history's key: the desktop
+ * app's menu has them on macOS, and a browser has no such menu.
  */
 export function pageHandlesMenuKeys(platform: string, client: 'desktop' | 'web'): boolean {
   return client === 'web' || platform !== 'darwin'
@@ -37,22 +36,31 @@ export function pageHandlesZoomKeys(platform: string, client: 'desktop' | 'web')
 }
 
 /**
- * App-wide shortcuts. On macOS, Cmd+O, Cmd+N, Cmd+, and Cmd+B are menu accelerators that arrive as
- * app commands, and the zoom keys are menu items, so they are not handled here; a browser has no
- * menu, so the web client handles the first four and leaves zoom to the browser. While a terminal
- * has focus on Windows and Linux, only the terminal and zoom shortcuts reach the app, since
- * Ctrl+B, Ctrl+L and Ctrl+N mean something to the shell.
+ * App-wide shortcuts. On macOS, Cmd+O, Cmd+N, Cmd+, Cmd+B and Cmd+Y are menu accelerators that
+ * arrive as app commands, and the zoom keys are menu items, so they are not handled here; a
+ * browser has no menu, so the web client handles the first five and leaves zoom to the browser.
+ * Cmd+[ and Cmd+] are menu items too, but the page takes them first, and the menu gets them only
+ * when the page leaves them, as under a dialog or menu. While a terminal has focus on Windows
+ * and Linux, only the terminal and zoom shortcuts reach the app, since Ctrl+B, Ctrl+H, Ctrl+L and
+ * Ctrl+N mean something to the shell.
  */
 export function useKeyboardShortcuts(): void {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing) return
+      if (event.defaultPrevented) return
+      if (event.isComposing) {
+        // The input method has had the key by now, so preventing it leaves the composition be.
+        if (keepHistoryKey(event, platform)) event.preventDefault()
+        return
+      }
       const view = useViewStore.getState()
       const inTerminal = !!(document.activeElement as HTMLElement | null)?.closest(
         '[data-terminal]',
       )
 
       if (event.ctrlKey && !event.metaKey && !event.altKey && event.code === 'Backquote') {
+        // A session's More menu opens its own session's terminal on this key.
+        if (document.querySelector(MENU_OPENS_TERMINAL)) return
         event.preventDefault()
         if (!view.projectPath || view.settings.open) return
         if (event.shiftKey) emitAppEvent({ kind: 'new-terminal' })
@@ -62,7 +70,7 @@ export function useKeyboardShortcuts(): void {
 
       const step = historyStep(event, platform)
       if (step) {
-        if (layerOpen()) return
+        if (popupOpen()) return
         return run(event, step === 'back' ? back : forward)
       }
 
@@ -76,13 +84,14 @@ export function useKeyboardShortcuts(): void {
 
       // The Files pane's editor keeps this key, which comments the selected lines there.
       if (event.key === '/' && !inCodeEditor(event.target)) {
-        return run(event, () => toggleShortcuts(layerOpen()))
+        return run(event, () => toggleShortcuts(popupOpen()))
       }
 
-      // Mod+1 to Mod+9 focus a pane of the split, unless Settings covers it or no pane is there.
+      // Mod+1 to Mod+9 focus a pane of the split, unless Settings covers it, no pane is there, or a
+      // menu is open, such as the account menu, where they pick a host.
       const digit = /^[1-9]$/.test(event.key) ? Number(event.key) - 1 : null
       if (digit !== null && !view.settings.open && !event.shiftKey) {
-        if (!paneAt(digit)) return
+        if (!paneAt(digit) || layerOpen()) return
         return run(event, () => {
           focusPaneAt(digit)
           focusComposerOfPane()
@@ -95,6 +104,7 @@ export function useKeyboardShortcuts(): void {
         if (key === 'n') return run(event, newSession)
         if (key === ',') return run(event, () => openSettings())
         if (key === 'b') return run(event, toggleSidebar)
+        if (key === historyKey(platform)) return run(event, () => toggleHistory(layerOpen()))
       }
       if (key === 'u' && !event.shiftKey && view.main.kind === 'session' && !view.settings.open) {
         return run(event, () => emitAppEvent({ kind: 'add-attachments' }))
@@ -108,32 +118,28 @@ export function useKeyboardShortcuts(): void {
         return run(event, () => stepSession(event.code === 'BracketLeft' ? -1 : 1))
       }
     }
-    // In the bubble phase, after the page: a popup that closes on Esc stops the key on its way.
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return
-      if (!useViewStore.getState().settings.open || isEditable(event.target) || layerOpen()) return
-      event.preventDefault()
-      settingsBack()
+    // In the bubble phase, once the Files pane's editor has used the key or left it.
+    const onHistoryKey = (event: KeyboardEvent) => {
+      if (keepHistoryKey(event, platform)) event.preventDefault()
     }
     // The mouse's back and forward buttons.
     const onMouseUp = (event: MouseEvent) => {
-      if ((event.button !== 3 && event.button !== 4) || layerOpen()) return
+      if ((event.button !== 3 && event.button !== 4) || popupOpen()) return
       event.preventDefault()
       if (event.button === 3) back()
       else forward()
     }
     window.addEventListener('keydown', onKeyDown, true)
-    window.addEventListener('keydown', onEscape)
+    window.addEventListener('keydown', onHistoryKey)
     window.addEventListener('mouseup', onMouseUp)
     // An artifact's page keeps the keys typed in it; main passes on the app's own shortcuts.
     const offForwarded = window.kettu.app.onShortcut((key) => {
       const event = new KeyboardEvent('keydown', { ...key, cancelable: true })
       onKeyDown(event)
-      onEscape(event)
     })
     return () => {
       window.removeEventListener('keydown', onKeyDown, true)
-      window.removeEventListener('keydown', onEscape)
+      window.removeEventListener('keydown', onHistoryKey)
       window.removeEventListener('mouseup', onMouseUp)
       offForwarded()
     }
@@ -151,17 +157,39 @@ const ARROWS: Record<string, 'back' | 'forward'> = { ArrowLeft: 'back', ArrowRig
  * Files pane's editor keeps them, where they indent or move by syntax, and outside macOS so does
  * a terminal, where they move by a word.
  */
-export function historyStep(
-  event: Pick<KeyboardEvent, 'code' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey' | 'target'>,
+export function historyStep(event: HistoryKeyEvent, platform: string): 'back' | 'forward' | null {
+  const step = historyKeys(event, platform)
+  if (!step || inCodeEditor(event.target)) return null
+  if (platform !== 'darwin' && (event.target as HTMLElement | null)?.closest('[data-terminal]')) {
+    return null
+  }
+  return step
+}
+
+/**
+ * Whether a history key the page does not step on is still prevented, since macOS's History menu
+ * and a browser's Back have the same keys and take any the page leaves: one the Files pane's
+ * editor did not use, as in a read-only file, or one typed while an input method composes.
+ */
+export function keepHistoryKey(
+  event: HistoryKeyEvent & Pick<KeyboardEvent, 'isComposing' | 'defaultPrevented'>,
   platform: string,
-): 'back' | 'forward' | null {
+): boolean {
+  if (event.defaultPrevented || !historyKeys(event, platform)) return false
+  return event.isComposing || inCodeEditor(event.target)
+}
+
+type HistoryKeyEvent = Pick<
+  KeyboardEvent,
+  'code' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey' | 'target'
+>
+
+/** Back or forward by the keys alone, wherever the focus is. */
+function historyKeys(event: HistoryKeyEvent, platform: string): 'back' | 'forward' | null {
   const mac = platform === 'darwin'
   const held = mac ? event.metaKey && !event.altKey : event.altKey && !event.metaKey
   if (!held || event.ctrlKey || event.shiftKey) return null
-  const step = (mac ? BRACKETS : ARROWS)[event.code]
-  if (!step || inCodeEditor(event.target)) return null
-  if (!mac && (event.target as HTMLElement | null)?.closest('[data-terminal]')) return null
-  return step
+  return (mac ? BRACKETS : ARROWS)[event.code] ?? null
 }
 
 function run(event: KeyboardEvent, action: () => void): void {
@@ -201,27 +229,25 @@ function zoomBy(step: ZoomStep): void {
   )
 }
 
-function isEditable(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null
-  if (!el) return false
-  return (
-    el.isContentEditable ||
-    el.tagName === 'INPUT' ||
-    el.tagName === 'TEXTAREA' ||
-    el.tagName === 'SELECT'
-  )
-}
-
 function inCodeEditor(target: EventTarget | null): boolean {
   return !!(target as HTMLElement | null)?.closest('[data-code-editor]')
 }
+
+const MENU_OPENS_TERMINAL = '[role=menu] [data-accelerator="Ctrl+`"]:not([data-disabled])'
 
 /**
  * Whether a dialog or menu is open, closing included: Esc is its own, and Base UI leaves the event
  * unprevented. Focus can be on the body by then, after the button it went back to was disabled.
  */
-function layerOpen(): boolean {
+export function layerOpen(): boolean {
   return !!document.querySelector('[role=dialog], [role=alertdialog], [role=menu]')
+}
+
+/** A dialog or menu other than the Settings modal, which keeps Back and the shortcuts list. */
+export function popupOpen(): boolean {
+  return !!document.querySelector(
+    '[role=dialog]:not([data-settings-dialog]), [role=alertdialog], [role=menu]',
+  )
 }
 
 /** Previous or next session in sidebar order, across Pinned, the projects and No project. */

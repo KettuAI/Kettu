@@ -323,3 +323,14 @@ export function isInstalled(status: AgentStatus): boolean {
 export function hasProgram(status: AgentStatus): boolean {
   return isInstalled(status) || !!status.cli?.installed
 }
+
+/**
+ * Ready to install but not installed: the adapter Kettu installs into its data folder, or the SDK
+ * while the user's own CLI is missing too.
+ */
+export function awaitsPackage(status: AgentStatus): boolean {
+  const pkg = status.package
+  return (
+    !!pkg && !pkg.installed && status.state === 'available' && !(pkg.isSdk && status.cli?.installed)
+  )
+}

@@ -3,11 +3,13 @@ import { useTranslation } from 'react-i18next'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { cn } from '@renderer/lib/utils'
 import { openViewer } from '@renderer/stores/viewer'
+import { FRAME, FrameRing } from './frame'
 import { refKey } from './viewer-items'
 
 /**
- * A picture the thread carries as bytes, by its index among its entry's refs, as a button that
- * opens the viewer.
+ * A picture the thread carries as bytes, by its index among its entry's refs, in the frame of a
+ * reply's pictures, as a button that opens the viewer. `className` sizes the picture; the frame
+ * clips its corners and any shadow of its own.
  */
 export function CarriedImage({
   sessionId,
@@ -46,9 +48,10 @@ export function CarriedImage({
           from: event.currentTarget,
         })
       }
-      className="block max-w-full cursor-zoom-in rounded-lg focus-ring"
+      className={cn(FRAME, 'group/media block w-fit max-w-full cursor-zoom-in focus-ring')}
     >
       <img alt="" src={`data:${mimeType};base64,${data}`} className={cn('block', className)} />
+      <FrameRing />
     </button>
   )
 }

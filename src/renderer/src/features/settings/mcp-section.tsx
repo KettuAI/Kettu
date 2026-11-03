@@ -8,14 +8,22 @@ import { AgentTile } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
 import { usableAgents } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { openSettingsItem } from '@renderer/stores/view'
-import { ConfigNote, ConfigPath } from './places'
-import { GroupLabel, ItemPageHeader, ItemRow, Notice, RowGroup, RowShell, RowText } from './rows'
-import { SettingSwitch } from './controls'
+import {
+  GroupLabel,
+  ItemLine,
+  ItemPageHeader,
+  ItemRow,
+  Notice,
+  RowGroup,
+  RowShell,
+  RowText,
+} from './rows'
+import { Pill, ROW_BUTTON, SettingSwitch } from './controls'
+import { PlaceAction } from './places'
 import { useApply } from './use-apply'
 
 /** Both groups wait for the first status this long, then show what comes, or a skeleton. */
@@ -27,51 +35,35 @@ function useKettuOff(): AgentId[] {
   return useSettingsStore((s) => s.settings.mcp.kettu.off)
 }
 
-/** The shell's tile for Kettu's own server, at the size a row or a page header uses. */
+/** Kettu's own server's tile, in the fox, at the size a row or a page header uses. */
 function ServerTile({ size, glyph }: { size: number; glyph: number }) {
   return (
     <span
       aria-hidden
       style={{ width: size, height: size }}
-      className="grid place-items-center rounded-lg bg-tile text-icon shadow-[inset_0_0_var(--hairline)_var(--border-subtle)]"
+      className="grid shrink-0 place-items-center rounded-segments bg-(image:--brand-kettu-tile) text-(--on-fill)"
     >
       <PlugIcon style={{ width: glyph, height: glyph }} />
     </span>
   )
 }
 
-/** Whether the server listens, as a dot alone on the row and in words on its page. */
-function RunningDot({ running, words }: { running: boolean; words: boolean }) {
+/** Whether the server listens: a dot and the word, on its row and its page. */
+function RunningDot({ running }: { running: boolean }) {
   const { t } = useTranslation('settings')
-  const label = t(running ? 'mcp.state.running' : 'mcp.state.notRunning')
-  if (words) {
-    return (
-      <span
-        className={cn(
-          'inline-flex shrink-0 items-center gap-1.5 font-medium',
-          running ? 'text-secondary' : 'text-danger',
-        )}
-      >
-        <span
-          aria-hidden
-          className={cn('size-1.5 rounded-full', running ? 'bg-success' : 'bg-danger')}
-        />
-        {label}
-      </span>
-    )
-  }
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={<span role="img" aria-label={label} className="flex h-4 items-center px-1" />}
-      >
-        <span
-          className={cn('size-1.5 rounded-full', running ? 'bg-success' : 'bg-danger')}
-          aria-hidden
-        />
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1.5 text-hint whitespace-nowrap',
+        running ? 'text-secondary' : 'text-danger',
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn('size-1.75 rounded-full', running ? 'bg-success' : 'bg-danger')}
+      />
+      {t(running ? 'mcp.state.running' : 'mcp.state.notRunning')}
+    </span>
   )
 }
 
@@ -89,52 +81,81 @@ function ServerSummary({ server }: { server: McpStatus['servers'][number] }) {
       ? t('mcp.row.off', { names: names.join(', ') })
       : null
   return (
-    <span className="flex min-h-4.5 min-w-0 items-center text-command leading-4.5 text-secondary">
-      <span className="min-w-0 truncate">
-        {t('mcp.row.tools', { count: server.tools.length })}
-        {offLine && `${' · '}${offLine}`}
-      </span>
-    </span>
+    <ItemLine>
+      {t('mcp.row.tools', { count: server.tools.length })}
+      {offLine && `${' · '}${offLine}`}
+    </ItemLine>
   )
 }
 
-/** Kettu's own server in the list: its tile, its tool count and its state. */
+/** Kettu's own server in the list: its tile, its tool count and whether it runs. */
 export function ServerRow({ server }: { server: McpStatus['servers'][number] }) {
+  const { t } = useTranslation('settings')
   return (
     <ItemRow
       item={server.name}
       label={server.title}
       onOpen={() => openSettingsItem('mcp', server.name)}
-      tile={<ServerTile size={30} glyph={16} />}
-      name={<span className="truncate text-ui font-medium">{server.title}</span>}
-      right={<RunningDot running={server.running} words={false} />}
+      tile={<ServerTile size={34} glyph={17} />}
+      name={
+        <>
+          <span className="truncate">{server.title}</span>
+          {server.builtIn && <Pill>{t('mcp.builtIn')}</Pill>}
+        </>
+      }
+      right={<RunningDot running={server.running} />}
     >
       <ServerSummary server={server} />
     </ItemRow>
   )
 }
 
-/** One agent's own configuration: its tile and name, then the file as a place. */
+/**
+ * One agent's own configuration: its tile and name, then where its servers come from, saying so
+ * when the file is not there yet, with Show in Finder or Copy path at the end while it is.
+ */
 export function AgentPlaceRow({ place }: { place: McpStatus['places'][number] }) {
   const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const agent = useAgentsStore((s) => s.byId[place.agentId])
   const name = agent?.name ?? place.agentId
+  const note = place.chosen
+    ? t('agents.chosenInKettu')
+    : place.env && t('agents.setByLine', { env: place.env })
+  const values = {
+    path: note ? t('mcp.place.pathNote', { path: place.path, note }) : place.path,
+    command: place.listCommand,
+    file: place.project,
+  }
+  // Where a command lists the servers, the line names the file only when it is missing or moved.
+  const line = place.listCommand
+    ? t(
+        !place.exists
+          ? 'mcp.place.ownWithCommandMissing'
+          : note
+            ? 'mcp.place.ownWithCommandFrom'
+            : 'mcp.place.ownWithCommand',
+        values,
+      )
+    : t(place.exists ? 'mcp.place.ownFrom' : 'mcp.place.ownFromMissing', values)
   return (
-    <div className="flex items-start gap-3 py-3">
+    <div className="flex items-center gap-3.5 py-3.25">
       <AgentTile agent={place.agentId} size={30} glyph={16} />
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="text-ui font-medium">{name}</span>
-        <span className="text-xs text-secondary">
-          {t('mcp.place.connects', { name })}
-          {place.listCommand && ` ${t('mcp.place.list', { command: place.listCommand })}`}
-        </span>
-        <ConfigPath item={place} />
-        <ConfigNote item={place} />
-        <span className="text-xs text-tertiary">
-          {t('mcp.place.project', { file: place.project })}
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-label leading-[normal]">{name}</span>
+        <span
+          className="truncate text-group leading-[normal] text-tertiary"
+          title={line}
+          data-selectable=""
+        >
+          {line}
         </span>
       </div>
+      {place.exists && (
+        <span className="flex shrink-0 items-center gap-2">
+          <PlaceAction path={place.path} icon />
+        </span>
+      )}
     </div>
   )
 }
@@ -177,7 +198,8 @@ export function FailedRead({ error }: { error: string }) {
       title={t('mcp.error.title')}
       action={
         <Button
-          size="sm"
+          className={ROW_BUTTON}
+
           variant="outline"
           disabled={busy}
           onClick={() => {
@@ -232,14 +254,14 @@ export function McpServerPage({ name }: { name: string }) {
         item={name}
         icon={<ServerTile size={40} glyph={20} />}
         title={server?.title ?? name}
+        subtitle={
+          <>
+            <span className="font-mono text-code">{name}</span>
+            {server?.builtIn && <Pill>{t('mcp.builtIn')}</Pill>}
+          </>
+        }
       >
-        <p className="flex min-w-0 items-center gap-1.75 text-command leading-4.5 text-tertiary">
-          {server && <RunningDot running={server.running} words />}
-          <span aria-hidden>·</span>
-          <span className="font-mono text-code">{name}</span>
-          <span aria-hidden>·</span>
-          <span className="truncate">{t('mcp.server.builtIn')}</span>
-        </p>
+        {server && <RunningDot running={server.running} />}
       </ItemPageHeader>
       {/* Until the first status, the page holds its shape rather than flashing an error. */}
       {!server ? (
@@ -249,8 +271,12 @@ export function McpServerPage({ name }: { name: string }) {
           <LoadingRows rows={1} />
         )
       ) : (
-        <div className="flex flex-col gap-7">
-          {!server.running && <NotRunning server={server} />}
+        <div className="flex flex-col">
+          {!server.running && (
+            <div className="mt-5">
+              <NotRunning server={server} />
+            </div>
+          )}
           <AgentsGroup />
           <ToolsGroup tools={server.tools} />
         </div>
@@ -272,7 +298,8 @@ function NotRunning({ server }: { server: McpStatus['servers'][number] }) {
       title={t('mcp.server.notRunning.title')}
       action={
         <Button
-          size="sm"
+          className={ROW_BUTTON}
+
           variant="outline"
           disabled={busy}
           onClick={() => {
@@ -311,7 +338,7 @@ function AgentsGroup() {
   return (
     <section className="flex flex-col" aria-label={t('mcp.agents')}>
       <GroupLabel group={{ id: 'agents', label: t('mcp.agents'), count: agents.length }} />
-      {error && <p className="px-1 pb-1 text-xs text-danger">{error}</p>}
+      {error && <p className="pb-1 text-hint text-danger">{error}</p>}
       <RowGroup>
         {agents.map((agent) => (
           <AgentSwitchRow
@@ -344,19 +371,17 @@ function AgentSwitchRow({
   const takesNone = status?.capabilities.mcpHttp === false
   return (
     <RowShell>
-      <div className="flex items-center gap-3 py-2.5">
+      <div className="flex items-center gap-3.5 py-3.25">
         <AgentTile agent={agentId} size={30} glyph={16} />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-ui font-medium">{name}</span>
-          <span className="text-xs text-secondary">
+          <span className="truncate text-label leading-[normal]">{name}</span>
+          <span className="text-group leading-[normal] text-tertiary">
             {takesNone
               ? t('mcp.agent.takesNone', { name })
               : t(off ? 'mcp.agent.off' : 'mcp.agent.on')}
           </span>
           {!takesNone && active !== null && active !== runs && (
-            <span className="text-xs text-muted-foreground">
-              {t('mcp.agent.nextStart', { name })}
-            </span>
+            <span className="text-hint text-tertiary">{t('mcp.agent.nextStart', { name })}</span>
           )}
         </div>
         {!takesNone && (
@@ -380,7 +405,7 @@ function ToolsGroup({ tools }: { tools: McpStatus['servers'][number]['tools'] })
       <RowGroup>
         {tools.map((tool) => (
           <RowShell key={tool.name}>
-            <div className="py-2.5">
+            <div className="py-3.25">
               <RowText
                 name={<span className="font-mono text-code">{tool.name}</span>}
                 description={tool.description}

@@ -1,22 +1,39 @@
-import { createContext, useContext, type ReactNode } from 'react'
-import { ArrowLeftIcon, ChevronRightIcon } from 'lucide-react'
+import { useContext, type ReactNode } from 'react'
+import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
-import { Button } from '@renderer/components/ui/button'
 import { cn } from '@renderer/lib/utils'
 import { FlashContext, type GroupDef, type RowDef, type SectionDef } from './model'
 
-const CardContext = createContext(false)
-
-/** One group's rows on a card, divided by separators inset to the text. */
-export function RowGroup({ children }: { children: ReactNode }) {
+/** A section's title in the display face and its one line under it. */
+export function PageHeader({
+  id,
+  title,
+  children,
+}: {
+  id?: string
+  title: ReactNode
+  children?: ReactNode
+}) {
   return (
-    <CardContext.Provider value>
-      <div className="rounded-xl bg-card shadow-card">{children}</div>
-    </CardContext.Provider>
+    <header className="flex flex-col">
+      <h2 id={id} className="font-display text-section font-bold text-balance">
+        {title}
+      </h2>
+      {children && <p className="mt-1.5 mb-1 text-lede text-pretty text-tertiary">{children}</p>}
+    </header>
   )
 }
 
-/** A section's rows, each run of rows that share a group under its label. */
+// A run of rows between hairlines: one above the first, one under each.
+const LINE_TOP = 'shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]'
+const LINE_UNDER = 'shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]'
+
+/** One group's rows, under a hairline, each row with its own hairline under it. */
+export function RowGroup({ children }: { children: ReactNode }) {
+  return <div className={LINE_TOP}>{children}</div>
+}
+
+/** A section's rows, each run of rows that share a group under its heading. */
 export function SectionBody({ section }: { section: SectionDef }) {
   const groups: { group: GroupDef | undefined; rows: RowDef[] }[] = []
   for (const row of section.rows) {
@@ -26,10 +43,14 @@ export function SectionBody({ section }: { section: SectionDef }) {
     else groups.push({ group: row.group, rows: [row] })
   }
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-col">
       {groups.map(({ group, rows }, i) => (
         <section key={group?.id ?? i} aria-label={group?.label} className="flex flex-col">
-          {group && !group.unlabeled && <GroupLabel group={group} />}
+          {group && !group.unlabeled ? (
+            <GroupLabel group={group} first={i === 0} />
+          ) : (
+            <div className="h-4" />
+          )}
           {group?.plain ? (
             rows.map((row) => (
               <RowShell key={row.id} id={row.id} bare>
@@ -39,9 +60,13 @@ export function SectionBody({ section }: { section: SectionDef }) {
           ) : (
             <RowGroup>
               {rows.map((row) =>
-                row.layout === 'custom' ? (
-                  <RowShell key={row.id} id={row.id} plain>
-                    {row.render(null)}
+                row.layout === 'custom' || row.layout === 'bare' ? (
+                  <RowShell key={row.id} id={row.id} plain bare={row.layout === 'bare'}>
+                    {row.render(
+                      row.layout === 'bare' ? (
+                        <RowText name={row.name} description={row.rich ?? row.description} />
+                      ) : null,
+                    )}
                   </RowShell>
                 ) : (
                   <Row key={row.id} row={row} />
@@ -56,28 +81,22 @@ export function SectionBody({ section }: { section: SectionDef }) {
   )
 }
 
-/** A line under a group's card, as `GroupDef.note` takes it. */
+/** A line under a group's rows, as `GroupDef.note` takes it. */
 export function GroupNote({ children }: { children: ReactNode }) {
-  return <p className="mt-2.5 px-1 text-xs text-pretty text-tertiary">{children}</p>
+  return <p className="mt-2.5 text-hint text-pretty text-tertiary">{children}</p>
 }
 
-/** A group's label in the caption role, with its count and actions at the end. */
-export function GroupLabel({ group }: { group: GroupDef }) {
+/** A group's heading, with its count after it and its actions at the end. */
+/** `first`: right under the page's description, whose 4 px below it count toward the 32 above. */
+export function GroupLabel({ group, first }: { group: GroupDef; first?: boolean }) {
   return (
-    <div
-      className={cn(
-        'flex min-h-7.5 items-center gap-2 px-1 text-xs font-medium',
-        group.tone === 'danger' ? 'text-danger' : 'text-tertiary',
+    <div className={cn('mb-1 flex min-h-7.5 items-center gap-2', first ? 'mt-7' : 'mt-8')}>
+      <h3 className="text-subheading font-semibold">{group.label}</h3>
+      {group.count !== undefined && (
+        <span className="text-group text-tertiary tabular">{group.count}</span>
       )}
-    >
-      <h3>
-        {group.label}
-        {group.count !== undefined && (
-          <span className="ml-1 font-normal tabular">{group.count}</span>
-        )}
-      </h3>
       {group.actions && (
-        <span className="-mr-1.5 ml-auto flex items-center gap-1 font-normal">{group.actions}</span>
+        <span className="ml-auto flex items-center gap-1 font-normal">{group.actions}</span>
       )}
     </div>
   )
@@ -88,7 +107,7 @@ function Row({ row }: { row: RowDef }) {
   if (row.layout === 'block') {
     return (
       <RowShell id={row.id}>
-        <div className="py-2.5">{row.render(text)}</div>
+        <div className="py-3.75">{row.render(text)}</div>
       </RowShell>
     )
   }
@@ -100,9 +119,8 @@ function Row({ row }: { row: RowDef }) {
 }
 
 /**
- * Outside a card, every row draws the hairline above it, so the first one also underlines its
- * group's label. On a card, a separator starts at the text's inset and the first row has none.
- * `plain` rows draw their own padding, as an agent's row does; `bare` ones draw everything.
+ * A row with its hairline under it. `plain` rows draw their own padding, as an item's row does;
+ * `bare` ones draw everything, the line included.
  */
 export function RowShell({
   id,
@@ -116,49 +134,29 @@ export function RowShell({
   children: ReactNode
 }) {
   const flash = useContext(FlashContext)
-  const card = useContext(CardContext)
   return (
-    <div
-      data-setting-row={id}
-      className={cn(
-        'relative',
-        bare
-          ? 'rounded-xl'
-          : card
-            ? cn(
-                'before:absolute before:top-0 before:right-0 before:left-4 before:h-(--hairline) before:bg-border-soft first:rounded-t-xl first:before:hidden last:rounded-b-xl',
-                plain ? 'px-3' : 'pr-3 pl-4',
-              )
-            : cn('border-t border-subtle', !plain && 'px-1'),
-      )}
-    >
+    <div data-setting-row={id} className={cn('relative', !bare && LINE_UNDER)}>
       {id && (
         <span
           aria-hidden
           className={cn(
-            'pointer-events-none absolute inset-y-0 rounded-[inherit] bg-mark opacity-0 transition-opacity duration-(--duration-slower)',
-            bare ? '-inset-2' : card ? 'inset-x-0' : '-inset-x-2 rounded-lg',
+            'pointer-events-none absolute -inset-x-2 inset-y-0 rounded-lg bg-mark opacity-0 transition-opacity duration-(--duration-slower)',
+            bare && '-inset-2 rounded-xl',
             flash === id && 'opacity-100',
           )}
         />
       )}
-      <div className="relative rounded-[inherit]">{children}</div>
+      <div className={cn('relative', plain && 'rounded-[inherit]')}>{children}</div>
     </div>
   )
 }
 
 export function RowText({ name, description }: { name: ReactNode; description?: ReactNode }) {
-  const card = useContext(CardContext)
   return (
-    <div className={cn('flex min-w-0 flex-col', !card && 'gap-0.5')}>
-      <span className="text-ui font-medium">{name}</span>
+    <div className="flex min-w-0 flex-col">
+      <span className="text-label leading-[normal]">{name}</span>
       {description && (
-        <span
-          className={cn(
-            'text-xs text-pretty text-secondary',
-            card ? 'mt-0.5 leading-4' : 'leading-normal',
-          )}
-        >
+        <span className="mt-0.75 text-group leading-normal text-pretty text-tertiary">
           {description}
         </span>
       )}
@@ -167,44 +165,20 @@ export function RowText({ name, description }: { name: ReactNode; description?: 
 }
 
 /** A row's first line: its text on the left, its control on the right. */
-export function RowLine({
-  text,
-  compact,
-  children,
-}: {
-  text: ReactNode
-  compact?: boolean
-  children?: ReactNode
-}) {
-  const card = useContext(CardContext)
+export function RowLine({ text, children }: { text: ReactNode; children?: ReactNode }) {
   return (
-    <div
-      className={cn(
-        'flex items-center',
-        card ? cn('gap-4 py-2.5', compact ? 'min-h-12' : 'min-h-15') : 'min-h-7 gap-6 py-3',
-      )}
-    >
-      <div className="min-w-0 flex-1">{text}</div>
+    <div className="flex items-center gap-x-7 gap-y-3 py-3.75">
+      <div className="min-w-0 flex-[1_1_280px]">{text}</div>
       {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}
     </div>
   )
 }
 
 /** A row of its own outside the section data, such as a fact on an agent's page. */
-export function RowFrame({
-  text,
-  compact,
-  children,
-}: {
-  text: ReactNode
-  compact?: boolean
-  children?: ReactNode
-}) {
+export function RowFrame({ text, children }: { text: ReactNode; children?: ReactNode }) {
   return (
     <RowShell>
-      <RowLine text={text} compact={compact}>
-        {children}
-      </RowLine>
+      <RowLine text={text}>{children}</RowLine>
     </RowShell>
   )
 }
@@ -248,37 +222,44 @@ export function ItemRow({
   onOpen: () => void
 }) {
   return (
-    <div className="relative -mx-3 flex items-start gap-3 rounded-[inherit] py-3 pr-3 pl-4">
+    <div className="relative flex items-center gap-3.5 py-3.25">
       {/* Buttons cannot nest, so the row opens through a button laid under its content. */}
       <button
         type="button"
         data-item-row={item}
         aria-label={label}
         onClick={onOpen}
-        className="absolute inset-0 rounded-[inherit] outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-visible:shadow-[inset_0_0_0_2px_var(--focus)]"
+        className="absolute -inset-x-2 inset-y-px rounded-lg outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
       />
       <span className="pointer-events-none relative">{tile}</span>
       <div className="pointer-events-none relative flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex min-h-5.5 min-w-0 items-center gap-2">
-          <span className="truncate text-ui font-medium">{name}</span>
-        </div>
+        <div className="flex min-w-0 items-center gap-2 text-label leading-[normal]">{name}</div>
         {children}
       </div>
-      <div className="pointer-events-none relative flex h-5.5 shrink-0 items-center gap-2">
+      <div className="pointer-events-none relative flex shrink-0 items-center gap-2">
         {right}
-        <ChevronRightIcon className="size-4 text-icon" />
+        <ChevronRightIcon strokeWidth={1.6} className="size-3.5 text-tertiary" />
       </div>
     </div>
   )
 }
 
-/** An item page's header: the way back to its list, a 40 px tile and the title with its line. */
+/** A line under an item row's name, in the quiet small role. */
+export function ItemLine({ children }: { children: ReactNode }) {
+  return <span className="truncate text-group leading-[normal] text-tertiary">{children}</span>
+}
+
+/**
+ * An item page's header: the way back to its list, the title, then a 40 px tile with what the item
+ * is and its state beside it.
+ */
 export function ItemPageHeader({
   back,
   onBack,
   item,
   icon,
   title,
+  subtitle,
   children,
   actions,
 }: {
@@ -287,31 +268,40 @@ export function ItemPageHeader({
   item: string
   icon: ReactNode
   title: ReactNode
-  /** The line under the title. */
+  /** What the item is, beside the tile, such as its harness and how it signs in. */
+  subtitle?: ReactNode
+  /** The state line under it. */
   children?: ReactNode
   actions?: ReactNode
 }) {
   return (
     <>
-      <Button
-        variant="quiet"
-        size="sm"
-        className="-mt-1 mb-3.5 -ml-2 w-max gap-1.5 pr-2.5 pl-2 text-secondary"
+      <button
+        type="button"
         onClick={onBack}
+        className="mb-3 inline-flex w-max items-center gap-1 rounded-md text-group leading-[normal] text-tertiary outline-none transition-colors duration-(--duration-fast) hover:text-primary focus-ring"
       >
-        <ArrowLeftIcon data-icon="inline-start" />
+        <ChevronLeftIcon className="size-3.5" />
         {back}
-      </Button>
-      <header data-setting-row={item} className="relative mb-6 flex items-center gap-3.5">
+      </button>
+      <header data-setting-row={item} className="relative flex flex-col">
         <FlashMark id={item} />
-        <span className="relative grid size-10 shrink-0 place-items-center rounded-code bg-surface shadow-card">
-          {icon}
-        </span>
-        <div className="relative flex min-w-0 flex-1 flex-col gap-0.75">
-          <h2 className="flex min-w-0 font-heading text-title font-medium">{title}</h2>
-          {children && <div className="flex min-w-0 items-center gap-1.75">{children}</div>}
+        <h2 className="relative flex min-w-0 font-display text-section font-bold">{title}</h2>
+        {/* 10 px: a page title's 6 px and the 4 px its description would leave below. */}
+        <div className="relative mt-2.5 flex items-center gap-3.5">
+          <span className="relative grid size-10 shrink-0 place-items-center">{icon}</span>
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            {subtitle && (
+              <div className="flex min-w-0 items-center gap-1.5 text-label">{subtitle}</div>
+            )}
+            {children && (
+              <div className="flex min-w-0 items-center gap-1.75 text-hint text-secondary">
+                {children}
+              </div>
+            )}
+          </div>
+          {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
         </div>
-        {actions && <div className="relative flex shrink-0 items-center gap-1.5">{actions}</div>}
       </header>
     </>
   )

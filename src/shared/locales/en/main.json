@@ -33,6 +33,10 @@
     "forceReload": "Force Reload",
     "toggleDevTools": "Toggle Developer Tools",
     "toggleFullScreen": "Enter Full Screen",
+    "history": "History",
+    "back": "Back",
+    "forward": "Forward",
+    "showAllHistory": "Show All History",
     "window": "Window",
     "minimize": "Minimize",
     "zoom": "Zoom",
@@ -48,7 +52,8 @@
     "addFolder": "Add Folder",
     "installTheme": "Install Theme",
     "exportTheme": "Export Theme",
-    "chooseAgentFolder": "Choose Agent Folder"
+    "chooseAgentFolder": "Choose Agent Folder",
+    "chooseEditor": "Choose Editor"
   },
   "quit": {
     "titleQuit": "Quit {{name}}?",
@@ -72,11 +77,16 @@
     "filesUnsaved_other": "{{count}} files have unsaved changes: {{names}}.",
     "losesOnQuit": "Quitting loses them.",
     "losesOnRestart": "Restarting loses them.",
-    "losesOnClose": "Closing the window loses them."
+    "losesOnClose": "Closing the window loses them.",
+    "stopAndQuit": "Stop them and quit",
+    "keepRunning": "Keep running",
+    "keepsRunning": "Kettu can keep them running in the background. You’ll see them when you open Kettu again."
   },
   "notifications": {
     "testTitle": "Kettu",
-    "testBody": "Notifications are on. This is how an agent that needs you will reach you."
+    "testBody": "Notifications are on. This is how an agent that needs you will reach you.",
+    "allowOnce": "Allow once",
+    "open": "Open"
   },
   "attachments": {
     "hostDown": "The agent host isn't running. Try again once it has restarted."
@@ -92,7 +102,10 @@
     "remoteOn_one": "Remote access on · {{count}} device online",
     "remoteOn_other": "Remote access on · {{count}} devices online",
     "open": "Open {{name}}",
-    "quit": "Quit {{name}}"
+    "newSession": "New session",
+    "quit": "Quit {{name}}",
+    "remoteAccess": "Remote access",
+    "checkForUpdates": "Check for updates…"
   },
   "agents": {
     "folderTaken": "This folder already belongs to {{agent}}. Choose another one, or let Kettu make a new one."

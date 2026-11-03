@@ -37,6 +37,7 @@ export function SegmentedControl<T extends string>({
   onChange,
   thumbClassName,
   thumb,
+  size = 'default',
   className,
   itemClassName,
   ...aria
@@ -48,6 +49,8 @@ export function SegmentedControl<T extends string>({
   thumbClassName?: (value: T) => string | undefined
   /** Content painted inside the thumb, under the segment's label. */
   thumb?: ReactNode
+  /** `small` sits in a pane's or a block's header: tighter corners and no ring around the track. */
+  size?: 'default' | 'small'
   className?: string
   /** Layout for each segment, such as tighter padding where many share a narrow track. */
   itemClassName?: string
@@ -132,7 +135,6 @@ export function SegmentedControl<T extends string>({
       {...aria}
       ref={group}
       variant="segmented"
-      size="compact"
       spacing={0.5}
       value={[value]}
       onValueChange={(next) => {
@@ -143,17 +145,23 @@ export function SegmentedControl<T extends string>({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={() => setPressed(null)}
-      className={cn('relative', className)}
+      className={cn(
+        'relative',
+        size === 'small' &&
+          'data-[variant=segmented]:rounded-tile data-[variant=segmented]:shadow-none',
+        className,
+      )}
     >
       {box && active >= 0 && (
         <span
           aria-hidden
           data-slot="segmented-thumb"
           className={cn(
-            'pointer-events-none absolute inset-y-0.5 left-0 overflow-hidden rounded-md bg-segment-thumb shadow-segment contain-strict',
+            'pointer-events-none absolute inset-y-0.5 left-0 overflow-hidden rounded-segment bg-segment-thumb shadow-segment contain-strict',
             placed &&
-              'transition-[translate,width,scale,box-shadow] duration-(--duration-base) ease-(--ease-out-quart) motion-reduce:transition-none',
+              'transition-[translate,width,scale,box-shadow] duration-(--duration-base) ease-standard motion-reduce:transition-none',
             pressed !== null && 'scale-97',
+            size === 'small' && 'rounded-md',
             thumbClassName?.(segments[active].value),
           )}
           style={{ width: box.width, translate: `${box.x}px 0` } satisfies CSSProperties}
@@ -165,8 +173,14 @@ export function SegmentedControl<T extends string>({
         <ToggleGroupItem
           key={s.value}
           value={s.value}
+          // No toggle size: its height utility would outrank an itemClassName height.
+          size={null}
           data-active={i === active || undefined}
-          className={cn('relative flex-auto', itemClassName)}
+          className={cn(
+            "relative h-6.5 flex-auto rounded-segment px-2.5 text-hint font-medium [&_svg:not([class*='size-'])]:size-3.5",
+            size === 'small' && 'rounded-md',
+            itemClassName,
+          )}
         >
           <span className="truncate">
             {typeof s.label === 'function' ? s.label(i === active) : s.label}

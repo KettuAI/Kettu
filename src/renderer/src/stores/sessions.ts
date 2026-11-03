@@ -57,11 +57,19 @@ export function isScratchFolder(byId: Record<string, SessionSummary>, path: stri
 
 export interface SessionNode {
   summary: SessionSummary
+  /**
+   * The sub-sessions the user started, one level deep: a sub-session's own sub-sessions list here
+   * too, by when they were created.
+   */
   children: SessionNode[]
-  /** Pending permission requests here and in every descendant. */
+  /** The agent's sub-agents of this session, which its row shows as a badge rather than as rows. */
+  subagents: SessionSummary[]
+  /** Pending permission requests here, in its sub-agents and in its sub-sessions. */
   permissionCount: number
-  /** Whether this session or a descendant is running. */
+  /** Whether this session or one of its sub-sessions is running; sub-agents run on its badge. */
   running: boolean
+  /** The same two for the row alone, with its sub-agents' requests but not its sub-sessions'. */
+  own: { permissionCount: number; running: boolean }
 }
 
 /** The host a session is on, null being this computer. */
@@ -105,14 +113,21 @@ export function pinnedTree(byId: Record<string, SessionSummary>): SessionNode[] 
  * failed: the top-level ones, the latest first. They stay listed in their projects as well.
  */
 export function needsYouTree(byId: Record<string, SessionSummary>): SessionNode[] {
-  return buildTree(
-    byId,
-    (s) => s.origin !== 'routine',
-    (s) => !s.archivedAt,
+  return (
+    buildTree(
+      byId,
+      (s) => s.origin !== 'routine',
+      (s) => !s.archivedAt,
+    )
+      .filter((node) => node.permissionCount > 0 || node.summary.attention === 'error')
+      // The row stands for the whole tree, so it shows what its sub-sessions wait for as its own.
+      .map((node) => ({
+        ...node,
+        children: [],
+        own: { permissionCount: node.permissionCount, running: node.running },
+      }))
+      .sort((a, b) => b.summary.updatedAt - a.summary.updatedAt)
   )
-    .filter((node) => node.permissionCount > 0 || node.summary.attention === 'error')
-    .map((node) => ({ ...node, children: [] }))
-    .sort((a, b) => b.summary.updatedAt - a.summary.updatedAt)
 }
 
 /** Whether the session is a pinned top-level session not archived, or one of its sub-sessions. */
@@ -151,22 +166,47 @@ function buildTree(
       const list = children.get(s.parentId) ?? []
       list.push(s)
       children.set(s.parentId, list)
-    } else if (rootKept(s)) {
+    } else if (rootKept(s) && s.origin !== 'subagent') {
       roots.push(s)
     }
   }
-  const build = (summary: SessionSummary): SessionNode => {
-    const kids = (children.get(summary.id) ?? [])
-      .sort((a, b) => a.createdAt - b.createdAt)
-      .map(build)
+  const kids = (id: string) =>
+    (children.get(id) ?? []).slice().sort((a, b) => a.createdAt - b.createdAt)
+  // A sub-agent's requests wait on the row that shows its badge, its own sub-agents' too; their
+  // runs show on the badge, not as the row's.
+  const agentWaits = (id: string): number =>
+    kids(id).reduce(
+      (n, child) =>
+        child.origin === 'subagent' ? n + child.permissionCount + agentWaits(child.id) : n,
+      0,
+    )
+  // Sub-sessions at any depth, sub-agents' included, as one level.
+  const subSessions = (id: string): SessionSummary[] =>
+    kids(id).flatMap((child) =>
+      child.origin === 'subagent' ? subSessions(child.id) : [child, ...subSessions(child.id)],
+    )
+  const row = (summary: SessionSummary, nested: SessionNode[]): SessionNode => {
+    const own = {
+      permissionCount: summary.permissionCount + agentWaits(summary.id),
+      running: isActive(summary),
+    }
     return {
       summary,
-      children: kids,
-      permissionCount: summary.permissionCount + kids.reduce((n, k) => n + k.permissionCount, 0),
-      running: isActive(summary) || kids.some((k) => k.running),
+      children: nested,
+      subagents: kids(summary.id).filter((child) => child.origin === 'subagent'),
+      permissionCount: own.permissionCount + nested.reduce((n, k) => n + k.permissionCount, 0),
+      running: own.running || nested.some((k) => k.running),
+      own,
     }
   }
-  return roots.map(build)
+  return roots.map((root) =>
+    row(
+      root,
+      subSessions(root.id)
+        .sort((a, b) => a.createdAt - b.createdAt)
+        .map((child) => row(child, [])),
+    ),
+  )
 }
 
 function isActive(summary: SessionSummary): boolean {

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@renderer/lib/utils'
 
-// Rows are --control-height-sm tall, as the tree's rows, read once from the theme.
+// Rows are --control-height tall, as the tree's rows, read once from the theme.
 const ROW = parseFloat(
-  getComputedStyle(document.documentElement).getPropertyValue('--control-height-sm'),
+  getComputedStyle(document.documentElement).getPropertyValue('--control-height'),
 )
 const OVERSCAN = 8
 

@@ -7,8 +7,8 @@ import { Root } from './root'
 export function renderApp(container: HTMLElement): void {
   createRoot(container).render(
     <StrictMode>
-      {/* One 1 px line at every icon size (design system: density and sizing). */}
-      <LucideProvider strokeWidth={1.25} nonScalingStroke>
+      {/* One line of 1.35 px at every icon size. */}
+      <LucideProvider strokeWidth={1.35} nonScalingStroke>
         <Root />
       </LucideProvider>
     </StrictMode>,

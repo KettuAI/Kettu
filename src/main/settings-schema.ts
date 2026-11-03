@@ -4,6 +4,11 @@ import {
   AGENT_NAME_CHARS,
   CONFIG_VARIABLES,
   DEFAULT_SETTINGS,
+  AGENT_COLORS,
+  isAgentColor,
+  nextAgentColor,
+  isLinkSite,
+  MAX_LINK_SITES,
   type AddedAgent,
   type HostSettings,
   type ProxySettings,
@@ -60,6 +65,24 @@ const isHostName: Check = (value, path) =>
 const isThemeId: Check = (value, path) =>
   typeof value === 'string' && THEME_ID.test(value) ? null : `"${path}" must be a theme id`
 
+/** The sites the "Always open" choice remembers, each a host mapped to where it opens. */
+const isLinkSites: Check = (value, path) => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return `"${path}" must be an object`
+  }
+  const entries = Object.entries(value)
+  if (entries.length > MAX_LINK_SITES) return `"${path}" may hold at most ${MAX_LINK_SITES} sites`
+  for (const [site, destination] of entries) {
+    if (!isLinkSite(site)) {
+      return `"${path}" names a site that is not a host`
+    }
+    if (destination !== 'browser' && destination !== 'session') {
+      return `"${path}.${site}" must be one of "browser", "session"`
+    }
+  }
+  return null
+}
+
 const SECTION_FIELDS = {
   general: {
     language: oneOf(...LANGUAGE_SETTINGS),
@@ -71,7 +94,12 @@ const SECTION_FIELDS = {
     background: isBoolean,
     sessionTitles: isBoolean,
   },
-  thread: { outlineSummaries: isBoolean, confirmLinks: isBoolean },
+  thread: {
+    outlineSummaries: isBoolean,
+    confirmLinks: isBoolean,
+    openLinksIn: oneOf('browser', 'session', 'ask'),
+    alwaysOpenIn: isLinkSites,
+  },
   appearance: {
     theme: oneOf('system', 'light', 'dark'),
     colorTheme: isThemeId,
@@ -400,7 +428,11 @@ export function withAddedAgent(current: SettingsFile, agent: AddedAgent): Settin
     throw new SettingsError(`The agent "${agent.id}" exists already`)
   }
   const next = structuredClone(current)
-  next.addedAgents.push({ ...agent, name: agentName(agent.name) })
+  next.addedAgents.push({
+    ...agent,
+    name: agentName(agent.name),
+    color: agent.color ?? nextAgentColor(current.addedAgents),
+  })
   return next
 }
 
@@ -413,6 +445,20 @@ export function withRenamedAgent(
   if (index < 0) throw new SettingsError(`No added agent "${agentId}"`)
   const next = structuredClone(current)
   next.addedAgents[index] = { ...next.addedAgents[index]!, name: agentName(name) }
+  return next
+}
+
+/** Sets an added agent's dot from untrusted arguments. */
+export function withAgentColor(
+  current: SettingsFile,
+  agentId: unknown,
+  color: unknown,
+): SettingsFile {
+  const index = current.addedAgents.findIndex((agent) => agent.id === agentId)
+  if (index < 0) throw new SettingsError(`No added agent "${String(agentId)}"`)
+  if (!isAgentColor(color)) throw new SettingsError(`Unknown agent color "${String(color)}"`)
+  const next = structuredClone(current)
+  next.addedAgents[index] = { ...next.addedAgents[index]!, color }
   return next
 }
 
@@ -572,7 +618,18 @@ function readAddedAgents(list: unknown[], problems: string[]): AddedAgent[] {
       problems.push(`"${path}" repeats another agent's id or folder`)
       continue
     }
-    agents.push({ id, name: stored, configDir: configDir as string, created: created as boolean })
+    // A file from before colors, or a color this version does not know, gets the color the
+    // agent's place showed, kept from then on so removing an agent above it changes nothing.
+    const color = isAgentColor(entry.color)
+      ? entry.color
+      : AGENT_COLORS[agents.length % AGENT_COLORS.length]!
+    agents.push({
+      id,
+      name: stored,
+      configDir: configDir as string,
+      created: created as boolean,
+      color,
+    })
   }
   return agents
 }

@@ -55,12 +55,12 @@ describe('buttonVariants depth', () => {
     expect(classes).not.toContain('bg-destructive/10')
   })
 
-  it('draws destructive-outline as the outline button in the danger color', () => {
+  it('draws destructive-outline on the surface with a thin ring in the danger color', () => {
     const classes = buttonVariants({ variant: 'destructive-outline' }).split(' ')
 
     expect(classes).toContain('bg-card')
-    expect(classes).toContain('shadow-outline')
-    expect(classes).toContain('hover:shadow-outline-hover')
+    expect(classes).toContain('shadow-destructive-ring')
+    expect(classes).toContain('hover:shadow-destructive-ring-hover')
     expect(classes).toContain('text-destructive')
     expect(classes).toContain('disabled:text-tertiary')
   })
@@ -71,7 +71,7 @@ describe('buttonVariants shape', () => {
     ['xs', 'rounded-md'],
     ['icon-xs', 'rounded-md'],
     ['sm', 'rounded-lg'],
-    ['icon-sm', 'rounded-lg'],
+    ['icon-sm', 'rounded-tile'],
     ['default', 'rounded-lg'],
   ] as const)('rounds the %s size at %s', (size, radius) => {
     const classes = buttonVariants({ size }).split(' ')
@@ -80,10 +80,10 @@ describe('buttonVariants shape', () => {
     expect(radii).toEqual([radius])
   })
 
-  it('sets sm text at the small step', () => {
+  it('sets sm text at the control step', () => {
     const classes = buttonVariants({ size: 'sm' }).split(' ')
 
-    expect(classes).toContain('text-small')
+    expect(classes).toContain('text-control')
     expect(classes).not.toContain('text-ui')
   })
 })

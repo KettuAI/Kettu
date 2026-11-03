@@ -242,6 +242,8 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
     app: {
       // The web client is the host's own build, so its version is the host's.
       getInfo: () => hostInfo(),
+      // Links open in this browser itself, which the page cannot name.
+      defaultBrowser: async () => ({ name: null, icon: null }),
       respondQuit: async () => {},
       onConfirmQuit: never,
       setUnsaved: () => {},
@@ -329,6 +331,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       addAgent: (harnessId, name, folder) =>
         admin('settings.addAgent', { harnessId, name, folder }),
       renameAgent: (agentId, name) => done(admin('settings.renameAgent', { agentId, name })),
+      setAgentColor: (agentId, color) => done(admin('settings.setAgentColor', { agentId, color })),
       removeAgent: (agentId, trash) => done(admin('settings.removeAgent', { agentId, trash })),
     },
     themes: webThemes({
@@ -380,6 +383,12 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       showDataFolder: async () => copyPath((await hostInfo()).userDataPath),
       showItem: (path) => copyPath(path),
       openNotices: () => unsupported('show files'),
+    },
+    // The host's files open in apps on the host, which a browser cannot start.
+    editors: {
+      list: async () => ({ editors: [], last: null }),
+      open: () => unsupported('open files in another app'),
+      choose: () => unsupported('open files in another app'),
     },
     media: {
       copyImage: async (source) => {
@@ -437,6 +446,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       stop: () => unsupported('show the browser'),
       openExternal: () => unsupported('show the browser'),
       freeze: async () => null,
+      capture: async () => null,
       thaw: async () => {},
       handBack: () => unsupported('show the browser'),
       stopDriving: () => unsupported('show the browser'),
@@ -444,6 +454,9 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       allowedSites: async () => [],
       removeAllowedSite: () => unsupported('show the browser'),
       clearData: () => unsupported('show the browser'),
+      siteIcons: async () => ({}),
+      onSiteIcon: never,
+      siteOpened: async () => {},
       setSessions: () => {},
       onState: never,
       onOpened: never,

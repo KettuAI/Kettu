@@ -19,6 +19,7 @@ import {
   nextState,
   offReason,
   readOnlyVolume,
+  releaseHighlights,
   type StartedBy,
   type UpdateMode,
   type UpdaterEvent,
@@ -328,7 +329,11 @@ export class Updater {
         this.dispatch({ type: 'progress', percent: progress.percent }),
       )
       autoUpdater.on('update-downloaded', (info) => {
-        this.dispatch({ type: 'downloaded', version: info.version })
+        this.dispatch({
+          type: 'downloaded',
+          version: info.version,
+          notes: releaseHighlights(info.releaseNotes),
+        })
         // electron-updater adds its quit handler right after this event, so the choice applies
         // once it has.
         queueMicrotask(() => this.applyInstallOnQuit(autoUpdater, this.deps.settings()))

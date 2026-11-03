@@ -4,7 +4,7 @@ import {
   EllipsisIcon,
   Maximize2Icon,
   Minimize2Icon,
-  RefreshCwIcon,
+  RotateCwIcon,
   TrashIcon,
   XIcon,
 } from 'lucide-react'
@@ -144,7 +144,7 @@ export default function ArtifactPane({
       <div
         className={cn(
           'app-region-drag flex h-top-bar shrink-0 items-center gap-0.5 pr-2 pl-3 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
-          cornered && 'pl-[calc(36px+var(--traffic-lights))]',
+          cornered && 'pl-(--corner-inset)',
         )}
       >
         {cornered && <CornerControls className="mr-1" />}
@@ -172,7 +172,7 @@ export default function ArtifactPane({
               />
             )}
             <PanelButton label={t('viewer.reload')} onClick={artifact.reload}>
-              <RefreshCwIcon />
+              <RotateCwIcon />
             </PanelButton>
             {summary && (
               <DropdownMenu>

@@ -1,12 +1,18 @@
-// The Files pane editor's colors, from the Shiki theme code blocks and diffs take: a CodeMirror
+// The Files pane editor's colors, from the code theme code blocks and diffs take: a CodeMirror
 // highlight style built from the theme's TextMate rules.
 
 import { HighlightStyle, syntaxHighlighting, type TagStyle } from '@codemirror/language'
 import type { Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { tags, type Tag } from '@lezer/highlight'
-import { normalizeTheme, type BundledTheme, type ThemeRegistrationResolved } from 'shiki'
+import { normalizeTheme, type ThemeRegistrationResolved } from 'shiki'
 import { bundledThemes } from 'shiki/themes'
+import {
+  isKettuCodeTheme,
+  KETTU_CODE_THEMES,
+  kettuCodeTheme,
+  type CodeTheme,
+} from '@renderer/features/session/markdown/code-themes'
 
 // The scopes Shiki's grammars give the tokens each tag marks, the likeliest first. A tag left out,
 // or one the theme styles none of the scopes of, takes its parent tag's rule: `operator` has none,
@@ -136,25 +142,31 @@ export function highlightSpecs(theme: ThemeRegistrationResolved): TagStyle[] {
 
 const loaded = new Map<string, Promise<Extension>>()
 
+async function themeOf(id: CodeTheme): Promise<ThemeRegistrationResolved> {
+  if (isKettuCodeTheme(id)) {
+    return normalizeTheme(kettuCodeTheme(id === KETTU_CODE_THEMES.dark ? 'dark' : 'light'))
+  }
+  return normalizeTheme((await bundledThemes[id]()).default)
+}
+
 /**
- * The editor's colors under a Shiki theme in the app's light or dark mode, with the surfaces the
- * pane gives it. Each is built once and kept, so the same promise comes back for the same choice.
+ * The editor's colors under a code theme in the app's light or dark mode, on the code block's
+ * surface. Each is built once and kept, so the same promise comes back for the same choice.
  */
-export function editorTheme(id: BundledTheme, dark: boolean): Promise<Extension> {
+export function editorTheme(id: CodeTheme, dark: boolean): Promise<Extension> {
   const key = `${id} ${dark}`
   let extension = loaded.get(key)
   if (!extension) {
-    extension = bundledThemes[id]().then(({ default: raw }) => {
-      const theme = normalizeTheme(raw)
+    extension = themeOf(id).then((theme) => {
       return [
         EditorView.theme(
           {
-            '&': { color: theme.fg, backgroundColor: 'var(--bg-app)' },
-            '.cm-content': { caretColor: 'var(--text-primary)' },
-            '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--text-primary)' },
+            '&': { color: theme.fg, backgroundColor: 'var(--bg-code-block)' },
+            '.cm-content': { caretColor: 'var(--control-on)' },
+            '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--control-on)' },
             '.cm-gutters': {
-              backgroundColor: 'var(--bg-app)',
-              color: 'var(--text-disabled)',
+              backgroundColor: 'var(--bg-code-block)',
+              color: 'var(--syntax-comment)',
               borderRightColor: 'transparent',
             },
             // The line being edited shows only while the editor has the focus.

@@ -36,7 +36,7 @@ Kettu is only a GUI: it implements no agent. It drives Claude Code through the C
 
 Electron 44, electron-vite 6 (Vite 8), React 19, TypeScript 6 in strict mode, Tailwind CSS v4, pnpm 10, electron-builder. TypeScript stays on 6.0 until typescript-eslint supports 7.
 
-Beyond the UI stack: `@agentclientprotocol/sdk` for ACP (protocol v1 through the SDK's `unstable` entrypoint, whose schema carries the subagent updates), `@modelcontextprotocol/sdk` for the artifacts service's MCP server, `electron-updater` for updates, Vitest for tests, `react-day-picker` for the usage page's date range picker, `uqr` for the pairing QR code in Settings › Remote access, and the Inter, Source Serif 4 and JetBrains Mono faces from `@fontsource-variable`, which themes may choose; the built-in theme sets text in the system font.
+Beyond the UI stack: `@agentclientprotocol/sdk` for ACP (protocol v1 through the SDK's `unstable` entrypoint, whose schema carries the subagent updates), `@modelcontextprotocol/sdk` for the artifacts service's MCP server, `electron-updater` for updates, Vitest for tests, `react-day-picker` for the usage page's date range picker, `uqr` for the pairing QR code in Settings › Remote access, `tldts` for the registrable domain the link confirmation names, and the Inter, Manrope, Source Serif 4 and JetBrains Mono faces from `@fontsource-variable`: the built-in theme sets the interface and replies in Inter, page and dialog titles in Manrope and code in JetBrains Mono, and a theme may choose others.
 
 Claude Code's `@anthropic-ai/claude-agent-sdk` and Codex's `@openai/codex` are never dependencies: Kettu installs them into its data folder on first use and loads them at runtime, because the SDK's license grants no right to redistribute it. The repository holds only its own types for the parts of the SDK it uses, and lint rejects a value import of the package.
 
@@ -50,7 +50,7 @@ Claude Code's `@anthropic-ai/claude-agent-sdk` and Codex's `@openai/codex` are n
 | Resizable layout            | react-resizable-panels, through `components/ui/resizable.tsx`         |
 | Drag and drop               | dnd-kit, the new `@dnd-kit/react` API only                            |
 | State management            | Zustand, stores in `src/renderer/src/stores`, one store per domain    |
-| Markdown                    | Streamdown, with `@streamdown/code` and `@streamdown/cjk`             |
+| Markdown                    | Streamdown and its code, CJK and Mermaid plugins; KaTeX for maths     |
 | Syntax highlighting         | Shiki                                                                 |
 | Diffs                       | `@pierre/diffs`                                                       |
 | Code editing                | CodeMirror 6 (`codemirror`): the Files pane's editor and the composer |
@@ -66,7 +66,7 @@ The top of the tree:
 ```text
 src/
 ├── main/              Main process: lifecycle, windows, menus, IPC, settings, updates
-├── preload/           Sandboxed bridge exposed as window.kettu
+├── preload/           Sandboxed bridges exposed as window.kettu: the window's and the menu bar panel's
 ├── agent-host/        Utility process: agents, sessions, projects, git
 ├── terminal-host/     Utility process: the terminal's shells through node-pty
 ├── remote-host/       Utility process: paired devices' encrypted connections to the agent host
@@ -103,7 +103,7 @@ Kettu drives agents that run shell commands, so these are not negotiable:
 - Keep the permission handlers in `src/main/permissions.ts`: the clipboard is the only web permission granted, and only to the app's own page. Add another only with a stated reason.
 - Navigation away from the app and new windows stay blocked; external `http(s)` links open in the system browser.
 - The sandboxed preload can only `require('electron')`. Bundled source and type-only imports from `@shared` are fine; Node built-ins and npm packages are not.
-- Do not loosen the CSP in `src/renderer/index.html` without a stated reason.
+- Do not loosen the CSP in `src/renderer/index.html` and `src/renderer/tray.html` without a stated reason. The menu bar panel's page gets only what `src/preload/tray.ts` exposes, main takes from it only the channels `PANEL_CHANNELS` in `src/main/ipc.ts` lists, and its `tray:*` calls from that page alone.
 
 ## Commands
 

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import type { ChangedFile, ChangeStatus } from '@shared/git'
 import { ChangeBadge } from './change-badge'
-import { changesByPath } from './changes'
+import { changesByPath, projectChanges } from './changes'
 
 function changed(path: string, status: ChangeStatus): ChangedFile {
   return { path, oldPath: null, status, insertions: null, deletions: null }
@@ -34,6 +34,15 @@ describe('changesByPath', () => {
   })
 })
 
+describe('projectChanges', () => {
+  it('keeps deleted files and the change itself, under the project-relative path', () => {
+    const gone = changed('app/gone.ts', 'deleted')
+    expect(projectChanges('/repo', '/repo/app', [gone, changed('lib/b.ts', 'added')])).toEqual([
+      { path: 'gone.ts', file: gone },
+    ])
+  })
+})
+
 describe('ChangeBadge', () => {
   it("shows git's letter in its state's color and names the change", () => {
     const modified = renderToStaticMarkup(createElement(ChangeBadge, { status: 'modified' }))
@@ -41,8 +50,10 @@ describe('ChangeBadge', () => {
     expect(modified).toContain('text-warning')
     expect(modified).toContain('Modified')
 
+    // A new file reads as added before it is staged too.
     const added = renderToStaticMarkup(createElement(ChangeBadge, { status: 'untracked' }))
-    expect(added).toContain('>U<')
+    expect(added).toContain('>A<')
     expect(added).toContain('text-success')
+    expect(added).toContain('Untracked')
   })
 })

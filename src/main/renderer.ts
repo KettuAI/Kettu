@@ -6,18 +6,43 @@ import { is } from '@electron-toolkit/utils'
 /** Where the renderer loads from: the dev server in development, else the built index.html. */
 export type RendererEntry = { kind: 'dev-server'; url: string } | { kind: 'file'; path: string }
 
-const devServerUrl = is.dev ? process.env['ELECTRON_RENDERER_URL'] : undefined
-const entry: RendererEntry = devServerUrl
-  ? { kind: 'dev-server', url: devServerUrl }
-  : { kind: 'file', path: join(__dirname, '../renderer/index.html') }
+/** The renderer's pages: the main window's, and the menu bar panel's. */
+export type RendererPage = 'index' | 'tray'
 
-export function loadRenderer(window: BrowserWindow): Promise<void> {
+const devServerUrl = is.dev ? process.env['ELECTRON_RENDERER_URL'] : undefined
+
+function entryOf(page: RendererPage): RendererEntry {
+  if (!devServerUrl) return { kind: 'file', path: join(__dirname, `../renderer/${page}.html`) }
+  if (page === 'index') return { kind: 'dev-server', url: devServerUrl }
+  return { kind: 'dev-server', url: URL.parse(`${page}.html`, devServerUrl)?.href ?? devServerUrl }
+}
+
+const entries: Record<RendererPage, RendererEntry> = {
+  index: entryOf('index'),
+  tray: entryOf('tray'),
+}
+
+export function loadRenderer(window: BrowserWindow, page: RendererPage = 'index'): Promise<void> {
+  const entry = entries[page]
   return entry.kind === 'dev-server' ? window.loadURL(entry.url) : window.loadFile(entry.path)
 }
 
 /** Whether a URL belongs to the app's own renderer, as opposed to remote content. */
 export function isRendererUrl(url: string | undefined): boolean {
-  return matchesRendererEntry(url, entry)
+  return rendererPage(url) !== null
+}
+
+/**
+ * Which of the renderer's pages a URL is, or null for anything else. On the dev server every page
+ * shares one origin, so a page there is told by its path.
+ */
+export function rendererPage(url: string | undefined): RendererPage | null {
+  if (!matchesRendererEntry(url, entries.index) && !matchesRendererEntry(url, entries.tray)) {
+    return null
+  }
+  if (entries.tray.kind === 'file')
+    return matchesRendererEntry(url, entries.tray) ? 'tray' : 'index'
+  return URL.parse(url!)?.pathname === '/tray.html' ? 'tray' : 'index'
 }
 
 /**

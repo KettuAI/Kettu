@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CopyAction, PathText, RevealAction } from './controls'
+import { isWeb } from '@renderer/lib/platform'
+import { useHostScope } from '@renderer/stores/host-scope'
+import { CopyAction, PathText, RevealAction, RevealButton } from './controls'
+import { RowFrame, RowText } from './rows'
 
 /** The fields of a place that Settings shows, on an agent's page and for its MCP servers' file. */
 export interface PlaceItem {
@@ -31,13 +34,16 @@ export function PathLine({
   )
 }
 
-/** A word on a path, such as that its file is not there yet. */
-export function PathNote({ children }: { children: ReactNode }) {
-  return (
-    <span className="h-4.5 shrink-0 rounded-full bg-subtle px-1.5 text-xs leading-4.5 text-tertiary">
-      {children}
-    </span>
-  )
+/**
+ * Show in Finder, as a row's text button or an icon, or Copy path where the reveal controls show
+ * nothing: in a browser, and for another host.
+ */
+export function PlaceAction({ path, icon }: { path: string; icon?: boolean }) {
+  const { t } = useTranslation('settings')
+  const { hostId } = useHostScope()
+  if (isWeb || hostId !== null)
+    return <CopyAction text={path} label={t('advanced.dataFolder.copy')} />
+  return icon ? <RevealAction path={path} /> : <RevealButton path={path} />
 }
 
 export function PathActions({ path }: { path: string }) {
@@ -50,32 +56,54 @@ export function PathActions({ path }: { path: string }) {
   )
 }
 
-/** A place: its path, a word when it is not there yet, and copy and show. */
-export function ConfigPath({ item, extra }: { item: PlaceItem; extra?: ReactNode }) {
+/**
+ * A place as a row: its name, then its path in mono and what set it, or that it is not there yet;
+ * Show in Finder at the end, or Copy path where the window cannot show it.
+ */
+export function PlaceRow({
+  name,
+  item,
+  note,
+  children,
+}: {
+  name: string
+  item: PlaceItem
+  note?: ReactNode
+  children?: ReactNode
+}) {
   const { t } = useTranslation('settings')
+  const set = item.chosen
+    ? t('agents.chosenInKettu')
+    : item.env && t('agents.setByLine', { env: item.env })
+  const after = note ?? set
   return (
-    <PathLine
-      path={item.path}
-      missing={!item.exists}
-      actions={
-        (extra || item.exists) && (
-          <>
-            {extra}
-            {item.exists && <PathActions path={item.path} />}
-          </>
-        )
+    <RowFrame
+      text={
+        <RowText
+          name={name}
+          description={
+            item.exists ? (
+              <span className="flex min-w-0 items-baseline gap-1">
+                <span
+                  title={item.path}
+                  data-selectable=""
+                  className="min-w-0 truncate font-mono text-code [direction:rtl]"
+                >
+                  {'\u200E'}
+                  {item.path}
+                  {'\u200E'}
+                </span>
+                {after && <span className="shrink-0">· {after}</span>}
+              </span>
+            ) : (
+              t('agents.notCreatedLine')
+            )
+          }
+        />
       }
     >
-      {!item.exists && <PathNote>{t('agents.notCreated')}</PathNote>}
-    </PathLine>
+      {children}
+      {item.exists && <PlaceAction path={item.path} />}
+    </RowFrame>
   )
-}
-
-/** What set the place: a folder picked in Kettu, or the variable that moved it. */
-export function ConfigNote({ item }: { item: PlaceItem }) {
-  const { t } = useTranslation('settings')
-  const note = item.chosen
-    ? t('agents.configFolder.chosen')
-    : item.env && t('agents.setBy', { env: item.env })
-  return note ? <span className="text-xs text-tertiary">{note}</span> : null
 }

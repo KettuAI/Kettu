@@ -135,6 +135,28 @@ export function installMenu(deps: MenuDeps): void {
       ],
     },
     {
+      // The page takes Cmd+[ and Cmd+] first, so these fire only for keys it leaves, and clicks.
+      label: t('menu.history'),
+      submenu: [
+        {
+          label: t('menu.back'),
+          accelerator: 'Cmd+[',
+          click: () => toCurrentWindow({ kind: 'go-back' }),
+        },
+        {
+          label: t('menu.forward'),
+          accelerator: 'Cmd+]',
+          click: () => toCurrentWindow({ kind: 'go-forward' }),
+        },
+        { type: 'separator' },
+        {
+          label: t('menu.showAllHistory'),
+          accelerator: 'Cmd+Y',
+          click: () => toCurrentWindow({ kind: 'show-history' }),
+        },
+      ],
+    },
+    {
       // The items of Electron's windowMenu role on macOS; the role keeps the window list.
       role: 'windowMenu',
       label: t('menu.window'),

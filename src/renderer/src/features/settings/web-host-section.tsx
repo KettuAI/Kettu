@@ -16,7 +16,7 @@ import { Input } from '@renderer/components/ui/input'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage } from '@renderer/lib/host'
 import { useWebHostStore, type WebHost } from '@renderer/stores/web-host'
-import { CONFIRM, ControlError } from './controls'
+import { CONFIRM, ControlError, ROW_BUTTON } from './controls'
 import { webHostLine } from './host-text'
 import { HostState } from './hosts-section'
 import { DeviceTile, HostIcon } from './remote-parts'
@@ -130,7 +130,7 @@ export function ForgetHost() {
   return (
     <>
       <ControlError error={open ? null : error} />
-      <Button variant="destructive-outline" size="sm" onClick={() => setOpen(true)}>
+      <Button className={ROW_BUTTON} variant="destructive-outline" onClick={() => setOpen(true)}>
         {t('hosts.web.forget.button')}
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>

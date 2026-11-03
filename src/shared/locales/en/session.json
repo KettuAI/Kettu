@@ -63,6 +63,13 @@
       "move": "Move",
       "run": "Run"
     },
+    "verbDone": {
+      "read": "Read",
+      "edit": "Edited",
+      "delete": "Deleted",
+      "move": "Moved",
+      "run": "Ran"
+    },
     "runInTerminal": "Run in terminal",
     "copyCommand": "Copy command",
     "showAll": "Show all",
@@ -94,34 +101,48 @@
     },
     "label": "Permission request",
     "answeredOn": "Already answered on {{device}}.",
-    "answeredInWindow": "Already answered in another window."
+    "answeredInWindow": "Already answered in another window.",
+    "needsYou": "Needs you"
   },
   "browserOrigin": {
     "label": "New site",
     "ask": "{{agent}} wants to open this site in the browser.",
     "answerGroup": "Answer",
-    "waiting": "Needs approval",
     "decision": {
       "session": "Allow for this session",
-      "project": "Always for this project",
-      "deny": "Deny"
+      "project": "Always allow {{site}} in this project",
+      "deny": "Don’t allow"
     },
     "answer": {
       "session": "Allowed for this session",
       "project": "Always allowed for this project",
       "deny": "Denied",
       "timeout": "Not answered in time"
-    }
+    },
+    "open": "Open",
+    "newSite": "New site",
+    "wants": "{{agent}} wants to open <site>{{site}}</site>",
+    "where": "In this session’s browser · with your sign-ins"
   },
   "subagent": {
-    "fallbackTitle": "Subagent"
+    "fallbackTitle": "Sub-agent",
+    "tools_one": "{{count}} tool",
+    "tools_other": "{{count}} tools",
+    "earlier_one": "{{count}} earlier step",
+    "earlier_other": "{{count}} earlier steps",
+    "stop": "Stop",
+    "openLog": "Open full log"
   },
   "subagentBar": {
-    "runsFor": "{{agent}} runs this subagent for <parent/>",
-    "runsForParent": "{{agent}} runs this subagent for <parent>its parent session</parent>",
+    "runsFor": "{{agent}} runs this sub-agent for <parent/>",
+    "runsForParent": "{{agent}} runs this sub-agent for <parent>its parent session</parent>",
     "stop": "Stop",
     "back": "Back to {{title}}",
     "backShort": "Back"
+  },
+  "subSession": {
+    "back": "Back to {{title}}",
+    "startedFrom": "Started from <parent>{{title}}</parent>"
   },
   "sessionMessage": {
     "from": "From {{title}}",
@@ -156,17 +177,21 @@
     "copyCommitId": "Copy commit id"
   },
   "artifactEntry": {
-    "create": "Created",
-    "update": "Updated",
-    "restore": "Restored",
-    "delete": "Deleted",
     "version": "v{{version}}",
+    "createdAgo": "created {{time}}",
+    "updatedAgo": "updated {{time}}",
+    "restoredAgo": "restored {{time}}",
+    "writing": "writing…",
+    "writingPill": "Writing…",
     "writes_one": "{{count}} version this turn",
     "writes_other": "{{count}} versions this turn",
+    "published": "Published",
+    "private": "Private",
     "deleted": "Deleted",
     "erased": "Deleted permanently",
     "open": "Open {{title}}",
     "openShort": "Open",
+    "stop": "Stop",
     "deletedLine": "Deleted artifact <title/>"
   },
   "plan": {
@@ -184,18 +209,34 @@
   },
   "replyFooter": {
     "copyReply": "Copy reply",
-    "fork": "Fork into a new session",
+    "fork": "Fork from here",
     "forking": "Forking…",
     "forkBetweenTurns": "Forks between turns",
     "forkNotReady": "Forks once the session is ready"
   },
+  "worked": {
+    "for": "Worked for {{duration}}",
+    "untimed": "Worked",
+    "read_one": "read {{count}} file",
+    "read_other": "read {{count}} files",
+    "edited_one": "edited {{count}} file",
+    "edited_other": "edited {{count}} files",
+    "editedAfter": "edited {{count}}",
+    "both": "{{read}}, {{edited}}"
+  },
+  "changes": {
+    "label": "Changes",
+    "files_one": "{{count}} file changed",
+    "files_other": "{{count}} files changed",
+    "review": "Review",
+    "commit": "Commit and open PR"
+  },
   "queue": {
     "label": "Queued messages: {{count}}",
-    "next": "Next",
-    "number": "#{{number}}",
-    "queued": "{{count}} queued",
-    "pausedCount": "Paused · {{count}} queued",
+    "paused": "Paused",
     "position": "{{number}} / {{count}}",
+    "previous": "Previous queued message",
+    "following": "Next queued message",
     "resume": "Resume",
     "attachment": "Attachment",
     "from": "From {{device}}",
@@ -232,7 +273,6 @@
     "whatToWorkOn": "What should {{agent}} work on?",
     "message": "Message",
     "messageAgent": "Message {{agent}}",
-    "askAgent": "Ask {{agent}} to…",
     "describeTask": "Describe a task…",
     "send": "Send",
     "project": "Project",
@@ -247,7 +287,7 @@
     "searchProjectsLabel": "Search projects",
     "recent": "Recent",
     "noMatchingProjects": "No matching projects",
-    "heading": "What should we work on?",
+    "heading": "What should we build?",
     "branchHint": "The session starts on this branch",
     "commitHint": "The session starts at this commit",
     "missingLine": "This project's folder is missing. Choose another project.",
@@ -258,8 +298,6 @@
     "noAgentNode_one": "No agent can start yet: {{agents, list}} needs Node.js 22 or later.",
     "noAgentNode_other": "No agent can start yet: {{agents, list}} need Node.js 22 or later.",
     "setUpAgents": "Set up agents…",
-    "recentArtifacts": "Recent artifacts",
-    "viewAll": "View all",
     "agentMenu": {
       "label": "Agent and model",
       "search": "Search agents and models",
@@ -317,6 +355,30 @@
       "repo": "Git repository",
       "note": "Only folders are listed, with paths as {{host}} writes them:",
       "open": "Open"
+    },
+    "picker": {
+      "search": "Search agents",
+      "noMatch": "No matching agents",
+      "agents": "Agents",
+      "other": "Other harnesses",
+      "signedOut": "Signed out · sign in to use",
+      "failed": "Failed to start",
+      "limitUsed": "{{percent}}% of {{limit}} limit",
+      "limitReached": "{{limit}} limit reached",
+      "manage": "Manage agents…"
+    },
+    "modelMenu": {
+      "label": "Model",
+      "search": "Search models",
+      "model": "Model"
+    },
+    "pickup": {
+      "title": "Pick up where you left off",
+      "waiting": "Waiting for your approval",
+      "working": "Working",
+      "failed": "Stopped with an error",
+      "signIn": "Waiting for sign-in",
+      "finished": "Finished {{ago}}"
     }
   },
   "signIn": {
@@ -377,25 +439,79 @@
     "catchUp": "Sent by {{name}} · Catch-up for {{when}}"
   },
   "link": {
-    "title": "Open this {{host}} link?",
-    "opens": "It opens in your default browser.",
+    "title": "Open link?",
     "userinfo": "The text before “@” in this link is not where it goes.",
     "copy": "Copy link",
-    "open": "Open in browser"
+    "copyMarkdown": "Copy as Markdown",
+    "firstVisit": "First visit",
+    "firstVisitNote": "You haven’t opened this site from Kettu before. Its icon shows once the session browser opens it.",
+    "defaultBrowser": "Default browser",
+    "yourBrowser": "your default browser",
+    "sessionBrowser": "Session browser",
+    "browserHint": "Your own browser and sign-ins",
+    "sessionHint": "{{agent}} can see and use it",
+    "sessionHintGeneric": "The session’s agent can see and use it",
+    "writtenBy": "Written by {{agent}} in <title>{{title}}</title>",
+    "openIn": "Open in {{browser}}",
+    "openInSession": "Open in session browser",
+    "opensIn": "{{url}} · opens in {{browser}}",
+    "opensInSession": "{{url}} · opens in the session browser",
+    "alwaysSite": "Always open {{site}} links in {{browser}}",
+    "alwaysSiteSession": "Always open {{site}} links in the session browser",
+    "alwaysHost": "Always open this site in {{browser}}",
+    "alwaysHostSession": "Always open this site in the session browser",
+    "openFailed": "Couldn’t open the link: {{error}}"
   },
   "svg": {
-    "alt": "SVG image",
-    "showSource": "Show source",
-    "showPreview": "Show preview"
+    "alt": "SVG image"
+  },
+  "block": {
+    "exit": "exit {{code}}",
+    "openInTerminal": "Open in terminal",
+    "showEarlier_one": "Show {{count}} earlier line",
+    "showEarlier_other": "Show {{count}} earlier lines",
+    "openDiff": "Open diff",
+    "copyNew": "Copy the new text",
+    "copy": "Copy",
+    "wrap": "Wrap lines",
+    "showMore_one": "Show {{count}} more line",
+    "showMore_other": "Show {{count}} more lines",
+    "showLess": "Show fewer lines",
+    "view": "View",
+    "preview": "Preview",
+    "source": "Source",
+    "download": "Download",
+    "diagram": "Diagram",
+    "diagramFailed": "Could not draw this diagram.",
+    "copyLatex": "Copy LaTeX",
+    "copyMarkdown": "Copy as Markdown",
+    "downloadCsv": "Download CSV",
+    "tableSize": "{{rows}} · {{columns}}",
+    "rows_one": "{{count}} row",
+    "rows_other": "{{count}} rows",
+    "columns_one": "{{count}} column",
+    "columns_other": "{{count}} columns"
   },
   "media": {
     "openImage": "Open image {{name}}",
+    "openImageMore_one": "Open image {{name}} and {{count}} more",
+    "openImageMore_other": "Open image {{name}} and {{count}} more",
+    "moreBadge": "+{{count}}",
+    "pixels": "{{width}} × {{height}}",
+    "retryFile": "Retry {{name}}",
     "notFound": "Not found at {{path}}.",
-    "cannotRead": "Can't read {{name}}",
+    "cannotReadShort": "Can't read it: {{message}}",
     "unsupported": "This image's format can't be shown here.",
     "unsupportedVideo": "This video's format can't be played here.",
     "unsupportedAudio": "This sound's format can't be played here.",
-    "tooLarge": "Too large to show here: {{size}}.",
+    "unsupportedShort": "can't be shown here",
+    "unsupportedPlayShort": "can't be played here",
+    "tooLargeShort": "too large to show here",
+    "inProject": "written to the project folder",
+    "download": "Download",
+    "play": "Play {{name}}",
+    "speed": "Playback speed {{rate}}×",
+    "rate": "{{rate}}×",
     "openLarger": "Open larger",
     "showInFiles": "Show in Files",
     "showIn": "Show in {{name}}",
@@ -421,5 +537,11 @@
     "away": "{{name}} is not connected",
     "awayBody": "{{state}}. Its sessions open here again once it is back.",
     "awayComposer": "{{name}} is not connected: {{state}}. You can send messages again once it is back."
+  },
+  "question": {
+    "label": "Question",
+    "ask": "{{agent}} asks you a question.",
+    "asksYou": "Asks you",
+    "answeredOther": "Something else"
   }
 }

@@ -5,14 +5,18 @@
     "newTerminal": "New terminal",
     "restore": "Restore",
     "maximize": "Maximize",
-    "empty": "No terminal in this project."
+    "empty": "No terminal in this project.",
+    "split": "Split",
+    "unsplit": "Unsplit",
+    "close": "Close panel"
   },
   "tab": {
     "rename": "Rename",
     "nameLabel": "Terminal name",
     "newOutput": "New output",
     "running": "Running",
-    "close": "Close {{name}}"
+    "close": "Close {{name}}",
+    "owner": "· {{agent}}"
   },
   "closeDialog": {
     "title": "End this terminal?",
@@ -28,5 +32,12 @@
     "stopped": "Terminal stopped unexpectedly",
     "exited": "Exited with code {{code}}",
     "restart": "Restart"
+  },
+  "owner": {
+    "startedBy": "Started by {{agent}} · {{time}}",
+    "openInBrowser": "Open in browser",
+    "stop": "Stop",
+    "notice": "{{agent}} is using this terminal. Typing here takes it over.",
+    "stops": "stops it"
   }
 }

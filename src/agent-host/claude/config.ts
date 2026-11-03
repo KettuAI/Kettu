@@ -10,11 +10,23 @@ export const DEFAULT_MODEL = 'default'
 export const DEFAULT_EFFORT = 'default'
 
 const MODES: { id: PermissionMode; name: string; description: string }[] = [
-  { id: 'default', name: 'Manual', description: 'Always ask before making changes' },
-  { id: 'acceptEdits', name: 'Accept edits', description: 'Automatically accept all file edits' },
-  { id: 'plan', name: 'Plan', description: 'Create a plan before making changes' },
+  {
+    id: 'default',
+    name: 'Ask before edits',
+    description: 'Asks before it changes a file or runs a command',
+  },
+  {
+    id: 'acceptEdits',
+    name: 'Accept edits',
+    description: 'Edits files freely; still asks before commands',
+  },
+  { id: 'plan', name: 'Plan only', description: 'Reads and plans. Changes nothing' },
   { id: 'auto', name: 'Auto', description: 'Claude handles permission decisions' },
-  { id: 'bypassPermissions', name: 'Bypass permissions', description: 'Accepts all permissions' },
+  {
+    id: 'bypassPermissions',
+    name: 'Full access',
+    description: 'Never asks. Use it in a sandbox or a worktree',
+  },
 ]
 
 export function modeName(mode: string): string {

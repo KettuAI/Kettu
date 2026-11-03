@@ -86,15 +86,23 @@
     }
   },
   "attention": {
-    "browserOrigin": "{{origin}} 正在等待你的答复",
-    "permission": "Agent 请求授权",
+    "browserOrigin": "想打开 {{site}}",
+    "permission": "请求权限",
     "turnEnd": {
       "end_turn": "已完成",
       "cancelled": "已取消",
       "max_tokens": "已达到 token 上限而停止",
       "max_turn_requests": "已达到请求次数上限而停止",
       "refusal": "Agent 拒绝了请求"
-    }
+    },
+    "wantsToRun": "想运行 {{command}}",
+    "wantsToEdit": "想修改 {{target}}",
+    "wantsToDelete": "想删除 {{target}}",
+    "wantsToMove": "想移动 {{target}}",
+    "wantsToUse": "想使用 {{tool}}",
+    "asks": "在问：{{question}}",
+    "done": "{{title}} · 已完成",
+    "withChanges_other": "{{text}}改动了 {{count}} 个文件。"
   },
   "routines": {
     "busy": "此例程已经有一个运行正在工作",
@@ -226,6 +234,11 @@
     "busy": "此项目正在执行另一个 git 操作，请等它结束后再试",
     "notRepository": "此文件夹不是 git 仓库",
     "operationInProgress": "请先完成正在进行的合并或变基",
+    "conflicts": "请先解决冲突",
+    "notAChange": "{{path}} 没有未提交的更改",
+    "nestedRepository": "{{path}} 是一个独立的仓库，请在终端中处理",
+    "alreadyPublished": "此分支已在跟踪 {{upstream}}",
+    "remoteNotFound": "此仓库没有名为 {{remote}} 的远程仓库",
     "noBranch": "请先切换到一个分支：HEAD 处于分离状态或还没有提交",
     "noUpstream": "此分支尚未发布",
     "diverged": "此分支与 {{upstream}} 已分叉，请先变基或合并，再推送",
@@ -241,23 +254,27 @@
   },
   "permission": {
     "allowOnce": "允许一次",
-    "allowAlways": "始终允许 {{changes}}",
-    "addRules": "{{rules}}{{place}}",
-    "addDirectories": "访问 {{directories}}{{place}}",
+    "allowAlways": "始终允许{{changes}}",
+    "addRules": "{{place}}中的 {{rules}}",
+    "addDirectories": "在{{place}}中访问 {{directories}}",
     "setMode": "切换到 {{mode}}",
-    "reject": "拒绝",
+    "reject": "拒绝，并说明该怎么做",
     "place": {
-      "user": "（记入用户设置）",
-      "project": "（记入项目设置 .claude/settings.json）",
-      "local": "（记入本地设置 .claude/settings.local.json）",
-      "session": "（仅本会话）"
+      "user": "所有项目",
+      "project": "本项目",
+      "shared": "本项目的共享设置",
+      "session": "本会话"
     },
+    "listSeparator": "、",
+    "changeSeparator": "；",
     "exitPlan": {
       "auto": "是，并使用 Auto 模式",
       "acceptEdits": "是，并自动接受编辑",
       "manual": "是，并手动批准编辑",
       "keepPlanning": "否，继续规划"
-    }
+    },
+    "allowEdit": "允许这次修改",
+    "acceptEdits": "允许本会话中的所有修改"
   },
   "content": {
     "audioTooLarge": "音频，{{size}}，太大，无法显示",
@@ -329,14 +346,15 @@
       "gateway": "自定义模型服务商"
     },
     "approval": {
-      "allowOnce": "允许",
-      "allowSession": "允许，本会话内都允许",
-      "allowTurn": "允许，这一轮内都允许",
-      "allowPrefix": "允许，以后 `{{command}}` 不再询问",
-      "allowHost": "允许，以后都允许 {{host}}",
-      "denyHost": "拒绝，以后都拦截 {{host}}",
-      "decline": "拒绝",
-      "cancel": "拒绝并停止",
+      "allowOnce": "允许一次",
+      "allowSession": "本会话内都允许",
+      "allowTurn": "这一轮内都允许",
+      "allowPrefix": "始终允许 `{{command}}`",
+      "allowHost": "始终允许 {{host}}",
+      "denyHost": "始终拦截 {{host}}",
+      "decline": "拒绝，并继续",
+      "cancel": "拒绝，并说明该怎么做",
+      "dismiss": "不作回答，直接关闭",
       "accept": "继续",
       "network": "网络访问",
       "networkHost": "{{protocol}} 访问 {{host}}",
@@ -344,7 +362,8 @@
       "read": "读取 {{path}}",
       "write": "写入 {{path}}",
       "permissionsTitle": "更多权限",
-      "elicitationTitle": "{{server}} 请求继续"
+      "elicitationTitle": "{{server}} 请求继续",
+      "allowEdit": "允许这次修改"
     },
     "tool": {
       "readFile": "读取文件 '{{path}}'",
@@ -464,5 +483,8 @@
       "unknownError": "未知的 MCP 启动错误",
       "unnamed": "（未命名）"
     }
+  },
+  "question": {
+    "other": "其他回答…"
   }
 }

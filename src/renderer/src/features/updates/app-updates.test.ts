@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { UpdateStatus } from '@shared/updates'
 import { i18n } from '@renderer/lib/i18n'
-import { appUpdateNotice, appUpdateRow, cardAction } from './app-updates'
+import { appUpdateNotice, appUpdateText } from './app-updates'
 
 afterEach(() => i18n.changeLanguage('en'))
 
@@ -69,123 +69,61 @@ describe('appUpdateNotice', () => {
   })
 })
 
-describe('appUpdateRow', () => {
-  it('offers a restart for a ready update', () => {
-    expect(appUpdateRow({ kind: 'ready', version: '0.3.0' })).toEqual({
-      words: 'Update ready',
-      versionFirst: false,
-      label: 'Update ready 0.3.0',
-      detail: 'Restart to finish; your sessions come back.',
+describe('appUpdateText', () => {
+  it('offers a restart for a ready update, which keeps the sessions', () => {
+    expect(appUpdateText({ kind: 'ready', version: '0.3.0' })).toEqual({
+      title: 'Kettu 0.3.0 is ready',
       note: 'Your sessions come back',
+      rowNote: 'Needs a restart · sessions come back',
       action: 'restart',
       actionLabel: 'Restart',
       href: null,
-      dismissible: true,
     })
   })
 
-  it('offers to download and install an update on offer', () => {
-    expect(appUpdateRow({ kind: 'available', version: '0.3.0', moves: false })).toMatchObject({
-      label: '0.3.0 is out',
-      detail: 'Update downloads it, then restarts; your sessions come back.',
+  it('offers to download and install an update, moving the app first from a read-only volume', () => {
+    expect(appUpdateText({ kind: 'available', version: '0.3.0', moves: false })).toMatchObject({
+      title: 'Kettu 0.3.0 is out',
       note: 'Downloads, then restarts',
       action: 'update',
       actionLabel: 'Update',
-      href: null,
-      dismissible: true,
     })
-  })
-
-  it('says that Update moves the app first from a read-only volume, and shows the move', () => {
-    expect(appUpdateRow({ kind: 'available', version: '0.3.0', moves: true })).toMatchObject({
-      label: '0.3.0 is out',
-      detail: 'Update moves Kettu to Applications, then restarts; your sessions come back.',
-      note: 'Moves to Applications, then restarts',
-      action: 'update',
-    })
-    expect(appUpdateRow({ kind: 'moving', version: '0.3.0' })).toEqual({
-      words: 'Moving to Applications…',
-      versionFirst: false,
-      label: 'Moving to Applications…',
-      detail: null,
-      note: null,
-      action: null,
-      actionLabel: '',
-      href: null,
-      dismissible: false,
-    })
-  })
-
-  it('links to the download when the update is on the release page only', () => {
-    expect(
-      appUpdateRow({ kind: 'link', version: '0.3.0', downloadUrl: 'https://example.com/a.dmg' }),
-    ).toMatchObject({
-      label: '0.3.0 is out',
-      detail: 'Download it from the release page.',
-      action: 'download',
-      actionLabel: 'Download',
-      href: 'https://example.com/a.dmg',
-      dismissible: true,
-    })
-    expect(appUpdateRow({ kind: 'link', version: '0.3.0', downloadUrl: null }).href).toBe(
-      'https://github.com/KettuAI/Kettu/releases/tag/v0.3.0',
+    expect(appUpdateText({ kind: 'available', version: '0.3.0', moves: true }).note).toBe(
+      'Moves to Applications, then restarts',
     )
   })
 
-  it('shows a download by its progress, which is cancelled rather than dismissed', () => {
-    expect(appUpdateRow({ kind: 'downloading', version: '0.3.0', percent: 40 })).toMatchObject({
-      label: 'Downloading 0.3.0',
-      detail: null,
-      action: 'cancel',
-      actionLabel: 'Cancel update',
-      dismissible: false,
+  it('links to the download when the update is on the release page only', () => {
+    expect(appUpdateText({ kind: 'link', version: '0.3.0', downloadUrl: null })).toMatchObject({
+      action: 'download',
+      href: 'https://github.com/KettuAI/Kettu/releases/tag/v0.3.0',
     })
+    expect(
+      appUpdateText({ kind: 'link', version: '0.3.0', downloadUrl: 'https://x.test/k.dmg' }).href,
+    ).toBe('https://x.test/k.dmg')
+  })
+
+  it('shows a download and a move without an action, which the bar and corner handle', () => {
+    expect(appUpdateText({ kind: 'downloading', version: '0.3.0', percent: 42 })).toMatchObject({
+      title: 'Updating Kettu',
+      note: 'Downloading 0.3.0',
+      rowNote: 'Downloading · 42%',
+      action: null,
+    })
+    expect(appUpdateText({ kind: 'moving', version: '0.3.0' }).action).toBeNull()
   })
 
   it('names the version an update came from and links to what is new', () => {
-    expect(appUpdateRow({ kind: 'updated', version: '0.3.0', from: '0.2.0' })).toMatchObject({
-      label: 'Updated to 0.3.0',
-      detail: 'Updated from 0.2.0.',
+    expect(appUpdateText({ kind: 'updated', version: '0.3.0', from: '0.2.0' })).toMatchObject({
+      title: 'Kettu 0.3.0',
+      note: 'Updated from 0.2.0',
       action: 'whats-new',
-      actionLabel: 'What’s new',
       href: 'https://github.com/KettuAI/Kettu/releases/tag/v0.3.0',
-      dismissible: true,
     })
   })
 
   it('speaks Chinese', async () => {
     await i18n.changeLanguage('zh-CN')
-    expect(appUpdateRow({ kind: 'available', version: '0.3.0', moves: false })).toMatchObject({
-      label: '0.3.0 已发布',
-      detail: '「更新」会下载并重启，会话会自动恢复。',
-      note: '下载后重启',
-    })
-    expect(appUpdateRow({ kind: 'ready', version: '0.3.0' }).note).toBe('会话会自动恢复')
-    expect(appUpdateRow({ kind: 'available', version: '0.3.0', moves: true }).detail).toBe(
-      '「更新」会把 Kettu 移到“应用程序”文件夹并重启，会话会自动恢复。',
-    )
-    expect(appUpdateRow({ kind: 'moving', version: '0.3.0' }).label).toBe('正在移到“应用程序”…')
-    expect(appUpdateRow({ kind: 'updated', version: '0.3.0', from: '0.2.0' }).detail).toBe(
-      '从 0.2.0 更新而来。',
-    )
-  })
-})
-
-describe('cardAction', () => {
-  it('runs the action of the row from anywhere on the card, but not a cancel or a move', () => {
-    expect(cardAction(appUpdateRow({ kind: 'ready', version: '0.3.0' }))).toBe('restart')
-    expect(cardAction(appUpdateRow({ kind: 'available', version: '0.3.0', moves: false }))).toBe(
-      'update',
-    )
-    expect(cardAction(appUpdateRow({ kind: 'link', version: '0.3.0', downloadUrl: null }))).toBe(
-      'download',
-    )
-    expect(cardAction(appUpdateRow({ kind: 'updated', version: '0.3.0', from: '0.2.0' }))).toBe(
-      'whats-new',
-    )
-    expect(cardAction(appUpdateRow({ kind: 'downloading', version: '0.3.0', percent: 4 }))).toBe(
-      null,
-    )
-    expect(cardAction(appUpdateRow({ kind: 'moving', version: '0.3.0' }))).toBe(null)
+    expect(appUpdateText({ kind: 'ready', version: '0.3.0' }).title).toBe('Kettu 0.3.0 已就绪')
   })
 })

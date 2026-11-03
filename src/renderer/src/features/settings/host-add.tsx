@@ -23,20 +23,22 @@ import {
 import { parsePairingLink } from '@shared/remote/pairing'
 import { SegmentedControl } from '@renderer/components/segmented-control'
 import { Button } from '@renderer/components/ui/button'
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@renderer/components/ui/dialog'
+import { Dialog, DialogClose, DialogFooter } from '@renderer/components/ui/dialog'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@renderer/components/ui/field'
 import { Input } from '@renderer/components/ui/input'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
 import { changeHost, platformName, routeName } from './host-text'
+import { ROW_BUTTON } from './controls'
 import { DeviceTile, HostIcon } from './remote-parts'
+import {
+  DIALOG_BODY,
+  DIALOG_FIELD,
+  DIALOG_FOOTER,
+  DIALOG_MONO_FIELD,
+  SettingsDialogContent,
+  SettingsDialogHeader,
+} from './settings-dialog'
 
 /** Why Add host shows no host: what pairing said, or what kept it from starting. */
 export type AddHostFailure = HostPairingFailure | 'self' | 'unavailable'
@@ -275,7 +277,7 @@ function AddHostFlow({
 
   const tabs = <AddHostTabs tab={tab} onTab={setTab} />
   return (
-    <DialogContent showCloseButton={false} className="gap-0 p-0 sm:max-w-130">
+    <SettingsDialogContent>
       {tab === 'ssh' || ssh.kind === 'added' ? (
         <SshAddBody
           step={ssh}
@@ -308,7 +310,7 @@ function AddHostFlow({
           onDone={() => onDone(step.kind === 'added' ? step.host : null)}
         />
       )}
-    </DialogContent>
+    </SettingsDialogContent>
   )
 }
 
@@ -320,7 +322,9 @@ function AddHostTabs({ tab, onTab }: { tab: AddHostTab; onTab: (tab: AddHostTab)
       aria-label={t('hosts.add.tabs.label')}
       value={tab}
       onChange={onTab}
-      className="mb-4 w-full"
+      className="h-8 self-start rounded-segments"
+      itemClassName="h-7 rounded-segment px-3 text-control font-medium"
+      thumbClassName={() => 'rounded-segment'}
       segments={[
         { value: 'link', label: t('hosts.add.tabs.link') },
         { value: 'ssh', label: t('hosts.add.tabs.ssh') },
@@ -370,12 +374,10 @@ export function AddHostBody({
   }
   return (
     <>
-      <DialogHeader className="px-5 pt-5">
-        <DialogTitle>{t('hosts.add.title')}</DialogTitle>
-      </DialogHeader>
-      <div className="px-5 pt-4">
+      <SettingsDialogHeader title={t('hosts.add.title')} />
+      <div className={DIALOG_BODY}>
         {tabs}
-        <p className="mb-2.5 text-ui leading-5 text-pretty text-tertiary">
+        <p className="text-lede leading-normal text-pretty text-tertiary">
           <Trans
             t={t}
             i18nKey="hosts.add.hint"
@@ -395,7 +397,7 @@ export function AddHostBody({
           placeholder={t('hosts.add.placeholder')}
           spellCheck={false}
           autoComplete="off"
-          className="h-7 font-mono text-code md:text-code"
+          className={DIALOG_MONO_FIELD}
           onChange={(event) => onDraft(event.target.value)}
           onPaste={pasting ? onPaste : undefined}
           onKeyDown={(event) => {
@@ -425,7 +427,7 @@ export function AddHostBody({
           </div>
         )}
       </div>
-      <DialogFooter className="items-center p-5">
+      <DialogFooter className={DIALOG_FOOTER}>
         {(step.kind === 'connecting' || step.kind === 'confirm') && (
           <span role="status" className="flex items-center gap-2 text-ui text-tertiary">
             <Spinner className="size-4" />
@@ -435,22 +437,30 @@ export function AddHostBody({
         <span className="flex-1" />
         {failure ? (
           <>
-            <DialogClose render={<Button variant="outline" />}>
+            <DialogClose render={<Button variant="ghost" className={ROW_BUTTON} />}>
               {t('common:actions.close')}
             </DialogClose>
             {failure === 'unreachable' ? (
-              <Button onClick={onRetry}>{t('hosts.add.retry')}</Button>
+              <Button className={ROW_BUTTON} onClick={onRetry}>
+                {t('hosts.add.retry')}
+              </Button>
             ) : (
-              <Button onClick={onAgain}>{t('hosts.add.newLink')}</Button>
+              <Button className={ROW_BUTTON} onClick={onAgain}>
+                {t('hosts.add.newLink')}
+              </Button>
             )}
           </>
         ) : (
           <>
-            <DialogClose render={<Button variant="outline" />}>
+            <DialogClose render={<Button variant="ghost" className={ROW_BUTTON} />}>
               {t('common:actions.cancel')}
             </DialogClose>
             {pasting && (
-              <Button disabled={!parsePairingLink(draft.trim())} onClick={() => onSubmit(draft)}>
+              <Button
+                className={ROW_BUTTON}
+                disabled={!parsePairingLink(draft.trim())}
+                onClick={() => onSubmit(draft)}
+              >
                 {t('hosts.add.add')}
               </Button>
             )}
@@ -486,6 +496,7 @@ export function SshAddBody({
 }) {
   const { t } = useTranslation(['settings', 'common'])
   const errorId = useId()
+  const fieldId = useId()
   if (step.kind === 'added') return <Added host={step.host} onDone={onDone} />
   const working = step.kind === 'working'
   const failure = step.kind === 'failed' ? step : null
@@ -493,39 +504,51 @@ export function SshAddBody({
   const steps = stepsOf(step)
   return (
     <>
-      <DialogHeader className="px-5 pt-5">
-        <DialogTitle>{t('hosts.add.title')}</DialogTitle>
-      </DialogHeader>
-      <div className="px-5 pt-4">
+      <SettingsDialogHeader title={t('hosts.add.title')} />
+      <div className={DIALOG_BODY}>
         {tabs}
-        <p className="mb-2.5 text-ui leading-5 text-pretty text-tertiary">
-          {t('hosts.add.ssh.hint')}
-        </p>
-        <Input
-          ref={inputRef}
-          value={working ? target : draft}
-          readOnly={working}
-          autoFocus
-          aria-label={t('hosts.add.ssh.label')}
-          aria-describedby={failure ? errorId : undefined}
-          placeholder={t('hosts.add.ssh.placeholder')}
-          spellCheck={false}
-          autoComplete="off"
-          autoCapitalize="off"
-          className="h-7 font-mono text-code md:text-code"
-          onChange={(event) => onDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (working || isComposing(event) || event.key !== 'Enter') return
-            event.preventDefault()
-            if (valid) onSubmit(draft)
-          }}
-        />
-        {steps.length > 0 ? (
-          <SshProgress steps={steps} failed={failure !== null} />
-        ) : (
-          !failure && (
-            <p className="mt-2 text-xs leading-4 text-tertiary">{t('hosts.add.ssh.note')}</p>
-          )
+        <div className="flex flex-col gap-1.75">
+          <label htmlFor={fieldId} className="text-control leading-[normal] font-medium">
+            {t('hosts.add.ssh.label')}
+          </label>
+          <div className="flex gap-2">
+            <Input
+              id={fieldId}
+              ref={inputRef}
+              value={working ? target : draft}
+              readOnly={working}
+              autoFocus
+              aria-describedby={failure ? errorId : undefined}
+              placeholder={t('hosts.add.ssh.placeholder')}
+              spellCheck={false}
+              autoComplete="off"
+              autoCapitalize="off"
+              className={cn(DIALOG_MONO_FIELD, 'flex-1')}
+              onChange={(event) => onDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (working || isComposing(event) || event.key !== 'Enter') return
+                event.preventDefault()
+                if (valid) onSubmit(draft)
+              }}
+            />
+            {!failure && (
+              <Button
+                className={ROW_BUTTON}
+                disabled={!valid || working}
+                onClick={() => onSubmit(draft)}
+              >
+                {t('hosts.add.ssh.connect')}
+              </Button>
+            )}
+          </div>
+          {!failure && (
+            <span className="text-hint leading-[normal] text-tertiary">
+              {t('hosts.add.ssh.note')}
+            </span>
+          )}
+        </div>
+        {steps.length > 0 && (
+          <SshProgress steps={steps} failed={failure !== null} target={target} />
         )}
         {failure && (
           <SshFailure
@@ -536,14 +559,15 @@ export function SshAddBody({
           />
         )}
       </div>
-      <DialogFooter className="items-center p-5">
+      <DialogFooter className={DIALOG_FOOTER}>
         <span className="flex-1" />
         {failure ? (
           <>
-            <DialogClose render={<Button variant="outline" />}>
+            <DialogClose render={<Button variant="ghost" className={ROW_BUTTON} />}>
               {t('common:actions.close')}
             </DialogClose>
             <Button
+              className={ROW_BUTTON}
               disabled={!valid}
               onClick={() => (draft.trim() === target ? onRetry() : onSubmit(draft))}
             >
@@ -552,14 +576,9 @@ export function SshAddBody({
           </>
         ) : (
           <>
-            <DialogClose render={<Button variant="outline" />}>
+            <DialogClose render={<Button variant="ghost" className={ROW_BUTTON} />}>
               {t('common:actions.cancel')}
             </DialogClose>
-            {!working && (
-              <Button disabled={!valid} onClick={() => onSubmit(draft)}>
-                {t('hosts.add.ssh.connect')}
-              </Button>
-            )}
           </>
         )}
       </DialogFooter>
@@ -573,13 +592,27 @@ type StepState = 'done' | 'active' | 'failed' | 'pending'
  * Logging in, installing or updating once that turned out to be needed, adding this computer and
  * opening the channel: each done, under way, failed or still to come.
  */
-function SshProgress({ steps, failed }: { steps: SshStep[]; failed: boolean }) {
+function SshProgress({
+  steps,
+  failed,
+  target,
+}: {
+  steps: SshStep[]
+  failed: boolean
+  target: string
+}) {
   const { t } = useTranslation('settings')
   const install = steps.find((s) => s.step === 'installing' || s.step === 'updating')
-  const items: { id: SshStep['step']; label: string }[] = [
-    { id: 'connecting', label: t('hosts.add.ssh.steps.connecting') },
+  const items: { id: SshStep['step']; label: string; detail?: string }[] = [
+    { id: 'connecting', label: t('hosts.add.ssh.steps.connecting'), detail: target },
     ...(install?.step === 'installing'
-      ? [{ id: install.step, label: t('hosts.add.ssh.steps.installing', install) }]
+      ? [
+          {
+            id: install.step,
+            label: t('hosts.add.ssh.steps.installing', install),
+            detail: t('hosts.add.ssh.steps.installingDetail'),
+          },
+        ]
       : install?.step === 'updating'
         ? [{ id: install.step, label: t('hosts.add.ssh.steps.updating', install) }]
         : []),
@@ -593,7 +626,7 @@ function SshProgress({ steps, failed }: { steps: SshStep[]; failed: boolean }) {
     <ol
       aria-label={t('hosts.add.ssh.steps.label')}
       aria-live="polite"
-      className="mt-3.5 flex flex-col gap-1.5"
+      className="flex flex-col pt-1.5 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]"
     >
       {items.map((item, index) => {
         const state = stateAt(index)
@@ -601,21 +634,29 @@ function SshProgress({ steps, failed }: { steps: SshStep[]; failed: boolean }) {
           <li
             key={item.id}
             aria-current={state === 'active' ? 'step' : undefined}
-            className={cn(
-              'flex items-center gap-2 text-ui',
-              state === 'pending' && 'text-tertiary',
-            )}
+            className="flex items-start gap-2.5 py-1.75 text-lede leading-[normal]"
           >
-            <span aria-hidden className="grid size-4 shrink-0 place-items-center">
-              {state === 'done' && <CheckIcon className="size-3.5 text-success" />}
-              {state === 'active' && <Spinner className="size-3.5" />}
+            <span aria-hidden className="mt-px grid size-4 shrink-0 place-items-center">
+              {state === 'done' && <CheckIcon strokeWidth={2} className="size-3.5 text-success" />}
+              {state === 'active' && <Spinner className="size-3.25" />}
               {state === 'failed' && <CircleAlertIcon className="size-3.5 text-danger" />}
-              {state === 'pending' && <span className="size-1.5 rounded-full bg-border-strong" />}
+              {state === 'pending' && (
+                <span className="size-2 rounded-full shadow-[inset_0_0_0_1.5px_var(--border-strong)]" />
+              )}
             </span>
-            <span className="min-w-0 truncate">{item.label}</span>
-            {(state === 'done' || state === 'failed') && (
-              <span className="sr-only">{t(`hosts.add.ssh.steps.${state}`)}</span>
-            )}
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="truncate">
+                {item.label}
+                {(state === 'done' || state === 'failed') && (
+                  <span className="sr-only"> {t(`hosts.add.ssh.steps.${state}`)}</span>
+                )}
+              </span>
+              {item.detail && (
+                <span className="truncate text-hint leading-[normal] text-tertiary">
+                  {item.detail}
+                </span>
+              )}
+            </span>
           </li>
         )
       })}
@@ -703,10 +744,8 @@ function Added({ host, onDone }: { host: HostStatus; onDone: () => void }) {
   }
   return (
     <form className="contents" onSubmit={(event) => void submit(event)}>
-      <DialogHeader className="px-5 pt-5">
-        <DialogTitle>{t('hosts.add.title')}</DialogTitle>
-      </DialogHeader>
-      <div className="flex flex-col gap-3.5 px-5 pt-4">
+      <SettingsDialogHeader title={t('hosts.add.title')} />
+      <div className={DIALOG_BODY}>
         <div className="flex items-center gap-3">
           <DeviceTile large icon={<HostIcon platform={host.platform} className="size-5" />} />
           <div className="min-w-0">
@@ -732,7 +771,7 @@ function Added({ host, onDone }: { host: HostStatus; onDone: () => void }) {
             autoFocus
             autoComplete="off"
             spellCheck={false}
-            className="h-7 text-ui md:text-ui"
+            className={DIALOG_FIELD}
             aria-invalid={!valid || error !== null || undefined}
             onFocus={(event) => event.currentTarget.select()}
             onChange={(event) => {
@@ -749,8 +788,8 @@ function Added({ host, onDone }: { host: HostStatus; onDone: () => void }) {
           )}
         </Field>
       </div>
-      <DialogFooter className="p-5">
-        <Button type="submit" disabled={!valid || busy}>
+      <DialogFooter className={DIALOG_FOOTER}>
+        <Button type="submit" className={ROW_BUTTON} disabled={!valid || busy}>
           {busy && <Spinner data-icon="inline-start" />}
           {t('hosts.add.done')}
         </Button>

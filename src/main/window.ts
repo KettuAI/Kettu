@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, nativeTheme, screen, shell } from 'electron'
+import { app, BrowserWindow, nativeTheme, screen, shell, type WebContents } from 'electron'
 import type { Locale } from '@shared/locale'
 import { DEFAULT_SETTINGS, type SettingsFile, type ZoomLevel } from '@shared/settings'
 import type { Theme } from '@shared/themes'
@@ -7,7 +7,7 @@ import { mayOpenWindow } from './artifacts/guards'
 import { JsonFileWriter, readJsonFile } from './json-file'
 import { createLogger } from './log'
 import type { StartMode } from './login-item'
-import { isRendererUrl, loadRenderer } from './renderer'
+import { loadRenderer, rendererPage } from './renderer'
 import { windowColors, type WindowColors } from './themes'
 import { parseWindowState, placeWindow, type SavedWindowState } from './window-bounds'
 import { titleBarHeight, trafficLightPosition } from './window-controls'
@@ -15,10 +15,10 @@ import { titleBarHeight, trafficLightPosition } from './window-controls'
 const log = createLogger('window')
 
 // Must match --bg-sidebar in the renderer's tokens.css, or the window flashes on load.
-const BACKGROUND_COLOR = { light: '#fafafa', dark: '#171717' }
+const BACKGROUND_COLOR = { light: '#f1f3f6', dark: '#0e1217' }
 
 // The symbols of the Windows and Linux window controls: --text-primary of each theme.
-const SYMBOL_COLOR = { light: '#222222', dark: '#ececec' }
+const SYMBOL_COLOR = { light: '#10161e', dark: '#e8ecf1' }
 
 // The chosen theme, whose colors replace the two above; null for the built-in theme.
 let chosen: Theme | null = null
@@ -32,6 +32,27 @@ export function devIcon(): string | null {
 }
 
 let zoom: ZoomLevel = DEFAULT_SETTINGS.appearance.zoom
+
+// The menu bar panel's window: never the one to talk to, transparent over the system's material,
+// and sized for the menu bar rather than the app's zoom.
+const panels = new WeakSet<BrowserWindow>()
+
+export function markPanel(window: BrowserWindow): void {
+  panels.add(window)
+}
+
+/** Whether `contents` is the menu bar panel's page. */
+export function isPanel(contents: WebContents): boolean {
+  const window = BrowserWindow.fromWebContents(contents)
+  return window !== null && panels.has(window)
+}
+
+/** The app's own windows, without the menu bar panel. */
+function appWindows(): BrowserWindow[] {
+  return BrowserWindow.getAllWindows().filter(
+    (window) => !window.isDestroyed() && !panels.has(window),
+  )
+}
 
 function colors(): WindowColors {
   const mode = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
@@ -52,8 +73,7 @@ function titleBarOverlay(): { color: string; symbolColor: string; height: number
 export function applyZoom(factor: ZoomLevel): void {
   if (factor === zoom) return
   zoom = factor
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (window.isDestroyed()) continue
+  for (const window of appWindows()) {
     window.webContents.setZoomFactor(zoom)
     if (process.platform === 'darwin') window.setWindowButtonPosition(trafficLightPosition(zoom))
     else window.setTitleBarOverlay(titleBarOverlay())
@@ -65,8 +85,7 @@ export function applyTheme(theme: SettingsFile['appearance']['theme']): void {
 }
 
 function repaint(): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (window.isDestroyed()) continue
+  for (const window of appWindows()) {
     window.setBackgroundColor(backgroundColor())
     if (process.platform !== 'darwin') window.setTitleBarOverlay(titleBarOverlay())
   }
@@ -195,7 +214,7 @@ export function createMainWindow(start: StartMode = 'window'): BrowserWindow {
   })
 
   window.webContents.on('will-navigate', (event, url) => {
-    if (isRendererUrl(url)) return
+    if (rendererPage(url) === 'index') return
     event.preventDefault()
     openIfExternal(url)
   })
@@ -209,8 +228,8 @@ export function createMainWindow(start: StartMode = 'window'): BrowserWindow {
 /** The window to talk to: the focused one, else the first open one. */
 export function currentWindow(): BrowserWindow | null {
   const focused = BrowserWindow.getFocusedWindow()
-  if (focused && !focused.isDestroyed()) return focused
-  return BrowserWindow.getAllWindows().find((window) => !window.isDestroyed()) ?? null
+  if (focused && !focused.isDestroyed() && !panels.has(focused)) return focused
+  return appWindows()[0] ?? null
 }
 
 /** Brings the main window forward, creating it if every window was closed. */

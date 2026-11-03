@@ -9,6 +9,7 @@ import { SidebarProvider } from '@renderer/components/ui/sidebar'
 import { Toaster } from '@renderer/components/ui/toast'
 import { TooltipProvider } from '@renderer/components/ui/tooltip'
 import { ArtifactDialogs } from '@renderer/features/artifacts/artifact-dialogs'
+import { GitDialogsHost } from '@renderer/features/git/git-dialogs'
 import { MediaViewer } from '@renderer/features/session/media/media-viewer'
 import { HostBanner } from '@renderer/features/shell/host-banner'
 import { LaunchCover } from '@renderer/features/shell/launch-cover'
@@ -18,6 +19,7 @@ import { ShortcutsDialog } from '@renderer/features/shell/shortcuts-dialog'
 import { DESK, SHEET_PANEL } from '@renderer/features/shell/sheet'
 import { TitleBand } from '@renderer/features/shell/top-bar'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
+import { UpdateDialog } from '@renderer/features/updates/update-dialog'
 import { AppSidebar } from '@renderer/features/sidebar/app-sidebar'
 import { hasBand } from '@renderer/lib/platform'
 import { layoutStorage, readJson, writeJson } from '@renderer/lib/storage'
@@ -35,6 +37,9 @@ const HostPathDialog = lazy(() => import('@renderer/web/host-path-dialog'))
 
 export function App() {
   const settingsOpen = useViewStore((s) => s.settings.open)
+  // Settings stays mounted once loaded, so it closes with its own exit.
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
+  if (settingsOpen && !settingsLoaded) setSettingsLoaded(true)
   const pathAsked = usePathRequest((s) => s.asked !== null)
   const [pathPicker, setPathPicker] = useState(false)
   if (pathAsked && !pathPicker) setPathPicker(true)
@@ -47,29 +52,24 @@ export function App() {
         <div className="relative flex h-full w-full flex-col">
           <HostBanner />
           <div className="relative min-h-0 flex-1">
-            {/* The workbench stays mounted under Settings, so threads and terminals keep their
-                state and scroll position; content-visibility skips rendering it meanwhile. */}
-            <div
-              inert={settingsOpen}
-              className={cn('absolute inset-0', settingsOpen && '[content-visibility:hidden]')}
-            >
+            {/* The workbench stays in view under Settings, which opens over it. */}
+            <div inert={settingsOpen} className="absolute inset-0">
               {/* One drag scope for the sidebar and the main area: a session's row drags into
                   the split. */}
               <SplitDragProvider>
                 <Workbench />
               </SplitDragProvider>
             </div>
-            {settingsOpen && (
-              <div className="absolute inset-0">
-                <Suspense fallback={null}>
-                  <SettingsPage />
-                </Suspense>
-              </div>
+            {settingsLoaded && (
+              <Suspense fallback={null}>
+                <SettingsPage />
+              </Suspense>
             )}
           </div>
         </div>
         <LaunchCover />
         <QuitConfirm />
+        <UpdateDialog />
         <ArtifactDialogs />
         <MediaViewer />
         <ShortcutsDialog />
@@ -78,6 +78,7 @@ export function App() {
             <HostPathDialog />
           </Suspense>
         )}
+        <GitDialogsHost />
         <Toaster />
         <ReportInteractive />
       </SidebarProvider>
@@ -91,7 +92,7 @@ const SIDEBAR_WIDTH = 'sidebar-width'
 function Workbench() {
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
   // Fixed at mount: a changed default re-registers the panel, which forgets its size before collapsing.
-  const [sidebarDefault] = useState(() => (collapsed ? '0px' : '260px'))
+  const [sidebarDefault] = useState(() => (collapsed ? '0px' : '336px'))
   const sidebar = usePanelRef()
   const width = useRef(0)
   const layout = useDefaultLayout({ id: 'workbench', storage: layoutStorage })
@@ -116,7 +117,7 @@ function Workbench() {
       const width = mainWidth - parseFloat(padding.paddingLeft) - parseFloat(padding.paddingRight)
       mainContent.current.style.width = `${width}px`
       box.style.overflow = 'clip'
-      box.style.boxShadow = 'var(--elevation-sheet)'
+      box.style.boxShadow = 'var(--sheet-ring)'
       // Over the sheets' rounded left edge, so the two meet as one sheet.
       const overlap = parseFloat(getComputedStyle(box).borderTopLeftRadius)
       wing.current.style.right = `${width - overlap}px`
@@ -208,20 +209,30 @@ function Workbench() {
           <AppSidebar />
         </div>
       </ResizablePanel>
-      {/* The line between the two. Collapsed, the handle takes no width and leaves the tab
+      {/* On the main sheet's edge. Collapsed, the handle takes no width and leaves the tab
           order. */}
       <ResizableHandle
         withHandle={!collapsed}
         disabled={collapsed}
-        className={cn('bg-border', collapsed && 'pointer-events-none w-0')}
+        className={cn(collapsed && 'pointer-events-none w-0')}
         onPointerDown={() => sliding.current && endSlide()}
       />
       <ResizablePanel id="main" minSize="560px" className={SLIDING_PANEL} style={SHEET_PANEL}>
-        {/* Under the main area's columns, which drags the window. On Windows and Linux the band
-            above them holds the window controls. */}
-        <main ref={desk} className={cn(PANEL_CONTENT, DESK, hasBand && 'pt-(--title-bar)')}>
+        {/* The desk around the main area's sheets, which drags the window; its left side only
+            while the sidebar is collapsed. On Windows and Linux the band above them holds the
+            window controls. */}
+        <main
+          ref={desk}
+          className={cn(
+            PANEL_CONTENT,
+            DESK,
+            'py-(--sheet-gap) pr-(--sheet-gap)',
+            collapsed && 'pl-(--sheet-gap)',
+            hasBand && 'pt-[calc(var(--title-bar)+var(--sheet-gap))]',
+          )}
+        >
           <TitleBand />
-          <div ref={frame} className="relative flex h-full justify-end">
+          <div ref={frame} className="relative flex h-full justify-end rounded-xl">
             <div ref={mainContent} className="isolate h-full w-full min-w-0 shrink-0">
               <MainArea />
             </div>
