@@ -6,7 +6,13 @@ import type {
   AgentTask,
   EnvironmentInfo,
 } from '@shared/agent-host'
-import { harnessOf, sortAgentIds, type AgentId, type HarnessId } from '@shared/thread'
+import {
+  harnessOf,
+  MULTI_AGENT_HARNESSES,
+  sortAgentIds,
+  type AgentId,
+  type HarnessId,
+} from '@shared/thread'
 import { errorMessage, host, hostAt, type HostRequest } from '@renderer/lib/host'
 
 /** One host's agents, in the order the menus list them. */
@@ -74,8 +80,7 @@ export function createAgentsStore(request: HostRequest): AgentsStoreHook {
     },
     remove(agentId) {
       set((state) => ({
-        byId: without(state.byId, agentId),
-        order: state.order.filter((id) => id !== agentId),
+        ...withoutAgent(state, agentId),
         details: without(state.details, agentId),
       }))
     },
@@ -197,10 +202,21 @@ export function hostAgentChanged(hostId: string, status: AgentStatus): void {
 }
 
 export function hostAgentRemoved(hostId: string, agentId: AgentId): void {
-  setHost(hostId, (agents) => ({
+  setHost(hostId, (agents) => withoutAgent(agents, agentId))
+}
+
+function withoutAgent(agents: HostAgents, agentId: AgentId): HostAgents {
+  const status = agents.byId[agentId]
+  if (status?.isDefault) {
+    return {
+      byId: { ...agents.byId, [agentId]: { ...status, registered: false } },
+      order: agents.order,
+    }
+  }
+  return {
     byId: without(agents.byId, agentId),
     order: agents.order.filter((id) => id !== agentId),
-  }))
+  }
 }
 
 /** Forgets the agents of a host this computer no longer connects to. */
@@ -300,14 +316,23 @@ export const AGENT_NAMES: Record<HarnessId, string> = {
   'fake-agent': 'Fake agent',
 }
 
-/** Every agent the host reports, in its order: by harness, each harness's default agent first. */
+/** Registered agents, including those from older hosts that do not report registration. */
 export function usableAgents(order: AgentId[], byId: AgentsStore['byId']): AgentStatus[] {
-  return order.map((id) => byId[id]).filter((s): s is AgentStatus => !!s)
+  return order.map((id) => byId[id]).filter((s): s is AgentStatus => !!s && s.registered !== false)
 }
 
-/** One status per harness, its default agent's, which carries the harness's install and updates. */
+/** The catalog stays available when its default configuration has no registered agent. */
 export function harnessStatuses(order: AgentId[], byId: AgentsStore['byId']): AgentStatus[] {
-  return usableAgents(order, byId).filter((s) => s.isDefault)
+  return order.map((id) => byId[id]).filter((s): s is AgentStatus => !!s?.isDefault)
+}
+
+export function addableHarnesses(order: AgentId[], byId: AgentsStore['byId']): AgentStatus[] {
+  return harnessStatuses(order, byId).filter(
+    (s) =>
+      hasProgram(s) &&
+      !awaitsPackage(s) &&
+      (s.registered === false || MULTI_AGENT_HARNESSES.includes(s.harnessId)),
+  )
 }
 
 /** The agents the agent menu lists: those on installed harnesses, but no hidden default agent. */

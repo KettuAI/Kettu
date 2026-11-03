@@ -275,7 +275,7 @@
     "missingLine": "这个项目的文件夹不见了，请换一个项目。",
     "chooseProjectFirst": "先选择项目",
     "chooseAgentFirst": "先选择 Agent",
-    "noAgent": "暂时没有可以启动的 Agent，请先安装一个。",
+    "noAgent": "还没有 Agent，先添加一个再开始。",
     "noAgentOnHost": "{{host}} 上暂时没有可以启动的 Agent。",
     "noAgentNode_other": "暂时没有可以启动的 Agent：{{agents, list(style: narrow)}} 需要 Node.js 22 或更高版本。",
     "setUpAgents": "设置 Agent…",
@@ -360,7 +360,8 @@
       "failed": "出错停止",
       "signIn": "等待登录",
       "finished": "{{ago}}完成"
-    }
+    },
+    "addAgent": "添加 Agent…"
   },
   "signIn": {
     "title": "登录 {{agent}}",
@@ -378,6 +379,10 @@
     "signInToContinue": "登录 {{agent}} 以继续",
     "historyStays": "历史记录会保留在这里，会话会从中断的地方继续。",
     "signIn": "登录…",
+    "agentRemoved": "{{agent}} 已移除",
+    "agentRemovedBody": "历史仍留在这里，但这个会话不能再继续。可以重新添加这个 Agent，或用别的 Agent 带着上下文新建会话。",
+    "agentRemovedComposer": "这个 Agent 已移除，会话不能再继续。",
+    "openAgents": "打开 Agents",
     "announceApproval": "{{agent}} 需要你的授权",
     "announceFinished": "{{agent}} 已完成"
   },

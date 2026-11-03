@@ -205,7 +205,18 @@ describe('the port envelope', () => {
   })
 
   it('starts an agent to prepare a session, and refuses one that cannot run', async () => {
-    const { port } = await setup()
+    const { port } = await setup({
+      settings: {
+        locale: 'en',
+        agents: { 'fake-agent': { enabled: true }, codex: { enabled: true } },
+        addedAgents: DEFAULT_SETTINGS.addedAgents,
+        proxy: DEFAULT_SETTINGS.proxy,
+        git: DEFAULT_SETTINGS.git,
+        mcp: DEFAULT_SETTINGS.mcp,
+        usage: { fromComputer: false },
+        sessionTitles: true,
+      },
+    })
     await port.request('sessions.prepare', { agentId: 'fake-agent', projectPath: null })
     const agents = await port.request('agents.list', undefined)
     expect(agents.find((a) => a.id === 'fake-agent')?.state).toBe('ready')

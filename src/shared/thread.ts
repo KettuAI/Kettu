@@ -6,6 +6,7 @@ import type { BrowserOriginAnswer } from './browser'
 import type { RoutineRef } from './routines'
 
 export {
+  AUTO_AGENT_HARNESSES,
   HARNESS_IDS,
   MULTI_AGENT_HARNESSES,
   addedAgentId,

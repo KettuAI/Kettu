@@ -10,6 +10,10 @@ const {
   agentsOn,
   forgetHostAgents,
   awaitsPackage,
+  addableHarnesses,
+  harnessStatuses,
+  menuAgents,
+  usableAgents,
   hasProgram,
   hostAgentChanged,
   hostAgentRemoved,
@@ -34,6 +38,70 @@ describe('agents store', () => {
   beforeEach(() => {
     request.mockReset()
     useAgentsStore.setState({ byId: {}, order: [], environment: null, loaded: false })
+  })
+
+  it('keeps unregistered harnesses out of agents and menus, but in the harness catalog', () => {
+    const codex = {
+      id: 'codex',
+      harnessId: 'codex',
+      isDefault: true,
+      registered: false,
+      state: 'available',
+    } as AgentStatus
+    const work = {
+      id: 'codex~work',
+      harnessId: 'codex',
+      isDefault: false,
+      registered: true,
+      state: 'available',
+    } as unknown as AgentStatus
+    const byId = { codex, 'codex~work': work }
+    const order = ['codex', 'codex~work'] as AgentStatus['id'][]
+    expect(usableAgents(order, byId)).toEqual([work])
+    expect(menuAgents(order, byId)).toEqual([work])
+    expect(harnessStatuses(order, byId)).toEqual([codex])
+  })
+
+  it('retains a removed default instance as an unregistered harness on both hosts', () => {
+    const codex = {
+      id: 'codex',
+      harnessId: 'codex',
+      isDefault: true,
+      registered: true,
+      state: 'available',
+    } as AgentStatus
+    useAgentsStore.getState().setAll([codex])
+    useAgentsStore.getState().remove('codex')
+    const local = useAgentsStore.getState()
+    expect(local.byId.codex?.registered).toBe(false)
+    expect(harnessStatuses(local.order, local.byId)).toHaveLength(1)
+    expect(usableAgents(local.order, local.byId)).toEqual([])
+    hostAgentChanged('dev', codex)
+    hostAgentRemoved('dev', 'codex')
+    const remote = agentsOn(useAgentsStore.getState(), 'dev')
+    expect(remote.byId.codex?.registered).toBe(false)
+    expect(harnessStatuses(remote.order, remote.byId)).toHaveLength(1)
+  })
+
+  it('offers a first instance for every installed harness and extra instances only when supported', () => {
+    const statuses = [
+      { id: 'codex', harnessId: 'codex', registered: true },
+      { id: 'opencode', harnessId: 'opencode', registered: false },
+      { id: 'pi', harnessId: 'pi', registered: true },
+      { id: 'gemini', harnessId: 'gemini', registered: false, state: 'not-installed' },
+    ].map((s) => ({ isDefault: true, state: 'available', ...s }) as AgentStatus)
+    const byId = Object.fromEntries(statuses.map((s) => [s.id, s]))
+    expect(
+      addableHarnesses(
+        statuses.map((s) => s.id),
+        byId,
+      ).map((s) => s.id),
+    ).toEqual(['codex', 'opencode'])
+  })
+
+  it('keeps existing agents from hosts that do not report registration yet', () => {
+    const codex = { id: 'codex', isDefault: true, state: 'available' } as AgentStatus
+    expect(usableAgents(['codex'], { codex })).toEqual([codex])
   })
 
   it('keeps an environment that resolved while the agent list was still loading', async () => {

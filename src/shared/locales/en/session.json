@@ -293,7 +293,7 @@
     "missingLine": "This project's folder is missing. Choose another project.",
     "chooseProjectFirst": "Choose a project first",
     "chooseAgentFirst": "Choose an agent first",
-    "noAgent": "No agent can start yet. Install one to begin.",
+    "noAgent": "No agents yet. Add one to begin.",
     "noAgentOnHost": "No agent can start on {{host}} yet.",
     "noAgentNode_one": "No agent can start yet: {{agents, list}} needs Node.js 22 or later.",
     "noAgentNode_other": "No agent can start yet: {{agents, list}} need Node.js 22 or later.",
@@ -379,7 +379,8 @@
       "failed": "Stopped with an error",
       "signIn": "Waiting for sign-in",
       "finished": "Finished {{ago}}"
-    }
+    },
+    "addAgent": "Add an agent…"
   },
   "signIn": {
     "title": "Sign in to {{agent}}",
@@ -397,6 +398,10 @@
     "signInToContinue": "Sign in to {{agent}} to continue",
     "historyStays": "Your history stays here; the session picks up where it was.",
     "signIn": "Sign in…",
+    "agentRemoved": "{{agent}} was removed",
+    "agentRemovedBody": "Its history stays here, but this session can't continue. Add the agent again, or continue in a new session with another agent.",
+    "agentRemovedComposer": "This session can’t continue because its agent was removed.",
+    "openAgents": "Open Agents",
     "announceApproval": "{{agent}} needs your approval",
     "announceFinished": "{{agent}} finished"
   },

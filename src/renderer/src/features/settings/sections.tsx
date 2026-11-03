@@ -106,13 +106,9 @@ export function Language() {
 export function DefaultAgent() {
   const { t } = useTranslation('settings')
   const value = useSettings().general.defaultAgent
-  // A hidden default agent stays listed while it is the one chosen, so the choice still reads.
+  // The fake agent is a development tool, not a choice for everyday use.
   const agents = useAgentsStore(
-    useShallow((s) =>
-      usableAgents(s.order, s.byId).filter(
-        (a) => a.id !== 'fake-agent' && (!a.hidden || a.id === value),
-      ),
-    ),
+    useShallow((s) => usableAgents(s.order, s.byId).filter((a) => a.id !== 'fake-agent')),
   )
   const [apply, error] = useApply()
   const options = [

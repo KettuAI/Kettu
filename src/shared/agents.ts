@@ -104,6 +104,12 @@ export const HARNESS_IDS: readonly HarnessId[] = [
 export const MULTI_AGENT_HARNESSES: readonly HarnessId[] = ['claude-code', 'codex']
 
 /**
+ * Harnesses whose default agent is registered without being added. Only the fake agent, which
+ * exists in development builds, so the tools that drive the app have an agent to use.
+ */
+export const AUTO_AGENT_HARNESSES: readonly HarnessId[] = ['fake-agent']
+
+/**
  * An agent: the default one is its harness's own id, so sessions and settings from before agents
  * keep theirs; an added one is `<harness>~<slug>`.
  */

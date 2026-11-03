@@ -586,7 +586,8 @@ export class AgentHost {
     }
     this.usage.setFromComputer(next.usage.fromComputer)
     this.env.setConfigFolders(configFolders(this.catalog, next))
-    await this.agents.settingsChanged(previous, next)
+    const removed = await this.agents.settingsChanged(previous, next)
+    if (removed.length > 0) await this.sessions.agentsRemoved(removed)
   }
 
   /** The computer slept or woke, so the routines' timer starts over from the wall clock. */

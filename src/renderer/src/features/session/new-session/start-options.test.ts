@@ -340,6 +340,11 @@ describe('agentNeed', () => {
     expect(agentNeed(status({ package: adapter(true), cli: cli() }))).toBeNull()
   })
 
+  it('cannot start a harness whose agent was not added', () => {
+    expect(canStart(status({ package: adapter(true), registered: false }))).toBe(false)
+    expect(canStart(status({ package: adapter(true) }))).toBe(true)
+  })
+
   it('cannot start an agent missing from PATH or without Node.js', () => {
     for (const state of ['not-installed', 'node-missing', 'node-outdated'] as const) {
       const missing = status({ state, package: adapter(false) })

@@ -29,6 +29,7 @@ import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
   choosePaneAgent,
+  openAgentSettings,
   openHarnessSettings,
   openSession,
   paneAgent,
@@ -174,7 +175,8 @@ function DraftComposer({
     useShallow((s) => {
       if (hostId === null ? !s.loaded : !(hostId in s.hosts)) return null
       const { order, byId } = agentsOn(s, hostId)
-      return noAgentCanStart(usableAgents(order, byId))
+      const usable = usableAgents(order, byId)
+      return usable.length === 0 ? [] : noAgentCanStart(usable)
     }),
   )
   const now = useNow()
@@ -437,9 +439,13 @@ function NoAgentLine({
       : waitingForNode.length > 0
         ? t('newSession.noAgentNode', { agents: waitingForNode, count: waitingForNode.length })
         : t('newSession.noAgent')
+  const noneYet = waitingForNode.length === 0
   return (
     <div className="flex min-w-0 items-center gap-2 px-2.75">
-      <p className="truncate text-xs text-destructive" title={text}>
+      <p
+        className={cn('truncate text-xs', noneYet ? 'text-secondary' : 'text-destructive')}
+        title={text}
+      >
         {text}
       </p>
       {hostId === null && (
@@ -447,9 +453,9 @@ function NoAgentLine({
           variant="outline"
           size="xs"
           className="shrink-0"
-          onClick={() => openHarnessSettings(null)}
+          onClick={() => (noneYet ? openAgentSettings(null) : openHarnessSettings(null))}
         >
-          {t('newSession.installHarness')}
+          {t(noneYet ? 'newSession.addAgent' : 'newSession.installHarness')}
         </Button>
       )}
     </div>

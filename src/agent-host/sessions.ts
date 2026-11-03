@@ -3016,6 +3016,7 @@ export class SessionManager {
    * model provider refused for want of credit.
    */
   async retry(sessionId: string, portId?: string): Promise<void> {
+    this.assertRegistered(sessionId)
     let live = this.live.get(sessionId)
     if (!live) {
       const snapshot = await this.open(sessionId)
@@ -3579,6 +3580,12 @@ export class SessionManager {
     return breakdown
   }
 
+  private assertRegistered(sessionId: string): void {
+    if (!this.deps.agents.has(this.recordOf(sessionId).agentId)) {
+      throw new HostError('agent_unavailable', t('agent.removed'))
+    }
+  }
+
   /** Sends a prompt; a session that is not attached attaches to its agent as the turn starts. */
   async prompt(
     sessionId: string,
@@ -3586,6 +3593,7 @@ export class SessionManager {
     portId?: string,
     device?: FromDevice,
   ): Promise<void> {
+    this.assertRegistered(sessionId)
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
@@ -3822,6 +3830,7 @@ export class SessionManager {
     portId?: string,
     device?: FromDevice,
   ): Promise<{ itemId: string | null }> {
+    this.assertRegistered(sessionId)
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
@@ -3861,6 +3870,7 @@ export class SessionManager {
    * answers that no turn is running, the turn is ending: the prompt stays first in the queue.
    */
   async steer(sessionId: string, itemId: string): Promise<void> {
+    this.assertRegistered(sessionId)
     const live = await this.revive(sessionId)
     const item = live.thread.session.queue.find((i) => i.id === itemId)
     if (!item) throw notFound(`No queued prompt ${itemId}`)
@@ -3913,6 +3923,7 @@ export class SessionManager {
    * turn, by moving it to the front of the queue and stopping this one.
    */
   async sendNow(sessionId: string, itemId: string): Promise<void> {
+    this.assertRegistered(sessionId)
     const live = await this.revive(sessionId)
     if (this.deps.agents.status(live.record.agentId).capabilities.steering) {
       return this.steer(sessionId, itemId)
@@ -3934,6 +3945,7 @@ export class SessionManager {
   }
 
   async resumeQueue(sessionId: string): Promise<void> {
+    this.assertRegistered(sessionId)
     this.unarchive(sessionId)
     const live = await this.revive(sessionId)
     this.update(live, { queuePaused: false })
@@ -3947,6 +3959,7 @@ export class SessionManager {
    * when it is, for the prompt Send now chose.
    */
   private drainQueue(live: Live, chosen = false): void {
+    if (!this.deps.agents.has(live.record.agentId)) return
     const { status, queue, queuePaused } = live.thread.session
     const [next, ...rest] = queue
     if (!next || (queuePaused && !chosen) || !canSend(status)) return
@@ -4915,6 +4928,7 @@ export class SessionManager {
     optionId: string,
     value: string | boolean,
   ): Promise<void> {
+    this.assertRegistered(sessionId)
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noConfig'))
     }
@@ -5323,6 +5337,18 @@ export class SessionManager {
   private saveRecord(sessionId: string): void {
     if (this.records.has(sessionId)) this.saveIndex()
     this.touch(sessionId)
+  }
+
+  /** Closes removed agents' live sessions while retaining their index and transcript. */
+  async agentsRemoved(agentIds: readonly AgentId[]): Promise<void> {
+    const records = [...this.records.values()].filter((record) => agentIds.includes(record.agentId))
+    await Promise.all(records.map((record) => this.settled(record.id)))
+    for (const live of [...this.live.values()]) {
+      if (agentIds.includes(live.record.agentId) && live.prepared) {
+        await this.dropPrepared(live, { agentGone: true })
+      }
+    }
+    await this.closeAll(records, true)
   }
 
   async close(sessionId: string): Promise<void> {

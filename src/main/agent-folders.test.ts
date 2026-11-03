@@ -102,4 +102,13 @@ describe('AgentFolders', () => {
     await expect(folders.remove(made, true)).rejects.toThrow('No added agent')
     await expect(folders.remove('codex', 'yes')).rejects.toThrow('"trash" must be a boolean')
   })
+
+  it('unregisters a default configuration without touching the harness or its folder', async () => {
+    const { settings, folders } = await setup()
+    settings.update({ agents: { opencode: { enabled: true } } })
+    await folders.remove('opencode', false)
+    expect(settings.get().agents.opencode).toEqual({ enabled: false })
+    expect(trashed).toEqual([])
+    await expect(folders.remove('opencode', false)).rejects.toThrow('No registered agent')
+  })
 })

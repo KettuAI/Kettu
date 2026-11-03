@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -24,6 +24,99 @@ async function readSettings(): Promise<unknown> {
 }
 
 describe('SettingsStore', () => {
+  it('registers only defaults with user settings or references during a one-time migration', async () => {
+    await mkdir(join(dir, 'state'))
+    await writeFile(
+      join(dir, 'settings.json'),
+      JSON.stringify({
+        version: 1,
+        agents: {
+          codex: { binaryPath: '/opt/codex' },
+          'claude-code': { configDir: '/my/config' },
+          opencode: { hidden: true },
+        },
+        general: { defaultAgent: 'pi' },
+        mcp: { kettu: { off: ['gemini'] } },
+      }),
+    )
+    await writeFile(
+      join(dir, 'state', 'sessions.json'),
+      JSON.stringify({
+        version: 1,
+        sessions: [
+          {
+            id: 'old',
+            agentId: 'qwen',
+            acpSessionId: 'external',
+            projectPath: '/project',
+            title: null,
+            createdAt: 1,
+            updatedAt: 1,
+            lastViewedAt: null,
+            parentId: null,
+            origin: 'user',
+            description: null,
+            branch: null,
+            archivedAt: 2,
+          },
+        ],
+      }),
+    )
+    await writeFile(
+      join(dir, 'state', 'agent-options.json'),
+      JSON.stringify({
+        version: 1,
+        agents: {
+          codex: { config: [], remembered: { model: 'chosen' } },
+          opencode: { config: [{ id: 'model' }], remembered: {} },
+        },
+      }),
+    )
+    const store = await SettingsStore.load(dir)
+    expect(store.get().agents).toMatchObject({
+      codex: { enabled: true, binaryPath: '/opt/codex' },
+      'claude-code': { enabled: true, configDir: '/my/config' },
+      pi: { enabled: true },
+      gemini: { enabled: true },
+      qwen: { enabled: true },
+    })
+    expect(store.get().agents.opencode?.enabled).not.toBe(true)
+    expect(store.get()).toHaveProperty('agentRegistrationVersion', 1)
+    store.removeAgent('qwen')
+    await store.flush()
+    const reloaded = await SettingsStore.load(dir)
+    expect(reloaded.get().agents['qwen']?.enabled).toBe(false)
+    expect(await readFile(join(dir, 'state', 'sessions.json'), 'utf8')).toContain('archivedAt')
+  })
+
+  it('does not register a harness merely because its binary was picked', async () => {
+    await writeFile(
+      join(dir, 'settings.json'),
+      JSON.stringify({ version: 1, agents: { codex: { binaryPath: '/opt/codex' } } }),
+    )
+    const store = await SettingsStore.load(dir)
+    expect(store.get()).toHaveProperty('agentRegistrationVersion', 1)
+    expect(store.get().agents.codex).toEqual({ binaryPath: '/opt/codex' })
+    store.update({ agents: { codex: { enabled: true, hidden: false } } })
+    expect(store.get().agents.codex?.enabled).toBe(true)
+    store.removeAgent('codex')
+    expect(store.get().agents.codex).toEqual({ binaryPath: '/opt/codex', enabled: false })
+    await store.flush()
+  })
+
+  it('keeps every harness when the history cannot be read, without touching the files', async () => {
+    const old = JSON.stringify({ version: 1 })
+    await writeFile(join(dir, 'settings.json'), old)
+    await mkdir(join(dir, 'state'))
+    await writeFile(join(dir, 'state', 'sessions.json'), '{ broken')
+    const store = await SettingsStore.load(dir)
+    expect(store.get().agents['fake-agent']?.enabled).toBe(true)
+    expect(store.get().agents['claude-code']?.enabled).toBe(true)
+    expect(store.get()).toHaveProperty('agentRegistrationVersion', 1)
+    await store.flush()
+    expect(await readFile(join(dir, 'state', 'sessions.json'), 'utf8')).toBe('{ broken')
+  })
+
   it('starts from the defaults without a file and writes nothing until a change', async () => {
     const store = await SettingsStore.load(dir)
     expect(store.get()).toEqual(DEFAULT_SETTINGS)

@@ -46,7 +46,9 @@ export function noticeSummary({ signIn, update }: Notices): NoticeSummary | null
 export function useNotices(): Notices & { summary: NoticeSummary | null } {
   const signIn = useAgentsStore(
     useShallow((s) =>
-      s.order.filter((id) => s.byId[id]?.signIn === 'required').map((id) => s.byId[id]!.name),
+      s.order
+        .filter((id) => s.byId[id]?.registered !== false && s.byId[id]?.signIn === 'required')
+        .map((id) => s.byId[id]!.name),
     ),
   )
   const notices: Notices = { signIn, update: useUpdates().card }

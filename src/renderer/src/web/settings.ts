@@ -24,12 +24,12 @@ export interface SettingsLink {
   onState(listener: (state: LinkState) => void): () => void
 }
 
-type Section = Exclude<keyof SettingsFile, 'version'>
+type Section = Exclude<keyof SettingsFile, 'version' | 'agentRegistrationVersion'>
 
 /** The keys this browser keeps, by section: every key the host does not take. */
 const CLIENT_KEYS: Partial<Record<Section, readonly string[]>> = Object.fromEntries(
   (Object.keys(DEFAULT_SETTINGS) as (keyof SettingsFile)[]).flatMap((section) => {
-    if (section === 'version') return []
+    if (section === 'version' || section === 'agentRegistrationVersion') return []
     const host = (HOST_SETTING_KEYS as Partial<Record<Section, 'all' | readonly string[]>>)[section]
     if (host === 'all') return []
     const keys = Object.keys(DEFAULT_SETTINGS[section]).filter((key) => !host?.includes(key))

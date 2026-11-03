@@ -54,6 +54,41 @@ function tools(port: TestPort, sessionId: string): ToolEntry[] {
   return port.entries(sessionId).filter((entry): entry is ToolEntry => entry.kind === 'tool')
 }
 
+describe('agent registration', () => {
+  it('preserves removed agent history while refusing prompts before changing the thread', async () => {
+    const { t, port } = await setup()
+    const id = await newSession(t, port)
+    await turn(port, id, 'remember me')
+    await port.untilStatus(id, 'ready')
+    const before = structuredClone(port.entries(id))
+    expect(before.length).toBeGreaterThan(0)
+    await t.host.updateSettings({
+      locale: 'en',
+      agents: { 'fake-agent': { enabled: false } },
+      addedAgents: [],
+      proxy: DEFAULT_SETTINGS.proxy,
+      git: DEFAULT_SETTINGS.git,
+      mcp: DEFAULT_SETTINGS.mcp,
+      usage: DEFAULT_SETTINGS.usage,
+      sessionTitles: true,
+    })
+    await expect(turn(port, id, 'must not be written')).rejects.toMatchObject({
+      code: 'agent_unavailable',
+    })
+    await expect(
+      port.request('sessions.queue', {
+        sessionId: id,
+        content: [{ type: 'text', text: 'must not be queued' }],
+      }),
+    ).rejects.toMatchObject({ code: 'agent_unavailable' })
+    expect(port.entries(id)).toEqual(before)
+    expect((await port.request('sessions.list', {})).some((s) => s.id === id)).toBe(true)
+    expect(
+      (await port.request('agents.list', undefined)).find((a) => a.id === 'fake-agent'),
+    ).toMatchObject({ registered: false })
+  })
+})
+
 describe('attachments', () => {
   const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4])
   const THUMB = 'data:image/webp;base64,AAAA'
@@ -1042,7 +1077,10 @@ describe('prepared sessions', () => {
     const other = await prepare(t, t.connect())
     const settings = {
       locale: 'en' as const,
-      agents: { 'claude-code': { configDir: path.join(t.dir, 'claude-config') } },
+      agents: {
+        'claude-code': { enabled: true, configDir: path.join(t.dir, 'claude-config') },
+        'fake-agent': { enabled: true },
+      },
       addedAgents: [],
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
@@ -2073,7 +2111,7 @@ describe('a prompt turn', () => {
       usageReaders: [reader],
       settings: {
         locale: 'en',
-        agents: DEFAULT_SETTINGS.agents,
+        agents: { 'fake-agent': { enabled: true } },
         addedAgents: [],
         proxy: DEFAULT_SETTINGS.proxy,
         git: DEFAULT_SETTINGS.git,

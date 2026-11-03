@@ -172,6 +172,7 @@ export interface AgentStatus {
   harnessId: HarnessId
   harnessName: string
   isDefault: boolean
+  registered?: boolean // absent on older hosts; catalog entries are not necessarily agents
   hidden: boolean // a default agent hidden from the agent menu
   color?: AgentColor // an added agent's dot on its mark; absent for a harness's default agent
   // Whether Kettu handed this agent's harness an API key; null for a harness that takes none.

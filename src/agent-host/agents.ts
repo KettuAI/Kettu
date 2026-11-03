@@ -20,7 +20,13 @@ import type {
 import type { AgentProcess, NodeRuntime } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import { agentColor, type AddedAgent, type HostSettings } from '@shared/settings'
-import { harnessOf, type AgentId, type ConfigOption, type HarnessId } from '@shared/thread'
+import {
+  AUTO_AGENT_HARNESSES,
+  harnessOf,
+  type AgentId,
+  type ConfigOption,
+  type HarnessId,
+} from '@shared/thread'
 import {
   installAdapter,
   NPM_INSTALL_ARGS,
@@ -406,6 +412,15 @@ function sameUpdate(a: AgentUpdate | null, b: AgentUpdate | null): boolean {
   return !!a && !!b && a.adapterVersion === b.adapterVersion && a.cliVersion === b.cliVersion
 }
 
+/**
+ * A default agent is registered when the user added it. The fake agent exists only in development
+ * builds and is on unless it was removed.
+ */
+function registeredByDefault(harnessId: HarnessId, agents: HostSettings['agents']): boolean {
+  const enabled = agents[harnessId]?.enabled
+  return enabled === true || (AUTO_AGENT_HARNESSES.includes(harnessId) && enabled !== false)
+}
+
 export class AgentManager {
   private readonly harnesses = new Map<HarnessId, Harness>()
   private readonly slots = new Map<AgentId, Slot>()
@@ -444,7 +459,13 @@ export class AgentManager {
   }
 
   has(agentId: AgentId): boolean {
-    return this.slots.has(agentId)
+    const slot = this.slots.get(agentId)
+    return !!slot && (!!slot.added || registeredByDefault(slot.def.id, this.deps.settings().agents))
+  }
+
+  private registeredSlot(agentId: AgentId): Slot {
+    if (!this.has(agentId)) throw new HostError('agent_unavailable', t('agent.removed'))
+    return this.slot(agentId)
   }
 
   /** The agent's name; a removed agent's sessions name its harness. */
@@ -474,7 +495,6 @@ export class AgentManager {
       }
       this.slots.delete(slot.id)
       removed.push(slot.id)
-      void this.stopProcess(slot).catch(() => {})
     }
     for (const agent of added) {
       if (this.slots.has(agent.id)) continue
@@ -656,12 +676,26 @@ export class AgentManager {
   }
 
   /**
-   * Agents were added, renamed or removed, a program was picked, or a default agent hidden: sync
-   * the slots and detect the affected harnesses again. The environment already carries each
-   * agent's folder. Returns the agents removed.
+   * Agents were added, renamed or removed, or a program was picked: sync the slots and detect the
+   * affected harnesses again. The environment already carries each agent's folder. Returns the
+   * agents removed.
    */
   async settingsChanged(previous: HostSettings, next: HostSettings): Promise<AgentId[]> {
+    const previousSlots = new Map(this.slots)
     const removed = this.syncAgents(next.addedAgents)
+    for (const h of this.harnesses.values()) {
+      const before = registeredByDefault(h.def.id, previous.agents)
+      const after = registeredByDefault(h.def.id, next.agents)
+      if (before && !after) removed.push(h.def.id)
+      // A newly added default instance shows at once; its slot already exists for the harness.
+      else if (!before && after) this.emit(this.home(h))
+    }
+    await Promise.all(
+      removed.map(async (agentId) => {
+        const slot = previousSlots.get(agentId)
+        if (slot) await this.stopProcess(slot)
+      }),
+    )
     for (const agentId of removed) this.deps.removed?.(agentId)
     // A default agent's folder from before agents could be added can only be cleared, which
     // gives its account, limits and prepared session back to the harness's default folder.
@@ -681,8 +715,8 @@ export class AgentManager {
         previous.agents[h.def.id]?.configDir !== next.agents[h.def.id]?.configDir,
     )
     await Promise.all(changed.map((h) => this.detect(h)))
-    // A rename, a hidden default agent or a switch for Kettu's server shows in the status; the
-    // switch changes what a start gets, and waits for the next one.
+    // A rename or a switch for Kettu's server shows in the status; the switch changes what a
+    // start gets, and waits for the next one.
     for (const slot of this.slots.values()) this.emit(slot)
     return removed
   }
@@ -691,18 +725,18 @@ export class AgentManager {
 
   runtime(agentId: AgentId): AgentRuntime | null {
     const slot = this.slots.get(agentId)
-    return slot && !slot.stopping ? slot.runtime : null
+    return slot && this.has(agentId) && !slot.stopping ? slot.runtime : null
   }
 
   /** Starts the agent if needed; rejects with `agent_unavailable` when it cannot run. */
   async ensureReady(agentId: AgentId): Promise<AgentRuntime> {
     // A session keeps its agent, which may have been removed since.
-    if (!this.slots.has(agentId)) throw new HostError('agent_unavailable', t('agent.removed'))
-    const slot = this.slot(agentId)
+    const slot = this.registeredSlot(agentId)
     const { h } = slot
     await this.detectAll()
     if (slot.stopping) await slot.stopping
     if (h.installing) await h.installing.catch(() => {})
+    this.registeredSlot(agentId)
     if (slot.runtime) return slot.runtime
     if (slot.starting) return slot.starting
     if (slot.state === 'failed') {
@@ -739,7 +773,7 @@ export class AgentManager {
     } catch (error) {
       const message = (error as Error).message
       // A start the quit stopped did not fail either.
-      if (error instanceof InstallCancelled || this.stopped) {
+      if (error instanceof InstallCancelled || this.stopped || !this.has(slot.id)) {
         slot.state = slot.h.detection?.state ?? 'available'
         slot.detail = null
         this.emit(slot)
@@ -775,6 +809,7 @@ export class AgentManager {
   private async launch(slot: Slot, spec: LaunchSpec): Promise<AgentRuntime> {
     const { diagnostics } = this.deps
     const agentId = slot.id
+    this.registeredSlot(agentId)
     if (this.stopped) throw new Error(`${slot.name} was not started: the host is stopping.`)
     slot.state = 'starting'
     slot.detail = null
@@ -813,6 +848,7 @@ export class AgentManager {
           throw new Error(`${t('agent.exitedBeforeReady', { exit })}${tail ? ` ${tail}` : ''}`)
         }),
       ])
+      this.registeredSlot(agentId)
       const runtime: AgentRuntime = {
         agentId,
         connection,
@@ -1887,7 +1923,7 @@ export class AgentManager {
 
   /** Clears `failed` and starts the agent again when live sessions need it. */
   async retry(agentId: AgentId): Promise<void> {
-    const slot = this.slot(agentId)
+    const slot = this.registeredSlot(agentId)
     if (slot.state === 'failed') {
       slot.failures = []
       slot.state = 'available'
@@ -2129,6 +2165,7 @@ export class AgentManager {
    * events report a window only when it changes, so without this most windows would stay unknown.
    */
   async refreshLimits(agentId: AgentId): Promise<void> {
+    if (!this.has(agentId)) return
     const slot = this.slot(agentId)
     if (!this.hasLimits(agentId)) return
     await this.detectAll()
@@ -2426,7 +2463,7 @@ export class AgentManager {
    * that reports them. Never installs: an agent that would need an install first is left alone.
    */
   async refreshAccount(agentId: AgentId): Promise<void> {
-    const slot = this.slot(agentId)
+    const slot = this.registeredSlot(agentId)
     if (!slot.def.reportsAccount) return
     await this.detectAll()
     if (slot.signIn === 'required') return
@@ -2527,7 +2564,7 @@ export class AgentManager {
    * credentials until it stops, so an idle one is stopped and the next start uses the key.
    */
   async setApiKey(agentId: AgentId, input: ApiKeyInput): Promise<void> {
-    const slot = this.slot(agentId)
+    const slot = this.registeredSlot(agentId)
     await this.detectAll()
     const checked = checkApiKey(input, slot.def.id === 'claude-code')
     if (slot.def.id === 'claude-code') {
@@ -2544,7 +2581,7 @@ export class AgentManager {
 
   /** Removes what `setApiKey` handed over: the variables it wrote, or Codex's login. */
   async clearApiKey(agentId: AgentId): Promise<void> {
-    const slot = this.slot(agentId)
+    const slot = this.registeredSlot(agentId)
     await this.detectAll()
     if (slot.def.id === 'claude-code') await clearClaudeKey(this.settingsFile(slot))
     else if (slot.def.id === 'codex') await this.runCodexLogin(slot, ['logout'])
@@ -2702,6 +2739,7 @@ export class AgentManager {
       harnessId: slot.def.id,
       harnessName: slot.def.name,
       isDefault: !slot.added,
+      registered: this.has(agentId),
       hidden: !slot.added && harnessSettings?.hidden === true,
       ...(color ? { color } : {}),
       apiKey:
@@ -2807,7 +2845,7 @@ export class AgentManager {
   }
 
   ids(): AgentId[] {
-    return [...this.slots.keys()]
+    return [...this.slots.keys()].filter((id) => this.has(id))
   }
 
   private onStderr(slot: Slot, text: string): void {

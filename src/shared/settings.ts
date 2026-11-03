@@ -5,6 +5,7 @@ import type { AgentId, HarnessId } from './thread'
 
 export interface SettingsFile {
   version: 1
+  agentRegistrationVersion?: 1
   general: {
     language: LanguageSetting
     defaultAgent: AgentId | null // null: pick one on the New session screen each time
@@ -39,7 +40,9 @@ export interface SettingsFile {
   }
   // Keyed by harness: the program picked for it, and its default agent's folder and visibility.
   // configDir: a folder picked before agents could be added, which the default agent keeps.
-  agents: Partial<Record<HarnessId, { binaryPath?: string; configDir?: string; hidden?: true }>>
+  agents: Partial<
+    Record<HarnessId, { binaryPath?: string; configDir?: string; hidden?: true; enabled?: boolean }>
+  >
   addedAgents: AddedAgent[] // in the order they were added
   proxy: ProxySettings
   terminal: {
@@ -135,6 +138,7 @@ export type ProxySettings =
 
 export const DEFAULT_SETTINGS: SettingsFile = {
   version: 1,
+  agentRegistrationVersion: 1,
   general: {
     language: 'system',
     defaultAgent: null,
@@ -195,7 +199,9 @@ export interface SettingsPatch {
   thread?: Partial<SettingsFile['thread']>
   appearance?: Partial<SettingsFile['appearance']>
   notifications?: Partial<SettingsFile['notifications']>
-  agents?: Partial<Record<HarnessId, { binaryPath?: null; configDir?: null; hidden?: boolean }>>
+  agents?: Partial<
+    Record<HarnessId, { binaryPath?: null; configDir?: null; hidden?: boolean; enabled?: boolean }>
+  >
   proxy?: ProxySettings
   terminal?: { shellPath?: null; fontSize?: SettingsFile['terminal']['fontSize'] }
   git?: Partial<SettingsFile['git']>

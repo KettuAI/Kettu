@@ -97,9 +97,9 @@ export class AgentFolders {
     if (!isAgentId(agentId)) throw new SettingsError(`Unknown agent "${String(agentId)}"`)
     if (typeof trash !== 'boolean') throw new SettingsError('"trash" must be a boolean')
     const agent = this.settings.get().addedAgents.find((candidate) => candidate.id === agentId)
-    if (!agent) throw new SettingsError(`No added agent "${agentId}"`)
+    if (!agent && !isHarnessId(agentId)) throw new SettingsError(`No added agent "${agentId}"`)
     this.settings.removeAgent(agentId)
-    if (trash && agent.created && this.inRoot(agent.configDir)) {
+    if (trash && agent?.created && this.inRoot(agent.configDir)) {
       await this.trash(agent.configDir)
     }
   }

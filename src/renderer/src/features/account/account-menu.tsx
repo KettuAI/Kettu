@@ -368,7 +368,9 @@ function PlanLimits() {
 function useAgentsWithLimits(): AgentStatus[] {
   return useAgentsStore(
     useShallow((s) =>
-      s.order.map((id) => s.byId[id]).filter((a): a is AgentStatus => !!a && a.limits.length > 0),
+      s.order
+        .map((id) => s.byId[id])
+        .filter((a): a is AgentStatus => !!a && a.registered !== false && a.limits.length > 0),
     ),
   )
 }
