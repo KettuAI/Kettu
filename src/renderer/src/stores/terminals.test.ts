@@ -20,13 +20,17 @@ vi.stubGlobal('window', {
 
 const { fromHostTerminalEvent } = await import('@renderer/lib/host')
 const { hostOfPath, onHost } = await import('@renderer/lib/host-paths')
+const { createLayout, splitAt } = await import('@renderer/features/split/layout')
+const { useViewStore } = await import('./view')
 const {
   createTerminal,
   endTerminals,
   findLocalUrl,
   focusTerminalSide,
+  finishTerminalLoad,
   forgetTerminal,
   initTerminals,
+  loadTerminals,
   interruptTerminal,
   killTerminal,
   reattachTerminals,
@@ -40,6 +44,7 @@ const {
   renameTerminal,
   replaceStale,
   terminalsOf,
+  trackTerminalOpen,
   toggleSplit,
   useTerminalsStore,
 } = await import('./terminals')
@@ -217,6 +222,252 @@ describe('forgetTerminal', () => {
     useTerminalsStore.setState({ active: { '/repo': 'b' } })
     forgetTerminal('b')
     expect(state().active['/repo']).toBe('a')
+  })
+})
+
+describe('an empty terminal panel', () => {
+  const pane = () => useViewStore.getState().sidePane['/repo']
+  const otherPane = () => useViewStore.getState().sidePane['/other']
+
+  beforeEach(() => {
+    useViewStore.setState({
+      projectPath: '/repo',
+      main: { kind: 'session', sessionId: 's' },
+      layout: createLayout({ kind: 'session', sessionId: 's', projectPath: '/repo' }),
+      sidePane: { '/repo': 'terminal' },
+      splitSidePane: null,
+      sidePaneMaximized: false,
+    })
+  })
+
+  it('closes the panel when the last tab is removed', () => {
+    add(info('a', 1))
+    forgetTerminal('a')
+    expect(state().byId.a).toBeUndefined()
+    expect(pane()).toBeUndefined()
+  })
+
+  it('closes from the host removing the last tab', () => {
+    add(info('a', 1), info('b', 2))
+    emit({ type: 'terminal.removed', id: 'a' })
+    expect(pane()).toBe('terminal')
+    emit({ type: 'terminal.removed', id: 'b' })
+    expect(pane()).toBeUndefined()
+  })
+
+  it('keeps the panel while another tab remains', () => {
+    add(info('a', 1), info('b', 2))
+    forgetTerminal('a')
+    expect(state().byId.b).toBeDefined()
+    expect(pane()).toBe('terminal')
+  })
+
+  it('keeps an exited tab and its output in the panel', () => {
+    add(info('a', 1), info('b', 2))
+    add(info('b', 2, { exitCode: 0, busy: false }))
+    forgetTerminal('a')
+    expect(state().byId.b).toMatchObject({ exitCode: 0 })
+    expect(pane()).toBe('terminal')
+  })
+
+  it('does not close the panel when the only tab exits', () => {
+    add(info('a', 1))
+    add(info('a', 1, { exitCode: 1, busy: false }))
+    expect(state().byId.a).toMatchObject({ exitCode: 1 })
+    expect(pane()).toBe('terminal')
+  })
+
+  it('does not close another project’s panel', () => {
+    add(info('a', 1), info('x', 2, { projectPath: '/other' }))
+    useViewStore.setState({
+      projectPath: '/other',
+      sidePane: { '/repo': 'terminal', '/other': 'terminal' },
+    })
+    forgetTerminal('a')
+    expect(useViewStore.getState().sidePane['/repo']).toBeUndefined()
+    expect(otherPane()).toBe('terminal')
+  })
+
+  it('does not close a different pane', () => {
+    add(info('a', 1))
+    useViewStore.setState({ sidePane: { '/repo': 'files' } })
+    forgetTerminal('a')
+    expect(useViewStore.getState().sidePane['/repo']).toBe('files')
+  })
+
+  it('closes the split terminal pane only for the focused project', () => {
+    add(info('a', 1, { projectPath: '/repo' }), info('x', 2, { projectPath: '/other' }))
+    const base = createLayout({ kind: 'session', sessionId: 's1', projectPath: '/other' })
+    const layout = splitAt(
+      base,
+      base.focus,
+      'right',
+      { kind: 'session', sessionId: 's2', projectPath: '/repo' },
+      { width: 1920, height: 1080 },
+    )!
+    useViewStore.setState({
+      layout,
+      projectPath: '/repo',
+      main: { kind: 'session', sessionId: 's2' },
+      splitSidePane: 'terminal',
+      sidePane: { '/repo': 'terminal', '/other': 'terminal' },
+    })
+    forgetTerminal('x')
+    expect(useViewStore.getState().splitSidePane).toBe('terminal')
+    forgetTerminal('a')
+    expect(useViewStore.getState().splitSidePane).toBeNull()
+  })
+
+  it('does not close a split pane that is not the terminal', () => {
+    add(info('a', 1))
+    const base = createLayout({ kind: 'session', sessionId: 's1', projectPath: '/repo' })
+    const layout = splitAt(
+      base,
+      base.focus,
+      'right',
+      { kind: 'session', sessionId: 's2', projectPath: '/other' },
+      { width: 1920, height: 1080 },
+    )!
+    // The new pane is focused; point the focus back at /repo, which owns the last tab.
+    layout.focus = base.focus
+    useViewStore.setState({
+      layout,
+      projectPath: '/repo',
+      splitSidePane: 'files',
+      sidePane: { '/repo': 'files' },
+    })
+    forgetTerminal('a')
+    expect(useViewStore.getState().splitSidePane).toBe('files')
+  })
+
+  it('does not close the panel for an unknown tab', () => {
+    forgetTerminal('missing')
+    expect(pane()).toBe('terminal')
+  })
+
+  it('keeps the panel while a replacement for the last tab is being created', async () => {
+    add(info('a', 1))
+    let resolveCreate: (value: TerminalInfo) => void = () => undefined
+    request.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCreate = resolve
+      }),
+    )
+    const pending = createTerminal('/repo')
+    forgetTerminal('a')
+    expect(pane()).toBe('terminal')
+    resolveCreate(info('n', 9))
+    await pending
+    expect(state().byId.n).toBeDefined()
+    expect(pane()).toBe('terminal')
+  })
+
+  it('keeps the panel when a stale last tab is replaced', async () => {
+    add(info('a', 1))
+    request.mockResolvedValueOnce(info('n', 9))
+    await replaceStale('a')
+    expect(state().byId.a).toBeUndefined()
+    expect(state().byId.n).toBeDefined()
+    expect(pane()).toBe('terminal')
+  })
+
+  it('closes a panel that was already open once an empty list loads', () => {
+    finishTerminalLoad('/repo', { explicitOpen: false, stale: false, loaded: true })
+    expect(pane()).toBeUndefined()
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it('starts a terminal when the panel was just opened onto nothing', async () => {
+    request.mockResolvedValueOnce(info('n', 9))
+    finishTerminalLoad('/repo', { explicitOpen: true, stale: false, loaded: true })
+    await vi.waitFor(() => expect(state().byId.n).toBeDefined())
+    expect(pane()).toBe('terminal')
+  })
+
+  it('does nothing when the list failed or finished after a switch', async () => {
+    request.mockRejectedValueOnce(new Error('down'))
+    const loaded = await loadTerminals('/repo')
+    expect(loaded).toBe(false)
+    finishTerminalLoad('/repo', { explicitOpen: false, stale: false, loaded })
+    finishTerminalLoad('/repo', { explicitOpen: false, stale: true, loaded: true })
+    expect(pane()).toBe('terminal')
+    expect(request).not.toHaveBeenCalledWith('terminals.create', expect.anything())
+  })
+
+  it('leaves the panel open when the list has a tab', async () => {
+    request.mockResolvedValueOnce([info('a', 1)])
+    const loaded = await loadTerminals('/repo')
+    finishTerminalLoad('/repo', { explicitOpen: false, stale: false, loaded })
+    expect(state().byId.a).toBeDefined()
+    expect(pane()).toBe('terminal')
+  })
+
+  it('does not close while that list is in flight with a create', async () => {
+    let resolveCreate: (value: TerminalInfo) => void = () => undefined
+    request.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCreate = resolve
+      }),
+    )
+    const pending = createTerminal('/repo')
+    finishTerminalLoad('/repo', { explicitOpen: false, stale: false, loaded: true })
+    expect(pane()).toBe('terminal')
+    expect(request).toHaveBeenCalledTimes(1)
+    resolveCreate(info('n', 9))
+    await pending
+    expect(pane()).toBe('terminal')
+  })
+
+  it('closes only the project whose list was empty', () => {
+    useViewStore.setState({ sidePane: { '/repo': 'terminal', '/other': 'terminal' } })
+    finishTerminalLoad('/other', { explicitOpen: false, stale: false, loaded: true })
+    expect(pane()).toBe('terminal')
+    expect(otherPane()).toBeUndefined()
+  })
+
+  it('does not close the split pane when the empty project is not focused', () => {
+    const base = createLayout({ kind: 'session', sessionId: 's1', projectPath: '/repo' })
+    const layout = splitAt(
+      base,
+      base.focus,
+      'right',
+      { kind: 'session', sessionId: 's2', projectPath: '/other' },
+      { width: 1920, height: 1080 },
+    )!
+    useViewStore.setState({
+      layout,
+      projectPath: '/other',
+      splitSidePane: 'terminal',
+      sidePane: { '/repo': 'terminal', '/other': 'terminal' },
+    })
+    finishTerminalLoad('/repo', { explicitOpen: false, stale: false, loaded: true })
+    expect(useViewStore.getState().splitSidePane).toBe('terminal')
+  })
+})
+
+describe('trackTerminalOpen', () => {
+  const closed = { projectPath: '/repo', open: false }
+  const open = { projectPath: '/repo', open: true }
+
+  it('treats a restored open panel as not just opened', () => {
+    expect(trackTerminalOpen(open, open, false)).toEqual({ opening: false, explicitOpen: false })
+  })
+
+  it('keeps an explicit open for the second run of that open', () => {
+    const first = trackTerminalOpen(closed, open, false)
+    expect(first).toEqual({ opening: true, explicitOpen: true })
+    expect(trackTerminalOpen(open, open, first.opening)).toEqual({
+      opening: true,
+      explicitOpen: true,
+    })
+  })
+
+  it('clears the explicit open when the project changes or the pane closes', () => {
+    expect(trackTerminalOpen(open, { projectPath: '/other', open: true }, true)).toEqual({
+      opening: false,
+      explicitOpen: false,
+    })
+    expect(trackTerminalOpen(open, closed, true)).toEqual({ opening: false, explicitOpen: false })
   })
 })
 

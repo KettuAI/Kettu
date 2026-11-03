@@ -12,9 +12,9 @@ import { layoutStorage } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
 import {
   createTerminal,
+  finishTerminalLoad,
   loadTerminals,
-  terminalsOf,
-  useTerminalsStore,
+  trackTerminalOpen,
 } from '@renderer/stores/terminals'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { shownSidePane, toggleTerminal, useViewStore } from '@renderer/stores/view'
@@ -70,18 +70,24 @@ export function SidePanelArea({
     onlySaveAfterUserInteractions: true,
   })
   const previous = useRef({ projectPath, open })
+  // Stays set for a second run of one open, so that run still starts a tab instead of closing.
+  const opening = useRef(false)
 
-  // Opening the panel in a project without terminals starts one; switching projects never does.
+  // Opening the panel in a project without terminals starts one. A panel already open, restored or
+  // reached by switching projects, closes once the list comes back empty. A list that fails, or
+  // that finishes after the project or pane changed, leaves the pane as it is.
   useEffect(() => {
-    const before = previous.current
+    const tracked = trackTerminalOpen(previous.current, { projectPath, open }, opening.current)
+    opening.current = tracked.opening
     previous.current = { projectPath, open }
     if (!open) return
-    void loadTerminals(projectPath).then(() => {
-      const opened = before.projectPath === projectPath && !before.open
-      if (opened && terminalsOf(useTerminalsStore.getState().byId, projectPath).length === 0) {
-        void createTerminal(projectPath)
-      }
+    let stale = false
+    void loadTerminals(projectPath).then((loaded) => {
+      finishTerminalLoad(projectPath, { explicitOpen: tracked.explicitOpen, stale, loaded })
     })
+    return () => {
+      stale = true
+    }
   }, [projectPath, open])
 
   useEffect(

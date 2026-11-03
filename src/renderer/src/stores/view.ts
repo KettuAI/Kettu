@@ -114,6 +114,8 @@ export type SettingsSection =
   | 'about'
 
 interface ViewStore {
+  /** The regular New session draft's choices, kept while another view replaces its pane. */
+  newSessionDraft: Extract<PaneView, { kind: 'new' }> | null
   projectPath: string | null
   main: MainView
   /** Columns of panes, and the pane in focus; the pane's view mirrors `main`. */
@@ -185,6 +187,7 @@ export const savedLayout: unknown = saved.layout
 export const lastSessionId = saved.lastSessionId ?? null
 
 export const useViewStore = create<ViewStore>()(() => ({
+  newSessionDraft: null,
   projectPath: saved.projectPath ?? null,
   main: { kind: 'launch' },
   layout: readLayout(saved.layout) ?? createLayout(),
@@ -305,6 +308,8 @@ function sidePaneChange(
 function withLayout(s: ViewStore, layout: Layout, show = false): Partial<ViewStore> {
   const mirroring = show || sessionsShown(s.main)
   const changes: Partial<ViewStore> = { layout }
+  const draft = newSessionPane(layout)?.view
+  if (draft?.kind === 'new' && !draft.parentId) changes.newSessionDraft = draft
   if (mirroring) Object.assign(changes, mirror(s, layout))
   const projectPath = mirroring ? (changes.projectPath ?? s.projectPath) : s.projectPath
   return { ...changes, ...sidePaneChange(s, layout, projectPath) }
@@ -637,23 +642,20 @@ export function placeNewSession(
   )
 }
 
-/**
- * New session's view: a shown one keeps its agent, its No project and its project, unless given
- * one; anywhere else it takes the agent it was opened with. Its parent is not carried, since New
- * session opened plainly starts a session of its own.
- */
+/** The regular draft's choices, with an explicitly requested project taking precedence. */
 function newSessionView(
   s: ViewStore,
   projectPath: string | null,
   agentId: AgentId | null,
   noProject: boolean,
 ): PaneView {
-  const shown = s.main.kind === 'new' ? s.main : null
+  const draft =
+    s.main.kind === 'new' ? { ...s.main, projectPath: s.projectPath } : s.newSessionDraft
   return {
     kind: 'new',
-    agentId: shown ? shown.agentId : agentId,
-    noProject: noProject || (projectPath === null && !!shown?.noProject),
-    projectPath: projectPath ?? s.projectPath,
+    agentId: draft ? draft.agentId : agentId,
+    noProject: noProject || (projectPath === null && !!draft?.noProject),
+    projectPath: projectPath ?? draft?.projectPath ?? s.projectPath,
   }
 }
 

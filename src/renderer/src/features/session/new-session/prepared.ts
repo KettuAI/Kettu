@@ -102,8 +102,23 @@ function discard(sessionId: string): void {
 /** Removes the window's prepared session; the next use of New session prepares another. */
 export function discardPrepared(): void {
   const current = useAgentOptionsStore.getState().prepared
+  keepDraftOptions(current)
   setPrepared(null)
   if (current?.summary) discard(current.summary.id)
+}
+
+function keepDraftOptions(current: PreparedState | null): void {
+  const config = current?.summary?.prepared?.config
+  if (!current || !config) return
+  useAgentOptionsStore.setState((s) => ({
+    picks: {
+      ...s.picks,
+      [current.agentId]: {
+        ...Object.fromEntries(config.map((option) => [option.id, option.value])),
+        ...s.picks[current.agentId],
+      },
+    },
+  }))
 }
 
 /** The first send adopted it, so it is a session of its own now and nothing removes it. */
@@ -136,6 +151,7 @@ export function preparedRemoved(sessionId: string): boolean {
   if (discarded.delete(sessionId)) return true
   const current = useAgentOptionsStore.getState().prepared
   if (current?.summary?.id !== sessionId) return false
+  keepDraftOptions(current)
   setPrepared(null)
   if (shown && target && !idle) void prepare(target)
   return true
@@ -152,7 +168,9 @@ export function setOption(agentId: AgentId, optionId: string, value: string | bo
     )
     .finally(() => {
       sets.delete(setting)
-      settlePick(agentId, optionId, value)
+      if (useAgentOptionsStore.getState().prepared?.summary?.id === summary.id) {
+        settlePick(agentId, optionId, value)
+      }
     })
   sets.add(setting)
 }
@@ -219,6 +237,7 @@ export function hostRestarted(hostId: string | null = null): void {
   // Only the host New session's folder is on lost the prepared session.
   const on = target?.projectPath ? hostOfPath(target.projectPath) : null
   if (on !== hostId) return
+  keepDraftOptions(useAgentOptionsStore.getState().prepared)
   setPrepared(null)
   discarded.clear()
   if (shown && target && !idle) void prepare(target)

@@ -130,6 +130,68 @@ describe('prepared sessions in New session', () => {
     await vi.waitFor(() => expect(useAgentOptionsStore.getState().picks.codex).toEqual({}))
   })
 
+  it('keeps the draft options when its prepared session is released', async () => {
+    request.mockResolvedValue(prepared('p1', 'large'))
+    prepareFor(target)
+    await vi.waitFor(() => expect(useAgentOptionsStore.getState().prepared?.summary).toBeTruthy())
+    receivePrepared({
+      ...prepared('p1', 'large'),
+      prepared: {
+        config: [
+          model('large'),
+          {
+            id: 'mode',
+            name: 'Mode',
+            category: 'mode',
+            type: 'select',
+            value: 'plan',
+            choices: [
+              { value: 'plan', name: 'Plan' },
+              { value: 'auto', name: 'Auto' },
+            ],
+          },
+        ],
+        notices: [],
+        openedAt: 1,
+      },
+    })
+    discardPrepared()
+    expect(useAgentOptionsStore.getState().picks.codex).toEqual({ model: 'large', mode: 'plan' })
+    request.mockClear()
+    request.mockResolvedValue(prepared('p2', 'large'))
+    prepareFor(target)
+    expect(calls('sessions.prepare')).toEqual([
+      { agentId: 'codex', projectPath: '/repo', options: { model: 'large', mode: 'plan' } },
+    ])
+    await vi.waitFor(() => expect(useAgentOptionsStore.getState().prepared?.summary?.id).toBe('p2'))
+  })
+
+  it('keeps a newer pick over the released session value', async () => {
+    request.mockResolvedValue(prepared('p1'))
+    prepareFor(target)
+    await vi.waitFor(() => expect(useAgentOptionsStore.getState().prepared?.summary).toBeTruthy())
+    useAgentOptionsStore.setState({ picks: { codex: { model: 'large' } } })
+    discardPrepared()
+    expect(useAgentOptionsStore.getState().picks.codex).toEqual({ model: 'large' })
+  })
+
+  it('keeps a pending choice after releasing the session it was sent to', async () => {
+    request.mockResolvedValue(prepared('p1'))
+    prepareFor(target)
+    await vi.waitFor(() => expect(useAgentOptionsStore.getState().prepared?.summary).toBeTruthy())
+    let answer: () => void = () => {}
+    request.mockImplementation((method) =>
+      method === 'sessions.setConfigOption'
+        ? new Promise<void>((resolve) => (answer = resolve))
+        : Promise.resolve(),
+    )
+    setOption('codex', 'model', 'large')
+    discardPrepared()
+    answer()
+    await settleOptions()
+    expect(useAgentOptionsStore.getState().picks.codex).toEqual({ model: 'large' })
+  })
+
   it('lets go of it once adopted, without discarding it', async () => {
     request.mockResolvedValue(prepared('p1'))
     prepareFor(target)

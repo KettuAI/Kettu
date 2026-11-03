@@ -263,6 +263,8 @@ export interface IpcInvokeContract {
   'hosts:remove': { args: [id: string]; result: 'unknown_host' | null }
   'browser:show': { args: [sessionId: string]; result: void }
   'browser:hide': { args: [sessionId: string]; result: void }
+  // Destroys the page. The session stays, unlike a session leaving the list.
+  'browser:close': { args: [sessionId: string]; result: void }
   'browser:bounds': { args: [sessionId: string, bounds: BrowserBounds]; result: void }
   // A URL the renderer normalised; only http(s) ever reaches the page.
   'browser:navigate': { args: [sessionId: string, url: string]; result: void }
@@ -594,6 +596,8 @@ export interface KettuApi {
     show(sessionId: string): Promise<void>
     /** Hides the page, keeping it alive for when the pane shows again. */
     hide(sessionId: string): Promise<void>
+    /** Destroys the page and forgets its address. The session stays. */
+    close(sessionId: string): Promise<void>
     /** Where the pane's page sits, in device-independent pixels; null while it is not shown. */
     setBounds(sessionId: string, bounds: BrowserBounds): Promise<void>
     navigate(sessionId: string, url: string): Promise<void>

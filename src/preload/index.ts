@@ -229,6 +229,7 @@ const api: KettuApi = {
   browser: {
     show: (id) => invoke('browser:show', id),
     hide: (id) => invoke('browser:hide', id),
+    close: (id) => invoke('browser:close', id),
     setBounds: (id, bounds) => invoke('browser:bounds', id, bounds),
     navigate: (id, url) => invoke('browser:navigate', id, url),
     back: (id) => invoke('browser:back', id),

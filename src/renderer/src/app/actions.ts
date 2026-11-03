@@ -94,8 +94,9 @@ function newSessionStart(
   projectPath: string | null,
   noProject: boolean,
 ): [string | null, AgentId | null, boolean] {
-  const selected = useViewStore.getState().projectPath
+  const { projectPath: selected, newSessionDraft } = useViewStore.getState()
   const inScratch =
+    !newSessionDraft &&
     projectPath === null &&
     selected !== null &&
     isScratchFolder(useSessionsStore.getState().byId, selected)

@@ -37,6 +37,8 @@ const { useThreadsStore } = await import('@renderer/stores/threads')
 const { chooseNewSessionProject, openNewSubSession, useViewStore } =
   await import('@renderer/stores/view')
 
+beforeEach(() => useViewStore.setState({ newSessionDraft: null }))
+
 const summary = { id: 's1', projectPath: '/repo' } as SessionSummary
 const fixTheBuild: UserContent[] = [{ type: 'text', text: 'Fix the build' }]
 const scratch = { id: 'x1', projectPath: '/data/scratch/a', scratch: true } as SessionSummary
@@ -300,6 +302,21 @@ describe('New session with No project', () => {
     })
     newSession()
     expect(useViewStore.getState().main).toMatchObject({ kind: 'new', noProject: true })
+  })
+
+  it('returns to a project draft after visiting a scratch session', () => {
+    useViewStore.setState({ main: { kind: 'launch' }, projectPath: '/repo' })
+    newSession('/repo')
+    useSessionsStore.setState({ byId: { x1: scratch } })
+    useViewStore.setState({
+      main: { kind: 'session', sessionId: 'x1' },
+      projectPath: scratch.projectPath,
+    })
+    newSession()
+    expect(useViewStore.getState()).toMatchObject({
+      main: { kind: 'new', noProject: false },
+      projectPath: '/repo',
+    })
   })
 
   it('switches between No project and a project', () => {
