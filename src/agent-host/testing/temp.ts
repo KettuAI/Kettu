@@ -10,6 +10,6 @@ import { onTestFinished } from 'vitest'
  */
 export async function tempFolder(prefix: string): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), prefix))
-  onTestFinished(() => rm(dir, { recursive: true, force: true }))
+  onTestFinished(() => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   return dir
 }

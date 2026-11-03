@@ -393,7 +393,9 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       if (stopped) return
       stopped = true
       await host.shutdown()
-      if (!options.userDataPath) await rm(dir, { recursive: true, force: true })
+      if (!options.userDataPath) {
+        await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+      }
     },
   }
 }
