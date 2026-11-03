@@ -140,7 +140,11 @@ export function parseSiteIcons(raw: unknown): Map<string, Site> {
 
 export class SiteIcons {
   private sites = new Map<string, Site>()
+  /** Icons loaded for a link's site that the site was never opened for, by origin. */
+  private readonly linked = new Map<string, string>()
   private readonly loading = new Map<string, Loading>()
+  /** Sites a link already asked an icon for, so one run asks each of them once. */
+  private readonly asked = new Set<string>()
   private fileRead = false
   /** What was asked before the file was read, done in order once it is. */
   private readonly queued: (() => void)[] = []
@@ -189,23 +193,28 @@ export class SiteIcons {
     if (origin === null || source === null) return
     if (!this.fileRead) await this.ready
     if (!this.sites.has(origin)) this.record(pageUrl)
-    const loading = this.loadingOf(origin)
-    if (this.sites.get(origin)?.source === source) {
-      stop(loading)
-    } else if (loading.current?.source === source) {
-      unwait(loading)
-    } else {
-      const wait = loading.started + LOAD_GAP_MS - Date.now()
-      if (wait <= 0) return this.load(origin, loading, source)
-      loading.waiting = source
-      loading.timer ??= setTimeout(() => {
-        const next = loading.waiting
-        unwait(loading)
-        if (next !== null && this.sites.get(origin)?.source !== next) {
-          void this.load(origin, loading, next)
-        }
-      }, wait)
-    }
+    await this.request(origin, source)
+  }
+
+  /**
+   * A link in a reply has no icon for its site: tries the icon at the site's own root, once per
+   * run, without counting the site as opened, which the first-visit confirmation reads. Only
+   * public http(s) sites, so a reply cannot make main request this computer.
+   */
+  async link(url: string): Promise<void> {
+    const site = URL.parse(url)
+    if (site === null) return
+    if (site.protocol !== 'http:' && site.protocol !== 'https:') return
+    if (site.username !== '' || site.password !== '') return
+    if (isPrivateHost(site)) return
+    const origin = originOf(url)
+    if (origin === null || this.asked.has(origin)) return
+    if (this.linked.has(origin) || this.sites.get(origin)?.icon) return
+    this.asked.add(origin)
+    const icon = await this.fetchIcon(`${origin}/favicon.ico`, new AbortController().signal)
+    if (icon === null) return
+    this.linked.set(origin, icon)
+    this.deps.changed({ kind: 'link', origin, icon })
   }
 
   /** Forgets every site, with the browser's other data, and writes that at once. */
@@ -213,6 +222,7 @@ export class SiteIcons {
     this.whenRead(() => {
       for (const loading of this.loading.values()) stop(loading)
       this.loading.clear()
+      this.linked.clear()
       this.sites.clear()
       this.deps.changed({ kind: 'cleared' })
       this.save()
@@ -267,6 +277,27 @@ export class SiteIcons {
       this.deps.changed({ kind: 'removed', origin: oldest })
     }
     this.save()
+  }
+
+  /** Starts `source`'s load, or holds it to the site's gap and loads the latest one asked. */
+  private request(origin: string, source: string): Promise<void> | void {
+    const loading = this.loadingOf(origin)
+    if (this.sites.get(origin)?.source === source) {
+      stop(loading)
+    } else if (loading.current?.source === source) {
+      unwait(loading)
+    } else {
+      const wait = loading.started + LOAD_GAP_MS - Date.now()
+      if (wait <= 0) return this.load(origin, loading, source)
+      loading.waiting = source
+      loading.timer ??= setTimeout(() => {
+        const next = loading.waiting
+        unwait(loading)
+        if (next !== null && this.sites.get(origin)?.source !== next) {
+          void this.load(origin, loading, next)
+        }
+      }, wait)
+    }
   }
 
   /** Loads `source` for the site, stopping the load in flight. */
