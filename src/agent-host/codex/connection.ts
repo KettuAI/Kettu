@@ -1071,6 +1071,9 @@ export class CodexConnection implements AgentConnection {
       return refusal(method)
     }
     const answer = await target.requestPermission(approval.request, signal)
+    if (answer !== 'cancelled' && 'answers' in answer && approval.answerQuestions) {
+      return approval.answerQuestions(answer.answers)
+    }
     return approval.respond(optionAnswer(answer))
   }
 

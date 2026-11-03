@@ -13,7 +13,10 @@ import {
   userInputApproval,
 } from './approvals'
 import { ThreadMapper } from './mapper'
-import type { CommandExecutionRequestApprovalParams } from './protocol'
+import type {
+  CommandExecutionRequestApprovalParams,
+  ToolRequestUserInputQuestion,
+} from './protocol'
 
 function context(): MapperContext {
   let n = 0
@@ -163,6 +166,107 @@ describe('userInputApproval', () => {
 
   it('answers nothing when the request goes unanswered', () => {
     expect(asked().respond('cancelled')).toEqual({ answers: {} })
+  })
+})
+
+describe('userInputApproval with the questions of one ask', () => {
+  const plan: ToolRequestUserInputQuestion = {
+    id: 'plan',
+    header: 'Plan',
+    question: 'Which plan?',
+    isOther: false,
+    isSecret: false,
+    options: [
+      { label: 'A', description: '' },
+      { label: 'B', description: 'The second way' },
+    ],
+  }
+  const why = { ...plan, id: 'why', header: 'Why', question: 'Why?', isOther: true }
+  const note = { ...plan, id: 'note', header: '', question: 'Anything else?', options: null }
+  const token = { ...plan, id: 'token', header: 'Token', question: 'Your token?', isSecret: true }
+  const asked = (...questions: ToolRequestUserInputQuestion[]) =>
+    userInputApproval({ ...at, questions }, new ThreadMapper(), context())!
+
+  it('carries every question, with where the user may write an answer', () => {
+    const { request } = asked(plan, why, note, token)
+    expect(request.questions).toEqual([
+      {
+        header: 'Plan',
+        question: 'Which plan?',
+        multiSelect: false,
+        options: [{ label: 'A' }, { label: 'B', description: 'The second way' }],
+        allowsText: false,
+        secret: false,
+      },
+      {
+        header: 'Why',
+        question: 'Why?',
+        multiSelect: false,
+        options: [{ label: 'A' }, { label: 'B', description: 'The second way' }],
+        allowsText: true,
+        secret: false,
+      },
+      {
+        header: '',
+        question: 'Anything else?',
+        multiSelect: false,
+        options: [],
+        allowsText: true,
+        secret: false,
+      },
+      {
+        header: 'Token',
+        question: 'Your token?',
+        multiSelect: false,
+        options: [{ label: 'A' }, { label: 'B', description: 'The second way' }],
+        allowsText: false,
+        secret: true,
+      },
+    ])
+  })
+
+  it('keeps the first question’s choices as options for a client without the card', () => {
+    expect(asked(plan, why).request.options).toEqual([
+      { id: 'answer:0', name: 'A', kind: 'allow_once' },
+      { id: 'answer:1', name: 'B', kind: 'allow_once', description: 'The second way' },
+      { id: 'other', name: 'Something else…', kind: 'reject_once' },
+    ])
+    expect(asked(note).request.options).toEqual([
+      { id: 'other', name: 'Something else…', kind: 'reject_once' },
+    ])
+  })
+
+  it('answers each question by its id, in the words given, and leaves a skipped one out', () => {
+    const approval = asked(plan, why, note)
+    expect(
+      approval.answerQuestions!([
+        { question: 0, choices: [1] },
+        { question: 2, choices: [], text: 'Nothing' },
+      ]),
+    ).toEqual({ answers: { plan: { answers: ['B'] }, note: { answers: ['Nothing'] } } })
+  })
+
+  it('answers none when every question was skipped', () => {
+    expect(asked(plan, why).answerQuestions!([])).toEqual({ answers: {} })
+  })
+
+  it('gives Codex a secret answer, which is the one place it goes', () => {
+    expect(asked(token).answerQuestions!([{ question: 0, choices: [], text: 'hunter2' }])).toEqual({
+      answers: { token: { answers: ['hunter2'] } },
+    })
+  })
+
+  it('answers the first question alone to a client that sends an option id', () => {
+    expect(asked(plan, why).respond({ optionId: 'answer:0' })).toEqual({
+      answers: { plan: { answers: ['A'] } },
+    })
+    expect(asked(note).respond({ optionId: 'other' })).toEqual({
+      answers: { note: { answers: [ANSWER_IN_REPLY] } },
+    })
+  })
+
+  it('asks nothing when there is no question', () => {
+    expect(userInputApproval({ ...at, questions: [] }, new ThreadMapper(), context())).toBeNull()
   })
 })
 
