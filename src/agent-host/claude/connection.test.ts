@@ -1555,6 +1555,22 @@ describe('reports', () => {
     expect(s.accounts).toEqual([{ kind: 'none', label: 'Not signed in', email: null }])
   })
 
+  it('reports an OAuth sign-in that names no plan', async () => {
+    const s = await setup()
+    s.sdk.init = { ...FAKE_INIT, account: { tokenSource: 'none', apiProvider: 'firstParty' } }
+    s.sdk.usage = { rate_limits_available: false, rate_limits: null }
+    const reading = s.connection.readLimits!()
+    await settle()
+    const index = s.spawned.findIndex((options) => options.args.join(' ') === 'auth status --json')
+    s.children[index]!.stdout.write(
+      '{"loggedIn": true, "authMethod": "oauth_token", "apiProvider": "firstParty"}\n',
+    )
+    s.children[index]!.emit('exit', 0)
+    s.children[index]!.emit('close', 0)
+    expect(await reading).toEqual([])
+    expect(s.accounts).toEqual([{ kind: 'account', label: 'Claude', email: null }])
+  })
+
   it('gives no limits for an account without them', async () => {
     const s = await setup()
     s.sdk.usage = { rate_limits_available: false, rate_limits: null }

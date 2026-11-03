@@ -42,8 +42,14 @@ export function mapAccount(info: AccountInfo | undefined): AgentAccount | null {
 }
 
 /**
+ * What `auth status` can say for an OAuth sign-in that names no plan. Claude Code 2.1 reports a
+ * finished sign-in that way; the plan and address are in `.claude.json`.
+ */
+export const OAUTH_ACCOUNT_LABEL = 'Claude'
+
+/**
  * The account `claude auth status --json` names, which also tells when Claude Code is signed out:
- * no login, no key and no other provider. A login without a profile names no one.
+ * no login, no key and no other provider. A login that names no plan still counts.
  */
 export function mapAuthStatus(stdout: string): AgentAccount | null {
   let status: unknown
@@ -63,7 +69,13 @@ export function mapAuthStatus(stdout: string): AgentAccount | null {
     if (value !== undefined) info[name] = value
   }
   const account = mapAccount(info)
-  if (account || fields.loggedIn) return account
+  if (account) return account
+  const method = text('authMethod')
+  if (fields.loggedIn && method && method !== 'none') {
+    return { kind: 'account', label: OAUTH_ACCOUNT_LABEL, email: null }
+  }
+  // Logged in, but not in a way this knows: leave the account unknown rather than signed out.
+  if (fields.loggedIn) return null
   return { kind: 'none', label: 'Not signed in', email: null }
 }
 

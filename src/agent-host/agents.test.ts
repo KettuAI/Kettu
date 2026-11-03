@@ -2299,6 +2299,32 @@ describe('refreshAccount', () => {
     expect(installs).toEqual([])
     expect(uninstalled.launcher.launches).toBe(0)
   })
+
+  it('does not start an agent again while it still needs a sign-in', async () => {
+    const m = manager()
+    m.agents.authRequired('fake-agent')
+    await m.agents.refreshAccount('fake-agent')
+    expect(m.agents.status('fake-agent').signIn).toBe('required')
+    expect(m.launcher.launches).toBe(0)
+    await m.agents.stopAll()
+  })
+
+  it('reads the account again after a sign-in when asked', async () => {
+    const m = manager()
+    m.agents.authRequired('fake-agent')
+    await m.agents.refreshAccount('fake-agent', { force: true })
+    await until(() => m.agents.status('fake-agent').signIn === 'signed-in')
+    expect(m.agents.status('fake-agent').account).toMatchObject({ kind: 'account' })
+    await m.agents.stopAll()
+  })
+
+  it('keeps a signed-out agent required when the forced read says so', async () => {
+    const m = manager({ FAKE_AGENT_AUTH: 'required' })
+    m.agents.authRequired('fake-agent')
+    await m.agents.refreshAccount('fake-agent', { force: true })
+    expect(m.agents.status('fake-agent').signIn).toBe('required')
+    await m.agents.stopAll()
+  })
 })
 
 /** Codex as a package agent with real install directories, each carrying a Codex CLI version. */

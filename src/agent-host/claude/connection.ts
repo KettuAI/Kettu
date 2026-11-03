@@ -1490,7 +1490,21 @@ export class ClaudeConnection implements AgentConnection {
     // Reported again even when unchanged, since the reader may have forgotten it.
     this.account = null
     const open = [...this.sessions.values()].find((session) => session.query && !session.stale)
-    const temporary = open ? null : await this.temporary(os.tmpdir(), { hidden: 'limits' })
+    let temporary: Session | null = null
+    if (!open) {
+      try {
+        temporary = await this.temporary(os.tmpdir(), { hidden: 'limits' })
+      } catch (error) {
+        // The query can fail while the CLI already knows the sign-in. Ask it before giving up.
+        this.context.hooks.log(
+          'warn',
+          `Claude Code's plan limits could not be read: ${errorText(error)}`,
+        )
+        const account = await this.authStatus()
+        if (account) this.report(account)
+        return []
+      }
+    }
     const query = open?.query ?? temporary?.query
     try {
       if (query) await this.readAccount(query)
@@ -1512,12 +1526,11 @@ export class ClaudeConnection implements AgentConnection {
 
   /** The account a query runs under; Claude Code's own status tells when it is signed out. */
   private async readAccount(query: Query): Promise<void> {
-    let info: AccountInfo
+    let info: AccountInfo | undefined
     try {
       info = await query.accountInfo()
     } catch (error) {
       this.context.hooks.log('warn', `Claude Code's account could not be read: ${errorText(error)}`)
-      return
     }
     const account = mapAccount(info) ?? (await this.authStatus())
     if (account) this.report(account)

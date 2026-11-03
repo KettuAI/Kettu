@@ -569,7 +569,11 @@ export function createValidators(platform: Platform): Validators {
     'agents.readFirstOptions': agent,
     'agents.refreshLimits': agent,
     'agents.details': agent,
-    'agents.refreshAccount': agent,
+    'agents.refreshAccount': (params) => {
+      const o = fields(params)
+      const force = optionalFlag(o, 'force')
+      return { agentId: agentId(o), ...(force !== undefined ? { force } : {}) }
+    },
     'agents.options': none,
     'mcp.status': none,
     'mcp.retry': none,

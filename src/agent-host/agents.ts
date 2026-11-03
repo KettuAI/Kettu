@@ -79,6 +79,7 @@ import {
   type Detection,
   type LaunchSpec,
 } from './catalog'
+import { OAUTH_ACCOUNT_LABEL } from './claude/reports'
 import {
   AgentRequestError,
   type AgentConnection,
@@ -94,7 +95,7 @@ import { getEnv, isExecutableFile, type Env } from './find-command'
 import { HostedRun, type HostedRunHooks } from './hosted-run'
 import { t } from './i18n'
 import { CliVersions, type CliProbe, type CliVersion } from './installed-cli'
-import { claudeJsonPath, readPlanTier } from './plan-tier'
+import { claudeJsonPath, readClaudeProfile } from './plan-tier'
 import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { formatCommand } from './quote'
 import { hasContextReport, limitsReport, runReport, type LimitsReport } from './reports'
@@ -2222,12 +2223,19 @@ export class AgentManager {
     ).find((location) => location.id === 'folder')
     if (!folder) return
     const file = claudeJsonPath(folder, os.homedir(), platform)
-    const tier = await readPlanTier(file, (level, message) =>
+    const profile = await readClaudeProfile(file, (level, message) =>
       this.deps.diagnostics.log(level, message),
     )
     // The account may have changed, or the agent been stopped and its account forgotten, meanwhile.
-    if (slot.account !== account || (account.tier ?? null) === tier) return
-    slot.account = { kind: account.kind, label: account.label, email: account.email }
+    if (!profile || slot.account !== account) return
+    const email = account.email ?? profile.email
+    // `auth status` has no plan name; the file's display name is the one Settings shows.
+    const label =
+      account.label === OAUTH_ACCOUNT_LABEL && profile.plan ? profile.plan : account.label
+    const tier = profile.tier
+    if (account.label === label && account.email === email && (account.tier ?? null) === tier)
+      return
+    slot.account = { kind: account.kind, label, email }
     if (tier) slot.account.tier = tier
     this.emit(slot)
   }
@@ -2257,16 +2265,17 @@ export class AgentManager {
    * most once a minute, starting the agent if needed; the windows arrive in its status. Rate-limit
    * events report a window only when it changes, so without this most windows would stay unknown.
    */
-  async refreshLimits(agentId: AgentId): Promise<void> {
+  async refreshLimits(agentId: AgentId, options?: { force?: boolean }): Promise<void> {
     if (!this.has(agentId)) return
     const slot = this.slot(agentId)
     if (!this.hasLimits(agentId)) return
     await this.detectAll()
-    if (slot.signIn === 'required' || (!slot.runtime && slot.h.detection?.state !== 'available')) {
-      return
-    }
+    const force = options?.force === true
+    // A forced read is how a finished sign-in clears "required": the last failure must not stick.
+    if (!slot.runtime && slot.h.detection?.state !== 'available') return
+    if (!force && slot.signIn === 'required') return
     if (slot.limitsRun) return slot.limitsRun
-    if (Date.now() - slot.limitsReadAt < this.timings.limitsMs) return
+    if (!force && Date.now() - slot.limitsReadAt < this.timings.limitsMs) return
     slot.limitsRun = this.readLimits(slot).finally(() => {
       slot.limitsRun = null
     })
@@ -2555,14 +2564,21 @@ export class AgentManager {
    * Brings an agent's account and plan limits up to date for Settings › Agents, starting an agent
    * that reports them. Never installs: an agent that would need an install first is left alone.
    */
-  async refreshAccount(agentId: AgentId): Promise<void> {
+  async refreshAccount(agentId: AgentId, options?: { force?: boolean }): Promise<void> {
     const slot = this.registeredSlot(agentId)
     if (!slot.def.reportsAccount) return
     await this.detectAll()
-    if (slot.signIn === 'required') return
+    const force = options?.force === true
+    if (!force && slot.signIn === 'required') return
     if (!slot.runtime && (slot.h.detection?.state !== 'available' || !slot.h.detection.spec)) return
-    if (this.hasLimits(agentId)) await this.refreshLimits(agentId)
-    else await this.ensureReady(agentId)
+    try {
+      if (this.hasLimits(agentId)) await this.refreshLimits(agentId, { force })
+      else await this.ensureReady(agentId)
+    } catch (error) {
+      // Still signed out: the notice stays, and opening the page is not an error.
+      if (force && error instanceof HostError && error.code === 'auth_required') return
+      throw error
+    }
   }
 
   authRequired(agentId: AgentId): void {

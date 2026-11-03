@@ -24,8 +24,23 @@ export function claudeJsonPath(folder: ConfigLocation, home: string, platform: P
   return moved ? p.join(folder.candidates[0]!, '.claude.json') : p.join(home, '.claude.json')
 }
 
+/** The plan name and address in `.claude.json`, beside the rate-limit tier. */
+export interface ClaudeProfile {
+  tier: string | null
+  plan: string | null
+  email: string | null
+}
+
 /** The tier in a `.claude.json`; null when the file, the field or the pattern is not there. */
 export async function readPlanTier(file: string, log: LogFn): Promise<string | null> {
+  return (await readClaudeProfile(file, log))?.tier ?? null
+}
+
+/**
+ * The subscription Claude Code stores beside its login. `auth status` on current Claude Code
+ * names neither the plan nor the address, so Settings reads them from here.
+ */
+export async function readClaudeProfile(file: string, log: LogFn): Promise<ClaudeProfile | null> {
   let text: string
   try {
     text = await readFile(file, 'utf8')
@@ -40,8 +55,17 @@ export async function readPlanTier(file: string, log: LogFn): Promise<string | n
     const parsed: unknown = JSON.parse(text)
     if (typeof parsed !== 'object' || parsed === null) return null
     const account = (parsed as { oauthAccount?: unknown }).oauthAccount
-    if (typeof account !== 'object' || account === null) return null
-    return tierOf((account as { organizationRateLimitTier?: unknown }).organizationRateLimitTier)
+    if (typeof account !== 'object' || account === null || Array.isArray(account)) return null
+    const fields = account as Record<string, unknown>
+    const value = (name: string): string | null => {
+      const field = fields[name]
+      return typeof field === 'string' && field.trim() !== '' ? field.trim() : null
+    }
+    return {
+      tier: tierOf(fields.organizationRateLimitTier),
+      plan: value('planDisplayName'),
+      email: value('emailAddress'),
+    }
   } catch (error) {
     log('warn', `Could not parse ${file}: ${(error as Error).message}`)
     return null

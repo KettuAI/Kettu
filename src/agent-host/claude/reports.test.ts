@@ -63,6 +63,13 @@ describe("Claude Code's own sign-in status", () => {
     expect(mapAuthStatus('{"authMethod": "none"}')).toBeNull()
     expect(mapAuthStatus('{"loggedIn": true, "apiProvider": "firstParty"}')).toBeNull()
   })
+
+  it('treats an OAuth sign-in with no plan or email as signed in', () => {
+    // Claude Code 2.1.317 reports a finished sign-in this way; the plan is in .claude.json.
+    expect(
+      mapAuthStatus('{"loggedIn": true, "authMethod": "oauth_token", "apiProvider": "firstParty"}'),
+    ).toEqual({ kind: 'account', label: 'Claude', email: null })
+  })
 })
 
 describe('compactTokens', () => {

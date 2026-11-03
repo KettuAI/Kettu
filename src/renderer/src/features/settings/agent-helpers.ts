@@ -40,12 +40,13 @@ export function limitsReadable(status: AgentStatus): boolean {
  * Reads what an agent's row and page show: its account and plan limits, starting an agent that
  * reports them, and its details. True while the account and limits are being read.
  */
-export function useAgentReads(status: AgentStatus): boolean {
+export function useAgentReads(status: AgentStatus, options?: { force?: boolean }): boolean {
   const { request, useAgentsStore } = useHostScope()
   const [reading, setReading] = useState(true)
+  const force = options?.force === true
   useEffect(() => {
     let current = true
-    request('agents.refreshAccount', { agentId: status.id })
+    request('agents.refreshAccount', { agentId: status.id, ...(force ? { force: true } : {}) })
       .catch((e: unknown) =>
         console.warn(`Could not read the account and plan limits: ${errorMessage(e)}`),
       )
@@ -55,7 +56,7 @@ export function useAgentReads(status: AgentStatus): boolean {
     return () => {
       current = false
     }
-  }, [status.id, request])
+  }, [status.id, request, force])
   // Again on each state or task change, so an adapter installed or updated shows its CLI version.
   const task = status.task?.state ?? null
   useEffect(() => {
