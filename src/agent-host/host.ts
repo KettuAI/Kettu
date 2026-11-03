@@ -959,7 +959,7 @@ export class AgentHost {
       },
       'agents.refreshLimits': ({ agentId }) => agents.refreshLimits(agentId),
       'agents.details': ({ agentId }) => agents.details(agentId),
-      'agents.refreshAccount': ({ agentId }) => agents.refreshAccount(agentId),
+      'agents.refreshAccount': ({ agentId, force }) => agents.refreshAccount(agentId, { force }),
       'agents.options': () => this.agentOptions.list(),
       'mcp.status': () => this.mcpStatus(),
       'mcp.retry': async () => {

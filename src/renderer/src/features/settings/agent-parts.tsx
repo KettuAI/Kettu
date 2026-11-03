@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { CheckIcon, CopyIcon, LogInIcon, SquareTerminalIcon, XIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentStatus, AgentTask, PlanLimit } from '@shared/agent-host'
+import { CommandLine } from '@renderer/components/command-line'
 import { useRefresh } from '@renderer/components/refresh'
 import { RefreshIcon } from '@renderer/components/refresh-icon'
 import { Button } from '@renderer/components/ui/button'
@@ -19,7 +20,7 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { limitsReadable, percent, useAction } from './agent-helpers'
-import { ControlError, CopyAction, IconAction, ROW_BUTTON } from './controls'
+import { ControlError, IconAction, ROW_BUTTON } from './controls'
 import { GroupLabel, Notice, RowFrame, RowGroup, RowShell, RowText } from './rows'
 import { agentCost } from './spend'
 
@@ -97,18 +98,7 @@ export function SignInNotice({
       more={
         (first?.command || others.length > 0) && (
           <>
-            {first?.command && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-code-block py-0.75 pr-0.75 pl-2.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]">
-                <code
-                  className="min-w-0 flex-1 truncate font-mono text-code text-primary"
-                  data-selectable=""
-                  title={first.command}
-                >
-                  {first.command}
-                </code>
-                <CopyAction text={first.command} label={t('session:signIn.copyCommand')} />
-              </div>
-            )}
+            {first?.command && <CommandLine command={first.command} />}
             {others.length > 0 && (
               <span className="flex flex-wrap gap-1.5">
                 {others.map((method) =>
@@ -164,7 +154,7 @@ export function Log({ lines, error }: { lines: string[]; error?: boolean }) {
       ref={box}
       role="log"
       data-selectable=""
-      className="max-h-21.5 overflow-auto rounded-lg bg-code-block px-2.5 py-1.75 font-mono text-meta leading-4.5 text-tertiary shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
+      className="max-h-21.5 min-w-0 overflow-auto rounded-lg bg-code-block px-2.5 py-1.75 font-mono text-meta leading-4.5 text-tertiary shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
     >
       {lines.map((line, i) => (
         <span

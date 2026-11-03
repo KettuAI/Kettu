@@ -632,16 +632,16 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
         )}
         {error && <p className="mt-3 text-group text-danger">{error}</p>}
 
-        <div className="mt-5 empty:hidden">
+        <div className="mt-5 min-w-0 empty:hidden">
           <TaskNotice status={status} installed={installed} />
         </div>
         {status.uninstalled && (
-          <div className="mt-5">
+          <div className="mt-5 min-w-0">
             <UninstalledNotice status={status} />
           </div>
         )}
         {kind && (
-          <div className="mt-5">
+          <div className="mt-5 min-w-0">
             <InstallNotice status={status} kind={kind} />
           </div>
         )}

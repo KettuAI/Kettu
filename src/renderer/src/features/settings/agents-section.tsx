@@ -763,7 +763,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
   const { t } = useTranslation(['settings', 'common'])
   const [act, busy, error] = useAction()
   const r = readiness(status)
-  const reading = useAgentReads(status)
+  const reading = useAgentReads(status, { force: status.signIn === 'required' })
   const running = status.state === 'ready'
   const terminalSignIn = status.authMethods.find((m) => m.type === 'terminal' && m.command)
 
@@ -810,7 +810,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           </p>
         )}
         {r.kind === 'sign-in' && status.authMethods.length > 0 && (
-          <div className="mt-5">
+          <div className="mt-5 min-w-0">
             <SignInNotice
               status={status}
               busy={busy}

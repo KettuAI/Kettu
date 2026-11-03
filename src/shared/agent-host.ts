@@ -468,7 +468,7 @@ export interface HostContract {
   'agents.readFirstOptions': { params: { agentId: AgentId }; result: void }
   'agents.refreshLimits': { params: { agentId: AgentId }; result: void }
   'agents.details': { params: { agentId: AgentId }; result: AgentDetails }
-  'agents.refreshAccount': { params: { agentId: AgentId }; result: void }
+  'agents.refreshAccount': { params: { agentId: AgentId; force?: boolean }; result: void }
   'agents.listSessions': {
     params: { agentId: AgentId; projectPath: string; cursor?: string }
     result: { sessions: ImportableSession[]; nextCursor: string | null }

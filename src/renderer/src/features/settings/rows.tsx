@@ -333,7 +333,7 @@ export function Notice({
         </div>
         {action && <div className="-my-1 flex shrink-0 items-center gap-1.5">{action}</div>}
       </div>
-      {more && <div className="col-start-2 mt-2.5 flex flex-col gap-2.5">{more}</div>}
+      {more && <div className="col-start-2 mt-2.5 flex min-w-0 flex-col gap-2.5">{more}</div>}
     </Alert>
   )
 }

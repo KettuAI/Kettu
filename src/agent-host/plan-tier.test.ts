@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ConfigLocation } from './agent-details'
-import { claudeJsonPath, readPlanTier, tierOf } from './plan-tier'
+import { claudeJsonPath, readClaudeProfile, readPlanTier, tierOf } from './plan-tier'
 
 describe('tierOf', () => {
   it('reads the multiple at the end of the tier', () => {
@@ -91,5 +91,23 @@ describe('readPlanTier', () => {
   it('gives null with a warning for a file that does not parse', async () => {
     expect(await readPlanTier(await write('broken', '{"oauthAccount":'), log)).toBeNull()
     expect(log).toHaveBeenCalledWith('warn', expect.stringContaining('Could not parse'))
+  })
+
+  it('reads the plan name and address auth status leaves out', async () => {
+    const file = await write(
+      'ultra',
+      JSON.stringify({
+        oauthAccount: {
+          planDisplayName: 'Ultra',
+          emailAddress: 'a@b.c',
+          organizationRateLimitTier: 'default_claude_max_20x',
+        },
+      }),
+    )
+    expect(await readClaudeProfile(file, log)).toEqual({
+      tier: '20x',
+      plan: 'Ultra',
+      email: 'a@b.c',
+    })
   })
 })

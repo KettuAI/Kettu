@@ -1,4 +1,5 @@
 import type { HostEvent } from '@shared/agent-host'
+import type { AgentId } from '@shared/agents'
 import {
   followShownSession,
   removeEmptySessions,
@@ -6,9 +7,10 @@ import {
   takeReturnedMessages,
   usePendingSession,
 } from '@renderer/app/actions'
+import { onAppEvent } from '@renderer/app/events'
 import { launchTarget } from '@renderer/app/restore'
 import { restoreDraftAttachments } from '@renderer/features/session/composer/attachments'
-import { forgetSessionHost, host, sessionHost } from '@renderer/lib/host'
+import { errorMessage, forgetSessionHost, host, sessionHost } from '@renderer/lib/host'
 import { whenHostHas } from '@renderer/lib/host-features'
 import { isWeb, platform } from '@renderer/lib/platform'
 import { initAccount } from '@renderer/stores/account'
@@ -270,6 +272,15 @@ export function bootstrap(): Promise<unknown> {
     followWindowTitle()
   }
   initTerminals()
+  // The terminal command exiting is the only signal a sign-in finished. Read the account again,
+  // including when the last attempt had marked it required.
+  onAppEvent((event) => {
+    if (event.kind !== 'sign-in-finished') return
+    void host('agents.refreshAccount', { agentId: event.agentId as AgentId, force: true }).catch(
+      (error: unknown) =>
+        console.warn(`Could not read the account after sign-in: ${errorMessage(error)}`),
+    )
+  })
   // Before any composer shows, so each finds its draft's attachments.
   void restoreDraftAttachments()
   void takeReturnedMessages()
