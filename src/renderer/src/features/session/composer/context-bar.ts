@@ -97,32 +97,45 @@ export function partFill(part: ContextPart | { kind: 'used' }): string {
 
 /** What the context part shows under its bar, for the report the store keeps for a session. */
 export type BreakdownView =
-  | { kind: 'rows'; rows: ContextRow[]; dimmed: boolean }
+  | {
+      kind: 'rows'
+      rows: ContextRow[]
+      dimmed: boolean
+      /** Read before the running turn, which no report can be taken in. */
+      stale: boolean
+    }
   | { kind: 'loading' }
   | { kind: 'error'; error: string }
   | { kind: 'betweenTurns' }
   | { kind: 'none' }
 
 /**
- * The rows, skeleton rows, error or between-turns line to show. The rows show only while no turn
- * runs, and only for the context in use; a read that fails drops the older rows, so nothing read
- * for an earlier context passes for the current one.
+ * The rows, skeleton rows, error or between-turns line to show. A connection that reads while a
+ * turn runs (`live`) keeps its rows current; without one the rows are the turn's starting point,
+ * marked stale, and a turn that never read one shows the between-turns line. A read that fails
+ * drops the older rows, so nothing read for an earlier context passes for the current one.
  */
 export function breakdownView(
   report: ContextReport | undefined,
   key: string,
-  { reports, idle }: { reports: boolean; idle: boolean },
+  { reports, idle, live }: { reports: boolean; idle: boolean; live: boolean },
 ): BreakdownView {
   if (!reports) return { kind: 'none' }
-  if (!idle) return { kind: 'betweenTurns' }
+  const breakdown = report?.breakdown
+  const rows = breakdown ? contextRows(breakdown.categories) : null
+  if (live) {
+    if (report && rows) return { kind: 'rows', rows, dimmed: report.loading, stale: false }
+    if (report?.error) return { kind: 'error', error: report.error }
+    return { kind: 'loading' }
+  }
+  if (!idle) {
+    if (rows) return { kind: 'rows', rows, dimmed: false, stale: true }
+    return { kind: 'betweenTurns' }
+  }
   if (report?.error) return { kind: 'error', error: report.error }
   // A newer read dims the rows it replaces until its own arrive.
-  if (report?.breakdown && (report.loading || report.key === key)) {
-    return {
-      kind: 'rows',
-      rows: contextRows(report.breakdown.categories),
-      dimmed: report.loading,
-    }
+  if (report && rows && (report.loading || report.key === key)) {
+    return { kind: 'rows', rows, dimmed: report.loading, stale: false }
   }
   return { kind: 'loading' }
 }

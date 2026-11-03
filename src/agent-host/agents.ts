@@ -2929,6 +2929,7 @@ export class AgentManager {
         steering: capabilities?.steering ?? false,
         reports: this.hasLimits(slot.id),
         context: this.hasContext(slot.id),
+        liveContext: this.driver(slot).reads?.context === true,
         account: slot.def.reportsAccount ?? false,
         progressNotes: slot.def.progressNotes ?? false,
         mcpHttp: capabilities?.mcpHttp ?? null,

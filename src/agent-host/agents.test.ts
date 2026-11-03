@@ -460,6 +460,7 @@ describe('AgentManager', () => {
       },
     )
     expect(m.agents.status('fake-agent').capabilities.context).toBe(true)
+    expect(m.agents.status('fake-agent').capabilities.liveContext).toBe(false)
     expect(m.agents.status('codex').capabilities.context).toBe(false)
     expect(m.agents.status('opencode').capabilities.context).toBe(false)
     await m.agents.stopAll()
