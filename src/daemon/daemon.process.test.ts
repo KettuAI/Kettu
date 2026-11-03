@@ -848,7 +848,8 @@ describeUnix('kettu', () => {
       thumb: null,
     })
     expect(added).toMatchObject({ type: 'image', size: png.length })
-    expect(await uploads()).toEqual([])
+    // The file goes once its bytes are read, which may be after the answer.
+    await until(async () => (await uploads()).length === 0, 'upload file removed after reading')
     await device.port.request('sessions.prompt', {
       sessionId: session.id,
       content: [

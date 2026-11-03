@@ -130,7 +130,7 @@ describe('Account sign-in', () => {
     const stored = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>
     expect(stored.encrypted).toBe(true)
     expect(Buffer.from(stored.token as string, 'base64').toString()).toMatch(/^sealed:/)
-    expect((await stat(file)).mode & 0o777).toBe(0o600)
+    if (process.platform !== 'win32') expect((await stat(file)).mode & 0o777).toBe(0o600)
   })
 
   it('opens the Chinese pages when the app is in Chinese', async () => {

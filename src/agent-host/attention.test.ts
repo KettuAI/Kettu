@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { ThreadEntry, ThreadState, ToolEntry } from '@shared/thread'
 import { allowOnceOption, changedFiles, replySummary, requestText } from './attention'
@@ -43,7 +44,7 @@ describe('requestText', () => {
     ).toBe('Wants to run pnpm vitest run src/usage')
     expect(
       requestText(tool({ toolKind: 'edit', locations: [{ path: '/p/src/a.ts' }] }), '/p'),
-    ).toBe('Wants to edit src/a.ts')
+    ).toBe(`Wants to edit ${path.join('src', 'a.ts')}`)
     expect(
       requestText(tool({ toolKind: 'delete', locations: [{ path: '/elsewhere/b' }] }), '/p'),
     ).toBe('Wants to delete /elsewhere/b')
