@@ -29,7 +29,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@renderer/components/ui/empty'
-import { bugReportUrl } from '@renderer/lib/bug-report'
 import { basename, mediumAgo } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { useHostContext, useHostHas } from '@renderer/lib/host-features'
@@ -52,7 +51,7 @@ import { useWebHostStore } from '@renderer/stores/web-host'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { openAgentSettings, openHarnessSettings, openSettingsItem } from '@renderer/stores/view'
-import { AboutHero, AutomaticUpdates, LinkRow, NoUpdates, UpdateRow } from './about-section'
+import { AboutHero, AutomaticUpdates, NoUpdates, UpdateRow } from './about-section'
 import {
   AddAgentRow,
   AgentListItem,
@@ -131,9 +130,6 @@ import { BrowserNameField, ForgetHost, WebHostRow } from './web-host-section'
 
 // The sections of the Settings page as data, so search and the match counts read the same rows
 // the page draws.
-
-const SOURCE_URL = 'https://github.com/KettuAI/Kettu'
-const LICENSE_URL = 'https://github.com/KettuAI/Kettu/blob/main/LICENSE'
 
 function group(id: string, label: string, extra?: Omit<GroupDef, 'id' | 'label'>): GroupDef {
   return { id, label, ...extra }
@@ -859,7 +855,6 @@ export function useAboutSection(): SectionDef {
   // A host whose Kettu Settings cannot update, as the daemon's, says so in the row.
   const updatable = useHostHas('updates')
   const updates = group('updates', t('about.groups.updates'))
-  const links = group('links', t('about.groups.links'))
   return {
     id: 'about',
     title: t('sections.about'),
@@ -889,52 +884,12 @@ export function useAboutSection(): SectionDef {
             },
           ]),
       {
-        id: 'source',
-        name: t('about.source.name'),
-        english: en('about.source.name'),
-        group: links,
-        layout: 'custom',
-        render: () => <LinkRow name={t('about.source.name')} url={SOURCE_URL} />,
-      },
-      {
-        id: 'license',
-        name: t('about.license.name'),
-        english: en('about.license.name'),
-        keywords: t('about.license.keywords'),
-        group: links,
-        layout: 'custom',
-        render: () => (
-          <LinkRow name={t('about.license.name')} url={LICENSE_URL} detail="Apache-2.0" />
-        ),
-      },
-      {
-        id: 'notices',
-        name: t('about.notices.name'),
-        english: en('about.notices.name'),
-        keywords: t('about.notices.keywords'),
-        group: links,
-        layout: 'custom',
-        render: () => (
-          <LinkRow
-            name={t('about.notices.name')}
-            onOpen={() => window.kettu.shell.openNotices()}
-            detail="third-party-notices.txt"
-          />
-        ),
-      },
-      {
-        id: 'issues',
-        name: t('about.issues.name'),
-        english: en('about.issues.name'),
-        group: links,
-        layout: 'custom',
-        render: () => (
-          <LinkRow
-            name={t('about.issues.name')}
-            url={bugReportUrl(info)}
-            detail="github.com/KettuAI/Kettu/issues/new"
-          />
-        ),
+        id: 'github',
+        name: t('about.github.name'),
+        english: en('about.github.name'),
+        keywords: t('about.github.keywords'),
+        searchOnly: true,
+        render: () => null,
       },
     ],
   }

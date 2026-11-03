@@ -211,7 +211,6 @@ const api: KettuApi = {
   shell: {
     showDataFolder: () => invoke('shell:show-data-folder'),
     showItem: (path) => invoke('shell:show-item', path),
-    openNotices: () => invoke('shell:open-notices'),
   },
   editors: {
     list: () => invoke('editors:list'),

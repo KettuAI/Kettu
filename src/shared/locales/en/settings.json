@@ -649,7 +649,8 @@
   },
   "about": {
     "version": {
-      "description": "A desktop workbench for Claude Code, Codex, opencode and Pi."
+      "description": "A desktop workbench for Claude Code, Codex, opencode and Pi.",
+      "line": "Version {{version}} · {{system}}"
     },
     "updates": {
       "name": "Updates",
@@ -690,23 +691,12 @@
       "linkNotify": "Tell me about new versions",
       "linkOff": "Off"
     },
-    "source": {
-      "name": "Source code"
-    },
-    "license": {
-      "name": "License",
-      "keywords": "apache licence"
-    },
-    "notices": {
-      "name": "Third-party notices",
-      "keywords": "licenses open source acknowledgements"
+    "github": {
+      "name": "GitHub",
+      "keywords": "source code repository license issue bug report"
     },
     "groups": {
-      "updates": "Updates",
-      "links": "Links"
-    },
-    "issues": {
-      "name": "Report an issue"
+      "updates": "Updates"
     }
   },
   "pages": {
@@ -721,7 +711,7 @@
     "git": "The top bar’s branch and changes, pull requests and their checks all come from these two tools.",
     "advanced": "Network proxy, diagnostics and the data Kettu keeps on this computer.",
     "advanced_web": "Network proxy, diagnostics and the data Kettu keeps on {{host}}.",
-    "about": "Kettu’s version, updates and links.",
+    "about": "Kettu’s version and updates.",
     "archived": "Off the sidebar but kept. Restore one to put it back in its project.",
     "sharing": "Publish artifacts to links anyone can open, through your own Cloudflare account.",
     "remote": "Use this computer’s sessions from Kettu on an iPhone, an iPad or another computer, on your own network.",

@@ -19,11 +19,19 @@ import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { checkForUpdates, useUpdatesStore } from '@renderer/stores/updates'
 import { ControlError, GROUP_ACTION, ROW_BUTTON, SettingSelect } from './controls'
-import { DeviceTile } from './remote-parts'
-import { PageHeader } from './rows'
+import { FlashMark, PageHeader } from './rows'
 import { useApply } from './use-apply'
 
-/** The top of the About page: its title, then Kettu's icon, name, version and line. */
+const SOURCE_URL = 'https://github.com/KettuAI/Kettu'
+
+// GitHub mark: Octicons mark-github, https://github.com/primer/octicons (MIT), Copyright (c) GitHub Inc.
+const GITHUB_MARK =
+  'M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656'
+
+/**
+ * The top of the About page: its title, then a card with Kettu's icon, name, line, version and
+ * system, which a bug report asks for, and the way to the repository.
+ */
 export function AboutHero({ info }: { info: AppInfo | null }) {
   const { t } = useTranslation('settings')
   return (
@@ -31,27 +39,36 @@ export function AboutHero({ info }: { info: AppInfo | null }) {
       <PageHeader id="settings-about" title={t('sections.about')}>
         {t('pages.about')}
       </PageHeader>
-      <div className="mt-5 flex items-center gap-4">
-        <BrandIcon size={56} className="shrink-0" />
-        <div className="min-w-0">
-          <div className="flex items-baseline gap-1.5">
-            <span className="font-display text-app-name font-extrabold">Kettu</span>
-            {info ? (
-              <span
-                data-selectable=""
-                title={info.system}
-                className="font-display text-row font-medium text-tertiary"
-              >
-                {info.version}
-              </span>
-            ) : (
-              <Skeleton className="h-4 w-12" />
-            )}
-          </div>
-          <p className="mt-0.5 text-lede text-pretty text-tertiary">
+      <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-card bg-subtle px-4.5 py-4">
+        <BrandIcon size={52} />
+        <div className="flex min-w-0 flex-[1_1_240px] flex-col">
+          <span className="font-display text-app-name font-extrabold">Kettu</span>
+          <p className="mt-0.5 text-group text-pretty text-secondary">
             {t('about.version.description')}
           </p>
+          {info ? (
+            <p data-selectable="" className="mt-1.5 text-group text-tertiary tabular">
+              {t('about.version.line', { version: info.version, system: info.system })}
+            </p>
+          ) : (
+            <Skeleton className="mt-2 h-3.5 w-44" />
+          )}
         </div>
+        <span data-setting-row="github" className="relative">
+          <FlashMark id="github" />
+          <a
+            href={SOURCE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className={cn(buttonVariants({ variant: 'outline' }), ROW_BUTTON, 'relative')}
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden data-icon="inline-start">
+              <path d={GITHUB_MARK} />
+            </svg>
+            {t('about.github.name')}
+            <ExternalLinkIcon data-icon="inline-end" />
+          </a>
+        </span>
       </div>
     </>
   )
@@ -259,60 +276,5 @@ export function AutomaticUpdates() {
         className="w-57.5"
       />
     </>
-  )
-}
-
-/**
- * A link row: the whole row opens the page, which main sends to the system browser, or, with
- * `onOpen` in place of `url`, whatever that opens, showing its error in place of the detail. The
- * line under the name is the address, unless `detail` says something more useful.
- */
-export function LinkRow({
-  name,
-  detail,
-  ...target
-}: { name: string; detail?: string } & (
-  { url: string; onOpen?: never } | { onOpen: () => Promise<void>; url?: never }
-)) {
-  const [error, setError] = useState<string | null>(null)
-  const className =
-    'group relative flex w-full items-center gap-3.5 py-3.25 text-left outline-none before:absolute before:-inset-x-2 before:inset-y-px before:rounded-lg before:transition-colors before:duration-(--duration-fast) hover:before:bg-hover focus-visible:before:shadow-[0_0_0_2px_var(--focus)]'
-  const body = (
-    <>
-      <DeviceTile icon={<ExternalLinkIcon className="size-4" />} />
-      <span className="relative flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-label leading-[normal]">{name}</span>
-        {error ? (
-          <span className="truncate text-group leading-[normal] text-danger" title={error}>
-            {error}
-          </span>
-        ) : (
-          <span className="truncate text-group leading-[normal] text-tertiary">
-            {detail ?? target.url?.replace(/^https?:\/\//, '')}
-          </span>
-        )}
-      </span>
-      <ExternalLinkIcon className="relative size-3.5 shrink-0 text-tertiary transition-colors duration-(--duration-fast) group-hover:text-primary" />
-    </>
-  )
-  if (target.url !== undefined) {
-    return (
-      <a href={target.url} target="_blank" rel="noreferrer" className={className}>
-        {body}
-      </a>
-    )
-  }
-  const { onOpen } = target
-  return (
-    <button
-      type="button"
-      className={className}
-      onClick={() => {
-        setError(null)
-        onOpen().catch((e: unknown) => setError(errorMessage(e)))
-      }}
-    >
-      {body}
-    </button>
   )
 }
