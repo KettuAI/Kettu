@@ -191,7 +191,7 @@ export function ProjectMenu({
           <span className="shrink-0 text-danger">{t('newSession.missing')}</span>
         )}
       </ComboboxTrigger>
-      <ComboboxContent sideOffset={6} className="max-w-80 min-w-60">
+      <ComboboxContent sideOffset={6} className="max-w-80">
         <ComboboxInput
           showTrigger={false}
           placeholder={t('newSession.searchProjects')}
