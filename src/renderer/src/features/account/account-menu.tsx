@@ -28,10 +28,13 @@ import {
   DropdownMenuShortcut,
 } from '@renderer/components/ui/dropdown-menu'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { toggleVariants } from '@renderer/components/ui/toggle'
+import { SegmentThumb } from '@renderer/components/segmented-control'
 import { HostIcon } from '@renderer/features/settings/remote-parts'
 import { deviceShape } from '@renderer/features/settings/remote-text'
 import { connectionText, routeName } from '@renderer/features/settings/host-text'
 import { Masked } from '@renderer/features/settings/controls'
+import { useSegmentThumb } from '@renderer/hooks/use-segment-thumb'
 import { LIMIT_FILL } from '@renderer/lib/plan-limit'
 import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
@@ -372,29 +375,41 @@ function useAgentsWithLimits(): AgentStatus[] {
 
 const THEMES = ['system', 'light', 'dark'] as const
 
-/** System, Light or Dark, as segments that keep the menu open. */
+/** System, Light or Dark, as segments that keep the menu open, with the segmented thumb. */
 function ThemeChoice() {
   const { t } = useTranslation('sidebar')
   const theme = useSettingsStore((s) => s.settings.appearance.theme)
+  const choose = (next: (typeof THEMES)[number]) =>
+    void useSettingsStore
+      .getState()
+      .update({ appearance: { theme: next } })
+      .catch((error: unknown) => console.warn('Could not change the theme', error))
+  const { group, active, handlers, thumb } = useSegmentThumb(
+    THEMES.indexOf(theme),
+    THEMES.length,
+    (at) => choose(THEMES[at]),
+  )
   return (
     <div className="px-1.5 pt-1 pb-1.5">
       <DropdownMenuRadioGroup
+        ref={group}
         value={theme}
-        onValueChange={(next: (typeof THEMES)[number]) =>
-          void useSettingsStore
-            .getState()
-            .update({ appearance: { theme: next } })
-            .catch((error: unknown) => console.warn('Could not change the theme', error))
-        }
+        onValueChange={choose}
+        {...handlers}
         aria-label={t('account.theme')}
-        className="flex gap-0.5 rounded-tile bg-segment-track p-0.5"
+        className="relative flex gap-0.5 rounded-tile bg-segment-track p-0.5"
       >
-        {THEMES.map((value) => (
+        <SegmentThumb {...thumb} className="rounded-md" />
+        {THEMES.map((value, i) => (
           <MenuPrimitive.RadioItem
             key={value}
             value={value}
             closeOnClick={false}
-            className="flex h-6 flex-1 cursor-default items-center justify-center rounded-md text-small font-medium text-tertiary outline-none select-none data-checked:bg-segment-thumb data-checked:text-primary data-checked:shadow-segment data-highlighted:not-data-checked:bg-hover data-highlighted:not-data-checked:text-secondary"
+            data-active={i === active || undefined}
+            className={cn(
+              toggleVariants({ variant: 'segmented', size: null }),
+              'relative h-6 flex-1 cursor-default rounded-md px-2.5 text-small select-none data-highlighted:text-foreground',
+            )}
           >
             {t(`account.themes.${value}`)}
           </MenuPrimitive.RadioItem>
