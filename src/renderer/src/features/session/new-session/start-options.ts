@@ -1,4 +1,5 @@
 import type { AgentOptions, AgentStatus } from '@shared/agent-host'
+import { isStartMode } from '@shared/agents'
 import type { AgentId, ConfigOption } from '@shared/thread'
 import { listedInstalled, readiness } from '@renderer/features/agents/readiness'
 import type { OptionValues } from '@renderer/stores/agent-options'
@@ -53,16 +54,37 @@ function takes(option: ConfigOption, value: string | boolean): boolean {
   return typeof value === 'string' && !!option.choices?.some((c) => c.value === value)
 }
 
+/** How a new session's options are worked out: with `startMode`, the agent's start mode is applied. */
+export interface StartFlags {
+  startMode?: boolean
+}
+
+/** The mode option the agent's start mode is set on, and that mode, when it offers it. */
+function startModeOf(entry: AgentOptions): { optionId: string; value: string } | null {
+  if (!isStartMode(entry.agentId, entry.startMode)) return null
+  const option = entry.config.find((o) => o.category === 'mode' && o.type === 'select')
+  return option && takes(option, entry.startMode)
+    ? { optionId: option.id, value: entry.startMode }
+    : null
+}
+
 /**
  * The options a new session with the agent starts with: the agent's own defaults, then the values
- * remembered from earlier sessions, then what New session set. A value the option no longer takes
- * is passed over. The level is the one the chosen model offered when last seen, since an agent's
- * levels can differ by model.
+ * remembered from earlier sessions, then what New session set. With `startMode`, the mode is the
+ * start mode the user chose for the agent, which only a pick of the mode overrides. A value the
+ * option no longer takes is passed over. The level is the one the chosen model offered when last
+ * seen, since an agent's levels can differ by model.
  */
-export function startConfig(entry: AgentOptions, picks: OptionValues = {}): ConfigOption[] {
+export function startConfig(
+  entry: AgentOptions,
+  picks: OptionValues = {},
+  { startMode = false }: StartFlags = {},
+): ConfigOption[] {
+  const start = startMode ? startModeOf(entry) : null
   const valueOf = (option: ConfigOption): string | boolean => {
     const pick = picks[option.id]
     if (pick !== undefined && takes(option, pick)) return pick
+    if (start?.optionId === option.id) return start.value
     const remembered = REMEMBERED.has(option.category) ? entry.remembered[option.id] : undefined
     if (remembered !== undefined && takes(option, remembered)) return remembered
     return option.value
@@ -103,13 +125,21 @@ export function preparedConfig(
 
 /**
  * What `sessions.create` takes: the start values that differ from the agent's own defaults, or
- * every value for a provisional entry, whose values need not be the agent's defaults.
+ * every value for a provisional entry, whose values need not be the agent's defaults. With
+ * `startMode`, a pick of the mode is sent even when it is the agent's own, since it overrides the
+ * start mode the session would otherwise start in.
  */
-export function startValues(entry: AgentOptions, picks: OptionValues = {}): OptionValues {
+export function startValues(
+  entry: AgentOptions,
+  picks: OptionValues = {},
+  flags: StartFlags = {},
+): OptionValues {
   const defaults = new Map(entry.provisional ? [] : entry.config.map((o) => [o.id, o.value]))
+  const start = flags.startMode ? startModeOf(entry) : null
   const values: OptionValues = {}
-  for (const option of startConfig(entry, picks)) {
-    if (defaults.get(option.id) !== option.value) values[option.id] = option.value
+  for (const option of startConfig(entry, picks, flags)) {
+    const picked = start?.optionId === option.id && picks[option.id] === option.value
+    if (picked || defaults.get(option.id) !== option.value) values[option.id] = option.value
   }
   return values
 }

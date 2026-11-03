@@ -47,3 +47,56 @@ describe("another host's agent options", () => {
     expect(optionsOn(state, devBox)).toEqual({})
   })
 })
+
+describe('a change of the start mode', () => {
+  const mode = { id: 'mode', name: 'Mode', category: 'mode', type: 'select', value: 'default' }
+  const claude = (startMode?: string) =>
+    ({
+      agentId: 'claude-code',
+      config: [mode],
+      ...(startMode ? { startMode } : {}),
+    }) as unknown as AgentOptions
+
+  beforeEach(() => {
+    useAgentOptionsStore.setState({
+      byId: { 'claude-code': claude('plan') },
+      hosts: {},
+      picks: { 'claude-code': { mode: 'plan', model: 'opus' }, codex: { mode: 'agent' } },
+    })
+  })
+
+  it('replaces the mode the draft kept for the agent, and nothing else', () => {
+    receiveAgentOptions(claude('acceptEdits'))
+    expect(useAgentOptionsStore.getState().picks).toEqual({
+      'claude-code': { model: 'opus' },
+      codex: { mode: 'agent' },
+    })
+    receiveAgentOptions(claude('acceptEdits'))
+    expect(useAgentOptionsStore.getState().byId['claude-code']?.startMode).toBe('acceptEdits')
+  })
+
+  it('does the same when the start mode is cleared or first set', () => {
+    receiveAgentOptions(claude())
+    expect(useAgentOptionsStore.getState().picks['claude-code']).toEqual({ model: 'opus' })
+    useAgentOptionsStore.setState({ picks: { 'claude-code': { mode: 'plan' } } })
+    receiveAgentOptions(claude('plan'))
+    expect(useAgentOptionsStore.getState().picks['claude-code']).toEqual({})
+  })
+
+  it('keeps the draft while the start mode stays', () => {
+    receiveAgentOptions({ ...claude('plan'), observedAt: 5 })
+    expect(useAgentOptionsStore.getState().picks['claude-code']).toEqual({
+      mode: 'plan',
+      model: 'opus',
+    })
+  })
+
+  it('keeps the draft of an agent whose options were not known', () => {
+    useAgentOptionsStore.setState({ byId: {} })
+    receiveAgentOptions(claude('plan'))
+    expect(useAgentOptionsStore.getState().picks['claude-code']).toEqual({
+      mode: 'plan',
+      model: 'opus',
+    })
+  })
+})

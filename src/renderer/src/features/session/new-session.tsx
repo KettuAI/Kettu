@@ -238,7 +238,7 @@ function DraftComposer({
       const { picks, prepared } = optionsState
       const entry = optionsOn(optionsState, hostId)[agentId]
       // Without a prepared session, the values New session showed go with the create.
-      const options = entry ? startValues(entry, picks[agentId]) : null
+      const options = entry ? startValues(entry, picks[agentId], { startMode: true }) : null
       const preparedId = prepared?.agentId === agentId ? (prepared.summary?.id ?? null) : null
       const content: UserContent[] = [
         ...(text.trim() ? [{ type: 'text' as const, text }] : []),

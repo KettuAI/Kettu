@@ -108,6 +108,94 @@ describe('startConfig', () => {
   })
 })
 
+describe('the start mode', () => {
+  const claudeMode: ConfigOption = {
+    ...mode,
+    choices: [
+      { value: 'default', name: 'Ask before edits' },
+      { value: 'acceptEdits', name: 'Accept edits' },
+      { value: 'plan', name: 'Plan only' },
+      { value: 'bypassPermissions', name: 'Full access' },
+    ],
+  }
+  const claude = (over: Partial<AgentOptions> = {}): AgentOptions =>
+    entry({
+      config: [claudeMode, model, level('medium', ['low', 'medium', 'high']), fast],
+      ...over,
+    })
+  const modeOf = (config: ConfigOption[]) => config.find((o) => o.id === 'mode')?.value
+  const flags = { startMode: true }
+
+  it("is the mode a new session shows, in place of the agent's own", () => {
+    const withMode = claude({ startMode: 'acceptEdits' })
+    expect(modeOf(startConfig(withMode, {}, flags))).toBe('acceptEdits')
+    expect(modeOf(startConfig(claude(), {}, flags))).toBe('default')
+  })
+
+  it('is applied only where asked, so a routine starts as the agent does', () => {
+    expect(modeOf(startConfig(claude({ startMode: 'acceptEdits' })))).toBe('default')
+    expect(startValues(claude({ startMode: 'acceptEdits' }))).toEqual({})
+  })
+
+  it('gives way to a pick of the mode, the agent’s own value included', () => {
+    const withMode = claude({ startMode: 'acceptEdits' })
+    expect(modeOf(startConfig(withMode, { mode: 'plan' }, flags))).toBe('plan')
+    expect(modeOf(startConfig(withMode, { mode: 'default' }, flags))).toBe('default')
+  })
+
+  it('leaves the other options as they were', () => {
+    const withMode = claude({ startMode: 'plan', remembered: { model: 'opus' } })
+    expect(values(startConfig(withMode, { fast: true }, flags))).toEqual({
+      mode: 'plan',
+      model: 'opus',
+      effort: 'medium',
+      fast: true,
+    })
+  })
+
+  it('is skipped when the agent no longer offers it, or it gives full access', () => {
+    for (const startMode of ['retired', 'bypassPermissions', '']) {
+      const withMode = claude({ startMode })
+      expect(modeOf(startConfig(withMode, {}, flags)), startMode).toBe('default')
+      expect(startValues(withMode, {}, flags), startMode).toEqual({})
+    }
+  })
+
+  it('is skipped for an agent that takes none, and for options without a mode', () => {
+    expect(modeOf(startConfig(claude({ agentId: 'opencode', startMode: 'plan' }), {}, flags))).toBe(
+      'default',
+    )
+    const noMode = claude({ startMode: 'plan', config: [model, fast] })
+    expect(startConfig(noMode, {}, flags).map((o) => o.id)).toEqual(['model', 'fast'])
+  })
+
+  it('is sent with the start values, since the agent does not know it', () => {
+    expect(startValues(claude({ startMode: 'acceptEdits' }), {}, flags)).toEqual({
+      mode: 'acceptEdits',
+    })
+    expect(
+      startValues(claude({ startMode: 'acceptEdits', remembered: { model: 'opus' } }), {}, flags),
+    ).toEqual({ mode: 'acceptEdits', model: 'opus' })
+  })
+
+  it('is not sent when it is the mode the agent starts in anyway', () => {
+    expect(startValues(claude({ startMode: 'default' }), {}, flags)).toEqual({})
+  })
+
+  it('is overridden by a pick of the agent’s own mode, which is sent', () => {
+    expect(startValues(claude({ startMode: 'acceptEdits' }), { mode: 'default' }, flags)).toEqual({
+      mode: 'default',
+    })
+    expect(startValues(claude({ startMode: 'acceptEdits' }), { mode: 'plan' }, flags)).toEqual({
+      mode: 'plan',
+    })
+  })
+
+  it('leaves a pick of the agent’s own mode unsent where there is no start mode', () => {
+    expect(startValues(claude(), { mode: 'default' }, flags)).toEqual({})
+  })
+})
+
 describe('startValues', () => {
   it("sends only what differs from the agent's defaults", () => {
     expect(startValues(entry())).toEqual({})
