@@ -1,9 +1,10 @@
 // A permission request of Claude Code's as the options Kettu shows, and the answer as Claude
 // Code takes it. The option ids are the ACP adapter's, so answers stored with a thread still read.
 
-import type { PendingPermission } from '@shared/thread'
+import type { PendingPermission, PendingQuestion, QuestionAnswer } from '@shared/thread'
 import { unsafeCommand, unsafeCommandPrefix } from '../command-safety'
 import { t } from '../i18n'
+import { answerWords } from '../question-answers'
 import { modeName } from './config'
 import type { AskedQuestion } from './tools'
 import type {
@@ -228,6 +229,37 @@ export const ANSWER_IN_REPLY =
   'The user will answer this question in their own words. Stop here and wait for their next message.'
 export const QUESTION_UNREADABLE =
   'This question could not be shown to the user. Ask it in your reply instead.'
+export const QUESTIONS_SKIPPED =
+  'The user skipped these questions without answering. Go on with your own judgment, or ask again in your reply.'
+
+/** An ask's questions as a card shows them; Claude Code always lets the user answer in their own words. */
+export function pendingQuestions(questions: readonly AskedQuestion[]): PendingQuestion[] {
+  return questions.map((asked) => ({
+    header: asked.header,
+    question: asked.question,
+    multiSelect: asked.multiSelect,
+    options: asked.options.map((option) => ({
+      label: option.label,
+      ...(option.description ? { description: option.description } : {}),
+    })),
+    allowsText: true,
+    secret: false,
+  }))
+}
+
+/** What Claude Code takes as `answers`, by question text; several words join with a comma. */
+export function questionAnswers(
+  questions: readonly AskedQuestion[],
+  answers: readonly QuestionAnswer[],
+): Record<string, string> {
+  const pending = pendingQuestions(questions)
+  const given: Record<string, string> = {}
+  for (const answer of [...answers].sort((a, b) => a.question - b.question)) {
+    const asked = pending[answer.question]
+    if (asked) given[asked.question] = answerWords(asked, answer).join(', ')
+  }
+  return given
+}
 
 /** A question's answers as options: each choice, then one to answer in the user's own words. */
 export function questionOptions(question: AskedQuestion): Options {

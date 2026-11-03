@@ -87,6 +87,9 @@ function requestTarget(
 ): { text: string; code: boolean } {
   if (request.kind === 'origin') return { text: request.origin, code: false }
   const { tool } = request
+  if (request.permission.questions && tool.question !== undefined) {
+    return { text: tool.question, code: false }
+  }
   const location = tool.locations[0]?.path
   if (tool.toolKind in VERB_KEY && location) {
     return { text: relativePath(location, projectPath), code: true }
@@ -653,15 +656,18 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
       0,
     ),
   )
-  const options: { label: string; choice: AnswerChoice }[] =
-    request.kind === 'tool'
+  // Questions are answered in the window: the panel has no room for their steps and text.
+  const asks = request.kind === 'tool' && request.permission.questions !== undefined
+  const options: { label: string; choice: AnswerChoice | null }[] = asks
+    ? [{ label: t('answerInKettu'), choice: null }]
+    : request.kind === 'tool'
       ? request.permission.options.map((o) => ({ label: o.name, choice: { optionId: o.id } }))
       : ORIGIN_DECISIONS.map((decision) => ({
           label: t(`session:browserOrigin.decision.${decision}`),
           choice: { decision },
         }))
   const primary =
-    request.kind === 'tool'
+    request.kind === 'tool' && !asks
       ? Math.max(
           0,
           request.permission.options.findIndex((o) => o.kind === 'allow_once'),
@@ -671,12 +677,19 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
   const [failure, setFailure] = useState<string | null>(null)
   const sending = useRef(false)
   const target = requestTarget(request, summary.projectPath)
-  const wants =
-    request.kind === 'origin' ? t('wants.origin') : t(`wants.${WANTS_KEY[request.tool.toolKind]}`)
+  const wants = asks
+    ? t('wants.question')
+    : request.kind === 'origin'
+      ? t('wants.origin')
+      : t(`wants.${WANTS_KEY[request.tool.toolKind]}`)
 
   const choose = (index: number) => {
     const option = options[index]
     if (!option || sending.current) return
+    if (option.choice === null) {
+      open({ kind: 'session', sessionId: summary.id })
+      return
+    }
     sending.current = true
     setHighlight(index)
     void answer(summary.id, request, option.choice).then((message) => {

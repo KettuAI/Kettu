@@ -8,7 +8,10 @@ const FINISHED_ROWS = 3
 const RECENT_ROWS = 2
 
 /** What the panel shows of a tool: its kind, title, paths and command. */
-export type PendingTool = Pick<ToolEntry, 'toolKind' | 'title' | 'locations' | 'rawInput'>
+export type PendingTool = Pick<
+  ToolEntry,
+  'toolKind' | 'title' | 'locations' | 'rawInput' | 'question'
+>
 
 /** A request in a session's thread that waits for the user. */
 export type PendingRequest =

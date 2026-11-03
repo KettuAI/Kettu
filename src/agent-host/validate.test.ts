@@ -37,6 +37,52 @@ describe('createValidators', () => {
     rejects(() => posix['agents.logout']({ agentId: 'unknown-agent' }))
   })
 
+  it('takes a permission answer as an option or as the answers to questions', () => {
+    const base = { sessionId: 's', requestId: 'p1' }
+    expect(posix['permissions.respond']({ ...base, optionId: 'allow-once', x: 1 })).toEqual({
+      ...base,
+      optionId: 'allow-once',
+    })
+    const answers = [
+      { question: 0, choices: [1] },
+      { question: 2, choices: [], text: 'mine', extra: true },
+    ]
+    expect(posix['permissions.respond']({ ...base, answers })).toEqual({
+      ...base,
+      answers: [
+        { question: 0, choices: [1] },
+        { question: 2, choices: [], text: 'mine' },
+      ],
+    })
+    // Every question skipped
+    expect(posix['permissions.respond']({ ...base, answers: [] })).toEqual({ ...base, answers: [] })
+    rejects(() => posix['permissions.respond'](base))
+    rejects(() => posix['permissions.respond']({ ...base, optionId: 'a', answers: [] }))
+    rejects(() => posix['permissions.respond']({ ...base, answers: 'a' }))
+    rejects(() =>
+      posix['permissions.respond']({ ...base, answers: [{ question: -1, choices: [] }] }),
+    )
+    rejects(() => posix['permissions.respond']({ ...base, answers: [{ question: 0 }] }))
+    rejects(() =>
+      posix['permissions.respond']({ ...base, answers: [{ question: 0, choices: [1.5] }] }),
+    )
+    rejects(() =>
+      posix['permissions.respond']({ ...base, answers: [{ question: 0, choices: [], text: 1 }] }),
+    )
+    rejects(() =>
+      posix['permissions.respond']({
+        ...base,
+        answers: [{ question: 0, choices: [], text: 'x'.repeat(10_001) }],
+      }),
+    )
+    rejects(() =>
+      posix['permissions.respond']({
+        ...base,
+        answers: Array.from({ length: 21 }, (_, question) => ({ question, choices: [0] })),
+      }),
+    )
+  })
+
   it('takes positions as whole numbers from 0', () => {
     expect(posix['sessions.snapshot']({ sessionId: 's' })).toEqual({ sessionId: 's' })
     expect(posix['sessions.snapshot']({ sessionId: 's', from: 0 })).toEqual({

@@ -43,6 +43,7 @@ import type {
   OlderPage,
   PatchBatch,
   PromptCache,
+  QuestionAnswer,
   SessionSnapshot,
   SessionStatus,
   UserContent,
@@ -585,8 +586,9 @@ export interface HostContract {
   // with no sessionId, every one.
   'sessions.takeReturned': { params: { sessionId?: string | null }; result: ReturnedMessage[] }
   'sessions.removeAll': { params: void; result: void }
+  // One of `optionId` and `answers`: a question's answers go together, only those given.
   'permissions.respond': {
-    params: { sessionId: string; requestId: string; optionId: string }
+    params: { sessionId: string; requestId: string; optionId?: string; answers?: QuestionAnswer[] }
     result: void
   }
   'diagnostics.collect': { params: void; result: DiagnosticsBundle }

@@ -45,11 +45,13 @@
     "fetch": "想获取",
     "switchMode": "想切换模式",
     "other": "想使用",
-    "origin": "想打开"
+    "origin": "想打开",
+    "question": "在问你"
   },
   "answerGroup": "回答",
   "moreWaiting_other": "还有 {{count}} 个在等",
   "openInKettu": "在 Kettu 中打开",
+  "answerInKettu": "在 Kettu 中回答",
   "answeredElsewhere": "已在别处回答：{{title}}",
   "answerFailed": "没能回答：{{message}}",
   "remote": {

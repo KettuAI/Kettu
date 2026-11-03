@@ -300,7 +300,7 @@ const handlesEnter = (target: EventTarget | null) =>
 /**
  * Number keys 1 to 9 answer the first card waiting for the user (a permission request, a question
  * or a new site) while the composer is empty, and Enter answers it with its highlighted option,
- * unless the focus is on a control of its own.
+ * unless the focus is on a control of its own. On a card of questions the numbers only select.
  */
 function usePermissionKeys(sessionId: string, focused: boolean): void {
   useEffect(() => {
@@ -322,13 +322,18 @@ function usePermissionKeys(sessionId: string, focused: boolean): void {
           (entry?.kind === 'tool' && !!entry.permission) ||
           (entry?.kind === 'browser_origin' && entry.decision === null)
         if (!waiting) continue
-        // Through the card's own button, so a failure shows where the answer was given.
-        const button = document.querySelector<HTMLButtonElement>(
-          `[data-entry-id="${CSS.escape(id)}"] ${enter ? '[data-answer-option][data-highlighted]' : `[data-answer-option="${n}"]`}`,
+        // Through the card's own control, so a failure shows where the answer was given. A
+        // question card's Enter goes on to its next question, and its own-answer field takes focus.
+        const scope = `[data-entry-id="${CSS.escape(id)}"]`
+        const target = document.querySelector<HTMLButtonElement | HTMLInputElement>(
+          enter
+            ? `${scope} [data-answer-enter], ${scope} [data-answer-option][data-highlighted]`
+            : `${scope} [data-answer-option="${n}"]`,
         )
-        if (!button || button.disabled) return
+        if (!target || target.disabled) return
         event.preventDefault()
-        button.click()
+        if (target instanceof HTMLInputElement) target.focus()
+        else target.click()
         return
       }
     }

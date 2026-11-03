@@ -28,7 +28,7 @@ import {
 import { FAKE_INIT, FakeChild, FakeClaudeSdk, type FakeQuery } from '../testing/fake-claude-sdk'
 import { ClaudeConnection, promptContent } from './connection'
 import { claudeSdkDriver } from './driver'
-import { ANSWER_IN_REPLY, QUESTION_UNREADABLE } from './permissions'
+import { ANSWER_IN_REPLY, QUESTION_UNREADABLE, QUESTIONS_SKIPPED } from './permissions'
 import type { SdkMessage, StoredMessage } from './sdk'
 
 const baseSession: SessionView = {
@@ -956,11 +956,28 @@ describe('permissions', () => {
     multiSelect: false,
   }
 
-  it('asks each of AskUserQuestion questions as a card and answers with the labels', async () => {
-    const second = { ...which, question: 'Add a test?', header: 'Test' }
+  const several = {
+    ...which,
+    question: 'Which checks should run?',
+    header: 'Checks',
+    multiSelect: true,
+  }
+  const checks = {
+    ...several,
+    options: [
+      { label: 'Lint', description: '' },
+      { label: 'Types', description: '' },
+      { label: 'Tests', description: '' },
+    ],
+  }
+  const second = { ...which, question: 'Add a test?', header: 'Test' }
+
+  it('asks all of AskUserQuestion questions as one request and answers with the labels', async () => {
     const answer = askQuestions([which, second])
     await settle()
-    expect(target.asked[0]!.request.options).toEqual([
+    expect(target.asked).toHaveLength(1)
+    const { request } = target.asked[0]!
+    expect(request.options).toEqual([
       { id: 'answer:0', name: 'Fix it here', kind: 'allow_once' },
       {
         id: 'answer:1',
@@ -970,14 +987,30 @@ describe('permissions', () => {
       },
       { id: 'other', name: 'Something else…', kind: 'reject_once' },
     ])
+    expect(request.questions).toEqual([
+      {
+        header: 'Where',
+        question: which.question,
+        multiSelect: false,
+        options: [
+          { label: 'Fix it here' },
+          { label: 'Separate session', description: 'Keeps this change small' },
+        ],
+        allowsText: true,
+        secret: false,
+      },
+      expect.objectContaining({ header: 'Test', question: 'Add a test?' }),
+    ])
     expect(target.entry('t:toolu_q')).toMatchObject({
       title: 'Where',
       question: 'Fix it here or in a separate session?',
     })
-    target.asked[0]!.answer({ optionId: 'answer:1' })
-    await settle()
-    expect(target.entry('t:toolu_q')).toMatchObject({ title: 'Test', question: 'Add a test?' })
-    target.asked[1]!.answer({ optionId: 'answer:0' })
+    target.asked[0]!.answer({
+      answers: [
+        { question: 1, choices: [0] },
+        { question: 0, choices: [1] },
+      ],
+    })
     expect(await answer).toEqual({
       behavior: 'allow',
       updatedInput: {
@@ -986,6 +1019,56 @@ describe('permissions', () => {
       },
       toolUseID: 'toolu_q',
     })
+    expect(target.entry('t:toolu_q')).toMatchObject({ status: 'in_progress' })
+  })
+
+  it('joins the labels of a multi-select question and takes typed text as an answer', async () => {
+    const answer = askQuestions([checks, which])
+    await settle()
+    expect(target.asked[0]!.request.questions?.[0]).toMatchObject({ multiSelect: true })
+    target.asked[0]!.answer({
+      answers: [
+        { question: 0, choices: [2, 0], text: 'and a build' },
+        { question: 1, choices: [], text: 'In a new branch' },
+      ],
+    })
+    expect(await answer).toMatchObject({
+      behavior: 'allow',
+      updatedInput: {
+        answers: {
+          [checks.question]: 'Lint, Tests, and a build',
+          [which.question]: 'In a new branch',
+        },
+      },
+    })
+  })
+
+  it('leaves a skipped question out, and tells Claude Code when every one was skipped', async () => {
+    let answer = askQuestions([which, second])
+    await settle()
+    target.asked[0]!.answer({ answers: [{ question: 1, choices: [1] }] })
+    expect(await answer).toMatchObject({
+      behavior: 'allow',
+      updatedInput: { answers: { 'Add a test?': 'Separate session' } },
+    })
+    answer = askQuestions([which, second])
+    await settle()
+    target.asked[1]!.answer({ answers: [] })
+    expect(await answer).toMatchObject({ behavior: 'deny', message: QUESTIONS_SKIPPED })
+  })
+
+  it('still takes an option id from a client that does not know the questions', async () => {
+    let answer = askQuestions([which, second])
+    await settle()
+    target.asked[0]!.answer({ optionId: 'answer:1' })
+    expect(await answer).toMatchObject({
+      behavior: 'allow',
+      updatedInput: { answers: { [which.question]: 'Separate session' } },
+    })
+    answer = askQuestions([which, second])
+    await settle()
+    target.asked[1]!.answer({ optionId: 'other' })
+    expect(await answer).toMatchObject({ behavior: 'deny', message: ANSWER_IN_REPLY })
   })
 
   it('lets the user answer in their next message, and turns down a question it cannot show', async () => {

@@ -647,7 +647,7 @@ export class AgentHost {
   /** Allow once from a request's notification; a request already answered elsewhere is left. */
   answerPermission(sessionId: string, requestId: string, optionId: string): void {
     try {
-      this.sessions.respond(sessionId, requestId, optionId)
+      this.sessions.respond(sessionId, requestId, { optionId })
     } catch (error) {
       this.diagnostics.log(
         'info',
@@ -1037,8 +1037,13 @@ export class AgentHost {
         await sessions.removeAll()
         this.options.send({ type: 'host:media-revoke', sessionId: null })
       },
-      'permissions.respond': ({ sessionId, requestId, optionId }, { device }) =>
-        sessions.respond(sessionId, requestId, optionId, fromDevice(device)),
+      'permissions.respond': ({ sessionId, requestId, optionId, answers }, { device }) =>
+        sessions.respond(
+          sessionId,
+          requestId,
+          answers ? { answers } : { optionId: optionId! },
+          fromDevice(device),
+        ),
       'diagnostics.collect': () => this.collectDiagnostics(),
       'git.status': async ({ projectPath }, { portId }) => {
         const git = this.requireGit()

@@ -21,7 +21,13 @@ import {
   type RoutineOption,
 } from '@shared/routines'
 import { ATTACHMENT_BYTES, ATTACHMENT_LIMIT, PROMPT_BYTES, THUMB_CHARS } from '@shared/attachments'
-import { isAgentId, type AgentId, type ContentRef, type UserContent } from '@shared/thread'
+import {
+  isAgentId,
+  type AgentId,
+  type ContentRef,
+  type QuestionAnswer,
+  type UserContent,
+} from '@shared/thread'
 import { invalidParams } from './errors'
 import { isCompletablePath } from './path-completion'
 import { isAbsolutePath } from './paths'
@@ -104,6 +110,34 @@ function configValues(value: unknown): Record<string, string | boolean> {
     }
   }
   return values
+}
+
+// An ask holds a few questions; Codex's schema sets no bound, so this is generous.
+const ASK_QUESTIONS = 20
+const ASK_CHOICES = 100
+const ANSWER_CHARS = 10_000
+
+/** The answers to an ask's questions; their fit to the questions is checked where those are known. */
+function questionAnswers(value: unknown): QuestionAnswer[] {
+  if (!Array.isArray(value) || value.length > ASK_QUESTIONS) {
+    throw invalidParams(`answers must be an array of at most ${ASK_QUESTIONS} answers`)
+  }
+  return value.map((item: unknown, index) => {
+    const at = `answers[${index}]`
+    const o = fields(item)
+    const { choices, text } = o
+    if (!Array.isArray(choices) || choices.length > ASK_CHOICES) {
+      throw invalidParams(`${at}.choices must be an array of at most ${ASK_CHOICES} choices`)
+    }
+    if (text !== undefined && (typeof text !== 'string' || text.length > ANSWER_CHARS)) {
+      throw invalidParams(`${at}.text must be a string of at most ${ANSWER_CHARS} characters`)
+    }
+    return {
+      question: position(o, 'question'),
+      choices: choices.map((choice: unknown) => position({ choice }, 'choice')),
+      ...(text === undefined ? {} : { text }),
+    }
+  })
 }
 
 function absolutePath(o: Fields, key: string, platform: Platform): string {
@@ -765,11 +799,13 @@ export function createValidators(platform: Platform): Validators {
     'routines.markSeen': (params) => ({ routineId: routineId(fields(params)) }),
     'permissions.respond': (params) => {
       const o = fields(params)
-      return {
-        sessionId: sessionId(o),
-        requestId: string(o, 'requestId', ID_CHARS),
-        optionId: string(o, 'optionId', ID_CHARS),
+      const base = { sessionId: sessionId(o), requestId: string(o, 'requestId', ID_CHARS) }
+      if ((o.optionId === undefined) === (o.answers === undefined)) {
+        throw invalidParams('Give one of optionId and answers')
       }
+      return o.answers === undefined
+        ? { ...base, optionId: string(o, 'optionId', ID_CHARS) }
+        : { ...base, answers: questionAnswers(o.answers) }
     },
     'diagnostics.collect': none,
     'git.status': project,

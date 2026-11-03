@@ -41,8 +41,10 @@ import {
   type OlderPage,
   type Patch,
   type PatchBatch,
+  type PendingQuestion,
   type PermissionKind,
   type PlanEntry,
+  type QuestionAnswer,
   type SessionSnapshot,
   type SessionStatus,
   type SessionView,
@@ -52,6 +54,7 @@ import {
   type ThreadEntry,
   type ThreadState,
   type TokenTotals,
+  type ToolEntry,
   type UserContent,
   ULTRACODE_OPTION_ID,
 } from '@shared/thread'
@@ -93,6 +96,7 @@ import {
 } from './connection'
 import type { Diagnostics } from './diagnostics'
 import { holdsNothing, mayBeEmpty } from './empty-sessions'
+import { questionsResult } from './question-answers'
 import { HostError, invalidParams, notFound } from './errors'
 import { t } from './i18n'
 import type { GitEventDraft, GitServiceApi } from './git/api'
@@ -316,6 +320,7 @@ interface PendingRequest {
   requestId: string
   toolEntryId: string
   options: { id: string; name: string; kind: PermissionKind }[]
+  questions?: PendingQuestion[]
   answer(answer: PermissionAnswer): void
 }
 
@@ -4836,6 +4841,7 @@ export class SessionManager {
         requestId,
         toolEntryId: request.toolEntryId,
         options: request.options,
+        ...(request.questions ? { questions: request.questions } : {}),
         answer: (answer) => {
           signal.removeEventListener('abort', onAbort)
           resolve(answer)
@@ -4851,7 +4857,14 @@ export class SessionManager {
         {
           op: 'entry.update',
           id: request.toolEntryId,
-          changes: { permission: { requestId, options: request.options }, permissionResult: null },
+          changes: {
+            permission: {
+              requestId,
+              options: request.options,
+              ...(request.questions ? { questions: request.questions } : {}),
+            },
+            permissionResult: null,
+          },
         },
       ])
       const status = live.thread.session.status
@@ -4884,10 +4897,7 @@ export class SessionManager {
   private settlePermission(
     live: Live,
     requestId: string,
-    result:
-      | { optionId: string; kind: PermissionKind; device?: FromDevice; name?: string }
-      | 'cancelled'
-      | 'withdrawn',
+    result: NonNullable<ToolEntry['permissionResult']>,
   ): void {
     const pending = live.permissions.get(requestId)
     if (!pending) return
@@ -4933,7 +4943,12 @@ export class SessionManager {
     this.update(live, { status: live.turn || live.childRunning ? 'running' : 'ready' })
   }
 
-  respond(sessionId: string, requestId: string, optionId: string, device?: FromDevice): void {
+  respond(
+    sessionId: string,
+    requestId: string,
+    answer: { optionId: string } | { answers: QuestionAnswer[] },
+    device?: FromDevice,
+  ): void {
     this.recordOf(sessionId)
     const live = this.live.get(sessionId)
     const pending = live?.permissions.get(requestId)
@@ -4944,22 +4959,30 @@ export class SessionManager {
       })
     }
     if (!live || !pending) throw notFound(`No pending permission request ${requestId}`)
-    const option = pending.options.find((o) => o.id === optionId)
-    if (!option) throw invalidParams(`${optionId} is not an option of request ${requestId}`)
-    const tool = live.thread.byId[pending.toolEntryId]
-    // A question's answer is what the card shows once answered; a permission's kind says enough.
-    const answered = tool?.kind === 'tool' && tool.question !== undefined
-    this.settlePermission(live, requestId, {
-      optionId,
-      kind: option.kind,
-      ...(answered && option.kind !== 'reject_once' ? { name: option.name } : {}),
-      ...(device ? { device } : {}),
-    })
+    let result: Exclude<NonNullable<ToolEntry['permissionResult']>, string>
+    if ('answers' in answer) {
+      if (!pending.questions) throw invalidParams(`Request ${requestId} asks no questions`)
+      result = questionsResult(pending.questions, answer.answers, device)
+    } else {
+      const { optionId } = answer
+      const option = pending.options.find((o) => o.id === optionId)
+      if (!option) throw invalidParams(`${optionId} is not an option of request ${requestId}`)
+      const tool = live.thread.byId[pending.toolEntryId]
+      // A question's answer is what the card shows once answered; a permission's kind says enough.
+      const answered = tool?.kind === 'tool' && tool.question !== undefined
+      result = {
+        optionId,
+        kind: option.kind,
+        ...(answered && option.kind !== 'reject_once' ? { name: option.name } : {}),
+        ...(device ? { device } : {}),
+      }
+    }
+    this.settlePermission(live, requestId, result)
     live.answered.set(requestId, device ?? null)
     if (live.answered.size > ANSWERS_KEPT) {
       live.answered.delete(live.answered.keys().next().value!)
     }
-    pending.answer({ optionId })
+    pending.answer(answer)
     this.touch(live.id)
   }
 
