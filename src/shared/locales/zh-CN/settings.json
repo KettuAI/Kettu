@@ -1102,8 +1102,6 @@
     },
     "device": {
       "rename": "改名",
-      "renameTitle": "给设备改名",
-      "save": "保存",
       "facts": "设备信息",
       "joined": "加入",
       "joinedScan": "{{date}}，扫码添加",

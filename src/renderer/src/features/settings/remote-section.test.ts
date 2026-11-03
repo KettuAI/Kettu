@@ -56,7 +56,7 @@ const {
 const { CodeBody, Confirm } = await import('./remote-pairing')
 const { browserLinks } = await import('./pair-links')
 const { closeRequest } = await import('./pair-close')
-const { changeDevice, deviceLine } = await import('./remote-text')
+const { changeDevice, deviceLine, nextDeviceName } = await import('./remote-text')
 const { platformName } = await import('./host-text')
 const { ActivityRow, DevicePage } = await import('./remote-device')
 const { useRemoteSection } = await import('./section-defs')
@@ -549,6 +549,23 @@ describe("a device's page", () => {
     expect(page).toMatch(/Online now, connected at/)
     expect(page).toContain('Activity Last 30 days')
     expect(page).toContain('Remove this device')
+  })
+
+  it('puts the icon before the name and renames without a dialog', () => {
+    remote.status = status()
+    const html = renderToStaticMarkup(createElement(DevicePage, { id: phone.id }))
+    expect(html.indexOf('rounded-segments')).toBeLessThan(html.indexOf('My iPhone'))
+    expect(html).toContain('aria-label="Rename"')
+    expect(html).not.toContain('Rename the device')
+  })
+
+  it('keeps a new name and drops one that is empty, the same or too long', () => {
+    expect(nextDeviceName('My iPhone', '  Pocket  ')).toBe('Pocket')
+    expect(nextDeviceName('My iPhone', '   ')).toBeNull()
+    expect(nextDeviceName('My iPhone', 'My iPhone')).toBeNull()
+    expect(nextDeviceName('My iPhone', '  My iPhone  ')).toBeNull()
+    expect(nextDeviceName('A', 'x'.repeat(65))).toBeNull()
+    expect(nextDeviceName('A', 'x'.repeat(64))).toBe('x'.repeat(64))
   })
 
   it('says what it runs, with the platform as people name it', () => {

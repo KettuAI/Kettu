@@ -1,8 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { PencilIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { DeviceActivity } from '@shared/remote/activity'
-import { DEVICE_NAME_CHARS, type PairedDevice } from '@shared/remote/device'
+import type { PairedDevice } from '@shared/remote/device'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,16 +14,6 @@ import {
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@renderer/components/ui/dialog'
-import { Field, FieldError, FieldLabel } from '@renderer/components/ui/field'
-import { Input } from '@renderer/components/ui/input'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { basename, monthDay } from '@renderer/lib/format'
 import { useHostContext } from '@renderer/lib/host-features'
@@ -37,7 +27,7 @@ import { Fact } from './agent-parts'
 import { CONFIRM, ControlError, ROW_BUTTON } from './controls'
 import { DeviceIcon, DeviceTile, OnlineDot } from './remote-parts'
 import { ThisBrowserBadge } from './remote-section'
-import { changeDevice, deviceLine, whenAt } from './remote-text'
+import { changeDevice, deviceLine, nextDeviceName, whenAt } from './remote-text'
 import { GroupLabel, ItemPageHeader, RowFrame, RowGroup, RowText } from './rows'
 
 const back = () => openSettingsItem('remote', null)
@@ -69,7 +59,6 @@ function DevicePageBody({ device, online }: { device: PairedDevice; online: bool
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
   const now = useNow()
-  const [renaming, setRenaming] = useState(false)
   const joined = t(
     device.kind === 'desktop' ? 'remote.device.joinedLink' : 'remote.device.joinedScan',
     {
@@ -88,33 +77,12 @@ function DevicePageBody({ device, online }: { device: PairedDevice; online: bool
         back={t('sections.remote')}
         onBack={back}
         item={device.id}
+        iconFirst
         icon={<DeviceTile large icon={<DeviceIcon device={device} className="size-5" />} />}
-        title={
-          <span className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate">{device.name}</span>
-            <Button
-              variant="quiet"
-              size="icon-sm"
-              aria-label={t('remote.device.rename')}
-              title={t('remote.device.rename')}
-              className="text-tertiary"
-              onClick={() => setRenaming(true)}
-            >
-              <PencilIcon />
-            </Button>
-            <ThisBrowserBadge deviceId={device.id} className="shrink-0 font-sans font-normal" />
-            {online && (
-              <span className="flex shrink-0 items-center gap-1.5 font-sans text-xs font-normal text-tertiary">
-                <OnlineDot />
-                {t('remote.devices.online')}
-              </span>
-            )}
-          </span>
-        }
+        title={<DeviceName device={device} online={online} />}
       >
         <p className="truncate text-command leading-4.5 text-tertiary">{deviceLine(t, device)}</p>
       </ItemPageHeader>
-      <RenameDialog device={device} open={renaming} onOpenChange={setRenaming} />
 
       <div className="flex flex-col gap-7">
         <section aria-label={t('remote.device.facts')} className="flex flex-col">
@@ -273,76 +241,134 @@ function eventText(
   }
 }
 
-function RenameDialog({
-  device,
-  open,
-  onOpenChange,
-}: {
-  device: PairedDevice
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
+const isComposing = (event: KeyboardEvent<HTMLInputElement>): boolean =>
+  event.nativeEvent.isComposing || event.keyCode === 229
+
+/** The name, edited in place. Enter or leaving the field saves; Esc puts the old name back. */
+function DeviceName({ device, online }: { device: PairedDevice; online: boolean }) {
   const { api } = useHostScope()
-  const { t } = useTranslation(['settings', 'common'])
-  const [name, setName] = useState(device.name)
-  const [busy, setBusy] = useState(false)
+  const { t } = useTranslation('settings')
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(device.name)
   const [error, setError] = useState<string | null>(null)
-  const trimmed = name.trim()
-  const valid = trimmed.length > 0 && [...trimmed].length <= DEVICE_NAME_CHARS
-  const submit = async (event: FormEvent): Promise<void> => {
-    event.preventDefault()
-    if (!valid || busy) return
-    if (trimmed === device.name) return onOpenChange(false)
-    setBusy(true)
-    const failed = await changeDevice(t, () => api.remote.renameDevice(device.id, trimmed))
-    setBusy(false)
-    if (failed) setError(failed)
-    else onOpenChange(false)
+  const pencil = useRef<HTMLButtonElement>(null)
+  const cancel = useRef(false)
+  const saving = useRef(false)
+  // False before the field unmounts, so that blur does not save the name a second time.
+  const live = useRef(false)
+  // Enter and Esc hand focus back to the pencil; a click elsewhere keeps it where it went.
+  const returnFocus = useRef(false)
+
+  useEffect(() => {
+    if (!editing && returnFocus.current) {
+      returnFocus.current = false
+      pencil.current?.focus()
+    }
+  }, [editing])
+
+  useEffect(
+    () => () => {
+      live.current = false
+    },
+    [],
+  )
+
+  const stop = (): void => {
+    live.current = false
+    setError(null)
+    setEditing(false)
   }
+
+  const commit = async (): Promise<void> => {
+    if (saving.current || !live.current) return
+    if (cancel.current) {
+      cancel.current = false
+      setDraft(device.name)
+      stop()
+      return
+    }
+    const next = nextDeviceName(device.name, draft)
+    if (next === null) {
+      setDraft(device.name)
+      stop()
+      return
+    }
+    saving.current = true
+    const failed = await changeDevice(t, () => api.remote.renameDevice(device.id, next))
+    saving.current = false
+    if (!live.current) return
+    if (failed) {
+      setError(failed)
+      return
+    }
+    stop()
+  }
+
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+    if (isComposing(event) || saving.current) return
+    if (event.key === 'Enter') {
+      returnFocus.current = true
+      event.currentTarget.blur()
+    } else if (event.key === 'Escape') {
+      event.stopPropagation()
+      cancel.current = true
+      returnFocus.current = true
+      event.currentTarget.blur()
+    }
+  }
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (next) setName(device.name)
-        setError(null)
-        onOpenChange(next)
-      }}
-    >
-      <DialogContent className="sm:max-w-md">
-        <form className="contents" onSubmit={(event) => void submit(event)}>
-          <DialogHeader>
-            <DialogTitle>{t('remote.device.renameTitle')}</DialogTitle>
-          </DialogHeader>
-          <Field data-invalid={!valid || error !== null || undefined}>
-            <FieldLabel htmlFor="device-rename" className="sr-only">
-              {t('remote.pair.confirm.name')}
-            </FieldLabel>
-            <Input
-              id="device-rename"
-              value={name}
-              autoFocus
-              autoComplete="off"
-              spellCheck={false}
-              aria-invalid={!valid || error !== null || undefined}
-              onFocus={(event) => event.currentTarget.select()}
-              onChange={(event) => {
-                setName(event.target.value)
-                setError(null)
-              }}
-            />
-            {error && <FieldError>{error}</FieldError>}
-          </Field>
-          <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" />}>
-              {t('common:actions.cancel')}
-            </DialogClose>
-            <Button type="submit" disabled={!valid || busy}>
-              {t('remote.device.save')}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <span className="flex min-w-0 flex-1 flex-col gap-1 font-sans font-normal">
+      <span className="flex w-full min-w-0 items-center gap-1.5 font-display text-section font-bold">
+        {editing ? (
+          <input
+            aria-label={t('remote.device.rename')}
+            aria-invalid={error !== null || undefined}
+            value={draft}
+            autoFocus
+            autoComplete="off"
+            spellCheck={false}
+            maxLength={256}
+            className="-mx-0.5 h-7 max-w-full min-w-8 field-sizing-content rounded-t-md bg-transparent px-0.5 text-primary shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-strong)] outline-none selection:bg-edit-selection focus-visible:rounded-md focus-visible:shadow-none focus-ring"
+            onFocus={(event) => event.currentTarget.select()}
+            onChange={(event) => {
+              setDraft(event.target.value)
+              setError(null)
+            }}
+            onBlur={() => void commit()}
+            onKeyDown={onKeyDown}
+          />
+        ) : (
+          <span className="min-w-0 truncate">{device.name}</span>
+        )}
+        {!editing && (
+          <Button
+            ref={pencil}
+            variant="quiet"
+            size="icon-sm"
+            aria-label={t('remote.device.rename')}
+            title={t('remote.device.rename')}
+            className="text-tertiary"
+            onClick={() => {
+              setDraft(device.name)
+              setError(null)
+              live.current = true
+              setEditing(true)
+            }}
+          >
+            <PencilIcon />
+          </Button>
+        )}
+        <ThisBrowserBadge deviceId={device.id} className="shrink-0 font-sans font-normal" />
+        {online && (
+          <span className="flex shrink-0 items-center gap-1.5 font-sans text-xs font-normal text-tertiary">
+            <OnlineDot />
+            {t('remote.devices.online')}
+          </span>
+        )}
+      </span>
+      {error && <span className="truncate text-xs text-danger">{error}</span>}
+    </span>
   )
 }
 
