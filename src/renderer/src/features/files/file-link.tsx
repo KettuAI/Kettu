@@ -1,6 +1,6 @@
-import { FileIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { openFile } from '@renderer/stores/files'
+import { FileTypeIcon } from './file-type-icon'
 import type { FileRef } from './file-refs'
 import { nameOf } from './paths'
 
@@ -19,7 +19,7 @@ export function FileLink({ file }: { file: FileRef & { projectPath: string } }) 
       aria-label={t('link.open', { target })}
       onClick={() => openFile(file.projectPath, file.path, file.line)}
     >
-      <FileIcon className="size-3.25 text-tertiary" />
+      <FileTypeIcon path={file.path} className="size-3.5" />
       <span>{nameOf(file.path)}</span>
       {file.line && <span className="-ml-[3px]">:{file.line}</span>}
     </button>
