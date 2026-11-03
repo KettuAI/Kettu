@@ -716,12 +716,17 @@ async function run() {
   await sleep(600)
   await shoot('routines')
 
-  // The account menu over the footer, then the shortcuts dialog from it; Esc puts it away.
+  // The account menu over the footer, then the shortcuts dialog from its Help submenu.
   await click(`return document.querySelector('[data-account-trigger]')`, 'the account row')
   await waitFor(`document.querySelector('[role=menu]')`, 'the account menu')
   await moveAway()
   await sleep(400)
   await shoot('account-menu')
+  await click(byText('[role=menuitem]', 'Help'), 'the Help submenu')
+  await waitFor(
+    `[...document.querySelectorAll('[role=menuitem]')].some((el) => el.textContent.includes('Keyboard shortcuts'))`,
+    'Keyboard shortcuts in the Help submenu',
+  )
   await click(byText('[role=menuitem]', 'Keyboard shortcuts'), 'Keyboard shortcuts')
   await waitFor(`document.querySelector('[role=dialog]')`, 'the shortcuts dialog')
   await sleep(600)
