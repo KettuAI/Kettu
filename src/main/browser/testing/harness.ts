@@ -23,6 +23,13 @@ interface Result {
   dialog?: string | null
   evicted?: string | null
   forbidden?: boolean
+  closedDestroyed?: boolean
+  closedUrl?: string | null
+  closedTitle?: string | null
+  pendingClosed?: string | null
+  showRevived?: boolean
+  showUrl?: string | null
+  fresh?: string | null
   capturedShown?: boolean
   capturedHidden?: boolean
   capturedNone?: Uint8Array | null
@@ -136,6 +143,29 @@ async function main(): Promise<Result> {
   } catch {
     result.forbidden = true
   }
+
+  // Closing destroys the page. Showing again does not bring it back; the next navigation is new.
+  const closed = 'closed'
+  views.show(closed)
+  views.navigate(closed, `${FIXTURE}/one`)
+  await loaded(closed, '/one')
+  const pending = views.load(closed, `${FIXTURE}/hang`)
+  // The address stays the current page until the hang commits, which it never does.
+  await waitFor(closed, (state) => state.loading)
+  const contents = views.contents(closed)
+  views.close(closed)
+  const settled = await pending
+  result.pendingClosed = settled.ok ? null : settled.error
+  // close() destroys the web contents asynchronously, after beforeunload.
+  for (let attempt = 0; attempt < 50 && !contents?.isDestroyed(); attempt += 1) await sleep(20)
+  result.closedDestroyed = contents?.isDestroyed() ?? false
+  result.closedUrl = states.get(closed)?.url ?? null
+  result.closedTitle = states.get(closed)?.title ?? null
+  views.show(closed)
+  result.showRevived = views.contents(closed) !== null
+  result.showUrl = states.get(closed)?.url ?? null
+  views.navigate(closed, `${FIXTURE}/two`)
+  result.fresh = (await loaded(closed, '/two')).title
 
   return result
 }

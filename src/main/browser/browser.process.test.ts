@@ -29,6 +29,7 @@ beforeAll(async () => {
   dir = await mkdtemp(path.join(os.tmpdir(), 'kettu-browser-'))
   server = createServer((request, response) => {
     const url = request.url ?? '/'
+    if (url === '/hang') return
     if (url === '/download') {
       response.writeHead(200, {
         'content-type': 'text/plain',
@@ -134,6 +135,13 @@ describe('the browser views', () => {
       dialog: 'after',
       evicted: 'evicted',
       forbidden: true,
+      closedDestroyed: true,
+      closedUrl: null,
+      closedTitle: null,
+      pendingClosed: 'The page closed.',
+      showRevived: false,
+      showUrl: null,
+      fresh: 'Two',
     })
     // On macOS a frame reaching above the page rounds only its lower corners; elsewhere the page
     // rounds its own.

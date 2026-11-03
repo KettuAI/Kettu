@@ -3,7 +3,9 @@ import type { AgentId } from '@shared/agents'
 import type { PortConnectionState } from '@shared/port-rpc'
 import type { TerminalCommand, TerminalEvent, TerminalInfo } from '@shared/terminal-host'
 import { emitAppEvent } from '@renderer/app/events'
+import { focusedPane, isSplit } from '@renderer/features/split/layout'
 import { errorMessage, terminalHost, terminals, terminalsAt } from '@renderer/lib/host'
+import { toggleTerminal, useViewStore } from '@renderer/stores/view'
 
 // The terminals the renderer knows, per project, this computer's and other hosts' alike. Output
 // goes straight to the xterm.js instances through `sinks`, never through this store, so a flood of
@@ -120,12 +122,81 @@ function upsert(info: TerminalInfo, owner?: TerminalOwner | null): void {
   }
 }
 
+/** A create still waiting on the host. Closing then would hide the tab it is about to show. */
+const createsInFlight = new Map<string, number>()
+
+function beginCreate(projectPath: string): void {
+  createsInFlight.set(projectPath, (createsInFlight.get(projectPath) ?? 0) + 1)
+}
+
+function endCreate(projectPath: string): void {
+  const left = (createsInFlight.get(projectPath) ?? 1) - 1
+  if (left > 0) createsInFlight.set(projectPath, left)
+  else createsInFlight.delete(projectPath)
+}
+
+function createInFlight(projectPath: string): boolean {
+  return (createsInFlight.get(projectPath) ?? 0) > 0
+}
+
+/**
+ * Closes this project's terminal pane once it has no tabs. A split's pane is the window's, so it
+ * closes only while this project is the one in focus. Any other pane is left as it is.
+ */
+function closeEmptyTerminalPane(projectPath: string): void {
+  const view = useViewStore.getState()
+  if (isSplit(view.layout)) {
+    const focused = focusedPane(view.layout).view.projectPath ?? view.projectPath
+    if (focused !== projectPath) return
+  }
+  toggleTerminal(projectPath, false)
+}
+
+export interface TerminalOpenState {
+  projectPath: string
+  open: boolean
+}
+
+/**
+ * Whether this open of the pane was the user's. `opening` stays set for a second run of the same
+ * open, and clears when the project changes or the pane closes, so a restored or switched project
+ * is not taken for one just opened.
+ */
+export function trackTerminalOpen(
+  before: TerminalOpenState,
+  now: TerminalOpenState,
+  opening: boolean,
+): { opening: boolean; explicitOpen: boolean } {
+  if (!now.open) return { opening: false, explicitOpen: false }
+  const nextOpening = before.projectPath === now.projectPath ? opening || !before.open : false
+  return { opening: nextOpening, explicitOpen: nextOpening }
+}
+
+/**
+ * A project's terminal list has come back. An explicit open with no tabs starts one. A pane that
+ * was already open closes when the list is empty. A failed or stale list, or a create still in
+ * flight, changes nothing.
+ */
+export function finishTerminalLoad(
+  projectPath: string,
+  options: { explicitOpen: boolean; stale: boolean; loaded: boolean },
+): void {
+  if (!options.loaded || options.stale || createInFlight(projectPath)) return
+  if (terminalsOf(useTerminalsStore.getState().byId, projectPath).length > 0) return
+  if (options.explicitOpen) {
+    void createTerminal(projectPath)
+    return
+  }
+  closeEmptyTerminalPane(projectPath)
+}
+
 /** Drops a terminal from the renderer, such as a stale tab the user restarts or closes. */
 export function forgetTerminal(id: string): void {
   sinks.delete(id)
   replays.delete(id)
   signIns.delete(id)
   urlTails.delete(id)
+  const removedFrom = useTerminalsStore.getState().byId[id]?.projectPath
   useTerminalsStore.setState((s) => {
     const gone = s.byId[id]
     if (!gone) return s
@@ -150,6 +221,10 @@ export function forgetTerminal(id: string): void {
     }
     return { byId, active, order }
   })
+  if (!removedFrom || createInFlight(removedFrom)) return
+  if (terminalsOf(useTerminalsStore.getState().byId, removedFrom).length === 0) {
+    closeEmptyTerminalPane(removedFrom)
+  }
 }
 
 function unsplit(
@@ -246,13 +321,15 @@ export function initTerminals(): void {
   })
 }
 
-/** Lists a project's terminals, for example after a reload of the window. */
-export async function loadTerminals(projectPath: string): Promise<void> {
+/** Lists a project's terminals, for example after a reload of the window. False when the list fails. */
+export async function loadTerminals(projectPath: string): Promise<boolean> {
   try {
     const list = await terminals('terminals.list', { projectPath })
     for (const info of list) upsert(info)
+    return true
   } catch (error) {
     useTerminalsStore.setState({ error: errorMessage(error) })
+    return false
   }
 }
 
@@ -281,6 +358,7 @@ async function startTerminal(
   size: Size = SIZE,
   options?: CreateTerminalOptions,
 ): Promise<TerminalInfo | null> {
+  beginCreate(projectPath)
   useTerminalsStore.setState({ error: null })
   try {
     const info = await terminals('terminals.create', {
@@ -297,6 +375,8 @@ async function startTerminal(
   } catch (error) {
     useTerminalsStore.setState({ error: errorMessage(error) })
     return null
+  } finally {
+    endCreate(projectPath)
   }
 }
 

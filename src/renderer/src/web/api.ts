@@ -437,6 +437,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
     browser: {
       show: () => unsupported('show the browser'),
       hide: async () => {},
+      close: async () => {},
       setBounds: async () => {},
       navigate: () => unsupported('show the browser'),
       back: () => unsupported('show the browser'),

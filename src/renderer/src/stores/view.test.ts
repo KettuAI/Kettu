@@ -22,6 +22,8 @@ const { useArtifactsStore } = await import('./artifacts')
 
 const settings = () => useViewStore.getState().settings
 
+beforeEach(() => useViewStore.setState({ newSessionDraft: null }))
+
 describe('settings view', () => {
   beforeEach(() => {
     useViewStore.setState({
@@ -216,6 +218,55 @@ describe('the split view', () => {
     ).toHaveLength(1)
     // The shown New session keeps the agent it had.
     expect(useViewStore.getState().main).toMatchObject({ kind: 'new', agentId: 'codex' })
+  })
+
+  it('restores New session selections after visiting another page or session', async () => {
+    const view = await sessions()
+    view.resetLayout('/draft', 'codex')
+    view.choosePaneAgent(useViewStore.getState().layout.focus, 'opencode')
+    view.openUsage()
+    view.openNewSession(null, null)
+    expect(useViewStore.getState().main).toMatchObject({ kind: 'new', agentId: 'opencode' })
+    expect(useViewStore.getState().projectPath).toBe('/draft')
+
+    view.openSession('elsewhere', '/other')
+    view.openNewSession(null, 'codex')
+    expect(useViewStore.getState().main).toMatchObject({ kind: 'new', agentId: 'opencode' })
+    expect(useViewStore.getState().projectPath).toBe('/draft')
+
+    view.openSession('elsewhere', '/other')
+    view.openNewSession('/chosen', 'codex')
+    expect(useViewStore.getState().projectPath).toBe('/chosen')
+  })
+
+  it('keeps No project when returning to New session', async () => {
+    const view = await sessions()
+    view.resetLayout('/draft', 'codex')
+    view.chooseNewSessionProject(null)
+    view.openSession('elsewhere', '/other')
+    view.openNewSession(null, null)
+    expect(useViewStore.getState().main).toMatchObject({
+      kind: 'new',
+      agentId: 'codex',
+      noProject: true,
+    })
+    view.openNewSession('/chosen', null)
+    expect(useViewStore.getState().main).toMatchObject({ noProject: false })
+  })
+
+  it('does not reuse a sub-session agent or parent for the regular draft', async () => {
+    const view = await sessions()
+    view.resetLayout('/draft', 'codex')
+    view.openSession('parent', '/parent')
+    view.openNewSubSession({ id: 'parent', projectPath: '/parent' }, 'opencode')
+    view.openSession('elsewhere', '/other')
+    view.openNewSession(null, null)
+    expect(useViewStore.getState().main).toEqual({
+      kind: 'new',
+      agentId: 'codex',
+      noProject: false,
+    })
+    expect(useViewStore.getState().projectPath).toBe('/draft')
   })
 
   it('leaves the layout as it was when a page shows', async () => {

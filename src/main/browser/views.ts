@@ -248,6 +248,26 @@ export class BrowserViews {
     this.setVisible(page, false)
   }
 
+  /**
+   * Destroys the session's page and forgets its address. The session stays, so the next navigation
+   * starts a new page; hiding still only takes a live page off screen.
+   */
+  close(sessionId: string): void {
+    const page = this.pages.get(sessionId)
+    if (!page) return
+    // destroy clears the view before the web contents is gone, so its destroyed listener cannot
+    // settle a navigation that is still waiting.
+    this.endNavigation(page, { ok: false, error: 'The page closed.' })
+    this.destroy(page)
+    page.lastUrl = null
+    page.lastTitle = null
+    page.notice = null
+    page.shown = false
+    page.frozen = false
+    this.emit(page)
+    this.pages.delete(sessionId)
+  }
+
   setBounds(sessionId: string, bounds: BrowserBounds): void {
     const page = this.page(sessionId)
     page.bounds = bounds
@@ -407,7 +427,7 @@ export class BrowserViews {
     const live = new Set(sessionIds)
     for (const [sessionId, page] of this.pages) {
       if (live.has(sessionId)) continue
-      this.close(page)
+      this.destroy(page)
       this.pages.delete(sessionId)
       this.deps.removed?.(sessionId)
     }
@@ -646,12 +666,12 @@ export class BrowserViews {
     if (!oldest) return
     const evicted = this.pages.get(oldest)
     if (!evicted) return
-    this.close(evicted)
+    this.destroy(evicted)
     evicted.notice = { kind: 'evicted' }
     this.emit(evicted)
   }
 
-  private close(page: Page): void {
+  private destroy(page: Page): void {
     const view = page.view
     const attached = page.frame ?? view
     page.view = null

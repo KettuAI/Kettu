@@ -213,7 +213,14 @@ export function BrowserPane({
           <PanelButton
             label={t('actions.closeBrowser')}
             size="icon-sm"
-            onClick={() => toggleSidePane(projectPath, 'browser', false)}
+            onClick={() => {
+              if (sessionId) {
+                void window.kettu.browser
+                  .close(sessionId)
+                  .catch((error: unknown) => console.error('Could not close the page', error))
+              }
+              toggleSidePane(projectPath, 'browser', false)
+            }}
           >
             <XIcon className="size-3.75" />
           </PanelButton>

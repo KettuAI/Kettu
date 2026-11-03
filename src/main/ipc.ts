@@ -685,6 +685,7 @@ export function registerIpcHandlers({
 
   handle('browser:show', 1, (_, id) => browserViews.show(sessionId(id)))
   handle('browser:hide', 1, (_, id) => browserViews.hide(sessionId(id)))
+  handle('browser:close', 1, (_, id) => browserViews.close(sessionId(id)))
   handle('browser:bounds', 2, (_, id, bounds) =>
     browserViews.setBounds(sessionId(id), browserBounds(bounds)),
   )
