@@ -297,6 +297,7 @@ export function ContextButton({
   agentId,
   idle,
   reports,
+  live,
   usage,
   limits,
   account,
@@ -304,10 +305,12 @@ export function ContextButton({
 }: {
   sessionId: string
   agentId: AgentId
-  /** No turn runs, so the agent can break the context down. */
+  /** No turn runs. */
   idle: boolean
   /** Whether the agent breaks its context down at all. */
   reports: boolean
+  /** Whether a running turn's context can be read through the agent's connection. */
+  live: boolean
   usage: SessionUsage | null
   limits: PlanLimit[]
   account: AgentAccount | null
@@ -326,7 +329,7 @@ export function ContextButton({
     refreshLimits(agentId).catch((error: unknown) =>
       console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
     )
-    if (reports && idle && usage) loadContext(sessionId, `${usage.used}/${usage.size}`)
+    if (reports && (idle || live) && usage) loadContext(sessionId, `${usage.used}/${usage.size}`)
   }
   return (
     <Popover onOpenChange={onOpenChange}>
@@ -374,6 +377,7 @@ export function ContextButton({
             full={full}
             idle={idle}
             reports={reports}
+            live={live}
             onCompact={onCompact}
           />
         )}
@@ -400,6 +404,7 @@ function ContextPart({
   full,
   idle,
   reports,
+  live,
   onCompact,
 }: {
   sessionId: string
@@ -408,6 +413,7 @@ function ContextPart({
   full: boolean
   idle: boolean
   reports: boolean
+  live: boolean
   onCompact: (() => void) | null
 }) {
   const { t } = useTranslation('composer')
@@ -415,11 +421,11 @@ function ContextPart({
   const totals = usage.tokens
   const tone = contextTone(share)
   const key = `${usage.used}/${usage.size}`
-  const view = breakdownView(report, key, { reports, idle })
+  const view = breakdownView(report, key, { reports, idle, live })
   // A turn that ends under an open popover reads the context it can now break down, as opening
-  // the popover does.
+  // the popover does; a live reader keeps up through the turn.
   const waiting = !report || (!report.loading && report.key !== key)
-  const readNow = reports && idle && waiting
+  const readNow = reports && (idle || live) && waiting
   useEffect(() => {
     if (readNow) loadContext(sessionId, key)
   }, [readNow, sessionId, key])
@@ -450,6 +456,9 @@ function ContextPart({
         <ContextBar rows={rows} used={usage.used} size={usage.size} />
         {rows && <Sources rows={rows} lists={lists} />}
       </div>
+      {view.kind === 'rows' && view.stale && (
+        <p className="text-small text-tertiary">{t('usage.breakdown.stale')}</p>
+      )}
       {view.kind === 'loading' && <BreakdownRows />}
       {view.kind === 'error' && <BreakdownError error={view.error} onRetry={retry} />}
       {view.kind === 'betweenTurns' && (

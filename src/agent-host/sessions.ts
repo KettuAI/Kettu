@@ -3507,9 +3507,10 @@ export class SessionManager {
   /**
    * What fills the session's context, from the agent's connection when it reads it, else from the
    * agent's `/context` report. That runs in a fork, deleted afterwards, so the session's own thread
-   * and history stay as they were. Null for an agent without either. A session no turn runs in is
-   * read without attaching it: the fork starts from its transcript on disk, and the agent's idle
-   * stop ends it again.
+   * and history stay as they were. Null for an agent without either. A session whose turn runs is
+   * read when its connection answers directly, and a report waits for the turn to end. A session
+   * no turn runs in is read without attaching it: the fork starts from its transcript on disk, and
+   * the agent's idle stop ends it again.
    */
   context(sessionId: string): Promise<ContextBreakdown | null> {
     const running = this.contextRuns.get(sessionId)
@@ -3528,14 +3529,17 @@ export class SessionManager {
     const record = live?.record ?? this.recordOf(sessionId)
     if (!this.deps.agents.hasContext(record.agentId) || record.origin === 'subagent') return null
     const status = live?.thread.session.status ?? 'closed'
-    const running =
-      status === 'starting' || status === 'running' || status === 'awaiting_permission'
-    if (running) throw busyError(status)
+    // A starting session has no query to read yet. A running one can be read when its connection
+    // answers directly, as Claude Code's does; a report in a fork waits for the turn to end.
+    if (status === 'starting') throw busyError(status)
     const runtime = await this.deps.agents.ensureReady(record.agentId)
     const { connection } = runtime
+    const running = status === 'running' || status === 'awaiting_permission'
+    if (running && !connection.readContext) throw busyError(status)
+    let breakdown: ContextBreakdown | null
     if (connection.readContext) {
       try {
-        return await connection.readContext(
+        breakdown = await connection.readContext(
           record.acpSessionId,
           record.projectPath,
           sessionOptions(record),
@@ -3543,40 +3547,43 @@ export class SessionManager {
       } catch (error) {
         throw agentError(error)
       }
+    } else {
+      const agent = this.deps.agents.name(record.agentId)
+      if (!runtime.init.capabilities.forkSession) {
+        throw new HostError('agent_unavailable', t('session.cannotFork', { agent }))
+      }
+      const log = (message: string): void => this.deps.diagnostics.log('warn', message)
+      let messages: string[]
+      try {
+        messages = await runReport(
+          runtime,
+          async () =>
+            (
+              await connection.forkSession(record.acpSessionId, record.projectPath, {
+                ...sessionOptions(record),
+                hidden: 'context',
+              })
+            ).sessionId,
+          CONTEXT_REPORT,
+          log,
+        )
+      } catch (error) {
+        throw agentError(error)
+      }
+      const now = this.now()
+      breakdown =
+        messages
+          .map((text) => parseContextReport(text, now))
+          .findLast((report) => report !== null) ?? null
+      if (!breakdown) {
+        log(`${agent}: /context gave no report Kettu can read`)
+        throw new HostError(
+          'agent_error',
+          t('agent.unreadableReport', { agent, command: CONTEXT_REPORT.command }),
+        )
+      }
     }
-    const agent = this.deps.agents.name(record.agentId)
-    if (!runtime.init.capabilities.forkSession) {
-      throw new HostError('agent_unavailable', t('session.cannotFork', { agent }))
-    }
-    const log = (message: string): void => this.deps.diagnostics.log('warn', message)
-    let messages: string[]
-    try {
-      messages = await runReport(
-        runtime,
-        async () =>
-          (
-            await connection.forkSession(record.acpSessionId, record.projectPath, {
-              ...sessionOptions(record),
-              hidden: 'context',
-            })
-          ).sessionId,
-        CONTEXT_REPORT,
-        log,
-      )
-    } catch (error) {
-      throw agentError(error)
-    }
-    const now = this.now()
-    const breakdown =
-      messages.map((text) => parseContextReport(text, now)).findLast((report) => report !== null) ??
-      null
-    if (!breakdown) {
-      log(`${agent}: /context gave no report Kettu can read`)
-      throw new HostError(
-        'agent_error',
-        t('agent.unreadableReport', { agent, command: CONTEXT_REPORT.command }),
-      )
-    }
+    this.applyContextUsage(live, breakdown)
     return breakdown
   }
 
@@ -3584,6 +3591,25 @@ export class SessionManager {
     if (!this.deps.agents.has(this.recordOf(sessionId).agentId)) {
       throw new HostError('agent_unavailable', t('agent.removed'))
     }
+  }
+
+  /**
+   * Keeps the session's usage in step with a breakdown: some connections report the context only
+   * in the breakdown, and a running turn updates it before the agent's next usage event arrives.
+   */
+  private applyContextUsage(live: Live | undefined, breakdown: ContextBreakdown): void {
+    if (!live || breakdown.size <= 0 || this.live.get(live.id) !== live) return
+    const usage = live.thread.session.usage
+    if (usage?.used === breakdown.used && usage.size === breakdown.size) return
+    this.update(live, {
+      usage: {
+        used: breakdown.used,
+        size: breakdown.size,
+        cost: usage?.cost ?? null,
+        tokens: usage?.tokens ?? null,
+        ...(usage?.cache ? { cache: usage.cache } : {}),
+      },
+    })
   }
 
   /** Sends a prompt; a session that is not attached attaches to its agent as the turn starts. */

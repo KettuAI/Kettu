@@ -292,6 +292,7 @@ const status = (overrides: Partial<AgentStatus>): AgentStatus => ({
     steering: false,
     reports: false,
     context: false,
+    liveContext: false,
     account: false,
     progressNotes: false,
     mcpHttp: true,

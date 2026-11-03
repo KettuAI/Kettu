@@ -87,17 +87,24 @@ describe('breakdownView', () => {
   })
 
   it('shows the rows read for the context in use', () => {
-    expect(breakdownView(report(), '750/1000', { reports: true, idle: true })).toEqual({
-      kind: 'rows',
-      rows: contextRows(breakdown.categories),
-      dimmed: false,
-    })
+    expect(breakdownView(report(), '750/1000', { reports: true, idle: true, live: false })).toEqual(
+      {
+        kind: 'rows',
+        rows: contextRows(breakdown.categories),
+        dimmed: false,
+        stale: false,
+      },
+    )
   })
 
   it('dims the rows while a newer read loads', () => {
     expect(
-      breakdownView(report({ loading: true }), '800/1000', { reports: true, idle: true }),
-    ).toEqual({ kind: 'rows', rows: contextRows(breakdown.categories), dimmed: true })
+      breakdownView(report({ loading: true }), '800/1000', {
+        reports: true,
+        idle: true,
+        live: false,
+      }),
+    ).toEqual({ kind: 'rows', rows: contextRows(breakdown.categories), dimmed: true, stale: false })
   })
 
   it('shows skeleton rows for a first read', () => {
@@ -105,9 +112,12 @@ describe('breakdownView', () => {
       breakdownView(report({ breakdown: null, key: '', loading: true }), '750/1000', {
         reports: true,
         idle: true,
+        live: false,
       }),
     ).toEqual({ kind: 'loading' })
-    expect(breakdownView(undefined, '750/1000', { reports: true, idle: true })).toEqual({
+    expect(
+      breakdownView(undefined, '750/1000', { reports: true, idle: true, live: false }),
+    ).toEqual({
       kind: 'loading',
     })
   })
@@ -117,21 +127,43 @@ describe('breakdownView', () => {
       breakdownView(report({ breakdown: null, key: '800/1000', error: 'busy' }), '800/1000', {
         reports: true,
         idle: true,
+        live: false,
       }),
     ).toEqual({ kind: 'error', error: 'busy' })
   })
 
-  it('shows the between-turns line while a turn runs, never its older rows', () => {
-    expect(breakdownView(report(), '750/1000', { reports: true, idle: false })).toEqual({
-      kind: 'betweenTurns',
-    })
+  it('keeps the older rows through a turn, marked stale, when the agent cannot read live', () => {
+    expect(
+      breakdownView(report(), '750/1000', { reports: true, idle: false, live: false }),
+    ).toEqual({ kind: 'rows', rows: contextRows(breakdown.categories), dimmed: false, stale: true })
+    expect(
+      breakdownView(undefined, '750/1000', { reports: true, idle: false, live: false }),
+    ).toEqual({ kind: 'betweenTurns' })
+  })
+
+  it('shows the rows read through a running turn when the agent reads live', () => {
+    expect(breakdownView(report(), '750/1000', { reports: true, idle: false, live: true })).toEqual(
+      {
+        kind: 'rows',
+        rows: contextRows(breakdown.categories),
+        dimmed: false,
+        stale: false,
+      },
+    )
+    expect(
+      breakdownView(undefined, '750/1000', { reports: true, idle: false, live: true }),
+    ).toEqual({ kind: 'loading' })
   })
 
   it('shows nothing for an agent without the report', () => {
-    expect(breakdownView(report(), '750/1000', { reports: false, idle: true })).toEqual({
+    expect(
+      breakdownView(report(), '750/1000', { reports: false, idle: true, live: false }),
+    ).toEqual({
       kind: 'none',
     })
-    expect(breakdownView(undefined, '750/1000', { reports: false, idle: false })).toEqual({
+    expect(
+      breakdownView(undefined, '750/1000', { reports: false, idle: false, live: false }),
+    ).toEqual({
       kind: 'none',
     })
   })

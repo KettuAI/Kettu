@@ -193,6 +193,7 @@ describe('agent drivers', () => {
     expect(plain.agents.status('opencode').capabilities).toMatchObject({
       reports: false,
       context: false,
+      liveContext: false,
     })
     const readLimits = vi.fn(async () => [LIMIT])
     const reading = manager(
@@ -202,6 +203,7 @@ describe('agent drivers', () => {
     expect(reading.agents.status('opencode').capabilities).toMatchObject({
       reports: true,
       context: true,
+      liveContext: true,
     })
     await reading.agents.refreshLimits('opencode')
     expect(reading.agents.limitsOf('opencode')).toEqual([LIMIT])
@@ -250,6 +252,42 @@ describe('direct context', () => {
       .agentRecords('fake-agent')
       .traffic.filter((r) => r.direction === 'out' && r.method === 'session/fork')
     expect(forks).toEqual([])
+  })
+
+  it("reads a running session's context from its connection and keeps its usage in step", async () => {
+    const breakdown: ContextBreakdown = {
+      model: 'fake',
+      used: 12_300,
+      size: 456_000,
+      categories: [],
+      lists: [],
+      observedAt: 1,
+    }
+    const readContext = vi.fn(async () => breakdown)
+    current = await startTestHost({
+      drivers: { acp: acpWith({ readContext }) },
+      agentEnv: { FAKE_AGENT_DELAY_SCALE: '100' },
+    })
+    const t = current
+    const port = t.connect()
+    const summary = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+    })
+    await port.open(summary.id)
+    await port.request('sessions.prompt', {
+      sessionId: summary.id,
+      content: [{ type: 'text', text: '/cancel' }],
+    })
+    await port.untilStatus(summary.id, 'running')
+
+    expect(await port.request('sessions.context', { sessionId: summary.id })).toEqual(breakdown)
+    expect(readContext).toHaveBeenCalledTimes(1)
+    await port.until(() => port.thread(summary.id).session.usage?.used === 12_300)
+    expect(port.thread(summary.id).session.usage).toMatchObject({ used: 12_300, size: 456_000 })
+
+    await port.request('sessions.cancel', { sessionId: summary.id })
+    await port.untilStatus(summary.id, 'ready')
   })
 })
 
