@@ -199,6 +199,7 @@ export function ControlRow({
         agentId={session.agentId}
         idle={!running && session.status !== 'starting'}
         reports={agent?.capabilities.context ?? false}
+        direct={agent?.capabilities.liveContext ?? false}
         live={running && (agent?.capabilities.liveContext ?? false)}
         usage={session.usage}
         limits={agent?.limits ?? []}

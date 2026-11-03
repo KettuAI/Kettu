@@ -1,8 +1,21 @@
 import type { ContextBreakdown } from '@shared/agent-host'
+import type { SessionUsage } from '@shared/thread'
 import type { ContextReport } from '@renderer/stores/usage'
 
 /** The context colors, `--context-1` to `--context-7`. */
 export const CONTEXT_COLORS = 7
+
+/**
+ * The session's usage, or what the agent's own read counted while the session has none: some
+ * providers report no context at all and leave the count at zero.
+ */
+export function shownUsage(
+  usage: SessionUsage | null,
+  breakdown: ContextBreakdown | null,
+): SessionUsage | null {
+  if (!usage || usage.used > 0 || !breakdown || breakdown.size <= 0) return usage
+  return { ...usage, used: breakdown.used, size: breakdown.size }
+}
 
 /** What a part of the context is: a source with its color (1 to 7), the buffer, or what is left. */
 export type ContextPart = { kind: 'source'; color: number } | { kind: 'buffer' } | { kind: 'free' }

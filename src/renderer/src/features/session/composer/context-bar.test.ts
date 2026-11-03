@@ -1,8 +1,54 @@
 import { describe, expect, it } from 'vitest'
+import type { ContextBreakdown } from '@shared/agent-host'
+import type { SessionUsage } from '@shared/thread'
 import css from '@renderer/styles/globals.css?raw'
-import { breakdownView, compactsAt, contextRows, contextSegments, partFill } from './context-bar'
+import {
+  breakdownView,
+  compactsAt,
+  contextRows,
+  contextSegments,
+  partFill,
+  shownUsage,
+} from './context-bar'
 
 const category = (name: string, tokens: number) => ({ name, tokens, share: null })
+
+const usage = (used: number, size: number): SessionUsage => ({
+  used,
+  size,
+  cost: null,
+  tokens: null,
+})
+
+const agentRead = (used: number, size: number): ContextBreakdown => ({
+  model: null,
+  used,
+  size,
+  categories: [],
+  lists: [],
+  observedAt: 1,
+})
+
+describe('shownUsage', () => {
+  it("takes the agent's read while the session counts no context", () => {
+    expect(shownUsage(usage(0, 500_000), agentRead(12_300, 500_000))).toMatchObject({
+      used: 12_300,
+      size: 500_000,
+    })
+  })
+
+  it('keeps the session usage once it has a count', () => {
+    const own = usage(40_000, 500_000)
+    expect(shownUsage(own, agentRead(12_300, 500_000))).toBe(own)
+  })
+
+  it('keeps the session usage without a read, or with a read of no window', () => {
+    const own = usage(0, 500_000)
+    expect(shownUsage(own, null)).toBe(own)
+    expect(shownUsage(own, agentRead(12_300, 0))).toBe(own)
+    expect(shownUsage(null, agentRead(12_300, 500_000))).toBeNull()
+  })
+})
 
 describe('contextRows', () => {
   it('puts the four kinds first in their fixed colors, the rest in grays, then the buffer and free space', () => {

@@ -25,6 +25,7 @@ import {
   compactsAt,
   contextSegments,
   partFill,
+  shownUsage,
   type ContextRow,
 } from '@renderer/features/session/composer/context-bar'
 import { PANEL } from '@renderer/features/session/entries/helpers'
@@ -297,6 +298,7 @@ export function ContextButton({
   agentId,
   idle,
   reports,
+  direct,
   live,
   usage,
   limits,
@@ -309,6 +311,8 @@ export function ContextButton({
   idle: boolean
   /** Whether the agent breaks its context down at all. */
   reports: boolean
+  /** Whether the agent reads its context through its connection, without a fork. */
+  direct: boolean
   /** Whether a running turn's context can be read through the agent's connection. */
   live: boolean
   usage: SessionUsage | null
@@ -319,8 +323,18 @@ export function ContextButton({
   const { t } = useTranslation('composer')
   const warning = warningLimit(limits)
   const [setAnchor, aboveBox] = useAboveBox()
+  const read = useUsageStore((s) => s.context[sessionId])
+  // A provider that reports no context leaves the count at zero; the agent's own read has it.
+  const shown = shownUsage(usage, read?.breakdown ?? null)
+  // Read once while the count is missing, so the ring does not wait for the popover to open.
+  const key = usage && usage.size > 0 ? `${usage.used}/${usage.size}` : null
+  const waiting = !!key && (!read || (!read.loading && read.key !== key))
+  const readNow = direct && key !== null && usage?.used === 0 && !read?.error && waiting
+  useEffect(() => {
+    if (readNow && key) loadContext(sessionId, key)
+  }, [readNow, sessionId, key])
   if (!usage && !warning) return null
-  const share = usage && usage.size > 0 ? usage.used / usage.size : 0
+  const share = shown && shown.size > 0 ? shown.used / shown.size : 0
   const full = share >= CONTEXT_WARNING
   const tone = contextTone(share)
   const percent = Math.round(share * 100)
@@ -369,10 +383,10 @@ export function ContextButton({
         sideOffset={aboveBox}
         className="max-h-(--available-height) w-85 gap-0 overflow-y-auto px-4 py-3.5"
       >
-        {usage && (
+        {shown && (
           <ContextPart
             sessionId={sessionId}
-            usage={usage}
+            usage={shown}
             share={share}
             full={full}
             idle={idle}
