@@ -94,7 +94,7 @@ describe('kettu login', () => {
     expect(service.devices[0]!.clientInfo).toMatchObject({ kind: 'daemon', name: 'devbox' })
 
     const file = accountFile(run.dir)
-    expect((await stat(file)).mode & 0o777).toBe(0o600)
+    if (process.platform !== 'win32') expect((await stat(file)).mode & 0o777).toBe(0o600)
     const stored = await readAccount(file, () => {})
     expect(stored).toMatchObject({ encrypted: false, plainText: true, subscription: 'none' })
     expect(accountLine(stored)).toBe('signed in as ada@example.com, not subscribed')
