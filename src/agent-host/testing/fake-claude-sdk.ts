@@ -183,7 +183,12 @@ export class FakeQuery implements Query {
 
   async generateSessionTitle(description: string, options: { persist: boolean }) {
     this.record('generateSessionTitle', description, options)
+    if (this.sdk.titleError) throw this.sdk.titleError
     return this.sdk.generatedTitle
+  }
+
+  async renameSession(title: string, sessionId?: string): Promise<void> {
+    this.record('renameSession', title, sessionId)
   }
 
   close(): void {
@@ -223,6 +228,8 @@ export class FakeClaudeSdk implements ClaudeSdk {
   exitOnClose = true
   /** What a query's `accountInfo` answers, when it differs from the account it started with. */
   account: AccountInfo | null = null
+  /** Thrown by `generateSessionTitle` until cleared, so a test can fail the first attempt. */
+  titleError: Error | null = null
   initError: ((query: FakeQuery) => Error) | null = null
   settings: Record<string, unknown> = {}
   generatedTitle: string | null = null

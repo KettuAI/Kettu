@@ -317,6 +317,8 @@ export interface Query extends AsyncIterable<SdkMessage> {
   close(): void
   /** Present in the SDK Kettu pins, though not in its published types. */
   generateSessionTitle?(description: string, options: { persist: boolean }): Promise<string | null>
+  /** Stores a title this query generated. Present beside `generateSessionTitle` in the pinned SDK. */
+  renameSession?(title: string, sessionId?: string): Promise<void>
   usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?(options: {
     skipBehaviors?: boolean
   }): Promise<UsageAnswer>
