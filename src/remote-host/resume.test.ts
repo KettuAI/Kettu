@@ -292,10 +292,14 @@ describe('a device session of version 2', () => {
     expect(slow.device.received()).toBe(2)
     await slow.device.ack()
     await expect.poll(() => slow.device.received()).toBeGreaterThan(2)
-    for (let n = 0; n < 4; n++) {
-      await slow.device.ack()
-      await new Promise((resolve) => setTimeout(resolve, 10))
-    }
+    // The host may take the messages in over several reads, as on Windows: read on until the
+    // latest summary is in.
+    await expect
+      .poll(async () => {
+        await slow.device.ack()
+        return slow.device.messages.slice(2)
+      })
+      .toContainEqual(summary('a', 'step 4'))
     const after = slow.device.messages.slice(2)
     expect(after).toContainEqual({ type: 'resync' })
     expect(after).toContainEqual(summary('b', 'step 4'))
