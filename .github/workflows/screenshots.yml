@@ -4,9 +4,21 @@ on:
   workflow_dispatch:
   # The release run calls it to see the app start on each platform.
   workflow_call:
+  # After a merge that changes the interface or the capture, on Linux alone, so a break shows at
+  # once instead of at the next release. It gates nothing.
+  push:
+    branches: [main]
+    paths:
+      - 'src/renderer/**'
+      - 'src/shared/locales/**'
+      - 'tools/screenshots/**'
+      - 'tools/launch.mjs'
+      - 'tools/fake-agent/**'
+      - '.github/workflows/screenshots.yml'
 
 concurrency:
-  group: screenshots-${{ github.ref }}
+  # A push run has a group of its own, so it never queues behind or cancels the release's run.
+  group: screenshots-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -16,10 +28,7 @@ jobs:
       fail-fast: false
       matrix:
         # The *_RUNNER repository variables, when set, replace GitHub's runners.
-        os:
-          - ${{ vars.MACOS_RUNNER || 'macos-latest' }}
-          - ${{ vars.WINDOWS_RUNNER || 'windows-latest' }}
-          - ${{ vars.LINUX_RUNNER || 'ubuntu-24.04' }}
+        os: ${{ fromJSON(github.event_name == 'push' && format('["{0}"]', vars.LINUX_RUNNER || 'ubuntu-24.04') || format('["{0}","{1}","{2}"]', vars.MACOS_RUNNER || 'macos-latest', vars.WINDOWS_RUNNER || 'windows-latest', vars.LINUX_RUNNER || 'ubuntu-24.04')) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
