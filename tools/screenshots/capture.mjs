@@ -314,6 +314,12 @@ async function run() {
     'the fixture page',
   )
   await sleep(1200)
+  // The link sits in the turn's steps, which fold under its "Worked for" row once it has ended.
+  await click(byText('button[aria-expanded=false]', 'Worked'), "the finished turn's row")
+  await waitFor(
+    `[...document.querySelectorAll('p a')].some((a) => a.textContent.includes('Node.js timers guide'))`,
+    'the link in the unfolded turn',
+  )
   // The reply's link asks first, in a dialog centred over the pane. A tooltip in the pane's header
   // would not do: below a title bar it opens above its button, clear of the page.
   await click(byText('p a', 'Node.js timers guide'), 'the link in the reply')
