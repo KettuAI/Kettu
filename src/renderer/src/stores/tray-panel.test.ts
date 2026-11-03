@@ -1,5 +1,10 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ALREADY_ANSWERED, type HostEvent, type SessionSummary } from '@shared/agent-host'
+import {
+  ALREADY_ANSWERED,
+  type AgentStatus,
+  type HostEvent,
+  type SessionSummary,
+} from '@shared/agent-host'
 import type { ThreadEntry } from '@shared/thread'
 import type { SessionDetail } from '@renderer/features/tray/model'
 
@@ -7,6 +12,7 @@ const api = vi.hoisted(() => ({
   request: vi.fn(),
   hide: vi.fn(),
   listeners: [] as ((event: HostEvent) => void)[],
+  shown: [] as (() => void)[],
 }))
 
 vi.stubGlobal('window', {
@@ -17,7 +23,7 @@ vi.stubGlobal('window', {
       onConnection: () => {},
     },
     remote: { status: () => Promise.resolve(null), onChanged: () => {} },
-    tray: { hide: api.hide, onShown: () => {} },
+    tray: { hide: api.hide, onShown: (listener: () => void) => api.shown.push(listener) },
   },
 })
 // The panel reads threads only while it shows; most of these tests keep it hidden.
@@ -209,5 +215,23 @@ describe('a request settled elsewhere while it is reviewed', () => {
         }),
       { timeout: 3000 },
     )
+  })
+})
+
+describe('when the panel comes forward', () => {
+  const agent = (id: string, patch: Partial<AgentStatus> = {}) =>
+    ({ id, state: 'ready', capabilities: { reports: true }, ...patch }) as AgentStatus
+
+  it('reads the plan limits again of the added agents that report them', () => {
+    api.request.mockResolvedValue(undefined)
+    useTrayPanelStore.setState({
+      agents: [
+        agent('claude-code'),
+        agent('codex', { registered: false }),
+        agent('pi', { capabilities: { reports: false } as AgentStatus['capabilities'] }),
+      ],
+    })
+    for (const listener of api.shown) listener()
+    expect(api.request.mock.calls).toEqual([['agents.refreshLimits', { agentId: 'claude-code' }]])
   })
 })

@@ -4,6 +4,7 @@ import type { BrowserOriginDecision } from '@shared/browser'
 import { isPortError, type PortConnectionState } from '@shared/port-rpc'
 import type { RemoteStatus } from '@shared/remote/status'
 import type { TrayPanelApi } from '@shared/tray'
+import { limitReaders } from '@renderer/features/sidebar/plan-usage'
 import {
   groupSessions,
   needsYou,
@@ -184,6 +185,15 @@ async function load(): Promise<void> {
   readListed()
 }
 
+/** Asks the agents to read their plan limits again; they arrive in each agent's status. */
+function readLimits(): void {
+  for (const agentId of limitReaders(useTrayPanelStore.getState().agents)) {
+    trayApi()
+      .agents.request('agents.refreshLimits', { agentId })
+      .catch((error: unknown) => console.warn('Could not read the plan limits', error))
+  }
+}
+
 /** Follows the host and remote access, and reads what changed whenever the panel comes forward. */
 export async function initTrayPanel(): Promise<void> {
   const api = trayApi()
@@ -213,13 +223,14 @@ export async function initTrayPanel(): Promise<void> {
     }
   })
   api.remote.onChanged((remote) => useTrayPanelStore.setState({ remote }))
-  api.tray.onShown(() =>
+  api.tray.onShown(() => {
     useTrayPanelStore.setState((state) => ({
       reviewing: null,
       shown: state.shown + 1,
       answeredElsewhere: null,
-    })),
-  )
+    }))
+    readLimits()
+  })
   document.addEventListener('visibilitychange', followVisibility)
   followVisibility()
   useTrayPanelStore.setState({ remote: await api.remote.status() })

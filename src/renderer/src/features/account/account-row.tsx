@@ -5,12 +5,16 @@ import { DropdownMenu, DropdownMenuTrigger } from '@renderer/components/ui/dropd
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { routeName } from '@renderer/features/settings/host-text'
+import { limitReaders } from '@renderer/features/sidebar/plan-usage'
+import { errorMessage } from '@renderer/lib/host'
 import { formatShortcut, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useAccountStore } from '@renderer/stores/account'
+import { useAgentsStore } from '@renderer/stores/agents'
 import { otherHosts, useHostsStore, useOtherHost } from '@renderer/stores/hosts'
 import { useRemoteStore } from '@renderer/stores/remote'
 import { setSettingsDot } from '@renderer/stores/updates'
+import { refreshLimits } from '@renderer/stores/usage'
 import { openSettings, THIS_COMPUTER, useViewStore } from '@renderer/stores/view'
 import { AccountMenuContent } from './account-menu'
 import { AccountAvatar, IdentityName, SettingsGlyph } from './avatar'
@@ -30,6 +34,16 @@ function useHostLine(): string {
   return self
 }
 
+/** Reads the plan limits the menu lists again; the host asks each agent at most once a minute. */
+function readLimits(): void {
+  const { order, byId } = useAgentsStore.getState()
+  for (const agentId of limitReaders(order.flatMap((id) => byId[id] ?? []))) {
+    refreshLimits(agentId).catch((error: unknown) =>
+      console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
+    )
+  }
+}
+
 /**
  * The sidebar footer's account row: who you are and the host this window controls, which open the
  * account menu, then remote access and Settings, each with its own click.
@@ -46,7 +60,13 @@ export function AccountRow() {
     if (settingsOpen) setSettingsDot(false)
   }, [settingsOpen])
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (next) readLimits()
+      }}
+    >
       <div
         className={cn(
           'flex h-10 shrink-0 items-center gap-2.25 rounded-tile pr-1 transition-colors duration-(--duration-fast)',
