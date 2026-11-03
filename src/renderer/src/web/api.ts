@@ -382,7 +382,6 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
     shell: {
       showDataFolder: async () => copyPath((await hostInfo()).userDataPath),
       showItem: (path) => copyPath(path),
-      openNotices: () => unsupported('show files'),
     },
     // The host's files open in apps on the host, which a browser cannot start.
     editors: {

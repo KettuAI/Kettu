@@ -35,7 +35,7 @@ describe('webClusters', () => {
       [section('browser', ['open-links-in', 'clear-data', 'allowed-sites'])],
       [section('agents', ['list']), section('terminal', ['shell', 'font-size'])],
       [section('sharing', ['cloudflare']), section('remote', ['remote', 'reset'])],
-      [section('about', ['update', 'source', 'notices', 'issues'])],
+      [section('about', ['update', 'github'])],
     ])
     expect(ids(kept)).toEqual([
       [
@@ -52,7 +52,7 @@ describe('webClusters', () => {
         ['sharing', ['cloudflare']],
         ['remote', ['remote', 'reset']],
       ],
-      [['about', ['update', 'source', 'issues']]],
+      [['about', ['update', 'github']]],
     ])
   })
 

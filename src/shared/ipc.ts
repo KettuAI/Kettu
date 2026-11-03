@@ -182,7 +182,6 @@ export interface IpcInvokeContract {
   'diagnostics:save': { args: [bundle: DiagnosticsBundle]; result: string | null }
   'shell:show-data-folder': { args: []; result: void }
   'shell:show-item': { args: [path: string]; result: void }
-  'shell:open-notices': { args: []; result: void }
   'editors:list': { args: []; result: EditorList }
   // `editorId`: one `editors:list` gave; `path`: an existing file or folder, absolute.
   'editors:open': { args: [editorId: string, path: string]; result: void }
@@ -549,8 +548,6 @@ export interface KettuApi {
     showDataFolder(): Promise<void>
     /** Shows a file or folder in the system file manager; the path must be absolute. */
     showItem(path: string): Promise<void>
-    /** Opens third-party-notices.txt in the system's app for text files. */
-    openNotices(): Promise<void>
   }
   /** Open in editor: the code editors on this computer, which main finds and starts by id. */
   editors: {
