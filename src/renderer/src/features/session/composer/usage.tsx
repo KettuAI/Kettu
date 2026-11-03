@@ -122,7 +122,7 @@ export function Ring({
   )
 }
 
-/** An arc over a track, filled to `share`: the context button's 14 px ring and the cache's 40 px one. */
+/** An arc over a track, filled to `share`: the cache popover's 40 px ring. */
 function Arc({
   share,
   size,
@@ -289,7 +289,7 @@ function CachePart({
 }
 
 /**
- * How much of the context is used, as an arc and its percentage, and a plan limit nearing its end
+ * How much of the context is used, as a pie and its percentage, and a plan limit nearing its end
  * before them. It opens what fills the context, the session's tokens and the plan's limits.
  */
 export function ContextButton({
@@ -358,7 +358,7 @@ export function ContextButton({
         )}
         {usage && (
           <span className={cn('flex items-center gap-1.5', full && USAGE_TONE_TEXT[tone])}>
-            <Arc share={share} size={14} stroke={1.6} />
+            <Ring share={share} tone={tone} />
             {percent}%
           </span>
         )}
