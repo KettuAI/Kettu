@@ -587,7 +587,7 @@
       "title": "添加 Agent",
       "description": "同一个 Harness 上的另一个账号，用它自己的配置目录。",
       "harness": "Harness",
-      "harnessHint": "只有能分开配置目录的 Harness 能加 Agent；OpenCode、Pi 等只有默认的那一个。",
+      "harnessHint": "只有能分开配置目录的 Harness 能加 Agent；opencode、Pi 等只有默认的那一个。",
       "name": "名字",
       "namePlaceholder": "比如 公司 API",
       "nameTooLong_other": "最多 {{count}} 个字",
@@ -645,7 +645,7 @@
   },
   "about": {
     "version": {
-      "description": "面向 Claude Code、Codex、OpenCode 和 Pi 的桌面工作台。"
+      "description": "面向 Claude Code、Codex、opencode 和 Pi 的桌面工作台。"
     },
     "updates": {
       "name": "更新",

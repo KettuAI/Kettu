@@ -35,7 +35,13 @@ import { i18n } from '@renderer/lib/i18n'
 import { useHostContext, useHostHas } from '@renderer/lib/host-features'
 import { formatShortcut, isMac, isWeb, isWindows, platform } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
-import { agentName, harnessStatuses, hasProgram, usableAgents } from '@renderer/stores/agents'
+import {
+  agentName,
+  awaitsPackage,
+  harnessStatuses,
+  hasProgram,
+  usableAgents,
+} from '@renderer/stores/agents'
 import { useAccountStore } from '@renderer/stores/account'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useProjectsStore } from '@renderer/stores/projects'
@@ -576,8 +582,8 @@ export function useHarnessesSection(): SectionDef {
   const en = english()
   const harnesses = useAgentsStore(useShallow((s) => harnessStatuses(s.order, s.byId)))
   const environment = useAgentsStore((s) => s.environment)
-  // Installed: its program is on the machine, even before Kettu's package for it installs.
-  const installed = harnesses.filter(hasProgram)
+  // Installed: its program is on the machine, too old included, with any package Kettu adds for it.
+  const installed = harnesses.filter((h) => hasProgram(h) && !awaitsPackage(h))
   const missing = harnesses.filter((h) => !installed.includes(h))
   const groups = {
     installed: {

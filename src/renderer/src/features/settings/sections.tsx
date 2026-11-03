@@ -451,8 +451,8 @@ export function ShellPicker() {
       <span
         title={shellPath ?? undefined}
         className={cn(
-          'max-w-56 min-w-0 truncate text-tertiary',
-          isProgram ? 'font-mono text-code' : 'text-lede',
+          'max-w-56 min-w-0 truncate',
+          isProgram ? 'font-mono text-hint text-secondary' : 'text-lede text-tertiary',
         )}
       >
         {shellPath ?? program}
@@ -585,7 +585,7 @@ export function GhTool() {
   return (
     <>
       <span
-        className="text-lede text-secondary has-data-[slot=masked]:-me-1.5"
+        className="text-control text-secondary has-data-[slot=masked]:-me-1.5"
         title={gh.version ? `gh ${gh.version}` : undefined}
       >
         {before}
@@ -648,7 +648,7 @@ export function NotificationPreview() {
     <div className="flex items-center gap-6 py-4.5">
       <div
         aria-hidden
-        className="flex w-90 max-w-full shrink-0 gap-3 rounded-dialog bg-tray px-3.5 py-3 shadow-[0_0_0_var(--hairline)_var(--border-subtle),var(--elevation-float)]"
+        className="flex w-97 max-w-full shrink-0 gap-3 rounded-dialog bg-tray px-3.5 py-3 shadow-[0_0_0_var(--hairline)_var(--border-subtle),var(--elevation-notification)]"
       >
         <BrandIcon size={34} />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-control leading-[normal]">

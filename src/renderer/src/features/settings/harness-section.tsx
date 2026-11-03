@@ -39,6 +39,7 @@ import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import {
+  awaitsPackage,
   harnessStatuses,
   isInstalled,
   usableAgents,
@@ -431,7 +432,7 @@ export function HarnessListItem({ status }: { status: AgentStatus }) {
       <span className="text-danger">{status.task.error}</span>
     ) : taskError ? (
       <span className="text-danger">{taskError.message}</span>
-    ) : kind === 'package' && !(status.package?.isSdk && status.cli?.installed) ? (
+    ) : awaitsPackage(status) ? (
       t(
         status.package?.isSdk
           ? 'agents.install.missingLineSdk'

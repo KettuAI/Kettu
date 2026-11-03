@@ -287,7 +287,8 @@ export function ItemPageHeader({
       <header data-setting-row={item} className="relative flex flex-col">
         <FlashMark id={item} />
         <h2 className="relative flex min-w-0 font-display text-section font-bold">{title}</h2>
-        <div className="relative mt-1.5 flex items-center gap-3.5">
+        {/* 10 px: a page title's 6 px and the 4 px its description would leave below. */}
+        <div className="relative mt-2.5 flex items-center gap-3.5">
           <span className="relative grid size-10 shrink-0 place-items-center">{icon}</span>
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             {subtitle && (

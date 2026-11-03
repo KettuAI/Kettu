@@ -43,7 +43,7 @@ export function HostPicker({ hostId }: { hostId: string | null }) {
       >
         <SelectTrigger
           aria-labelledby={label}
-          className="h-row w-full gap-2 rounded-xl bg-subtle pr-2 pl-2.5 text-control text-primary shadow-none hover:bg-selected"
+          className="h-row w-full gap-2 rounded-xl bg-subtle pr-2 pl-2.5 text-control text-primary shadow-none hover:bg-selected [&>svg:last-child]:stroke-[1.75] [&>svg:last-child]:text-tertiary"
         >
           {hostId === null ? (
             <LaptopIcon className="size-3.75 text-secondary" />
