@@ -5,7 +5,7 @@
 import os from 'node:os'
 import path from 'node:path'
 import { cp, mkdir, rename, rm, stat } from 'node:fs/promises'
-import type { DiagnosticsBundle, HostEvent, McpStatus } from '@shared/agent-host'
+import type { AgentOptions, DiagnosticsBundle, HostEvent, McpStatus } from '@shared/agent-host'
 import { type ArtifactImportResult, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import type { BrowserCallAnswer, BrowserCallRequest, BrowserOriginAnswer } from '@shared/browser'
@@ -22,8 +22,8 @@ import type { FromPort } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
 import type { HostSettings } from '@shared/settings'
 import { HARNESSES_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
-import type { FromDevice } from '@shared/thread'
-import { agentOptionsFile, AgentOptionsStore } from './agent-options'
+import type { AgentId, FromDevice } from '@shared/thread'
+import { agentOptionsFile, AgentOptionsStore, startModeIn } from './agent-options'
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
 import { readImport } from './artifacts/import'
@@ -260,7 +260,8 @@ export class AgentHost {
     this.updates = agentUpdatesFile(options.userDataPath, log)
     this.agentOptions = new AgentOptionsStore({
       file: agentOptionsFile(options.userDataPath, log),
-      changed: (changed) => this.hub.broadcast({ type: 'agent.options', options: changed }),
+      changed: (changed) =>
+        this.hub.broadcast({ type: 'agent.options', options: this.withStartMode(changed) }),
     })
     this.preparedRecords = new PreparedRecords(preparedFile(options.userDataPath, log))
     this.trees = new AgentTrees({
@@ -631,8 +632,29 @@ export class AgentHost {
     }
     this.usage.setFromComputer(next.usage.fromComputer)
     this.env.setConfigFolders(configFolders(this.catalog, next))
+    this.startModesChanged(previous, next)
     const removed = await this.agents.settingsChanged(previous, next)
     if (removed.length > 0) await this.sessions.agentsRemoved(removed)
+  }
+
+  /** The options as New session takes them, with the start mode the settings name for the agent. */
+  private withStartMode(options: AgentOptions): AgentOptions {
+    const startMode = startModeIn(this.settings, options.agentId)
+    return startMode === undefined ? options : { ...options, startMode }
+  }
+
+  /**
+   * An agent's start mode changed: its prepared sessions started in the old one, and the windows
+   * learn the new one with its options, after the prepared sessions' removal.
+   */
+  private startModesChanged(previous: HostSettings, next: HostSettings): void {
+    const agentIds = new Set([...Object.keys(previous.startModes), ...Object.keys(next.startModes)])
+    for (const agentId of agentIds as Set<AgentId>) {
+      if (startModeIn(previous, agentId) === startModeIn(next, agentId)) continue
+      this.sessions.startModeChanged(agentId)
+      const entry = this.agentOptions.get(agentId)
+      if (entry) this.hub.broadcast({ type: 'agent.options', options: this.withStartMode(entry) })
+    }
   }
 
   /** The computer slept or woke, so the routines' timer starts over from the wall clock. */
@@ -960,7 +982,7 @@ export class AgentHost {
       'agents.refreshLimits': ({ agentId }) => agents.refreshLimits(agentId),
       'agents.details': ({ agentId }) => agents.details(agentId),
       'agents.refreshAccount': ({ agentId, force }) => agents.refreshAccount(agentId, { force }),
-      'agents.options': () => this.agentOptions.list(),
+      'agents.options': () => this.agentOptions.list().map((o) => this.withStartMode(o)),
       'mcp.status': () => this.mcpStatus(),
       'mcp.retry': async () => {
         await this.artifactService.start()

@@ -153,6 +153,38 @@ export function addedAgentId(harness: HarnessId, name: string, taken: readonly s
   }
 }
 
+/** The harnesses whose agents take a start mode: the permission mode new sessions start in. */
+export const START_MODE_HARNESSES: readonly HarnessId[] = ['claude-code', 'codex']
+
+/** The permission modes that never ask, which no setting may start a session in. */
+export const FULL_ACCESS_MODES: readonly string[] = [
+  'bypassPermissions',
+  'agent-full-access',
+  'danger-full-access',
+]
+
+export function isFullAccessMode(value: string | undefined): boolean {
+  return value !== undefined && FULL_ACCESS_MODES.includes(value)
+}
+
+/** The longest mode id a start mode may name. */
+export const START_MODE_CHARS = 64
+
+export function takesStartMode(id: AgentId): boolean {
+  return START_MODE_HARNESSES.includes(harnessOf(id))
+}
+
+/** Whether `value` can be the agent's start mode: any mode id but one that gives full access. */
+export function isStartMode(id: AgentId, value: unknown): value is string {
+  return (
+    takesStartMode(id) &&
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= START_MODE_CHARS &&
+    !isFullAccessMode(value)
+  )
+}
+
 /** Agents in catalog order of their harness, each harness's default agent first. */
 export function sortAgentIds<T extends AgentId>(ids: Iterable<T>): T[] {
   const rank = (id: AgentId): number => HARNESS_IDS.indexOf(harnessOf(id))

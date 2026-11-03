@@ -1,5 +1,6 @@
 // Pure validation and merging of settings.json and of the renderer's patches.
 
+import { isStartMode, takesStartMode } from '@shared/agents'
 import {
   AGENT_NAME_CHARS,
   CONFIG_VARIABLES,
@@ -195,6 +196,19 @@ function checkMcp(value: unknown, path: string): string | null {
   return checkMcpOff(kettu.off, `${path}.kettu.off`)
 }
 
+/** The start modes a patch sets: each for an agent that takes one, or null to clear it. */
+function checkStartModes(value: unknown, path: string): string | null {
+  if (!isRecord(value)) return `"${path}" must be an object`
+  for (const [id, mode] of Object.entries(value)) {
+    if (!isAgentId(id)) return `"${path}.${id}" is not an agent id`
+    if (!takesStartMode(id)) return `"${path}.${id}" is an agent that takes no start mode`
+    if (mode !== null && !isStartMode(id, mode)) {
+      return `"${path}.${id}" must be a mode that does not give full access, or null`
+    }
+  }
+  return null
+}
+
 const ADDRESS_PROBLEM = 'must be a host name or IP address and a port from 1 to 65535'
 
 /** The owner's own direct addresses as a patch sets them: each valid, once, and few enough. */
@@ -316,6 +330,9 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
     } else if (section === 'mcp') {
       const problem = checkMcp(value, 'mcp')
       if (problem) problems.push(problem)
+    } else if (section === 'startModes') {
+      const problem = checkStartModes(value, 'startModes')
+      if (problem) problems.push(problem)
     } else if (section === 'remote') {
       checkRemote(value, problems)
     } else if (section === 'terminal') {
@@ -367,6 +384,12 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
   }
   if (patch.proxy) next.proxy = normalizeProxy(patch.proxy)
   if (patch.mcp) next.mcp = { kettu: { off: [...patch.mcp.kettu.off] } }
+  if (patch.startModes) {
+    for (const [id, mode] of Object.entries(patch.startModes) as [AgentId, string | null][]) {
+      if (mode === null) delete next.startModes[id]
+      else next.startModes[id] = mode
+    }
+  }
   if (patch.agents) {
     for (const harnessId of Object.keys(patch.agents) as HarnessId[]) {
       const change = patch.agents[harnessId]
@@ -505,6 +528,7 @@ export function withMovedAgent(
   if (defaultAgent) next.agents[agentId] = { ...next.agents[agentId], enabled: false }
   else next.addedAgents = next.addedAgents.filter((agent) => agent.id !== agentId)
   next.mcp.kettu.off = next.mcp.kettu.off.filter((id) => id !== agentId)
+  delete next.startModes[agentId]
   if (next.general.defaultAgent === agentId) next.general.defaultAgent = null
   return next
 }
@@ -611,6 +635,7 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
     if (!isRecord(raw.mcp)) problems.push('"mcp" must be an object')
     else settings.mcp = readMcp(raw.mcp)
   }
+  if (raw.startModes !== undefined) settings.startModes = readStartModes(raw.startModes, problems)
   if (raw.remote !== undefined) {
     if (!isRecord(raw.remote)) problems.push('"remote" must be an object')
     else settings.remote = readRemote(raw.remote, problems)
@@ -744,6 +769,20 @@ function readMcp(raw: Record<string, unknown>): SettingsFile['mcp'] {
   return { kettu: { off } }
 }
 
+/** Reads the start modes leniently: an entry that is no start mode of an agent is dropped. */
+function readStartModes(raw: unknown, problems: string[]): SettingsFile['startModes'] {
+  if (!isRecord(raw)) {
+    problems.push('"startModes" must be an object')
+    return {}
+  }
+  const modes: SettingsFile['startModes'] = {}
+  for (const [id, mode] of Object.entries(raw)) {
+    if (isAgentId(id) && isStartMode(id, mode)) modes[id] = mode
+    else problems.push(`"startModes.${id}" is not a start mode of an agent that takes one`)
+  }
+  return modes
+}
+
 export function hostSettings(settings: SettingsFile, systemLocale: Locale): HostSettings {
   return {
     locale: resolveLocale(settings.general.language, systemLocale),
@@ -752,6 +791,7 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
     proxy: structuredClone(settings.proxy),
     git: { ...settings.git },
     mcp: structuredClone(settings.mcp),
+    startModes: { ...settings.startModes },
     usage: { fromComputer: settings.usage.fromComputer },
     sessionTitles: settings.general.sessionTitles,
   }
@@ -764,6 +804,7 @@ const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
   'proxy',
   'git',
   'mcp',
+  'startModes',
   'usage',
 ])
 

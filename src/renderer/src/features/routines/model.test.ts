@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import type { AgentOptions } from '@shared/agent-host'
 import type { RoutineRun, RoutineView } from '@shared/routines'
 import { i18n } from '@renderer/lib/i18n'
 import {
@@ -10,6 +11,7 @@ import {
   nextRunText,
   onRoutines,
   rowDescription,
+  routineOptions,
   routineState,
   runDay,
   runDuration,
@@ -282,5 +284,43 @@ describe('schedule choices', () => {
     expect(cronFieldAt('  0 9', 1)).toBe(0)
     expect(cronFieldAt('0 9 * * 1 2', 11)).toBeNull()
     expect(cronFieldAt('@daily', 3)).toBeNull()
+  })
+})
+
+describe("a routine's options", () => {
+  const mode = {
+    id: 'mode',
+    name: 'Mode',
+    category: 'mode' as const,
+    type: 'select' as const,
+    value: 'default',
+    choices: [
+      { value: 'default', name: 'Ask before edits' },
+      { value: 'acceptEdits', name: 'Accept edits' },
+    ],
+  }
+  const model = {
+    id: 'model',
+    name: 'Model',
+    category: 'model' as const,
+    type: 'select' as const,
+    value: 'sonnet',
+    choices: [
+      { value: 'opus', name: 'Opus' },
+      { value: 'sonnet', name: 'Sonnet' },
+    ],
+  }
+  const entry: AgentOptions = {
+    agentId: 'claude-code',
+    config: [mode, model],
+    levels: {},
+    remembered: { model: 'opus' },
+    observedAt: 0,
+    startMode: 'acceptEdits',
+  }
+
+  it("carry the model but never the start mode, which belongs to a user's new sessions", () => {
+    expect(routineOptions(entry, {})).toEqual([{ id: 'model', value: 'opus' }])
+    expect(routineOptions(entry, { mode: 'acceptEdits' })).toEqual([{ id: 'model', value: 'opus' }])
   })
 })

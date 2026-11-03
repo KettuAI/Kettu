@@ -2,8 +2,9 @@
 // harness, a button's request state, and reading an agent's account, usage and version.
 
 import { useEffect, useState } from 'react'
-import type { AgentStatus, PlanLimit } from '@shared/agent-host'
-import type { HarnessId } from '@shared/thread'
+import type { AgentOptions, AgentStatus, PlanLimit } from '@shared/agent-host'
+import { isFullAccessMode, isStartMode } from '@shared/agents'
+import type { AgentId, HarnessId } from '@shared/thread'
 import { errorMessage } from '@renderer/lib/host'
 import { isInstalled } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
@@ -88,4 +89,59 @@ export function useHasOtherAgents(status: AgentStatus): boolean {
   return useAgentsStore((s) =>
     s.order.some((id) => id !== status.id && s.byId[id]?.harnessId === status.harnessId),
   )
+}
+
+/** The choice that has an agent's new sessions start in the mode the agent has by itself. */
+export const FOLLOW_AGENT = '__follow'
+
+export interface StartModeChoice {
+  value: string
+  name: string
+  /** False for the stored mode when the agent no longer lists it. */
+  offered: boolean
+}
+
+export interface StartModeView {
+  /** `unused`: the agent's modes are not known yet; `failed`: reading them failed. */
+  state: 'loading' | 'unused' | 'failed' | 'ready'
+  /** The modes after the "follow" choice, the stored one among them, full access left out. */
+  choices: StartModeChoice[]
+  /** The stored mode, or `FOLLOW_AGENT`. */
+  value: string
+}
+
+/**
+ * What the start mode row shows for an agent: the modes it lists in its cached options, which only
+ * an agent that has been used has, and the one stored in the settings, kept in the list when the
+ * agent no longer offers it so it can be seen and changed.
+ */
+export function startModeView(input: {
+  agentId: AgentId
+  entry: AgentOptions | undefined
+  /** Whether the host's cached options were read, so a row stops waiting for them. */
+  loaded: boolean
+  failed: boolean
+  stored: string | undefined
+}): StartModeView {
+  const { agentId, entry, loaded, failed, stored } = input
+  const kept = isStartMode(agentId, stored) ? stored : null
+  const value = kept ?? FOLLOW_AGENT
+  const stay = (state: StartModeView['state']): StartModeView => ({
+    state,
+    choices: kept === null ? [] : [{ value: kept, name: kept, offered: true }],
+    value,
+  })
+  if (!loaded) return stay('loading')
+  const option = entry?.config.find(
+    (o) => o.category === 'mode' && o.type === 'select' && !!o.choices?.length,
+  )
+  // A provisional entry has the model's options alone, so no mode counts as unused.
+  if (!option) return stay(failed && !entry ? 'failed' : 'unused')
+  const choices = (option.choices ?? [])
+    .filter((choice) => !isFullAccessMode(choice.value))
+    .map((choice): StartModeChoice => ({ value: choice.value, name: choice.name, offered: true }))
+  if (kept !== null && !choices.some((choice) => choice.value === kept)) {
+    choices.push({ value: kept, name: kept, offered: false })
+  }
+  return { state: 'ready', choices, value }
 }

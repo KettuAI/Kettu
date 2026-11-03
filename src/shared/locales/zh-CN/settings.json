@@ -477,6 +477,17 @@
     "setBy": "由 {{env}} 指定",
     "showIn": "在{{name}}中显示",
     "noConfig": "没有可显示的配置文件。",
+    "startMode": {
+      "name": "新会话的模式",
+      "description": "新会话一开始使用的权限模式，不论项目自己的设置怎么写。这里不能选“完全访问”。",
+      "follow": {
+        "claude-code": "跟随 Claude Code",
+        "codex": "跟随 Codex（自动审查）"
+      },
+      "unused": "这个 Agent 用过之后才能选择。",
+      "unoffered": "{{mode}}（已不再提供）",
+      "readFailed": "读取这个 Agent 的模式失败。"
+    },
     "advanced": "高级",
     "readingAccount": "正在读取账号…",
     "noAccount": "未提供账号信息",

@@ -5,7 +5,8 @@ import { preparedConfig, startConfig } from './start-options'
 
 /**
  * The options a new session with the agent on the host named starts with: its prepared session's
- * once it answered, else the cached ones; null while neither is known.
+ * once it answered, else the cached ones with the agent's start mode; null while neither is
+ * known.
  */
 export function useStartConfig(
   agentId: AgentId | null,
@@ -20,6 +21,6 @@ export function useStartConfig(
   return useMemo(() => {
     const shown = values ?? picks
     if (prepared) return preparedConfig(prepared.config, entry?.levels ?? {}, shown)
-    return entry ? startConfig(entry, shown) : null
+    return entry ? startConfig(entry, shown, { startMode: true }) : null
   }, [entry, picks, prepared, values])
 }

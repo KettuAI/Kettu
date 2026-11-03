@@ -107,11 +107,22 @@ export function optionsLoaded(
 }
 
 export function receiveAgentOptions(options: AgentOptions, hostId: string | null = null): void {
-  useAgentOptionsStore.setState((s) =>
-    hostId === null
-      ? { byId: { ...s.byId, [options.agentId]: options } }
-      : { hosts: { ...s.hosts, [hostId]: { ...s.hosts[hostId], [options.agentId]: options } } },
-  )
+  useAgentOptionsStore.setState((s) => {
+    const own = hostId === null ? s.byId : s.hosts[hostId]
+    const base =
+      hostId === null
+        ? { byId: { ...s.byId, [options.agentId]: options } }
+        : { hosts: { ...s.hosts, [hostId]: { ...s.hosts[hostId], [options.agentId]: options } } }
+    const before = own?.[options.agentId]
+    if (!before || before.startMode === options.startMode) return base
+    // A new start mode replaces a mode the draft held, whether picked or kept from a prepared session.
+    const modeId = options.config.find((o) => o.category === 'mode')?.id
+    const picks = s.picks[options.agentId]
+    if (modeId === undefined || picks?.[modeId] === undefined) return base
+    const rest = { ...picks }
+    delete rest[modeId]
+    return { ...base, picks: { ...s.picks, [options.agentId]: rest } }
+  })
 }
 
 export function pickOption(agentId: AgentId, optionId: string, value: string | boolean): void {

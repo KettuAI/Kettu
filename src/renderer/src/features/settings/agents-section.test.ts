@@ -3,8 +3,8 @@
 import { createElement, type ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AgentAccount, AgentDetails, AgentStatus } from '@shared/agent-host'
-import type { AgentId } from '@shared/thread'
+import type { AgentAccount, AgentDetails, AgentOptions, AgentStatus } from '@shared/agent-host'
+import type { AgentId, ConfigOption } from '@shared/thread'
 
 vi.stubGlobal('window', {
   kettu: { platform: 'darwin', remote: { activity: () => new Promise(() => {}) } },
@@ -22,10 +22,25 @@ const scope = vi.hoisted(() => ({
   },
 }))
 const reads = vi.hoisted(() => ({ on: false }))
+// The start mode row's inputs: the stored modes, the cached options and why a save failed.
+const modes = vi.hoisted(() => ({
+  stored: {} as Record<string, string>,
+  options: {
+    byId: {} as Record<string, unknown>,
+    hosts: {} as Record<string, unknown>,
+    loaded: true,
+    error: null as string | null,
+  },
+  saveError: null as string | null,
+}))
 vi.mock('@renderer/stores/settings', async () => {
   const { DEFAULT_SETTINGS } = await import('@shared/settings')
   const state = () => ({
-    settings: { ...DEFAULT_SETTINGS, privacy: { hideAccount: scope.hideAccount } },
+    settings: {
+      ...DEFAULT_SETTINGS,
+      startModes: modes.stored,
+      privacy: { hideAccount: scope.hideAccount },
+    },
     loaded: true,
     update: async () => {},
   })
@@ -41,6 +56,14 @@ vi.mock('@renderer/stores/agents', async (importOriginal) => {
   useAgentsStore.getState = () => scope.agents
   return { ...actual, useAgentsStore }
 })
+vi.mock('@renderer/stores/agent-options', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@renderer/stores/agent-options')>()
+  const useAgentOptionsStore = (select?: (value: typeof modes.options) => unknown) =>
+    select ? select(modes.options) : modes.options
+  useAgentOptionsStore.getState = () => modes.options
+  return { ...actual, useAgentOptionsStore }
+})
+vi.mock('./use-apply', () => ({ useApply: () => [() => {}, modes.saveError] }))
 vi.mock('./agent-helpers', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./agent-helpers')>()
   return {
@@ -60,6 +83,7 @@ vi.mock('@renderer/components/refresh', () => ({
 const { i18n } = await import('@renderer/lib/i18n')
 const { TooltipProvider } = await import('@renderer/components/ui/tooltip')
 const { AgentListItem, AgentPage, AgentsGroupActions } = await import('./agents-section')
+const { FOLLOW_AGENT, startModeView } = await import('./agent-helpers')
 const { useAgentsSection } = await import('./section-defs')
 const { matches } = await import('./model')
 
@@ -130,6 +154,9 @@ function text(element: ReactElement): string {
 
 afterEach(async () => {
   reads.on = false
+  modes.stored = {}
+  modes.options = { byId: {}, hosts: {}, loaded: true, error: null }
+  modes.saveError = null
   show([])
   await i18n.changeLanguage('en')
 })
@@ -274,6 +301,210 @@ describe('the agent page', () => {
     expect(html).toContain(EMAIL)
     expect(html).not.toContain('blur-mask')
     expect(html).not.toContain('data-slot="masked"')
+  })
+})
+
+describe("the agent page's mode for new sessions", () => {
+  const modeOption: ConfigOption = {
+    id: 'mode',
+    name: 'Mode',
+    category: 'mode',
+    type: 'select',
+    value: 'default',
+    choices: [
+      { value: 'default', name: 'Ask before edits' },
+      { value: 'acceptEdits', name: 'Accept edits' },
+      { value: 'bypassPermissions', name: 'Full access' },
+    ],
+  }
+  const cached = (agentId: AgentId, over: Partial<AgentOptions> = {}): void => {
+    modes.options.byId = {
+      [agentId]: {
+        agentId,
+        config: [modeOption],
+        levels: {},
+        remembered: {},
+        observedAt: 1,
+        ...over,
+      },
+    }
+  }
+  const page = (status: AgentStatus) => {
+    show([status])
+    return {
+      html: markup(createElement(AgentPage, { agentId: status.id })),
+      words: text(createElement(AgentPage, { agentId: status.id })),
+    }
+  }
+  const NAME = 'Mode for new sessions'
+
+  it('follows Claude Code until a mode is chosen, and says so for Codex', () => {
+    cached('claude-code')
+    const claude = page(agent())
+    expect(claude.words).toContain(NAME)
+    expect(claude.words).toContain('Follow Claude Code')
+    expect(claude.html).not.toMatch(/data-disabled/)
+    cached('codex')
+    const codex = page(
+      agent({ id: 'codex', name: 'Codex', harnessId: 'codex', harnessName: 'Codex' }),
+    )
+    expect(codex.words).toContain('Follow Codex (Auto review)')
+  })
+
+  it('shows the chosen mode by the name the agent gives it', () => {
+    cached('claude-code')
+    modes.stored = { 'claude-code': 'acceptEdits' }
+    const { words } = page(agent())
+    expect(words).toContain('Accept edits')
+    expect(words).not.toContain('Follow Claude Code')
+  })
+
+  it('shows a chosen mode the agent no longer lists, marked, and leaves it to change', () => {
+    cached('claude-code')
+    modes.stored = { 'claude-code': 'auto' }
+    const { words, html } = page(agent())
+    expect(words).toContain('auto (no longer offered)')
+    expect(html).not.toMatch(/data-disabled/)
+  })
+
+  it('waits behind a placeholder while the cached options load', () => {
+    modes.options.loaded = false
+    const { words, html } = page(agent())
+    expect(words).toContain(NAME)
+    expect(html).toContain('data-slot="skeleton"')
+    expect(words).not.toContain('Follow Claude Code')
+  })
+
+  it('is disabled with its reason for an agent that has not been used', () => {
+    const unused = page(agent())
+    expect(unused.words).toContain('Available once this agent has been used.')
+    expect(unused.html).toMatch(/data-disabled/)
+    // A loaded session gives the model's options alone, which has no mode to choose.
+    cached('claude-code', {
+      provisional: true,
+      config: [{ ...modeOption, id: 'model', category: 'model' }],
+    })
+    const provisional = page(agent())
+    expect(provisional.words).toContain('Available once this agent has been used.')
+    expect(provisional.html).toMatch(/data-disabled/)
+  })
+
+  it('is disabled with its reason when the options could not be read', () => {
+    modes.options.error = 'The host did not answer'
+    const { words, html } = page(agent())
+    expect(words).toContain('Couldn’t read this agent’s modes.')
+    expect(words).not.toContain('Available once this agent has been used.')
+    expect(html).toMatch(/data-disabled/)
+  })
+
+  it('says under the row why a change was not saved', () => {
+    cached('claude-code')
+    modes.saveError = 'The host is busy'
+    const { words } = page(agent())
+    expect(words).toContain('The host is busy')
+  })
+
+  it('has no row for an agent whose harness takes no start mode', () => {
+    cached('opencode')
+    const { words } = page(
+      agent({ id: 'opencode', name: 'OpenCode', harnessId: 'opencode', harnessName: 'OpenCode' }),
+    )
+    expect(words).not.toContain(NAME)
+  })
+
+  it('reads in Chinese', async () => {
+    await i18n.changeLanguage('zh-CN')
+    cached('claude-code')
+    expect(page(agent()).words).toContain('新会话的模式')
+    expect(page(agent()).words).toContain('跟随 Claude Code')
+    cached('codex')
+    const codex = page(
+      agent({ id: 'codex', name: 'Codex', harnessId: 'codex', harnessName: 'Codex' }),
+    )
+    expect(codex.words).toContain('跟随 Codex（自动审查）')
+  })
+})
+
+describe('the modes the row offers', () => {
+  const mode = (choices: string[], over: Partial<ConfigOption> = {}): ConfigOption => ({
+    id: 'mode',
+    name: 'Mode',
+    category: 'mode',
+    type: 'select',
+    value: choices[0]!,
+    choices: choices.map((value) => ({ value, name: value.toUpperCase() })),
+    ...over,
+  })
+  const entry = (config: ConfigOption[], over: Partial<AgentOptions> = {}): AgentOptions => ({
+    agentId: 'claude-code',
+    config,
+    levels: {},
+    remembered: {},
+    observedAt: 1,
+    ...over,
+  })
+  const view = (
+    over: Partial<Parameters<typeof startModeView>[0]> = {},
+  ): ReturnType<typeof startModeView> =>
+    startModeView({
+      agentId: 'claude-code',
+      entry: entry([mode(['default', 'plan'])]),
+      loaded: true,
+      failed: false,
+      stored: undefined,
+      ...over,
+    })
+
+  it('are the ones the agent last listed, without full access', () => {
+    const listed = view({
+      entry: entry([mode(['default', 'acceptEdits', 'bypassPermissions', 'agent-full-access'])]),
+    })
+    expect(listed.state).toBe('ready')
+    expect(listed.value).toBe(FOLLOW_AGENT)
+    expect(listed.choices.map((c) => [c.value, c.name, c.offered])).toEqual([
+      ['default', 'DEFAULT', true],
+      ['acceptEdits', 'ACCEPTEDITS', true],
+    ])
+  })
+
+  it('show the stored mode as chosen', () => {
+    expect(view({ stored: 'plan' })).toMatchObject({ state: 'ready', value: 'plan' })
+  })
+
+  it('keep a stored mode the agent no longer lists, marked as not offered', () => {
+    const kept = view({ stored: 'auto' })
+    expect(kept.value).toBe('auto')
+    expect(kept.choices.at(-1)).toEqual({ value: 'auto', name: 'auto', offered: false })
+    expect(kept.choices.filter((c) => c.offered)).toHaveLength(2)
+  })
+
+  it('never choose a stored mode that gives full access', () => {
+    const full = view({ stored: 'bypassPermissions' })
+    expect(full.value).toBe(FOLLOW_AGENT)
+    expect(full.choices.map((c) => c.value)).toEqual(['default', 'plan'])
+  })
+
+  it('wait while the cached options load', () => {
+    expect(view({ loaded: false, entry: undefined })).toMatchObject({ state: 'loading' })
+  })
+
+  it('are unknown for an agent that was not used, or whose options carry no mode', () => {
+    expect(view({ entry: undefined })).toMatchObject({ state: 'unused', choices: [] })
+    const provisional = entry([mode(['small'], { id: 'model', category: 'model' })], {
+      provisional: true,
+    })
+    expect(view({ entry: provisional })).toMatchObject({ state: 'unused', choices: [] })
+    expect(view({ entry: entry([mode([])]) })).toMatchObject({ state: 'unused' })
+    // The stored mode still shows, though it cannot be changed yet.
+    expect(view({ entry: undefined, stored: 'plan' })).toMatchObject({
+      state: 'unused',
+      value: 'plan',
+    })
+  })
+
+  it('are unknown when reading them failed, unless some were read before', () => {
+    expect(view({ entry: undefined, failed: true })).toMatchObject({ state: 'failed' })
+    expect(view({ failed: true })).toMatchObject({ state: 'ready' })
   })
 })
 

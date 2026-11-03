@@ -126,18 +126,21 @@ export function SettingSelect<T extends string>({
   value,
   options,
   onChange,
+  disabled,
   className,
 }: {
   label: string
   value: T
   options: { value: T; label: string; icon?: ReactNode; hint?: string; disabled?: boolean }[]
   onChange: (value: T) => void
+  disabled?: boolean
   className?: string
 }) {
   return (
     <Select
       value={value}
       items={options}
+      disabled={disabled}
       onValueChange={(next) => {
         if (next !== null && next !== value) onChange(next as T)
       }}

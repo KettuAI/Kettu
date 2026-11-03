@@ -60,6 +60,8 @@ export interface SettingsFile {
   }
   git: { backgroundFetch: boolean }
   mcp: { kettu: { off: AgentId[] } } // the agents whose sessions get no Kettu MCP server
+  // The permission mode each agent's new sessions start in; an agent with none starts as its own.
+  startModes: Partial<Record<AgentId, string>>
   updates: { automatic: 'download' | 'restart' | 'notify' | 'off' }
   privacy: { hideAccount: boolean } // kept so older files still parse; loading turns it off
   usage: {
@@ -180,6 +182,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   terminal: { fontSize: 13 },
   git: { backgroundFetch: false },
   mcp: { kettu: { off: [] } },
+  startModes: {},
   updates: { automatic: 'download' },
   privacy: { hideAccount: false },
   usage: { fromComputer: false, sidebar: 'today' },
@@ -224,6 +227,7 @@ export interface SettingsPatch {
   terminal?: { shellPath?: null; fontSize?: SettingsFile['terminal']['fontSize'] }
   git?: Partial<SettingsFile['git']>
   mcp?: { kettu: { off: AgentId[] } } // the list is replaced whole
+  startModes?: Partial<Record<AgentId, string | null>> // merged by agent; null clears one
   updates?: Partial<SettingsFile['updates']>
   privacy?: Partial<SettingsFile['privacy']>
   usage?: Partial<SettingsFile['usage']>
@@ -244,6 +248,7 @@ export interface HostSettings {
   proxy: ProxySettings
   git: SettingsFile['git']
   mcp: SettingsFile['mcp']
+  startModes: SettingsFile['startModes']
   usage: { fromComputer: boolean }
   sessionTitles: boolean // write a title for a session its agent leaves untitled
 }

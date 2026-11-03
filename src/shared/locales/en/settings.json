@@ -479,6 +479,17 @@
     "setBy": "Set by {{env}}",
     "showIn": "Show in {{name}}",
     "noConfig": "No configuration files to show.",
+    "startMode": {
+      "name": "Mode for new sessions",
+      "description": "The permission mode a new session starts in, whatever a project’s own settings say. Full access can’t be chosen here.",
+      "follow": {
+        "claude-code": "Follow Claude Code",
+        "codex": "Follow Codex (Auto review)"
+      },
+      "unused": "Available once this agent has been used.",
+      "unoffered": "{{mode}} (no longer offered)",
+      "readFailed": "Couldn’t read this agent’s modes."
+    },
     "advanced": "Advanced",
     "readingAccount": "Reading the account…",
     "noAccount": "No account reported",

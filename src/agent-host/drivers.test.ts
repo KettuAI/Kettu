@@ -82,6 +82,7 @@ function manager(
       proxy: { mode: 'environment' },
       git: { backgroundFetch: false },
       mcp: DEFAULT_SETTINGS.mcp,
+      startModes: DEFAULT_SETTINGS.startModes,
       usage: { fromComputer: false },
       sessionTitles: true,
     }),

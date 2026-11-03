@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ARTIFACT_ID, NO_SESSION } from '@shared/artifacts'
 import type { GitStatus, GitTools, PullRequest } from '@shared/git'
-import { DEFAULT_SETTINGS } from '@shared/settings'
+import { DEFAULT_SETTINGS, type HostSettings } from '@shared/settings'
 import type { ThreadEntry } from '@shared/thread'
 import type { AgentLauncher } from './agents'
 import type { GitEventDraft, GitServiceApi } from './git/api'
@@ -213,6 +213,7 @@ describe('the port envelope', () => {
         proxy: DEFAULT_SETTINGS.proxy,
         git: DEFAULT_SETTINGS.git,
         mcp: DEFAULT_SETTINGS.mcp,
+        startModes: DEFAULT_SETTINGS.startModes,
         usage: { fromComputer: false },
         sessionTitles: true,
       },
@@ -343,6 +344,7 @@ describe('main messages', () => {
       proxy: { mode: 'custom', url: 'http://proxy.test:8080', noProxy: 'localhost' },
       git: { backgroundFetch: true },
       mcp: DEFAULT_SETTINGS.mcp,
+      startModes: DEFAULT_SETTINGS.startModes,
       usage: { fromComputer: false },
       sessionTitles: true,
     })
@@ -368,6 +370,7 @@ describe('main messages', () => {
       proxy: { mode: 'environment' as const },
       git: { backgroundFetch: false },
       mcp: DEFAULT_SETTINGS.mcp,
+      startModes: DEFAULT_SETTINGS.startModes,
       usage: { fromComputer: false },
       sessionTitles: true,
     }
@@ -657,6 +660,7 @@ describe('git', () => {
       proxy: { mode: 'environment' },
       git: { backgroundFetch: true },
       mcp: DEFAULT_SETTINGS.mcp,
+      startModes: DEFAULT_SETTINGS.startModes,
       usage: { fromComputer: false },
       sessionTitles: true,
     })
@@ -869,6 +873,76 @@ describe('mentioned files', () => {
       code: 'invalid_params',
     })
     await expect(mention('gone.txt')).rejects.toMatchObject({ code: 'not_found' })
+  })
+})
+
+describe('the start mode in the agent options', () => {
+  const settings = (startModes: HostSettings['startModes']): HostSettings => ({
+    locale: 'en',
+    agents: { 'fake-agent': { enabled: true }, 'claude-code': { enabled: true } },
+    addedAgents: DEFAULT_SETTINGS.addedAgents,
+    proxy: DEFAULT_SETTINGS.proxy,
+    git: DEFAULT_SETTINGS.git,
+    mcp: DEFAULT_SETTINGS.mcp,
+    startModes,
+    usage: { fromComputer: false },
+    sessionTitles: true,
+  })
+  const readOptions = (port: TestPort) => port.request('agents.options', undefined)
+  const heard = (port: TestPort, agentId: string) =>
+    port.events.flatMap((e) =>
+      e.type === 'agent.options' && e.options.agentId === agentId ? [e.options] : [],
+    )
+
+  it('goes with the options of the agent that has one, and with no other', async () => {
+    const { t, port } = await setup({
+      fakeAs: ['claude-code'],
+      settings: settings({ 'claude-code': 'acceptEdits' }),
+    })
+    for (const agentId of ['claude-code', 'fake-agent'] as const) {
+      await port.request('sessions.prepare', { agentId, projectPath: t.project })
+    }
+    const options = await readOptions(port)
+    expect(options.find((o) => o.agentId === 'claude-code')?.startMode).toBe('acceptEdits')
+    expect(options.find((o) => o.agentId === 'fake-agent')).not.toHaveProperty('startMode')
+    expect(heard(port, 'claude-code').at(-1)?.startMode).toBe('acceptEdits')
+    expect(heard(port, 'fake-agent').at(-1)).not.toHaveProperty('startMode')
+  })
+
+  it('is left out when the file names a mode that gives full access', async () => {
+    const { t, port } = await setup({
+      fakeAs: ['claude-code'],
+      settings: settings({ 'claude-code': 'bypassPermissions' }),
+    })
+    await port.request('sessions.prepare', { agentId: 'claude-code', projectPath: t.project })
+    const [options] = await readOptions(port)
+    expect(options).not.toHaveProperty('startMode')
+  })
+
+  it('is told to the windows when the setting changes, and never written to the cache', async () => {
+    const { t, port } = await setup({ fakeAs: ['claude-code'], settings: settings({}) })
+    await port.request('sessions.prepare', { agentId: 'claude-code', projectPath: t.project })
+    expect(heard(port, 'claude-code').at(-1)).not.toHaveProperty('startMode')
+    await t.host.updateSettings(settings({ 'claude-code': 'plan' }))
+    await port.until(() => heard(port, 'claude-code').at(-1)?.startMode === 'plan')
+    expect((await readOptions(port))[0]?.startMode).toBe('plan')
+    await t.host.updateSettings(settings({}))
+    await port.until(() => !('startMode' in (heard(port, 'claude-code').at(-1) ?? {})))
+    expect((await readOptions(port))[0]).not.toHaveProperty('startMode')
+
+    await t.host.updateSettings(settings({ 'claude-code': 'plan' }))
+    await t.host.shutdown()
+    const file = JSON.parse(
+      await readFile(path.join(t.dir, 'state', 'agent-options.json'), 'utf8'),
+    ) as { agents: Record<string, object> }
+    expect(file.agents['claude-code']).not.toHaveProperty('startMode')
+  })
+
+  it('is not announced for an agent whose options are unknown', async () => {
+    const { t, port } = await setup({ fakeAs: ['claude-code'], settings: settings({}) })
+    await t.host.updateSettings(settings({ 'claude-code': 'plan' }))
+    await port.request('agents.list', undefined)
+    expect(heard(port, 'claude-code')).toEqual([])
   })
 })
 

@@ -465,6 +465,7 @@ describe('attaching on use', () => {
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
       mcp: DEFAULT_SETTINGS.mcp,
+      startModes: DEFAULT_SETTINGS.startModes,
       usage: { fromComputer: false },
       sessionTitles: true,
     })
@@ -863,6 +864,35 @@ describe('keeping the config across an attach', () => {
     expect(requests(t, port, sessionId)).toEqual(['session/resume', ...restored, 'session/prompt'])
     const [options] = await port.request('agents.options', undefined)
     expect(options?.remembered).toMatchObject({ model: 'swift' })
+  })
+
+  it('keeps the mode of a released session over the start mode when it attaches again', async () => {
+    const { t, port } = await setup({
+      sessionTimings: quick,
+      fakeAs: ['claude-code'],
+      agentEnv: { FAKE_AGENT_RESUME_CONFIG: 'reset' },
+      settings: {
+        locale: 'en',
+        agents: { 'claude-code': { enabled: true } },
+        addedAgents: DEFAULT_SETTINGS.addedAgents,
+        proxy: DEFAULT_SETTINGS.proxy,
+        git: DEFAULT_SETTINGS.git,
+        mcp: DEFAULT_SETTINGS.mcp,
+        startModes: { 'claude-code': 'plan' },
+        usage: { fromComputer: false },
+        sessionTitles: true,
+      },
+    })
+    const created = await port.request('sessions.create', {
+      agentId: 'claude-code',
+      projectPath: t.project,
+      options: { mode: 'code' },
+    })
+    await port.open(created.id)
+    await finishTurn(port, created.id, 'hello')
+    await release(port, created.id)
+    await finishTurn(port, created.id, 'and again')
+    expect(values(port, created.id)).toMatchObject({ mode: 'code' })
   })
 
   it('sets them again after a restart, when a setting attaches the session', async () => {

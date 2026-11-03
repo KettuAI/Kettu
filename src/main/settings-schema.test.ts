@@ -116,6 +116,14 @@ describe('validateSettingsPatch', () => {
     })
   })
 
+  it('takes a start mode for a Claude Code or Codex agent, and null to clear one', () => {
+    const patch = {
+      startModes: { 'claude-code': 'acceptEdits', 'codex~work': 'agent', 'claude-code~a': null },
+    }
+    expect(validateSettingsPatch(patch)).toEqual(patch)
+    expect(validateSettingsPatch({ startModes: {} })).toEqual({ startModes: {} })
+  })
+
   it.each([
     [null, 'must be an object'],
     [[], 'must be an object'],
@@ -242,6 +250,17 @@ describe('validateSettingsPatch', () => {
     [{ mcp: { kettu: { on: [] } } }, 'Unknown setting "mcp.kettu.on"'],
     [{ mcp: { off: [] } }, 'Unknown setting "mcp.off"'],
     [{ mcp: [] }, '"mcp" must be an object'],
+    [{ startModes: [] }, '"startModes" must be an object'],
+    [{ startModes: { 'unknown-agent': 'plan' } }, '"startModes.unknown-agent" is not an agent id'],
+    [{ startModes: { opencode: 'plan' } }, '"startModes.opencode" is an agent that takes no'],
+    [{ startModes: { pi: null } }, '"startModes.pi" is an agent that takes no'],
+    [{ startModes: { 'claude-code': 'bypassPermissions' } }, '"startModes.claude-code" must be'],
+    [{ startModes: { codex: 'agent-full-access' } }, '"startModes.codex" must be'],
+    [{ startModes: { codex: 'danger-full-access' } }, '"startModes.codex" must be'],
+    [{ startModes: { codex: '' } }, '"startModes.codex" must be'],
+    [{ startModes: { codex: 'x'.repeat(65) } }, '"startModes.codex" must be'],
+    [{ startModes: { codex: 7 } }, '"startModes.codex" must be'],
+    [{ startModes: { codex: true } }, '"startModes.codex" must be'],
   ])('rejects %j', (patch, message) => {
     expect(() => validateSettingsPatch(patch)).toThrow(SettingsError)
     expect(() => validateSettingsPatch(patch)).toThrow(message)
@@ -419,6 +438,78 @@ describe('mergeSettings', () => {
     expect(mergeSettings(off, { mcp: { kettu: { off: [] } } }).mcp).toEqual({
       kettu: { off: [] },
     })
+  })
+})
+
+describe('start modes', () => {
+  it('merge by agent, and null clears one', () => {
+    const set = mergeSettings(defaults(), {
+      startModes: { 'claude-code': 'acceptEdits', codex: 'agent' },
+    })
+    expect(set.startModes).toEqual({ 'claude-code': 'acceptEdits', codex: 'agent' })
+    const changed = mergeSettings(set, { startModes: { 'claude-code': 'plan' } })
+    expect(changed.startModes).toEqual({ 'claude-code': 'plan', codex: 'agent' })
+    expect(mergeSettings(changed, { startModes: { codex: null } }).startModes).toEqual({
+      'claude-code': 'plan',
+    })
+    expect(mergeSettings(changed, { startModes: {} }).startModes).toEqual(changed.startModes)
+    expect(set.startModes).toEqual({ 'claude-code': 'acceptEdits', codex: 'agent' })
+  })
+
+  it('are read from the file, dropping each entry that is no start mode of an agent', () => {
+    const loaded = parseSettingsFile({
+      version: 1,
+      startModes: {
+        'claude-code': 'acceptEdits',
+        'claude-code~work': 'bypassPermissions',
+        codex: 'agent',
+        'codex~two': 'agent-full-access',
+        'codex~three': 'danger-full-access',
+        opencode: 'plan',
+        'unknown-agent': 'plan',
+        'claude-code~four': 7,
+        'claude-code~five': '',
+      },
+    })
+    expect(loaded.settings.startModes).toEqual({ 'claude-code': 'acceptEdits', codex: 'agent' })
+    expect(loaded.problems).toHaveLength(7)
+    expect(loaded.settings.general).toEqual(DEFAULT_SETTINGS.general)
+  })
+
+  it('are none when the file has none, or a value that is no object', () => {
+    expect(parseSettingsFile({ version: 1 }).settings.startModes).toEqual({})
+    for (const startModes of [[], 'plan', null, 3]) {
+      const loaded = parseSettingsFile({ version: 1, startModes })
+      expect(loaded.settings.startModes).toEqual({})
+      expect(loaded.problems).toEqual(['"startModes" must be an object'])
+    }
+  })
+
+  it('go with the agent that is removed, and stay with the others', () => {
+    const added = mergeSettings(
+      withAddedAgent(defaults(), {
+        id: 'claude-code~work',
+        name: 'Work',
+        configDir: '/srv/w',
+        created: false,
+      }),
+      { startModes: { 'claude-code~work': 'plan', 'claude-code': 'acceptEdits' } },
+    )
+    expect(withoutAgent(added, 'claude-code~work').startModes).toEqual({
+      'claude-code': 'acceptEdits',
+    })
+    const registered = mergeSettings(added, { agents: { 'claude-code': { enabled: true } } })
+    expect(withoutAgent(registered, 'claude-code').startModes).toEqual({
+      'claude-code~work': 'plan',
+    })
+  })
+
+  it('reach the agent host, and only through their own section', () => {
+    const set = mergeSettings(defaults(), { startModes: { codex: 'agent' } })
+    expect(hostSettings(set, 'en').startModes).toEqual({ codex: 'agent' })
+    expect(hostSettings(defaults(), 'en').startModes).toEqual({})
+    expect([...changedSections(defaults(), set)]).toEqual(['startModes'])
+    expect(reachesHost(changedSections(defaults(), set))).toBe(true)
   })
 })
 
@@ -802,6 +893,7 @@ describe('derived settings', () => {
       proxy: { mode: 'environment' },
       git: { backgroundFetch: false },
       mcp: { kettu: { off: [] } },
+      startModes: {},
       usage: { fromComputer: false },
       sessionTitles: true,
     })

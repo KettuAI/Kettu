@@ -414,6 +414,7 @@ describe('the artifacts service in sessions', () => {
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
       mcp: { kettu: { off } },
+      startModes: DEFAULT_SETTINGS.startModes,
       usage: { fromComputer: false },
       sessionTitles: true,
     })

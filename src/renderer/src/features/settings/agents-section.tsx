@@ -2,7 +2,7 @@
 // folder and a name, with its account, sign-in, API key, usage and configuration. Installs and
 // updates are Settings > Harnesses'.
 
-import { useId, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react'
 import {
   BotIcon,
   FolderIcon,
@@ -14,6 +14,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentAccount, AgentStatus } from '@shared/agent-host'
+import { takesStartMode } from '@shared/agents'
 import {
   AGENT_COLORS,
   AGENT_NAME_CHARS,
@@ -49,12 +50,19 @@ import {
 } from '@renderer/components/ui/empty'
 import { Input } from '@renderer/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@renderer/components/ui/radio-group'
+import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { AgentStateLine } from '@renderer/features/agents/agent-state'
 import { readiness, type AgentReadiness } from '@renderer/features/agents/readiness'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
+import {
+  optionsLoaded,
+  optionsOn,
+  readHostAgentOptions,
+  useAgentOptionsStore,
+} from '@renderer/stores/agent-options'
 import { addableHarnesses, type AgentsStoreHook } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
@@ -68,7 +76,9 @@ import {
 import { Fact, ListMeter, SignInNotice, SpendGroup, UsageGroup } from './agent-parts'
 import {
   currentLimits,
+  FOLLOW_AGENT,
   harnessVersion,
+  startModeView,
   useAction,
   useAgentReads,
   useHasOtherAgents,
@@ -93,7 +103,17 @@ import {
   SettingsDialogHeader,
   SettingsField,
 } from './settings-dialog'
-import { GroupLabel, ItemPageHeader, ItemRow, RowFrame, RowGroup, RowShell, RowText } from './rows'
+import {
+  GroupLabel,
+  ItemPageHeader,
+  ItemRow,
+  RowFrame,
+  RowGroup,
+  RowLine,
+  RowShell,
+  RowText,
+} from './rows'
+import { useApply } from './use-apply'
 
 /** How long the dialog waits for the host to list an agent it just added, before giving up. */
 const ADDED_WAIT_MS = 10_000
@@ -1062,6 +1082,7 @@ function ConfigurationGroup({ status }: { status: AgentStatus }) {
             {t('agents.openHarnessButton')}
           </Button>
         </RowFrame>
+        {takesStartMode(status.id) && <StartModeRow key={status.id} status={status} />}
         {details?.config.map((item) => (
           <PlaceRow
             key={item.id}
@@ -1077,6 +1098,82 @@ function ConfigurationGroup({ status }: { status: AgentStatus }) {
         )}
       </RowGroup>
     </section>
+  )
+}
+
+/** The permission mode the agent's new sessions start in, for the agents that take one. */
+function StartModeRow({ status }: { status: AgentStatus }) {
+  const { hostId, useSettingsStore } = useHostScope()
+  const { t } = useTranslation('settings')
+  const entry = useAgentOptionsStore((s) => optionsOn(s, hostId)[status.id])
+  const loaded = useAgentOptionsStore((s) => optionsLoaded(s, hostId))
+  const loadFailed = useAgentOptionsStore((s) => hostId === null && s.error !== null)
+  // An older host sends no start modes.
+  const stored = useSettingsStore((s) => s.settings.startModes?.[status.id])
+  const [hostFailed, setHostFailed] = useState(false)
+  const [apply, error] = useApply()
+  // Another host's options are read when a connection to it opens; Settings may come before.
+  useEffect(() => {
+    if (hostId === null || loaded) return
+    readHostAgentOptions(hostId).catch(() => setHostFailed(true))
+  }, [hostId, loaded])
+  const view = startModeView({
+    agentId: status.id,
+    entry,
+    loaded,
+    failed: loadFailed || hostFailed,
+    stored,
+  })
+  const note =
+    error ??
+    (view.state === 'unused'
+      ? t('agents.startMode.unused')
+      : view.state === 'failed'
+        ? t('agents.startMode.readFailed')
+        : null)
+  const name = t('agents.startMode.name')
+  return (
+    <RowShell>
+      <RowLine text={<RowText name={name} description={t('agents.startMode.description')} />}>
+        {view.state === 'loading' ? (
+          <Skeleton aria-hidden className="h-8 w-50 rounded-xl" />
+        ) : (
+          <SettingSelect
+            label={name}
+            value={view.value}
+            disabled={view.state !== 'ready'}
+            options={[
+              {
+                value: FOLLOW_AGENT,
+                label: t(
+                  `agents.startMode.follow.${status.harnessId === 'codex' ? 'codex' : 'claude-code'}`,
+                ),
+              },
+              ...view.choices.map((choice) => ({
+                value: choice.value,
+                label: choice.offered
+                  ? choice.name
+                  : t('agents.startMode.unoffered', { mode: choice.name }),
+              })),
+            ]}
+            onChange={(next) =>
+              apply({ startModes: { [status.id]: next === FOLLOW_AGENT ? null : next } })
+            }
+          />
+        )}
+      </RowLine>
+      {note && (
+        <p
+          role="status"
+          className={cn(
+            '-mt-1.5 pb-3.75 text-hint text-pretty',
+            error ? 'text-danger' : 'text-tertiary',
+          )}
+        >
+          {note}
+        </p>
+      )}
+    </RowShell>
   )
 }
 

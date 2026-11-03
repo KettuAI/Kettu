@@ -31,6 +31,7 @@ export const HOST_SETTING_KEYS = {
   terminal: ['shellPath'],
   git: 'all',
   mcp: 'all',
+  startModes: 'all',
   updates: 'all',
   usage: ['fromComputer'],
   remote: 'all',
@@ -45,6 +46,7 @@ export interface HostSettingsPart {
   terminal: Pick<SettingsFile['terminal'], 'shellPath'>
   git: SettingsFile['git']
   mcp: SettingsFile['mcp']
+  startModes: SettingsFile['startModes']
   updates: SettingsFile['updates']
   usage: Pick<SettingsFile['usage'], 'fromComputer'>
   remote: SettingsFile['remote']
