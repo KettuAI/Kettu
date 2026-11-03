@@ -1,10 +1,17 @@
 // The requests `codex app-server` sends for the user to answer, as Kettu's permission requests:
 // each option is a decision the request lists, under the option ids codex-acp used.
 
-import type { PendingPermission, PermissionKind, ToolContent } from '@shared/thread'
+import type {
+  PendingPermission,
+  PendingQuestion,
+  PermissionKind,
+  QuestionAnswer,
+  ToolContent,
+} from '@shared/thread'
 import { commandSteps, unsafeArgvPrefix, unsafeCommand } from '../command-safety'
 import type { OptionAnswer, PermissionRequest } from '../connection'
 import { t } from '../i18n'
+import { answerWords } from '../question-answers'
 import type { MapperContext, MapperOutput } from '../session-updates'
 import { commandFacts, type ThreadMapper } from './mapper'
 import type {
@@ -24,6 +31,8 @@ type Option = PendingPermission['options'][number]
 export interface Approval {
   request: PermissionRequest
   respond(answer: OptionAnswer): unknown
+  /** What a reply to the request's questions sends back, for a request that carries them. */
+  answerQuestions?(answers: QuestionAnswer[]): unknown
 }
 
 const KIND_ORDER: Record<PermissionKind, number> = {
@@ -286,25 +295,40 @@ export const ANSWER_IN_REPLY =
   'The user will answer this question in their own words in their next message. Stop here and wait for it.'
 
 /**
- * A question with choices, as a question card: the choices, then Something else, which tells
- * Codex to wait for the user's next message. Null for anything else, which Kettu cannot ask:
- * several questions, free text or a secret.
+ * The questions of one ask as a question card, each with its choices and, where Codex lets the
+ * user write an answer or offers no choices, a field for it. The options are the first question's
+ * choices and Something else, for a client that sends only an option id. Null without a question.
  */
 export function userInputApproval(
   params: ToolRequestUserInputParams,
   mapper: ThreadMapper,
   ctx: MapperContext,
 ): Approval | null {
-  const question = params.questions.length === 1 ? params.questions[0]! : null
-  const choices = question?.options ?? []
-  if (!question || question.isSecret || choices.length === 0) return null
+  const asked = params.questions
+  const first = asked[0]
+  if (!first) return null
   const out = output()
   const entryId = mapper.tool(ctx, out, params.itemId, {
-    title: question.header || question.question,
+    title: first.header || first.question,
     toolKind: 'other',
     status: 'pending',
-    question: question.question || question.header,
+    question: first.question || first.header,
   })
+  const questions: PendingQuestion[] = asked.map((question) => {
+    const choices = question.options ?? []
+    return {
+      header: question.header,
+      question: question.question,
+      multiSelect: false,
+      options: choices.map((choice) => ({
+        label: choice.label,
+        ...(choice.description ? { description: choice.description } : {}),
+      })),
+      allowsText: question.isOther || choices.length === 0,
+      secret: question.isSecret,
+    }
+  })
+  const choices = first.options ?? []
   const options: Option[] = [
     ...choices.map((choice, index) => ({
       id: `answer:${index}`,
@@ -315,13 +339,24 @@ export function userInputApproval(
     { id: 'other', name: t('question.other'), kind: 'reject_once' },
   ]
   return {
-    request: { toolCallId: params.itemId, toolEntryId: entryId, output: out, options },
+    request: { toolCallId: params.itemId, toolEntryId: entryId, output: out, options, questions },
     respond: (answer) => {
       if (answer === 'cancelled') return { answers: {} }
       const id = answer.optionId
       const choice = id.startsWith('answer:') ? choices[Number(id.slice('answer:'.length))] : null
       const text = choice ? choice.label : id === 'other' ? ANSWER_IN_REPLY : null
-      return text === null ? { answers: {} } : { answers: { [question.id]: { answers: [text] } } }
+      return text === null ? { answers: {} } : { answers: { [first.id]: { answers: [text] } } }
+    },
+    answerQuestions: (answers) => {
+      const given: Record<string, { answers: string[] }> = {}
+      for (const answer of answers) {
+        const question = asked[answer.question]
+        const pending = questions[answer.question]
+        if (!question || !pending) continue
+        const words = answerWords(pending, answer)
+        if (words.length > 0) given[question.id] = { answers: words }
+      }
+      return { answers: given }
     },
   }
 }

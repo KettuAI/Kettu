@@ -33,6 +33,16 @@ const SPEC = {
   display: { command: '/opt/codex/bin/codex', args: ['app-server'], env: {} },
 }
 
+const question = {
+  id: 'q',
+  header: 'Plan',
+  question: 'Which one?',
+  isOther: false,
+  isSecret: false,
+}
+
+const choice = (label: string, description = '') => ({ label, description })
+
 function hooks() {
   const accounts: AgentAccount[] = []
   const ignored: string[] = []
@@ -707,31 +717,16 @@ describe('approvals', () => {
     expect(await answer).toEqual({ decision: 'decline' })
   })
 
-  it('asks a question with choices and Something else, and answers others it cannot ask with none', async () => {
+  it('asks a question with choices and Something else', async () => {
     const { server, connection } = await connect()
     await connection.newSession('/project')
     const t = threadTarget((request) => ({ optionId: request.options[1]!.id }))
     connection.register('thread-1', t.target)
-    const question = {
-      id: 'q',
-      header: 'Plan',
-      question: 'Which one?',
-      isOther: false,
-      isSecret: false,
-    }
     const asked = server.request('item/tool/requestUserInput', {
       threadId: 'thread-1',
       turnId: 'turn-1',
       itemId: 'ask-1',
-      questions: [
-        {
-          ...question,
-          options: [
-            { label: 'A', description: '' },
-            { label: 'B', description: 'The second way' },
-          ],
-        },
-      ],
+      questions: [{ ...question, options: [choice('A'), choice('B', 'The second way')] }],
     })
     expect(await asked.answer).toEqual({ answers: { q: { answers: ['B'] } } })
     expect(t.requests[0]!.request.options).toEqual([
@@ -744,13 +739,120 @@ describe('approvals', () => {
       title: 'Plan',
       question: 'Which one?',
     })
-    const free = server.request('item/tool/requestUserInput', {
+  })
+
+  it('asks every question of one ask in one request and answers them together', async () => {
+    const { server, connection } = await connect()
+    await connection.newSession('/project')
+    const t = threadTarget(() => ({
+      answers: [
+        { question: 0, choices: [1] },
+        { question: 2, choices: [], text: 'Because' },
+      ],
+    }))
+    connection.register('thread-1', t.target)
+    const asked = server.request('item/tool/requestUserInput', {
       threadId: 'thread-1',
       turnId: 'turn-1',
-      itemId: 'ask-2',
-      questions: [{ ...question, options: null }],
+      itemId: 'ask-1',
+      questions: [
+        { ...question, options: [choice('A'), choice('B')] },
+        {
+          ...question,
+          id: 'r',
+          header: 'Reply',
+          question: 'Which reply?',
+          isOther: true,
+          options: [choice('X')],
+        },
+        { ...question, id: 'why', header: 'Why', question: 'Why?', options: null },
+      ],
     })
-    expect(await free.answer).toEqual({ answers: {} })
+    expect(await asked.answer).toEqual({
+      answers: { q: { answers: ['B'] }, why: { answers: ['Because'] } },
+    })
+    expect(t.requests).toHaveLength(1)
+    expect(t.requests[0]!.request.questions?.map((q) => [q.question, q.allowsText])).toEqual([
+      ['Which one?', false],
+      ['Which reply?', true],
+      ['Why?', true],
+    ])
+    expect(t.entry('t:ask-1')).toMatchObject({ title: 'Plan', question: 'Which one?' })
+  })
+
+  it('answers none when every question was skipped or the ask was cancelled', async () => {
+    const { server, connection } = await connect()
+    await connection.newSession('/project')
+    let reply: PermissionAnswer = { answers: [] }
+    const t = threadTarget(() => reply)
+    connection.register('thread-1', t.target)
+    const ask = (itemId: string) =>
+      server.request('item/tool/requestUserInput', {
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        itemId,
+        questions: [
+          { ...question, options: [choice('A'), choice('B')] },
+          { ...question, id: 'r', options: null },
+        ],
+      })
+    expect(await ask('ask-1').answer).toEqual({ answers: {} })
+    reply = 'cancelled'
+    expect(await ask('ask-2').answer).toEqual({ answers: {} })
+  })
+
+  it('answers the first question alone to a client that sends an option id', async () => {
+    const { server, connection } = await connect()
+    await connection.newSession('/project')
+    const t = threadTarget(() => ({ optionId: 'answer:0' }))
+    connection.register('thread-1', t.target)
+    const asked = server.request('item/tool/requestUserInput', {
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      itemId: 'ask-1',
+      questions: [
+        { ...question, options: [choice('A'), choice('B')] },
+        { ...question, id: 'r', options: [choice('X')] },
+      ],
+    })
+    expect(await asked.answer).toEqual({ answers: { q: { answers: ['A'] } } })
+  })
+
+  it('gives Codex a secret answer without it reaching a log or the thread', async () => {
+    const { server, connection, logs, ignored } = await connect()
+    await connection.newSession('/project')
+    const t = threadTarget(() => ({ answers: [{ question: 0, choices: [], text: 'hunter2' }] }))
+    connection.register('thread-1', t.target)
+    const asked = server.request('item/tool/requestUserInput', {
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      itemId: 'ask-1',
+      questions: [
+        { ...question, id: 'token', question: 'Your token?', isSecret: true, options: null },
+      ],
+    })
+    expect(await asked.answer).toEqual({ answers: { token: { answers: ['hunter2'] } } })
+    expect(t.requests[0]!.request.questions).toEqual([
+      expect.objectContaining({ allowsText: true, secret: true, options: [] }),
+    ])
+    const kept = JSON.stringify([logs, ignored, t.entry('t:ask-1')])
+    expect(kept).not.toContain('hunter2')
+  })
+
+  it('asks nothing when the ask holds no question', async () => {
+    const { server, connection, ignored } = await connect()
+    await connection.newSession('/project')
+    const t = threadTarget()
+    connection.register('thread-1', t.target)
+    const asked = server.request('item/tool/requestUserInput', {
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      itemId: 'ask-1',
+      questions: [],
+    })
+    expect(await asked.answer).toEqual({ answers: {} })
+    expect(t.requests).toHaveLength(0)
+    expect(ignored).toHaveLength(1)
   })
 
   it('grants more permissions for the turn, never through a routine’s scope', async () => {
