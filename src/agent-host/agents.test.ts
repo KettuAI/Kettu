@@ -8,7 +8,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { AgentStatus, AgentUpdate } from '@shared/agent-host'
 import type { Platform } from '@shared/platform'
 import { DEFAULT_SETTINGS, type AddedAgent, type HostSettings } from '@shared/settings'
-import type { AgentId } from '@shared/thread'
+import { HARNESS_IDS, type AgentId } from '@shared/thread'
 import {
   compareInstalls,
   type InstalledAdapter,
@@ -28,6 +28,7 @@ import {
   configFolders,
   detectAgent,
   fakeAgent,
+  FAST_AGENT,
   OPENCODE,
   type AgentDefinition,
   type DetectContext,
@@ -124,7 +125,9 @@ function manager(
     launcher,
     settings: () => ({
       locale: 'en',
-      agents: {},
+      agents: Object.fromEntries(
+        (extra.catalog ?? [fakeAgent(FAKE_AGENT_MAIN)]).map((def) => [def.id, { enabled: true }]),
+      ),
       addedAgents: [],
       proxy: { mode: 'environment' },
       git: { backgroundFetch: false },
@@ -199,6 +202,91 @@ function stopFails(firstEnv: Env = {}) {
 }
 
 describe('AgentManager', () => {
+  it('keeps an unregistered harness detectable without allowing an agent to start', async () => {
+    const settings: HostSettings = {
+      locale: 'en',
+      agents: { 'fake-agent': { enabled: false } },
+      addedAgents: [],
+      proxy: { mode: 'environment' },
+      git: DEFAULT_SETTINGS.git,
+      mcp: DEFAULT_SETTINGS.mcp,
+      usage: DEFAULT_SETTINGS.usage,
+      sessionTitles: true,
+    }
+    const m = manager({}, {}, { settings: () => settings })
+    expect(await m.agents.list()).toMatchObject([
+      { id: 'fake-agent', registered: false, state: 'available' },
+    ])
+    expect(m.agents.has('fake-agent')).toBe(false)
+    await expect(m.agents.ensureReady('fake-agent')).rejects.toMatchObject({
+      code: 'agent_unavailable',
+    })
+    expect(m.launcher.launches).toBe(0)
+    await m.agents.check('fake-agent')
+    expect(m.agents.status('fake-agent').registered).toBe(false)
+    await m.agents.stopAll()
+  })
+
+  it('stops a removed default agent and never registers it again through detection', async () => {
+    let settings: HostSettings = {
+      locale: 'en',
+      agents: { 'fake-agent': { enabled: true } },
+      addedAgents: [],
+      proxy: { mode: 'environment' },
+      git: DEFAULT_SETTINGS.git,
+      mcp: DEFAULT_SETTINGS.mcp,
+      usage: DEFAULT_SETTINGS.usage,
+      sessionTitles: true,
+    }
+    const m = manager({}, {}, { settings: () => settings })
+    await m.agents.ensureReady('fake-agent')
+    const previous = settings
+    settings = { ...settings, agents: { 'fake-agent': { enabled: false } } }
+    expect(await m.agents.settingsChanged(previous, settings)).toEqual(['fake-agent'])
+    expect(m.agents.processes()).toEqual([])
+    expect(m.agents.runtime('fake-agent')).toBeNull()
+    expect(m.agents.has('fake-agent')).toBe(false)
+    await m.agents.check('fake-agent')
+    await expect(m.agents.ensureReady('fake-agent')).rejects.toMatchObject({
+      code: 'agent_unavailable',
+    })
+    expect(m.launcher.launches).toBe(1)
+    expect(m.agents.status('fake-agent').registered).toBe(false)
+    const removed = settings
+    settings = { ...settings, agents: { 'fake-agent': { enabled: true } } }
+    expect(await m.agents.settingsChanged(removed, settings)).toEqual([])
+    expect(m.agents.status('fake-agent').registered).toBe(true)
+    expect(m.statuses.at(-1)).toMatchObject({ id: 'fake-agent', registered: true })
+    await m.agents.stopAll()
+  })
+
+  it('reports a harness as not installed while it is uninstalled', async () => {
+    const m = manager(
+      {},
+      {},
+      {
+        settings: () => ({
+          locale: 'en',
+          agents: { 'fake-agent': { enabled: true, uninstalled: true } },
+          addedAgents: [],
+          proxy: { mode: 'environment' },
+          git: DEFAULT_SETTINGS.git,
+          mcp: DEFAULT_SETTINGS.mcp,
+          usage: DEFAULT_SETTINGS.usage,
+          sessionTitles: true,
+        }),
+      },
+    )
+    const [status] = await m.agents.list()
+    expect(status).toMatchObject({ id: 'fake-agent', state: 'not-installed', uninstalled: true })
+    await m.agents.stopAll()
+  })
+
+  it('names the command that clears a uvx package when uninstalling', () => {
+    const m = manager({}, {}, { catalog: [FAST_AGENT] })
+    expect(m.agents.status('fast-agent').uninstallCommand).toBe('uv cache clean fast-agent-acp')
+  })
+
   it('starts lazily, once, however many callers wait', async () => {
     const m = manager()
     expect(await m.agents.list()).toMatchObject([{ id: 'fake-agent', state: 'available' }])
@@ -1175,7 +1263,7 @@ function cliManager(
 function withMcpOff(off: AgentId[]): HostSettings {
   return {
     locale: 'en',
-    agents: {},
+    agents: Object.fromEntries(HARNESS_IDS.map((id) => [id, { enabled: true }])),
     addedAgents: [],
     proxy: { mode: 'environment' },
     git: { backgroundFetch: false },
@@ -1666,7 +1754,7 @@ describe('a configuration folder of its own', () => {
   }
   const settingsWith = (configDir?: string): HostSettings => ({
     locale: 'en',
-    agents: configDir ? { 'claude-code': { configDir } } : {},
+    agents: { 'claude-code': { enabled: true, ...(configDir ? { configDir } : {}) } },
     addedAgents: [],
     proxy: { mode: 'environment' },
     git: { backgroundFetch: false },
@@ -1853,7 +1941,7 @@ describe('agents added to a harness', () => {
     agents: HostSettings['agents'] = {},
   ): HostSettings => ({
     locale: 'en',
-    agents,
+    agents: { ...agents, 'claude-code': { enabled: true, ...agents['claude-code'] } },
     addedAgents,
     proxy: { mode: 'environment' },
     git: { backgroundFetch: false },
@@ -1963,7 +2051,7 @@ describe('agents added to a harness', () => {
   })
 
   it('hides a default agent the settings hide, and only that one', async () => {
-    const m = addedManager(settingsWith([WORK], { 'claude-code': { hidden: true } }))
+    const m = addedManager(settingsWith([WORK], { 'claude-code': { enabled: true, hidden: true } }))
     await m.agents.list()
     expect(m.agents.status('claude-code').hidden).toBe(true)
     expect(m.agents.status('claude-code~work').hidden).toBe(false)
@@ -1975,9 +2063,10 @@ describe('agents added to a harness', () => {
       {},
       {
         settings: () =>
-          settingsWith([
-            { id: 'fake-agent~other', name: 'Other', configDir: work, created: false },
-          ]),
+          settingsWith(
+            [{ id: 'fake-agent~other', name: 'Other', configDir: work, created: false }],
+            { 'fake-agent': { enabled: true } },
+          ),
       },
     )
     await m.agents.list()
@@ -3057,7 +3146,7 @@ describe('installing a binary agent from its archive', () => {
       }),
       probe: async () => ({ nodeVersion: null, npmPath: null, nodePath: null }),
     })
-    let agentSettings: HostSettings['agents'] = {}
+    let agentSettings: HostSettings['agents'] = { opencode: { enabled: true } }
     const m = manager(
       {},
       { progressMs: 1 },
@@ -3107,6 +3196,15 @@ describe('installing a binary agent from its archive', () => {
     expect(m.status().launchCommand).toContain(m.program)
     const runtime = await m.agents.ensureReady('opencode')
     expect(runtime.agentId).toBe('opencode')
+    await m.agents.stopAll()
+  })
+
+  it('uninstalls the archive Kettu installed', async () => {
+    const m = await archiveManager()
+    await m.agents.install('opencode')
+    expect(await stat(m.program)).toBeTruthy()
+    expect(await m.agents.uninstall('opencode', false)).toEqual({ command: null, error: null })
+    await expect(stat(m.program)).rejects.toThrow()
     await m.agents.stopAll()
   })
 

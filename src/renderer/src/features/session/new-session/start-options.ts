@@ -25,6 +25,7 @@ export function agentNeed(status: AgentStatus): AgentNeed {
 
 /** Whether New session can start the agent, and so whether its menu lists it. */
 export function canStart(status: AgentStatus): boolean {
+  if (status.registered === false) return false
   const need = agentNeed(status)
   return need !== 'install' && need !== 'adapter'
 }

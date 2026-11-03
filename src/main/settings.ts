@@ -1,7 +1,8 @@
 import { randomInt } from 'node:crypto'
 import { join } from 'node:path'
 import type { AddedAgent, SettingsFile } from '@shared/settings'
-import type { AgentId, HarnessId } from '@shared/thread'
+import { HARNESS_IDS, isHarnessId, type AgentId, type HarnessId } from '@shared/thread'
+import { parseSessionsFile, parseRoutinesFile } from '../agent-host/storage'
 import { JsonFileWriter, quarantineFile, readJsonFile } from './json-file'
 import { createLogger } from './log'
 import {
@@ -15,6 +16,7 @@ import {
   withAgentBinary,
   withAgentColor,
   withDirectPort,
+  withMovedAgent,
   withoutAgent,
   withRenamedAgent,
   withShellPath,
@@ -28,6 +30,78 @@ function randomDirectPort(): number {
 }
 
 export type SettingsListener = (settings: SettingsFile, changed: Set<SettingsSection>) => void
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** Reads only Kettu's indexes; a failed read must never erase evidence of an agent's use. */
+async function migrateAgentRegistration(
+  settings: SettingsFile,
+  userDataPath: string,
+): Promise<void> {
+  const used = new Set<HarnessId>()
+  const keep = (id: AgentId | null): void => {
+    if (isHarnessId(id)) used.add(id)
+  }
+  keep(settings.general.defaultAgent)
+  settings.mcp.kettu.off.forEach(keep)
+  for (const id of HARNESS_IDS) {
+    if (settings.agents[id]?.configDir) used.add(id)
+  }
+  const readIndex = async (name: string): Promise<Record<string, unknown> | null> => {
+    const file = join(userDataPath, 'state', name)
+    const read = await readJsonFile(file)
+    if (read.kind === 'missing') return null
+    if (read.kind !== 'ok')
+      throw new Error(`Cannot migrate agent registration: ${file}: ${read.reason}`)
+    if (!isRecord(read.value) || read.value.version !== 1) {
+      throw new Error(`Cannot migrate agent registration: ${file}: unsupported or malformed index`)
+    }
+    return read.value
+  }
+  for (const [name, parse] of [
+    ['sessions.json', parseSessionsFile],
+    ['routines.json', parseRoutinesFile],
+  ] as const) {
+    const raw = await readIndex(name)
+    if (!raw) continue
+    const parsed = parse(raw)
+    if (typeof parsed === 'string')
+      throw new Error(`Cannot migrate agent registration: ${name}: ${parsed}`)
+    const records = 'sessions' in parsed ? parsed.sessions : parsed.routines
+    records.forEach((record) => keep(record.agentId))
+  }
+  const options = await readIndex('agent-options.json')
+  if (options) {
+    if (!isRecord(options.agents))
+      throw new Error(
+        'Cannot migrate agent registration: agent-options.json: agents is not an object',
+      )
+    for (const [id, entry] of Object.entries(options.agents)) {
+      if (!isRecord(entry))
+        throw new Error(
+          `Cannot migrate agent registration: agent-options.json: malformed entry ${id}`,
+        )
+      if (entry.remembered !== undefined && !isRecord(entry.remembered)) {
+        throw new Error(
+          `Cannot migrate agent registration: agent-options.json: malformed remembered options ${id}`,
+        )
+      }
+      if (isHarnessId(id) && isRecord(entry.remembered) && Object.keys(entry.remembered).length > 0)
+        used.add(id)
+    }
+  }
+  for (const id of HARNESS_IDS) {
+    const entry = settings.agents[id]
+    if (entry?.enabled !== undefined) continue
+    // Hiding belonged to the old always-registered default; an agent is now removed instead.
+    if (entry) delete entry.hidden
+    if (used.has(id)) settings.agents[id] = { ...entry, enabled: true }
+    else if (entry && Object.keys(entry).length === 0) delete settings.agents[id]
+  }
+  settings.agentRegistrationVersion = 1
+}
 
 /** Owns settings.json: read once at startup, validated on every change, written atomically. */
 export class SettingsStore {
@@ -54,6 +128,22 @@ export class SettingsStore {
       log.warn('settings.json comes from a newer version; changes this run are not saved')
       return new SettingsStore(settings, null)
     }
+    const savedMarker =
+      read.kind === 'ok' && isRecord(read.value) ? read.value.agentRegistrationVersion : undefined
+    // An unreadable file still has history to go on; one from a newer build is never rewritten.
+    const needsRegistration = !loaded.readOnly && savedMarker === undefined
+    if (needsRegistration) {
+      try {
+        await migrateAgentRegistration(settings, userDataPath)
+      } catch (error) {
+        // Keeping every harness is the safe side: an unreadable index must not drop a used agent.
+        log.error('Could not read the history to register agents; keeping all harnesses', error)
+        for (const id of HARNESS_IDS) {
+          settings.agents[id] = { ...settings.agents[id], enabled: true }
+        }
+        settings.agentRegistrationVersion = 1
+      }
+    }
     const store = new SettingsStore(settings, writer())
     if (loaded.problems.length > 0) {
       log.warn(`settings.json is invalid: ${loaded.problems.join('; ')}`)
@@ -64,9 +154,10 @@ export class SettingsStore {
         return new SettingsStore(settings, null)
       }
       store.save()
-    } else if (settings !== loaded.settings) {
+    } else if (settings !== loaded.settings || needsRegistration) {
       store.save()
     }
+    if (needsRegistration) await store.flush()
     return store
 
     function writer(): JsonFileWriter {
@@ -102,6 +193,10 @@ export class SettingsStore {
 
   removeAgent(agentId: AgentId): SettingsFile {
     return this.replace(withoutAgent(this.current, agentId))
+  }
+
+  moveAgent(agentId: AgentId, configDir: string): SettingsFile {
+    return this.replace(withMovedAgent(this.current, agentId, configDir))
   }
 
   setShellPath(shellPath: string): SettingsFile {

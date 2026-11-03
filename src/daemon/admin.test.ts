@@ -92,11 +92,19 @@ type Attention = Extract<HostToMain, { type: 'host:attention' }>
 
 async function setup() {
   const dataPath = await tempFolder('kettu-daemon-admin-')
+  const home = await tempFolder('kettu-daemon-home-')
   const settings = await SettingsStore.load(dataPath)
   const hosts = new FakeHosts()
-  const admin = await startDaemonAdmin({ dataPath, version: '1.2.3', settings, hosts, env: {} })
+  const admin = await startDaemonAdmin({
+    dataPath,
+    home,
+    version: '1.2.3',
+    settings,
+    hosts,
+    env: {},
+  })
   const call = (method: string, params?: unknown) => admin.answer(PHONE, method, params)
-  return { dataPath, settings, hosts, admin, call }
+  return { dataPath, home, settings, hosts, admin, call }
 }
 
 describe("the daemon's answers to its owner's devices", () => {
@@ -250,7 +258,7 @@ describe("the daemon's answers to its owner's devices", () => {
     })
     const removed = path.join(t.dataPath, 'removed-agent-config')
     expect(await readdir(removed)).toEqual(['codex~work-1234'])
-    expect(await readdir(path.join(t.dataPath, 'agent-config'))).toEqual([])
+    expect(await readdir(path.join(t.home, '.kettu', 'agents'))).toEqual([])
     if (process.platform !== 'win32') expect((await stat(removed)).mode & 0o777).toBe(0o700)
     vi.restoreAllMocks()
     await t.settings.flush()

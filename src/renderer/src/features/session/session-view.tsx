@@ -57,6 +57,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const progressNotes = useAgentsStore(
     (s) => s.byId[summary.agentId]?.capabilities.progressNotes ?? false,
   )
+  const agentRemoved = useAgentsStore((s) => s.byId[summary.agentId]?.registered === false)
   const otherHost = useOtherHost(hostOfPath(summary.projectPath))
   // Its host is offline: what the thread showed stays, and nothing goes to it.
   const away = otherHost && isAway(otherHost.connection) ? otherHost : null
@@ -198,6 +199,18 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                 </AlertAction>
               </Alert>
             )}
+            {agentRemoved && (
+              <Alert variant="warning">
+                <CircleAlertIcon />
+                <AlertTitle>{t('view.agentRemoved', { agent: name })}</AlertTitle>
+                <AlertDescription>{t('view.agentRemovedBody')}</AlertDescription>
+                <AlertAction>
+                  <Button size="xs" variant="outline" onClick={() => openSettings('agents')}>
+                    {t('view.openAgents')}
+                  </Button>
+                </AlertAction>
+              </Alert>
+            )}
             {(actionError || queueError) && (
               <p role="alert" className="animate-in px-1 text-xs text-danger fade-in">
                 {actionError ?? queueError}
@@ -215,6 +228,10 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                 session && <HostAway host={away} inline />
               ) : summary.origin === 'subagent' ? (
                 <SubagentBar summary={summary} session={session} />
+              ) : agentRemoved ? (
+                <p className="px-3 py-4 text-small text-tertiary">
+                  {t('view.agentRemovedComposer')}
+                </p>
               ) : session ? (
                 <div className="relative z-10">
                   <Composer key={sessionId} session={session} agentName={name} />

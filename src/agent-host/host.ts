@@ -4,6 +4,7 @@
 
 import os from 'node:os'
 import path from 'node:path'
+import { cp, mkdir, rename, rm, stat } from 'node:fs/promises'
 import type { DiagnosticsBundle, HostEvent, McpStatus } from '@shared/agent-host'
 import { type ArtifactImportResult, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
@@ -20,6 +21,7 @@ import type { PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
 import type { HostSettings } from '@shared/settings'
+import { HARNESSES_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
 import type { FromDevice } from '@shared/thread'
 import { agentOptionsFile, AgentOptionsStore } from './agent-options'
 import { STOP_TIMINGS } from './agent-process'
@@ -135,6 +137,39 @@ export interface HostOptions {
   homeDir?: string
   /** Reads a session's prompt cache lifetime; Claude Code's transcripts by default. */
   cacheTtl?: CacheTtlReader
+}
+
+/** Whether a path is a directory, without raising when it is not there. */
+async function isDirectory(folder: string): Promise<boolean> {
+  return (await stat(folder).catch(() => null))?.isDirectory() ?? false
+}
+
+/**
+ * Kettu used to install harness packages beside its own data, where uninstalling the app could
+ * take them along. Moves that folder to the user's home once; a folder on another volume is
+ * copied instead.
+ */
+async function moveHarnessInstalls(
+  legacy: string,
+  target: string,
+  log: (message: string) => void,
+): Promise<void> {
+  if (!(await isDirectory(legacy)) || (await isDirectory(target))) return
+  await mkdir(path.dirname(target), { recursive: true })
+  try {
+    await rename(legacy, target)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EXDEV') {
+      log(`Could not move ${legacy} to ${target}: ${(error as Error).message}`)
+      return
+    }
+    try {
+      await cp(legacy, target, { recursive: true })
+      await rm(legacy, { recursive: true, force: true })
+    } catch (copyError) {
+      log(`Could not move ${legacy} to ${target}: ${(copyError as Error).message}`)
+    }
+  }
 }
 
 export class AgentHost {
@@ -307,6 +342,11 @@ export class AgentHost {
       status: (status) => this.hub.broadcast({ type: 'usage.status', status }),
       ...(options.usageTimings ? { timings: options.usageTimings } : {}),
     })
+    const adaptersDir = path.join(
+      options.homeDir ?? os.homedir(),
+      KETTU_HOME_FOLDER,
+      HARNESSES_FOLDER,
+    )
     this.agents = new AgentManager({
       catalog,
       platform,
@@ -317,7 +357,7 @@ export class AgentHost {
       launcher: options.launcher ?? processLauncher(platform),
       settings: () => this.settings,
       reportsDir: path.join(options.userDataPath, 'agent-reports'),
-      adaptersDir: path.join(options.userDataPath, 'agents'),
+      adaptersDir,
       sessionRouterPath: options.sessionRouterPath ?? null,
       ...(options.detect ? { detect: options.detect } : {}),
       ...(options.protocols ? { protocols: options.protocols } : {}),
@@ -489,6 +529,11 @@ export class AgentHost {
 
   /** Loads the state, answers `host:ready`, and resolves the environment in the background. */
   static async start(options: HostOptions): Promise<AgentHost> {
+    await moveHarnessInstalls(
+      path.join(options.userDataPath, 'agents'),
+      path.join(options.homeDir ?? os.homedir(), KETTU_HOME_FOLDER, HARNESSES_FOLDER),
+      (message) => options.send({ type: 'host:log', level: 'warn', message }),
+    )
     const host = new AgentHost(options)
     const [, , , remembered, updates] = await Promise.all([
       host.scratch.ready(),
@@ -586,7 +631,8 @@ export class AgentHost {
     }
     this.usage.setFromComputer(next.usage.fromComputer)
     this.env.setConfigFolders(configFolders(this.catalog, next))
-    await this.agents.settingsChanged(previous, next)
+    const removed = await this.agents.settingsChanged(previous, next)
+    if (removed.length > 0) await this.sessions.agentsRemoved(removed)
   }
 
   /** The computer slept or woke, so the routines' timer starts over from the wall clock. */
@@ -895,6 +941,8 @@ export class AgentHost {
       'agents.setApiKey': ({ agentId, ...input }) => agents.setApiKey(agentId, input),
       'agents.clearApiKey': ({ agentId }) => agents.clearApiKey(agentId),
       'agents.install': ({ agentId, method }) => agents.install(agentId, method),
+      'agents.uninstall': ({ agentId, removeProgram }) =>
+        agents.uninstall(agentId, removeProgram === true),
       'agents.cancelTask': ({ agentId }) => agents.cancelTask(agentId),
       'agents.readOptions': async ({ agentId, projectPath }) => {
         const entry = this.agentOptions.get(agentId)

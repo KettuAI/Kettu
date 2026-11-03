@@ -30,7 +30,9 @@ export function PlanLimits({ used }: { used: readonly AgentId[] }) {
   const agents = useAgentsStore(
     useShallow((s) =>
       planAgents(
-        s.order.map((id) => s.byId[id]).filter((a): a is AgentStatus => !!a),
+        s.order
+          .map((id) => s.byId[id])
+          .filter((a): a is AgentStatus => !!a && a.registered !== false),
         used,
       ),
     ),

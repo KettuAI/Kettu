@@ -58,6 +58,7 @@ import {
   AgentPage,
   AgentsFooter,
   AgentsGroupActions,
+  NoAgents,
 } from './agents-section'
 import {
   EnvironmentFooter,
@@ -531,14 +532,22 @@ export function useAgentsSection(): SectionDef {
   const onHost = useHostContext()
   const { useAgentsStore, useSettingsStore } = useHostScope()
   const en = english()
-  const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId).filter(hasProgram)))
+  const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
-  const list: GroupDef = {
-    id: 'agents',
-    label: t('agents.groups.list', onHost),
-    count: agents.length,
-    actions: <AgentsGroupActions />,
-  }
+  const list: GroupDef =
+    agents.length === 0
+      ? {
+          id: 'agents',
+          label: t('agents.groups.list', onHost),
+          actions: <AgentsGroupActions />,
+          unlabeled: true,
+        }
+      : {
+          id: 'agents',
+          label: t('agents.groups.list', onHost),
+          count: agents.length,
+          actions: <AgentsGroupActions />,
+        }
   const row = (status: AgentStatus): RowDef => ({
     id: status.id,
     name: status.name,
@@ -555,18 +564,30 @@ export function useAgentsSection(): SectionDef {
     title: t('sections.agents'),
     description: t('pages.agents', onHost),
     icon: BotIcon,
-    rows: [
-      ...agents.map(row),
-      {
-        id: 'add-agent',
-        name: t('agents.add.button'),
-        english: en('agents.add.button'),
-        keywords: t('agents.add.keywords'),
-        group: list,
-        layout: 'custom',
-        render: () => <AddAgentRow />,
-      },
-    ],
+    rows:
+      agents.length === 0
+        ? [
+            {
+              id: 'no-agents',
+              name: t('agents.empty.title'),
+              keywords: t('agents.empty.keywords'),
+              group: list,
+              layout: 'custom',
+              render: () => <NoAgents />,
+            },
+          ]
+        : [
+            ...agents.map(row),
+            {
+              id: 'add-agent',
+              name: t('agents.add.button'),
+              english: en('agents.add.button'),
+              keywords: t('agents.add.keywords'),
+              group: list,
+              layout: 'custom',
+              render: () => <AddAgentRow />,
+            },
+          ],
     footer: <AgentsFooter />,
     itemPage: (agentId) => <AgentPage agentId={agentId as AgentId} />,
   }
@@ -579,7 +600,7 @@ export function useHarnessesSection(): SectionDef {
   const harnesses = useAgentsStore(useShallow((s) => harnessStatuses(s.order, s.byId)))
   const environment = useAgentsStore((s) => s.environment)
   // Installed: its program is on the machine, too old included, with any package Kettu adds for it.
-  const installed = harnesses.filter((h) => hasProgram(h) && !awaitsPackage(h))
+  const installed = harnesses.filter((h) => hasProgram(h) && !awaitsPackage(h) && !h.uninstalled)
   const missing = harnesses.filter((h) => !installed.includes(h))
   const groups = {
     installed: {

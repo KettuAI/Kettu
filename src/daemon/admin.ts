@@ -3,7 +3,9 @@
 // updated from Settings, and every change of the settings reaches the hosts that read them.
 
 import { mkdir, rename } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
+import { AGENTS_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
 import { BUILTIN_THEME_ID } from '@shared/themes'
 import { AgentFolders } from '../main/agent-folders'
 import { AdminError, HostAdmin } from '../main/host-admin'
@@ -41,6 +43,8 @@ export interface DaemonAdminOptions {
   hosts: DaemonHosts
   /** The daemon's environment, whose proxy variables apply unless the settings name a proxy. */
   env: NodeJS.ProcessEnv
+  /** The home folder Kettu keeps its agent folders under; the system's unless a test picks one. */
+  home?: string
 }
 
 /** A server has no trash, so a folder Kettu made moves into one of the daemon's own. */
@@ -66,6 +70,7 @@ export async function startDaemonAdmin({
   settings,
   hosts,
   env,
+  home = os.homedir(),
 }: DaemonAdminOptions): Promise<HostAdmin> {
   const themesDir = path.join(dataPath, 'themes')
   const sourcesFile = path.join(dataPath, 'theme-sources.json')
@@ -84,9 +89,12 @@ export async function startDaemonAdmin({
     },
   )
   const removed = path.join(dataPath, 'removed-agent-config')
-  const agentFolders = new AgentFolders(settings, path.join(dataPath, 'agent-config'), (folder) =>
-    setAside(folder, removed),
+  const agentFolders = new AgentFolders(
+    settings,
+    path.join(home, KETTU_HOME_FOLDER, AGENTS_FOLDER),
+    (folder) => setAside(folder, removed),
   )
+  await agentFolders.moveCreatedAgents(path.join(dataPath, 'agent-config'))
   admin = new HostAdmin({
     settings,
     agentFolders,

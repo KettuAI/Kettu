@@ -23,6 +23,7 @@ import type { DirectAddress } from '@shared/remote/protocol'
 import { DEVICE_NAME_CHARS, isDeviceName } from '@shared/remote/device'
 import { THEME_ID } from '@shared/themes'
 import {
+  AUTO_AGENT_HARNESSES,
   HARNESS_IDS,
   isAgentId,
   isDefaultAgent,
@@ -156,7 +157,13 @@ function checkProxy(value: unknown, path: string): string | null {
   return null
 }
 
-const AGENT_KEYS: readonly string[] = ['binaryPath', 'configDir', 'hidden']
+const AGENT_KEYS: readonly string[] = [
+  'binaryPath',
+  'configDir',
+  'hidden',
+  'enabled',
+  'uninstalled',
+]
 
 /** The agents Kettu's own MCP server is off for: each an agent id, once. */
 function checkMcpOff(value: unknown, path: string): string | null {
@@ -284,7 +291,9 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
           !isRecord(entry) ||
           Object.keys(entry).some((key) => !AGENT_KEYS.includes(key))
         ) {
-          problems.push(`"agents.${harnessId}" accepts only "binaryPath", "configDir" and "hidden"`)
+          problems.push(
+            `"agents.${harnessId}" accepts only "binaryPath", "configDir", "hidden", "enabled" and "uninstalled"`,
+          )
         } else {
           if ('binaryPath' in entry && entry.binaryPath !== null) {
             problems.push(
@@ -294,9 +303,11 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
           if ('configDir' in entry && entry.configDir !== null) {
             problems.push(`"agents.${harnessId}.configDir" can only be cleared with null`)
           }
-          const problem =
-            'hidden' in entry ? isBoolean(entry.hidden, `agents.${harnessId}.hidden`) : null
-          if (problem) problems.push(problem)
+          for (const key of ['hidden', 'enabled', 'uninstalled']) {
+            const problem =
+              key in entry ? isBoolean(entry[key], `agents.${harnessId}.${key}`) : null
+            if (problem) problems.push(problem)
+          }
         }
       }
     } else if (section === 'proxy') {
@@ -360,6 +371,9 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
     for (const harnessId of Object.keys(patch.agents) as HarnessId[]) {
       const change = patch.agents[harnessId]
       const entry = { ...next.agents[harnessId] }
+      if (change?.enabled !== undefined) entry.enabled = change.enabled
+      if (change?.uninstalled === true) entry.uninstalled = true
+      if (change?.uninstalled === false) delete entry.uninstalled
       if (change?.binaryPath === null) delete entry.binaryPath
       if (change?.configDir === null) delete entry.configDir
       if (change?.hidden === true) entry.hidden = true
@@ -462,13 +476,34 @@ export function withAgentColor(
   return next
 }
 
-/** Removes an added agent, and every setting that names it. */
-export function withoutAgent(current: SettingsFile, agentId: AgentId): SettingsFile {
-  if (!current.addedAgents.some((agent) => agent.id === agentId)) {
-    throw new SettingsError(`No added agent "${agentId}"`)
+/** Points a created agent at the folder it was moved to. */
+export function withMovedAgent(
+  current: SettingsFile,
+  agentId: AgentId,
+  configDir: string,
+): SettingsFile {
+  const index = current.addedAgents.findIndex((agent) => agent.id === agentId)
+  if (index < 0) throw new SettingsError(`No added agent "${agentId}"`)
+  const next = structuredClone(current)
+  next.addedAgents[index] = { ...next.addedAgents[index]!, configDir }
+  return next
+}
+
+/** Unregisters an agent without changing its harness installation or external configuration. */ export function withoutAgent(
+  current: SettingsFile,
+  agentId: AgentId,
+): SettingsFile {
+  const defaultAgent = isHarnessId(agentId)
+  const registered =
+    defaultAgent &&
+    (current.agents[agentId]?.enabled === true ||
+      (AUTO_AGENT_HARNESSES.includes(agentId) && current.agents[agentId]?.enabled !== false))
+  if (defaultAgent ? !registered : !current.addedAgents.some((agent) => agent.id === agentId)) {
+    throw new SettingsError(`No ${defaultAgent ? 'registered' : 'added'} agent "${agentId}"`)
   }
   const next = structuredClone(current)
-  next.addedAgents = next.addedAgents.filter((agent) => agent.id !== agentId)
+  if (defaultAgent) next.agents[agentId] = { ...next.agents[agentId], enabled: false }
+  else next.addedAgents = next.addedAgents.filter((agent) => agent.id !== agentId)
   next.mcp.kettu.off = next.mcp.kettu.off.filter((id) => id !== agentId)
   if (next.general.defaultAgent === agentId) next.general.defaultAgent = null
   return next
@@ -501,6 +536,9 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
     return { settings, problems: ['"version" is missing or invalid'], readOnly: false }
   }
   const problems: string[] = []
+  if (raw.agentRegistrationVersion !== undefined && raw.agentRegistrationVersion !== 1) {
+    problems.push('"agentRegistrationVersion" must be 1')
+  }
   for (const section of FIELD_SECTIONS) {
     const value = raw[section]
     if (value === undefined) continue
@@ -541,10 +579,20 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
           if (problem) problems.push(problem)
           else stored.configDir = entry.configDir as string
         }
+        if (entry.enabled !== undefined) {
+          const problem = isBoolean(entry.enabled, `agents.${harnessId}.enabled`)
+          if (problem) problems.push(problem)
+          else stored.enabled = entry.enabled as boolean
+        }
         if (entry.hidden !== undefined) {
           const problem = isBoolean(entry.hidden, `agents.${harnessId}.hidden`)
           if (problem) problems.push(problem)
           else if (entry.hidden) stored.hidden = true
+        }
+        if (entry.uninstalled !== undefined) {
+          const problem = isBoolean(entry.uninstalled, `agents.${harnessId}.uninstalled`)
+          if (problem) problems.push(problem)
+          else if (entry.uninstalled) stored.uninstalled = true
         }
         if (Object.keys(stored).length > 0) settings.agents[harnessId] = stored
       }
@@ -732,13 +780,14 @@ export function terminalSettings(settings: SettingsFile): TerminalSettings {
   }
 }
 
-export type SettingsSection = Exclude<keyof SettingsFile, 'version'>
+export type SettingsSection = Exclude<keyof SettingsFile, 'version' | 'agentRegistrationVersion'>
 
+/** The sections whose values differ, so each consumer is told only about what it uses. */
 /** The sections whose values differ, so each consumer is told only about what it uses. */
 export function changedSections(before: SettingsFile, after: SettingsFile): Set<SettingsSection> {
   const changed = new Set<SettingsSection>()
   for (const key of Object.keys(after) as (keyof SettingsFile)[]) {
-    if (key === 'version') continue
+    if (key === 'version' || key === 'agentRegistrationVersion') continue
     if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) changed.add(key)
   }
   return changed

@@ -315,7 +315,13 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     fakeAgentPath: FAKE_AGENT_MAIN,
     settings: options.settings ?? {
       locale: 'en',
-      agents: DEFAULT_SETTINGS.agents,
+      agents: Object.fromEntries(
+        [
+          'fake-agent',
+          ...(options.fakeAs ?? []),
+          ...(options.fakeThroughRouter?.agentIds ?? []),
+        ].map((id) => [id, { enabled: true }]),
+      ),
       addedAgents: DEFAULT_SETTINGS.addedAgents,
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,

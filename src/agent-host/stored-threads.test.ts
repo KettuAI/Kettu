@@ -460,7 +460,7 @@ describe('attaching on use', () => {
     const shellFolder = path.join(os.tmpdir(), 'kettu-shell-claude')
     const settings = (configDir?: string): HostSettings => ({
       locale: 'en',
-      agents: configDir ? { 'claude-code': { configDir } } : {},
+      agents: { 'claude-code': { enabled: true, ...(configDir ? { configDir } : {}) } },
       addedAgents: [],
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,

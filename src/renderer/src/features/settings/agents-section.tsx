@@ -4,6 +4,7 @@
 
 import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import {
+  BotIcon,
   EyeIcon,
   EyeOffIcon,
   FolderIcon,
@@ -38,6 +39,14 @@ import {
 import { Button } from '@renderer/components/ui/button'
 import { Checkbox } from '@renderer/components/ui/checkbox'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@renderer/components/ui/empty'
 import { Input } from '@renderer/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@renderer/components/ui/radio-group'
 import { Spinner } from '@renderer/components/ui/spinner'
@@ -47,7 +56,7 @@ import { readiness } from '@renderer/features/agents/readiness'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { isInstalled, type AgentsStoreHook } from '@renderer/stores/agents'
+import { addableHarnesses, type AgentsStoreHook } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
 import {
@@ -74,7 +83,6 @@ import {
   Pill,
   ROW_BUTTON,
   SettingSelect,
-  SettingSwitch,
 } from './controls'
 import { PlaceRow } from './places'
 import {
@@ -104,13 +112,15 @@ const ADDED_WAIT_MS = 10_000
 /** Resolves once the host lists the agent, which follows the settings change that added it. */
 function listed(agents: AgentsStoreHook, agentId: AgentId): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (agents.getState().byId[agentId]) return resolve()
+    const known = agents.getState().byId[agentId]
+    if (known && known.registered !== false) return resolve()
     const timer = setTimeout(() => {
       stop()
       reject(new Error(`${agentId} did not appear`))
     }, ADDED_WAIT_MS)
     const stop = agents.subscribe((state) => {
-      if (!state.byId[agentId]) return
+      const status = state.byId[agentId]
+      if (!status || status.registered === false) return
       clearTimeout(timer)
       stop()
       resolve()
@@ -128,17 +138,9 @@ function signInTerminal(status: AgentStatus, command: string): void {
   emitAppEvent({ kind: 'sign-in-terminal', projectPath, command, agentId: status.id })
 }
 
-/** The harnesses agents can be added to, that are installed. */
 function useAddable(): AgentStatus[] {
   const { useAgentsStore } = useHostScope()
-  return useAgentsStore(
-    useShallow((s) =>
-      MULTI_AGENT_HARNESSES.flatMap((id) => {
-        const status = s.byId[id]
-        return status && isInstalled(status) ? [status] : []
-      }),
-    ),
-  )
+  return useAgentsStore(useShallow((s) => addableHarnesses(s.order, s.byId)))
 }
 
 /** One agent in the list: its harness's mark, its name, its harness and account, its usage. */
@@ -187,7 +189,6 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
         <>
           <span className="truncate">{status.name}</span>
           {status.isDefault && hasOthers && <Pill>{t('agents.default')}</Pill>}
-          {status.hidden && <Pill>{t('agents.hiddenTag')}</Pill>}
         </>
       }
       right={<span className="pointer-events-auto flex items-center">{end}</span>}
@@ -230,18 +231,29 @@ export function AgentsGroupActions() {
   )
 }
 
-/** Add agent, which opens its dialog; hidden while no installed harness can carry another. */
-function AddAgentButton({ className, row }: { className?: string; row?: boolean }) {
+/** Adding stays discoverable before the first harness is installed. */
+function AddAgentButton({
+  className,
+  row,
+  primary = false,
+}: {
+  className?: string
+  row?: boolean
+  primary?: boolean
+}) {
   const { t } = useTranslation('settings')
   const [open, setOpen] = useState(false)
   const addable = useAddable()
-  if (addable.length === 0) return null
+  const add = (): void => {
+    if (addable.length === 0) openHarnessSettings(null)
+    else setOpen(true)
+  }
   return (
     <>
       {row ? (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={add}
           className="group/add flex w-full items-center gap-3.5 rounded-lg py-3.25 text-left text-row text-secondary outline-none transition-colors duration-(--duration-fast) hover:text-primary focus-ring"
         >
           <span className="grid size-7.5 shrink-0 place-items-center rounded-xl shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] transition-shadow duration-(--duration-fast) group-hover/add:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)]">
@@ -250,7 +262,7 @@ function AddAgentButton({ className, row }: { className?: string; row?: boolean 
           {t('agents.add.button')}
         </button>
       ) : (
-        <Button variant="ghost" className={className} onClick={() => setOpen(true)}>
+        <Button variant={primary ? 'default' : 'ghost'} className={className} onClick={add}>
           <PlusIcon data-icon="inline-start" />
           {t('agents.add.button')}
         </Button>
@@ -265,7 +277,31 @@ export function AddAgentRow() {
   return <AddAgentButton row />
 }
 
-/** Under the list: other programs are installed in Settings > Harnesses. */
+export function NoAgents() {
+  const { t } = useTranslation('settings')
+  const addable = useAddable()
+  return (
+    <Empty className="min-h-72">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <BotIcon />
+        </EmptyMedia>
+        <EmptyTitle>{t('agents.empty.title')}</EmptyTitle>
+        <EmptyDescription>
+          {t(addable.length > 0 ? 'agents.empty.installed' : 'agents.empty.description')}
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <AddAgentButton primary />
+        <Button variant="ghost" onClick={() => openHarnessSettings(null)}>
+          {t('agents.empty.harnesses')}
+        </Button>
+      </EmptyContent>
+    </Empty>
+  )
+}
+
+/** Under the list: installation and registration are separate choices. */
 export function AgentsFooter() {
   const { t } = useTranslation('settings')
   return (
@@ -279,6 +315,7 @@ export function AgentsFooter() {
         {t('sections.harnesses')}
       </button>
       {t('agents.footerAfter')}
+      <span className="block">{t('agents.registrationNote')}</span>
     </p>
   )
 }
@@ -298,29 +335,35 @@ function AddAgentDialog({
   onOpenChange: (open: boolean) => void
   harnesses: AgentStatus[]
 }) {
-  const { api, request, useAgentsStore } = useHostScope()
+  const { api, request, useAgentsStore, useSettingsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const [harness, setHarness] = useState<HarnessId>(harnesses[0]?.harnessId ?? 'claude-code')
   const [name, setName] = useState('')
-  const [folder, setFolder] = useState<'new' | 'existing'>('new')
+  const [folder, setFolder] = useState<'default' | 'new' | 'existing'>('default')
   const [picked, setPicked] = useState<string | null>(null)
   const [login, setLogin] = useState<Login>('terminal')
   const [key, setKey] = useState({ baseUrl: '', key: '', model: '' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const chosen = harnesses.find((h) => h.harnessId === harness) ?? harnesses[0]
-  const trimmed = name.trim()
+  const canUseDefault = chosen?.registered === false
+  const multiple = !!chosen && MULTI_AGENT_HARNESSES.includes(chosen.harnessId)
+  const selectedFolder = folder === 'default' && !canUseDefault ? 'new' : folder
+  const useDefault = selectedFolder === 'default'
+  const trimmed = useDefault ? (chosen?.harnessName ?? '') : name.trim()
   const tooLong = [...trimmed].length > AGENT_NAME_CHARS
   const providers = chosen?.apiKey?.providers ?? false
   const valid =
+    !!chosen &&
     trimmed.length > 0 &&
     !tooLong &&
-    (folder === 'new' || picked !== null) &&
-    (login === 'terminal' || key.key.trim().length > 0)
+    (useDefault || multiple) &&
+    (selectedFolder !== 'existing' || picked !== null) &&
+    (useDefault || login === 'terminal' || key.key.trim().length > 0)
 
   const reset = (): void => {
     setName('')
-    setFolder('new')
+    setFolder('default')
     setPicked(null)
     setLogin('terminal')
     setKey({ baseUrl: '', key: '', model: '' })
@@ -346,13 +389,20 @@ function AddAgentDialog({
     setBusy(true)
     setError(null)
     try {
-      const id = await api.settings.addAgent(
-        chosen.harnessId,
-        trimmed,
-        folder === 'new' ? null : picked,
-      )
+      const id = useDefault
+        ? chosen.harnessId
+        : await api.settings.addAgent(
+            chosen.harnessId,
+            trimmed,
+            selectedFolder === 'new' ? null : picked,
+          )
+      if (useDefault) {
+        await useSettingsStore.getState().update({
+          agents: { [chosen.harnessId]: { enabled: true, hidden: false } },
+        })
+      }
       await listed(useAgentsStore, id)
-      if (login === 'api-key') {
+      if (!useDefault && login === 'api-key') {
         await request('agents.setApiKey', {
           agentId: id,
           key: key.key.trim(),
@@ -396,99 +446,117 @@ function AddAgentDialog({
                 onChange={(next) => {
                   setHarness(next)
                   setPicked(null)
-                  setFolder('new')
+                  setFolder('default')
                 }}
               />
             </SettingsField>
-            <SettingsField
-              label={t('agents.add.name')}
-              htmlFor="agent-name"
-              hint={
-                tooLong && (
-                  <span className="text-danger">
-                    {t('agents.add.nameTooLong', { count: AGENT_NAME_CHARS })}
-                  </span>
-                )
-              }
-            >
-              <Input
-                id="agent-name"
-                value={name}
-                autoFocus
-                autoComplete="off"
-                spellCheck={false}
-                placeholder={t('agents.add.namePlaceholder')}
-                aria-invalid={tooLong || undefined}
-                className={DIALOG_FIELD}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </SettingsField>
+            {!useDefault && (
+              <SettingsField
+                label={t('agents.add.name')}
+                htmlFor="agent-name"
+                hint={
+                  tooLong && (
+                    <span className="text-danger">
+                      {t('agents.add.nameTooLong', { count: AGENT_NAME_CHARS })}
+                    </span>
+                  )
+                }
+              >
+                <Input
+                  id="agent-name"
+                  value={name}
+                  autoFocus
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={t('agents.add.namePlaceholder')}
+                  aria-invalid={tooLong || undefined}
+                  className={DIALOG_FIELD}
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </SettingsField>
+            )}
             <SettingsField label={t('agents.add.folder')}>
               <RadioGroup
                 aria-label={t('agents.add.folder')}
-                value={folder}
+                value={selectedFolder}
                 onValueChange={(next) => setFolder(next as typeof folder)}
                 className="gap-5"
               >
-                <Choice
-                  value="new"
-                  checked={folder === 'new'}
-                  title={t('agents.add.folderNew')}
-                  description={t('agents.add.folderNewHint')}
-                />
-                <Choice
-                  value="existing"
-                  checked={folder === 'existing'}
-                  title={t('agents.add.folderExisting')}
-                  description={t('agents.add.folderExistingHint')}
-                  extra={
-                    folder === 'existing' && (
-                      <span className="flex min-w-0 items-center gap-2">
-                        {picked && <PathText path={picked} />}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className={ROW_BUTTON}
-                          onClick={() => void pick()}
-                        >
-                          <FolderIcon data-icon="inline-start" className="size-3.5" />
-                          {t('agents.add.choose')}
-                        </Button>
-                      </span>
-                    )
-                  }
-                />
+                {canUseDefault && (
+                  <Choice
+                    value="default"
+                    checked={useDefault}
+                    title={t('agents.add.folderDefault')}
+                    description={t('agents.add.folderDefaultHint', {
+                      name: chosen?.harnessName ?? '',
+                    })}
+                  />
+                )}
+                {multiple && (
+                  <>
+                    <Choice
+                      value="new"
+                      checked={selectedFolder === 'new'}
+                      title={t('agents.add.folderNew')}
+                      description={t('agents.add.folderNewHint')}
+                    />
+                    <Choice
+                      value="existing"
+                      checked={selectedFolder === 'existing'}
+                      title={t('agents.add.folderExisting')}
+                      description={t('agents.add.folderExistingHint')}
+                      extra={
+                        selectedFolder === 'existing' && (
+                          <span className="flex min-w-0 items-center gap-2">
+                            {picked && <PathText path={picked} />}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className={ROW_BUTTON}
+                              onClick={() => void pick()}
+                            >
+                              <FolderIcon data-icon="inline-start" className="size-3.5" />
+                              {t('agents.add.choose')}
+                            </Button>
+                          </span>
+                        )
+                      }
+                    />
+                  </>
+                )}
               </RadioGroup>
             </SettingsField>
-            <SettingsField label={t('agents.add.login')}>
-              <RadioGroup
-                aria-label={t('agents.add.login')}
-                value={login}
-                onValueChange={(next) => setLogin(next as Login)}
-                className="gap-5"
-              >
-                <Choice
-                  value="terminal"
-                  checked={login === 'terminal'}
-                  title={t('agents.add.loginTerminal')}
-                  description={t('agents.add.loginTerminalHint', {
-                    name: chosen?.harnessName ?? '',
-                  })}
-                />
-                <Choice
-                  value="api-key"
-                  checked={login === 'api-key'}
-                  title={t('agents.add.loginKey')}
-                  description={t(
-                    providers ? 'agents.add.loginKeyHint' : 'agents.add.loginKeyHintOpenAi',
-                  )}
-                  extra={
-                    login === 'api-key' &&
-                    chosen && <ApiKeyFields status={chosen} value={key} onChange={setKey} />
-                  }
-                />
-              </RadioGroup>
-            </SettingsField>
+            {!useDefault && (
+              <SettingsField label={t('agents.add.login')}>
+                <RadioGroup
+                  aria-label={t('agents.add.login')}
+                  value={login}
+                  onValueChange={(next) => setLogin(next as Login)}
+                  className="gap-5"
+                >
+                  <Choice
+                    value="terminal"
+                    checked={login === 'terminal'}
+                    title={t('agents.add.loginTerminal')}
+                    description={t('agents.add.loginTerminalHint', {
+                      name: chosen?.harnessName ?? '',
+                    })}
+                  />
+                  <Choice
+                    value="api-key"
+                    checked={login === 'api-key'}
+                    title={t('agents.add.loginKey')}
+                    description={t(
+                      providers ? 'agents.add.loginKeyHint' : 'agents.add.loginKeyHintOpenAi',
+                    )}
+                    extra={
+                      login === 'api-key' &&
+                      chosen && <ApiKeyFields status={chosen} value={key} onChange={setKey} />
+                    }
+                  />
+                </RadioGroup>
+              </SettingsField>
+            )}
             {error && <p className="text-hint text-danger">{error}</p>}
           </SettingsDialogBody>
           <SettingsDialogFooter>
@@ -967,34 +1035,10 @@ function ConfigurationGroup({ status }: { status: AgentStatus }) {
   )
 }
 
-/** Delete an added agent; a default agent is only hidden from the agent menu. */
+/** Remove an agent; a default one simply stops being registered. */
 function DangerGroup({ status }: { status: AgentStatus }) {
   const { t } = useTranslation('settings')
-  const [apply, error] = useApply()
   const [removing, setRemoving] = useState(false)
-  if (status.isDefault) {
-    return (
-      <section className="flex flex-col pt-4">
-        <RowGroup>
-          <RowFrame
-            text={
-              <RowText
-                name={t('agents.hide.name')}
-                description={t('agents.hide.description', { name: status.harnessName })}
-              />
-            }
-          >
-            <ControlError error={error} />
-            <SettingSwitch
-              label={t('agents.hide.name')}
-              checked={status.hidden}
-              onChange={(hidden) => apply({ agents: { [status.harnessId]: { hidden } } })}
-            />
-          </RowFrame>
-        </RowGroup>
-      </section>
-    )
-  }
   return (
     <section className="flex flex-col pt-4">
       <RowGroup>
@@ -1110,6 +1154,10 @@ function RemoveDialog({
               <span className="text-xs text-secondary">{t('agents.remove.trashHint')}</span>
             </span>
           </label>
+        ) : status.isDefault ? (
+          <p className="text-xs text-secondary">
+            {t('agents.remove.keepsDefault', { name: status.harnessName })}
+          </p>
         ) : (
           <p className="text-xs text-secondary">{t('agents.remove.keepsFolder')}</p>
         )}

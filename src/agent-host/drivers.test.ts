@@ -77,7 +77,7 @@ function manager(
     launcher: inProcessLauncher(module),
     settings: () => ({
       locale: 'en',
-      agents: {},
+      agents: { [def.id]: { enabled: true } },
       addedAgents: [],
       proxy: { mode: 'environment' },
       git: { backgroundFetch: false },
