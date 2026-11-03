@@ -17,6 +17,7 @@ export type ResultKey =
   | 'result.fetchedNew'
   | 'result.fetchedNothing'
   | 'result.pulled'
+  | 'result.pulledNothing'
   | 'result.pushed'
   | 'result.pushedBranch'
   | 'result.published'
@@ -89,6 +90,10 @@ export function successNote(
         : note('result.fetched', { remote }, 'info')
     }
     case 'pull':
+      // A pull with nothing new leaves HEAD where it was.
+      if (after.head.oid === before.head.oid) {
+        return note('result.pulledNothing', { branch: upstreamBranch(after) ?? branch }, 'info')
+      }
       return note('result.pulled', { count: Math.max(1, before.upstream?.behind ?? 1) }, 'success')
     case 'push': {
       const count = before.upstream?.ahead ?? 0

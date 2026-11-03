@@ -10,6 +10,7 @@
     "changes": "更改",
     "allFiles": "所有文件",
     "findFile": "查找文件",
+    "openInEditor": "在编辑器中打开",
     "close": "关闭面板"
   },
   "browser": {

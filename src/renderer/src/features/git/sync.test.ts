@@ -44,7 +44,7 @@ const upstream = (ahead: number, behind: number): Partial<GitStatus> => ({
 describe('planSync', () => {
   it('pushes when ahead and pulls when behind', () => {
     expect(planSync(status(upstream(2, 0)), 'ready')).toMatchObject({
-      pull: { kind: 'pull', enabled: false, reason: 'nothingToPull' },
+      pull: { kind: 'pull', enabled: true, next: false, count: 0 },
       push: { kind: 'push', enabled: true, next: true, count: 2 },
       hint: null,
     })
@@ -62,9 +62,14 @@ describe('planSync', () => {
     })
   })
 
-  it('is up to date in sync', () => {
+  it('is up to date in sync, and still offers Pull, which fetches first', () => {
     const plan = planSync(status(), 'ready')
-    expect([plan.pull.enabled, plan.push.enabled, plan.hint]).toEqual([false, false, 'upToDate'])
+    expect([plan.pull.enabled, plan.pull.next, plan.push.enabled, plan.hint]).toEqual([
+      true,
+      false,
+      false,
+      'upToDate',
+    ])
   })
 
   it('publishes a branch without an upstream, and a repository without a remote', () => {

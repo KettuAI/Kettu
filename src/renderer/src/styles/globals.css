@@ -1638,5 +1638,7 @@
   --diffs-bg-separator-override: var(--bg-subtle);
   --diffs-header-font-family: var(--font-mono);
   --diffs-line-height: 21px;
+  /* A changed line's tint runs from the numbers into the code without a seam. */
+  --diffs-gap-style: none;
   font-variant-ligatures: none;
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   ChevronRightIcon,
+  CodeIcon,
   FileIcon,
   FolderIcon,
   Maximize2Icon,
@@ -29,13 +30,15 @@ import {
 } from '@renderer/components/ui/resizable'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { LineCounts } from '@renderer/features/git/rows'
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { SHEET } from '@renderer/features/shell/sheet'
 import { CornerControls } from '@renderer/features/shell/top-bar'
 import { errorMessage, host } from '@renderer/lib/host'
-import { formatShortcut, hasBand, isMod } from '@renderer/lib/platform'
+import { hostOfPath } from '@renderer/lib/host-paths'
+import { formatShortcut, hasBand, isMod, isWeb } from '@renderer/lib/platform'
 import { layoutStorage } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
 import { loadFiles, openDiff, openFile, refreshFiles, useFilesStore } from '@renderer/stores/files'
@@ -61,6 +64,14 @@ import { VirtualRows } from './virtual-rows'
 const FILTER_LIMIT = 1000
 const SEARCH_DELAY_MS = 250
 
+/** Opens the project in the editor used last, else the first one found, else asks for an app. */
+async function openInEditor(path: string): Promise<void> {
+  const { editors, last } = await window.kettu.editors.list()
+  const editor = editors.find((candidate) => candidate.id === last) ?? editors[0]
+  if (editor) await window.kettu.editors.open(editor.id, path)
+  else await window.kettu.editors.choose(path)
+}
+
 /** The side panel's Files pane: the changes or the project's files, beside the one that is open. */
 export default function FilesPanel({
   projectPath,
@@ -74,6 +85,8 @@ export default function FilesPanel({
   const open = useFilesStore((s) => s.open[projectPath] ?? null)
   const diff = useFilesStore((s) => s.diffs[projectPath] ?? null)
   const isRepo = useGitStore((s) => !!s.status[projectPath]?.repo)
+  // Editors open folders on this computer only.
+  const local = !isWeb && hostOfPath(projectPath) === null
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const changes = useFileChanges(projectPath)
@@ -176,28 +189,45 @@ export default function FilesPanel({
         <span className="flex-1" />
         {!bare && !searching && (
           <PanelButton
+            size="icon-sm"
             label={t('panel.findFile')}
             shortcut={formatShortcut('Mod+P')}
             onClick={() => setSearching(true)}
           >
-            <SearchIcon className="size-3.5" />
+            <SearchIcon className="size-3.75" />
           </PanelButton>
         )}
+        {local && (
+          <PanelButton
+            size="icon-sm"
+            label={t('panel.openInEditor')}
+            onClick={() =>
+              void openInEditor(projectPath).catch((failure: unknown) =>
+                toast(errorMessage(failure)),
+              )
+            }
+          >
+            <CodeIcon className="size-3.75" />
+          </PanelButton>
+        )}
+        {/* The only way to maximize the pane, so it stays though the design leaves it out. */}
         <PanelButton
+          size="icon-sm"
           label={maximized ? t('panel.restore') : t('panel.maximize')}
           onClick={() => useViewStore.setState({ sidePaneMaximized: !maximized })}
         >
           {maximized ? (
-            <Minimize2Icon className="size-3.5" />
+            <Minimize2Icon className="size-3.75" />
           ) : (
-            <Maximize2Icon className="size-3.5" />
+            <Maximize2Icon className="size-3.75" />
           )}
         </PanelButton>
         <PanelButton
+          size="icon-sm"
           label={t('panel.close')}
           onClick={() => toggleSidePane(projectPath, 'files', false)}
         >
-          <XIcon className="size-3.5" />
+          <XIcon className="size-3.75" />
         </PanelButton>
       </div>
       {bare ? (

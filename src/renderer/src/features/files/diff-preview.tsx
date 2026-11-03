@@ -115,7 +115,7 @@ function Changes({
       >
         <FilesDiff fileDiff={fileDiff} selected={selected} onSelect={onSelect} />
       </div>
-      <div className="flex h-9 shrink-0 items-center gap-3 pr-2 pl-3.5 text-small text-tertiary shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
+      <div className="flex h-9 shrink-0 items-center gap-3 px-3.5 text-small text-tertiary shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
         {lines ? (
           <Button variant="outline" size="xs" className="-ml-1.5 text-small" onClick={mention}>
             <AtSignIcon />
@@ -137,11 +137,19 @@ function Changes({
         <span className="shrink-0 tabular">
           {t('diff.hunks', { count: fileDiff.hunks.length })}
         </span>
-        <span className="flex shrink-0 items-center">
-          <PanelButton label={t('diff.previous')} onClick={() => stepChange(scroller, -1)}>
+        <span className="flex shrink-0 items-center gap-3">
+          <PanelButton
+            label={t('diff.previous')}
+            className="text-tertiary"
+            onClick={() => stepChange(scroller, -1)}
+          >
             <ChevronUpIcon className="size-3.5" />
           </PanelButton>
-          <PanelButton label={t('diff.next')} onClick={() => stepChange(scroller, 1)}>
+          <PanelButton
+            label={t('diff.next')}
+            className="text-tertiary"
+            onClick={() => stepChange(scroller, 1)}
+          >
             <ChevronDownIcon className="size-3.5" />
           </PanelButton>
         </span>
