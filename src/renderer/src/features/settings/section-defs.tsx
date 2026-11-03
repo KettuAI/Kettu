@@ -530,10 +530,9 @@ export function useUsageSection(): SectionDef {
 export function useAgentsSection(): SectionDef {
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
-  const { useAgentsStore, useSettingsStore } = useHostScope()
+  const { useAgentsStore } = useHostScope()
   const en = english()
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
-  const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
   const list: GroupDef =
     agents.length === 0
       ? {
@@ -552,8 +551,9 @@ export function useAgentsSection(): SectionDef {
     id: status.id,
     name: status.name,
     description: status.account?.label ?? undefined,
-    // A hidden email stays out of search too, so a match cannot reveal it.
-    keywords: `${t('agents.keywords')} ${status.harnessName} ${hidden ? '' : (status.account?.email ?? '')}`,
+    keywords: `${t('agents.keywords')} ${status.harnessName} ${
+      status.account?.kind === 'none' ? '' : (status.account?.email ?? '')
+    }`,
     group: list,
     layout: 'custom',
     render: () => <AgentListItem status={status} />,

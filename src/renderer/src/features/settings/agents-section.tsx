@@ -5,8 +5,6 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react'
 import {
   BotIcon,
-  EyeIcon,
-  EyeOffIcon,
   FolderIcon,
   PencilIcon,
   PlusIcon,
@@ -15,7 +13,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { AgentStatus } from '@shared/agent-host'
+import type { AgentAccount, AgentStatus } from '@shared/agent-host'
 import {
   AGENT_COLORS,
   AGENT_NAME_CHARS,
@@ -52,9 +50,8 @@ import {
 import { Input } from '@renderer/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@renderer/components/ui/radio-group'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { AgentStateLine } from '@renderer/features/agents/agent-state'
-import { readiness } from '@renderer/features/agents/readiness'
+import { readiness, type AgentReadiness } from '@renderer/features/agents/readiness'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -80,7 +77,6 @@ import {
   CONFIRM,
   ControlError,
   IconAction,
-  Masked,
   GROUP_ACTION,
   PathText,
   Pill,
@@ -97,17 +93,7 @@ import {
   SettingsDialogHeader,
   SettingsField,
 } from './settings-dialog'
-import {
-  GroupLabel,
-  ItemLine,
-  ItemPageHeader,
-  ItemRow,
-  RowFrame,
-  RowGroup,
-  RowShell,
-  RowText,
-} from './rows'
-import { useApply } from './use-apply'
+import { GroupLabel, ItemPageHeader, ItemRow, RowFrame, RowGroup, RowShell, RowText } from './rows'
 
 /** How long the dialog waits for the host to list an agent it just added, before giving up. */
 const ADDED_WAIT_MS = 10_000
@@ -146,7 +132,43 @@ function useAddable(): AgentStatus[] {
   return useAgentsStore(useShallow((s) => addableHarnesses(s.order, s.byId)))
 }
 
-/** One agent in the list: its harness's mark, its name, its harness and account, its usage. */
+/** The plan, with its tier once. A label that already names the tier is left as it is. */
+function planText(
+  label: string,
+  tier: string | undefined,
+  join: (plan: string, tier: string) => string,
+): string {
+  const extra = tier?.trim()
+  if (!extra || label.toLowerCase().includes(extra.toLowerCase())) return label
+  return join(label, extra)
+}
+
+/**
+ * What the account line says. A missing program or a failed start comes first. An email is shown
+ * as itself; an API key, which has none, is named by how it signs in. Otherwise the line says
+ * which of the three empty states this is.
+ */
+function accountIdentity(
+  status: AgentStatus,
+  account: AgentAccount | null,
+  ready: AgentReadiness,
+  reading: boolean,
+  text: (key: 'agents.needsSignInLine' | 'agents.readingAccount' | 'agents.noAccount') => string,
+  joinTier: (plan: string, tier: string) => string,
+): { tone: 'clear' | 'quiet' | 'failed'; text: string } {
+  if (ready.kind === 'failed') return { tone: 'failed', text: ready.message }
+  if (ready.kind === 'missing') return { tone: 'clear', text: ready.message }
+  const email = account?.email?.trim()
+  if (email) return { tone: 'clear', text: email }
+  const label = account?.label.trim()
+  if (label) return { tone: 'clear', text: planText(label, account?.tier, joinTier) }
+  if (ready.kind === 'sign-in') return { tone: 'quiet', text: text('agents.needsSignInLine') }
+  if (reading && status.capabilities.account)
+    return { tone: 'quiet', text: text('agents.readingAccount') }
+  return { tone: 'quiet', text: text('agents.noAccount') }
+}
+
+/** One agent in the list: its name, the account it is signed in as, then its harness and plan. */
 export function AgentListItem({ status }: { status: AgentStatus }) {
   const { useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
@@ -154,24 +176,22 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
   const hasOthers = useHasOtherAgents(status)
   const details = useAgentsStore((s) => s.details[status.id])
   const now = useNow()
-  const r = readiness(status)
+  const ready = readiness(status)
   const reading = useAgentReads(status)
   const account = status.account?.kind === 'none' ? null : status.account
   const limits = currentLimits(status.limits, now)
   const folder = details?.config.find((item) => item.id === 'folder')?.path
-  // What it needs first; then what it is signed in with; else where it keeps its configuration.
-  const summary: ReactNode =
-    r.kind === 'missing' || r.kind === 'failed'
-      ? r.message
-      : r.kind === 'sign-in'
-        ? t('agents.needsSignInLine')
-        : account
-          ? account.label
-          : reading && status.capabilities.account
-            ? t('agents.readingAccount')
-            : (folder ?? null)
+  const joinTier = (plan: string, tier: string) => t('agents.planTier', { plan, tier })
+  const identity = accountIdentity(status, account, ready, reading, (key) => t(key), joinTier)
+  const blocked = ready.kind === 'missing' || ready.kind === 'failed'
+  const email = account?.email?.trim() ?? ''
+  const label = account?.label.trim() ?? ''
+  // The plan sits with the harness when the email is the account line. An API key has no email,
+  // so its login is that line and the folder it keeps takes the plan's place.
+  const plan = !blocked && email && label ? planText(label, account?.tier, joinTier) : ''
+  const showFolder = !blocked && account?.kind === 'api_key' && !email && folder
   const end: ReactNode =
-    r.kind === 'sign-in' ? (
+    ready.kind === 'sign-in' ? (
       <Pill tone="attention">{t('agents.signInPill')}</Pill>
     ) : limits.length > 0 ? (
       <ListMeter limits={limits} />
@@ -190,49 +210,49 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
       tile={<AgentTile agent={status.id} size={30} glyph={16} dot={dot} />}
       name={
         <>
-          <span className="truncate">{status.name}</span>
+          <span className="truncate font-medium">{status.name}</span>
           {status.isDefault && hasOthers && <Pill>{t('agents.default')}</Pill>}
         </>
       }
       right={<span className="pointer-events-auto flex items-center">{end}</span>}
     >
-      <ItemLine>
-        {status.harnessName}
-        {summary && ' · '}
-        {summary}
-      </ItemLine>
+      <span
+        title={identity.text}
+        className={cn(
+          'min-w-0 text-label leading-[normal] wrap-anywhere',
+          identity.tone === 'failed'
+            ? 'text-danger'
+            : identity.tone === 'quiet'
+              ? 'text-tertiary'
+              : 'text-primary',
+        )}
+      >
+        {identity.text}
+      </span>
+      <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-group leading-[normal] text-tertiary">
+        <span className="min-w-0 wrap-anywhere">{status.harnessName}</span>
+        {plan && (
+          <>
+            <span aria-hidden>·</span>
+            <span className="min-w-0 wrap-anywhere">{plan}</span>
+          </>
+        )}
+        {showFolder && folder && (
+          <>
+            <span aria-hidden>·</span>
+            <span title={folder} className="min-w-0 truncate">
+              {folder}
+            </span>
+          </>
+        )}
+      </span>
     </ItemRow>
   )
 }
 
-/** The list's own actions: add an agent, and hide the account details. */
+/** The list's own action: add an agent. */
 export function AgentsGroupActions() {
-  const { useSettingsStore } = useHostScope()
-  const { t } = useTranslation('settings')
-  const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
-  const [apply, error] = useApply()
-  return (
-    <>
-      <ControlError error={error} />
-      <AddAgentButton className={GROUP_ACTION} />
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              variant="ghost"
-              aria-pressed={hidden}
-              onClick={() => apply({ privacy: { hideAccount: !hidden } })}
-              className="h-7 gap-1.5 rounded-segment px-2 text-hint font-normal has-data-[icon=inline-start]:pl-2 text-secondary aria-pressed:text-primary [&_svg:not([class*='size-'])]:size-3.5"
-            />
-          }
-        >
-          {hidden ? <EyeOffIcon data-icon="inline-start" /> : <EyeIcon data-icon="inline-start" />}
-          {t(hidden ? 'agents.showAccounts' : 'agents.hideAccounts')}
-        </TooltipTrigger>
-        <TooltipContent>{t('agents.hideAccountsHint')}</TooltipContent>
-      </Tooltip>
-    </>
-  )
+  return <AddAgentButton className={GROUP_ACTION} />
 }
 
 /** Adding stays discoverable before the first harness is installed. */
@@ -863,11 +883,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
             >
               {status.account?.kind === 'none' ? null : status.account?.label}
             </Fact>
-            {status.account?.email && (
-              <Fact name={t('agents.email')}>
-                <Masked>{status.account.email}</Masked>
-              </Fact>
-            )}
+            {status.account?.email && <Fact name={t('agents.email')}>{status.account.email}</Fact>}
             {status.apiKey && <ApiKeyRow status={status} />}
             {((terminalSignIn && hostId === null) ||
               (status.canLogout && status.signIn === 'signed-in')) && (

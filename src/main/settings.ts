@@ -144,6 +144,10 @@ export class SettingsStore {
         settings.agentRegistrationVersion = 1
       }
     }
+    // The Agents page no longer has a control for this, so a stored true would keep the account,
+    // sharing and git names masked with no way to show them.
+    const clearedHide = settings.privacy.hideAccount
+    if (clearedHide) settings.privacy.hideAccount = false
     const store = new SettingsStore(settings, writer())
     if (loaded.problems.length > 0) {
       log.warn(`settings.json is invalid: ${loaded.problems.join('; ')}`)
@@ -154,7 +158,7 @@ export class SettingsStore {
         return new SettingsStore(settings, null)
       }
       store.save()
-    } else if (settings !== loaded.settings || needsRegistration) {
+    } else if (settings !== loaded.settings || needsRegistration || clearedHide) {
       store.save()
     }
     if (needsRegistration) await store.flush()

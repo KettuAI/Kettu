@@ -61,7 +61,7 @@ export interface SettingsFile {
   git: { backgroundFetch: boolean }
   mcp: { kettu: { off: AgentId[] } } // the agents whose sessions get no Kettu MCP server
   updates: { automatic: 'download' | 'restart' | 'notify' | 'off' }
-  privacy: { hideAccount: boolean } // masks emails and account names on screen
+  privacy: { hideAccount: boolean } // kept so older files still parse; loading turns it off
   usage: {
     fromComputer: boolean // read the agents' own logs
     sidebar: 'today' | 'cost' | 'limit' | 'off' // what the sidebar's Usage row shows at its end
