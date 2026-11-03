@@ -180,6 +180,22 @@ describe('limitRows', () => {
       ['codex', null, 4],
     ])
   })
+
+  it('skips an agent that was not added, whose remembered limits never refresh', () => {
+    const rows = limitRows(
+      [
+        agent({ id: 'codex', name: 'Codex', registered: false, limits: [limit({})] }),
+        agent({ limits: [limit({})] }),
+      ],
+      0,
+    )
+    expect(rows.map((r) => r.agent.id)).toEqual(['claude-code'])
+  })
+
+  it('skips an agent whose windows report no use yet', () => {
+    const rows = limitRows([agent({ limits: [limit({ usedPercent: null })] })], 0)
+    expect(rows).toEqual([])
+  })
 })
 
 describe('elapsed', () => {

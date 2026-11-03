@@ -1,4 +1,5 @@
-import type { PlanLimit } from '@shared/agent-host'
+import type { AgentStatus, PlanLimit } from '@shared/agent-host'
+import type { AgentId } from '@shared/thread'
 import { i18n } from '@renderer/lib/i18n'
 
 const MINUTE = 60_000
@@ -16,6 +17,16 @@ export function tightestLimit(limits: readonly PlanLimit[], now: number): PlanLi
   const known = current.filter((l) => l.usedPercent !== null)
   const fullest = known.sort((a, b) => (b.usedPercent ?? 0) - (a.usedPercent ?? 0))[0]
   return fullest ?? current[0] ?? null
+}
+
+/**
+ * The agents whose plan limits are worth reading when a surface that lists them opens: added,
+ * already running and able to report them, so that no agent starts just for the read.
+ */
+export function limitReaders(agents: readonly AgentStatus[]): AgentId[] {
+  return agents
+    .filter((a) => a.registered !== false && a.state === 'ready' && a.capabilities.reports)
+    .map((a) => a.id)
 }
 
 export type UsageTone = 'success' | 'attention' | 'destructive'

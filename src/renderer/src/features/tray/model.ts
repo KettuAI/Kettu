@@ -137,13 +137,14 @@ export interface LimitRow {
   limit: PlanLimit
 }
 
-/** One row per agent on a plan: its tightest window. */
+/** One row per added agent on a plan: its tightest window that reports how full it is. */
 export function limitRows(agents: readonly AgentStatus[], now: number): LimitRow[] {
   const rows: LimitRow[] = []
   for (const agent of agents) {
-    if (agent.hidden || agent.limits.length === 0) continue
+    // A removed agent keeps its last limits, which nothing reads again.
+    if (agent.hidden || agent.registered === false || agent.limits.length === 0) continue
     const limit = tightestLimit(agent.limits, now)
-    if (!limit) continue
+    if (!limit || limit.usedPercent === null) continue
     const plan = agent.account ? planName(agent.name, agent.account.label) : null
     rows.push({ agent, plan, limit })
   }

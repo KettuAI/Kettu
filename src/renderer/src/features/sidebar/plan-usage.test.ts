@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { PlanLimit } from '@shared/agent-host'
-import { countdown, tightestLimit, usageTone } from './plan-usage'
+import type { AgentStatus, PlanLimit } from '@shared/agent-host'
+import { countdown, limitReaders, tightestLimit, usageTone } from './plan-usage'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -80,5 +80,25 @@ describe('countdown', () => {
   it('has nothing to count once the time has passed', () => {
     expect(countdown(0)).toBeNull()
     expect(countdown(-MINUTE)).toBeNull()
+  })
+})
+
+describe('limitReaders', () => {
+  const agent = (id: string, patch: Partial<AgentStatus> = {}) =>
+    ({
+      id,
+      state: 'ready',
+      capabilities: { reports: true },
+      ...patch,
+    }) as AgentStatus
+
+  it('lists the added agents that are ready and report plan limits', () => {
+    const agents = [
+      agent('claude-code'),
+      agent('codex', { registered: false }),
+      agent('pi', { capabilities: { reports: false } as AgentStatus['capabilities'] }),
+      agent('opencode', { state: 'starting' as AgentStatus['state'] }),
+    ]
+    expect(limitReaders(agents)).toEqual(['claude-code'])
   })
 })
