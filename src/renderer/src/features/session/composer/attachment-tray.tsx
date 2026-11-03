@@ -5,6 +5,7 @@ import { embedsText, readTextThumb } from '@shared/attachments'
 import type { AgentId } from '@shared/thread'
 import { bytes } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
+import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
 import {
   selectDraft,
@@ -35,6 +36,7 @@ export function AttachmentTray({
   onError,
   onLeave,
   hidden,
+  className,
 }: {
   draft: string
   /** The session whose thread's pictures the viewer steps through with the draft's. */
@@ -52,6 +54,7 @@ export function AttachmentTray({
   onLeave: () => void
   /** The keys of the attachments a chip in the text stands for, which need no tile. */
   hidden?: ReadonlySet<string>
+  className?: string
 }) {
   const { t } = useTranslation('composer')
   const all = useAttachmentsStore(selectDraft(draft))
@@ -172,7 +175,7 @@ export function AttachmentTray({
           aria-label={t('attachments.label')}
           aria-orientation="horizontal"
           onKeyDown={onKeyDown}
-          className="flex w-full flex-wrap gap-2 pt-0.5 pb-1.5"
+          className={cn('flex w-full flex-wrap gap-2 pt-0.5 pb-1.5', className)}
         >
           <AnimatePresence initial={false}>
             {items.map((item, i) => (
@@ -187,7 +190,7 @@ export function AttachmentTray({
                     : { opacity: 0, scale: 0.9, transition: { duration: 0.12 } }
                 }
                 transition={{ duration: 0.2, ease: EASE_OUT_QUART }}
-                className="shrink-0"
+                className="shrink-0 self-start"
               >
                 <AttachmentTile
                   view={view(item)}

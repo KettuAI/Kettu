@@ -117,9 +117,10 @@ export function NewSessionView({
         )}
         <span className="flex-1" />
       </TopBar>
-      <ColumnScroller className="flex flex-col px-8 pb-12">
-        {/* The heading sits a fixed share down the sheet, and moves up on a short one. */}
-        <div className="mx-auto flex w-full max-w-175 flex-col pt-[clamp(--spacing(6),calc(23vh-var(--top-bar)-8px),--spacing(38))]">
+      <ColumnScroller className="flex flex-col px-8">
+        {/* Centred in the column. Auto margins fall away once the block is taller than the sheet,
+            so a short window still scrolls from the top. */}
+        <div className="mx-auto my-auto flex w-full max-w-175 flex-col py-8">
           <h1 className="mb-7 animate-in text-center font-display text-[30px] leading-[1.2] font-bold tracking-[-0.02em] text-balance fade-in animation-duration-(--duration-slow)">
             {t('newSession.heading')}
           </h1>

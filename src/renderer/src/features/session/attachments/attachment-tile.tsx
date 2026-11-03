@@ -24,8 +24,9 @@ export interface TileView {
 }
 
 /**
- * An attachment: an image as its picture, 40 px square in the composer and 92 by 64 in a sent
- * message, anything else as a 40 px tile with its icon, name and size. One that cannot be sent
+ * An attachment: an image as its picture, up to 112 px tall and 224 px wide in the composer so a
+ * wide shot stays whole (the thumbnail is 224 px on its longer side), and 92 by 64 in a sent
+ * message. Anything else is a 40 px tile with its icon, name and size. One that cannot be sent
  * has a red edge and says why.
  */
 export function AttachmentTile({
@@ -37,7 +38,7 @@ export function AttachmentTile({
   ...props
 }: {
   view: TileView
-  /** An image's size: the composer's square, or the thread's larger picture. */
+  /** An image's size: the composer's picture, or the thread's crop. */
   picture?: 'small' | 'large'
   onRemove?: () => void
   removeLabel?: string
@@ -61,7 +62,9 @@ export function AttachmentTile({
               image
                 ? picture === 'large'
                   ? 'h-16 w-23 rounded-code'
-                  : 'size-10'
+                  : view.thumb
+                    ? 'inline-flex'
+                    : 'size-28'
                 : 'flex h-10 max-w-60 items-center gap-2.25 bg-subtle pr-1.5 pl-2.5',
               className,
             )}
@@ -74,7 +77,11 @@ export function AttachmentTile({
               src={view.thumb}
               alt=""
               draggable={false}
-              className="size-full rounded-[inherit] object-cover"
+              className={
+                picture === 'large'
+                  ? 'size-full rounded-[inherit] object-cover'
+                  : 'block max-h-28 max-w-[min(calc(var(--spacing)*56),100%)] rounded-[inherit]'
+              }
             />
           ) : (
             // Shown only when reading takes a while, so a quick one never flashes.

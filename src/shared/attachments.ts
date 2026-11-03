@@ -21,7 +21,7 @@ export const IMAGE_BYTES = 3.75 * 1024 * 1024
 /** The most bytes the host takes for one attachment it is handed. */
 export const ATTACHMENT_BYTES = 20 * 1024 * 1024
 
-/** Thumbnails are this many pixels on their longer side, twice the 112 px tile. */
+/** Thumbnails are this many pixels on their longer side, the composer's widest picture. */
 export const THUMB_SIDE = 224
 
 /** A thumbnail's data URL is never longer than this. */
