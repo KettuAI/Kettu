@@ -46,6 +46,8 @@ export type SiteIconEvent =
   | { kind: 'set'; origin: string; icon: string | null }
   | { kind: 'removed'; origin: string }
   | { kind: 'cleared' }
+  /** An icon loaded for a link's site, which that site has not been opened for. */
+  | { kind: 'link'; origin: string; icon: string }
 
 /** Whether the app can register a login item, and whether macOS waits for the user's approval. */
 export interface LoginItemStatus {
@@ -287,6 +289,8 @@ export interface IpcInvokeContract {
   'browser:remove-allowed-site': { args: [projectPath: string, origin: string]; result: void }
   'browser:clear-data': { args: []; result: void }
   'browser:site-icons': { args: []; result: SiteIconMap }
+  /** A link's site has no icon yet: main tries the icon at the site's own root. */
+  'browser:load-site-icon': { args: [url: string]; result: void }
   /** A link in Kettu opened the address, in either place, so its site counts as opened. */
   'browser:site-opened': { args: [url: string]; result: void }
 }
@@ -621,6 +625,8 @@ export interface KettuApi {
     clearData(): Promise<void>
     /** The icons of the sites the pages opened, which links in replies show. */
     siteIcons(): Promise<SiteIconMap>
+    /** Tries the icon at a link's own site when Kettu has none recorded for it yet. */
+    loadSiteIcon(url: string): Promise<void>
     onSiteIcon(listener: (event: SiteIconEvent) => void): () => void
     /** A link in Kettu opened `url`, in either place: its site is recorded, without an icon. */
     siteOpened(url: string): Promise<void>

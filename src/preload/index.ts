@@ -248,6 +248,7 @@ const api: KettuApi = {
       invoke('browser:remove-allowed-site', projectPath, origin),
     clearData: () => invoke('browser:clear-data'),
     siteIcons: () => invoke('browser:site-icons'),
+    loadSiteIcon: (url) => invoke('browser:load-site-icon', url),
     onSiteIcon,
     siteOpened: (url) => invoke('browser:site-opened', url),
     setSessions: (ids) => send('browser:sessions', ids),

@@ -454,6 +454,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       removeAllowedSite: () => unsupported('show the browser'),
       clearData: () => unsupported('show the browser'),
       siteIcons: async () => ({}),
+      loadSiteIcon: async () => {},
       onSiteIcon: never,
       siteOpened: async () => {},
       setSessions: () => {},

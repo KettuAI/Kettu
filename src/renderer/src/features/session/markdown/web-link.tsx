@@ -30,6 +30,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import {
   iconFor,
   loadSiteIcons,
+  requestSiteIcon,
   useDefaultBrowser,
   useSiteIcon,
   useSiteIconsStore,
@@ -84,6 +85,7 @@ export function BrowserIcon({
  */
 function SiteTile({ url }: { url: string }) {
   const icon = useSiteIcon(url)
+  useEffect(() => requestSiteIcon(url), [url])
   const tile =
     'relative -top-[1.5px] mr-[5px] inline-flex size-3.5 shrink-0 items-center justify-center overflow-hidden rounded-[3px] align-middle leading-none'
   if (isLocalLink(url)) {

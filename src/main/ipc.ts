@@ -725,6 +725,7 @@ export function registerIpcHandlers({
     await browserViews.clearData()
   })
   handle('browser:site-icons', 0, () => siteIcons.all())
+  handle('browser:load-site-icon', 1, (_, url) => siteIcons.link(browserUrl(url)))
   // Records only the site, never an icon: those come from the browser's own pages.
   handle('browser:site-opened', 1, (_, url) => siteIcons.visited(browserUrl(url)))
 

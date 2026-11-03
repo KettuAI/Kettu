@@ -435,4 +435,46 @@ describe('SiteIcons', () => {
     const store = open(folder, { fetch: vi.fn(), changed: () => {} })
     expect(await store.all()).toEqual({})
   })
+
+  it("loads a link's site icon from the site's root, once per run, without opening the site", async () => {
+    const { store, events, fetch } = await icons()
+    await store.link('https://kettu.sh/docs/remote')
+    await store.link('https://kettu.sh/docs/other')
+    expect(events).toContainEqual({ kind: 'link', origin: 'https://kettu.sh', icon: PNG_ICON })
+    expect(loaded(fetch)).toEqual(['https://kettu.sh/favicon.ico'])
+    expect(await store.all()).toEqual({})
+  })
+
+  it("keeps a link's site icon it already has", async () => {
+    const { store, fetch } = await icons()
+    await store.favicons('https://kettu.sh/', ['https://kettu.sh/icon.png'])
+    await store.link('https://kettu.sh/docs/remote')
+    expect(loaded(fetch)).toEqual(['https://kettu.sh/icon.png'])
+  })
+
+  it("tells nothing for a link's site when its root has no icon", async () => {
+    const { store, events } = await icons(() => image('<html>', 'text/html'))
+    await store.link('https://kettu.sh/docs/remote')
+    expect(events).toEqual([])
+    expect(await store.all()).toEqual({})
+  })
+
+  it.each([
+    'http://127.0.0.1/x',
+    'http://10.1.2.3/x',
+    'http://192.168.1.1/x',
+    'http://169.254.169.254/x',
+    'http://localhost:5173/x',
+    'http://app.localhost/x',
+    'http://[::1]/x',
+    'http://[fd12::1]/x',
+    'file:///etc/passwd',
+    'mailto:a@b.c',
+    'https://user:secret@kettu.sh/x',
+  ])('loads nothing for the link %s', async (url) => {
+    const { store, fetch } = await icons()
+    await store.link(url)
+    expect(fetch).not.toHaveBeenCalled()
+    expect(await store.all()).toEqual({})
+  })
 })
