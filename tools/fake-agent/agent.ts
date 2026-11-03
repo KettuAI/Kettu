@@ -101,12 +101,15 @@ const DEFAULT_CONFIG: Pick<FakeSessionState, 'mode' | 'model' | 'thought' | 'fas
  * The folder's own defaults from `.fake-agent.json`, read for every new session as the real agents
  * read a project's settings, so a change to the file shows on the next one.
  */
-function projectDefaults(cwd: string): Partial<Pick<FakeSessionState, 'model' | 'thought'>> {
+function projectDefaults(
+  cwd: string,
+): Partial<Pick<FakeSessionState, 'mode' | 'model' | 'thought'>> {
   const file = join(cwd, '.fake-agent.json')
   if (!existsSync(file)) return {}
   try {
     const parsed = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>
     return {
+      ...(typeof parsed.mode === 'string' ? { mode: parsed.mode } : {}),
       ...(typeof parsed.model === 'string' ? { model: parsed.model } : {}),
       ...(typeof parsed.thought === 'string' ? { thought: parsed.thought } : {}),
     }

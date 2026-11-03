@@ -5,6 +5,7 @@ import {
   AgentOptionsStore,
   isValueOf,
   parseAgentOptionsFile,
+  startModeIn,
   startOrder,
   type AgentOptionsFile,
 } from './agent-options'
@@ -227,6 +228,26 @@ describe('startOrder', () => {
       'mode',
       'unknown',
     ])
+  })
+})
+
+describe('startModeIn', () => {
+  it('names the mode the settings give an agent that takes one', () => {
+    const startModes = { 'claude-code': 'acceptEdits', 'codex~work': 'agent' } as const
+    expect(startModeIn({ startModes }, 'claude-code')).toBe('acceptEdits')
+    expect(startModeIn({ startModes }, 'codex~work')).toBe('agent')
+    expect(startModeIn({ startModes }, 'codex')).toBeUndefined()
+  })
+
+  it('ignores a mode that gives full access, or an agent that takes none', () => {
+    const startModes = {
+      'claude-code': 'bypassPermissions',
+      codex: 'agent-full-access',
+      opencode: 'plan',
+    }
+    for (const agentId of ['claude-code', 'codex', 'opencode'] as const) {
+      expect(startModeIn({ startModes }, agentId), agentId).toBeUndefined()
+    }
   })
 })
 

@@ -8,7 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS } from '@shared/settings'
+import { DEFAULT_SETTINGS, type HostSettings } from '@shared/settings'
 import type { SessionSummary } from '@shared/agent-host'
 import type { Attachment, ThreadEntry, ToolEntry, UserContent } from '@shared/thread'
 import { AgentRequestError } from './connection'
@@ -1301,6 +1301,269 @@ describe('prepared sessions', () => {
     })
     await next.request('sessions.discard', { sessionId: summary.id })
     await vi.waitFor(async () => expect(await read()).toEqual([]))
+  })
+})
+
+describe('the start mode', () => {
+  const hostSettings = (startModes: HostSettings['startModes']): HostSettings => ({
+    locale: 'en',
+    agents: {
+      'fake-agent': { enabled: true },
+      'claude-code': { enabled: true },
+      codex: { enabled: true },
+    },
+    addedAgents: DEFAULT_SETTINGS.addedAgents,
+    proxy: DEFAULT_SETTINGS.proxy,
+    git: DEFAULT_SETTINGS.git,
+    mcp: DEFAULT_SETTINGS.mcp,
+    startModes,
+    usage: { fromComputer: false },
+    sessionTitles: true,
+  })
+  async function start(
+    startModes: HostSettings['startModes'],
+    options: Parameters<typeof startTestHost>[0] = {},
+  ) {
+    return setup({
+      fakeAs: ['claude-code', 'codex'],
+      settings: hostSettings(startModes),
+      ...options,
+    })
+  }
+  const prepare = (t: TestHost, port: TestPort, extra: Record<string, unknown> = {}) =>
+    port.request('sessions.prepare', { agentId: 'claude-code', projectPath: t.project, ...extra })
+  const modeOf = (summary: SessionSummary) =>
+    summary.prepared?.config.find((o) => o.id === 'mode')?.value
+  const ownMode = (t: TestHost, mode: string) =>
+    writeFile(path.join(t.project, '.fake-agent.json'), JSON.stringify({ mode }))
+  const removed = (port: TestPort, sessionId: string) =>
+    port.events.some((e) => e.type === 'session.removed' && e.sessionId === sessionId)
+
+  describe('of a prepared session', () => {
+    it("is the mode it starts in, over the project's own", async () => {
+      const { t, port } = await start({ 'claude-code': 'code' })
+      await ownMode(t, 'plan')
+      const summary = await prepare(t, port)
+      expect(modeOf(summary)).toBe('code')
+      expect(summary.prepared?.notices).toEqual([])
+    })
+
+    it('leaves the agent its own mode when none is set', async () => {
+      const { t, port } = await start({})
+      await ownMode(t, 'plan')
+      expect(modeOf(await prepare(t, port))).toBe('plan')
+    })
+
+    it('belongs to the agent that has it', async () => {
+      const { t, port } = await start({ codex: 'plan' })
+      expect(modeOf(await prepare(t, port))).toBe('ask')
+      const codex = await port.request('sessions.prepare', {
+        agentId: 'codex',
+        projectPath: t.project,
+      })
+      expect(modeOf(codex)).toBe('plan')
+      const fake = await port.request('sessions.prepare', {
+        agentId: 'fake-agent',
+        projectPath: t.project,
+      })
+      expect(modeOf(fake)).toBe('ask')
+    })
+
+    it('is ignored when the file names a mode that gives full access', async () => {
+      const { t, port } = await start({
+        'claude-code': 'bypassPermissions',
+        codex: 'agent-full-access',
+      })
+      expect(modeOf(await prepare(t, port))).toBe('ask')
+      const codex = await port.request('sessions.prepare', {
+        agentId: 'codex',
+        projectPath: t.project,
+      })
+      expect(modeOf(codex)).toBe('ask')
+      expect(codex.prepared?.notices).toEqual([])
+    })
+
+    it("yields to the window's own pick", async () => {
+      const { t, port } = await start({ 'claude-code': 'code' })
+      const summary = await prepare(t, port, { options: { mode: 'ask' } })
+      expect(modeOf(summary)).toBe('ask')
+      expect(summary.prepared?.notices).toEqual([])
+    })
+
+    it('names both modes when the agent does not offer it, and keeps the agent mode', async () => {
+      const { t, port } = await start({ 'claude-code': 'acceptEdits' })
+      const summary = await prepare(t, port)
+      expect(modeOf(summary)).toBe('ask')
+      expect(summary.prepared?.notices).toEqual([
+        {
+          reason: 'not_offered',
+          optionId: 'mode',
+          category: 'mode',
+          option: 'Mode',
+          type: 'select',
+          wanted: 'acceptEdits',
+          actual: 'Ask',
+        },
+      ])
+    })
+
+    it('is not voided by a change of the agent mode outside Kettu, as a remembered model is', async () => {
+      const { t, port } = await start({ 'claude-code': 'code' })
+      const first = await prepare(t, port)
+      await port.request('sessions.setConfigOption', {
+        sessionId: first.id,
+        optionId: 'model',
+        value: 'deep',
+      })
+      await writeFile(
+        path.join(t.project, '.fake-agent.json'),
+        JSON.stringify({ mode: 'plan', model: 'swift' }),
+      )
+      const next = await prepare(t, port, { replace: true })
+      expect(modeOf(next)).toBe('code')
+      expect(next.prepared?.config.find((o) => o.id === 'model')?.value).toBe('swift')
+      expect(next.prepared?.notices).toMatchObject([{ reason: 'replaced', optionId: 'model' }])
+    })
+
+    it('is not remembered as a choice of the user', async () => {
+      const { t, port } = await start({ 'claude-code': 'code' })
+      await prepare(t, port)
+      const [options] = await port.request('agents.options', undefined)
+      expect(options?.remembered).toEqual({})
+      expect(options?.config.find((o) => o.id === 'mode')?.value).toBe('ask')
+    })
+
+    it('replaces the agent’s prepared session when it changes, and no other', async () => {
+      const { t, port } = await start({})
+      const summary = await prepare(t, port)
+      const codex = await port.request('sessions.prepare', {
+        agentId: 'codex',
+        projectPath: t.project,
+      })
+      await t.host.updateSettings(hostSettings({ 'claude-code': 'code' }))
+      await port.until(() => removed(port, summary.id))
+      expect(removed(port, codex.id)).toBe(false)
+      expect(modeOf(await prepare(t, port))).toBe('code')
+      await t.host.updateSettings(hostSettings({ 'claude-code': 'code', codex: 'plan' }))
+      await port.until(() => removed(port, codex.id))
+    })
+
+    it('leaves the prepared session when another setting changes', async () => {
+      const { t, port } = await start({ 'claude-code': 'code' })
+      const summary = await prepare(t, port)
+      await t.host.updateSettings({
+        ...hostSettings({ 'claude-code': 'code' }),
+        sessionTitles: false,
+      })
+      await port.request('agents.list', undefined)
+      expect(removed(port, summary.id)).toBe(false)
+    })
+  })
+
+  describe('of a session that is not new', () => {
+    const modeValue = (port: TestPort, sessionId: string) =>
+      port.thread(sessionId).session.config.find((o) => o.id === 'mode')?.value
+
+    it('is not set on a fork, which keeps the mode of its source', async () => {
+      const { t, port } = await start(
+        { 'claude-code': 'plan' },
+        { agentEnv: { FAKE_AGENT_FORK_CONFIG: 'reset' } },
+      )
+      const created = await port.request('sessions.create', {
+        agentId: 'claude-code',
+        projectPath: t.project,
+        options: { mode: 'code' },
+      })
+      await port.open(created.id)
+      await turn(port, created.id, 'Fix the flaky login test')
+      await port.untilEntry(created.id, (entry) => entry.kind === 'turn_end')
+      await port.untilStatus(created.id, 'ready')
+      const fork = await port.request('sessions.fork', { sessionId: created.id })
+      await port.open(fork.id)
+      expect(modeValue(port, fork.id)).toBe('code')
+    })
+
+    it('is not set on a new session the window creates without a prepared one', async () => {
+      const { t, port } = await start({ 'claude-code': 'plan' })
+      const created = await port.request('sessions.create', {
+        agentId: 'claude-code',
+        projectPath: t.project,
+      })
+      await port.open(created.id)
+      expect(modeValue(port, created.id)).toBe('ask')
+    })
+  })
+
+  describe('of a session an agent starts', () => {
+    const optionValue = (port: TestPort, sessionId: string, id: string) =>
+      port.thread(sessionId).session.config.find((o) => o.id === id)?.value
+
+    /** A caller in the mode `code`, standing for one that gives full access. */
+    async function caller(t: TestHost, port: TestPort, agentId: 'claude-code' | 'codex') {
+      const created = await port.request('sessions.create', {
+        agentId,
+        projectPath: t.project,
+        options: { mode: 'code', model: 'deep' },
+      })
+      await port.open(created.id)
+      return created.id
+    }
+    async function sub(
+      t: TestHost,
+      port: TestPort,
+      callerId: string,
+      params: { agentId?: 'claude-code' | 'codex' } = {},
+    ) {
+      const id = await t.host.sessions.startFromTool(callerId, { prompt: 'Look around', ...params })
+      await port.open(id)
+      return id
+    }
+
+    it('never takes the mode of its caller', async () => {
+      const { t, port } = await start({})
+      const callerId = await caller(t, port, 'claude-code')
+      expect(optionValue(port, callerId, 'mode')).toBe('code')
+      const id = await sub(t, port, callerId)
+      expect(optionValue(port, id, 'mode')).toBe('ask')
+      // The model and the level still come from the caller.
+      expect(optionValue(port, id, 'model')).toBe('deep')
+    })
+
+    it('starts in the start mode of its agent instead', async () => {
+      const { t, port } = await start({ 'claude-code': 'plan' })
+      const callerId = await caller(t, port, 'claude-code')
+      const id = await sub(t, port, callerId)
+      expect(optionValue(port, id, 'mode')).toBe('plan')
+      expect(optionValue(port, id, 'model')).toBe('deep')
+    })
+
+    it('starts another agent in that agent’s start mode, not the caller’s', async () => {
+      const { t, port } = await start({ 'claude-code': 'code', codex: 'plan' })
+      const callerId = await caller(t, port, 'claude-code')
+      const id = await sub(t, port, callerId, { agentId: 'codex' })
+      expect(optionValue(port, id, 'mode')).toBe('plan')
+    })
+
+    it('starts another agent in its own mode when it has no start mode', async () => {
+      const { t, port } = await start({ 'claude-code': 'code' })
+      const callerId = await caller(t, port, 'claude-code')
+      const id = await sub(t, port, callerId, { agentId: 'codex' })
+      expect(optionValue(port, id, 'mode')).toBe('ask')
+    })
+
+    it('starts a Codex agent in its start mode, not its caller’s', async () => {
+      const { t, port } = await start({ codex: 'plan' })
+      const callerId = await caller(t, port, 'codex')
+      const id = await sub(t, port, callerId)
+      expect(optionValue(port, id, 'mode')).toBe('plan')
+    })
+
+    it('ignores a start mode that gives full access', async () => {
+      const { t, port } = await start({ 'claude-code': 'bypassPermissions' })
+      const callerId = await caller(t, port, 'claude-code')
+      const id = await sub(t, port, callerId)
+      expect(optionValue(port, id, 'mode')).toBe('ask')
+    })
   })
 })
 

@@ -5,6 +5,8 @@
 
 import path from 'node:path'
 import type { AgentOptions } from '@shared/agent-host'
+import { isStartMode } from '@shared/agents'
+import type { HostSettings } from '@shared/settings'
 import { isAgentId, type AgentId, type ConfigOption } from '@shared/thread'
 import { JsonFile, type LogFn } from './storage'
 
@@ -24,6 +26,15 @@ export const REMEMBERED_CATEGORIES: ReadonlySet<ConfigOption['category']> = new 
 const MAX_LEVELS = 200
 // Folders whose own values are kept per agent, the latest first to stay.
 const MAX_FOLDERS = 50
+
+/** The start mode the settings name for the agent, when it takes one and it is no full access. */
+export function startModeIn(
+  settings: Pick<HostSettings, 'startModes'>,
+  agentId: AgentId,
+): string | undefined {
+  const mode = settings.startModes[agentId]
+  return isStartMode(agentId, mode) ? mode : undefined
+}
 
 /** A remembered value dropped because the agent's own value changed outside Kettu since. */
 export interface ReplacedValue {

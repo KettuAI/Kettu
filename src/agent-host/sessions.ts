@@ -30,6 +30,7 @@ import {
   applyPatchInPlace,
   coalescePatches,
   entryMessageId,
+  harnessOf,
   outOfCreditTurn,
   threadEntries,
   threadFromSnapshot,
@@ -68,7 +69,13 @@ import {
 } from './artifacts/entries'
 import { allowOnceOption, changedFiles, replySummary, requestText } from './attention'
 import { parseContextReport } from './acp/claude-reports'
-import { isValueOf, startOrder, type AgentOptionsStore, type ReplacedValue } from './agent-options'
+import {
+  isValueOf,
+  startModeIn,
+  startOrder,
+  type AgentOptionsStore,
+  type ReplacedValue,
+} from './agent-options'
 import {
   blockBytes,
   embedFile,
@@ -80,6 +87,8 @@ import {
   type Attachments,
 } from './attachments'
 import { agentError, type AgentManager, type AgentRuntime } from './agents'
+import { OPTION_IDS as CLAUDE_OPTION_IDS } from './claude/config'
+import { MODE_ID as CODEX_MODE_ID } from './codex/config'
 import { carryMode, lostValues, lostValuesNotice, type LostValue } from './config-notice'
 import {
   AgentRequestError,
@@ -2314,7 +2323,11 @@ export class SessionManager {
       config: withUltracode(live.record, setup.config),
       error: null,
     })
-    const wanted = { ...this.deps.options?.rememberedOf(agentId), ...picks }
+    const wanted = {
+      ...this.startModeOf(agentId),
+      ...this.deps.options?.rememberedOf(agentId),
+      ...picks,
+    }
     const config = await this.applyStartOptions(live, runtime.connection, wanted, {
       stop: () => gone() || runtime.connection.isClosed,
     })
@@ -2929,6 +2942,21 @@ export class SessionManager {
     for (const live of [...this.live.values()]) {
       if (live.record.agentId === agentId && live.prepared) void this.dropPrepared(live)
     }
+  }
+
+  /** The agent's start mode changed: its prepared sessions started in the old one. */
+  startModeChanged(agentId: AgentId): void {
+    this.configChanged(agentId)
+  }
+
+  /**
+   * The mode option set to the start mode the settings name for the agent, for a session the
+   * agent starts or the window prepares; nothing when there is none, so the agent's own stays.
+   */
+  private startModeOf(agentId: AgentId): Record<string, string> {
+    const mode = startModeIn(this.deps.settings(), agentId)
+    const optionId = modeOptionId(agentId)
+    return mode === undefined || optionId === null ? {} : { [optionId]: mode }
   }
 
   /**
@@ -5298,7 +5326,8 @@ export class SessionManager {
 
   /**
    * Starts a sub-session of the caller with its first prompt, as New sub-session would: the
-   * caller's project and parent, and with the caller's agent its model, level and mode.
+   * caller's project and parent, and with the caller's agent its model and level. The mode is the
+   * start mode, never the caller's, which may give full access.
    */
   async startFromTool(
     callerId: string,
@@ -5313,18 +5342,13 @@ export class SessionManager {
       const config = live?.thread.session.config ?? []
       for (const option of config) {
         if (option.id === ULTRACODE_OPTION_ID) continue
-        if (
-          option.category !== 'model' &&
-          option.category !== 'thought_level' &&
-          option.category !== 'mode'
-        ) {
-          continue
-        }
+        if (option.category !== 'model' && option.category !== 'thought_level') continue
         options[option.id] = option.value
       }
     } else {
       Object.assign(options, this.deps.options?.rememberedOf(agentId) ?? {})
     }
+    Object.assign(options, this.startModeOf(agentId))
     const summary = await this.create({
       agentId,
       projectPath: caller.projectPath,
@@ -5974,6 +5998,18 @@ function replacedNotice(
     type: option.type,
     wanted: nameOf(option, wanted, cached),
     actual: nameOf(now, now.value, cached),
+  }
+}
+
+/** The id of the permission mode option of a Claude Code or Codex agent; null for any other. */
+function modeOptionId(agentId: AgentId): string | null {
+  switch (harnessOf(agentId)) {
+    case 'claude-code':
+      return CLAUDE_OPTION_IDS.mode
+    case 'codex':
+      return CODEX_MODE_ID
+    default:
+      return null
   }
 }
 

@@ -256,6 +256,9 @@ export interface AgentOptions {
   defaults?: Record<string, Record<string, string | boolean>>
   observedAt: number
   provisional?: boolean // from a loaded or resumed session, so not the agent's own defaults
+  // The permission mode its new sessions start in, from the host's settings: sent with the
+  // options, never stored with them.
+  startMode?: string
 }
 
 /** An agent's page in Settings › Agents: what its status leaves out, read when the page opens. */
