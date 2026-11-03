@@ -433,6 +433,7 @@
     "reinstall": "Reinstall",
     "installsOnFirstUse": "Installs on first use",
     "account": "Account",
+    "refreshAccount": "Read the account again",
     "usage": "Plan usage",
     "checkLimits": "Check plan limits",
     "program": "Program",

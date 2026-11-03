@@ -26,6 +26,8 @@ import {
 import { MULTI_AGENT_HARNESSES, type AgentId, type HarnessId } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
+import { useRefresh } from '@renderer/components/refresh'
+import { RefreshIcon } from '@renderer/components/refresh-icon'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -77,6 +79,7 @@ import {
 import {
   CONFIRM,
   ControlError,
+  IconAction,
   Masked,
   GROUP_ACTION,
   PathText,
@@ -764,6 +767,8 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
   const [act, busy, error] = useAction()
   const r = readiness(status)
   const reading = useAgentReads(status, { force: status.signIn === 'required' })
+  const refreshAccount = useRefresh()
+  const [accountError, setAccountError] = useState<string | null>(null)
   const running = status.state === 'ready'
   const terminalSignIn = status.authMethods.find((m) => m.type === 'terminal' && m.command)
 
@@ -826,7 +831,30 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
         {error && <p className="mt-4 text-group text-danger">{error}</p>}
 
         <section className="flex flex-col">
-          <GroupLabel group={{ id: 'account', label: t('agents.account') }} />
+          <GroupLabel
+            group={{
+              id: 'account',
+              label: t('agents.account'),
+              actions: status.capabilities.account ? (
+                <IconAction
+                  label={t('agents.refreshAccount')}
+                  disabled={refreshAccount.phase === 'turning'}
+                  busy={refreshAccount.phase === 'turning'}
+                  onClick={() => {
+                    setAccountError(null)
+                    void refreshAccount
+                      .run(() =>
+                        request('agents.refreshAccount', { agentId: status.id, force: true }),
+                      )
+                      .catch((e: unknown) => setAccountError(errorMessage(e)))
+                  }}
+                >
+                  <RefreshIcon phase={refreshAccount.phase} />
+                </IconAction>
+              ) : undefined,
+            }}
+          />
+          {accountError && <p className="pb-2 text-hint text-danger">{accountError}</p>}
           <RowGroup>
             {/* A subscription's label is its plan; the other kinds name how the agent signs in. */}
             <Fact
