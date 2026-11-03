@@ -178,6 +178,17 @@ describe('SettingsStore', () => {
     expect(await readSettings()).toMatchObject({ general: { sendKey: 'mod-enter' } })
   })
 
+  it('turns off a stored account mask, because the settings page no longer has that control', async () => {
+    await writeFile(
+      join(dir, 'settings.json'),
+      JSON.stringify({ version: 1, agentRegistrationVersion: 1, privacy: { hideAccount: true } }),
+    )
+    const store = await SettingsStore.load(dir)
+    expect(store.get().privacy.hideAccount).toBe(false)
+    await store.flush()
+    expect(await readSettings()).toMatchObject({ privacy: { hideAccount: false } })
+  })
+
   it('picks a dynamic port the first time direct connections turn on, and keeps it', async () => {
     const store = await SettingsStore.load(dir)
     store.update({ remote: { direct: { enabled: true } } })
