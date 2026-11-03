@@ -435,8 +435,7 @@
     },
     "outline": {
       "label_one": "Outline, {{count}} message",
-      "label_other": "Outline, {{count}} messages",
-      "start": "Session start"
+      "label_other": "Outline, {{count}} messages"
     }
   },
   "routine": {

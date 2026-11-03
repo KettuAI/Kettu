@@ -28,8 +28,6 @@ const ROOM_PX = 40
 // A row shows the spinner only for a jump that waits this long for its pages.
 const SPINNER_AFTER_MS = 200
 
-// The Session start row's key while it waits.
-const START = 'start'
 // A first row focused this soon after opening was focused by the keyboard opening.
 const KEYBOARD_FOCUS_MS = 500
 // How many times a jump's scroll is set right before it is left as it is.
@@ -92,7 +90,7 @@ export const MessageOutline = memo(function MessageOutline({
   const { t } = useTranslation('session')
   const { rows, opened } = useOutline(sessionId)
   const { height, room } = useRailBox(viewport, content)
-  const { scrollToMessage, scrollToStart } = useMessageScroller()
+  const { scrollToMessage } = useMessageScroller()
 
   const [tracker] = useState(() => new ReadingTracker())
   useEffect(() => {
@@ -127,23 +125,21 @@ export const MessageOutline = memo(function MessageOutline({
     if (next) opened()
   }
 
-  const jump = async (row: OutlineRow | null): Promise<void> => {
+  const jump = async (row: OutlineRow): Promise<void> => {
     const view = viewport.current
     const column = content.current
     if (!view || !column) return
     const id = ++jumping.current
     const current = (): boolean => jumping.current === id
     const timer = setTimeout(() => {
-      if (current()) setWaiting(row?.entryId ?? START)
+      if (current()) setWaiting(row.entryId)
     }, SPINNER_AFTER_MS)
     try {
       const replica = useThreadsStore.getState().replicas[sessionId]
-      const loaded = row
-        ? replica?.state?.byId[row.entryId] !== undefined
-        : (replica?.older ?? null) === null
-      if (!loaded && !(await loadThrough(sessionId, row?.pos ?? 0))) return
+      const loaded = replica?.state?.byId[row.entryId] !== undefined
+      if (!loaded && !(await loadThrough(sessionId, row.pos ?? 0))) return
       if (!current()) return
-      await jumps.reveal(row?.entryId ?? null)
+      await jumps.reveal(row.entryId)
     } finally {
       clearTimeout(timer)
       if (current()) setWaiting(null)
@@ -152,7 +148,7 @@ export const MessageOutline = memo(function MessageOutline({
     setOpen(false)
     jumps.hold(true)
     try {
-      await settle(view, column, row?.entryId ?? null, current)
+      await settle(view, column, row.entryId, current)
     } finally {
       if (current()) jumps.hold(false)
     }
@@ -166,16 +162,14 @@ export const MessageOutline = memo(function MessageOutline({
   const settle = async (
     view: HTMLElement,
     column: HTMLElement,
-    target: string | null,
+    target: string,
     current: () => boolean,
   ): Promise<void> => {
     // An item's own top spacing keeps the message under the top fade.
     const place = (behavior: ScrollBehavior): void => {
-      if (target) scrollToMessage(target, { align: 'start', behavior })
-      else scrollToStart({ behavior })
+      scrollToMessage(target, { align: 'start', behavior })
     }
     const off = (): boolean => {
-      if (!target) return view.scrollTop > 1
       const element = column.querySelector(`[data-message-id="${CSS.escape(target)}"]`)
       if (!element) return false
       const inset = Number.parseFloat(getComputedStyle(column).paddingTop) || 0
@@ -258,12 +252,6 @@ export const MessageOutline = memo(function MessageOutline({
         className="w-70"
         style={{ maxHeight: Math.round(height * 0.6) }}
       >
-        <OutlineItem
-          label={t('thread.outline.start')}
-          reading={false}
-          waiting={waiting === START}
-          onJump={() => void jump(null)}
-        />
         {rows.map((row, i) => (
           <OutlineItem
             key={row.entryId}

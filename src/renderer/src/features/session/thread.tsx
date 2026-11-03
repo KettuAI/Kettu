@@ -52,8 +52,8 @@ function useShownFrom(total: number, held: boolean): number {
 
 /** What a jump in the outline needs of the thread. */
 export interface ThreadJumps {
-  /** Resolves once the item `key`, or the first item for null, is rendered. */
-  reveal(key: string | null): Promise<void>
+  /** Resolves once the item `key` is rendered. */
+  reveal(key: string): Promise<void>
   /**
    * Holds the rendering of older items and the loading of older pages while a jump's scroll
    * settles: either would prepend items and cut the scroll short.
@@ -173,12 +173,12 @@ export const Thread = memo(function Thread({
   const sent = lastSent(order ?? [], signature)
   const [held, setHeld] = useState(false)
   const shownFrom = useShownFrom(items.length, held)
-  const revealing = useRef<{ key: string | null; resolve: () => void } | null>(null)
+  const revealing = useRef<{ key: string; resolve: () => void } | null>(null)
   const [, setRevealTick] = useState(0)
   useEffect(() => {
     const waiting = revealing.current
     if (!waiting) return
-    const index = waiting.key === null ? 0 : items.findIndex((item) => item.key === waiting.key)
+    const index = items.findIndex((item) => item.key === waiting.key)
     if (index < 0 || shownFrom > index) return
     revealing.current = null
     waiting.resolve()
