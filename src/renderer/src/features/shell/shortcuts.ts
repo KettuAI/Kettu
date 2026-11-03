@@ -7,6 +7,7 @@ export type ShortcutGroupName = 'general' | 'sessions' | 'composer' | 'terminal'
 
 export type ShortcutAction =
   | 'newSession'
+  | 'searchSessions'
   | 'openProject'
   | 'settings'
   | 'toggleSidebar'
@@ -42,6 +43,7 @@ export interface Shortcut {
 export function shortcutList(sendKey: 'enter' | 'mod-enter'): Shortcut[] {
   return [
     { group: 'general', action: 'newSession', keys: 'Mod+N' },
+    { group: 'general', action: 'searchSessions', keys: 'Mod+K' },
     { group: 'general', action: 'openProject', keys: 'Mod+O' },
     { group: 'general', action: 'settings', keys: 'Mod+,' },
     { group: 'general', action: 'toggleSidebar', keys: 'Mod+B' },

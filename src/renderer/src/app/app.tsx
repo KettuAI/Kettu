@@ -21,6 +21,7 @@ import { TitleBand } from '@renderer/features/shell/top-bar'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
 import { UpdateDialog } from '@renderer/features/updates/update-dialog'
 import { AppSidebar } from '@renderer/features/sidebar/app-sidebar'
+import { SearchDialog } from '@renderer/features/sidebar/search-dialog'
 import { hasBand } from '@renderer/lib/platform'
 import { layoutStorage, readJson, writeJson } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
@@ -73,6 +74,7 @@ export function App() {
         <ArtifactDialogs />
         <MediaViewer />
         <ShortcutsDialog />
+        <SearchDialog />
         {pathPicker && (
           <Suspense fallback={null}>
             <HostPathDialog />

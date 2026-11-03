@@ -11,7 +11,7 @@ import {
 import {
   ArrowLeftIcon,
   CalendarClockIcon,
-  ChartNoAxesColumnIcon,
+  ChartPieIcon,
   CircleAlertIcon,
   EllipsisIcon,
   PlayIcon,
@@ -241,7 +241,7 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
   if (state.kind === 'paused' && state.pause) {
     notices.push(
       <Alert key="paused" variant="info">
-        <ChartNoAxesColumnIcon />
+        <ChartPieIcon />
         <AlertTitle>{t('pause.title', { agent: agentName(state.pause.agentId) })}</AlertTitle>
         <AlertDescription>{pauseNotice(state.pause, now)}</AlertDescription>
       </Alert>,
