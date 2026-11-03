@@ -254,6 +254,34 @@ describe('direct context', () => {
     expect(forks).toEqual([])
   })
 
+  it('reads the context when a turn ends, so the ring does not wait for the popover', async () => {
+    const breakdown: ContextBreakdown = {
+      model: 'fake',
+      used: 12_300,
+      size: 456_000,
+      categories: [],
+      lists: [],
+      observedAt: 1,
+    }
+    const readContext = vi.fn(async () => breakdown)
+    current = await startTestHost({ drivers: { acp: acpWith({ readContext }) } })
+    const t = current
+    const port = t.connect()
+    const summary = await port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.project,
+    })
+    await port.open(summary.id)
+    await port.request('sessions.prompt', {
+      sessionId: summary.id,
+      content: [{ type: 'text', text: 'Fix the flaky login test' }],
+    })
+    await port.untilStatus(summary.id, 'ready')
+    await port.until(() => port.thread(summary.id).session.usage?.used === 12_300)
+    expect(readContext).toHaveBeenCalledTimes(1)
+    expect(port.thread(summary.id).session.usage).toMatchObject({ used: 12_300, size: 456_000 })
+  })
+
   it("reads a running session's context from its connection and keeps its usage in step", async () => {
     const breakdown: ContextBreakdown = {
       model: 'fake',

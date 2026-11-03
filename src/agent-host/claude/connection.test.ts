@@ -402,6 +402,54 @@ describe('a turn', () => {
     expect(s.sdk.last.inputs[0]!.message.content).toEqual([{ type: 'text', text: 'Hi' }])
   })
 
+  it('keeps the context it knows when a provider counts no tokens', async () => {
+    const turn =
+      (counts: boolean) =>
+      (query: FakeQuery): void => {
+        const tokens = counts ? 1000 : 0
+        query.running()
+        query.emit(
+          stream(query, {
+            type: 'message_start',
+            message: {
+              id: 'msg_1',
+              usage: { input_tokens: counts ? 3 : 0, cache_read_input_tokens: tokens },
+            },
+          }),
+          assistant(query, 'msg_1', [{ type: 'text', text: 'ok' }], {
+            message: {
+              id: 'msg_1',
+              model: 'claude-opus-5',
+              content: [{ type: 'text', text: 'ok' }],
+              usage: {
+                input_tokens: counts ? 3 : 0,
+                output_tokens: counts ? 7 : 0,
+                cache_read_input_tokens: tokens,
+              },
+            },
+          }),
+        )
+        query.finish({
+          usage: { input_tokens: counts ? 3 : 0, output_tokens: counts ? 7 : 0 },
+          modelUsage: {
+            'claude-opus-5': {
+              inputTokens: counts ? 3 : 0,
+              outputTokens: counts ? 7 : 0,
+              cacheReadInputTokens: tokens,
+              cacheCreationInputTokens: 0,
+              contextWindow: 500_000,
+            },
+          },
+        })
+      }
+    s.sdk.script = turn(true)
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'one' }])
+    expect(target.thread.session.usage).toMatchObject({ used: 1010, size: 500_000 })
+    s.sdk.script = turn(false)
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'two' }])
+    expect(target.thread.session.usage).toMatchObject({ used: 1010, size: 500_000 })
+  })
+
   it("counts each turn's own spend from the running totals", async () => {
     let turn = 0
     s.sdk.script = (query) => {

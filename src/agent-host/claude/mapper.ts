@@ -257,7 +257,9 @@ export class ClaudeMapper {
     const out = output()
     if (ctx.replaying) return out
     const previous = ctx.thread.session.usage
-    const used = usage ? contextTokens(usage) : null
+    // A provider that counts no request tokens sends zeros; that is no count, not an empty context.
+    const counted = usage ? contextTokens(usage) : null
+    const used = counted === 0 && (previous?.used ?? 0) > 0 ? null : counted
     const counts = !ctx.cancelling
     if (used === null && !counts) return out
     out.patches.push({
@@ -347,7 +349,10 @@ export class ClaudeMapper {
   ): MapperOutput {
     const out = output()
     const previous = ctx.thread.session.usage
-    const used = contextTokens(usage) + (usage.output_tokens ?? 0)
+    const counted = contextTokens(usage)
+    // A provider that counts no request tokens sends zeros; that is no count, not an empty context.
+    if (counted === 0 && (previous?.used ?? 0) > 0) return out
+    const used = counted + (usage.output_tokens ?? 0)
     if (previous?.used === used) return out
     out.patches.push({
       op: 'session.update',

@@ -4446,6 +4446,22 @@ export class SessionManager {
     // An agent that lists its titles sends none in the thread: the turn's end reads the session's.
     this.maybeReadListedTitle(live, this.userMessages(live) === 1)
     this.checkpoint(live)
+    this.refreshContext(live)
+  }
+
+  /**
+   * Reads the context from a connection that answers directly. Providers can report no context
+   * count at all, so the ring must not wait for the popover to open.
+   */
+  private refreshContext(live: Live): void {
+    if (live.record.origin === 'subagent') return
+    if (!this.deps.agents.runtime(live.record.agentId)?.connection.readContext) return
+    void this.context(live.id).catch((error: unknown) => {
+      this.deps.diagnostics.log(
+        'warn',
+        `${live.id}: the context could not be read after the turn: ${(error as Error).message}`,
+      )
+    })
   }
 
   /** The messages the thread holds, which says whether the turn that ended was the first one. */
