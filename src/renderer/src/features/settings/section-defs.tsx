@@ -439,7 +439,7 @@ export function useAccountSection(): SectionDef {
       render: () => <AccountRow />,
     },
   ]
-  if (signedIn) {
+  if (signedIn && signedIn.subscription !== 'none') {
     rows.push({
       id: 'subscription',
       name: t('account.subscription.name'),
