@@ -7,7 +7,7 @@ interface UpdatesStore {
   status: UpdateStatus | null
   /** Set for 4 s after a check the user started found nothing. */
   justChecked: boolean
-  /** The "Updated to" notice was dismissed; it shows for one launch only anyway. */
+  /** Closed here, or initialized already by an earlier window of this version. */
   updatedDismissed: boolean
   /** The dialog that restarts into a downloaded update, which only Restart opens. */
   dialogOpen: boolean
@@ -20,6 +20,7 @@ interface UpdatesStore {
 }
 
 const SETTINGS_DOT_KEY = 'updates.settingsDot'
+const UPDATED_NOTICE_KEY = 'updates.updatedNotice'
 
 export const useUpdatesStore = create<UpdatesStore>()(() => ({
   status: null,
@@ -63,7 +64,22 @@ export async function checkForUpdates(): Promise<void> {
   }
 }
 
+/**
+ * Main keeps `updatedFrom` until the process ends, so every new window would show the completion
+ * notice again. The first window records the version and still shows it; a later window of that
+ * version starts dismissed. A launch with no `updatedFrom` records nothing, so the next update
+ * can still show.
+ */
+function updatedNoticeDismissed(status: UpdateStatus): boolean {
+  if (!status.updatedFrom) return false
+  if (readJson<unknown>(UPDATED_NOTICE_KEY, null) === status.current) return true
+  writeJson(UPDATED_NOTICE_KEY, status.current)
+  return false
+}
+
 export async function initUpdates(): Promise<void> {
   window.kettu.updates.onChanged((status) => useUpdatesStore.setState({ status }))
-  useUpdatesStore.setState({ status: await window.kettu.updates.getStatus() })
+  const status = await window.kettu.updates.getStatus()
+  const updatedDismissed = updatedNoticeDismissed(status)
+  useUpdatesStore.setState(updatedDismissed ? { status, updatedDismissed } : { status })
 }
