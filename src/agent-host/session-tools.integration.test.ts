@@ -341,14 +341,16 @@ describe('the session tools', () => {
       false,
     )
 
-    // The next open shows the prompt waiting, and Resume sends it and brings the session back.
+    // The next open shows the prompt waiting. Resume is refused until the session is restored.
     const { session } = await port.open(a)
     expect(session).toMatchObject({ status: 'closed', queuePaused: true })
     expect(session.queue.map((item) => item.content)).toEqual([[{ type: 'text', text: 'Next' }]])
-    await port.request('sessions.resumeQueue', { sessionId: a })
-    await port.until(() => users().length === 2)
-    expect(port.summary(a)?.archivedAt).toBeNull()
-    expect(port.thread(a).session.queue).toEqual([])
+    await expect(port.request('sessions.resumeQueue', { sessionId: a })).rejects.toMatchObject({
+      code: 'restricted',
+    })
+    expect(port.summary(a)?.archivedAt).toEqual(expect.any(Number))
+    expect(port.thread(a).session.queue).toHaveLength(1)
+    expect(port.thread(a).session.queuePaused).toBe(true)
   })
 
   it("tells sessions apart on an agent's folder token, as OpenCode names them", async () => {

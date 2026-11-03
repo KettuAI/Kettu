@@ -28,6 +28,7 @@
     "attachmentDenied": "Kettu 没有读取 {{name}} 的权限。",
     "otherConfigFolder": "这个会话是在配置目录 {{path}} 下开始的，它的 Agent 已不再使用这个目录，所以无法在这里继续。",
     "topLevelOnly": "只有顶层会话可以置顶或归档",
+    "archived": "这个会话已归档",
     "untitled": "未命名会话",
     "subagent": {
       "noPrompt": "子 Agent 会话从父会话接收指令",

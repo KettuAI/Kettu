@@ -13,7 +13,7 @@ import { hostOfPath } from '@renderer/lib/host-paths'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import { ensureFiles } from '@renderer/stores/files'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
-import { useSessionsStore } from '@renderer/stores/sessions'
+import { sessionArchived, useSessionsStore } from '@renderer/stores/sessions'
 import { focusSession, reloadSession, useThreadsStore } from '@renderer/stores/threads'
 import { openSettings } from '@renderer/stores/view'
 import { DropOverlay } from './attachments/drop-overlay'
@@ -26,6 +26,7 @@ import { PlanBar } from './plan-bar'
 import { QueueStack } from './queue-stack'
 import { SessionHeader } from './session-header'
 import {
+  ArchivedComposer,
   ColumnScroller,
   ComposerPlaceholder,
   FailedState,
@@ -58,6 +59,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
     (s) => s.byId[summary.agentId]?.capabilities.progressNotes ?? false,
   )
   const agentRemoved = useAgentsStore((s) => s.byId[summary.agentId]?.registered === false)
+  const archived = useSessionsStore((s) => sessionArchived(s.byId, sessionId))
   const otherHost = useOtherHost(hostOfPath(summary.projectPath))
   // Its host is offline: what the thread showed stays, and nothing goes to it.
   const away = otherHost && isAway(otherHost.connection) ? otherHost : null
@@ -87,7 +89,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   usePermissionKeys(sessionId, focused)
   useEscapeToCancel(sessionId, !!session && running, focused, fail)
   const drop = useFileDrop(
-    session && summary.origin !== 'subagent' ? sessionId : null,
+    session && !archived && summary.origin !== 'subagent' ? sessionId : null,
     status === 'starting',
   )
 
@@ -217,17 +219,22 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
               </p>
             )}
             <div className="flex flex-col">
-              {session && summary.origin !== 'subagent' && (
+              {session && !archived && summary.origin !== 'subagent' && (
                 <PlanBar sessionId={sessionId} running={running} />
               )}
               {/* Mounted only while something waits; its cards sit behind the composer. */}
-              {session && summary.origin !== 'subagent' && session.queue.length > 0 && (
-                <QueueStack session={session} onError={setQueueError} />
-              )}
+              {session &&
+                !archived &&
+                summary.origin !== 'subagent' &&
+                session.queue.length > 0 && (
+                  <QueueStack session={session} onError={setQueueError} />
+                )}
               {away ? (
                 session && <HostAway host={away} inline />
               ) : summary.origin === 'subagent' ? (
                 <SubagentBar summary={summary} session={session} />
+              ) : archived ? (
+                <ArchivedComposer sessionId={sessionId} />
               ) : agentRemoved ? (
                 <p className="px-3 py-4 text-small text-tertiary">
                   {t('view.agentRemovedComposer')}

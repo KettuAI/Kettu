@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId, UserContent } from '@shared/thread'
-import { exportDiagnostics } from '@renderer/app/actions'
+import { exportDiagnostics, unarchiveSession } from '@renderer/app/actions'
 import { Bubble, BubbleContent } from '@renderer/components/ui/bubble'
 import { Button } from '@renderer/components/ui/button'
 import { InputGroup, InputGroupAddon, InputGroupButton } from '@renderer/components/ui/input-group'
@@ -283,6 +283,39 @@ export function FailedState({
         </Button>
         {note && <span className="min-w-0 truncate text-xs text-muted-foreground">{note}</span>}
       </div>
+    </div>
+  )
+}
+
+/** In place of the composer: an archived session stays readable, and takes no further message. */
+export function ArchivedComposer({ sessionId }: { sessionId: string }) {
+  const { t } = useTranslation('session')
+  const [restoring, setRestoring] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const restore = async () => {
+    setRestoring(true)
+    setError(null)
+    try {
+      await unarchiveSession(sessionId)
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setRestoring(false)
+    }
+  }
+  return (
+    <div className="flex flex-col gap-2 px-3 py-4">
+      <p className="text-small text-tertiary">{t('view.archivedComposer')}</p>
+      <div>
+        <Button size="xs" variant="outline" disabled={restoring} onClick={() => void restore()}>
+          {t('view.restore')}
+        </Button>
+      </div>
+      {error && (
+        <p role="alert" className="text-xs text-danger">
+          {error}
+        </p>
+      )}
     </div>
   )
 }

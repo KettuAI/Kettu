@@ -3856,14 +3856,22 @@ describe('pinning, archiving and marking unread', () => {
     expect(listed.map((s) => s.id)).toContain(sessionId)
   })
 
-  it('brings an archived session back when a prompt is sent to it', async () => {
+  it('refuses a prompt, a queued prompt and resuming the queue while archived', async () => {
     const { t, port } = await setup()
     const sessionId = await newSession(t, port)
     await port.request('sessions.archive', { sessionId })
     expect(port.summary(sessionId)?.archivedAt).toEqual(expect.any(Number))
-    await turn(port, sessionId, 'hello')
-    await port.untilStatus(sessionId, 'ready')
-    expect(port.summary(sessionId)?.archivedAt).toBeNull()
+    await expect(turn(port, sessionId, 'hello')).rejects.toMatchObject({ code: 'restricted' })
+    await expect(
+      port.request('sessions.queue', {
+        sessionId,
+        content: [{ type: 'text', text: 'next' }],
+      }),
+    ).rejects.toMatchObject({ code: 'restricted' })
+    await expect(port.request('sessions.resumeQueue', { sessionId })).rejects.toMatchObject({
+      code: 'restricted',
+    })
+    expect(port.summary(sessionId)?.archivedAt).toEqual(expect.any(Number))
   })
 
   it('restores an archived session with unarchive', async () => {

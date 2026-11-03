@@ -382,6 +382,8 @@
     "agentRemoved": "{{agent}} 已移除",
     "agentRemovedBody": "历史仍留在这里，但这个会话不能再继续。可以重新添加这个 Agent，或用别的 Agent 带着上下文新建会话。",
     "agentRemovedComposer": "这个 Agent 已移除，会话不能再继续。",
+    "archivedComposer": "这个会话已归档，不能再发消息。",
+    "restore": "恢复",
     "openAgents": "打开 Agents",
     "announceApproval": "{{agent}} 需要你的授权",
     "announceFinished": "{{agent}} 已完成"
