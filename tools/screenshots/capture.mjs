@@ -328,11 +328,20 @@ async function run() {
   )
   // The reply's link asks first, in a dialog centred over the pane. A tooltip in the pane's header
   // would not do: below a title bar it opens above its button, clear of the page.
-  await click(byText('p a', 'Node.js timers guide'), 'the link in the reply')
-  await waitFor(
-    `Boolean(document.querySelector('[data-browser-panel] img[aria-hidden]'))`,
-    'the still of the page',
-  )
+  // A page that has not painted yet gives no still, so the dialog is opened again until it does.
+  const stillShown = `Boolean(document.querySelector('[data-browser-panel] img[aria-hidden]'))`
+  for (let attempt = 1; ; attempt++) {
+    await click(byText('p a', 'Node.js timers guide'), 'the link in the reply')
+    const shown = await waitFor(stillShown, 'the still of the page', 5000).then(
+      () => true,
+      () => false,
+    )
+    if (shown) break
+    if (attempt === 3) throw new Error('Timed out waiting for the still of the page')
+    await press('Escape', 27)
+    await waitFor(`!document.querySelector('[role=dialog]')`, 'the link dialog to close')
+    await sleep(500)
+  }
   await sleep(500)
   await shoot('browser-overlay')
   // The same still without the dialog that asked for it.
