@@ -1113,8 +1113,6 @@
     },
     "device": {
       "rename": "Rename",
-      "renameTitle": "Rename the device",
-      "save": "Save",
       "facts": "Device",
       "joined": "Joined",
       "joinedScan": "{{date}}, from a scanned code",

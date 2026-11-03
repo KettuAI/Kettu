@@ -1,5 +1,9 @@
 import type { TFunction } from 'i18next'
-import type { DeviceChangeFailure, PairedDevice } from '@shared/remote/device'
+import {
+  DEVICE_NAME_CHARS,
+  type DeviceChangeFailure,
+  type PairedDevice,
+} from '@shared/remote/device'
 import { removalAt, UNSEEN_NOTICE_DAYS } from '@shared/remote/status'
 import { clockTime, daysBefore, monthDay } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
@@ -20,6 +24,13 @@ export function deviceLine(t: TFunction<'settings'>, device: Device): string {
   return [kindLabel(t, device.kind), device.model, platformName(device.platform)]
     .filter(Boolean)
     .join(' · ')
+}
+
+/** A trimmed rename that fits, or null when the draft is empty, unchanged or too long. */
+export function nextDeviceName(current: string, draft: string): string | null {
+  const next = draft.trim()
+  if (next === '' || next === current || [...next].length > DEVICE_NAME_CHARS) return null
+  return next
 }
 
 /** Renames or removes a device through main: null once done, else what to show for it. */
