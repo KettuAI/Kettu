@@ -25,8 +25,9 @@ export async function checkProjectMenu(cdp, name) {
     }
     throw new Error(`Project menu did not ${open ? 'open' : 'close'}`)
   }
-  // What the popup would be if it were only as wide as its widest item, measured from the item's
-  // own parts: an element's stretched width says nothing about how much room its text needs.
+  // What the popup would be if it were only as wide as its widest item. An item stretches to
+  // the popup, so its box says nothing about the room it needs; a part's box does, padding
+  // included. A text range skips that padding, which made the shortcut look 16px too narrow.
   const menuFit = `(() => {
     const popup = document.querySelector('[data-slot="dropdown-menu-content"]')
     if (!popup) return null
@@ -35,13 +36,15 @@ export async function checkProjectMenu(cdp, name) {
       range.selectNodeContents(node)
       return range.getBoundingClientRect().width
     }
+    const partWidth = (node) =>
+      node.nodeType === Node.ELEMENT_NODE ? node.getBoundingClientRect().width : textWidth(node)
     const widths = [...popup.querySelectorAll('[data-slot="dropdown-menu-item"]')].map((item) => {
       const style = getComputedStyle(item)
       const gaps = Number.parseFloat(style.columnGap) || 0
       const parts = [...item.childNodes].filter(
         (node) => node.nodeType === Node.ELEMENT_NODE || node.textContent.trim() !== '',
       )
-      const content = parts.reduce((sum, node) => sum + textWidth(node), 0)
+      const content = parts.reduce((sum, node) => sum + partWidth(node), 0)
       return (
         Number.parseFloat(style.paddingLeft) +
         Number.parseFloat(style.paddingRight) +
@@ -49,9 +52,15 @@ export async function checkProjectMenu(cdp, name) {
         gaps * Math.max(0, parts.length - 1)
       )
     })
+    const popupStyle = getComputedStyle(popup)
+    const chrome =
+      Number.parseFloat(popupStyle.paddingLeft) +
+      Number.parseFloat(popupStyle.paddingRight) +
+      Number.parseFloat(popupStyle.borderLeftWidth) +
+      Number.parseFloat(popupStyle.borderRightWidth)
     return {
       popup: popup.getBoundingClientRect().width,
-      fit: Math.max(160, ...widths.map((width) => width + 10)),
+      fit: Math.max(160, ...widths.map((width) => width + chrome)),
     }
   })()`
   const before = await actions()
