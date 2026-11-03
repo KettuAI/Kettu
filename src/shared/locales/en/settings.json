@@ -602,7 +602,7 @@
       "folderDefault": "Use the configuration you already use",
       "folderDefaultHint": "{{name}} in a terminal uses this folder too, so they share the same account and settings.",
       "folderNew": "A new folder",
-      "folderNewHint": "Kettu makes it in its data folder; sign in once the agent is added.",
+      "folderNewHint": "Kettu creates it under .kettu/agents in your home folder; sign in once the agent is added.",
       "folderExisting": "A folder you already use",
       "folderExistingHint": "Choose one to share its settings and sign-in.",
       "choose": "Choose…",
@@ -1282,6 +1282,16 @@
     "usedBy": "Used by",
     "listSeparator": ", ",
     "manageAgents": "Manage in Agents",
-    "versionOut": "{{version}} is out"
+    "versionOut": "{{version}} is out",
+    "removedLine": "Removed from Kettu",
+    "uninstall": {
+      "name": "Uninstall {{name}}",
+      "description": "Removes what Kettu installed for it. Your own program and configuration stay.",
+      "button": "Uninstall…",
+      "title": "Uninstall {{name}}?",
+      "body": "Kettu deletes its installed package for {{name}} and removes the agents you added here. Any turn still running stops; their sessions stay and can still be read. Your own program, its sign-in and configuration folders are not touched.",
+      "program": "Also uninstall the program with this command",
+      "installAgain": "Install it again to use it; its configuration and sessions were kept."
+    }
   }
 }

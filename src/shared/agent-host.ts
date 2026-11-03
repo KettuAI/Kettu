@@ -173,6 +173,9 @@ export interface AgentStatus {
   harnessName: string
   isDefault: boolean
   registered?: boolean // absent on older hosts; catalog entries are not necessarily agents
+  uninstalled?: boolean // removed from Kettu; Install brings it back
+  /** The command that removes the user's own program, when its install route has one. */
+  uninstallCommand?: string | null
   hidden: boolean // a default agent hidden from the agent menu
   color?: AgentColor // an added agent's dot on its mark; absent for a harness's default agent
   // Whether Kettu handed this agent's harness an API key; null for a harness that takes none.
@@ -450,6 +453,11 @@ export interface HostContract {
   'agents.install': {
     params: { agentId: AgentId; method?: AgentInstallMethod['id'] }
     result: void
+  }
+  // Removes Kettu's copy for the harness, and its own program too when asked.
+  'agents.uninstall': {
+    params: { agentId: AgentId; removeProgram?: boolean }
+    result: { command: string | null; error: string | null }
   }
   // Stops a running task, or clears a failed one.
   'agents.cancelTask': { params: { agentId: AgentId }; result: void }
@@ -756,6 +764,7 @@ export const HOST_METHODS = [
   'agents.setApiKey',
   'agents.clearApiKey',
   'agents.install',
+  'agents.uninstall',
   'agents.cancelTask',
   'agents.readOptions',
   'agents.readFirstOptions',

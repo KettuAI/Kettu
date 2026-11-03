@@ -600,7 +600,7 @@ export function useHarnessesSection(): SectionDef {
   const harnesses = useAgentsStore(useShallow((s) => harnessStatuses(s.order, s.byId)))
   const environment = useAgentsStore((s) => s.environment)
   // Installed: its program is on the machine, too old included, with any package Kettu adds for it.
-  const installed = harnesses.filter((h) => hasProgram(h) && !awaitsPackage(h))
+  const installed = harnesses.filter((h) => hasProgram(h) && !awaitsPackage(h) && !h.uninstalled)
   const missing = harnesses.filter((h) => !installed.includes(h))
   const groups = {
     installed: {

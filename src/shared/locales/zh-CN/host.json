@@ -184,7 +184,10 @@
     },
     "reportTimeout": "{{command}} 没有在 {{seconds}} 秒内完成",
     "unreadableReport": "{{agent}} 的 {{command}} 没有返回 Kettu 能读取的报告",
-    "removed": "这个 Agent 已删除，这个会话无法继续。"
+    "removed": "这个 Agent 已删除，这个会话无法继续。",
+    "uninstall": {
+      "busy": "{{agent}} 正在安装或更新，等它完成后才能卸载。"
+    }
   },
   "detect": {
     "nodeMissing": "{{agent}} 需要 Node.js，但在 PATH 中找不到 node。",
@@ -221,7 +224,8 @@
     "cliMissing": "{{agent}} 运行你自己的 {{command}}，但在 PATH 中找不到它。请在「设置 › Harness」中安装。",
     "cliUnsupported": "{{agent}} 找到的 {{path}} 不经 Shell 无法运行。",
     "cliFailed": "{{agent}} 无法读取它的程序的版本：{{reason}}",
-    "cliOutdated": "{{agent}} 需要 {{command}} {{required}} 或更高版本，当前安装的是 {{installed}}。请在「设置 › Harness」中更新。"
+    "cliOutdated": "{{agent}} 需要 {{command}} {{required}} 或更高版本，当前安装的是 {{installed}}。请在「设置 › Harness」中更新。",
+    "uninstalled": "{{agent}} 已卸载。要再次使用，请重新安装。"
   },
   "environment": {
     "inherited": "Kettu 启动后对 PATH 的修改要在重启后才生效。",

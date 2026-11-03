@@ -3,7 +3,9 @@
 // updated from Settings, and every change of the settings reaches the hosts that read them.
 
 import { mkdir, rename } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
+import { AGENTS_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
 import { BUILTIN_THEME_ID } from '@shared/themes'
 import { AgentFolders } from '../main/agent-folders'
 import { AdminError, HostAdmin } from '../main/host-admin'
@@ -84,9 +86,12 @@ export async function startDaemonAdmin({
     },
   )
   const removed = path.join(dataPath, 'removed-agent-config')
-  const agentFolders = new AgentFolders(settings, path.join(dataPath, 'agent-config'), (folder) =>
-    setAside(folder, removed),
+  const agentFolders = new AgentFolders(
+    settings,
+    path.join(os.homedir(), KETTU_HOME_FOLDER, AGENTS_FOLDER),
+    (folder) => setAside(folder, removed),
   )
+  await agentFolders.moveCreatedAgents(path.join(dataPath, 'agent-config'))
   admin = new HostAdmin({
     settings,
     agentFolders,

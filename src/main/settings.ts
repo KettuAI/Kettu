@@ -16,6 +16,7 @@ import {
   withAgentBinary,
   withAgentColor,
   withDirectPort,
+  withMovedAgent,
   withoutAgent,
   withRenamedAgent,
   withShellPath,
@@ -192,6 +193,10 @@ export class SettingsStore {
 
   removeAgent(agentId: AgentId): SettingsFile {
     return this.replace(withoutAgent(this.current, agentId))
+  }
+
+  moveAgent(agentId: AgentId, configDir: string): SettingsFile {
+    return this.replace(withMovedAgent(this.current, agentId, configDir))
   }
 
   setShellPath(shellPath: string): SettingsFile {

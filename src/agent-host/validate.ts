@@ -549,6 +549,16 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'agents.cancelTask': agent,
+    'agents.uninstall': (params) => {
+      const o = fields(params)
+      if (o.removeProgram !== undefined && typeof o.removeProgram !== 'boolean') {
+        throw invalidParams('removeProgram must be a boolean')
+      }
+      return {
+        agentId: agentId(o),
+        ...(o.removeProgram !== undefined ? { removeProgram: o.removeProgram as boolean } : {}),
+      }
+    },
     'agents.readOptions': (params) => {
       const o = fields(params)
       return {

@@ -28,6 +28,7 @@ import {
   configFolders,
   detectAgent,
   fakeAgent,
+  FAST_AGENT,
   OPENCODE,
   type AgentDefinition,
   type DetectContext,
@@ -257,6 +258,33 @@ describe('AgentManager', () => {
     expect(m.agents.status('fake-agent').registered).toBe(true)
     expect(m.statuses.at(-1)).toMatchObject({ id: 'fake-agent', registered: true })
     await m.agents.stopAll()
+  })
+
+  it('reports a harness as not installed while it is uninstalled', async () => {
+    const m = manager(
+      {},
+      {},
+      {
+        settings: () => ({
+          locale: 'en',
+          agents: { 'fake-agent': { enabled: true, uninstalled: true } },
+          addedAgents: [],
+          proxy: { mode: 'environment' },
+          git: DEFAULT_SETTINGS.git,
+          mcp: DEFAULT_SETTINGS.mcp,
+          usage: DEFAULT_SETTINGS.usage,
+          sessionTitles: true,
+        }),
+      },
+    )
+    const [status] = await m.agents.list()
+    expect(status).toMatchObject({ id: 'fake-agent', state: 'not-installed', uninstalled: true })
+    await m.agents.stopAll()
+  })
+
+  it('names the command that clears a uvx package when uninstalling', () => {
+    const m = manager({}, {}, { catalog: [FAST_AGENT] })
+    expect(m.agents.status('fast-agent').uninstallCommand).toBe('uv cache clean fast-agent-acp')
   })
 
   it('starts lazily, once, however many callers wait', async () => {
@@ -3168,6 +3196,15 @@ describe('installing a binary agent from its archive', () => {
     expect(m.status().launchCommand).toContain(m.program)
     const runtime = await m.agents.ensureReady('opencode')
     expect(runtime.agentId).toBe('opencode')
+    await m.agents.stopAll()
+  })
+
+  it('uninstalls the archive Kettu installed', async () => {
+    const m = await archiveManager()
+    await m.agents.install('opencode')
+    expect(await stat(m.program)).toBeTruthy()
+    expect(await m.agents.uninstall('opencode', false)).toEqual({ command: null, error: null })
+    await expect(stat(m.program)).rejects.toThrow()
     await m.agents.stopAll()
   })
 

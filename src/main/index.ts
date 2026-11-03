@@ -1,4 +1,4 @@
-import { hostname } from 'node:os'
+import { homedir, hostname } from 'node:os'
 import { join } from 'node:path'
 import {
   app,
@@ -15,6 +15,7 @@ import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import { HOSTS_FILE, type HostsStatus } from '@shared/remote/hosts'
 import type { RemoteStatus } from '@shared/remote/status'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
+import { AGENTS_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
 import { Account } from './account'
 import { ACCOUNT_URL, AccountApi, accountBaseUrl, clientInfo } from './account/service'
 import { accountFile } from './account/store'
@@ -511,9 +512,13 @@ async function start(): Promise<void> {
   })
   const quitFlow = quit
   checkForUpdates = () => void updater.check()
-  const agentFolders = new AgentFolders(settings, join(userDataPath, 'agent-config'), (folder) =>
-    shell.trashItem(folder),
+  const agentFolders = new AgentFolders(
+    settings,
+    join(homedir(), KETTU_HOME_FOLDER, AGENTS_FOLDER),
+    (folder) => shell.trashItem(folder),
+    (message) => log.warn(message),
   )
+  await agentFolders.moveCreatedAgents(join(userDataPath, 'agent-config'))
   hostAdmin = new HostAdmin({
     settings,
     agentFolders,

@@ -329,6 +329,7 @@ export function harnessStatuses(order: AgentId[], byId: AgentsStore['byId']): Ag
 export function addableHarnesses(order: AgentId[], byId: AgentsStore['byId']): AgentStatus[] {
   return harnessStatuses(order, byId).filter(
     (s) =>
+      s.uninstalled !== true &&
       hasProgram(s) &&
       !awaitsPackage(s) &&
       (s.registered === false || MULTI_AGENT_HARNESSES.includes(s.harnessId)),

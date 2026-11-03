@@ -186,7 +186,10 @@
     },
     "reportTimeout": "{{command}} did not finish in {{seconds}} s",
     "unreadableReport": "{{agent}}'s {{command}} gave no report Kettu can read",
-    "removed": "This agent was deleted, so this session cannot continue."
+    "removed": "This agent was deleted, so this session cannot continue.",
+    "uninstall": {
+      "busy": "{{agent}} is being installed or updated. Wait for it to finish, then uninstall."
+    }
   },
   "detect": {
     "nodeMissing": "{{agent}} runs on Node.js, and node was not found on PATH.",
@@ -223,7 +226,8 @@
     "cliMissing": "{{agent}} runs your own {{command}}, which was not found on PATH. Install it in Settings › Harnesses.",
     "cliUnsupported": "{{agent}} found {{path}}, which cannot be run without a shell.",
     "cliFailed": "{{agent}} could not read the version of its program: {{reason}}",
-    "cliOutdated": "{{agent}} needs {{command}} {{required}} or later; {{installed}} is installed. Update it in Settings › Harnesses."
+    "cliOutdated": "{{agent}} needs {{command}} {{required}} or later; {{installed}} is installed. Update it in Settings › Harnesses.",
+    "uninstalled": "{{agent}} was uninstalled. Install it to use it again."
   },
   "environment": {
     "inherited": "Changes to PATH made after Kettu started take effect after a restart.",

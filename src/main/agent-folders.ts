@@ -1,9 +1,9 @@
 // The agents a user adds beside a harness's default one, each with a configuration folder of its
-// own: one Kettu makes in its data folder, or one picked in the folder dialog or typed on a device.
-// A folder belongs to one agent, and an agent keeps its folder; only main, or the daemon, writes
-// the paths into the settings.
+// own: one Kettu makes under the user's home folder, or one picked in the folder dialog or typed
+// on a device. A folder belongs to one agent, and an agent keeps its folder; only main, or the
+// daemon, writes the paths into the settings.
 
-import { mkdir, realpath } from 'node:fs/promises'
+import { cp, mkdir, realpath, rename, rm, stat } from 'node:fs/promises'
 import os from 'node:os'
 import { join, relative, isAbsolute } from 'node:path'
 import type { AddedAgent } from '@shared/settings'
@@ -30,6 +30,10 @@ async function resolved(folder: string): Promise<string> {
   return process.platform === 'win32' ? real.toLowerCase() : real
 }
 
+async function exists(folder: string): Promise<boolean> {
+  return (await stat(folder).catch(() => null))?.isDirectory() ?? false
+}
+
 export class AgentFolders {
   /**
    * The folders the dialog returned this run, or a device typed and the host found, the only
@@ -39,11 +43,48 @@ export class AgentFolders {
 
   constructor(
     private readonly settings: SettingsStore,
-    /** `<userData>/agent-config`, where Kettu makes the folders of the agents it creates. */
+    /** `<home>/.kettu/agents`, where Kettu makes the folders of the agents it creates. */
     private readonly root: string,
     /** Moves a folder Kettu made out of the way: to the trash, or where the daemon keeps them. */
     private readonly trash: (folder: string) => Promise<void>,
+    private readonly log: (message: string) => void = (message) => console.warn(message),
   ) {}
+
+  /**
+   * Moves the folders Kettu made while they lived beside its own data, once: they belong to the
+   * user and must outlive the app. A folder on another volume is copied.
+   */
+  async moveCreatedAgents(legacyRoot: string): Promise<void> {
+    const agents = this.settings
+      .get()
+      .addedAgents.filter((agent) => agent.created && this.inside(legacyRoot, agent.configDir))
+    if (agents.length === 0) return
+    await mkdir(this.root, { recursive: true })
+    for (const agent of agents) {
+      const target = join(this.root, agent.id)
+      try {
+        if (!(await exists(target))) await this.moveFolder(agent.configDir, target)
+        this.settings.moveAgent(agent.id, target)
+      } catch (error) {
+        this.log(`Could not move ${agent.configDir} to ${target}: ${(error as Error).message}`)
+      }
+    }
+  }
+
+  private async moveFolder(from: string, to: string): Promise<void> {
+    try {
+      await rename(from, to)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error
+      await cp(from, to, { recursive: true })
+      await rm(from, { recursive: true, force: true })
+    }
+  }
+
+  private inside(root: string, folder: string): boolean {
+    const path = relative(root, folder)
+    return path !== '' && !path.startsWith('..') && !isAbsolute(path)
+  }
 
   /** Records a folder the user picked in the dialog or the host checked, which `add` may take. */
   remember(folder: string): void {
@@ -105,8 +146,7 @@ export class AgentFolders {
   }
 
   private inRoot(folder: string): boolean {
-    const path = relative(this.root, folder)
-    return path !== '' && !path.startsWith('..') && !isAbsolute(path)
+    return this.inside(this.root, folder)
   }
 
   /** Refuses a folder another agent already has: an added one, or a harness's default folder. */

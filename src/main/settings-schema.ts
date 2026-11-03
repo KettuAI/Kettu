@@ -157,7 +157,13 @@ function checkProxy(value: unknown, path: string): string | null {
   return null
 }
 
-const AGENT_KEYS: readonly string[] = ['binaryPath', 'configDir', 'hidden', 'enabled']
+const AGENT_KEYS: readonly string[] = [
+  'binaryPath',
+  'configDir',
+  'hidden',
+  'enabled',
+  'uninstalled',
+]
 
 /** The agents Kettu's own MCP server is off for: each an agent id, once. */
 function checkMcpOff(value: unknown, path: string): string | null {
@@ -286,7 +292,7 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
           Object.keys(entry).some((key) => !AGENT_KEYS.includes(key))
         ) {
           problems.push(
-            `"agents.${harnessId}" accepts only "binaryPath", "configDir", "hidden" and "enabled"`,
+            `"agents.${harnessId}" accepts only "binaryPath", "configDir", "hidden", "enabled" and "uninstalled"`,
           )
         } else {
           if ('binaryPath' in entry && entry.binaryPath !== null) {
@@ -297,7 +303,7 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
           if ('configDir' in entry && entry.configDir !== null) {
             problems.push(`"agents.${harnessId}.configDir" can only be cleared with null`)
           }
-          for (const key of ['hidden', 'enabled']) {
+          for (const key of ['hidden', 'enabled', 'uninstalled']) {
             const problem =
               key in entry ? isBoolean(entry[key], `agents.${harnessId}.${key}`) : null
             if (problem) problems.push(problem)
@@ -366,6 +372,8 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
       const change = patch.agents[harnessId]
       const entry = { ...next.agents[harnessId] }
       if (change?.enabled !== undefined) entry.enabled = change.enabled
+      if (change?.uninstalled === true) entry.uninstalled = true
+      if (change?.uninstalled === false) delete entry.uninstalled
       if (change?.binaryPath === null) delete entry.binaryPath
       if (change?.configDir === null) delete entry.configDir
       if (change?.hidden === true) entry.hidden = true
@@ -468,8 +476,23 @@ export function withAgentColor(
   return next
 }
 
-/** Unregisters an agent without changing its harness installation or external configuration. */
-export function withoutAgent(current: SettingsFile, agentId: AgentId): SettingsFile {
+/** Points a created agent at the folder it was moved to. */
+export function withMovedAgent(
+  current: SettingsFile,
+  agentId: AgentId,
+  configDir: string,
+): SettingsFile {
+  const index = current.addedAgents.findIndex((agent) => agent.id === agentId)
+  if (index < 0) throw new SettingsError(`No added agent "${agentId}"`)
+  const next = structuredClone(current)
+  next.addedAgents[index] = { ...next.addedAgents[index]!, configDir }
+  return next
+}
+
+/** Unregisters an agent without changing its harness installation or external configuration. */ export function withoutAgent(
+  current: SettingsFile,
+  agentId: AgentId,
+): SettingsFile {
   const defaultAgent = isHarnessId(agentId)
   const registered =
     defaultAgent &&
@@ -565,6 +588,11 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
           const problem = isBoolean(entry.hidden, `agents.${harnessId}.hidden`)
           if (problem) problems.push(problem)
           else if (entry.hidden) stored.hidden = true
+        }
+        if (entry.uninstalled !== undefined) {
+          const problem = isBoolean(entry.uninstalled, `agents.${harnessId}.uninstalled`)
+          if (problem) problems.push(problem)
+          else if (entry.uninstalled) stored.uninstalled = true
         }
         if (Object.keys(stored).length > 0) settings.agents[harnessId] = stored
       }

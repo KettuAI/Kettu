@@ -598,7 +598,7 @@
       "folderDefault": "沿用现有的配置",
       "folderDefaultHint": "终端里的 {{name}} 也使用这个目录，账号和设置是同一份。",
       "folderNew": "新建一个",
-      "folderNewHint": "Kettu 在自己的数据目录里新建，加好后登录。",
+      "folderNewHint": "Kettu 在你的主目录下的 .kettu/agents 里新建，加好后登录。",
       "folderExisting": "用已有的",
       "folderExistingHint": "选择一个，与它共用设置和登录。",
       "choose": "选择…",
@@ -1270,6 +1270,16 @@
     "usedBy": "在用它的",
     "listSeparator": "、",
     "manageAgents": "在 Agent 里管理",
-    "versionOut": "{{version}} 已发布"
+    "versionOut": "{{version}} 已发布",
+    "removedLine": "已从 Kettu 卸载",
+    "uninstall": {
+      "name": "卸载 {{name}}",
+      "description": "删除 Kettu 为它安装的包；你自己的程序、登录和配置都保留。",
+      "button": "卸载…",
+      "title": "卸载 {{name}}？",
+      "body": "Kettu 会删除为 {{name}} 安装的包，并移除你在这里添加的 Agent；正在运行的回合会停止。它们的会话仍保留、能查看。你自己的程序、登录和配置目录都不动。",
+      "program": "同时用这条命令卸载程序",
+      "installAgain": "重新安装后即可使用；配置和会话都保留着。"
+    }
   }
 }

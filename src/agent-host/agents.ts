@@ -2,7 +2,7 @@
 // sign-in state and the AgentStatus every port sees. A harness's detection, installs and updates
 // are shared by its agents: its default agent and those added with folders of their own.
 
-import { mkdir, realpath } from 'node:fs/promises'
+import { mkdir, realpath, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type {
@@ -573,18 +573,24 @@ export class AgentManager {
         : [],
       this.cliMethod(h, detection),
     ])
-    h.detection = detection
+    const effective: Detection = harnessSettings?.uninstalled
+      ? {
+          state: 'not-installed',
+          detail: t('detect.uninstalled', { agent: h.def.name }),
+        }
+      : detection
+    h.detection = effective
     h.installedCli = installedCli
     h.installPlans = plans
     h.cliMethod = cliMethod
     h.requiresProgram =
-      detection.state === 'available' ? (detection.requires?.program ?? null) : null
+      effective.state === 'available' ? (effective.requires?.program ?? null) : null
     h.requiresVersion =
-      detection.state === 'available' ? (detection.requires?.version ?? null) : null
+      effective.state === 'available' ? (effective.requires?.version ?? null) : null
     // A binary agent's own version is asked in the background, so detection never waits for it.
     const program =
-      h.def.launch.kind === 'binary' && detection.state === 'available'
-        ? (detection.spec?.command ?? null)
+      h.def.launch.kind === 'binary' && effective.state === 'available'
+        ? (effective.spec?.command ?? null)
         : null
     if (program !== h.binaryProgram) {
       h.binaryProgram = program
@@ -595,8 +601,8 @@ export class AgentManager {
       // A running, installing, failed or recovering agent keeps its lifecycle state.
       const idle = !slot.launched && !slot.starting && !h.installing && slot.state !== 'failed'
       if (idle) {
-        slot.state = detection.state
-        slot.detail = detection.state === 'available' ? null : detection.detail
+        slot.state = effective.state
+        slot.detail = effective.state === 'available' ? null : effective.detail
       }
     }
     this.emit(this.home(h))
@@ -712,7 +718,8 @@ export class AgentManager {
       (h) =>
         previous.locale !== next.locale ||
         previous.agents[h.def.id]?.binaryPath !== next.agents[h.def.id]?.binaryPath ||
-        previous.agents[h.def.id]?.configDir !== next.agents[h.def.id]?.configDir,
+        previous.agents[h.def.id]?.configDir !== next.agents[h.def.id]?.configDir ||
+        previous.agents[h.def.id]?.uninstalled !== next.agents[h.def.id]?.uninstalled,
     )
     await Promise.all(changed.map((h) => this.detect(h)))
     // A rename or a switch for Kettu's server shows in the status; the switch changes what a
@@ -1157,6 +1164,92 @@ export class AgentManager {
   /** The sessions open with any of the harness's agents. */
   private liveSessionsOf(h: Harness): number {
     return this.agentsOf(h).reduce((sum, slot) => sum + this.hooks.liveSessions(slot.id), 0)
+  }
+
+  /**
+   * Removes what Kettu installed for the harness, and asks the harness's own installer to remove
+   * the user's program when asked. Agents and their sessions are handled by the settings change
+   * that follows; external configuration and user-installed programs are never deleted here.
+   */
+  async uninstall(
+    agentId: AgentId,
+    removeProgram = false,
+  ): Promise<{ command: string | null; error: string | null }> {
+    const { h } = this.slot(agentId)
+    await this.detectAll()
+    if (h.task?.state === 'running') {
+      throw invalidParams(t('agent.uninstall.busy', { agent: h.def.name }))
+    }
+    const program = removeProgram ? this.programUninstall(h) : null
+    for (const slot of this.agentsOf(h)) await this.stopProcess(slot)
+    await rm(path.join(this.deps.adaptersDir, h.def.id), { recursive: true, force: true })
+    this.deps.diagnostics.event(h.def.id, 'uninstall', 'removed what Kettu installed')
+    h.latest = null
+    h.skipped = null
+    h.cliSkipped = null
+    h.task = null
+    h.detection = null
+    h.installedCli = null
+    if (!program) return { command: null, error: null }
+    await this.deps.env.ready()
+    const run = await runProgram({
+      program: program.program,
+      args: program.args,
+      cwd: os.homedir(),
+      env: this.deps.env.agentEnv(h.def.id),
+      platform: this.deps.platform,
+      timeoutMs: this.timings.installMs,
+    })
+    return {
+      command: program.command,
+      error: programFailure(program.command, run, this.timings.installMs),
+    }
+  }
+
+  /** How to remove the user's own program, when its install route has a safe opposite. */
+  private programUninstall(
+    h: Harness,
+  ): { command: string; program: string; args: string[] } | null {
+    const { installs } = h.def
+    if (h.def.launch.kind === 'uvx') {
+      const args = ['cache', 'clean', h.def.launch.package]
+      return {
+        command: formatCommand({ command: 'uv', args }, this.deps.platform),
+        program: 'uv',
+        args,
+      }
+    }
+    if (!installs) return null
+    const method = h.cliMethod
+    if (method === 'brew') {
+      const name = installs.brewCask ?? installs.brew
+      if (!name) return null
+      const args = installs.brewCask ? ['uninstall', '--cask', name] : ['uninstall', name]
+      return {
+        command: formatCommand({ command: 'brew', args }, this.deps.platform),
+        program: 'brew',
+        args,
+      }
+    }
+    if (method === 'npm' && installs.npm) {
+      const npm = this.deps.env.nodeProbe().npmPath
+      if (!npm) return null
+      const args = ['uninstall', '-g', installs.npm]
+      return {
+        command: formatCommand({ command: 'npm', args }, this.deps.platform),
+        program: npm,
+        args,
+      }
+    }
+    if (method === 'winget' && installs.winget) {
+      const args = ['uninstall', installs.winget]
+      return {
+        command: formatCommand({ command: 'winget', args }, this.deps.platform),
+        program: 'winget',
+        args,
+      }
+    }
+    return null
   }
 
   /**
@@ -2740,6 +2833,8 @@ export class AgentManager {
       harnessName: slot.def.name,
       isDefault: !slot.added,
       registered: this.has(agentId),
+      uninstalled: harnessSettings?.uninstalled === true,
+      uninstallCommand: slot.added ? null : (this.programUninstall(h)?.command ?? null),
       hidden: !slot.added && harnessSettings?.hidden === true,
       ...(color ? { color } : {}),
       apiKey:

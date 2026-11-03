@@ -189,6 +189,12 @@ describe('createValidators', () => {
     rejects(() => posix['agents.install']({ agentId: 'opencode', method: 'choco' }))
     rejects(() => posix['agents.install']({ agentId: 'opencode', method: null }))
     rejects(() => posix['agents.install']({ method: 'brew' }))
+    expect(posix['agents.uninstall']({ agentId: 'opencode' })).toEqual({ agentId: 'opencode' })
+    expect(posix['agents.uninstall']({ agentId: 'opencode', removeProgram: true, x: 1 })).toEqual({
+      agentId: 'opencode',
+      removeProgram: true,
+    })
+    rejects(() => posix['agents.uninstall']({ agentId: 'opencode', removeProgram: 'yes' }))
     expect(posix['agents.update']({ agentId: 'codex' })).toEqual({ agentId: 'codex' })
     expect(posix['agents.skipUpdate']({ agentId: 'codex' })).toEqual({ agentId: 'codex' })
     expect(posix['agents.cancelTask']({ agentId: 'codex' })).toEqual({ agentId: 'codex' })

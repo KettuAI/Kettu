@@ -103,6 +103,20 @@ describe('AgentFolders', () => {
     await expect(folders.remove('codex', 'yes')).rejects.toThrow('"trash" must be a boolean')
   })
 
+  it('moves the folders it made beside the app data into the user home, once', async () => {
+    const { settings, folders } = await setup()
+    const id = await folders.add('claude-code', 'Work', null)
+    const homeRoot = join(dir, 'home', '.kettu', 'agents')
+    const moved = new AgentFolders(settings, homeRoot, async () => {})
+    await moved.moveCreatedAgents(root)
+    expect(settings.get().addedAgents[0]?.configDir).toBe(join(homeRoot, id))
+    expect((await stat(join(homeRoot, id))).isDirectory()).toBe(true)
+    await expect(stat(join(root, id))).rejects.toThrow()
+    // Running again changes nothing and never makes a second folder.
+    await moved.moveCreatedAgents(root)
+    expect(settings.get().addedAgents[0]?.configDir).toBe(join(homeRoot, id))
+  })
+
   it('unregisters a default configuration without touching the harness or its folder', async () => {
     const { settings, folders } = await setup()
     settings.update({ agents: { opencode: { enabled: true } } })

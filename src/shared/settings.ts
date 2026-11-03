@@ -41,7 +41,16 @@ export interface SettingsFile {
   // Keyed by harness: the program picked for it, and its default agent's folder and visibility.
   // configDir: a folder picked before agents could be added, which the default agent keeps.
   agents: Partial<
-    Record<HarnessId, { binaryPath?: string; configDir?: string; hidden?: true; enabled?: boolean }>
+    Record<
+      HarnessId,
+      {
+        binaryPath?: string
+        configDir?: string
+        hidden?: true
+        enabled?: boolean
+        uninstalled?: true
+      }
+    >
   >
   addedAgents: AddedAgent[] // in the order they were added
   proxy: ProxySettings
@@ -200,7 +209,16 @@ export interface SettingsPatch {
   appearance?: Partial<SettingsFile['appearance']>
   notifications?: Partial<SettingsFile['notifications']>
   agents?: Partial<
-    Record<HarnessId, { binaryPath?: null; configDir?: null; hidden?: boolean; enabled?: boolean }>
+    Record<
+      HarnessId,
+      {
+        binaryPath?: null
+        configDir?: null
+        hidden?: boolean
+        enabled?: boolean
+        uninstalled?: boolean
+      }
+    >
   >
   proxy?: ProxySettings
   terminal?: { shellPath?: null; fontSize?: SettingsFile['terminal']['fontSize'] }
