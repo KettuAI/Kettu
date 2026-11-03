@@ -9,6 +9,7 @@ describe('modeLook', () => {
     expect(modeLook('agent')).toBe('auto')
     expect(modeLook('bypassPermissions')).toBe('full')
     expect(modeLook('agent-full-access')).toBe('full')
+    expect(modeLook('danger-full-access')).toBe('full')
   })
 
   it('reads any other mode as one that asks', () => {

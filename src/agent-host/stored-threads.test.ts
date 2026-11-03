@@ -465,6 +465,7 @@ describe('attaching on use', () => {
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
       mcp: DEFAULT_SETTINGS.mcp,
+      startModes: DEFAULT_SETTINGS.startModes,
       usage: { fromComputer: false },
       sessionTitles: true,
     })

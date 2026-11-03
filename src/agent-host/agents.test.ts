@@ -132,6 +132,7 @@ function manager(
       proxy: { mode: 'environment' },
       git: { backgroundFetch: false },
       mcp: DEFAULT_SETTINGS.mcp,
+      startModes: DEFAULT_SETTINGS.startModes,
       usage: { fromComputer: false },
       sessionTitles: true,
     }),
@@ -210,6 +211,7 @@ describe('AgentManager', () => {
       proxy: { mode: 'environment' },
       git: DEFAULT_SETTINGS.git,
       mcp: DEFAULT_SETTINGS.mcp,
+      startModes: DEFAULT_SETTINGS.startModes,
       usage: DEFAULT_SETTINGS.usage,
       sessionTitles: true,
     }
@@ -235,6 +237,7 @@ describe('AgentManager', () => {
       proxy: { mode: 'environment' },
       git: DEFAULT_SETTINGS.git,
       mcp: DEFAULT_SETTINGS.mcp,
+      startModes: DEFAULT_SETTINGS.startModes,
       usage: DEFAULT_SETTINGS.usage,
       sessionTitles: true,
     }
@@ -272,6 +275,7 @@ describe('AgentManager', () => {
           proxy: { mode: 'environment' },
           git: DEFAULT_SETTINGS.git,
           mcp: DEFAULT_SETTINGS.mcp,
+          startModes: DEFAULT_SETTINGS.startModes,
           usage: DEFAULT_SETTINGS.usage,
           sessionTitles: true,
         }),
@@ -1269,6 +1273,7 @@ function withMcpOff(off: AgentId[]): HostSettings {
     proxy: { mode: 'environment' },
     git: { backgroundFetch: false },
     mcp: { kettu: { off } },
+    startModes: {},
     usage: { fromComputer: false },
     sessionTitles: true,
   }
@@ -1760,6 +1765,7 @@ describe('a configuration folder of its own', () => {
     proxy: { mode: 'environment' },
     git: { backgroundFetch: false },
     mcp: DEFAULT_SETTINGS.mcp,
+    startModes: DEFAULT_SETTINGS.startModes,
     usage: { fromComputer: false },
     sessionTitles: true,
   })
@@ -1947,6 +1953,7 @@ describe('agents added to a harness', () => {
     proxy: { mode: 'environment' },
     git: { backgroundFetch: false },
     mcp: DEFAULT_SETTINGS.mcp,
+    startModes: DEFAULT_SETTINGS.startModes,
     usage: { fromComputer: false },
     sessionTitles: true,
   })
@@ -3188,6 +3195,7 @@ describe('installing a binary agent from its archive', () => {
           proxy: { mode: 'environment' },
           git: { backgroundFetch: false },
           mcp: DEFAULT_SETTINGS.mcp,
+          startModes: DEFAULT_SETTINGS.startModes,
           usage: { fromComputer: false },
           sessionTitles: true,
         }),

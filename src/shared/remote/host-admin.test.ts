@@ -80,6 +80,28 @@ describe("the host's part of the settings", () => {
     })
   })
 
+  it("keeps the start modes on the host, whole, and a client's own out of its part", () => {
+    const host = file((s) => {
+      s.startModes = { 'claude-code': 'acceptEdits' }
+    })
+    expect(hostSettingsPart(host).startModes).toEqual({ 'claude-code': 'acceptEdits' })
+    const client = file((s) => {
+      s.startModes = { codex: 'agent', 'claude-code': 'plan' }
+    })
+    expect(withHostSettings(client, hostSettingsPart(host)).startModes).toEqual({
+      'claude-code': 'acceptEdits',
+    })
+    expect(
+      splitSettingsPatch({
+        startModes: { 'claude-code': null, codex: 'agent' },
+        appearance: { theme: 'dark' },
+      }),
+    ).toEqual({
+      host: { startModes: { 'claude-code': null, codex: 'agent' } },
+      client: { appearance: { theme: 'dark' } },
+    })
+  })
+
   it('names its methods and events and nothing else', () => {
     expect(isHostAdminMethod('settings.update')).toBe(true)
     expect(isHostAdminMethod('sessions.create')).toBe(false)

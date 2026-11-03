@@ -4,8 +4,11 @@ import {
   harnessOf,
   isAgentId,
   isDefaultAgent,
+  isFullAccessMode,
   isHarnessId,
+  isStartMode,
   sortAgentIds,
+  takesStartMode,
 } from './agents'
 
 describe('agent ids', () => {
@@ -50,5 +53,35 @@ describe('agent ids', () => {
       sortAgentIds(['codex~b', 'opencode', 'codex', 'claude-code~work', 'codex~a', 'claude-code']),
     ).toEqual(['claude-code', 'claude-code~work', 'codex', 'codex~a', 'codex~b', 'opencode'])
     expect(sortAgentIds(['codex', 'codex'])).toEqual(['codex'])
+  })
+})
+
+describe('start modes', () => {
+  it('belong to the Claude Code and Codex agents, added ones included', () => {
+    for (const id of ['claude-code', 'claude-code~work', 'codex', 'codex~client'] as const) {
+      expect(takesStartMode(id), id).toBe(true)
+    }
+    for (const id of ['opencode', 'pi', 'fake-agent'] as const) {
+      expect(takesStartMode(id), id).toBe(false)
+    }
+  })
+
+  it('take any mode id but one that gives full access', () => {
+    expect(isStartMode('claude-code', 'acceptEdits')).toBe(true)
+    expect(isStartMode('codex~client', 'agent')).toBe(true)
+    for (const mode of ['bypassPermissions', 'agent-full-access', 'danger-full-access']) {
+      expect(isFullAccessMode(mode), mode).toBe(true)
+      expect(isStartMode('claude-code', mode), mode).toBe(false)
+    }
+    expect(isFullAccessMode('acceptEdits')).toBe(false)
+    expect(isFullAccessMode(undefined)).toBe(false)
+  })
+
+  it('are strings of 1 to 64 characters, for an agent that takes one', () => {
+    expect(isStartMode('claude-code', 'a'.repeat(64))).toBe(true)
+    for (const value of ['', 'a'.repeat(65), 7, null, undefined, ['plan']]) {
+      expect(isStartMode('claude-code', value), String(value)).toBe(false)
+    }
+    expect(isStartMode('opencode', 'plan')).toBe(false)
   })
 })

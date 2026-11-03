@@ -1,6 +1,8 @@
 // What a permission mode looks like in the composer, from the ids Claude Code and Codex give
 // their modes; any other agent's mode reads as one that asks.
 
+import { isFullAccessMode } from '@shared/agents'
+
 export type ModeLook = 'asks' | 'edits' | 'plan' | 'auto' | 'full'
 
 const LOOKS: Record<string, ModeLook> = {
@@ -11,12 +13,10 @@ const LOOKS: Record<string, ModeLook> = {
   plan: 'plan',
   auto: 'auto',
   agent: 'auto',
-  bypassPermissions: 'full',
-  'agent-full-access': 'full',
-  'danger-full-access': 'full',
 }
 
 export function modeLook(value: string | undefined): ModeLook {
+  if (isFullAccessMode(value)) return 'full'
   return (value !== undefined && Object.hasOwn(LOOKS, value) && LOOKS[value]) || 'asks'
 }
 

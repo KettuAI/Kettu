@@ -69,6 +69,7 @@ describe('agent registration', () => {
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
       mcp: DEFAULT_SETTINGS.mcp,
+      startModes: DEFAULT_SETTINGS.startModes,
       usage: DEFAULT_SETTINGS.usage,
       sessionTitles: true,
     })
@@ -1085,6 +1086,7 @@ describe('prepared sessions', () => {
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
       mcp: DEFAULT_SETTINGS.mcp,
+      startModes: DEFAULT_SETTINGS.startModes,
       usage: { fromComputer: false },
       sessionTitles: true,
     }
@@ -2116,6 +2118,7 @@ describe('a prompt turn', () => {
         proxy: DEFAULT_SETTINGS.proxy,
         git: DEFAULT_SETTINGS.git,
         mcp: DEFAULT_SETTINGS.mcp,
+        startModes: DEFAULT_SETTINGS.startModes,
         usage: { fromComputer: true },
         sessionTitles: true,
       },

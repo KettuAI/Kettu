@@ -213,6 +213,7 @@ describe('the port envelope', () => {
         proxy: DEFAULT_SETTINGS.proxy,
         git: DEFAULT_SETTINGS.git,
         mcp: DEFAULT_SETTINGS.mcp,
+        startModes: DEFAULT_SETTINGS.startModes,
         usage: { fromComputer: false },
         sessionTitles: true,
       },
@@ -343,6 +344,7 @@ describe('main messages', () => {
       proxy: { mode: 'custom', url: 'http://proxy.test:8080', noProxy: 'localhost' },
       git: { backgroundFetch: true },
       mcp: DEFAULT_SETTINGS.mcp,
+      startModes: DEFAULT_SETTINGS.startModes,
       usage: { fromComputer: false },
       sessionTitles: true,
     })
@@ -368,6 +370,7 @@ describe('main messages', () => {
       proxy: { mode: 'environment' as const },
       git: { backgroundFetch: false },
       mcp: DEFAULT_SETTINGS.mcp,
+      startModes: DEFAULT_SETTINGS.startModes,
       usage: { fromComputer: false },
       sessionTitles: true,
     }
@@ -657,6 +660,7 @@ describe('git', () => {
       proxy: { mode: 'environment' },
       git: { backgroundFetch: true },
       mcp: DEFAULT_SETTINGS.mcp,
+      startModes: DEFAULT_SETTINGS.startModes,
       usage: { fromComputer: false },
       sessionTitles: true,
     })
