@@ -548,6 +548,20 @@
     "label": "Question",
     "ask": "{{agent}} asks you a question.",
     "asksYou": "Asks you",
-    "answeredOther": "Something else"
+    "answeredOther": "Something else",
+    "other": "Something else…",
+    "otherPlaceholder": "Write your own answer",
+    "steps": "Questions",
+    "step": "Question {{number}}",
+    "stepAnswered": "Question {{number}}, answered",
+    "selectMany": "Select all that apply",
+    "skip": "Skip",
+    "skipAll": "Skip all",
+    "next": "Next",
+    "submit": "Submit",
+    "answered": "Answered {{answered}}/{{total}}",
+    "answeredOne": "Answered",
+    "skipped": "Skipped",
+    "secret": "Not shown"
   }
 }

@@ -15,6 +15,7 @@ import {
 import type { LaunchSpec } from '../catalog'
 import {
   AgentRequestError,
+  optionAnswer,
   type AgentConnection,
   type AgentInit,
   type AuthMethodInfo,
@@ -1070,7 +1071,7 @@ export class CodexConnection implements AgentConnection {
       return refusal(method)
     }
     const answer = await target.requestPermission(approval.request, signal)
-    return approval.respond(answer)
+    return approval.respond(optionAnswer(answer))
   }
 
   // Turns.

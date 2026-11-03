@@ -518,6 +518,20 @@
     "label": "问题",
     "ask": "{{agent}} 问你一个问题。",
     "asksYou": "在问你",
-    "answeredOther": "其他回答"
+    "answeredOther": "其他回答",
+    "other": "其他回答…",
+    "otherPlaceholder": "写下你自己的回答",
+    "steps": "问题",
+    "step": "第 {{number}} 个问题",
+    "stepAnswered": "第 {{number}} 个问题，已回答",
+    "selectMany": "可多选",
+    "skip": "跳过",
+    "skipAll": "全部跳过",
+    "next": "下一题",
+    "submit": "提交",
+    "answered": "已回答 {{answered}}/{{total}}",
+    "answeredOne": "已回答",
+    "skipped": "已跳过",
+    "secret": "不显示"
   }
 }

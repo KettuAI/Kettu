@@ -281,8 +281,16 @@ export interface ToolEntry {
   locations: { path: string; line?: number }[]
   permission: PendingPermission | null
   permissionResult:
-    // by: answered within a scope; device: answered on a paired device; name: a question's answer
-    | { optionId: string; kind: PermissionKind; by?: 'routine'; device?: FromDevice; name?: string }
+    // by: answered within a scope; device: answered on a paired device; name: a question's answer;
+    // questions: what each question of an ask got, in the agent's order
+    | {
+        optionId: string
+        kind: PermissionKind
+        by?: 'routine'
+        device?: FromDevice
+        name?: string
+        questions?: AnsweredQuestion[]
+      }
     | 'cancelled'
     | 'withdrawn'
     | null
@@ -301,6 +309,35 @@ export interface PendingPermission {
   requestId: string
   // name may hold `code` spans; description: what a question's answer means, in the agent's words
   options: { id: string; name: string; kind: PermissionKind; description?: string }[]
+  // An ask's questions, answered together. `options` then holds the first question's choices and
+  // Something else, for a client that does not know `questions`.
+  questions?: PendingQuestion[]
+}
+
+export interface PendingQuestion {
+  header: string
+  question: string
+  multiSelect: boolean
+  options: { label: string; description?: string }[]
+  // Whether the user may write an answer of their own
+  allowsText: boolean
+  // Whether the answer is a secret: typed as dots, never kept
+  secret: boolean
+}
+
+/** What the user gave one question: option indexes, and the text they wrote instead or as well. */
+export interface QuestionAnswer {
+  // The question's position in the ask
+  question: number
+  choices: number[]
+  text?: string
+}
+
+/** What the card keeps of one question once the ask is answered; no answer for a secret one. */
+export interface AnsweredQuestion {
+  question: string
+  answered: boolean
+  answer?: string
 }
 
 export type PermissionKind = 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always'

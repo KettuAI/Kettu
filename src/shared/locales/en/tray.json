@@ -46,12 +46,14 @@
     "fetch": "Wants to fetch",
     "switchMode": "Wants to switch modes",
     "other": "Wants to use",
-    "origin": "Wants to open"
+    "origin": "Wants to open",
+    "question": "Asks you"
   },
   "answerGroup": "Answer",
   "moreWaiting_one": "{{count}} more waiting",
   "moreWaiting_other": "{{count}} more waiting",
   "openInKettu": "Open in Kettu",
+  "answerInKettu": "Answer in Kettu",
   "answeredElsewhere": "Answered elsewhere: {{title}}",
   "answerFailed": "Could not answer: {{message}}",
   "remote": {

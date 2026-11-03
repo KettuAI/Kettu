@@ -10,6 +10,8 @@ import type {
 import type {
   ConfigOption,
   PendingPermission,
+  PendingQuestion,
+  QuestionAnswer,
   StopReason,
   TokenTotals,
   UserContent,
@@ -22,9 +24,18 @@ export interface PermissionRequest {
   /** Adds or updates the tool entry the request belongs to. */
   output: MapperOutput
   options: PendingPermission['options']
+  /** An ask's questions, answered together; `options` then serves a client that lacks them. */
+  questions?: PendingQuestion[]
 }
 
-export type PermissionAnswer = { optionId: string } | 'cancelled'
+export type PermissionAnswer = { optionId: string } | { answers: QuestionAnswer[] } | 'cancelled'
+
+/** An answer that picks an option, which is all a request without questions gets. */
+export type OptionAnswer = { optionId: string } | 'cancelled'
+
+export function optionAnswer(answer: PermissionAnswer): OptionAnswer {
+  return answer !== 'cancelled' && 'answers' in answer ? 'cancelled' : answer
+}
 
 /** What a live session gives the connection; Kettu types only. */
 export interface SessionTarget {

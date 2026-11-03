@@ -18,6 +18,7 @@ export interface ToolView {
 export interface AskedQuestion {
   question: string
   header: string
+  multiSelect: boolean
   options: { label: string; description: string }[]
 }
 
@@ -88,7 +89,12 @@ export function askedQuestions(raw: unknown): AskedQuestion[] | null {
           }))
       : []
     if (!question || options.length === 0) return null
-    asked.push({ question, header: text(fields.header) ?? '', options })
+    asked.push({
+      question,
+      header: text(fields.header) ?? '',
+      multiSelect: fields.multiSelect === true,
+      options,
+    })
   }
   return asked
 }

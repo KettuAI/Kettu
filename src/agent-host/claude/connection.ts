@@ -13,12 +13,14 @@ import type { AgentAccount, ContextBreakdown, PlanLimit } from '@shared/agent-ho
 import type { ConfigOption, TokenTotals } from '@shared/thread'
 import {
   AgentRequestError,
+  optionAnswer,
   type AgentConnection,
   type AgentInit,
   type ForkPoint,
   type ListedSession,
   type ModelTokens,
   type OpenedSession,
+  type PermissionAnswer,
   type PromptBlock,
   type PromptResult,
   type SessionOptions,
@@ -56,10 +58,13 @@ import {
   ANSWER_IN_REPLY,
   answeredMode,
   OTHER_ANSWER,
+  pendingQuestions,
   permissionOptions,
   permissionResult,
   QUESTION_UNREADABLE,
+  questionAnswers,
   questionOptions,
+  QUESTIONS_SKIPPED,
 } from './permissions'
 import { mapAccount, mapAuthStatus, mapContextUsage, mapUsageLimits } from './reports'
 import { askedQuestions } from './tools'
@@ -1477,7 +1482,8 @@ export class ClaudeConnection implements AgentConnection {
         },
         permission.signal,
       )
-      optionId = answer === 'cancelled' ? null : answer.optionId
+      const picked = optionAnswer(answer)
+      optionId = picked === 'cancelled' ? null : picked.optionId
     } catch {
       // Withdrawn: Claude Code no longer waits for the answer.
       return permissionResult(null, input, permission)
@@ -1492,9 +1498,10 @@ export class ClaudeConnection implements AgentConnection {
   }
 
   /**
-   * AskUserQuestion's questions, each as a card of its answers and Something else, one after
-   * another; Claude Code takes the answers keyed by question. Something else lets the user answer
-   * in their next message instead.
+   * AskUserQuestion's questions as one card, answered together; Claude Code takes the answers
+   * keyed by question, and a question the user skipped has none. Something else is the user's own
+   * words in the card; a client without the card's questions sends an option id instead, which
+   * answers the first question alone or, for Something else, waits for the next message.
    */
   private async askQuestions(
     session: Session,
@@ -1506,38 +1513,34 @@ export class ClaudeConnection implements AgentConnection {
     const questions = askedQuestions(input)
     if (!questions) return { behavior: 'deny', message: QUESTION_UNREADABLE, toolUseID }
     const block = { type: 'tool_use' as const, id: toolUseID, name: 'AskUserQuestion', input }
-    const entryId = `t:${toolUseID}`
-    const answers: Record<string, string> = {}
-    for (const [index, asked] of questions.entries()) {
-      const output =
-        index === 0
-          ? session.mapper.permissionTool(target.context(), block, session.id)
-          : {
-              patches: [
-                {
-                  op: 'entry.update' as const,
-                  id: entryId,
-                  changes: { title: asked.header || asked.question, question: asked.question },
-                },
-              ],
-              effects: [],
-            }
-      let optionId: string
-      try {
-        const answer = await target.requestPermission(
-          { toolCallId: toolUseID, toolEntryId: entryId, output, options: questionOptions(asked) },
-          permission.signal,
-        )
-        if (answer === 'cancelled') return permissionResult(null, input, permission)
-        optionId = answer.optionId
-      } catch {
-        return permissionResult(null, input, permission)
+    let answer: PermissionAnswer
+    try {
+      answer = await target.requestPermission(
+        {
+          toolCallId: toolUseID,
+          toolEntryId: `t:${toolUseID}`,
+          output: session.mapper.permissionTool(target.context(), block, session.id),
+          options: questionOptions(questions[0]!),
+          questions: pendingQuestions(questions),
+        },
+        permission.signal,
+      )
+    } catch {
+      return permissionResult(null, input, permission)
+    }
+    if (answer === 'cancelled') return permissionResult(null, input, permission)
+    let answers: Record<string, string>
+    if ('answers' in answer) {
+      answers = questionAnswers(questions, answer.answers)
+      if (Object.keys(answers).length === 0) {
+        return { behavior: 'deny', message: QUESTIONS_SKIPPED, toolUseID }
       }
-      const chosen = asked.options[Number(optionId.replace(/^answer:/, ''))]
-      if (optionId === OTHER_ANSWER || !chosen) {
+    } else {
+      const chosen = questions[0]!.options[Number(answer.optionId.replace(/^answer:/, ''))]
+      if (answer.optionId === OTHER_ANSWER || !chosen) {
         return { behavior: 'deny', message: ANSWER_IN_REPLY, toolUseID }
       }
-      answers[asked.question] = chosen.label
+      answers = { [questions[0]!.question]: chosen.label }
     }
     target.apply(session.mapper.toolStatus(target.context(), toolUseID, 'in_progress'))
     return { behavior: 'allow', updatedInput: { ...input, answers }, toolUseID }

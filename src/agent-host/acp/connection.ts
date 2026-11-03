@@ -27,6 +27,7 @@ import {
 import type { AgentId, ConfigOption } from '@shared/thread'
 import {
   AgentRequestError,
+  optionAnswer,
   type AgentConnection,
   type AgentInit,
   type AuthMethodInfo,
@@ -269,9 +270,10 @@ export class AcpConnection implements AgentConnection {
           },
           ctx.signal,
         )
-        return answer === 'cancelled'
+        const picked = optionAnswer(answer)
+        return picked === 'cancelled'
           ? { outcome: { outcome: 'cancelled' } }
-          : { outcome: { outcome: 'selected', optionId: answer.optionId } }
+          : { outcome: { outcome: 'selected', optionId: picked.optionId } }
       })
       .onNotification(
         '_auth/status_update',

@@ -3,7 +3,7 @@
 
 import type { PendingPermission, PermissionKind, ToolContent } from '@shared/thread'
 import { commandSteps, unsafeArgvPrefix, unsafeCommand } from '../command-safety'
-import type { PermissionAnswer, PermissionRequest } from '../connection'
+import type { OptionAnswer, PermissionRequest } from '../connection'
 import { t } from '../i18n'
 import type { MapperContext, MapperOutput } from '../session-updates'
 import { commandFacts, type ThreadMapper } from './mapper'
@@ -23,7 +23,7 @@ type Option = PendingPermission['options'][number]
 /** A request for the user and what each answer sends back. */
 export interface Approval {
   request: PermissionRequest
-  respond(answer: PermissionAnswer): unknown
+  respond(answer: OptionAnswer): unknown
 }
 
 const KIND_ORDER: Record<PermissionKind, number> = {

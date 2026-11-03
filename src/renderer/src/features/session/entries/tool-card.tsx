@@ -42,14 +42,9 @@ import {
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { basename, dirname } from '@renderer/lib/format'
-import { errorMessage } from '@renderer/lib/host'
-import { hostOfPath } from '@renderer/lib/host-paths'
 import { cn } from '@renderer/lib/utils'
-import { toast } from '@renderer/components/ui/toast'
-import { isAway, useOtherHost } from '@renderer/stores/hosts'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
-import { useWebHostStore } from '@renderer/stores/web-host'
 import { Clamp } from '../clamp'
 import { Markdown } from '../markdown'
 import { CarriedImage } from '../media/carried-image'
@@ -59,14 +54,9 @@ import { LocalMedia } from '../media/local-media'
 import { toolMedia } from '../media/named'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { AnswerList, OptionName, WaitingCard, WaitingHeader, WaitingStatus } from './answer-list'
-import {
-  answeredBy,
-  commandOutput,
-  primaryOption,
-  PANEL,
-  respondToPermission,
-  toolLabel,
-} from './helpers'
+import { AnsweredQuestions, QuestionCard } from './question-card'
+import { useAnswering } from './use-answering'
+import { commandOutput, primaryOption, PANEL, respondToPermission, toolLabel } from './helpers'
 import { DiffBlock } from './diff-block'
 import { ShellBlock } from './shell-block'
 import { useDiffStats } from './use-diff-stats'
@@ -137,8 +127,9 @@ export const ToolCard = memo(function ToolCard({
   if (permission) {
     // Each request gets a card of its own, so an agent's next question in the same entry starts
     // unanswered rather than inheriting the last one's pending answer.
+    const Card = permission.questions ? QuestionCard : PermissionCard
     return (
-      <PermissionCard
+      <Card
         key={permission.requestId}
         ref={ref}
         sessionId={sessionId}
@@ -155,14 +146,21 @@ export const ToolCard = memo(function ToolCard({
   // A command's output shows under it, in the same block, as a terminal prints it.
   const output = command ? commandOutput(entry.content) : null
   const content = output === null ? entry.content : entry.content.slice(1)
+  // An ask of several questions keeps each question with its answer.
+  const result = entry.permissionResult
+  const asked =
+    typeof result === 'object' && result?.questions && result.questions.length > 1
+      ? result.questions
+      : null
   const hasBody =
     entry.content.length > 0 ||
     media.length > 0 ||
+    asked !== null ||
     (!!command && (command.length > 60 || command.includes('\n')))
   const autoOpen =
     hasBody &&
     (entry.status === 'pending' || entry.status === 'in_progress' || entry.status === 'failed')
-  const open = hasBody && (userOpen ?? autoOpen)
+  const open = hasBody && (userOpen ?? (autoOpen || asked !== null))
 
   const card = (
     <Collapsible
@@ -174,6 +172,7 @@ export const ToolCard = memo(function ToolCard({
       {hasBody && (
         <CollapsibleContent className={PANEL} keepMounted={false}>
           <div className="flex flex-col gap-1.5 pt-1.5 pb-0.5 pl-5.5">
+            {asked && <AnsweredQuestions questions={asked} />}
             {command && (
               <ShellBlock
                 sessionId={sessionId}
@@ -472,13 +471,7 @@ function PermissionCard({
   const level = useRoutinesStore((s) =>
     routine ? (s.byId[routine.routineId]?.scope.level ?? null) : null,
   )
-  // An answer cannot reach a host that is not connected; the card waits for it to come back.
-  const hostId = useSessionsStore((s) => hostOfPath(s.byId[sessionId]?.projectPath ?? ''))
-  const other = useOtherHost(hostId)
-  const away = isAway(other?.connection ?? null)
-  const served = useWebHostStore((s) => s.host?.name ?? null)
-  const [answering, setAnswering] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const { answering, error, away, send } = useAnswering(sessionId)
   const list = useRef<HTMLDivElement>(null)
   const permission = entry.permission!
   const question = entry.question
@@ -497,29 +490,11 @@ function PermissionCard({
     // An answer from the card's own rows would leave the focus on nothing once the card goes;
     // a denial or Something else goes on in the composer, where the user says what instead.
     const focused = !!list.current?.contains(document.activeElement)
-    setAnswering(option.id)
-    setError(null)
-    try {
-      await respondToPermission(sessionId, permission.requestId, option.id)
-      if (focused || option.kind === 'reject_once' || option.kind === 'reject_always') {
-        emitAppEvent({ kind: 'focus-composer' })
-      }
-    } catch (e) {
-      const by = answeredBy(e)
-      if (by !== undefined) {
-        // The card turns into the first answer as its patch lands, so the note goes in a toast.
-        const host = hostId !== null ? (other?.name ?? null) : served
-        toast(
-          by
-            ? t('permission.answeredOn', { device: by.name })
-            : host
-              ? t('permission.answeredOn', { device: host })
-              : t('permission.answeredInWindow'),
-        )
-      } else {
-        setError(errorMessage(e))
-      }
-      setAnswering(null)
+    const sent = await send(option.id, () =>
+      respondToPermission(sessionId, permission.requestId, option.id),
+    )
+    if (sent && (focused || option.kind === 'reject_once' || option.kind === 'reject_always')) {
+      emitAppEvent({ kind: 'focus-composer' })
     }
   }
 
@@ -630,18 +605,26 @@ function PermissionAnswer({
   question: boolean
 }) {
   const { t } = useTranslation('session')
+  const asked = typeof result === 'object' ? result.questions : undefined
+  const given = asked?.filter((q) => q.answered) ?? []
   const answer =
     result === 'cancelled'
       ? t('permission.answer.cancelled')
       : result === 'withdrawn'
         ? t('permission.answer.withdrawn')
-        : result.name
-          ? result.name
-          : question && result.kind === 'reject_once'
-            ? t('question.answeredOther')
-            : result.by === 'routine'
-              ? t('permission.answer.allowedByRoutine')
-              : t(`permission.answer.${ANSWER_KEY[result.kind]}`)
+        : asked
+          ? given.length === 0
+            ? t('question.skipped')
+            : asked.length > 1
+              ? t('question.answered', { answered: given.length, total: asked.length })
+              : (given[0]!.answer ?? t('question.answeredOne'))
+          : result.name
+            ? result.name
+            : question && result.kind === 'reject_once'
+              ? t('question.answeredOther')
+              : result.by === 'routine'
+                ? t('permission.answer.allowedByRoutine')
+                : t(`permission.answer.${ANSWER_KEY[result.kind]}`)
   const device = typeof result === 'object' ? result.device : undefined
   const text = device ? t('permission.answer.onDevice', { answer, device: device.name }) : answer
   return (

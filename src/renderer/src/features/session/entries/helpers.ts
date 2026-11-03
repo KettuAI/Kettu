@@ -3,6 +3,7 @@ import {
   entryMessageId,
   type FromDevice,
   type PermissionKind,
+  type QuestionAnswer,
   type SessionStatus,
   type StopReason,
   type ToolContent,
@@ -56,6 +57,15 @@ export function toolLabel(
 
 export function respondToPermission(sessionId: string, requestId: string, optionId: string) {
   return host('permissions.respond', { sessionId, requestId, optionId })
+}
+
+/** The answers to an ask's questions, only those given; none at all skips every one. */
+export function respondToQuestions(
+  sessionId: string,
+  requestId: string,
+  answers: QuestionAnswer[],
+) {
+  return host('permissions.respond', { sessionId, requestId, answers })
 }
 
 /**

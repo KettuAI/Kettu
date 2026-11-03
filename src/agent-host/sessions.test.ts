@@ -2260,6 +2260,10 @@ describe('permissions', () => {
     await expect(
       port.request('permissions.respond', { sessionId, requestId, optionId: 'maybe' }),
     ).rejects.toMatchObject({ code: 'invalid_params' })
+    // A request that asks no questions takes no answers to them.
+    await expect(
+      port.request('permissions.respond', { sessionId, requestId, answers: [] }),
+    ).rejects.toMatchObject({ code: 'invalid_params' })
     await expect(
       port.request('permissions.respond', { sessionId, requestId: 'p999', optionId }),
     ).rejects.toMatchObject({ code: 'not_found' })
