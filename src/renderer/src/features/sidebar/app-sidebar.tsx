@@ -150,7 +150,10 @@ export function AppSidebar() {
         <RoutinesNavRow />
         <UsageNavRow />
       </div>
-      <SidebarContent className="scroll-fade-y gap-0 px-2 pt-1.5 pb-2" onKeyDown={moveRowFocus}>
+      <SidebarContent
+        className="scroll-fade-y gap-0 overflow-x-hidden overflow-y-auto px-2 pt-1.5 pb-2"
+        onKeyDown={moveRowFocus}
+      >
         <HostSwitchBar />
         {/* No header row: projects are added with Mod+O, the File menu or New session. */}
         <SidebarGroup

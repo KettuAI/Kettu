@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { connect, launchApp, makeProject, openProject, stopApp } from '../launch.mjs'
 import { checkProjectMenu } from './project-menu.mjs'
+import { checkSessionRename } from './session-rename.mjs'
 
 const args = process.argv.slice(2)
 const valueOf = (flag) => {
@@ -293,6 +294,10 @@ async function run() {
   await waitFor(`document.querySelector('[aria-label=Stop]')`, 'the turn to start')
   await waitFor(`!document.querySelector('[aria-label=Stop]')`, 'the turn to end', 120_000)
   await sleep(800)
+  const sessionTitle = await cdp.evaluate(
+    `document.querySelector('[data-session-id] span.truncate').textContent`,
+  )
+  await checkSessionRename(cdp, sessionTitle)
   // Overlay scrollbars take no room; classic ones do.
   const gutter = await cdp.evaluate(
     `(() => { const el = document.querySelector('[data-slot=message-scroller-viewport]'); return el.offsetWidth - el.clientWidth })()`,
