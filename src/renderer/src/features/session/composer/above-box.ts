@@ -1,9 +1,19 @@
 import { useCallback, useState } from 'react'
 
 /**
- * A control-row popup's trigger ref and side offset that clear the whole composer box, `gap` px
- * above it, rather than the trigger under the box. The offset is read on each placement, so a box
- * that grew is cleared too, and it stays one function, since a new one places the popup again.
+ * How far above its trigger a control-row popup sits so its bottom edge lands on the input box's
+ * bottom and the popup covers the box. A trigger that is not below the box keeps `gap`.
+ */
+export function coverBoxOffset(triggerTop: number, boxBottom: number, gap: number): number {
+  const offset = triggerTop - boxBottom
+  return offset >= 0 ? offset : gap
+}
+
+/**
+ * A control-row popup's trigger ref and side offset that cover the composer box, the popup's
+ * bottom edge on the box's bottom, rather than floating above the box and leaving it blank. The
+ * offset is read on each placement, so a box that grew is covered too, and it stays one function,
+ * since a new one places the popup again.
  */
 export function useAboveBox(
   gap = 6,
@@ -17,7 +27,11 @@ export function useAboveBox(
     ({ side }: { side: string }) => {
       const box = trigger?.closest('[data-composer]')?.querySelector('[data-slot=input-group]')
       if (side !== 'top' || !trigger || !box) return gap
-      return trigger.getBoundingClientRect().top - box.getBoundingClientRect().top + gap
+      return coverBoxOffset(
+        trigger.getBoundingClientRect().top,
+        box.getBoundingClientRect().bottom,
+        gap,
+      )
     },
     [trigger, gap],
   )
