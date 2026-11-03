@@ -283,6 +283,8 @@ export function PromptBox({
           onError={box.setError}
           onLeave={box.focus}
           hidden={chips.hidden}
+          // New session's box has no padding of its own; keep the picture in line with the text.
+          className={stacked ? 'pt-4 pr-3 pl-4.5' : undefined}
         />
         {/* With a basis, the text wraps under the attachments instead of sharing their row. */}
         <div className={cn('min-w-0', stacked ? 'w-full' : 'flex-[1_1_12rem] self-stretch')}>
