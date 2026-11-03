@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ChartNoAxesColumnIcon, ChevronDownIcon, CircleAlertIcon } from 'lucide-react'
+import { ChartPieIcon, ChevronDownIcon, CircleAlertIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
 import { partsTotal, type TokenParts, type UsageScope } from '@shared/usage'
@@ -363,7 +363,7 @@ function FirstRun() {
     <Empty className="py-18">
       <EmptyHeader>
         <EmptyMedia variant="icon">
-          <ChartNoAxesColumnIcon />
+          <ChartPieIcon />
         </EmptyMedia>
         <EmptyTitle>{t('empty.title')}</EmptyTitle>
         <EmptyDescription>

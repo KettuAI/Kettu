@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import {
-  ChartNoAxesColumnIcon,
+  ChartPieIcon,
   ChevronDownIcon,
   ClockIcon,
   CircleAlertIcon,
   EllipsisIcon,
   PlusIcon,
+  SearchIcon,
   ShapesIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -70,6 +71,7 @@ import {
   openUsage,
   PINNED_GROUP,
   showAllRows,
+  showSearch,
   useViewStore,
 } from '@renderer/stores/view'
 import { HostEmpty, HostHeading, NeedsYouGroup } from './host-groups'
@@ -140,6 +142,12 @@ export function AppSidebar() {
           label={t('nav.newSession')}
           shortcut="Mod+N"
           onClick={() => newSession()}
+        />
+        <NavRow
+          icon={<SearchIcon />}
+          label={t('nav.search')}
+          shortcut="Mod+K"
+          onClick={() => showSearch(true)}
         />
         <NavRow
           icon={<ShapesIcon />}
@@ -347,7 +355,7 @@ function UsageNavRow() {
     ) : undefined
   return (
     <NavRow
-      icon={<ChartNoAxesColumnIcon />}
+      icon={<ChartPieIcon />}
       label={t('nav.usage')}
       current={current}
       onClick={openUsage}

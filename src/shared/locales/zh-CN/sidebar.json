@@ -2,11 +2,17 @@
   "nav": {
     "label": "项目和会话",
     "newSession": "新建会话",
+    "search": "搜索",
     "artifacts": "Artifacts",
     "routines": "例程",
     "sessions": "会话",
     "unavailable": "暂时无法加载项目。",
     "empty": "会话会显示在这里。"
+  },
+  "search": {
+    "placeholder": "搜索会话",
+    "noMatch": "没有会话匹配“{{query}}”",
+    "none": "还没有会话。"
   },
   "project": {
     "missing": "未找到",

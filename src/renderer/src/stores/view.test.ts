@@ -14,6 +14,7 @@ const {
   openSettingsItem,
   settingsBack,
   showShortcuts,
+  toggleSearch,
   toggleShortcuts,
   useViewStore,
 } = await import('./view')
@@ -125,6 +126,32 @@ describe('shortcuts view', () => {
     showShortcuts(true)
     expect(open()).toBe(true)
     showShortcuts(false)
+    expect(open()).toBe(false)
+  })
+})
+
+describe('search view', () => {
+  const open = () => useViewStore.getState().searchOpen
+
+  beforeEach(() => {
+    useViewStore.setState({ searchOpen: false })
+  })
+
+  it('opens search with the shortcut and closes it again', () => {
+    toggleSearch(false)
+    expect(open()).toBe(true)
+    toggleSearch(false)
+    expect(open()).toBe(false)
+  })
+
+  it('leaves search closed while another layer is open', () => {
+    toggleSearch(true)
+    expect(open()).toBe(false)
+  })
+
+  it('closes an open search even while another layer is open', () => {
+    toggleSearch(false)
+    toggleSearch(true)
     expect(open()).toBe(false)
   })
 })

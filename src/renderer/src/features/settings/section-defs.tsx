@@ -3,7 +3,7 @@ import {
   ArchiveIcon,
   BellIcon,
   BotIcon,
-  ChartNoAxesColumnIcon,
+  ChartPieIcon,
   CodeIcon,
   ContrastIcon,
   GitBranchIcon,
@@ -522,7 +522,7 @@ export function useUsageSection(): SectionDef {
     id: 'usage',
     title: t('settings.title'),
     description: t('settings.description'),
-    icon: ChartNoAxesColumnIcon,
+    icon: ChartPieIcon,
     rows,
   }
 }

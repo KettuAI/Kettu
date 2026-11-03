@@ -10,6 +10,7 @@ import {
   focusPaneAt,
   openSession,
   openSettings,
+  toggleSearch,
   toggleShortcuts,
   toggleSidebar,
   toggleTerminal,
@@ -99,6 +100,10 @@ export function useKeyboardShortcuts(): void {
       }
 
       const key = event.key.toLowerCase()
+      // A terminal on Windows and Linux never reaches here: Ctrl+K deletes to the end of the line.
+      if (key === 'k' && !event.shiftKey && !event.repeat) {
+        return run(event, () => toggleSearch(layerOpen()))
+      }
       if (pageHandlesMenuKeys(platform, client) && !event.shiftKey) {
         if (key === 'o') return run(event, () => void openProjectDialog())
         if (key === 'n') return run(event, newSession)

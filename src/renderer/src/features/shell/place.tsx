@@ -1,7 +1,7 @@
 import {
   BotIcon,
   CalendarClockIcon,
-  ChartNoAxesColumnIcon,
+  ChartPieIcon,
   PlusIcon,
   Settings2Icon,
   ShapesIcon,
@@ -35,7 +35,7 @@ function PageIcon({ place }: { place: HistoryPlace }) {
     case 'settings':
       return <Settings2Icon className="size-3.5" />
     case 'usage':
-      return <ChartNoAxesColumnIcon className="size-3.75" />
+      return <ChartPieIcon className="size-3.75" />
     case 'routines':
     case 'routine':
       return <CalendarClockIcon className="size-3.75" />

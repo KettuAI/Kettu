@@ -2,11 +2,17 @@
   "nav": {
     "label": "Projects and sessions",
     "newSession": "New session",
+    "search": "Search",
     "artifacts": "Artifacts",
     "routines": "Routines",
     "sessions": "Sessions",
     "unavailable": "Projects are unavailable right now.",
     "empty": "Sessions appear here."
+  },
+  "search": {
+    "placeholder": "Search sessions",
+    "noMatch": "No sessions match “{{query}}”",
+    "none": "No sessions yet."
   },
   "project": {
     "missing": "Missing",

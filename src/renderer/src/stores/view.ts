@@ -133,6 +133,8 @@ interface ViewStore {
   settings: { open: boolean; section: SettingsSection | null; item: string | null }
   /** The shortcuts dialog, over whatever the window shows. Not persisted. */
   shortcutsOpen: boolean
+  /** Session search, over whatever the window shows. Not persisted. */
+  searchOpen: boolean
   /** Back and Forward through what the main area showed, nearest last. Not persisted. */
   history: { back: Step[]; forward: Step[] }
   sidebarCollapsed: boolean
@@ -196,6 +198,7 @@ export const useViewStore = create<ViewStore>()(() => ({
   splitSideArtifact: null,
   settings: { open: false, section: null, item: null },
   shortcutsOpen: false,
+  searchOpen: false,
   history: { back: [], forward: [] },
   sidebarCollapsed: saved.sidebarCollapsed ?? false,
   collapsedProjects: saved.collapsedProjects ?? {},
@@ -740,6 +743,18 @@ export function showShortcuts(open: boolean): void {
 export function toggleShortcuts(layerOpen: boolean): void {
   useViewStore.setState((s) =>
     s.shortcutsOpen ? { shortcutsOpen: false } : layerOpen ? s : { shortcutsOpen: true },
+  )
+}
+
+/** Shows session search, or closes it. */
+export function showSearch(open: boolean): void {
+  useViewStore.setState({ searchOpen: open })
+}
+
+/** Closes session search when open, and otherwise opens it unless another layer is open. */
+export function toggleSearch(layerOpen: boolean): void {
+  useViewStore.setState((s) =>
+    s.searchOpen ? { searchOpen: false } : layerOpen ? s : { searchOpen: true },
   )
 }
 
