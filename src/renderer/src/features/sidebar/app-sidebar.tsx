@@ -576,7 +576,7 @@ function ProjectGroup({
               <TooltipTrigger render={<ContextMenuTrigger render={row} />} delay={700} />
               {tooltip}
             </Tooltip>
-            <ContextMenuContent className="w-67.5">{menuItems}</ContextMenuContent>
+            <ContextMenuContent>{menuItems}</ContextMenuContent>
           </ContextMenu>
         ) : (
           <Tooltip>
@@ -603,7 +603,7 @@ function ProjectGroup({
                         className={cn(
                           GROUP_ACTION,
                           'data-popup-open:bg-selected data-popup-open:text-primary',
-                          !project.missing && !moreOpen && 'right-7.5',
+                          !project.missing && 'right-7.5',
                         )}
                       />
                     }
@@ -614,13 +614,11 @@ function ProjectGroup({
               </TooltipTrigger>
               <TooltipContent>{t('row.more')}</TooltipContent>
             </Tooltip>
-            <DropdownMenuContent align="start" className="w-67.5">
-              {menuItems}
-            </DropdownMenuContent>
+            <DropdownMenuContent align="start">{menuItems}</DropdownMenuContent>
           </DropdownMenu>
         )}
         {/* New session starts No project sessions on this computer only. */}
-        {!project?.missing && !away && (project || local) && !moreOpen && (
+        {!project?.missing && !away && (project || local) && (
           <Tooltip>
             <TooltipTrigger
               render={
