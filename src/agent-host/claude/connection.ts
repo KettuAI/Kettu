@@ -193,6 +193,12 @@ interface Session {
   stale: boolean
   /** What the title is generated from, until one is settled on. */
   titleText: string | null
+  /** Bumps each time `titleText` grows, so a failed ask is not repeated for the same text. */
+  titleRev: number
+  /** The revision a generation already answered with nothing. */
+  titleForRev: number | null
+  /** A title request already running. */
+  titling: Promise<void> | null
   ultracode: boolean | undefined
   /** Set for a session opened only to read from. */
   quiet: boolean
@@ -737,6 +743,9 @@ export class ClaudeConnection implements AgentConnection {
       terminal: new Set(),
       stale: false,
       titleText: '',
+      titleRev: 0,
+      titleForRev: null,
+      titling: null,
       ultracode: options.ultracode,
       quiet: how.quiet === true,
       process: null,
@@ -967,8 +976,7 @@ export class ClaudeConnection implements AgentConnection {
           .join('')
         if (text) {
           turn?.texts?.push(text)
-          if (session.titleText !== null)
-            session.titleText = (session.titleText + text).slice(-TITLE_CONTEXT)
+          this.noteTitle(session, text)
         }
       }
     } else if (message.type === 'result') {
@@ -1050,23 +1058,42 @@ export class ClaudeConnection implements AgentConnection {
     if (!turn.texts && !session.options.hidden) void this.title(session)
   }
 
-  /** The session's title after a turn: the one stored, or one generated once from its text. */
-  private async title(session: Session): Promise<void> {
-    if (session.titleText === null) return
+  /**
+   * The session's title: one Claude Code stored, or one generated from the message. Nothing is
+   * asked again for text that already came back empty; a failure or a title that only repeats the
+   * message leaves a later call, such as the end of the turn, to try again.
+   */
+  private title(session: Session): Promise<void> {
+    if (session.titleText === null || session.options.hidden) return Promise.resolve()
+    if (session.titleText.trim().length < TITLE_MINIMUM) return Promise.resolve()
+    if (session.titleForRev === session.titleRev) return Promise.resolve()
+    if (session.titling) return session.titling.then(() => this.title(session))
+    const run = this.askTitle(session).finally(() => {
+      if (session.titling === run) session.titling = null
+    })
+    session.titling = run
+    return run
+  }
+
+  /** Asks once. A title is kept only once it is accepted, so a failed ask can be repeated. */
+  private async askTitle(session: Session): Promise<void> {
+    const asked = session.titleText?.trim() ?? ''
+    const rev = session.titleRev
+    if (asked.length < TITLE_MINIMUM) return
     const sdk = this.requireSdk()
-    let title: string | null
+    const query = session.query
+    let title: string | null = null
+    let generated = false
     try {
       const info = await this.withConfigDir(() =>
         sdk.getSessionInfo(session.id, { dir: session.cwd }),
       )
-      title = info?.customTitle ?? null
-      const query = session.query
-      const text = session.titleText.trim()
-      if (!title && query?.generateSessionTitle && text.length >= TITLE_MINIMUM) {
-        // Asked once at a time; a generation that gives none leaves a later turn to ask again.
-        session.titleText = null
-        title = await query.generateSessionTitle(text, { persist: true })
-        if (!title) session.titleText = text
+      const stored = info?.customTitle?.trim() ? info.customTitle : null
+      if (stored && !repeatsFirstMessage(stored, asked)) title = stored
+      if (!title && query?.generateSessionTitle) {
+        generated = true
+        // Not persisted yet: a title that only repeats the message must not block the next ask.
+        title = await query.generateSessionTitle(asked, { persist: false })
       }
     } catch (error) {
       this.context.hooks.log(
@@ -1075,20 +1102,46 @@ export class ClaudeConnection implements AgentConnection {
       )
       return
     }
-    if (!title) return
+    const value = title?.replace(/\s+/g, ' ').trim() ?? ''
+    if (!value || !this.keepTitle(session, value, asked)) {
+      // The same text gets one answer. Text that arrived while asking, after a repeat, is asked.
+      if (!value || session.titleRev === rev) session.titleForRev = session.titleRev
+      return
+    }
     session.titleText = null
-    const value = title.replace(/\s+/g, ' ').trim()
+    session.titleForRev = null
+    if (!generated) return
+    try {
+      await query?.renameSession?.(value, session.id)
+    } catch (error) {
+      this.context.hooks.log(
+        'warn',
+        `Could not store the title of ${session.id}: ${errorText(error)}`,
+      )
+    }
+  }
+
+  /** Whether `value` says more than the message it came from, and so can replace the title. */
+  private keepTitle(session: Session, value: string, asked: string): boolean {
+    if (repeatsFirstMessage(value, asked)) return false
+    let accepted = false
     this.deliver({
       sessionId: session.id,
       map: (ctx) => {
-        if (repeatsFirstMessage(value, firstUserMessage(ctx.thread)))
+        if (
+          repeatsFirstMessage(value, firstUserMessage(ctx.thread)) ||
+          repeatsFirstMessage(value, asked)
+        ) {
           return { patches: [], effects: [] }
+        }
+        accepted = true
         return {
           patches: [{ op: 'session.update', changes: { title: value, updatedAt: ctx.now } }],
           effects: [{ kind: 'title', title: value }],
         }
       },
     })
+    return accepted
   }
 
   // Routing.
@@ -1208,10 +1261,8 @@ export class ClaudeConnection implements AgentConnection {
       sessionId: session.id,
       blocks: content.map((block) => block.type),
     })
-    if (session.titleText !== null) {
-      const text = blocks.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('\n')
-      session.titleText = `${session.titleText}\n${text}\n`.slice(-TITLE_CONTEXT)
-    }
+    const text = blocks.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('\n')
+    this.noteTitle(session, `\n${text}\n`)
     session.input!.push({
       type: 'user',
       message: { role: 'user', content },
@@ -1247,7 +1298,16 @@ export class ClaudeConnection implements AgentConnection {
     const session = await this.ready(sessionId)
     const turn = this.startTurn(session, null)
     this.send(session, prompt)
+    // Asked now, not after the turn: a long run would otherwise keep the raw message as its title.
+    void this.title(session)
     return turn
+  }
+
+  /** Adds text the next title is written from, until one has been accepted. */
+  private noteTitle(session: Session, text: string): void {
+    if (session.titleText === null || text.trim() === '') return
+    session.titleText = `${session.titleText}${text}`.slice(-TITLE_CONTEXT)
+    session.titleRev += 1
   }
 
   async collect(sessionId: string, text: string): Promise<string[]> {

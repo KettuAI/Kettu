@@ -681,6 +681,66 @@ describe('a turn', () => {
     )
   })
 
+  it('writes a title from the first message while the turn is still running', async () => {
+    s.sdk.generatedTitle = 'Show the account on each agent'
+    s.sdk.script = (query) => {
+      query.running()
+    }
+    const turn = s.connection.prompt(sessionId, [
+      { type: 'text', text: 'The agent list never shows which account is signed in' },
+    ])
+    await settle()
+    expect(target.thread.session.title).toBe('Show the account on each agent')
+    const titles = () => s.sdk.last.calls.filter((call) => call.method === 'generateSessionTitle')
+    expect(titles()).toHaveLength(1)
+    expect(titles()[0]?.args[1]).toEqual({ persist: false })
+    s.sdk.last.finish()
+    await expect(turn).resolves.toMatchObject({ stopReason: 'end_turn' })
+    await settle()
+    expect(titles()).toHaveLength(1)
+    expect(s.sdk.last.calls).toContainEqual({
+      method: 'renameSession',
+      args: ['Show the account on each agent', sessionId],
+    })
+  })
+
+  it('tries the title again when the turn ends if the first request failed', async () => {
+    s.sdk.titleError = new Error('unavailable')
+    s.sdk.script = (query) => {
+      query.running()
+    }
+    const turn = s.connection.prompt(sessionId, [
+      { type: 'text', text: 'The agent list never shows which account is signed in' },
+    ])
+    await settle()
+    expect(target.thread.session.title).toBeNull()
+    s.sdk.titleError = null
+    s.sdk.generatedTitle = 'Show the account on each agent'
+    s.sdk.last.finish()
+    await turn
+    await settle()
+    expect(target.thread.session.title).toBe('Show the account on each agent')
+  })
+
+  it('drops a generated title that only repeats the first message, and asks once there is more', async () => {
+    const message = 'The agent list never shows which account is signed in'
+    s.sdk.generatedTitle = message
+    s.sdk.script = (query) => {
+      query.running()
+    }
+    const turn = s.connection.prompt(sessionId, [{ type: 'text', text: message }])
+    await settle()
+    expect(target.thread.session.title).toBeNull()
+    s.sdk.generatedTitle = 'Show the account on each agent'
+    s.sdk.last.emit(
+      assistant(s.sdk.last, 'msg_more', [{ type: 'text', text: 'Looking at the list.' }]),
+    )
+    s.sdk.last.finish()
+    await turn
+    await settle()
+    expect(target.thread.session.title).toBe('Show the account on each agent')
+  })
+
   it('asks for a title again after a turn whose text gave none', async () => {
     await s.connection.prompt(sessionId, [{ type: 'text', text: 'Hello there, Claude' }])
     await settle()
