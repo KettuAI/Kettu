@@ -2,6 +2,7 @@ import type { KeyboardEvent, ReactNode } from 'react'
 import { Menu as MenuPrimitive } from '@base-ui/react/menu'
 import {
   CheckIcon,
+  CircleHelpIcon,
   ExternalLinkIcon,
   KeyboardIcon,
   LaptopIcon,
@@ -26,6 +27,9 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toggleVariants } from '@renderer/components/ui/toggle'
@@ -68,7 +72,7 @@ const SEPARATOR = 'mx-0.75 my-1.25'
 
 /**
  * The account menu, opened from the avatar or name: who you are, the host this window controls
- * (Mod+1 to Mod+9 while open), plan limits, the theme, and the ways to settings and help.
+ * (Mod+1 to Mod+9 while open), plan limits, the theme, settings and a Help submenu.
  */
 export function AccountMenuContent({
   identity,
@@ -115,18 +119,8 @@ export function AccountMenuContent({
           {t('account.settings')}
           <DropdownMenuShortcut>{formatShortcut('Mod+,')}</DropdownMenuShortcut>
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => showShortcuts(true)}>
-          <KeyboardIcon />
-          {t('account.shortcuts')}
-          <DropdownMenuShortcut>{formatShortcut('Mod+/')}</DropdownMenuShortcut>
-        </DropdownMenuItem>
-        <WhatsNewItem />
-        <DropdownMenuItem render={<a href={DOCS_URL} target="_blank" rel="noreferrer" />}>
-          <ExternalLinkIcon />
-          {t('account.docs')}
-        </DropdownMenuItem>
+        <HelpMenu />
         <AccountAction />
-        <VersionLine />
       </DropdownMenuList>
     </DropdownMenuContent>
   )
@@ -418,6 +412,33 @@ function ThemeChoice() {
         ))}
       </DropdownMenuRadioGroup>
     </div>
+  )
+}
+
+/** The entries that have another way in or are rarely needed, folded into one submenu. */
+function HelpMenu() {
+  const { t } = useTranslation('sidebar')
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <CircleHelpIcon />
+        {t('account.help')}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="w-62">
+        <DropdownMenuItem onClick={() => showShortcuts(true)}>
+          <KeyboardIcon />
+          {t('account.shortcuts')}
+          <DropdownMenuShortcut>{formatShortcut('Mod+/')}</DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <WhatsNewItem />
+        <DropdownMenuItem render={<a href={DOCS_URL} target="_blank" rel="noreferrer" />}>
+          <ExternalLinkIcon />
+          {t('account.docs')}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className={SEPARATOR} />
+        <VersionLine />
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   )
 }
 
