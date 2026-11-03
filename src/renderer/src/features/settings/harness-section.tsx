@@ -44,7 +44,7 @@ import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { RadioGroup, RadioGroupTile } from '@renderer/components/ui/radio-group'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
-import { listedInstalled, readiness } from '@renderer/features/agents/readiness'
+import { listedInstalled, readiness, showsCurrent } from '@renderer/features/agents/readiness'
 import { adapterOnlyUpdate } from '@renderer/features/agents/updates'
 import { PANEL } from '@renderer/features/session/entries/helpers'
 import { mediumAgo } from '@renderer/lib/format'
@@ -309,9 +309,7 @@ function HarnessState({ status }: { status: AgentStatus }) {
       </>
     )
   }
-  return status.updateCheckedAt !== null || status.cli ? (
-    <StateDot label={t('agents.update.upToDate')} />
-  ) : null
+  return showsCurrent(status) ? <StateDot label={t('agents.update.upToDate')} /> : null
 }
 
 /** A state in the success color's dot, such as Up to date. */
@@ -831,6 +829,9 @@ function VersionGroup({ status }: { status: AgentStatus }) {
   const checks = !!status.package || !!status.cli || checkedAt !== null
   const updating = status.task?.kind === 'update' && status.task.state === 'running'
   const next = status.cli?.update?.version ?? status.update?.cliVersion ?? null
+  // A stale check does not make a missing program current, so it gets no green dot.
+  const current = !next && !status.update && showsCurrent(status)
+  const stated = !!next || !!status.update || current
   const line: ReactNode = !checks ? (
     t('agents.ownInstaller')
   ) : refresh.phase === 'turning' ? (
@@ -839,13 +840,15 @@ function VersionGroup({ status }: { status: AgentStatus }) {
     t('agents.update.updating')
   ) : (
     <>
-      <span
-        aria-hidden
-        className={cn(
-          'mr-1.5 inline-block size-1.5 rounded-full bg-current align-[0.1em]',
-          next || status.update ? 'text-info' : 'text-success',
-        )}
-      />
+      {stated && (
+        <span
+          aria-hidden
+          className={cn(
+            'mr-1.5 inline-block size-1.5 rounded-full bg-current align-[0.1em]',
+            next || status.update ? 'text-info' : 'text-success',
+          )}
+        />
+      )}
       {next
         ? t('agents.update.released', { version: next })
         : status.update
@@ -855,9 +858,11 @@ function VersionGroup({ status }: { status: AgentStatus }) {
                 version: status.update.adapterVersion,
               },
             )
-          : t('agents.update.upToDate')}
+          : current
+            ? t('agents.update.upToDate')
+            : null}
       <span className="text-tertiary">
-        {' · '}
+        {stated && ' · '}
         {checkedAt
           ? t('agents.update.checkedAgo', { ago: mediumAgo(checkedAt, now) })
           : t('agents.update.notChecked')}

@@ -214,6 +214,7 @@ export function AgentsGroupActions() {
   return (
     <>
       <ControlError error={error} />
+      <AddAgentButton className={GROUP_ACTION} />
       <Tooltip>
         <TooltipTrigger
           render={

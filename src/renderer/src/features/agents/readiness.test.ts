@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentStatus } from '@shared/agent-host'
-import { listedInstalled } from './readiness'
+import { listedInstalled, showsCurrent } from './readiness'
 
 const status = (overrides: Partial<AgentStatus>): AgentStatus => ({
   id: 'codex',
@@ -79,5 +79,37 @@ describe('listedInstalled', () => {
 
   it('keeps a failed agent with the installed ones, where its error and retry are', () => {
     expect(listedInstalled(status({ state: 'failed', package: adapter(true) }))).toBe(true)
+  })
+})
+
+describe('showsCurrent', () => {
+  it('calls an installed harness current after a check, or from its own program', () => {
+    expect(showsCurrent(status({ updateCheckedAt: 1 }))).toBe(true)
+    expect(
+      showsCurrent(
+        status({
+          cli: {
+            command: 'codex',
+            installed: { path: '/codex', version: '1', variable: null, problem: null },
+            method: null,
+            update: null,
+          },
+        }),
+      ),
+    ).toBe(true)
+  })
+
+  it('does not call a missing program current from an earlier check', () => {
+    expect(
+      showsCurrent(
+        status({ id: 'pi', harnessId: 'pi', state: 'not-installed', updateCheckedAt: 1 }),
+      ),
+    ).toBe(false)
+    expect(showsCurrent(status({ state: 'node-missing', updateCheckedAt: 1 }))).toBe(false)
+  })
+
+  it('does not call a harness current while its package is still to install, or after uninstall', () => {
+    expect(showsCurrent(status({ package: adapter(false), updateCheckedAt: 1 }))).toBe(false)
+    expect(showsCurrent(status({ uninstalled: true, updateCheckedAt: 1 }))).toBe(false)
   })
 })
