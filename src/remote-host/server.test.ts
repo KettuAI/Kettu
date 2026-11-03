@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HostMethod } from '@shared/agent-host'
 import type { PortChannel } from '@shared/port-channel'
 import { deviceId } from '@shared/remote/device'
-import type { HostAdminEvent } from '@shared/remote/host-admin'
+import { isHostAdminEvent, type HostAdminEvent } from '@shared/remote/host-admin'
 import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
 import { parsePairingLink, type PairingState } from '@shared/remote/pairing'
 import { PROTOCOL_VERSION } from '@shared/remote/protocol'
@@ -861,8 +861,9 @@ describe("the host's events", () => {
     }
     t.server.adminEvent(changed, null)
     t.server.adminEvent(pairing, tablet.id)
-    await expect.poll(() => pad.port.events).toEqual([changed, pairing])
-    await expect.poll(() => phone.port.events).toEqual([changed])
+    // The agent host's own events, such as an agent's status, may come in between.
+    await expect.poll(() => pad.port.events.filter(isHostAdminEvent)).toEqual([changed, pairing])
+    await expect.poll(() => phone.port.events.filter(isHostAdminEvent)).toEqual([changed])
   })
 })
 
