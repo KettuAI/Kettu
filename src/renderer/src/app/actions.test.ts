@@ -175,6 +175,43 @@ describe('a shown session that goes away', () => {
     useSessionsStore.getState().remove('s1')
     expect(useViewStore.getState()).toMatchObject({ main: { kind: 'new' }, settings })
   })
+
+  it('leaves for New session when the shown session is archived', () => {
+    useViewStore.setState({ main: { kind: 'session', sessionId: 's1' }, projectPath: '/other' })
+    useSessionsStore.getState().upsert({ ...summary, archivedAt: 5 })
+    expect(useViewStore.getState()).toMatchObject({
+      main: { kind: 'new', agentId: 'codex', noProject: false },
+      projectPath: '/repo',
+    })
+  })
+
+  it('leaves an archived scratch session for New session with No project', () => {
+    useViewStore.setState({
+      main: { kind: 'session', sessionId: 'x1' },
+      projectPath: scratch.projectPath,
+    })
+    useSessionsStore.getState().upsert({ ...scratch, archivedAt: 5 })
+    expect(useViewStore.getState().main).toEqual({ kind: 'new', agentId: 'codex', noProject: true })
+  })
+
+  it('leaves a shown sub-session when its parent is archived', () => {
+    const child = { id: 'c1', projectPath: '/repo', parentId: 's1' } as SessionSummary
+    useSessionsStore.setState({ byId: { s1: summary, c1: child, x1: scratch } })
+    useViewStore.setState({ main: { kind: 'session', sessionId: 'c1' }, projectPath: '/repo' })
+    useSessionsStore.getState().upsert({ ...summary, archivedAt: 5 })
+    expect(useViewStore.getState()).toMatchObject({
+      main: { kind: 'new', agentId: 'codex', noProject: false },
+      projectPath: '/repo',
+    })
+  })
+
+  it('stays on an archived session that was opened again', () => {
+    useViewStore.setState({ main: { kind: 'session', sessionId: 's1' }, projectPath: '/repo' })
+    useSessionsStore.getState().upsert({ ...summary, archivedAt: 5 })
+    useViewStore.setState({ main: { kind: 'session', sessionId: 's1' }, projectPath: '/repo' })
+    useSessionsStore.getState().upsert({ ...summary, archivedAt: 5, status: 'closed' })
+    expect(useViewStore.getState().main).toEqual({ kind: 'session', sessionId: 's1' })
+  })
 })
 
 describe('openProjectDialog', () => {
@@ -903,6 +940,20 @@ describe('the split view', () => {
     useSessionsStore.setState({ byId: { s1: session('s1') } })
     await archiveSession('s1')
     expect(useViewStore.getState().main).toMatchObject({ kind: 'new' })
+  })
+
+  it('closes a split pane whose session is archived and keeps the others', async () => {
+    const { allPanes } = await splitStore(
+      { kind: 'session', sessionId: 's1', projectPath: '/repo' },
+      { kind: 'session', sessionId: 's2', projectPath: '/repo' },
+    )
+    useSessionsStore.setState({ byId: { s1: session('s1'), s2: session('s2') } })
+    const unfollow = followShownSession()
+    useSessionsStore.getState().upsert({ ...session('s1'), archivedAt: 5 })
+    unfollow()
+    expect(allPanes(useViewStore.getState().layout).map((pane) => pane.view)).toEqual([
+      { kind: 'session', sessionId: 's2', projectPath: '/repo' },
+    ])
   })
 
   it('shows the created session in the pane that showed New session, wherever the focus went', async () => {

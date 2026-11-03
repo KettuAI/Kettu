@@ -137,6 +137,18 @@ export function inPinnedTree(byId: Record<string, SessionSummary>, s: SessionSum
   return !!root.pinnedAt && !root.archivedAt
 }
 
+/** Archived itself, or under a session that is. A missing parent is not treated as archived. */
+export function sessionArchived(byId: Record<string, SessionSummary>, sessionId: string): boolean {
+  const seen = new Set<string>()
+  let current: SessionSummary | undefined = byId[sessionId]
+  while (current && !seen.has(current.id)) {
+    if (current.archivedAt) return true
+    seen.add(current.id)
+    current = current.parentId ? byId[current.parentId] : undefined
+  }
+  return false
+}
+
 /** A host's archived top-level sessions, this computer's by default, latest archived first. */
 export function archivedSessions(
   byId: Record<string, SessionSummary>,

@@ -27,9 +27,9 @@ import {
   type DraftAttachment,
 } from '@renderer/stores/attachments'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { isScratchFolder, useSessionsStore } from '@renderer/stores/sessions'
+import { isScratchFolder, sessionArchived, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { isSplit, paneWithSession } from '@renderer/features/split/layout'
+import { allPanes, isSplit, paneWithSession } from '@renderer/features/split/layout'
 import { focusSession, forgetSession } from '@renderer/stores/threads'
 import {
   closeLayoutSession,
@@ -380,24 +380,42 @@ function leaveSession(summary: SessionSummary | undefined): void {
 
 /**
  * Leaves a shown session that drops out of the list, deleted here, by the agent host or with its
- * parent, for New session where it ran; New session for a sub-session whose parent goes becomes
- * one for a session of its own. Returns the unsubscribe.
+ * parent, or that becomes archived, including when its own agent archives it. New session for a
+ * sub-session whose parent goes becomes one for a session of its own. Returns the unsubscribe.
  */
 export function followShownSession(): () => void {
   return useSessionsStore.subscribe((state, previous) => {
-    const { main, layout } = useViewStore.getState()
+    const { layout } = useViewStore.getState()
+    // A split pane that is not the main view still closes, as when the menu archives it.
+    if (isSplit(layout)) {
+      const ids = allPanes(layout).flatMap((pane) =>
+        pane.view.kind === 'session' ? [pane.view.sessionId] : [],
+      )
+      for (const id of ids) {
+        if (!leftTheList(state.byId, id)) continue
+        if (!previous.byId[id] || sessionArchived(previous.byId, id)) continue
+        closeLayoutSession(id)
+      }
+    }
+    const { main, layout: now } = useViewStore.getState()
     const shownId =
       main.kind === 'session' ? main.sessionId : main.kind === 'new' ? main.parentId : undefined
-    if (!shownId || state.byId[shownId]) return
+    if (!shownId || !leftTheList(state.byId, shownId)) return
     const gone = previous.byId[shownId]
-    if (!gone) return
+    // Opening one that is already archived, such as from its started entry, stays.
+    if (!gone || sessionArchived(previous.byId, shownId)) return
     // In a split the pane closes; the main view follows the pane that takes the focus.
-    if (isSplit(layout) && paneWithSession(layout, shownId)) {
+    if (isSplit(now) && paneWithSession(now, shownId)) {
       closeLayoutSession(shownId)
       return
     }
     leaveSession(gone)
   })
+}
+
+/** Gone from the list, or archived with an ancestor. The record of an archived session stays. */
+function leftTheList(byId: Record<string, SessionSummary>, id: string): boolean {
+  return !byId[id] || sessionArchived(byId, id)
 }
 
 /** All sessions under a session, for the confirmation that names how many go with it. */

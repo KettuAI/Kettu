@@ -3597,7 +3597,7 @@ export class SessionManager {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
-    this.unarchive(sessionId)
+    this.refuseIfArchived(sessionId)
     const hydrated = this.hydrate(content)
     const live = await this.revive(sessionId)
     if (!canSend(live.thread.session.status)) throw busyError(live.thread.session.status)
@@ -3834,7 +3834,7 @@ export class SessionManager {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
-    this.unarchive(sessionId)
+    this.refuseIfArchived(sessionId)
     const content = this.hydrate(input)
     const live = await this.revive(sessionId)
     const { status, queue, queuePaused } = live.thread.session
@@ -3946,7 +3946,7 @@ export class SessionManager {
 
   async resumeQueue(sessionId: string): Promise<void> {
     this.assertRegistered(sessionId)
-    this.unarchive(sessionId)
+    this.refuseIfArchived(sessionId)
     const live = await this.revive(sessionId)
     this.update(live, { queuePaused: false })
     this.drainQueue(live)
@@ -5278,7 +5278,10 @@ export class SessionManager {
     return summary.id
   }
 
-  /** Prompts a session the caller started, or queues the prompt while that session works. */
+  /**
+   * Prompts a session the caller started, or queues the prompt while that session works.
+   * Unlike a message from the user, this brings an archived session back.
+   */
   async sendFromTool(
     sessionId: string,
     text: string,
@@ -5300,6 +5303,13 @@ export class SessionManager {
     this.persist(live)
     this.touch(live.id)
     return 'queued'
+  }
+
+  /** A message from the user does not bring an archived session back; restoring it does. */
+  private refuseIfArchived(sessionId: string): void {
+    if (this.isArchived(this.recordOf(sessionId))) {
+      throw new HostError('restricted', t('session.archived'))
+    }
   }
 
   /** Brings back the archived session at the top of this one's tree, or the session itself. */

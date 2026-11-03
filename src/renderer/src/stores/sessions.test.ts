@@ -5,6 +5,7 @@ import { NO_PROJECT_GROUP, PINNED_GROUP, type MainView } from '@renderer/stores/
 import {
   archivedSessions,
   inPinnedTree,
+  sessionArchived,
   isScratchFolder,
   needsYouTree,
   noProjectGroup,
@@ -115,6 +116,13 @@ describe('pinned and archived sessions', () => {
 
   it('lists the archived ones, the most recently archived first', () => {
     expect(archivedSessions(sessions).map((s) => s.id)).toEqual(['e', 'd'])
+  })
+
+  it('counts a session under an archived parent as archived', () => {
+    expect(sessionArchived(sessions, 'd')).toBe(true)
+    expect(sessionArchived(sessions, 'd1')).toBe(true)
+    expect(sessionArchived(sessions, 'a')).toBe(false)
+    expect(sessionArchived(sessions, 'missing')).toBe(false)
   })
 })
 

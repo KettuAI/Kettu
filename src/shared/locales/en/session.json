@@ -401,6 +401,8 @@
     "agentRemoved": "{{agent}} was removed",
     "agentRemovedBody": "Its history stays here, but this session can't continue. Add the agent again, or continue in a new session with another agent.",
     "agentRemovedComposer": "This session can’t continue because its agent was removed.",
+    "archivedComposer": "This session is archived and no longer takes messages.",
+    "restore": "Restore",
     "openAgents": "Open Agents",
     "announceApproval": "{{agent}} needs your approval",
     "announceFinished": "{{agent}} finished"
