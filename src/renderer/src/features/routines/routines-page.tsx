@@ -47,7 +47,6 @@ import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useRoutinesStore } from '@renderer/stores/routines'
-import { useSettingsStore } from '@renderer/stores/settings'
 import { openRoutine, useViewStore } from '@renderer/stores/view'
 import { openActiveRun } from './actions'
 import { DeleteRoutineDialog } from './delete-routine-dialog'
@@ -84,7 +83,6 @@ export default function RoutinesPage() {
   const loaded = useRoutinesStore((s) => s.loaded)
   const problem = useRoutinesStore((s) => s.problem)
   const loadError = useRoutinesStore((s) => s.error)
-  const openAtLogin = useSettingsStore((s) => s.settings.general.openAtLogin)
   const [error, setError] = useState<string | null>(null)
   const [active, setActive] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -106,14 +104,6 @@ export default function RoutinesPage() {
     useRoutinesStore
       .getState()
       .runNow(routine.id)
-      .catch((failure: unknown) => setError(errorMessage(failure)))
-  }
-
-  const enableOpenAtLogin = () => {
-    setError(null)
-    useSettingsStore
-      .getState()
-      .update({ general: { openAtLogin: true } })
       .catch((failure: unknown) => setError(errorMessage(failure)))
   }
 
@@ -233,19 +223,6 @@ export default function RoutinesPage() {
           {loaded && (
             <p className={cn('mt-4 text-control text-tertiary', !empty && 'mx-3')}>
               {t('page.footnote')}
-              {!openAtLogin && (
-                <>
-                  {' '}
-                  <Button
-                    variant="link"
-                    size="xs"
-                    onClick={enableOpenAtLogin}
-                    className="h-auto px-0 align-baseline text-control text-secondary"
-                  >
-                    {t('page.openAtLoginAction')}
-                  </Button>
-                </>
-              )}
             </p>
           )}
         </div>

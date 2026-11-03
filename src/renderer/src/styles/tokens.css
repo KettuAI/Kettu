@@ -657,7 +657,7 @@
   /* Neutral fills of controls. */
   --tile: var(--bg-subtle);
   --segment-track: var(--bg-subtle);
-  --segment-thumb: var(--bg-raised);
+  --segment-thumb: var(--bg-surface);
   --pressed: var(--bg-selected);
   --pressed-hover: color-mix(in srgb, var(--bg-selected), var(--text-primary) 5%);
   /* The edge of the queued card right behind the front one, halfway there. */

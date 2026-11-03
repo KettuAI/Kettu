@@ -13,7 +13,6 @@
     "open": "Open {{name}}",
     "switchOn": "Turn on {{name}}",
     "switchOff": "Turn off {{name}}",
-    "openAtLoginAction": "Open at login",
     "columns": {
       "routine": "Routine",
       "schedule": "Schedule",

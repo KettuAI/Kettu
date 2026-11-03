@@ -13,7 +13,6 @@
     "open": "打开 {{name}}",
     "switchOn": "开启 {{name}}",
     "switchOff": "关闭 {{name}}",
-    "openAtLoginAction": "登录时打开",
     "columns": {
       "routine": "例程",
       "schedule": "计划",

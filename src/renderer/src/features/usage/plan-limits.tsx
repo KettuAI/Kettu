@@ -55,13 +55,13 @@ export function PlanLimits({ used }: { used: readonly AgentId[] }) {
       <div className="flex items-center gap-2">
         <PanelTitle className="flex-1">{t('limits.title')}</PanelTitle>
         {read > 0 && (
-          <span className="text-small text-tertiary">
+          <span className="text-small leading-[normal] text-tertiary">
             {t('limits.read', { ago: longAgo(read, now) })}
           </span>
         )}
       </div>
       {agents.length === 0 ? (
-        <p className="pt-3.5 pb-0.5 text-hint text-tertiary">{t('limits.none')}</p>
+        <p className="pt-3.5 pb-0.5 text-hint leading-[normal] text-tertiary">{t('limits.none')}</p>
       ) : (
         <>
           {rows.map((status, i) => (
@@ -71,8 +71,8 @@ export function PlanLimits({ used }: { used: readonly AgentId[] }) {
             <p
               className={
                 rows.length > 0
-                  ? 'pt-3 text-hint text-tertiary shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]'
-                  : 'pt-3.5 text-hint text-tertiary'
+                  ? 'pt-3 text-hint leading-[normal] text-tertiary shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]'
+                  : 'pt-3.5 text-hint leading-[normal] text-tertiary'
               }
             >
               {t('limits.notReported', { name: names, count: unreported.length })}
@@ -98,9 +98,13 @@ function Plan({ status, now, first }: { status: AgentStatus; now: number; first:
     >
       <div className="flex min-w-0 items-center gap-2.5">
         <AgentMark agent={status.id} size={18} mono={!isInstalled(status)} />
-        <span className="truncate text-lede font-medium text-primary">{status.name}</span>
+        <span className="truncate text-lede leading-[normal] font-medium text-primary">
+          {status.name}
+        </span>
         {status.account && (
-          <span className="truncate text-hint text-tertiary">{status.account.label}</span>
+          <span className="truncate text-hint leading-[normal] text-tertiary">
+            {status.account.label}
+          </span>
         )}
       </div>
       {status.limits.length > 0 ? (
@@ -110,7 +114,7 @@ function Plan({ status, now, first }: { status: AgentStatus; now: number; first:
           ))}
         </div>
       ) : (
-        <p className="text-hint text-tertiary">{t('limits.notYet')}</p>
+        <p className="text-hint leading-[normal] text-tertiary">{t('limits.notYet')}</p>
       )}
     </section>
   )
@@ -122,7 +126,7 @@ function Window({ limit, now }: { limit: PlanLimit; now: number }) {
   const name = limitLabel(limit)
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
-      <div className="flex justify-between gap-2 text-hint text-tertiary">
+      <div className="flex justify-between gap-2 text-hint leading-[normal] text-tertiary">
         <span className="truncate">{name}</span>
         <span className="shrink-0 text-primary tabular-nums">
           {limit.usedPercent === null
@@ -137,7 +141,7 @@ function Window({ limit, now }: { limit: PlanLimit; now: number }) {
         className={LIMIT_BAR}
       />
       {limit.resetsAt !== null && (
-        <p className="text-small text-tertiary">
+        <p className="text-small leading-[normal] text-tertiary">
           {resetForm(limit.resetsAt, now) === 'in'
             ? t('limits.resetsIn', { time: countdown(limit.resetsAt - now)! })
             : t('limits.resetsAt', { time: resetWhen(limit.resetsAt, now) })}

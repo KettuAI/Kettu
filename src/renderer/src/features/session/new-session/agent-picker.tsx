@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CheckIcon, SearchIcon, SlidersHorizontalIcon } from 'lucide-react'
+import { CheckIcon, SearchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentId } from '@shared/thread'
@@ -21,6 +21,7 @@ import {
   useComboboxFilter,
 } from '@renderer/components/ui/combobox'
 import { InputGroupAddon } from '@renderer/components/ui/input-group'
+import { SettingsGlyph } from '@renderer/features/account/avatar'
 import { useHostLabel } from '@renderer/features/sidebar/host-label'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
@@ -196,13 +197,13 @@ export function AgentPicker({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8.5 w-full justify-start gap-2.5 rounded-xl px-2 text-control font-normal text-secondary"
+                  className="h-8.5 w-full justify-start gap-2.5 rounded-xl px-2 text-control font-normal text-secondary [&>svg]:size-4"
                   onClick={() => {
                     setOpen(false)
                     openAgentSettings(null)
                   }}
                 >
-                  <SlidersHorizontalIcon className="size-4" />
+                  <SettingsGlyph />
                   {t('newSession.picker.manage')}
                 </Button>
               </div>
