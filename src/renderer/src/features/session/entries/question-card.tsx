@@ -285,7 +285,7 @@ function Choices({
             aria-label={t('question.other')}
             data-answer-option={own < NUMBERED ? own + 1 : undefined}
             onChange={(event) => onText(event.target.value)}
-            className="h-7 flex-1 border-transparent bg-transparent shadow-none"
+            className="-ml-2.5 h-7 flex-1 border-transparent bg-transparent shadow-none"
           />
         </div>
       )}
