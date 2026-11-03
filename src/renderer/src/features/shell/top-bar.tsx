@@ -58,32 +58,35 @@ export function TitleBand() {
 }
 
 /**
- * The sidebar's top row: room for the traffic lights, the drag region, then Back, Forward and the
- * toggle at its end. It holds the whole history's dialog, since the sidebar stays mounted.
+ * The sidebar's top row. Back, Forward and the toggle sit where the collapsed top bar puts them,
+ * so hiding and showing the sidebar keeps that click: on macOS just past the traffic lights,
+ * elsewhere at the title band's inset. The rest drags the window. The row holds the whole
+ * history's dialog, since the sidebar stays mounted.
  */
 export function SidebarTitleBar() {
   return (
     // On macOS 56 px, its buttons centred on the traffic lights, which main puts level with the
-    // top bar's centre; elsewhere in the band.
+    // top bar's centre; elsewhere in the band. The inset is the cornered top bar's, measured from
+    // the window's edge, and the same half-step pull-back, so the buttons do not move on collapse.
     <div
       className={cn(
-        'app-region-drag flex shrink-0 items-center gap-0.5 pr-2 pl-4.5',
-        hasBand ? 'h-(--title-bar)' : 'h-14 pt-2',
+        'app-region-drag flex shrink-0 items-center pr-2',
+        hasBand
+          ? 'h-(--title-bar) pl-(--sheet-gap)'
+          : 'h-14 pt-2 pl-[calc(var(--corner-inset)+var(--sheet-gap))]',
       )}
     >
-      {!hasBand && <span aria-hidden className="w-(--traffic-lights)" />}
+      <CornerControls className={cn(!hasBand && '-ml-0.5')} />
       {/* The window's drag region. */}
       <span className="flex-1" />
-      <BackForward />
-      <SidebarToggle />
       <HistoryDialog />
     </div>
   )
 }
 
 /**
- * Back, Forward and the toggle where the collapsed sidebar's row would have them, in the same
- * order; `divided` sets them off with a line from what follows in the bar.
+ * Back, Forward and the toggle, in the sidebar's row and, while it is collapsed, where that row
+ * had them; `divided` sets them off with a line from what follows in the bar.
  */
 export function CornerControls({
   className,
