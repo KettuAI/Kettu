@@ -338,6 +338,8 @@ export class AgentHost {
       sessionTitle: (sessionId) => this.sessions.title(sessionId),
       runningTurn: (sessionId) => this.sessions.runningTurn(sessionId),
       sessionOf: (process, id) => this.sessions.sessionOf(process, id),
+      subagentCall: (process, id) => this.sessions.isSubagentCall(process, id),
+      plan: { set: (sessionId, items) => this.sessions.planSet(sessionId, items) },
       wrote: (sessionId, write) => this.sessions.artifactWritten(sessionId, write),
       browserCall: (request) => this.browserCall(request),
       browserSession: (sessionId) => this.sessions.browserSession(sessionId),

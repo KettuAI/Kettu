@@ -9,6 +9,7 @@ import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { BrowserCallAnswer, BrowserCallRequest } from '@shared/browser'
 import type { McpServer } from '../connection'
+import { SERVICE_NAME } from '../service-name'
 import type { LogFn } from '../storage'
 import {
   SessionTools,
@@ -23,6 +24,15 @@ import {
   BROWSER_TOOLS,
   isBrowserToolName,
 } from './browser-tools'
+import {
+  isPlanToolName,
+  PlanTools,
+  PLAN_INSTRUCTIONS,
+  PLAN_PROMPT,
+  PLAN_TOOL,
+  PLAN_TOOLS,
+  type PlanToolsDeps,
+} from '../plan-tool'
 import { artifactWrite, type ArtifactWrite } from './entries'
 import type { ArtifactData } from './runtime/data'
 import { DATA_TOOLS, DataTools, isDataToolName } from './runtime/data-tools'
@@ -35,7 +45,7 @@ import {
   type Caller,
 } from './tools'
 
-export const SERVICE_NAME = 'kettu'
+export { SERVICE_NAME }
 export const SERVICE_PATH = '/mcp'
 /** A call may carry several files of up to 5 MiB of text each, escaped as JSON. */
 export const BODY_BYTES = 16 * 1024 * 1024
@@ -46,10 +56,16 @@ const SUMMARY_CHARS = 200
 const SESSION_META = 'ai.opencode/sessionID'
 
 /** The tools `tools/list` answers: the artifact tools, the session tools and the browser's. */
-export const SERVICE_TOOLS: Tool[] = [...TOOLS, ...DATA_TOOLS, ...SESSION_TOOLS, ...BROWSER_TOOLS]
+export const SERVICE_TOOLS: Tool[] = [
+  ...TOOLS,
+  ...DATA_TOOLS,
+  ...SESSION_TOOLS,
+  ...PLAN_TOOLS,
+  ...BROWSER_TOOLS,
+]
 
 /** The service's `instructions`: the artifact tools', the session tools' and the browser's. */
-const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS}`
+const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${PLAN_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS}`
 
 // The SDK loads with the first request rather than with the host, which starts faster without it.
 function loadSdk() {
@@ -88,6 +104,10 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   sessionProject?(sessionId: string): string | null
   /** The artifacts' data, which the data tools read and write; without it they fail. */
   data?: ArtifactData
+  /** Where the plan tool writes. */
+  plan: PlanToolsDeps
+  /** Whether the agent's session `id` is a subagent that runs under a session of its own. */
+  subagentCall?(process: AgentProcess, id: string): boolean
 }
 
 /** A token for one session. */
@@ -119,6 +139,8 @@ function entry(url: string, token: string): McpServer[] {
       name: SERVICE_NAME,
       url,
       headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
+      autoAllow: [PLAN_TOOL],
+      prompt: PLAN_PROMPT,
     },
   ]
 }
@@ -158,6 +180,7 @@ export class ArtifactService {
   private readonly folders = new Map<AgentProcess, Map<string, string>>()
   private readonly tools: ArtifactTools
   private readonly sessionTools: SessionTools
+  private readonly planTools: PlanTools
   private readonly browserTools: BrowserTools
   private readonly dataTools: DataTools | null
   private sdk: Promise<Sdk> | null = null
@@ -168,6 +191,7 @@ export class ArtifactService {
     this.tools = new ArtifactTools(deps)
     this.dataTools = deps.data ? new DataTools({ data: deps.data }) : null
     this.sessionTools = new SessionTools(deps.sessions)
+    this.planTools = new PlanTools(deps.plan)
     const browserCall = deps.browserCall
     this.browserTools = new BrowserTools({
       call: (request) =>
@@ -309,6 +333,7 @@ export class ArtifactService {
   revoke(sessionId: string): void {
     this.tools.forget(sessionId)
     this.dataTools?.forget(sessionId)
+    this.planTools.forget(sessionId)
     this.leave(sessionId)
   }
 
@@ -357,7 +382,8 @@ export class ArtifactService {
     const id = meta?.[SESSION_META]
     const sessionId = typeof id === 'string' ? this.deps.sessionOf(grant.process, id) : null
     if (sessionId === null || !grant.sessions.has(sessionId)) return null
-    return { sessionId, project: grant.project }
+    const subagent = typeof id === 'string' && this.deps.subagentCall?.(grant.process, id) === true
+    return { sessionId, project: grant.project, ...(subagent ? { subagent } : {}) }
   }
 
   private grantOf(header: string | undefined): Grant | null {
@@ -456,6 +482,17 @@ export class ArtifactService {
         } catch (error) {
           this.deps.log('error', `${name} failed: ${(error as Error).message}`)
           throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+        }
+      }
+      if (isPlanToolName(name)) {
+        try {
+          return this.planTools.call(caller, name, input)
+        } catch (error) {
+          this.deps.log('error', `${PLAN_TOOL} failed: ${(error as Error).message}`)
+          throw new McpError(
+            ErrorCode.InternalError,
+            `${PLAN_TOOL} failed: ${(error as Error).message}`,
+          )
         }
       }
       if (isBrowserToolName(name)) {

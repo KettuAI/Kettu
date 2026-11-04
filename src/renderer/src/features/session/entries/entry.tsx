@@ -5,7 +5,6 @@ import {
   CompactionEntry,
   GitEventEntry,
   NoticeEntry,
-  PlanEntry,
   SessionMessageEntry,
   ThoughtEntry,
   TurnEndEntry,
@@ -47,7 +46,7 @@ export const Entry = memo(function Entry({
     case 'session_message':
       return <SessionMessageEntry {...props} />
     case 'plan':
-      return <PlanEntry {...props} />
+      return null
     case 'notice':
       return <NoticeEntry {...props} />
     case 'compaction':

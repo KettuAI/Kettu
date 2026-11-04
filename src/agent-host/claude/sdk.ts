@@ -95,9 +95,11 @@ export interface QueryOptions {
   forwardSubagentText?: boolean
   perTaskStopAffordance?: boolean
   settingSources?: SettingSource[]
-  systemPrompt?: { type: 'preset'; preset: 'claude_code' }
+  systemPrompt?: { type: 'preset'; preset: 'claude_code'; append?: string }
   /** The built-in tools, by name; an empty list has none. */
   tools?: string[] | { type: 'preset'; preset: 'claude_code' }
+  /** Tools that run without asking, as `mcp__<server>__<tool>` for an MCP server's. */
+  allowedTools?: string[]
   disallowedTools?: string[]
   /** Only `mcpServers`, and none of the settings' servers. */
   strictMcpConfig?: boolean

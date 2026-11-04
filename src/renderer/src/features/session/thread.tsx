@@ -27,6 +27,7 @@ import {
   lastSent,
   replyKeys,
   signatureOf,
+  withoutPlans,
   type Estimate,
   type Item,
 } from './thread-items'
@@ -150,18 +151,19 @@ export const Thread = memo(function Thread({
   working: boolean
 }) {
   const { t } = useTranslation('session')
-  const order = useThreadsStore((s) => s.replicas[sessionId]?.state?.order)
-  const signature = useThreadsStore((s) => signatureOf(s.replicas[sessionId]?.state))
-  const items = useMemo(
-    () => buildItems(order ?? [], signature, working),
-    [order, signature, working],
+  const allOrder = useThreadsStore((s) => s.replicas[sessionId]?.state?.order)
+  const allSignature = useThreadsStore((s) => signatureOf(s.replicas[sessionId]?.state))
+  const { order, signature } = useMemo(
+    () => withoutPlans(allOrder ?? [], allSignature),
+    [allOrder, allSignature],
   )
+  const items = useMemo(() => buildItems(order, signature, working), [order, signature, working])
   const statusLast = useMemo(() => items.at(-1)?.type === 'status', [items])
-  const steps = useMemo(() => stepIds(order ?? [], signature), [order, signature])
+  const steps = useMemo(() => stepIds(order, signature), [order, signature])
   const replies = useMemo(() => replyKeys(items), [items])
   // Another session's footer may share a key, so a switch made from the keyboard starts clear.
   useEffect(() => () => hoverReply(null), [sessionId])
-  const sent = lastSent(order ?? [], signature)
+  const sent = lastSent(order, signature)
   const [held, setHeld] = useState(false)
   const shownFrom = useShownFrom(items.length, held)
   const revealing = useRef<{ key: string; resolve: () => void } | null>(null)

@@ -432,17 +432,6 @@ function CommitId({ oid }: { oid: string }) {
   )
 }
 
-export const PlanEntry = memo(function PlanEntry({ sessionId, entryId }: EntryProps) {
-  const entry = useEntry(sessionId, entryId, 'plan')
-  const animation = useEntryAnimation(sessionId, entryId)
-  if (!entry) return null
-  return (
-    <div className={cn('rounded-xl bg-card px-3.5 py-2.5 shadow-card', animation)}>
-      <PlanList items={entry.items} />
-    </div>
-  )
-})
-
 export function PlanList({ items }: { items: PlanItem[] }) {
   const { t } = useTranslation('session')
   return (

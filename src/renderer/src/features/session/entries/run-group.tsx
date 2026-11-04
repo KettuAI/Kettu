@@ -73,8 +73,6 @@ export const RunGroup = memo(function RunGroup({
     } else if (entry?.kind === 'tool') {
       steps.push(toolStep(entry))
       if (entry.permission) waiting = true
-    } else if (entry?.kind === 'plan') {
-      steps.push({ kind: 'plan' })
     } else if (entry?.kind === 'compaction') {
       steps.push({ kind: 'compaction', running: entry.status === 'in_progress' })
     }
@@ -137,7 +135,7 @@ export const RunGroup = memo(function RunGroup({
                 agentName={agentName}
               />
             ) : (
-              // A plan, compaction or thought is not a row, so it keeps room from them.
+              // A compaction or thought is not a row, so it keeps room from them.
               <div key={item.key} className={cn(spaced.has(item.id) && 'py-1.5')}>
                 <Entry
                   sessionId={sessionId}

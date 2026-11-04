@@ -140,6 +140,10 @@ export interface McpServer {
   name: string
   url: string
   headers: { name: string; value: string }[]
+  /** Tools of the server that an agent runs without asking, where its own settings can say so. */
+  autoAllow?: string[]
+  /** A paragraph for the agent's own instructions, where it takes one. */
+  prompt?: string
 }
 
 /** A content block of a prompt, as Kettu sends it; each protocol converts it for its wire. */

@@ -13,6 +13,7 @@ import type {
 } from '@shared/thread'
 import { replayedBlock } from '../acp/mapper'
 import { hasMessage, t } from '../i18n'
+import { isCodexPlanCall } from '../plan-tool'
 import { parseReplayedText } from '../replayed-content'
 import {
   addEntry,
@@ -359,6 +360,8 @@ export class ThreadMapper {
         })
         break
       case 'mcpToolCall': {
+        // The host wrote the plan from the call itself, so the call shows no row.
+        if (isCodexPlanCall(item.server, item.tool)) break
         const raw = rawInputText(item.arguments)
         this.tool(ctx, out, item.id, {
           title: t('codex.tool.mcp', { server: item.server, tool: item.tool }),

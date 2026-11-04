@@ -238,11 +238,26 @@ function sessionConfig(
         {
           url: server.url,
           http_headers: Object.fromEntries(server.headers.map((h) => [h.name, h.value])),
+          ...(server.autoAllow && server.autoAllow.length > 0
+            ? {
+                tools: Object.fromEntries(
+                  server.autoAllow.map((tool) => [tool, { approval_mode: 'approve' }]),
+                ),
+              }
+            : {}),
         },
       ]),
     )
   }
   return config
+}
+
+/** The servers' paragraphs for the model, as a thread takes them. */
+function developerInstructions(
+  servers: readonly McpServer[] | undefined,
+): { developerInstructions: string } | Record<string, never> {
+  const prompts = (servers ?? []).flatMap((server) => server.prompt ?? [])
+  return prompts.length > 0 ? { developerInstructions: prompts.join('\n\n') } : {}
 }
 
 interface Prompting {
@@ -576,6 +591,7 @@ export class CodexConnection implements AgentConnection {
       approvalsReviewer: mode.approvalsReviewer,
       sandbox: sandboxMode(mode.sandbox),
       config: sessionConfig(cwd, options.mcpServers),
+      ...developerInstructions(options.mcpServers),
       ephemeral: hidden,
       experimentalRawEvents: false,
     })
@@ -604,6 +620,7 @@ export class CodexConnection implements AgentConnection {
           }
         : {}),
       config: sessionConfig(cwd, options.mcpServers),
+      ...developerInstructions(options.mcpServers),
       excludeTurns: true,
     })
     const record = await this.record(threadId, cwd, response, options.hidden !== undefined, known)
@@ -694,6 +711,7 @@ export class CodexConnection implements AgentConnection {
       // A fork takes the model and effort of the configuration, not of its source.
       ...(source ? { model: source.model } : {}),
       config: sessionConfig(cwd, options.mcpServers),
+      ...developerInstructions(options.mcpServers),
       ephemeral: hidden,
       excludeTurns: true,
     })

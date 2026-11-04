@@ -138,7 +138,6 @@ export type RunStep =
       /** The agent's own name for the work this call is part of. */
       label?: string
     }
-  | { kind: 'plan' }
   | { kind: 'compaction'; running: boolean }
 
 /** A tool call as a step of a folded run. */
@@ -302,7 +301,6 @@ export function runSummary(steps: RunStep[]): {
     running: steps.some((s) => {
       if (s.kind === 'thought') return !!s.streaming
       if (s.kind === 'compaction') return s.running
-      if (s.kind === 'plan') return false
       return s.status === 'pending' || s.status === 'in_progress'
     }),
   }

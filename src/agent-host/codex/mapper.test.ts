@@ -190,6 +190,29 @@ describe('diffs', () => {
   })
 })
 
+describe('the plan tool', () => {
+  const call = (id: string, server: string, tool: string) => ({
+    type: 'mcpToolCall',
+    id,
+    server,
+    tool,
+    status: 'completed',
+    arguments: {},
+    result: null,
+    error: null,
+    durationMs: 1,
+  })
+
+  it('shows no row for its call, and one for another server with a tool of that name', () => {
+    const { entries } = run([
+      started({ ...call('a', 'kettu', 'set_plan'), status: 'inProgress' }),
+      completed(call('a', 'kettu', 'set_plan')),
+      completed(call('b', 'other', 'set_plan')),
+    ])
+    expect(entries.map((entry) => entry.id)).toEqual(['t:b'])
+  })
+})
+
 describe('other items', () => {
   it('maps plans, searches, MCP calls, compaction and a reroute', () => {
     const { entries } = run([

@@ -46,6 +46,7 @@ import {
   type PendingQuestion,
   type PermissionKind,
   type PlanEntry,
+  type PlanItem,
   type QuestionAnswer,
   type SessionSnapshot,
   type SessionStatus,
@@ -707,6 +708,16 @@ export class SessionManager {
     return null
   }
 
+  /** Whether the agent's session `id` is a subagent of a session attached through `connection`. */
+  isSubagentCall(connection: object, id: string): boolean {
+    for (const live of this.live.values()) {
+      if (live.connection !== connection || !live.connection) continue
+      const root = live.connection.rootOf(id)
+      if (live.record.acpSessionId === root) return root !== id
+    }
+    return false
+  }
+
   /** The session's running turn, for telling it from a later one; null between turns. */
   runningTurn(sessionId: string): object | null {
     const turn = this.live.get(sessionId)?.turn
@@ -925,6 +936,24 @@ export class SessionManager {
     }
     this.track(live, patch)
     live.queue.push(patch)
+    return true
+  }
+
+  /**
+   * The plan an agent set through the plan tool: the turn's plan entry takes it, as an agent's own
+   * todo list would, or a new entry goes in. False for a session that is not in memory.
+   */
+  planSet(sessionId: string, items: PlanItem[]): boolean {
+    const live = this.live.get(sessionId)
+    if (!live) return false
+    const current = live.scope.planId ? live.thread.byId[live.scope.planId] : undefined
+    if (current?.kind === 'plan') {
+      this.emit(live, [{ op: 'entry.update', id: current.id, changes: { items } }])
+      return true
+    }
+    const id = this.nextId(live)
+    live.scope.planId = id
+    this.emit(live, [{ op: 'entry.add', entry: { kind: 'plan', id, items } }])
     return true
   }
 
