@@ -2,7 +2,13 @@
 // params object with only the known fields, or throws `invalid_params` before anything runs.
 
 import type { AgentInstallMethod, HostMethod, HostParams } from '@shared/agent-host'
-import { artifactPathProblem } from '@shared/artifact-files'
+import { COMMENT_CHARS, THREAD_ID, type CommentAnchor } from '@shared/artifact-comments'
+import { artifactPathProblem, isHtmlPath } from '@shared/artifact-files'
+import {
+  checkedStyle,
+  EDIT_TEXT_CHARS,
+  SNIPPET_CHARS,
+} from '@shared/artifact-runtime/page-messages'
 import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
 import type { BrowserCallAnswer, BrowserOriginAnswer, BrowserOriginDecision } from '@shared/browser'
 import { FILE_READ_LIMIT } from '@shared/files'
@@ -413,6 +419,74 @@ function version(o: Fields, key: string): number {
     throw invalidParams(`${key} must be a version, a whole number from 1`)
   }
   return value
+}
+
+const ELEMENT_TAG = /^[a-z][a-z0-9-]{0,31}$/
+const PAGE_NAME_CHARS = 200
+const MAX_OFFSET = 64 * 1024 * 1024
+const SENT_THREADS = 1_000
+
+function htmlPath(o: Fields, key: string): string {
+  const value = o[key]
+  if (typeof value !== 'string' || artifactPathProblem(value) !== null || !isHtmlPath(value)) {
+    throw invalidParams(`${key} must be the path of one of the artifact's HTML files`)
+  }
+  return value
+}
+
+function offset(o: Fields, key: string): number {
+  const value = o[key]
+  if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) > MAX_OFFSET) {
+    throw invalidParams(`${key} must be an offset in the file`)
+  }
+  return value as number
+}
+
+function threadId(o: Fields): string {
+  const value = string(o, 'threadId', ID_CHARS)
+  if (!THREAD_ID.test(value)) throw invalidParams('threadId is not a thread id')
+  return value
+}
+
+function commentBody(o: Fields): string {
+  const value = o.body
+  if (typeof value !== 'string' || value.trim() === '' || longer(value, COMMENT_CHARS)) {
+    throw invalidParams(`body must be 1 to ${COMMENT_CHARS} characters, not blank`)
+  }
+  return value
+}
+
+/** A new thread's anchor: what the page reported, checked and capped; never already missing. */
+function commentAnchor(value: unknown): CommentAnchor {
+  const o = fields(value)
+  let page: CommentAnchor['page'] = null
+  if (o.page !== null) {
+    const p = fields(o.page)
+    const number = p.number
+    if (!Number.isSafeInteger(number) || (number as number) < 1 || (number as number) > 9_999) {
+      throw invalidParams('anchor.page.number must be a page number')
+    }
+    if (p.name !== null && (typeof p.name !== 'string' || longer(p.name, PAGE_NAME_CHARS))) {
+      throw invalidParams(`anchor.page.name must be text of at most ${PAGE_NAME_CHARS} characters`)
+    }
+    page = { number: number as number, name: p.name as string | null }
+  }
+  const tag = o.tag
+  if (tag !== null && (typeof tag !== 'string' || !ELEMENT_TAG.test(tag))) {
+    throw invalidParams('anchor.tag must be an element name')
+  }
+  if (typeof o.text !== 'string' || longer(o.text, SNIPPET_CHARS)) {
+    throw invalidParams(`anchor.text must be text of at most ${SNIPPET_CHARS} characters`)
+  }
+  return {
+    version: version(o, 'version'),
+    path: htmlPath(o, 'path'),
+    page,
+    offset: o.offset === null ? null : offset(o, 'offset'),
+    tag: tag as string | null,
+    text: o.text,
+    missing: false,
+  }
 }
 
 const IMAGE_MIME = /^image\/[a-z0-9][a-z0-9.+-]*$/i
@@ -1081,6 +1155,51 @@ export function createValidators(platform: Platform): Validators {
     },
     'artifacts.watch': artifact,
     'artifacts.unwatch': artifact,
+    'artifacts.comments': artifact,
+    'artifacts.comment': (params) => {
+      const o = fields(params)
+      return { id: artifactId(o), anchor: commentAnchor(o.anchor), body: commentBody(o) }
+    },
+    'artifacts.reply': (params) => {
+      const o = fields(params)
+      return { id: artifactId(o), threadId: threadId(o), body: commentBody(o) }
+    },
+    'artifacts.resolve': (params) => {
+      const o = fields(params)
+      return { id: artifactId(o), threadId: threadId(o), resolved: flag(o, 'resolved') }
+    },
+    'artifacts.markSent': (params) => {
+      const o = fields(params)
+      const ids = o.threadIds
+      if (!Array.isArray(ids) || ids.length === 0 || ids.length > SENT_THREADS) {
+        throw invalidParams(`threadIds must list 1 to ${SENT_THREADS} threads`)
+      }
+      return {
+        id: artifactId(o),
+        threadIds: ids.map((value: unknown) => threadId({ threadId: value })),
+        sessionId: sessionId(o),
+      }
+    },
+    'artifacts.editElement': (params) => {
+      const o = fields(params)
+      const style = o.style === null ? null : checkedStyle(o.style)
+      if (o.style !== null && !style) {
+        throw invalidParams('style may set only the editable properties, to values they take')
+      }
+      const text = o.text
+      if (text !== null && (typeof text !== 'string' || text.length > EDIT_TEXT_CHARS)) {
+        throw invalidParams(`text must be text of at most ${EDIT_TEXT_CHARS} characters, or null`)
+      }
+      if (style === null && text === null) throw invalidParams('Give a style, a text or both')
+      return {
+        id: artifactId(o),
+        baseVersion: version(o, 'baseVersion'),
+        path: htmlPath(o, 'path'),
+        offset: offset(o, 'offset'),
+        style,
+        text: text as string | null,
+      }
+    },
     // The host checks the answer's shape as it checks main's.
     'browser.answer': (params) => {
       const o = fields(params)

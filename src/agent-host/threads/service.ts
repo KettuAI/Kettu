@@ -106,5 +106,17 @@ function artifact(db: ThreadDb, call: ArtifactCall): unknown {
       return null
     case 'purge':
       return db.purgeArtifacts(call.params.before)
+    case 'threads':
+      return db.artifactThreads(call.params)
+    case 'addThread':
+      return db.addThread(call.params)
+    case 'reply':
+      return db.replyThread(call.params)
+    case 'resolve':
+      return db.resolveThread(call.params)
+    case 'markSent':
+      return db.markThreadsSent(call.params)
+    case 'reanchor':
+      return db.reanchorThreads(call.params)
   }
 }

@@ -1,5 +1,6 @@
 // The artifact records the thread worker keeps, and the calls the host makes on them.
 
+import type { CommentAnchor, CommentAuthor, CommentThread } from '@shared/artifact-comments'
 import type { ArtifactSummary } from '@shared/artifacts'
 
 export interface ArtifactRecord {
@@ -112,6 +113,46 @@ export interface ArtifactCalls {
   erase: { params: { id: string }; result: null }
   /** Removes what was deleted before `before`, then every file no version names. */
   purge: { params: { before: number }; result: { artifacts: number; files: number } }
+  /** The artifact's comment threads, oldest first. */
+  threads: { params: { id: string; project: string | null }; result: CommentThread[] }
+  /** A new thread with its first comment. */
+  addThread: {
+    params: {
+      id: string
+      project: string | null
+      threadId: string
+      anchor: CommentAnchor
+      author: CommentAuthor
+      body: string
+      at: number
+    }
+    result: CommentThread
+  }
+  reply: {
+    params: {
+      id: string
+      project: string | null
+      threadId: string
+      author: CommentAuthor
+      body: string
+      at: number
+    }
+    result: CommentThread
+  }
+  resolve: {
+    params: { id: string; project: string | null; threadId: string; resolved: boolean; at: number }
+    result: CommentThread
+  }
+  /** The user sent the threads to a session. */
+  markSent: {
+    params: { id: string; threadIds: string[]; sessionId: string; at: number }
+    result: null
+  }
+  /** Anchors found again in a later version, in place of the threads' old ones. */
+  reanchor: {
+    params: { id: string; anchors: { threadId: string; anchor: CommentAnchor }[] }
+    result: null
+  }
 }
 
 export type ArtifactCallName = keyof ArtifactCalls

@@ -6,6 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { cp, mkdir, rename, rm, stat } from 'node:fs/promises'
 import type { AgentOptions, DiagnosticsBundle, HostEvent, McpStatus } from '@shared/agent-host'
+import { OWNER } from '@shared/artifact-comments'
 import { artifactFileType } from '@shared/artifact-files'
 import { type ArtifactImportResult, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
@@ -291,6 +292,7 @@ export class AgentHost {
         this.hub.send(portIds, { type: 'artifacts.version', id, version }),
       activity: (portIds, activity) =>
         this.hub.send(portIds, { type: 'artifacts.activity', ...activity }),
+      comments: (portIds, id) => this.hub.send(portIds, { type: 'artifacts.comments', id }),
     })
     this.artifactService = new ArtifactService({
       store: this.artifacts,
@@ -1214,6 +1216,17 @@ export class AgentHost {
         artifacts.restore({ id, version, baseVersion, author: null }),
       'artifacts.watch': ({ id }, { portId }) => artifacts.watch(id, portId),
       'artifacts.unwatch': ({ id }, { portId }) => artifacts.unwatch(id, portId),
+      'artifacts.comments': ({ id }) => artifacts.threads(id),
+      'artifacts.comment': ({ id, anchor, body }) =>
+        artifacts.addThread(id, { anchor, body, author: { person: OWNER, session: null } }),
+      'artifacts.reply': ({ id, threadId, body }) =>
+        artifacts.reply(id, threadId, { body, author: { person: OWNER, session: null } }),
+      'artifacts.resolve': ({ id, threadId, resolved }) =>
+        artifacts.resolve(id, threadId, resolved),
+      'artifacts.markSent': ({ id, threadIds, sessionId }) =>
+        artifacts.markSent(id, threadIds, sessionId),
+      'artifacts.editElement': ({ id, baseVersion, path, offset, style, text }) =>
+        artifacts.editElement({ id, baseVersion, path, offset, change: { style, text } }),
       'browser.answer': ({ callId, answer }, ctx) => {
         browserApp(ctx)
         if (!this.deviceBrowser.answer(ctx.portId, callId, answer)) {

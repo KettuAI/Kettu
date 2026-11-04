@@ -6,6 +6,12 @@ import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite'
 import { ARTIFACT_ENTRY } from '@shared/artifact-files'
+import {
+  COMMENTS_PER_THREAD,
+  THREADS_PER_ARTIFACT,
+  type CommentAnchor,
+  type CommentThread,
+} from '@shared/artifact-comments'
 import { type ArtifactState, NO_SESSION } from '@shared/artifacts'
 import { OUTLINE_TEXT } from '@shared/outline'
 import { isRoutineRun, type RoutineRun } from '@shared/routines'
@@ -46,7 +52,7 @@ import {
 } from './model'
 import type { ThreadDbStatus, ThreadErrorCode } from './protocol'
 
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 6
 
 // `turn` is the position of the entry that opened the entry's turn, so a page that starts at a
 // turn is one range of the primary key.
@@ -149,12 +155,41 @@ const ARTIFACT_FILES = `
   ALTER TABLE artifact_versions DROP COLUMN hash;
 `
 
+// Comment threads on an artifact, kept with it and apart from its versions; deleting the artifact
+// for good removes them. `anchor` is the thread's anchor as JSON, `person` and `session_id` each
+// comment's author.
+const ARTIFACT_COMMENTS = `
+  CREATE TABLE artifact_threads (
+    artifact_id TEXT NOT NULL REFERENCES artifacts (id) ON DELETE CASCADE,
+    id          TEXT NOT NULL,
+    anchor      TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    resolved_at INTEGER,
+    sent_at     INTEGER,
+    sent_to     TEXT,
+    PRIMARY KEY (artifact_id, id)
+  ) STRICT, WITHOUT ROWID;
+  CREATE TABLE artifact_comments (
+    artifact_id TEXT NOT NULL,
+    thread_id   TEXT NOT NULL,
+    n           INTEGER NOT NULL,
+    person      TEXT NOT NULL,
+    session_id  TEXT,
+    body        TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    PRIMARY KEY (artifact_id, thread_id, n),
+    FOREIGN KEY (artifact_id, thread_id)
+      REFERENCES artifact_threads (artifact_id, id) ON DELETE CASCADE
+  ) STRICT, WITHOUT ROWID;
+`
+
 /** What brings a database of the version before each key up to it; a new one runs them all. */
 const MIGRATIONS: Record<number, string> = {
   2: ARTIFACTS,
   3: ROUTINE_RUNS,
   4: OUTLINE_TITLES,
   5: ARTIFACT_FILES,
+  6: ARTIFACT_COMMENTS,
 }
 
 /** The tables of a database at schema `version`, as a new one made then had them. */
@@ -364,6 +399,32 @@ function prepareAll(db: DatabaseSync) {
     hashesOf: sql('SELECT DISTINCT hash FROM artifact_files WHERE artifact_id = ?'),
     named: sql('SELECT 1 AS named FROM artifact_files WHERE hash = ? LIMIT 1'),
     allHashes: sql('SELECT DISTINCT hash FROM artifact_files'),
+    threadsOf: sql(
+      'SELECT id, anchor, resolved_at, sent_at, sent_to FROM artifact_threads WHERE artifact_id = ? ORDER BY created_at, id',
+    ),
+    threadOf: sql(
+      'SELECT id, anchor, resolved_at, sent_at, sent_to FROM artifact_threads WHERE artifact_id = ? AND id = ?',
+    ),
+    threadCount: sql('SELECT COUNT(*) AS n FROM artifact_threads WHERE artifact_id = ?'),
+    commentsOf: sql(
+      'SELECT thread_id, person, session_id, body, created_at FROM artifact_comments WHERE artifact_id = ? ORDER BY thread_id, n',
+    ),
+    commentsIn: sql(
+      'SELECT thread_id, person, session_id, body, created_at FROM artifact_comments WHERE artifact_id = ? AND thread_id = ? ORDER BY n',
+    ),
+    insertThread: sql(
+      'INSERT INTO artifact_threads (artifact_id, id, anchor, created_at) VALUES (?, ?, ?, ?)',
+    ),
+    insertComment: sql(`
+      INSERT INTO artifact_comments (artifact_id, thread_id, n, person, session_id, body, created_at)
+      VALUES (?1, ?2, (SELECT COUNT(*) FROM artifact_comments WHERE artifact_id = ?1 AND thread_id = ?2), ?3, ?4, ?5, ?6)`),
+    setResolved: sql(
+      'UPDATE artifact_threads SET resolved_at = ? WHERE artifact_id = ? AND id = ?',
+    ),
+    setSent: sql(
+      'UPDATE artifact_threads SET sent_at = ?, sent_to = ? WHERE artifact_id = ? AND id = ?',
+    ),
+    setAnchor: sql('UPDATE artifact_threads SET anchor = ? WHERE artifact_id = ? AND id = ?'),
     runSeq: sql('SELECT seq FROM routine_runs WHERE run_id = ?'),
     lastSeq: sql('SELECT MAX(seq) AS seq FROM routine_runs WHERE routine_id = ?'),
     insertRun: sql(
@@ -1062,6 +1123,118 @@ export class ThreadDb {
         return { artifacts, files }
       },
       { artifacts: 0, files: 0 },
+    )
+  }
+
+  // Comments.
+
+  private threadRow(sql: Statements, artifactId: string, threadId: string): Row {
+    const row = sql.threadOf.get(artifactId, threadId)
+    if (!row) throw new ThreadDbError(`${artifactId} has no thread ${threadId}`, 'not_found')
+    return row
+  }
+
+  private thread(row: Row, comments: Row[]): CommentThread {
+    return {
+      id: String(row.id),
+      anchor: JSON.parse(String(row.anchor)) as CommentAnchor,
+      comments: comments.map((c) => ({
+        author: { person: String(c.person), session: optionalText(c.session_id) },
+        createdAt: Number(c.created_at),
+        body: String(c.body),
+      })),
+      resolvedAt: row.resolved_at === null ? null : Number(row.resolved_at),
+      sentAt: row.sent_at === null ? null : Number(row.sent_at),
+      sentTo: optionalText(row.sent_to),
+    }
+  }
+
+  private threadNow(sql: Statements, artifactId: string, threadId: string): CommentThread {
+    const row = this.threadRow(sql, artifactId, threadId)
+    return this.thread(row, sql.commentsIn.all(artifactId, threadId))
+  }
+
+  /** An artifact's threads, oldest first; one in Recently deleted keeps them for the user. */
+  artifactThreads({ id, project }: ArtifactCalls['threads']['params']): CommentThread[] {
+    return this.must((sql) => {
+      this.artifactIn(sql, id, project, project !== null)
+      const comments = new Map<string, Row[]>()
+      for (const row of sql.commentsOf.all(id)) {
+        const list = comments.get(String(row.thread_id))
+        if (list) list.push(row)
+        else comments.set(String(row.thread_id), [row])
+      }
+      return sql.threadsOf
+        .all(id)
+        .map((row) => this.thread(row, comments.get(String(row.id)) ?? []))
+    })
+  }
+
+  addThread(params: ArtifactCalls['addThread']['params']): CommentThread {
+    return this.must((sql, db) =>
+      this.transaction(db, () => {
+        const { id, threadId, anchor, author, body, at } = params
+        this.artifactIn(sql, id, params.project, true)
+        const count = Number((sql.threadCount.get(id) as { n?: number } | undefined)?.n ?? 0)
+        if (count >= THREADS_PER_ARTIFACT) {
+          throw new ThreadDbError(`${id} holds ${THREADS_PER_ARTIFACT} threads`, 'conflict')
+        }
+        sql.insertThread.run(id, threadId, JSON.stringify(anchor), at)
+        sql.insertComment.run(id, threadId, author.person, author.session, body, at)
+        return this.threadNow(sql, id, threadId)
+      }),
+    )
+  }
+
+  /** A reply in a thread; the user's own makes the thread wait to be sent again. */
+  replyThread(params: ArtifactCalls['reply']['params']): CommentThread {
+    return this.must((sql, db) =>
+      this.transaction(db, () => {
+        const { id, threadId, author, body, at } = params
+        this.artifactIn(sql, id, params.project, true)
+        const thread = this.threadNow(sql, id, threadId)
+        if (thread.comments.length >= COMMENTS_PER_THREAD) {
+          throw new ThreadDbError(`${threadId} holds ${COMMENTS_PER_THREAD} comments`, 'conflict')
+        }
+        sql.insertComment.run(id, threadId, author.person, author.session, body, at)
+        if (author.session === null) sql.setSent.run(null, null, id, threadId)
+        return this.threadNow(sql, id, threadId)
+      }),
+    )
+  }
+
+  resolveThread(params: ArtifactCalls['resolve']['params']): CommentThread {
+    return this.must((sql) => {
+      const { id, threadId, resolved, at } = params
+      this.artifactIn(sql, id, params.project, true)
+      this.threadRow(sql, id, threadId)
+      sql.setResolved.run(resolved ? at : null, id, threadId)
+      return this.threadNow(sql, id, threadId)
+    })
+  }
+
+  markThreadsSent({ id, threadIds, sessionId, at }: ArtifactCalls['markSent']['params']): null {
+    return this.must((sql, db) =>
+      this.transaction(db, () => {
+        this.artifactIn(sql, id, null, true)
+        for (const threadId of threadIds) {
+          this.threadRow(sql, id, threadId)
+          sql.setSent.run(at, sessionId, id, threadId)
+        }
+        return null
+      }),
+    )
+  }
+
+  /** Puts anchors found again in a later version in place of the threads' old ones. */
+  reanchorThreads({ id, anchors }: ArtifactCalls['reanchor']['params']): null {
+    return this.must((sql, db) =>
+      this.transaction(db, () => {
+        for (const { threadId, anchor } of anchors) {
+          sql.setAnchor.run(JSON.stringify(anchor), id, threadId)
+        }
+        return null
+      }),
     )
   }
 

@@ -688,3 +688,184 @@ describe("the thread database's artifacts", () => {
     check.close()
   })
 })
+
+describe("the thread database's comments", () => {
+  const bytes = (text: string): Uint8Array => new TextEncoder().encode(text)
+  const ID = 'art_01J9Z3K4V5W6X7Y8Z9A0B1C2D3'
+  const T1 = 'thr_01J9Z3K4V5W6X7Y8Z9A0B1C2D3'
+  const T2 = 'thr_01J9Z3K4V5W6X7Y8Z9A0B1C2D4'
+  const owner = { person: 'owner', session: null }
+  const agent = { person: 'owner', session: 's1' }
+  const anchor = {
+    version: 1,
+    path: 'index.html',
+    page: { number: 1, name: 'General' },
+    offset: 20,
+    tag: 'button',
+    text: 'Save changes',
+    missing: false,
+  }
+
+  function withArtifact(file = tempFile()): ThreadDb {
+    const db = ThreadDb.open(
+      file,
+      (level, message) => logs.push({ level, message }),
+      () => 0,
+      path.join(path.dirname(file), 'content'),
+    )
+    db.createArtifact({
+      id: ID,
+      project: '/p',
+      sessionId: 's1',
+      title: 'Settings',
+      files: [{ path: 'index.html', data: bytes('<button>Save changes</button>') }],
+      pages: 0,
+      note: null,
+      at: 1,
+    })
+    return db
+  }
+
+  const add = (db: ThreadDb, threadId = T1, project: string | null = null) =>
+    db.addThread({
+      id: ID,
+      project,
+      threadId,
+      anchor,
+      author: owner,
+      body: 'Make it orange',
+      at: 5,
+    })
+
+  it('keeps threads apart from versions, with their author, anchor and replies', () => {
+    const db = withArtifact()
+    add(db)
+    db.replyThread({
+      id: ID,
+      project: '/p',
+      threadId: T1,
+      author: agent,
+      body: 'Done in v2',
+      at: 6,
+    })
+    db.writeArtifact({
+      id: ID,
+      project: null,
+      baseVersion: 1,
+      changes: [{ path: 'index.html', data: bytes('<p>x</p>') }],
+      pages: 0,
+      author: 's1',
+      note: null,
+      at: 7,
+    })
+    const [thread] = db.artifactThreads({ id: ID, project: null })
+    expect(thread).toEqual({
+      id: T1,
+      anchor,
+      comments: [
+        { author: owner, createdAt: 5, body: 'Make it orange' },
+        { author: agent, createdAt: 6, body: 'Done in v2' },
+      ],
+      resolvedAt: null,
+      sentAt: null,
+      sentTo: null,
+    })
+    db.close()
+  })
+
+  it('marks threads sent until the user writes in them again, and resolves them', () => {
+    const db = withArtifact()
+    add(db)
+    add(db, T2)
+    db.markThreadsSent({ id: ID, threadIds: [T1, T2], sessionId: 's2', at: 8 })
+    db.replyThread({ id: ID, project: '/p', threadId: T2, author: agent, body: 'On it', at: 9 })
+    db.replyThread({ id: ID, project: null, threadId: T1, author: owner, body: 'Also bold', at: 9 })
+    const sent = db.artifactThreads({ id: ID, project: null }).map((t) => [t.id, t.sentTo])
+    expect(sent).toEqual([
+      [T1, null],
+      [T2, 's2'],
+    ])
+    expect(
+      db.resolveThread({ id: ID, project: '/p', threadId: T2, resolved: true, at: 10 }),
+    ).toMatchObject({
+      resolvedAt: 10,
+    })
+    expect(
+      db.resolveThread({ id: ID, project: null, threadId: T2, resolved: false, at: 11 }),
+    ).toMatchObject({
+      resolvedAt: null,
+    })
+    db.close()
+  })
+
+  it("reaches no thread of another project's artifact, or one that does not exist", () => {
+    const db = withArtifact()
+    add(db)
+    expect(() => db.artifactThreads({ id: ID, project: '/q' })).toThrow(ThreadDbError)
+    expect(() => add(db, T2, '/q')).toThrow(ThreadDbError)
+    expect(() =>
+      db.replyThread({ id: ID, project: null, threadId: T2, author: owner, body: 'x', at: 1 }),
+    ).toThrow(/no thread/)
+    db.close()
+  })
+
+  it('keeps threads in Recently deleted, writes none there, and erases them with it', () => {
+    const db = withArtifact()
+    add(db)
+    db.deleteArtifact({ id: ID, project: null, at: 2 })
+    expect(db.artifactThreads({ id: ID, project: null })).toHaveLength(1)
+    expect(() => add(db, T2)).toThrow(ThreadDbError)
+    db.eraseArtifact(ID)
+    const raw = (db as unknown as { db: DatabaseSync }).db
+    expect(raw.prepare('SELECT COUNT(*) AS n FROM artifact_threads').get()!.n).toBe(0)
+    expect(raw.prepare('SELECT COUNT(*) AS n FROM artifact_comments').get()!.n).toBe(0)
+    db.close()
+  })
+
+  it('purges the threads of an artifact gone from Recently deleted', () => {
+    const db = withArtifact()
+    add(db)
+    db.deleteArtifact({ id: ID, project: null, at: 2 })
+    db.purgeArtifacts(3)
+    const raw = (db as unknown as { db: DatabaseSync }).db
+    expect(raw.prepare('SELECT COUNT(*) AS n FROM artifact_comments').get()!.n).toBe(0)
+    db.close()
+  })
+
+  it('moves an anchor to where a later version has its element', () => {
+    const db = withArtifact()
+    add(db)
+    const moved = { ...anchor, version: 2, offset: 42 }
+    db.reanchorThreads({ id: ID, anchors: [{ threadId: T1, anchor: moved }] })
+    expect(db.artifactThreads({ id: ID, project: null })[0]!.anchor).toEqual(moved)
+    db.close()
+  })
+
+  it('adds the comment tables to a database of version 5, keeping its artifacts', () => {
+    const file = tempFile()
+    mkdirSync(path.dirname(file), { recursive: true })
+    const raw = new DatabaseSync(file)
+    raw.exec(`BEGIN; ${schemaAt(5)} PRAGMA user_version = 5; COMMIT;`)
+    raw
+      .prepare(
+        'INSERT INTO artifacts (id, project, title, head, session_id, created_at, updated_at) VALUES (?, ?, ?, 1, ?, 1, 1)',
+      )
+      .run(ID, '/p', 'Old', 's1')
+    raw
+      .prepare(
+        'INSERT INTO artifact_versions (artifact_id, n, size, pages, author, note, created_at) VALUES (?, 1, 1, 0, NULL, NULL, 1)',
+      )
+      .run(ID)
+    raw.close()
+    const db = ThreadDb.open(
+      file,
+      () => {},
+      () => 0,
+      path.join(path.dirname(file), 'content'),
+    )
+    expect(db.artifactThreads({ id: ID, project: null })).toEqual([])
+    add(db)
+    expect(db.artifactThreads({ id: ID, project: null })).toHaveLength(1)
+    db.close()
+  })
+})

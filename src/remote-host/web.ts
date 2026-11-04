@@ -268,7 +268,12 @@ export class WebServer {
     if (!isHtmlPath(wanted.path)) {
       return send(request, response, { file: found.file, type }, headers)
     }
-    const body = Buffer.from(servedHtml(await readFile(found.file, 'utf8'), wanted.page), 'utf8')
+    // The page's runtime talks to the client over the port it hands the frame, never to this port.
+    const html = servedHtml(await readFile(found.file, 'utf8'), wanted.page, {
+      path: wanted.path,
+      transport: 'port',
+    })
+    const body = Buffer.from(html, 'utf8')
     response.writeHead(200, { ...headers, 'Content-Type': type, 'Content-Length': body.length })
     response.end(request.method === 'HEAD' ? undefined : body)
   }

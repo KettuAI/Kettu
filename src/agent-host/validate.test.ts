@@ -367,3 +367,49 @@ describe('attachments', () => {
     rejects(() => posix['attachments.held']({ ids: ['a1', ''] }))
   })
 })
+
+describe('comment and direct edit requests', () => {
+  const id = 'art_01J9Z3K4V5W6X7Y8Z9A0B1C2D3'
+  const anchor = {
+    version: 2,
+    path: 'index.html',
+    page: { number: 1, name: 'General' },
+    offset: 10,
+    tag: 'button',
+    text: 'Save',
+    missing: true,
+  }
+
+  it('takes an anchor as the page reported it, never already missing', () => {
+    expect(posix['artifacts.comment']({ id, anchor, body: 'Hi' })).toEqual({
+      id,
+      anchor: { ...anchor, missing: false },
+      body: 'Hi',
+    })
+    rejects(() =>
+      posix['artifacts.comment']({ id, anchor: { ...anchor, path: 'a.css' }, body: 'x' }),
+    )
+    rejects(() =>
+      posix['artifacts.comment']({ id, anchor: { ...anchor, path: '../a.html' }, body: 'x' }),
+    )
+    rejects(() => posix['artifacts.comment']({ id, anchor: { ...anchor, tag: '<b>' }, body: 'x' }))
+    rejects(() =>
+      posix['artifacts.comment']({ id, anchor: { ...anchor, text: 'x'.repeat(121) }, body: 'x' }),
+    )
+    rejects(() => posix['artifacts.comment']({ id, anchor, body: '  ' }))
+  })
+
+  it('takes an edit of the editable properties only, to values that stay in the attribute', () => {
+    const edit = { id, baseVersion: 3, path: 'index.html', offset: 0, text: null }
+    expect(posix['artifacts.editElement']({ ...edit, style: { color: '#ffffff' } })).toEqual({
+      ...edit,
+      style: { color: '#ffffff' },
+    })
+    rejects(() => posix['artifacts.editElement']({ ...edit, style: { color: 'red;x:y' } }))
+    rejects(() => posix['artifacts.editElement']({ ...edit, style: { position: 'fixed' } }))
+    rejects(() => posix['artifacts.editElement']({ ...edit, style: null }))
+    rejects(() => posix['artifacts.editElement']({ ...edit, style: null, text: 5 }))
+    rejects(() => posix['artifacts.editElement']({ ...edit, offset: -1, style: null, text: 'x' }))
+    rejects(() => posix['artifacts.markSent']({ id, threadIds: ['nope'], sessionId: 's' }))
+  })
+})

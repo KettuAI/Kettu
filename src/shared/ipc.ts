@@ -1,6 +1,7 @@
 import type { AccountStatus } from './account'
 import type { AgentsApi, DiagnosticsBundle, HostMethod } from './agent-host'
 import type { ArtifactImportKind, ArtifactImportResult, ThumbnailPage } from './artifacts'
+import type { SelectMessage } from './artifact-runtime/page-messages'
 import type { GrantedAttachment } from './attachments'
 import type { BrowserBounds, BrowserOriginDecision, BrowserState } from './browser'
 import type { EditorApp, EditorList } from './editors'
@@ -113,6 +114,19 @@ export interface ArtifactStoppedEvent {
   origin: string
 }
 
+/** A page on an artifact origin the window opened reported a pick; the page's data, checked. */
+export interface ArtifactSelectedEvent {
+  origin: string // as `artifact:open` gave it, without the path
+  message: SelectMessage
+}
+
+/** One page of a canvas, by the protocol's numbers, at its own size, for `artifact:png`. */
+export interface ArtifactPngPage {
+  page: { group: number; index: number } | null
+  width: number
+  height: number
+}
+
 /** An app shortcut typed while a page's frame had focus, which main passes to the app's page. */
 export interface ForwardedKey {
   key: string
@@ -205,6 +219,17 @@ export interface IpcInvokeContract {
   }
   'artifact:open-external': { args: [id: string, version: number]; result: void }
   'artifact:export': { args: [id: string, version: number]; result: boolean }
+  // `name` is the file's default name; false when the user cancelled the save dialog.
+  'artifact:png': {
+    args: [
+      id: string,
+      version: number,
+      page: ArtifactPngPage['page'],
+      size: { width: number; height: number },
+      name: string,
+    ]
+    result: boolean
+  }
   // `project`: a registered project's folder, or null for No project.
   'artifact:import': {
     args: [project: string | null, kind: ArtifactImportKind]
@@ -306,6 +331,7 @@ export interface IpcEventContract {
   'app:shortcut': ForwardedKey
   'artifact:blocked': ArtifactBlockedEvent
   'artifact:stopped': ArtifactStoppedEvent
+  'artifact:selected': ArtifactSelectedEvent
   'account:changed': AccountStatus
   'sharing:changed': SharingStatus
   'remote:changed': RemoteStatus
@@ -415,6 +441,19 @@ export interface KettuApi {
     import(project: string | null, kind: ArtifactImportKind): Promise<ArtifactImportResult>
     onBlocked(listener: (event: ArtifactBlockedEvent) => void): () => void
     onStopped(listener: (event: ArtifactStoppedEvent) => void): () => void
+    /** A page's pick, from a frame of an origin this window opened. */
+    onSelected(listener: (event: ArtifactSelectedEvent) => void): () => void
+    /**
+     * Renders a page of the version at its own size, apart from the window, and saves it as a PNG
+     * where the user says; false when they cancelled. Only a desktop host renders one.
+     */
+    png(
+      id: string,
+      version: number,
+      page: ArtifactPngPage['page'],
+      size: { width: number; height: number },
+      name: string,
+    ): Promise<boolean>
   }
   /** The Kettu account; main holds its tokens and makes every request. */
   account: {

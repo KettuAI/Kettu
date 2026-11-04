@@ -537,6 +537,7 @@ async function start(): Promise<void> {
     updates: updater,
     themes,
     thumbnail: (id, version, layout) => artifacts.thumbnail(id, version, layout),
+    png: (id, version, page, size) => artifacts.png(id, version, page, size),
     send: (event, deviceId) => remoteHost.adminEvent(event, deviceId),
   })
 

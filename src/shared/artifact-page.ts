@@ -1,7 +1,10 @@
 // What a frame asks of an artifact's origin, and what Kettu serves for it: shared by main's
 // artifact protocol and the frames the direct port serves the web client.
 
+import runtimeScript from 'virtual:kettu-page-runtime'
 import { ARTIFACT_ENTRY, ARTIFACT_RESERVED } from './artifact-files'
+import { markSources, sourceMark } from './artifact-source'
+import { RUNTIME_VERSION, type RuntimeConfig } from './artifact-runtime/page-messages'
 
 /** One page of a canvas alone: its group, 0 outside any, and its place in it, both from 1. */
 export interface CanvasPage {
@@ -69,11 +72,37 @@ export function parseServed(pathname: string, params: URLSearchParams): ServedFi
 }
 
 /**
- * An HTML file of an artifact as a frame gets it: the one place Kettu changes what it serves. The
- * entry page asked for one canvas page alone gets the style that shows only that page.
+ * An HTML file of an artifact as a frame gets it: the one place Kettu changes what it serves. Each
+ * start tag is marked with its offset, the page runtime comes first, talking over `transport`, and
+ * the entry page asked for one canvas page alone gets the style that shows only that page.
  */
-export function servedHtml(html: string, page: CanvasPage | null): string {
-  return page ? withStyle(html, pageStyle(page.group, page.index)) : html
+export function servedHtml(
+  html: string,
+  page: CanvasPage | null,
+  served: { path: string; transport: RuntimeConfig['transport'] },
+): string {
+  const mark = sourceMark()
+  const marked = markSources(html, mark)
+  const styled = page ? withStyle(marked, pageStyle(page.group, page.index)) : marked
+  return withRuntime(styled, {
+    v: RUNTIME_VERSION,
+    transport: served.transport,
+    path: served.path,
+    mark,
+  })
+}
+
+/**
+ * The HTML with the page runtime first, after any doctype, so it runs before the page's own
+ * scripts and any policy the page sets; the script removes itself once it has run.
+ */
+export function withRuntime(html: string, config: RuntimeConfig): string {
+  const json = JSON.stringify(config).replace(/</g, '\\u003c')
+  const script =
+    `<script>(()=>{${runtimeScript};__kettuRuntime.start(${json});` +
+    'document.currentScript?.remove()})()</script>'
+  const at = /^(?:\s|<!--[\s\S]*?-->)*<!doctype[^>]*>/i.exec(html)?.[0].length ?? 0
+  return html.slice(0, at) + script + html.slice(at)
 }
 
 /** The style that shows one page of a canvas alone, at the top left; built from checked integers. */

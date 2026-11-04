@@ -250,3 +250,115 @@ describe('the artifact tools', () => {
     expect(missing.error?.code).toBe('not_found')
   })
 })
+
+describe('comments and direct edits', () => {
+  const owner = { person: 'owner', session: null }
+  const anchorOn = (offset: number, tag: string, text: string) => ({
+    version: 1,
+    path: 'index.html',
+    page: null,
+    offset,
+    tag,
+    text,
+    missing: false,
+  })
+
+  it('let the agent read the open threads, reply in one and resolve it', async () => {
+    const id = await create({ html: '<button>Save changes</button>' })
+    const thread = await store.addThread(id, {
+      anchor: anchorOn(0, 'button', 'Save changes'),
+      author: owner,
+      body: 'Make it orange',
+    })
+    const read = await call('read_comments', { id })
+    expect(read.error).toBeNull()
+    expect(read.value.threads).toEqual([
+      {
+        thread: thread.id,
+        resolved: false,
+        path: 'index.html',
+        page: null,
+        element: { tag: 'button', offset: 0, text: 'Save changes', gone: false },
+        comments: [{ author: 'user', at: expect.any(String), text: 'Make it orange' }],
+      },
+    ])
+    expect((await call('reply_comment', { id, thread: thread.id, text: 'Done' })).error).toBeNull()
+    expect((await call('resolve_comment', { id, thread: thread.id })).error).toBeNull()
+    const [after] = await store.threads(id)
+    expect(after!.comments[1]).toMatchObject({ author: { person: 'owner', session: 's1' } })
+    expect(after!.resolvedAt).not.toBeNull()
+    expect((await call('read_comments', { id })).value.threads).toEqual([])
+    expect((await call('read_comments', { id, resolved: true })).value.threads).toHaveLength(1)
+  })
+
+  it('find an element again by its text in a new version, or say it is gone', async () => {
+    const id = await create({ html: '<button>Save changes</button>' })
+    await store.addThread(id, {
+      anchor: anchorOn(0, 'button', 'Save changes'),
+      author: owner,
+      body: 'x',
+    })
+    const html = '<p>Intro</p><button class="b">Save   changes</button>'
+    await call('update_artifact', { id, base_version: 1, html })
+    const moved = (await call('read_comments', { id })).value.threads as { element: unknown }[]
+    expect(moved[0]!.element).toMatchObject({ offset: html.indexOf('<button'), gone: false })
+    await call('update_artifact', { id, base_version: 2, html: '<p>Intro</p>' })
+    const gone = (await call('read_comments', { id })).value.threads as { element: unknown }[]
+    expect(gone[0]!.element).toMatchObject({ offset: null, gone: true })
+  })
+
+  it("reach no thread of another project's artifact, nor one it lacks", async () => {
+    const id = await create({ html: '<p>x</p>' })
+    const thread = await store.addThread(id, {
+      anchor: anchorOn(0, 'p', 'x'),
+      author: owner,
+      body: 'x',
+    })
+    const missing = 'thr_01J9Z3K4V5W6X7Y8Z9A0B1C2D3'
+    expect((await call('reply_comment', { id, thread: missing, text: 'x' })).error?.code).toBe(
+      'not_found',
+    )
+    caller = { sessionId: 's2', project: path.join(dir, 'other') }
+    expect((await call('read_comments', { id })).error?.code).toBe('not_found')
+    expect((await call('resolve_comment', { id, thread: thread.id })).error?.code).toBe('not_found')
+  })
+
+  it("write the user's direct edit as a new version from the latest, and refuse a stale one", async () => {
+    const html = '<h1>Title</h1><button style="margin: 4px">Save</button><p>Rest</p>'
+    const id = await create({ html, files: [{ path: 'app.css', content: 'p{}' }] })
+    const offset = html.indexOf('<button')
+    const { version } = await store.editElement({
+      id,
+      baseVersion: 1,
+      path: 'index.html',
+      offset,
+      change: { style: { color: '#ffffff' }, text: 'Save changes' },
+    })
+    expect(version).toBe(2)
+    const read = await call('read_artifact', { id })
+    expect(read.value.text).toBe(
+      '<h1>Title</h1><button style="margin: 4px; color: #ffffff">Save changes</button><p>Rest</p>',
+    )
+    const versions = await store.versions(id)
+    expect(versions[0]!.author).toBeNull()
+    expect((read.value.files as unknown[]).length).toBe(2)
+    await expect(
+      store.editElement({
+        id,
+        baseVersion: 1,
+        path: 'index.html',
+        offset,
+        change: { style: null, text: 'Again' },
+      }),
+    ).rejects.toMatchObject({ reason: 'conflict' })
+    await expect(
+      store.editElement({
+        id,
+        baseVersion: 2,
+        path: 'index.html',
+        offset: offset + 1,
+        change: { style: null, text: 'x' },
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_params' })
+  })
+})

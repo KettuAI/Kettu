@@ -31,5 +31,7 @@
     "src/terminal-host/**/*",
     "src/remote-host/**/*",
     "src/daemon/**/*"
-  ]
+  ],
+  // The page runtime runs in an artifact's page, and the web project checks it with the DOM's types.
+  "exclude": ["src/shared/artifact-runtime/runtime.ts"]
 }

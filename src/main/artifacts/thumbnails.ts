@@ -3,7 +3,7 @@
 
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { BrowserWindow, type Session, type WebContents } from 'electron'
+import { BrowserWindow, type NativeImage, type Session, type WebContents } from 'electron'
 import {
   fitThumbnail,
   THUMBNAIL_HEIGHT,
@@ -11,7 +11,7 @@ import {
   THUMBNAIL_WIDTH,
   type ThumbnailPage,
 } from '@shared/artifacts'
-import { versionUrlPath } from '@shared/artifact-page'
+import { versionUrlPath, type CanvasPage } from '@shared/artifact-page'
 import type { ArtifactContentResult } from '@shared/host-control'
 import { createLogger } from '../log'
 import { restrictPermissions } from '../permissions'
@@ -40,6 +40,11 @@ const JPEG_QUALITY = 82
 export const KEPT_THUMBNAILS = 500
 
 const HASH = /^[0-9a-f]{64}$/
+
+export interface Size {
+  width: number
+  height: number
+}
 const MAX_SIZE = 8_000
 const MIN_SIZE = 64
 const MAX_OFFSET = 10_000_000
@@ -116,6 +121,48 @@ export function thumbnailDocument(
   )
 }
 
+/** The document a page's image renders from: the page alone in one frame at its size. */
+export function pageDocument(
+  origin: string,
+  version: number,
+  page: CanvasPage | null,
+  size: Size,
+): string {
+  const src = `${origin.replace(/\/$/, '')}${versionUrlPath(version)}${page ? `?page=${page.group}.${page.index}` : ''}`
+  return (
+    '<!doctype html><html><head><meta charset="utf-8">' +
+    '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; ' +
+    "style-src 'unsafe-inline'; frame-src kettu-artifact:\">" +
+    '<style>html,body{margin:0;overflow:hidden;background:white}' +
+    'iframe{position:absolute;left:0;top:0;border:0;background:white}</style>' +
+    `</head><body><iframe src="${src}" ${FRAME_ATTRIBUTES} ` +
+    `style="width:${size.width}px;height:${size.height}px"></iframe></body></html>`
+  )
+}
+
+/** A page's size for its image, checked integers, or null. */
+export function parseSize(value: unknown): Size | null {
+  const o = value as Partial<Record<keyof Size, unknown>> | null
+  if (typeof o !== 'object' || o === null) return null
+  if (!isWhole(o.width, MIN_SIZE, MAX_SIZE) || !isWhole(o.height, MIN_SIZE, MAX_SIZE)) return null
+  return { width: o.width, height: o.height }
+}
+
+/** One page of a canvas from the renderer, or null for the whole entry page. */
+export function parsePage(value: unknown): CanvasPage | null {
+  if (value === null) return null
+  const p = value as Partial<Record<keyof CanvasPage, unknown>> | null
+  if (
+    typeof p !== 'object' ||
+    p === null ||
+    !isWhole(p.group, 0, MAX_PLACE) ||
+    !isWhole(p.index, 1, MAX_PLACE)
+  ) {
+    throw new Error('Not a page')
+  }
+  return { group: p.group, index: p.index }
+}
+
 /** How long the capture waits for a thumbnail of this many pages to load. */
 export function loadWait(pages: number): number {
   return Math.min(MAX_LOAD_WAIT_MS, LOAD_WAIT_MS + PAGE_LOAD_WAIT_MS * Math.max(0, pages - 1))
@@ -147,7 +194,8 @@ export class Thumbnails {
 
   /** The thumbnails' own session: the protocol, the request filter, no permissions, the proxy. */
   async install(session: Session): Promise<void> {
-    serveArtifacts(session, this.deps.source)
+    // No window shows these frames, so their picks go nowhere.
+    serveArtifacts(session, { ...this.deps.source, selected: null })
     filterArtifactRequests(session)
     restrictPermissions(
       session,
@@ -162,6 +210,22 @@ export class Thumbnails {
   /** `artifact:thumbnail`: the version's image as a `data:` URL, or null when it cannot render. */
   thumbnail(id: string, version: number, layout: ThumbnailPage[] | null): Promise<string | null> {
     const run = this.queue.then(() => this.make(id, version, layout))
+    this.queue = run.catch(() => {})
+    return run
+  }
+
+  /**
+   * `artifact:png`: one page of a version, or its entry page, at the page's own size as a PNG, in
+   * the same isolation as thumbnails; null when it cannot render.
+   */
+  image(id: string, version: number, page: CanvasPage | null, size: Size): Promise<Buffer | null> {
+    const run = this.queue.then(async () => {
+      const found = await this.deps.content(id, version)
+      if (found.kind !== 'found') return null
+      const document = pageDocument(this.deps.serve(id), version, page, size)
+      const captured = await this.capture(document, size, false, 1)
+      return captured ? captured.toPNG() : null
+    })
     this.queue = run.catch(() => {})
     return run
   }
@@ -195,15 +259,33 @@ export class Thumbnails {
     version: number,
     layout: ThumbnailPage[] | null,
   ): Promise<Buffer | null> {
+    const captured = await this.capture(
+      thumbnailDocument(origin, version, layout),
+      { width: THUMBNAIL_WIDTH, height: THUMBNAIL_HEIGHT },
+      layout !== null,
+      layout?.length ?? 1,
+    )
+    if (!captured) return null
+    const scaled = captured.resize({ width: OUTPUT_WIDTH, quality: 'good' })
+    return layout ? scaled.toPNG() : scaled.toJPEG(JPEG_QUALITY)
+  }
+
+  /** Loads `document` in an offscreen window of `size` and captures what it painted. */
+  private async capture(
+    document: string,
+    size: Size,
+    transparent: boolean,
+    pages: number,
+  ): Promise<NativeImage | null> {
     if (!this.session) return null
     const window = new BrowserWindow({
       show: false,
-      width: THUMBNAIL_WIDTH,
-      height: THUMBNAIL_HEIGHT,
+      width: size.width,
+      height: size.height,
       useContentSize: true,
       frame: false,
-      transparent: layout !== null,
-      backgroundColor: layout ? '#00000000' : '#ffffff',
+      transparent,
+      backgroundColor: transparent ? '#00000000' : '#ffffff',
       webPreferences: {
         offscreen: true,
         session: this.session,
@@ -220,23 +302,17 @@ export class Thumbnails {
       guardThumbnail(contents)
       // A page that has not loaded in time is captured with what it painted by then.
       const loaded = await Promise.race([
-        contents
-          .loadURL(
-            `data:text/html;charset=utf-8,${encodeURIComponent(thumbnailDocument(origin, version, layout))}`,
-          )
-          .then(
-            () => 'loaded' as const,
-            () => 'failed' as const,
-          ),
-        delay(loadWait(layout?.length ?? 1)).then(() => 'waited' as const),
+        contents.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(document)}`).then(
+          () => 'loaded' as const,
+          () => 'failed' as const,
+        ),
+        delay(loadWait(pages)).then(() => 'waited' as const),
       ])
       if (loaded === 'failed' || window.isDestroyed()) return null
       if (loaded === 'loaded') await delay(SETTLE_MS)
       if (window.isDestroyed()) return null
       const captured = await contents.capturePage()
-      if (captured.isEmpty()) return null
-      const scaled = captured.resize({ width: OUTPUT_WIDTH, quality: 'good' })
-      return layout ? scaled.toPNG() : scaled.toJPEG(JPEG_QUALITY)
+      return captured.isEmpty() ? null : captured
     } finally {
       if (!window.isDestroyed()) window.destroy()
     }

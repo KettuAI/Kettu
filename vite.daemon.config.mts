@@ -4,6 +4,7 @@
 
 import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
+import { pageRuntime } from './tools/build/page-runtime'
 import { standaloneThirdPartyNotices } from './tools/build/third-party-notices'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
@@ -27,7 +28,11 @@ export default defineConfig({
   root,
   resolve: { alias: { '@shared': source('src/shared') } },
   ssr: { noExternal: true },
-  plugins: [noElectron(), standaloneThirdPartyNotices(root, ['node-pty'])],
+  plugins: [
+    noElectron(),
+    standaloneThirdPartyNotices(root, ['node-pty']),
+    pageRuntime(source('src/shared/artifact-runtime/runtime.ts')),
+  ],
   build: {
     ssr: true,
     outDir: source('out/daemon'),

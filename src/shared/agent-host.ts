@@ -1,6 +1,8 @@
 // The contract between the renderer and the agent host, over the agent host port.
 
 import type { ArtifactContent, ArtifactSession, ArtifactSummary, VersionSummary } from './artifacts'
+import type { CommentAnchor, CommentThread } from './artifact-comments'
+import type { PreviewStyle } from './artifact-runtime/page-messages'
 import type {
   BrowserCallAnswer,
   BrowserDeviceCall,
@@ -775,6 +777,40 @@ export interface HostContract {
   // Each watch counts as a viewer, and brings `artifacts.version`.
   'artifacts.watch': { params: { id: string }; result: void }
   'artifacts.unwatch': { params: { id: string }; result: void }
+  // The artifact's comment threads, oldest first, anchored in its latest version.
+  'artifacts.comments': { params: { id: string }; result: CommentThread[] }
+  // The user's new thread; its anchor's text is what the page reported.
+  'artifacts.comment': {
+    params: { id: string; anchor: CommentAnchor; body: string }
+    result: CommentThread
+  }
+  'artifacts.reply': {
+    params: { id: string; threadId: string; body: string }
+    result: CommentThread
+  }
+  'artifacts.resolve': {
+    params: { id: string; threadId: string; resolved: boolean }
+    result: CommentThread
+  }
+  // The user sent the threads to a session.
+  'artifacts.markSent': {
+    params: { id: string; threadIds: string[]; sessionId: string }
+    result: void
+  }
+  // The user's direct edit of one element as a new version; `conflict` when `baseVersion` is not
+  // the latest. `style` sets properties of its start tag's style; `text` replaces the text of an
+  // element that holds text alone.
+  'artifacts.editElement': {
+    params: {
+      id: string
+      baseVersion: number
+      path: string
+      offset: number
+      style: PreviewStyle | null
+      text: string | null
+    }
+    result: { version: number }
+  }
   // A desktop app's side of the browser calls the host sent its port, as main's is for the host's
   // own windows: the answer, the call's wait on a new site, and the site's question and its end,
   // which the session's thread shows. A window is refused them.
@@ -931,6 +967,12 @@ export const HOST_METHODS = [
   'artifacts.restoreVersion',
   'artifacts.watch',
   'artifacts.unwatch',
+  'artifacts.comments',
+  'artifacts.comment',
+  'artifacts.reply',
+  'artifacts.resolve',
+  'artifacts.markSent',
+  'artifacts.editElement',
   'browser.answer',
   'browser.waiting',
   'browser.origin',
@@ -962,6 +1004,8 @@ export type HostEvent =
   | { type: 'artifacts.changed' } // the list changed; a page showing it reads again
   | { type: 'artifacts.version'; id: string; version: number }
   | { type: 'artifacts.activity'; id: string; viewers: number; sessions: ArtifactSession[] }
+  // To the ports watching the artifact: its comments changed, so they read them again.
+  | { type: 'artifacts.comments'; id: string }
   | { type: 'routine.changed'; routine: RoutineView } // a routine, its state or its next run
   | { type: 'routine.removed'; routineId: string }
   | { type: 'routine.run'; run: RoutineRun } // a run's status changed

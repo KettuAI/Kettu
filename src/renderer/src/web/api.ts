@@ -6,6 +6,7 @@
 import type { HostEvent } from '@shared/agent-host'
 import type { ArtifactContent } from '@shared/artifacts'
 import type { AppCommand, KettuApi } from '@shared/ipc'
+import { safeName } from '@shared/file-name'
 import { matchLocale } from '@shared/locale'
 import type { PortConnectionState } from '@shared/port-rpc'
 import type { Platform } from '@shared/platform'
@@ -273,6 +274,15 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       import: () => unsupported('import an artifact'),
       onBlocked: never,
       onStopped: never,
+      // A frame's picks come over the port the page hands it, never from the host.
+      onSelected: never,
+      png: async (id, version, page, size, name) => {
+        const url = await admin('artifacts.png', { id, version, page, size })
+        if (!url) throw new Error('The host could not render the page')
+        const bytes = Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0))
+        downloadFile(new Blob([bytes], { type: 'image/png' }), `${safeName(name, 'page')}.png`)
+        return true
+      },
     },
     // Only the desktop app signs in to a Kettu account so far.
     account: {
