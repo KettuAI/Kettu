@@ -29,25 +29,27 @@ export function limitReaders(agents: readonly AgentStatus[]): AgentId[] {
     .map((a) => a.id)
 }
 
-export type UsageTone = 'success' | 'attention' | 'destructive'
+export type UsageTone = 'low' | 'medium' | 'high' | 'critical'
 
 /**
- * A usage level, as the context's ring and percentage show it: plenty below 80% used, getting
- * close from 80%, nearly gone from 95% or once the limit is reached. A plan limit's bar takes
- * limitLevel instead.
+ * A usage level, as the context's ring and percentage show it: below 50% used, 50 to 79%, 80 to
+ * 94%, and from 95% or once the limit is reached. It goes by the whole percentage shown, so "80%"
+ * never sits beside the level below. A plan limit's bar takes limitLevel instead.
  */
 export function usageTone(limit: Pick<PlanLimit, 'usedPercent' | 'state'>): UsageTone {
-  const used = limit.usedPercent ?? 0
-  if (limit.state === 'reached' || used >= 95) return 'destructive'
-  if (used >= 80) return 'attention'
-  return 'success'
+  const used = Math.round(limit.usedPercent ?? 0)
+  if (limit.state === 'reached' || used >= 95) return 'critical'
+  if (used >= 80) return 'high'
+  if (used >= 50) return 'medium'
+  return 'low'
 }
 
 /** A percentage's text color at each usage level. */
 export const USAGE_TONE_TEXT: Record<UsageTone, string> = {
-  success: 'text-tertiary',
-  attention: 'text-warning',
-  destructive: 'text-danger',
+  low: 'text-tertiary',
+  medium: 'text-tertiary',
+  high: 'text-warning',
+  critical: 'text-danger',
 }
 
 /** Time left in its two largest units: "42m", "5h 12m", "1d 5h"; null once it has passed. */

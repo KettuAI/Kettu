@@ -162,6 +162,10 @@
   --color-limit-ok: var(--limit-ok);
   --color-limit-warn: var(--limit-warn);
   --color-limit-bad: var(--limit-bad);
+  --color-usage-green: var(--usage-green);
+  --color-usage-blue: var(--usage-blue);
+  --color-usage-orange: var(--usage-orange);
+  --color-usage-red: var(--usage-red);
   --color-segment-track: var(--segment-track);
   --color-segment-thumb: var(--segment-thumb);
   --color-canvas: var(--canvas);

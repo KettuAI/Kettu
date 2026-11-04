@@ -49,13 +49,10 @@ import { openUsage } from '@renderer/stores/view'
 import { useAboveBox } from './above-box'
 import { ROW_BUTTON } from './menu-parts'
 
-/** From this share of the context the percentage takes the usage level's color. */
-const CONTEXT_WARNING = 0.8
-
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 
-/** The context's usage level: plenty below 80% used, getting close from 80%, nearly full from 95%. */
+/** The context's usage level, which colors its ring: see usageTone for the four. */
 const contextTone = (share: number): UsageTone =>
   usageTone({ usedPercent: share * 100, state: 'ok' })
 
@@ -85,9 +82,10 @@ const RING_TONE = {
   'limit-warn': ['stroke-track', 'stroke-limit-warn'],
   'limit-bad': ['stroke-track', 'stroke-limit-bad'],
   muted: ['stroke-track', 'stroke-muted-foreground'],
-  success: ['stroke-track', 'stroke-muted-foreground'],
-  attention: ['stroke-warning/45', 'stroke-warning'],
-  destructive: ['stroke-danger/45', 'stroke-danger'],
+  low: ['stroke-usage-green/40', 'stroke-usage-green'],
+  medium: ['stroke-usage-blue/40', 'stroke-usage-blue'],
+  high: ['stroke-usage-orange/40', 'stroke-usage-orange'],
+  critical: ['stroke-usage-red/40', 'stroke-usage-red'],
 } as const
 
 /** A pie inside a ring: a filling wedge, which a short arc would not be, cannot read as a spinner. */
@@ -338,8 +336,9 @@ export function ContextButton({
   }, [readNow, sessionId, key])
   if (!usage && !warning) return null
   const share = shown && shown.size > 0 ? shown.used / shown.size : 0
-  const full = share >= CONTEXT_WARNING
   const tone = contextTone(share)
+  // From 80% the percentage takes the level's text color.
+  const full = tone === 'high' || tone === 'critical'
   const percent = Math.round(share * 100)
   const onOpenChange = (open: boolean) => {
     if (!open) return
