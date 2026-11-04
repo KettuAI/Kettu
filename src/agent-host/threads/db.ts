@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite'
+import { RUNTIME_VERSION } from '@shared/artifact-capabilities'
 import { ARTIFACT_ENTRY } from '@shared/artifact-files'
 import { type ArtifactState, NO_SESSION } from '@shared/artifacts'
 import { OUTLINE_TEXT } from '@shared/outline'
@@ -24,6 +25,7 @@ import type {
   StoredFile,
   VersionRecord,
 } from '../artifacts/model'
+import type { RuntimeCall } from '../artifacts/runtime/calls'
 import type { RoutineCall, RoutineCalls, RoutineRunStats } from '../routines/calls'
 import {
   attachmentBlobs,
@@ -45,8 +47,16 @@ import {
   type ThreadWrite,
 } from './model'
 import type { ThreadDbStatus, ThreadErrorCode } from './protocol'
+import {
+  declarationAt,
+  prepareRuntime,
+  putDeclaration,
+  RUNTIME_TABLES,
+  runtimeCall,
+  type RuntimeStatements,
+} from './runtime-db'
 
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 7
 
 // `turn` is the position of the entry that opened the entry's turn, so a page that starts at a
 // turn is one range of the primary key.
@@ -155,12 +165,13 @@ const MIGRATIONS: Record<number, string> = {
   3: ROUTINE_RUNS,
   4: OUTLINE_TITLES,
   5: ARTIFACT_FILES,
+  7: RUNTIME_TABLES,
 }
 
 /** The tables of a database at schema `version`, as a new one made then had them. */
 export function schemaAt(version: number): string {
   let schema = THREADS
-  for (let next = 2; next <= version; next++) schema += MIGRATIONS[next]
+  for (let next = 2; next <= version; next++) schema += MIGRATIONS[next] ?? ''
   return schema
 }
 
@@ -407,6 +418,7 @@ type Statements = ReturnType<typeof prepareAll>
 export class ThreadDb {
   private db: DatabaseSync | null = null
   private sql: Statements | null = null
+  private runtimeSql: { db: DatabaseSync; sql: RuntimeStatements } | null = null
   status: ThreadDbStatus = 'ok'
   /** False once the content folder could not follow a damaged database aside. */
   private sweeps = true
@@ -462,7 +474,7 @@ export class ThreadDb {
         if (this.status === 'ok') this.status = 'created'
       } else if (version < SCHEMA_VERSION) {
         let steps = ''
-        for (let next = version + 1; next <= SCHEMA_VERSION; next++) steps += MIGRATIONS[next]
+        for (let next = version + 1; next <= SCHEMA_VERSION; next++) steps += MIGRATIONS[next] ?? ''
         db.exec(`BEGIN; ${steps} PRAGMA user_version = ${SCHEMA_VERSION}; COMMIT;`)
         this.log('info', `Migrated ${path.basename(this.file)} from schema version ${version}`)
       }
@@ -950,6 +962,12 @@ export class ThreadDb {
         sql.insertArtifact.run(id, project, title, sessionId, at, at)
         const author = sessionId === NO_SESSION ? null : sessionId
         this.insertVersion(sql, id, 1, files, { pages, author, note, at })
+        putDeclaration(
+          this.runtimeStatements(db),
+          id,
+          1,
+          params.declaration ?? { capabilities: [], runtime: RUNTIME_VERSION },
+        )
         return { version: 1 }
       }),
     )
@@ -971,6 +989,13 @@ export class ThreadDb {
         const n = artifact.head + 1
         const { pages, author, note, at } = params
         this.insertVersion(sql, artifact.id, n, [...files.values()], { pages, author, note, at })
+        const runtime = this.runtimeStatements(db)
+        putDeclaration(
+          runtime,
+          artifact.id,
+          n,
+          params.declaration ?? declarationAt(runtime, artifact.id, artifact.head),
+        )
         sql.setHead.run(n, at, artifact.id)
         return { version: n }
       }),
@@ -992,6 +1017,14 @@ export class ThreadDb {
         const { author, note, at } = params
         sql.insertVersion.run(artifact.id, n, restored.size, restored.pages, author, note, at)
         sql.copyFiles.run(n, artifact.id, restored.version)
+        // The page and what it declares come back together.
+        const runtime = this.runtimeStatements(db)
+        putDeclaration(
+          runtime,
+          artifact.id,
+          n,
+          declarationAt(runtime, artifact.id, restored.version),
+        )
         sql.setHead.run(n, at, artifact.id)
         return { version: n }
       }),
@@ -1062,6 +1095,29 @@ export class ThreadDb {
         return { artifacts, files }
       },
       { artifacts: 0, files: 0 },
+    )
+  }
+
+  // The page runtime's declarations, data and consents.
+
+  /** The runtime's statements for `db`, prepared again after a recovery opened a new one. */
+  private runtimeStatements(db: DatabaseSync): RuntimeStatements {
+    if (this.runtimeSql?.db !== db) this.runtimeSql = { db, sql: prepareRuntime(db) }
+    return this.runtimeSql.sql
+  }
+
+  /** One call on the runtime's tables, for the worker's `runtime` op. */
+  runtime(call: RuntimeCall): unknown {
+    return this.must((_, db) =>
+      runtimeCall(
+        {
+          db,
+          sql: this.runtimeStatements(db),
+          transaction: (run) => this.transaction(db, run),
+          fail: (message, code, data) => new ThreadDbError(message, code, data),
+        },
+        call,
+      ),
     )
   }
 

@@ -1081,6 +1081,20 @@ export function createValidators(platform: Platform): Validators {
     },
     'artifacts.watch': artifact,
     'artifacts.unwatch': artifact,
+    // The message is the page's, which the runtime itself checks.
+    'artifacts.runtime': (params) => {
+      const o = fields(params)
+      const artifactId = string(o, 'artifactId', ID_CHARS)
+      if (!ARTIFACT_ID.test(artifactId)) throw invalidParams('artifactId is not an artifact id')
+      const stream = optionalString(o, 'stream', ID_CHARS)
+      return { artifactId, message: o.message, ...(stream === undefined ? {} : { stream }) }
+    },
+    'artifacts.consent': (params) => {
+      const o = fields(params)
+      return { requestId: string(o, 'requestId', ID_CHARS), allow: flag(o, 'allow') }
+    },
+    'artifacts.consents': none,
+    'artifacts.revokeConsent': artifact,
     // The host checks the answer's shape as it checks main's.
     'browser.answer': (params) => {
       const o = fields(params)

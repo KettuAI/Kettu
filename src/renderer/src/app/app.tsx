@@ -9,6 +9,7 @@ import { SidebarProvider } from '@renderer/components/ui/sidebar'
 import { Toaster } from '@renderer/components/ui/toast'
 import { TooltipProvider } from '@renderer/components/ui/tooltip'
 import { ArtifactDialogs } from '@renderer/features/artifacts/artifact-dialogs'
+import { ArtifactConsentDialog } from '@renderer/features/artifacts/consent-dialog'
 import { GitDialogsHost } from '@renderer/features/git/git-dialogs'
 import { MediaViewer } from '@renderer/features/session/media/media-viewer'
 import { HostBanner } from '@renderer/features/shell/host-banner'
@@ -72,6 +73,7 @@ export function App() {
         <QuitConfirm />
         <UpdateDialog />
         <ArtifactDialogs />
+        <ArtifactConsentDialog />
         <MediaViewer />
         <ShortcutsDialog />
         <SearchDialog />

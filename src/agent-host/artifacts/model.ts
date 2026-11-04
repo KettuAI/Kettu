@@ -1,6 +1,7 @@
 // The artifact records the thread worker keeps, and the calls the host makes on them.
 
 import type { ArtifactSummary } from '@shared/artifacts'
+import type { Declaration } from './runtime/calls'
 
 export interface ArtifactRecord {
   id: string
@@ -67,6 +68,8 @@ export interface ArtifactCalls {
       pages: number
       note: string | null
       at: number
+      /** What the version declares; nothing at the current runtime when absent. */
+      declaration?: Declaration
     }
     result: { version: number }
   }
@@ -84,6 +87,8 @@ export interface ArtifactCalls {
       author: string | null
       note: string | null
       at: number
+      /** What the version declares; the base version's when absent. */
+      declaration?: Declaration
     }
     result: { version: number }
   }

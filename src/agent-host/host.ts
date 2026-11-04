@@ -6,6 +6,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { cp, mkdir, rename, rm, stat } from 'node:fs/promises'
 import type { AgentOptions, DiagnosticsBundle, HostEvent, McpStatus } from '@shared/agent-host'
+import { harnessOf, type HarnessId } from '@shared/agents'
+import type { RuntimeAnswer } from '@shared/artifact-capabilities'
 import { artifactFileType } from '@shared/artifact-files'
 import { type ArtifactImportResult, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
@@ -28,6 +30,21 @@ import { agentOptionsFile, AgentOptionsStore, startModeIn } from './agent-option
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
 import { readImport } from './artifacts/import'
+import { ArtifactConsents } from './artifacts/runtime/consent'
+import { ArtifactData } from './artifacts/runtime/data'
+import { dbCapability } from './artifacts/runtime/db-capability'
+import {
+  CapabilityError,
+  registerCapability,
+  RuntimeDispatcher,
+  RuntimeRequests,
+} from './artifacts/runtime/dispatcher'
+import { filesCapability } from './artifacts/runtime/files-capability'
+import {
+  sampleCapability,
+  type SampleAgent,
+  type SampleQuestion,
+} from './artifacts/runtime/sample-capability'
 import { ArtifactService, SERVICE_NAME } from './artifacts/service'
 import { ArtifactError, ArtifactStore, versionSummary } from './artifacts/store'
 import {
@@ -82,6 +99,8 @@ import { createValidators } from './validate'
 
 // The agent menu reads a running agent's options again once they are older than this.
 const OPTIONS_FRESH_MS = 5 * 60_000
+/** The harnesses whose connection answers a page's question in a session with no tools at all. */
+const QUESTION_HARNESSES: ReadonlySet<HarnessId> = new Set(['claude-code'])
 
 /** Refuses a port that is not a desktop app's: only one runs browser calls for the host. */
 function browserApp(ctx: RequestContext): void {
@@ -202,6 +221,12 @@ export class AgentHost {
   readonly artifacts: ArtifactStore
   /** The `kettu` MCP server, through which the sessions' agents reach the artifacts. */
   readonly artifactService: ArtifactService
+  /** The artifacts' own data, which their pages and the agents read and write. */
+  private readonly artifactData: ArtifactData
+  /** What the user allowed the artifacts' pages, and the questions asking for it. */
+  private readonly consents: ArtifactConsents
+  /** The page runtime's requests in flight, from main and from devices' remote hosts. */
+  private readonly runtimeRequests: RuntimeRequests
   readonly hub: PortHub
   private settings: HostSettings
   private readonly git: GitServiceApi | null
@@ -291,8 +316,11 @@ export class AgentHost {
         this.hub.send(portIds, { type: 'artifacts.version', id, version }),
       activity: (portIds, activity) =>
         this.hub.send(portIds, { type: 'artifacts.activity', ...activity }),
+      unwatched: (id) => this.consents.unwatched(id),
     })
+    this.artifactData = new ArtifactData({ store: this.artifacts })
     this.artifactService = new ArtifactService({
+      data: this.artifactData,
       store: this.artifacts,
       sessionTitle: (sessionId) => this.sessions.title(sessionId),
       runningTurn: (sessionId) => this.sessions.runningTurn(sessionId),
@@ -501,6 +529,34 @@ export class AgentHost {
       },
     })
     routineHooks.current = this.routines.hooks
+    this.consents = new ArtifactConsents({
+      store: this.artifacts,
+      isDevice: (portId) => this.hub.deviceOf(portId) !== null,
+      send: (portIds, event) => this.hub.send(portIds, event),
+      broadcast: (event) => this.hub.broadcast(event),
+      agentName: async (folder) => (await this.sampleAgent(this.projectOf(folder)))?.name ?? null,
+    })
+    registerCapability(dbCapability(this.artifactData))
+    registerCapability(filesCapability(platform))
+    registerCapability(
+      sampleCapability({
+        agentFor: (project) => this.sampleAgent(project),
+        answer: (agent, question) => this.answerQuestion(agent, question),
+      }),
+    )
+    this.runtimeRequests = new RuntimeRequests(
+      new RuntimeDispatcher({
+        artifact: (id) =>
+          this.artifacts
+            .runtime('declaration', { id, project: null, version: null })
+            .catch(() => null),
+        project: (folder) => this.projectOf(folder),
+        allowed: (id, capability) => this.consents.allowed(id, capability),
+        ask: (artifact, capability, client, waitMs) =>
+          this.consents.ask(artifact, capability, client, waitMs),
+        log,
+      }),
+    )
     this.deviceBrowser = new DeviceBrowserCalls({
       send: (portId, event) => this.hub.send([portId], event),
       servicePort: () => this.artifactService.listeningPort,
@@ -609,6 +665,8 @@ export class AgentHost {
   }
 
   private portClosed(portId: string): void {
+    this.runtimeRequests.portClosed(portId)
+    this.consents.portClosed(portId)
     this.deviceBrowser.portClosed(portId)
     this.sessions.portClosed(portId)
     this.artifacts.portClosed(portId)
@@ -699,6 +757,51 @@ export class AgentHost {
       }
     }
     this.options.send({ type: 'host:artifact-content', requestId, result })
+  }
+
+  /** `host:artifact-runtime`: a page's message main relayed from an artifact origin it serves. */
+  artifactRuntime(requestId: number, artifactId: string, message: unknown): void {
+    this.runtimeRequests.fromMain(requestId, artifactId, message, (answer: RuntimeAnswer) =>
+      this.options.send({ type: 'host:artifact-runtime-answer', requestId, answer }),
+    )
+  }
+
+  /** `host:artifact-runtime-cancel`: the page closed its request, which ends a stream. */
+  artifactRuntimeCancel(requestId: number): void {
+    this.runtimeRequests.cancelMain(requestId)
+  }
+
+  /** The artifact's folder as a project, or null for a scratch folder, which is No project. */
+  private projectOf(folder: string): string | null {
+    return this.scratch.contains(folder) ? null : folder
+  }
+
+  /**
+   * The agent that answers the questions of a page of `project`, null for No project: the agent
+   * new sessions start with, else the one its latest session used, when that agent can answer
+   * without tools.
+   */
+  private async sampleAgent(project: string | null): Promise<SampleAgent | null> {
+    let agentId = this.settings.defaultAgent
+    if (agentId === null) {
+      const sessions = project === null ? this.sessions.list() : this.sessions.list(project)
+      agentId = sessions.sort((a, b) => b.updatedAt - a.updatedAt)[0]?.agentId ?? null
+    }
+    if (agentId === null || !this.agents.has(agentId)) return null
+    if (!QUESTION_HARNESSES.has(harnessOf(agentId))) return null
+    return { id: agentId, name: this.agents.name(agentId) }
+  }
+
+  /** A page's question to the agent, in a hidden session with no tools in the reports' folder. */
+  private async answerQuestion(agent: SampleAgent, question: SampleQuestion): Promise<string> {
+    const runtime = await this.agents.ensureReady(agent.id as AgentId)
+    const { connection } = runtime
+    if (!connection.answerQuestion) {
+      throw new CapabilityError('unsupported', `${agent.name} cannot answer without tools.`)
+    }
+    const dir = path.join(this.options.userDataPath, 'agent-reports')
+    await mkdir(dir, { recursive: true })
+    return connection.answerQuestion(dir, question.prompt, question.onText, question.signal)
   }
 
   /** `host:artifact-list-request`: every artifact's id, for main to unpublish the ones gone. */
@@ -1214,6 +1317,21 @@ export class AgentHost {
         artifacts.restore({ id, version, baseVersion, author: null }),
       'artifacts.watch': ({ id }, { portId }) => artifacts.watch(id, portId),
       'artifacts.unwatch': ({ id }, { portId }) => artifacts.unwatch(id, portId),
+      'artifacts.runtime': ({ artifactId, message, stream }, { portId, device }) => {
+        // A window's frames reach the runtime through main; only a device's remote host relays.
+        if (!device) {
+          throw new HostError('forbidden', 'Only a paired device may call "artifacts.runtime"')
+        }
+        return this.runtimeRequests.fromPort(portId, artifactId, message, stream, (answer) => {
+          if (stream !== undefined) {
+            this.hub.send([portId], { type: 'artifacts.runtime', stream, answer })
+          }
+        })
+      },
+      'artifacts.consent': ({ requestId, allow }, { portId }) =>
+        this.consents.answer(requestId, allow, portId),
+      'artifacts.consents': () => this.consents.list(),
+      'artifacts.revokeConsent': ({ id }) => this.consents.revoke(id),
       'browser.answer': ({ callId, answer }, ctx) => {
         browserApp(ctx)
         if (!this.deviceBrowser.answer(ctx.portId, callId, answer)) {

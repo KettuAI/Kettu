@@ -105,6 +105,7 @@ export type SettingsSection =
   | 'usage'
   | 'mcp'
   | 'archived'
+  | 'artifacts'
   | 'sharing'
   | 'remote'
   | 'hosts'

@@ -14,6 +14,7 @@ let listener: Server
 let web: WebServer
 let base: string
 let asked: { version: number | null; path: string }[]
+let strict: boolean
 
 beforeEach(async () => {
   dir = mkdtempSync(path.join(os.tmpdir(), 'kettu-web-frames-'))
@@ -23,6 +24,7 @@ beforeEach(async () => {
   }
   for (const [name, text] of Object.entries(files)) writeFileSync(path.join(dir, name), text)
   asked = []
+  strict = false
   web = new WebServer({
     root: null,
     server: {
@@ -31,7 +33,9 @@ beforeEach(async () => {
       frameFile: async (token, version, wanted) => {
         asked.push({ version, path: wanted })
         const text = token === TOKEN ? files[wanted] : undefined
-        return text === undefined ? null : { file: path.join(dir, wanted), size: text.length }
+        return text === undefined
+          ? null
+          : { file: path.join(dir, wanted), size: text.length, strict }
       },
     },
     limits: new HandshakeLimits(),
@@ -75,6 +79,18 @@ describe("the direct port's artifact frames", () => {
     ])
   })
 
+  it('names no CDN in the frames of an artifact that reads beyond it', async () => {
+    const loose = await fetch(`${base}/frame/${TOKEN}/index.html`)
+    expect(loose.headers.get('content-security-policy')).toContain('https://cdn.jsdelivr.net')
+    strict = true
+    const tight = (await fetch(`${base}/frame/${TOKEN}/index.html`)).headers.get(
+      'content-security-policy',
+    )!
+    expect(tight).toMatch(/^sandbox allow-scripts /)
+    expect(tight).not.toContain('https:')
+    expect(tight).toContain(`connect-src ${new URL(base).host}/frame/${TOKEN}/;`)
+  })
+
   it.each([
     `/frame/${'B'.repeat(43)}/index.html`,
     `/frame/${TOKEN}/missing.css`,
@@ -93,7 +109,7 @@ describe('the frames a session opens', () => {
     const two = frames.open('a', 'art_2')
     const other = frames.open('b', 'art_1')
     expect(one).toMatch(/^[A-Za-z0-9_-]{43}$/)
-    expect(frames.find(one)).toEqual({ session: 'a', artifactId: 'art_1' })
+    expect(frames.find(one)).toEqual({ session: 'a', artifactId: 'art_1', lax: false })
     frames.close('b', one)
     expect(frames.find(one)).toBeDefined()
     frames.close('a', one)

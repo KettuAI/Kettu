@@ -12,22 +12,35 @@ export const ARTIFACT_CDNS = [
   'https://fonts.gstatic.com',
 ] as const
 
-const CDNS = ARTIFACT_CDNS.join(' ')
+function policy(cdns: string): string {
+  return [
+    "default-src 'none'",
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:${cdns}`,
+    `style-src 'self' 'unsafe-inline'${cdns}`,
+    `font-src 'self' data:${cdns}`,
+    `img-src 'self' data: blob:${cdns}`,
+    "media-src 'self' data: blob:",
+    `connect-src 'self'${cdns}`,
+    "worker-src 'self' blob:",
+    "frame-src 'self'",
+    "form-action 'none'",
+    "base-uri 'self'",
+  ].join('; ')
+}
 
 /** Its own origin, `data:`, `blob:` and the CDNs. */
-export const ARTIFACT_CSP = [
-  "default-src 'none'",
-  `script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: ${CDNS}`,
-  `style-src 'self' 'unsafe-inline' ${CDNS}`,
-  `font-src 'self' data: ${CDNS}`,
-  `img-src 'self' data: blob: ${CDNS}`,
-  "media-src 'self' data: blob:",
-  `connect-src 'self' ${CDNS}`,
-  "worker-src 'self' blob:",
-  "frame-src 'self'",
-  "form-action 'none'",
-  "base-uri 'self'",
-].join('; ')
+export const ARTIFACT_CSP = policy(` ${ARTIFACT_CDNS.join(' ')}`)
+
+/**
+ * For an artifact whose latest version declares a capability that reads what is outside it: its
+ * own origin, `data:` and `blob:`, so nothing it reads can leave in a URL.
+ */
+export const ARTIFACT_STRICT_CSP = policy('')
+
+/** The policy of an artifact's pages, strict or with the CDNs. */
+export function artifactCsp(strict: boolean): string {
+  return strict ? ARTIFACT_STRICT_CSP : ARTIFACT_CSP
+}
 
 const POWERFUL_FEATURES = [
   'camera',

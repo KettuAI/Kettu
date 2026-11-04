@@ -74,6 +74,8 @@ function run(db: ThreadDb, request: ThreadRequest): unknown {
       return db.routine(request.call)
     case 'artifact':
       return artifact(db, request.call)
+    case 'runtime':
+      return db.runtime(request.call)
     case 'close':
       db.close()
       return null

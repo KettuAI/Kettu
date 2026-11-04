@@ -3,6 +3,7 @@
 // The records and files belong to the thread worker; this side only reads the files.
 
 import { readFile } from 'node:fs/promises'
+import { isStrictDeclaration } from '@shared/artifact-capabilities'
 import { ARTIFACT_ENTRY } from '@shared/artifact-files'
 import {
   ARTIFACT_KEEP_DELETED_MS,
@@ -24,6 +25,7 @@ import type {
   StoredSummary,
   VersionRecord,
 } from './model'
+import type { Declaration, RuntimeCallName, RuntimeCalls } from './runtime/calls'
 
 const PURGE_EVERY_MS = 24 * 60 * 60 * 1000
 
@@ -61,6 +63,8 @@ export interface ArtifactStoreDeps {
   /** A new version, for the ports watching the artifact. */
   version(portIds: Iterable<string>, id: string, version: number): void
   activity(portIds: Iterable<string>, activity: ArtifactActivity): void
+  /** The last port watching the artifact stopped. */
+  unwatched?(id: string): void
   now?: () => number
   purgeEveryMs?: number
 }
@@ -131,8 +135,26 @@ export class ArtifactStore {
   ): Promise<ArtifactCalls[K]['result']> {
     const { threads } = this.deps
     if (!threads) throw new HostError('internal', 'Artifacts need the thread database')
+    return this.refused(() => threads.artifact(name, params))
+  }
+
+  /**
+   * A call on the page runtime's tables beside the artifacts: a version's declaration, the data
+   * and the consents. Fails as the artifact calls do, and `invalid` or `too_large` as the
+   * ThreadStoreError of a write of data that does not apply or fit.
+   */
+  runtime<K extends RuntimeCallName>(
+    name: K,
+    params: RuntimeCalls[K]['params'],
+  ): Promise<RuntimeCalls[K]['result']> {
+    const { threads } = this.deps
+    if (!threads) throw new HostError('internal', 'Artifacts need the thread database')
+    return this.refused(() => threads.runtime(name, params))
+  }
+
+  private async refused<T>(run: () => Promise<T>): Promise<T> {
     try {
-      return await threads.artifact(name, params)
+      return await run()
     } catch (error) {
       if (
         error instanceof ThreadStoreError &&
@@ -229,17 +251,28 @@ export class ArtifactStore {
 
   /**
    * The files of a version, the latest by default, for main and the remote host to serve; with the
-   * artifact's title and the key its thumbnail is kept under.
+   * artifact's title, the key its thumbnail is kept under, and whether its pages load from their
+   * own origin alone, as the latest version's declaration says.
    */
   async content(
     id: string,
     version?: number,
-  ): Promise<{ version: number; title: string; key: string; files: ContentFile[] }> {
-    const found = await this.get(id, version === undefined ? {} : { version })
+  ): Promise<{
+    version: number
+    title: string
+    key: string
+    strict: boolean
+    files: ContentFile[]
+  }> {
+    const [found, latest] = await Promise.all([
+      this.get(id, version === undefined ? {} : { version }),
+      this.runtime('declaration', { id, project: null, version: null }),
+    ])
     return {
       version: found.version.version,
       title: found.artifact.title,
       key: versionKey(found.files),
+      strict: isStrictDeclaration(latest.capabilities),
       files: found.files.map((file) => ({
         path: file.path,
         file: contentPath(this.deps.contentDir, file.hash),
@@ -259,6 +292,7 @@ export class ArtifactStore {
       files: { path: string; data: Uint8Array }[]
       pages: number
       note: string | null
+      declaration?: Declaration
     } & Editing,
   ): Promise<{ id: string; version: number }> {
     const { editor, ...rest } = input
@@ -282,6 +316,7 @@ export class ArtifactStore {
       pages: number
       author: string | null
       note: string | null
+      declaration?: Declaration
     } & Reach &
       Editing,
   ): Promise<{ version: number }> {
@@ -439,6 +474,11 @@ export class ArtifactStore {
     if (this.drop(id, portId)) this.sendActivity(id)
   }
 
+  /** The ports watching the artifact now. */
+  watchers(id: string): string[] {
+    return [...(this.watches.get(id)?.keys() ?? [])]
+  }
+
   /** Removes one watch of the port; false when it had none. */
   private drop(id: string, portId: string): boolean {
     const ports = this.watches.get(id)
@@ -446,15 +486,20 @@ export class ArtifactStore {
     if (!ports || !count) return false
     if (count > 1) ports.set(portId, count - 1)
     else ports.delete(portId)
-    if (ports.size === 0) this.watches.delete(id)
+    if (ports.size === 0) this.unwatched(id)
     return true
   }
 
   portClosed(portId: string): void {
     for (const [id, ports] of [...this.watches]) {
       if (!ports.delete(portId)) continue
-      if (ports.size === 0) this.watches.delete(id)
+      if (ports.size === 0) this.unwatched(id)
       else this.sendActivity(id)
     }
+  }
+
+  private unwatched(id: string): void {
+    this.watches.delete(id)
+    this.deps.unwatched?.(id)
   }
 }

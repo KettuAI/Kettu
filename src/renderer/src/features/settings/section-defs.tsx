@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ArchiveIcon,
   BellIcon,
@@ -13,6 +13,7 @@ import {
   PlugIcon,
   ServerIcon,
   Settings2Icon,
+  ShapesIcon,
   ShareIcon,
   SquareTerminalIcon,
   UserRoundIcon,
@@ -20,6 +21,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus, SessionSummary } from '@shared/agent-host'
+import type { ArtifactConsentRow } from '@shared/artifact-capabilities'
 import { originLabel } from '@shared/browser'
 import type { AgentId, HarnessId } from '@shared/thread'
 import {
@@ -30,6 +32,7 @@ import {
   EmptyTitle,
 } from '@renderer/components/ui/empty'
 import { basename, mediumAgo } from '@renderer/lib/format'
+import { errorMessage } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { useHostContext, useHostHas } from '@renderer/lib/host-features'
 import { formatShortcut, isMac, isWeb, isWindows, platform } from '@renderer/lib/platform'
@@ -68,6 +71,7 @@ import {
 } from './harness-section'
 import { AgentPlaceRow, FailedRead, McpServerPage, PendingList, ServerRow } from './mcp-section'
 import { ArchivedRow } from './archived-section'
+import { ConsentRow, ConsentsState } from './artifacts-section'
 import { GroupLabel, GroupNote, RowGroup, RowShell } from './rows'
 import { SettingSwitch } from './controls'
 import { HostPage } from './host-page'
@@ -1375,5 +1379,70 @@ export function useSharingSection(): SectionDef {
         </RowGroup>
       </section>
     ),
+  }
+}
+
+/** What the user allowed the artifacts' pages on the host, read again whenever it changes. */
+function useConsents() {
+  const { request } = useHostScope()
+  const [rows, setRows] = useState<ArtifactConsentRow[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    let live = true
+    const load = (): void => {
+      request('artifacts.consents', undefined).then(
+        (list) => {
+          if (!live) return
+          setRows(list)
+          setError(null)
+        },
+        (reason: unknown) => {
+          if (live) setError(errorMessage(reason))
+        },
+      )
+    }
+    load()
+    const off = window.kettu.agents.onEvent((event) => {
+      if (event.type === 'artifacts.consentsChanged') load()
+    })
+    return () => {
+      live = false
+      off()
+    }
+  }, [request, attempt])
+  return { rows, error, retry: () => setAttempt((n) => n + 1) }
+}
+
+/** Settings › Artifacts: the pages the user allowed to read project files or ask the agent. */
+export function useArtifactsSection(): SectionDef {
+  const { t } = useTranslation('settings')
+  const en = english()
+  const { rows, error, retry } = useConsents()
+  const projects = useProjectsStore((s) => s.projects)
+  const where = (row: ArtifactConsentRow): string =>
+    projects.find((p) => p.path === row.project)?.name ?? basename(row.project)
+  const list = group('page-permissions', t('artifacts.group'))
+  return {
+    id: 'artifacts',
+    title: t('sections.artifacts'),
+    description: t('pages.artifacts'),
+    icon: ShapesIcon,
+    rows: (rows ?? []).map((row) => ({
+      id: `consent-${row.artifactId}`,
+      name: row.title,
+      description: where(row),
+      keywords: t('artifacts.keywords'),
+      english: en('sections.artifacts'),
+      group: list,
+      layout: 'custom',
+      render: () => <ConsentRow row={row} where={where(row)} />,
+    })),
+    footer:
+      rows === null ? (
+        <ConsentsState state={error ? 'failed' : 'loading'} error={error} onRetry={retry} />
+      ) : (
+        rows.length === 0 && <ConsentsState state="empty" />
+      ),
   }
 }

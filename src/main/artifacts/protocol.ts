@@ -11,6 +11,7 @@ import type { ArtifactContentResult } from '@shared/host-control'
 import { createLogger } from '../log'
 import { ARTIFACT_SCHEME, artifactHost } from './origins'
 import { artifactHeaders } from './policy'
+import { isRuntimeRequest, respondRuntime, type RuntimeRelay } from './runtime'
 
 const log = createLogger('artifacts')
 
@@ -38,6 +39,10 @@ export interface ArtifactSource {
   /** The artifact on this origin id, when it was opened in this run. */
   artifactOf(host: string): string | undefined
   content(id: string, version: number | null): Promise<ArtifactContentResult>
+  /** Where a page's capability requests go; none, as for thumbnails, offers no capability. */
+  runtime?: RuntimeRelay | null
+  /** What the latest version declares makes the artifact's pages strict, or no longer. */
+  declared?(id: string, strict: boolean): void
 }
 
 export interface ArtifactRequest extends ServedFile {
@@ -84,8 +89,21 @@ function withinWait(content: Promise<ArtifactContentResult>): Promise<ArtifactCo
   return Promise.race([content, late]).finally(() => clearTimeout(timer))
 }
 
+/**
+ * A page's request to the runtime, from its own origin; one that another origin sends, as only
+ * the app's own page could, is refused.
+ */
+function runtimeRequest(request: Request, source: ArtifactSource): Promise<Response> | Response {
+  const host = artifactHost(request.url)
+  const id = host ? source.artifactOf(host) : undefined
+  const origin = request.headers.get('origin')
+  if (!host || !id || (origin !== null && artifactHost(origin) !== host)) return answer(404)
+  return respondRuntime(request, id, source.runtime ?? null)
+}
+
 /** Answers one request on an artifact origin: a file of the version it names, or of the latest. */
 export async function respond(request: Request, source: ArtifactSource): Promise<Response> {
+  if (isRuntimeRequest(request.url)) return runtimeRequest(request, source)
   if (request.method !== 'GET') return answer(405)
   const wanted = parseRequest(request.url, (host) => source.artifactOf(host))
   if (!wanted) return answer(404)
@@ -98,7 +116,8 @@ export async function respond(request: Request, source: ArtifactSource): Promise
     log.error(`Refused ${wanted.id}'s file outside the content folder: ${file.file}`)
     return answer(404)
   }
-  const headers = { ...artifactHeaders(), 'Content-Type': artifactFileType(file.path) }
+  source.declared?.(wanted.id, found.strict)
+  const headers = { ...artifactHeaders(found.strict), 'Content-Type': artifactFileType(file.path) }
   try {
     if (isHtmlPath(file.path)) {
       const html = servedHtml(await readFile(file.file, 'utf8'), wanted.page)

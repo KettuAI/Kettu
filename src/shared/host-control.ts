@@ -1,6 +1,7 @@
 // Messages between main and the hosts: over `utilityProcess` messaging in the desktop app, or the
 // IPC of `child_process.fork` when a host runs under Node.js.
 
+import type { RuntimeAnswer } from './artifact-capabilities'
 import type { ArtifactImportResult } from './artifacts'
 import type { AttachmentGrant } from './attachments'
 import type { BrowserForward, BrowserOriginAnswer, BrowserOriginDecision } from './browser'
@@ -81,6 +82,11 @@ export type MainToHost =
       path: string
       project: string | null
     }
+  // A page's message to the runtime, from the artifact origin main serves it on: answered by
+  // host:artifact-runtime-answer under the same id, once, or for a stream with each event and the end.
+  | { type: 'host:artifact-runtime'; requestId: number; artifactId: string; message: unknown }
+  // The page closed the request, which ends its stream.
+  | { type: 'host:artifact-runtime-cancel'; requestId: number }
   | { type: 'host:power'; state: 'suspend' | 'resume' }
   // Allow once, from a request's notification: answered as one of the host's own windows would.
   | { type: 'host:permission-answer'; sessionId: string; requestId: string; optionId: string }
@@ -106,7 +112,15 @@ export interface ArtifactContentFile {
  * names what they are together, for its thumbnail.
  */
 export type ArtifactContentResult =
-  | { kind: 'found'; version: number; title: string; key: string; files: ArtifactContentFile[] }
+  | {
+      kind: 'found'
+      version: number
+      title: string
+      key: string
+      /** The latest version declares what reads beyond the page, so its pages get no CDN. */
+      strict: boolean
+      files: ArtifactContentFile[]
+    }
   | { kind: 'not_found' }
   | { kind: 'failed' }
 
@@ -151,6 +165,7 @@ export type HostToMain =
   | { type: 'host:artifact-content'; requestId: number; result: ArtifactContentResult }
   | { type: 'host:artifact-list'; requestId: number; result: ArtifactListResult }
   | { type: 'host:artifact-import'; requestId: number; result: NonNullable<ArtifactImportResult> }
+  | { type: 'host:artifact-runtime-answer'; requestId: number; answer: RuntimeAnswer }
   | { type: 'host:media-grant'; grant: MediaGrantRecord }
   | { type: 'host:media-revoke'; sessionId: string | null } // null drops them all
   // A window's or device's answer to the new origin main's page asked for, from the session's card.

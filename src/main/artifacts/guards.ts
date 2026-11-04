@@ -41,11 +41,17 @@ export function requestingArtifact(source: RequestSource): string | null {
   return artifactHost(source.initiatorOrigin) ?? frameArtifact(source.frame)
 }
 
-/** Cancels every request an artifact makes for anything but its own origin, `data:`, `blob:` or a CDN. */
-export function filterArtifactRequests(session: Session): void {
+/**
+ * Cancels every request an artifact makes for anything but its own origin, `data:`, `blob:` or a
+ * CDN; the CDNs too for an artifact `strict` names.
+ */
+export function filterArtifactRequests(
+  session: Session,
+  strict: (host: string) => boolean = () => false,
+): void {
   refuseRequests(session, (details) => {
     const host = requestingArtifact(details)
-    return host !== null && !mayRequest(host, details.url)
+    return host !== null && !mayRequest(host, details.url, strict(host))
   })
 }
 

@@ -208,5 +208,15 @@
       "failed": "出了点问题，请重试。"
     },
     "button": "分享"
+  },
+  "consent": {
+    "filesTitle": "允许“{{title}}”读取 {{project}} 里的文件？",
+    "filesBody": "页面能读取这个项目里的任何文件，但不能修改，也不能把它们发到别处。随时可以在 设置 › Artifacts 里收回。",
+    "sampleTitle": "允许“{{title}}”向 {{agent}} 提问？",
+    "sampleBody": "每个问题都在一个没有任何工具的隐藏会话里回答：不能读取或修改文件，也不能运行命令。它用的是你自己的 {{agent}} 额度，同时最多两个问题。",
+    "yourAgent": "你的 Agent",
+    "allow": "允许",
+    "deny": "不允许",
+    "failed": "没能保存你的选择：{{error}}"
   }
 }

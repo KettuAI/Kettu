@@ -13,7 +13,7 @@ import { pipeline } from 'node:stream/promises'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { artifactFileType, isHtmlPath } from '@shared/artifact-files'
 import { parseServed, servedHtml } from '@shared/artifact-page'
-import { ARTIFACT_CSP, ARTIFACT_PERMISSIONS_POLICY } from '@shared/artifact-policy'
+import { ARTIFACT_PERMISSIONS_POLICY, artifactCsp } from '@shared/artifact-policy'
 import { MAX_NOISE_MESSAGE } from '@shared/remote/noise'
 import type { Transport } from '@shared/remote/transport'
 import type { LogFn } from '../agent-host/storage'
@@ -82,19 +82,21 @@ const HOST = /^(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(?::[0-9]{1,5})?$/
  * The policy of an artifact frame's files. The sandbox gives the frame an opaque origin, but
  * 'self' would still name the web client's whole origin, so the artifact's own sources are its
  * frame's folder alone, `host` and `folder` as the request named them. A policy cannot name an
- * IPv6 address, so a page opened on one keeps 'self'.
+ * IPv6 address, so a page opened on one keeps 'self'. A `strict` one names no CDN.
  */
-export function frameCsp(host: string, folder: string): string {
+export function frameCsp(host: string, folder: string, strict = false): string {
   const own = host.startsWith('[') ? "'self'" : `${host}${folder}`
   return [
     'sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals',
     "frame-ancestors 'self'",
-    ...ARTIFACT_CSP.split('; ').map((directive) =>
-      directive
-        .split(' ')
-        .map((source) => (source === "'self'" ? own : source))
-        .join(' '),
-    ),
+    ...artifactCsp(strict)
+      .split('; ')
+      .map((directive) =>
+        directive
+          .split(' ')
+          .map((source) => (source === "'self'" ? own : source))
+          .join(' '),
+      ),
   ].join('; ')
 }
 
@@ -112,9 +114,10 @@ function frameHeaders(
   request: IncomingMessage,
   host: string,
   folder: string,
+  strict: boolean,
 ): Record<string, string> {
   return {
-    'Content-Security-Policy': frameCsp(host, folder),
+    'Content-Security-Policy': frameCsp(host, folder, strict),
     'Permissions-Policy': ARTIFACT_PERMISSIONS_POLICY,
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
@@ -263,7 +266,7 @@ export class WebServer {
     if (!wanted) return plain(response, 404, 'Not found.', frameCors(request))
     const found = await this.options.server.frameFile(token, wanted.version, wanted.path)
     if (!found) return plain(response, 404, 'Not found.', frameCors(request))
-    const headers = frameHeaders(request, host, `${FRAME_PATH}${token}/`)
+    const headers = frameHeaders(request, host, `${FRAME_PATH}${token}/`, found.strict)
     const type = artifactFileType(wanted.path)
     if (!isHtmlPath(wanted.path)) {
       return send(request, response, { file: found.file, type }, headers)

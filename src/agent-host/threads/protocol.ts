@@ -3,6 +3,7 @@
 import type { OutlineTitle } from '@shared/agent-host'
 import type { ArtifactState } from '@shared/artifacts'
 import type { ArtifactCall } from '../artifacts/model'
+import type { RuntimeCall } from '../artifacts/runtime/calls'
 import type { RoutineCall } from '../routines/calls'
 import type { ThreadWrite } from './model'
 
@@ -25,8 +26,10 @@ export type ThreadDbStatus = 'ok' | 'created' | 'recovered' | 'newer' | 'unavail
  * `unavailable`: the database is not open, or the store has closed.
  * `not_found`, `deleted`: no such artifact or version in reach, or the artifact is in Recently
  * deleted.
+ * `invalid`, `too_large`: a write of an artifact's data that does not apply, or would not fit.
  */
-export type ThreadErrorCode = 'corrupt' | 'conflict' | 'unavailable' | 'not_found' | 'deleted'
+export type ThreadErrorCode =
+  'corrupt' | 'conflict' | 'unavailable' | 'not_found' | 'deleted' | 'invalid' | 'too_large'
 
 export type ThreadRequest =
   | { id: number; op: 'page'; sessionId: string; before: number | null; from: number | null }
@@ -39,6 +42,7 @@ export type ThreadRequest =
   | { id: number; op: 'outline'; sessionId: string }
   | { id: number; op: 'setOutlineTitles'; sessionId: string; titles: OutlineTitle[] }
   | { id: number; op: 'artifact'; call: ArtifactCall }
+  | { id: number; op: 'runtime'; call: RuntimeCall }
   | { id: number; op: 'routine'; call: RoutineCall }
   | { id: number; op: 'close' }
 

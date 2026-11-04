@@ -184,7 +184,7 @@ export interface PromptResult {
 }
 
 /** What Kettu opens a session no thread shows for. */
-export type HiddenPurpose = 'options' | 'limits' | 'context' | 'titles'
+export type HiddenPurpose = 'options' | 'limits' | 'context' | 'titles' | 'sample'
 
 /** How a session is opened, loaded, resumed or forked. */
 export interface SessionOptions {
@@ -263,6 +263,18 @@ export interface AgentConnection {
   readonly hiddenSessions: boolean
   /** Removes such a session and drops its late updates; failures go to `log` while it is open. */
   removeHidden(sessionId: string, log: (message: string) => void): Promise<void>
+
+  /**
+   * Answers one question in a hidden session of its own in `dir`, with no tools, MCP servers,
+   * hooks or settings and no history kept, its text streamed to `onText` as it comes; resolves
+   * with the whole answer, and `signal` cancels it. Absent where the agent cannot run one so.
+   */
+  answerQuestion?(
+    dir: string,
+    prompt: readonly PromptBlock[],
+    onText: (text: string) => void,
+    signal: AbortSignal,
+  ): Promise<string>
 
   /**
    * The current use of the agent's plan limits, answered by the agent itself. Without it the host
