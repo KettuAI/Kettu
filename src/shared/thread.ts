@@ -3,6 +3,7 @@
 
 import type { AgentId } from './agents'
 import type { BrowserOriginAnswer } from './browser'
+import type { ContextReport } from './context'
 import type { RoutineRef } from './routines'
 
 export {
@@ -38,6 +39,8 @@ export interface SessionView {
   config: ConfigOption[]
   commands: SlashCommand[]
   usage: SessionUsage | null
+  /** Ephemeral context snapshot; absent on hosts that only answer context requests. */
+  context?: ContextReport
   error: { message: string; detail?: string } | null
   turnStartedAt: number | null
   turnStartUsed: number | null // usage.used when the running turn started, for what it adds

@@ -11,6 +11,7 @@ import type {
   BrowserOriginAnswer,
   BrowserOriginDecision,
 } from './browser'
+import type { ContextBreakdown } from './context'
 import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { ArtifactContentFile } from './host-control'
 import type { MediaAuthorization, MediaOpenResult } from './media'
@@ -124,22 +125,7 @@ export interface OutlineTitle {
   title: string
 }
 
-/** What fills a session's context, as the agent's own report breaks it down. */
-export interface ContextBreakdown {
-  model: string | null
-  used: number
-  size: number
-  /** In the report's order, free space and the autocompact buffer included. */
-  categories: { name: string; tokens: number; share: number | null }[]
-  /** The itemised lists that follow, such as MCP tools, memory files and skills. */
-  lists: ContextList[]
-  observedAt: number
-}
-
-export interface ContextList {
-  name: string // "MCP Tools", "Memory Files", "Skills"
-  items: { name: string; detail: string | null; tokens: string }[] // tokens as reported: "~310"
-}
+export type { ContextBreakdown, ContextList } from './context'
 
 export type AgentState =
   | 'not-installed'

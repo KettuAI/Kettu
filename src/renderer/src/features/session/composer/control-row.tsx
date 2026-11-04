@@ -202,6 +202,7 @@ export function ControlRow({
         direct={agent?.capabilities.liveContext ?? false}
         live={running && (agent?.capabilities.liveContext ?? false)}
         usage={session.usage}
+        context={session.context}
         limits={agent?.limits ?? []}
         account={agent?.account ?? null}
         onCompact={onCompact}

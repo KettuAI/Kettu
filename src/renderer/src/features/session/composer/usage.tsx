@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { ChevronRightIcon, TimerIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentAccount, ContextList, PlanLimit } from '@shared/agent-host'
+import { CONTEXT_REFRESH_MS, type ContextReport } from '@shared/context'
 import {
   knownExpiry,
   type CacheExpiry,
@@ -301,6 +302,7 @@ export function ContextButton({
   direct,
   live,
   usage,
+  context,
   limits,
   account,
   onCompact,
@@ -316,6 +318,7 @@ export function ContextButton({
   /** Whether a running turn's context can be read through the agent's connection. */
   live: boolean
   usage: SessionUsage | null
+  context?: ContextReport
   limits: PlanLimit[]
   account: AgentAccount | null
   onCompact: (() => void) | null
@@ -323,13 +326,13 @@ export function ContextButton({
   const { t } = useTranslation('composer')
   const warning = warningLimit(limits)
   const [setAnchor, aboveBox] = useAboveBox()
-  const read = useUsageStore((s) => s.context[sessionId])
-  // A provider that reports no context leaves the count at zero; the agent's own read has it.
+  const cached = useUsageStore((s) => s.context[sessionId])
+  const read = context ?? cached
   const shown = shownUsage(usage, read?.breakdown ?? null)
-  // Read once while the count is missing, so the ring does not wait for the popover to open.
+  // Older hosts answer on demand; current hosts push every direct snapshot with the session.
   const key = usage && usage.size > 0 ? `${usage.used}/${usage.size}` : null
   const waiting = !!key && (!read || (!read.loading && read.key !== key))
-  const readNow = direct && key !== null && usage?.used === 0 && !read?.error && waiting
+  const readNow = direct && !context && key !== null && !read?.error && waiting
   useEffect(() => {
     if (readNow && key) loadContext(sessionId, key)
   }, [readNow, sessionId, key])
@@ -343,7 +346,13 @@ export function ContextButton({
     refreshLimits(agentId).catch((error: unknown) =>
       console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
     )
-    if (reports && (idle || live) && usage) loadContext(sessionId, `${usage.used}/${usage.size}`)
+    const stale =
+      !context?.breakdown ||
+      context.error ||
+      Date.now() - context.breakdown.observedAt >= CONTEXT_REFRESH_MS
+    if (reports && (idle || live) && usage && (!context || (!context.loading && stale))) {
+      loadContext(sessionId, `${usage.used}/${usage.size}`, direct)
+    }
   }
   return (
     <Popover onOpenChange={onOpenChange}>
@@ -353,7 +362,12 @@ export function ContextButton({
             ref={setAnchor}
             variant="quiet"
             size="sm"
-            aria-label={usage ? t('usage.contextPercent', { percent }) : t('usage.title')}
+            aria-label={
+              usage
+                ? t(read?.error ? 'usage.contextPercentStale' : 'usage.contextPercent', { percent })
+                : t('usage.title')
+            }
+            title={read?.error ? t('usage.breakdown.refreshFailed') : undefined}
             className={cn(ROW_BUTTON, 'text-hint tabular')}
           />
         }
@@ -373,6 +387,7 @@ export function ContextButton({
         {usage && (
           <span className={cn('flex items-center gap-1.5', full && USAGE_TONE_TEXT[tone])}>
             <Ring share={share} tone={tone} />
+            {read?.error && '≈'}
             {percent}%
           </span>
         )}
@@ -392,6 +407,8 @@ export function ContextButton({
             idle={idle}
             reports={reports}
             live={live}
+            report={read}
+            managed={context !== undefined && direct}
             onCompact={onCompact}
           />
         )}
@@ -419,6 +436,8 @@ function ContextPart({
   idle,
   reports,
   live,
+  report,
+  managed,
   onCompact,
 }: {
   sessionId: string
@@ -428,18 +447,18 @@ function ContextPart({
   idle: boolean
   reports: boolean
   live: boolean
+  report: ContextReport | undefined
+  managed: boolean
   onCompact: (() => void) | null
 }) {
   const { t } = useTranslation('composer')
-  const report = useUsageStore((s) => s.context[sessionId])
   const totals = usage.tokens
   const tone = contextTone(share)
   const key = `${usage.used}/${usage.size}`
   const view = breakdownView(report, key, { reports, idle, live })
-  // A turn that ends under an open popover reads the context it can now break down, as opening
-  // the popover does; a live reader keeps up through the turn.
+  // Managed reports are refreshed by the host, independently of this popover's lifetime.
   const waiting = !report || (!report.loading && report.key !== key)
-  const readNow = reports && (idle || live) && waiting
+  const readNow = reports && !managed && (idle || live) && waiting
   useEffect(() => {
     if (readNow) loadContext(sessionId, key)
   }, [readNow, sessionId, key])
@@ -448,7 +467,7 @@ function ContextPart({
   const lists = breakdown?.lists ?? []
   const busy = view.kind === 'rows' && view.dimmed
   const compactAt = compactsAt(rows, usage.size)
-  const retry = () => loadContext(sessionId, key)
+  const retry = () => loadContext(sessionId, key, true)
   return (
     <div className="flex flex-col text-hint">
       <div className="flex items-baseline gap-3">
@@ -471,7 +490,15 @@ function ContextPart({
         {rows && <Sources rows={rows} lists={lists} />}
       </div>
       {view.kind === 'rows' && view.stale && (
-        <p className="text-small text-tertiary">{t('usage.breakdown.stale')}</p>
+        <p className="text-small text-tertiary">
+          {t(
+            report?.error
+              ? 'usage.breakdown.refreshFailed'
+              : live || idle
+                ? 'usage.breakdown.updating'
+                : 'usage.breakdown.stale',
+          )}
+        </p>
       )}
       {view.kind === 'loading' && <BreakdownRows />}
       {view.kind === 'error' && <BreakdownError error={view.error} onRetry={retry} />}

@@ -376,6 +376,27 @@ describe('a turn', () => {
     expect(s.sdk.last.inputs[0]!.message.content).toEqual([{ type: 'text', text: 'Hi' }])
   })
 
+  it('reads context summaries from the running query without sending another prompt', async () => {
+    s.sdk.script = (query) => query.running()
+    const running = s.connection.prompt(sessionId, [{ type: 'text', text: 'Keep working' }])
+    await settle()
+    const query = s.sdk.last
+    const queries = s.sdk.queries.length
+    for (const totalTokens of [20_000, 160_000]) {
+      s.sdk.context = { ...s.sdk.context, totalTokens }
+      const snapshot = await s.connection.readContext!(sessionId, '/repo', {})
+      expect(snapshot).toMatchObject({ used: totalTokens, size: 200_000 })
+    }
+    expect(s.sdk.queries).toHaveLength(queries)
+    expect(query.inputs).toHaveLength(1)
+    expect(query.calls.filter((call) => call.method === 'getContextUsage')).toEqual([
+      { method: 'getContextUsage', args: [{ detail: 'summary' }] },
+      { method: 'getContextUsage', args: [{ detail: 'summary' }] },
+    ])
+    query.finish()
+    await running
+  })
+
   it('keeps the context it knows when a provider counts no tokens', async () => {
     const turn =
       (counts: boolean) =>

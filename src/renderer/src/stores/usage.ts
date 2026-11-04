@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import type { ContextBreakdown } from '@shared/agent-host'
+import { CONTEXT_REFRESH_MS, type ContextReport } from '@shared/context'
+export type { ContextReport } from '@shared/context'
 import type { AgentId } from '@shared/thread'
 import type { UsageScope, UsageStatus, UsageSummary } from '@shared/usage'
 import {
@@ -19,14 +20,6 @@ import {
 } from '@renderer/features/usage/model'
 import { errorMessage, host, hostAt } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
-
-export interface ContextReport {
-  /** The context it was read for, as `used/size`; another one means it is out of date. */
-  key: string
-  breakdown: ContextBreakdown | null
-  loading: boolean
-  error: string | null
-}
 
 /** What the usage page shows; kept while the app runs, back to the defaults on launch. */
 export interface UsageFilters {
@@ -92,14 +85,12 @@ function setReport(sessionId: string, report: ContextReport): void {
   useUsageStore.setState((s) => ({ context: { ...s.context, [sessionId]: report } }))
 }
 
-/**
- * Reads what fills the session's context unless it was read for the same context already. Each
- * read forks the session in the agent, so a breakdown holds until the context changes. A read
- * that fails drops the older breakdown, which described another context.
- */
-export function loadContext(sessionId: string, key: string): void {
+/** Reads a report on demand for hosts without a pushed snapshot, or retries a stale snapshot. */
+export function loadContext(sessionId: string, key: string, force = false): void {
   const current = useUsageStore.getState().context[sessionId]
-  if (current && (current.loading || (current.key === key && !current.error))) return
+  const fresh = current?.breakdown && Date.now() - current.breakdown.observedAt < CONTEXT_REFRESH_MS
+  if (current && (current.loading || (!force && fresh && current.key === key && !current.error)))
+    return
   setReport(sessionId, {
     key,
     breakdown: current?.breakdown ?? null,
@@ -107,11 +98,18 @@ export function loadContext(sessionId: string, key: string): void {
     error: null,
   })
   host('sessions.context', { sessionId })
-    .then((breakdown) => setReport(sessionId, { key, breakdown, loading: false, error: null }))
+    .then((breakdown) =>
+      setReport(sessionId, {
+        key: breakdown ? `${breakdown.used}/${breakdown.size}` : key,
+        breakdown,
+        loading: false,
+        error: null,
+      }),
+    )
     .catch((error: unknown) =>
       setReport(sessionId, {
         key,
-        breakdown: null,
+        breakdown: current?.breakdown ?? null,
         loading: false,
         error: errorMessage(error),
       }),
