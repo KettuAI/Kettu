@@ -104,6 +104,8 @@ jobs:
           - os: windows-11-arm
             target: --win --arm64
             update_mode: install
+            # Slow enough that timing-sensitive remote host tests miss their deadlines (#710).
+            test_args: --retry=2
           - os: ${{ vars.LINUX_RUNNER || 'ubuntu-24.04' }}
             target: --linux --x64
             update_mode: install
@@ -125,7 +127,7 @@ jobs:
         run: pnpm test
       # os.tmpdir() is on the C: system drive; the tests' temp folders move to the checkout's drive.
       - if: runner.os == 'Windows'
-        run: pnpm test
+        run: pnpm test ${{ matrix.test_args }}
         env:
           TEMP: ${{ runner.temp }}
           TMP: ${{ runner.temp }}
