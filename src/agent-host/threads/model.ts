@@ -120,7 +120,7 @@ export interface ThreadPage {
   from: number
   /** The cursor for the page before this one, or null when the page starts the thread. */
   older: number | null
-  /** The latest plan when it lies before the page, for the plan pinned above the composer. */
+  /** The latest plan when it lies before the page, for the plan in the top bar. */
   plan: Extract<ThreadEntry, { kind: 'plan' }> | null
 }
 

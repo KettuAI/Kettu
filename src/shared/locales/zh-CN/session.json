@@ -184,10 +184,12 @@
     "inProgress": "进行中",
     "todo": "待办"
   },
-  "planBar": {
-    "label": "计划",
-    "count": "{{done}}/{{total}}",
-    "progress": "已完成 {{done}}/{{total}} 步"
+  "planChip": {
+    "label": "计划：第 {{step}} 步，共 {{total}} 步，{{content}}",
+    "labelDone": "计划：{{total}} 步都已完成",
+    "title": "计划",
+    "count": "{{step}}/{{total}}",
+    "step": "第 {{step}} 步，共 {{total}} 步"
   },
   "userActions": {
     "steered": "已插入当前对话",

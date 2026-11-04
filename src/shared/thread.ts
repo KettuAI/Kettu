@@ -404,7 +404,7 @@ export interface SessionSnapshot {
   seq: number
   /** The cursor for the page before `entries`, or null when they start the thread. */
   older: number | null
-  /** The latest plan when it lies before `entries`, for the plan pinned above the composer. */
+  /** The latest plan when it lies before `entries`, for the plan in the top bar. */
   plan: PlanEntry | null
 }
 
