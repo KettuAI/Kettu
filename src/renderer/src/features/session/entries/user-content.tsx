@@ -22,6 +22,7 @@ import { projectOf } from '../composer/prompt-chips'
 import { CarriedImage } from '../media/carried-image'
 import { CarriedMedia } from '../media/carried-media'
 import { attachmentKey } from '../media/viewer-items'
+import { splitQuote } from './reply-quote'
 
 /** Taller than this, a message collapses behind a fade and Show more. */
 const COLLAPSED_HEIGHT = 300
@@ -42,13 +43,26 @@ export function UserContentView({
   entryId?: string
 }) {
   const text = textOf(content)
+  const quoted = splitQuote(text)
+  const body = quoted ? quoted.rest : text
   const refs = content.flatMap((c) => (c.type === 'ref' ? [c.ref] : []))
   return (
     <div className="flex flex-col gap-2">
       {text && (
         <div className="flex flex-col gap-1">
           <Clamp maxHeight={COLLAPSED_HEIGHT} buttonClassName="-mx-1.5 -mb-0.5">
-            <ChipText text={text} sessionId={sessionId} entryId={entryId} />
+            {quoted && (
+              <blockquote
+                data-selectable=""
+                className={cn(
+                  'border-l-2 border-strong pl-2.5 whitespace-pre-wrap text-secondary',
+                  body && 'mb-2',
+                )}
+              >
+                {quoted.quote}
+              </blockquote>
+            )}
+            {body && <ChipText text={body} sessionId={sessionId} entryId={entryId} />}
           </Clamp>
         </div>
       )}

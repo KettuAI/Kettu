@@ -537,6 +537,9 @@
   ::selection {
     background-color: var(--selection);
   }
+  ::highlight(reply-quote) {
+    background-color: var(--selection);
+  }
   input,
   textarea,
   [contenteditable] {

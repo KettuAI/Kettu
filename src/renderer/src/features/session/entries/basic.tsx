@@ -129,7 +129,7 @@ export const AgentEntry = memo(function AgentEntry({ sessionId, entryId }: Entry
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
   return (
-    <div className={cn('min-w-0', animation)} data-selectable="">
+    <div className={cn('min-w-0', animation)} data-selectable="" data-agent-message="">
       <SessionIdContext value={sessionId}>
         <EntryIdContext value={entryId}>
           <Markdown markdown={entry.markdown} streaming={entry.streaming} />

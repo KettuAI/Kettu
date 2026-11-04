@@ -533,5 +533,11 @@
     "answeredOne": "已回答",
     "skipped": "已跳过",
     "secret": "不显示"
+  },
+  "reply": {
+    "button": "回复",
+    "placeholder": "回复 {{agent}}…",
+    "send": "发送回复",
+    "quote": "引用的文字"
   }
 }
