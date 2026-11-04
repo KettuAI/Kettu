@@ -37,6 +37,41 @@ describe('createValidators', () => {
     rejects(() => posix['agents.logout']({ agentId: 'unknown-agent' }))
   })
 
+  it('validates provider actions without accepting unrelated credentials', () => {
+    const base = { agentId: 'opencode', providerId: 'deepseek' }
+    expect(posix['agents.providerAction']({ ...base, action: 'set-key', key: 'secret' })).toEqual({
+      ...base,
+      action: 'set-key',
+      key: 'secret',
+    })
+    expect(
+      posix['agents.providerAction']({ ...base, action: 'activate', credentialId: 'one' }),
+    ).toEqual({
+      ...base,
+      action: 'activate',
+      credentialId: 'one',
+    })
+    rejects(() => posix['agents.providerAction']({ ...base, action: 'delete' }))
+    rejects(() => posix['agents.providerAction']({ ...base, action: 'set-key' }))
+    rejects(() => posix['agents.providerAction']({ ...base, action: 'activate' }))
+    rejects(() =>
+      posix['agents.providerAction']({
+        ...base,
+        action: 'logout',
+        credentialId: 'one',
+        key: 'secret',
+      }),
+    )
+    rejects(() =>
+      posix['agents.providerAction']({
+        ...base,
+        providerId: '../other',
+        action: 'logout',
+        credentialId: 'one',
+      }),
+    )
+  })
+
   it('wants absolute paths by the platform rules', () => {
     expect(posix['projects.add']({ path: '/Users/me/app' })).toEqual({ path: '/Users/me/app' })
     rejects(() => posix['projects.add']({ path: 'app' }))

@@ -468,6 +468,7 @@
       "group": "Spend",
       "month": "This month",
       "description": "{{name}} doesn’t report plan limits for API keys. Kettu counts what it sent.",
+      "descriptionProviders": "What Kettu sent through this agent this month, by its own record.",
       "unpriced": "Not priced"
     },
     "configuration": "Configuration",
@@ -661,7 +662,62 @@
       "rose": "Rose",
       "green": "Green",
       "slate": "Slate"
-    }
+    },
+    "providers": {
+      "group": "Providers",
+      "add": "Add provider",
+      "refresh": "Read providers again",
+      "reading": "Reading providers…",
+      "readFailed": "Couldn’t read providers.",
+      "retry": "Try again",
+      "none": "No provider is connected yet.",
+      "noneReported": "OpenCode reported no providers.",
+      "connected": "Connected",
+      "notConnected": "Not connected",
+      "active": "Active",
+      "needsSignIn": "Needs sign-in",
+      "use": "Use",
+      "signIn": "Sign in",
+      "again": "Sign in again",
+      "logOut": "Log out",
+      "setKey": "Add key…",
+      "copyCommand": "Copy command",
+      "copied": "Sign-in command copied",
+      "copyFailed": "Couldn’t copy the command",
+      "command": "Copy sign-in command",
+      "unavailable": "No sign-in method",
+      "methods": {
+        "key": "API key",
+        "oauth": "Sign in",
+        "command": "Command",
+        "external": "External sign-in",
+        "env": "Environment"
+      },
+      "addTitle": "Add a provider",
+      "addDescription": "Search the providers OpenCode knows, then sign in with a plan or an API key.",
+      "search": "Search providers",
+      "searchPlaceholder": "Search providers…",
+      "noMatches": "No provider matches.",
+      "key": {
+        "title": "API key for {{name}}",
+        "description": "OpenCode stores the key. Kettu uses it only to read usage from this provider.",
+        "label": "API key",
+        "save": "Save key"
+      },
+      "usage": {
+        "reading": "Reading usage…",
+        "unsupported": "{{name}} doesn’t report usage.",
+        "failed": "Couldn’t read usage for {{name}}.",
+        "unknown": "No usage reported yet.",
+        "none": "No plan usage reported.",
+        "balances": "Balances",
+        "observed": "Read {{ago}}",
+        "balancesStale": "Showing the last balances, read {{ago}}; a refresh failed.",
+        "balancesStaleNoTime": "Showing the last balances; a refresh failed."
+      }
+    },
+    "signInCopied": "No project is open, so the sign-in command was copied.",
+    "signInCopyFailed": "No project is open and the sign-in command could not be copied."
   },
   "about": {
     "version": {

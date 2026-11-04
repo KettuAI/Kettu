@@ -10,6 +10,8 @@ import type {
   AgentAuthMethod,
   AgentDetails,
   AgentInstallMethod,
+  AgentProvider,
+  AgentProviderAction,
   AgentState,
   AgentStatus,
   AgentTask,
@@ -95,6 +97,7 @@ import { getEnv, isExecutableFile, type Env } from './find-command'
 import { HostedRun, type HostedRunHooks } from './hosted-run'
 import { t } from './i18n'
 import { CliVersions, type CliProbe, type CliVersion } from './installed-cli'
+import { OpenCodeClient } from './opencode/client'
 import { claudeJsonPath, readClaudeProfile } from './plan-tier'
 import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { formatCommand } from './quote'
@@ -315,6 +318,11 @@ class Slot {
   failures: number[] = []
   signIn: AgentStatus['signIn'] = 'unknown'
   account: AgentAccount | null = null
+  providers: AgentProvider[] = []
+  providersError: string | null = null
+  providersRun: Promise<void> | null = null
+  providersReadAt = 0
+  providerActionRun: Promise<void> | null = null
   limits = new Map<string, PlanLimit>()
   /** Kettu handed the harness an API key for this agent, which it never reads back. */
   apiKey = false
@@ -2268,6 +2276,7 @@ export class AgentManager {
   async refreshLimits(agentId: AgentId, options?: { force?: boolean }): Promise<void> {
     if (!this.has(agentId)) return
     const slot = this.slot(agentId)
+    if (slot.def.id === 'opencode') return this.refreshProviders(slot, options?.force === true)
     if (!this.hasLimits(agentId)) return
     await this.detectAll()
     const force = options?.force === true
@@ -2286,7 +2295,10 @@ export class AgentManager {
   hasLimits(agentId: AgentId): boolean {
     const slot = this.slots.get(agentId)
     return (
-      !!slot && (limitsReport(slot.def.id) !== null || this.driver(slot).reads?.limits === true)
+      !!slot &&
+      (slot.def.id === 'opencode' ||
+        limitsReport(slot.def.id) !== null ||
+        this.driver(slot).reads?.limits === true)
     )
   }
 
@@ -2566,6 +2578,7 @@ export class AgentManager {
    */
   async refreshAccount(agentId: AgentId, options?: { force?: boolean }): Promise<void> {
     const slot = this.registeredSlot(agentId)
+    if (slot.def.id === 'opencode') return this.refreshProviders(slot, options?.force === true)
     if (!slot.def.reportsAccount) return
     await this.detectAll()
     const force = options?.force === true
@@ -2579,6 +2592,105 @@ export class AgentManager {
       if (force && error instanceof HostError && error.code === 'auth_required') return
       throw error
     }
+  }
+
+  private openCodeClient(slot: Slot): OpenCodeClient {
+    const display = this.display(slot)
+    return new OpenCodeClient({
+      program: display.command,
+      env: this.deps.env.agentEnv(slot.id),
+      platform: this.deps.platform,
+      ...(this.deps.runProgram ? { runProgram: this.deps.runProgram } : {}),
+    })
+  }
+
+  private async refreshProviders(slot: Slot, force: boolean): Promise<void> {
+    await this.detectAll()
+    if (slot.h.detection?.state !== 'available' || !slot.h.detection.spec) return
+    if (slot.providersRun) return slot.providersRun
+    if (!force && Date.now() - slot.providersReadAt < this.timings.limitsMs) return
+    slot.providersRun = this.readProviders(slot).finally(() => {
+      slot.providersRun = null
+    })
+    return slot.providersRun
+  }
+
+  private async readProviders(slot: Slot): Promise<void> {
+    try {
+      const display = this.display(slot)
+      const providers = (await this.openCodeClient(slot).providers()).map((provider) => {
+        const previous = slot.providers.find((p) => p.id === provider.id)
+        const sameAccounts =
+          previous && JSON.stringify(previous.accounts) === JSON.stringify(provider.accounts)
+        if (provider.usage?.state === 'error' && previous?.usage && sameAccounts) {
+          return {
+            ...provider,
+            usage: {
+              ...provider.usage,
+              limits: previous.usage.limits,
+              balances: previous.usage.balances,
+              observedAt: previous.usage.observedAt,
+            },
+          }
+        }
+        return provider
+      })
+      slot.providers = providers.map((provider) => ({
+        ...provider,
+        loginCommand: formatCommand(
+          {
+            command: display.command,
+            args: ['auth', 'login', provider.id],
+            env: display.env,
+          },
+          this.deps.platform,
+        ),
+      }))
+      slot.providersError = null
+      slot.providersReadAt = Date.now()
+      slot.limits.clear()
+      for (const provider of providers) {
+        for (const limit of provider.usage?.limits ?? []) {
+          const window = `${provider.id}:${limit.window}`
+          slot.limits.set(window, { ...limit, window, label: `${provider.name} · ${limit.label}` })
+        }
+      }
+      const connected = providers.filter((provider) => provider.accounts.some((a) => !a.needsAuth))
+      slot.account =
+        connected.length > 0
+          ? { kind: 'external', label: connected.map((p) => p.name).join(', '), email: null }
+          : null
+      const wasRequired = slot.signIn === 'required'
+      // Free and local models work without a connected account.
+      slot.signIn = connected.length > 0 ? 'signed-in' : 'unknown'
+      if (wasRequired && connected.length > 0) this.hooks.signedIn(slot.id)
+    } catch {
+      slot.providersError =
+        'Could not read OpenCode providers. Check the installed OpenCode version and try again.'
+      throw new HostError('agent_unavailable', slot.providersError)
+    } finally {
+      this.emit(slot)
+    }
+  }
+
+  async providerAction(input: AgentProviderAction): Promise<void> {
+    const slot = this.registeredSlot(input.agentId)
+    if (slot.def.id !== 'opencode') throw invalidParams('This agent has no provider accounts')
+    if (slot.providerActionRun) throw new HostError('busy', 'A provider account is being changed')
+    const run = async (): Promise<void> => {
+      await this.detectAll()
+      if (slot.h.detection?.state !== 'available' || !slot.h.detection.spec) {
+        throw new HostError('agent_unavailable', 'OpenCode is not installed')
+      }
+      await slot.providersRun
+      await this.openCodeClient(slot).action(input)
+      await this.credentialsChanged(slot)
+      await this.refreshProviders(slot, true)
+    }
+    slot.providerActionRun = run().finally(() => {
+      slot.providerActionRun = null
+    })
+    return slot.providerActionRun
   }
 
   authRequired(agentId: AgentId): void {
@@ -2833,6 +2945,14 @@ export class AgentManager {
         ? { command: this.signInCommand(slot, display, method, folderEnv) }
         : {}),
     }))
+    if (slot.def.id === 'opencode' && this.has(agentId)) {
+      authMethods.push({
+        id: 'opencode-login',
+        name: 'OpenCode login',
+        type: 'terminal',
+        command: formatCommand({ ...display, args: ['auth', 'login'] }, platform),
+      })
+    }
     const capabilities = init?.capabilities ?? rememberedCapabilities(slot)
     const { launch } = slot.def
     const detection = h.detection
@@ -2876,6 +2996,12 @@ export class AgentManager {
       authMethods,
       canLogout: capabilities?.logout ?? false,
       account: slot.account,
+      ...(slot.def.id === 'opencode'
+        ? {
+            providers: slot.providers,
+            providersError: slot.providersError,
+          }
+        : {}),
       limits: [...slot.limits.values()],
       detail: slot.detail ?? h.adapterNote,
       installUrl:
@@ -2930,7 +3056,7 @@ export class AgentManager {
         reports: this.hasLimits(slot.id),
         context: this.hasContext(slot.id),
         liveContext: this.driver(slot).reads?.context === true,
-        account: slot.def.reportsAccount ?? false,
+        account: slot.def.id === 'opencode' || (slot.def.reportsAccount ?? false),
         progressNotes: slot.def.progressNotes ?? false,
         mcpHttp: capabilities?.mcpHttp ?? null,
         prompt: capabilities?.prompt ?? null,
@@ -3002,9 +3128,12 @@ export class AgentManager {
       h.rememberedUpdate = update
       this.rememberUpdates()
     }
-    const commands = this.statuses().flatMap((s) =>
-      s.authMethods.flatMap((method) => (method.command ? [method.command] : [])),
-    )
+    const commands = this.statuses().flatMap((s) => [
+      ...s.authMethods.flatMap((method) => (method.command ? [method.command] : [])),
+      ...(s.providers ?? []).flatMap((provider) =>
+        provider.loginCommand ? [provider.loginCommand] : [],
+      ),
+    ])
     const commandsJson = JSON.stringify(commands)
     if (commandsJson !== this.lastAuthCommands) {
       this.lastAuthCommands = commandsJson

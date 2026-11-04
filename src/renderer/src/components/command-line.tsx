@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { CopyAction } from './copy-action'
 
 /** A command as it runs, which can be copied into a terminal. */
-export function CommandLine({ command }: { command: string }) {
+export function CommandLine({ command, label }: { command: string; label?: string }) {
   const { t } = useTranslation('common')
   return (
     <div className="flex min-w-0 items-center gap-1.5 rounded-lg bg-code-block py-0.75 pr-0.75 pl-2.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]">
@@ -13,7 +13,7 @@ export function CommandLine({ command }: { command: string }) {
       >
         {command}
       </code>
-      <CopyAction text={command} label={t('actions.copyCommand')} />
+      <CopyAction text={command} label={label ?? t('actions.copyCommand')} />
     </div>
   )
 }

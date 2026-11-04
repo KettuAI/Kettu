@@ -13,7 +13,7 @@ import { limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { isInstalled, useAgentsStore } from '@renderer/stores/agents'
 import { refreshLimits } from '@renderer/stores/usage'
-import { planAgents, resetForm, splitPlans } from './model'
+import { planAgents, resetForm, splitPlans, limitsToRead } from './model'
 import { Panel, PanelTitle } from './panel'
 
 /** A limit's bar: 6 px on the default line, its fill by `limitLevel`. */
@@ -40,8 +40,7 @@ export function PlanLimits({ used }: { used: readonly AgentId[] }) {
   // Read afresh when the page opens; the host asks each agent at most once a minute.
   useEffect(() => {
     const { byId } = useAgentsStore.getState()
-    for (const agent of Object.values(byId)) {
-      if (!agent || agent.state !== 'ready' || agent.limits.length === 0) continue
+    for (const agent of limitsToRead(Object.values(byId).filter((a): a is AgentStatus => !!a))) {
       refreshLimits(agent.id).catch((error: unknown) =>
         console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
       )

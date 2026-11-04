@@ -199,7 +199,14 @@ export function LogCopyButton({ task }: { task: AgentTask }) {
  * What Kettu sent through an agent signed in with an API key this month, by its own record: an
  * API key has no plan limits to read.
  */
-export function SpendGroup({ status }: { status: AgentStatus }) {
+export function SpendGroup({
+  status,
+  providers = false,
+}: {
+  status: AgentStatus
+  /** A provider-based agent: its provider usage is read elsewhere. */
+  providers?: boolean
+}) {
   const { request } = useHostScope()
   const { t } = useTranslation('settings')
   // undefined while it is read; null when no model it used has a price.
@@ -230,7 +237,10 @@ export function SpendGroup({ status }: { status: AgentStatus }) {
           text={
             <RowText
               name={t('agents.spend.month')}
-              description={t('agents.spend.description', { name: status.harnessName })}
+              description={t(
+                providers ? 'agents.spend.descriptionProviders' : 'agents.spend.description',
+                { name: status.harnessName },
+              )}
             />
           }
         >
