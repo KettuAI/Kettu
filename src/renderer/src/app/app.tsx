@@ -56,12 +56,14 @@ export function App() {
           <div className="relative min-h-0 flex-1">
             {/* The workbench stays in view under Settings, which opens over it. */}
             <div inert={settingsOpen} className="absolute inset-0">
-              <CornerControls />
               {/* One drag scope for the sidebar and the main area: a session's row drags into
                   the split. */}
               <SplitDragProvider>
                 <Workbench />
               </SplitDragProvider>
+              {/* Last, since where drag regions overlap the later one wins and the headers
+                  beneath are drag regions. */}
+              <CornerControls />
             </div>
             {settingsLoaded && (
               <Suspense fallback={null}>
