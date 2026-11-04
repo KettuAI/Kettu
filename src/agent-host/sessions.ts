@@ -19,6 +19,7 @@ import {
   type StartNotice,
 } from '@shared/agent-host'
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
+import { CONTEXT_REFRESH_MS } from '@shared/context'
 import { firstLine, outlineText } from '@shared/outline'
 import { originLabel, type BrowserOriginAnswer, type BrowserOriginDecision } from '@shared/browser'
 import type { BusyCounts, BusySession } from '@shared/host-control'
@@ -173,6 +174,9 @@ export interface SessionTimings {
   settingsDelayMs: number
   /** An agent that lists its titles is read once more this long after the first turn's end. */
   listedTitleRetryMs: number
+  /** The free direct context reader's polling interval and activity coalescing window. */
+  contextRefreshMs: number
+  contextDebounceMs: number
 }
 
 export const SESSION_TIMINGS: SessionTimings = {
@@ -185,6 +189,8 @@ export const SESSION_TIMINGS: SessionTimings = {
   cacheReadMs: 1_000,
   settingsDelayMs: 500,
   listedTitleRetryMs: 10_000,
+  contextRefreshMs: CONTEXT_REFRESH_MS,
+  contextDebounceMs: 500,
 }
 
 export interface SessionEvents {
@@ -423,6 +429,12 @@ interface Live {
   idleSince: number | null
   hiddenSince: number | null
   releaseTimer: ReturnType<typeof setTimeout> | null
+  contextTimer: ReturnType<typeof setTimeout> | null
+  contextDueAt: number
+  contextDirty: boolean
+  contextRevision: number
+  contextFailures: number
+  contextReadAt: number
   /** The agent that asked for this session to be archived once its running turn ends. */
   archiveAfterTurn: string | null
   /** Send now stopped the running turn, so the queue's first prompt goes when the turn ends. */
@@ -1515,6 +1527,12 @@ export class SessionManager {
       idleSince: null,
       hiddenSince: this.inFront(record.id) ? null : this.now(),
       releaseTimer: null,
+      contextTimer: null,
+      contextDueAt: 0,
+      contextDirty: false,
+      contextRevision: 0,
+      contextFailures: 0,
+      contextReadAt: 0,
       archiveAfterTurn: null,
       sendNext: false,
     }
@@ -1545,6 +1563,8 @@ export class SessionManager {
     this.flushPatches(live)
     if (live.checkpointTimer) clearTimeout(live.checkpointTimer)
     if (live.releaseTimer) clearTimeout(live.releaseTimer)
+    if (live.contextTimer) clearTimeout(live.contextTimer)
+    this.contextRuns.delete(live.id)
     if (live.listedTitleTimer) clearTimeout(live.listedTitleTimer)
     if (live.turn?.fallback) clearTimeout(live.turn.fallback)
     live.connection?.unregister(live.record.acpSessionId, live.target)
@@ -1594,6 +1614,21 @@ export class SessionManager {
     if (live.closing) return
     if (output.patches.length > 0) this.emit(live, output.patches)
     for (const effect of output.effects) this.applyEffect(live, effect)
+    if (
+      !live.replaying &&
+      output.patches.some(
+        (patch) =>
+          (patch.op === 'session.update' &&
+            ('usage' in patch.changes || 'config' in patch.changes)) ||
+          (patch.op === 'entry.add' &&
+            ['agent', 'tool', 'compaction'].includes(patch.entry.kind)) ||
+          (patch.op === 'entry.update' &&
+            ['tool', 'compaction'].includes(live.thread.byId[patch.id]?.kind ?? '')),
+      )
+    ) {
+      live.contextRevision++
+      this.refreshContext(live, this.timings.contextDebounceMs)
+    }
     this.touch(live.id)
   }
 
@@ -1638,6 +1673,7 @@ export class SessionManager {
         this.refreshRelease(live)
         break
       case 'request':
+        this.refreshContext(live, this.timings.contextDebounceMs)
         // A turn's transcript is read as it ends; a request between turns has a read of its own.
         if (live.turn) live.turn.requested = true
         else {
@@ -1869,6 +1905,8 @@ export class SessionManager {
     }
     ports.add(portId)
     this.tellViewers(id, [portId])
+    const live = this.live.get(id)
+    if (live) this.refreshContext(live)
   }
 
   private showing(sessionId: string): string[] {
@@ -1914,6 +1952,7 @@ export class SessionManager {
       const live = this.live.get(id)
       if (!live) continue
       live.hiddenSince = this.inFront(live.id) ? null : this.now()
+      if (this.inFront(live.id)) this.refreshContext(live)
       this.refreshRelease(live)
     }
   }
@@ -3545,14 +3584,57 @@ export class SessionManager {
    * no turn runs in is read without attaching it: the fork starts from its transcript on disk, and
    * the agent's idle stop ends it again.
    */
-  context(sessionId: string): Promise<ContextBreakdown | null> {
+  context(sessionId: string, force = false): Promise<ContextBreakdown | null> {
     const running = this.contextRuns.get(sessionId)
     if (running) return running
-    const run = this.readContext(sessionId).finally(() => {
-      this.contextRuns.delete(sessionId)
-      const live = this.live.get(sessionId)
-      if (live) this.refreshRelease(live)
-    })
+    const live = this.live.get(sessionId)
+    const report = live?.thread.session.context
+    if (
+      live &&
+      !force &&
+      report?.breakdown &&
+      !report.error &&
+      !live.contextDirty &&
+      this.now() - live.contextReadAt < this.timings.contextRefreshMs
+    ) {
+      return Promise.resolve(report.breakdown)
+    }
+    if (live) {
+      if (live.contextTimer) clearTimeout(live.contextTimer)
+      live.contextTimer = null
+      live.contextDirty = false
+      live.contextReadAt = this.now()
+    }
+    const run = this.readContext(sessionId)
+      .catch((error: unknown) => {
+        if (live && this.contextCurrent(live)) {
+          live.contextFailures++
+          const previous = live.thread.session.context
+          this.update(live, {
+            context: {
+              key: previous?.key ?? '',
+              breakdown: previous?.breakdown ?? null,
+              loading: false,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          })
+        }
+        throw error
+      })
+      .finally(() => {
+        if (this.contextRuns.get(sessionId) === run) this.contextRuns.delete(sessionId)
+        if (live && this.contextCurrent(live)) {
+          const active = this.contextActive(live)
+          const retry = live.contextFailures > 0 && live.contextFailures <= 3
+          if (live.contextDirty || active || retry) {
+            const delay = live.contextDirty
+              ? this.timings.contextDebounceMs
+              : this.timings.contextRefreshMs * Math.min(8, 2 ** live.contextFailures)
+            this.scheduleContext(live, delay)
+          }
+          this.refreshRelease(live)
+        }
+      })
     this.contextRuns.set(sessionId, run)
     return run
   }
@@ -3565,7 +3647,20 @@ export class SessionManager {
     // A starting session has no query to read yet. A running one can be read when its connection
     // answers directly, as Claude Code's does; a report in a fork waits for the turn to end.
     if (status === 'starting') throw busyError(status)
+    const revision = live?.contextRevision
+    if (live && this.contextCurrent(live)) {
+      const previous = live.thread.session.context
+      this.update(live, {
+        context: {
+          key: previous?.key ?? '',
+          breakdown: previous?.breakdown ?? null,
+          loading: true,
+          error: previous?.error ?? null,
+        },
+      })
+    }
     const runtime = await this.deps.agents.ensureReady(record.agentId)
+    if (live && !this.contextCurrent(live)) return null
     const { connection } = runtime
     const running = status === 'running' || status === 'awaiting_permission'
     if (running && !connection.readContext) throw busyError(status)
@@ -3616,7 +3711,7 @@ export class SessionManager {
         )
       }
     }
-    this.applyContextUsage(live, breakdown)
+    this.applyContextUsage(live, breakdown, revision)
     return breakdown
   }
 
@@ -3630,19 +3725,36 @@ export class SessionManager {
    * Keeps the session's usage in step with a breakdown: some connections report the context only
    * in the breakdown, and a running turn updates it before the agent's next usage event arrives.
    */
-  private applyContextUsage(live: Live | undefined, breakdown: ContextBreakdown): void {
-    if (!live || breakdown.size <= 0 || this.live.get(live.id) !== live) return
+  private applyContextUsage(
+    live: Live | undefined,
+    breakdown: ContextBreakdown,
+    revision?: number,
+  ): void {
+    if (!live || breakdown.size <= 0 || !this.contextCurrent(live)) return
+    live.contextFailures = 0
     const usage = live.thread.session.usage
-    if (usage?.used === breakdown.used && usage.size === breakdown.size) return
-    this.update(live, {
-      usage: {
+    const changes: Partial<SessionView> = {
+      context: {
+        key: `${breakdown.used}/${breakdown.size}`,
+        breakdown,
+        loading: false,
+        error: null,
+      },
+    }
+    // A usage event newer than the read must not be replaced by the older snapshot's count.
+    if (
+      live.contextRevision === revision &&
+      (usage?.used !== breakdown.used || usage.size !== breakdown.size)
+    ) {
+      changes.usage = {
         used: breakdown.used,
         size: breakdown.size,
         cost: usage?.cost ?? null,
         tokens: usage?.tokens ?? null,
         ...(usage?.cache ? { cache: usage.cache } : {}),
-      },
-    })
+      }
+    }
+    this.update(live, changes)
   }
 
   /** Sends a prompt; a session that is not attached attaches to its agent as the turn starts. */
@@ -4305,6 +4417,7 @@ export class SessionManager {
       const sending = connection.prompt(live.record.acpSessionId, resolved.wire).finally(() => {
         if (live.unansweredCancel === turn) live.unansweredCancel = null
       })
+      this.refreshContext(live)
       // Sent: a retry after a failed sign-in sends what the thread shows, and the records stay
       // until the turn ends, in case its message is given back.
       this.commitAttachments(live, resolved)
@@ -4482,19 +4595,45 @@ export class SessionManager {
     this.refreshContext(live)
   }
 
-  /**
-   * Reads the context from a connection that answers directly. Providers can report no context
-   * count at all, so the ring must not wait for the popover to open.
-   */
-  private refreshContext(live: Live): void {
-    if (live.record.origin === 'subagent') return
-    if (!this.deps.agents.runtime(live.record.agentId)?.connection.readContext) return
-    void this.context(live.id).catch((error: unknown) => {
-      this.deps.diagnostics.log(
-        'warn',
-        `${live.id}: the context could not be read after the turn: ${(error as Error).message}`,
-      )
-    })
+  /** Coalesces activity reads; a change during a read is followed by another read. */
+  private refreshContext(live: Live, delay = 0): void {
+    if (!this.contextCurrent(live) || !live.connection?.readContext) return
+    live.contextDirty = true
+    if (this.contextRuns.has(live.id)) return
+    this.scheduleContext(live, delay)
+  }
+
+  private contextCurrent(live: Live): boolean {
+    return (
+      !this.stopped &&
+      !live.closing &&
+      this.live.get(live.id) === live &&
+      live.record.origin !== 'subagent'
+    )
+  }
+
+  private contextActive(live: Live): boolean {
+    const status = live.thread.session.status
+    return status === 'running' || status === 'awaiting_permission'
+  }
+
+  private scheduleContext(live: Live, delay: number): void {
+    if (!this.contextCurrent(live) || !live.connection?.readContext) return
+    const due = this.now() + delay
+    if (live.contextTimer && live.contextDueAt <= due) return
+    if (live.contextTimer) clearTimeout(live.contextTimer)
+    live.contextDueAt = due
+    live.contextTimer = setTimeout(() => {
+      live.contextTimer = null
+      if (!this.contextCurrent(live) || !live.connection?.readContext) return
+      void this.context(live.id, true).catch((error: unknown) => {
+        this.deps.diagnostics.log(
+          'warn',
+          `${live.id}: the context could not be read: ${(error as Error).message}`,
+        )
+      })
+    }, delay)
+    live.contextTimer.unref?.()
   }
 
   /** The messages the thread holds, which says whether the turn that ended was the first one. */
@@ -4713,6 +4852,7 @@ export class SessionManager {
       this.deps.events.attention(live.id, 'error', this.titleOf(live), mapped.message)
     }
     this.checkpoint(live)
+    this.refreshContext(live)
   }
 
   /**
@@ -5843,6 +5983,7 @@ export class SessionManager {
       this.flushPatches(live)
       if (live.turn?.fallback) clearTimeout(live.turn.fallback)
       if (live.releaseTimer) clearTimeout(live.releaseTimer)
+      if (live.contextTimer) clearTimeout(live.contextTimer)
       this.checkpoint(live)
     }
     for (const timer of this.cacheReads.values()) clearTimeout(timer)

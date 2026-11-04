@@ -1,6 +1,5 @@
-import type { ContextBreakdown } from '@shared/agent-host'
+import type { ContextBreakdown, ContextReport } from '@shared/context'
 import type { SessionUsage } from '@shared/thread'
-import type { ContextReport } from '@renderer/stores/usage'
 
 /** The context colors, `--context-1` to `--context-7`. */
 export const CONTEXT_COLORS = 7
@@ -114,7 +113,7 @@ export type BreakdownView =
       kind: 'rows'
       rows: ContextRow[]
       dimmed: boolean
-      /** Read before the running turn, which no report can be taken in. */
+      /** The snapshot predates the current context, or its refresh failed. */
       stale: boolean
     }
   | { kind: 'loading' }
@@ -122,12 +121,7 @@ export type BreakdownView =
   | { kind: 'betweenTurns' }
   | { kind: 'none' }
 
-/**
- * The rows, skeleton rows, error or between-turns line to show. A connection that reads while a
- * turn runs (`live`) keeps its rows current; without one the rows are the turn's starting point,
- * marked stale, and a turn that never read one shows the between-turns line. A read that fails
- * drops the older rows, so nothing read for an earlier context passes for the current one.
- */
+/** Keeps the last successful rows visible while a newer snapshot loads or retries. */
 export function breakdownView(
   report: ContextReport | undefined,
   key: string,
@@ -136,8 +130,9 @@ export function breakdownView(
   if (!reports) return { kind: 'none' }
   const breakdown = report?.breakdown
   const rows = breakdown ? contextRows(breakdown.categories) : null
+  if (report?.error && rows) return { kind: 'rows', rows, dimmed: false, stale: true }
   if (live) {
-    if (report && rows) return { kind: 'rows', rows, dimmed: report.loading, stale: false }
+    if (report && rows) return { kind: 'rows', rows, dimmed: false, stale: report.key !== key }
     if (report?.error) return { kind: 'error', error: report.error }
     return { kind: 'loading' }
   }

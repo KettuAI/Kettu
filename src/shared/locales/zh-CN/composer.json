@@ -46,6 +46,7 @@
   "usage": {
     "title": "用量",
     "contextPercent": "上下文已使用 {{percent}}%",
+    "contextPercentStale": "上次读取的上下文用量为 {{percent}}%，正在重试",
     "shortWindow": {
       "five_hour": "5 小时",
       "seven_day": "7 天",
@@ -73,7 +74,9 @@
       "loading": "正在读取上下文明细",
       "error": "无法获取上下文明细：{{error}}",
       "betweenTurns": "上下文明细仅在两轮对话之间显示",
-      "stale": "本轮开始前读取"
+      "stale": "本轮开始前读取",
+      "updating": "正在更新上下文明细",
+      "refreshFailed": "当前显示上次读取的结果，读取恢复后会自动更新。"
     },
     "limits": {
       "plan": "套餐",
