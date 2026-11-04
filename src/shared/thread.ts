@@ -299,6 +299,8 @@ export interface ToolEntry {
     | null
   rawInput?: string // the command or input as text, when the agent sent one
   description?: string // what a command does, in the agent's words (Claude Code's Bash)
+  /** The agent's own name for the work this call is part of; the work line shows it. */
+  label?: string
   // The agent's question, when the call asks the user to pick an answer rather than to allow it.
   question?: string
 }

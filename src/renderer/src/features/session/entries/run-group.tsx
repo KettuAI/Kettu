@@ -15,7 +15,15 @@ import { stepItems } from '../thread-items'
 import { useEntryAnimation } from '../use-thread'
 import { Entry } from './entry'
 import { CutLabel } from './cut-label'
-import { PANEL, runSummary, toolStep, type RunStep, type SummaryPart } from './helpers'
+import {
+  PANEL,
+  runLabels,
+  runSummary,
+  thoughtTitle,
+  toolStep,
+  type RunStep,
+  type SummaryPart,
+} from './helpers'
 import { ToolGroup } from './tool-group'
 import { useDiffStats } from './use-diff-stats'
 
@@ -26,12 +34,19 @@ interface RunGroupProps {
   signature: string
   projectPath: string
   agentName: string
+  /** The last thing in a thread whose turn still runs. */
+  latest: boolean
 }
 
+// What an agent's own label for a run names, so the counts after it leave these out.
+const LABELLED = new Set(['read', 'search', 'fetch'])
+
 /**
- * The work between messages and short thoughts, two or more steps or a lone tool call or long
- * thought, folded into one line that says what it did ("Read plan.md · Edited ui.md +3 −0 · Ran 3
- * commands") and expands to the steps. A step waiting for permission holds it open.
+ * The work between messages, two or more steps or a lone tool call or thought, folded into one
+ * line that says what it did ("Read plan.md · Edited ui.md +3 −0 · Ran 3 commands") and expands to
+ * the steps. An agent's own label for the work comes first and its counts follow. While the work
+ * runs, or is the last thing in a turn that still runs, the line ends with the latest thought's
+ * heading. A step waiting for permission holds it open.
  */
 export const RunGroup = memo(function RunGroup({
   sessionId,
@@ -39,6 +54,7 @@ export const RunGroup = memo(function RunGroup({
   signature,
   projectPath,
   agentName,
+  latest,
 }: RunGroupProps) {
   const { t } = useTranslation('session')
   const [userOpen, setUserOpen] = useState<boolean | null>(null)
@@ -63,10 +79,26 @@ export const RunGroup = memo(function RunGroup({
       steps.push({ kind: 'compaction', running: entry.status === 'in_progress' })
     }
   }
-  const { parts, failed, running } = runSummary(steps)
+  const summary = runSummary(steps)
+  const { failed, running } = summary
+  const labels = runLabels(steps)
+  const parts: SummaryPart[] =
+    labels.length > 0
+      ? [
+          ...labels.map((text) => ({ text })),
+          ...summary.parts.filter((part) => !part.kind || !LABELLED.has(part.kind)),
+        ]
+      : summary.parts
+  let thought: string | null = null
+  if (running || latest) {
+    for (let i = entries.length - 1; i >= 0 && thought === null; i--) {
+      const entry = entries[i]
+      if (entry?.kind === 'thought') thought = thoughtTitle(entry.markdown)
+    }
+  }
   const items = useMemo(() => stepItems(entryIds, signature), [entryIds, signature])
   const spaced = useMemo(
-    () => new Set(entryIds.filter((_, i) => signature[i] === 'p' || signature[i] === 'r')),
+    () => new Set(entryIds.filter((_, i) => signature[i] === 'p' || signature[i] === 'h')),
     [entryIds, signature],
   )
   const open = waiting || (userOpen ?? false)
@@ -85,9 +117,9 @@ export const RunGroup = memo(function RunGroup({
         />
         <CutLabel
           className="min-w-0 truncate"
-          full={<Summary parts={parts} failed={failed} plain />}
+          full={<Summary parts={parts} failed={failed} thought={thought} plain />}
         >
-          <Summary parts={parts} failed={failed} />
+          <Summary parts={parts} failed={failed} thought={thought} />
         </CutLabel>
         {running && (
           <Spinner aria-label={t('status.running')} className="size-3 shrink-0 text-info" />
@@ -126,10 +158,12 @@ export const RunGroup = memo(function RunGroup({
 function Summary({
   parts,
   failed,
+  thought,
   plain = false,
 }: {
   parts: SummaryPart[]
   failed: number
+  thought: string | null
   plain?: boolean
 }) {
   const { t } = useTranslation('session')
@@ -146,6 +180,12 @@ function Summary({
         <span className={cn(!plain && 'text-danger')}>
           <Separator plain={plain} />
           {t('summary.failed', { failed })}
+        </span>
+      )}
+      {thought && (
+        <span>
+          <Separator plain={plain} />
+          {thought}
         </span>
       )}
     </>
@@ -190,6 +230,7 @@ function sameRun(a: RunGroupProps, b: RunGroupProps): boolean {
     a.signature === b.signature &&
     a.projectPath === b.projectPath &&
     a.agentName === b.agentName &&
+    a.latest === b.latest &&
     a.entryIds.length === b.entryIds.length &&
     a.entryIds.every((id, i) => id === b.entryIds[i])
   )

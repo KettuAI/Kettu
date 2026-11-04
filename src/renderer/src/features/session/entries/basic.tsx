@@ -125,24 +125,16 @@ function RoutineSent({ routine }: { routine: RoutineRef }) {
   )
 }
 
-/** An agent message; `note` sets a progress note between runs, muted like a thought. */
-export const AgentEntry = memo(function AgentEntry({
-  sessionId,
-  entryId,
-  note = false,
-}: EntryProps & { note?: boolean }) {
+/** An agent message. */
+export const AgentEntry = memo(function AgentEntry({ sessionId, entryId }: EntryProps) {
   const entry = useEntry(sessionId, entryId, 'agent')
   const animation = useEntryAnimation(sessionId, entryId)
   if (!entry) return null
   return (
-    <div className={cn('min-w-0', note && 'text-muted-foreground', animation)} data-selectable="">
+    <div className={cn('min-w-0', animation)} data-selectable="">
       <SessionIdContext value={sessionId}>
         <EntryIdContext value={entryId}>
-          <Markdown
-            markdown={entry.markdown}
-            streaming={entry.streaming}
-            className={note ? 'markdown-muted' : undefined}
-          />
+          <Markdown markdown={entry.markdown} streaming={entry.streaming} />
         </EntryIdContext>
       </SessionIdContext>
       {entry.attachments.length > 0 && (

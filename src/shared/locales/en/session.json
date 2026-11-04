@@ -214,16 +214,6 @@
     "forkBetweenTurns": "Forks between turns",
     "forkNotReady": "Forks once the session is ready"
   },
-  "worked": {
-    "for": "Worked for {{duration}}",
-    "untimed": "Worked",
-    "read_one": "read {{count}} file",
-    "read_other": "read {{count}} files",
-    "edited_one": "edited {{count}} file",
-    "edited_other": "edited {{count}} files",
-    "editedAfter": "edited {{count}}",
-    "both": "{{read}}, {{edited}}"
-  },
   "changes": {
     "label": "Changes",
     "files_one": "{{count}} file changed",

@@ -36,6 +36,7 @@ import type {
   SystemMessage,
   ToolResultBlock,
   ToolUseBlock,
+  ToolUseSummaryMessage,
   UserMessage,
 } from './sdk'
 import { PLAN_TOOLS, resultContent, startsBackgroundWork, SUBAGENT_TOOLS, toolView } from './tools'
@@ -197,6 +198,8 @@ export class ClaudeMapper {
           },
         ]
       }
+      case 'tool_use_summary':
+        return this.toolUseSummary(message as ToolUseSummaryMessage)
       case 'tool_progress': {
         const id = (message as { tool_use_id?: unknown }).tool_use_id
         const tool = typeof id === 'string' ? this.tools.get(id) : undefined
@@ -208,6 +211,30 @@ export class ClaudeMapper {
       default:
         return null
     }
+  }
+
+  /** Claude Code's summary of a batch of tool calls, which labels the work line they fold into. */
+  private toolUseSummary(message: ToolUseSummaryMessage): Delivery[] {
+    const label = typeof message.summary === 'string' ? message.summary.trim() : ''
+    if (label === '' || !Array.isArray(message.preceding_tool_use_ids)) return []
+    const bySession = new Map<string, string[]>()
+    for (const toolUseId of message.preceding_tool_use_ids) {
+      const tool = this.tools.get(toolUseId)
+      if (!tool) continue
+      bySession.set(tool.sessionId, [...(bySession.get(tool.sessionId) ?? []), `t:${toolUseId}`])
+    }
+    return [...bySession].map(([sessionId, ids]) => ({
+      sessionId,
+      map: (ctx) => {
+        const out = output()
+        for (const id of ids) {
+          if (ctx.thread.byId[id]?.kind === 'tool') {
+            out.patches.push({ op: 'entry.update', id, changes: { label } })
+          }
+        }
+        return out
+      },
+    }))
   }
 
   private streamEvent(message: StreamEvent): Delivery[] {

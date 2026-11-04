@@ -13,12 +13,10 @@ import {
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
 import { loadOlder, useThreadsStore } from '@renderer/stores/threads'
-import { AgentEntry } from './entries/basic'
 import { Entry } from './entries/entry'
 import { ReplyFooter } from './entries/message-actions'
 import { RunGroup } from './entries/run-group'
 import { ToolGroup } from './entries/tool-group'
-import { WorkedRow } from './entries/worked-row'
 import { MessageOutline } from './outline/message-outline'
 import { hoverReply } from './reply-hover'
 import { SubSessionStart } from './subagent/sub-session-start'
@@ -118,9 +116,11 @@ function OlderLoading({ sessionId }: { sessionId: string }) {
 const isSent = (item: Item): boolean =>
   item.type === 'entry' && (item.char === 'u' || item.char === 's')
 
+const isText = (item: Item): boolean => item.type === 'entry' && item.char === 'a'
+
 /**
- * 32 px between turns; within one, 4 px between steps, 8 px above the reply's actions, 10 px under
- * a finished turn's folded work, 20 px from a message you sent to a paragraph and 16 px between
+ * 32 px between turns; within one, 4 px between steps, 8 px between a step and the text beside it,
+ * 8 px above the reply's actions, 20 px from a message you sent to a paragraph and 16 px between
  * anything else. The running turn's status starts 16 px under a message you sent, where the reply
  * will, and 8 px under the reply's latest entry, the gap of the row that takes its place.
  */
@@ -128,8 +128,11 @@ function spacing(item: Item, previous: Item, steps: Set<string>): string {
   if (item.type === 'status') return item.afterSent ? 'pt-4' : 'pt-2'
   if (item.type === 'entry' && item.turnStart) return 'pt-8'
   if (item.type === 'reply') return 'pt-2'
-  if (previous.type === 'worked') return 'pt-2.5'
   if (isStep(item, steps) && isStep(previous, steps)) return 'pt-1'
+  // A step's row is 28 px tall around one line of text, so it needs less room than a paragraph.
+  if ((isStep(item, steps) && isText(previous)) || (isText(item) && isStep(previous, steps))) {
+    return 'pt-2'
+  }
   if (isSent(previous) && item.type === 'entry' && item.char === 'a') return 'pt-5'
   return 'pt-4'
 }
@@ -139,31 +142,19 @@ export const Thread = memo(function Thread({
   projectPath,
   agentName,
   working,
-  progressNotes,
 }: {
   sessionId: string
   projectPath: string
   agentName: string
   /** A turn is running. */
   working: boolean
-  /** The agent's messages that more work follows show as muted notes between runs. */
-  progressNotes: boolean
 }) {
   const { t } = useTranslation('session')
   const order = useThreadsStore((s) => s.replicas[sessionId]?.state?.order)
   const signature = useThreadsStore((s) => signatureOf(s.replicas[sessionId]?.state))
-  // The finished turns whose folded work is open.
-  const [openFolds, setOpenFolds] = useState<ReadonlySet<string>>(() => new Set())
-  const toggleFold = useCallback((key: string) => {
-    setOpenFolds((open) => {
-      const next = new Set(open)
-      if (!next.delete(key)) next.add(key)
-      return next
-    })
-  }, [])
   const items = useMemo(
-    () => buildItems(order ?? [], signature, working, progressNotes, openFolds),
-    [order, signature, working, progressNotes, openFolds],
+    () => buildItems(order ?? [], signature, working),
+    [order, signature, working],
   )
   const statusLast = useMemo(() => items.at(-1)?.type === 'status', [items])
   const steps = useMemo(() => stepIds(order ?? [], signature), [order, signature])
@@ -244,15 +235,6 @@ export const Thread = memo(function Thread({
                 >
                   {item.type === 'status' ? (
                     <TurnStatus sessionId={sessionId} />
-                  ) : item.type === 'worked' ? (
-                    <WorkedRow
-                      sessionId={sessionId}
-                      rowKey={item.key}
-                      toolIds={item.toolIds}
-                      endId={item.endId}
-                      open={item.open}
-                      onToggle={toggleFold}
-                    />
                   ) : item.type === 'reply' ? (
                     <ReplyFooter
                       replyKey={item.key}
@@ -270,6 +252,7 @@ export const Thread = memo(function Thread({
                       signature={item.signature}
                       projectPath={projectPath}
                       agentName={agentName}
+                      latest={statusLast && index === items.length - 2}
                     />
                   ) : item.type === 'group' ? (
                     <ToolGroup
@@ -278,8 +261,6 @@ export const Thread = memo(function Thread({
                       projectPath={projectPath}
                       agentName={agentName}
                     />
-                  ) : item.note ? (
-                    <AgentEntry sessionId={sessionId} entryId={item.id} note />
                   ) : (
                     <Entry
                       sessionId={sessionId}

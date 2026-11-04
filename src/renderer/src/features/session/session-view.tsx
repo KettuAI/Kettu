@@ -54,9 +54,6 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const session = useSessionView(sessionId)
   const renderersReady = useRenderersReady()
   const name = agentName(summary.agentId)
-  const progressNotes = useAgentsStore(
-    (s) => s.byId[summary.agentId]?.capabilities.progressNotes ?? false,
-  )
   const agentRemoved = useAgentsStore((s) => s.byId[summary.agentId]?.registered === false)
   const archived = useSessionsStore((s) => sessionArchived(s.byId, sessionId))
   const otherHost = useOtherHost(hostOfPath(summary.projectPath))
@@ -152,7 +149,6 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
         projectPath={summary.projectPath}
         agentName={name}
         working={running}
-        progressNotes={progressNotes}
       />
     )
   }

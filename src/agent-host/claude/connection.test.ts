@@ -256,6 +256,7 @@ describe('the Claude Agent SDK driver', () => {
       PATH: '/usr/bin',
       CLAUDE_CONFIG_DIR: '/home/ada/.claude-work',
       CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: '1',
+      CLAUDE_CODE_EMIT_TOOL_USE_SUMMARIES: '1',
     })
     expect(options.persistSession).toBeUndefined()
     expect(spawned).toEqual([
@@ -546,6 +547,29 @@ describe('a turn', () => {
       { phase: 'started', toolCallId: 'toolu_1' },
       { phase: 'ended', toolCallId: 'toolu_1', output: '```console\na.ts\nb.ts\n```' },
     ])
+  })
+
+  it("labels the tool calls Claude Code's summary names, and skips one it names wrongly", async () => {
+    s.sdk.script = (query) => {
+      query.running()
+      query.emit(
+        assistant(query, 'msg_1', [
+          { type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'ls' } },
+          { type: 'tool_use', id: 'toolu_2', name: 'Read', input: { file_path: '/repo/a.ts' } },
+        ]),
+        {
+          type: 'tool_use_summary',
+          summary: 'Listed the files',
+          preceding_tool_use_ids: ['toolu_1', 'toolu_2', 'toolu_missing'],
+          session_id: query.sessionId,
+        } as SdkMessage,
+      )
+      query.finish()
+    }
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'ls' }])
+    expect(target.entry('t:toolu_1')).toMatchObject({ kind: 'tool', label: 'Listed the files' })
+    expect(target.entry('t:toolu_2')).toMatchObject({ kind: 'tool', label: 'Listed the files' })
+    expect(target.entry('t:toolu_missing')).toBeUndefined()
   })
 
   it('shows TodoWrite as the plan', async () => {

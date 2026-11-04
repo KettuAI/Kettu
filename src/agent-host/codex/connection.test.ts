@@ -483,10 +483,21 @@ describe('a turn', () => {
     })
     const entries = t.entries()
     // The host adds the user's own entry.
-    expect(entries.map((e) => e.id)).toEqual(['m:rs_1', 'm:msg_1', 't:exec-1', 't:patch-1'])
+    expect(entries.map((e) => e.id)).toEqual([
+      'm:rs_1',
+      'm:rs_1#part1',
+      'm:msg_1',
+      't:exec-1',
+      't:patch-1',
+    ])
     expect(t.entry('m:rs_1')).toMatchObject({
       kind: 'thought',
-      markdown: '**Look**\n\nThen act',
+      markdown: '**Look**',
+      streaming: false,
+    })
+    expect(t.entry('m:rs_1#part1')).toMatchObject({
+      kind: 'thought',
+      markdown: 'Then act',
       streaming: false,
     })
     expect(t.entry('m:msg_1')).toMatchObject({
