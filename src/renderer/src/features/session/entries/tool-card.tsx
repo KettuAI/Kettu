@@ -356,8 +356,6 @@ function ContentBlock({
   index,
   content,
   projectPath,
-  bleed = false,
-  proposed = false,
 }: {
   sessionId: string
   entryId: string
@@ -365,10 +363,6 @@ function ContentBlock({
   index: number
   content: ToolContent
   projectPath: string
-  /** In a request's card: a diff spans the card's width. */
-  bleed?: boolean
-  /** The call still waits for permission, so a diff in it is not applied yet. */
-  proposed?: boolean
 }) {
   const { t } = useTranslation('session')
   switch (content.type) {
@@ -381,10 +375,7 @@ function ContentBlock({
         </div>
       )
     case 'diff':
-      // In the block frame in a row's details; in a request's card it runs edge to edge.
-      return (
-        <DiffBlock diff={content} projectPath={projectPath} proposed={proposed} bleed={bleed} />
-      )
+      return <DiffBlock diff={content} projectPath={projectPath} />
     case 'ref':
       if (content.ref.kind === 'image') {
         return (
@@ -543,30 +534,17 @@ function PermissionCard({
           {command}
         </pre>
       )}
-      {entry.content.map((content, i) =>
-        content.type === 'diff' ? (
+      {entry.content.map((content, i) => (
+        <div key={i} className="border-b border-border-soft px-3.5 py-2.5">
           <ContentBlock
-            key={i}
             sessionId={sessionId}
             entryId={entry.id}
             index={i}
             content={content}
             projectPath={projectPath}
-            bleed
-            proposed
           />
-        ) : (
-          <div key={i} className="border-b border-border-soft px-3.5 py-2.5">
-            <ContentBlock
-              sessionId={sessionId}
-              entryId={entry.id}
-              index={i}
-              content={content}
-              projectPath={projectPath}
-            />
-          </div>
-        ),
-      )}
+        </div>
+      ))}
       {media.length > 0 && (
         <div className="border-b border-border-soft px-3.5 py-2.5">
           <ToolMedia sessionId={sessionId} entryId={entry.id} media={media} />
