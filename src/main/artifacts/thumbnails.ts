@@ -183,6 +183,8 @@ export interface ThumbnailDeps {
   source: ArtifactSource
   /** Lets the protocol serve the artifact in this run; returns its origin URL. */
   serve(id: string): string
+  /** Whether the artifact on this origin id loads nothing from the CDNs. */
+  strict?(host: string): boolean
 }
 
 /** Renders card thumbnails one at a time and keeps them on disk. */
@@ -194,9 +196,9 @@ export class Thumbnails {
 
   /** The thumbnails' own session: the protocol, the request filter, no permissions, the proxy. */
   async install(session: Session): Promise<void> {
-    // No window shows these frames, so their picks go nowhere.
-    serveArtifacts(session, { ...this.deps.source, selected: null })
-    filterArtifactRequests(session)
+    // No window shows these frames: their picks go nowhere and no one is there to ask the user.
+    serveArtifacts(session, { ...this.deps.source, selected: null, runtime: null })
+    filterArtifactRequests(session, this.deps.strict)
     restrictPermissions(
       session,
       () => false,

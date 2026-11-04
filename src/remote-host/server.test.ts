@@ -237,9 +237,37 @@ describe('a paired device', () => {
       path: string
     }
     const token = /^\/frame\/([A-Za-z0-9_-]{43})\/$/.exec(folder)![1]!
+    const runtime = (message: unknown, at = folder) =>
+      call(device)('artifacts.frameRuntime', { path: at, message })
+    const readOne = { v: 1, id: 'c1', kind: 'call', cap: 'files', op: 'read', args: {} }
+    // The artifact declares nothing, so the agent host offers it nothing.
+    expect(await runtime({ v: 1, id: 'u1', kind: 'use', cap: 'db' })).toEqual({
+      v: 1,
+      id: 'u1',
+      ok: true,
+      value: null,
+    })
+    expect(await runtime(readOne)).toMatchObject({ ok: false, error: { code: 'not_declared' } })
+    await expect(
+      runtime({ v: 1, id: 'u1', kind: 'use', cap: 'db' }, `/frame/${'A'.repeat(43)}/`),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    await expect(
+      call(device)('artifacts.runtime', {
+        artifactId: artifact!.id,
+        message: { v: 1, id: 'u1', kind: 'use', cap: 'db' },
+      }),
+    ).rejects.toMatchObject({ code: 'forbidden' })
     const image = await t.server.frameFile(token, 1, 'assets/logo.png')
     expect(await readFile(image!.file)).toEqual(Buffer.from([0x89, 0x50]))
-    expect(await t.server.frameFile(token, null, 'index.html')).not.toBeNull()
+    expect(await t.server.frameFile(token, null, 'index.html')).toMatchObject({ strict: false })
+    // A page served with the CDNs in its policy could send out what it reads.
+    expect(await runtime(readOne)).toMatchObject({ ok: false, error: { code: 'not_allowed' } })
+    expect(await runtime({ v: 1, id: 'u2', kind: 'use', cap: 'sample' })).toEqual({
+      v: 1,
+      id: 'u2',
+      ok: true,
+      value: null,
+    })
     expect(await t.server.frameFile(token, 1, 'missing.css')).toBeNull()
     expect(await t.server.frameFile('A'.repeat(43), 1, 'index.html')).toBeNull()
     await call(device)('artifacts.closeFrame', { path: folder })

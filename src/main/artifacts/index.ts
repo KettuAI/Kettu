@@ -12,13 +12,14 @@ import {
 } from 'electron'
 import type { SelectMessage } from '@shared/artifact-runtime/page-messages'
 import { ARTIFACT_ID, type ArtifactImportResult } from '@shared/artifacts'
+import type { RuntimeAnswer } from '@shared/artifact-capabilities'
 import { safeName } from '@shared/file-name'
 import type { ArtifactContentResult } from '@shared/host-control'
 import type { ArtifactOpenResult } from '@shared/ipc'
 import { sendEvent } from '../events'
 import { ArtifactFiles, parseVersion } from './files'
 import { filterArtifactRequests, guardArtifactFrames } from './guards'
-import { ARTIFACT_SCHEME, ArtifactOrigins } from './origins'
+import { ARTIFACT_SCHEME, ArtifactOrigins, originId } from './origins'
 import { WINDOW_PROXY } from './policy'
 import { serveArtifacts, type ArtifactSource } from './protocol'
 import { parseLayout, parsePage, parseSize, THUMBNAIL_PARTITION, Thumbnails } from './thumbnails'
@@ -65,6 +66,8 @@ export interface ArtifactsDeps {
   thumbnailDir: string
   /** Has the host make an artifact of a file or folder, in a project, or No project when null. */
   importFile(path: string, project: string | null): Promise<NonNullable<ArtifactImportResult>>
+  /** Passes a page's capability message to the host; returns the cancel. */
+  runtime(artifactId: string, message: unknown, answer: (answer: RuntimeAnswer) => void): () => void
 }
 
 export class Artifacts {
@@ -74,6 +77,13 @@ export class Artifacts {
   private readonly files: ArtifactFiles
   private readonly windows = new Set<WebContents>()
   private readonly picks = new ReportLimit(PICKS_PER_SECOND)
+  /** The origin ids whose latest version declares what reads beyond the page, as last served. */
+  private readonly declaredStrict = new Set<string>()
+  /**
+   * The origin ids a page asked for such a capability in this run. Its pages may hold what it
+   * read, so they keep off the CDNs until the app quits, whatever comes later.
+   */
+  private readonly reading = new Set<string>()
 
   constructor(private readonly deps: ArtifactsDeps) {
     this.source = {
@@ -81,12 +91,21 @@ export class Artifacts {
       artifactOf: (host) => this.origins.artifactOf(host),
       content: (id, version) => deps.content(id, version),
       selected: (host, message) => this.selected(host, message),
+      runtime: {
+        send: (id, message, answer) => deps.runtime(id, message, answer),
+        reading: (id) => this.reading.add(originId(id)),
+      },
+      declared: (id, strict) => {
+        if (strict) this.declaredStrict.add(originId(id))
+        else this.declaredStrict.delete(originId(id))
+      },
     }
     this.thumbnails = new Thumbnails({
       content: (id, version) => deps.content(id, version),
       dir: deps.thumbnailDir,
       source: this.source,
       serve: (id) => this.origins.serve(id),
+      strict: (host) => this.isStrict(host),
     })
     this.files = new ArtifactFiles({
       content: (id, version) => deps.content(id, version),
@@ -101,7 +120,7 @@ export class Artifacts {
    */
   async install(session: Session): Promise<void> {
     serveArtifacts(session, this.source)
-    filterArtifactRequests(session)
+    filterArtifactRequests(session, (host) => this.isStrict(host))
     // A page may offer a file to save. With no save path set, Electron asks where in the system's
     // save dialog, so nothing lands on disk without the user's choice.
     session.on('will-download', (_, item) => {
@@ -120,6 +139,11 @@ export class Artifacts {
         sendEvent(contents, 'artifact:selected', { origin, message })
       }
     }
+  }
+
+  /** Whether the artifact on this origin id loads nothing from the CDNs, whatever its policy. */
+  private isStrict(host: string): boolean {
+    return this.declaredStrict.has(host) || this.reading.has(host)
   }
 
   watchWindow(contents: WebContents): void {

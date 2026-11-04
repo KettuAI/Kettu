@@ -3,6 +3,11 @@
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import {
+  DECLARED_CAPABILITIES,
+  parseDeclaration,
+  RUNTIME_VERSION,
+} from '@shared/artifact-capabilities'
+import {
   ARTIFACT_ENTRY,
   ARTIFACT_PATH_CHARS,
   ARTIFACT_RESERVED,
@@ -26,6 +31,7 @@ import {
 } from '@shared/artifact-comments'
 import type { Platform } from '@shared/platform'
 import type { FileChange } from './model'
+import type { Declaration } from './runtime/calls'
 import { countPages } from './pages'
 import { readSource, SourceError } from './sources'
 import { ArtifactError, type ArtifactStore, type FoundVersion, type SessionTurn } from './store'
@@ -74,6 +80,38 @@ export const GUIDE = {
     '`<div data-page-group="Group name">` child of `<body>`; each group becomes a row. Write the ' +
     'page elements in the markup, not from a script. Styles, scripts and images can be files of ' +
     'the artifact the pages share.',
+  runtime:
+    'A page asks Kettu for more than a static page can do with `await kettu.use(name)`, which ' +
+    'resolves to an object of functions, or to null when the artifact does not declare the ' +
+    'capability, the user did not allow it, or the page runs where it is not offered, such as a ' +
+    'published link. Always check for null and keep the page useful without it. Declare what ' +
+    'the pages use in capabilities when you create or update the artifact; the declaration ' +
+    'belongs to the version, and changing it makes a new one. ' +
+    "db, the artifact's own documents, which you read and write too with read_artifact_data and " +
+    "write_artifact_data: `const db = await kettu.use('db')`; `db.get(collection, id)` gives " +
+    '`{collection, id, value, version, updatedAt}` or null; `db.set(collection, id, value, ' +
+    '{baseVersion})`, `db.update(collection, id, patch, {baseVersion})` and `db.delete(collection, ' +
+    'id, {baseVersion})` refuse with code conflict when baseVersion is not the version read (0 ' +
+    'for a new document); `db.list(collection, {after, limit})` gives `{docs, next}`; ' +
+    "`db.query(collection, {where: [['done', '==', false], ['due', '<', 20]], orderBy: ['due', " +
+    "'asc'], limit})` gives the documents; `db.collections()`; `const stop = db.watch(collection, " +
+    "change => ...)` gets each change, `{type: 'set', collection, id, value, version}` or " +
+    "`{type: 'delete', collection, id}`, the page's own and yours. A document is at most 1 MiB of " +
+    "JSON and an artifact's data at most 256 MiB; the user is not asked. " +
+    "files, the project's folder, read-only: `const files = await kettu.use('files')`; " +
+    "`await files.list('src')` gives `[{name, path, type, size}]` with type file or folder; " +
+    "`await files.read('package.json')` gives its text, `files.read('logo.png', {as: 'bytes'})` a " +
+    'Uint8Array. Nothing under .git, at most 20 MiB a file, and null for an artifact under No ' +
+    'project; the user is asked once. ' +
+    "sample, one question to the user's agent: `const sample = await kettu.use('sample')`; " +
+    "`await sample.ask(question, {onText: t => ...})` gives the answer's text, streamed to " +
+    "onText as it comes; `{format: 'json'}` gives the parsed JSON, and `images: ['data:image/png;" +
+    "base64,...']` adds up to 4 images. Each question stands alone, with no tools, files or " +
+    'memory of the last, at most two at a time and ten a minute; the user is asked once. ' +
+    'An artifact that declares files or sample loads nothing from the CDNs: bring every ' +
+    'library, style and font as a file of the artifact. A refused call rejects with ' +
+    '`{code, message}`, code one of not_declared, not_allowed, unsupported, invalid, too_large, ' +
+    'rate_limited, conflict, not_found or failed.',
 } as const
 
 type GuideTopic = keyof typeof GUIDE
@@ -88,10 +126,11 @@ export const INSTRUCTIONS =
   `files and from ${CDNS}. For a page that is one HTML file, create_artifact with html is enough; ` +
   'read_artifact_guide explains adding styles, scripts, images and other files (topic files) and ' +
   'laying out several pages on a canvas (topic canvas). To change an artifact, read it, then ' +
-  'call update_artifact with the version you read; if it changed since, read it again. The user ' +
-  'may also edit an artifact and leave comments on it: read_comments shows them; once you have ' +
-  'changed what one asks, say what you changed with reply_comment and close it with ' +
-  'resolve_comment.'
+  'call update_artifact with the version you read; if it changed since, read it again. A page ' +
+  "can keep data, read the project's files and ask the user's agent through kettu.use, which " +
+  'gives null where that is not allowed, so check before use (topic runtime). The user may also ' +
+  'edit an artifact and leave comments on it: read_comments shows them; once you have changed ' +
+  'what one asks, say what you changed with reply_comment and close it with resolve_comment.'
 
 export type ToolErrorCode =
   'not_found' | 'deleted' | 'conflict' | 'edit_not_found' | 'too_large' | 'invalid' | 'rate_limited'
@@ -198,6 +237,13 @@ const FILE_LIST: Schema = {
     ['path', 'size', 'type'],
   ),
 }
+const CAPABILITIES: Schema = {
+  type: 'array',
+  items: { type: 'string', enum: [...DECLARED_CAPABILITIES] },
+  uniqueItems: true,
+  description:
+    'What the pages use through kettu.use; read_artifact_guide topic runtime explains them.',
+}
 const NOTE: Schema = {
   type: 'string',
   maxLength: NOTE_CHARS,
@@ -252,9 +298,16 @@ export const TOOLS: Tool[] = [
       'Makes a new artifact at version 1 and returns its id, which update_artifact and ' +
       `read_artifact take. Give html for a page of one file, or files with ${ARTIFACT_ENTRY} ` +
       'among them; read_artifact_guide explains files and canvases of several pages.',
-    inputSchema: object({ title: TITLE, html: HTML, files: filesSchema(false), note: NOTE }, [
-      'title',
-    ]),
+    inputSchema: object(
+      {
+        title: TITLE,
+        html: HTML,
+        files: filesSchema(false),
+        capabilities: CAPABILITIES,
+        note: NOTE,
+      },
+      ['title'],
+    ),
     outputSchema: output({ id: ID, version: VERSION, pages: PAGES }),
     annotations: { ...ON_ARTIFACTS, destructiveHint: false, idempotentHint: false },
   },
@@ -297,6 +350,7 @@ export const TOOLS: Tool[] = [
       pages: PAGES,
       updated_at: TIME,
       files: FILE_LIST,
+      capabilities: { type: 'array', items: { type: 'string' } },
       path: PATH,
       text: {
         type: ['string', 'null'],
@@ -317,10 +371,10 @@ export const TOOLS: Tool[] = [
       'Changes an artifact in this project as a new version from base_version, the version you ' +
       'read; a stale base_version is refused, and you read it again. Give html to replace ' +
       `${ARTIFACT_ENTRY}, files to add, replace or remove files, and edits to replace parts of ` +
-      'text files; files you do not name stay as they are, and when any part fails nothing ' +
-      'changes. Each edit replaces old_text, which must occur exactly once in its file as the ' +
-      'files and edits before it left it. Or give a title alone to rename it, which makes no ' +
-      'version.',
+      'text files, and capabilities to change what the version declares; files you do not name ' +
+      'stay as they are, and when any part fails nothing changes. Each edit replaces old_text, ' +
+      'which must occur exactly once in its file as the files and edits before it left it. Or ' +
+      'give a title alone to rename it, which makes no version.',
     inputSchema: object(
       {
         id: ID,
@@ -344,6 +398,7 @@ export const TOOLS: Tool[] = [
           ),
           description: `Up to ${EDITS} text replacements, applied in order after files.`,
         },
+        capabilities: CAPABILITIES,
         title: TITLE,
         note: NOTE,
       },
@@ -357,7 +412,8 @@ export const TOOLS: Tool[] = [
     title: 'Read artifact guide',
     description:
       'Explains how to write artifacts, by topic: files (styles, scripts, images, paths and ' +
-      'limits) or canvas (several pages in one artifact).',
+      'limits), canvas (several pages in one artifact) or runtime (data, project files and ' +
+      "questions to the user's agent through kettu.use).",
     inputSchema: object(
       { topic: { type: 'string', enum: Object.keys(GUIDE), description: 'What to read about.' } },
       ['topic'],
@@ -590,6 +646,14 @@ function title(o: Args): string {
   return value
 }
 
+/** The declaration a write gives, at the current runtime; undefined when it gives none. */
+function declaration(o: Args): Declaration | undefined {
+  if (o.capabilities === undefined) return undefined
+  const parsed = parseDeclaration(o.capabilities)
+  if ('problem' in parsed) throw invalid(`capabilities ${parsed.problem}.`)
+  return { capabilities: parsed, runtime: RUNTIME_VERSION }
+}
+
 function note(o: Args): string | null {
   const value = o.note
   if (value === undefined || value === null) return null
@@ -813,13 +877,22 @@ export class ArtifactTools {
   private run(caller: Caller, name: string, input: unknown): Promise<CallToolResult> {
     switch (name) {
       case 'create_artifact':
-        return this.create(caller, args(input, ['title', 'html', 'files', 'note']))
+        return this.create(caller, args(input, ['title', 'html', 'files', 'capabilities', 'note']))
       case 'read_artifact':
         return this.read(caller, args(input, ['id', 'version', 'path', 'offset', 'limit']))
       case 'update_artifact':
         return this.update(
           caller,
-          args(input, ['id', 'base_version', 'html', 'files', 'edits', 'title', 'note']),
+          args(input, [
+            'id',
+            'base_version',
+            'html',
+            'files',
+            'edits',
+            'capabilities',
+            'title',
+            'note',
+          ]),
         )
       case 'read_artifact_guide':
         return Promise.resolve(this.guide(args(input, ['topic'])))
@@ -1046,7 +1119,8 @@ export class ArtifactTools {
   }
 
   private async create(caller: Caller, o: Args): Promise<CallToolResult> {
-    const input = { title: title(o), note: note(o) }
+    const declared = declaration(o)
+    const input = { title: title(o), note: note(o), ...(declared ? { declaration: declared } : {}) }
     if (o.html === undefined && o.files === undefined) {
       throw invalid(`Give html, or files with ${ARTIFACT_ENTRY} among them.`)
     }
@@ -1092,6 +1166,11 @@ export class ArtifactTools {
       )
     }
     const type = artifactFileType(path)
+    const declared = await this.deps.store.runtime('declaration', {
+      id: artifactId,
+      project: caller.project,
+      version: n,
+    })
     const decoded = isTextType(type) ? utf8(await this.deps.store.bytes(found, stored)) : null
     const text = decoded === null ? null : decoded.slice(offset, offset + limit)
     const end = decoded === null ? 0 : Math.min(decoded.length, offset + limit)
@@ -1117,6 +1196,7 @@ export class ArtifactTools {
           size: file.size,
           type: artifactFileType(file.path),
         })),
+        capabilities: declared.capabilities,
         path,
         text,
         offset,
@@ -1127,13 +1207,13 @@ export class ArtifactTools {
 
   private async update(caller: Caller, o: Args): Promise<CallToolResult> {
     const artifactId = id(o)
-    const changes = ['html', 'files', 'edits'].filter((key) => o[key] !== undefined)
+    const changes = ['html', 'files', 'edits', 'capabilities'].filter((key) => o[key] !== undefined)
     const { store } = this.deps
     if (o.title !== undefined) {
       if (changes.length > 0) {
         throw invalid(
-          'Give a title alone to rename; html, files and edits make a new version, which a ' +
-            'rename does not.',
+          'Give a title alone to rename; html, files, edits and capabilities make a new version, ' +
+            'which a rename does not.',
         )
       }
       // A rename makes no version, so base_version and a note have nothing to apply to.
@@ -1156,11 +1236,14 @@ export class ArtifactTools {
       )
     }
     if (changes.length === 0) {
-      throw invalid('Give html, files or edits for a new version, or a title alone to rename.')
+      throw invalid(
+        'Give html, files, edits or capabilities for a new version, or a title alone to rename.',
+      )
     }
     if (o.base_version === undefined) {
-      throw invalid('base_version is needed with html, files or edits.')
+      throw invalid('base_version is needed with html, files, edits or capabilities.')
     }
+    const declared = declaration(o)
     const baseVersion = wholeNumber(o, 'base_version', 1)
     const versionNote = note(o)
     const specs = fileSpecs(o, true)
@@ -1184,6 +1267,7 @@ export class ArtifactTools {
         author: caller.sessionId,
         note: versionNote,
         project: caller.project,
+        ...(declared ? { declaration: declared } : {}),
         ...(editor ? { editor } : {}),
       })
       return result(

@@ -4,6 +4,10 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { startThreadService } from '../threads/service'
 import { ThreadStoreError, type ThreadStore } from '../threads/store'
+import { ArtifactData, PAGE_ACTOR } from './runtime/data'
+import { DataTools } from './runtime/data-tools'
+import { dbCapability } from './runtime/db-capability'
+import type { CapabilityContext } from './runtime/dispatcher'
 import { ArtifactStore } from './store'
 import { ArtifactTools, type Caller } from './tools'
 
@@ -29,14 +33,15 @@ function threadsAt(folder: string): ThreadStore {
       else waiting?.reject(new ThreadStoreError(reply.message, reply.code, reply.data))
     },
   )
-  return {
-    artifact: (name: string, params: unknown) =>
+  const ask =
+    (op: 'artifact' | 'runtime') =>
+    (name: string, params: unknown): Promise<unknown> =>
       new Promise((resolve, reject) => {
         const id = ++next
         pending.set(id, { resolve, reject })
-        handle({ id, op: 'artifact', call: { name, params } as never })
-      }),
-  } as unknown as ThreadStore
+        handle({ id, op, call: { name, params } as never })
+      })
+  return { artifact: ask('artifact'), runtime: ask('runtime') } as unknown as ThreadStore
 }
 
 beforeEach(() => {
@@ -360,5 +365,120 @@ describe('comments and direct edits', () => {
         change: { style: null, text: 'x' },
       }),
     ).rejects.toMatchObject({ code: 'invalid_params' })
+  })
+})
+
+describe("what an artifact's pages use", () => {
+  const ctx = (artifactId: string): CapabilityContext => ({
+    artifactId,
+    project: work,
+    version: 1,
+    declared: ['db'],
+    client: 'desktop',
+    signal: new AbortController().signal,
+  })
+
+  async function code(run: () => Promise<unknown>): Promise<string> {
+    try {
+      await run()
+    } catch (error) {
+      return (error as { code: string }).code
+    }
+    return 'ok'
+  }
+
+  it('is declared on each version, sorted, and makes the pages strict when they read beyond', async () => {
+    const id = await create({ html: '<p>hi</p>', capabilities: ['sample', 'db'] })
+    expect((await call('read_artifact', { id })).value.capabilities).toEqual(['db', 'sample'])
+    expect((await store.content(id)).strict).toBe(true)
+    const { error } = await call('create_artifact', {
+      title: 'Report',
+      html: '<p>hi</p>',
+      capabilities: ['network'],
+    })
+    expect(error?.code).toBe('invalid')
+    expect(await count()).toBe(1)
+  })
+
+  it('changes with a version of its own, and stays when a version does not name it', async () => {
+    const id = await create({ html: '<p>hi</p>', capabilities: ['files'] })
+    const changed = await call('update_artifact', { id, base_version: 1, capabilities: ['db'] })
+    expect(changed.value.version).toBe(2)
+    await call('update_artifact', { id, base_version: 2, html: '<p>v3</p>' })
+    expect((await call('read_artifact', { id })).value.capabilities).toEqual(['db'])
+    expect((await store.content(id)).strict).toBe(false)
+    expect((await call('read_artifact', { id, version: 1 })).value.capabilities).toEqual(['files'])
+  })
+
+  it('keeps the same documents for the pages and the agents, each held to the version read', async () => {
+    const id = await create({ html: '<p>hi</p>', capabilities: ['db'] })
+    const data = new ArtifactData({ store })
+    const db = dbCapability(data)
+    const agent = new DataTools({ data })
+    const changes: unknown[] = []
+    const stop = data.watch(PAGE_ACTOR, id, 'todos', (change) => changes.push(change))
+    expect(
+      await db.call(ctx(id), 'set', { collection: 'todos', id: 'a', value: { text: 'milk' } }),
+    ).toEqual({ id: 'a', version: 1 })
+    const read = await agent.call(caller, 'read_artifact_data', {
+      id,
+      collection: 'todos',
+      doc_id: 'a',
+    })
+    expect(read.structuredContent).toMatchObject({
+      document: { id: 'a', value: { text: 'milk' }, version: 1 },
+    })
+    const wrote = await agent.call(caller, 'write_artifact_data', {
+      id,
+      collection: 'todos',
+      doc_id: 'a',
+      patch: { done: true },
+      base_version: 1,
+    })
+    expect(wrote.structuredContent).toMatchObject({ version: 2, deleted: false })
+    expect(changes).toEqual([
+      { type: 'set', collection: 'todos', id: 'a', value: { text: 'milk' }, version: 1 },
+      {
+        type: 'set',
+        collection: 'todos',
+        id: 'a',
+        value: { text: 'milk', done: true },
+        version: 2,
+      },
+    ])
+    stop()
+    expect(
+      await code(() =>
+        db.call(ctx(id), 'update', { collection: 'todos', id: 'a', patch: {}, baseVersion: 1 }),
+      ),
+    ).toBe('conflict')
+    const stale = await agent.call(caller, 'write_artifact_data', {
+      id,
+      collection: 'todos',
+      doc_id: 'a',
+      value: 1,
+      base_version: 1,
+    })
+    expect(stale.isError).toBe(true)
+    expect(stale.structuredContent).toMatchObject({ code: 'conflict' })
+    expect(
+      await code(() => db.call(ctx(id), 'query', { collection: 'todos', where: [['x', '~', 1]] })),
+    ).toBe('invalid')
+  })
+
+  it("reach a session's own project only, and nothing in Recently deleted", async () => {
+    const id = await create({ html: '<p>hi</p>', capabilities: ['db'] })
+    const data = new ArtifactData({ store })
+    const agent = new DataTools({ data })
+    const elsewhere = await agent.call({ sessionId: 's2', project: dir }, 'read_artifact_data', {
+      id,
+    })
+    expect(elsewhere.structuredContent).toMatchObject({ code: 'not_found' })
+    await store.delete(id)
+    expect(
+      await code(() => dbCapability(data).call(ctx(id), 'get', { collection: 'todos', id: 'a' })),
+    ).toBe('not_found')
+    const gone = await agent.call(caller, 'read_artifact_data', { id })
+    expect(gone.structuredContent).toMatchObject({ code: 'not_found' })
   })
 })

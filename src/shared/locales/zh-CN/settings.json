@@ -10,6 +10,7 @@
     "advanced": "高级",
     "about": "关于",
     "archived": "已归档会话",
+    "artifacts": "Artifacts",
     "sharing": "分享",
     "remote": "远程访问",
     "browser": "浏览器",
@@ -781,6 +782,7 @@
     "advanced_web": "网络代理、诊断信息，以及 Kettu 保存在 {{host}} 上的数据。",
     "about": "Kettu 的版本和更新。",
     "archived": "从侧边栏移走但仍保留。恢复后会回到原来的项目里。",
+    "artifacts": "页面要读取项目文件或向你的 Agent 提问时会先问你。只保存自己数据的页面不会问。",
     "sharing": "通过你自己的 Cloudflare 账号，把 artifact 发布为任何人都能打开的链接。",
     "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑的会话，只走你自己的网络。",
     "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 的会话，只走你自己的网络。",
@@ -801,6 +803,21 @@
     "emptyTitle": "没有已归档的会话",
     "emptyHint": "可以在侧边栏中从会话的菜单里归档。",
     "keywords": "归档 恢复 archive"
+  },
+  "artifacts": {
+    "group": "页面权限",
+    "keywords": "artifact 页面 权限 同意 文件 Agent 收回 允许",
+    "files": "读取文件",
+    "sample": "询问 {{agent}}",
+    "yourAgent": "你的 Agent",
+    "noProject": "无项目",
+    "revoke": "收回",
+    "revoked": "已收回“{{title}}”的权限",
+    "loading": "正在读取权限",
+    "loadFailed": "没能读取权限：{{error}}",
+    "retry": "重试",
+    "emptyTitle": "没有页面权限",
+    "emptyHint": "页面请求读取项目文件或向你的 Agent 提问、你允许后，会列在这里。"
   },
   "sharing": {
     "groups": {

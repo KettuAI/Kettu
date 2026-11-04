@@ -312,5 +312,15 @@
     "controls": "Presentation",
     "position": "{{name}} · {{number}} / {{count}}",
     "exit": "Esc to exit"
+  },
+  "consent": {
+    "filesTitle": "Let “{{title}}” read files in {{project}}?",
+    "filesBody": "The page can read any file in this project, but can’t change them or send them anywhere. You can take this back in Settings › Artifacts.",
+    "sampleTitle": "Let “{{title}}” ask {{agent}}?",
+    "sampleBody": "Each question runs in a hidden session with no tools: it can’t read or change files or run commands. It uses your own {{agent}} plan, at most two questions at a time.",
+    "yourAgent": "your agent",
+    "allow": "Allow",
+    "deny": "Don’t allow",
+    "failed": "Your answer could not be saved: {{error}}"
   }
 }

@@ -4,6 +4,7 @@
 
 import { Worker } from 'node:worker_threads'
 import type { HostEvent } from '@shared/agent-host'
+import { ARTIFACT_ID } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import type { HostToMain, MainToHost } from '@shared/host-control'
 import type { ControlChannel, PortChannel } from '@shared/port-channel'
@@ -108,6 +109,19 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
         break
       case 'host:artifact-import-request':
         withHost((h) => h.artifactImport(message.requestId, message.path, message.project))
+        break
+      case 'host:artifact-runtime':
+        if (
+          Number.isSafeInteger(message.requestId) &&
+          ARTIFACT_ID.test(String(message.artifactId))
+        ) {
+          withHost((h) => h.artifactRuntime(message.requestId, message.artifactId, message.message))
+        }
+        break
+      case 'host:artifact-runtime-cancel':
+        if (Number.isSafeInteger(message.requestId)) {
+          withHost((h) => h.artifactRuntimeCancel(message.requestId))
+        }
         break
       case 'browser-result':
         if (Number.isSafeInteger(message.callId)) {

@@ -120,6 +120,9 @@ export function useArtifact(id: string, version: number | null) {
         setPresence({ viewers: event.viewers, sessions: event.sessions })
       } else if (event.type === 'artifacts.version' && event.id === id) {
         setAnnounced((n) => Math.max(n, event.version))
+      } else if (event.type === 'artifacts.consentSettled' && event.artifactId === id) {
+        // The page stopped waiting before the user allowed it, so it loads again to use it.
+        if (event.reload) setReloads((n) => n + 1)
       }
     })
     return () => {

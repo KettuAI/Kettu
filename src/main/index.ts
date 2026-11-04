@@ -450,6 +450,7 @@ async function start(): Promise<void> {
     contentDir: join(userDataPath, 'artifacts', 'content'),
     thumbnailDir: join(userDataPath, 'artifacts', 'thumbnails'),
     importFile: (path, project) => agentHost.artifactImport(path, project),
+    runtime: (id, message, answer) => agentHost.artifactRuntime(id, message, answer),
   })
   await artifacts.install(session.defaultSession)
   // The window's page only: the menu bar panel's shows no media.

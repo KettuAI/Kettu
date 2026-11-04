@@ -2,12 +2,10 @@
 // it, what the page sends back, and the checks a client makes of it. Everything a page sends is
 // untrusted: only the shapes below pass, each field capped.
 
+import { RUNTIME_PATH, RUNTIME_VERSION, type RuntimeAnswer } from '../artifact-capabilities'
 import { artifactPathProblem, isHtmlPath } from '../artifact-files'
 
-export const RUNTIME_VERSION = 1
-
-/** Where a desktop page posts its messages, on its own origin. */
-export const RUNTIME_PATH = '/_kettu/v1'
+export { RUNTIME_PATH, RUNTIME_VERSION, type RuntimeAnswer }
 
 /** The most a page's message may be, as UTF-8 bytes. */
 export const MESSAGE_BYTES = 64 * 1024
@@ -228,11 +226,6 @@ export function parseSelectMessage(value: unknown): SelectMessage | null {
   if (picked === undefined) return null
   return { v: RUNTIME_VERSION, id, kind: 'select', channel, selection: picked }
 }
-
-/** The answer to a message, as a page reads it. */
-export type RuntimeAnswer =
-  | { v: typeof RUNTIME_VERSION; id: string; ok: true; value: unknown }
-  | { v: typeof RUNTIME_VERSION; id: string; ok: false; error: { code: string; message: string } }
 
 /** A page's message by its kind: phase-owned `select` and `preview` ones, or a capability's. */
 export type PageMessage =

@@ -159,10 +159,14 @@ async function showApp(device: WebDevice, paired: Paired | null): Promise<void> 
   })
   link.start()
 
-  const [{ bootstrap }, { renderApp }] = await Promise.all([
-    import('@renderer/app/bootstrap'),
-    import('@renderer/app/render'),
-  ])
+  const [{ bootstrap }, { renderApp }, { setRuntimeRelay }, { attachRuntimePort }] =
+    await Promise.all([
+      import('@renderer/app/bootstrap'),
+      import('@renderer/app/render'),
+      import('@renderer/features/artifacts/frame-link'),
+      import('./runtime-relay'),
+    ])
+  setRuntimeRelay((url, port) => attachRuntimePort(link, url, port))
   await bootstrap()
   renderApp(root)
 }

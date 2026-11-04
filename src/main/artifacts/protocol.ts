@@ -7,20 +7,18 @@ import { Readable } from 'node:stream'
 import type { CustomScheme, Session } from 'electron'
 import { artifactFileType, isHtmlPath } from '@shared/artifact-files'
 import { parseServed, servedHtml, type ServedFile } from '@shared/artifact-page'
+import { errorAnswer, type RuntimeAnswer } from '@shared/artifact-capabilities'
 import {
   MESSAGE_BYTES,
-  noCapability,
   parsePageMessage,
   received,
-  RUNTIME_PATH,
-  RUNTIME_VERSION,
-  type RuntimeAnswer,
   type SelectMessage,
 } from '@shared/artifact-runtime/page-messages'
 import type { ArtifactContentResult } from '@shared/host-control'
 import { createLogger } from '../log'
 import { ARTIFACT_SCHEME, artifactHost } from './origins'
 import { artifactHeaders } from './policy'
+import { isRuntimeRequest, respondRuntime, type RuntimeRelay } from './runtime'
 
 const log = createLogger('artifacts')
 
@@ -50,6 +48,10 @@ export interface ArtifactSource {
   content(id: string, version: number | null): Promise<ArtifactContentResult>
   /** A page on this origin id reported a pick, checked; null where no window takes them. */
   selected: ((host: string, message: SelectMessage) => void) | null
+  /** Where a page's capability requests go; none, as for thumbnails, offers no capability. */
+  runtime?: RuntimeRelay | null
+  /** What the latest version declares makes the artifact's pages strict, or no longer. */
+  declared?(id: string, strict: boolean): void
 }
 
 export interface ArtifactRequest extends ServedFile {
@@ -97,59 +99,42 @@ function withinWait(content: Promise<ArtifactContentResult>): Promise<ArtifactCo
 }
 
 function json(status: number, body: RuntimeAnswer): Response {
-  const headers = { ...artifactHeaders(), 'Content-Type': 'application/json; charset=utf-8' }
+  const headers = { ...artifactHeaders(true), 'Content-Type': 'application/json; charset=utf-8' }
   return new Response(JSON.stringify(body), { status, headers })
 }
 
-/** The body's text, or null when it is longer than `limit` bytes. */
-async function cappedText(request: Request, limit: number): Promise<string | null> {
-  const length = Number(request.headers.get('Content-Length') ?? 0)
-  if (length > limit || !request.body) return length > limit ? null : ''
-  const reader = request.body.getReader()
-  const chunks: Uint8Array[] = []
-  let size = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    size += value.byteLength
-    if (size > limit) {
-      void reader.cancel()
-      return null
-    }
-    chunks.push(value)
+/** A page's message for the editor rather than a capability: a pick, for the windows of `host`. */
+function editorMessage(
+  host: string,
+  source: ArtifactSource,
+  message: unknown,
+  bytes: number,
+): Response {
+  const parsed = bytes > MESSAGE_BYTES ? null : parsePageMessage(message)
+  if (parsed?.kind !== 'select') {
+    return json(400, errorAnswer({ v: 1, id: '' }, 'invalid', 'Not a page runtime message.'))
   }
-  return Buffer.concat(chunks).toString('utf8')
+  source.selected?.(host, parsed.message)
+  return json(200, received(parsed.message.id))
 }
 
 /**
- * A message from the page runtime on an artifact origin: a pick goes to the windows that opened
- * the origin; a capability's gets the answer of a client that offers none.
+ * A page's request to the runtime, from its own origin; one that another origin sends, as only
+ * the app's own page could, is refused.
  */
-async function runtimeMessage(request: Request, source: ArtifactSource): Promise<Response> {
+function runtimeRequest(request: Request, source: ArtifactSource): Promise<Response> | Response {
   const host = artifactHost(request.url)
-  if (!host || !source.artifactOf(host)) return answer(404)
-  if (request.method !== 'POST') return answer(405)
-  const invalid = (message: string): Response =>
-    json(400, { v: RUNTIME_VERSION, id: '', ok: false, error: { code: 'invalid', message } })
-  const text = await cappedText(request, MESSAGE_BYTES)
-  if (text === null) return invalid('The message is too large')
-  let parsed: ReturnType<typeof parsePageMessage> = null
-  try {
-    parsed = parsePageMessage(JSON.parse(text))
-  } catch {
-    // Not JSON; refused below.
-  }
-  if (!parsed) return invalid('Not a page runtime message')
-  if (parsed.kind === 'select') {
-    source.selected?.(host, parsed.message)
-    return json(200, received(parsed.message.id))
-  }
-  return json(200, noCapability(parsed.message))
+  const id = host ? source.artifactOf(host) : undefined
+  const origin = request.headers.get('origin')
+  if (!host || !id || (origin !== null && artifactHost(origin) !== host)) return answer(404)
+  return respondRuntime(request, id, source.runtime ?? null, (message, bytes) =>
+    editorMessage(host, source, message, bytes),
+  )
 }
 
 /** Answers one request on an artifact origin: a file of the version it names, or of the latest. */
 export async function respond(request: Request, source: ArtifactSource): Promise<Response> {
-  if (URL.parse(request.url)?.pathname === RUNTIME_PATH) return runtimeMessage(request, source)
+  if (isRuntimeRequest(request.url)) return runtimeRequest(request, source)
   if (request.method !== 'GET') return answer(405)
   const wanted = parseRequest(request.url, (host) => source.artifactOf(host))
   if (!wanted) return answer(404)
@@ -162,7 +147,8 @@ export async function respond(request: Request, source: ArtifactSource): Promise
     log.error(`Refused ${wanted.id}'s file outside the content folder: ${file.file}`)
     return answer(404)
   }
-  const headers = { ...artifactHeaders(), 'Content-Type': artifactFileType(file.path) }
+  source.declared?.(wanted.id, found.strict)
+  const headers = { ...artifactHeaders(found.strict), 'Content-Type': artifactFileType(file.path) }
   try {
     if (isHtmlPath(file.path)) {
       const html = servedHtml(await readFile(file.file, 'utf8'), wanted.page, {

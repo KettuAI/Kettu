@@ -251,6 +251,7 @@ export interface HostSettings {
   startModes: SettingsFile['startModes']
   usage: { fromComputer: boolean }
   sessionTitles: boolean // write a title for a session its agent leaves untitled
+  defaultAgent: AgentId | null // the agent new sessions start with, which answers artifacts' questions
 }
 
 /** The part of the settings the terminal host receives. */

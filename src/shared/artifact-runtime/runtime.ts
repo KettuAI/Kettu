@@ -4,7 +4,8 @@
 // what it sends goes through one transport, which the server chose: a POST to its own origin on the
 // desktop, or the port the web client hands it. Bundled on its own, it reaches nothing of Kettu's.
 
-import { capabilityNamespace, type RuntimeTransport } from './capabilities'
+import type { RuntimeError } from '../artifact-capabilities'
+import { capabilityNamespace, type CapabilityTransport } from './capabilities'
 import {
   RUNTIME_PATH,
   RUNTIME_VERSION,
@@ -12,7 +13,6 @@ import {
   type ElementStyle,
   type PageSelection,
   type Pin,
-  type RuntimeAnswer,
   type RuntimeConfig,
 } from './page-messages'
 
@@ -21,7 +21,15 @@ const SOURCE = 'data-kettu-src'
 const TEXT_CHARS = 200
 
 type Message = Record<string, unknown> & { v: typeof RUNTIME_VERSION; id: string; kind: string }
-type Answer = Partial<RuntimeAnswer> & { id?: unknown; event?: unknown; done?: unknown }
+// Read from the transport as it came, so every field is checked where it is used.
+type Answer = {
+  id?: unknown
+  ok?: unknown
+  value?: unknown
+  error?: unknown
+  event?: unknown
+  done?: unknown
+}
 
 export function start(config: RuntimeConfig): void {
   // Taken before the page's own scripts run, which may replace them.
@@ -107,6 +115,7 @@ export function start(config: RuntimeConfig): void {
           }
         }
         if (rest.trim()) end(parse(rest) as Answer)
+        end({ ok: false, error: { code: 'failed', message: 'The stream ended' } })
       })
       .catch(() => end({ ok: false, error: { code: 'failed', message: 'The stream ended' } }))
     return () => {
@@ -115,23 +124,25 @@ export function start(config: RuntimeConfig): void {
     }
   }
 
-  function failure(answer: Answer): Error {
+  function failure(answer: Answer): Error & RuntimeError {
     const error = (answer as { error?: { code?: unknown; message?: unknown } }).error
     const failed = new Error(typeof error?.message === 'string' ? error.message : 'Failed')
     ;(failed as Error & { code?: string }).code =
       typeof error?.code === 'string' ? error.code : 'failed'
-    return failed
+    return failed as Error & RuntimeError
   }
 
-  const transport: RuntimeTransport = {
+  const transport: CapabilityTransport = {
     call: (cap, op, args) =>
       request({ v: RUNTIME_VERSION, id: nextId(), kind: 'call', cap, op, args }).then((answer) => {
         if (answer.ok === true) return answer.value
         throw failure(answer)
       }),
-    stream: (cap, op, args, onEvent) =>
+    stream: (cap, op, args, onEvent, onEnd) =>
       streamed({ v: RUNTIME_VERSION, id: nextId(), kind: 'stream', cap, op, args }, (answer) => {
         if ('event' in answer) onEvent(answer.event)
+        else if (answer.done === true) onEnd?.(null)
+        else if (answer.ok === false) onEnd?.(failure(answer))
       }),
   }
 
@@ -147,7 +158,7 @@ export function start(config: RuntimeConfig): void {
         if (!ops) return null
         try {
           const namespace = capabilityNamespace(cap, ops as string[], transport)
-          return namespace ? freeze(namespace) : null
+          return namespace ? (freeze(namespace) as Readonly<Record<string, unknown>>) : null
         } catch {
           return null
         }

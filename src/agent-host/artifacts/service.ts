@@ -24,6 +24,8 @@ import {
   isBrowserToolName,
 } from './browser-tools'
 import { artifactWrite, type ArtifactWrite } from './entries'
+import type { ArtifactData } from './runtime/data'
+import { DATA_TOOLS, DataTools, isDataToolName } from './runtime/data-tools'
 import {
   ArtifactTools,
   INSTRUCTIONS,
@@ -44,7 +46,7 @@ const SUMMARY_CHARS = 200
 const SESSION_META = 'ai.opencode/sessionID'
 
 /** The tools `tools/list` answers: the artifact tools, the session tools and the browser's. */
-export const SERVICE_TOOLS: Tool[] = [...TOOLS, ...SESSION_TOOLS, ...BROWSER_TOOLS]
+export const SERVICE_TOOLS: Tool[] = [...TOOLS, ...DATA_TOOLS, ...SESSION_TOOLS, ...BROWSER_TOOLS]
 
 /** The service's `instructions`: the artifact tools', the session tools' and the browser's. */
 const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS}`
@@ -84,6 +86,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   browserSession?(sessionId: string): string | null
   /** The project whose always-allowed sites the page reads. */
   sessionProject?(sessionId: string): string | null
+  /** The artifacts' data, which the data tools read and write; without it they fail. */
+  data?: ArtifactData
 }
 
 /** A token for one session. */
@@ -155,12 +159,14 @@ export class ArtifactService {
   private readonly tools: ArtifactTools
   private readonly sessionTools: SessionTools
   private readonly browserTools: BrowserTools
+  private readonly dataTools: DataTools | null
   private sdk: Promise<Sdk> | null = null
   /** Why the last `start()` could not listen; cleared once it does. */
   private startError: string | null = null
 
   constructor(private readonly deps: ArtifactServiceDeps) {
     this.tools = new ArtifactTools(deps)
+    this.dataTools = deps.data ? new DataTools({ data: deps.data }) : null
     this.sessionTools = new SessionTools(deps.sessions)
     const browserCall = deps.browserCall
     this.browserTools = new BrowserTools({
@@ -302,6 +308,7 @@ export class ArtifactService {
   /** The session left memory: it closed, was released or was deleted. */
   revoke(sessionId: string): void {
     this.tools.forget(sessionId)
+    this.dataTools?.forget(sessionId)
     this.leave(sessionId)
   }
 
@@ -454,6 +461,17 @@ export class ArtifactService {
       if (isBrowserToolName(name)) {
         try {
           return await this.browserTools.call(caller, name, input)
+        } catch (error) {
+          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+        }
+      }
+      if (isDataToolName(name)) {
+        if (!this.dataTools) {
+          throw new McpError(ErrorCode.InternalError, `${name} is not available on this host`)
+        }
+        try {
+          return await this.dataTools.call(caller, name, input)
         } catch (error) {
           this.deps.log('error', `${name} failed: ${(error as Error).message}`)
           throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)

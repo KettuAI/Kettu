@@ -9,6 +9,8 @@
 import { randomBytes } from 'node:crypto'
 import { open, realpath, type FileHandle } from 'node:fs/promises'
 import type { HostMethod, HostResult } from '@shared/agent-host'
+import { errorAnswer, messageHeader } from '@shared/artifact-capabilities'
+import { isHtmlPath } from '@shared/artifact-files'
 import { ARTIFACT_ID } from '@shared/artifacts'
 import type { AdminAnswer } from '@shared/host-control'
 import type { PortChannel } from '@shared/port-channel'
@@ -106,7 +108,11 @@ const MAX_HOST_NAME = 256
 const REMOTE_HOST_ONLY: ReadonlySet<string> = new Set<HostMethod>([
   'media.authorize',
   'artifacts.content',
+  'artifacts.runtime',
 ])
+
+/** The longest name a device may give a frame's stream. */
+const STREAM_CHARS = 128
 
 export interface RemoteServerOptions {
   staticKey: KeyPair
@@ -386,11 +392,14 @@ export class RemoteServer {
     token: string,
     version: number | null,
     path: string,
-  ): Promise<{ file: string; size: number } | null> {
+  ): Promise<{ file: string; size: number; strict: boolean } | null> {
     const frame = this.frames.find(token)
     if (!frame) return null
     const content = await frame.session.artifactContent(frame.artifactId, version)
-    return content?.files.find((file) => file.path === path) ?? null
+    const found = content?.files.find((file) => file.path === path)
+    if (!content || !found) return null
+    if (isHtmlPath(path) && !content.strict) frame.lax = true
+    return { file: found.file, size: found.size, strict: content.strict }
   }
 
   sessionEnded(session: DeviceSession): void {
@@ -1047,6 +1056,7 @@ class DeviceSession {
     if (method === 'media.read') return void this.readMedia(id, params)
     if (method === 'artifacts.openFrame') return void this.openFrame(id, params)
     if (method === 'artifacts.closeFrame') return this.closeFrame(id, params)
+    if (method === 'artifacts.frameRuntime') return this.frameRuntime(id, params)
     const named = findPlaces(value as Record<string, unknown>, 'params', isUploadRef)
     if (named.length === 0) return this.forward(value)
     void this.withUploads(value, id, named)
@@ -1208,6 +1218,50 @@ class DeviceSession {
       this.server.frames.close(this, path.slice(FRAME_PATH.length, -1))
     }
     if (typeof id === 'number') this.send({ type: 'response', id, result: null })
+  }
+
+  /**
+   * A device's `artifacts.frameRuntime`: a page's message from the frame at `path`, which goes to
+   * the agent host as the runtime request of the frame's artifact, untouched. A stream's events
+   * come back as the agent host's `artifacts.runtime` events under `stream`.
+   */
+  private frameRuntime(id: unknown, params: unknown): void {
+    if (typeof id !== 'number') return
+    const fail = (error: PortError): void => this.send({ type: 'error', id, error })
+    const { path, message, stream } = (params ?? {}) as Record<string, unknown>
+    const token =
+      typeof path === 'string' && path.startsWith(FRAME_PATH) && path.endsWith('/')
+        ? path.slice(FRAME_PATH.length, -1)
+        : ''
+    const frame = this.server.frames.find(token)
+    if (!frame || frame.session !== this) {
+      return fail({ code: 'not_found', message: 'No such frame is open' })
+    }
+    if (stream !== undefined && (typeof stream !== 'string' || stream.length > STREAM_CHARS)) {
+      return fail({ code: 'invalid_params', message: 'stream must be a short name' })
+    }
+    const { kind, cap } = (typeof message === 'object' && message !== null ? message : {}) as {
+      kind?: unknown
+      cap?: unknown
+    }
+    if (frame.lax && (cap === 'files' || cap === 'sample')) {
+      const header = messageHeader(message)
+      const result =
+        kind === 'use'
+          ? { ...header, ok: true, value: null }
+          : errorAnswer(header, 'not_allowed', 'Open the artifact again to use this.')
+      return this.send({ type: 'response', id, result })
+    }
+    this.forward({
+      type: 'request',
+      id,
+      method: 'artifacts.runtime',
+      params: {
+        artifactId: frame.artifactId,
+        message,
+        ...(stream === undefined ? {} : { stream }),
+      },
+    })
   }
 
   /** Where the files of a version of the artifact lie, or null when the agent host has none. */

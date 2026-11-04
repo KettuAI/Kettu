@@ -16,6 +16,11 @@ export const MAX_FRAMES = 64
 export interface Frame<S> {
   session: S
   artifactId: string
+  /**
+   * A page of the frame loaded with the CDNs in its policy, so it could send out what it reads:
+   * it is offered nothing that reads beyond the artifact until it is opened anew.
+   */
+  lax: boolean
 }
 
 export class ArtifactFrames<S> {
@@ -28,7 +33,7 @@ export class ArtifactFrames<S> {
       this.frames.delete(token)
     }
     const token = randomBytes(32).toString('base64url')
-    this.frames.set(token, { session, artifactId })
+    this.frames.set(token, { session, artifactId, lax: false })
     return token
   }
 

@@ -1,7 +1,7 @@
 // The window's side of the page runtime in each artifact frame: what drives the frame, posted into
 // it, and the picks it reports, which reach this page only checked. On the desktop they come from
 // main, which took them from the page's own origin; in the web client, over the port this page
-// hands the frame, where a capability's message is answered as by a client that offers none.
+// hands the frame, whose capability messages the web client relays to the host untouched.
 
 import {
   noCapability,
@@ -18,6 +18,17 @@ import { isWeb } from '@renderer/lib/platform'
 const PICKS_PER_SECOND = 20
 
 type PickListener = (selection: PageSelection | null) => void
+type RuntimeRelay = (url: string, port: MessagePort) => () => void
+
+let relay: RuntimeRelay | null = null
+
+/**
+ * The web client's relay of the capability messages the frame at `url` posts on `port`, which
+ * returns the detach. The desktop app sets none, since its pages ask main.
+ */
+export function setRuntimeRelay(next: RuntimeRelay): void {
+  relay = next
+}
 
 const channels = new Map<string, { origin: string; listener: PickListener }>()
 let listening = false
@@ -55,6 +66,7 @@ export class FrameLink {
   readonly channel = newChannel()
   private frame: HTMLIFrameElement | null = null
   private port: MessagePort | null = null
+  private detachRuntime: (() => void) | null = null
   private readonly sticky = new Map<Sticky, DriveMessage>()
   private second = 0
   private picks = 0
@@ -105,6 +117,8 @@ export class FrameLink {
   }
 
   private closePort(): void {
+    this.detachRuntime?.()
+    this.detachRuntime = null
     this.port?.close()
     this.port = null
   }
@@ -115,6 +129,8 @@ export class FrameLink {
     this.closePort()
     const { port1, port2 } = new MessageChannel()
     this.port = port1
+    const relays = relay
+    this.detachRuntime = relays ? relays(`${this.origin}/`, port1) : null
     port1.onmessage = (event) => {
       const parsed = parsePageMessage(event.data)
       if (!parsed) return
@@ -123,7 +139,7 @@ export class FrameLink {
         deliver(this.origin, parsed.message)
         return
       }
-      if (parsed.message.kind === 'cancel') return
+      if (relays || parsed.message.kind === 'cancel') return
       port1.postMessage(noCapability(parsed.message))
     }
     const message: DriveMessage = { v: RUNTIME_VERSION, kind: 'transport' }

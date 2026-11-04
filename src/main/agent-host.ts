@@ -1,5 +1,12 @@
 import { join } from 'node:path'
 import { app, MessageChannelMain, type MessagePortMain, type WebContents } from 'electron'
+import {
+  errorAnswer,
+  isLastAnswer,
+  isRuntimeAnswer,
+  messageHeader,
+  type RuntimeAnswer,
+} from '@shared/artifact-capabilities'
 import { artifactPathProblem, VERSION_FILES } from '@shared/artifact-files'
 import {
   ARTIFACT_ID,
@@ -123,10 +130,11 @@ function isContentFile(value: unknown): boolean {
 
 function isContentResult(value: unknown): value is ArtifactContentResult {
   if (typeof value !== 'object' || value === null) return false
-  const { kind, files, version, title, key } = value as Record<string, unknown>
+  const { kind, files, version, title, key, strict } = value as Record<string, unknown>
   if (kind === 'not_found' || kind === 'failed') return true
   return (
     kind === 'found' &&
+    typeof strict === 'boolean' &&
     Array.isArray(files) &&
     files.length <= VERSION_FILES &&
     files.every(isContentFile) &&
@@ -195,6 +203,8 @@ export class AgentHost {
   private nextImportId = 1
   private readonly listRequests = new Map<number, (ids: Set<string> | null) => void>()
   private nextListId = 1
+  private readonly runtimeRequests = new Map<number, (answer: RuntimeAnswer) => void>()
+  private nextRuntimeId = 1
 
   constructor(private readonly deps: AgentHostDeps) {
     this.host = new UtilityHost<MainToHost, HostToMain>({
@@ -354,6 +364,38 @@ export class AgentHost {
     })
   }
 
+  /**
+   * Passes a page's message to the host, whose answers go to `answer`: one, or a stream's events
+   * and then its end. Returns the cancel, which ends a stream; a host that is gone answers
+   * `failed`.
+   */
+  artifactRuntime(
+    artifactId: string,
+    message: unknown,
+    answer: (answer: RuntimeAnswer) => void,
+  ): () => void {
+    const gone = (): void =>
+      answer(errorAnswer(messageHeader(message), 'failed', 'Kettu cannot answer right now.'))
+    if (this.host.state !== 'ready') {
+      gone()
+      return () => {}
+    }
+    const requestId = this.nextRuntimeId++
+    this.runtimeRequests.set(requestId, (next) => {
+      if (isLastAnswer(next)) this.runtimeRequests.delete(requestId)
+      answer(next)
+    })
+    if (!this.host.post({ type: 'host:artifact-runtime', requestId, artifactId, message })) {
+      this.runtimeRequests.delete(requestId)
+      gone()
+    }
+    return () => {
+      if (this.runtimeRequests.delete(requestId)) {
+        this.host.post({ type: 'host:artifact-runtime-cancel', requestId })
+      }
+    }
+  }
+
   /** `host:browser-waiting`: the call waits on a new origin, so its own limit covers that wait. */
   browserWaiting(callId: number, waiting: boolean): void {
     this.host.post({ type: 'host:browser-waiting', callId, waiting })
@@ -473,6 +515,16 @@ export class AgentHost {
         resolve(isImportAnswer(message.result) ? message.result : UNAVAILABLE)
         break
       }
+      case 'host:artifact-runtime-answer': {
+        const deliver = this.runtimeRequests.get(message.requestId)
+        if (!deliver) break
+        if (isRuntimeAnswer(message.answer)) deliver(message.answer)
+        else {
+          log.warn('The host answered a page with something that is not an answer')
+          deliver(errorAnswer({ v: 1, id: '' }, 'failed', 'Kettu could not answer.'))
+        }
+        break
+      }
       case 'host:media-grant':
         if (isMediaGrant(message.grant)) this.deps.onMediaGrant(message.grant)
         break
@@ -567,6 +619,10 @@ export class AgentHost {
     this.importRequests.clear()
     for (const resolve of this.listRequests.values()) resolve(null)
     this.listRequests.clear()
+    for (const deliver of [...this.runtimeRequests.values()]) {
+      deliver(errorAnswer({ v: 1, id: '' }, 'failed', 'Kettu stopped before it answered.'))
+    }
+    this.runtimeRequests.clear()
     this.deps.onMediaRevoke(null)
     this.deps.onServicePort?.(null)
     this.deps.onRoutinesWorking(false)

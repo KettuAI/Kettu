@@ -1186,6 +1186,38 @@ describe('sessions', () => {
     expect(await s.connection.collect(sessionId, 'Title these')).toEqual(['Done.'])
   })
 
+  it("answers a page's question in a session with no tool, server, setting or history", async () => {
+    const s = await setup()
+    s.sdk.script = (query) => {
+      query.running()
+      query.emit(
+        stream(query, { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Do' } }),
+        stream(query, { type: 'content_block_delta', delta: { type: 'text_delta', text: 'ne.' } }),
+        assistant(query, 'msg_1', [{ type: 'text', text: 'Done.' }]),
+      )
+      query.finish()
+    }
+    const texts: string[] = []
+    const answer = await s.connection.answerQuestion!(
+      '/repo',
+      [{ type: 'text', text: 'Hi' }],
+      (text) => texts.push(text),
+      new AbortController().signal,
+    )
+    expect(answer).toBe('Done.')
+    expect(texts).toEqual(['Do', 'ne.'])
+    const query = s.sdk.last
+    expect(query.options).toMatchObject({
+      tools: [],
+      strictMcpConfig: true,
+      settingSources: [],
+      persistSession: false,
+      settings: { disableAllHooks: true },
+    })
+    expect(query.options.mcpServers).toBeUndefined()
+    expect(query.closed).toBe(true)
+  })
+
   it('reads the SDK history with the agent configuration folder', async () => {
     const s = await setup({ CLAUDE_CONFIG_DIR: '/home/ada/.claude-work' })
     const before = process.env.CLAUDE_CONFIG_DIR
