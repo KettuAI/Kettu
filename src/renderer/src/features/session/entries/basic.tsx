@@ -64,9 +64,6 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
     c.type === 'ref' && c.ref.kind === 'attachment' ? [c.ref.attachment] : [],
   )
   const rest = entry.content.filter((c) => c.type !== 'ref' || c.ref.kind !== 'attachment')
-  const actions = <UserActions content={entry.content} at={entry.at} steered={entry.steered} />
-  // Beside the bubble, so the reply starts right under it; a steered message keeps its label below.
-  const beside = rest.length > 0 && !entry.steered
   return (
     <div className={cn('group/actions flex flex-col items-end gap-1', animation)}>
       {attachments.length > 0 && (
@@ -81,7 +78,6 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
             <BubbleContent>
               <UserContentView content={rest} sessionId={sessionId} entryId={entryId} />
             </BubbleContent>
-            {beside && <div className="absolute right-full bottom-0 mr-2.5">{actions}</div>}
           </Bubble>
         </Message>
       )}
@@ -98,7 +94,7 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
         </span>
       )}
       {first && routine && <RoutineSent routine={routine} />}
-      {!beside && actions}
+      <UserActions content={entry.content} at={entry.at} steered={entry.steered} />
     </div>
   )
 })

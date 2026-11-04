@@ -76,7 +76,6 @@ const INTRINSIC_SIZE: Record<Estimate, string> = {
   20: '[contain-intrinsic-size:auto_20px]',
   24: '[contain-intrinsic-size:auto_24px]',
   28: '[contain-intrinsic-size:auto_28px]',
-  37: '[contain-intrinsic-size:auto_37px]',
   69: '[contain-intrinsic-size:auto_69px]',
 }
 
@@ -121,20 +120,20 @@ const isText = (item: Item): boolean => item.type === 'entry' && item.char === '
 
 /**
  * 32 px between turns; within one, 4 px between steps, 8 px between a step and the text beside it,
- * 8 px above the reply's actions, 20 px from a message you sent to a paragraph and 16 px between
- * anything else. The running turn's status starts 16 px under a message you sent, where the reply
- * will, and 8 px under the reply's latest entry, the gap of the row that takes its place.
+ * 8 px above the reply's actions, 4 px under a message you sent, whose own row of actions comes
+ * first, and 16 px between anything else. The running turn's status starts there too, where the
+ * reply will, and 8 px under the reply's latest entry, the gap of the row that takes its place.
  */
 function spacing(item: Item, previous: Item, steps: Set<string>): string {
-  if (item.type === 'status') return item.afterSent ? 'pt-4' : 'pt-2'
+  if (item.type === 'status') return item.afterSent ? 'pt-1' : 'pt-2'
   if (item.type === 'entry' && item.turnStart) return 'pt-8'
   if (item.type === 'reply') return 'pt-2'
+  if (isSent(previous)) return 'pt-1'
   if (isStep(item, steps) && isStep(previous, steps)) return 'pt-1'
   // A step's row is 28 px tall around one line of text, so it needs less room than a paragraph.
   if ((isStep(item, steps) && isText(previous)) || (isText(item) && isStep(previous, steps))) {
     return 'pt-2'
   }
-  if (isSent(previous) && item.type === 'entry' && item.char === 'a') return 'pt-5'
   return 'pt-4'
 }
 

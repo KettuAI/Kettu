@@ -154,7 +154,7 @@ function sentItem(item: Item | undefined): boolean {
 }
 
 /** An item's height in px before it renders: its kind's shortest rendered height. */
-export type Estimate = 16 | 18 | 20 | 24 | 28 | 37 | 69
+export type Estimate = 16 | 18 | 20 | 24 | 28 | 69
 
 /**
  * The height an item is laid out at until it renders: the shortest its kind renders at, at any
@@ -165,10 +165,8 @@ export function estimateOf(item: Item): Estimate {
   if (item.type === 'run') return 28
   if (item.type === 'group' || item.type === 'reply' || item.type === 'status') return 24
   switch (item.char) {
-    // One line of bubble, whose actions sit beside it.
+    // One line of bubble and the row under it: the time, Copy and the steered label.
     case 'u':
-      return 37
-    // One line of bubble and the row under it that says it was steered.
     case 's':
       return 69
     case 'a':
