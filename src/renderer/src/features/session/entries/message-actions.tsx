@@ -87,10 +87,7 @@ function userText(content: UserContent[]): string {
     .join('\n')
 }
 
-/**
- * Under a user message, at its end: "Steered" for one sent into a running turn, then on hover
- * when it was sent, and Copy.
- */
+/** Message metadata and Copy, revealed on hover or focus. */
 export function UserActions({
   content,
   at,
@@ -102,21 +99,31 @@ export function UserActions({
 }) {
   const { t } = useTranslation('session')
   return (
-    <div className="-mr-1.5 flex h-7 items-center gap-1 text-hint whitespace-nowrap text-tertiary">
-      {steered && (
-        <span className="mr-1 inline-flex items-center gap-1">
-          <CornerDownRightIcon className="size-3" />
-          {t('userActions.steered')}
-        </span>
+    <div
+      className={cn(
+        'flex h-7 max-w-full items-center gap-2 text-hint whitespace-nowrap text-tertiary',
+        steered ? 'pr-0.5' : '-mr-1.5',
+        REVEAL,
       )}
-      <span className={cn('flex items-center gap-1', REVEAL)}>
-        {at !== undefined && <Ago at={at} />}
+    >
+      <span className="flex min-w-0 items-center gap-1">
+        {at !== undefined && (
+          <span className="truncate">
+            <Ago at={at} />
+          </span>
+        )}
         <CopyButton
           text={() => userText(content)}
           label={t('userActions.copyMessage')}
           size="icon-sm"
         />
       </span>
+      {steered && (
+        <span className="inline-flex shrink-0 items-center gap-1">
+          <CornerDownRightIcon className="size-3" />
+          {t('userActions.steered')}
+        </span>
+      )}
     </div>
   )
 }
