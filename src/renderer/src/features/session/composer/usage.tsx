@@ -45,7 +45,6 @@ import { LIMIT_TEXT, limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { loadContext, refreshLimits, useUsageStore } from '@renderer/stores/usage'
-import { openUsage } from '@renderer/stores/view'
 import { useAboveBox } from './above-box'
 import { ROW_BUTTON } from './menu-parts'
 
@@ -327,6 +326,8 @@ export function ContextButton({
 }) {
   const { t } = useTranslation('composer')
   const warning = warningLimit(limits)
+  // An account of another kind has no plan; an unknown one shows the limits the agent reports.
+  const subscribed = account ? account.kind === 'account' : limits.length > 0
   const [setAnchor, aboveBox] = useAboveBox()
   const cached = useUsageStore((s) => s.context[sessionId])
   const read = context ?? cached
@@ -415,7 +416,7 @@ export function ContextButton({
             onCompact={onCompact}
           />
         )}
-        {(limits.length > 0 || account) && (
+        {subscribed && (
           <>
             {usage && <Rule />}
             <PlanPart limits={limits} account={account} />
@@ -703,7 +704,7 @@ function ListPart({ list }: { list: ContextList }) {
   )
 }
 
-/** The plan and its windows: a bar for each, in the limit colors, then a way to the Usage page. */
+/** The plan and its windows: a bar for each, in the limit colors. */
 function PlanPart({ limits, account }: { limits: PlanLimit[]; account: AgentAccount | null }) {
   const { t } = useTranslation('composer')
   const now = useNow()
@@ -752,14 +753,6 @@ function PlanPart({ limits, account }: { limits: PlanLimit[]; account: AgentAcco
           </div>
         )
       })}
-      <button
-        type="button"
-        onClick={openUsage}
-        className="mt-3 inline-flex w-fit items-center gap-1 rounded-sm font-medium text-primary underline decoration-border-strong underline-offset-3 outline-none focus-ring hover:decoration-current"
-      >
-        {t('usage.openUsage')}
-        <ChevronRightIcon strokeWidth={1.6} className="size-3" />
-      </button>
     </div>
   )
 }
