@@ -47,7 +47,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { SHEET } from '@renderer/features/shell/sheet'
-import { CornerControls } from '@renderer/features/shell/top-bar'
+import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { hasBand } from '@renderer/lib/platform'
 import { layoutStorage } from '@renderer/lib/storage'
@@ -164,7 +164,7 @@ export function TerminalPanel({
           cornered && 'pl-(--corner-inset)',
         )}
       >
-        {cornered && <CornerControls className="mr-1" />}
+        {cornered && <CornerControlsSpace className="mr-1" />}
         <DragDropProvider sensors={sensors} onDragEnd={dragEnded}>
           <div
             role="tablist"

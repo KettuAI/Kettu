@@ -18,7 +18,7 @@ import { SplitDragProvider } from '@renderer/features/split/session-drag'
 import { MainArea } from '@renderer/features/shell/main-area'
 import { ShortcutsDialog } from '@renderer/features/shell/shortcuts-dialog'
 import { DESK, SHEET_PANEL } from '@renderer/features/shell/sheet'
-import { TitleBand } from '@renderer/features/shell/top-bar'
+import { CornerControls, TitleBand } from '@renderer/features/shell/top-bar'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
 import { UpdateDialog } from '@renderer/features/updates/update-dialog'
 import { AppSidebar } from '@renderer/features/sidebar/app-sidebar'
@@ -56,6 +56,7 @@ export function App() {
           <div className="relative min-h-0 flex-1">
             {/* The workbench stays in view under Settings, which opens over it. */}
             <div inert={settingsOpen} className="absolute inset-0">
+              <CornerControls />
               {/* One drag scope for the sidebar and the main area: a session's row drags into
                   the split. */}
               <SplitDragProvider>

@@ -29,7 +29,7 @@ import { Progress } from '@renderer/components/ui/progress'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { CornerControls } from '@renderer/features/shell/top-bar'
+import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
 import { bytes, count, longAgo, percent, tokens, usd } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext } from '@renderer/lib/host-features'
@@ -161,7 +161,7 @@ function PageBar() {
         cornered ? 'h-top-bar pl-(--corner-inset)' : 'h-8',
       )}
     >
-      {cornered && <CornerControls className="-ml-1" />}
+      {cornered && <CornerControlsSpace />}
     </div>
   )
 }

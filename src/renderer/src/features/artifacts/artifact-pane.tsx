@@ -29,7 +29,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { SHEET } from '@renderer/features/shell/sheet'
-import { CornerControls } from '@renderer/features/shell/top-bar'
+import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
 import { hasBand } from '@renderer/lib/platform'
 import { host } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
@@ -209,7 +209,7 @@ export default function ArtifactPane({
           cornered && 'pl-(--corner-inset)',
         )}
       >
-        {cornered && <CornerControls className="mr-1" />}
+        {cornered && <CornerControlsSpace className="mr-1" />}
         <span className="min-w-0 truncate pr-1.5 text-ui font-medium">{title}</span>
         {shown && (
           <span className="shrink-0 text-xs text-secondary tabular-nums">
