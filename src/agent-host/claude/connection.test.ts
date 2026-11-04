@@ -1218,6 +1218,35 @@ describe('sessions', () => {
     expect(query.closed).toBe(true)
   })
 
+  it("signs a page's question in as the user's Claude Code does, with nothing else of theirs", async () => {
+    const s = await setup()
+    s.sdk.settings = {
+      env: { ANTHROPIC_BASE_URL: 'https://example.com', ANTHROPIC_AUTH_TOKEN: 'token' },
+      apiKeyHelper: '/usr/local/bin/key',
+      hooks: { Stop: [] },
+      permissions: { allow: ['Bash'] },
+      enabledPlugins: { tools: true },
+    }
+    s.sdk.script = (query) => {
+      query.running()
+      query.emit(assistant(query, 'msg_1', [{ type: 'text', text: 'Done.' }]))
+      query.finish()
+    }
+    await s.connection.answerQuestion!(
+      '/repo',
+      [{ type: 'text', text: 'Hi' }],
+      () => {},
+      new AbortController().signal,
+    )
+    const query = s.sdk.last
+    expect(query.options.settingSources).toEqual([])
+    expect(query.options.settings).toEqual({
+      disableAllHooks: true,
+      env: { ANTHROPIC_BASE_URL: 'https://example.com', ANTHROPIC_AUTH_TOKEN: 'token' },
+      apiKeyHelper: '/usr/local/bin/key',
+    })
+  })
+
   it('reads the SDK history with the agent configuration folder', async () => {
     const s = await setup({ CLAUDE_CONFIG_DIR: '/home/ada/.claude-work' })
     const before = process.env.CLAUDE_CONFIG_DIR

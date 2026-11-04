@@ -109,6 +109,14 @@ const AUTH_STATUS_MS = 10_000
 const RESOURCE_NOT_FOUND = -32002
 const INVALID_PARAMS = -32602
 const USER_SOURCES: SettingSource[] = ['user', 'project', 'local']
+/** The settings by which Claude Code signs in: an endpoint and key, or a helper that gives one. */
+const SIGN_IN_SETTINGS = ['env', 'apiKeyHelper', 'awsAuthRefresh', 'awsCredentialExport'] as const
+
+function signInSettings(settings: Record<string, unknown>): Record<string, unknown> {
+  const picked: Record<string, unknown> = {}
+  for (const key of SIGN_IN_SETTINGS) if (settings[key] !== undefined) picked[key] = settings[key]
+  return picked
+}
 
 /** How Claude Code says a request failed for want of a sign-in. */
 const SIGN_IN_TEXT =
@@ -761,6 +769,8 @@ export class ClaudeConnection implements AgentConnection {
     }
     const flags: Record<string, unknown> = {}
     if (hidden) flags.disableAllHooks = true
+    // A page's question reads none of the user's settings but how they sign in, which may be there.
+    if (bare) Object.assign(flags, signInSettings(await this.settings(cwd, ['user'])))
     if (options.ultracode !== undefined) flags.ultracode = options.ultracode
     const mcpServers = Object.fromEntries(
       (options.mcpServers ?? []).map((server) => [
