@@ -282,7 +282,12 @@ export function OptionMenu({
             {option.choices.map((choice) => {
               const ChoiceIcon = MODE_ICON[modeLook(choice.value)]
               return (
-                <CheckRow key={choice.value} value={choice.value} described={!!choice.description}>
+                <CheckRow
+                  key={choice.value}
+                  value={choice.value}
+                  described={!!choice.description}
+                  checkAt={isMode ? 'end' : 'start'}
+                >
                   {isMode && <ChoiceIcon strokeWidth={1.4} />}
                   <ItemText
                     name={<ChoiceName name={choice.name} className="font-normal" />}
@@ -309,18 +314,30 @@ export function OptionMenu({
   )
 }
 
-/** A choice whose check sits in a column before it, as every choice in the composer's menus. */
+/**
+ * A choice with its check in a column. The column leads the row; rows that lead with an icon of
+ * their own put it after the text (`checkAt="end"`), so no empty column sits before the icons.
+ */
 function CheckRow({
   value,
   described = false,
+  checkAt = 'start',
   className,
   children,
 }: {
   value: string
   described?: boolean
+  checkAt?: 'start' | 'end'
   className?: string
   children: ReactNode
 }) {
+  const check = (
+    <CheckColumn>
+      <MenuPrimitive.RadioItemIndicator className="flex">
+        <CheckIcon strokeWidth={1.75} className="size-3.5" />
+      </MenuPrimitive.RadioItemIndicator>
+    </CheckColumn>
+  )
   return (
     <DropdownMenuRadioItem
       value={value}
@@ -331,12 +348,9 @@ function CheckRow({
         className,
       )}
     >
-      <CheckColumn>
-        <MenuPrimitive.RadioItemIndicator className="flex">
-          <CheckIcon strokeWidth={1.75} className="size-3.5" />
-        </MenuPrimitive.RadioItemIndicator>
-      </CheckColumn>
+      {checkAt === 'start' && check}
       {children}
+      {checkAt === 'end' && check}
     </DropdownMenuRadioItem>
   )
 }
