@@ -103,8 +103,7 @@
       "lastsHoursShort_other": "有效 {{count}} 小时",
       "estimateLastsMinutes_other": "约有效 {{count}} 分钟",
       "estimateLastsHours_other": "约有效 {{count}} 小时"
-    },
-    "openUsage": "打开用量"
+    }
   },
   "attachments": {
     "label": "附件",

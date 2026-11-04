@@ -107,8 +107,7 @@
       "estimateLastsMinutes_other": "Lasts about {{count}} min",
       "estimateLastsHours_one": "Lasts about {{count}} hour",
       "estimateLastsHours_other": "Lasts about {{count}} hours"
-    },
-    "openUsage": "Open Usage"
+    }
   },
   "attachments": {
     "label": "Attachments",
