@@ -11,11 +11,7 @@ import { formatShortcut, hasBand } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { toggleSidebar, useViewStore } from '@renderer/stores/view'
 
-/**
- * The top bar of the main area, at the top of its sheet: the window's drag region. On macOS with
- * the sidebar collapsed it leaves room for the traffic lights and carries Back, Forward and the
- * sidebar toggle, which on Windows and Linux sit in the band above the sheets instead.
- */
+/** The main sheet's drag region, leaving room for the window's controls when cornered. */
 export function TopBar({
   children,
   className,
@@ -32,42 +28,25 @@ export function TopBar({
     <header
       className={cn(
         '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 bg-app pr-3 pl-4.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
-        cornered && 'pl-(--corner-inset)',
         className,
+        cornered && 'pl-(--corner-inset)',
       )}
     >
-      {cornered && <CornerControls divided={children != null} className="-ml-0.5" />}
+      {cornered && <CornerControlsSpace divided={children != null} />}
       {children}
     </header>
   )
 }
 
-/**
- * Windows and Linux: the band across the top of the main area, beside the window controls.
- * It drags the window and, while the sidebar is collapsed, holds Back, Forward and the sidebar
- * toggle.
- */
+/** The drag region beside the window controls on Windows and Linux. */
 export function TitleBand() {
-  const collapsed = useViewStore((s) => s.sidebarCollapsed)
   if (!hasBand) return null
-  return (
-    <div className="app-region-drag absolute inset-x-0 top-0 flex h-(--title-bar) items-center pl-(--sheet-gap)">
-      {collapsed && <CornerControls />}
-    </div>
-  )
+  return <div className="app-region-drag absolute inset-x-0 top-0 h-(--title-bar)" />
 }
 
-/**
- * The sidebar's top row. Back, Forward and the toggle sit where the collapsed top bar puts them,
- * so hiding and showing the sidebar keeps that click: on macOS just past the traffic lights,
- * elsewhere at the title band's inset. The rest drags the window. The row holds the whole
- * history's dialog, since the sidebar stays mounted.
- */
+/** The sidebar's drag region and the history dialog, which stays mounted with it. */
 export function SidebarTitleBar() {
   return (
-    // On macOS 56 px, its buttons centred on the traffic lights, which main puts level with the
-    // top bar's centre; elsewhere in the band. The inset is the cornered top bar's, measured from
-    // the window's edge, and the same half-step pull-back, so the buttons do not move on collapse.
     <div
       className={cn(
         'app-region-drag flex shrink-0 items-center pr-2',
@@ -76,19 +55,34 @@ export function SidebarTitleBar() {
           : 'h-14 pt-2 pl-[calc(var(--corner-inset)+var(--sheet-gap))]',
       )}
     >
-      <CornerControls className={cn(!hasBand && '-ml-0.5')} />
-      {/* The window's drag region. */}
+      <CornerControlsSpace />
       <span className="flex-1" />
       <HistoryDialog />
     </div>
   )
 }
 
-/**
- * Back, Forward and the toggle, in the sidebar's row and, while it is collapsed, where that row
- * had them; `divided` sets them off with a line from what follows in the bar.
- */
-export function CornerControls({
+/** One mounted set of controls, outside the panels that slide beneath it. */
+export function CornerControls() {
+  return (
+    <div
+      className={cn(
+        'pointer-events-none absolute top-0 left-0 z-20 flex items-center',
+        hasBand
+          ? 'h-(--title-bar) pl-(--sheet-gap)'
+          : 'h-14 pt-2 pl-[calc(var(--corner-inset)+var(--sheet-gap))]',
+      )}
+    >
+      <div className={cn('pointer-events-auto flex items-center gap-0.5', !hasBand && '-ml-0.5')}>
+        <SidebarToggle />
+        <BackForward />
+      </div>
+    </div>
+  )
+}
+
+/** Reserves the controls' width in a header without moving the controls into that panel. */
+export function CornerControlsSpace({
   className,
   divided = false,
 }: {
@@ -97,16 +91,17 @@ export function CornerControls({
 }) {
   return (
     <div
+      aria-hidden
       className={cn(
-        'flex shrink-0 items-center gap-0.5',
+        'flex shrink-0 items-center',
+        !hasBand && '-ml-0.5',
         // No line before the bar's spacer, as on New session, where nothing follows on the left.
         divided &&
           'mr-1.5 pr-2.5 shadow-[inset_calc(-1*var(--hairline))_0_0_var(--border-subtle)] [&:has(+_.flex-1)]:shadow-none',
         className,
       )}
     >
-      <BackForward />
-      <SidebarToggle />
+      <span className="h-7.5 w-23.5 shrink-0" />
     </div>
   )
 }
@@ -116,29 +111,20 @@ export function NoDrag({ children, className }: { children: ReactNode; className
   return <div className={cn('app-region-no-drag flex items-center', className)}>{children}</div>
 }
 
-// The sidebar is inert while collapsed, and the top bar's toggle goes once it shows, so the toggle
-// in the other place takes the focus when the sidebar hides with the focus in it or shows from the
-// top bar's toggle. Read as the state changes, before the page does.
-let handOff = false
-useViewStore.subscribe((state, previous) => {
-  if (state.sidebarCollapsed === previous.sidebarCollapsed) return
-  handOff = !!document.activeElement?.closest(
-    state.sidebarCollapsed ? '[data-slot=sidebar]' : '[data-sidebar-toggle]',
-  )
-})
-
 export function SidebarToggle({ className }: { className?: string }) {
   const { t } = useTranslation('shell')
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
   const { summary } = useNotices()
   const button = useRef<HTMLButtonElement>(null)
-  // Collapsed, the top bar's toggle takes the focus; shown, the sidebar's.
-  useLayoutEffect(() => {
-    const element = button.current
-    if (!handOff || !element || !!element.closest('[data-slot=sidebar]') === collapsed) return
-    handOff = false
-    element.focus()
-  }, [collapsed])
+  // Move focus out of the sidebar before collapsing makes it inert.
+  useLayoutEffect(
+    () =>
+      useViewStore.subscribe((state, previous) => {
+        if (!state.sidebarCollapsed || previous.sidebarCollapsed) return
+        if (document.activeElement?.closest('[data-slot=sidebar]')) button.current?.focus()
+      }),
+    [],
+  )
   // Collapsed, the sidebar's notices are out of sight, so the toggle marks and names them.
   const notices = collapsed ? summary : null
   const label = collapsed ? t('topBar.showSidebar') : t('topBar.hideSidebar')
@@ -154,7 +140,11 @@ export function SidebarToggle({ className }: { className?: string }) {
             aria-label={label}
             aria-description={notices?.name}
             onClick={toggleSidebar}
-            className={cn(TITLE_BUTTON, 'relative', className)}
+            className={cn(
+              TITLE_BUTTON,
+              'relative active:not-aria-[haspopup]:translate-y-0',
+              className,
+            )}
           />
         }
       >

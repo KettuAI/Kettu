@@ -38,7 +38,7 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Switch } from '@renderer/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { CornerControls } from '@renderer/features/shell/top-bar'
+import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
 import { basename, longAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { hasBand } from '@renderer/lib/platform'
@@ -253,7 +253,7 @@ function PageStrip() {
         cornered ? 'h-top-bar pl-(--corner-inset)' : 'h-8',
       )}
     >
-      {cornered && <CornerControls className="-ml-1" />}
+      {cornered && <CornerControlsSpace />}
     </div>
   )
 }

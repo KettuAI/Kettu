@@ -20,7 +20,7 @@ import {
 } from '@renderer/components/ui/empty'
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { SHEET } from '@renderer/features/shell/sheet'
-import { CornerControls } from '@renderer/features/shell/top-bar'
+import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
 import { hasBand, isMac } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
@@ -169,7 +169,7 @@ export function BrowserPane({
           cornered && 'pl-(--corner-inset)',
         )}
       >
-        {cornered && <CornerControls className="mr-1" />}
+        {cornered && <CornerControlsSpace className="mr-1" />}
         {hasPage && state?.url && (
           <div
             role="tablist"

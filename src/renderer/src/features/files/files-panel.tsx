@@ -34,7 +34,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { LineCounts } from '@renderer/features/git/rows'
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { SHEET } from '@renderer/features/shell/sheet'
-import { CornerControls } from '@renderer/features/shell/top-bar'
+import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { formatShortcut, hasBand, isMod, isWeb } from '@renderer/lib/platform'
@@ -142,7 +142,7 @@ export default function FilesPanel({
           cornered && 'pl-(--corner-inset)',
         )}
       >
-        {cornered && <CornerControls className="mr-1" />}
+        {cornered && <CornerControlsSpace className="mr-1" />}
         {searching ? (
           <InputGroup className="app-region-no-drag h-7 w-80 min-w-0">
             <InputGroupAddon>
