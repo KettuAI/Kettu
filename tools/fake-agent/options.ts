@@ -105,7 +105,7 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
     description: "Makes or changes a canvas through Kettu's artifacts service, then reads it",
     hint:
       '--read <artifact id> --site <image in the project> --type <document|slides> ' +
-      '--until-cancel --child <id> ' +
+      '--from <folder in the project>... --until-cancel --child <id> ' +
       '--meta <session id|none> --execute',
   },
   'open-site': {
@@ -145,6 +145,7 @@ export interface ScenarioOptions {
   read: string | null // artifacts: the artifact to read instead
   site: string | null // artifacts: an image of the project, for a page of several files instead
   type: string | null // artifacts: a type to make an artifact of instead, document or slides
+  from: string[] // artifacts: folders of the project to make one artifact of each instead
   untilCancel: boolean // artifacts: the turn runs on after its calls until it is cancelled
   child: string | null // artifacts: the calls come from this subagent session, as OpenCode's do
   meta: string | null // artifacts: the session id the calls name instead; none names none
@@ -190,6 +191,18 @@ function flagValue(args: string[], name: string): string | undefined {
     if (arg.startsWith(`--${name}=`)) return arg.slice(name.length + 3)
   }
   return undefined
+}
+
+/** Every value a flag that may repeat was given, in order. */
+function flagValues(args: string[], name: string): string[] {
+  const values: string[] = []
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!
+    const next = args[i + 1]
+    if (arg === `--${name}` && next !== undefined && !next.startsWith('--')) values.push(next)
+    else if (arg.startsWith(`--${name}=`)) values.push(arg.slice(name.length + 3))
+  }
+  return values
 }
 
 /**
@@ -240,6 +253,7 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
     read: flagValue(args, 'read') || null,
     site: flagValue(args, 'site') || null,
     type: flagValue(args, 'type') || null,
+    from: flagValues(args, 'from'),
     untilCancel: flagValue(args, 'until-cancel') !== undefined,
     child: flagValue(args, 'child') || null,
     meta: flagValue(args, 'meta') || null,

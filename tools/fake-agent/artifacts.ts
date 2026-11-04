@@ -1,6 +1,8 @@
 // The artifacts scenario: calls Kettu's artifacts service through the MCP servers the session
 // was attached with, as a real agent's MCP client would, and reports each call in the thread.
 
+import { readdir, readFile } from 'node:fs/promises'
+import path from 'node:path'
 import type { McpServer } from '@agentclientprotocol/sdk/unstable'
 import type { Scenario, Turn } from './turn.ts'
 
@@ -119,6 +121,43 @@ const CANVAS = [
   '</body></html>',
 ].join('\n')
 
+/** What a `--from` folder's `artifact.json` may say. */
+interface FolderSpec {
+  title?: unknown
+  capabilities?: unknown
+  type?: unknown
+}
+
+const SPEC_FILE = 'artifact.json'
+
+/**
+ * The call that makes an artifact of `folder`, inside the session's working folder: its
+ * `artifact.json` names the title and what it declares or the type it is made from, and every
+ * other file, hidden ones aside, is one of its files, which the host reads from the folder.
+ */
+async function folderCall(
+  cwd: string,
+  folder: string,
+): Promise<{ name: string; args: Record<string, unknown> }> {
+  const root = path.resolve(cwd, folder)
+  const spec = JSON.parse(
+    await readFile(path.join(root, SPEC_FILE), 'utf8').catch(() => '{}'),
+  ) as FolderSpec
+  const entries = await readdir(root, { recursive: true, withFileTypes: true })
+  const files = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.relative(root, path.join(entry.parentPath, entry.name)))
+    .filter((rel) => rel !== SPEC_FILE && !rel.split(path.sep).some((part) => part.startsWith('.')))
+    .sort()
+    .map((rel) => ({ path: rel.split(path.sep).join('/'), source: path.join(root, rel) }))
+  const title = typeof spec.title === 'string' ? spec.title : path.basename(root)
+  if (spec.type === 'document' || spec.type === 'slides') {
+    return { name: 'create_artifact_from_type', args: { type: spec.type, title, files } }
+  }
+  const capabilities = Array.isArray(spec.capabilities) ? { capabilities: spec.capabilities } : {}
+  return { name: 'create_artifact', args: { title, files, ...capabilities } }
+}
+
 interface CallResult {
   text: string
   value: Record<string, unknown>
@@ -149,7 +188,9 @@ async function say(turn: Turn, text: string): Promise<void> {
  * reads it back; `/artifacts --read <id>` reads that artifact, and `/artifacts --site <image>`
  * makes "Fake site" of several files, the image read by the host from the project; `--type
  * document` or `--type slides` makes "Fake report" or "Fake deck" from that type, with the
- * `--site` image in it when given. Each call shows as a tool call named as Claude Code names MCP
+ * `--site` image in it when given. `--from <folder>`, which may repeat, makes one artifact of each
+ * folder of the project: an `artifact.json` there may give `title`, `capabilities` and `type`, and
+ * every other file is one of its files. Each call shows as a tool call named as Claude Code names MCP
  * tools, and the reply lists what each call returned. With
  * `--until-cancel` the turn runs on after the reply until it is cancelled, whatever the pace.
  *
@@ -250,9 +291,18 @@ export const artifacts: Scenario = async (turn) => {
     return { text, value, isError }
   }
   try {
-    const { read, site, type } = turn.options
+    const { read, site, type, from } = turn.options
     if (read) {
       await call('read_artifact', { id: read })
+    } else if (from.length > 0) {
+      for (const folder of from) {
+        try {
+          const made = await folderCall(turn.session.cwd, folder)
+          await call(made.name, made.args)
+        } catch (error) {
+          lines.push(`${folder}: ${(error as Error).message}`)
+        }
+      }
     } else if (type) {
       await call('list_artifact_types', {})
       await call('read_artifact_type', { type })
