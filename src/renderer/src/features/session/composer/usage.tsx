@@ -78,17 +78,20 @@ function warningLimit(limits: PlanLimit[]): PlanLimit | null {
 
 const RING_TONE = {
   // A plan limit's pie, in the color of its level (lib/plan-limit.ts).
-  'limit-ok': ['stroke-track', 'stroke-limit-ok'],
-  'limit-warn': ['stroke-track', 'stroke-limit-warn'],
-  'limit-bad': ['stroke-track', 'stroke-limit-bad'],
-  muted: ['stroke-track', 'stroke-muted-foreground'],
-  low: ['stroke-usage-green/40', 'stroke-usage-green'],
-  medium: ['stroke-usage-blue/40', 'stroke-usage-blue'],
-  high: ['stroke-usage-orange/40', 'stroke-usage-orange'],
-  critical: ['stroke-usage-red/40', 'stroke-usage-red'],
+  'limit-ok': 'text-limit-ok',
+  'limit-warn': 'text-limit-warn',
+  'limit-bad': 'text-limit-bad',
+  muted: 'text-muted-foreground',
+  low: 'text-usage-green',
+  medium: 'text-usage-blue',
+  high: 'text-usage-orange',
+  critical: 'text-usage-red',
 } as const
 
-/** A pie inside a ring: a filling wedge, which a short arc would not be, cannot read as a spinner. */
+/**
+ * A pie on a disc tinted in its color: a filling wedge, which a short arc would not be, cannot
+ * read as a spinner, and the disc shows how much is left.
+ */
 export function Ring({
   share,
   tone,
@@ -100,11 +103,15 @@ export function Ring({
   className?: string
 }) {
   // A circle stroked as wide as its diameter paints the wedge that its dash covers.
-  const r = 2.75
+  const r = 3.75
   const c = 2 * Math.PI * r
   return (
-    <svg aria-hidden viewBox="0 0 16 16" className={cn('size-4 shrink-0 -rotate-90', className)}>
-      <circle cx="8" cy="8" r="6.75" fill="none" strokeWidth="1.5" className={RING_TONE[tone][0]} />
+    <svg
+      aria-hidden
+      viewBox="0 0 16 16"
+      className={cn('size-4 shrink-0 -rotate-90', RING_TONE[tone], className)}
+    >
+      <circle cx="8" cy="8" r="7.5" className="fill-current opacity-(--ring-tint)" />
       <circle
         cx="8"
         cy="8"
@@ -113,10 +120,7 @@ export function Ring({
         strokeWidth={r * 2}
         strokeDasharray={c}
         strokeDashoffset={c * (1 - Math.min(1, Math.max(0, share)))}
-        className={cn(
-          'transition-[stroke-dashoffset] duration-(--duration-slow) ease-out-quint',
-          RING_TONE[tone][1],
-        )}
+        className="stroke-current transition-[stroke-dashoffset] duration-(--duration-slow) ease-out-quint"
       />
     </svg>
   )

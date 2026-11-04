@@ -172,6 +172,8 @@
   --usage-blue: #2a78d6;
   --usage-orange: #d46a00;
   --usage-red: #dc3f3a;
+  /* How strongly a ring's disc shows its pie's color under the pie. */
+  --ring-tint: 16%;
 
   /* The account's avatar, a letter on a dark gradient, and the tile Kettu's mark sits on in
      the update card: dark in both themes, with white on them. */
@@ -393,6 +395,7 @@
     --usage-blue: #3987e5;
     --usage-orange: #f2a03d;
     --usage-red: #e5605a;
+    --ring-tint: 24%;
 
     /* The account's avatar, a letter on a dark gradient, and the tile Kettu's mark sits on in
        the update card: dark in both themes, with white on them. */
@@ -578,6 +581,7 @@
   --usage-blue: #3987e5;
   --usage-orange: #f2a03d;
   --usage-red: #e5605a;
+  --ring-tint: 24%;
 
   /* The account's avatar, a letter on a dark gradient, and the tile Kettu's mark sits on in
      the update card: dark in both themes, with white on them. */
