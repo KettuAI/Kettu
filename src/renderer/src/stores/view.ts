@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import type { AgentId, HarnessId } from '@shared/thread'
-import { markSwitchStart } from '@renderer/app/perf'
 import {
   GROUPINGS,
   SORTS,
@@ -375,8 +374,6 @@ export function shownLayoutSessions(state: ViewStore): string[] {
 }
 
 export function openSession(sessionId: string, projectPath: string): void {
-  const { main } = useViewStore.getState()
-  if (main.kind !== 'session' || main.sessionId !== sessionId) markSwitchStart(sessionId)
   useViewStore.setState((s) => ({
     ...withLayout(s, showViewInLayout(s.layout, { kind: 'session', sessionId, projectPath }), true),
     settings: { ...s.settings, open: false },

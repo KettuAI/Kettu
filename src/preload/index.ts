@@ -94,7 +94,6 @@ const api: KettuApi = {
   platform: process.platform,
   client: 'desktop',
   hostPlatform: () => process.platform,
-  perf: process.argv.includes('--kettu-perf'),
   systemLocale: systemLocale(),
   app: {
     getInfo: () => invoke('app:get-info'),
@@ -117,7 +116,6 @@ const api: KettuApi = {
     },
     reportInteractive: () => send('perf:interactive'),
     setUnsaved: (files) => send('app:set-unsaved', files),
-    perfMetrics: () => invoke('perf:metrics'),
     onShortcut,
   },
   artifacts: {

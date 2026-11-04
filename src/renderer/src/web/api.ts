@@ -237,7 +237,6 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
     platform: devicePlatform(navigator),
     client: 'web',
     hostPlatform: () => hostSystem ?? devicePlatform(navigator),
-    perf: false,
     systemLocale: matchLocale(navigator.languages),
     app: {
       // The web client is the host's own build, so its version is the host's.
@@ -252,7 +251,6 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         return () => commands.delete(listener)
       },
       reportInteractive: () => {},
-      perfMetrics: () => unsupported('measure performance'),
       onShortcut: never,
     },
     artifacts: {

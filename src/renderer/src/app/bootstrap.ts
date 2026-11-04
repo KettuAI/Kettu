@@ -63,7 +63,6 @@ import {
 } from '@renderer/stores/view'
 import { initHostSessions } from './host-sessions'
 import { followWindowTitle } from './window-title'
-import { installPerfCounters } from './perf'
 
 /** An event of this computer's agent host, or with `hostId` of another host's. */
 function onHostEvent(event: HostEvent, hostId: string | null = null): void {
@@ -215,7 +214,6 @@ export function bootstrap(): Promise<unknown> {
   // Platform styles, such as the Windows scrollbars, key off these.
   document.documentElement.dataset.platform = platform
   document.documentElement.dataset.client = window.kettu.client
-  installPerfCounters()
   const agents = window.kettu.agents
   agents.onEvent((event) => onHostEvent(event))
   agents.onConnection((state) => {

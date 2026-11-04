@@ -93,8 +93,6 @@ export interface IpcDeps {
   computerModel(): Promise<string>
   updater: Updater
   quit: QuitFlow
-  /** Started with --kettu-perf. */
-  perf: boolean
 }
 
 interface Caller {
@@ -393,7 +391,6 @@ export function registerIpcHandlers({
   computerModel,
   updater,
   quit,
-  perf,
 }: IpcDeps): void {
   handle('app:get-info', 0, () => appInfo())
   handle('app:default-browser', 0, () => defaultBrowser(app))
@@ -547,19 +544,6 @@ export function registerIpcHandlers({
   })
   handle('terminal-host:restart', 0, () => {
     terminalHost.restart()
-  })
-
-  handle('perf:metrics', 0, () => {
-    if (!perf) throw new Error('"perf:metrics" needs --kettu-perf')
-    return {
-      launchToInteractiveMs,
-      processes: app.getAppMetrics().map((metric) => ({
-        type: metric.type,
-        name: metric.name ?? null,
-        pid: metric.pid,
-        workingSetKB: metric.memory.workingSetSize,
-      })),
-    }
   })
 
   handle('artifact:open', 1, ({ event }, id) => artifacts.open(event.sender, id))

@@ -82,13 +82,6 @@ export interface AllowedSites {
   origins: string[]
 }
 
-/** What a perf run (--kettu-perf) reads from main. */
-export interface PerfMetrics {
-  launchToInteractiveMs: number | null
-  /** From `app.getAppMetrics()`; a utility process is named by the serviceName it was forked with. */
-  processes: { type: string; name: string | null; pid: number; workingSetKB: number }[]
-}
-
 /** Commands main sends to the renderer, from the app menu or a notification. */
 export type AppCommand =
   | { kind: 'open-project' }
@@ -204,7 +197,6 @@ export interface IpcInvokeContract {
   'update:dismiss': { args: []; result: void }
   'agent-host:restart': { args: []; result: void }
   'terminal-host:restart': { args: []; result: void }
-  'perf:metrics': { args: []; result: PerfMetrics }
   'artifact:open': { args: [id: string]; result: ArtifactOpenResult }
   'artifact:close': { args: [url: string]; result: void }
   'artifact:thumbnail': {
@@ -382,8 +374,6 @@ export interface KettuApi {
   client: 'desktop' | 'web'
   /** The system of the host whose paths the page shows: this computer's, or the one connected. */
   hostPlatform(): Platform
-  /** Whether the app runs with --kettu-perf, which turns on the renderer's frame counters. */
-  perf: boolean
   /** The interface language the system's preferred languages pick, for Language › System. */
   systemLocale: Locale
   app: {
@@ -395,8 +385,6 @@ export interface KettuApi {
     setUnsaved(files: UnsavedFile[]): void
     onCommand(listener: (command: AppCommand) => void): () => void
     reportInteractive(): void
-    /** Only answers in a perf run; rejects otherwise. */
-    perfMetrics(): Promise<PerfMetrics>
     /** App shortcuts typed in an artifact's frame, which the page itself never sees. */
     onShortcut(listener: (key: ForwardedKey) => void): () => void
   }

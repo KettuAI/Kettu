@@ -152,7 +152,6 @@ export class WindowStateStore {
 
 export interface WindowOptions {
   state: WindowStateStore
-  perf: boolean
   systemLocale: Locale
 }
 
@@ -188,12 +187,7 @@ export function createMainWindow(start: StartMode = 'window'): BrowserWindow {
       nodeIntegration: false,
       // The page resolves Settings › General › Language itself; only the system's choice is
       // main's to know.
-      additionalArguments: [
-        `--kettu-system-locale=${options.systemLocale}`,
-        ...(options.perf ? ['--kettu-perf'] : []),
-      ],
-      // A perf run measures frames and timers, which Chromium throttles for a window behind others.
-      backgroundThrottling: !options.perf,
+      additionalArguments: [`--kettu-system-locale=${options.systemLocale}`],
     },
   })
 
