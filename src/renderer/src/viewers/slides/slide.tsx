@@ -6,6 +6,8 @@ import { bulletParts, type Bullet, type Column, type Slide } from '@shared/artif
 import type { TextPath } from './deck'
 
 export interface SlideEditing {
+  /** Tells whether a text is being changed in place, before it is taken on leaving it. */
+  typing(now: boolean): void
   /** Takes a text the user changed. */
   change(path: TextPath, text: string): void
 }
@@ -41,7 +43,9 @@ function Text({
       suppressContentEditableWarning
       spellCheck
       onKeyDown={commitOnEnter}
+      onInput={() => editing.typing(true)}
       onBlur={(event) => {
+        editing.typing(false)
         const text = event.currentTarget.innerText.replace(/\n$/, '')
         if (text !== value) editing.change(path, text)
       }}

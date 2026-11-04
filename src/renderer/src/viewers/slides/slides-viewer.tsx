@@ -74,6 +74,8 @@ export function SlidesViewer({ config, view }: { config: ViewerConfig; view: Vie
     [content.text],
   )
   const [draft, setDraft] = useState<Deck | null>(null)
+  // Counts a text being typed as a change, so Save is enabled before the text is taken on blur.
+  const [typing, setTyping] = useState(false)
   const [index, setIndex] = useState(() => Number(remembered.get(REMEMBERED)) || 0)
   const [presenting, setPresenting] = useState(false)
   const deck = draft ?? (parsed && 'deck' in parsed ? parsed.deck : null)
@@ -140,7 +142,10 @@ export function SlidesViewer({ config, view }: { config: ViewerConfig; view: Vie
   }
 
   const editor = editing
-    ? { change: (path: TextPath, text: string) => setDraft(withText(deck, path, text)) }
+    ? {
+        typing: setTyping,
+        change: (path: TextPath, text: string) => setDraft(withText(deck, path, text)),
+      }
     : null
   const slide = (i: number) => (
     <SlideView
@@ -227,8 +232,9 @@ export function SlidesViewer({ config, view }: { config: ViewerConfig; view: Vie
         <EditBar
           hint={t('slides.editHint')}
           dirty={
+            typing ||
             JSON.stringify(draft) !==
-            JSON.stringify(parsed && 'deck' in parsed ? parsed.deck : null)
+              JSON.stringify(parsed && 'deck' in parsed ? parsed.deck : null)
           }
           head={content.head}
           status={content.status}
