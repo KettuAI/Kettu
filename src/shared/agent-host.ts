@@ -238,6 +238,7 @@ export interface AgentStatus {
   limits: PlanLimit[] // subscription windows, see plan limits in the session model
   detail: string | null // install hint or error message
   installUrl: string | null
+  installNotice?: string | null // the vendor installer's effects, shown before installation
   progress: string[] // latest npm output or stderr lines while installing or starting
   launchCommand: string // as shown in Settings › Agents, quoted for the platform
   binaryOverride: string | null // the program picked in Settings, if any

@@ -111,10 +111,12 @@ function installMethod(status: AgentStatus, picked?: string): AgentInstallMethod
   return available.find((m) => m.id === picked) ?? available[0] ?? null
 }
 
-/** What Install does: run a route for the program, or install Kettu's package for it. */
-function installKind(status: AgentStatus): 'program' | 'package' | null {
+type InstallKind = 'program' | 'package' | 'setup'
+
+function installKind(status: AgentStatus): InstallKind | null {
   if (programMissing(status) && status.installMethods.length > 0) return 'program'
   if (status.package && !status.package.installed && status.state === 'available') return 'package'
+  if (['not-installed', 'node-missing', 'node-outdated'].includes(status.state)) return 'setup'
   return null
 }
 
@@ -135,7 +137,10 @@ async function startInstall(
   const status = agents.getState().byId[harness]
   // A harness whose program is still on the machine is back without installing anything.
   if (!status || status.uninstalled || status.task?.state === 'running') return
-  if (installKind(status)) void agents.getState().install(harness, method ?? undefined)
+  const kind = installKind(status)
+  if (kind === 'program' || kind === 'package') {
+    void agents.getState().install(harness, method ?? undefined)
+  }
 }
 
 function startUpdate(agents: AgentsStoreHook, harness: HarnessId): void {
@@ -257,7 +262,7 @@ function HarnessState({ status }: { status: AgentStatus }) {
     return (
       <Button
         variant="outline"
-        className={ROW_BUTTON}
+        className={cn(ROW_BUTTON, 'min-w-20')}
         onClick={() => void startInstall(useAgentsStore, useSettingsStore, harness)}
       >
         {t('agents.install.button')}
@@ -294,16 +299,16 @@ function HarnessState({ status }: { status: AgentStatus }) {
       <>
         <Button
           variant="outline"
-          className={ROW_BUTTON}
+          className={cn(ROW_BUTTON, 'min-w-20')}
           onClick={() =>
-            kind === 'program'
-              ? setInstalling(true)
-              : void startInstall(useAgentsStore, useSettingsStore, harness)
+            kind === 'package'
+              ? void startInstall(useAgentsStore, useSettingsStore, harness)
+              : setInstalling(true)
           }
         >
-          {t(kind === 'program' ? 'agents.install.buttonDialog' : 'agents.install.button')}
+          {t('agents.install.button')}
         </Button>
-        {kind === 'program' && (
+        {kind !== 'package' && (
           <InstallDialog status={status} open={installing} onOpenChange={setInstalling} />
         )}
       </>
@@ -340,88 +345,143 @@ function InstallDialog({
   const [picked, setPicked] = useState<AgentInstallMethod['id'] | undefined>(undefined)
   const method = installMethod(status, picked)
   const vendor = VENDORS[status.harnessId]
+  const [check, checking, error] = useAction()
+  const hasMethods = status.installMethods.length > 0
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <SettingsDialogContent className="sm:max-w-125">
         <SettingsDialogHeader title={t('harnesses.install.title', { name: status.harnessName })}>
-          {t(vendor ? 'harnesses.install.body' : 'harnesses.install.bodyPlain', {
-            name: status.harnessName,
-            vendor,
-          })}
+          {t(
+            hasMethods
+              ? vendor
+                ? 'harnesses.install.body'
+                : 'harnesses.install.bodyPlain'
+              : 'harnesses.install.setupBody',
+            { name: status.harnessName, vendor },
+          )}
         </SettingsDialogHeader>
         <SettingsDialogBody>
-          <SettingsField label={t('harnesses.install.method')}>
-            <RadioGroup
-              aria-label={t('harnesses.install.method')}
-              value={method?.id ?? null}
-              onValueChange={(id) => setPicked(id as AgentInstallMethod['id'])}
-              className="gap-5"
-            >
-              {status.installMethods.map((m, index) => (
-                <RadioGroupTile
-                  key={m.id}
-                  value={m.id}
-                  disabled={!m.available}
-                  className={SETTINGS_TILE}
-                >
-                  <span className="flex flex-col gap-0.5">
-                    <span className="leading-[normal]">
-                      {methodName(t, m.id)}
-                      {index === 0 && m.available && (
-                        <>
-                          {' '}
-                          <Badge
-                            variant="recommended"
-                            className="rounded-tile border-0 font-medium"
-                          >
-                            {t('harnesses.install.recommended')}
-                          </Badge>
-                        </>
+          {hasMethods && (
+            <SettingsField label={t('harnesses.install.method')}>
+              <RadioGroup
+                aria-label={t('harnesses.install.method')}
+                value={method?.id ?? null}
+                onValueChange={(id) => setPicked(id as AgentInstallMethod['id'])}
+                className="gap-5"
+              >
+                {status.installMethods.map((m, index) => (
+                  <RadioGroupTile
+                    key={m.id}
+                    value={m.id}
+                    disabled={!m.available}
+                    className={SETTINGS_TILE}
+                  >
+                    <span className="flex flex-col gap-0.5">
+                      <span className="leading-[normal]">
+                        {methodName(t, m.id)}
+                        {index === 0 && m.available && (
+                          <>
+                            {' '}
+                            <Badge
+                              variant="recommended"
+                              className="rounded-tile border-0 font-medium"
+                            >
+                              {t('harnesses.install.recommended')}
+                            </Badge>
+                          </>
+                        )}
+                      </span>
+                      {!m.available && (
+                        <span className="text-hint text-tertiary">
+                          {t('agents.install.notFound')}
+                        </span>
                       )}
                     </span>
-                    {!m.available && (
-                      <span className="text-hint text-tertiary">
-                        {t('agents.install.notFound')}
-                      </span>
-                    )}
-                  </span>
-                </RadioGroupTile>
-              ))}
-            </RadioGroup>
-          </SettingsField>
+                  </RadioGroupTile>
+                ))}
+              </RadioGroup>
+            </SettingsField>
+          )}
+          {!method && status.detail && (
+            <p className="text-group text-secondary" data-selectable="">
+              {status.detail}
+            </p>
+          )}
           {method && (
-            <SettingsField label={t('harnesses.install.runs')}>
+            <SettingsField
+              label={t(
+                method.id === 'archive' ? 'harnesses.install.downloads' : 'harnesses.install.runs',
+              )}
+            >
               <div className="flex items-center gap-2 rounded-segments bg-code-block px-3 py-2.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] [&>button]:size-6.5 [&>button]:rounded-segment [&>button>svg]:size-3.5!">
                 <code
-                  className="min-w-0 flex-1 truncate font-mono text-hint text-primary"
+                  className="min-w-0 flex-1 font-mono text-hint break-all whitespace-pre-wrap text-primary"
                   data-selectable=""
                   title={method.command}
                 >
                   {method.command}
                 </code>
-                <CopyAction text={method.command} label={t('harnesses.install.copy')} />
+                <CopyAction
+                  text={method.command}
+                  label={t(
+                    method.id === 'archive' ? 'common:actions.copy' : 'harnesses.install.copy',
+                  )}
+                />
               </div>
-              <span className="text-hint text-tertiary">{t('harnesses.install.ownTerminal')}</span>
+              <span className="text-hint text-tertiary">
+                {t(
+                  method.id === 'archive'
+                    ? 'harnesses.install.downloadBody'
+                    : 'harnesses.install.ownTerminal',
+                )}
+              </span>
             </SettingsField>
+          )}
+          {method && status.installNotice && (
+            <p className="text-group text-secondary" data-selectable="">
+              {status.installNotice}
+            </p>
+          )}
+          {status.installUrl && (
+            <a
+              href={status.installUrl}
+              target="_blank"
+              rel="noreferrer"
+              className={cn(buttonVariants({ variant: 'link', size: 'xs' }), 'self-start')}
+            >
+              {t('harnesses.install.guide')}
+              <ExternalLinkIcon data-icon="inline-end" />
+            </a>
           )}
           {status.binaryCommand && (
             <ChooseElsewhere harness={status.harnessId} onChosen={() => onOpenChange(false)} />
           )}
+          <ControlError error={error} />
         </SettingsDialogBody>
         <SettingsDialogFooter>
           <DialogClose render={<Button variant="ghost" className={ROW_BUTTON} />}>
             {t('common:actions.cancel')}
           </DialogClose>
-          <Button
-            className={ROW_BUTTON}
-            disabled={!method}
-            onClick={() => {
-              void startInstall(useAgentsStore, useSettingsStore, status.harnessId, method?.id)
-              onOpenChange(false)
-            }}
-          >
-            {t('agents.install.button')}
-          </Button>
+          {method ? (
+            <Button
+              className={ROW_BUTTON}
+              onClick={() => {
+                void startInstall(useAgentsStore, useSettingsStore, status.harnessId, method.id)
+                onOpenChange(false)
+              }}
+            >
+              {t('agents.install.button')}
+            </Button>
+          ) : (
+            <Button
+              className={ROW_BUTTON}
+              disabled={checking}
+              onClick={() => check(() => useAgentsStore.getState().reloadEnvironment())}
+            >
+              {checking && <Spinner data-icon="inline-start" />}
+              {t('agents.environment.reload')}
+            </Button>
+          )}
         </SettingsDialogFooter>
       </SettingsDialogContent>
     </Dialog>
@@ -475,14 +535,10 @@ export function HarnessListItem({ status }: { status: AgentStatus }) {
       <span className="text-danger">{taskError.message}</span>
     ) : status.uninstalled ? (
       t('harnesses.removedLine')
-    ) : awaitsPackage(status) ? (
-      t(
-        status.package?.isSdk
-          ? 'agents.install.missingLineSdk'
-          : 'agents.install.missingLineAdapter',
-      )
-    ) : kind === 'program' ? (
-      t('harnesses.missingLine', { name: status.harnessName })
+    ) : awaitsPackage(status) && status.package?.isSdk ? (
+      t('agents.installsOnFirstUse')
+    ) : kind || awaitsPackage(status) ? (
+      t('harnesses.groups.notInstalled')
     ) : r.kind === 'missing' || r.kind === 'failed' ? (
       r.message
     ) : (
@@ -1107,7 +1163,7 @@ function UninstalledNotice({ status }: { status: AgentStatus }) {
 }
 
 /** Installing a harness: its program by a route in the dialog, or Kettu's package; then progress. */
-function InstallNotice({ status, kind }: { status: AgentStatus; kind: 'program' | 'package' }) {
+function InstallNotice({ status, kind }: { status: AgentStatus; kind: InstallKind }) {
   const { api, useAgentsStore, useSettingsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const [open, setOpen] = useState(false)

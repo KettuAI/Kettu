@@ -3026,6 +3026,7 @@ export class AgentManager {
         : {}),
       limits: [...slot.limits.values()],
       detail: slot.detail ?? h.adapterNote,
+      installNotice: slot.def.install.notice ? t(slot.def.install.notice) : null,
       installUrl:
         slot.state === 'not-installed' ||
         slot.state === 'node-missing' ||

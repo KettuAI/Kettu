@@ -201,6 +201,7 @@
     "requiresOutdated": "{{agent}} 需要 {{command}} {{required}} 或更高版本，当前安装的是 {{installed}}。{{hint}}",
     "requiresFailed": "{{agent}} 无法读取 {{command}} 的版本：{{reason}} {{hint}}",
     "scriptMissing": "{{script}} 不存在。",
+    "hermesInstallNotice": "官方安装程序会修改你的 Shell 配置文件，将 ~/.local/bin 加入 PATH。安装包含 ACP，会跳过浏览器和 computer-use 组件。",
     "hint": {
       "node": "请从 nodejs.org 安装 Node.js，然后在设置中点击「重新加载环境」。",
       "uv": "请从 docs.astral.sh/uv 安装 uv，然后在设置中点击「重新加载环境」。",
@@ -212,7 +213,7 @@
       "goose": "请安装 goose，或在「设置 › Harness」中选择它的程序。",
       "kilo": "请安装 Kilo Code，或在「设置 › Harness」中选择它的程序。",
       "omp": "请用 `bun install -g @oh-my-pi/pi-coding-agent` 或 omp.sh 上的安装程序安装 OMP。",
-      "hermes": "请用 hermes-agent.nousresearch.com 上的安装程序安装 Hermes Agent，并带上它的 `acp` 扩展。",
+      "hermes": "在 macOS 或 Linux 上，请在「设置 › Harness」中安装 Hermes Agent；在 Windows 上，请按官方指南通过 WSL2 安装。",
       "muse": "请从 dev.meta.ai 安装 Muse Code，或在「设置 › Harness」中选择它的程序。",
       "codewhale": "请用 codewhale.net 上的安装程序安装 CodeWhale，或在「设置 › Harness」中选择它的程序。",
       "harn": "请安装 Harn，或在「设置 › Harness」中选择它的程序。",
