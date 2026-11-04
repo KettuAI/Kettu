@@ -495,7 +495,7 @@ export function HarnessListItem({ status }: { status: AgentStatus }) {
       item={status.harnessId}
       label={status.harnessName}
       onOpen={() => openHarnessSettings(status.harnessId)}
-      tile={<AgentTile agent={status.harnessId} mono={!installed} size={30} glyph={16} />}
+      tile={<AgentTile agent={status.harnessId} mono={!installed} size={30} />}
       name={<span className="truncate">{status.harnessName}</span>}
       right={
         <span className="pointer-events-auto flex items-center gap-2">
@@ -572,7 +572,7 @@ function HarnessPageHeader({ status }: { status: AgentStatus | null }) {
       back={t('sections.harnesses')}
       onBack={() => openHarnessSettings(null)}
       item={status?.harnessId ?? 'harness'}
-      icon={status && <AgentTile agent={status.harnessId} size={40} glyph={22} mono={!installed} />}
+      icon={status && <AgentTile agent={status.harnessId} size={40} mono={!installed} />}
       title={status?.harnessName ?? null}
       subtitle={status && <HarnessPageLine status={status} />}
     />
