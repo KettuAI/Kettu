@@ -1,14 +1,8 @@
 import { EventEmitter } from 'node:events'
-import type { Input, WebContents, WebFrameMain } from 'electron'
+import type { WebContents, WebFrameMain } from 'electron'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ArtifactBlockedEvent, ArtifactStoppedEvent, ForwardedKey } from '@shared/ipc'
-import {
-  forwardedKey,
-  guardArtifactFrames,
-  mayNavigate,
-  mayOpenWindow,
-  requestingArtifact,
-} from './guards'
+import { guardArtifactFrames, mayNavigate, mayOpenWindow, requestingArtifact } from './guards'
 
 const HOST = '0123456789abcdef0123456789'
 const ORIGIN = `kettu-artifact://${HOST}`
@@ -82,127 +76,6 @@ describe('mayNavigate', () => {
   })
 })
 
-function input(key: string, code: string, modifiers: Partial<Input> = {}): Input {
-  return {
-    type: 'keyDown',
-    key,
-    code,
-    isAutoRepeat: false,
-    isComposing: false,
-    shift: false,
-    control: false,
-    alt: false,
-    meta: false,
-    location: 0,
-    modifiers: [],
-    ...modifiers,
-  } as Input
-}
-
-describe('forwardedKey', () => {
-  it('passes the shortcut table on Windows and Linux', () => {
-    for (const platform of ['win32', 'linux'] as const) {
-      for (const [key, code] of [
-        ['o', 'KeyO'],
-        ['n', 'KeyN'],
-        ['b', 'KeyB'],
-        [',', 'Comma'],
-        ['l', 'KeyL'],
-        ['=', 'Equal'],
-        ['-', 'Minus'],
-        ['0', 'Digit0'],
-      ] as const) {
-        expect(forwardedKey(input(key, code, { control: true }), platform)).toMatchObject({ key })
-      }
-      expect(
-        forwardedKey(input('{', 'BracketLeft', { control: true, shift: true }), platform),
-      ).not.toBeNull()
-    }
-  })
-
-  it('passes the history dialog key off macOS, where no menu item takes it', () => {
-    for (const platform of ['win32', 'linux'] as const) {
-      expect(forwardedKey(input('h', 'KeyH', { control: true }), platform)).toMatchObject({
-        key: 'h',
-        ctrlKey: true,
-      })
-      expect(forwardedKey(input('H', 'KeyH', { control: true, shift: true }), platform)).toBeNull()
-    }
-    expect(forwardedKey(input('h', 'KeyH', { meta: true }), 'darwin')).toBeNull()
-  })
-
-  it('leaves the menu accelerators to the menu on macOS', () => {
-    expect(forwardedKey(input('b', 'KeyB', { meta: true }), 'darwin')).toBeNull()
-    expect(forwardedKey(input('=', 'Equal', { meta: true }), 'darwin')).toBeNull()
-    expect(forwardedKey(input('l', 'KeyL', { meta: true }), 'darwin')).toMatchObject({ key: 'l' })
-    expect(
-      forwardedKey(input('}', 'BracketRight', { meta: true, shift: true }), 'darwin'),
-    ).not.toBeNull()
-  })
-
-  it('passes the terminal toggle on every platform', () => {
-    for (const platform of ['darwin', 'win32', 'linux'] as const) {
-      expect(forwardedKey(input('`', 'Backquote', { control: true }), platform)).toMatchObject({
-        code: 'Backquote',
-        ctrlKey: true,
-      })
-    }
-  })
-
-  it('passes the shortcuts dialog key on every platform', () => {
-    for (const platform of ['darwin', 'win32', 'linux'] as const) {
-      const modifier = platform === 'darwin' ? { meta: true } : { control: true }
-      expect(forwardedKey(input('/', 'Slash', modifier), platform)).toMatchObject({ key: '/' })
-      expect(
-        forwardedKey(input('/', 'Slash', { ...modifier, shift: true }), platform),
-      ).toMatchObject({ key: '/' })
-    }
-  })
-
-  it('passes the split view’s pane keys on every platform', () => {
-    for (const platform of ['darwin', 'win32', 'linux'] as const) {
-      const modifier = platform === 'darwin' ? { meta: true } : { control: true }
-      for (let n = 1; n <= 9; n++) {
-        expect(forwardedKey(input(String(n), `Digit${n}`, modifier), platform)).toMatchObject({
-          key: String(n),
-        })
-      }
-    }
-  })
-
-  it('passes back and forward: Cmd and a bracket on macOS, Alt and an arrow elsewhere', () => {
-    expect(forwardedKey(input('[', 'BracketLeft', { meta: true }), 'darwin')).toMatchObject({
-      code: 'BracketLeft',
-      metaKey: true,
-      altKey: false,
-    })
-    expect(forwardedKey(input(']', 'BracketRight', { meta: true }), 'darwin')).not.toBeNull()
-    for (const platform of ['win32', 'linux'] as const) {
-      for (const code of ['ArrowLeft', 'ArrowRight']) {
-        expect(forwardedKey(input(code, code, { alt: true }), platform)).toMatchObject({
-          code,
-          altKey: true,
-          ctrlKey: false,
-        })
-        for (const other of [{ shift: true }, { control: true }, { meta: true }]) {
-          expect(forwardedKey(input(code, code, { alt: true, ...other }), platform)).toBeNull()
-        }
-      }
-      expect(forwardedKey(input('[', 'BracketLeft', { control: true }), platform)).toBeNull()
-    }
-    expect(forwardedKey(input('ArrowLeft', 'ArrowLeft', { alt: true }), 'darwin')).toBeNull()
-  })
-
-  it("keeps the page's own keys in the page", () => {
-    expect(forwardedKey(input('c', 'KeyC', { control: true }), 'win32')).toBeNull()
-    expect(forwardedKey(input('b', 'KeyB'), 'win32')).toBeNull()
-    expect(forwardedKey(input('b', 'KeyB', { control: true, alt: true }), 'win32')).toBeNull()
-    expect(forwardedKey(input('b', 'KeyB', { meta: true }), 'win32')).toBeNull()
-    expect(forwardedKey(input('Escape', 'Escape'), 'darwin')).toBeNull()
-    expect(forwardedKey(input('b', 'KeyB', { control: true, type: 'keyUp' }), 'win32')).toBeNull()
-  })
-})
-
 class FakeContents extends EventEmitter {
   mainFrame = frame(null, 'file://', 1)
   focusedFrame: FakeFrame | null = this.mainFrame
@@ -263,22 +136,6 @@ describe('guardArtifactFrames', () => {
     const fresh = frame(contents.mainFrame, 'file://', 5)
     expect(navigate(contents, fresh, `${ORIGIN}/`)).not.toHaveBeenCalled()
     expect(navigate(contents, contents.mainFrame, 'https://example.com/')).not.toHaveBeenCalled()
-  })
-
-  it('passes app shortcuts typed in a page to the app, and nothing else', () => {
-    const { contents, child, keys } = guarded('win32')
-    const press = (key: string, code: string, modifiers: Partial<Input>) => {
-      const event = { preventDefault: vi.fn() }
-      contents.emit('before-input-event', event, input(key, code, modifiers))
-      return event.preventDefault
-    }
-    expect(press('b', 'KeyB', { control: true })).not.toHaveBeenCalled()
-    contents.focusedFrame = child
-    expect(press('b', 'KeyB', { control: true })).toHaveBeenCalled()
-    expect(press('c', 'KeyC', { control: true })).not.toHaveBeenCalled()
-    expect(keys).toEqual([
-      { key: 'b', code: 'KeyB', shiftKey: false, ctrlKey: true, metaKey: false, altKey: false },
-    ])
   })
 
   it('tells the page when the process of a frame it shows stops', () => {

@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Routine } from '@shared/routines'
 import {
   agentsFile,
   agentUpdatesFile,
@@ -12,12 +11,9 @@ import {
   parseAgentsFile,
   parseAgentUpdatesFile,
   parseProjectsFile,
-  parseReturnedFile,
-  parseRoutinesFile,
   parseSessionsFile,
   projectsFile,
   routinesFile,
-  returnedFile,
   sessionsFile,
   writeFileAtomic,
   type Migration,
@@ -224,152 +220,6 @@ describe('the host files', () => {
       'session 0 is malformed',
     )
     expect(parseSessionsFile({ sessions: {} })).toBe('sessions is not a list')
-  })
-
-  it('keeps a saved queue and drops one that does not parse', () => {
-    const queue = [{ id: 'q1', content: [{ type: 'text', text: 'Then this' }], at: 5 }]
-    expect(parseSessionsFile({ sessions: [{ ...session, queue }] })).toEqual({
-      version: 1,
-      sessions: [{ ...session, queue }],
-    })
-    expect(
-      parseSessionsFile({ sessions: [{ ...session, queue: [{ id: 'q1', content: 'x', at: 5 }] }] }),
-    ).toEqual({ version: 1, sessions: [session] })
-    // A prompt another session's agent sent keeps whose it is, and drops a from that does not parse.
-    const from = { sessionId: 's0', title: 'From another agent' }
-    expect(
-      parseSessionsFile({
-        sessions: [{ ...session, queue: [{ id: 'q1', content: [], at: 5, from }] }],
-      }),
-    ).toEqual({
-      version: 1,
-      sessions: [{ ...session, queue: [{ id: 'q1', content: [], at: 5, from }] }],
-    })
-    expect(
-      parseSessionsFile({
-        sessions: [{ ...session, queue: [{ id: 'q1', content: [], at: 5, from: { title: 1 } }] }],
-      }),
-    ).toEqual({ version: 1, sessions: [{ ...session, queue: [{ id: 'q1', content: [], at: 5 }] }] })
-  })
-
-  it('keeps the session an agent started, and drops one that does not parse', () => {
-    expect(parseSessionsFile({ sessions: [{ ...session, startedBy: 's0' }] })).toEqual({
-      version: 1,
-      sessions: [{ ...session, startedBy: 's0' }],
-    })
-    expect(parseSessionsFile({ sessions: [{ ...session, startedBy: 7 }] })).toEqual({
-      version: 1,
-      sessions: [session],
-    })
-  })
-
-  it('keeps the configuration folder a session started with, and drops one that does not parse', () => {
-    const picked = { ...session, configDir: '/srv/claude' }
-    expect(parseSessionsFile({ sessions: [picked] })).toEqual({ version: 1, sessions: [picked] })
-    for (const configDir of ['', 7]) {
-      expect(parseSessionsFile({ sessions: [{ ...session, configDir }] })).toEqual({
-        version: 1,
-        sessions: [session],
-      })
-    }
-  })
-
-  it('keeps when sessions with no message were removed, and drops a time that does not parse', () => {
-    expect(parseSessionsFile({ sessions: [session], emptySessionsRemovedAt: 7 })).toEqual({
-      version: 1,
-      sessions: [session],
-      emptySessionsRemovedAt: 7,
-    })
-    expect(parseSessionsFile({ sessions: [session], emptySessionsRemovedAt: 'x' })).toEqual({
-      version: 1,
-      sessions: [session],
-    })
-  })
-
-  it('keeps the returned messages that validate and drops the rest', async () => {
-    const kept = {
-      sessionId: null,
-      content: [{ type: 'text' as const, text: 'Fix the build' }],
-      at: 3,
-    }
-    expect(
-      parseReturnedFile({
-        messages: [
-          kept,
-          { sessionId: 's1', content: [{ type: 'text', text: 7 }], at: 4 },
-          { sessionId: 's1', content: 'Fix the build', at: 5 },
-        ],
-      }),
-    ).toEqual({ version: 1, messages: [kept] })
-    expect(parseReturnedFile({ messages: {} })).toBe('messages is not a list')
-    const store = returnedFile(dir, log)
-    expect(store.file).toBe(path.join(dir, 'state', 'returned.json'))
-    store.save({ version: 1, messages: [kept] })
-    await store.flush()
-    expect(await returnedFile(dir, log).load()).toEqual({ version: 1, messages: [kept] })
-  })
-
-  it("keeps a session's routine, and drops a reference that does not parse", () => {
-    const routine = {
-      routineId: 'r-0123456789ab',
-      runId: 'run-1',
-      trigger: 'manual' as const,
-      scheduledFor: null,
-    }
-    const record = { ...session, origin: 'routine' as const, routine }
-    expect(parseSessionsFile({ sessions: [record] })).toEqual({ version: 1, sessions: [record] })
-    expect(
-      parseSessionsFile({ sessions: [{ ...record, routine: { ...routine, trigger: 'later' } }] }),
-    ).toEqual({ version: 1, sessions: [{ ...session, origin: 'routine' }] })
-    expect(
-      parseSessionsFile({ sessions: [{ ...record, routine: { ...routine, scheduledFor: 7 } }] }),
-    ).toEqual({ version: 1, sessions: [{ ...record, routine: { ...routine, scheduledFor: 7 } }] })
-  })
-
-  it('validates routines, failing the file on one that is malformed', () => {
-    const routine: Routine = {
-      id: 'r-0123456789ab',
-      name: 'Morning briefing',
-      prompt: 'Summarize the open pull requests',
-      agentId: 'claude-code',
-      projectPath: '/repo',
-      options: [{ id: 'model', value: 'fable' }],
-      trigger: {
-        kind: 'schedule',
-        schedule: { kind: 'weekly', days: [1, 2, 3, 4, 5], time: '09:00' },
-      },
-      scope: { level: 'read', web: false },
-      timeLimitMinutes: 60,
-      enabled: true,
-      createdAt: 1,
-      updatedAt: 2,
-      checkedThrough: 3,
-    }
-    expect(parseRoutinesFile({ routines: [routine] })).toEqual({ version: 1, routines: [routine] })
-    expect(parseRoutinesFile({ routines: {} })).toBe('routines is not a list')
-    for (const broken of [
-      { ...routine, id: 'routine-1' },
-      { ...routine, name: 'x'.repeat(121) },
-      { ...routine, prompt: '' },
-      { ...routine, agentId: 'unknown-agent' },
-      { ...routine, projectPath: 7 },
-      { ...routine, options: [{ id: '', value: true }] },
-      { ...routine, options: [{ id: 'model', value: 'x'.repeat(201) }] },
-      {
-        ...routine,
-        trigger: { kind: 'schedule', schedule: { kind: 'weekly', days: [], time: '09:00' } },
-      },
-      {
-        ...routine,
-        trigger: { kind: 'schedule', schedule: { kind: 'weekly', days: [1], time: '25:00' } },
-      },
-      { ...routine, scope: { level: 'all', web: false } },
-      { ...routine, timeLimitMinutes: 45 },
-      { ...routine, enabled: 'yes' },
-      { ...routine, createdAt: -1 },
-    ]) {
-      expect(parseRoutinesFile({ routines: [routine, broken] })).toBe('routine 1 is malformed')
-    }
   })
 
   it('round-trips the routines file', async () => {

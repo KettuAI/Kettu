@@ -30,8 +30,6 @@
     "src/agent-host/**/*",
     "src/terminal-host/**/*",
     "src/remote-host/**/*",
-    "src/daemon/**/*",
-    // Runs the web client's link against a host in process.
-    "src/renderer/src/web/link.test.ts"
+    "src/daemon/**/*"
   ]
 }

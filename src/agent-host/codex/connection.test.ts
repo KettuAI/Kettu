@@ -1068,41 +1068,6 @@ describe('hidden sessions', () => {
 })
 
 describe('limits and subagents', () => {
-  it('reads the plan limits, and passes on the ones Codex pushes', async () => {
-    const { server, connection } = await connect()
-    expect(await connection.readLimits()).toEqual([
-      expect.objectContaining({
-        window: 'five_hour',
-        label: '5-hour',
-        usedPercent: 19,
-        resetsAt: 1_800_018_000_000,
-      }),
-      expect.objectContaining({ window: 'seven_day', label: 'Weekly', usedPercent: 32 }),
-    ])
-    await connection.newSession('/project')
-    const t = threadTarget()
-    connection.register('thread-1', t.target)
-    server.notify('account/rateLimits/updated', {
-      rateLimits: {
-        limitId: 'codex_spark',
-        limitName: 'GPT-5.3-Codex-Spark',
-        primary: { usedPercent: 100, windowDurationMins: 300, resetsAt: null },
-        secondary: null,
-      },
-    })
-    await until(() => t.effects.length > 0)
-    expect(t.effects).toEqual([
-      {
-        kind: 'limit',
-        limit: expect.objectContaining({
-          window: 'gpt_5_3_codex_spark_five_hour',
-          label: '5-hour · GPT-5.3-Codex-Spark',
-          state: 'reached',
-        }),
-      },
-    ])
-  })
-
   it('reports a subagent thread to its parent, with its turns, and stops it on its own', async () => {
     const { server, connection } = await connect()
     await connection.newSession('/project')

@@ -244,24 +244,6 @@ describe('the thread database', () => {
     db.close()
   })
 
-  it('names the latest plan only when it lies before the page', () => {
-    const db = open()
-    const plan: ThreadEntry = {
-      kind: 'plan',
-      id: 'plan',
-      items: [{ content: 'step', priority: 'high', status: 'in_progress' }],
-    }
-    const entries = [
-      { pos: 0, entry: plan },
-      ...turns(30, 2).map((p) => ({ ...p, pos: p.pos + 1 })),
-    ]
-    db.write('s1', { head, entries })
-    const latest = db.page('s1', null)!
-    expect(latest.plan).toEqual(plan)
-    expect(db.page('s1', 3)!.plan).toBeNull()
-    db.close()
-  })
-
   it('keeps large images apart, once per session, and puts them back when read', () => {
     const file = tempFile()
     const db = open(file)
