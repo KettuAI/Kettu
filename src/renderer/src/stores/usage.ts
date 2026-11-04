@@ -72,7 +72,7 @@ interface UsageStore {
 export const DEFAULT_FILTERS: UsageFilters = {
   metric: 'tokens',
   agent: 'all',
-  range: { kind: 'all' },
+  range: { kind: '1' },
   scope: 'computer',
 }
 
