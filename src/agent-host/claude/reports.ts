@@ -22,11 +22,12 @@ function planLabel(plan: string): string {
 
 /**
  * The account a session runs under, or null when Claude Code names none: a provider other than
- * Anthropic, then an API key, which pays before a subscription sign-in, then the subscription.
+ * Anthropic, then an API key or a bearer token, which pay before a subscription sign-in, then the
+ * subscription.
  */
 export function mapAccount(info: AccountInfo | undefined): AgentAccount | null {
   if (!info) return null
-  const { apiProvider, apiKeySource, subscriptionType } = info
+  const { apiProvider, apiKeySource, subscriptionType, tokenSource } = info
   if (apiProvider === 'gateway')
     return { kind: 'gateway', label: 'Custom model gateway', email: null }
   if (apiProvider && apiProvider !== 'firstParty') {
@@ -34,6 +35,10 @@ export function mapAccount(info: AccountInfo | undefined): AgentAccount | null {
   }
   if (apiKeySource && apiKeySource !== 'none') {
     return { kind: 'api_key', label: 'Anthropic API key', email: null }
+  }
+  // The answer names no plan for this token, and `auth status` would name the stored sign-in.
+  if (tokenSource === 'ANTHROPIC_AUTH_TOKEN') {
+    return { kind: 'gateway', label: 'Custom model gateway', email: null }
   }
   if (subscriptionType) {
     return { kind: 'account', label: planLabel(subscriptionType), email: info.email ?? null }
