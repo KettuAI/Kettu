@@ -20,4 +20,7 @@ export const PI: AgentDefinition = {
     hint: 'detect.hint.pi',
     url: 'https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/quickstart.md',
   },
+  // The npm command the quickstart lists, checked on 2026-11-03. Its installer script asks
+  // questions on a terminal, so it is not a route.
+  installs: { npm: '@earendil-works/pi-coding-agent', ignoreScripts: true },
 }

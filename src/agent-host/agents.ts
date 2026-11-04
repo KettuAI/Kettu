@@ -16,6 +16,7 @@ import type {
   AgentStatus,
   AgentTask,
   AgentUpdate,
+  InstalledCli,
   McpStatus,
   PlanLimit,
 } from '@shared/agent-host'
@@ -618,6 +619,13 @@ export class AgentManager {
     if (program) void this.askBinaryVersion(h, program, env)
   }
 
+  /** The program an adapter runs, as the page shows the user's CLI; null while it is not found. */
+  private requiresCli(detection: Detection | null | undefined): InstalledCli | null {
+    if (detection?.state !== 'available' || !detection.requires) return null
+    const { program, version } = detection.requires
+    return { path: program, version, variable: null, problem: null }
+  }
+
   /** How the user's own CLI, or a binary harness's program, was installed. */
   private async cliMethod(
     h: Harness,
@@ -626,6 +634,7 @@ export class AgentManager {
     const installs = h.def.installs
     const found =
       detection.cli?.path ??
+      (detection.state === 'available' ? detection.requires?.program : undefined) ??
       (h.def.launch.kind === 'binary' && detection.state === 'available'
         ? detection.spec?.command
         : undefined)
@@ -1373,10 +1382,16 @@ export class AgentManager {
       : { adapterVersion: adapter.version, cliVersion: null }
   }
 
-  /** The user's own program, as detection found it: the SDK's CLI, or a binary harness's program. */
+  /**
+   * The user's own program, as detection found it: the SDK's CLI, the program an adapter runs, or a
+   * binary harness's program.
+   */
   private userProgram(h: Harness): { path: string; version: string | null } | null {
     const detection = h.detection
     if (detection?.cli) return { path: detection.cli.path, version: detection.cli.version }
+    if (detection?.state === 'available' && detection.requires) {
+      return { path: detection.requires.program, version: detection.requires.version }
+    }
     if (h.def.launch.kind !== 'binary' || detection?.state !== 'available' || !detection.spec) {
       return null
     }
@@ -1673,7 +1688,9 @@ export class AgentManager {
         await this.detect(h)
         h.cliSkipped = null
         const update = this.updateOf(h)
-        if (update && !this.stopped) await this.installUpdate(h, update, signal, onOutput)
+        if (update && h.def.cli && !this.stopped) {
+          await this.installUpdate(h, update, signal, onOutput)
+        }
       },
       (message) => t('agent.updateFailed', { agent: h.def.name, message }),
       h.cliMethod,
@@ -1728,9 +1745,11 @@ export class AgentManager {
   async install(agentId: AgentId, method?: AgentInstallMethod['id']): Promise<void> {
     const { h } = this.slot(agentId)
     await this.detectAll()
-    // The user's CLI the SDK runs is installed first; one found too old is updated instead.
+    // The user's program the adapter runs is installed first, the SDK's CLI or pi for pi-acp; one
+    // found too old is updated instead.
     const cliMissing = h.detection?.state === 'not-installed' && !h.detection.cli
-    if (h.def.cli && h.def.launch.kind === 'package' && cliMissing) {
+    const runsProgram = !!h.def.cli || (!!h.def.requires && !!h.def.installs)
+    if (runsProgram && h.def.launch.kind === 'package' && cliMissing) {
       return this.installProgram(h, method)
     }
     switch (h.def.launch.kind) {
@@ -1864,7 +1883,9 @@ export class AgentManager {
           npmPrefix: () => this.npmPrefix(plan.tool),
         })
         const command =
-          h.def.cli?.command ?? (h.def.launch.kind === 'binary' ? h.def.launch.command : agent)
+          h.def.cli?.command ??
+          h.def.requires?.command ??
+          (h.def.launch.kind === 'binary' ? h.def.launch.command : agent)
         throw new Error(
           folder
             ? t('agent.binaryInstall.notOnPath', { agent, command, folder })
@@ -2962,6 +2983,7 @@ export class AgentManager {
     const color = slot.added ? agentColor(this.deps.settings().addedAgents, slot.id) : null
     const cliVersion = this.cliUpdateVersion(h)
     const cliCommand = cliVersion ? (this.cliCommands.get(h) ?? null) : null
+    const cliCommandName = slot.def.cli?.command ?? slot.def.requires?.command
     return {
       id: slot.id,
       name: slot.name,
@@ -3029,10 +3051,10 @@ export class AgentManager {
         command,
         available,
       })),
-      cli: slot.def.cli
+      cli: cliCommandName
         ? {
-            command: slot.def.cli.command,
-            installed: detection?.cli ?? null,
+            command: cliCommandName,
+            installed: detection?.cli ?? this.requiresCli(detection),
             method: h.cliMethod,
             update: cliVersion && cliCommand ? { version: cliVersion, command: cliCommand } : null,
           }

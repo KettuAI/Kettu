@@ -289,7 +289,7 @@
       "signIn": "需要登录",
       "window": "{{limit}} {{used}}",
       "windowResets": "{{limit}} {{used}} · {{left}}后重置",
-      "setsUpLong": "{{agent}} 会在首次使用时自动配置：Kettu 会为它安装适配器；适配器不接受你的 {{command}} 版本时，还会下载一份 {{agent}}。",
+      "setsUpLong": "{{agent}} 会在首次使用时自动配置：Kettu 会为它安装适配器，适配器运行你的 {{command}}。",
       "setsUpLongSdk": "{{agent}} 会在首次使用时自动配置：Kettu 会为它安装 SDK；SDK 不接受你的 {{command}} 版本时，还会下载一份 {{agent}}。",
       "install": "安装…",
       "failedLong": "{{agent}} 启动失败。",
