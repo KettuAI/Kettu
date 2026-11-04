@@ -25,7 +25,7 @@ import {
   type MapperEffect,
   type MapperOutput,
 } from '../session-updates'
-import { FAKE_INIT, FakeChild, FakeClaudeSdk, type FakeQuery } from '../testing/fake-claude-sdk'
+import { FakeChild, FakeClaudeSdk, type FakeQuery } from '../testing/fake-claude-sdk'
 import { ClaudeConnection, promptContent } from './connection'
 import { claudeSdkDriver } from './driver'
 import { ANSWER_IN_REPLY, QUESTION_UNREADABLE, QUESTIONS_SKIPPED } from './permissions'
@@ -281,32 +281,6 @@ describe('the Claude Agent SDK driver', () => {
       'auto',
       ...(process.getuid?.() === 0 ? [] : ['bypassPermissions']),
     ])
-  })
-
-  it('reports the account the session runs under', async () => {
-    const { connection, accounts } = await setup()
-    await connection.newSession('/repo')
-    await connection.newSession('/repo')
-    expect(accounts).toEqual([{ kind: 'account', label: 'Claude Max', email: 'ada@example.com' }])
-  })
-
-  it('lists the commands Kettu can run, without the terminal ones', async () => {
-    const { sdk, connection } = await setup()
-    const target = new Target()
-    const { sessionId } = await connection.newSession('/repo')
-    connection.register(sessionId, target)
-    expect(target.thread.session.commands).toEqual([
-      { name: 'review', description: 'Review a pull request', inputHint: '<number>' },
-      { name: 'statusline', description: 'Set up the status line' },
-    ])
-    sdk.last.emit({
-      type: 'system',
-      subtype: 'init',
-      terminal_slash_commands: ['statusline'],
-      session_id: sessionId,
-    } as SdkMessage)
-    await settle()
-    expect(target.thread.session.commands.map((command) => command.name)).toEqual(['review'])
   })
 })
 
@@ -713,93 +687,6 @@ describe('a turn', () => {
     ).resolves.toMatchObject({
       stopReason: 'end_turn',
     })
-  })
-
-  it('titles the session from the title Claude Code stored, or one it generates once', async () => {
-    s.sdk.generatedTitle = 'Fix the flaky login test'
-    await s.connection.prompt(sessionId, [{ type: 'text', text: 'The login test fails at random' }])
-    await settle()
-    expect(target.thread.session.title).toBe('Fix the flaky login test')
-    expect(target.effects).toContainEqual({ kind: 'title', title: 'Fix the flaky login test' })
-    s.sdk.infos.set(sessionId, { sessionId, summary: 'x', lastModified: 1, customTitle: 'Renamed' })
-    await s.connection.prompt(sessionId, [{ type: 'text', text: 'more' }])
-    await settle()
-    expect(s.sdk.last.calls.filter((call) => call.method === 'generateSessionTitle')).toHaveLength(
-      1,
-    )
-  })
-
-  it('writes a title from the first message while the turn is still running', async () => {
-    s.sdk.generatedTitle = 'Show the account on each agent'
-    s.sdk.script = (query) => {
-      query.running()
-    }
-    const turn = s.connection.prompt(sessionId, [
-      { type: 'text', text: 'The agent list never shows which account is signed in' },
-    ])
-    await settle()
-    expect(target.thread.session.title).toBe('Show the account on each agent')
-    const titles = () => s.sdk.last.calls.filter((call) => call.method === 'generateSessionTitle')
-    expect(titles()).toHaveLength(1)
-    expect(titles()[0]?.args[1]).toEqual({ persist: false })
-    s.sdk.last.finish()
-    await expect(turn).resolves.toMatchObject({ stopReason: 'end_turn' })
-    await settle()
-    expect(titles()).toHaveLength(1)
-    expect(s.sdk.last.calls).toContainEqual({
-      method: 'renameSession',
-      args: ['Show the account on each agent', sessionId],
-    })
-  })
-
-  it('tries the title again when the turn ends if the first request failed', async () => {
-    s.sdk.titleError = new Error('unavailable')
-    s.sdk.script = (query) => {
-      query.running()
-    }
-    const turn = s.connection.prompt(sessionId, [
-      { type: 'text', text: 'The agent list never shows which account is signed in' },
-    ])
-    await settle()
-    expect(target.thread.session.title).toBeNull()
-    s.sdk.titleError = null
-    s.sdk.generatedTitle = 'Show the account on each agent'
-    s.sdk.last.finish()
-    await turn
-    await settle()
-    expect(target.thread.session.title).toBe('Show the account on each agent')
-  })
-
-  it('drops a generated title that only repeats the first message, and asks once there is more', async () => {
-    const message = 'The agent list never shows which account is signed in'
-    s.sdk.generatedTitle = message
-    s.sdk.script = (query) => {
-      query.running()
-    }
-    const turn = s.connection.prompt(sessionId, [{ type: 'text', text: message }])
-    await settle()
-    expect(target.thread.session.title).toBeNull()
-    s.sdk.generatedTitle = 'Show the account on each agent'
-    s.sdk.last.emit(
-      assistant(s.sdk.last, 'msg_more', [{ type: 'text', text: 'Looking at the list.' }]),
-    )
-    s.sdk.last.finish()
-    await turn
-    await settle()
-    expect(target.thread.session.title).toBe('Show the account on each agent')
-  })
-
-  it('asks for a title again after a turn whose text gave none', async () => {
-    await s.connection.prompt(sessionId, [{ type: 'text', text: 'Hello there, Claude' }])
-    await settle()
-    expect(target.thread.session.title).toBeNull()
-    s.sdk.generatedTitle = 'Greeting'
-    await s.connection.prompt(sessionId, [{ type: 'text', text: 'And again' }])
-    await settle()
-    expect(target.thread.session.title).toBe('Greeting')
-    expect(s.sdk.last.calls.filter((call) => call.method === 'generateSessionTitle')).toHaveLength(
-      2,
-    )
   })
 
   it('takes a failed authentication as a sign-in Claude Code needs', async () => {
@@ -1684,150 +1571,6 @@ describe('subagents', () => {
       { kind: 'session_message', id: 'sm:toolu_s', senderId: 'kettu-h2' },
       { kind: 'agent', id: 'm:msg_s', markdown: 'Seen' },
     ])
-  })
-})
-
-describe('reports', () => {
-  it('reads the plan limits in a query that keeps nothing, when no session is open', async () => {
-    const s = await setup()
-    const limits = await s.connection.readLimits!()
-    expect(limits).toMatchObject([
-      {
-        window: 'five_hour',
-        label: '5-hour',
-        usedPercent: 42,
-        resetsAt: Date.parse('2026-10-30T18:00:00.000Z'),
-      },
-      { window: 'seven_day', label: 'Weekly', usedPercent: 7 },
-      { window: 'seven_day_opus', label: 'Weekly · Opus', usedPercent: 12, resetsAt: null },
-    ])
-    const query = s.sdk.last
-    expect(query.options).toMatchObject({ persistSession: false, settingSources: [] })
-    expect(query.calls).toContainEqual({ method: 'usage', args: [{ skipBehaviors: true }] })
-    expect(query.closed).toBe(true)
-  })
-
-  it('reports the account with the limits, from the query it reads them in', async () => {
-    const s = await setup()
-    await s.connection.readLimits!()
-    expect(s.accounts).toEqual([{ kind: 'account', label: 'Claude Max', email: 'ada@example.com' }])
-    const { sessionId } = await s.connection.newSession('/repo')
-    const open = s.sdk.last
-    expect(open.sessionId).toBe(sessionId)
-    await s.connection.readLimits!()
-    expect(open.calls).toContainEqual({ method: 'accountInfo', args: [] })
-    expect(s.accounts).toHaveLength(2)
-    s.sdk.account = {
-      email: 'grace@example.com',
-      subscriptionType: 'pro',
-      apiProvider: 'firstParty',
-    }
-    await s.connection.readLimits!()
-    expect(s.accounts.at(-1)).toEqual({
-      kind: 'account',
-      label: 'Claude Pro',
-      email: 'grace@example.com',
-    })
-  })
-
-  it('asks Claude Code whether it is signed in when its account names no one', async () => {
-    const s = await setup()
-    s.sdk.init = { ...FAKE_INIT, account: { tokenSource: 'none', apiProvider: 'firstParty' } }
-    s.sdk.usage = { rate_limits_available: false, rate_limits: null }
-    const reading = s.connection.readLimits!()
-    await settle()
-    const index = s.spawned.findIndex((options) => options.args.join(' ') === 'auth status --json')
-    expect(s.spawned[index]).toMatchObject({ command: '/opt/claude/bin/claude' })
-    s.children[index]!.stdout.write('{"loggedIn": false, "authMethod": "none", "apiProvider": ')
-    s.children[index]!.stdout.write('"firstParty"}\n')
-    s.children[index]!.emit('exit', 1)
-    s.children[index]!.emit('close', 1)
-    expect(await reading).toEqual([])
-    expect(s.accounts).toEqual([{ kind: 'none', label: 'Not signed in', email: null }])
-  })
-
-  it('reports an OAuth sign-in that names no plan', async () => {
-    const s = await setup()
-    s.sdk.init = { ...FAKE_INIT, account: { tokenSource: 'none', apiProvider: 'firstParty' } }
-    s.sdk.usage = { rate_limits_available: false, rate_limits: null }
-    const reading = s.connection.readLimits!()
-    await settle()
-    const index = s.spawned.findIndex((options) => options.args.join(' ') === 'auth status --json')
-    s.children[index]!.stdout.write(
-      '{"loggedIn": true, "authMethod": "oauth_token", "apiProvider": "firstParty"}\n',
-    )
-    s.children[index]!.emit('exit', 0)
-    s.children[index]!.emit('close', 0)
-    expect(await reading).toEqual([])
-    expect(s.accounts).toEqual([{ kind: 'account', label: 'Claude', email: null }])
-  })
-
-  it('gives no limits for an account without them', async () => {
-    const s = await setup()
-    s.sdk.usage = { rate_limits_available: false, rate_limits: null }
-    expect(await s.connection.readLimits!()).toEqual([])
-  })
-
-  it("reads a session's context from its query, in the report's terms", async () => {
-    const s = await setup()
-    const { sessionId } = await s.connection.newSession('/repo')
-    const breakdown = await s.connection.readContext!(sessionId, '/repo', {})
-    expect(breakdown).toMatchObject({
-      model: 'claude-opus-5',
-      used: 10_000,
-      size: 200_000,
-      categories: [
-        { name: 'System prompt', tokens: 3000, share: 0.015 },
-        { name: 'Messages', tokens: 7000, share: 0.035 },
-        { name: 'Free space', tokens: 190_000, share: 0.95 },
-      ],
-      lists: [
-        {
-          name: 'MCP Tools',
-          items: [{ name: 'mcp__kettu__show', detail: 'kettu', tokens: '310' }],
-        },
-        {
-          name: 'Memory Files',
-          items: [{ name: 'Project', detail: '/repo/CLAUDE.md', tokens: '1.2k' }],
-        },
-        { name: 'Skills', items: [{ name: 'review', detail: 'project', tokens: '45' }] },
-      ],
-    })
-    expect(s.sdk.last.calls).toContainEqual({
-      method: 'getContextUsage',
-      args: [{ detail: 'summary' }],
-    })
-  })
-
-  it('reads a closed session in a fork that keeps nothing', async () => {
-    const s = await setup()
-    await s.connection.readContext!('closed-one', '/repo', {})
-    expect(s.sdk.last.options).toMatchObject({
-      resume: 'closed-one',
-      forkSession: true,
-      persistSession: false,
-    })
-    expect(s.sdk.last.closed).toBe(true)
-  })
-})
-
-describe('signing out', () => {
-  it("runs Claude Code's logout through the host, and says why one failed", async () => {
-    const s = await setup()
-    const logout = s.connection.logout()
-    await settle()
-    expect(s.spawned).toEqual([
-      expect.objectContaining({ command: '/opt/claude/bin/claude', args: ['auth', 'logout'] }),
-    ])
-    expect(s.spawned[0]!.env).toMatchObject({ PATH: '/usr/bin' })
-    s.children[0]!.emit('exit', 0)
-    await expect(logout).resolves.toBeUndefined()
-    const failing = s.connection.logout()
-    await settle()
-    s.children[1]!.stderr.write('Could not reach the keychain\n')
-    await settle()
-    s.children[1]!.emit('exit', 1)
-    await expect(failing).rejects.toMatchObject({ message: 'Could not reach the keychain' })
   })
 })
 

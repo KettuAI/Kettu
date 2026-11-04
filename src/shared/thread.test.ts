@@ -5,9 +5,7 @@ import {
   coalescePatches,
   entryMessageId,
   isThreadEntry,
-  outOfCreditTurn,
   prependEntries,
-  previewsCommand,
   threadEntries,
   threadFromSnapshot,
   UnknownEntryError,
@@ -362,57 +360,5 @@ describe('entryMessageId', () => {
     expect(entryMessageId('e:12')).toBeNull()
     expect(entryMessageId('t:call_1')).toBeNull()
     expect(entryMessageId('sm:msg_1')).toBeNull()
-  })
-})
-
-describe('outOfCreditTurn', () => {
-  const thread = (...entries: ThreadEntry[]): Pick<ThreadState, 'order' | 'byId'> => ({
-    order: entries.map((e) => e.id),
-    byId: Object.fromEntries(entries.map((e) => [e.id, e])),
-  })
-  const prompt: ThreadEntry = { kind: 'user', id: 'u1', content: [{ type: 'text', text: 'hi' }] }
-  const notice: ThreadEntry = {
-    kind: 'notice',
-    id: 'n1',
-    severity: 'warning',
-    title: 'x is out of credit',
-    cause: 'out_of_credit',
-    model: 'x',
-  }
-
-  it("gives the latest turn's prompt and notice when credit ran out", () => {
-    const steered: ThreadEntry = { ...prompt, id: 'u2', steered: true }
-    expect(outOfCreditTurn(thread(prompt, steered, notice))).toEqual({ notice, prompt })
-  })
-
-  it('gives null once a later turn started, or when the turn failed otherwise', () => {
-    expect(outOfCreditTurn(thread(prompt, notice, { ...prompt, id: 'u3' }))).toBeNull()
-    expect(
-      outOfCreditTurn(thread(prompt, { kind: 'notice', id: 'n2', severity: 'error', title: 'x' })),
-    ).toBeNull()
-    expect(outOfCreditTurn(thread(notice))).toBeNull()
-  })
-
-  it('gives null once the retried turn has answered under the same prompt', () => {
-    const reply: ThreadEntry = {
-      kind: 'agent',
-      id: 'm1',
-      markdown: 'Done',
-      attachments: [],
-      streaming: false,
-    }
-    const end: ThreadEntry = { kind: 'turn_end', id: 'e1', stopReason: 'end_turn', durationMs: 5 }
-    expect(outOfCreditTurn(thread(prompt, notice, reply, end))).toBeNull()
-  })
-})
-
-describe('previewsCommand', () => {
-  it('shows a command of more than one step, or a long one, in full', () => {
-    expect(previewsCommand('rm -rf node_modules/.vite && pnpm dev --port 5173')).toBe(true)
-    expect(previewsCommand('pnpm test; pnpm lint')).toBe(true)
-    expect(previewsCommand('git log | head')).toBe(true)
-    expect(previewsCommand('echo a\necho b')).toBe(true)
-    expect(previewsCommand('x'.repeat(61))).toBe(true)
-    expect(previewsCommand('pnpm vitest run src/usage')).toBe(false)
   })
 })

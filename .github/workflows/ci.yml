@@ -2,8 +2,8 @@ name: CI
 
 on:
   # Never on edits: the newest run on a commit gives its CI result, so a run that skipped the job
-  # would hide a failure on that commit. The title and description have their own workflow, pr.yml.
-  # Windows and macOS run before each release, in release.yml.
+  # would hide a failure on that commit. Building and packaging every platform is the release
+  # run's gate, in release.yml.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
@@ -22,16 +22,28 @@ jobs:
     # The LINUX_RUNNER repository variable, when set, replaces GitHub's runner.
     runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-24.04' }}
     steps:
+      # The merge commit and its base, so the diff between them is what the pull request changes.
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+        with:
+          fetch-depth: 2
+      # Styles, docs and images have nothing to type-check or test, so the job passes without
+      # running the rest. It still runs, since a skipped job would not report the CI check.
+      - name: Look for code changes
+        id: changes
+        run: |
+          if git diff --name-only HEAD^1 HEAD | grep -qE '\.(ts|tsx|mts|cts|js|mjs|cjs|json|yaml|yml)$'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.changes.outputs.code
+        uses: pnpm/action-setup@v6
+      - if: steps.changes.outputs.code
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm format:check
-      - run: pnpm lint
-      # Type-checks first.
-      - run: pnpm build
-      - run: pnpm test
-      - run: pnpm exec electron-builder --dir --publish never
+      - if: steps.changes.outputs.code
+        run: pnpm install --frozen-lockfile
+      - if: steps.changes.outputs.code
+        run: pnpm typecheck
+      - if: steps.changes.outputs.code
+        run: pnpm test

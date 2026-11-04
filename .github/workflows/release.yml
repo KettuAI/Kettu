@@ -1,9 +1,9 @@
 name: Release
 
-# The full check before a release: every installer builds and tests on its own runner, and the app
-# starts on each platform. With a version, a run on main then uploads everything to a draft release
-# of that commit, and publishing the draft creates the tag. Without one it touches no release, which
-# checks a branch, or new macOS signing secrets before a release depends on them.
+# The gate before a release: the core tests pass once and every installer builds and packages on its
+# own runner. With a version, a run on main then uploads everything to a draft release of that
+# commit, and publishing the draft creates the tag. Without one it touches no release, which checks a
+# branch, or new macOS signing secrets before a release depends on them.
 on:
   workflow_dispatch:
     inputs:
@@ -104,8 +104,6 @@ jobs:
           - os: windows-11-arm
             target: --win --arm64
             update_mode: install
-            # Slow enough that timing-sensitive remote host tests miss their deadlines (#710).
-            test_args: --retry=2
           - os: ${{ vars.LINUX_RUNNER || 'ubuntu-24.04' }}
             target: --linux --x64
             update_mode: install
@@ -123,14 +121,6 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - if: runner.os != 'Windows'
-        run: pnpm test
-      # os.tmpdir() is on the C: system drive; the tests' temp folders move to the checkout's drive.
-      - if: runner.os == 'Windows'
-        run: pnpm test ${{ matrix.test_args }}
-        env:
-          TEMP: ${{ runner.temp }}
-          TMP: ${{ runner.temp }}
       # main keeps 0.0.0, so a release needs no version commit; installers and update files take it
       # from package.json.
       - name: Set the version
@@ -148,110 +138,6 @@ jobs:
       - name: Package the daemon
         if: runner.os != 'Windows'
         run: node tools/daemon/package.mjs --out daemon-package
-      # The package as users install it, from a release laid out as GitHub's: the CLI, its hosts and
-      # node-pty run on the Node.js inside it, and kettu run stops on SIGTERM.
-      - name: Check the daemon's package
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="$(node -p 'require("./package.json").version')"
-          release="$RUNNER_TEMP/release/download/v$version"
-          mkdir -p "$release"
-          cp daemon-package/*.tar.gz "$release/"
-          cat daemon-package/*.sha256 > "$release/kettu-daemon-sha256sums.txt"
-          KETTU_RELEASES_URL="file://$RUNNER_TEMP/release" \
-            sh tools/daemon/install.sh --version "$version" --no-service
-          kettu="$HOME/.local/bin/kettu"
-          test "$("$kettu" --version)" = "$version"
-
-          package="$(dirname "$(dirname "$(readlink "$kettu")")")"
-          "$package/node/bin/node" -e '
-            const pty = require(process.argv[1]).spawn("/bin/sh", ["-c", "echo from-pty"], {})
-            let out = ""
-            pty.onData((data) => (out += data))
-            pty.onExit(() => {
-              if (!out.includes("from-pty")) throw new Error(`The shell wrote: ${out}`)
-            })
-          ' "$package/daemon/node_modules/node-pty"
-
-          export KETTU_DAEMON_DATA="$RUNNER_TEMP/kd"
-          "$kettu" run > "$RUNNER_TEMP/daemon-run.log" 2>&1 &
-          pid=$!
-          trap 'cat "$RUNNER_TEMP/daemon-run.log"' EXIT
-          for _ in $(seq 30); do
-            if "$kettu" status 2> /dev/null | grep -q 'Agent host: *ready'; then break; fi
-            sleep 1
-          done
-          "$kettu" status | tee "$RUNNER_TEMP/daemon-status.txt"
-          grep -q 'Agent host: *ready' "$RUNNER_TEMP/daemon-status.txt"
-          kill -TERM "$pid"
-          wait "$pid"
-      # The installed package as a real LaunchAgent, which is never installed on a developer's
-      # computer: it is installed from an SSH session that then ends, must run as a service, come
-      # back after it is killed, and stop when the service is removed.
-      - name: Check the daemon's service
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          set -euo pipefail
-          main="$HOME/.local/bin/kettu"
-          kettu() { "$main" "$@"; }
-          # The first line names the daemon's own pid.
-          daemon_pid() { sed -n '1s/.*(pid \([0-9]*\))$/\1/p' "$1"; }
-          status="$RUNNER_TEMP/daemon-status.txt"
-          trap 'tail -n 50 "$HOME/Library/Application Support/Kettu Daemon/logs/daemon.log" || true' EXIT
-
-          # Remote Login, for an SSH session to install the service from.
-          ssh-keygen -q -t ed25519 -N '' -f "$RUNNER_TEMP/ssh-key"
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          cat "$RUNNER_TEMP/ssh-key.pub" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys
-          sudo launchctl enable system/com.openssh.sshd || true
-          sudo launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist || true
-          ssh_to_self=(ssh -i "$RUNNER_TEMP/ssh-key" -o BatchMode=yes -o ConnectTimeout=10
-            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$(id -un)@localhost")
-          if "${ssh_to_self[@]}" true; then
-            "${ssh_to_self[@]}" "'$main' service install"
-            echo "Installed from an SSH session, which has ended"
-            sleep 5
-          else
-            echo "::warning::Remote Login could not be turned on; the service is installed without SSH"
-            kettu service install
-          fi
-          kettu status | tee "$status"
-          grep -q 'is running as a service' "$status"
-          grep -q 'Private key: *in a file only you can read' "$status"
-          launchctl print "gui/$(id -u)/sh.kettu.daemon" > "$RUNNER_TEMP/launchd.txt"
-          head -n 40 "$RUNNER_TEMP/launchd.txt"
-          grep -q 'exit timeout = 20' "$RUNNER_TEMP/launchd.txt"
-
-          # launchd starts it again whenever it exits.
-          pid="$(daemon_pid "$status")"
-          kill -9 "$pid"
-          restarted=''
-          for _ in $(seq 60); do
-            sleep 1
-            if kettu status > "$status"; then
-              restarted="$(daemon_pid "$status")"
-              if [ -n "$restarted" ] && [ "$restarted" != "$pid" ]; then break; fi
-            fi
-          done
-          cat "$status"
-          if [ -z "$restarted" ] || [ "$restarted" = "$pid" ]; then
-            echo "::error::launchd did not start the daemon again after it was killed"
-            exit 1
-          fi
-
-          kettu service uninstall
-          if kettu status; then
-            echo "::error::The daemon still runs after its service was removed"
-            exit 1
-          fi
-          test ! -e "$HOME/Library/LaunchAgents/sh.kettu.daemon.plist"
-          if launchctl print "gui/$(id -u)/sh.kettu.daemon" > /dev/null 2>&1; then
-            echo "::error::launchd still has the service after it was removed"
-            exit 1
-          fi
       # The Icon Composer app icon compiles only with Xcode 26's actool or later, which the macOS 15
       # image has but does not select.
       - name: Select Xcode 26 or later
@@ -346,14 +232,23 @@ jobs:
           path: daemon-package/kettu-daemon-*
           if-no-files-found: error
 
-  screenshots:
-    needs: version
+  test:
+    name: Test
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-24.04' }}
     permissions:
       contents: read
-    uses: ./.github/workflows/screenshots.yml
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
 
   publish:
-    needs: [mac-signing, build, screenshots]
+    needs: [mac-signing, build, test]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

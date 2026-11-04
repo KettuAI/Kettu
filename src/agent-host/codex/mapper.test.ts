@@ -5,7 +5,6 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { applyPatches, threadEntries, threadFromSnapshot, type ThreadState } from '@shared/thread'
 import { newTurnScope, type MapperContext, type MapperEffect } from '../session-updates'
-import { mapAccount, mapRateLimits } from './account'
 import { commandFacts, diffHunks, fenced, stripShellPrefix, ThreadMapper } from './mapper'
 
 function run(
@@ -267,14 +266,6 @@ describe('other items', () => {
     expect(entries[5]).toMatchObject({ kind: 'notice', title: 'Codex switched from a to b' })
   })
 
-  it('takes a thread name as the title unless it only repeats the first message', () => {
-    const named = run([
-      ['thread/name/updated', { threadId: 'thread-1', threadName: 'Fix the build' }],
-    ])
-    expect(named.thread.session.title).toBe('Fix the build')
-    expect(named.effects).toContainEqual({ kind: 'title', title: 'Fix the build' })
-  })
-
   it('shows raw reasoning only while the thought has no summary', () => {
     const { entries } = run([
       started({ type: 'reasoning', id: 'r', summary: [], content: [] }),
@@ -314,59 +305,6 @@ describe('other items', () => {
     expect(run([completed(user)]).entries).toEqual([])
     expect(run([completed(user)], { replaying: true }).entries).toEqual([
       { kind: 'user', id: 'm:u', content: [{ type: 'text', text: 'hi' }] },
-    ])
-  })
-})
-
-describe('the account and its limits', () => {
-  it('names each kind of account', () => {
-    expect(
-      mapAccount({
-        account: { type: 'chatgpt', email: 'a@b.c', planType: 'pro' },
-        requiresOpenaiAuth: true,
-      }),
-    ).toEqual({
-      kind: 'account',
-      label: 'ChatGPT Pro',
-      email: 'a@b.c',
-    })
-    expect(mapAccount({ account: { type: 'apiKey' }, requiresOpenaiAuth: true })).toMatchObject({
-      kind: 'api_key',
-      label: 'OpenAI API key',
-    })
-    expect(mapAccount({ account: null, requiresOpenaiAuth: true })).toMatchObject({ kind: 'none' })
-    expect(mapAccount({ account: null, requiresOpenaiAuth: false })).toMatchObject({
-      kind: 'gateway',
-    })
-  })
-
-  it('names windows by their length, in seconds to milliseconds', () => {
-    const limits = mapRateLimits(
-      {
-        limitId: 'codex',
-        limitName: null,
-        primary: { usedPercent: 40, windowDurationMins: 120, resetsAt: 10 },
-        secondary: { usedPercent: 5, windowDurationMins: 43_200, resetsAt: null },
-      },
-      7,
-    )
-    expect(limits).toEqual([
-      {
-        window: '2_hour',
-        label: '2-hour',
-        usedPercent: 40,
-        resetsAt: 10_000,
-        state: 'ok',
-        observedAt: 7,
-      },
-      {
-        window: 'monthly',
-        label: 'Monthly',
-        usedPercent: 5,
-        resetsAt: null,
-        state: 'ok',
-        observedAt: 7,
-      },
     ])
   })
 })

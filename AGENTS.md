@@ -80,11 +80,8 @@ src/
 │   └── styles/        globals.css: Tailwind entry and theme tokens
 └── shared/            Shared across processes: the IPC and host contracts, the thread model
 tools/
-├── fake-agent/        Scripted ACP agent for development, tests and perf runs
-├── perf/              The performance script and its CI runner
-├── screenshots/       Captures the main screens on each platform
-├── workflow/          The pull request check and the release check CI runs
-└── launch.mjs         Starts a production build for perf and screenshots
+├── fake-agent/        Scripted ACP agent for development and tests
+└── workflow/          The macOS signing steps of the release run
 ```
 
 ### Adding an IPC call
@@ -122,8 +119,8 @@ Kettu drives agents that run shell commands, so these are not negotiable:
 ## Definition of done
 
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck` and `pnpm test` pass. Also run `pnpm build` when you touch config, the main process or the preload.
-- Logic you add or change comes with tests; a bug fix starts with a test that fails.
-- CI checks pull requests on Linux only; Windows and macOS run in the release run before each release, not on branches. The screenshot capture also runs once a day on main, on Linux; it gates nothing, so read its result.
+- Tests cover only the core: the security boundaries (IPC and request validation, permissions, the artifact guards, command safety, the encrypted channel and pairing), the stored data (the thread database and the host files) and the agent protocols (the Claude Code, Codex and ACP mapping and the thread model). Add or change tests only there, where a bug fix starts with a test that fails. UI, styling, copy, wiring and tooling get none.
+- CI on a pull request only type-checks and runs those tests, on Linux, and skips both when no code changed. Building and packaging every platform is the gate of the release run.
 - For UI changes, run the app and look at the result in light and dark themes before reporting the work as done. In development, `REMOTE_DEBUGGING_PORT=9222 pnpm dev` exposes the renderer over the Chrome DevTools Protocol for inspection and screenshots.
 
 ## Conventions
