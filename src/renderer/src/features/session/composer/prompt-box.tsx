@@ -238,6 +238,13 @@ export function PromptBox({
       chooseItem(row)
       return true
     }
+    if (
+      !open &&
+      !modified &&
+      (event.key === 'ArrowUp' || event.key === 'ArrowDown') &&
+      box.moveHistory(event.key === 'ArrowDown')
+    )
+      return true
     onKeyDown(event)
     return event.defaultPrevented
   }

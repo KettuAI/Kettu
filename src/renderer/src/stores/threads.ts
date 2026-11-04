@@ -190,11 +190,13 @@ export function receiveBatch(batch: PatchBatch): void {
  * Loads the page before the loaded ones, for a thread scrolled back toward them. The host sends
  * a session's patches before the page, so they apply first and the page has what they changed.
  */
-export function loadOlder(sessionId: string): void {
+export function loadOlder(sessionId: string): Promise<boolean> | undefined {
+  const pending = pagesInFlight.get(sessionId)
+  if (pending) return pending
   const replica = useThreadsStore.getState().replicas[sessionId]
   if (!replica?.state || replica.older === null || replica.loadingOlder) return
   if (snapshotsInFlight.has(sessionId)) return
-  void requestPage(sessionId, replica, replica.older)
+  return requestPage(sessionId, replica, replica.older)
 }
 
 /**

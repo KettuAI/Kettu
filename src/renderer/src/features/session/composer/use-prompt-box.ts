@@ -25,6 +25,7 @@ import {
 } from './attachments'
 import { clearDraft, flushDraft, readDraft, writeDraft } from './drafts'
 import type { ComposerEditorHandle } from './editor'
+import { useInputHistory } from './use-input-history'
 
 // The state of the box both composers share, the session's and New session's; see PromptBox.
 
@@ -62,6 +63,20 @@ export function usePromptBox({
   // The caret, or null while a range is selected, for telling which `@` word it is in.
   const [caret, setCaret] = useState<number | null>(null)
   const editor = useRef<ComposerEditorHandle>(null)
+  const { move: moveHistory, reset: resetHistory } = useInputHistory({
+    sessionId,
+    disabled,
+    editor,
+    onRecall: (next) => {
+      setText(next)
+      writeDraft(draft, next)
+      editor.current?.setText(next)
+      setCaret(null)
+      setSlashDismissed(true)
+      setError(null)
+    },
+    onError: () => setError(t('prompt.historyFailed')),
+  })
   // Only the focused pane's composer takes the events sent to no session in particular.
   const paneFocused = usePane()?.focused ?? true
   const focused = useRef(paneFocused)
@@ -131,6 +146,7 @@ export function usePromptBox({
         onEvent(event)
         if (event.kind === 'focus-composer' && focused.current) editor.current?.focus()
         if (event.kind === 'draft-written' && event.draft === draft) {
+          resetHistory()
           const next = readDraft(draft)
           setText(next)
           setCaret(null)
@@ -149,7 +165,7 @@ export function usePromptBox({
           requestAnimationFrame(() => editor.current?.focus())
         }
       }),
-    [draft, sessionId],
+    [draft, sessionId, resetHistory],
   )
 
   /** Typing changed the text: its state, its draft, and a slash list Esc closed. */
@@ -168,6 +184,7 @@ export function usePromptBox({
 
   /** Empties the box for a send. */
   const take = (): Taken => {
+    resetHistory()
     const prompt = text
     const held = attachments
     setText('')
@@ -233,6 +250,7 @@ export function usePromptBox({
     editor,
     focus: () => editor.current?.focus(),
     changed,
+    moveHistory,
     // For the view.
     slashDismissed,
     setSlashDismissed,

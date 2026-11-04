@@ -22,6 +22,8 @@ export interface ComposerEditorHandle {
   focus(): void
   text(): string
   selection(): { from: number; to: number }
+  /** Whether a single caret is on the first or last visual line. */
+  atBoundary(forward: boolean): boolean
   /** Types `text` over the selection, as a paste would, so it can be undone. */
   insert(text: string): void
   /** Replaces the whole text and puts the caret at `caret`, the end by default. */
@@ -301,6 +303,14 @@ export function ComposerEditor({
       selection: () => {
         const main = view.current?.state.selection.main
         return { from: main?.from ?? 0, to: main?.to ?? 0 }
+      },
+      atBoundary: (forward) => {
+        const editor = view.current
+        if (!editor) return false
+        const { selection, doc } = editor.state
+        if (selection.ranges.length !== 1 || !selection.main.empty) return false
+        const edge = editor.moveToLineBoundary(selection.main, forward, true).head
+        return edge === (forward ? doc.length : 0)
       },
       insert: (text) => {
         const editor = view.current
