@@ -1,25 +1,22 @@
 import type { ReactNode } from 'react'
-import {
-  GlobeIcon,
-  LaptopIcon,
-  MonitorIcon,
-  ServerIcon,
-  SmartphoneIcon,
-  TabletIcon,
-} from 'lucide-react'
+import { GlobeIcon, LaptopIcon, MonitorIcon, SmartphoneIcon, TabletIcon } from 'lucide-react'
 import type { PairedDevice } from '@shared/remote/device'
+import { SystemLogo } from '@renderer/components/system-logo'
 import { cn } from '@renderer/lib/utils'
-import { deviceShape } from './remote-text'
+import { deviceShape, systemLogoOf } from './remote-text'
 
-/** A phone, a tablet, a laptop, a desktop or a globe, by what the device is. */
+/** A device's system logo; a globe for a browser, else a phone, tablet, laptop or desktop. */
 export function DeviceIcon({
   device,
   className,
 }: {
-  device: Pick<PairedDevice, 'kind' | 'model'>
+  device: Pick<PairedDevice, 'kind' | 'model' | 'platform'>
   className?: string
 }) {
-  switch (deviceShape(device)) {
+  const shape = deviceShape(device)
+  const logo = shape === 'web' ? null : systemLogoOf(device.platform)
+  if (logo) return <SystemLogo name={logo} className={className} />
+  switch (shape) {
     case 'web':
       return <GlobeIcon className={className} />
     case 'laptop':
@@ -33,10 +30,11 @@ export function DeviceIcon({
   }
 }
 
-/** A host by what it runs: a server for Linux, a desktop otherwise. */
+/** A host's system logo, or a monitor for a system without one. */
 export function HostIcon({ platform, className }: { platform: string; className?: string }) {
-  return platform === 'linux' ? (
-    <ServerIcon className={className} />
+  const logo = systemLogoOf(platform)
+  return logo ? (
+    <SystemLogo name={logo} className={className} />
   ) : (
     <MonitorIcon className={className} />
   )
