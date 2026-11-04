@@ -19,6 +19,7 @@ import { ToolGroup } from './entries/tool-group'
 import { JumpToLatest } from './jump-to-latest'
 import { MessageOutline } from './outline/message-outline'
 import { hoverReply } from './reply-hover'
+import { ReplyToSelection } from './reply-selection'
 import { SubSessionStart } from './subagent/sub-session-start'
 import { TurnStatus } from './turn-status'
 import {
@@ -275,6 +276,13 @@ export const Thread = memo(function Thread({
             })}
           </MessageScrollerContent>
         </MessageScrollerViewport>
+        <ReplyToSelection
+          key={sessionId}
+          sessionId={sessionId}
+          agentName={agentName}
+          content={content}
+          viewport={viewport}
+        />
         <JumpToLatest sessionId={sessionId} working={working} />
         <OlderLoading sessionId={sessionId} />
         <MessageOutline sessionId={sessionId} viewport={viewport} content={content} jumps={jumps} />

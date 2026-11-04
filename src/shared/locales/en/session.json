@@ -561,5 +561,11 @@
     "answeredOne": "Answered",
     "skipped": "Skipped",
     "secret": "Not shown"
+  },
+  "reply": {
+    "button": "Reply",
+    "placeholder": "Reply to {{agent}}…",
+    "send": "Send reply",
+    "quote": "Quoted text"
   }
 }
