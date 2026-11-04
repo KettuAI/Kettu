@@ -540,21 +540,20 @@ function OpenInEditor({ path }: { path: string }) {
         ) : (
           list.editors.map((editor) => (
             <DropdownMenuItem key={editor.id} onClick={() => open(editor.id)}>
-              <span className="grid w-4 shrink-0 place-items-center">
-                {editor.id === current?.id && <CheckIcon strokeWidth={2} className="size-3!" />}
-              </span>
               {editor.icon ? (
                 <img src={editor.icon} alt="" className="size-4 shrink-0" draggable={false} />
               ) : (
                 <AppWindowIcon />
               )}
               <span className="min-w-0 truncate">{editor.name}</span>
+              {editor.id === current?.id && (
+                <CheckIcon strokeWidth={1.6} className="ml-auto size-3" />
+              )}
             </DropdownMenuItem>
           ))
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={choose}>
-          <span className="w-4 shrink-0" />
           <FolderIcon />
           {t('row.chooseApp')}
         </DropdownMenuItem>
