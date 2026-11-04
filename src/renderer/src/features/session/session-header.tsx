@@ -96,8 +96,9 @@ export function SessionHeader({
   return (
     <TopBar cornered={pane?.cornered}>
       {/* The title gives way before the git chips (see SessionGitChips). What is left once the
-          title reaches its least width is cut at the group's edge, not under the tools. */}
-      <NoDrag className="min-w-0 gap-0.5 overflow-clip">
+          title reaches its least width is cut at the group's edge, not under the tools. Only the
+          sides are cut, so the rename field's ring is not clipped above and below. */}
+      <NoDrag className="min-w-0 gap-0.5 overflow-x-clip">
         {routine && summary.routine && (
           <>
             <Button
