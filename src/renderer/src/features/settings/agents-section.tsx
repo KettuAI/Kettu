@@ -227,7 +227,7 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
       item={status.id}
       label={status.name}
       onOpen={() => openAgentSettings(status.id)}
-      tile={<AgentTile agent={status.id} size={30} glyph={16} dot={dot} />}
+      tile={<AgentTile agent={status.id} size={30} dot={dot} />}
       name={
         <>
           <span className="truncate font-medium">{status.name}</span>
@@ -735,7 +735,7 @@ function AgentPageHeader({ status, actions }: { status: AgentStatus | null; acti
       back={t('sections.agents')}
       onBack={() => openAgentSettings(null)}
       item={status?.id ?? 'agent'}
-      icon={status && <AgentTile agent={status.id} size={40} glyph={22} dot={dot} />}
+      icon={status && <AgentTile agent={status.id} size={40} dot={dot} />}
       title={status?.name ?? null}
       subtitle={status && <AgentSubtitle status={status} />}
       actions={actions}

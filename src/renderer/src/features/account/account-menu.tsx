@@ -52,7 +52,7 @@ import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { openSettings, showShortcuts, THIS_COMPUTER, useViewStore } from '@renderer/stores/view'
-import { HarnessTile } from '@renderer/features/updates/update-parts'
+import { AgentTile } from '@renderer/components/agents/agent-mark'
 import { AccountAvatar, IdentityName, SettingsGlyph } from './avatar'
 import { chosenHost, limitRows, systemName, type Identity } from './model'
 import { useThisComputerName } from './use-account'
@@ -336,7 +336,7 @@ function PlanLimits() {
         <div className="px-2 pb-1">
           {rows.map((row) => (
             <div key={row.agentId} className="flex h-6.5 items-center gap-2">
-              <HarnessTile agentId={row.agentId} size={14} />
+              <AgentTile agent={row.agentId} size={18} />
               <span className="min-w-0 flex-1 truncate text-hint text-secondary">{row.label}</span>
               <span
                 aria-hidden

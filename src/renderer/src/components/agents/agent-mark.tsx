@@ -25,16 +25,22 @@ function useAgentDot(agent: AgentId, hostId: string | null | undefined): AgentCo
   return useAgentsStore((s) => agentsOn(s, host).byId[agent]?.color ?? null)
 }
 
-/**
- * The 7 px dot at the bottom right that tells an added agent from its harness's default. Its ring
- * is the color behind the mark: the surface unless an ancestor sets `--agent-dot-ring`.
- */
-function AgentDot({ color }: { color: AgentColor }) {
+/** The ring matches the surface unless an ancestor sets `--agent-dot-ring`. */
+function AgentDot({ color, size }: { color: AgentColor; size: number }) {
+  const diameter = Math.max(3, Math.min(7, Math.round(size / 4)))
+  const ring = Math.min(1.5, diameter / 4)
   return (
     <span
       aria-hidden
-      style={{ backgroundColor: `var(--agent-${color})` }}
-      className="absolute -right-0.5 -bottom-0.5 size-1.75 rounded-full shadow-[0_0_0_1.5px_var(--agent-dot-ring,var(--bg-surface))]"
+      style={{
+        backgroundColor: `var(--agent-${color})`,
+        width: diameter,
+        height: diameter,
+        right: -ring,
+        bottom: -ring,
+        boxShadow: `0 0 0 ${ring}px var(--agent-dot-ring,var(--bg-surface))`,
+      }}
+      className="absolute rounded-full"
     />
   )
 }
@@ -69,24 +75,22 @@ export function AgentMark({
   return (
     <span aria-hidden className={cn('relative block shrink-0', className)}>
       {mark}
-      <AgentDot color={color} />
+      <AgentDot color={color} size={size} />
     </span>
   )
 }
 
-/** The mark on a 32 px tile, for agent cards. */
+/** A flat avatar with consistent mark and dot proportions across sizes. */
 export function AgentTile({
   agent,
   mono,
   size = 32,
-  glyph = 17,
   hostId,
   dot,
 }: {
   agent: AgentId
   mono?: boolean
   size?: number
-  glyph?: number
   hostId?: string | null
   dot?: AgentColor | null
 }) {
@@ -96,10 +100,10 @@ export function AgentTile({
     <span
       aria-hidden
       style={{ width: size, height: size }}
-      className="relative grid shrink-0 place-items-center rounded-lg bg-tile text-icon shadow-[inset_0_0_var(--hairline)_var(--border-subtle)]"
+      className="relative grid shrink-0 place-items-center text-icon"
     >
-      <AgentMark agent={agent} size={glyph} mono={mono} dot={null} />
-      {color && <AgentDot color={color} />}
+      <AgentMark agent={agent} size={Math.round(size * 0.75)} mono={mono} dot={null} />
+      {color && <AgentDot color={color} size={size} />}
     </span>
   )
 }

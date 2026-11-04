@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { HARNESS_IDS } from '@shared/agents'
 import type { AgentColor } from '@shared/settings'
-import { AgentMark } from './agent-mark'
+import { AgentMark, AgentTile } from './agent-mark'
 import { AgentMarkHost } from './agent-mark-host'
 
 // Server rendering reads no store, so the test hands over the statuses each host reports.
@@ -17,6 +17,33 @@ vi.mock('@renderer/stores/agents', () => ({
   agentsOn: (s: typeof stores, hostId: string | null) =>
     hostId === null ? s.local : (s.hosts[hostId] ?? { byId: {} }),
 }))
+
+describe('agent avatars', () => {
+  it.each([14, 18, 30, 40])('keeps the color dot proportional at %d px', (size) => {
+    const html = renderToStaticMarkup(
+      createElement(AgentMark, { agent: 'codex~work', size, dot: 'rose' }),
+    )
+    const dot = html.match(/<span[^>]*style="([^"]*--agent-rose[^"]*)"/)?.[1] ?? ''
+    const width = Number.parseFloat(dot.match(/(?:^|;)width:([\d.]+)px/)?.[1] ?? '')
+    const ring = Number.parseFloat(dot.match(/box-shadow:0 0 0 ([\d.]+)px/)?.[1] ?? '')
+    expect(width).toBeGreaterThanOrEqual(3)
+    expect(width).toBeLessThanOrEqual(size / 3)
+    expect(ring).toBeGreaterThan(0)
+    expect(ring).toBeLessThanOrEqual(width / 3)
+  })
+
+  it.each([18, 30, 40])('draws a flat avatar with a readable mark at %d px', (size) => {
+    const html = renderToStaticMarkup(
+      createElement(AgentTile, { agent: 'codex~work', size, dot: 'rose' }),
+    )
+    const root = html.slice(0, html.indexOf('>'))
+    const glyph = Number(html.match(/<svg width="(\d+)"/)?.[1])
+    expect(root).not.toMatch(/\b(?:bg-|shadow-|border-)/)
+    expect(glyph).toBeGreaterThanOrEqual(size * 0.7)
+    expect(glyph).toBeLessThanOrEqual(size * 0.8)
+    expect(html.match(/var\(--agent-rose\)/g)).toHaveLength(1)
+  })
+})
 
 describe('AgentMark', () => {
   it('draws an added agent with its harness mark', () => {
