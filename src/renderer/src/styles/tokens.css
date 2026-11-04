@@ -10,7 +10,7 @@
 
   /* The desk is the window behind everything; the main column and the panes are sheets on it. */
   --bg-app: #ffffff;
-  --bg-sidebar: #f1f3f6;
+  --bg-sidebar: #f5f5f5;
   --bg-surface: #ffffff;
   --bg-subtle: #f2f4f7;
   /* A system notification in Settings › Notifications, as the menu bar draws one. */
