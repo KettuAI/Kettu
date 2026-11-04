@@ -50,6 +50,8 @@ export interface BinaryInstalls {
   winget?: string
   /** The npm package, installed globally. */
   npm?: string
+  /** The npm route skips the package's install scripts, as the vendor's own command does. */
+  ignoreScripts?: true
   archive?: ArchiveRelease
   /** The routes in the vendor's order, the recommended first; archive, Homebrew, script, npm otherwise. */
   order?: AgentInstallMethod['id'][]
@@ -222,7 +224,12 @@ export async function installPlans(
     })
   }
   if (installs.npm) {
-    const npmArgs = ['install', '-g', installs.npm]
+    const npmArgs = [
+      'install',
+      '-g',
+      ...(installs.ignoreScripts ? ['--ignore-scripts'] : []),
+      installs.npm,
+    ]
     const command = formatCommand({ command: 'npm', args: npmArgs }, platform)
     plans.push({
       id: 'npm',
@@ -347,7 +354,12 @@ export async function updatePlan(
     }
     case 'npm': {
       if (!installs.npm) return null
-      const args = ['install', '-g', `${installs.npm}@latest`]
+      const args = [
+        'install',
+        '-g',
+        ...(installs.ignoreScripts ? ['--ignore-scripts'] : []),
+        `${installs.npm}@latest`,
+      ]
       return {
         command: formatCommand({ command: 'npm', args }, platform),
         run: ctx.npm ? { program: ctx.npm, args: [...args, ...NPM_GLOBAL_FLAGS] } : null,

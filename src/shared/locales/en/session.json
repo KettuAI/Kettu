@@ -308,7 +308,7 @@
       "signIn": "Sign in",
       "window": "{{limit}} {{used}}",
       "windowResets": "{{limit}} {{used}} · resets in {{left}}",
-      "setsUpLong": "{{agent}} sets up on first use: Kettu installs its adapter, and downloads {{agent}} too if the adapter does not accept the version of your {{command}}.",
+      "setsUpLong": "{{agent}} sets up on first use: Kettu installs its adapter, which runs your {{command}}.",
       "setsUpLongSdk": "{{agent}} sets up on first use: Kettu installs its SDK, and downloads {{agent}} too if the SDK does not accept the version of your {{command}}.",
       "install": "Install…",
       "failedLong": "{{agent}} failed to start.",
