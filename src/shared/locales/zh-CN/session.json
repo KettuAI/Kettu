@@ -200,14 +200,6 @@
     "forkBetweenTurns": "仅在两轮对话之间可分叉",
     "forkNotReady": "会话就绪后才能分叉"
   },
-  "worked": {
-    "for": "工作了 {{duration}}",
-    "untimed": "工作过程",
-    "read_other": "读了 {{count}} 个文件",
-    "edited_other": "改了 {{count}} 个文件",
-    "editedAfter": "改了 {{count}} 个",
-    "both": "{{read}}，{{edited}}"
-  },
   "changes": {
     "label": "改动",
     "files_other": "{{count}} 个文件有改动",

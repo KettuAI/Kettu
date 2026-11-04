@@ -135,6 +135,8 @@ export type RunStep =
       /** An edit's diffs, which tell a created file and give the stats. */
       diffs?: Diff[]
       description?: string
+      /** The agent's own name for the work this call is part of. */
+      label?: string
     }
   | { kind: 'plan' }
   | { kind: 'compaction'; running: boolean }
@@ -142,7 +144,10 @@ export type RunStep =
 /** A tool call as a step of a folded run. */
 export function toolStep(entry: ToolEntry): RunStep {
   const base = { kind: 'tool' as const, toolKind: entry.toolKind, status: entry.status }
-  const description = entry.description !== undefined ? { description: entry.description } : {}
+  const description = {
+    ...(entry.description !== undefined ? { description: entry.description } : {}),
+    ...(entry.label !== undefined ? { label: entry.label } : {}),
+  }
   if (entry.toolKind !== 'edit') {
     const first = entry.locations[0]?.path
     return { ...base, paths: first !== undefined ? [first] : [], ...description }
@@ -156,6 +161,8 @@ export function toolStep(entry: ToolEntry): RunStep {
 /** A part of a fold line, with the diffs whose stats follow it. */
 export interface SummaryPart {
   text: string
+  /** What the part counts: a tool kind, a thought, a plan. */
+  kind?: RunPart
   /** The file names inside `text`, which the fold line sets apart. */
   names?: string
   diffs?: Diff[]
@@ -222,10 +229,54 @@ function filesText(part: FilePart, paths: (string | undefined)[]): SummaryPart {
   return { text, names }
 }
 
+/** What a kind's units add to a fold line: its words, without the kind they stand for. */
+function partsOf(part: RunPart, units: Unit[]): Omit<SummaryPart, 'kind'>[] {
+  const n = units.length
+  switch (part) {
+    case 'thought': {
+      const ms = units.reduce(
+        (sum, u) => sum + (u.step.kind === 'thought' ? (u.step.durationMs ?? 0) : 0),
+        0,
+      )
+      return [
+        {
+          text:
+            ms >= 1000
+              ? i18n.t('session:summary.thoughtFor', { duration: duration(ms) })
+              : i18n.t('session:summary.thought'),
+        },
+      ]
+    }
+    case 'plan':
+      return [{ text: i18n.t('session:summary.plan') }]
+    case 'compaction':
+      return [{ text: i18n.t('session:summary.compaction') }]
+    case 'execute': {
+      const only = units[0]?.step
+      const description = n === 1 && only?.kind === 'tool' ? only.description : undefined
+      return [{ text: description ?? i18n.t('session:summary.execute', { count: n }) }]
+    }
+    case 'search':
+      return [{ text: i18n.t('session:summary.search', { count: n }) }]
+    case 'fetch':
+      return [{ text: i18n.t('session:summary.fetch', { count: n }) }]
+    case 'other':
+      return [{ text: i18n.t('session:summary.tool', { count: n }) }]
+    default: {
+      const files = filesText(
+        part,
+        units.map((u) => u.path),
+      )
+      if (part !== 'create' && part !== 'edit') return [files]
+      return [{ ...files, diffs: units.flatMap((u) => u.diffs ?? []) }]
+    }
+  }
+}
+
 /**
  * A folded run's summary, "Read README.md and 6 more · Created offload.py · Ran 5 commands": one
- * part per kind in the order it first appears, and a command's description after its part. Long
- * thoughts name a part only in a run of nothing else: "Thought for 25 s".
+ * part per kind in the order it first appears; a lone command is named by its description.
+ * Thoughts name a part only in a run of nothing else: "Thought for 25 s".
  */
 export function runSummary(steps: RunStep[]): {
   parts: SummaryPart[]
@@ -242,50 +293,9 @@ export function runSummary(steps: RunStep[]): {
     byPart.set(unit.part, [...(byPart.get(unit.part) ?? []), unit])
   }
   const named = byPart.size > 1 ? [...byPart].filter(([part]) => part !== 'thought') : [...byPart]
-  const parts = named.flatMap(([part, units]): SummaryPart[] => {
-    const n = units.length
-    switch (part) {
-      case 'thought': {
-        const ms = units.reduce(
-          (sum, u) => sum + (u.step.kind === 'thought' ? (u.step.durationMs ?? 0) : 0),
-          0,
-        )
-        return [
-          {
-            text:
-              ms >= 1000
-                ? i18n.t('session:summary.thoughtFor', { duration: duration(ms) })
-                : i18n.t('session:summary.thought'),
-          },
-        ]
-      }
-      case 'plan':
-        return [{ text: i18n.t('session:summary.plan') }]
-      case 'compaction':
-        return [{ text: i18n.t('session:summary.compaction') }]
-      case 'execute': {
-        const last = units.at(-1)?.step
-        const description = last?.kind === 'tool' ? last.description : undefined
-        if (n === 1 && description) return [{ text: description }]
-        const count = { text: i18n.t('session:summary.execute', { count: n }) }
-        return description ? [count, { text: description }] : [count]
-      }
-      case 'search':
-        return [{ text: i18n.t('session:summary.search', { count: n }) }]
-      case 'fetch':
-        return [{ text: i18n.t('session:summary.fetch', { count: n }) }]
-      case 'other':
-        return [{ text: i18n.t('session:summary.tool', { count: n }) }]
-      default: {
-        const files = filesText(
-          part,
-          units.map((u) => u.path),
-        )
-        if (part !== 'create' && part !== 'edit') return [files]
-        return [{ ...files, diffs: units.flatMap((u) => u.diffs ?? []) }]
-      }
-    }
-  })
+  const parts = named.flatMap(([part, units]): SummaryPart[] =>
+    partsOf(part, units).map((text) => ({ ...text, kind: part })),
+  )
   return {
     parts,
     failed: steps.filter((s) => s.kind === 'tool' && s.status === 'failed').length,
@@ -296,6 +306,22 @@ export function runSummary(steps: RunStep[]): {
       return s.status === 'pending' || s.status === 'in_progress'
     }),
   }
+}
+
+/** The names an agent gave the work of a run's tool calls, each once, in order. */
+export function runLabels(steps: RunStep[]): string[] {
+  const labels = new Set<string>()
+  for (const step of steps) if (step.kind === 'tool' && step.label) labels.add(step.label)
+  return [...labels]
+}
+
+/** A thought's heading: its leading bold text, else its first sentence, as plain text. */
+export function thoughtTitle(markdown: string): string | null {
+  const text = markdown.trim()
+  const bold = /^(?:\*\*|__)(.+?)(?:\*\*|__)/.exec(text)
+  const first = bold?.[1] ?? text.split('\n', 1)[0]!.split(/(?<=[.!?\u3002\uff01\uff1f])\s*/, 1)[0]!
+  const title = first.replace(/[*_`#>]/g, '').trim()
+  return title === '' ? null : title
 }
 
 export function stopReasonText(stopReason: StopReason, durationMs: number): string {

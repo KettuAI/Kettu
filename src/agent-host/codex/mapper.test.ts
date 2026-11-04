@@ -276,7 +276,67 @@ describe('other items', () => {
       ],
       ['item/reasoning/textDelta', { ...at, itemId: 'r', contentIndex: 0, delta: ' more raw' }],
     ])
-    expect(entries[0]).toMatchObject({ kind: 'thought', markdown: 'raw\n\n summary' })
+    expect(entries).toMatchObject([
+      { kind: 'thought', markdown: 'raw' },
+      { kind: 'thought', markdown: ' summary' },
+    ])
+  })
+
+  it('keeps each reasoning summary part as a thought of its own', () => {
+    const part = (index: number): [string, unknown] => [
+      'item/reasoning/summaryPartAdded',
+      { ...at, itemId: 'r', summaryIndex: index },
+    ]
+    const delta = (index: number, text: string): [string, unknown] => [
+      'item/reasoning/summaryTextDelta',
+      { ...at, itemId: 'r', summaryIndex: index, delta: text },
+    ]
+    const summary = ['**Verifying shared top bar**', '**Locating artifact import contract**']
+    const { entries } = run([
+      started({ type: 'reasoning', id: 'r', summary: [], content: [] }),
+      part(0),
+      delta(0, summary[0]!),
+      part(1),
+      delta(1, summary[1]!),
+      completed({ type: 'reasoning', id: 'r', summary, content: [] }),
+    ])
+    expect(entries).toMatchObject([
+      { kind: 'thought', id: 'm:r', markdown: summary[0], streaming: false },
+      { kind: 'thought', id: 'm:r#part1', markdown: summary[1], streaming: false },
+    ])
+  })
+
+  it('starts a new thought at each part Codex announces, even under one index', () => {
+    const part: [string, unknown] = [
+      'item/reasoning/summaryPartAdded',
+      { ...at, itemId: 'r', summaryIndex: 0 },
+    ]
+    const delta = (text: string): [string, unknown] => [
+      'item/reasoning/summaryTextDelta',
+      { ...at, itemId: 'r', summaryIndex: 0, delta: text },
+    ]
+    const { entries } = run([
+      started({ type: 'reasoning', id: 'r', summary: [], content: [] }),
+      part,
+      delta('**One**'),
+      part,
+      delta('**Two**'),
+    ])
+    expect(entries).toMatchObject([
+      { kind: 'thought', markdown: '**One**' },
+      { kind: 'thought', markdown: '**Two**' },
+    ])
+  })
+
+  it('replays a reasoning item as one thought per summary part', () => {
+    const { entries } = run(
+      [completed({ type: 'reasoning', id: 'r', summary: ['**One**', '', '**Two**'], content: [] })],
+      { replaying: true },
+    )
+    expect(entries).toMatchObject([
+      { kind: 'thought', id: 'm:r', markdown: '**One**', streaming: false },
+      { kind: 'thought', id: 'm:r#part1', markdown: '**Two**', streaming: false },
+    ])
   })
 
   it('shows no thought that stays empty', () => {

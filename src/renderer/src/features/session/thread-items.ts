@@ -1,10 +1,10 @@
 import type { ThreadEntry, ThreadState } from '@shared/thread'
 
 // One character per entry, so the thread re-renders only when its shape changes, not on every
-// streamed token: u user, s user message steered into a running turn, a agent, h thought shown in
-// place, r long thought, q short thought still streaming, g groupable lookup, t other tool, w tool
-// waiting for permission, p plan or compaction, c progress note, e turn end, o anything else,
-// which a new site's request and an agent's question are: of their own, never folded into a run.
+// streamed token: u user, s user message steered into a running turn, a agent, h thought, g
+// groupable lookup, t other tool, w tool waiting for permission, p plan or compaction, e turn end,
+// o anything else, which a new site's request and an agent's question are: of their own, never
+// folded into a run.
 export function signatureOf(state: ThreadState | null | undefined): string {
   if (!state) return ''
   let signature = ''
@@ -17,7 +17,7 @@ function charOf(entry: ThreadEntry | undefined): string {
   if (entry.kind === 'user') return entry.steered ? 's' : 'u'
   if (entry.kind === 'agent') return 'a'
   if (entry.kind === 'turn_end') return 'e'
-  if (entry.kind === 'thought') return longThought(entry) ? 'r' : entry.streaming ? 'q' : 'h'
+  if (entry.kind === 'thought') return 'h'
   if (entry.kind === 'plan' || entry.kind === 'compaction') return 'p'
   if (entry.kind !== 'tool' || entry.question !== undefined) return 'o'
   if (entry.permission) return 'w'
@@ -30,69 +30,16 @@ function charOf(entry: ThreadEntry | undefined): string {
   return 't'
 }
 
-/** A thought wider than this is raw reasoning, which folds into the run of work around it. */
-const LONG_THOUGHT = 300
-
-// Chinese, Japanese and Korean characters, which count two toward a thought's width.
-const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu
-
-// The signature is read on every update, and a changed entry is a new object, so each version of
-// a thought is measured once: scanning a long thread's Chinese thoughts each time took over 1 ms.
-const measured = new WeakMap<object, boolean>()
-
-/**
- * Whether a thought is wider than LONG_THOUGHT: the length of its trimmed Markdown, a Chinese,
- * Japanese or Korean character counting two. Only a length that could go either way is scanned
- * for those characters.
- */
-function longThought(thought: { markdown: string }): boolean {
-  if (thought.markdown.length <= LONG_THOUGHT / 2) return false
-  let long = measured.get(thought)
-  if (long === undefined) {
-    const text = thought.markdown.trim()
-    long =
-      text.length > LONG_THOUGHT ||
-      (text.length > LONG_THOUGHT / 2 &&
-        text.length + (text.match(CJK)?.length ?? 0) > LONG_THOUGHT)
-    measured.set(thought, long)
-  }
-  return long
-}
-
-/** Work after a message makes that message a progress note. Thoughts count as work here. */
+/** Work, as opposed to what an agent says: what a reply's answer comes after. */
 const isWork = (char: string | undefined): boolean =>
-  char === 'h' ||
-  char === 'r' ||
-  char === 'q' ||
-  char === 'g' ||
-  char === 't' ||
-  char === 'w' ||
-  char === 'p'
+  char === 'h' || char === 'g' || char === 't' || char === 'w' || char === 'p'
 
 /**
- * Tool calls, plans, compactions and long thoughts fold into a run; other thoughts end it, and so
- * does a request for permission, which waits for the user below the work before it.
+ * Tool calls, plans, compactions and thoughts fold into a run; a request for permission ends it,
+ * since it waits for the user below the work before it.
  */
 const foldsIntoRun = (char: string | undefined): boolean =>
-  char === 'r' || char === 'g' || char === 't' || char === 'p'
-
-/**
- * Marks progress notes as c: an agent message that more work in its turn follows, as Codex's
- * commentary, which it writes before its tool calls and never after its final answer. In the turn
- * still running, the latest message may be the answer, so it stays one until work follows it.
- */
-function markNotes(signature: string): string {
-  const chars = [...signature]
-  const starts = [0]
-  for (let i = 1; i < chars.length; i++) if (chars[i] === 'u') starts.push(i)
-  starts.forEach((start, n) => {
-    const end = starts[n + 1] ?? chars.length
-    let workEnd = end
-    while (workEnd > start && !isWork(chars[workEnd - 1])) workEnd--
-    for (let i = start; i < workEnd; i++) if (chars[i] === 'a') chars[i] = 'c'
-  })
-  return chars.join('')
-}
+  char === 'h' || char === 'g' || char === 't' || char === 'p'
 
 /** A step on its own, or a run of completed lookups ("Read a.ts and 2 more"). */
 export type Step =
@@ -104,12 +51,12 @@ export type Item =
       type: 'entry'
       id: string
       turnStart: boolean
-      note: boolean
       /** Its character in the signature. */
       char: string
     }
   | { key: string; type: 'group'; ids: string[] }
-  // The work between messages, two or more steps or a lone tool call, folded into one line.
+  // The work between messages, two or more steps or a lone tool call or thought, folded into one
+  // line.
   | { key: string; type: 'run'; ids: string[]; signature: string }
   // The actions under a turn's reply, with its turn-end marker when it has one, and the turn's
   // tool calls, whose edits it lists.
@@ -121,39 +68,18 @@ export type Item =
       latest: boolean
       toolIds: string[]
     }
-  // A finished turn's work before its answer, folded into one row unless it is open.
-  | {
-      key: string
-      type: 'worked'
-      toolIds: string[]
-      endId: string | null
-      open: boolean
-    }
   // The running turn's status, where the reply will start: right after a message you sent.
   | { key: string; type: 'status'; afterSent: boolean }
 
 /**
  * The thread's items. Work folds as it happens, so a running turn already reads as it will once it
- * ends. With `live`, a turn is running and gets its reply footer only when it ends. With `notes`,
- * the agent's messages that more work follows are progress notes and show between the runs. With
- * `open`, each finished turn's work before its answer folds into one row, which shows the work
- * when its key is in `open`.
+ * ends: the same rows with the same keys, and a turn ending only adds its reply footer. With
+ * `live`, a turn is running and gets its reply footer only when it ends.
  */
-export function buildItems(
-  order: string[],
-  shape: string,
-  live = false,
-  notes = false,
-  open: ReadonlySet<string> | null = null,
-): Item[] {
-  const signature = notes ? markNotes(shape) : shape
+export function buildItems(order: string[], signature: string, live = false): Item[] {
   const items: Item[] = []
   const { replacing, after } = replyFooters(order, signature, live)
-  const { rows, hidden } = open ? turnFolds(order, signature, live, open) : NO_FOLDS
   for (let i = 0; i < order.length; i++) {
-    const row = rows.get(i)
-    if (row) items.push(row)
-    if (hidden.has(i)) continue
     const footer = replacing.get(i)
     if (footer) {
       items.push(footer)
@@ -163,10 +89,10 @@ export function buildItems(
       let end = i
       while (foldsIntoRun(signature[end + 1])) end++
       const ids = order.slice(i, end + 1)
-      // A lone tool call or long thought folds too, so every piece of work reads as one quiet
-      // line; a plan or compaction shows as it is.
+      // A lone tool call or thought folds too, so every piece of work reads as one quiet line; a
+      // plan or compaction shows as it is.
       const lone =
-        end === i && (signature[i] === 'g' || signature[i] === 't' || signature[i] === 'r')
+        end === i && (signature[i] === 'g' || signature[i] === 't' || signature[i] === 'h')
       if (end > i || lone) {
         items.push({
           key: `run:${ids[0]}`,
@@ -177,9 +103,7 @@ export function buildItems(
       } else {
         for (const step of stepItems(ids, signature.slice(i, end + 1))) {
           items.push(
-            step.type === 'group'
-              ? step
-              : { ...step, turnStart: false, note: false, char: signature[i]! },
+            step.type === 'group' ? step : { ...step, turnStart: false, char: signature[i]! },
           )
         }
       }
@@ -188,18 +112,14 @@ export function buildItems(
       if (closing) items.push(closing)
       continue
     }
-    // A short thought shows once it closes, so none shows in place and then moves into a run.
-    if (signature[i] !== 'q') {
-      const id = order[i]!
-      items.push({
-        key: id,
-        type: 'entry',
-        id,
-        turnStart: signature[i] === 'u',
-        note: signature[i] === 'c',
-        char: signature[i] ?? 'o',
-      })
-    }
+    const id = order[i]!
+    items.push({
+      key: id,
+      type: 'entry',
+      id,
+      turnStart: signature[i] === 'u',
+      char: signature[i] ?? 'o',
+    })
     const closing = after.get(i)
     if (closing) items.push(closing)
   }
@@ -217,59 +137,6 @@ function turnsOf(signature: string): [number, number][] {
   return starts.map((start, n) => [start, starts[n + 1] ?? signature.length])
 }
 
-type Folds = { rows: Map<number, Item>; hidden: Set<number> }
-
-const NO_FOLDS: Folds = { rows: new Map(), hidden: new Set() }
-
-/**
- * What a finished turn's row folds: its work, thoughts and the agent's messages. A message you
- * steered in, a card, a notice or anything else of its own stays in view, which also keeps every
- * message the outline jumps to out of a fold.
- */
-const foldsIntoTurn = (char: string | undefined): boolean =>
-  char !== undefined && char !== 'o' && char !== 's' && char !== 'u'
-
-/**
- * Each finished turn's folded row, by the index it goes before, and the indexes it hides while
- * closed: what folds between the user message and the answer, the turn's last run of messages;
- * the rest shows under the row. A turn with nothing to fold, or no answer, has no row; the
- * running turn shows as it is.
- */
-function turnFolds(
-  order: string[],
-  signature: string,
-  live: boolean,
-  open: ReadonlySet<string>,
-): Folds {
-  const folds: Folds = { rows: new Map(), hidden: new Set() }
-  for (const [start, end] of turnsOf(signature)) {
-    if (signature[start] !== 'u' || (live && end === signature.length)) continue
-    let answer = signature.lastIndexOf('a', end - 1)
-    if (answer <= start) continue
-    while (signature[answer - 1] === 'a') answer--
-    const folded: number[] = []
-    for (let i = start + 1; i < answer; i++) if (foldsIntoTurn(signature[i])) folded.push(i)
-    if (folded.length === 0) continue
-    const key = `worked:${order[start]}`
-    const toolIds: string[] = []
-    let endId: string | null = null
-    for (let i = start; i < end; i++) {
-      if (isTool(signature[i])) toolIds.push(order[i]!)
-      else if (signature[i] === 'e') endId = order[i]!
-    }
-    const shut = !open.has(key)
-    folds.rows.set(start + 1, {
-      key,
-      type: 'worked',
-      toolIds,
-      endId,
-      open: !shut,
-    })
-    if (shut) for (const i of folded) folds.hidden.add(i)
-  }
-  return folds
-}
-
 /** The item before the status: a message you sent, steered or not, sets its gap. */
 function sentItem(item: Item | undefined): boolean {
   return item?.type === 'entry' && (item.char === 'u' || item.char === 's')
@@ -284,7 +151,7 @@ export type Estimate = 16 | 18 | 20 | 24 | 28 | 37 | 69
  * never takes more room than it will.
  */
 export function estimateOf(item: Item): Estimate {
-  if (item.type === 'run' || item.type === 'worked') return 28
+  if (item.type === 'run') return 28
   if (item.type === 'group' || item.type === 'reply' || item.type === 'status') return 24
   switch (item.char) {
     // One line of bubble, whose actions sit beside it.
@@ -295,12 +162,6 @@ export function estimateOf(item: Item): Estimate {
       return 69
     case 'a':
       return 20
-    // A progress note is muted like a thought, in the same smaller type.
-    case 'c':
-    case 'h':
-    case 'r':
-    case 'q':
-      return 18
     case 'g':
     case 't':
     case 'w':
@@ -342,7 +203,8 @@ export function replyKeys(items: Item[]): (string | null)[] {
 /**
  * One footer per turn with a message, a turn running from a user message to the next. It takes
  * the place of the turn's end marker, or closes a turn from history that has none; the turn still
- * running gets its footer when it ends.
+ * running gets its footer when it ends. Its messages are the answer, those after the turn's last
+ * work, or all of them when the turn ended on work.
  */
 function replyFooters(
   order: string[],
@@ -353,19 +215,24 @@ function replyFooters(
   const after = new Map<number, Item>()
   for (const [start, end] of turnsOf(signature)) {
     const latest = end === signature.length
-    const agentIds: string[] = []
+    const messageIds: string[] = []
+    const answerIds: string[] = []
     const toolIds: string[] = []
     let endAt = -1
+    let lastWork = -1
+    for (let i = start; i < end; i++) if (isWork(signature[i])) lastWork = i
     for (let i = start; i < end; i++) {
-      if (signature[i] === 'a') agentIds.push(order[i]!)
-      else if (signature[i] === 'e') endAt = i
+      if (signature[i] === 'a') {
+        messageIds.push(order[i]!)
+        if (i > lastWork) answerIds.push(order[i]!)
+      } else if (signature[i] === 'e') endAt = i
       else if (isTool(signature[i])) toolIds.push(order[i]!)
     }
-    if (agentIds.length === 0 || (latest && live && endAt === -1)) continue
+    if (messageIds.length === 0 || (latest && live && endAt === -1)) continue
     const footer: Item = {
       key: `reply:${order[start]}`,
       type: 'reply',
-      agentIds,
+      agentIds: answerIds.length > 0 ? answerIds : messageIds,
       endId: endAt === -1 ? null : order[endAt]!,
       latest,
       toolIds,

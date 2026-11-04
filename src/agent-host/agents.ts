@@ -3080,7 +3080,6 @@ export class AgentManager {
         context: this.hasContext(slot.id),
         liveContext: this.driver(slot).reads?.context === true,
         account: slot.def.id === 'opencode' || (slot.def.reportsAccount ?? false),
-        progressNotes: slot.def.progressNotes ?? false,
         mcpHttp: capabilities?.mcpHttp ?? null,
         prompt: capabilities?.prompt ?? null,
       },

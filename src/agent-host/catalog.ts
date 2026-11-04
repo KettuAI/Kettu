@@ -139,11 +139,6 @@ export interface AgentDefinition {
   /** Pushes `_auth/status_update` as it starts, naming its account. */
   reportsAccount?: boolean
   /**
-   * Writes progress notes as messages before its tool calls, Codex's commentary, which the thread
-   * tells by the work that follows.
-   */
-  progressNotes?: boolean
-  /**
    * Keeps MCP servers by name for each folder rather than each session, and names the session on
    * each tool call, so the artifacts service gives its process one token per folder.
    */

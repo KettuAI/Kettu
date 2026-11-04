@@ -223,12 +223,21 @@ export function childThreads(item: ThreadItem): string[] {
   return []
 }
 
+/** The thoughts one reasoning item made, in order. */
+interface ReasoningParts {
+  ids: string[]
+  /** The part that streams now, as `s<summaryIndex>` or `c<contentIndex>`. */
+  key: string | null
+  /** Codex announced a new part that has no text yet. */
+  announced: boolean
+}
+
 /** One Codex thread's mapper: what Kettu shows of its items, live and replayed. */
 export class ThreadMapper {
   /** What each running command printed so far. */
   private readonly outputs = new Map<string, string>()
-  /** The part of a thought that streams now, by the thought's item id. */
-  private readonly parts = new Map<string, string>()
+  /** The thoughts each reasoning item made so far, one per part, by the item's id. */
+  private readonly reasoningParts = new Map<string, ReasoningParts>()
   /** Thoughts with a summary, whose raw reasoning is not shown beside it. */
   private readonly summarized = new Set<string>()
 
@@ -248,7 +257,7 @@ export class ThreadMapper {
         this.appendMessage(ctx, out, p.itemId as string, p.delta as string)
         break
       case 'item/reasoning/summaryPartAdded':
-        this.startPart(p.itemId as string, `s${p.summaryIndex as number}`)
+        this.partsOf(p.itemId as string).announced = true
         this.summarized.add(p.itemId as string)
         break
       case 'item/reasoning/summaryTextDelta':
@@ -492,53 +501,95 @@ export class ThreadMapper {
     item: Item<'reasoning'>,
     done: boolean,
   ): void {
-    const id = messageEntryId(ctx, 'thought', item.id)!
-    const existing = ctx.thread.byId[id]
-    const text = (item.summary.length > 0 ? item.summary : item.content).join('\n\n')
-    if (existing?.kind === 'thought') {
+    const texts = (item.summary.length > 0 ? item.summary : item.content).filter((t) => t !== '')
+    const state = this.reasoningParts.get(item.id)
+    if (state && state.ids.length > 0) {
       if (!done) return
-      const startedAt = ctx.scope.thoughts.get(id)
-      ctx.scope.thoughts.delete(id)
-      const changes: EntryChanges = { streaming: false }
-      if (text !== '' && existing.markdown !== text) Object.assign(changes, { markdown: text })
-      if (startedAt !== undefined) {
-        Object.assign(changes, { durationMs: Math.max(0, ctx.now - startedAt) })
+      this.closePart(ctx, out, state.ids[state.ids.length - 1]!)
+      if (texts.length === state.ids.length) {
+        texts.forEach((text, i) => {
+          const id = state.ids[i]!
+          const existing = ctx.thread.byId[id]
+          if (existing?.kind === 'thought' && existing.markdown !== text) {
+            out.patches.push({ op: 'entry.update', id, changes: { markdown: text } })
+          }
+        })
       }
-      out.patches.push({ op: 'entry.update', id, changes })
-      this.parts.delete(item.id)
-      this.summarized.delete(item.id)
-      return
+    } else {
+      // Not streamed here: a replay, or an item that started with its text. Codex starts some
+      // that stay empty, and a thought shows once it has text.
+      const streaming = !ctx.replaying && !done
+      const ids: string[] = []
+      texts.forEach((text, i) => {
+        const id = this.partId(ctx, item.id, i)
+        ids.push(id)
+        const existing = ctx.thread.byId[id]
+        if (existing?.kind === 'thought') {
+          if (!done) return
+          const changes: EntryChanges = { streaming: false }
+          if (existing.markdown !== text) Object.assign(changes, { markdown: text })
+          out.patches.push({ op: 'entry.update', id, changes })
+          return
+        }
+        addEntry(ctx, out, { kind: 'thought', id, markdown: text, streaming })
+        if (streaming) ctx.scope.thoughts.set(id, ctx.now)
+      })
+      if (!done && ids.length > 0) {
+        this.reasoningParts.set(item.id, { ids, key: null, announced: false })
+        return
+      }
     }
-    // A thought shows once it has text: Codex starts some that stay empty.
-    if (text === '') return
-    const streaming = !ctx.replaying && !done
-    addEntry(ctx, out, { kind: 'thought', id, markdown: text, streaming })
-    if (streaming) ctx.scope.thoughts.set(id, ctx.now)
+    this.reasoningParts.delete(item.id)
+    this.summarized.delete(item.id)
   }
 
-  private startPart(itemId: string, part: string): void {
-    if (!this.parts.has(itemId)) this.parts.set(itemId, part)
+  private partsOf(itemId: string): ReasoningParts {
+    let state = this.reasoningParts.get(itemId)
+    if (!state) {
+      state = { ids: [], key: null, announced: false }
+      this.reasoningParts.set(itemId, state)
+    }
+    return state
   }
 
+  /** The first part keeps the item's entry id, so a thought of one part keeps the id it always had. */
+  private partId(ctx: MapperContext, itemId: string, n: number): string {
+    const base = messageEntryId(ctx, 'thought', itemId)!
+    return n === 0 ? base : `${base}#part${n}`
+  }
+
+  private closePart(ctx: MapperContext, out: MapperOutput, id: string): void {
+    const startedAt = ctx.scope.thoughts.get(id)
+    ctx.scope.thoughts.delete(id)
+    const changes: EntryChanges = { streaming: false }
+    if (startedAt !== undefined) {
+      Object.assign(changes, { durationMs: Math.max(0, ctx.now - startedAt) })
+    }
+    out.patches.push({ op: 'entry.update', id, changes })
+  }
+
+  /** Text of the part `key` names: it goes to the thought of that part, or starts one. */
   private appendThought(
     ctx: MapperContext,
     out: MapperOutput,
     itemId: string,
-    part: string,
+    key: string,
     delta: unknown,
   ): void {
     if (typeof delta !== 'string' || delta === '') return
-    const id = messageEntryId(ctx, 'thought', itemId)!
-    const existing = ctx.thread.byId[id]
-    const previous = this.parts.get(itemId)
-    this.parts.set(itemId, part)
-    if (existing?.kind !== 'thought') {
-      addEntry(ctx, out, { kind: 'thought', id, markdown: delta, streaming: !ctx.replaying })
-      if (!ctx.replaying) ctx.scope.thoughts.set(id, ctx.now)
+    const state = this.partsOf(itemId)
+    const last = state.ids[state.ids.length - 1]
+    if (last !== undefined && !state.announced && state.key === key) {
+      out.patches.push({ op: 'entry.appendText', id: last, text: delta })
       return
     }
-    const gap = previous !== undefined && previous !== part && existing.markdown !== ''
-    out.patches.push({ op: 'entry.appendText', id, text: gap ? `\n\n${delta}` : delta })
+    if (last !== undefined) this.closePart(ctx, out, last)
+    const id = this.partId(ctx, itemId, state.ids.length)
+    state.ids.push(id)
+    state.key = key
+    state.announced = false
+    addEntry(ctx, out, { kind: 'thought', id, markdown: delta, streaming: !ctx.replaying })
+    if (!ctx.replaying) ctx.scope.thoughts.set(id, ctx.now)
   }
 
   private command(

@@ -784,7 +784,12 @@ export class ClaudeConnection implements AgentConnection {
     )
     const queryOptions: QueryOptions = {
       cwd,
-      env: { ...this.env, CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: '1' },
+      env: {
+        ...this.env,
+        CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: '1',
+        // Without it Claude Code sends no summary of its tool calls.
+        CLAUDE_CODE_EMIT_TOOL_USE_SUMMARIES: '1',
+      },
       pathToClaudeCodeExecutable: this.requireCli(),
       spawnClaudeCodeProcess: (spawn) => {
         const child = this.context.spawn({

@@ -231,6 +231,13 @@ export interface SystemMessage {
   [key: string]: unknown
 }
 
+export interface ToolUseSummaryMessage {
+  type: 'tool_use_summary'
+  summary: string
+  preceding_tool_use_ids: string[]
+  session_id: string
+}
+
 export interface RateLimitEvent {
   type: 'rate_limit_event'
   rate_limit_info: unknown
@@ -244,6 +251,7 @@ export type SdkMessage =
   | StreamEvent
   | SystemMessage
   | RateLimitEvent
+  | ToolUseSummaryMessage
   | { type: string; subtype?: string; session_id?: string }
 
 export interface ModelInfo {

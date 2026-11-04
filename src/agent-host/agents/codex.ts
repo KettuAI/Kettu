@@ -21,7 +21,6 @@ export const CODEX: AgentDefinition = {
     order: ['script', 'brew', 'npm'],
   },
   reportsAccount: true,
-  progressNotes: true,
   cli: CODEX_CLI,
   configVariable: CONFIG_VARIABLES.codex,
   mcpConfig: { project: '.codex/config.toml', listCommand: '/mcp' },
