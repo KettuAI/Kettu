@@ -1,11 +1,12 @@
 // The `kettu-artifact` protocol: each artifact on an origin of its own, the files of its versions
 // from the store and nothing else.
 
+import { createReadStream } from 'node:fs'
 import { open, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import type { CustomScheme, Session } from 'electron'
-import { artifactFileType, isHtmlPath } from '@shared/artifact-files'
+import { ARTIFACT_ENTRY, artifactFileType, isHtmlPath } from '@shared/artifact-files'
 import { parseServed, servedHtml, type ServedFile } from '@shared/artifact-page'
 import { errorAnswer, type RuntimeAnswer } from '@shared/artifact-capabilities'
 import {
@@ -14,11 +15,14 @@ import {
   received,
   type SelectMessage,
 } from '@shared/artifact-runtime/page-messages'
+import { VIEWER_PREFIX, viewerBase, viewerPage } from '@shared/artifact-types'
 import type { ArtifactContentResult } from '@shared/host-control'
+import type { Locale } from '@shared/locale'
 import { createLogger } from '../log'
 import { ARTIFACT_SCHEME, artifactHost } from './origins'
 import { artifactHeaders } from './policy'
 import { isRuntimeRequest, respondRuntime, type RuntimeRelay } from './runtime'
+import type { ViewerFiles } from './viewers'
 
 const log = createLogger('artifacts')
 
@@ -52,6 +56,10 @@ export interface ArtifactSource {
   runtime?: RuntimeRelay | null
   /** What the latest version declares makes the artifact's pages strict, or no longer. */
   declared?(id: string, strict: boolean): void
+  /** The type viewers' files, which a typed artifact's origin serves. */
+  viewers?: ViewerFiles
+  /** The interface language, which a type's viewer speaks. */
+  locale?: () => Locale
 }
 
 export interface ArtifactRequest extends ServedFile {
@@ -141,6 +149,26 @@ export async function respond(request: Request, source: ArtifactSource): Promise
   const found = await withinWait(source.content(wanted.id, wanted.version))
   if (found.kind === 'not_found') return answer(404)
   if (found.kind === 'failed') return answer(503)
+  if (found.type) {
+    // A typed artifact's page is its type's viewer, which reads the content files beside it.
+    if (wanted.path === ARTIFACT_ENTRY) {
+      const page = viewerPage(
+        found.type,
+        found.version,
+        source.locale?.() ?? 'en',
+        viewerBase(wanted.version),
+      )
+      if (!page) return answer(404)
+      const headers = { ...artifactHeaders(), 'Content-Type': artifactFileType(ARTIFACT_ENTRY) }
+      const html = servedHtml(page, null, { path: ARTIFACT_ENTRY, transport: 'fetch' })
+      return new Response(html, { headers })
+    }
+    if (wanted.path.startsWith(VIEWER_PREFIX)) {
+      const file = await source.viewers?.find(wanted.path.slice(VIEWER_PREFIX.length))
+      if (!file) return answer(404)
+      return streamed(file, artifactFileType(wanted.path))
+    }
+  }
   const file = found.files.find((f) => f.path === wanted.path)
   if (!file) return answer(404)
   if (!isInside(source.contentDir, file.file)) {
@@ -164,6 +192,12 @@ export async function respond(request: Request, source: ArtifactSource): Promise
     log.error(`Could not read ${file.path} of ${wanted.id} version ${found.version}`, error)
     return answer(404)
   }
+}
+
+/** A viewer file. It lies in the app's archive, which a read stream reads in place. */
+function streamed(file: string, type: string): Response {
+  const body = Readable.toWeb(createReadStream(file)) as ReadableStream<Uint8Array>
+  return new Response(body, { headers: { ...artifactHeaders(), 'Content-Type': type } })
 }
 
 /** Serves artifacts through the session's `kettu-artifact` protocol. */

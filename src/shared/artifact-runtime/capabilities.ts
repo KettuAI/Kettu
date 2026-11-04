@@ -2,6 +2,7 @@
 // ops the host answered. It runs inside the artifact's page, so it imports nothing at runtime.
 
 import type { RuntimeError } from '../artifact-capabilities'
+import { CONTENT_CAPABILITY, contentNamespace } from './content'
 
 /**
  * How a namespace reaches the host. `call` resolves with the answer's value, or rejects with its
@@ -133,6 +134,7 @@ export function capabilityNamespace(
   ops: readonly string[],
   transport: CapabilityTransport,
 ): object | null {
+  if (cap === CONTENT_CAPABILITY) return contentNamespace(ops, transport)
   const build = Object.hasOwn(BUILDERS, cap) ? BUILDERS[cap] : undefined
   return build ? build(new Set(ops), transport) : null
 }

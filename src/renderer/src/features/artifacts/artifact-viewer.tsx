@@ -415,7 +415,8 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
           <NoDrag className="min-w-0 shrink-0 gap-2">
             <Presence id={id} presence={artifact.presence} deleted={summary?.deletedAt != null} />
             {pageName && <CanvasBarControls controls={controls} pageName={pageName} zoom={false} />}
-            {shown && (
+            {/* A type's viewer presents its content itself, as a deck does. */}
+            {shown && !summary?.type && (
               <Button
                 variant="quiet"
                 size="sm"
@@ -434,8 +435,8 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
                 head={head ?? shown.version}
               />
             )}
-            {/* The web client shows it in a browser already. */}
-            {shown && !isWeb && (
+            {/* The web client shows it in a browser already; a type's viewer needs Kettu. */}
+            {shown && !isWeb && !summary?.type && (
               <BarButton
                 label={t('viewer.openInBrowser')}
                 onClick={() =>
@@ -485,6 +486,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
                       files: shown?.files ?? summary.files,
                       sessionId: summary.sessionId,
                       deletedAt: summary.deletedAt,
+                      type: summary.type,
                     }}
                     onReload={artifact.reload}
                     historyOpen={historyOpen}

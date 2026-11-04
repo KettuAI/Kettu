@@ -102,6 +102,59 @@ describe("the direct port's artifact frames", () => {
   })
 })
 
+describe("the direct port's frames of a typed artifact", () => {
+  it("serves its type's viewer in place of index.html, sandboxed like any page", async () => {
+    const viewers = mkdtempSync(path.join(os.tmpdir(), 'kettu-web-viewers-'))
+    writeFileSync(path.join(viewers, 'slides.js'), 'export {}')
+    const typed = new WebServer({
+      root: null,
+      viewers,
+      server: {
+        accept: () => {},
+        refusedOne: () => {},
+        frameFile: async (token, _version, wanted) =>
+          token === TOKEN && wanted === 'slides.json'
+            ? { file: path.join(dir, 'style.css'), size: 3, strict: false }
+            : null,
+        frameType: async (token, version) =>
+          token === TOKEN ? { type: { name: 'slides', format: 1 }, version: version ?? 4 } : null,
+      },
+      limits: new HandshakeLimits(),
+      log: () => {},
+    })
+    const server = createServer((socket) => typed.take(socket))
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    const at = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`
+    try {
+      const page = await fetch(`${at}/frame/${TOKEN}/_kettu/v/2/index.html`, {
+        headers: { 'Accept-Language': 'zh-CN,zh;q=0.9' },
+      })
+      expect(page.status).toBe(200)
+      expect(page.headers.get('content-security-policy')).toMatch(/^sandbox allow-scripts /)
+      const html = await page.text()
+      expect(html).toContain('src="../../../_kettu/viewer/slides.js"')
+      expect(html).toContain('"version":2')
+      expect(html).toContain('"locale":"zh-CN"')
+      const script = await fetch(`${at}/frame/${TOKEN}/_kettu/viewer/slides.js`)
+      expect(script.headers.get('content-type')).toBe('text/javascript; charset=utf-8')
+      expect(await script.text()).toBe('export {}')
+      expect((await fetch(`${at}/frame/${TOKEN}/slides.json`)).status).toBe(200)
+      for (const missing of [
+        `/frame/${TOKEN}/_kettu/viewer/missing.js`,
+        `/frame/${TOKEN}/_kettu/viewer/../../slides.js`,
+        `/frame/${'B'.repeat(43)}/_kettu/viewer/slides.js`,
+      ]) {
+        expect((await fetch(`${at}${missing}`)).status).toBe(404)
+      }
+    } finally {
+      typed.endAll()
+      await new Promise((resolve) => server.close(resolve))
+      rmSync(viewers, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('the frames a session opens', () => {
   it('lasts until closed by its session, or until the session ends', () => {
     const frames = new ArtifactFrames<string>()

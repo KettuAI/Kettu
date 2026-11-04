@@ -123,6 +123,11 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
           withHost((h) => h.artifactRuntimeCancel(message.requestId))
         }
         break
+      case 'host:artifact-export-request':
+        withHost((h) =>
+          h.artifactExport(message.requestId, message.id, message.version, message.format),
+        )
+        break
       case 'browser-result':
         if (Number.isSafeInteger(message.callId)) {
           withHost((h) => h.browserResult(message.callId, message.result, message.error))

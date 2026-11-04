@@ -231,11 +231,11 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     const opened = openedAt[artifact.id] ?? 0
     return { at: sort !== 'updated' && opened > artifact.updatedAt ? opened : artifact.updatedAt }
   }
-  // "Page", or "Canvas · 6 pages".
-  const kindLine = (artifact: ArtifactSummary): string =>
-    artifactKind(artifact) === 'canvas'
-      ? t('card.canvas', { count: artifact.pages })
-      : t('page.kinds.web')
+  // "Page", "Document", or "Canvas · 6 pages".
+  const kindLine = (artifact: ArtifactSummary): string => {
+    const kind = artifactKind(artifact)
+    return kind === 'canvas' ? t('card.canvas', { count: artifact.pages }) : t(`page.kinds.${kind}`)
+  }
   const card = (
     artifact: ArtifactSummary,
     meta: string,

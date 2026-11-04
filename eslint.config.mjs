@@ -25,6 +25,7 @@ export default defineConfig([
       'vitest.config.mts',
       'vite.daemon.config.mts',
       'vite.web.config.mts',
+      'vite.viewers.config.mts',
       'src/main/**/*.ts',
       'src/preload/**/*.ts',
       'src/agent-host/**/*.ts',

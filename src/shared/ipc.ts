@@ -2,6 +2,7 @@ import type { AccountStatus } from './account'
 import type { AgentsApi, DiagnosticsBundle, HostMethod } from './agent-host'
 import type { ArtifactImportKind, ArtifactImportResult, ThumbnailPage } from './artifacts'
 import type { SelectMessage } from './artifact-runtime/page-messages'
+import type { ArtifactExportFormat } from './artifact-types'
 import type { GrantedAttachment } from './attachments'
 import type { BrowserBounds, BrowserOriginDecision, BrowserState } from './browser'
 import type { EditorApp, EditorList } from './editors'
@@ -230,6 +231,10 @@ export interface IpcInvokeContract {
     ]
     result: boolean
   }
+  'artifact:export-as': {
+    args: [id: string, version: number, format: ArtifactExportFormat]
+    result: boolean
+  }
   // `project`: a registered project's folder, or null for No project.
   'artifact:import': {
     args: [project: string | null, kind: ArtifactImportKind]
@@ -434,6 +439,11 @@ export interface KettuApi {
      * several; false when the user cancelled.
      */
     export(id: string, version: number): Promise<boolean>
+    /**
+     * Asks where to save a typed version in one of its type's formats, converted on the host:
+     * one file, or a folder for Markdown with pictures; false when the user cancelled.
+     */
+    exportAs(id: string, version: number, format: ArtifactExportFormat): Promise<boolean>
     /**
      * Asks for an HTML file or a folder with an `index.html` and makes it an artifact in the
      * project, or in No project when null; null when the user cancelled.

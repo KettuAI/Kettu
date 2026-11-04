@@ -104,6 +104,10 @@
   --color-kind-web-tint: var(--kind-web-tint);
   --color-kind-canvas: var(--kind-canvas);
   --color-kind-canvas-tint: var(--kind-canvas-tint);
+  --color-kind-document: var(--kind-document);
+  --color-kind-document-tint: var(--kind-document-tint);
+  --color-kind-slides: var(--kind-slides);
+  --color-kind-slides-tint: var(--kind-slides-tint);
   --color-warning: var(--warning);
   --color-warning-tint: var(--warning-tint);
   --color-link: var(--link);

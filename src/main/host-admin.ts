@@ -168,6 +168,8 @@ export interface HostAdminDeps {
   /** A page as a PNG; the host's own windows render it, so the daemon has none. */
   png:
     ((id: unknown, version: unknown, page: unknown, size: unknown) => Promise<Buffer | null>) | null
+  /** A typed version's PDF; null where nothing renders artifacts. */
+  printPdf?: ((id: unknown, version: unknown) => Promise<Buffer>) | null
   /** Remote access is always on, as under the daemon, so a device may not turn it off. */
   remoteAlwaysOn?: boolean
   /** Tells every owner's device, or only `deviceId`. */
@@ -485,6 +487,11 @@ export class HostAdmin {
         const { id, version, page, size } = fields(params)
         const image = await this.deps.png(id, version, page, size)
         return image ? `data:image/png;base64,${image.toString('base64')}` : null
+      }
+      case 'artifacts.printPdf': {
+        if (!this.deps.printPdf) throw new AdminError('unavailable', 'This host does not print')
+        const { id, version } = fields(params)
+        return (await this.deps.printPdf(id, version)).toString('base64')
       }
     }
   }

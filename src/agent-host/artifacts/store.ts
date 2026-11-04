@@ -2,6 +2,7 @@
 // artifacts service call, the watches that count viewers, and the purge of Recently deleted.
 // The records and files belong to the thread worker; this side only reads the files.
 
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { isStrictDeclaration } from '@shared/artifact-capabilities'
 import type { CommentAnchor, CommentAuthor, CommentThread } from '@shared/artifact-comments'
@@ -13,6 +14,7 @@ import {
   type ArtifactState,
   type VersionSummary,
 } from '@shared/artifacts'
+import type { ArtifactTypeInfo } from '@shared/artifact-types'
 import { HostError } from '../errors'
 import type { LogFn } from '../storage'
 import { ThreadStoreError, type ThreadStore } from '../threads/store'
@@ -108,6 +110,8 @@ export interface FoundVersion {
   artifact: ArtifactRecord
   version: VersionRecord
   files: StoredFile[]
+  /** The version's type and format; null for a plain artifact. */
+  type: ArtifactTypeInfo | null
 }
 
 /** A file of a version as main and the remote host serve it: where its bytes lie on disk. */
@@ -269,15 +273,23 @@ export class ArtifactStore {
     key: string
     strict: boolean
     files: ContentFile[]
+    type: ArtifactTypeInfo | null
   }> {
     const [found, latest] = await Promise.all([
       this.get(id, version === undefined ? {} : { version }),
       this.runtime('declaration', { id, project: null, version: null }),
     ])
+    const key = versionKey(found.files)
     return {
       version: found.version.version,
       title: found.artifact.title,
-      key: versionKey(found.files),
+      type: found.type,
+      // A typed version's thumbnail is its viewer's, which a new format's viewer draws anew.
+      key: found.type
+        ? createHash('sha256')
+            .update(`${key}\0${found.type.name}\0${found.type.format}`, 'utf8')
+            .digest('hex')
+        : key,
       strict: isStrictDeclaration(latest.capabilities),
       files: found.files.map((file) => ({
         path: file.path,
@@ -299,6 +311,7 @@ export class ArtifactStore {
       pages: number
       note: string | null
       declaration?: Declaration
+      type?: ArtifactTypeInfo | null
     } & Editing,
   ): Promise<{ id: string; version: number }> {
     const { editor, ...rest } = input
@@ -323,6 +336,7 @@ export class ArtifactStore {
       author: string | null
       note: string | null
       declaration?: Declaration
+      type?: ArtifactTypeInfo | null
     } & Reach &
       Editing,
   ): Promise<{ version: number }> {

@@ -282,6 +282,7 @@ export default function ArtifactPane({
                       files: shown?.files ?? summary.files,
                       sessionId: summary.sessionId,
                       deletedAt: summary.deletedAt,
+                      type: summary.type,
                     }}
                     onVersionHistory={() => openArtifact(id, { history: true })}
                   />

@@ -2,6 +2,7 @@
 
 import type { CommentAnchor, CommentAuthor, CommentThread } from '@shared/artifact-comments'
 import type { ArtifactSummary } from '@shared/artifacts'
+import type { ArtifactTypeInfo } from '@shared/artifact-types'
 import type { Declaration } from './runtime/calls'
 
 export interface ArtifactRecord {
@@ -55,7 +56,13 @@ export interface ArtifactCalls {
   /** The artifact with one of its versions, the latest when `version` is null, and its files. */
   get: {
     params: { id: string; version: number | null; project: string | null }
-    result: { artifact: ArtifactRecord; version: VersionRecord; files: StoredFile[] }
+    result: {
+      artifact: ArtifactRecord
+      version: VersionRecord
+      files: StoredFile[]
+      /** The version's type and format; null for a plain artifact. */
+      type: ArtifactTypeInfo | null
+    }
   }
   /** Newest first. */
   versions: { params: { id: string; project: string | null }; result: VersionRecord[] }
@@ -71,6 +78,8 @@ export interface ArtifactCalls {
       at: number
       /** What the version declares; nothing at the current runtime when absent. */
       declaration?: Declaration
+      /** Made from a type, whose content the caller checked. */
+      type?: ArtifactTypeInfo | null
     }
     result: { version: number }
   }
@@ -90,6 +99,8 @@ export interface ArtifactCalls {
       at: number
       /** What the version declares; the base version's when absent. */
       declaration?: Declaration
+      /** The new version's type and format: a typed artifact's must name its type, a plain one none. */
+      type?: ArtifactTypeInfo | null
     }
     result: { version: number }
   }

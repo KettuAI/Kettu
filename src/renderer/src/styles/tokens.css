@@ -219,6 +219,10 @@
   --kind-web-tint: #e6f2f4;
   --kind-canvas: #7653c9;
   --kind-canvas-tint: #f1edfb;
+  --kind-document: #2f6bd1;
+  --kind-document-tint: #e8f0fc;
+  --kind-slides: #c65a14;
+  --kind-slides-tint: #fcefe5;
 
   /* Usage charts: each agent's series, and the empty day the heatmap deepens from. */
   --agent-opencode: oklch(0.6 0 0);
@@ -406,6 +410,10 @@
     --kind-web-tint: #1e3236;
     --kind-canvas: #a88beb;
     --kind-canvas-tint: #2b2540;
+    --kind-document: #7fa9f2;
+    --kind-document-tint: #1f2a3d;
+    --kind-slides: #f2a066;
+    --kind-slides-tint: #3a271b;
 
     --agent-opencode: oklch(0.74 0 0);
     /* Pi's yellow mixed 86% with the dark surface. */
@@ -582,6 +590,10 @@
   --kind-web-tint: #1e3236;
   --kind-canvas: #a88beb;
   --kind-canvas-tint: #2b2540;
+  --kind-document: #7fa9f2;
+  --kind-document-tint: #1f2a3d;
+  --kind-slides: #f2a066;
+  --kind-slides-tint: #3a271b;
 
   --agent-opencode: oklch(0.74 0 0);
   /* Pi's yellow mixed 86% with the dark surface. */

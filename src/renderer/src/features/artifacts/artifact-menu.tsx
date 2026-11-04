@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { NO_SESSION } from '@shared/artifacts'
+import { EXPORT_FORMATS, type ArtifactTypeName } from '@shared/artifact-types'
 import {
   DropdownMenuCheckboxItem,
   DropdownMenuGroup,
@@ -20,6 +21,7 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { askArtifactDialog, deleteArtifact, restoreArtifact } from '@renderer/stores/artifacts'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { useHostHas } from '@renderer/lib/host-features'
 import { isWeb } from '@renderer/lib/platform'
 import { isPublished, useSharingStore } from '@renderer/stores/sharing'
 import { openSessionWithArtifact } from '@renderer/stores/view'
@@ -44,6 +46,8 @@ export interface MenuTarget {
   files: number
   sessionId: string
   deletedAt: number | null
+  /** The type it was made from, which exports to its own formats; null for a page. */
+  type?: ArtifactTypeName | null
 }
 
 /**
@@ -80,6 +84,9 @@ export function ArtifactMenuItems({
   )
   const failed = (what: string) => (error: unknown) =>
     console.error(`Could not ${what} ${target.id}`, error)
+  // A PDF is printed by a desktop app, also for the web client it serves.
+  const prints = useHostHas('thumbnails')
+  const typed = target.type ?? null
 
   if (target.deletedAt !== null) {
     return (
@@ -129,8 +136,8 @@ export function ArtifactMenuItems({
             {t('viewer.reload')}
           </DropdownMenuItem>
         )}
-        {/* The web client shows it in a browser already. */}
-        {!isWeb && (
+        {/* The web client shows it in a browser already; a type's viewer needs Kettu. */}
+        {!isWeb && !typed && (
           <DropdownMenuItem
             onClick={() =>
               void window.kettu.artifacts
@@ -142,23 +149,53 @@ export function ArtifactMenuItems({
             {t('menu.openInBrowser')}
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem
-          disabled={target.files > 1 && !canSaveFolders()}
-          onClick={() =>
-            void window.kettu.artifacts.export(target.id, target.version).catch(failed('export'))
-          }
-        >
-          <FileDownIcon />
-          {target.files > 1 && !canSaveFolders() ? (
-            <span className="flex min-w-0 flex-col">
-              {t('menu.export')}
-              <span className="text-xs text-tertiary">{t('menu.exportNoFolders')}</span>
-            </span>
-          ) : (
-            t('menu.export')
-          )}
-        </DropdownMenuItem>
-        {onDownloadPng && (
+        {typed ? (
+          EXPORT_FORMATS[typed]
+            .filter((format) => format !== 'pdf' || prints)
+            .map((format) => {
+              // Markdown with pictures is saved as a folder.
+              const noFolder = format === 'md' && target.files > 1 && !canSaveFolders()
+              return (
+                <DropdownMenuItem
+                  key={format}
+                  disabled={noFolder}
+                  onClick={() =>
+                    void window.kettu.artifacts
+                      .exportAs(target.id, target.version, format)
+                      .catch(failed(`export as ${format}`))
+                  }
+                >
+                  <FileDownIcon />
+                  {noFolder ? (
+                    <span className="flex min-w-0 flex-col">
+                      {t(`menu.exportAs.${format}`)}
+                      <span className="text-xs text-tertiary">{t('menu.exportNoFolders')}</span>
+                    </span>
+                  ) : (
+                    t(`menu.exportAs.${format}`)
+                  )}
+                </DropdownMenuItem>
+              )
+            })
+        ) : (
+          <DropdownMenuItem
+            disabled={target.files > 1 && !canSaveFolders()}
+            onClick={() =>
+              void window.kettu.artifacts.export(target.id, target.version).catch(failed('export'))
+            }
+          >
+            <FileDownIcon />
+            {target.files > 1 && !canSaveFolders() ? (
+              <span className="flex min-w-0 flex-col">
+                {t('menu.export')}
+                <span className="text-xs text-tertiary">{t('menu.exportNoFolders')}</span>
+              </span>
+            ) : (
+              t('menu.export')
+            )}
+          </DropdownMenuItem>
+        )}
+        {onDownloadPng && !typed && (
           <DropdownMenuItem onClick={onDownloadPng}>
             <ImageDownIcon />
             {t('canvas.downloadPng')}

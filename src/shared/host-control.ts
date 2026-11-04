@@ -3,6 +3,7 @@
 
 import type { RuntimeAnswer } from './artifact-capabilities'
 import type { ArtifactImportResult } from './artifacts'
+import type { ArtifactExportFormat, ArtifactTypeInfo, ExportedFile } from './artifact-types'
 import type { AttachmentGrant } from './attachments'
 import type { BrowserForward, BrowserOriginAnswer, BrowserOriginDecision } from './browser'
 import type { MediaGrantRecord } from './media'
@@ -87,6 +88,14 @@ export type MainToHost =
   | { type: 'host:artifact-runtime'; requestId: number; artifactId: string; message: unknown }
   // The page closed the request, which ends its stream.
   | { type: 'host:artifact-runtime-cancel'; requestId: number }
+  // `artifact.export`: a typed version converted on the host, for main to save.
+  | {
+      type: 'host:artifact-export-request'
+      requestId: number
+      id: string
+      version: number
+      format: ArtifactExportFormat
+    }
   | { type: 'host:power'; state: 'suspend' | 'resume' }
   // Allow once, from a request's notification: answered as one of the host's own windows would.
   | { type: 'host:permission-answer'; sessionId: string; requestId: string; optionId: string }
@@ -120,9 +129,17 @@ export type ArtifactContentResult =
       /** The latest version declares what reads beyond the page, so its pages get no CDN. */
       strict: boolean
       files: ArtifactContentFile[]
+      /** Made from a type: its viewer is served in place of the entry page. */
+      type?: ArtifactTypeInfo | null
     }
   | { kind: 'not_found' }
   | { kind: 'failed' }
+
+/** The host's answer to `host:artifact-export-request`. */
+export type ArtifactExportResult =
+  | { kind: 'exported'; title: string; files: ExportedFile[] }
+  | { kind: 'not_found' }
+  | { kind: 'failed'; message: string }
 
 /** The host's answer to `host:artifact-list-request`. */
 export type ArtifactListResult = { kind: 'listed'; ids: string[] } | { kind: 'failed' }
@@ -166,6 +183,7 @@ export type HostToMain =
   | { type: 'host:artifact-list'; requestId: number; result: ArtifactListResult }
   | { type: 'host:artifact-import'; requestId: number; result: NonNullable<ArtifactImportResult> }
   | { type: 'host:artifact-runtime-answer'; requestId: number; answer: RuntimeAnswer }
+  | { type: 'host:artifact-export'; requestId: number; result: ArtifactExportResult }
   | { type: 'host:media-grant'; grant: MediaGrantRecord }
   | { type: 'host:media-revoke'; sessionId: string | null } // null drops them all
   // A window's or device's answer to the new origin main's page asked for, from the session's card.

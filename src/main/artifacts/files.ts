@@ -1,12 +1,20 @@
 // What the user does with an artifact's files: open them in the browser, export them, or import a
 // file or folder.
 
-import { copyFile, mkdir, rm } from 'node:fs/promises'
+import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { app, type BrowserWindow, dialog, shell } from 'electron'
 import { ARTIFACT_ENTRY } from '@shared/artifact-files'
+import { isImagePath } from '@shared/artifact-document'
+import {
+  type ArtifactExportFormat,
+  type ArtifactTypeInfo,
+  EXPORT_EXTENSIONS,
+  type ExportedFile,
+  isExportFormat,
+} from '@shared/artifact-types'
 import { ARTIFACT_ID, type ArtifactImportKind, type ArtifactImportResult } from '@shared/artifacts'
 import type { ArtifactContentFile, ArtifactContentResult } from '@shared/host-control'
 import { safeName } from '@shared/file-name'
@@ -26,7 +34,10 @@ export function parseVersion(id: unknown, version: unknown): { id: string; versi
  * Where each of a version's files goes under `folder`: the paths the host stored, which have no
  * `..` or root, checked again so none lands outside.
  */
-export function placed(folder: string, files: readonly ArtifactContentFile[]): string[] {
+export function placed(
+  folder: string,
+  files: readonly Pick<ArtifactContentFile, 'path'>[],
+): string[] {
   return files.map((file) => {
     const target = path.join(folder, ...file.path.split('/'))
     if (!isInside(folder, target))
@@ -112,6 +123,56 @@ export class ArtifactFiles {
     if (result.canceled || !result.filePath) return false
     if (single) await copyFile(found.files[0]!.file, result.filePath)
     else await copyInto(result.filePath, found.files)
+    return true
+  }
+
+  /**
+   * `artifact:export-as`: a typed version in one of its type's formats, `make` converting it once
+   * the user chose where: one file, or a folder for Markdown with pictures. False when cancelled.
+   */
+  async exportAs(
+    window: BrowserWindow | null,
+    id: unknown,
+    version: unknown,
+    format: unknown,
+    make: (
+      wanted: { id: string; version: number },
+      type: ArtifactTypeInfo,
+      format: ArtifactExportFormat,
+    ) => Promise<ExportedFile[]>,
+  ): Promise<boolean> {
+    const wanted = parseVersion(id, version)
+    const found = await this.deps.content(wanted.id, wanted.version)
+    if (found.kind === 'failed') throw new Error('The agent host did not answer')
+    if (found.kind === 'not_found' || !found.type) throw new Error('Not found')
+    const type = found.type
+    if (!isExportFormat(type.name, format)) throw new Error('Not a format this type exports to')
+    const name = safeName(found.title, wanted.id)
+    const folder = format === 'md' && found.files.some((file) => isImagePath(file.path))
+    const extension = EXPORT_EXTENSIONS[format]
+    const options: Electron.SaveDialogOptions = folder
+      ? {
+          defaultPath: path.join(app.getPath('downloads'), name),
+          properties: ['createDirectory', 'showOverwriteConfirmation'],
+        }
+      : {
+          defaultPath: path.join(app.getPath('downloads'), `${name}.${extension}`),
+          filters: [{ name: extension.toUpperCase(), extensions: [extension] }],
+        }
+    const result = window
+      ? await dialog.showSaveDialog(window, options)
+      : await dialog.showSaveDialog(options)
+    if (result.canceled || !result.filePath) return false
+    const files = await make(wanted, type, format)
+    if (!folder) {
+      await writeFile(result.filePath, files[0]!.bytes)
+      return true
+    }
+    const targets = placed(result.filePath, files)
+    for (const [i, file] of files.entries()) {
+      await mkdir(path.dirname(targets[i]!), { recursive: true })
+      await writeFile(targets[i]!, file.bytes)
+    }
     return true
   }
 

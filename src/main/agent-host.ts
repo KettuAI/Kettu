@@ -21,8 +21,14 @@ import {
   type BrowserOriginAnswer,
   type BrowserOriginDecision,
 } from '@shared/browser'
+import {
+  type ArtifactExportFormat,
+  type ExportedFile,
+  isArtifactTypeName,
+} from '@shared/artifact-types'
 import type {
   ArtifactContentResult,
+  ArtifactExportResult,
   BusyCounts,
   BusySession,
   HostToMain,
@@ -84,6 +90,9 @@ const CONTENT_TIMEOUT_MS = 10_000
 const IMPORT_TIMEOUT_MS = 10_000
 /** How long main waits for the host to list its artifacts. */
 const LIST_TIMEOUT_MS = 10_000
+/** How long an export may take the host, which converts a whole version. */
+const EXPORT_TIMEOUT_MS = 120_000
+const MAX_FORMAT = 1_000
 const MAX_ARTIFACTS = 1_000_000
 
 type ImportAnswer = NonNullable<ArtifactImportResult>
@@ -142,9 +151,48 @@ function isContentResult(value: unknown): value is ArtifactContentResult {
     (version as number) >= 1 &&
     typeof title === 'string' &&
     typeof key === 'string' &&
-    /^[0-9a-f]{64}$/.test(key)
+    /^[0-9a-f]{64}$/.test(key) &&
+    isTypeInfo((value as Record<string, unknown>).type)
   )
 }
+
+/** A version's type as the host names it: absent or null for a plain artifact. */
+function isTypeInfo(value: unknown): boolean {
+  if (value === undefined || value === null) return true
+  if (typeof value !== 'object') return false
+  const { name, format } = value as Record<string, unknown>
+  return (
+    isArtifactTypeName(name) &&
+    Number.isSafeInteger(format) &&
+    (format as number) >= 1 &&
+    (format as number) <= MAX_FORMAT
+  )
+}
+
+function isExportedFile(value: unknown): value is ExportedFile {
+  if (typeof value !== 'object' || value === null) return false
+  const { path, bytes } = value as Record<string, unknown>
+  return (
+    typeof path === 'string' && artifactPathProblem(path) === null && bytes instanceof Uint8Array
+  )
+}
+
+function isExportResult(value: unknown): value is ArtifactExportResult {
+  if (typeof value !== 'object' || value === null) return false
+  const { kind, title, files, message } = value as Record<string, unknown>
+  if (kind === 'not_found') return true
+  if (kind === 'failed') return typeof message === 'string'
+  return (
+    kind === 'exported' &&
+    typeof title === 'string' &&
+    Array.isArray(files) &&
+    files.length >= 1 &&
+    files.length <= VERSION_FILES &&
+    files.every(isExportedFile)
+  )
+}
+
+const FAILED_EXPORT: ArtifactExportResult = { kind: 'failed', message: 'The agent host is down' }
 
 /** The listed ids, or null for a failed or malformed answer. */
 function listedIds(value: unknown): Set<string> | null {
@@ -201,6 +249,8 @@ export class AgentHost {
   private nextContentId = 1
   private readonly importRequests = new Map<number, (result: ImportAnswer) => void>()
   private nextImportId = 1
+  private readonly exportRequests = new Map<number, (result: ArtifactExportResult) => void>()
+  private nextExportId = 1
   private readonly listRequests = new Map<number, (ids: Set<string> | null) => void>()
   private nextListId = 1
   private readonly runtimeRequests = new Map<number, (answer: RuntimeAnswer) => void>()
@@ -444,6 +494,33 @@ export class AgentHost {
     })
   }
 
+  /** A typed version converted by the host, for a save dialog's file; `failed` without a host. */
+  artifactExport(
+    id: string,
+    version: number,
+    format: ArtifactExportFormat,
+  ): Promise<ArtifactExportResult> {
+    if (this.host.state !== 'ready') return Promise.resolve(FAILED_EXPORT)
+    const requestId = this.nextExportId++
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.exportRequests.delete(requestId)
+        log.warn(`No artifact export answer within ${EXPORT_TIMEOUT_MS} ms`)
+        resolve(FAILED_EXPORT)
+      }, EXPORT_TIMEOUT_MS)
+      this.exportRequests.set(requestId, (result) => {
+        clearTimeout(timer)
+        resolve(result)
+      })
+      if (
+        !this.host.post({ type: 'host:artifact-export-request', requestId, id, version, format })
+      ) {
+        this.exportRequests.get(requestId)?.(FAILED_EXPORT)
+        this.exportRequests.delete(requestId)
+      }
+    })
+  }
+
   stop(): Promise<void> {
     return this.host.stop()
   }
@@ -506,6 +583,13 @@ export class AgentHost {
         if (!resolve) break
         this.listRequests.delete(message.requestId)
         resolve(listedIds(message.result))
+        break
+      }
+      case 'host:artifact-export': {
+        const resolve = this.exportRequests.get(message.requestId)
+        if (!resolve) break
+        this.exportRequests.delete(message.requestId)
+        resolve(isExportResult(message.result) ? message.result : FAILED_EXPORT)
         break
       }
       case 'host:artifact-import': {
@@ -617,6 +701,8 @@ export class AgentHost {
     this.contentRequests.clear()
     for (const resolve of this.importRequests.values()) resolve(UNAVAILABLE)
     this.importRequests.clear()
+    for (const resolve of this.exportRequests.values()) resolve(FAILED_EXPORT)
+    this.exportRequests.clear()
     for (const resolve of this.listRequests.values()) resolve(null)
     this.listRequests.clear()
     for (const deliver of [...this.runtimeRequests.values()]) {

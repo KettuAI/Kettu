@@ -14,6 +14,7 @@ import {
   type CommentThread,
 } from '@shared/artifact-comments'
 import { type ArtifactState, NO_SESSION } from '@shared/artifacts'
+import { type ArtifactTypeInfo, isArtifactTypeName } from '@shared/artifact-types'
 import { OUTLINE_TEXT } from '@shared/outline'
 import { isRoutineRun, type RoutineRun } from '@shared/routines'
 import { isThreadEntry, type ThreadEntry } from '@shared/thread'
@@ -62,7 +63,7 @@ import {
   type RuntimeStatements,
 } from './runtime-db'
 
-export const SCHEMA_VERSION = 7
+export const SCHEMA_VERSION = 8
 
 // `turn` is the position of the entry that opened the entry's turn, so a page that starts at a
 // turn is one range of the primary key.
@@ -193,6 +194,19 @@ const ARTIFACT_COMMENTS = `
   ) STRICT, WITHOUT ROWID;
 `
 
+// The type and content format of each version of an artifact made from a type; a version without
+// a row is a plain artifact's.
+const ARTIFACT_TYPES = `
+  CREATE TABLE artifact_types (
+    artifact_id TEXT NOT NULL,
+    n           INTEGER NOT NULL,
+    type        TEXT NOT NULL,
+    format      INTEGER NOT NULL,
+    PRIMARY KEY (artifact_id, n),
+    FOREIGN KEY (artifact_id, n) REFERENCES artifact_versions (artifact_id, n) ON DELETE CASCADE
+  ) STRICT, WITHOUT ROWID;
+`
+
 /** What brings a database of the version before each key up to it; a new one runs them all. */
 const MIGRATIONS: Record<number, string> = {
   2: ARTIFACTS,
@@ -201,6 +215,7 @@ const MIGRATIONS: Record<number, string> = {
   5: ARTIFACT_FILES,
   6: ARTIFACT_COMMENTS,
   7: RUNTIME_TABLES,
+  8: ARTIFACT_TYPES,
 }
 
 /** The tables of a database at schema `version`, as a new one made then had them. */
@@ -295,7 +310,16 @@ function listing(row: Row): ArtifactListing {
     size: Number(row.size),
     updatedAt: Number(row.updated_at),
     deletedAt: row.deleted_at === null ? null : Number(row.deleted_at),
+    type: null,
   }
+}
+
+/** A version's type row, or null for a plain artifact's version. */
+function typeOf(row: Row | undefined): ArtifactTypeInfo | null {
+  if (!row) return null
+  const name = String(row.type)
+  if (!isArtifactTypeName(name)) throw new Error(`Unknown artifact type ${name}`)
+  return { name, format: Number(row.format) }
 }
 
 const stateOf = (artifact: ArtifactRecord): ArtifactState => ({
@@ -438,6 +462,16 @@ function prepareAll(db: DatabaseSync) {
       'UPDATE artifact_threads SET sent_at = ?, sent_to = ? WHERE artifact_id = ? AND id = ?',
     ),
     setAnchor: sql('UPDATE artifact_threads SET anchor = ? WHERE artifact_id = ? AND id = ?'),
+    versionType: sql('SELECT type, format FROM artifact_types WHERE artifact_id = ? AND n = ?'),
+    insertType: sql(
+      'INSERT INTO artifact_types (artifact_id, n, type, format) VALUES (?, ?, ?, ?)',
+    ),
+    copyType: sql(`
+      INSERT INTO artifact_types (artifact_id, n, type, format)
+      SELECT artifact_id, ?, type, format FROM artifact_types WHERE artifact_id = ? AND n = ?`),
+    headTypes: sql(`
+      SELECT t.artifact_id, t.type FROM artifact_types t
+      JOIN artifacts a ON a.id = t.artifact_id AND t.n = a.head`),
     runSeq: sql('SELECT seq FROM routine_runs WHERE run_id = ?'),
     lastSeq: sql('SELECT MAX(seq) AS seq FROM routine_runs WHERE routine_id = ?'),
     insertRun: sql(
@@ -964,20 +998,30 @@ export class ThreadDb {
     return { path, hash, size: data.length }
   }
 
-  /** Records a new version with these files, which must include the entry page. */
+  /**
+   * Records a new version with these files, which must include the entry page, unless the version
+   * is of a type, whose viewer is the entry and which checked its content itself.
+   */
   private insertVersion(
     sql: Statements,
     id: string,
     n: number,
     files: readonly StoredFile[],
-    row: { pages: number; author: string | null; note: string | null; at: number },
+    row: {
+      pages: number
+      author: string | null
+      note: string | null
+      at: number
+      type?: ArtifactTypeInfo | null
+    },
   ): void {
-    if (!files.some((file) => file.path === ARTIFACT_ENTRY)) {
+    if (!row.type && !files.some((file) => file.path === ARTIFACT_ENTRY)) {
       throw new Error(`Version ${n} of ${id} has no ${ARTIFACT_ENTRY}`)
     }
     const size = files.reduce((sum, file) => sum + file.size, 0)
     sql.insertVersion.run(id, n, size, row.pages, row.author, row.note, row.at)
     for (const file of files) sql.insertFile.run(id, n, file.path, file.hash, file.size)
+    if (row.type) sql.insertType.run(id, n, row.type.name, row.type.format)
   }
 
   listArtifacts(params: ArtifactCalls['list']['params']): ArtifactListing[] {
@@ -988,7 +1032,11 @@ export class ThreadDb {
           : params.deleted
             ? sql.listedDeleted.all()
             : sql.listed.all()
-      return rows.map(listing)
+      const types = new Map(sql.headTypes.all().map((row) => [String(row.artifact_id), row]))
+      return rows.map((row) => ({
+        ...listing(row),
+        type: typeOf(types.get(String(row.id)))?.name ?? null,
+      }))
     })
   }
 
@@ -1002,7 +1050,12 @@ export class ThreadDb {
       const n = version ?? artifact.head
       const row = sql.version.get(id, n)
       if (!row) throw new ThreadDbError(`${id} has no version ${n}`, 'not_found')
-      return { artifact, version: versionRecord(row), files: sql.files.all(id, n).map(storedFile) }
+      return {
+        artifact,
+        version: versionRecord(row),
+        files: sql.files.all(id, n).map(storedFile),
+        type: typeOf(sql.versionType.get(id, n)),
+      }
     })
   }
 
@@ -1024,7 +1077,7 @@ export class ThreadDb {
         const files = params.files.map((file) => this.putFile(file.path, file.data))
         sql.insertArtifact.run(id, project, title, sessionId, at, at)
         const author = sessionId === NO_SESSION ? null : sessionId
-        this.insertVersion(sql, id, 1, files, { pages, author, note, at })
+        this.insertVersion(sql, id, 1, files, { pages, author, note, at, type: params.type })
         putDeclaration(
           this.runtimeStatements(db),
           id,
@@ -1049,9 +1102,22 @@ export class ThreadDb {
           if (data !== null) files.set(path, this.putFile(path, data))
           else if (!files.delete(path)) throw new Error(`${artifact.id} has no file ${path}`)
         }
+        // A type is the artifact's for good: every version of a typed one names it, of a plain none.
+        const was = typeOf(sql.versionType.get(artifact.id, artifact.head))
+        const type = params.type ?? null
+        if (was?.name !== type?.name) {
+          const kind = (of: ArtifactTypeInfo | null) => (of ? `a ${of.name}` : 'plain')
+          throw new Error(`${artifact.id} is ${kind(was)}, not ${kind(type)}`)
+        }
         const n = artifact.head + 1
         const { pages, author, note, at } = params
-        this.insertVersion(sql, artifact.id, n, [...files.values()], { pages, author, note, at })
+        this.insertVersion(sql, artifact.id, n, [...files.values()], {
+          pages,
+          author,
+          note,
+          at,
+          type,
+        })
         const runtime = this.runtimeStatements(db)
         putDeclaration(
           runtime,
@@ -1080,6 +1146,7 @@ export class ThreadDb {
         const { author, note, at } = params
         sql.insertVersion.run(artifact.id, n, restored.size, restored.pages, author, note, at)
         sql.copyFiles.run(n, artifact.id, restored.version)
+        sql.copyType.run(n, artifact.id, restored.version)
         // The page and what it declares come back together.
         const runtime = this.runtimeStatements(db)
         putDeclaration(
