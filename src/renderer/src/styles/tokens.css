@@ -61,7 +61,8 @@
   /* Links are ink with a gray underline (thread-link), which darkens on hover. */
   --link: #10161e;
   --link-hover: #10161e;
-  /* The fox: what is on, chosen or being typed. The focus ring draws it at half strength. */
+  /* The fox: what is on, chosen or being typed, and a running turn's dots. The focus ring draws it
+     at half strength. */
   --focus: #f2581b;
   /* A focused field's halo: a little fainter than the focus ring on the light page. */
   --focus-halo-strength: 42%;

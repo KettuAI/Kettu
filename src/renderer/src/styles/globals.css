@@ -808,6 +808,84 @@
   }
 }
 
+/* The running turn's dots (features/session/turn-dots.tsx): each runs one of these on its own
+   delay into the phase's loop, so phases differ only in which dot lights when. */
+[data-turn-dots] circle {
+  opacity: 0.22;
+}
+@keyframes turn-dot-trail {
+  0% {
+    opacity: 1;
+  }
+  40%,
+  100% {
+    opacity: 0.22;
+  }
+}
+@keyframes turn-dot-twinkle {
+  0%,
+  30%,
+  100% {
+    opacity: 0.22;
+  }
+  15% {
+    opacity: 1;
+  }
+}
+@keyframes turn-dot-swap {
+  0%,
+  100% {
+    opacity: 0.22;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+/* A soft bar sweeping across the columns and back: the edge columns light once a loop, the middle
+   one on the way over and on the way back. */
+@keyframes turn-dot-sweep-edge {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  12.5%,
+  87.5% {
+    opacity: 0.74;
+  }
+  25%,
+  75% {
+    opacity: 0.22;
+  }
+}
+@keyframes turn-dot-sweep-mid {
+  0%,
+  50%,
+  100% {
+    opacity: 0.22;
+  }
+  12.5%,
+  37.5%,
+  62.5%,
+  87.5% {
+    opacity: 0.36;
+  }
+  25%,
+  75% {
+    opacity: 1;
+  }
+}
+/* Lit for most of the loop, so dots lit one after another fill the grid before it clears. */
+@keyframes turn-dot-fill {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  62%,
+  100% {
+    opacity: 0.22;
+  }
+}
+
 /* Reduce motion: movement and loops stop; opacity and color changes remain. The transform
    variables do not inherit, so they are reset on every element. */
 @media (prefers-reduced-motion: reduce) {
@@ -830,6 +908,10 @@
   .shimmer,
   [data-caret] {
     animation: none !important;
+  }
+  /* Held, not removed: each dot keeps the frame its delay starts it on. */
+  [data-turn-dots] circle {
+    animation-play-state: paused !important;
   }
   [data-slot='collapsible-content'] {
     transition-duration: 0s !important;
@@ -855,6 +937,9 @@
   & .shimmer,
   & [data-caret] {
     animation: none !important;
+  }
+  & [data-turn-dots] circle {
+    animation-play-state: paused !important;
   }
   & [data-slot='collapsible-content'] {
     transition-duration: 0s !important;

@@ -1,9 +1,9 @@
 import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { duration, tokens } from '@renderer/lib/format'
 import { useThreadsStore } from '@renderer/stores/threads'
+import { TurnDots } from './turn-dots'
 import { turnPhase, turnTokens } from './turn-phase'
 
 /** The time since `since` in whole seconds, ticking on its own so nothing around it re-renders. */
@@ -29,8 +29,9 @@ function TurnClock({ since }: { since: number }) {
 
 /**
  * The running turn's status, the thread's last line at the left, where the reply will start: how
- * long it has run, its tokens and its phase, with the attention dot in place of the spinner while
- * it waits for you. It is as tall as the reply's action row, which takes its place once it ends.
+ * long it has run, its tokens and its phase, with the attention dot in place of the running dots
+ * while it waits for you. It is as tall as the reply's action row, which takes its place once it
+ * ends.
  */
 export const TurnStatus = memo(function TurnStatus({ sessionId }: { sessionId: string }) {
   const { t } = useTranslation('session')
@@ -54,7 +55,7 @@ export const TurnStatus = memo(function TurnStatus({ sessionId }: { sessionId: s
       {phase === 'approval' ? (
         <span aria-hidden className="size-2 shrink-0 rounded-full bg-attention-dot" />
       ) : (
-        <Spinner aria-hidden className="size-3 shrink-0 text-info" />
+        <TurnDots phase={phase} />
       )}
       {/* Only the phase is announced; the clock and the count change too often to read out. */}
       {startedAt !== null && (
