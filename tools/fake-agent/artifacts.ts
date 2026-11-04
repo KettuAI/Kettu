@@ -191,8 +191,9 @@ async function say(turn: Turn, text: string): Promise<void> {
  * `--site` image in it when given. `--from <folder>`, which may repeat, makes one artifact of each
  * folder of the project: an `artifact.json` there may give `title`, `capabilities` and `type`, and
  * every other file is one of its files. Each call shows as a tool call named as Claude Code names MCP
- * tools, and the reply lists what each call returned. With
- * `--until-cancel` the turn runs on after the reply until it is cancelled, whatever the pace.
+ * tools, and the reply lists what each call returned, or for `--from` names what it made, as an
+ * agent would. With `--until-cancel` the turn runs on after the reply until it is cancelled,
+ * whatever the pace.
  *
  * Every call names its session in `_meta`, as OpenCode's do. `--child <id>` makes the calls a
  * subagent's: its tool calls come on this session with OpenCode's child-session `_meta`, and the
@@ -216,6 +217,8 @@ export const artifacts: Scenario = async (turn) => {
     new StreamableHTTPClientTransport(new URL(server.url), { requestInit: { headers } }),
   )
   const lines: string[] = []
+  // A reply in place of the list of what each call returned.
+  let reply: string | null = null
   const { child } = turn.options
   const named = turn.options.meta ?? child ?? turn.session.id
   const meta = named === 'none' ? undefined : { 'ai.opencode/sessionID': named }
@@ -295,14 +298,24 @@ export const artifacts: Scenario = async (turn) => {
     if (read) {
       await call('read_artifact', { id: read })
     } else if (from.length > 0) {
+      const made: string[] = []
+      const failed: string[] = []
       for (const folder of from) {
         try {
-          const made = await folderCall(turn.session.cwd, folder)
-          await call(made.name, made.args)
+          const next = await folderCall(turn.session.cwd, folder)
+          const result = await call(next.name, next.args)
+          if (result.isError) failed.push(`Could not make ${folder}: ${result.text}`)
+          else made.push(String(next.args.title))
         } catch (error) {
-          lines.push(`${folder}: ${(error as Error).message}`)
+          failed.push(`Could not make ${folder}: ${(error as Error).message}`)
         }
       }
+      reply = [
+        made.length > 0
+          ? `Made ${made.length === 1 ? 'one artifact' : `${made.length} artifacts`}: ${made.join(', ')}.`
+          : 'Made no artifact.',
+        ...failed,
+      ].join('\n')
     } else if (type) {
       await call('list_artifact_types', {})
       await call('read_artifact_type', { type })
@@ -366,7 +379,7 @@ export const artifacts: Scenario = async (turn) => {
   } finally {
     await client.close()
   }
-  await say(turn, lines.join('\n'))
+  await say(turn, reply ?? lines.join('\n'))
   if (!turn.options.untilCancel) return 'end_turn'
   await new Promise<void>((resolve) => {
     if (turn.signal.aborted) resolve()
