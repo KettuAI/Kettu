@@ -87,6 +87,7 @@ export const ArtifactCard = memo(function ArtifactCard({
         title: artifact.title,
         version: artifact.version,
         versions: artifact.version,
+        files: artifact.files,
         sessionId: artifact.sessionId,
         deletedAt: artifact.deletedAt,
       }}

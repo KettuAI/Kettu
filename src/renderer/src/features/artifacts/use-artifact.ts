@@ -16,6 +16,8 @@ export type ViewerError = 'notFound' | 'unavailable' | 'failed'
 export interface ShownVersion {
   version: number
   title: string
+  /** How many files it has. */
+  files: number
   /** Laid out when the version marks two or more pages; null for a single page. */
   canvas: CanvasLayout | null
 }
@@ -95,6 +97,7 @@ export function useArtifact(id: string, version: number | null) {
         setShown({
           version: read.version,
           title: read.title,
+          files: read.files.length,
           canvas: layout.pages.length >= 2 ? layout : null,
         })
         setReadError(null)

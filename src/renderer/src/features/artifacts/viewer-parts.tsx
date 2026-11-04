@@ -2,8 +2,10 @@ import {
   ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  MessageSquareIcon,
   Minimize2Icon,
   MinusIcon,
+  MousePointer2Icon,
   PlusIcon,
   RotateCcwIcon,
   ScanIcon,
@@ -21,6 +23,8 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import { Kbd } from '@renderer/components/ui/kbd'
@@ -33,8 +37,9 @@ import { cn } from '@renderer/lib/utils'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { openSessionWithArtifact } from '@renderer/stores/view'
 import { atMaxZoom, atMinZoom } from './camera'
-import { useCanvasState, type CanvasControls } from './canvas-controls'
-import { CanvasView } from './canvas-view'
+import { CanvasControls, useCanvasState } from './canvas-controls'
+import { CanvasView, type PageActions } from './canvas-view'
+import { useEditorState, type ArtifactEditor } from './editor'
 import { daysLeft, presenceShown } from './model'
 import { PageFrame } from './page-frame'
 import { pageUrl, type Presence as PresenceState, type ShownVersion } from './use-artifact'
@@ -189,18 +194,96 @@ export function VersionChip({
   )
 }
 
-/** The overview's zoom, floating over the canvas's foot: out, the zoom, in, and Fit. */
-export function ZoomPill({ controls }: { controls: CanvasControls }) {
+/**
+ * The tools floating over the foot of the page or canvas: Select and Comment, then on a canvas's
+ * overview its zoom, whose percentage opens the zoom menu.
+ */
+export function EditToolbar({
+  editor,
+  controls,
+}: {
+  /** Null where nothing is edited, such as an earlier version. */
+  editor: ArtifactEditor | null
+  /** A canvas's; null for a single page. */
+  controls: CanvasControls | null
+}) {
+  const { t } = useTranslation('artifacts')
+  const { mode } = useEditorState(editor)
+  const focused = useCanvasState(controls ?? IDLE_CONTROLS).focused
+  if (!editor && (!controls || focused !== null)) return null
+  return (
+    <div
+      role="toolbar"
+      aria-label={t('tools.label')}
+      className="absolute bottom-5 left-1/2 z-10 flex h-10 -translate-x-1/2 items-center gap-0.5 rounded-2xl bg-surface px-1 shadow-menu"
+    >
+      {editor && (
+        <>
+          <ToolButton
+            label={t('tools.select')}
+            shortcut="V"
+            pressed={mode === 'select'}
+            onClick={() => editor.toggle('select')}
+          >
+            <MousePointer2Icon />
+          </ToolButton>
+          <ToolButton
+            label={t('tools.comment')}
+            shortcut="C"
+            pressed={mode === 'comment'}
+            onClick={() => editor.toggle('comment')}
+          >
+            <MessageSquareIcon />
+          </ToolButton>
+        </>
+      )}
+      {controls && <ZoomTools controls={controls} divided={!!editor} />}
+    </div>
+  )
+}
+
+const IDLE_CONTROLS = new CanvasControls()
+
+function ToolButton({
+  label,
+  shortcut,
+  pressed,
+  onClick,
+  children,
+}: {
+  label: string
+  shortcut: string
+  pressed: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <Button
+      variant="quiet"
+      size="sm"
+      aria-pressed={pressed}
+      aria-keyshortcuts={shortcut}
+      onClick={onClick}
+      className="h-8 gap-1.5 rounded-xl px-2.5 text-control font-normal text-secondary aria-pressed:bg-selected aria-pressed:text-foreground"
+    >
+      {children}
+      {label}
+      <span aria-hidden className="text-hint text-tertiary">
+        {shortcut}
+      </span>
+    </Button>
+  )
+}
+
+/** The overview's zoom: out, the percentage with its menu, and in. */
+function ZoomTools({ controls, divided }: { controls: CanvasControls; divided: boolean }) {
   const { t } = useTranslation('artifacts')
   const state = useCanvasState(controls)
   const commands = controls.commands
   if (state.focused !== null) return null
   return (
-    <div
-      role="group"
-      aria-label={t('canvas.zoomGroup')}
-      className="absolute bottom-5 left-1/2 z-10 flex h-9 -translate-x-1/2 items-center gap-0.5 rounded-2xl bg-surface px-1 shadow-menu"
-    >
+    <>
+      {divided && <span aria-hidden className="mx-1 h-4.5 w-(--hairline) bg-border" />}
       <BarButton
         label={t('canvas.zoomOut')}
         shortcut="−"
@@ -210,9 +293,54 @@ export function ZoomPill({ controls }: { controls: CanvasControls }) {
       >
         <MinusIcon className="size-3.75" />
       </BarButton>
-      <span className="min-w-11 text-center text-hint text-secondary tabular-nums">
-        {t('canvas.zoom', { percent: Math.round(state.zoom * 100) })}
-      </span>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="quiet"
+              size="sm"
+              aria-label={t('canvas.zoomMenu', { percent: Math.round(state.zoom * 100) })}
+              className="h-8 min-w-16 gap-1 rounded-xl px-2 text-control font-normal text-secondary tabular-nums"
+            />
+          }
+        >
+          {t('canvas.zoom', { percent: Math.round(state.zoom * 100) })}
+          <ChevronDownIcon strokeWidth={1.75} className="size-3 text-tertiary" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="top" align="center" sideOffset={10} className="min-w-50">
+          <DropdownMenuGroup>
+            <DropdownMenuItem onClick={() => commands?.fitAll()}>
+              {t('canvas.fitAll')}
+              <DropdownMenuShortcut>⇧1</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => commands?.fitSelected()}>
+              {t('canvas.fitSelection')}
+              <DropdownMenuShortcut>⇧2</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => commands?.actualSize()}>
+              {t('canvas.actualSize')}
+              <DropdownMenuShortcut>⇧0</DropdownMenuShortcut>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              disabled={atMaxZoom(state.zoom)}
+              onClick={() => commands?.zoomStep(1)}
+            >
+              {t('canvas.zoomIn')}
+              <DropdownMenuShortcut>+</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={atMinZoom(state.zoom)}
+              onClick={() => commands?.zoomStep(-1)}
+            >
+              {t('canvas.zoomOut')}
+              <DropdownMenuShortcut>−</DropdownMenuShortcut>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <BarButton
         label={t('canvas.zoomIn')}
         shortcut="+"
@@ -222,27 +350,7 @@ export function ZoomPill({ controls }: { controls: CanvasControls }) {
       >
         <PlusIcon className="size-3.75" />
       </BarButton>
-      <span aria-hidden className="mx-1 h-4 w-px bg-border" />
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              variant="quiet"
-              size="sm"
-              aria-pressed={state.fitted}
-              onClick={() => commands?.fitAll()}
-              className="h-7 rounded-tile px-2.5 text-hint font-normal text-secondary aria-pressed:bg-transparent aria-pressed:text-secondary aria-pressed:shadow-none"
-            />
-          }
-        >
-          {t('canvas.fit')}
-        </TooltipTrigger>
-        <TooltipContent>
-          {t('canvas.zoomToFit')}
-          <Kbd>⇧1</Kbd>
-        </TooltipContent>
-      </Tooltip>
-    </div>
+    </>
   )
 }
 
@@ -573,6 +681,9 @@ export function ArtifactSurface({
   controls,
   top,
   onEscape,
+  editor,
+  actions,
+  onPageChosen,
 }: {
   url: string
   shown: ShownVersion
@@ -582,6 +693,9 @@ export function ArtifactSurface({
   controls: CanvasControls
   top: number
   onEscape?: () => void
+  editor?: ArtifactEditor
+  actions?: PageActions
+  onPageChosen?: (index: number) => void
 }) {
   if (shown.canvas) {
     return (
@@ -595,6 +709,9 @@ export function ArtifactSurface({
         controls={controls}
         top={top}
         onEscape={onEscape}
+        editor={editor}
+        actions={actions}
+        onPageChosen={onPageChosen}
       />
     )
   }
@@ -608,6 +725,7 @@ export function ArtifactSurface({
         title={title}
         reloads={reloads}
         since={since}
+        editor={editor}
       />
     </div>
   )

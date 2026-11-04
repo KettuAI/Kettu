@@ -241,23 +241,26 @@ const ENTITIES: Readonly<Record<string, string>> = {
   gt: '>',
   quot: '"',
   apos: "'",
-  nbsp: ' ',
+  nbsp: '\u00a0',
+}
+
+/** Text with its character references decoded, as written otherwise. */
+export function decodeText(html: string): string {
+  return html.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (entity, body: string) => {
+    if (body[0] === '#') {
+      const code =
+        body[1] === 'x' || body[1] === 'X' ? parseInt(body.slice(2), 16) : Number(body.slice(1))
+      return Number.isSafeInteger(code) && code > 0 && code <= 0x10ffff
+        ? String.fromCodePoint(code)
+        : entity
+    }
+    return ENTITIES[body.toLowerCase()] ?? entity
+  })
 }
 
 /** Text as HTML would show it, near enough to match a page's report: entities, then spaces. */
 export function plainText(html: string): string {
-  return html
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (entity, body: string) => {
-      if (body[0] === '#') {
-        const code =
-          body[1] === 'x' || body[1] === 'X' ? parseInt(body.slice(2), 16) : Number(body.slice(1))
-        return Number.isSafeInteger(code) && code > 0 && code <= 0x10ffff
-          ? String.fromCodePoint(code)
-          : entity
-      }
-      return ENTITIES[body.toLowerCase()] ?? entity
-    })
+  return decodeText(html.replace(/<[^>]*>/g, ' '))
     .replace(/\s+/g, ' ')
     .trim()
 }

@@ -6,10 +6,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { limitLabel, resetTime } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { isMod } from '@renderer/lib/platform'
+import { selectionPrompt } from '@renderer/features/artifacts/anchors'
+import { SelectionChip } from '@renderer/features/artifacts/selection-chip'
 import { usePane } from '@renderer/features/split/pane-context'
 import { useAgentsStore } from '@renderer/stores/agents'
+import { setPaneSelection, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useThreadsStore } from '@renderer/stores/threads'
+import { useViewStore } from '@renderer/stores/view'
 import { endedOnRejection } from '../turn-phase'
 import { attachmentContent, attachmentsBlock } from './attachments'
 import { ControlRow } from './control-row'
@@ -32,6 +36,17 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const outOfCredit = useOutOfCredit(sessionId)
   const rejected = useThreadsStore((s) => endedOnRejection(s.replicas[sessionId]?.state))
+  // An element picked in the artifact beside this thread goes with the next message.
+  const picked = useArtifactsStore((s) =>
+    s.paneSelection?.projectPath === session.projectPath ? s.paneSelection : null,
+  )
+  const beside = useViewStore(
+    (s) =>
+      picked !== null &&
+      s.sidePane[session.projectPath] === 'artifact' &&
+      s.sideArtifact[session.projectPath] === picked.artifactId,
+  )
+  const selection = beside ? picked : null
 
   const status = session.status
   const starting = status === 'starting'
@@ -71,8 +86,11 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
 
   const queue = (steer: boolean) => {
     const taken = box.take()
+    const sent = selection && taken.prompt.trim() ? selection : null
+    const prompt = sent ? selectionPrompt(taken.prompt, sent) : taken.prompt
+    if (sent) setPaneSelection(null)
     const content: UserContent[] = [
-      ...(taken.prompt.trim() ? [{ type: 'text' as const, text: taken.prompt }] : []),
+      ...(prompt.trim() ? [{ type: 'text' as const, text: prompt }] : []),
       ...attachmentContent(taken.held),
     ]
     host('sessions.queue', { sessionId, content })
@@ -84,7 +102,10 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
           )
         }
       })
-      .catch(box.restore(taken))
+      .catch((reason: unknown) => {
+        if (sent) setPaneSelection(sent)
+        box.restore(taken)(reason)
+      })
   }
 
   const cancel = () => {
@@ -185,19 +206,24 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
           lineHeight: 'calc(var(--spacing) * 5)',
         }}
         onKeyDown={onKeyDown}
-        wrap={!!outOfCredit}
+        wrap={!!outOfCredit || !!selection}
         top={
-          <AnimatePresence initial={false}>
-            {outOfCredit && !starting && (
-              <OutOfCreditStrip
-                key={outOfCredit.id}
-                sessionId={sessionId}
-                notice={outOfCredit}
-                config={session.config}
-                onSwitchModel={() => setModelMenuOpen(true)}
-              />
+          <>
+            <AnimatePresence initial={false}>
+              {outOfCredit && !starting && (
+                <OutOfCreditStrip
+                  key={outOfCredit.id}
+                  sessionId={sessionId}
+                  notice={outOfCredit}
+                  config={session.config}
+                  onSwitchModel={() => setModelMenuOpen(true)}
+                />
+              )}
+            </AnimatePresence>
+            {selection && (
+              <SelectionChip selection={selection} onRemove={() => setPaneSelection(null)} />
             )}
-          </AnimatePresence>
+          </>
         }
         end={
           running ? (

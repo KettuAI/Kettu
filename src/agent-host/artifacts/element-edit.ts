@@ -7,7 +7,7 @@ import {
   EDIT_TEXT_CHARS,
   type PreviewStyle,
 } from '@shared/artifact-runtime/page-messages'
-import { startTagAt, textContentRange, type StartTag } from '@shared/artifact-source'
+import { decodeText, startTagAt, textContentRange, type StartTag } from '@shared/artifact-source'
 
 export interface ElementChange {
   style: PreviewStyle | null
@@ -19,25 +19,6 @@ export class EditError extends Error {
     super(message)
     this.name = 'EditError'
   }
-}
-
-const ENTITIES: Readonly<Record<string, string>> = {
-  amp: '&',
-  quot: '"',
-  apos: "'",
-  lt: '<',
-  gt: '>',
-}
-
-function decodeAttribute(value: string): string {
-  return value.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (entity, body: string) => {
-    if (body[0] !== '#') return ENTITIES[body.toLowerCase()] ?? entity
-    const code =
-      body[1] === 'x' || body[1] === 'X' ? parseInt(body.slice(2), 16) : Number(body.slice(1))
-    return Number.isSafeInteger(code) && code > 0 && code <= 0x10ffff
-      ? String.fromCodePoint(code)
-      : entity
-  })
 }
 
 /** A style's declarations, split at the semicolons outside quotes and brackets. */
@@ -86,7 +67,7 @@ function withStyleAttribute(html: string, tag: StartTag, style: PreviewStyle): s
   // The parser takes an attribute's first occurrence, so that is the one to change.
   const current = tag.attributes.find((attribute) => attribute.name === 'style')
   const value = styleWith(
-    current?.value === null || !current ? '' : decodeAttribute(current.value),
+    current?.value === null || !current ? '' : decodeText(current.value),
     style,
   )
   const attribute = `style="${attributeText(value)}"`

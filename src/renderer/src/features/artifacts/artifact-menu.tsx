@@ -2,6 +2,7 @@ import {
   ExternalLinkIcon,
   FileDownIcon,
   HistoryIcon,
+  ImageDownIcon,
   MessageSquareIcon,
   PencilIcon,
   RotateCwIcon,
@@ -23,6 +24,14 @@ import { isWeb } from '@renderer/lib/platform'
 import { isPublished, useSharingStore } from '@renderer/stores/sharing'
 import { openSessionWithArtifact } from '@renderer/stores/view'
 
+/** Whether this browser can save a folder, which exporting a version of several files needs. */
+function canSaveFolders(): boolean {
+  return (
+    !isWeb ||
+    typeof (window as { showDirectoryPicker?: unknown }).showDirectoryPicker === 'function'
+  )
+}
+
 /** What an artifact's menu acts on. */
 export interface MenuTarget {
   id: string
@@ -31,6 +40,8 @@ export interface MenuTarget {
   version: number
   /** All its versions, for the permanent delete's warning. */
   versions: number
+  /** The files of `version`, which a browser without a folder picker cannot export as several. */
+  files: number
   sessionId: string
   deletedAt: number | null
 }
@@ -46,6 +57,7 @@ export function ArtifactMenuItems({
   onVersionHistory,
   historyOpen,
   onDeleted,
+  onDownloadPng,
 }: {
   target: MenuTarget
   onOpen?: () => void
@@ -55,6 +67,8 @@ export function ArtifactMenuItems({
   /** Where the history can show beside the artifact, whether it does; Version history checks it. */
   historyOpen?: boolean
   onDeleted?: () => void
+  /** Saves the page as an image, where it is a single page a host can render. */
+  onDownloadPng?: () => void
 }) {
   const { t } = useTranslation('artifacts')
   const session = useSessionsStore((s) =>
@@ -129,13 +143,27 @@ export function ArtifactMenuItems({
           </DropdownMenuItem>
         )}
         <DropdownMenuItem
+          disabled={target.files > 1 && !canSaveFolders()}
           onClick={() =>
             void window.kettu.artifacts.export(target.id, target.version).catch(failed('export'))
           }
         >
           <FileDownIcon />
-          {t('menu.export')}
+          {target.files > 1 && !canSaveFolders() ? (
+            <span className="flex min-w-0 flex-col">
+              {t('menu.export')}
+              <span className="text-xs text-tertiary">{t('menu.exportNoFolders')}</span>
+            </span>
+          ) : (
+            t('menu.export')
+          )}
         </DropdownMenuItem>
+        {onDownloadPng && (
+          <DropdownMenuItem onClick={onDownloadPng}>
+            <ImageDownIcon />
+            {t('canvas.downloadPng')}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           onClick={() => askArtifactDialog({ kind: 'rename', id: target.id, title: target.title })}
         >

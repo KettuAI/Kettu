@@ -60,6 +60,7 @@ export interface ArtifactSummary {
   sessionId: string // the session it shows under: its latest version's, else its creator
   version: number // the latest
   pages: number // two or more is a canvas
+  files: number // of the latest version
   size: number // of the latest version, in bytes
   updatedAt: number // when the latest version was made
   deletedAt: number | null

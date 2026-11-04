@@ -447,6 +447,7 @@ function LargeCard({
                     title: summary.title,
                     version: summary.version,
                     versions: summary.version,
+                    files: summary.files,
                     sessionId: summary.sessionId,
                     deletedAt: summary.deletedAt,
                   }}

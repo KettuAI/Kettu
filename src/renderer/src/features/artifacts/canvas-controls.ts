@@ -13,6 +13,10 @@ export interface CanvasState {
 export interface CanvasCommands {
   zoomStep(direction: 1 | -1): void
   fitAll(): void
+  /** Fits the selected page in view. */
+  fitSelected(): void
+  /** Zooms to 100% around the view's middle. */
+  actualSize(): void
   focus(index: number | null): void
 }
 
