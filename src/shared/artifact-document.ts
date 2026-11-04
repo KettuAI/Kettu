@@ -33,6 +33,19 @@ export function markdownBlocks(text: string): MarkdownBlock[] {
   return blocks
 }
 
+/** The languages the Markdown's fenced code names, by its info's first word, lowercased. */
+export function fenceLanguages(text: string): string[] {
+  const languages = new Set<string>()
+  markdown.parse(text).iterate({
+    enter(node) {
+      if (node.name !== 'CodeInfo') return
+      const language = text.slice(node.from, node.to).trim().split(/\s/)[0]?.toLowerCase()
+      if (language) languages.add(language)
+    },
+  })
+  return [...languages]
+}
+
 /** A picture the Markdown shows: what it names, and the line it is on, from 1. */
 export interface MarkdownImage {
   target: string

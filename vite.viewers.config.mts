@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { viewerParts } from './tools/build/viewer-parts'
 
 const source = (file: string): string => fileURLToPath(new URL(file, import.meta.url))
 
@@ -19,7 +20,7 @@ export default defineConfig({
       { find: /^cn$/, replacement: source('src/renderer/src/lib/utils.ts') },
     ],
   },
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), viewerParts()],
   build: {
     outDir: source('out/viewers'),
     emptyOutDir: true,

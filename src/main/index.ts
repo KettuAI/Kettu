@@ -468,7 +468,7 @@ async function start(): Promise<void> {
       content: (id, version) => agentHost.artifactContent(id, version),
       ids: () => agentHost.artifactIds(),
     },
-    viewerFiles: () => artifacts.viewers.all(),
+    viewerFiles: (type, languages) => artifacts.viewers.forPage(type, languages),
     locale: currentLocale,
     cipher: {
       encrypt: async (text) => (await safeStorage.encryptStringAsync(text)).toString('base64'),

@@ -3,10 +3,16 @@
 
 import { readFile } from 'node:fs/promises'
 import { ARTIFACT_ENTRY, isHtmlPath } from '@shared/artifact-files'
-import { type ArtifactTypeInfo, VIEWER_PREFIX, viewerPage } from '@shared/artifact-types'
+import {
+  type ArtifactTypeInfo,
+  type ArtifactTypeName,
+  CONTENT_ENTRIES,
+  VIEWER_PREFIX,
+  viewerPage,
+} from '@shared/artifact-types'
 import { ARTIFACT_ID } from '@shared/artifacts'
 import type { Locale } from '@shared/locale'
-import type { ArtifactContentResult } from '@shared/host-control'
+import type { ArtifactContentFile, ArtifactContentResult } from '@shared/host-control'
 import {
   CLOUDFLARE_ACCOUNT_ID,
   CLOUDFLARE_TOKEN,
@@ -38,6 +44,11 @@ export interface SharingHost {
   ids(): Promise<Set<string> | null>
 }
 
+export interface ViewerFile {
+  path: string
+  file: string
+}
+
 export interface SharingDeps {
   userDataPath: string
   /** `artifacts/content/` in the data folder. */
@@ -54,10 +65,11 @@ export interface SharingDeps {
   /** Told of every change, for the windows; the token is not part of the status. */
   changed?(status: SharingStatus): void
   /**
-   * The type viewers' files by their paths under the viewers' folder, which a typed artifact's
-   * page publishes with its content; none without them.
+   * The files of a type's viewer by their paths under the viewers' folder, with the grammars of
+   * the code languages its content names, which a typed artifact's page publishes with its
+   * content; none without them.
    */
-  viewerFiles?(): Promise<{ path: string; file: string }[]>
+  viewerFiles?(type: ArtifactTypeName, languages: readonly string[]): Promise<ViewerFile[]>
   /** The language a published type viewer speaks. */
   locale?(): Locale
 }
@@ -320,7 +332,7 @@ export class Sharing {
       throw new SharingError('unavailable', 'The agent host did not answer.')
     }
     const files: PageFile[] = []
-    if (found.type) files.push(...(await this.viewerOf(found.type, found.version)))
+    if (found.type) files.push(...(await this.viewerOf(found.type, found.version, found.files)))
     for (const file of found.files) {
       if (!isInside(this.deps.contentDir, file.file)) {
         throw new SharingError('failed', 'The artifact file is not in the artifacts folder.')
@@ -341,9 +353,14 @@ export class Sharing {
    * A typed version's page: its type's viewer, which reads the content files beside it as they
    * are published, without the runtime, so it shows them and offers no editing.
    */
-  private async viewerOf(type: ArtifactTypeInfo, version: number): Promise<PageFile[]> {
+  private async viewerOf(
+    type: ArtifactTypeInfo,
+    version: number,
+    content: ArtifactContentFile[],
+  ): Promise<PageFile[]> {
     const page = viewerPage(type, version, this.deps.locale?.() ?? 'en', '')
-    const viewers = (await this.deps.viewerFiles?.()) ?? []
+    const viewers =
+      (await this.deps.viewerFiles?.(type.name, await this.codeLanguages(type, content))) ?? []
     if (!page || viewers.length === 0) {
       throw new SharingError('failed', 'This build has no viewer for the artifact’s type.')
     }
@@ -356,6 +373,21 @@ export class Sharing {
       }
     }
     return files
+  }
+
+  /** The code languages a document's fences name, whose grammars its viewer loads. */
+  private async codeLanguages(
+    type: ArtifactTypeInfo,
+    content: ArtifactContentFile[],
+  ): Promise<string[]> {
+    const entry = content.find((file) => file.path === CONTENT_ENTRIES[type.name])
+    if (type.name !== 'document' || !entry || !isInside(this.deps.contentDir, entry.file)) return []
+    try {
+      const { fenceLanguages } = await import('@shared/artifact-document')
+      return fenceLanguages(await readFile(entry.file, 'utf8'))
+    } catch (error) {
+      throw new SharingError('failed', `Could not read the artifact: ${(error as Error).message}`)
+    }
   }
 
   private async tokenOf(): Promise<string> {
