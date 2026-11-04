@@ -1724,7 +1724,7 @@ export class ArtifactTools {
         ...(editor ? { editor } : {}),
       })
       return result(
-        `Created ${id} version ${version}, a ${name}${filesText(draft.files)}. Kettu shows it ` +
+        `Created ${id} version ${version} from the ${name} type${filesText(draft.files)}. Kettu shows it ` +
           'with its viewer; change it with update_artifact.',
         { id, version, type: name, format: type.format },
       )
