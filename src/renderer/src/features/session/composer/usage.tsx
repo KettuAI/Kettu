@@ -23,7 +23,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { useCacheLeft, useCachePhase } from '@renderer/features/prompt-cache/cache-phase'
 import {
   breakdownView,
-  compactsAt,
   contextSegments,
   partFill,
   shownUsage,
@@ -306,7 +305,6 @@ export function ContextButton({
   context,
   limits,
   account,
-  onCompact,
 }: {
   sessionId: string
   agentId: AgentId
@@ -322,7 +320,6 @@ export function ContextButton({
   context?: ContextReport
   limits: PlanLimit[]
   account: AgentAccount | null
-  onCompact: (() => void) | null
 }) {
   const { t } = useTranslation('composer')
   const warning = warningLimit(limits)
@@ -413,7 +410,6 @@ export function ContextButton({
             live={live}
             report={read}
             managed={context !== undefined && direct}
-            onCompact={onCompact}
           />
         )}
         {subscribed && (
@@ -442,7 +438,6 @@ function ContextPart({
   live,
   report,
   managed,
-  onCompact,
 }: {
   sessionId: string
   usage: SessionUsage
@@ -453,7 +448,6 @@ function ContextPart({
   live: boolean
   report: ContextReport | undefined
   managed: boolean
-  onCompact: (() => void) | null
 }) {
   const { t } = useTranslation('composer')
   const totals = usage.tokens
@@ -470,7 +464,6 @@ function ContextPart({
   const breakdown = view.kind === 'rows' ? report?.breakdown : null
   const lists = breakdown?.lists ?? []
   const busy = view.kind === 'rows' && view.dimmed
-  const compactAt = compactsAt(rows, usage.size)
   const retry = () => loadContext(sessionId, key, true)
   return (
     <div className="flex flex-col text-hint">
@@ -514,18 +507,6 @@ function ContextPart({
           {lists.map((list) => (
             <ListPart key={list.name} list={list} />
           ))}
-        </div>
-      )}
-      {(compactAt !== null || onCompact) && (
-        <div className="mt-2.5 flex items-center gap-2">
-          <span className="min-w-0 flex-1 text-small text-tertiary">
-            {compactAt !== null && t('usage.context.compactsAt', { percent: compactAt })}
-          </span>
-          {onCompact && (
-            <Button variant="outline" size="sm" onClick={onCompact}>
-              {t('usage.context.compact')}
-            </Button>
-          )}
         </div>
       )}
       {(totals || usage.cost) && (
@@ -679,7 +660,7 @@ function BreakdownError({ error, onRetry }: { error: string; onRetry: () => void
 function ListPart({ list }: { list: ContextList }) {
   return (
     <Collapsible>
-      <CollapsibleTrigger className="group/list flex h-6 w-full items-center gap-1.5 rounded-sm text-secondary outline-none focus-ring">
+      <CollapsibleTrigger className="group/list -mx-2 flex h-6 w-[calc(100%+1rem)] items-center gap-1.5 rounded-md px-2 text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-visible:bg-hover focus-ring">
         <ChevronRightIcon
           strokeWidth={1.6}
           className="size-2.75 shrink-0 text-tertiary transition-transform duration-(--duration-fast) group-data-panel-open/list:rotate-90 motion-reduce:transition-none"

@@ -183,15 +183,6 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
           ? t('prompt.placeholder.denied', { agent: agentName })
           : t('prompt.placeholder.ask', { agent: agentName })
 
-  const compact = session.commands.some((c) => c.name === 'compact')
-    ? () => {
-        if (!idle) return
-        host('sessions.prompt', { sessionId, content: [{ type: 'text', text: '/compact' }] }).catch(
-          (e: unknown) => setError(errorMessage(e)),
-        )
-      }
-    : null
-
   return (
     <div data-composer="" className="flex flex-col">
       {box.historyEntry && <HistoryCard entry={box.historyEntry} onInsert={box.insertHistory} />}
@@ -262,7 +253,6 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
           <ControlRow
             session={session}
             addMenu={<AddMenu box={box} agentName={agentName} commands={session.commands} />}
-            onCompact={compact}
             ultracode={ultracode}
             modelMenu={{ open: modelMenuOpen, onOpenChange: setModelMenuOpen }}
             outOfCredit={!!outOfCredit}
