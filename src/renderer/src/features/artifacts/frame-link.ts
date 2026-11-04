@@ -108,6 +108,11 @@ export class FrameLink {
     this.send(message)
   }
 
+  /** Keeps a message for the next page the frame loads, without sending it to this one. */
+  keep(message: DriveMessage & { kind: Sticky }): void {
+    this.sticky.set(message.kind, message)
+  }
+
   dispose(): void {
     channels.delete(this.channel)
     this.closePort()

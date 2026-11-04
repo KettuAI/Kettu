@@ -88,7 +88,13 @@ export type DriveMessage =
   | { v: typeof RUNTIME_VERSION; kind: 'select-point'; x: number; y: number }
   | { v: typeof RUNTIME_VERSION; kind: 'select-leave' }
   | { v: typeof RUNTIME_VERSION; kind: 'select-pick'; x: number; y: number }
-  | { v: typeof RUNTIME_VERSION; kind: 'select-source'; src: number | null }
+  | {
+      v: typeof RUNTIME_VERSION
+      kind: 'select-source'
+      src: number | null
+      /** Report the element picked, as a pick by pointer does; the page then shows it edited. */
+      tell?: boolean
+    }
   | { v: typeof RUNTIME_VERSION; kind: 'select-pins'; pins: Pin[] }
   | { v: typeof RUNTIME_VERSION; kind: 'preview-style'; style: PreviewStyle }
   | { v: typeof RUNTIME_VERSION; kind: 'preview-text'; text: string }

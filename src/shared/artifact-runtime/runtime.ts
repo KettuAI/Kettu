@@ -450,7 +450,10 @@ export function start(config: RuntimeConfig): void {
         pick(elementAt(message.x, message.y), true)
         return
       case 'select-source':
-        pick(message.src === null ? null : sourceElement(message.src), false)
+        pick(
+          message.src === null ? null : sourceElement(message.src),
+          message.src !== null && message.tell === true,
+        )
         return
       case 'select-pins':
         pins = Array.isArray(message.pins) ? message.pins.slice(0, 200) : []

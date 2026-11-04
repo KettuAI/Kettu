@@ -287,7 +287,7 @@
   },
   "edit": {
     "title": "Edit",
-    "previewing": "Previewed in the page; nothing is written until you save.",
+    "autosave": "Changes save on their own as a new version; the history can restore an earlier one.",
     "scripted": "A script on the page made this element, so it can only be commented on.",
     "earlier": "Only the latest version can be edited.",
     "deleted": "Restore the artifact to edit it.",
@@ -316,8 +316,9 @@
     },
     "padding": "Padding",
     "radius": "Radius",
-    "discard": "Discard",
-    "save": "Save as v{{version}}"
+    "saving": "Saving…",
+    "saved": "Saved as v{{version}}",
+    "failed": "The change was not saved: {{error}}"
   },
   "present": {
     "label": "Presenting {{title}}",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlignCenterIcon, AlignLeftIcon, AlignRightIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -7,7 +7,6 @@ import {
   type PreviewStyle,
 } from '@shared/artifact-runtime/page-messages'
 import { decodeText, startTagAt, textContentRange } from '@shared/artifact-source'
-import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import {
   Select,
@@ -19,12 +18,15 @@ import {
 } from '@renderer/components/ui/select'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Textarea } from '@renderer/components/ui/textarea'
+import { toast } from '@renderer/components/ui/toast'
 import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import type { ArtifactEditor, Picked } from './editor'
 
 const WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900] as const
+/** How long the fields rest before what changed is written. */
+const AUTOSAVE_MS = 800
 const ALIGNS = [
   { value: 'left', Icon: AlignLeftIcon },
   { value: 'center', Icon: AlignCenterIcon },
@@ -99,6 +101,10 @@ const PROPERTY: Record<Exclude<keyof Fields, 'text'>, EditableProperty> = {
   radius: 'border-radius',
 }
 
+function sameFields(a: Fields, b: Fields): boolean {
+  return (Object.keys(a) as (keyof Fields)[]).every((field) => a[field] === b[field])
+}
+
 /** What differs from where the fields started: the style to write, and the text if changed. */
 function changes(start: Fields, now: Fields): { style: PreviewStyle; text: string | null } {
   const style: PreviewStyle = {}
@@ -110,38 +116,56 @@ function changes(start: Fields, now: Fields): { style: PreviewStyle; text: strin
   return { style, text: now.text !== null && now.text !== start.text ? now.text : null }
 }
 
+/** The element a write changes: its file, where its start tag is and the version that says so. */
+interface Target {
+  path: string
+  offset: number
+  version: number
+}
+
+// One write at a time for the whole window, so a write waits for the version the one before makes.
+let writing: Promise<void> = Promise.resolve()
+
 /**
  * The source of the picked element's file in the version shown, for its text as written and to
  * check that the page's offset names an element there.
  */
-function useSource(id: string, version: number, path: string): string | null | 'failed' {
-  const [source, setSource] = useState<{ key: string; text: string | 'failed' } | null>(null)
-  const key = `${id}:${version}:${path}`
+function useSource(
+  id: string,
+  version: number,
+  path: string,
+): { text: string | 'failed'; version: number } | null {
+  const [source, setSource] = useState<{
+    id: string
+    path: string
+    version: number
+    text: string | 'failed'
+  } | null>(null)
   useEffect(() => {
     let live = true
     host('artifacts.file', { id, version, path }).then(
       ({ bytes }) => {
-        if (live) setSource({ key, text: new TextDecoder().decode(bytes) })
+        if (live) setSource({ id, path, version, text: new TextDecoder().decode(bytes) })
       },
       () => {
-        if (live) setSource({ key, text: 'failed' })
+        if (live) setSource({ id, path, version, text: 'failed' })
       },
     )
     return () => {
       live = false
     }
-  }, [id, version, path, key])
-  return source?.key === key ? source.text : null
+  }, [id, version, path])
+  // A new version of the same file keeps the last one shown until it arrives, so the fields stay.
+  return source?.id === id && source.path === path ? source : null
 }
 
 /**
  * The right column in select mode once an element is picked: its text, when it holds text alone,
- * and its look, previewed in the page as they change and written as a new version on Save.
+ * and its look, previewed in the page as they change and written as a new version once they rest.
  */
 export function EditPanel({
   id,
   version,
-  head,
   editable,
   picked,
   editor,
@@ -149,7 +173,6 @@ export function EditPanel({
   id: string
   /** The version shown, where the element was picked. */
   version: number
-  head: number
   /** Why it cannot be edited: an earlier version, or one in Recently deleted. */
   editable: 'yes' | 'earlier' | 'deleted'
   picked: Picked
@@ -157,7 +180,8 @@ export function EditPanel({
 }) {
   const { t } = useTranslation('artifacts')
   const { selection } = picked
-  const source = useSource(id, version, selection.path)
+  const loaded = useSource(id, version, selection.path)
+  const source = loaded?.text ?? null
   const element = useMemo(() => {
     if (!source || source === 'failed' || selection.src === null) return null
     const tag = startTagAt(source, selection.src)
@@ -185,14 +209,20 @@ export function EditPanel({
     }
   }, [element, source, selection])
   const [fields, setFields] = useState<Fields>(start)
-  const [busy, setBusy] = useState(false)
+  // What the latest version holds, as far as this panel knows.
+  const [written, setWritten] = useState<Fields>(start)
+  const [saving, setSaving] = useState(0)
+  const [savedAs, setSavedAs] = useState<number | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  // A new pick starts the fields over.
+  // The element's source arrived: untouched fields follow it. Once the panel has written, its
+  // fields are what the latest version holds, so the pages its writes make change nothing here.
   const [shownStart, setShownStart] = useState(start)
   if (shownStart !== start) {
     setShownStart(start)
-    setFields(start)
-    setNotice(null)
+    if (savedAs === null && sameFields(fields, written)) {
+      setFields(start)
+      setWritten(start)
+    }
   }
   const diff = changes(start, fields)
   const changed = Object.keys(diff.style).length > 0 || diff.text !== null
@@ -200,34 +230,84 @@ export function EditPanel({
   useEffect(() => {
     if (changed) editor.preview(diff.style, diff.text)
     else editor.resetPreview()
-    // The preview follows the fields' values, not each new object.
+    // The preview follows the fields' values, not each new object, and comes back on a new page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, JSON.stringify(diff), changed])
+  }, [editor, JSON.stringify(diff), changed, selection])
 
   const set = (patch: Partial<Fields>) => setFields((now) => ({ ...now, ...patch }))
 
-  const save = () => {
-    if (!changed || busy || !element) return
-    setBusy(true)
-    host('artifacts.editElement', {
-      id,
-      baseVersion: head,
-      path: selection.path,
-      offset: element.start,
-      style: Object.keys(diff.style).length > 0 ? diff.style : null,
-      text: diff.text,
+  const target: Target | null =
+    element && loaded && editable === 'yes'
+      ? { path: selection.path, offset: element.start, version: loaded.version }
+      : null
+  const live = useRef(true)
+  // The last version this panel wrote: its own writes keep the element where it starts.
+  const wrote = useRef(0)
+  const queued = useRef(start)
+  const now = useRef({ fields, written, target })
+  useEffect(() => {
+    now.current = { fields, written, target }
+  })
+
+  /** Writes what changed from `from` to `snapshot`, after any write already on its way. */
+  const save = (snapshot: Fields, from: Fields, to: Target) => {
+    if (sameFields(snapshot, queued.current)) return
+    queued.current = snapshot
+    const change = changes(from, snapshot)
+    if (Object.keys(change.style).length === 0 && change.text === null) return
+    setSaving((count) => count + 1)
+    writing = writing.then(async () => {
+      try {
+        const { version } = await host('artifacts.editElement', {
+          id,
+          // A version anyone else wrote may have moved the element, so it is a conflict.
+          baseVersion: Math.max(to.version, wrote.current),
+          path: to.path,
+          offset: to.offset,
+          style: Object.keys(change.style).length > 0 ? change.style : null,
+          text: change.text,
+        })
+        wrote.current = version
+        if (!live.current) return
+        setWritten(snapshot)
+        setSavedAs(version)
+        setNotice(null)
+      } catch (reason) {
+        if (errorCode(reason) === 'conflict') {
+          toast(t('edit.conflict'), undefined, { tone: 'warning' })
+          if (live.current) editor.clearPick()
+        } else if (live.current) setNotice(errorMessage(reason))
+        else
+          toast(t('edit.failed', { error: errorMessage(reason) }), undefined, { tone: 'warning' })
+      } finally {
+        if (live.current) setSaving((count) => count - 1)
+      }
     })
-      .then(
-        () => editor.clearPick(),
-        (reason: unknown) => {
-          if (errorCode(reason) === 'conflict') {
-            setNotice(t('edit.conflict'))
-            editor.clearPick()
-          } else setNotice(errorMessage(reason))
-        },
-      )
-      .finally(() => setBusy(false))
   }
+
+  const dirty = !sameFields(fields, written)
+  const fieldsKey = JSON.stringify(fields)
+  useEffect(() => {
+    if (!dirty || !target) return
+    const timer = setTimeout(() => {
+      const at = now.current
+      if (at.target) save(at.fields, at.written, at.target)
+    }, AUTOSAVE_MS)
+    return () => clearTimeout(timer)
+    // A change of the fields starts the wait over; `save` reads the latest of them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldsKey, dirty, target?.path, target?.offset])
+
+  // Picking another element or leaving select mode writes what has not been yet.
+  useEffect(() => {
+    live.current = true
+    return () => {
+      live.current = false
+      const at = now.current
+      if (at.target && !sameFields(at.fields, at.written)) save(at.fields, at.written, at.target)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   let body: React.ReactNode
   if (editable !== 'yes') {
@@ -244,7 +324,7 @@ export function EditPanel({
   } else {
     body = (
       <>
-        <Note>{t('edit.previewing')}</Note>
+        <Note>{t('edit.autosave')}</Note>
         {fields.text !== null && (
           <Field label={t('edit.text')}>
             <Textarea
@@ -354,23 +434,13 @@ export function EditPanel({
           </p>
         )}
       </div>
-      {element && editable === 'yes' && (
-        <div className="flex shrink-0 justify-end gap-2 px-4 py-3 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-          <Button
-            variant="quiet"
-            size="sm"
-            disabled={!changed || busy}
-            onClick={() => {
-              setFields(start)
-              editor.resetPreview()
-            }}
-          >
-            {t('edit.discard')}
-          </Button>
-          <Button size="sm" disabled={!changed || busy} onClick={save}>
-            {t('edit.save', { version: head + 1 })}
-          </Button>
-        </div>
+      {target && (saving > 0 || savedAs !== null) && (
+        <p
+          role="status"
+          className="shrink-0 px-4 py-3 text-small text-tertiary shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]"
+        >
+          {saving > 0 ? t('edit.saving') : t('edit.saved', { version: savedAs })}
+        </p>
       )}
     </aside>
   )

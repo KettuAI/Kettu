@@ -278,7 +278,7 @@
   },
   "edit": {
     "title": "编辑",
-    "previewing": "在页面里预览，保存前什么都不写。",
+    "autosave": "改动会自动保存成新版本，历史里能恢复到之前的。",
     "scripted": "这个元素由页面的脚本生成，只能评论。",
     "earlier": "只有最新版本能编辑。",
     "deleted": "恢复这个 artifact 后才能编辑。",
@@ -307,8 +307,9 @@
     },
     "padding": "内边距",
     "radius": "圆角",
-    "discard": "放弃",
-    "save": "保存为 v{{version}}"
+    "saving": "正在保存…",
+    "saved": "已保存为 v{{version}}",
+    "failed": "改动没有保存：{{error}}"
   },
   "present": {
     "label": "正在演示 {{title}}",

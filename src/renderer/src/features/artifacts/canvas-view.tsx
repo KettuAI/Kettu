@@ -431,8 +431,9 @@ export const CanvasView = memo(function CanvasView({
     const count = pages.length
     const modeKey = editor ? isModeKey(event.nativeEvent) : null
     if (modeKey) editor!.toggle(modeKey)
-    else if (key === 'Escape' && editor && mode) editor.setMode(null)
-    else if (event.shiftKey && event.code === 'Digit1') fitAll(true)
+    else if (key === 'Escape' && editor?.escape()) {
+      // Back to the base mode, or the pick let go of, before Esc means anything else.
+    } else if (event.shiftKey && event.code === 'Digit1') fitAll(true)
     else if (event.shiftKey && event.code === 'Digit2') fitPage(selected)
     else if (event.shiftKey && event.code === 'Digit0') zoomAround(1)
     else if (key === 'ArrowRight') select(Math.min(count - 1, selected + 1), true)
@@ -591,7 +592,7 @@ export const CanvasView = memo(function CanvasView({
             if (mode) pointAt(-1, 0, 0)
           }}
           onDoubleClick={(event) => {
-            if (mode) return
+            if (mode === 'comment') return
             const { sx, sy } = point(event)
             const index = pageAt(pages, camera.current, sx, sy)
             if (index < 0) return
@@ -806,8 +807,9 @@ function FocusedPage({
         if (event.target !== event.currentTarget) return
         const modeKey = editor ? isModeKey(event.nativeEvent) : null
         if (modeKey) editor!.toggle(modeKey)
-        else if (event.key === 'Escape' && editor && mode) editor.setMode(null)
-        else if (event.key === 'Escape') onLeave()
+        else if (event.key === 'Escape' && editor?.escape()) {
+          // Back to the base mode, or the pick let go of, before leaving the page.
+        } else if (event.key === 'Escape') onLeave()
         else if (event.key === 'ArrowRight') onMove(1)
         else if (event.key === 'ArrowLeft') onMove(-1)
         else return

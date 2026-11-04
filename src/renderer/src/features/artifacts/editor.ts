@@ -48,6 +48,8 @@ function accent(): string {
  */
 export class ArtifactEditor {
   private state: EditorState = { mode: null, picked: null }
+  /** The mode it is in unless another is chosen: select on a canvas, none on a live page. */
+  private base: EditorMode = null
   private readonly listeners = new Set<() => void>()
   private readonly frames = new Set<EditorFrame>()
   private pins: (page: number | null) => Pin[] = () => []
@@ -132,8 +134,24 @@ export class ArtifactEditor {
     for (const frame of this.frames) this.drive(frame)
   }
 
+  /** Turns a mode on, or off back to the base mode. */
   toggle(mode: Exclude<EditorMode, null>): void {
-    this.setMode(this.state.mode === mode ? null : mode)
+    this.setMode(this.state.mode === mode ? this.base : mode)
+  }
+
+  /** The base mode, which it moves to when it was in the old one or in none. */
+  setBase(base: EditorMode): void {
+    const was = this.base
+    this.base = base
+    if (this.state.mode === null || this.state.mode === was) this.setMode(base)
+  }
+
+  /** What Esc does here: back to the base mode, else letting go of the pick; false for neither. */
+  escape(): boolean {
+    if (this.state.mode !== this.base) this.setMode(this.base)
+    else if (this.state.picked) this.clearPick()
+    else return false
+    return true
   }
 
   /** The pins each page shows, from the threads; called again whenever they change. */
@@ -150,11 +168,24 @@ export class ArtifactEditor {
     point: { x: number; y: number } | null,
   ): void {
     if (!this.state.mode) return
+    const was = this.state.picked
     if (this.pickedBy && this.pickedBy !== frame) {
       this.pickedBy.link.post({ v: RUNTIME_VERSION, kind: 'select-source', src: null })
     }
+    // The page picks the same element again when it loads, such as with the version an edit wrote.
+    frame.link.keep({
+      v: RUNTIME_VERSION,
+      kind: 'select-source',
+      src: selection?.src ?? null,
+      tell: true,
+    })
+    const again = this.pickedBy === frame && was?.selection.src === selection?.src
     this.pickedBy = selection ? frame : null
-    this.set({ picked: selection ? { page: frame.page, selection, point } : null })
+    this.set({
+      picked: selection
+        ? { page: frame.page, selection, point: point ?? (again ? was!.point : null) }
+        : null,
+    })
   }
 
   /** Lets go of the picked element, putting back any preview on it. */

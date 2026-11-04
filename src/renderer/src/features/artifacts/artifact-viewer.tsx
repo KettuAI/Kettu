@@ -115,7 +115,8 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
   const editing = useEditorState(editor)
   const { threads, error: commentsError } = useComments(id)
   const canvasState = useCanvasState(controls)
-  const latest = !!shown && head !== null && shown.version === head && !states.inTrash
+  // A version just written counts as the latest while it loads, so editing goes on across it.
+  const latest = !!shown && earlier === null && !states.inTrash
   // Comment mode shows the comments, unless the history was chosen over them.
   const shownPanel: Panel | null =
     editing.mode === 'comment' && panel !== 'history' ? 'comments' : panel
@@ -127,11 +128,15 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
   }, [editor, shown, threads, pinsShown])
 
   // Only the latest version, outside Recently deleted, is commented on and edited; a new version
-  // arriving keeps the mode.
+  // arriving keeps the mode. A canvas is in select mode unless another is chosen, while a single
+  // page, or a canvas page in focus, stays live for its own clicks.
   const leftLatest = earlier !== null || states.inTrash
+  const selects = !!shown?.canvas && canvasState.focused === null
   useEffect(() => {
-    if (leftLatest) editor?.setMode(null)
-  }, [leftLatest, editor])
+    if (!editor) return
+    editor.setBase(!leftLatest && selects ? 'select' : null)
+    if (leftLatest) editor.setMode(null)
+  }, [leftLatest, selects, editor])
 
   const pageName = useMemo(
     () => (shown?.canvas ? canvasPageName(shown, (number) => t('canvas.page', { number })) : null),
@@ -174,8 +179,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
       }
       if (event.key !== 'Escape') return
       event.preventDefault()
-      if (editor && editor.get().mode) editor.setMode(null)
-      else leaveArtifact()
+      if (!editor?.escape()) leaveArtifact()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -335,11 +339,10 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
   if (editingPicked) {
     column = (
       <EditPanel
-        key={`${editing.picked!.page}:${editing.picked!.selection.src}:${shown.version}`}
+        key={`${editing.picked!.page}:${editing.picked!.selection.path}:${editing.picked!.selection.src}`}
         id={id}
         version={shown.version}
-        head={head}
-        editable={states.inTrash ? 'deleted' : shown.version !== head ? 'earlier' : 'yes'}
+        editable={states.inTrash ? 'deleted' : earlier !== null ? 'earlier' : 'yes'}
         picked={editing.picked!}
         editor={editor}
       />
