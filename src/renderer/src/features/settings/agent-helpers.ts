@@ -2,10 +2,11 @@
 // harness, a button's request state, and reading an agent's account, usage and version.
 
 import { useEffect, useState } from 'react'
-import type { AgentOptions, AgentStatus, PlanLimit } from '@shared/agent-host'
+import type { AgentOptions, AgentStatus, PlanLimit, SessionSummary } from '@shared/agent-host'
 import { isFullAccessMode, isStartMode } from '@shared/agents'
 import type { AgentId, HarnessId } from '@shared/thread'
 import { errorMessage } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { isInstalled } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 
@@ -35,6 +36,26 @@ export function useAction(): [(run: () => Promise<unknown>) => void, boolean, st
 
 export function limitsReadable(status: AgentStatus): boolean {
   return status.capabilities.reports && isInstalled(status) && status.signIn !== 'required'
+}
+
+/**
+ * A folder of this computer a sign-in terminal can open in without a project: the selected one,
+ * else a project, else the newest scratch folder of a session started with No project.
+ */
+export function signInFolder(input: {
+  selected: string | null
+  projects: readonly { path: string }[]
+  sessions: Readonly<Record<string, SessionSummary>>
+}): string | null {
+  const local = (path: string | null | undefined): path is string =>
+    !!path && hostOfPath(path) === null
+  if (local(input.selected)) return input.selected
+  const project = input.projects.find((p) => local(p.path))
+  if (project) return project.path
+  const scratch = Object.values(input.sessions)
+    .filter((session) => session.scratch && local(session.projectPath))
+    .sort((a, b) => b.updatedAt - a.updatedAt)[0]
+  return scratch?.projectPath ?? null
 }
 
 /**

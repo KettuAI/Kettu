@@ -52,9 +52,11 @@ import { Input } from '@renderer/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@renderer/components/ui/radio-group'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { toast } from '@renderer/components/ui/toast'
 import { AgentStateLine } from '@renderer/features/agents/agent-state'
 import { readiness, type AgentReadiness } from '@renderer/features/agents/readiness'
 import { errorMessage } from '@renderer/lib/host'
+import { i18n } from '@renderer/lib/i18n'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import {
@@ -66,6 +68,7 @@ import {
 import { addableHarnesses, type AgentsStoreHook } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
+import { useSessionsStore } from '@renderer/stores/sessions'
 import {
   closeSettings,
   openAgentSettings,
@@ -74,10 +77,12 @@ import {
   useViewStore,
 } from '@renderer/stores/view'
 import { Fact, ListMeter, SignInNotice, SpendGroup, UsageGroup } from './agent-parts'
+import { AgentProviders } from './agent-providers'
 import {
   currentLimits,
   FOLLOW_AGENT,
   harnessVersion,
+  signInFolder,
   startModeView,
   useAction,
   useAgentReads,
@@ -137,11 +142,21 @@ function listed(agents: AgentsStoreHook, agentId: AgentId): Promise<void> {
   })
 }
 
-/** Runs the agent's terminal sign-in in the built-in terminal of the current project. */
+/** Runs the agent's terminal sign-in in the built-in terminal, or copies its command without one. */
 function signInTerminal(status: AgentStatus, command: string): void {
   const view = useViewStore.getState()
-  const projectPath = view.projectPath ?? useProjectsStore.getState().projects[0]?.path
-  if (!projectPath) return
+  const projectPath = signInFolder({
+    selected: view.projectPath,
+    projects: useProjectsStore.getState().projects,
+    sessions: useSessionsStore.getState().byId,
+  })
+  if (!projectPath) {
+    void navigator.clipboard.writeText(command).then(
+      () => toast(i18n.t('settings:agents.signInCopied')),
+      () => toast(i18n.t('settings:agents.signInCopyFailed'), undefined, { tone: 'warning' }),
+    )
+    return
+  }
   closeSettings()
   toggleTerminal(projectPath, true)
   emitAppEvent({ kind: 'sign-in-terminal', projectPath, command, agentId: status.id })
@@ -811,6 +826,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
   const refreshAccount = useRefresh()
   const [accountError, setAccountError] = useState<string | null>(null)
   const running = status.state === 'ready'
+  const providerMode = status.providers !== undefined
   const terminalSignIn = status.authMethods.find((m) => m.type === 'terminal' && m.command)
 
   const actions = (
@@ -855,7 +871,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
             )}
           </p>
         )}
-        {r.kind === 'sign-in' && status.authMethods.length > 0 && (
+        {!providerMode && r.kind === 'sign-in' && status.authMethods.length > 0 && (
           <div className="mt-5 min-w-0">
             <SignInNotice
               status={status}
@@ -871,74 +887,87 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
         )}
         {error && <p className="mt-4 text-group text-danger">{error}</p>}
 
-        <section className="flex flex-col">
-          <GroupLabel
-            group={{
-              id: 'account',
-              label: t('agents.account'),
-              actions: status.capabilities.account ? (
-                <IconAction
-                  label={t('agents.refreshAccount')}
-                  disabled={refreshAccount.phase === 'turning'}
-                  busy={refreshAccount.phase === 'turning'}
-                  onClick={() => {
-                    setAccountError(null)
-                    void refreshAccount
-                      .run(() =>
-                        request('agents.refreshAccount', { agentId: status.id, force: true }),
-                      )
-                      .catch((e: unknown) => setAccountError(errorMessage(e)))
-                  }}
-                >
-                  <RefreshIcon phase={refreshAccount.phase} />
-                </IconAction>
-              ) : undefined,
-            }}
+        {providerMode ? (
+          <AgentProviders
+            status={status}
+            reading={reading}
+            running={running}
+            onSignIn={(command) => signInTerminal(status, command)}
           />
-          {accountError && <p className="pb-2 text-hint text-danger">{accountError}</p>}
-          <RowGroup>
-            {/* A subscription's label is its plan; the other kinds name how the agent signs in. */}
-            <Fact
-              name={t(status.account?.kind === 'account' ? 'agents.plan' : 'agents.loginMethod')}
-            >
-              {status.account?.kind === 'none' ? null : status.account?.label}
-            </Fact>
-            {status.account?.email && <Fact name={t('agents.email')}>{status.account.email}</Fact>}
-            {status.apiKey && <ApiKeyRow status={status} />}
-            {((terminalSignIn && hostId === null) ||
-              (status.canLogout && status.signIn === 'signed-in')) && (
-              <RowFrame
-                text={
-                  <RowText name={t('agents.signInRow')} description={t('agents.signInRowHint')} />
-                }
+        ) : (
+          <section className="flex flex-col">
+            <GroupLabel
+              group={{
+                id: 'account',
+                label: t('agents.account'),
+                actions: status.capabilities.account ? (
+                  <IconAction
+                    label={t('agents.refreshAccount')}
+                    disabled={refreshAccount.phase === 'turning'}
+                    busy={refreshAccount.phase === 'turning'}
+                    onClick={() => {
+                      setAccountError(null)
+                      void refreshAccount
+                        .run(() =>
+                          request('agents.refreshAccount', { agentId: status.id, force: true }),
+                        )
+                        .catch((e: unknown) => setAccountError(errorMessage(e)))
+                    }}
+                  >
+                    <RefreshIcon phase={refreshAccount.phase} />
+                  </IconAction>
+                ) : undefined,
+              }}
+            />
+            {accountError && <p className="pb-2 text-hint text-danger">{accountError}</p>}
+            <RowGroup>
+              {/* A subscription's label is its plan; the other kinds name how the agent signs in. */}
+              <Fact
+                name={t(status.account?.kind === 'account' ? 'agents.plan' : 'agents.loginMethod')}
               >
-                {status.canLogout && status.signIn === 'signed-in' && (
-                  <Button
-                    variant="ghost"
-                    className={cn(ROW_BUTTON, 'text-secondary')}
-                    disabled={busy}
-                    onClick={() => act(() => request('agents.logout', { agentId: status.id }))}
-                  >
-                    {t('agents.signOut')}
-                  </Button>
-                )}
-                {terminalSignIn?.command && hostId === null && (
-                  <Button
-                    className={ROW_BUTTON}
+                {status.account?.kind === 'none' ? null : status.account?.label}
+              </Fact>
+              {status.account?.email && (
+                <Fact name={t('agents.email')}>{status.account.email}</Fact>
+              )}
+              {status.apiKey && <ApiKeyRow status={status} />}
+              {((terminalSignIn && hostId === null) ||
+                (status.canLogout && status.signIn === 'signed-in')) && (
+                <RowFrame
+                  text={
+                    <RowText name={t('agents.signInRow')} description={t('agents.signInRowHint')} />
+                  }
+                >
+                  {status.canLogout && status.signIn === 'signed-in' && (
+                    <Button
+                      variant="ghost"
+                      className={cn(ROW_BUTTON, 'text-secondary')}
+                      disabled={busy}
+                      onClick={() => act(() => request('agents.logout', { agentId: status.id }))}
+                    >
+                      {t('agents.signOut')}
+                    </Button>
+                  )}
+                  {terminalSignIn?.command && hostId === null && (
+                    <Button
+                      className={ROW_BUTTON}
 
-                    variant="outline"
-                    onClick={() => signInTerminal(status, terminalSignIn.command!)}
-                  >
-                    <SquareTerminalIcon data-icon="inline-start" />
-                    {t('agents.signInAgain')}
-                  </Button>
-                )}
-              </RowFrame>
-            )}
-          </RowGroup>
-        </section>
+                      variant="outline"
+                      onClick={() => signInTerminal(status, terminalSignIn.command!)}
+                    >
+                      <SquareTerminalIcon data-icon="inline-start" />
+                      {t('agents.signInAgain')}
+                    </Button>
+                  )}
+                </RowFrame>
+              )}
+            </RowGroup>
+          </section>
+        )}
 
-        {status.account?.kind === 'api_key' ? (
+        {providerMode ? (
+          <SpendGroup status={status} providers />
+        ) : status.account?.kind === 'api_key' ? (
           <SpendGroup status={status} />
         ) : (
           <UsageGroup status={status} reading={reading} running={running} />

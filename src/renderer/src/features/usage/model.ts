@@ -900,6 +900,20 @@ export function typedRange(
   return { range: from === null ? { from: to, to } : { from, to }, error: null }
 }
 
+/** The agents whose plan limits are worth asking for when the page opens. */
+export function limitsToRead<
+  T extends {
+    state: string
+    limits: readonly unknown[]
+    providers?: unknown
+  },
+>(agents: readonly T[]): T[] {
+  return agents.filter(
+    (agent) =>
+      agent.providers !== undefined || (agent.state === 'ready' && agent.limits.length > 0),
+  )
+}
+
 /** The agents whose plans the page lists: each with plan limits, and each other with usage. */
 export function planAgents<T extends { id: AgentId; limits: readonly unknown[] }>(
   agents: readonly T[],

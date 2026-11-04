@@ -466,6 +466,7 @@
       "group": "花费",
       "month": "本月",
       "description": "{{name}} 不为 API key 报告套餐额度。这里是 Kettu 统计的、它发出的请求。",
+      "descriptionProviders": "Kettu 本月通过这个 Agent 发出的用量，按 Kettu 自己的记录统计。",
       "unpriced": "无价格"
     },
     "configuration": "配置",
@@ -657,7 +658,62 @@
       "rose": "玫红",
       "green": "绿",
       "slate": "石板灰"
-    }
+    },
+    "providers": {
+      "group": "厂商",
+      "add": "添加厂商",
+      "refresh": "重新读取厂商",
+      "reading": "正在读取厂商…",
+      "readFailed": "无法读取厂商。",
+      "retry": "重试",
+      "none": "还没有连接厂商。",
+      "noneReported": "OpenCode 未提供厂商信息。",
+      "connected": "已连接",
+      "notConnected": "未连接",
+      "active": "使用中",
+      "needsSignIn": "需要登录",
+      "use": "使用",
+      "signIn": "登录",
+      "again": "重新登录",
+      "logOut": "退出登录",
+      "setKey": "添加 key…",
+      "copyCommand": "复制命令",
+      "copied": "已复制登录命令",
+      "copyFailed": "无法复制命令",
+      "command": "复制登录命令",
+      "unavailable": "没有登录方式",
+      "methods": {
+        "key": "API key",
+        "oauth": "登录",
+        "command": "命令",
+        "external": "外部登录",
+        "env": "环境变量"
+      },
+      "addTitle": "添加厂商",
+      "addDescription": "搜索 OpenCode 支持的厂商，然后用套餐或 API key 登录。",
+      "search": "搜索厂商",
+      "searchPlaceholder": "搜索厂商…",
+      "noMatches": "没有匹配的厂商。",
+      "key": {
+        "title": "{{name}} 的 API key",
+        "description": "key 由 OpenCode 保存。Kettu 仅用它向对应厂商查询用量。",
+        "label": "API key",
+        "save": "保存 key"
+      },
+      "usage": {
+        "reading": "正在读取用量…",
+        "unsupported": "{{name}} 不提供用量。",
+        "failed": "无法读取 {{name}} 的用量。",
+        "unknown": "尚未提供用量。",
+        "none": "未提供套餐用量。",
+        "balances": "余额",
+        "observed": "读取于 {{ago}}",
+        "balancesStale": "显示的是 {{ago}} 读取的余额，刷新失败。",
+        "balancesStaleNoTime": "显示的是上次读取的余额，刷新失败。"
+      }
+    },
+    "signInCopied": "当前没有打开项目，已复制登录命令。",
+    "signInCopyFailed": "当前没有打开项目，也无法复制登录命令。"
   },
   "about": {
     "version": {

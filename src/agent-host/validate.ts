@@ -552,6 +552,26 @@ export function createValidators(platform: Platform): Validators {
       return { agentId: agentId(o), methodId: string(o, 'methodId', ID_CHARS) }
     },
     'agents.logout': agent,
+    'agents.providerAction': (params) => {
+      const o = fields(params)
+      const providerId = string(o, 'providerId', ID_CHARS)
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(providerId)) {
+        throw invalidParams('providerId contains invalid characters')
+      }
+      const action = o.action
+      if (action !== 'logout' && action !== 'activate' && action !== 'set-key') {
+        throw invalidParams('action must be logout, activate or set-key')
+      }
+      const base = { agentId: agentId(o), providerId, action }
+      if (action === 'set-key') {
+        if (o.credentialId !== undefined) throw invalidParams('set-key takes no credentialId')
+        const key = string(o, 'key', 4096)
+        if (/[\r\n\0]/.test(key) || !key.trim()) throw invalidParams('key is invalid')
+        return { ...base, action, key }
+      }
+      if (o.key !== undefined) throw invalidParams('Only set-key accepts a key')
+      return { ...base, action, credentialId: string(o, 'credentialId', ID_CHARS) }
+    },
     'agents.retry': agent,
     'agents.reinstall': agent,
     'agents.checkUpdates': none,

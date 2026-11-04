@@ -71,6 +71,41 @@ export interface PlanLimit {
   observedAt: number
 }
 
+export interface ProviderBalance {
+  label: string
+  amount: number
+  currency: string
+}
+
+export interface AgentProvider {
+  id: string
+  name: string
+  methods: { type: 'key' | 'oauth' | 'command' | 'external' | 'env'; label: string }[]
+  accounts: {
+    id: string | null
+    label: string
+    method: 'key' | 'oauth' | 'external' | 'env'
+    needsAuth: boolean
+    active?: boolean
+  }[]
+  loginCommand: string
+  usage: {
+    state: 'ready' | 'unsupported' | 'error'
+    limits: PlanLimit[]
+    balances: ProviderBalance[]
+    observedAt: number
+    error: string | null
+  } | null
+}
+
+export interface AgentProviderAction {
+  agentId: AgentId
+  providerId: string
+  action: 'logout' | 'activate' | 'set-key'
+  credentialId?: string
+  key?: string
+}
+
 /** A user message in the message outline: its first line and the title a model wrote, if any. */
 export interface OutlineEntry {
   pos: number
@@ -198,6 +233,8 @@ export interface AgentStatus {
   authMethods: AgentAuthMethod[]
   canLogout: boolean
   account: AgentAccount | null // what the agent reports through `_auth/status_update`
+  providers?: AgentProvider[]
+  providersError?: string | null
   limits: PlanLimit[] // subscription windows, see plan limits in the session model
   detail: string | null // install hint or error message
   installUrl: string | null
@@ -437,6 +474,7 @@ export interface HostContract {
   'agents.environment': { params: void; result: EnvironmentInfo }
   'agents.authenticate': { params: { agentId: AgentId; methodId: string }; result: void }
   'agents.logout': { params: { agentId: AgentId }; result: void }
+  'agents.providerAction': { params: AgentProviderAction; result: void }
   'agents.retry': { params: { agentId: AgentId }; result: void }
   'agents.reinstall': { params: { agentId: AgentId }; result: void }
   // Asks npm for each package agent's latest adapter and the CLI it carries.
@@ -760,6 +798,7 @@ export const HOST_METHODS = [
   'agents.environment',
   'agents.authenticate',
   'agents.logout',
+  'agents.providerAction',
   'agents.retry',
   'agents.reinstall',
   'agents.checkUpdates',

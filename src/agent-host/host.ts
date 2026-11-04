@@ -953,6 +953,7 @@ export class AgentHost {
       'agents.environment': () => this.env.info(),
       'agents.authenticate': ({ agentId, methodId }) => agents.authenticate(agentId, methodId),
       'agents.logout': ({ agentId }) => agents.logout(agentId),
+      'agents.providerAction': (input) => agents.providerAction(input),
       'agents.retry': ({ agentId }) => agents.retry(agentId),
       'agents.reinstall': ({ agentId }) => agents.reinstall(agentId),
       'agents.checkUpdates': () => agents.checkUpdates(),
