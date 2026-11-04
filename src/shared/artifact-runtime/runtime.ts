@@ -403,15 +403,26 @@ export function start(config: RuntimeConfig): void {
 
   function drive(message: DriveMessage, ports: readonly MessagePort[]): void {
     switch (message.kind) {
-      case 'transport':
-        if (config.transport !== 'port' || port || !ports[0]) return
+      case 'transport': {
+        if (config.transport !== 'port' || !ports[0]) return
+        // The client hands a new port whenever it drives the page again, such as from a new view
+        // of the same frame, and closes the old one, so nothing still waiting there is answered.
+        const previous = port
         port = ports[0]
         port.onmessage = (event) => {
           const answer = event.data as Answer | null
           if (answer && typeof answer.id === 'string') waiting.get(answer.id)?.(answer)
         }
+        if (previous) {
+          previous.onmessage = null
+          previous.close()
+          for (const [id, settle] of [...waiting]) {
+            settle({ id, ok: false, error: { code: 'failed', message: 'The client reconnected' } })
+          }
+        }
         for (const waitingMessage of queued.splice(0)) port.postMessage(waitingMessage)
         return
+      }
       case 'select-mode':
         mode = message.mode === 'select' || message.mode === 'comment' ? message.mode : null
         channel = typeof message.channel === 'string' ? message.channel : ''

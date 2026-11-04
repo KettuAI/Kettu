@@ -66,6 +66,8 @@ export class FrameLink {
   readonly channel = newChannel()
   private frame: HTMLIFrameElement | null = null
   private port: MessagePort | null = null
+  /** The frame whose page holds `port`. */
+  private portFrame: HTMLIFrameElement | null = null
   private detachRuntime: (() => void) | null = null
   private readonly sticky = new Map<Sticky, DriveMessage>()
   private second = 0
@@ -85,7 +87,8 @@ export class FrameLink {
 
   attach(frame: HTMLIFrameElement | null): void {
     this.frame = frame
-    if (!frame) this.closePort()
+    // A ref set again on each render detaches and attaches the same frame, whose page keeps its port.
+    if (frame && frame !== this.portFrame) this.closePort()
   }
 
   /** The frame loaded a page: its port on the web, and what drives it, again. */
@@ -121,6 +124,7 @@ export class FrameLink {
     this.detachRuntime = null
     this.port?.close()
     this.port = null
+    this.portFrame = null
   }
 
   private connect(): void {
@@ -129,6 +133,7 @@ export class FrameLink {
     this.closePort()
     const { port1, port2 } = new MessageChannel()
     this.port = port1
+    this.portFrame = this.frame
     const relays = relay
     this.detachRuntime = relays ? relays(`${this.origin}/`, port1) : null
     port1.onmessage = (event) => {
