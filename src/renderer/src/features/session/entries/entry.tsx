@@ -40,7 +40,7 @@ export const Entry = memo(function Entry({
     case 'tool':
       return <ToolCard {...props} projectPath={projectPath} agentName={agentName} />
     case 'subagent':
-      return <SubagentCard {...props} projectPath={projectPath} />
+      return <SubagentCard {...props} />
     case 'session_started':
       return <SessionStartedEntry {...props} />
     case 'session_message':
