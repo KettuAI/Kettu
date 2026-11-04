@@ -6,6 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { cp, mkdir, rename, rm, stat } from 'node:fs/promises'
 import type { AgentOptions, DiagnosticsBundle, HostEvent, McpStatus } from '@shared/agent-host'
+import { artifactFileType } from '@shared/artifact-files'
 import { type ArtifactImportResult, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import type { BrowserCallAnswer, BrowserCallRequest, BrowserOriginAnswer } from '@shared/browser'
@@ -53,7 +54,7 @@ import { processControl, type ProcessControl } from './process-tree'
 import { Projects } from './projects'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
 import { PortHub, type Handlers, type RequestContext } from './rpc'
-import { Attachments } from './attachments'
+import { Attachments, toArrayBuffer } from './attachments'
 import { RoutinesManager, type RoutineTimings } from './routines/manager'
 import type { RoutineSessionHooksRef } from './routines/hooks'
 import type { RoutineClock } from './routines/scheduler'
@@ -684,7 +685,7 @@ export class AgentHost {
     this.options.send({ type: 'host:granted', requestId })
   }
 
-  /** `host:artifact-content-request`: the file of a version, for main's protocol. */
+  /** `host:artifact-content-request`: the files of a version, for main's protocol. */
   async artifactContent(requestId: number, id: string, version: number | null): Promise<void> {
     let result: ArtifactContentResult
     try {
@@ -717,8 +718,8 @@ export class AgentHost {
   }
 
   /**
-   * `host:artifact-import-request`: makes an artifact of a file the user chose, in `project` or,
-   * when it is null, in a new scratch folder, which the page lists under No project.
+   * `host:artifact-import-request`: makes an artifact of a file or folder the user chose, in
+   * `project` or, when it is null, in a new scratch folder, which the page lists under No project.
    */
   async artifactImport(requestId: number, file: string, project: string | null): Promise<void> {
     let result: NonNullable<ArtifactImportResult>
@@ -738,7 +739,7 @@ export class AgentHost {
           project: folder,
           sessionId: NO_SESSION,
           title: read.title,
-          html: read.html,
+          files: read.files,
           pages: read.pages,
           note: null,
         })
@@ -1175,7 +1176,32 @@ export class AgentHost {
         })),
       'artifacts.read': async ({ id, version }) => {
         const read = await artifacts.read(id, version === undefined ? {} : { version })
-        return { title: read.artifact.title, version: read.version.version, html: read.html }
+        return {
+          title: read.artifact.title,
+          version: read.version.version,
+          html: await artifacts.entryText(read),
+          files: read.files.map((file) => ({
+            path: file.path,
+            size: file.size,
+            type: artifactFileType(file.path),
+          })),
+        }
+      },
+      'artifacts.file': async ({ id, version, path }) => {
+        const found = await artifacts.read(id, { version })
+        const file = found.files.find((f) => f.path === path)
+        if (!file) throw new HostError('not_found', `${id} version ${version} has no file ${path}`)
+        return {
+          type: artifactFileType(path),
+          bytes: toArrayBuffer(await artifacts.bytes(found, file)),
+        }
+      },
+      'artifacts.content': async ({ id, version }, { device }) => {
+        // A window has main's protocol; only a device's remote host serves the files from disk.
+        if (!device) {
+          throw new HostError('forbidden', 'Only a paired device may call "artifacts.content"')
+        }
+        return artifacts.content(id, version)
       },
       'artifacts.versions': async ({ id }) => (await artifacts.versions(id)).map(versionSummary),
       'artifacts.rename': ({ id, title }) => artifacts.rename(id, title),

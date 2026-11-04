@@ -3,6 +3,7 @@
 // The records and files belong to the thread worker; this side only reads the files.
 
 import { readFile } from 'node:fs/promises'
+import { ARTIFACT_ENTRY } from '@shared/artifact-files'
 import {
   ARTIFACT_KEEP_DELETED_MS,
   type ArtifactSession,
@@ -12,12 +13,14 @@ import {
 import { HostError } from '../errors'
 import type { LogFn } from '../storage'
 import { ThreadStoreError, type ThreadStore } from '../threads/store'
-import { contentPath } from './content'
+import { contentPath, versionKey } from './content'
 import { newArtifactId } from './ids'
 import type {
   ArtifactCallName,
   ArtifactCalls,
   ArtifactRecord,
+  FileChange,
+  StoredFile,
   StoredSummary,
   VersionRecord,
 } from './model'
@@ -88,6 +91,20 @@ export interface Reading {
 
 export interface Editing {
   editor?: SessionTurn
+}
+
+/** A version as the store reads it: the artifact, the version and its files. */
+export interface FoundVersion {
+  artifact: ArtifactRecord
+  version: VersionRecord
+  files: StoredFile[]
+}
+
+/** A file of a version as main and the remote host serve it: where its bytes lie on disk. */
+export interface ContentFile {
+  path: string
+  file: string
+  size: number
 }
 
 export function versionSummary(record: VersionRecord): VersionSummary {
@@ -168,33 +185,39 @@ export class ArtifactStore {
     return listed.map((artifact) => ({ ...artifact, editing: this.editing(artifact.id) }))
   }
 
-  /** The artifact and one of its versions, the latest by default, without the HTML. */
-  get(
-    id: string,
-    { version, project }: Reach & { version?: number } = {},
-  ): Promise<{ artifact: ArtifactRecord; version: VersionRecord }> {
+  /** The artifact and one of its versions, the latest by default, with the version's files. */
+  get(id: string, { version, project }: Reach & { version?: number } = {}): Promise<FoundVersion> {
     return this.call('get', { id, version: version ?? null, project: project ?? null })
   }
 
-  /** A version, the latest by default, with its HTML. */
+  /** As `get`, which counts as the reader's reading it. */
   async read(
     id: string,
     reach: Reach & { version?: number } & Reading = {},
-  ): Promise<{ artifact: ArtifactRecord; version: VersionRecord; html: string }> {
+  ): Promise<FoundVersion> {
     const { reader, ...rest } = reach
     const found = await this.get(id, rest)
-    const file = contentPath(this.deps.contentDir, found.version.hash)
-    let html: string
+    this.used(id, reader, false)
+    return found
+  }
+
+  /** The bytes of a file of a version. */
+  async bytes(found: FoundVersion, file: StoredFile): Promise<Buffer> {
     try {
-      html = await readFile(file, 'utf8')
+      return await readFile(contentPath(this.deps.contentDir, file.hash))
     } catch (error) {
       throw new Error(
-        `The HTML of ${id} version ${found.version.version} cannot be read: ${(error as Error).message}`,
+        `${file.path} of ${found.artifact.id} version ${found.version.version} cannot be read: ${(error as Error).message}`,
         { cause: error },
       )
     }
-    this.used(id, reader, false)
-    return { ...found, html }
+  }
+
+  /** The text of the version's entry page, which the viewer and the page count read. */
+  async entryText(found: FoundVersion): Promise<string> {
+    const entry = found.files.find((file) => file.path === ARTIFACT_ENTRY)
+    if (!entry) throw new Error(`${found.artifact.id} has no ${ARTIFACT_ENTRY}`)
+    return (await this.bytes(found, entry)).toString('utf8')
   }
 
   /** Newest first. */
@@ -204,16 +227,24 @@ export class ArtifactStore {
     return records
   }
 
-  /** The file of a version, the latest by default, for main to serve; with the artifact's title. */
+  /**
+   * The files of a version, the latest by default, for main and the remote host to serve; with the
+   * artifact's title and the key its thumbnail is kept under.
+   */
   async content(
     id: string,
     version?: number,
-  ): Promise<{ path: string; version: number; title: string }> {
+  ): Promise<{ version: number; title: string; key: string; files: ContentFile[] }> {
     const found = await this.get(id, version === undefined ? {} : { version })
     return {
-      path: contentPath(this.deps.contentDir, found.version.hash),
       version: found.version.version,
       title: found.artifact.title,
+      key: versionKey(found.files),
+      files: found.files.map((file) => ({
+        path: file.path,
+        file: contentPath(this.deps.contentDir, file.hash),
+        size: file.size,
+      })),
     }
   }
 
@@ -225,7 +256,7 @@ export class ArtifactStore {
       project: string
       sessionId: string
       title: string
-      html: string
+      files: { path: string; data: Uint8Array }[]
       pages: number
       note: string | null
     } & Editing,
@@ -239,12 +270,15 @@ export class ArtifactStore {
     return { id, version }
   }
 
-  /** A new version from `baseVersion`, which must be the latest; `author` null is the user. */
+  /**
+   * A new version from `baseVersion`, which must be the latest: its files with `changes` made, the
+   * others as they were. `author` null is the user.
+   */
   async write(
     input: {
       id: string
       baseVersion: number
-      html: string
+      changes: FileChange[]
       pages: number
       author: string | null
       note: string | null

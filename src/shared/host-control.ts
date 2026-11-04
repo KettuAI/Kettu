@@ -69,12 +69,12 @@ export type MainToHost =
   | { type: 'host:settings'; settings: HostSettings }
   | { type: 'host:busy-request'; requestId: number }
   | { type: 'host:grant'; requestId: number; grants: AttachmentGrant[] } // answered by host:granted
-  // `artifact.content`: the file of a version, the latest when `version` is null.
+  // `artifact.content`: the files of a version, the latest when `version` is null.
   | { type: 'host:artifact-content-request'; requestId: number; id: string; version: number | null }
   // `artifact.list`: the id of every artifact the host has, Recently deleted included.
   | { type: 'host:artifact-list-request'; requestId: number }
-  // `artifact.import`: a file the user chose in main's dialog, made an artifact in `project`, or
-  // in a new scratch folder when `project` is null.
+  // `artifact.import`: a file or folder the user chose in main's dialog, made an artifact in
+  // `project`, or in a new scratch folder when `project` is null.
   | {
       type: 'host:artifact-import-request'
       requestId: number
@@ -94,9 +94,19 @@ export type MainToHost =
   | { type: 'host:browser-origin-answer'; requestId: number; decision: BrowserOriginAnswer }
   | { type: 'host:shutdown' }
 
-/** The host's answer to `host:artifact-content-request`. */
+/** A file of an artifact's version: its path in the artifact, and where its bytes lie on disk. */
+export interface ArtifactContentFile {
+  path: string
+  file: string // in artifacts/content/
+  size: number
+}
+
+/**
+ * The host's answer to `host:artifact-content-request`: the version's files, and `key`, which
+ * names what they are together, for its thumbnail.
+ */
 export type ArtifactContentResult =
-  | { kind: 'found'; path: string; version: number; title: string } // `path` lies in artifacts/content/
+  | { kind: 'found'; version: number; title: string; key: string; files: ArtifactContentFile[] }
   | { kind: 'not_found' }
   | { kind: 'failed' }
 

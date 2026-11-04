@@ -5,6 +5,34 @@ import type { McpServer } from '@agentclientprotocol/sdk/unstable'
 import type { Scenario, Turn } from './turn.ts'
 
 export const CANVAS_TITLE = 'Fake canvas'
+export const SITE_TITLE = 'Fake site'
+
+/** A page of several files: its style, its script and an image the host reads from the project. */
+function siteFiles(image: string): Record<string, unknown>[] {
+  const name = image.split(/[\\/]/).at(-1) ?? 'image'
+  return [
+    {
+      path: 'index.html',
+      content: [
+        '<!doctype html>',
+        '<html><head><title>Fake site</title>',
+        '<link rel="stylesheet" href="styles/site.css"></head>',
+        `<body><h1>Fake site</h1><img src="assets/${name}" alt="">`,
+        '<p id="status">The script has not run.</p>',
+        '<script src="scripts/site.js"></script></body></html>',
+      ].join('\n'),
+    },
+    {
+      path: 'styles/site.css',
+      content: 'body{font:16px system-ui;margin:2rem}h1{color:#c2410c}img{max-width:12rem}',
+    },
+    {
+      path: 'scripts/site.js',
+      content: "document.getElementById('status').textContent = 'The script ran.'\n",
+    },
+    { path: `assets/${name}`, source: image },
+  ]
+}
 
 const CANVAS = [
   '<!doctype html>',
@@ -44,7 +72,8 @@ async function say(turn: Turn, text: string): Promise<void> {
 
 /**
  * `/artifacts` makes "Fake canvas" in the project, or changes the one there with an edit, then
- * reads it back; `/artifacts --read <id>` reads that artifact. Each call shows as a tool call
+ * reads it back; `/artifacts --read <id>` reads that artifact, and `/artifacts --site <image>`
+ * makes "Fake site" of several files, the image read by the host from the project. Each call shows as a tool call
  * named as Claude Code names MCP tools, and the reply lists what each call returned. With
  * `--until-cancel` the turn runs on after the reply until it is cancelled, whatever the pace.
  *
@@ -145,9 +174,12 @@ export const artifacts: Scenario = async (turn) => {
     return { text, value, isError }
   }
   try {
-    const read = turn.options.read
+    const { read, site } = turn.options
     if (read) {
       await call('read_artifact', { id: read })
+    } else if (site) {
+      const created = await call('create_artifact', { title: SITE_TITLE, files: siteFiles(site) })
+      if (!created.isError) await call('read_artifact', { id: String(created.value.id) })
     } else {
       const listed = await call('list_artifacts', { query: CANVAS_TITLE })
       const found = (listed.value.artifacts as { id: string; version: number }[] | undefined)?.[0]
@@ -180,7 +212,7 @@ export const artifacts: Scenario = async (turn) => {
         })
       }
       const back = await call('read_artifact', { id })
-      const html = String(back.value.html ?? '')
+      const html = String(back.value.text ?? '')
       lines.push(`html: ${/revision \d+/.exec(html)?.[0] ?? 'no revision'}`)
     }
     if (execute) {

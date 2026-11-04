@@ -35,7 +35,8 @@ import {
 
 export const SERVICE_NAME = 'kettu'
 export const SERVICE_PATH = '/mcp'
-export const BODY_BYTES = 6 * 1024 * 1024
+/** A call may carry several files of up to 5 MiB of text each, escaped as JSON. */
+export const BODY_BYTES = 16 * 1024 * 1024
 const TOKEN_BYTES = 32
 /** A tool's description in Settings: its first sentence, at most this many characters. */
 const SUMMARY_CHARS = 200

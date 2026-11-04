@@ -11,6 +11,7 @@ import {
   THUMBNAIL_WIDTH,
   type ThumbnailPage,
 } from '@shared/artifacts'
+import { versionUrlPath } from '@shared/artifact-page'
 import type { ArtifactContentResult } from '@shared/host-control'
 import { createLogger } from '../log'
 import { restrictPermissions } from '../permissions'
@@ -85,17 +86,18 @@ export function thumbnailDocument(
   version: number,
   layout: ThumbnailPage[] | null,
 ): string {
+  const page = `${origin.replace(/\/$/, '')}${versionUrlPath(version)}`
   const frame = (query: string, style: string): string =>
-    `<iframe src="${origin}?${query}" ${FRAME_ATTRIBUTES} style="${style}"></iframe>`
+    `<iframe src="${page}${query}" ${FRAME_ATTRIBUTES} style="${style}"></iframe>`
   let frames: string
   if (!layout) {
-    frames = frame(`v=${version}`, `width:${THUMBNAIL_WIDTH}px;height:${THUMBNAIL_HEIGHT}px`)
+    frames = frame('', `width:${THUMBNAIL_WIDTH}px;height:${THUMBNAIL_HEIGHT}px`)
   } else {
     const fit = fitThumbnail(layout)
     frames = layout
       .map((p) =>
         frame(
-          `v=${version}&page=${p.group}.${p.index}`,
+          `?page=${p.group}.${p.index}`,
           `left:${fit.x + p.x * fit.scale}px;top:${fit.y + p.y * fit.scale}px;` +
             `width:${p.width}px;height:${p.height}px;transform:scale(${fit.scale})`,
         ),
@@ -170,11 +172,9 @@ export class Thumbnails {
     layout: ThumbnailPage[] | null,
   ): Promise<string | null> {
     const found = await this.deps.content(id, version)
-    if (found.kind !== 'found') return null
-    const hash = path.basename(found.path, '.html')
-    if (!HASH.test(hash)) return null
+    if (found.kind !== 'found' || !HASH.test(found.key)) return null
     const type = layout ? 'png' : 'jpeg'
-    const file = path.join(this.deps.dir, `${hash}.${layout ? 'png' : 'jpg'}`)
+    const file = path.join(this.deps.dir, `${found.key}.${layout ? 'png' : 'jpg'}`)
     const cached = await readFile(file).catch(() => null)
     if (cached) return dataUrl(type, cached)
     const image = await this.render(this.deps.serve(id), version, layout).catch(

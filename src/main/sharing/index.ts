@@ -2,6 +2,7 @@
 // talks to the target, so the renderer never names a URL and never sees the token.
 
 import { readFile } from 'node:fs/promises'
+import { isHtmlPath } from '@shared/artifact-files'
 import { ARTIFACT_ID } from '@shared/artifacts'
 import type { ArtifactContentResult } from '@shared/host-control'
 import {
@@ -17,7 +18,7 @@ import { isInside } from '../artifacts/protocol'
 import { createLogger } from '../log'
 import { accountSubdomain, Cloudflare, findAccounts, type Fetch } from './cloudflare'
 import { pageHeaders, withMeta } from './page'
-import { SharingError, type SharingProvider } from './provider'
+import { SharingError, type PageFile, type SharingProvider } from './provider'
 import {
   pagesToForget,
   pagesToUnpublish,
@@ -29,7 +30,7 @@ import {
 
 const log = createLogger('sharing')
 
-/** What main needs from the agent host: the version's file and every artifact it has. */
+/** What main needs from the agent host: the version's files and every artifact it has. */
 export interface SharingHost {
   content(id: string, version: number | null): Promise<ArtifactContentResult>
   ids(): Promise<Set<string> | null>
@@ -169,11 +170,8 @@ export class Sharing {
     }
     try {
       const token = await this.tokenOf()
-      const content = await this.readHtml(wanted.id, wanted.version)
-      const published = await this.provider(account, token).publish(
-        withMeta(content.html),
-        pageHeaders(),
-      )
+      const content = await this.readFiles(wanted.id, wanted.version)
+      const published = await this.provider(account, token).publish(content.files, pageHeaders())
       this.store.put({
         id: wanted.id,
         worker: published.ref,
@@ -246,8 +244,8 @@ export class Sharing {
   ): Promise<SharingResult> {
     try {
       const token = await this.tokenOf()
-      const content = await this.readHtml(page.id, version)
-      await this.provider(account, token).update(page.worker, withMeta(content.html), pageHeaders())
+      const content = await this.readFiles(page.id, version)
+      await this.provider(account, token).update(page.worker, content.files, pageHeaders())
       this.store.put({ ...page, version: content.version, publishedAt: this.now() })
       return this.report()
     } catch (error) {
@@ -300,7 +298,11 @@ export class Sharing {
     if (changed) this.deps.changed?.(this.status())
   }
 
-  private async readHtml(id: string, version: number): Promise<{ html: string; version: number }> {
+  /** The version's files as they are published: each HTML file with the policy in it. */
+  private async readFiles(
+    id: string,
+    version: number,
+  ): Promise<{ files: PageFile[]; version: number }> {
     const found = await this.deps.host.content(id, version)
     if (found.kind === 'not_found') {
       throw new SharingError('not_found', 'The agent host no longer has this version.')
@@ -308,14 +310,21 @@ export class Sharing {
     if (found.kind === 'failed') {
       throw new SharingError('unavailable', 'The agent host did not answer.')
     }
-    if (!isInside(this.deps.contentDir, found.path)) {
-      throw new SharingError('failed', 'The artifact file is not in the artifacts folder.')
+    const files: PageFile[] = []
+    for (const file of found.files) {
+      if (!isInside(this.deps.contentDir, file.file)) {
+        throw new SharingError('failed', 'The artifact file is not in the artifacts folder.')
+      }
+      try {
+        const bytes = isHtmlPath(file.path)
+          ? Buffer.from(withMeta(await readFile(file.file, 'utf8')), 'utf8')
+          : await readFile(file.file)
+        files.push({ path: file.path, bytes })
+      } catch (error) {
+        throw new SharingError('failed', `Could not read the artifact: ${(error as Error).message}`)
+      }
     }
-    try {
-      return { html: await readFile(found.path, 'utf8'), version: found.version }
-    } catch (error) {
-      throw new SharingError('failed', `Could not read the artifact: ${(error as Error).message}`)
-    }
+    return { files, version: found.version }
   }
 
   private async tokenOf(): Promise<string> {

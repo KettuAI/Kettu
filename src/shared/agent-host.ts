@@ -8,6 +8,7 @@ import type {
   BrowserOriginDecision,
 } from './browser'
 import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
+import type { ArtifactContentFile } from './host-control'
 import type { MediaAuthorization, MediaOpenResult } from './media'
 import type {
   BranchList,
@@ -749,6 +750,17 @@ export interface HostContract {
   'artifacts.list': { params: { deleted?: boolean }; result: ArtifactSummary[] }
   // The latest version without `version`.
   'artifacts.read': { params: { id: string; version?: number }; result: ArtifactContent }
+  // The bytes of one file of a version, as an export takes them.
+  'artifacts.file': {
+    params: { id: string; version: number; path: string }
+    result: { type: string; bytes: ArrayBuffer }
+  }
+  // Where a version's files lie on disk, for a paired device's remote host to serve them to its
+  // frames; a window is refused, and the device never sees the answer.
+  'artifacts.content': {
+    params: { id: string; version?: number }
+    result: { version: number; title: string; key: string; files: ArtifactContentFile[] }
+  }
   // Newest first.
   'artifacts.versions': { params: { id: string }; result: VersionSummary[] }
   'artifacts.rename': { params: { id: string; title: string }; result: void }
@@ -910,6 +922,8 @@ export const HOST_METHODS = [
   'usage.clearRecord',
   'artifacts.list',
   'artifacts.read',
+  'artifacts.file',
+  'artifacts.content',
   'artifacts.versions',
   'artifacts.rename',
   'artifacts.delete',

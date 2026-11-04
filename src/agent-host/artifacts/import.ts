@@ -1,14 +1,27 @@
-// Reads a file the user chose to import as an artifact: its HTML, its title and its pages.
+// Reads what the user chose to import as an artifact, an HTML file or a folder with an
+// `index.html`: its files, its title and its pages.
 
-import { readFile, stat } from 'node:fs/promises'
+import { readdir, readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
-import { ARTIFACT_TITLE_CHARS } from '@shared/artifacts'
+import {
+  ARTIFACT_ENTRY,
+  ARTIFACT_PATH_CHARS,
+  artifactPathProblem,
+  caseClash,
+  DISK_FILE_BYTES,
+  isHtmlPath,
+  VERSION_BYTES,
+  VERSION_FILES,
+} from '@shared/artifact-files'
+import { ARTIFACT_TITLE_CHARS, type ArtifactImportFailure } from '@shared/artifacts'
 import { countPages } from './pages'
-import { HTML_BYTES } from './tools'
 
 export type ImportRead =
-  | { html: string; title: string; pages: number }
-  | { failed: 'too_large' | 'not_utf8' | 'unreadable' }
+  | { files: { path: string; data: Uint8Array }[]; title: string; pages: number }
+  | { failed: Exclude<ArtifactImportFailure, 'unavailable'> }
+
+/** The entries a folder's walk looks at, files and folders, before it gives up. */
+const MAX_ENTRIES = 10_000
 
 const NAMED_ENTITIES: Record<string, string> = {
   amp: '&',
@@ -43,35 +56,122 @@ function clip(text: string): string {
 }
 
 /**
- * An artifact's title for a file: its `<title>`, else the file name without its extension, else
- * "Untitled"; 1 to 120 code points, as the service allows.
+ * An artifact's title for a file or folder: its page's `<title>`, else `name`, the file's name
+ * without its extension or the folder's, else "Untitled"; 1 to 120 code points, as the service
+ * allows.
  */
-export function importTitle(html: string, file: string): string {
+export function importTitle(html: string, name: string): string {
   const named = clip(pageTitle(html))
   if (named !== '') return named
-  const base = clip(path.parse(file).name.replace(/\s+/g, ' ').trim())
+  const base = clip(name.replace(/\s+/g, ' ').trim())
   return base !== '' ? base : 'Untitled'
 }
 
-/** The file as an artifact would hold it, or why it cannot be one. */
-export async function readImport(file: string): Promise<ImportRead> {
+function text(bytes: Uint8Array): string | null {
+  try {
+    // The decoder drops a leading BOM.
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return null
+  }
+}
+
+/** What the user chose as an artifact would hold it, or why it cannot be one. */
+export async function readImport(chosen: string): Promise<ImportRead> {
+  let info
+  try {
+    info = await stat(chosen)
+  } catch {
+    return { failed: 'unreadable' }
+  }
+  if (info.isDirectory()) return readFolder(chosen)
+  if (!info.isFile()) return { failed: 'unreadable' }
+  if (info.size > DISK_FILE_BYTES) return { failed: 'too_large' }
   let bytes: Buffer
   try {
-    const info = await stat(file)
-    if (!info.isFile()) return { failed: 'unreadable' }
-    if (info.size > HTML_BYTES) return { failed: 'too_large' }
-    bytes = await readFile(file)
+    bytes = await readFile(chosen)
   } catch {
     return { failed: 'unreadable' }
   }
   // The file may have grown since the stat.
-  if (bytes.length > HTML_BYTES) return { failed: 'too_large' }
-  let html: string
-  try {
-    // The decoder drops a leading BOM.
-    html = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-  } catch {
-    return { failed: 'not_utf8' }
+  if (bytes.length > DISK_FILE_BYTES) return { failed: 'too_large' }
+  const html = text(bytes)
+  if (html === null) return { failed: 'not_utf8' }
+  return {
+    files: [{ path: ARTIFACT_ENTRY, data: bytes }],
+    title: importTitle(html, path.parse(chosen).name),
+    pages: countPages(html),
   }
-  return { html, title: importTitle(html, file), pages: countPages(html) }
+}
+
+interface Found {
+  path: string
+  file: string
+}
+
+/**
+ * The files under `root` by their paths in the artifact, skipping hidden ones, symbolic links
+ * and anything else that is not a file or a folder; or why they cannot be an artifact's.
+ */
+async function listFolder(root: string): Promise<Found[] | { failed: 'too_many' | 'bad_name' }> {
+  const found: Found[] = []
+  let entries = 0
+  const walk = async (dir: string, prefix: string): Promise<'too_many' | 'bad_name' | null> => {
+    if (prefix.length > ARTIFACT_PATH_CHARS) return 'bad_name'
+    const listed = await readdir(dir, { withFileTypes: true })
+    listed.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    for (const entry of listed) {
+      if (entry.name.startsWith('.')) continue
+      if (++entries > MAX_ENTRIES) return 'too_many'
+      const at = `${prefix}${entry.name}`
+      const file = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        const failed = await walk(file, `${at}/`)
+        if (failed) return failed
+      } else if (entry.isFile()) {
+        if (artifactPathProblem(at) !== null) return 'bad_name'
+        if (found.length >= VERSION_FILES) return 'too_many'
+        found.push({ path: at, file })
+      }
+    }
+    return null
+  }
+  const failed = await walk(root, '')
+  if (failed) return { failed }
+  return caseClash(found.map((f) => f.path)) ? { failed: 'bad_name' } : found
+}
+
+async function readFolder(root: string): Promise<ImportRead> {
+  let listed
+  try {
+    listed = await listFolder(root)
+  } catch {
+    return { failed: 'unreadable' }
+  }
+  if (!Array.isArray(listed)) return listed
+  if (!listed.some((f) => f.path === ARTIFACT_ENTRY)) return { failed: 'no_index' }
+  const files: { path: string; data: Uint8Array }[] = []
+  let total = 0
+  let html = ''
+  for (const { path: at, file } of listed) {
+    let bytes: Buffer
+    try {
+      const info = await stat(file)
+      if (info.size > DISK_FILE_BYTES || total + info.size > VERSION_BYTES) {
+        return { failed: 'too_large' }
+      }
+      bytes = await readFile(file)
+    } catch {
+      return { failed: 'unreadable' }
+    }
+    total += bytes.length
+    if (bytes.length > DISK_FILE_BYTES || total > VERSION_BYTES) return { failed: 'too_large' }
+    if (isHtmlPath(at)) {
+      const decoded = text(bytes)
+      if (decoded === null) return { failed: 'not_utf8' }
+      if (at === ARTIFACT_ENTRY) html = decoded
+    }
+    files.push({ path: at, data: bytes })
+  }
+  return { files, title: importTitle(html, path.basename(root)), pages: countPages(html) }
 }

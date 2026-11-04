@@ -1,12 +1,13 @@
-// Cloudflare as a target: each page is a Worker of its own with Workers Static Assets, uploaded
-// through Cloudflare's REST API with the user's API token and served on the account's
+// Cloudflare as a target: each page is a Worker of its own with Workers Static Assets, its files
+// uploaded through Cloudflare's REST API with the user's API token and served on the account's
 // workers.dev subdomain.
 
 import { createHash, randomBytes } from 'node:crypto'
+import { artifactFileType } from '@shared/artifact-files'
 import { CLOUDFLARE_ACCOUNT_ID, type CloudflareAccountChoice } from '@shared/sharing'
 import { createLogger } from '../log'
 import { headersFile } from './page'
-import { SharingError, type Published, type SharingProvider } from './provider'
+import { SharingError, type PageFile, type Published, type SharingProvider } from './provider'
 
 const log = createLogger('sharing')
 
@@ -23,6 +24,9 @@ export const WORKER_MODULE =
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
 
 const BASE32 = 'abcdefghijklmnopqrstuvwxyz234567'
+
+/** Files Workers Static Assets reads as its settings, which a page's own files must not be. */
+const SETTINGS_FILES: ReadonlySet<string> = new Set(['_headers', '_redirects'])
 
 /** Errors that mean the token is invalid, expired, or has no access to the account. */
 const AUTH_CODES = new Set([1000, 9106, 9109, 10000])
@@ -79,9 +83,8 @@ export function assetHash(base64: string, extension: string): string {
     .slice(0, 32)
 }
 
-function asset(path: string, text: string, type: string): Asset {
-  const bytes = Buffer.from(text, 'utf8')
-  const base64 = bytes.toString('base64')
+function asset(path: string, bytes: Uint8Array, type: string): Asset {
+  const base64 = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64')
   const extension = /\.([^./]+)$/.exec(path)?.[1] ?? ''
   return { path, base64, size: bytes.length, type, hash: assetHash(base64, extension) }
 }
@@ -272,10 +275,10 @@ export class Cloudflare implements SharingProvider {
     this.scripts = `/accounts/${deps.accountId}/workers/scripts`
   }
 
-  async publish(html: string, headers: Record<string, string>): Promise<Published> {
+  async publish(files: readonly PageFile[], headers: Record<string, string>): Promise<Published> {
     const worker = workerName(this.deps.random)
     try {
-      await this.deploy(worker, html, headers)
+      await this.deploy(worker, files, headers)
       await this.call(
         `${this.scripts}/${worker}/subdomain`,
         json('POST', { enabled: true, previews_enabled: false }),
@@ -288,8 +291,8 @@ export class Cloudflare implements SharingProvider {
     return { url: `https://${worker}.${this.deps.subdomain}.workers.dev/`, ref: worker }
   }
 
-  update(ref: string, html: string, headers: Record<string, string>): Promise<void> {
-    return this.deploy(ref, html, headers)
+  update(ref: string, files: readonly PageFile[], headers: Record<string, string>): Promise<void> {
+    return this.deploy(ref, files, headers)
   }
 
   async unpublish(ref: string): Promise<void> {
@@ -318,11 +321,23 @@ export class Cloudflare implements SharingProvider {
    * The page as the Worker's assets: an upload session for the manifest, the files it asks for,
    * then the script with the assets' completion token and the headers.
    */
-  private async deploy(worker: string, html: string, headers: Record<string, string>) {
+  private async deploy(
+    worker: string,
+    files: readonly PageFile[],
+    headers: Record<string, string>,
+  ) {
+    const settings = files.find((file) => SETTINGS_FILES.has(file.path))
+    if (settings) {
+      throw new SharingError(
+        'failed',
+        `The artifact has a file named ${settings.path}, which Cloudflare reads as its settings. ` +
+          'Rename it to publish the artifact.',
+      )
+    }
     const headersText = headersFile(headers)
     const assets = [
-      asset('/index.html', html, 'text/html; charset=utf-8'),
-      asset('/_headers', headersText, 'text/plain; charset=utf-8'),
+      ...files.map((file) => asset(`/${file.path}`, file.bytes, artifactFileType(file.path))),
+      asset('/_headers', Buffer.from(headersText, 'utf8'), 'text/plain; charset=utf-8'),
     ]
     const manifest = Object.fromEntries(assets.map((a) => [a.path, { hash: a.hash, size: a.size }]))
     const upload = await this.call<{ jwt?: unknown; buckets?: unknown }>(

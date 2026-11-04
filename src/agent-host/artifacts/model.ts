@@ -15,12 +15,24 @@ export interface ArtifactRecord {
 
 export interface VersionRecord {
   version: number
-  hash: string
-  size: number
-  pages: number
+  size: number // of all its files
+  pages: number // the entry page's
   author: string | null
   note: string | null
   createdAt: number
+}
+
+/** One file of a version: its path in the artifact, and the content file holding its bytes. */
+export interface StoredFile {
+  path: string
+  hash: string
+  size: number
+}
+
+/** A file a new version puts at `path`, or removes from it when `data` is null. */
+export interface FileChange {
+  path: string
+  data: Uint8Array | null
 }
 
 /** A summary as the store knows it; the host adds whether its project is a scratch folder. */
@@ -38,10 +50,10 @@ export interface ArtifactCalls {
     params: { project: string } | { project: null; deleted: boolean }
     result: ArtifactListing[]
   }
-  /** The artifact with one of its versions, the latest when `version` is null. */
+  /** The artifact with one of its versions, the latest when `version` is null, and its files. */
   get: {
     params: { id: string; version: number | null; project: string | null }
-    result: { artifact: ArtifactRecord; version: VersionRecord }
+    result: { artifact: ArtifactRecord; version: VersionRecord; files: StoredFile[] }
   }
   /** Newest first. */
   versions: { params: { id: string; project: string | null }; result: VersionRecord[] }
@@ -51,20 +63,23 @@ export interface ArtifactCalls {
       project: string
       sessionId: string
       title: string
-      html: string
+      files: { path: string; data: Uint8Array }[]
       pages: number
       note: string | null
       at: number
     }
     result: { version: number }
   }
-  /** A new version from `baseVersion`, which must be the latest. */
+  /**
+   * A new version from `baseVersion`, which must be the latest: its files with `changes` made to
+   * them, the rest as they were.
+   */
   write: {
     params: {
       id: string
       project: string | null
       baseVersion: number
-      html: string
+      changes: FileChange[]
       pages: number
       author: string | null
       note: string | null
@@ -72,7 +87,7 @@ export interface ArtifactCalls {
     }
     result: { version: number }
   }
-  /** `version` again as the newest, sharing its file. */
+  /** `version` again as the newest, sharing its files. */
   restore: {
     params: {
       id: string

@@ -1,7 +1,7 @@
 // The remote host's side of device connections, against an in-process agent host running the
 // fake agent: handshake, pairing, hello and welcome, the session passed through, and what ends it.
 
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import net from 'node:net'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -211,6 +211,42 @@ describe('a paired device', () => {
       `warn: Device ${t.phone.id} asked for media.open, which devices may not call`,
       `warn: Device ${t.phone.id} asked for attachments.add, which devices may not call`,
     ])
+  })
+
+  it("opens an artifact's frame, whose token alone names its files to the direct port", async () => {
+    const t = await setup()
+    const device = await t.connect()
+    await device.first
+    await writeFile(path.join(t.agent.project, 'logo.png'), Buffer.from([0x89, 0x50]))
+    const session = await device.port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.agent.project,
+    })
+    await device.port.open(session.id)
+    await device.port.request('sessions.prompt', {
+      sessionId: session.id,
+      content: [{ type: 'text', text: '/artifacts --site logo.png' }],
+    })
+    await device.port.untilEntry(session.id, (entry) => entry.kind === 'turn_end')
+    const [artifact] = await device.port.request('artifacts.list', {})
+    expect(artifact).toBeDefined()
+    await expect(call(device)('artifacts.content', { id: artifact!.id })).rejects.toMatchObject({
+      code: 'forbidden',
+    })
+    const { path: folder } = (await call(device)('artifacts.openFrame', { id: artifact!.id })) as {
+      path: string
+    }
+    const token = /^\/frame\/([A-Za-z0-9_-]{43})\/$/.exec(folder)![1]!
+    const image = await t.server.frameFile(token, 1, 'assets/logo.png')
+    expect(await readFile(image!.file)).toEqual(Buffer.from([0x89, 0x50]))
+    expect(await t.server.frameFile(token, null, 'index.html')).not.toBeNull()
+    expect(await t.server.frameFile(token, 1, 'missing.css')).toBeNull()
+    expect(await t.server.frameFile('A'.repeat(43), 1, 'index.html')).toBeNull()
+    await call(device)('artifacts.closeFrame', { path: folder })
+    expect(await t.server.frameFile(token, 1, 'index.html')).toBeNull()
+    await expect(
+      call(device)('artifacts.openFrame', { id: 'art_01J9Z3K4V5W6X7Y8Z9A0B1C2D3' }),
+    ).rejects.toMatchObject({ code: 'not_found' })
   })
 
   it('adds a project by the folder it names', async () => {

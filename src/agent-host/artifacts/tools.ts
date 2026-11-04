@@ -1,39 +1,86 @@
-// The seven tools of the artifacts service: what agents are told, the schemas, the checks and the
+// The tools of the artifacts service: what agents are told, the schemas, the checks and the
 // limits, and the store calls behind them.
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
+import {
+  ARTIFACT_ENTRY,
+  ARTIFACT_PATH_CHARS,
+  ARTIFACT_RESERVED,
+  artifactFileType,
+  artifactPathProblem,
+  caseClash,
+  DISK_FILE_BYTES,
+  INLINE_FILE_BYTES,
+  isHtmlPath,
+  isTextType,
+  VERSION_BYTES,
+  VERSION_FILES,
+} from '@shared/artifact-files'
 import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer, NO_SESSION } from '@shared/artifacts'
+import type { Platform } from '@shared/platform'
+import type { FileChange } from './model'
 import { countPages } from './pages'
-import { ArtifactError, type ArtifactStore, type SessionTurn } from './store'
+import { readSource, SourceError } from './sources'
+import { ArtifactError, type ArtifactStore, type FoundVersion, type SessionTurn } from './store'
 
-export const HTML_BYTES = 5 * 1024 * 1024
 export const NOTE_CHARS = 200
 export const EDITS = 50
 export const WRITES_PER_MINUTE = 60
+/** The text read_artifact returns at once, in characters, unless a call asks for less or more. */
+export const READ_CHARS = 100_000
+const MAX_READ_CHARS = 1_000_000
+const SOURCE_CHARS = 4_096
 const QUERY_CHARS = 200
 const LIST_LIMIT = 200
 const LIST_DEFAULT = 50
 const MINUTE_MS = 60_000
 const MIB = 1024 * 1024
+/** The paths a refusal names when it lists a version's files. */
+const LISTED_PATHS = 20
 
 const CDNS =
   'cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, esm.sh, cdn.tailwindcss.com, ' +
   'fonts.googleapis.com and fonts.gstatic.com'
 
-const FORMAT =
-  `An artifact is one self-contained HTML file: inline its styles and scripts, or load them from ` +
-  `${CDNS}; nothing else loads, files beside it included. ` +
-  'For several pages in one file, such as design options or slides, put each page in its own ' +
-  'element with a data-page attribute that names it and a data-page-size attribute that gives ' +
-  'its size in CSS pixels, such as `<section data-page="Sign in · A" data-page-size="390x844">`, ' +
-  'as children of `<body>` or of a `<div data-page-group="Group name">` child of `<body>`; each ' +
-  'group becomes a row. Write the page elements in the markup, not from a script.'
+/** What read_artifact_guide answers, by topic. */
+export const GUIDE = {
+  files:
+    `An artifact is a set of files: ${ARTIFACT_ENTRY}, the page Kettu opens, and the styles, ` +
+    'scripts, images, fonts and data it uses, which it loads by relative paths such as ' +
+    '`styles/app.css` or `./data/sales.json`, never starting with `/`. A path uses `/` between ' +
+    'folders and has no `.` or `..` segment, backslash, control character or any of : * ? " < > |. ' +
+    'Paths are case-sensitive, and no two may differ only in case. Paths starting with ' +
+    `\`${ARTIFACT_RESERVED}\` are Kettu's. Scripts, styles and fonts may also load from ${CDNS}; ` +
+    'nothing else loads, so bring any other library or asset as a file of the artifact. Give each ' +
+    "file's text in content, at most 5 MiB, or in source the path of a file in your working " +
+    'directory, at most 20 MiB, which Kettu reads itself: use source for images, fonts and large ' +
+    'or binary files, so their bytes never pass through you; one call carries at most 16 MiB in ' +
+    'all. HTML files must be UTF-8. A version ' +
+    `holds at most ${VERSION_FILES} files and 64 MiB. update_artifact changes only the files it ` +
+    'names. read_artifact lists the files of a version and returns the text of one at a time; ' +
+    'images and other binary files are listed, not returned.',
+  canvas:
+    'For several pages on one canvas, such as design options or slides, put each page in ' +
+    `${ARTIFACT_ENTRY} in its own element with a data-page attribute that names it and a ` +
+    'data-page-size attribute that gives its size in CSS pixels, such as ' +
+    '`<section data-page="Sign in · A" data-page-size="390x844">`, as children of `<body>` or of a ' +
+    '`<div data-page-group="Group name">` child of `<body>`; each group becomes a row. Write the ' +
+    'page elements in the markup, not from a script. Styles, scripts and images can be files of ' +
+    'the artifact the pages share.',
+} as const
+
+type GuideTopic = keyof typeof GUIDE
 
 /** The service's `instructions`, which an agent reads when it connects. */
 export const INSTRUCTIONS =
-  'Kettu shows artifacts to the user: HTML pages for them to look at, such as reports, slide ' +
-  'decks, design options and prototypes. Use create_artifact for a page the user should see, not ' +
-  `for files of the project you are working on. ${FORMAT} To change an artifact, read it, then ` +
+  'Kettu shows artifacts to the user: pages for them to look at or use, such as reports, slide ' +
+  `decks, design options and prototypes, each a set of files whose entry page is ${ARTIFACT_ENTRY}. ` +
+  'Use create_artifact for something the user should see, not for files of the project you are ' +
+  'working on. Files have relative paths, and paths starting with ' +
+  `${ARTIFACT_RESERVED} are Kettu's; scripts, styles and fonts load only from the artifact's own ` +
+  `files and from ${CDNS}. For a page that is one HTML file, create_artifact with html is enough; ` +
+  'read_artifact_guide explains adding styles, scripts, images and other files (topic files) and ' +
+  'laying out several pages on a canvas (topic canvas). To change an artifact, read it, then ' +
   'call update_artifact with the version you read; if it changed since, read it again.'
 
 export type ToolErrorCode =
@@ -50,7 +97,10 @@ export class ToolError extends Error {
   }
 }
 
-/** The session a call is from, and its project or scratch folder: all it reaches. */
+/**
+ * The session a call is from, and its project or scratch folder: all it reaches, and the working
+ * directory its sources are read from.
+ */
 export interface Caller {
   sessionId: string
   project: string
@@ -66,6 +116,7 @@ export interface ArtifactToolsDeps {
    */
   runningTurn(sessionId: string): object | null
   now?: () => number
+  platform?: Platform
 }
 
 // Schemas.
@@ -86,7 +137,56 @@ const TITLE: Schema = {
 }
 const HTML: Schema = {
   type: 'string',
-  description: 'The whole page, at most 5 MiB of UTF-8.',
+  description: `The whole of ${ARTIFACT_ENTRY}, at most 5 MiB of UTF-8.`,
+}
+const PATH: Schema = {
+  type: 'string',
+  minLength: 1,
+  maxLength: ARTIFACT_PATH_CHARS,
+  description: `A file's path in the artifact, relative, such as ${ARTIFACT_ENTRY} or assets/logo.png.`,
+}
+
+function fileItems(update: boolean): Schema {
+  return object(
+    {
+      path: PATH,
+      content: { type: 'string', description: 'The text of the file, at most 5 MiB of UTF-8.' },
+      source: {
+        type: 'string',
+        minLength: 1,
+        maxLength: SOURCE_CHARS,
+        description:
+          'A file in your working directory, relative to it or absolute, at most 20 MiB, which ' +
+          'Kettu reads itself; use it for images, fonts and large files.',
+      },
+      ...(update ? { remove: { type: 'boolean', description: 'true removes the file.' } } : {}),
+    },
+    ['path'],
+  )
+}
+
+function filesSchema(update: boolean): Schema {
+  return {
+    type: 'array',
+    minItems: 1,
+    maxItems: VERSION_FILES,
+    items: fileItems(update),
+    description: update
+      ? 'Files to add, replace or remove, each with exactly one of content, source or remove.'
+      : `The files, ${ARTIFACT_ENTRY} among them unless html gives it, each with content or source.`,
+  }
+}
+
+const FILE_LIST: Schema = {
+  type: 'array',
+  items: object(
+    {
+      path: PATH,
+      size: { type: 'integer', description: 'Bytes.' },
+      type: { type: 'string', description: 'The type it is served with.' },
+    },
+    ['path', 'size', 'type'],
+  ),
 }
 const NOTE: Schema = {
   type: 'string',
@@ -139,9 +239,12 @@ export const TOOLS: Tool[] = [
     name: 'create_artifact',
     title: 'Create artifact',
     description:
-      'Makes a new artifact, an HTML page Kettu shows the user, at version 1. ' +
-      `${FORMAT} Returns its id, which update_artifact and read_artifact take.`,
-    inputSchema: object({ title: TITLE, html: HTML, note: NOTE }, ['title', 'html']),
+      'Makes a new artifact at version 1 and returns its id, which update_artifact and ' +
+      `read_artifact take. Give html for a page of one file, or files with ${ARTIFACT_ENTRY} ` +
+      'among them; read_artifact_guide explains files and canvases of several pages.',
+    inputSchema: object({ title: TITLE, html: HTML, files: filesSchema(false), note: NOTE }, [
+      'title',
+    ]),
     outputSchema: output({ id: ID, version: VERSION, pages: PAGES }),
     annotations: { ...ON_ARTIFACTS, destructiveHint: false, idempotentHint: false },
   },
@@ -149,12 +252,30 @@ export const TOOLS: Tool[] = [
     name: 'read_artifact',
     title: 'Read artifact',
     description:
-      'Returns the HTML of an artifact in this project, of its latest version or of the one ' +
-      'asked for, with its title and its latest version (head).',
+      'Returns an artifact in this project, of its latest version or of the one asked for: its ' +
+      `title, its latest version (head), its files, and the text of one, ${ARTIFACT_ENTRY} unless ` +
+      'path names another. A long file comes in parts: read on from next_offset. Images and ' +
+      'other binary files are listed, not returned.',
     inputSchema: object(
       {
         id: ID,
         version: { ...VERSION, description: 'The version to read; the latest by default.' },
+        path: {
+          ...PATH,
+          description: `The file whose text to return; ${ARTIFACT_ENTRY} by default.`,
+        },
+        offset: {
+          type: 'integer',
+          minimum: 0,
+          description: 'Where in the text to start, in characters; 0 by default.',
+        },
+        limit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: MAX_READ_CHARS,
+          default: READ_CHARS,
+          description: 'The most characters to return.',
+        },
       },
       ['id'],
     ),
@@ -165,7 +286,17 @@ export const TOOLS: Tool[] = [
       head: VERSION,
       pages: PAGES,
       updated_at: TIME,
-      html: HTML,
+      files: FILE_LIST,
+      path: PATH,
+      text: {
+        type: ['string', 'null'],
+        description: 'The text from offset on; null for a binary file.',
+      },
+      offset: { type: 'integer' },
+      next_offset: {
+        type: ['integer', 'null'],
+        description: 'Where the rest of the text starts; null when this is its end.',
+      },
     }),
     annotations: { ...ON_ARTIFACTS, readOnlyHint: true },
   },
@@ -173,31 +304,35 @@ export const TOOLS: Tool[] = [
     name: 'update_artifact',
     title: 'Update artifact',
     description:
-      'Changes an artifact in this project. Give html to replace the page, or edits to replace ' +
-      'parts of it, as a new version from base_version, the version you read; a stale ' +
-      'base_version is refused, and you read it again. Each edit replaces old_text, which must ' +
-      'occur exactly once in the HTML as the edits before it left it. Or give a title alone to ' +
-      'rename it, which makes no version.',
+      'Changes an artifact in this project as a new version from base_version, the version you ' +
+      'read; a stale base_version is refused, and you read it again. Give html to replace ' +
+      `${ARTIFACT_ENTRY}, files to add, replace or remove files, and edits to replace parts of ` +
+      'text files; files you do not name stay as they are, and when any part fails nothing ' +
+      'changes. Each edit replaces old_text, which must occur exactly once in its file as the ' +
+      'files and edits before it left it. Or give a title alone to rename it, which makes no ' +
+      'version.',
     inputSchema: object(
       {
         id: ID,
         base_version: {
           ...VERSION,
-          description: 'The version your change starts from; needed with html or edits.',
+          description: 'The version your change starts from; needed with html, files or edits.',
         },
         html: HTML,
+        files: filesSchema(true),
         edits: {
           type: 'array',
           minItems: 1,
           maxItems: EDITS,
           items: object(
             {
+              path: { ...PATH, description: `The file to edit; ${ARTIFACT_ENTRY} by default.` },
               old_text: { type: 'string', minLength: 1 },
               new_text: { type: 'string' },
             },
             ['old_text', 'new_text'],
           ),
-          description: `Up to ${EDITS} text replacements, applied in order.`,
+          description: `Up to ${EDITS} text replacements, applied in order after files.`,
         },
         title: TITLE,
         note: NOTE,
@@ -206,6 +341,19 @@ export const TOOLS: Tool[] = [
     ),
     outputSchema: output({ id: ID, version: VERSION, pages: PAGES }),
     annotations: { ...ON_ARTIFACTS, destructiveHint: false, idempotentHint: false },
+  },
+  {
+    name: 'read_artifact_guide',
+    title: 'Read artifact guide',
+    description:
+      'Explains how to write artifacts, by topic: files (styles, scripts, images, paths and ' +
+      'limits) or canvas (several pages in one artifact).',
+    inputSchema: object(
+      { topic: { type: 'string', enum: Object.keys(GUIDE), description: 'What to read about.' } },
+      ['topic'],
+    ),
+    outputSchema: output({ topic: { type: 'string' }, text: { type: 'string' } }),
+    annotations: { ...ON_ARTIFACTS, readOnlyHint: true },
   },
   {
     name: 'list_artifacts',
@@ -268,7 +416,7 @@ export const TOOLS: Tool[] = [
               description: 'The title of the session that wrote it, or "user".',
             },
             note: { type: ['string', 'null'] },
-            size: { type: 'integer', description: 'Bytes of UTF-8.' },
+            size: { type: 'integer', description: 'Bytes of all its files.' },
           },
           ['version', 'created_at', 'author', 'note', 'size'],
         ),
@@ -364,19 +512,85 @@ function html(o: Args): string {
   const value = o.html
   if (typeof value !== 'string') throw invalid('html must be a string.')
   const bytes = Buffer.byteLength(value, 'utf8')
-  if (bytes > HTML_BYTES) throw tooLarge(bytes)
+  if (bytes > INLINE_FILE_BYTES) throw tooLarge('html', bytes, INLINE_FILE_BYTES)
   return value
 }
 
-function tooLarge(bytes: number): ToolError {
-  const size = (Math.max(bytes, HTML_BYTES + 1) / MIB).toFixed(1)
+function mib(bytes: number): string {
+  return (bytes / MIB).toFixed(1)
+}
+
+function tooLarge(what: string, bytes: number, limit: number): ToolError {
   return new ToolError(
     'too_large',
-    `The HTML is ${size} MiB; an artifact holds at most 5 MiB. Move images to a CDN or shrink them.`,
+    `${what} is ${mib(Math.max(bytes, limit + 1))} MiB; it may be at most ${mib(limit)} MiB. ` +
+      'Shrink it, or give a large file in source.',
   )
 }
 
+/** A file a call writes: its text, a file of the working directory, or its removal. */
+type FileSpec =
+  | { path: string; content: string }
+  | { path: string; source: string }
+  | { path: string; remove: true }
+
+function checkedPath(value: unknown, label: string): string {
+  if (typeof value !== 'string') throw invalid(`${label}: path must be text.`)
+  const problem = artifactPathProblem(value)
+  if (problem) throw invalid(`${label}: the path ${JSON.stringify(value)} ${problem}.`)
+  return value
+}
+
+/** The files a call names, with `html` as the entry page's text. */
+function fileSpecs(o: Args, update: boolean): FileSpec[] {
+  const specs: FileSpec[] = []
+  if (o.files !== undefined) {
+    const value = o.files
+    if (!Array.isArray(value) || value.length === 0 || value.length > VERSION_FILES) {
+      throw invalid(`files must be a list of 1 to ${VERSION_FILES} files.`)
+    }
+    const keys = update ? ['path', 'content', 'source', 'remove'] : ['path', 'content', 'source']
+    const named = new Set<string>()
+    value.forEach((item: unknown, i) => {
+      const entry = args(item, keys)
+      const path = checkedPath(entry.path, `files[${i}]`)
+      const label = `files[${i}] (${path})`
+      if (named.has(path)) throw invalid(`${label}: the path is named twice.`)
+      named.add(path)
+      const given = keys.slice(1).filter((key) => entry[key] !== undefined)
+      if (given.length !== 1) {
+        throw invalid(
+          `${label}: give exactly one of ${update ? 'content, source or remove' : 'content or source'}.`,
+        )
+      }
+      if (entry.remove !== undefined) {
+        if (entry.remove !== true) throw invalid(`${label}: remove must be true.`)
+        specs.push({ path, remove: true })
+      } else if (entry.content !== undefined) {
+        if (typeof entry.content !== 'string') throw invalid(`${label}: content must be text.`)
+        const bytes = Buffer.byteLength(entry.content, 'utf8')
+        if (bytes > INLINE_FILE_BYTES) throw tooLarge(label, bytes, INLINE_FILE_BYTES)
+        specs.push({ path, content: entry.content })
+      } else {
+        const source = entry.source
+        if (typeof source !== 'string' || source === '' || source.length > SOURCE_CHARS) {
+          throw invalid(`${label}: source must be a path of 1 to ${SOURCE_CHARS} characters.`)
+        }
+        specs.push({ path, source })
+      }
+    })
+  }
+  if (o.html !== undefined) {
+    if (specs.some((spec) => spec.path === ARTIFACT_ENTRY)) {
+      throw invalid(`Give ${ARTIFACT_ENTRY} in html or in files, not in both.`)
+    }
+    specs.unshift({ path: ARTIFACT_ENTRY, content: html(o) })
+  }
+  return specs
+}
+
 interface Edit {
+  path: string
   oldText: string
   newText: string
 }
@@ -387,44 +601,66 @@ function edits(o: Args): Edit[] {
     throw invalid(`edits must be a list of 1 to ${EDITS} edits.`)
   }
   return value.map((item: unknown, i) => {
-    const edit = args(item, ['old_text', 'new_text'])
+    const edit = args(item, ['path', 'old_text', 'new_text'])
+    const path = edit.path === undefined ? ARTIFACT_ENTRY : checkedPath(edit.path, `Edit ${i + 1}`)
     if (typeof edit.old_text !== 'string' || edit.old_text.length === 0) {
       throw invalid(`Edit ${i + 1}: old_text must be text that is not empty.`)
     }
     if (typeof edit.new_text !== 'string') throw invalid(`Edit ${i + 1}: new_text must be text.`)
-    return { oldText: edit.old_text, newText: edit.new_text }
+    return { path, oldText: edit.old_text, newText: edit.new_text }
   })
 }
 
-/** Applies the edits in order; each `oldText` must occur exactly once in what came before. */
-export function applyEdits(source: string, list: readonly Edit[]): string {
-  let text = source
-  list.forEach((edit, i) => {
-    const at = text.indexOf(edit.oldText)
-    if (at < 0) {
-      throw new ToolError(
-        'edit_not_found',
-        `Edit ${i + 1}: old_text does not occur in the HTML` +
-          `${i > 0 ? ' as the edits before it left it' : ''}. ` +
-          'Read the artifact again and copy the text exactly.',
-      )
+/**
+ * Applies edit `i` to its file's text, in which its `oldText` must occur exactly once; `edited`
+ * says whether files or edits before it changed that text.
+ */
+function applyEdit(text: string, edit: Edit, i: number, edited: boolean): string {
+  const at = text.indexOf(edit.oldText)
+  if (at < 0) {
+    throw new ToolError(
+      'edit_not_found',
+      `Edit ${i + 1}: old_text does not occur in ${edit.path}` +
+        `${edited ? ' as the files and edits before it left it' : ''}. ` +
+        'Read the artifact again and copy the text exactly.',
+    )
+  }
+  if (text.indexOf(edit.oldText, at + 1) >= 0) {
+    let count = 0
+    for (let from = 0; ; count++) {
+      const next = text.indexOf(edit.oldText, from)
+      if (next < 0) break
+      from = next + edit.oldText.length
     }
-    if (text.indexOf(edit.oldText, at + 1) >= 0) {
-      let count = 0
-      for (let from = 0; ; count++) {
-        const next = text.indexOf(edit.oldText, from)
-        if (next < 0) break
-        from = next + edit.oldText.length
-      }
-      throw new ToolError(
-        'edit_not_found',
-        `Edit ${i + 1}: old_text occurs ${Math.max(count, 2)} times. ` +
-          'Include more of the surrounding text.',
-      )
-    }
-    text = text.slice(0, at) + edit.newText + text.slice(at + edit.oldText.length)
-  })
-  return text
+    throw new ToolError(
+      'edit_not_found',
+      `Edit ${i + 1}: old_text occurs ${Math.max(count, 2)} times in ${edit.path}. ` +
+        'Include more of the surrounding text.',
+    )
+  }
+  return text.slice(0, at) + edit.newText + text.slice(at + edit.oldText.length)
+}
+
+/** The bytes as text, or null when they are not UTF-8. */
+function utf8(bytes: Uint8Array): string | null {
+  try {
+    // A leading BOM stays, so an edit leaves the file's other bytes as they were.
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes)
+  } catch {
+    return null
+  }
+}
+
+function pathList(paths: readonly string[]): string {
+  const shown = paths.slice(0, LISTED_PATHS).join(', ')
+  return paths.length > LISTED_PATHS ? `${shown} and ${paths.length - LISTED_PATHS} more` : shown
+}
+
+/** The changes a write makes to its base, and the pages of the version it makes. */
+interface Draft {
+  changes: FileChange[]
+  pages: number
+  files: number
 }
 
 /** Lowercase, without accents, for matching titles. */
@@ -438,6 +674,10 @@ function iso(ms: number): string {
 
 function pagesText(pages: number): string {
   return pages >= 2 ? `a canvas of ${pages} pages` : 'a single page'
+}
+
+function filesText(files: number): string {
+  return files > 1 ? ` in ${files} files` : ''
 }
 
 function count(n: number, one: string, many: string): string {
@@ -482,14 +722,16 @@ export class ArtifactTools {
   private run(caller: Caller, name: string, input: unknown): Promise<CallToolResult> {
     switch (name) {
       case 'create_artifact':
-        return this.create(caller, args(input, ['title', 'html', 'note']))
+        return this.create(caller, args(input, ['title', 'html', 'files', 'note']))
       case 'read_artifact':
-        return this.read(caller, args(input, ['id', 'version']))
+        return this.read(caller, args(input, ['id', 'version', 'path', 'offset', 'limit']))
       case 'update_artifact':
         return this.update(
           caller,
-          args(input, ['id', 'base_version', 'html', 'edits', 'title', 'note']),
+          args(input, ['id', 'base_version', 'html', 'files', 'edits', 'title', 'note']),
         )
+      case 'read_artifact_guide':
+        return Promise.resolve(this.guide(args(input, ['topic'])))
       case 'list_artifacts':
         return this.list(caller, args(input, ['query', 'limit']))
       case 'delete_artifact':
@@ -591,62 +833,212 @@ export class ArtifactTools {
     }
   }
 
+  /**
+   * What a write changes in `base`, or makes from nothing: `specs` first, then `list` on the text
+   * the files then have; refused as a whole when any part fails or the version would not fit.
+   */
+  private async draft(
+    caller: Caller,
+    base: FoundVersion | null,
+    specs: readonly FileSpec[],
+    list: readonly Edit[],
+  ): Promise<Draft> {
+    const sizes = new Map(base?.files.map((file) => [file.path, file.size]) ?? [])
+    const changed = new Map<string, Buffer | null>()
+    const of = base ? ` in version ${base.version.version}` : ''
+    for (const spec of specs) {
+      if ('remove' in spec) {
+        if (!sizes.has(spec.path)) {
+          throw invalid(`There is no ${spec.path}${of} to remove.`)
+        }
+        sizes.delete(spec.path)
+        changed.set(spec.path, null)
+        continue
+      }
+      const bytes =
+        'content' in spec
+          ? Buffer.from(spec.content, 'utf8')
+          : await this.source(caller, spec.path, spec.source)
+      sizes.set(spec.path, bytes.length)
+      changed.set(spec.path, bytes)
+    }
+    const texts = new Map<string, string>()
+    for (const [i, edit] of list.entries()) {
+      let text = texts.get(edit.path)
+      if (text === undefined) {
+        const stored = base?.files.find((file) => file.path === edit.path)
+        const bytes = changed.has(edit.path)
+          ? changed.get(edit.path)
+          : stored && base
+            ? await this.deps.store.bytes(base, stored)
+            : null
+        if (!bytes) {
+          throw new ToolError(
+            'edit_not_found',
+            `Edit ${i + 1}: there is no ${edit.path}${of} to edit` +
+              `${changed.get(edit.path) === null ? ' once files removes it' : ''}.`,
+          )
+        }
+        const decoded = utf8(bytes)
+        if (decoded === null) throw invalid(`Edit ${i + 1}: ${edit.path} is not UTF-8 text.`)
+        text = decoded
+      }
+      texts.set(edit.path, applyEdit(text, edit, i, changed.has(edit.path) || texts.has(edit.path)))
+    }
+    for (const [path, text] of texts) {
+      const bytes = Buffer.from(text, 'utf8')
+      if (bytes.length > DISK_FILE_BYTES) {
+        throw tooLarge(`${path} after the edits`, bytes.length, DISK_FILE_BYTES)
+      }
+      sizes.set(path, bytes.length)
+      changed.set(path, bytes)
+    }
+    if (!sizes.has(ARTIFACT_ENTRY)) {
+      throw invalid(
+        base
+          ? `An artifact needs ${ARTIFACT_ENTRY}, the page Kettu opens, so it cannot be removed.`
+          : `An artifact needs ${ARTIFACT_ENTRY}, the page Kettu opens: give it in html or files.`,
+      )
+    }
+    if (sizes.size > VERSION_FILES) {
+      throw new ToolError(
+        'too_large',
+        `The version would have ${sizes.size} files; an artifact holds at most ${VERSION_FILES}.`,
+      )
+    }
+    let total = 0
+    for (const size of sizes.values()) total += size
+    if (total > VERSION_BYTES) {
+      throw new ToolError(
+        'too_large',
+        `The version would be ${mib(total)} MiB; an artifact holds at most ${mib(VERSION_BYTES)} MiB ` +
+          'in all. Shrink or leave out the largest files.',
+      )
+    }
+    const clash = caseClash(sizes.keys())
+    if (clash) {
+      throw invalid(
+        `${clash[0]} and ${clash[1]} differ only in case, which a disk that ignores case would ` +
+          'make one file. Rename one of them.',
+      )
+    }
+    for (const [path, bytes] of changed) {
+      if (bytes && isHtmlPath(path) && utf8(bytes) === null) {
+        throw invalid(`${path} is not UTF-8 text; HTML files must be.`)
+      }
+    }
+    const entry = changed.get(ARTIFACT_ENTRY)
+    return {
+      changes: [...changed].map(([path, data]) => ({ path, data })),
+      pages: entry ? countPages(entry.toString('utf8')) : (base?.version.pages ?? 0),
+      files: sizes.size,
+    }
+  }
+
+  /** A file of the caller's working directory, as a write's source for `path`. */
+  private async source(caller: Caller, path: string, source: string): Promise<Buffer> {
+    try {
+      return await readSource(caller.project, source, DISK_FILE_BYTES, this.deps.platform)
+    } catch (error) {
+      if (!(error instanceof SourceError)) throw error
+      throw new ToolError(
+        error.reason === 'too_large' ? 'too_large' : 'invalid',
+        `${path}: ${error.message}`,
+      )
+    }
+  }
+
   private async create(caller: Caller, o: Args): Promise<CallToolResult> {
-    const input = { title: title(o), html: html(o), note: note(o) }
+    const input = { title: title(o), note: note(o) }
+    if (o.html === undefined && o.files === undefined) {
+      throw invalid(`Give html, or files with ${ARTIFACT_ENTRY} among them.`)
+    }
+    const specs = fileSpecs(o, false)
     return this.limited(caller, async () => {
-      const pages = countPages(input.html)
+      const draft = await this.draft(caller, null, specs, [])
       const editor = this.turn(caller)
       const { id, version } = await this.deps.store.create({
         ...input,
         project: caller.project,
         sessionId: caller.sessionId,
-        pages,
+        files: draft.changes.map(({ path, data }) => ({ path, data: data! })),
+        pages: draft.pages,
         ...(editor ? { editor } : {}),
       })
-      return result(`Created ${id} version ${version}, ${pagesText(pages)}.`, {
-        id,
-        version,
-        pages,
-      })
+      return result(
+        `Created ${id} version ${version}, ${pagesText(draft.pages)}${filesText(draft.files)}.`,
+        { id, version, pages: draft.pages },
+      )
     })
   }
 
   private async read(caller: Caller, o: Args): Promise<CallToolResult> {
     const artifactId = id(o)
     const version = optionalNumber(o, 'version', 1)
+    const path = o.path === undefined ? ARTIFACT_ENTRY : checkedPath(o.path, 'read_artifact')
+    const offset = optionalNumber(o, 'offset', 0) ?? 0
+    const limit = optionalNumber(o, 'limit', 1, MAX_READ_CHARS) ?? READ_CHARS
     const reader = this.turn(caller)
-    const read = await this.deps.store.read(artifactId, {
+    const found = await this.deps.store.read(artifactId, {
       project: caller.project,
       ...(version === undefined ? {} : { version }),
       ...(reader ? { reader } : {}),
     })
-    const { artifact } = read
-    const pages = read.version.pages
+    const { artifact } = found
+    const n = found.version.version
+    const stored = found.files.find((file) => file.path === path)
+    if (!stored) {
+      throw new ToolError(
+        'not_found',
+        `${artifactId} version ${n} has no file ${path}. Its files: ` +
+          `${pathList(found.files.map((file) => file.path))}.`,
+      )
+    }
+    const type = artifactFileType(path)
+    const decoded = isTextType(type) ? utf8(await this.deps.store.bytes(found, stored)) : null
+    const text = decoded === null ? null : decoded.slice(offset, offset + limit)
+    const end = decoded === null ? 0 : Math.min(decoded.length, offset + limit)
+    const nextOffset = decoded !== null && end < decoded.length ? end : null
+    const about =
+      decoded === null
+        ? `${path} is binary (${type}, ${stored.size} bytes) and is not shown`
+        : nextOffset === null
+          ? `${path} follows${offset > 0 ? ` from character ${offset}` : ''}`
+          : `${path} follows from character ${offset} to ${end} of ${decoded.length}; read on from next_offset`
     return result(
-      `${artifactId}, "${artifact.title}", version ${read.version.version} of ${artifact.head}, ` +
-        `${pagesText(pages)}.`,
+      `${artifactId}, "${artifact.title}", version ${n} of ${artifact.head}, ` +
+        `${pagesText(found.version.pages)}${filesText(found.files.length)}. ${about}.`,
       {
         id: artifactId,
         title: artifact.title,
-        version: read.version.version,
+        version: n,
         head: artifact.head,
-        pages,
+        pages: found.version.pages,
         updated_at: iso(artifact.updatedAt),
-        html: read.html,
+        files: found.files.map((file) => ({
+          path: file.path,
+          size: file.size,
+          type: artifactFileType(file.path),
+        })),
+        path,
+        text,
+        offset,
+        next_offset: nextOffset,
       },
     )
   }
 
   private async update(caller: Caller, o: Args): Promise<CallToolResult> {
     const artifactId = id(o)
-    const given = ['html', 'edits', 'title'].filter((key) => o[key] !== undefined)
-    if (given.length !== 1) {
-      throw invalid(
-        'Give one of html, edits or title: html or edits for a new version, a title to rename.',
-      )
-    }
+    const changes = ['html', 'files', 'edits'].filter((key) => o[key] !== undefined)
     const { store } = this.deps
     if (o.title !== undefined) {
+      if (changes.length > 0) {
+        throw invalid(
+          'Give a title alone to rename; html, files and edits make a new version, which a ' +
+            'rename does not.',
+        )
+      }
       // A rename makes no version, so base_version and a note have nothing to apply to.
       const newTitle = title(o)
       const editor = this.turn(caller)
@@ -666,45 +1058,52 @@ export class ArtifactTools {
         },
       )
     }
-    if (o.base_version === undefined) throw invalid('base_version is needed with html or edits.')
+    if (changes.length === 0) {
+      throw invalid('Give html, files or edits for a new version, or a title alone to rename.')
+    }
+    if (o.base_version === undefined) {
+      throw invalid('base_version is needed with html, files or edits.')
+    }
     const baseVersion = wholeNumber(o, 'base_version', 1)
     const versionNote = note(o)
-    const replaced = o.html === undefined ? undefined : html(o)
-    const list = replaced === undefined ? edits(o) : []
+    const specs = fileSpecs(o, true)
+    const list = o.edits === undefined ? [] : edits(o)
     return this.limited(caller, async () => {
-      let next = replaced
-      if (next === undefined) {
-        // The version first, so a stale one is refused without reading the HTML.
-        const { artifact } = await store.get(artifactId, { project: caller.project })
-        if (artifact.head !== baseVersion) {
-          throw new ArtifactError('conflict', 'Not the latest version', {
-            version: artifact.head,
-            deleted: false,
-          })
-        }
-        const base = await store.read(artifactId, { project: caller.project, version: baseVersion })
-        next = applyEdits(base.html, list)
-        const bytes = Buffer.byteLength(next, 'utf8')
-        if (bytes > HTML_BYTES) throw tooLarge(bytes)
+      // The version first, so a stale one is refused before any file is read.
+      const base = await store.get(artifactId, { project: caller.project })
+      if (base.artifact.head !== baseVersion) {
+        throw new ArtifactError('conflict', 'Not the latest version', {
+          version: base.artifact.head,
+          deleted: false,
+        })
       }
-      const pages = countPages(next)
+      const draft = await this.draft(caller, base, specs, list)
       const editor = this.turn(caller)
       const { version } = await store.write({
         id: artifactId,
         baseVersion,
-        html: next,
-        pages,
+        changes: draft.changes,
+        pages: draft.pages,
         author: caller.sessionId,
         note: versionNote,
         project: caller.project,
         ...(editor ? { editor } : {}),
       })
-      return result(`Updated ${artifactId} to version ${version}, ${pagesText(pages)}.`, {
-        id: artifactId,
-        version,
-        pages,
-      })
+      return result(
+        `Updated ${artifactId} to version ${version}, ${pagesText(draft.pages)}` +
+          `${filesText(draft.files)}.`,
+        { id: artifactId, version, pages: draft.pages },
+      )
     })
+  }
+
+  private guide(o: Args): CallToolResult {
+    const topic = o.topic
+    if (typeof topic !== 'string' || !Object.hasOwn(GUIDE, topic)) {
+      throw invalid(`topic must be one of ${Object.keys(GUIDE).join(', ')}.`)
+    }
+    const text = GUIDE[topic as GuideTopic]
+    return result(text, { topic, text })
   }
 
   private async list(caller: Caller, o: Args): Promise<CallToolResult> {

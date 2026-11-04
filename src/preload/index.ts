@@ -124,7 +124,7 @@ const api: KettuApi = {
     thumbnail: (id, version, layout) => invoke('artifact:thumbnail', id, version, layout),
     openExternal: (id, version) => invoke('artifact:open-external', id, version),
     export: (id, version) => invoke('artifact:export', id, version),
-    import: (project) => invoke('artifact:import', project),
+    import: (project, kind) => invoke('artifact:import', project, kind),
     onBlocked: onArtifactBlocked,
     onStopped: onArtifactStopped,
   },

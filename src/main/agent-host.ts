@@ -1,6 +1,11 @@
 import { join } from 'node:path'
 import { app, MessageChannelMain, type MessagePortMain, type WebContents } from 'electron'
-import { ARTIFACT_ID, type ArtifactImportResult } from '@shared/artifacts'
+import { artifactPathProblem, VERSION_FILES } from '@shared/artifact-files'
+import {
+  ARTIFACT_ID,
+  type ArtifactImportFailure,
+  type ArtifactImportResult,
+} from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import {
   isOriginDecision,
@@ -66,7 +71,7 @@ const MAX_STRING = 8192
 const GRACE_MS = 2_000
 /** How long the host gets to take a grant before the attachment counts as not added. */
 const GRANT_TIMEOUT_MS = 5_000
-/** How long the protocol waits for the host to name a version's file. */
+/** How long the protocol waits for the host to name a version's files. */
 const CONTENT_TIMEOUT_MS = 10_000
 /** How long an import waits for the host to make the artifact. */
 const IMPORT_TIMEOUT_MS = 10_000
@@ -75,6 +80,15 @@ const LIST_TIMEOUT_MS = 10_000
 const MAX_ARTIFACTS = 1_000_000
 
 type ImportAnswer = NonNullable<ArtifactImportResult>
+const IMPORT_FAILURES: ReadonlySet<string> = new Set<ArtifactImportFailure>([
+  'too_large',
+  'too_many',
+  'no_index',
+  'bad_name',
+  'not_utf8',
+  'unreadable',
+  'unavailable',
+])
 const UNAVAILABLE: ImportAnswer = { failed: 'unavailable' }
 
 /** The copy beside app.asar that a packaged build unpacks a file into; the path itself in dev. */
@@ -95,17 +109,32 @@ function isStringList(value: unknown): value is string[] {
   )
 }
 
+function isContentFile(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false
+  const { path, file, size } = value as Record<string, unknown>
+  return (
+    typeof path === 'string' &&
+    artifactPathProblem(path) === null &&
+    typeof file === 'string' &&
+    file.length <= MAX_STRING &&
+    isCount(size)
+  )
+}
+
 function isContentResult(value: unknown): value is ArtifactContentResult {
   if (typeof value !== 'object' || value === null) return false
-  const { kind, path, version, title } = value as Record<string, unknown>
+  const { kind, files, version, title, key } = value as Record<string, unknown>
   if (kind === 'not_found' || kind === 'failed') return true
   return (
     kind === 'found' &&
-    typeof path === 'string' &&
-    path.length <= MAX_STRING &&
+    Array.isArray(files) &&
+    files.length <= VERSION_FILES &&
+    files.every(isContentFile) &&
     Number.isSafeInteger(version) &&
     (version as number) >= 1 &&
-    typeof title === 'string'
+    typeof title === 'string' &&
+    typeof key === 'string' &&
+    /^[0-9a-f]{64}$/.test(key)
   )
 }
 
@@ -122,12 +151,7 @@ function isImportAnswer(value: unknown): value is ImportAnswer {
   if (typeof value !== 'object' || value === null) return false
   const { id, failed } = value as Record<string, unknown>
   if (typeof id === 'string') return ARTIFACT_ID.test(id)
-  return (
-    failed === 'too_large' ||
-    failed === 'not_utf8' ||
-    failed === 'unreadable' ||
-    failed === 'unavailable'
-  )
+  return typeof failed === 'string' && IMPORT_FAILURES.has(failed)
 }
 
 function isMediaGrant(value: unknown): value is MediaGrantRecord {

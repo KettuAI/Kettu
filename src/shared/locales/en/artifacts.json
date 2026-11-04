@@ -53,13 +53,21 @@
     "errorDescription": "{{error}} Your artifacts are safe on this computer.",
     "errorDescription_web": "{{error}} Your artifacts are safe on {{host}}.",
     "imported": "Imported",
-    "import": "Import an HTML file",
-    "importEllipsis": "Import an HTML file…",
+    "import": "Import an HTML file or folder",
+    "importEllipsis": "Import an HTML file or folder…",
+    "importWhat": "Import",
+    "importKind": {
+      "file": "An HTML file",
+      "folder": "A folder with index.html"
+    },
     "importInto": "Import into",
-    "importFailedTitle": "The file could not be imported",
+    "importFailedTitle": "It could not be imported",
     "importFailed": {
-      "too_large": "It is over 5 MiB, the most an artifact holds.",
-      "not_utf8": "It is not UTF-8 text.",
+      "too_large": "It is over the most an artifact holds: 20 MiB a file and 64 MiB in all.",
+      "too_many": "It has more than 256 files, the most an artifact holds.",
+      "no_index": "The folder has no index.html, the page an artifact opens on.",
+      "bad_name": "A file in it has a name an artifact can't use: one with a character such as : or ?, one starting with _kettu, or two names that differ only in case.",
+      "not_utf8": "Its HTML is not UTF-8 text.",
       "unreadable": "It could not be read.",
       "unavailable": "The agent host can't take it right now. Try again in a moment.",
       "failed": "Something went wrong. Try again."

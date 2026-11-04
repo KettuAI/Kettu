@@ -53,14 +53,22 @@
     "errorDescription": "{{error}} 你的 Artifact 仍安全地保存在这台电脑上。",
     "errorDescription_web": "{{error}} 你的 Artifact 仍安全地保存在 {{host}} 上。",
     "imported": "导入的",
-    "import": "导入 HTML 文件",
-    "importEllipsis": "导入 HTML 文件…",
+    "import": "导入 HTML 文件或文件夹",
+    "importEllipsis": "导入 HTML 文件或文件夹…",
+    "importWhat": "导入",
+    "importKind": {
+      "file": "HTML 文件",
+      "folder": "带 index.html 的文件夹"
+    },
     "importInto": "导入到",
-    "importFailedTitle": "无法导入这个文件",
+    "importFailedTitle": "无法导入",
     "importFailed": {
-      "too_large": "文件超过 5 MiB，超出了一个 artifact 的上限。",
-      "not_utf8": "文件不是 UTF-8 文本。",
-      "unreadable": "无法读取这个文件。",
+      "too_large": "超出了一个 artifact 的上限：每个文件 20 MiB，合计 64 MiB。",
+      "too_many": "文件超过 256 个，超出了一个 artifact 的上限。",
+      "no_index": "文件夹里没有 index.html，也就是 artifact 打开时的页面。",
+      "bad_name": "里面有文件的名字 artifact 不能用：带有 : 或 ? 这类字符、以 _kettu 开头，或两个名字只差大小写。",
+      "not_utf8": "其中的 HTML 不是 UTF-8 文本。",
+      "unreadable": "无法读取。",
       "unavailable": "Agent host 暂时无法接收，请稍后再试。",
       "failed": "出了点问题，请重试。"
     },

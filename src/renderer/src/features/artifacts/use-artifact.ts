@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { versionUrlPath } from '@shared/artifact-page'
 import type { ArtifactSession, ArtifactSummary } from '@shared/artifacts'
 import { errorCode, host } from '@renderer/lib/host'
 import {
@@ -182,13 +183,17 @@ export function useListsRead(): boolean {
   return useArtifactsStore((s) => s.list !== null && s.deleted !== null)
 }
 
-/** A page's frame address: one version, and for a canvas one page by the protocol's numbers. */
+/**
+ * A page's frame address: the entry page of one version, and for a canvas one page by the
+ * protocol's numbers. `url` is the artifact's origin, or its frame's folder, ending in a slash.
+ */
 export function pageUrl(
   url: string,
   version: number,
   page?: { group: number; index: number },
 ): string {
-  return page ? `${url}?v=${version}&page=${page.group}.${page.index}` : `${url}?v=${version}`
+  const entry = `${url.slice(0, -1)}${versionUrlPath(version)}`
+  return page ? `${entry}?page=${page.group}.${page.index}` : entry
 }
 
 function readFailure(reason: unknown): ViewerError {

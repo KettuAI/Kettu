@@ -32,7 +32,7 @@ export const MAX_UNREAD = 64
 const SOCKET_OPTIONS = { noDelay: true, keepAlive: true, keepAliveInitialDelay: KEEPALIVE_MS }
 
 export interface DirectListenerOptions {
-  server: Pick<RemoteServer, 'accept' | 'refusedOne' | 'setAddresses'>
+  server: Pick<RemoteServer, 'accept' | 'refusedOne' | 'setAddresses' | 'frameFile'>
   /** The status changed. */
   changed(): void
   log: LogFn

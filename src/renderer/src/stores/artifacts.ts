@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ArtifactImportResult, ArtifactSummary } from '@shared/artifacts'
+import type { ArtifactImportKind, ArtifactImportResult, ArtifactSummary } from '@shared/artifacts'
 import type { AgentId } from '@shared/thread'
 import {
   parseOpened,
@@ -149,12 +149,15 @@ export function eraseArtifact(id: string): Promise<void> {
   return host('artifacts.delete', { id, permanently: true })
 }
 
-/** Asks main for a file through its open dialog; `project` null is No project. */
-export async function importArtifact(project: string | null): Promise<string | null> {
+/** Asks main for a file or folder through its open dialog; `project` null is No project. */
+export async function importArtifact(
+  project: string | null,
+  kind: ArtifactImportKind,
+): Promise<string | null> {
   useArtifactsStore.setState({ importFailed: null })
   let result: ArtifactImportResult
   try {
-    result = await window.kettu.artifacts.import(project)
+    result = await window.kettu.artifacts.import(project, kind)
   } catch (error) {
     console.error('Could not import an artifact', error)
     useArtifactsStore.setState({ importFailed: 'failed' })

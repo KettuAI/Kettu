@@ -1,6 +1,6 @@
 import type { AccountStatus } from './account'
 import type { AgentsApi, DiagnosticsBundle, HostMethod } from './agent-host'
-import type { ArtifactImportResult, ThumbnailPage } from './artifacts'
+import type { ArtifactImportKind, ArtifactImportResult, ThumbnailPage } from './artifacts'
 import type { GrantedAttachment } from './attachments'
 import type { BrowserBounds, BrowserOriginDecision, BrowserState } from './browser'
 import type { EditorApp, EditorList } from './editors'
@@ -206,7 +206,10 @@ export interface IpcInvokeContract {
   'artifact:open-external': { args: [id: string, version: number]; result: void }
   'artifact:export': { args: [id: string, version: number]; result: boolean }
   // `project`: a registered project's folder, or null for No project.
-  'artifact:import': { args: [project: string | null]; result: ArtifactImportResult }
+  'artifact:import': {
+    args: [project: string | null, kind: ArtifactImportKind]
+    result: ArtifactImportResult
+  }
   'account:status': { args: []; result: AccountStatus }
   // Reads the account again, refreshing the tokens when needed.
   'account:check': { args: []; result: AccountStatus }
@@ -400,13 +403,16 @@ export interface KettuApi {
     thumbnail(id: string, version: number, layout: ThumbnailPage[] | null): Promise<string | null>
     /** Opens a copy of the version in the default browser, outside the app's isolation. */
     openExternal(id: string, version: number): Promise<void>
-    /** Asks where to save the version's HTML; false when the user cancelled. */
+    /**
+     * Asks where to save the version: its HTML file, or a folder for its files when it has
+     * several; false when the user cancelled.
+     */
     export(id: string, version: number): Promise<boolean>
     /**
-     * Asks for an HTML file and makes it an artifact in the project, or in No project when null;
-     * null when the user cancelled.
+     * Asks for an HTML file or a folder with an `index.html` and makes it an artifact in the
+     * project, or in No project when null; null when the user cancelled.
      */
-    import(project: string | null): Promise<ArtifactImportResult>
+    import(project: string | null, kind: ArtifactImportKind): Promise<ArtifactImportResult>
     onBlocked(listener: (event: ArtifactBlockedEvent) => void): () => void
     onStopped(listener: (event: ArtifactStoppedEvent) => void): () => void
   }

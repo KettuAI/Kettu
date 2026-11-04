@@ -3,6 +3,12 @@
 
 import type { SharingFailure } from '@shared/sharing'
 
+/** A file of a page to publish, by its path from the page's root, such as `index.html`. */
+export interface PageFile {
+  path: string
+  bytes: Uint8Array
+}
+
 /** A published page: where it opens, and what the target knows it by. */
 export interface Published {
   url: string
@@ -10,10 +16,10 @@ export interface Published {
 }
 
 export interface SharingProvider {
-  /** Puts the page online at a new URL. */
-  publish(html: string, headers: Record<string, string>): Promise<Published>
+  /** Puts the page and its files online at a new URL. */
+  publish(files: readonly PageFile[], headers: Record<string, string>): Promise<Published>
   /** Replaces the page at the same URL; the one it replaces is no longer reachable. */
-  update(ref: string, html: string, headers: Record<string, string>): Promise<void>
+  update(ref: string, files: readonly PageFile[], headers: Record<string, string>): Promise<void>
   /** Takes the page down; one the target no longer has counts as done. */
   unpublish(ref: string): Promise<void>
   /** Which of these pages the target still has. */

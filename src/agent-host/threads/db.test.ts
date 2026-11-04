@@ -1,10 +1,19 @@
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ThreadEntry } from '@shared/thread'
-import { SCHEMA_VERSION, ThreadDb, ThreadDbError } from './db'
+import { contentHash, contentPath } from '../artifacts/content'
+import { schemaAt, SCHEMA_VERSION, ThreadDb, ThreadDbError } from './db'
 import {
   EMPTY_SESSION,
   INLINE_MEDIA_LIMIT,
@@ -471,6 +480,211 @@ describe('the thread database', () => {
     db.close()
     const check = new DatabaseSync(file)
     expect(check.prepare('SELECT COUNT(*) AS n FROM threads').get()!.n).toBe(0)
+    check.close()
+  })
+})
+
+describe("the thread database's artifacts", () => {
+  const bytes = (text: string): Uint8Array => new TextEncoder().encode(text)
+  const ID = 'art_01J9Z3K4V5W6X7Y8Z9A0B1C2D3'
+
+  function withContent(file = tempFile()): { db: ThreadDb; content: string } {
+    const content = path.join(path.dirname(file), 'content')
+    const db = ThreadDb.open(
+      file,
+      (level, message) => logs.push({ level, message }),
+      () => 0,
+      content,
+    )
+    return { db, content }
+  }
+
+  function create(db: ThreadDb, files: Record<string, string>): void {
+    db.createArtifact({
+      id: ID,
+      project: '/p',
+      sessionId: 's1',
+      title: 'Report',
+      files: Object.entries(files).map(([path, text]) => ({ path, data: bytes(text) })),
+      pages: 0,
+      note: null,
+      at: 1,
+    })
+  }
+
+  const pathsOf = (db: ThreadDb, version: number | null = null): Record<string, string> =>
+    Object.fromEntries(
+      db.getArtifact({ id: ID, version, project: null }).files.map((f) => [f.path, f.hash]),
+    )
+
+  it('keeps a version as its paths, each naming the content file of its bytes', () => {
+    const { db, content } = withContent()
+    create(db, { 'index.html': '<p>hi</p>', 'styles/app.css': 'p{}' })
+    const { version, files } = db.getArtifact({ id: ID, version: null, project: null })
+    expect(files.map((f) => f.path)).toEqual(['index.html', 'styles/app.css'])
+    expect(version.size).toBe(9 + 3)
+    for (const f of files) {
+      expect(f.hash).toBe(contentHash(bytes(f.path === 'index.html' ? '<p>hi</p>' : 'p{}')))
+      expect(readFileSync(contentPath(content, f.hash), 'utf8')).toBe(
+        f.path === 'index.html' ? '<p>hi</p>' : 'p{}',
+      )
+    }
+    db.close()
+  })
+
+  it('writes a version from the latest, keeping the files it does not change', () => {
+    const { db } = withContent()
+    create(db, { 'index.html': 'a', 'app.js': 'b', 'old.css': 'c' })
+    const before = pathsOf(db)
+    db.writeArtifact({
+      id: ID,
+      project: '/p',
+      baseVersion: 1,
+      changes: [
+        { path: 'app.js', data: bytes('b2') },
+        { path: 'old.css', data: null },
+        { path: 'img/logo.svg', data: bytes('<svg/>') },
+      ],
+      pages: 0,
+      author: 's1',
+      note: null,
+      at: 2,
+    })
+    const after = pathsOf(db)
+    expect(Object.keys(after)).toEqual(['app.js', 'img/logo.svg', 'index.html'])
+    expect(after['index.html']).toBe(before['index.html'])
+    expect(after['app.js']).toBe(contentHash(bytes('b2')))
+    expect(pathsOf(db, 1)).toEqual(before)
+    expect(() =>
+      db.writeArtifact({
+        id: ID,
+        project: '/p',
+        baseVersion: 1,
+        changes: [{ path: 'app.js', data: bytes('b3') }],
+        pages: 0,
+        author: 's1',
+        note: null,
+        at: 3,
+      }),
+    ).toThrow(ThreadDbError)
+    expect(db.getArtifact({ id: ID, version: null, project: null }).artifact.head).toBe(2)
+    db.close()
+  })
+
+  it('refuses a version without its entry page, and records nothing of it', () => {
+    const { db } = withContent()
+    create(db, { 'index.html': 'a' })
+    expect(() =>
+      db.writeArtifact({
+        id: ID,
+        project: '/p',
+        baseVersion: 1,
+        changes: [{ path: 'index.html', data: null }],
+        pages: 0,
+        author: 's1',
+        note: null,
+        at: 2,
+      }),
+    ).toThrow(/index\.html/)
+    expect(db.getArtifact({ id: ID, version: null, project: null }).artifact.head).toBe(1)
+    db.close()
+  })
+
+  it('restores a version with all its files', () => {
+    const { db } = withContent()
+    create(db, { 'index.html': 'a', 'app.js': 'b' })
+    db.writeArtifact({
+      id: ID,
+      project: null,
+      baseVersion: 1,
+      changes: [{ path: 'app.js', data: null }],
+      pages: 0,
+      author: null,
+      note: null,
+      at: 2,
+    })
+    db.restoreArtifact({
+      id: ID,
+      project: null,
+      version: 1,
+      baseVersion: 2,
+      author: null,
+      note: null,
+      at: 3,
+    })
+    expect(pathsOf(db, 3)).toEqual(pathsOf(db, 1))
+    expect(db.getArtifact({ id: ID, version: 3, project: null }).version.size).toBe(2)
+    db.close()
+  })
+
+  it('removes only the content files no version names when it erases and purges', () => {
+    const { db, content } = withContent()
+    create(db, { 'index.html': 'shared', 'only.css': 'mine' })
+    db.createArtifact({
+      id: 'art_01J9Z3K4V5W6X7Y8Z9A0B1C2D4',
+      project: '/p',
+      sessionId: 's1',
+      title: 'Other',
+      files: [{ path: 'index.html', data: bytes('shared') }],
+      pages: 0,
+      note: null,
+      at: 1,
+    })
+    const stray = contentPath(content, contentHash(bytes('stray')))
+    mkdirSync(path.dirname(stray), { recursive: true })
+    writeFileSync(stray, 'stray')
+    db.deleteArtifact({ id: ID, project: null, at: 2 })
+    db.eraseArtifact(ID)
+    expect(existsSync(contentPath(content, contentHash(bytes('shared'))))).toBe(true)
+    expect(existsSync(contentPath(content, contentHash(bytes('mine'))))).toBe(false)
+    expect(existsSync(stray)).toBe(true)
+    expect(db.purgeArtifacts(0)).toEqual({ artifacts: 0, files: 1 })
+    expect(existsSync(stray)).toBe(false)
+    expect(existsSync(contentPath(content, contentHash(bytes('shared'))))).toBe(true)
+    db.close()
+  })
+
+  it('makes each version of a database before files an index.html of its one file', () => {
+    const file = tempFile()
+    mkdirSync(path.dirname(file), { recursive: true })
+    const content = path.join(path.dirname(file), 'content')
+    const pages = ['<h1>v1</h1>', '<h1>v2</h1>']
+    const raw = new DatabaseSync(file)
+    raw.exec(`BEGIN; ${schemaAt(4)} PRAGMA user_version = 4; COMMIT;`)
+    raw
+      .prepare(
+        'INSERT INTO artifacts (id, project, title, head, session_id, created_at, updated_at) VALUES (?, ?, ?, 2, ?, 1, 2)',
+      )
+      .run(ID, '/p', 'Old', 's1')
+    pages.forEach((html, i) => {
+      const hash = contentHash(bytes(html))
+      raw
+        .prepare(
+          'INSERT INTO artifact_versions (artifact_id, n, hash, size, pages, author, note, created_at) VALUES (?, ?, ?, ?, 0, ?, NULL, ?)',
+        )
+        .run(ID, i + 1, hash, html.length, 's1', i + 1)
+      mkdirSync(path.dirname(contentPath(content, hash)), { recursive: true })
+      writeFileSync(contentPath(content, hash), html)
+    })
+    raw.close()
+    const { db } = withContent(file)
+    expect(db.status).toBe('ok')
+    for (const [i, html] of pages.entries()) {
+      const found = db.getArtifact({ id: ID, version: i + 1, project: null })
+      expect(found.files).toEqual([
+        { path: 'index.html', hash: contentHash(bytes(html)), size: html.length },
+      ])
+      expect(found.version.size).toBe(html.length)
+    }
+    expect(db.purgeArtifacts(0).files).toBe(0)
+    for (const html of pages) {
+      expect(readFileSync(contentPath(content, contentHash(bytes(html))), 'utf8')).toBe(html)
+    }
+    db.close()
+    const check = new DatabaseSync(file)
+    expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(SCHEMA_VERSION)
+    const columns = check.prepare('PRAGMA table_info(artifact_versions)').all()
+    expect(columns.map((c) => c.name)).not.toContain('hash')
     check.close()
   })
 })

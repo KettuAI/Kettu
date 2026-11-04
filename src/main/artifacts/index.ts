@@ -34,7 +34,7 @@ export interface ArtifactsDeps {
   content(id: string, version: number | null): Promise<ArtifactContentResult>
   contentDir: string
   thumbnailDir: string
-  /** Has the host make an artifact of a file, in a project, or in No project when null. */
+  /** Has the host make an artifact of a file or folder, in a project, or No project when null. */
   importFile(path: string, project: string | null): Promise<NonNullable<ArtifactImportResult>>
 }
 
@@ -117,8 +117,12 @@ export class Artifacts {
   }
 
   /** `artifact:import`. */
-  import(window: BrowserWindow | null, project: unknown): Promise<ArtifactImportResult> {
-    return this.files.import(window, project)
+  import(
+    window: BrowserWindow | null,
+    project: unknown,
+    kind: unknown,
+  ): Promise<ArtifactImportResult> {
+    return this.files.import(window, project, kind)
   }
 
   /** `artifact:close`. */

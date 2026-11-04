@@ -103,7 +103,9 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   chinese: { description: 'A long answer in Chinese, with every Markdown block' },
   artifacts: {
     description: "Makes or changes a canvas through Kettu's artifacts service, then reads it",
-    hint: '--read <artifact id> --until-cancel --child <id> --meta <session id|none> --execute',
+    hint:
+      '--read <artifact id> --site <image in the project> --until-cancel --child <id> ' +
+      '--meta <session id|none> --execute',
   },
   'open-site': {
     description: 'Opens a site through the browser tools, which asks the user for a new one',
@@ -140,6 +142,7 @@ export interface ScenarioOptions {
   thenMs: number | null // requests: when it answers by itself after the turn, not scaled
   atEnd: boolean // requests: usage only as the turn ends, as OpenCode reports it
   read: string | null // artifacts: the artifact to read instead
+  site: string | null // artifacts: an image of the project, for a page of several files instead
   untilCancel: boolean // artifacts: the turn runs on after its calls until it is cancelled
   child: string | null // artifacts: the calls come from this subagent session, as OpenCode's do
   meta: string | null // artifacts: the session id the calls name instead; none names none
@@ -233,6 +236,7 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
     thenMs: parseNumber(flagValue(args, 'then')),
     atEnd: flagValue(args, 'at-end') !== undefined,
     read: flagValue(args, 'read') || null,
+    site: flagValue(args, 'site') || null,
     untilCancel: flagValue(args, 'until-cancel') !== undefined,
     child: flagValue(args, 'child') || null,
     meta: flagValue(args, 'meta') || null,

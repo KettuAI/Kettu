@@ -2,6 +2,7 @@
 // params object with only the known fields, or throws `invalid_params` before anything runs.
 
 import type { AgentInstallMethod, HostMethod, HostParams } from '@shared/agent-host'
+import { artifactPathProblem } from '@shared/artifact-files'
 import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
 import type { BrowserCallAnswer, BrowserOriginAnswer, BrowserOriginDecision } from '@shared/browser'
 import { FILE_READ_LIMIT } from '@shared/files'
@@ -1034,6 +1035,21 @@ export function createValidators(platform: Platform): Validators {
       return deleted === undefined ? {} : { deleted }
     },
     'artifacts.read': (params) => {
+      const o = fields(params)
+      return {
+        id: artifactId(o),
+        ...(o.version === undefined ? {} : { version: version(o, 'version') }),
+      }
+    },
+    'artifacts.file': (params) => {
+      const o = fields(params)
+      const path = o.path
+      if (typeof path !== 'string' || artifactPathProblem(path) !== null) {
+        throw invalidParams("path must be a path of one of the artifact's files")
+      }
+      return { id: artifactId(o), version: version(o, 'version'), path }
+    },
+    'artifacts.content': (params) => {
       const o = fields(params)
       return {
         id: artifactId(o),

@@ -1,61 +1,72 @@
-// Artifact pages in the web client. Each frame loads the host's frame shell under `/frame/<id>/`,
-// which the host serves sandboxed on an opaque origin with the artifact policy; the shell asks
-// for its page, and the page's HTML, read over the encrypted channel, is posted to it here.
+// Artifact frames in the web client. The session opens each frame on the host, which then serves
+// the artifact's files on its direct port under the folder it answers with, sandboxed on an opaque
+// origin with the artifact policy; the frames load from there, and nothing passes through this page.
 
-import { pageStyle, parseArtifactQuery, withStyle } from '@shared/artifact-page'
+import type { ArtifactContent } from '@shared/artifacts'
+import type { ArtifactOpenResult } from '@shared/ipc'
+import { errorCode } from '@renderer/lib/host'
 import type { HostLink } from './link'
 
 const FRAME_PATH = '/frame/'
 
-/** The origin URL a window would get from main's `artifact:open`, here the shell's folder. */
-export function frameArtifact(id: string): string {
-  return `${location.origin}${FRAME_PATH}${encodeURIComponent(id)}/`
-}
-
-/** What a frame's path asks for, or null when it names no artifact. */
-export function parseFramePath(path: string): {
-  id: string
-  version: number | null
-  page: { group: number; index: number } | null
-} | null {
-  const url = URL.parse(path, 'http://frame.invalid')
-  if (!url || !url.pathname.startsWith(FRAME_PATH)) return null
-  const rest = url.pathname.slice(FRAME_PATH.length)
-  if (!rest.endsWith('/') || rest.slice(0, -1).includes('/')) return null
-  let id: string
+/** `artifact:open`: the frame's folder on the host's origin, which `close` gives back. */
+export async function openFrame(link: HostLink, id: string): Promise<ArtifactOpenResult> {
+  let path: unknown
   try {
-    id = decodeURIComponent(rest.slice(0, -1))
-  } catch {
-    return null
+    path = ((await link.request('artifacts.openFrame', { id })) as { path?: unknown } | null)?.path
+  } catch (error) {
+    if (errorCode(error) === 'not_found') return { failed: 'not_found' }
+    throw error
   }
-  if (id === '') return null
-  const query = parseArtifactQuery(url.searchParams)
-  return query ? { id, ...query } : null
+  if (typeof path !== 'string' || !path.startsWith(FRAME_PATH) || !path.endsWith('/')) {
+    throw new Error('The host named no frame for the artifact')
+  }
+  return { url: `${location.origin}${path}` }
 }
 
-/** Answers every frame shell of this page that asks for its artifact. */
-export function serveFrames(link: HostLink): void {
-  window.addEventListener('message', (event) => {
-    const data = event.data as { type?: unknown; path?: unknown } | null
-    if (data?.type !== 'kettu:frame-ready' || typeof data.path !== 'string') return
-    // Only a frame in this page, never another window that found ours.
-    const frame = [...document.querySelectorAll('iframe')].find(
-      (element) => element.contentWindow === event.source,
-    )
-    const wanted = parseFramePath(data.path)
-    if (!frame?.contentWindow || !wanted) return
-    const target = frame.contentWindow
-    const params =
-      wanted.version === null ? { id: wanted.id } : { id: wanted.id, version: wanted.version }
-    void link.request('artifacts.read', params).then(
-      (read) => {
-        const { html } = read as { html: string }
-        const shown = wanted.page
-          ? withStyle(html, pageStyle(wanted.page.group, wanted.page.index))
-          : html
-        target.postMessage({ type: 'kettu:frame-html', html: shown }, '*')
-      },
-      (error: unknown) => console.error(`Could not read ${wanted.id} for its frame`, error),
-    )
-  })
+/** `artifact:close`: the host stops serving the frame at `url`. */
+export async function closeFrame(link: HostLink, url: string): Promise<void> {
+  const parsed = URL.parse(url)
+  if (!parsed || parsed.origin !== location.origin) return
+  await link.request('artifacts.closeFrame', { path: parsed.pathname })
+}
+
+/** The directory picker of the browsers that have one. */
+type DirectoryPicker = (options?: { mode?: 'readwrite' }) => Promise<FileSystemDirectoryHandle>
+
+/**
+ * `artifact:export` for a version of several files: each into the folder the user picks, in the
+ * folders its path names. False when the user cancelled.
+ */
+export async function exportFiles(
+  link: HostLink,
+  id: string,
+  read: ArtifactContent,
+): Promise<boolean> {
+  const browser = window as { showDirectoryPicker?: DirectoryPicker }
+  if (!browser.showDirectoryPicker) throw new Error('This browser cannot save a folder')
+  let root: FileSystemDirectoryHandle
+  try {
+    root = await browser.showDirectoryPicker({ mode: 'readwrite' })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return false
+    throw error
+  }
+  for (const file of read.files) {
+    const { bytes } = (await link.request('artifacts.file', {
+      id,
+      version: read.version,
+      path: file.path,
+    })) as { bytes: ArrayBuffer }
+    const segments = file.path.split('/')
+    let folder = root
+    for (const name of segments.slice(0, -1)) {
+      folder = await folder.getDirectoryHandle(name, { create: true })
+    }
+    const handle = await folder.getFileHandle(segments.at(-1)!, { create: true })
+    const writable = await handle.createWritable()
+    await writable.write(bytes)
+    await writable.close()
+  }
+  return true
 }
