@@ -278,7 +278,11 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
           editor={latest ? (editor ?? undefined) : undefined}
           actions={actions}
         />
-        <EditToolbar editor={latest ? editor : null} controls={shown.canvas ? controls : null} />
+        <EditToolbar
+          editor={latest ? editor : null}
+          controls={shown.canvas ? controls : null}
+          aside={!!summary?.type}
+        />
         {editor && editing.mode === 'comment' && editing.picked?.point && (
           <CommentBox
             key={`${editing.picked.point.x},${editing.picked.point.y}`}

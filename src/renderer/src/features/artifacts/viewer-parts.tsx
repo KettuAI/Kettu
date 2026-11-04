@@ -201,11 +201,14 @@ export function VersionChip({
 export function EditToolbar({
   editor,
   controls,
+  aside = false,
 }: {
   /** Null where nothing is edited, such as an earlier version. */
   editor: ArtifactEditor | null
   /** A canvas's; null for a single page. */
   controls: CanvasControls | null
+  /** At the foot's left, as a type's viewer keeps the middle for its own controls. */
+  aside?: boolean
 }) {
   const { t } = useTranslation('artifacts')
   const { mode } = useEditorState(editor)
@@ -215,7 +218,10 @@ export function EditToolbar({
     <div
       role="toolbar"
       aria-label={t('tools.label')}
-      className="absolute bottom-5 left-1/2 z-10 flex h-10 -translate-x-1/2 items-center gap-0.5 rounded-2xl bg-surface px-1 shadow-menu"
+      className={cn(
+        'absolute bottom-5 z-10 flex h-10 items-center gap-0.5 rounded-2xl bg-surface px-1 shadow-menu',
+        aside ? 'left-5' : 'left-1/2 -translate-x-1/2',
+      )}
     >
       {editor && (
         <>
