@@ -45,7 +45,6 @@ const root = document.getElementById('root')!
 window.kettu = {
   platform: devicePlatform(navigator),
   client: 'web',
-  perf: false,
   systemLocale: matchLocale(navigator.languages),
   settings: {
     get: async () => settings.get(),

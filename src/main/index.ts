@@ -108,7 +108,6 @@ protocol.registerSchemesAsPrivileged([artifactScheme, mediaScheme])
 disableDnsPrefetching()
 
 async function start(): Promise<void> {
-  const perf = process.argv.includes('--kettu-perf')
   const userDataPath = app.getPath('userData')
   const themesDir = join(userDataPath, 'themes')
   const themeSourcesFile = join(userDataPath, 'theme-sources.json')
@@ -190,7 +189,7 @@ async function start(): Promise<void> {
   })
   applyWindowTheme(themes.chosenTheme())
   watchTheme()
-  configureWindows({ state: windowState, perf, systemLocale })
+  configureWindows({ state: windowState, systemLocale })
   setBadgeEnabled(settings.get().notifications.badge)
   // From launch until quitting, whatever Run in the background says. The updater is made later.
   let checkForUpdates = (): void => {}
@@ -613,7 +612,6 @@ async function start(): Promise<void> {
     computerModel: readComputerModel,
     updater,
     quit: quitFlow,
-    perf,
   })
   ipcReady = true
   installMenu(menuDeps)

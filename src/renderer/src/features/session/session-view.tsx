@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
-import { markThreadShown } from '@renderer/app/perf'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { usePane } from '@renderer/features/split/pane-context'
 import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
@@ -94,7 +93,6 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   )
 
   let body
-  let showsThread = false
   if (!session && away) {
     body = (
       <ColumnScroller className="flex items-center justify-center px-6 pb-16">
@@ -148,7 +146,6 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
       </ColumnScroller>
     )
   } else {
-    showsThread = true
     body = (
       <Thread
         sessionId={sessionId}
@@ -159,10 +156,6 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
       />
     )
   }
-
-  useEffect(() => {
-    if (showsThread) markThreadShown(sessionId)
-  }, [sessionId, showsThread])
 
   return (
     <div className="relative flex h-full min-h-0 flex-col" {...drop.handlers}>
