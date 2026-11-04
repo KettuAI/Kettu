@@ -1,0 +1,17 @@
+@import '../../styles/globals.css';
+
+/* Tailwind scans from the build's root, this folder, so the shared components are added. */
+@source '../../components/ui';
+
+/* A viewer is a page of its own: it scrolls, and its content can be selected. */
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  overflow: auto;
+  background: var(--background);
+  user-select: text;
+  -webkit-user-select: text;
+}

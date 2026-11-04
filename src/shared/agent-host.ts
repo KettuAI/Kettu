@@ -1,6 +1,10 @@
 // The contract between the renderer and the agent host, over the agent host port.
 
+import type { ArtifactConsentAsk, ArtifactConsentRow, RuntimeAnswer } from './artifact-capabilities'
 import type { ArtifactContent, ArtifactSession, ArtifactSummary, VersionSummary } from './artifacts'
+import type { CommentAnchor, CommentThread } from './artifact-comments'
+import type { PreviewStyle } from './artifact-runtime/page-messages'
+import type { ArtifactExportFormat, ArtifactTypeInfo } from './artifact-types'
 import type {
   BrowserCallAnswer,
   BrowserDeviceCall,
@@ -8,6 +12,7 @@ import type {
   BrowserOriginDecision,
 } from './browser'
 import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
+import type { ArtifactContentFile } from './host-control'
 import type { MediaAuthorization, MediaOpenResult } from './media'
 import type {
   BranchList,
@@ -749,6 +754,24 @@ export interface HostContract {
   'artifacts.list': { params: { deleted?: boolean }; result: ArtifactSummary[] }
   // The latest version without `version`.
   'artifacts.read': { params: { id: string; version?: number }; result: ArtifactContent }
+  // The bytes of one file of a version, as an export takes them.
+  'artifacts.file': {
+    params: { id: string; version: number; path: string }
+    result: { type: string; bytes: ArrayBuffer }
+  }
+  // Where a version's files lie on disk, for a paired device's remote host to serve them to its
+  // frames; a window is refused, and the device never sees the answer.
+  'artifacts.content': {
+    params: { id: string; version?: number }
+    result: {
+      version: number
+      title: string
+      key: string
+      strict: boolean
+      files: ArtifactContentFile[]
+      type?: ArtifactTypeInfo | null
+    }
+  }
   // Newest first.
   'artifacts.versions': { params: { id: string }; result: VersionSummary[] }
   'artifacts.rename': { params: { id: string; title: string }; result: void }
@@ -763,6 +786,59 @@ export interface HostContract {
   // Each watch counts as a viewer, and brings `artifacts.version`.
   'artifacts.watch': { params: { id: string }; result: void }
   'artifacts.unwatch': { params: { id: string }; result: void }
+  // The artifact's comment threads, oldest first, anchored in its latest version.
+  'artifacts.comments': { params: { id: string }; result: CommentThread[] }
+  // The user's new thread; its anchor's text is what the page reported.
+  'artifacts.comment': {
+    params: { id: string; anchor: CommentAnchor; body: string }
+    result: CommentThread
+  }
+  'artifacts.reply': {
+    params: { id: string; threadId: string; body: string }
+    result: CommentThread
+  }
+  'artifacts.resolve': {
+    params: { id: string; threadId: string; resolved: boolean }
+    result: CommentThread
+  }
+  // The user sent the threads to a session.
+  'artifacts.markSent': {
+    params: { id: string; threadIds: string[]; sessionId: string }
+    result: void
+  }
+  // The user's direct edit of one element as a new version; `conflict` when `baseVersion` is not
+  // the latest. `style` sets properties of its start tag's style; `text` replaces the text of an
+  // element that holds text alone.
+  'artifacts.editElement': {
+    params: {
+      id: string
+      baseVersion: number
+      path: string
+      offset: number
+      style: PreviewStyle | null
+      text: string | null
+    }
+    result: { version: number }
+  }
+  // A page's message to the runtime from a frame a paired device's remote host serves, which names
+  // the artifact by the frame; a window is refused. A stream's events come as `artifacts.runtime`
+  // under `stream`, the port's own name for it, and the answer is its end.
+  'artifacts.runtime': {
+    params: { artifactId: string; message: unknown; stream?: string }
+    result: RuntimeAnswer
+  }
+  // The user's answer to an `artifacts.consentAsked`; the first answer counts.
+  'artifacts.consent': { params: { requestId: string; allow: boolean }; result: void }
+  // What the user allowed which artifacts, for Settings › Artifacts.
+  'artifacts.consents': { params: void; result: ArtifactConsentRow[] }
+  // Takes back everything the user allowed the artifact.
+  'artifacts.revokeConsent': { params: { id: string }; result: void }
+  // A typed version converted on the host to one of its type's formats: one file, or Markdown with
+  // its pictures under their paths. A deck's PDF is printed by a desktop app instead.
+  'artifacts.export': {
+    params: { id: string; version: number; format: ArtifactExportFormat }
+    result: { title: string; files: { path: string; bytes: ArrayBuffer }[] }
+  }
   // A desktop app's side of the browser calls the host sent its port, as main's is for the host's
   // own windows: the answer, the call's wait on a new site, and the site's question and its end,
   // which the session's thread shows. A window is refused them.
@@ -910,6 +986,8 @@ export const HOST_METHODS = [
   'usage.clearRecord',
   'artifacts.list',
   'artifacts.read',
+  'artifacts.file',
+  'artifacts.content',
   'artifacts.versions',
   'artifacts.rename',
   'artifacts.delete',
@@ -917,6 +995,17 @@ export const HOST_METHODS = [
   'artifacts.restoreVersion',
   'artifacts.watch',
   'artifacts.unwatch',
+  'artifacts.comments',
+  'artifacts.comment',
+  'artifacts.reply',
+  'artifacts.resolve',
+  'artifacts.markSent',
+  'artifacts.editElement',
+  'artifacts.runtime',
+  'artifacts.consent',
+  'artifacts.consents',
+  'artifacts.revokeConsent',
+  'artifacts.export',
   'browser.answer',
   'browser.waiting',
   'browser.origin',
@@ -948,6 +1037,17 @@ export type HostEvent =
   | { type: 'artifacts.changed' } // the list changed; a page showing it reads again
   | { type: 'artifacts.version'; id: string; version: number }
   | { type: 'artifacts.activity'; id: string; viewers: number; sessions: ArtifactSession[] }
+  // To the ports watching the artifact: its comments changed, so they read them again.
+  | { type: 'artifacts.comments'; id: string }
+  // A stream's event or end, to the port that asked under `stream`.
+  | { type: 'artifacts.runtime'; stream: string; answer: RuntimeAnswer }
+  // To the ports showing the artifact on the client a page asked from: the user's consent, asked
+  // outside the page. `settled` ends it everywhere; `reload` when the page stopped waiting before
+  // the user allowed it, so the page loads again to use what it may now.
+  | { type: 'artifacts.consentAsked'; ask: ArtifactConsentAsk }
+  | { type: 'artifacts.consentSettled'; requestId: string; artifactId: string; reload: boolean }
+  // What Settings › Artifacts lists changed.
+  | { type: 'artifacts.consentsChanged' }
   | { type: 'routine.changed'; routine: RoutineView } // a routine, its state or its next run
   | { type: 'routine.removed'; routineId: string }
   | { type: 'routine.run'; run: RoutineRun } // a run's status changed

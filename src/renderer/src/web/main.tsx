@@ -16,7 +16,6 @@ import { loadPlatformPrimitives } from '@shared/remote/primitives'
 import { BACKGROUND_PACE_MS, parseHostRenamed } from '@shared/remote/protocol'
 import { devicePlatform, pageAddress, webApi } from './api'
 import { browserDevice, deviceName } from './device-name'
-import { serveFrames } from './frames'
 import { channelUrl, dialWebSocket, hello, HostLink } from './link'
 import { startMediaWorker } from './media'
 import mediaWorker from './media-worker.ts?worker&url'
@@ -120,7 +119,6 @@ async function showApp(device: WebDevice, paired: Paired | null): Promise<void> 
       storage: storage('localStorage'),
     }),
   )
-  serveFrames(link)
   startMediaWorker(link, mediaWorker)
   // A page in the back takes patches a batch a second, which the host merges meanwhile.
   const pace = (): void =>
@@ -161,10 +159,14 @@ async function showApp(device: WebDevice, paired: Paired | null): Promise<void> 
   })
   link.start()
 
-  const [{ bootstrap }, { renderApp }] = await Promise.all([
-    import('@renderer/app/bootstrap'),
-    import('@renderer/app/render'),
-  ])
+  const [{ bootstrap }, { renderApp }, { setRuntimeRelay }, { attachRuntimePort }] =
+    await Promise.all([
+      import('@renderer/app/bootstrap'),
+      import('@renderer/app/render'),
+      import('@renderer/features/artifacts/frame-link'),
+      import('./runtime-relay'),
+    ])
+  setRuntimeRelay((url, port) => attachRuntimePort(link, url, port))
   await bootstrap()
   renderApp(root)
 }

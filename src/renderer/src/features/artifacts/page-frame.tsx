@@ -6,6 +6,8 @@ import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
+import { PickLayer } from './canvas-view'
+import { useEditorFrame, useEditorState, type ArtifactEditor } from './editor'
 
 /** The page shows once it has loaded, or after this long when a CDN never answers. */
 const SHOW_BY_MS = 3_000
@@ -24,6 +26,7 @@ export function PageFrame({
   reloads,
   since,
   className,
+  editor,
 }: {
   /** The artifact's origin, as `artifact:open` gave it. */
   url: string
@@ -33,9 +36,13 @@ export function PageFrame({
   reloads: number
   since: number
   className?: string
+  /** Select and comment mode, where the viewer or the pane shows them. */
+  editor?: ArtifactEditor
 }) {
   const { t } = useTranslation('artifacts')
   const frame = useRef<HTMLIFrameElement>(null)
+  const driven = useEditorFrame(editor, null)
+  const mode = useEditorState(editor).mode
   const [loaded, setLoaded] = useState(false)
   const [blocked, setBlocked] = useState<string | null>(null)
   const [mountedAt] = useState(reloads)
@@ -67,18 +74,25 @@ export function PageFrame({
   return (
     <div className={cn('absolute inset-0', className)}>
       <iframe
-        ref={frame}
+        ref={(el) => {
+          frame.current = el
+          driven.ref(el)
+        }}
         src={src}
         title={title}
         sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
         allow=""
         referrerPolicy="no-referrer"
-        onLoad={() => setLoaded(true)}
+        onLoad={() => {
+          setLoaded(true)
+          driven.onLoad()
+        }}
         className={cn(
           'absolute inset-0 size-full border-0 opacity-0 transition-opacity duration-(--duration-fast)',
           loaded && 'opacity-100',
         )}
       />
+      {mode && driven.frame && <PickLayer frame={driven.frame} scale={1} mode={mode} />}
       {!loaded && <Waiting since={since} />}
       {blocked && blockedHost && (
         <div

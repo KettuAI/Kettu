@@ -281,7 +281,7 @@ export function ShareButton({
             }
           >
             <ShareIcon className="size-3.5" />
-            {!iconOnly && t('share.button')}
+            {!iconOnly && (published ? t('share.buttonShared') : t('share.button'))}
             {published && (
               <span
                 aria-hidden

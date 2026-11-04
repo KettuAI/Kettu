@@ -9,6 +9,7 @@ export const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
   'git',
   'mcp',
   'archived',
+  'artifacts',
   'sharing',
   'terminal',
   'remote',

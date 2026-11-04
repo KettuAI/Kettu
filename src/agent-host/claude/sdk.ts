@@ -96,8 +96,11 @@ export interface QueryOptions {
   perTaskStopAffordance?: boolean
   settingSources?: SettingSource[]
   systemPrompt?: { type: 'preset'; preset: 'claude_code' }
-  tools?: { type: 'preset'; preset: 'claude_code' }
+  /** The built-in tools, by name; an empty list has none. */
+  tools?: string[] | { type: 'preset'; preset: 'claude_code' }
   disallowedTools?: string[]
+  /** Only `mcpServers`, and none of the settings' servers. */
+  strictMcpConfig?: boolean
   permissionMode?: PermissionMode
   allowDangerouslySkipPermissions?: boolean
   canUseTool?: CanUseTool

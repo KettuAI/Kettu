@@ -85,6 +85,7 @@ import type {
   SettingSource,
   SlashCommandInfo,
   StoredMessage,
+  StreamEvent,
   SystemMessage,
   ToolPermissionContext,
   UserInput,
@@ -108,6 +109,14 @@ const AUTH_STATUS_MS = 10_000
 const RESOURCE_NOT_FOUND = -32002
 const INVALID_PARAMS = -32602
 const USER_SOURCES: SettingSource[] = ['user', 'project', 'local']
+/** The settings by which Claude Code signs in: an endpoint and key, or a helper that gives one. */
+const SIGN_IN_SETTINGS = ['env', 'apiKeyHelper', 'awsAuthRefresh', 'awsCredentialExport'] as const
+
+function signInSettings(settings: Record<string, unknown>): Record<string, unknown> {
+  const picked: Record<string, unknown> = {}
+  for (const key of SIGN_IN_SETTINGS) if (settings[key] !== undefined) picked[key] = settings[key]
+  return picked
+}
 
 /** How Claude Code says a request failed for want of a sign-in. */
 const SIGN_IN_TEXT =
@@ -168,6 +177,8 @@ interface Turn {
   failure: string | null
   /** The agent messages' text, for `collect`. */
   texts: string[] | null
+  /** The agent's text as it streams, for `answer`. */
+  onText: ((text: string) => void) | null
 }
 
 interface Session {
@@ -717,7 +728,8 @@ export class ClaudeConnection implements AgentConnection {
     const previous = this.sessions.get(sessionId)
     if (previous) void this.stop(previous)
     const hidden = options.hidden
-    const sources = hidden === 'titles' || hidden === 'limits' ? [] : USER_SOURCES
+    const bare = hidden === 'sample'
+    const sources = hidden === 'titles' || hidden === 'limits' || bare ? [] : USER_SOURCES
     const settings = await this.settings(cwd, sources)
     const allowBypass = process.getuid?.() !== 0
     const modes = availableModes(allowBypass)
@@ -757,6 +769,8 @@ export class ClaudeConnection implements AgentConnection {
     }
     const flags: Record<string, unknown> = {}
     if (hidden) flags.disableAllHooks = true
+    // A page's question reads none of the user's settings but how they sign in, which may be there.
+    if (bare) Object.assign(flags, signInSettings(await this.settings(cwd, ['user'])))
     if (options.ultracode !== undefined) flags.ultracode = options.ultracode
     const mcpServers = Object.fromEntries(
       (options.mcpServers ?? []).map((server) => [
@@ -788,12 +802,14 @@ export class ClaudeConnection implements AgentConnection {
       perTaskStopAffordance: true,
       settingSources: sources,
       systemPrompt: { type: 'preset', preset: 'claude_code' },
-      tools: { type: 'preset', preset: 'claude_code' },
+      // A question from a page gets no tool at all: it cannot read, change or run anything.
+      tools: bare ? [] : { type: 'preset', preset: 'claude_code' },
+      ...(bare ? { strictMcpConfig: true } : {}),
       permissionMode: mode,
       allowDangerouslySkipPermissions: allowBypass,
       canUseTool: (name, toolInput, permission) =>
         this.canUseTool(session, name, toolInput, permission),
-      ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {}),
+      ...(Object.keys(mcpServers).length > 0 && !bare ? { mcpServers } : {}),
       ...(Object.keys(flags).length > 0 ? { settings: flags } : {}),
       extraArgs: { 'replay-user-messages': null },
       ...(hidden ? { persistSession: false } : {}),
@@ -988,6 +1004,12 @@ export class ClaudeConnection implements AgentConnection {
       if (turn) turn.running = true
       this.result(session, message as ResultMessage)
       return
+    } else if (message.type === 'stream_event' && turn?.onText) {
+      const event = (message as StreamEvent).event
+      const top = !(message as StreamEvent).parent_tool_use_id && !(message as StreamEvent).agent_id
+      if (top && event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+        if (event.delta.text) turn.onText(event.delta.text)
+      }
     }
     if (turn?.texts) return
     const deliveries = session.mapper.live(message)
@@ -1295,6 +1317,7 @@ export class ClaudeConnection implements AgentConnection {
         notice: null,
         failure: null,
         texts,
+        onText: null,
       }
     })
   }
@@ -1313,6 +1336,31 @@ export class ClaudeConnection implements AgentConnection {
     if (session.titleText === null || text.trim() === '') return
     session.titleText = `${session.titleText}${text}`.slice(-TITLE_CONTEXT)
     session.titleRev += 1
+  }
+
+  async answerQuestion(
+    dir: string,
+    prompt: readonly PromptBlock[],
+    onText: (text: string) => void,
+    signal: AbortSignal,
+  ): Promise<string> {
+    const sessionId = randomUUID()
+    const session = await this.open(sessionId, dir, { hidden: 'sample' }, { resume: false })
+    const cancel = (): void => void this.cancel(sessionId).catch(() => {})
+    try {
+      signal.throwIfAborted()
+      const texts: string[] = []
+      const turn = this.startTurn(session, texts)
+      session.turn!.onText = onText
+      signal.addEventListener('abort', cancel, { once: true })
+      this.send(session, prompt)
+      const result = await turn
+      if (result.stopReason === 'cancelled') throw new Error('The question was cancelled')
+      return texts.join('\n\n')
+    } finally {
+      signal.removeEventListener('abort', cancel)
+      await this.removeHidden(sessionId)
+    }
   }
 
   async collect(sessionId: string, text: string): Promise<string[]> {

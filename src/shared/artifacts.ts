@@ -1,5 +1,7 @@
 // Artifacts, as the agent host serves them to the interface.
 
+import type { ArtifactTypeInfo, ArtifactTypeName } from './artifact-types'
+
 /** `art_` and a ULID: 26 characters of Crockford's base32, the first ten the creation time. */
 export const ARTIFACT_ID = /^art_[0-9A-HJKMNP-TV-Z]{26}$/
 
@@ -9,11 +11,21 @@ export const ARTIFACT_TITLE_CHARS = 120
 export const NO_SESSION = ''
 
 /**
- * `artifact:import`: the new artifact's id, or why the file could not be imported; null when the
- * user cancelled the dialog.
+ * Why an import failed: a file or the whole over the limits, more files than a version holds, a
+ * folder without an `index.html`, a name no artifact file may have, HTML that is not UTF-8, or
+ * what could not be read; `unavailable` when the agent host cannot take it.
  */
-export type ArtifactImportResult =
-  { id: string } | { failed: 'too_large' | 'not_utf8' | 'unreadable' | 'unavailable' } | null
+export type ArtifactImportFailure =
+  'too_large' | 'too_many' | 'no_index' | 'bad_name' | 'not_utf8' | 'unreadable' | 'unavailable'
+
+/**
+ * `artifact:import`: the new artifact's id, or why the file or folder could not be imported; null
+ * when the user cancelled the dialog.
+ */
+export type ArtifactImportResult = { id: string } | { failed: ArtifactImportFailure } | null
+
+/** What `artifact:import` asks the user for: one HTML file, or a folder with an `index.html`. */
+export type ArtifactImportKind = 'file' | 'folder'
 
 /**
  * The viewer's frame: the page runs scripts on its own origin and may offer a download, but opens
@@ -50,10 +62,12 @@ export interface ArtifactSummary {
   sessionId: string // the session it shows under: its latest version's, else its creator
   version: number // the latest
   pages: number // two or more is a canvas
+  files: number // of the latest version
   size: number // of the latest version, in bytes
   updatedAt: number // when the latest version was made
   deletedAt: number | null
   editing: string[] // the sessions whose running turn changed it
+  type: ArtifactTypeName | null // the type it was made from, shown by the type's viewer
 }
 
 /** A session using an artifact now: its running turn read it, or changed it. */
@@ -70,10 +84,20 @@ export interface VersionSummary {
   size: number
 }
 
+/** A file of an artifact's version: its path, its size in bytes and the type it is served with. */
+export interface ArtifactFileInfo {
+  path: string
+  size: number
+  type: string
+}
+
 export interface ArtifactContent {
   title: string
   version: number
+  /** The entry page's text; empty for an artifact made from a type, whose viewer is its page. */
   html: string
+  files: ArtifactFileInfo[]
+  type?: ArtifactTypeInfo | null
 }
 
 /** A card's thumbnail renders at this size, a page's viewport, before main scales it down. */

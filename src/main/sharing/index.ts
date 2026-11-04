@@ -2,8 +2,17 @@
 // talks to the target, so the renderer never names a URL and never sees the token.
 
 import { readFile } from 'node:fs/promises'
+import { ARTIFACT_ENTRY, isHtmlPath } from '@shared/artifact-files'
+import {
+  type ArtifactTypeInfo,
+  type ArtifactTypeName,
+  CONTENT_ENTRIES,
+  VIEWER_PREFIX,
+  viewerPage,
+} from '@shared/artifact-types'
 import { ARTIFACT_ID } from '@shared/artifacts'
-import type { ArtifactContentResult } from '@shared/host-control'
+import type { Locale } from '@shared/locale'
+import type { ArtifactContentFile, ArtifactContentResult } from '@shared/host-control'
 import {
   CLOUDFLARE_ACCOUNT_ID,
   CLOUDFLARE_TOKEN,
@@ -17,7 +26,7 @@ import { isInside } from '../artifacts/protocol'
 import { createLogger } from '../log'
 import { accountSubdomain, Cloudflare, findAccounts, type Fetch } from './cloudflare'
 import { pageHeaders, withMeta } from './page'
-import { SharingError, type SharingProvider } from './provider'
+import { SharingError, type PageFile, type SharingProvider } from './provider'
 import {
   pagesToForget,
   pagesToUnpublish,
@@ -29,10 +38,15 @@ import {
 
 const log = createLogger('sharing')
 
-/** What main needs from the agent host: the version's file and every artifact it has. */
+/** What main needs from the agent host: the version's files and every artifact it has. */
 export interface SharingHost {
   content(id: string, version: number | null): Promise<ArtifactContentResult>
   ids(): Promise<Set<string> | null>
+}
+
+export interface ViewerFile {
+  path: string
+  file: string
 }
 
 export interface SharingDeps {
@@ -50,6 +64,14 @@ export interface SharingDeps {
   now?(): number
   /** Told of every change, for the windows; the token is not part of the status. */
   changed?(status: SharingStatus): void
+  /**
+   * The files of a type's viewer by their paths under the viewers' folder, with the grammars of
+   * the code languages its content names, which a typed artifact's page publishes with its
+   * content; none without them.
+   */
+  viewerFiles?(type: ArtifactTypeName, languages: readonly string[]): Promise<ViewerFile[]>
+  /** The language a published type viewer speaks. */
+  locale?(): Locale
 }
 
 function failed(failure: SharingFailure, message: string | null = null): SharingResult {
@@ -169,11 +191,8 @@ export class Sharing {
     }
     try {
       const token = await this.tokenOf()
-      const content = await this.readHtml(wanted.id, wanted.version)
-      const published = await this.provider(account, token).publish(
-        withMeta(content.html),
-        pageHeaders(),
-      )
+      const content = await this.readFiles(wanted.id, wanted.version)
+      const published = await this.provider(account, token).publish(content.files, pageHeaders())
       this.store.put({
         id: wanted.id,
         worker: published.ref,
@@ -246,8 +265,8 @@ export class Sharing {
   ): Promise<SharingResult> {
     try {
       const token = await this.tokenOf()
-      const content = await this.readHtml(page.id, version)
-      await this.provider(account, token).update(page.worker, withMeta(content.html), pageHeaders())
+      const content = await this.readFiles(page.id, version)
+      await this.provider(account, token).update(page.worker, content.files, pageHeaders())
       this.store.put({ ...page, version: content.version, publishedAt: this.now() })
       return this.report()
     } catch (error) {
@@ -300,7 +319,11 @@ export class Sharing {
     if (changed) this.deps.changed?.(this.status())
   }
 
-  private async readHtml(id: string, version: number): Promise<{ html: string; version: number }> {
+  /** The version's files as they are published: each HTML file with the policy in it. */
+  private async readFiles(
+    id: string,
+    version: number,
+  ): Promise<{ files: PageFile[]; version: number }> {
     const found = await this.deps.host.content(id, version)
     if (found.kind === 'not_found') {
       throw new SharingError('not_found', 'The agent host no longer has this version.')
@@ -308,11 +331,60 @@ export class Sharing {
     if (found.kind === 'failed') {
       throw new SharingError('unavailable', 'The agent host did not answer.')
     }
-    if (!isInside(this.deps.contentDir, found.path)) {
-      throw new SharingError('failed', 'The artifact file is not in the artifacts folder.')
+    const files: PageFile[] = []
+    if (found.type) files.push(...(await this.viewerOf(found.type, found.version, found.files)))
+    for (const file of found.files) {
+      if (!isInside(this.deps.contentDir, file.file)) {
+        throw new SharingError('failed', 'The artifact file is not in the artifacts folder.')
+      }
+      try {
+        const bytes = isHtmlPath(file.path)
+          ? Buffer.from(withMeta(await readFile(file.file, 'utf8')), 'utf8')
+          : await readFile(file.file)
+        files.push({ path: file.path, bytes })
+      } catch (error) {
+        throw new SharingError('failed', `Could not read the artifact: ${(error as Error).message}`)
+      }
     }
+    return { files, version: found.version }
+  }
+
+  /**
+   * A typed version's page: its type's viewer, which reads the content files beside it as they
+   * are published, without the runtime, so it shows them and offers no editing.
+   */
+  private async viewerOf(
+    type: ArtifactTypeInfo,
+    version: number,
+    content: ArtifactContentFile[],
+  ): Promise<PageFile[]> {
+    const page = viewerPage(type, version, this.deps.locale?.() ?? 'en', '')
+    const viewers =
+      (await this.deps.viewerFiles?.(type.name, await this.codeLanguages(type, content))) ?? []
+    if (!page || viewers.length === 0) {
+      throw new SharingError('failed', 'This build has no viewer for the artifact’s type.')
+    }
+    const files: PageFile[] = [{ path: ARTIFACT_ENTRY, bytes: Buffer.from(withMeta(page), 'utf8') }]
+    for (const viewer of viewers) {
+      try {
+        files.push({ path: `${VIEWER_PREFIX}${viewer.path}`, bytes: await readFile(viewer.file) })
+      } catch (error) {
+        throw new SharingError('failed', `Could not read the viewer: ${(error as Error).message}`)
+      }
+    }
+    return files
+  }
+
+  /** The code languages a document's fences name, whose grammars its viewer loads. */
+  private async codeLanguages(
+    type: ArtifactTypeInfo,
+    content: ArtifactContentFile[],
+  ): Promise<string[]> {
+    const entry = content.find((file) => file.path === CONTENT_ENTRIES[type.name])
+    if (type.name !== 'document' || !entry || !isInside(this.deps.contentDir, entry.file)) return []
     try {
-      return { html: await readFile(found.path, 'utf8'), version: found.version }
+      const { fenceLanguages } = await import('@shared/artifact-document')
+      return fenceLanguages(await readFile(entry.file, 'utf8'))
     } catch (error) {
       throw new SharingError('failed', `Could not read the artifact: ${(error as Error).message}`)
     }

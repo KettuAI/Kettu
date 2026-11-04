@@ -1,21 +1,34 @@
-// The `kettu-artifact` protocol: each artifact on an origin of its own, its HTML from the
-// store and nothing else.
+// The `kettu-artifact` protocol: each artifact on an origin of its own, the files of its versions
+// from the store and nothing else.
 
+import { createReadStream } from 'node:fs'
 import { open, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import type { CustomScheme, Session } from 'electron'
-import { pageStyle, parseArtifactQuery, withStyle, type ArtifactQuery } from '@shared/artifact-page'
+import { ARTIFACT_ENTRY, artifactFileType, isHtmlPath } from '@shared/artifact-files'
+import { parseServed, servedHtml, type ServedFile } from '@shared/artifact-page'
+import { errorAnswer, type RuntimeAnswer } from '@shared/artifact-capabilities'
+import {
+  MESSAGE_BYTES,
+  parsePageMessage,
+  received,
+  type SelectMessage,
+} from '@shared/artifact-runtime/page-messages'
+import { VIEWER_PREFIX, viewerBase, viewerPage } from '@shared/artifact-types'
 import type { ArtifactContentResult } from '@shared/host-control'
+import type { Locale } from '@shared/locale'
 import { createLogger } from '../log'
 import { ARTIFACT_SCHEME, artifactHost } from './origins'
 import { artifactHeaders } from './policy'
+import { isRuntimeRequest, respondRuntime, type RuntimeRelay } from './runtime'
+import type { ViewerFiles } from './viewers'
 
 const log = createLogger('artifacts')
 
 /**
- * How long a request waits for the host to name a version's file before it answers 503. Well inside
- * the frame guard's commit timeout, since a frame still waiting then cuts the window off.
+ * How long a request waits for the host to name a version's files before it answers 503. Well
+ * inside the frame guard's commit timeout, since a frame still waiting then cuts the window off.
  */
 export const CONTENT_WAIT_MS = 2_000
 
@@ -32,14 +45,24 @@ export const artifactScheme: CustomScheme = {
 }
 
 export interface ArtifactSource {
-  /** `artifacts/content/` in the data folder, where every version's file lies. */
+  /** `artifacts/content/` in the data folder, where the bytes of every file lie. */
   contentDir: string
   /** The artifact on this origin id, when it was opened in this run. */
   artifactOf(host: string): string | undefined
   content(id: string, version: number | null): Promise<ArtifactContentResult>
+  /** A page on this origin id reported a pick, checked; null where no window takes them. */
+  selected: ((host: string, message: SelectMessage) => void) | null
+  /** Where a page's capability requests go; none, as for thumbnails, offers no capability. */
+  runtime?: RuntimeRelay | null
+  /** What the latest version declares makes the artifact's pages strict, or no longer. */
+  declared?(id: string, strict: boolean): void
+  /** The type viewers' files, which a typed artifact's origin serves. */
+  viewers?: ViewerFiles
+  /** The interface language, which a type's viewer speaks. */
+  locale?: () => Locale
 }
 
-export interface ArtifactRequest extends ArtifactQuery {
+export interface ArtifactRequest extends ServedFile {
   id: string
 }
 
@@ -52,9 +75,8 @@ export function parseRequest(
   const parsed = URL.parse(url)
   const id = host ? artifactOf(host) : undefined
   if (!parsed || !id) return null
-  if (parsed.pathname !== '/' && parsed.pathname !== '/index.html') return null
-  const query = parseArtifactQuery(parsed.searchParams)
-  return query ? { id, ...query } : null
+  const served = parseServed(parsed.pathname, parsed.searchParams)
+  return served ? { id, ...served } : null
 }
 
 /** Whether `file` lies inside `dir`, by its path as written. */
@@ -73,42 +95,109 @@ function answer(status: number): Response {
   return new Response(status === 404 ? 'Not found' : null, { status, headers })
 }
 
-/** Answers one request on an artifact origin. */
 function withinWait(content: Promise<ArtifactContentResult>): Promise<ArtifactContentResult> {
   let timer: NodeJS.Timeout | undefined
   const late = new Promise<ArtifactContentResult>((resolve) => {
     timer = setTimeout(() => {
-      log.warn(`The agent host named no file within ${CONTENT_WAIT_MS} ms`)
+      log.warn(`The agent host named no files within ${CONTENT_WAIT_MS} ms`)
       resolve({ kind: 'failed' })
     }, CONTENT_WAIT_MS)
   })
   return Promise.race([content, late]).finally(() => clearTimeout(timer))
 }
 
+function json(status: number, body: RuntimeAnswer): Response {
+  const headers = { ...artifactHeaders(true), 'Content-Type': 'application/json; charset=utf-8' }
+  return new Response(JSON.stringify(body), { status, headers })
+}
+
+/** A page's message for the editor rather than a capability: a pick, for the windows of `host`. */
+function editorMessage(
+  host: string,
+  source: ArtifactSource,
+  message: unknown,
+  bytes: number,
+): Response {
+  const parsed = bytes > MESSAGE_BYTES ? null : parsePageMessage(message)
+  if (parsed?.kind !== 'select') {
+    return json(400, errorAnswer({ v: 1, id: '' }, 'invalid', 'Not a page runtime message.'))
+  }
+  source.selected?.(host, parsed.message)
+  return json(200, received(parsed.message.id))
+}
+
+/**
+ * A page's request to the runtime, from its own origin; one that another origin sends, as only
+ * the app's own page could, is refused.
+ */
+function runtimeRequest(request: Request, source: ArtifactSource): Promise<Response> | Response {
+  const host = artifactHost(request.url)
+  const id = host ? source.artifactOf(host) : undefined
+  const origin = request.headers.get('origin')
+  if (!host || !id || (origin !== null && artifactHost(origin) !== host)) return answer(404)
+  return respondRuntime(request, id, source.runtime ?? null, (message, bytes) =>
+    editorMessage(host, source, message, bytes),
+  )
+}
+
+/** Answers one request on an artifact origin: a file of the version it names, or of the latest. */
 export async function respond(request: Request, source: ArtifactSource): Promise<Response> {
+  if (isRuntimeRequest(request.url)) return runtimeRequest(request, source)
   if (request.method !== 'GET') return answer(405)
   const wanted = parseRequest(request.url, (host) => source.artifactOf(host))
   if (!wanted) return answer(404)
   const found = await withinWait(source.content(wanted.id, wanted.version))
   if (found.kind === 'not_found') return answer(404)
   if (found.kind === 'failed') return answer(503)
-  if (!isInside(source.contentDir, found.path)) {
-    log.error(`Refused ${wanted.id}'s file outside the content folder: ${found.path}`)
-    return answer(404)
-  }
-  try {
-    if (wanted.page) {
-      const html = await readFile(found.path, 'utf8')
-      const css = pageStyle(wanted.page.group, wanted.page.index)
-      return new Response(withStyle(html, css), { headers: artifactHeaders() })
+  if (found.type) {
+    // A typed artifact's page is its type's viewer, which reads the content files beside it.
+    if (wanted.path === ARTIFACT_ENTRY) {
+      const page = viewerPage(
+        found.type,
+        found.version,
+        source.locale?.() ?? 'en',
+        viewerBase(wanted.version),
+      )
+      if (!page) return answer(404)
+      const headers = { ...artifactHeaders(), 'Content-Type': artifactFileType(ARTIFACT_ENTRY) }
+      const html = servedHtml(page, null, { path: ARTIFACT_ENTRY, transport: 'fetch' })
+      return new Response(html, { headers })
     }
-    const file = await open(found.path, 'r')
-    const body = Readable.toWeb(file.createReadStream()) as ReadableStream<Uint8Array>
-    return new Response(body, { headers: artifactHeaders() })
-  } catch (error) {
-    log.error(`Could not read ${wanted.id} version ${found.version}`, error)
+    if (wanted.path.startsWith(VIEWER_PREFIX)) {
+      const file = await source.viewers?.find(wanted.path.slice(VIEWER_PREFIX.length))
+      if (!file) return answer(404)
+      return streamed(file, artifactFileType(wanted.path))
+    }
+  }
+  const file = found.files.find((f) => f.path === wanted.path)
+  if (!file) return answer(404)
+  if (!isInside(source.contentDir, file.file)) {
+    log.error(`Refused ${wanted.id}'s file outside the content folder: ${file.file}`)
     return answer(404)
   }
+  source.declared?.(wanted.id, found.strict)
+  const headers = { ...artifactHeaders(found.strict), 'Content-Type': artifactFileType(file.path) }
+  try {
+    if (isHtmlPath(file.path)) {
+      const html = servedHtml(await readFile(file.file, 'utf8'), wanted.page, {
+        path: file.path,
+        transport: 'fetch',
+      })
+      return new Response(html, { headers })
+    }
+    const handle = await open(file.file, 'r')
+    const body = Readable.toWeb(handle.createReadStream()) as ReadableStream<Uint8Array>
+    return new Response(body, { headers })
+  } catch (error) {
+    log.error(`Could not read ${file.path} of ${wanted.id} version ${found.version}`, error)
+    return answer(404)
+  }
+}
+
+/** A viewer file. It lies in the app's archive, which a read stream reads in place. */
+function streamed(file: string, type: string): Response {
+  const body = Readable.toWeb(createReadStream(file)) as ReadableStream<Uint8Array>
+  return new Response(body, { headers: { ...artifactHeaders(), 'Content-Type': type } })
 }
 
 /** Serves artifacts through the session's `kettu-artifact` protocol. */

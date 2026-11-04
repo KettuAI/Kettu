@@ -7,6 +7,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { cn } from 'cn/vite'
+import { pageRuntime } from './tools/build/page-runtime'
 import { standaloneThirdPartyNotices } from './tools/build/third-party-notices'
 
 const source = (file: string): string => fileURLToPath(new URL(file, import.meta.url))
@@ -32,12 +33,16 @@ export default defineConfig({
     cn({ full: true, out: 'src/lib/cn-tables.ts', cwd: source('src/renderer') }),
     // The daemon's package ships the web client too.
     standaloneThirdPartyNotices(source('.')),
+    pageRuntime(source('src/shared/artifact-runtime/runtime.ts')),
   ],
   server: {
-    // A dev server beside the app: the channel goes on to the host's direct port. The page's
-    // Origin and Host stay this server's, so the host's Origin check holds.
+    // A dev server beside the app: the channel and the artifact frames go on to the host's direct
+    // port. The page's Origin and Host stay this server's, so the host's Origin check holds.
     proxy: process.env.KETTU_WEB_HOST
-      ? { '/channel': { target: process.env.KETTU_WEB_HOST, ws: true } }
+      ? {
+          '/channel': { target: process.env.KETTU_WEB_HOST, ws: true },
+          '/frame/': { target: process.env.KETTU_WEB_HOST },
+        }
       : undefined,
   },
   build: {

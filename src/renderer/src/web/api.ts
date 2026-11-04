@@ -4,7 +4,9 @@
 // page hides it, and a call that comes anyway is refused.
 
 import type { HostEvent } from '@shared/agent-host'
+import type { ArtifactContent } from '@shared/artifacts'
 import type { AppCommand, KettuApi } from '@shared/ipc'
+import { safeName } from '@shared/file-name'
 import { matchLocale } from '@shared/locale'
 import type { PortConnectionState } from '@shared/port-rpc'
 import type { Platform } from '@shared/platform'
@@ -19,7 +21,8 @@ import type {
 import type { TerminalEvent } from '@shared/terminal-host'
 import { copyPath } from '@renderer/lib/copy-path'
 import { useWebHostStore, type WebHost } from '@renderer/stores/web-host'
-import { frameArtifact } from './frames'
+import { exportAs } from './exports'
+import { closeFrame, exportFiles, openFrame } from './frames'
 import { folderOf, homeStart } from './host-path'
 import { askHostPath, type HostPathPurpose } from './host-path-request'
 import type { HostLink, LinkError, LinkState } from './link'
@@ -254,8 +257,8 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       onShortcut: never,
     },
     artifacts: {
-      open: async (id) => ({ url: frameArtifact(id) }),
-      close: async () => {},
+      open: (id) => openFrame(link, id),
+      close: (url) => closeFrame(link, url),
       // Only a desktop host captures previews; the daemon's artifacts show none.
       thumbnail: async (id, version, layout) => {
         const known = useWebHostStore.getState().info
@@ -264,16 +267,25 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       },
       openExternal: () => unsupported('open an artifact outside the app'),
       export: async (id, version) => {
-        const read = (await link.request('artifacts.read', { id, version })) as {
-          title: string
-          html: string
-        }
+        const read = (await link.request('artifacts.read', { id, version })) as ArtifactContent
+        if (read.files.length > 1) return exportFiles(link, id, read)
         downloadFile(new Blob([read.html], { type: 'text/html' }), `${read.title || id}.html`)
         return true
       },
+      exportAs: (id, version, format) =>
+        exportAs(link, id, version, format, () => admin('artifacts.printPdf', { id, version })),
       import: () => unsupported('import an artifact'),
       onBlocked: never,
       onStopped: never,
+      // A frame's picks come over the port the page hands it, never from the host.
+      onSelected: never,
+      png: async (id, version, page, size, name) => {
+        const url = await admin('artifacts.png', { id, version, page, size })
+        if (!url) throw new Error('The host could not render the page')
+        const bytes = Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0))
+        downloadFile(new Blob([bytes], { type: 'image/png' }), `${safeName(name, 'page')}.png`)
+        return true
+      },
     },
     // Only the desktop app signs in to a Kettu account so far.
     account: {

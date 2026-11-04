@@ -1,6 +1,18 @@
 import { join } from 'node:path'
 import { app, MessageChannelMain, type MessagePortMain, type WebContents } from 'electron'
-import { ARTIFACT_ID, type ArtifactImportResult } from '@shared/artifacts'
+import {
+  errorAnswer,
+  isLastAnswer,
+  isRuntimeAnswer,
+  messageHeader,
+  type RuntimeAnswer,
+} from '@shared/artifact-capabilities'
+import { artifactPathProblem, VERSION_FILES } from '@shared/artifact-files'
+import {
+  ARTIFACT_ID,
+  type ArtifactImportFailure,
+  type ArtifactImportResult,
+} from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import {
   isOriginDecision,
@@ -9,8 +21,14 @@ import {
   type BrowserOriginAnswer,
   type BrowserOriginDecision,
 } from '@shared/browser'
+import {
+  type ArtifactExportFormat,
+  type ExportedFile,
+  isArtifactTypeName,
+} from '@shared/artifact-types'
 import type {
   ArtifactContentResult,
+  ArtifactExportResult,
   BusyCounts,
   BusySession,
   HostToMain,
@@ -66,15 +84,27 @@ const MAX_STRING = 8192
 const GRACE_MS = 2_000
 /** How long the host gets to take a grant before the attachment counts as not added. */
 const GRANT_TIMEOUT_MS = 5_000
-/** How long the protocol waits for the host to name a version's file. */
+/** How long the protocol waits for the host to name a version's files. */
 const CONTENT_TIMEOUT_MS = 10_000
 /** How long an import waits for the host to make the artifact. */
 const IMPORT_TIMEOUT_MS = 10_000
 /** How long main waits for the host to list its artifacts. */
 const LIST_TIMEOUT_MS = 10_000
+/** How long an export may take the host, which converts a whole version. */
+const EXPORT_TIMEOUT_MS = 120_000
+const MAX_FORMAT = 1_000
 const MAX_ARTIFACTS = 1_000_000
 
 type ImportAnswer = NonNullable<ArtifactImportResult>
+const IMPORT_FAILURES: ReadonlySet<string> = new Set<ArtifactImportFailure>([
+  'too_large',
+  'too_many',
+  'no_index',
+  'bad_name',
+  'not_utf8',
+  'unreadable',
+  'unavailable',
+])
 const UNAVAILABLE: ImportAnswer = { failed: 'unavailable' }
 
 /** The copy beside app.asar that a packaged build unpacks a file into; the path itself in dev. */
@@ -95,19 +125,74 @@ function isStringList(value: unknown): value is string[] {
   )
 }
 
+function isContentFile(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false
+  const { path, file, size } = value as Record<string, unknown>
+  return (
+    typeof path === 'string' &&
+    artifactPathProblem(path) === null &&
+    typeof file === 'string' &&
+    file.length <= MAX_STRING &&
+    isCount(size)
+  )
+}
+
 function isContentResult(value: unknown): value is ArtifactContentResult {
   if (typeof value !== 'object' || value === null) return false
-  const { kind, path, version, title } = value as Record<string, unknown>
+  const { kind, files, version, title, key, strict } = value as Record<string, unknown>
   if (kind === 'not_found' || kind === 'failed') return true
   return (
     kind === 'found' &&
-    typeof path === 'string' &&
-    path.length <= MAX_STRING &&
+    typeof strict === 'boolean' &&
+    Array.isArray(files) &&
+    files.length <= VERSION_FILES &&
+    files.every(isContentFile) &&
     Number.isSafeInteger(version) &&
     (version as number) >= 1 &&
-    typeof title === 'string'
+    typeof title === 'string' &&
+    typeof key === 'string' &&
+    /^[0-9a-f]{64}$/.test(key) &&
+    isTypeInfo((value as Record<string, unknown>).type)
   )
 }
+
+/** A version's type as the host names it: absent or null for a plain artifact. */
+function isTypeInfo(value: unknown): boolean {
+  if (value === undefined || value === null) return true
+  if (typeof value !== 'object') return false
+  const { name, format } = value as Record<string, unknown>
+  return (
+    isArtifactTypeName(name) &&
+    Number.isSafeInteger(format) &&
+    (format as number) >= 1 &&
+    (format as number) <= MAX_FORMAT
+  )
+}
+
+function isExportedFile(value: unknown): value is ExportedFile {
+  if (typeof value !== 'object' || value === null) return false
+  const { path, bytes } = value as Record<string, unknown>
+  return (
+    typeof path === 'string' && artifactPathProblem(path) === null && bytes instanceof Uint8Array
+  )
+}
+
+function isExportResult(value: unknown): value is ArtifactExportResult {
+  if (typeof value !== 'object' || value === null) return false
+  const { kind, title, files, message } = value as Record<string, unknown>
+  if (kind === 'not_found') return true
+  if (kind === 'failed') return typeof message === 'string'
+  return (
+    kind === 'exported' &&
+    typeof title === 'string' &&
+    Array.isArray(files) &&
+    files.length >= 1 &&
+    files.length <= VERSION_FILES &&
+    files.every(isExportedFile)
+  )
+}
+
+const FAILED_EXPORT: ArtifactExportResult = { kind: 'failed', message: 'The agent host is down' }
 
 /** The listed ids, or null for a failed or malformed answer. */
 function listedIds(value: unknown): Set<string> | null {
@@ -122,12 +207,7 @@ function isImportAnswer(value: unknown): value is ImportAnswer {
   if (typeof value !== 'object' || value === null) return false
   const { id, failed } = value as Record<string, unknown>
   if (typeof id === 'string') return ARTIFACT_ID.test(id)
-  return (
-    failed === 'too_large' ||
-    failed === 'not_utf8' ||
-    failed === 'unreadable' ||
-    failed === 'unavailable'
-  )
+  return typeof failed === 'string' && IMPORT_FAILURES.has(failed)
 }
 
 function isMediaGrant(value: unknown): value is MediaGrantRecord {
@@ -169,8 +249,12 @@ export class AgentHost {
   private nextContentId = 1
   private readonly importRequests = new Map<number, (result: ImportAnswer) => void>()
   private nextImportId = 1
+  private readonly exportRequests = new Map<number, (result: ArtifactExportResult) => void>()
+  private nextExportId = 1
   private readonly listRequests = new Map<number, (ids: Set<string> | null) => void>()
   private nextListId = 1
+  private readonly runtimeRequests = new Map<number, (answer: RuntimeAnswer) => void>()
+  private nextRuntimeId = 1
 
   constructor(private readonly deps: AgentHostDeps) {
     this.host = new UtilityHost<MainToHost, HostToMain>({
@@ -330,6 +414,38 @@ export class AgentHost {
     })
   }
 
+  /**
+   * Passes a page's message to the host, whose answers go to `answer`: one, or a stream's events
+   * and then its end. Returns the cancel, which ends a stream; a host that is gone answers
+   * `failed`.
+   */
+  artifactRuntime(
+    artifactId: string,
+    message: unknown,
+    answer: (answer: RuntimeAnswer) => void,
+  ): () => void {
+    const gone = (): void =>
+      answer(errorAnswer(messageHeader(message), 'failed', 'Kettu cannot answer right now.'))
+    if (this.host.state !== 'ready') {
+      gone()
+      return () => {}
+    }
+    const requestId = this.nextRuntimeId++
+    this.runtimeRequests.set(requestId, (next) => {
+      if (isLastAnswer(next)) this.runtimeRequests.delete(requestId)
+      answer(next)
+    })
+    if (!this.host.post({ type: 'host:artifact-runtime', requestId, artifactId, message })) {
+      this.runtimeRequests.delete(requestId)
+      gone()
+    }
+    return () => {
+      if (this.runtimeRequests.delete(requestId)) {
+        this.host.post({ type: 'host:artifact-runtime-cancel', requestId })
+      }
+    }
+  }
+
   /** `host:browser-waiting`: the call waits on a new origin, so its own limit covers that wait. */
   browserWaiting(callId: number, waiting: boolean): void {
     this.host.post({ type: 'host:browser-waiting', callId, waiting })
@@ -374,6 +490,33 @@ export class AgentHost {
       if (!this.host.post({ type: 'host:artifact-import-request', requestId, path, project })) {
         this.importRequests.get(requestId)?.(UNAVAILABLE)
         this.importRequests.delete(requestId)
+      }
+    })
+  }
+
+  /** A typed version converted by the host, for a save dialog's file; `failed` without a host. */
+  artifactExport(
+    id: string,
+    version: number,
+    format: ArtifactExportFormat,
+  ): Promise<ArtifactExportResult> {
+    if (this.host.state !== 'ready') return Promise.resolve(FAILED_EXPORT)
+    const requestId = this.nextExportId++
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.exportRequests.delete(requestId)
+        log.warn(`No artifact export answer within ${EXPORT_TIMEOUT_MS} ms`)
+        resolve(FAILED_EXPORT)
+      }, EXPORT_TIMEOUT_MS)
+      this.exportRequests.set(requestId, (result) => {
+        clearTimeout(timer)
+        resolve(result)
+      })
+      if (
+        !this.host.post({ type: 'host:artifact-export-request', requestId, id, version, format })
+      ) {
+        this.exportRequests.get(requestId)?.(FAILED_EXPORT)
+        this.exportRequests.delete(requestId)
       }
     })
   }
@@ -442,11 +585,28 @@ export class AgentHost {
         resolve(listedIds(message.result))
         break
       }
+      case 'host:artifact-export': {
+        const resolve = this.exportRequests.get(message.requestId)
+        if (!resolve) break
+        this.exportRequests.delete(message.requestId)
+        resolve(isExportResult(message.result) ? message.result : FAILED_EXPORT)
+        break
+      }
       case 'host:artifact-import': {
         const resolve = this.importRequests.get(message.requestId)
         if (!resolve) break
         this.importRequests.delete(message.requestId)
         resolve(isImportAnswer(message.result) ? message.result : UNAVAILABLE)
+        break
+      }
+      case 'host:artifact-runtime-answer': {
+        const deliver = this.runtimeRequests.get(message.requestId)
+        if (!deliver) break
+        if (isRuntimeAnswer(message.answer)) deliver(message.answer)
+        else {
+          log.warn('The host answered a page with something that is not an answer')
+          deliver(errorAnswer({ v: 1, id: '' }, 'failed', 'Kettu could not answer.'))
+        }
         break
       }
       case 'host:media-grant':
@@ -541,8 +701,14 @@ export class AgentHost {
     this.contentRequests.clear()
     for (const resolve of this.importRequests.values()) resolve(UNAVAILABLE)
     this.importRequests.clear()
+    for (const resolve of this.exportRequests.values()) resolve(FAILED_EXPORT)
+    this.exportRequests.clear()
     for (const resolve of this.listRequests.values()) resolve(null)
     this.listRequests.clear()
+    for (const deliver of [...this.runtimeRequests.values()]) {
+      deliver(errorAnswer({ v: 1, id: '' }, 'failed', 'Kettu stopped before it answered.'))
+    }
+    this.runtimeRequests.clear()
     this.deps.onMediaRevoke(null)
     this.deps.onServicePort?.(null)
     this.deps.onRoutinesWorking(false)

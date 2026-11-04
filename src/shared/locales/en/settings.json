@@ -10,6 +10,7 @@
     "advanced": "Advanced",
     "about": "About",
     "archived": "Archived sessions",
+    "artifacts": "Artifacts",
     "sharing": "Sharing",
     "remote": "Remote access",
     "browser": "Browser",
@@ -785,6 +786,7 @@
     "advanced_web": "Network proxy, diagnostics and the data Kettu keeps on {{host}}.",
     "about": "Kettu’s version and updates.",
     "archived": "Off the sidebar but kept. Restore one to put it back in its project.",
+    "artifacts": "Pages ask before they read project files or ask your agent. Pages that only keep their own data don’t ask.",
     "sharing": "Publish artifacts to links anyone can open, through your own Cloudflare account.",
     "remote": "Use this computer’s sessions from Kettu on an iPhone, an iPad or another computer, on your own network.",
     "remote_web": "Use {{host}}’s sessions from Kettu on an iPhone, an iPad or another computer, on your own network.",
@@ -805,6 +807,21 @@
     "emptyTitle": "No archived sessions",
     "emptyHint": "Archive one from its menu in the sidebar.",
     "keywords": "archive restore"
+  },
+  "artifacts": {
+    "group": "Page permissions",
+    "keywords": "artifact page permission consent files agent revoke allow",
+    "files": "Read files",
+    "sample": "Ask {{agent}}",
+    "yourAgent": "your agent",
+    "noProject": "No project",
+    "revoke": "Revoke",
+    "revoked": "Permissions for “{{title}}” are revoked",
+    "loading": "Loading permissions",
+    "loadFailed": "The permissions could not be read: {{error}}",
+    "retry": "Try again",
+    "emptyTitle": "No page permissions",
+    "emptyHint": "When a page asks to read project files or ask your agent and you allow it, it shows here."
   },
   "sharing": {
     "groups": {

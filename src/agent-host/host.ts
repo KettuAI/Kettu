@@ -6,16 +6,22 @@ import os from 'node:os'
 import path from 'node:path'
 import { cp, mkdir, rename, rm, stat } from 'node:fs/promises'
 import type { AgentOptions, DiagnosticsBundle, HostEvent, McpStatus } from '@shared/agent-host'
+import { OWNER } from '@shared/artifact-comments'
+import { harnessOf, type HarnessId } from '@shared/agents'
+import type { RuntimeAnswer } from '@shared/artifact-capabilities'
+import { artifactFileType } from '@shared/artifact-files'
 import { type ArtifactImportResult, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import type { BrowserCallAnswer, BrowserCallRequest, BrowserOriginAnswer } from '@shared/browser'
 import type {
   AgentProcess,
   ArtifactContentResult,
+  ArtifactExportResult,
   ArtifactListResult,
   HostToMain,
   NodeRuntime,
 } from '@shared/host-control'
+import type { ArtifactExportFormat } from '@shared/artifact-types'
 import type { Platform } from '@shared/platform'
 import type { PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
@@ -27,8 +33,28 @@ import { agentOptionsFile, AgentOptionsStore, startModeIn } from './agent-option
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
 import { readImport } from './artifacts/import'
+import { ArtifactConsents } from './artifacts/runtime/consent'
+import type { DeclaredArtifact } from './artifacts/runtime/calls'
+import { ArtifactData } from './artifacts/runtime/data'
+import { dbCapability } from './artifacts/runtime/db-capability'
+import {
+  CapabilityError,
+  registerCapability,
+  RuntimeDispatcher,
+  RuntimeRequests,
+} from './artifacts/runtime/dispatcher'
+import { filesCapability } from './artifacts/runtime/files-capability'
+import {
+  sampleCapability,
+  type SampleAgent,
+  type SampleQuestion,
+} from './artifacts/runtime/sample-capability'
 import { ArtifactService, SERVICE_NAME } from './artifacts/service'
 import { ArtifactError, ArtifactStore, versionSummary } from './artifacts/store'
+import { registerContentCapability } from './artifacts/types/capability'
+import { ExportError, exportVersion } from './artifacts/types/export'
+import { ArtifactTypes } from './artifacts/types/registry'
+import { upgradeContent } from './artifacts/types/writes'
 import {
   AgentManager,
   processLauncher,
@@ -39,7 +65,7 @@ import {
 import { buildCatalog, configFolders, type AgentDefinition } from './catalog'
 import { answerOf, BROWSER_GONE, browserTarget, DeviceBrowserCalls } from './device-browser'
 import { Diagnostics } from './diagnostics'
-import { HostError } from './errors'
+import { HostError, invalidParams } from './errors'
 import { setLocale, t } from './i18n'
 import { FilesService } from './files'
 import { MediaService } from './media'
@@ -53,7 +79,7 @@ import { processControl, type ProcessControl } from './process-tree'
 import { Projects } from './projects'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
 import { PortHub, type Handlers, type RequestContext } from './rpc'
-import { Attachments } from './attachments'
+import { Attachments, toArrayBuffer } from './attachments'
 import { RoutinesManager, type RoutineTimings } from './routines/manager'
 import type { RoutineSessionHooksRef } from './routines/hooks'
 import type { RoutineClock } from './routines/scheduler'
@@ -81,6 +107,8 @@ import { createValidators } from './validate'
 
 // The agent menu reads a running agent's options again once they are older than this.
 const OPTIONS_FRESH_MS = 5 * 60_000
+/** The harnesses whose connection answers a page's question in a session with no tools at all. */
+const QUESTION_HARNESSES: ReadonlySet<HarnessId> = new Set(['claude-code'])
 
 /** Refuses a port that is not a desktop app's: only one runs browser calls for the host. */
 function browserApp(ctx: RequestContext): void {
@@ -201,6 +229,14 @@ export class AgentHost {
   readonly artifacts: ArtifactStore
   /** The `kettu` MCP server, through which the sessions' agents reach the artifacts. */
   readonly artifactService: ArtifactService
+  /** The artifacts' own data, which their pages and the agents read and write. */
+  private readonly artifactData: ArtifactData
+  /** What the user allowed the artifacts' pages, and the questions asking for it. */
+  private readonly consents: ArtifactConsents
+  /** The page runtime's requests in flight, from main and from devices' remote hosts. */
+  private readonly runtimeRequests: RuntimeRequests
+  /** The types artifacts are made from: their formats, guidance and exports. */
+  readonly artifactTypes = new ArtifactTypes()
   readonly hub: PortHub
   private settings: HostSettings
   private readonly git: GitServiceApi | null
@@ -290,9 +326,15 @@ export class AgentHost {
         this.hub.send(portIds, { type: 'artifacts.version', id, version }),
       activity: (portIds, activity) =>
         this.hub.send(portIds, { type: 'artifacts.activity', ...activity }),
+      comments: (portIds, id) => this.hub.send(portIds, { type: 'artifacts.comments', id }),
+      unwatched: (id) => this.consents.unwatched(id),
     })
+    this.artifactData = new ArtifactData({ store: this.artifacts })
+    registerContentCapability({ store: this.artifacts, types: this.artifactTypes })
     this.artifactService = new ArtifactService({
+      data: this.artifactData,
       store: this.artifacts,
+      types: this.artifactTypes,
       sessionTitle: (sessionId) => this.sessions.title(sessionId),
       runningTurn: (sessionId) => this.sessions.runningTurn(sessionId),
       sessionOf: (process, id) => this.sessions.sessionOf(process, id),
@@ -500,6 +542,31 @@ export class AgentHost {
       },
     })
     routineHooks.current = this.routines.hooks
+    this.consents = new ArtifactConsents({
+      store: this.artifacts,
+      isDevice: (portId) => this.hub.deviceOf(portId) !== null,
+      send: (portIds, event) => this.hub.send(portIds, event),
+      broadcast: (event) => this.hub.broadcast(event),
+      agentName: async (folder) => (await this.sampleAgent(this.projectOf(folder)))?.name ?? null,
+    })
+    registerCapability(dbCapability(this.artifactData))
+    registerCapability(filesCapability(platform))
+    registerCapability(
+      sampleCapability({
+        agentFor: (project) => this.sampleAgent(project),
+        answer: (agent, question) => this.answerQuestion(agent, question),
+      }),
+    )
+    this.runtimeRequests = new RuntimeRequests(
+      new RuntimeDispatcher({
+        artifact: (id) => this.declaredArtifact(id),
+        project: (folder) => this.projectOf(folder),
+        allowed: (id, capability) => this.consents.allowed(id, capability),
+        ask: (artifact, capability, client, waitMs) =>
+          this.consents.ask(artifact, capability, client, waitMs),
+        log,
+      }),
+    )
     this.deviceBrowser = new DeviceBrowserCalls({
       send: (portId, event) => this.hub.send([portId], event),
       servicePort: () => this.artifactService.listeningPort,
@@ -608,6 +675,8 @@ export class AgentHost {
   }
 
   private portClosed(portId: string): void {
+    this.runtimeRequests.portClosed(portId)
+    this.consents.portClosed(portId)
     this.deviceBrowser.portClosed(portId)
     this.sessions.portClosed(portId)
     this.artifacts.portClosed(portId)
@@ -684,7 +753,7 @@ export class AgentHost {
     this.options.send({ type: 'host:granted', requestId })
   }
 
-  /** `host:artifact-content-request`: the file of a version, for main's protocol. */
+  /** `host:artifact-content-request`: the files of a version, for main's protocol. */
   async artifactContent(requestId: number, id: string, version: number | null): Promise<void> {
     let result: ArtifactContentResult
     try {
@@ -698,6 +767,65 @@ export class AgentHost {
       }
     }
     this.options.send({ type: 'host:artifact-content', requestId, result })
+  }
+
+  /** `host:artifact-runtime`: a page's message main relayed from an artifact origin it serves. */
+  artifactRuntime(requestId: number, artifactId: string, message: unknown): void {
+    this.runtimeRequests.fromMain(requestId, artifactId, message, (answer: RuntimeAnswer) =>
+      this.options.send({ type: 'host:artifact-runtime-answer', requestId, answer }),
+    )
+  }
+
+  /** `host:artifact-runtime-cancel`: the page closed its request, which ends a stream. */
+  artifactRuntimeCancel(requestId: number): void {
+    this.runtimeRequests.cancelMain(requestId)
+  }
+
+  /** The artifact's folder as a project, or null for a scratch folder, which is No project. */
+  private projectOf(folder: string): string | null {
+    return this.scratch.contains(folder) ? null : folder
+  }
+
+  /**
+   * The artifact as the runtime checks a page's request against it: what its latest version
+   * declares, and for one made from a type, what its type's viewer uses.
+   */
+  private async declaredArtifact(id: string): Promise<DeclaredArtifact | null> {
+    const [declared, found] = await Promise.all([
+      this.artifacts.runtime('declaration', { id, project: null, version: null }),
+      this.artifacts.get(id),
+    ]).catch(() => [null, null] as const)
+    if (!declared || !found?.type) return declared
+    const implied = this.artifactTypes.capabilities(found.type.name)
+    return { ...declared, capabilities: [...new Set([...declared.capabilities, ...implied])] }
+  }
+
+  /**
+   * The agent that answers the questions of a page of `project`, null for No project: the agent
+   * new sessions start with, else the one its latest session used, when that agent can answer
+   * without tools.
+   */
+  private async sampleAgent(project: string | null): Promise<SampleAgent | null> {
+    let agentId = this.settings.defaultAgent
+    if (agentId === null) {
+      const sessions = project === null ? this.sessions.list() : this.sessions.list(project)
+      agentId = sessions.sort((a, b) => b.updatedAt - a.updatedAt)[0]?.agentId ?? null
+    }
+    if (agentId === null || !this.agents.has(agentId)) return null
+    if (!QUESTION_HARNESSES.has(harnessOf(agentId))) return null
+    return { id: agentId, name: this.agents.name(agentId) }
+  }
+
+  /** A page's question to the agent, in a hidden session with no tools in the reports' folder. */
+  private async answerQuestion(agent: SampleAgent, question: SampleQuestion): Promise<string> {
+    const runtime = await this.agents.ensureReady(agent.id as AgentId)
+    const { connection } = runtime
+    if (!connection.answerQuestion) {
+      throw new CapabilityError('unsupported', `${agent.name} cannot answer without tools.`)
+    }
+    const dir = path.join(this.options.userDataPath, 'agent-reports')
+    await mkdir(dir, { recursive: true })
+    return connection.answerQuestion(dir, question.prompt, question.onText, question.signal)
   }
 
   /** `host:artifact-list-request`: every artifact's id, for main to unpublish the ones gone. */
@@ -716,9 +844,33 @@ export class AgentHost {
     this.options.send({ type: 'host:artifact-list', requestId, result })
   }
 
+  /** `host:artifact-export-request`: a typed version converted for main to save. */
+  async artifactExport(
+    requestId: number,
+    id: string,
+    version: number,
+    format: ArtifactExportFormat,
+  ): Promise<void> {
+    let result: ArtifactExportResult
+    try {
+      const found = await this.artifacts.get(id, { version })
+      const files = await exportVersion(this.artifacts, found, format)
+      result = { kind: 'exported', title: found.artifact.title, files }
+    } catch (error) {
+      if (error instanceof ArtifactError && error.reason === 'not_found') {
+        result = { kind: 'not_found' }
+      } else {
+        const message = (error as Error).message
+        this.diagnostics.log('warn', `Could not export ${id} as ${format}: ${message}`)
+        result = { kind: 'failed', message }
+      }
+    }
+    this.options.send({ type: 'host:artifact-export', requestId, result })
+  }
+
   /**
-   * `host:artifact-import-request`: makes an artifact of a file the user chose, in `project` or,
-   * when it is null, in a new scratch folder, which the page lists under No project.
+   * `host:artifact-import-request`: makes an artifact of a file or folder the user chose, in
+   * `project` or, when it is null, in a new scratch folder, which the page lists under No project.
    */
   async artifactImport(requestId: number, file: string, project: string | null): Promise<void> {
     let result: NonNullable<ArtifactImportResult>
@@ -738,7 +890,7 @@ export class AgentHost {
           project: folder,
           sessionId: NO_SESSION,
           title: read.title,
-          html: read.html,
+          files: read.files,
           pages: read.pages,
           note: null,
         })
@@ -1175,7 +1327,34 @@ export class AgentHost {
         })),
       'artifacts.read': async ({ id, version }) => {
         const read = await artifacts.read(id, version === undefined ? {} : { version })
-        return { title: read.artifact.title, version: read.version.version, html: read.html }
+        return {
+          title: read.artifact.title,
+          version: read.version.version,
+          // A typed artifact's page is its type's viewer, which has no text of its own.
+          html: read.type ? '' : await artifacts.entryText(read),
+          type: read.type,
+          files: read.files.map((file) => ({
+            path: file.path,
+            size: file.size,
+            type: artifactFileType(file.path),
+          })),
+        }
+      },
+      'artifacts.file': async ({ id, version, path }) => {
+        const found = await artifacts.read(id, { version })
+        const file = found.files.find((f) => f.path === path)
+        if (!file) throw new HostError('not_found', `${id} version ${version} has no file ${path}`)
+        return {
+          type: artifactFileType(path),
+          bytes: toArrayBuffer(await artifacts.bytes(found, file)),
+        }
+      },
+      'artifacts.content': async ({ id, version }, { device }) => {
+        // A window has main's protocol; only a device's remote host serves the files from disk.
+        if (!device) {
+          throw new HostError('forbidden', 'Only a paired device may call "artifacts.content"')
+        }
+        return artifacts.content(id, version)
       },
       'artifacts.versions': async ({ id }) => (await artifacts.versions(id)).map(versionSummary),
       'artifacts.rename': ({ id, title }) => artifacts.rename(id, title),
@@ -1186,8 +1365,53 @@ export class AgentHost {
       'artifacts.undelete': ({ id }) => artifacts.undelete(id),
       'artifacts.restoreVersion': ({ id, version, baseVersion }) =>
         artifacts.restore({ id, version, baseVersion, author: null }),
-      'artifacts.watch': ({ id }, { portId }) => artifacts.watch(id, portId),
+      'artifacts.watch': async ({ id }, { portId }) => {
+        await artifacts.watch(id, portId)
+        // Opening a typed artifact moves its content to a newer format, as a new version.
+        void upgradeContent(artifacts, this.artifactTypes, id, (level, message) =>
+          this.diagnostics.log(level, message),
+        ).catch(() => {})
+      },
+      'artifacts.export': async ({ id, version, format }) => {
+        const found = await artifacts.read(id, { version })
+        try {
+          const files = await exportVersion(artifacts, found, format)
+          return {
+            title: found.artifact.title,
+            files: files.map((file) => ({ path: file.path, bytes: toArrayBuffer(file.bytes) })),
+          }
+        } catch (error) {
+          if (error instanceof ExportError) throw invalidParams(error.message)
+          throw error
+        }
+      },
       'artifacts.unwatch': ({ id }, { portId }) => artifacts.unwatch(id, portId),
+      'artifacts.comments': ({ id }) => artifacts.threads(id),
+      'artifacts.comment': ({ id, anchor, body }) =>
+        artifacts.addThread(id, { anchor, body, author: { person: OWNER, session: null } }),
+      'artifacts.reply': ({ id, threadId, body }) =>
+        artifacts.reply(id, threadId, { body, author: { person: OWNER, session: null } }),
+      'artifacts.resolve': ({ id, threadId, resolved }) =>
+        artifacts.resolve(id, threadId, resolved),
+      'artifacts.markSent': ({ id, threadIds, sessionId }) =>
+        artifacts.markSent(id, threadIds, sessionId),
+      'artifacts.editElement': ({ id, baseVersion, path, offset, style, text }) =>
+        artifacts.editElement({ id, baseVersion, path, offset, change: { style, text } }),
+      'artifacts.runtime': ({ artifactId, message, stream }, { portId, device }) => {
+        // A window's frames reach the runtime through main; only a device's remote host relays.
+        if (!device) {
+          throw new HostError('forbidden', 'Only a paired device may call "artifacts.runtime"')
+        }
+        return this.runtimeRequests.fromPort(portId, artifactId, message, stream, (answer) => {
+          if (stream !== undefined) {
+            this.hub.send([portId], { type: 'artifacts.runtime', stream, answer })
+          }
+        })
+      },
+      'artifacts.consent': ({ requestId, allow }, { portId }) =>
+        this.consents.answer(requestId, allow, portId),
+      'artifacts.consents': () => this.consents.list(),
+      'artifacts.revokeConsent': ({ id }) => this.consents.revoke(id),
       'browser.answer': ({ callId, answer }, ctx) => {
         browserApp(ctx)
         if (!this.deviceBrowser.answer(ctx.portId, callId, answer)) {

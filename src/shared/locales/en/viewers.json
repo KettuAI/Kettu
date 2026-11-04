@@ -1,0 +1,34 @@
+{
+  "edit": {
+    "start": "Edit",
+    "startLabel": "Edit the text",
+    "hint": "Changes show here first; nothing is saved until you save.",
+    "discard": "Discard",
+    "save": "Save as v{{version}}",
+    "saving": "Saving…",
+    "saved": "Saved as v{{version}}",
+    "conflict": "A newer version arrived, so this edit was not saved. It shows the new version now; edit that one.",
+    "invalid": "This edit could not be saved: {{reason}}",
+    "failed": "It could not be saved. Try again.",
+    "dismiss": "Dismiss"
+  },
+  "load": {
+    "failed": "This content could not be read.",
+    "invalid": "This content does not fit its format: {{reason}}"
+  },
+  "document": {
+    "label": "Document",
+    "editHint": "Click a paragraph, heading or list to change its text.",
+    "blockLabel": "Edit this part"
+  },
+  "slides": {
+    "label": "Slides",
+    "slide": "Slide {{number}}",
+    "previous": "Previous slide",
+    "next": "Next slide",
+    "counter": "{{number}} / {{count}}",
+    "present": "Present",
+    "exit": "Esc to exit",
+    "editHint": "Click text on the slide to change it."
+  }
+}

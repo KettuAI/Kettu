@@ -2,10 +2,16 @@
 // policy goes out as a header, and main's request filter holds the same line on its own.
 
 import type { ProxyConfig } from 'electron'
-import { ARTIFACT_CDNS, ARTIFACT_CSP, ARTIFACT_PERMISSIONS_POLICY } from '@shared/artifact-policy'
+import {
+  ARTIFACT_CDNS,
+  ARTIFACT_CSP,
+  ARTIFACT_PERMISSIONS_POLICY,
+  ARTIFACT_STRICT_CSP,
+  artifactCsp,
+} from '@shared/artifact-policy'
 import { ARTIFACT_SCHEME, artifactHost } from './origins'
 
-export { ARTIFACT_CDNS, ARTIFACT_CSP }
+export { ARTIFACT_CDNS, ARTIFACT_CSP, ARTIFACT_STRICT_CSP }
 
 const CDN_HOSTS: ReadonlySet<string> = new Set(ARTIFACT_CDNS.map((origin) => new URL(origin).host))
 
@@ -21,11 +27,11 @@ export const WINDOW_PROXY: ProxyConfig = {
   proxyBypassRules: [...CDN_HOSTS, 'localhost', '127.0.0.1', '[::1]', '*.gvt1.com'].join(','),
 }
 
-/** The headers of every response on an artifact origin. */
-export function artifactHeaders(): Record<string, string> {
+/** The headers of every response on an artifact origin; `strict` keeps the CDNs out. */
+export function artifactHeaders(strict = false): Record<string, string> {
   return {
     'Content-Type': 'text/html; charset=utf-8',
-    'Content-Security-Policy': ARTIFACT_CSP,
+    'Content-Security-Policy': artifactCsp(strict),
     'Permissions-Policy': ARTIFACT_PERMISSIONS_POLICY,
     'Cross-Origin-Resource-Policy': 'same-origin',
     'X-Content-Type-Options': 'nosniff',
@@ -34,8 +40,11 @@ export function artifactHeaders(): Record<string, string> {
   }
 }
 
-/** Whether a page on the artifact origin `host` may request `url`, whatever its policy says. */
-export function mayRequest(host: string, url: string): boolean {
+/**
+ * Whether a page on the artifact origin `host` may request `url`, whatever its policy says; a
+ * `strict` one only its own origin, `data:` and `blob:`.
+ */
+export function mayRequest(host: string, url: string, strict = false): boolean {
   const parsed = URL.parse(url)
   if (!parsed) return false
   switch (parsed.protocol) {
@@ -45,6 +54,7 @@ export function mayRequest(host: string, url: string): boolean {
     case `${ARTIFACT_SCHEME}:`:
       return artifactHost(url) === host
     case 'https:':
+      if (strict) return false
       // URL drops the default port, so a CDN on any other port has a host of its own.
       return CDN_HOSTS.has(parsed.host) && parsed.username === '' && parsed.password === ''
     default:

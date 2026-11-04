@@ -447,8 +447,10 @@ function LargeCard({
                     title: summary.title,
                     version: summary.version,
                     versions: summary.version,
+                    files: summary.files,
                     sessionId: summary.sessionId,
                     deletedAt: summary.deletedAt,
+                    type: summary.type,
                   }}
                   onOpen={() => toggleArtifactPane(projectPath, summary.id, true)}
                   onVersionHistory={() => openArtifact(summary.id, { history: true })}

@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { DownloadIcon, PlayIcon, ScanIcon } from 'lucide-react'
 import { animate, type AnimationPlaybackControls } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { ARTIFACT_FRAME_SANDBOX, WEB_ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
@@ -23,7 +24,10 @@ import {
 } from './camera'
 import type { CanvasLayout, PlacedPage } from './canvas'
 import type { CanvasControls } from './canvas-controls'
+import { useEditorFrame, useEditorState, type ArtifactEditor, type EditorFrame } from './editor'
+import { isModeKey } from './keys'
 import { pageUrl } from './use-artifact'
+import { BarButton } from './viewer-parts'
 
 /** Pages that may start loading in one frame. */
 const LOADS_PER_FRAME = 2
@@ -37,6 +41,15 @@ const DOT_STEP = 20
 
 const mod = (value: number, step: number): number => (((value % step) + step) % step) - step
 const TITLE_ABOVE = 40
+/** A page's actions: three 24 px buttons, over the right of its name. */
+const ACTIONS_WIDTH = 80
+const ACTIONS_HEIGHT = 26
+
+/** What a page's actions do, in the viewer; the pane shows none. */
+export interface PageActions {
+  download: ((index: number) => void) | null
+  present: (index: number) => void
+}
 
 /**
  * An artifact's pages side by side on a surface that pans and zooms: one transform on the layer,
@@ -51,7 +64,11 @@ export const CanvasView = memo(function CanvasView({
   reloads,
   controls,
   top = 0,
+  bottom = 0,
   onEscape,
+  editor,
+  actions,
+  onPageChosen,
 }: {
   url: string
   version: number
@@ -61,15 +78,27 @@ export const CanvasView = memo(function CanvasView({
   controls: CanvasControls
   /** Screen pixels at the top that a bar covers, kept clear when fitting. */
   top?: number
+  /** Screen pixels at the bottom that a toolbar covers, kept clear when fitting. */
+  bottom?: number
   /** Esc on the canvas itself, after a focused page has been left. */
   onEscape?: () => void
+  /** Select and comment mode, where the canvas can show them. */
+  editor?: ArtifactEditor
+  actions?: PageActions
+  /** The page the user chose, by click or key, as its place in `layout.pages`. */
+  onPageChosen?: (index: number) => void
 }) {
   const { t } = useTranslation('artifacts')
   const stage = useRef<HTMLDivElement>(null)
   const layer = useRef<HTMLDivElement>(null)
   const dots = useRef<HTMLDivElement>(null)
   const labels = useRef<(HTMLSpanElement | null)[]>([])
+  const actionBars = useRef<(HTMLDivElement | null)[]>([])
   const frames = useRef(new Map<number, HTMLIFrameElement>())
+  const editorFrames = useRef(new Map<number, EditorFrame>())
+  const pointed = useRef(-1)
+  const editing = useEditorState(editor)
+  const mode = editor ? editing.mode : null
   const camera = useRef<Camera>({ x: 0, y: 0, z: 1 })
   const view = useRef<Size>({ width: 0, height: 0 })
   const fitted = useRef(false)
@@ -143,16 +172,27 @@ export const CanvasView = memo(function CanvasView({
     })
     pages.forEach((p, i) => {
       const label = labels.current[i]
-      if (!label) return
+      const bar = actionBars.current[i]
       const shown = p.width * z >= NAME_MIN_WIDTH && (p.y === 0 || room.names)
+      // The actions sit at the right end of the name's row, when it has room for both.
+      const withActions = Boolean(actions) && shown && p.width * z >= ACTIONS_WIDTH + NAME_MIN_WIDTH
+      if (bar) {
+        bar.style.visibility = withActions ? '' : 'hidden'
+        if (withActions) {
+          bar.style.transform =
+            `translate(${(p.x + p.width) * z + x - ACTIONS_WIDTH}px, ` +
+            `${p.y * z + y - LABEL_HEIGHT - (ACTIONS_HEIGHT - LABEL_HEIGHT) / 2 - 3}px)`
+        }
+      }
+      if (!label) return
       label.style.visibility = shown ? '' : 'hidden'
       if (!shown) return
       label.style.transform = `translate(${p.x * z + x}px, ${p.y * z + y - LABEL_HEIGHT}px)`
-      label.style.maxWidth = `${p.width * z}px`
+      label.style.maxWidth = `${p.width * z - (withActions ? ACTIONS_WIDTH : 0)}px`
     })
     controls.publish({ zoom: z, fitted: atFit.current })
     syncLive()
-  }, [pages, titles, controls, syncLive])
+  }, [pages, titles, controls, syncLive, actions])
 
   const place = useCallback(
     (next: Camera, fit = false) => {
@@ -188,19 +228,24 @@ export const CanvasView = memo(function CanvasView({
         { x: 0, y: 0, width: layout.width, height: layout.height },
         view.current,
         top,
+        bottom,
       )
       if (glides) moveTo(target, true)
       else place(target, true)
     },
-    [layout.width, layout.height, top, moveTo, place],
+    [layout.width, layout.height, top, bottom, moveTo, place],
   )
 
   const fitPage = useCallback(
     (index: number) => {
       const p = pages[index]
-      if (p) moveTo(fitBox({ x: p.x, y: p.y, width: p.width, height: p.height }, view.current, top))
+      if (p) {
+        moveTo(
+          fitBox({ x: p.x, y: p.y, width: p.width, height: p.height }, view.current, top, bottom),
+        )
+      }
     },
-    [pages, top, moveTo],
+    [pages, top, bottom, moveTo],
   )
 
   const zoomAround = useCallback(
@@ -228,7 +273,7 @@ export const CanvasView = memo(function CanvasView({
         if (target.x !== camera.current.x || target.y !== camera.current.y) moveTo(target)
       }
     },
-    [pages, moveTo],
+    [pages, moveTo, setSelected, setChosen],
   )
 
   // The view's size; the first one fits every page, and a fitted canvas fits again as it changes.
@@ -279,11 +324,21 @@ export const CanvasView = memo(function CanvasView({
     controls.publish({ selected, focused, count: pages.length })
   }, [controls, selected, focused, pages.length])
 
+  useEffect(() => {
+    if (chosen) onPageChosen?.(selected)
+  }, [chosen, selected, onPageChosen])
+
+  const selectedNow = useRef(selected)
+  useEffect(() => {
+    selectedNow.current = selected
+  }, [selected])
   useEffect(
     () =>
       controls.attach({
         zoomStep: (direction) => zoomAround(stepZoom(camera.current.z, direction)),
         fitAll: () => fitAll(true),
+        fitSelected: () => fitPage(selectedNow.current),
+        actualSize: () => zoomAround(1),
         focus: (index) => {
           if (index !== null) {
             setSelected(index)
@@ -292,7 +347,7 @@ export const CanvasView = memo(function CanvasView({
           setFocused(index)
         },
       }),
-    [controls, zoomAround, fitAll],
+    [controls, zoomAround, fitAll, fitPage],
   )
 
   // Reload loads every live page again, in place.
@@ -303,14 +358,16 @@ export const CanvasView = memo(function CanvasView({
     for (const frame of frames.current.values()) frame.setAttribute('src', frame.src)
   }, [reloads, mountedAt])
 
-  useEffect(
-    () => () => {
+  // Effects may run again on the same canvas, as React's development checks do, which must not
+  // leave the live pages it was loading unloaded.
+  useEffect(() => {
+    syncLive()
+    return () => {
       glideTo.current?.stop()
       cancelAnimationFrame(liveFrame.current)
       clearTimeout(settle.current)
-    },
-    [],
-  )
+    }
+  }, [syncLive])
 
   // The wheel pans, and zooms with Mod or a pinch, which Chromium sends as Ctrl and the wheel.
   useEffect(() => {
@@ -349,13 +406,34 @@ export const CanvasView = memo(function CanvasView({
     return { sx: event.clientX - rect.left, sy: event.clientY - rect.top }
   }
 
+  /** A spot on the screen in the pixels of page `index`. */
+  const toPage = (index: number, sx: number, sy: number) => {
+    const p = pages[index]!
+    const { x, y, z } = camera.current
+    return { x: (sx - (p.x * z + x)) / z, y: (sy - (p.y * z + y)) / z }
+  }
+
+  /** Outlines what is under the pointer in its page, and nothing in the page it left. */
+  const pointAt = (index: number, sx: number, sy: number) => {
+    if (pointed.current !== index) editorFrames.current.get(pointed.current)?.leave()
+    pointed.current = index
+    const frame = editorFrames.current.get(index)
+    if (!frame) return
+    const local = toPage(index, sx, sy)
+    frame.point(local.x, local.y)
+  }
+
   const onKeyDown = (event: React.KeyboardEvent): void => {
     if (event.target !== event.currentTarget || event.altKey || event.metaKey || event.ctrlKey) {
       return
     }
     const key = event.key
     const count = pages.length
-    if (event.shiftKey && event.code === 'Digit1') fitAll(true)
+    const modeKey = editor ? isModeKey(event.nativeEvent) : null
+    if (modeKey) editor!.toggle(modeKey)
+    else if (key === 'Escape' && editor?.escape()) {
+      // Back to the base mode, or the pick let go of, before Esc means anything else.
+    } else if (event.shiftKey && event.code === 'Digit1') fitAll(true)
     else if (event.shiftKey && event.code === 'Digit2') fitPage(selected)
     else if (event.shiftKey && event.code === 'Digit0') zoomAround(1)
     else if (key === 'ArrowRight') select(Math.min(count - 1, selected + 1), true)
@@ -425,9 +503,15 @@ export const CanvasView = memo(function CanvasView({
                   title={name(p)}
                   width={p.width}
                   height={p.height}
+                  editor={editor}
+                  page={i}
                   register={(frame) => {
                     if (frame) frames.current.set(i, frame)
                     else frames.current.delete(i)
+                  }}
+                  registerEditor={(frame) => {
+                    if (frame) editorFrames.current.set(i, frame)
+                    else editorFrames.current.delete(i)
                   }}
                 />
               ) : (
@@ -442,7 +526,16 @@ export const CanvasView = memo(function CanvasView({
         </div>
         <div
           aria-hidden
-          className={cn('absolute inset-0', dragging ? 'cursor-grabbing' : 'cursor-grab')}
+          className={cn(
+            'absolute inset-0',
+            dragging
+              ? 'cursor-grabbing'
+              : mode === 'comment'
+                ? 'cursor-crosshair'
+                : mode === 'select'
+                  ? 'cursor-default'
+                  : 'cursor-grab',
+          )}
           onPointerDown={(event) => {
             if (event.button !== 0) return
             event.currentTarget.setPointerCapture(event.pointerId)
@@ -457,7 +550,9 @@ export const CanvasView = memo(function CanvasView({
             const held = press.current
             if (!held) {
               const { sx, sy } = point(event)
-              setHovered(pageAt(pages, camera.current, sx, sy))
+              const index = pageAt(pages, camera.current, sx, sy)
+              setHovered(index)
+              if (mode) pointAt(index, sx, sy)
               return
             }
             const dx = event.clientX - held.x
@@ -479,14 +574,25 @@ export const CanvasView = memo(function CanvasView({
               setSelected(index)
               setChosen(true)
             }
+            if (mode && editor) {
+              const frame = editorFrames.current.get(index)
+              if (frame) {
+                const local = toPage(index, sx, sy)
+                frame.pick(local.x, local.y, { x: event.clientX, y: event.clientY })
+              } else editor.clearPick()
+            }
             stage.current?.focus({ preventScroll: true })
           }}
           onPointerCancel={() => {
             press.current = null
             setDragging(false)
           }}
-          onPointerLeave={() => setHovered(-1)}
+          onPointerLeave={() => {
+            setHovered(-1)
+            if (mode) pointAt(-1, 0, 0)
+          }}
           onDoubleClick={(event) => {
+            if (mode === 'comment') return
             const { sx, sy } = point(event)
             const index = pageAt(pages, camera.current, sx, sy)
             if (index < 0) return
@@ -519,6 +625,49 @@ export const CanvasView = memo(function CanvasView({
             </span>
           ))}
         </div>
+        {actions && (
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            {pages.map((p, i) => (
+              <div
+                key={`${p.group}.${p.index}`}
+                ref={(el) => {
+                  actionBars.current[i] = el
+                }}
+                style={{ width: ACTIONS_WIDTH, height: ACTIONS_HEIGHT }}
+                className="pointer-events-auto absolute top-0 left-0 flex items-center justify-end gap-0.5"
+              >
+                {actions.download && (
+                  <BarButton
+                    label={t('canvas.downloadPng')}
+                    size="pane"
+                    onClick={() => actions.download?.(i)}
+                  >
+                    <DownloadIcon />
+                  </BarButton>
+                )}
+                <BarButton
+                  label={t('canvas.presentFrom')}
+                  size="pane"
+                  onClick={() => actions.present(i)}
+                >
+                  <PlayIcon />
+                </BarButton>
+                <BarButton
+                  label={t('canvas.focusPage')}
+                  shortcut="↵"
+                  size="pane"
+                  onClick={() => {
+                    setSelected(i)
+                    setChosen(true)
+                    setFocused(i)
+                  }}
+                >
+                  <ScanIcon />
+                </BarButton>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       {shownPage && (
         <FocusedPage
@@ -528,6 +677,8 @@ export const CanvasView = memo(function CanvasView({
           name={name(shownPage)}
           top={top}
           reloads={reloads}
+          editor={editor}
+          index={focused!}
           onMove={(step) => {
             const next = focused! + step
             if (next < 0 || next >= pages.length) return
@@ -551,25 +702,43 @@ function CanvasFrame({
   title,
   width,
   height,
+  editor,
+  page,
   register,
+  registerEditor,
 }: {
   src: string
   title: string
   width: number
   height: number
+  editor: ArtifactEditor | undefined
+  page: number
   register: (frame: HTMLIFrameElement | null) => void
+  registerEditor: (frame: EditorFrame | null) => void
 }) {
   const [loaded, setLoaded] = useState(false)
+  const driven = useEditorFrame(editor, page)
+  const { frame, ref: drivenRef } = driven
+  useEffect(() => {
+    registerEditor(frame)
+    return () => registerEditor(null)
+  }, [frame, registerEditor])
   return (
     <iframe
-      ref={register}
+      ref={(el) => {
+        register(el)
+        drivenRef(el)
+      }}
       src={src}
       title={title}
       tabIndex={-1}
       sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
       allow=""
       referrerPolicy="no-referrer"
-      onLoad={() => setLoaded(true)}
+      onLoad={() => {
+        setLoaded(true)
+        driven.onLoad()
+      }}
       style={{ width, height }}
       className={cn(
         'block border-0 opacity-0 transition-opacity duration-(--duration-fast)',
@@ -586,6 +755,8 @@ function FocusedPage({
   name,
   top,
   reloads,
+  editor,
+  index,
   onMove,
   onLeave,
 }: {
@@ -594,6 +765,8 @@ function FocusedPage({
   name: string
   top: number
   reloads: number
+  editor: ArtifactEditor | undefined
+  index: number
   onMove: (step: 1 | -1) => void
   onLeave: () => void
 }) {
@@ -602,6 +775,8 @@ function FocusedPage({
   const [size, setSize] = useState<Size | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [mountedAt] = useState(reloads)
+  const driven = useEditorFrame(editor, index)
+  const mode = useEditorState(editor).mode
 
   useLayoutEffect(() => {
     const el = area.current
@@ -630,7 +805,11 @@ function FocusedPage({
       onKeyDown={(event) => {
         // Keys typed in the page stay there.
         if (event.target !== event.currentTarget) return
-        if (event.key === 'Escape') onLeave()
+        const modeKey = editor ? isModeKey(event.nativeEvent) : null
+        if (modeKey) editor!.toggle(modeKey)
+        else if (event.key === 'Escape' && editor?.escape()) {
+          // Back to the base mode, or the pick let go of, before leaving the page.
+        } else if (event.key === 'Escape') onLeave()
         else if (event.key === 'ArrowRight') onMove(1)
         else if (event.key === 'ArrowLeft') onMove(-1)
         else return
@@ -646,21 +825,72 @@ function FocusedPage({
           style={{ width: page.width * scale, height: page.height * scale }}
         >
           <iframe
-            ref={frame}
+            ref={(el) => {
+              frame.current = el
+              driven.ref(el)
+            }}
             src={src}
             title={name}
             sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
             allow=""
             referrerPolicy="no-referrer"
-            onLoad={() => setLoaded(true)}
+            onLoad={() => {
+              setLoaded(true)
+              driven.onLoad()
+            }}
             style={{ width: page.width, height: page.height, transform: `scale(${scale})` }}
             className={cn(
               'block origin-top-left border-0 opacity-0 transition-opacity duration-(--duration-fast)',
               loaded && 'opacity-100',
             )}
           />
+          {mode && driven.frame && (
+            <PickLayer
+              frame={driven.frame}
+              scale={scale}
+              mode={mode}
+              onDone={() => area.current?.focus({ preventScroll: true })}
+            />
+          )}
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Over a page that takes the pointer, in select or comment mode: the pointer outlines and picks
+ * elements through the page's runtime instead of using the page. `scale` is the page's on screen.
+ */
+export function PickLayer({
+  frame,
+  scale,
+  mode,
+  onDone,
+}: {
+  frame: EditorFrame
+  scale: number
+  mode: 'select' | 'comment'
+  onDone?: () => void
+}) {
+  const local = (event: React.PointerEvent) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    return { x: (event.clientX - rect.left) / scale, y: (event.clientY - rect.top) / scale }
+  }
+  return (
+    <div
+      aria-hidden
+      className={cn('absolute inset-0', mode === 'comment' ? 'cursor-crosshair' : 'cursor-default')}
+      onPointerMove={(event) => {
+        const at = local(event)
+        frame.point(at.x, at.y)
+      }}
+      onPointerLeave={() => frame.leave()}
+      onClick={(event) => {
+        const at = local(event as unknown as React.PointerEvent)
+        frame.pick(at.x, at.y, { x: event.clientX, y: event.clientY })
+        onDone?.()
+      }}
+    />
   )
 }

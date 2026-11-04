@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import type { ArtifactImportResult, ArtifactSummary } from '@shared/artifacts'
+import type { CommentAnchor } from '@shared/artifact-comments'
+import type { ArtifactImportKind, ArtifactImportResult, ArtifactSummary } from '@shared/artifacts'
 import type { AgentId } from '@shared/thread'
 import {
   parseOpened,
@@ -34,6 +35,16 @@ interface ArtifactsStore {
   importFailed: ImportFailure | null
   /** The rename or permanent delete waiting for the user's answer. */
   dialog: ArtifactDialog | null
+  /** The element picked in an artifact beside a project's thread, which its composer offers. */
+  paneSelection: PaneSelection | null
+}
+
+/** An element, or a page, picked in the artifact pane, as context for the session beside it. */
+export interface PaneSelection {
+  projectPath: string
+  artifactId: string
+  title: string
+  anchor: CommentAnchor
 }
 
 export type ArtifactDialog =
@@ -55,6 +66,7 @@ export const useArtifactsStore = create<ArtifactsStore>()(() => ({
   opened: null,
   importFailed: null,
   dialog: null,
+  paneSelection: null,
 }))
 
 let shown = 0
@@ -149,12 +161,15 @@ export function eraseArtifact(id: string): Promise<void> {
   return host('artifacts.delete', { id, permanently: true })
 }
 
-/** Asks main for a file through its open dialog; `project` null is No project. */
-export async function importArtifact(project: string | null): Promise<string | null> {
+/** Asks main for a file or folder through its open dialog; `project` null is No project. */
+export async function importArtifact(
+  project: string | null,
+  kind: ArtifactImportKind,
+): Promise<string | null> {
   useArtifactsStore.setState({ importFailed: null })
   let result: ArtifactImportResult
   try {
-    result = await window.kettu.artifacts.import(project)
+    result = await window.kettu.artifacts.import(project, kind)
   } catch (error) {
     console.error('Could not import an artifact', error)
     useArtifactsStore.setState({ importFailed: 'failed' })
@@ -183,4 +198,9 @@ export async function restoreVersion(
   baseVersion: number,
 ): Promise<void> {
   await host('artifacts.restoreVersion', { id, version, baseVersion })
+}
+
+/** What the pane offers its session's composer; null takes it away. */
+export function setPaneSelection(selection: PaneSelection | null): void {
+  useArtifactsStore.setState({ paneSelection: selection })
 }

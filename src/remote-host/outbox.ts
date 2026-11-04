@@ -404,6 +404,7 @@ function stateKey(value: unknown): string | null {
       return idKey('git.pr', fields.projectPath)
     case 'artifacts.version':
     case 'artifacts.activity':
+    case 'artifacts.comments':
       return idKey(kind, fields.id)
     case 'routine.changed':
       return idKey('routine', of('routine').id)

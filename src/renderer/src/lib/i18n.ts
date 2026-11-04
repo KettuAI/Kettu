@@ -3,9 +3,9 @@ import { initReactI18next } from 'react-i18next'
 import { i18nOptions, resolveLocale, type LanguageSetting, type Locale } from '@shared/locale'
 
 // Both languages are bundled: together they are small, and loading one on demand would hold the
-// first paint. Main and the agent host translate their own namespaces.
+// first paint. Main, the agent host and the artifact type viewers translate their own namespaces.
 const files = import.meta.glob<Record<string, unknown>>(
-  ['@shared/locales/*/*.json', '!@shared/locales/*/{main,host}.json'],
+  ['@shared/locales/*/*.json', '!@shared/locales/*/{main,host,viewers}.json'],
   { eager: true, import: 'default' },
 )
 

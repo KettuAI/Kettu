@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { versionUrlPath } from '@shared/artifact-page'
 import type { ArtifactSession, ArtifactSummary } from '@shared/artifacts'
 import { errorCode, host } from '@renderer/lib/host'
 import {
@@ -15,6 +16,8 @@ export type ViewerError = 'notFound' | 'unavailable' | 'failed'
 export interface ShownVersion {
   version: number
   title: string
+  /** How many files it has. */
+  files: number
   /** Laid out when the version marks two or more pages; null for a single page. */
   canvas: CanvasLayout | null
 }
@@ -94,6 +97,7 @@ export function useArtifact(id: string, version: number | null) {
         setShown({
           version: read.version,
           title: read.title,
+          files: read.files.length,
           canvas: layout.pages.length >= 2 ? layout : null,
         })
         setReadError(null)
@@ -116,6 +120,9 @@ export function useArtifact(id: string, version: number | null) {
         setPresence({ viewers: event.viewers, sessions: event.sessions })
       } else if (event.type === 'artifacts.version' && event.id === id) {
         setAnnounced((n) => Math.max(n, event.version))
+      } else if (event.type === 'artifacts.consentSettled' && event.artifactId === id) {
+        // The page stopped waiting before the user allowed it, so it loads again to use it.
+        if (event.reload) setReloads((n) => n + 1)
       }
     })
     return () => {
@@ -182,13 +189,17 @@ export function useListsRead(): boolean {
   return useArtifactsStore((s) => s.list !== null && s.deleted !== null)
 }
 
-/** A page's frame address: one version, and for a canvas one page by the protocol's numbers. */
+/**
+ * A page's frame address: the entry page of one version, and for a canvas one page by the
+ * protocol's numbers. `url` is the artifact's origin, or its frame's folder, ending in a slash.
+ */
 export function pageUrl(
   url: string,
   version: number,
   page?: { group: number; index: number },
 ): string {
-  return page ? `${url}?v=${version}&page=${page.group}.${page.index}` : `${url}?v=${version}`
+  const entry = `${url.slice(0, -1)}${versionUrlPath(version)}`
+  return page ? `${entry}?page=${page.group}.${page.index}` : entry
 }
 
 function readFailure(reason: unknown): ViewerError {

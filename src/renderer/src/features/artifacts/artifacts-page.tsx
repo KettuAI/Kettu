@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import { NO_SESSION, type ArtifactSummary } from '@shared/artifacts'
+import { NO_SESSION, type ArtifactImportKind, type ArtifactSummary } from '@shared/artifacts'
 import type { AgentId } from '@shared/thread'
 import { backTo } from '@renderer/app/history'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -231,11 +231,11 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     const opened = openedAt[artifact.id] ?? 0
     return { at: sort !== 'updated' && opened > artifact.updatedAt ? opened : artifact.updatedAt }
   }
-  // "Page", or "Canvas · 6 pages".
-  const kindLine = (artifact: ArtifactSummary): string =>
-    artifactKind(artifact) === 'canvas'
-      ? t('card.canvas', { count: artifact.pages })
-      : t('page.kinds.web')
+  // "Page", "Document", or "Canvas · 6 pages".
+  const kindLine = (artifact: ArtifactSummary): string => {
+    const kind = artifactKind(artifact)
+    return kind === 'canvas' ? t('card.canvas', { count: artifact.pages }) : t(`page.kinds.${kind}`)
+  }
   const card = (
     artifact: ArtifactSummary,
     meta: string,
@@ -928,8 +928,9 @@ function NothingDeleted() {
 }
 
 /**
- * "Import into": the sidebar's projects in its order, each with its folder in a tooltip, then No
- * project; each opens the dialog.
+ * What to import, an HTML file or a folder, since Windows and Linux have no dialog that picks
+ * either; then "Import into": the sidebar's projects in its order, each with its folder in a
+ * tooltip, then No project; each opens the dialog.
  */
 function ImportMenu({
   align,
@@ -940,16 +941,32 @@ function ImportMenu({
 }) {
   const { t } = useTranslation('artifacts')
   const projects = useProjectsStore((s) => s.projects)
+  const [kind, setKind] = useState<ArtifactImportKind>('file')
   return (
     <DropdownMenu>
       {children}
       <DropdownMenuContent align={align} sideOffset={6} className="min-w-50">
         <DropdownMenuGroup>
+          <DropdownMenuLabel>{t('page.importWhat')}</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={kind}
+            onValueChange={(value) => setKind(value === 'folder' ? 'folder' : 'file')}
+          >
+            <DropdownMenuRadioItem value="file">{t('page.importKind.file')}</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="folder">
+              {t('page.importKind.folder')}
+            </DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
           <DropdownMenuLabel>{t('page.importInto')}</DropdownMenuLabel>
           {projects.map((project) => (
             <Tooltip key={project.path}>
               <TooltipTrigger
-                render={<DropdownMenuItem onClick={() => void importArtifact(project.path)} />}
+                render={
+                  <DropdownMenuItem onClick={() => void importArtifact(project.path, kind)} />
+                }
               >
                 <span className="truncate">{project.name}</span>
               </TooltipTrigger>
@@ -959,7 +976,7 @@ function ImportMenu({
             </Tooltip>
           ))}
           {projects.length > 0 && <DropdownMenuSeparator />}
-          <DropdownMenuItem onClick={() => void importArtifact(null)}>
+          <DropdownMenuItem onClick={() => void importArtifact(null, kind)}>
             {t('page.noProject')}
           </DropdownMenuItem>
         </DropdownMenuGroup>

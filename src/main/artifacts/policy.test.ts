@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { ARTIFACT_CDNS, ARTIFACT_CSP, artifactHeaders, mayRequest, WINDOW_PROXY } from './policy'
+import {
+  ARTIFACT_CDNS,
+  ARTIFACT_CSP,
+  ARTIFACT_STRICT_CSP,
+  artifactHeaders,
+  mayRequest,
+  WINDOW_PROXY,
+} from './policy'
 
 const HOST = '0123456789abcdef0123456789'
 
@@ -35,6 +42,16 @@ describe('mayRequest', () => {
   })
 })
 
+describe('mayRequest for a strict artifact', () => {
+  it('lets a page load only its own origin, data: and blob:', () => {
+    expect(mayRequest(HOST, `kettu-artifact://${HOST}/_kettu/v1`, true)).toBe(true)
+    expect(mayRequest(HOST, 'data:text/plain,a', true)).toBe(true)
+    expect(mayRequest(HOST, `blob:kettu-artifact://${HOST}/0b1c`, true)).toBe(true)
+    for (const origin of ARTIFACT_CDNS) expect(mayRequest(HOST, `${origin}/x.js`, true)).toBe(false)
+    expect(mayRequest(HOST, 'kettu-artifact://ffffffffffffffffffffffffff/', true)).toBe(false)
+  })
+})
+
 describe('the policy', () => {
   it('allows nothing by default and names the CDNs only where the design does', () => {
     const directives = new Map(
@@ -47,6 +64,18 @@ describe('the policy', () => {
     for (const name of ['script-src', 'style-src', 'font-src', 'img-src', 'connect-src']) {
       expect(directives.get(name)).toEqual(expect.arrayContaining([...ARTIFACT_CDNS]))
     }
+  })
+
+  it('names no host but its own for an artifact that reads what is outside it', () => {
+    const directives = new Map(
+      ARTIFACT_STRICT_CSP.split('; ').map((d) => [d.split(' ')[0], d.split(' ').slice(1)]),
+    )
+    expect(ARTIFACT_STRICT_CSP).not.toMatch(/https?:/)
+    expect(directives.get('default-src')).toEqual(["'none'"])
+    expect(directives.get('connect-src')).toEqual(["'self'"])
+    expect(directives.get('img-src')).toEqual(["'self'", 'data:', 'blob:'])
+    expect(directives.get('form-action')).toEqual(["'none'"])
+    expect(artifactHeaders(true)['Content-Security-Policy']).toBe(ARTIFACT_STRICT_CSP)
   })
 
   it('goes out with every header the design lists', () => {

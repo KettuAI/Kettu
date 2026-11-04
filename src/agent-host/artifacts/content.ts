@@ -1,6 +1,8 @@
-// Each artifact version's HTML, one file per SHA-256 under `artifacts/content/` in the data folder.
-// The thread worker writes and removes them in turn with the rows that name them, synchronously,
-// since it owns the database; the host only reads them.
+// The bytes of every artifact file, one file per SHA-256 under `artifacts/content/` in the data
+// folder, which any number of versions' files name. Each is `<hash>.html` whatever it holds, as the
+// first versions, which held one page each, named them, so no file is ever renamed. The thread
+// worker writes and removes them in turn with the rows that name them, synchronously, since it owns
+// the database; the host only reads them.
 
 import { createHash, randomBytes } from 'node:crypto'
 import {
@@ -24,8 +26,18 @@ const TEMP = /^[0-9a-f]{64}\.html\.[0-9a-f]+\.tmp$/
 const RETRYABLE = new Set(['EPERM', 'EACCES', 'EBUSY'])
 const pause = new Int32Array(new SharedArrayBuffer(4))
 
-export function contentHash(html: string): string {
-  return createHash('sha256').update(html, 'utf8').digest('hex')
+export function contentHash(data: Uint8Array): string {
+  return createHash('sha256').update(data).digest('hex')
+}
+
+/**
+ * What a version's thumbnail is kept under: the hash of its one file when that is all it has, as
+ * before versions had several, else the hash of its paths and their hashes.
+ */
+export function versionKey(files: readonly { path: string; hash: string }[]): string {
+  if (files.length === 1) return files[0]!.hash
+  const lines = files.map((file) => `${file.path}\0${file.hash}\n`).toSorted()
+  return createHash('sha256').update(lines.join(''), 'utf8').digest('hex')
 }
 
 /** The file of a hash, in a folder named by its first two hex characters. */
@@ -49,10 +61,10 @@ function renameWithRetry(from: string, to: string): void {
 }
 
 /**
- * Writes the HTML under its hash unless a file holds it already: to a temporary file, flushed to
- * disk, then renamed into place, so the file is whole whenever it exists.
+ * Writes the bytes under their hash unless a file holds them already: to a temporary file, flushed
+ * to disk, then renamed into place, so the file is whole whenever it exists.
  */
-export function putContent(dir: string, hash: string, html: string): void {
+export function putContent(dir: string, hash: string, data: Uint8Array): void {
   const file = contentPath(dir, hash)
   if (existsSync(file)) return
   mkdirSync(path.dirname(file), { recursive: true })
@@ -60,7 +72,7 @@ export function putContent(dir: string, hash: string, html: string): void {
   try {
     const fd = openSync(temp, 'wx')
     try {
-      writeFileSync(fd, html, 'utf8')
+      writeFileSync(fd, data)
       fsyncSync(fd)
     } finally {
       closeSync(fd)

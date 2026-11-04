@@ -1,6 +1,9 @@
 // The artifact records the thread worker keeps, and the calls the host makes on them.
 
+import type { CommentAnchor, CommentAuthor, CommentThread } from '@shared/artifact-comments'
 import type { ArtifactSummary } from '@shared/artifacts'
+import type { ArtifactTypeInfo } from '@shared/artifact-types'
+import type { Declaration } from './runtime/calls'
 
 export interface ArtifactRecord {
   id: string
@@ -15,12 +18,24 @@ export interface ArtifactRecord {
 
 export interface VersionRecord {
   version: number
-  hash: string
-  size: number
-  pages: number
+  size: number // of all its files
+  pages: number // the entry page's
   author: string | null
   note: string | null
   createdAt: number
+}
+
+/** One file of a version: its path in the artifact, and the content file holding its bytes. */
+export interface StoredFile {
+  path: string
+  hash: string
+  size: number
+}
+
+/** A file a new version puts at `path`, or removes from it when `data` is null. */
+export interface FileChange {
+  path: string
+  data: Uint8Array | null
 }
 
 /** A summary as the store knows it; the host adds whether its project is a scratch folder. */
@@ -38,10 +53,16 @@ export interface ArtifactCalls {
     params: { project: string } | { project: null; deleted: boolean }
     result: ArtifactListing[]
   }
-  /** The artifact with one of its versions, the latest when `version` is null. */
+  /** The artifact with one of its versions, the latest when `version` is null, and its files. */
   get: {
     params: { id: string; version: number | null; project: string | null }
-    result: { artifact: ArtifactRecord; version: VersionRecord }
+    result: {
+      artifact: ArtifactRecord
+      version: VersionRecord
+      files: StoredFile[]
+      /** The version's type and format; null for a plain artifact. */
+      type: ArtifactTypeInfo | null
+    }
   }
   /** Newest first. */
   versions: { params: { id: string; project: string | null }; result: VersionRecord[] }
@@ -51,28 +72,39 @@ export interface ArtifactCalls {
       project: string
       sessionId: string
       title: string
-      html: string
+      files: { path: string; data: Uint8Array }[]
       pages: number
       note: string | null
       at: number
+      /** What the version declares; nothing at the current runtime when absent. */
+      declaration?: Declaration
+      /** Made from a type, whose content the caller checked. */
+      type?: ArtifactTypeInfo | null
     }
     result: { version: number }
   }
-  /** A new version from `baseVersion`, which must be the latest. */
+  /**
+   * A new version from `baseVersion`, which must be the latest: its files with `changes` made to
+   * them, the rest as they were.
+   */
   write: {
     params: {
       id: string
       project: string | null
       baseVersion: number
-      html: string
+      changes: FileChange[]
       pages: number
       author: string | null
       note: string | null
       at: number
+      /** What the version declares; the base version's when absent. */
+      declaration?: Declaration
+      /** The new version's type and format: a typed artifact's must name its type, a plain one none. */
+      type?: ArtifactTypeInfo | null
     }
     result: { version: number }
   }
-  /** `version` again as the newest, sharing its file. */
+  /** `version` again as the newest, sharing its files. */
   restore: {
     params: {
       id: string
@@ -97,6 +129,46 @@ export interface ArtifactCalls {
   erase: { params: { id: string }; result: null }
   /** Removes what was deleted before `before`, then every file no version names. */
   purge: { params: { before: number }; result: { artifacts: number; files: number } }
+  /** The artifact's comment threads, oldest first. */
+  threads: { params: { id: string; project: string | null }; result: CommentThread[] }
+  /** A new thread with its first comment. */
+  addThread: {
+    params: {
+      id: string
+      project: string | null
+      threadId: string
+      anchor: CommentAnchor
+      author: CommentAuthor
+      body: string
+      at: number
+    }
+    result: CommentThread
+  }
+  reply: {
+    params: {
+      id: string
+      project: string | null
+      threadId: string
+      author: CommentAuthor
+      body: string
+      at: number
+    }
+    result: CommentThread
+  }
+  resolve: {
+    params: { id: string; project: string | null; threadId: string; resolved: boolean; at: number }
+    result: CommentThread
+  }
+  /** The user sent the threads to a session. */
+  markSent: {
+    params: { id: string; threadIds: string[]; sessionId: string; at: number }
+    result: null
+  }
+  /** Anchors found again in a later version, in place of the threads' old ones. */
+  reanchor: {
+    params: { id: string; anchors: { threadId: string; anchor: CommentAnchor }[] }
+    result: null
+  }
 }
 
 export type ArtifactCallName = keyof ArtifactCalls

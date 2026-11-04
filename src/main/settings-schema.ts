@@ -794,6 +794,7 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
     startModes: { ...settings.startModes },
     usage: { fromComputer: settings.usage.fromComputer },
     sessionTitles: settings.general.sessionTitles,
+    defaultAgent: settings.general.defaultAgent,
   }
 }
 

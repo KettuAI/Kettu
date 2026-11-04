@@ -218,6 +218,18 @@ export interface HostAdminContract {
     params: { id: string; version: number; layout: ThumbnailPage[] | null }
     result: string | null
   }
+  /** A page of a version at its own size as a PNG `data:` URL; null when it cannot render. */
+  'artifacts.png': {
+    params: {
+      id: string
+      version: number
+      page: { group: number; index: number } | null
+      size: { width: number; height: number }
+    }
+    result: string | null
+  }
+  /** A typed version printed by its viewer, as a PDF in base64, which only a desktop app prints. */
+  'artifacts.printPdf': { params: { id: string; version: number }; result: string }
 }
 
 export type HostAdminMethod = keyof HostAdminContract
@@ -264,6 +276,8 @@ const METHODS: Record<HostAdminMethod, true> = {
   'themes.catalog': true,
   'themes.installCatalog': true,
   'artifacts.thumbnail': true,
+  'artifacts.png': true,
+  'artifacts.printPdf': true,
 }
 
 export function isHostAdminMethod(method: string): method is HostAdminMethod {

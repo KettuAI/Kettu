@@ -122,12 +122,17 @@ export async function packageDaemon({
   const name = packageName(platform, arch)
   must(path.join(build, 'daemon', 'main.cjs'), "The daemon's build; run pnpm build first. It")
   must(path.join(build, 'web', 'index.html'), "The web client's build; run pnpm build first. It")
+  must(
+    path.join(build, 'viewers', 'document.js'),
+    "The type viewers' build; run pnpm build first. It",
+  )
   const stage = await mkdtemp(path.join(os.tmpdir(), 'kettu-daemon-package-'))
   try {
     const dir = path.join(stage, name)
     // The daemon finds the web client beside its own folder, as in out/.
     await cp(path.join(build, 'daemon'), path.join(dir, 'daemon'), { recursive: true })
     await cp(path.join(build, 'web'), path.join(dir, 'web'), { recursive: true })
+    await cp(path.join(build, 'viewers'), path.join(dir, 'viewers'), { recursive: true })
 
     // node-pty's loader and its binaries, which it loads from build/Release.
     const require = createRequire(path.join(root, 'package.json'))

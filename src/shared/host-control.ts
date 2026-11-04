@@ -1,7 +1,9 @@
 // Messages between main and the hosts: over `utilityProcess` messaging in the desktop app, or the
 // IPC of `child_process.fork` when a host runs under Node.js.
 
+import type { RuntimeAnswer } from './artifact-capabilities'
 import type { ArtifactImportResult } from './artifacts'
+import type { ArtifactExportFormat, ArtifactTypeInfo, ExportedFile } from './artifact-types'
 import type { AttachmentGrant } from './attachments'
 import type { BrowserForward, BrowserOriginAnswer, BrowserOriginDecision } from './browser'
 import type { MediaGrantRecord } from './media'
@@ -69,17 +71,30 @@ export type MainToHost =
   | { type: 'host:settings'; settings: HostSettings }
   | { type: 'host:busy-request'; requestId: number }
   | { type: 'host:grant'; requestId: number; grants: AttachmentGrant[] } // answered by host:granted
-  // `artifact.content`: the file of a version, the latest when `version` is null.
+  // `artifact.content`: the files of a version, the latest when `version` is null.
   | { type: 'host:artifact-content-request'; requestId: number; id: string; version: number | null }
   // `artifact.list`: the id of every artifact the host has, Recently deleted included.
   | { type: 'host:artifact-list-request'; requestId: number }
-  // `artifact.import`: a file the user chose in main's dialog, made an artifact in `project`, or
-  // in a new scratch folder when `project` is null.
+  // `artifact.import`: a file or folder the user chose in main's dialog, made an artifact in
+  // `project`, or in a new scratch folder when `project` is null.
   | {
       type: 'host:artifact-import-request'
       requestId: number
       path: string
       project: string | null
+    }
+  // A page's message to the runtime, from the artifact origin main serves it on: answered by
+  // host:artifact-runtime-answer under the same id, once, or for a stream with each event and the end.
+  | { type: 'host:artifact-runtime'; requestId: number; artifactId: string; message: unknown }
+  // The page closed the request, which ends its stream.
+  | { type: 'host:artifact-runtime-cancel'; requestId: number }
+  // `artifact.export`: a typed version converted on the host, for main to save.
+  | {
+      type: 'host:artifact-export-request'
+      requestId: number
+      id: string
+      version: number
+      format: ArtifactExportFormat
     }
   | { type: 'host:power'; state: 'suspend' | 'resume' }
   // Allow once, from a request's notification: answered as one of the host's own windows would.
@@ -94,11 +109,37 @@ export type MainToHost =
   | { type: 'host:browser-origin-answer'; requestId: number; decision: BrowserOriginAnswer }
   | { type: 'host:shutdown' }
 
-/** The host's answer to `host:artifact-content-request`. */
+/** A file of an artifact's version: its path in the artifact, and where its bytes lie on disk. */
+export interface ArtifactContentFile {
+  path: string
+  file: string // in artifacts/content/
+  size: number
+}
+
+/**
+ * The host's answer to `host:artifact-content-request`: the version's files, and `key`, which
+ * names what they are together, for its thumbnail.
+ */
 export type ArtifactContentResult =
-  | { kind: 'found'; path: string; version: number; title: string } // `path` lies in artifacts/content/
+  | {
+      kind: 'found'
+      version: number
+      title: string
+      key: string
+      /** The latest version declares what reads beyond the page, so its pages get no CDN. */
+      strict: boolean
+      files: ArtifactContentFile[]
+      /** Made from a type: its viewer is served in place of the entry page. */
+      type?: ArtifactTypeInfo | null
+    }
   | { kind: 'not_found' }
   | { kind: 'failed' }
+
+/** The host's answer to `host:artifact-export-request`. */
+export type ArtifactExportResult =
+  | { kind: 'exported'; title: string; files: ExportedFile[] }
+  | { kind: 'not_found' }
+  | { kind: 'failed'; message: string }
 
 /** The host's answer to `host:artifact-list-request`. */
 export type ArtifactListResult = { kind: 'listed'; ids: string[] } | { kind: 'failed' }
@@ -141,6 +182,8 @@ export type HostToMain =
   | { type: 'host:artifact-content'; requestId: number; result: ArtifactContentResult }
   | { type: 'host:artifact-list'; requestId: number; result: ArtifactListResult }
   | { type: 'host:artifact-import'; requestId: number; result: NonNullable<ArtifactImportResult> }
+  | { type: 'host:artifact-runtime-answer'; requestId: number; answer: RuntimeAnswer }
+  | { type: 'host:artifact-export'; requestId: number; result: ArtifactExportResult }
   | { type: 'host:media-grant'; grant: MediaGrantRecord }
   | { type: 'host:media-revoke'; sessionId: string | null } // null drops them all
   // A window's or device's answer to the new origin main's page asked for, from the session's card.

@@ -67,6 +67,7 @@ const onUpdateChanged = subscribe('update:changed')
 const onShortcut = subscribe('app:shortcut')
 const onArtifactBlocked = subscribe('artifact:blocked')
 const onArtifactStopped = subscribe('artifact:stopped')
+const onArtifactSelected = subscribe('artifact:selected')
 const onAccountChanged = subscribe('account:changed')
 const onSharingChanged = subscribe('sharing:changed')
 const onRemoteChanged = subscribe('remote:changed')
@@ -124,7 +125,10 @@ const api: KettuApi = {
     thumbnail: (id, version, layout) => invoke('artifact:thumbnail', id, version, layout),
     openExternal: (id, version) => invoke('artifact:open-external', id, version),
     export: (id, version) => invoke('artifact:export', id, version),
-    import: (project) => invoke('artifact:import', project),
+    exportAs: (id, version, format) => invoke('artifact:export-as', id, version, format),
+    import: (project, kind) => invoke('artifact:import', project, kind),
+    onSelected: onArtifactSelected,
+    png: (id, version, page, size, name) => invoke('artifact:png', id, version, page, size, name),
     onBlocked: onArtifactBlocked,
     onStopped: onArtifactStopped,
   },

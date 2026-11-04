@@ -2,25 +2,36 @@
 // artifacts service call, the watches that count viewers, and the purge of Recently deleted.
 // The records and files belong to the thread worker; this side only reads the files.
 
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
+import { isStrictDeclaration } from '@shared/artifact-capabilities'
+import type { CommentAnchor, CommentAuthor, CommentThread } from '@shared/artifact-comments'
+import { ARTIFACT_ENTRY, DISK_FILE_BYTES, isHtmlPath } from '@shared/artifact-files'
+import { findAnchor, startTagAt } from '@shared/artifact-source'
 import {
   ARTIFACT_KEEP_DELETED_MS,
   type ArtifactSession,
   type ArtifactState,
   type VersionSummary,
 } from '@shared/artifacts'
+import type { ArtifactTypeInfo } from '@shared/artifact-types'
 import { HostError } from '../errors'
 import type { LogFn } from '../storage'
 import { ThreadStoreError, type ThreadStore } from '../threads/store'
-import { contentPath } from './content'
-import { newArtifactId } from './ids'
+import { contentPath, versionKey } from './content'
+import { editElement, EditError, type ElementChange } from './element-edit'
+import { newArtifactId, ulid } from './ids'
+import { countPages } from './pages'
 import type {
   ArtifactCallName,
   ArtifactCalls,
   ArtifactRecord,
+  FileChange,
+  StoredFile,
   StoredSummary,
   VersionRecord,
 } from './model'
+import type { Declaration, RuntimeCallName, RuntimeCalls } from './runtime/calls'
 
 const PURGE_EVERY_MS = 24 * 60 * 60 * 1000
 
@@ -58,6 +69,10 @@ export interface ArtifactStoreDeps {
   /** A new version, for the ports watching the artifact. */
   version(portIds: Iterable<string>, id: string, version: number): void
   activity(portIds: Iterable<string>, activity: ArtifactActivity): void
+  /** Its comments changed, for the ports watching the artifact. */
+  comments?(portIds: Iterable<string>, id: string): void
+  /** The last port watching the artifact stopped. */
+  unwatched?(id: string): void
   now?: () => number
   purgeEveryMs?: number
 }
@@ -90,6 +105,22 @@ export interface Editing {
   editor?: SessionTurn
 }
 
+/** A version as the store reads it: the artifact, the version and its files. */
+export interface FoundVersion {
+  artifact: ArtifactRecord
+  version: VersionRecord
+  files: StoredFile[]
+  /** The version's type and format; null for a plain artifact. */
+  type: ArtifactTypeInfo | null
+}
+
+/** A file of a version as main and the remote host serve it: where its bytes lie on disk. */
+export interface ContentFile {
+  path: string
+  file: string
+  size: number
+}
+
 export function versionSummary(record: VersionRecord): VersionSummary {
   const { version, createdAt, author, note, size } = record
   return { version, createdAt, author, note, size }
@@ -114,8 +145,26 @@ export class ArtifactStore {
   ): Promise<ArtifactCalls[K]['result']> {
     const { threads } = this.deps
     if (!threads) throw new HostError('internal', 'Artifacts need the thread database')
+    return this.refused(() => threads.artifact(name, params))
+  }
+
+  /**
+   * A call on the page runtime's tables beside the artifacts: a version's declaration, the data
+   * and the consents. Fails as the artifact calls do, and `invalid` or `too_large` as the
+   * ThreadStoreError of a write of data that does not apply or fit.
+   */
+  runtime<K extends RuntimeCallName>(
+    name: K,
+    params: RuntimeCalls[K]['params'],
+  ): Promise<RuntimeCalls[K]['result']> {
+    const { threads } = this.deps
+    if (!threads) throw new HostError('internal', 'Artifacts need the thread database')
+    return this.refused(() => threads.runtime(name, params))
+  }
+
+  private async refused<T>(run: () => Promise<T>): Promise<T> {
     try {
-      return await threads.artifact(name, params)
+      return await run()
     } catch (error) {
       if (
         error instanceof ThreadStoreError &&
@@ -168,33 +217,39 @@ export class ArtifactStore {
     return listed.map((artifact) => ({ ...artifact, editing: this.editing(artifact.id) }))
   }
 
-  /** The artifact and one of its versions, the latest by default, without the HTML. */
-  get(
-    id: string,
-    { version, project }: Reach & { version?: number } = {},
-  ): Promise<{ artifact: ArtifactRecord; version: VersionRecord }> {
+  /** The artifact and one of its versions, the latest by default, with the version's files. */
+  get(id: string, { version, project }: Reach & { version?: number } = {}): Promise<FoundVersion> {
     return this.call('get', { id, version: version ?? null, project: project ?? null })
   }
 
-  /** A version, the latest by default, with its HTML. */
+  /** As `get`, which counts as the reader's reading it. */
   async read(
     id: string,
     reach: Reach & { version?: number } & Reading = {},
-  ): Promise<{ artifact: ArtifactRecord; version: VersionRecord; html: string }> {
+  ): Promise<FoundVersion> {
     const { reader, ...rest } = reach
     const found = await this.get(id, rest)
-    const file = contentPath(this.deps.contentDir, found.version.hash)
-    let html: string
+    this.used(id, reader, false)
+    return found
+  }
+
+  /** The bytes of a file of a version. */
+  async bytes(found: FoundVersion, file: StoredFile): Promise<Buffer> {
     try {
-      html = await readFile(file, 'utf8')
+      return await readFile(contentPath(this.deps.contentDir, file.hash))
     } catch (error) {
       throw new Error(
-        `The HTML of ${id} version ${found.version.version} cannot be read: ${(error as Error).message}`,
+        `${file.path} of ${found.artifact.id} version ${found.version.version} cannot be read: ${(error as Error).message}`,
         { cause: error },
       )
     }
-    this.used(id, reader, false)
-    return { ...found, html }
+  }
+
+  /** The text of the version's entry page, which the viewer and the page count read. */
+  async entryText(found: FoundVersion): Promise<string> {
+    const entry = found.files.find((file) => file.path === ARTIFACT_ENTRY)
+    if (!entry) throw new Error(`${found.artifact.id} has no ${ARTIFACT_ENTRY}`)
+    return (await this.bytes(found, entry)).toString('utf8')
   }
 
   /** Newest first. */
@@ -204,16 +259,43 @@ export class ArtifactStore {
     return records
   }
 
-  /** The file of a version, the latest by default, for main to serve; with the artifact's title. */
+  /**
+   * The files of a version, the latest by default, for main and the remote host to serve; with the
+   * artifact's title, the key its thumbnail is kept under, and whether its pages load from their
+   * own origin alone, as the latest version's declaration says.
+   */
   async content(
     id: string,
     version?: number,
-  ): Promise<{ path: string; version: number; title: string }> {
-    const found = await this.get(id, version === undefined ? {} : { version })
+  ): Promise<{
+    version: number
+    title: string
+    key: string
+    strict: boolean
+    files: ContentFile[]
+    type: ArtifactTypeInfo | null
+  }> {
+    const [found, latest] = await Promise.all([
+      this.get(id, version === undefined ? {} : { version }),
+      this.runtime('declaration', { id, project: null, version: null }),
+    ])
+    const key = versionKey(found.files)
     return {
-      path: contentPath(this.deps.contentDir, found.version.hash),
       version: found.version.version,
       title: found.artifact.title,
+      type: found.type,
+      // A typed version's thumbnail is its viewer's, which a new format's viewer draws anew.
+      key: found.type
+        ? createHash('sha256')
+            .update(`${key}\0${found.type.name}\0${found.type.format}`, 'utf8')
+            .digest('hex')
+        : key,
+      strict: isStrictDeclaration(latest.capabilities),
+      files: found.files.map((file) => ({
+        path: file.path,
+        file: contentPath(this.deps.contentDir, file.hash),
+        size: file.size,
+      })),
     }
   }
 
@@ -225,9 +307,11 @@ export class ArtifactStore {
       project: string
       sessionId: string
       title: string
-      html: string
+      files: { path: string; data: Uint8Array }[]
       pages: number
       note: string | null
+      declaration?: Declaration
+      type?: ArtifactTypeInfo | null
     } & Editing,
   ): Promise<{ id: string; version: number }> {
     const { editor, ...rest } = input
@@ -239,15 +323,20 @@ export class ArtifactStore {
     return { id, version }
   }
 
-  /** A new version from `baseVersion`, which must be the latest; `author` null is the user. */
+  /**
+   * A new version from `baseVersion`, which must be the latest: its files with `changes` made, the
+   * others as they were. `author` null is the user.
+   */
   async write(
     input: {
       id: string
       baseVersion: number
-      html: string
+      changes: FileChange[]
       pages: number
       author: string | null
       note: string | null
+      declaration?: Declaration
+      type?: ArtifactTypeInfo | null
     } & Reach &
       Editing,
   ): Promise<{ version: number }> {
@@ -328,6 +417,173 @@ export class ArtifactStore {
     this.deps.changed()
   }
 
+  // Comments.
+
+  /**
+   * The artifact's threads, oldest first, each anchored in its latest version: an element a new
+   * version moved is found again by its tag, text and page, and one no longer there is marked so.
+   */
+  async threads(id: string, { project }: Reach = {}): Promise<CommentThread[]> {
+    const threads = await this.call('threads', { id, project: project ?? null })
+    const stale = threads.filter((t) => t.anchor.offset !== null && !t.anchor.missing)
+    if (stale.length === 0) return threads
+    const found = await this.get(id, project ? { project } : {}).catch(() => null)
+    if (!found) return threads
+    const head = found.version.version
+    const texts = new Map<string, string | null>()
+    const textOf = async (path: string): Promise<string | null> => {
+      if (!texts.has(path)) {
+        const file = found.files.find((f) => f.path === path)
+        texts.set(path, file ? (await this.bytes(found, file)).toString('utf8') : null)
+      }
+      return texts.get(path)!
+    }
+    const moved: { threadId: string; anchor: CommentAnchor }[] = []
+    for (const thread of stale) {
+      const { anchor } = thread
+      if (anchor.version === head) continue
+      const text = await textOf(anchor.path)
+      const old = { offset: anchor.offset!, tag: anchor.tag ?? '', text: anchor.text }
+      const offset =
+        text === null ? null : findAnchor(text, { ...old, page: anchor.page?.number ?? null })
+      // Without text to match, an element whose tag is still where it was stays.
+      const kept =
+        offset === null &&
+        text !== null &&
+        anchor.text === '' &&
+        startTagAt(text, old.offset)?.name === anchor.tag
+      const next: CommentAnchor =
+        offset !== null
+          ? { ...anchor, version: head, offset }
+          : kept
+            ? { ...anchor, version: head }
+            : { ...anchor, version: head, missing: true }
+      moved.push({ threadId: thread.id, anchor: next })
+      thread.anchor = next
+    }
+    if (moved.length > 0) await this.call('reanchor', { id, anchors: moved }).catch(() => {})
+    return threads
+  }
+
+  private commented(id: string): void {
+    const ports = this.watches.get(id)
+    if (ports) this.deps.comments?.(ports.keys(), id)
+  }
+
+  /** A new thread on the artifact, by the user or, with a session, their agent. */
+  async addThread(
+    id: string,
+    input: { anchor: CommentAnchor; author: CommentAuthor; body: string },
+    { project }: Reach = {},
+  ): Promise<CommentThread> {
+    const at = this.now()
+    const thread = await this.call('addThread', {
+      id,
+      project: project ?? null,
+      threadId: `thr_${ulid(at)}`,
+      ...input,
+      at,
+    })
+    this.commented(id)
+    return thread
+  }
+
+  async reply(
+    id: string,
+    threadId: string,
+    input: { author: CommentAuthor; body: string },
+    { project }: Reach = {},
+  ): Promise<CommentThread> {
+    const thread = await this.call('reply', {
+      id,
+      project: project ?? null,
+      threadId,
+      ...input,
+      at: this.now(),
+    })
+    this.commented(id)
+    return thread
+  }
+
+  async resolve(
+    id: string,
+    threadId: string,
+    resolved: boolean,
+    { project }: Reach = {},
+  ): Promise<CommentThread> {
+    const thread = await this.call('resolve', {
+      id,
+      project: project ?? null,
+      threadId,
+      resolved,
+      at: this.now(),
+    })
+    this.commented(id)
+    return thread
+  }
+
+  /** The user sent the threads to the session; they wait no more until the user writes again. */
+  async markSent(id: string, threadIds: string[], sessionId: string): Promise<void> {
+    await this.call('markSent', { id, threadIds, sessionId, at: this.now() })
+    this.commented(id)
+  }
+
+  /**
+   * The user's direct edit of one element as a new version from `baseVersion`, which must be the
+   * latest: only that element's start tag's style, or its text, changes in its file.
+   */
+  async editElement(input: {
+    id: string
+    baseVersion: number
+    path: string
+    offset: number
+    change: ElementChange
+  }): Promise<{ version: number }> {
+    const found = await this.get(input.id)
+    if (found.artifact.deletedAt !== null) {
+      throw new ArtifactError('deleted', `${input.id} is in Recently deleted`, {
+        version: found.artifact.head,
+        deleted: true,
+      })
+    }
+    if (found.artifact.head !== input.baseVersion) {
+      throw new ArtifactError('conflict', 'Not the latest version', {
+        version: found.artifact.head,
+        deleted: false,
+      })
+    }
+    const file = found.files.find((f) => f.path === input.path)
+    if (!file || !isHtmlPath(file.path)) {
+      throw new HostError('not_found', `${input.id} has no HTML file ${input.path}`)
+    }
+    let text: string
+    try {
+      text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(
+        await this.bytes(found, file),
+      )
+    } catch {
+      throw new HostError('invalid_params', `${input.path} is not UTF-8 text`)
+    }
+    let edited: string
+    try {
+      edited = editElement(text, input.offset, input.change)
+    } catch (error) {
+      if (error instanceof EditError) throw new HostError('invalid_params', error.message)
+      throw error
+    }
+    const data = Buffer.from(edited, 'utf8')
+    if (data.length > DISK_FILE_BYTES)
+      throw new HostError('invalid_params', 'The file is too large')
+    return this.write({
+      id: input.id,
+      baseVersion: input.baseVersion,
+      changes: [{ path: input.path, data }],
+      pages: input.path === ARTIFACT_ENTRY ? countPages(edited) : found.version.pages,
+      author: null,
+      note: null,
+    })
+  }
+
   // Presence.
 
   /** The sessions using the artifact, in the order they started. */
@@ -405,6 +661,11 @@ export class ArtifactStore {
     if (this.drop(id, portId)) this.sendActivity(id)
   }
 
+  /** The ports watching the artifact now. */
+  watchers(id: string): string[] {
+    return [...(this.watches.get(id)?.keys() ?? [])]
+  }
+
   /** Removes one watch of the port; false when it had none. */
   private drop(id: string, portId: string): boolean {
     const ports = this.watches.get(id)
@@ -412,15 +673,20 @@ export class ArtifactStore {
     if (!ports || !count) return false
     if (count > 1) ports.set(portId, count - 1)
     else ports.delete(portId)
-    if (ports.size === 0) this.watches.delete(id)
+    if (ports.size === 0) this.unwatched(id)
     return true
   }
 
   portClosed(portId: string): void {
     for (const [id, ports] of [...this.watches]) {
       if (!ports.delete(portId)) continue
-      if (ports.size === 0) this.watches.delete(id)
+      if (ports.size === 0) this.unwatched(id)
       else this.sendActivity(id)
     }
+  }
+
+  private unwatched(id: string): void {
+    this.watches.delete(id)
+    this.deps.unwatched?.(id)
   }
 }

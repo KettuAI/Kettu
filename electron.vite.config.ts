@@ -3,15 +3,18 @@ import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { cn } from 'cn/vite'
+import { pageRuntime } from './tools/build/page-runtime'
 import { thirdPartyNotices } from './tools/build/third-party-notices'
 
 const sharedAlias = { '@shared': resolve('src/shared') }
 const notices = thirdPartyNotices(resolve('.'))
+const runtime = (): ReturnType<typeof pageRuntime> =>
+  pageRuntime(resolve('src/shared/artifact-runtime/runtime.ts'))
 
 export default defineConfig({
   main: {
     resolve: { alias: sharedAlias },
-    plugins: [notices()],
+    plugins: [notices(), runtime()],
   },
   preload: {
     resolve: { alias: sharedAlias },
@@ -34,7 +37,13 @@ export default defineConfig({
       ],
     },
     // Full tables depend only on the theme, so tests can use the committed file as is.
-    plugins: [react(), tailwindcss(), cn({ full: true, out: 'src/lib/cn-tables.ts' }), notices()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      cn({ full: true, out: 'src/lib/cn-tables.ts' }),
+      notices(),
+      runtime(),
+    ],
     build: {
       minify: true,
       rolldownOptions: {

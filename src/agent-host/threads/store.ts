@@ -5,6 +5,7 @@ import type { Worker } from 'node:worker_threads'
 import type { OutlineTitle } from '@shared/agent-host'
 import type { ArtifactState } from '@shared/artifacts'
 import type { ArtifactCall, ArtifactCallName, ArtifactCalls } from '../artifacts/model'
+import type { RuntimeCall, RuntimeCallName, RuntimeCalls } from '../artifacts/runtime/calls'
 import type { RoutineCall, RoutineCallName, RoutineCalls } from '../routines/calls'
 import type { LogFn } from '../storage'
 import type { StoredBlob, StoredOutline, StoredThread, ThreadPage, ThreadWrite } from './model'
@@ -201,6 +202,14 @@ export class ThreadStore {
   ): Promise<ArtifactCalls[K]['result']> {
     // TypeScript cannot pair a generic name with its params inside the union.
     return this.request({ op: 'artifact', call: { name, params } as ArtifactCall })
+  }
+
+  /** A call on the artifacts' declarations, data and consents, which share the database. */
+  runtime<K extends RuntimeCallName>(
+    name: K,
+    params: RuntimeCalls[K]['params'],
+  ): Promise<RuntimeCalls[K]['result']> {
+    return this.request({ op: 'runtime', call: { name, params } as RuntimeCall })
   }
 
   /** A call on the routine runs, which share the database. */

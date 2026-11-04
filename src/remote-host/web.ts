@@ -1,19 +1,25 @@
-// What the direct port answers browsers: the web client's files over HTTP, and its channel as a
-// WebSocket at /channel, each binary message one Noise message. The direct listener hands over
-// each connection that starts with an HTTP request; nothing here listens on its own.
+// What the direct port answers browsers: the web client's files over HTTP, the files of the
+// artifact frames its sessions opened, and its channel as a WebSocket at /channel, each binary
+// message one Noise message. The direct listener hands over each connection that starts with an
+// HTTP request; nothing here listens on its own.
 
 import { createReadStream } from 'node:fs'
-import { readdir, stat } from 'node:fs/promises'
+import { readdir, readFile, stat } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { Socket } from 'node:net'
 import path from 'node:path'
 import type { Duplex } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { WebSocketServer, type WebSocket } from 'ws'
-import { ARTIFACT_CSP, ARTIFACT_PERMISSIONS_POLICY } from '@shared/artifact-policy'
+import { ARTIFACT_ENTRY, artifactFileType, isHtmlPath } from '@shared/artifact-files'
+import { parseServed, servedHtml } from '@shared/artifact-page'
+import { ARTIFACT_PERMISSIONS_POLICY, artifactCsp } from '@shared/artifact-policy'
+import { VIEWER_PREFIX, viewerBase, viewerPage } from '@shared/artifact-types'
+import { matchLocale, type Locale } from '@shared/locale'
 import { MAX_NOISE_MESSAGE } from '@shared/remote/noise'
 import type { Transport } from '@shared/remote/transport'
 import type { LogFn } from '../agent-host/storage'
+import { FRAME_PATH } from './frames'
 import { CLOSE_GRACE_MS, type HandshakeLimits } from './limits'
 import type { RemoteServer } from './server'
 
@@ -71,24 +77,63 @@ const PAGE_HEADERS = {
   'X-Frame-Options': 'DENY',
 }
 
-// The sandbox gives an artifact's frame an opaque origin, but 'self' would still name the web
-// client's, so the artifact's own policy goes without it.
-const FRAME_CSP = [
-  'sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals',
-  "frame-ancestors 'self'",
-  ...ARTIFACT_CSP.split('; ').map((directive) => {
-    const [name, ...sources] = directive.split(' ')
-    const kept = sources.filter((source) => source !== "'self'")
-    return [name, ...(kept.length > 0 ? kept : ["'none'"])].join(' ')
-  }),
-].join('; ')
+/** A Host header as a browser sends it: a name or an address, and a port. */
+const HOST = /^(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(?::[0-9]{1,5})?$/
 
-const FRAME_HEADERS = {
-  'Content-Security-Policy': FRAME_CSP,
-  'Permissions-Policy': ARTIFACT_PERMISSIONS_POLICY,
-  'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'no-referrer',
-  'Cache-Control': 'no-store',
+/**
+ * The policy of an artifact frame's files. The sandbox gives the frame an opaque origin, but
+ * 'self' would still name the web client's whole origin, so the artifact's own sources are its
+ * frame's folder alone, `host` and `folder` as the request named them. A policy cannot name an
+ * IPv6 address, so a page opened on one keeps 'self'. A `strict` one names no CDN.
+ */
+export function frameCsp(host: string, folder: string, strict = false): string {
+  const own = host.startsWith('[') ? "'self'" : `${host}${folder}`
+  return [
+    'sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals',
+    "frame-ancestors 'self'",
+    ...artifactCsp(strict)
+      .split('; ')
+      .map((directive) =>
+        directive
+          .split(' ')
+          .map((source) => (source === "'self'" ? own : source))
+          .join(' '),
+      ),
+  ].join('; ')
+}
+
+/**
+ * The frame's opaque origin makes its requests for its own files cross-origin, which `Origin: null`
+ * tells, so those may read the answer, a missing file's included.
+ */
+function frameCors(request: IncomingMessage): Record<string, string> {
+  return request.headers.origin === 'null'
+    ? { 'Access-Control-Allow-Origin': 'null', Vary: 'Origin' }
+    : { Vary: 'Origin' }
+}
+
+function frameHeaders(
+  request: IncomingMessage,
+  host: string,
+  folder: string,
+  strict: boolean,
+): Record<string, string> {
+  return {
+    'Content-Security-Policy': frameCsp(host, folder, strict),
+    'Permissions-Policy': ARTIFACT_PERMISSIONS_POLICY,
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+    'Cache-Control': 'no-store',
+    ...frameCors(request),
+  }
+}
+
+/** The token and the rest of a frame's path, as escaped in the URL, or null for another path. */
+export function framePath(pathname: string): { token: string; rest: string } | null {
+  if (!pathname.startsWith(FRAME_PATH)) return null
+  const slash = pathname.indexOf('/', FRAME_PATH.length)
+  if (slash < 0) return null
+  return { token: pathname.slice(FRAME_PATH.length, slash), rest: pathname.slice(slash) }
 }
 
 const IMMUTABLE = 'public, max-age=31536000, immutable'
@@ -101,7 +146,10 @@ interface WebFile {
 export interface WebServerOptions {
   /** The folder of the web client's built files, or null in a build without one. */
   root: string | null
-  server: Pick<RemoteServer, 'accept' | 'refusedOne'>
+  /** The type viewers' built files; by default the folder beside the web client's. */
+  viewers?: string | null
+  server: Pick<RemoteServer, 'accept' | 'refusedOne' | 'frameFile'> &
+    Partial<Pick<RemoteServer, 'frameType'>>
   /** The direct port's, which a WebSocket's handshake spends like a TCP connection's. */
   limits: HandshakeLimits
   log: LogFn
@@ -115,6 +163,7 @@ export class WebServer {
   /** HTTP connections, each with the timer that cuts it while it waits for a request. */
   private readonly connections = new Map<Socket, ReturnType<typeof setTimeout> | null>()
   private files: Promise<Map<string, WebFile> | null> | null = null
+  private viewerFiles: Promise<Map<string, WebFile> | null> | null = null
 
   constructor(private readonly options: WebServerOptions) {
     // Any other upgrade, such as curl's h2c, gets an HTTP/1.1 answer, where Node.js has the option.
@@ -185,6 +234,9 @@ export class WebServer {
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return plain(response, 405, 'Only GET and HEAD are allowed.', { Allow: 'GET, HEAD' })
     }
+    const url = URL.parse(request.url ?? '', 'http://host')
+    const frame = url ? framePath(url.pathname) : null
+    if (url && frame) return this.frame(request, response, frame, url.searchParams)
     const files = await this.load()
     const index = files?.get('/index.html')
     if (!files || !index) return plain(response, 503, 'This Kettu has no web client.')
@@ -203,12 +255,80 @@ export class WebServer {
         'Cache-Control': IMMUTABLE,
       })
     }
-    const frame = files.get('/frame.html')
-    if (frame && (pathname === '/frame.html' || pathname.startsWith('/frame/'))) {
-      return send(request, response, frame, FRAME_HEADERS)
-    }
     // The client's own routes, such as /pair, are its page too.
     return send(request, response, file ?? index, { ...PAGE_HEADERS, 'Cache-Control': 'no-cache' })
+  }
+
+  /** A file of the artifact a frame's token names, under the frame's own policy. */
+  private async frame(
+    request: IncomingMessage,
+    response: ServerResponse,
+    { token, rest }: { token: string; rest: string },
+    params: URLSearchParams,
+  ): Promise<void> {
+    const host = request.headers.host
+    if (!host || !HOST.test(host)) return plain(response, 400, 'The host is not valid.')
+    const wanted = parseServed(rest, params)
+    if (!wanted) return plain(response, 404, 'Not found.', frameCors(request))
+    if (wanted.path === ARTIFACT_ENTRY || wanted.path.startsWith(VIEWER_PREFIX)) {
+      const typed = await this.options.server.frameType?.(token, wanted.version)
+      if (typed) {
+        const headers = frameHeaders(request, host, `${FRAME_PATH}${token}/`, false)
+        if (wanted.path.startsWith(VIEWER_PREFIX)) {
+          const viewers = await this.loadViewers()
+          const file = viewers?.get(`/${wanted.path.slice(VIEWER_PREFIX.length)}`)
+          if (!file) return plain(response, 404, 'Not found.', frameCors(request))
+          return send(
+            request,
+            response,
+            { file: file.file, type: artifactFileType(wanted.path) },
+            headers,
+          )
+        }
+        const page = viewerPage(
+          typed.type,
+          typed.version,
+          requestLocale(request),
+          viewerBase(wanted.version),
+        )
+        if (!page) return plain(response, 404, 'Not found.', frameCors(request))
+        const html = servedHtml(page, null, { path: ARTIFACT_ENTRY, transport: 'port' })
+        const body = Buffer.from(html, 'utf8')
+        const type = artifactFileType(ARTIFACT_ENTRY)
+        response.writeHead(200, { ...headers, 'Content-Type': type, 'Content-Length': body.length })
+        return void response.end(request.method === 'HEAD' ? undefined : body)
+      }
+    }
+    const found = await this.options.server.frameFile(token, wanted.version, wanted.path)
+    if (!found) return plain(response, 404, 'Not found.', frameCors(request))
+    const headers = frameHeaders(request, host, `${FRAME_PATH}${token}/`, found.strict)
+    const type = artifactFileType(wanted.path)
+    if (!isHtmlPath(wanted.path)) {
+      return send(request, response, { file: found.file, type }, headers)
+    }
+    // The page's runtime talks to the client over the port it hands the frame, never to this port.
+    const html = servedHtml(await readFile(found.file, 'utf8'), wanted.page, {
+      path: wanted.path,
+      transport: 'port',
+    })
+    const body = Buffer.from(html, 'utf8')
+    response.writeHead(200, { ...headers, 'Content-Type': type, 'Content-Length': body.length })
+    response.end(request.method === 'HEAD' ? undefined : body)
+  }
+
+  /** The type viewers' files, read once, as the web client's are. */
+  private loadViewers(): Promise<Map<string, WebFile> | null> {
+    const { root, log } = this.options
+    // out/viewers lies beside out/web, in the app, the daemon's build and its package alike.
+    const viewers = this.options.viewers ?? (root ? path.join(root, '..', 'viewers') : null)
+    this.viewerFiles ??= viewers
+      ? readRoot(viewers).catch((error: NodeJS.ErrnoException) => {
+          log('warn', `Cannot read the artifact viewers: ${error.message}`)
+          this.viewerFiles = null
+          return null
+        })
+      : Promise.resolve(null)
+    return this.viewerFiles
   }
 
   /** The root's files, read once; requests never reach the file system by their path. */
@@ -257,6 +377,17 @@ function sameOrigin(request: IncomingMessage): boolean {
   if (!page || !host || (page.protocol !== 'http:' && page.protocol !== 'https:')) return false
   // Read with the page's scheme, so a default port drops from both alike.
   return URL.parse(`${page.protocol}//${host}`)?.host === page.host
+}
+
+/** The interface language the browser asks for, which a type's viewer speaks. */
+function requestLocale(request: IncomingMessage): Locale {
+  const header = request.headers['accept-language'] ?? ''
+  const tags = header
+    .slice(0, 512)
+    .split(',')
+    .map((part) => part.split(';')[0]!.trim())
+    .filter((tag) => tag !== '')
+  return matchLocale(tags)
 }
 
 /** The request's path with its dot segments resolved and its escapes decoded, or null. */

@@ -143,6 +143,7 @@ export async function startDaemonAdmin({
     updates: null,
     themes,
     thumbnail: null,
+    png: null,
     remoteAlwaysOn: true,
     send: (event, deviceId) => hosts.adminEvent(event, deviceId),
   })

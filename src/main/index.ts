@@ -450,6 +450,9 @@ async function start(): Promise<void> {
     contentDir: join(userDataPath, 'artifacts', 'content'),
     thumbnailDir: join(userDataPath, 'artifacts', 'thumbnails'),
     importFile: (path, project) => agentHost.artifactImport(path, project),
+    runtime: (id, message, answer) => agentHost.artifactRuntime(id, message, answer),
+    viewersDir: join(__dirname, '../viewers'),
+    exportVersion: (id, version, format) => agentHost.artifactExport(id, version, format),
   })
   await artifacts.install(session.defaultSession)
   // The window's page only: the menu bar panel's shows no media.
@@ -465,6 +468,8 @@ async function start(): Promise<void> {
       content: (id, version) => agentHost.artifactContent(id, version),
       ids: () => agentHost.artifactIds(),
     },
+    viewerFiles: (type, languages) => artifacts.viewers.forPage(type, languages),
+    locale: currentLocale,
     cipher: {
       encrypt: async (text) => (await safeStorage.encryptStringAsync(text)).toString('base64'),
       decrypt: async (encoded) =>
@@ -537,6 +542,8 @@ async function start(): Promise<void> {
     updates: updater,
     themes,
     thumbnail: (id, version, layout) => artifacts.thumbnail(id, version, layout),
+    png: (id, version, page, size) => artifacts.png(id, version, page, size),
+    printPdf: (id, version) => artifacts.printPdf(id, version),
     send: (event, deviceId) => remoteHost.adminEvent(event, deviceId),
   })
 
