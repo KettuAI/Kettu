@@ -41,11 +41,11 @@ const DOT_STEP = 20
 
 const mod = (value: number, step: number): number => (((value % step) + step) % step) - step
 const TITLE_ABOVE = 40
-/** The hover actions' row: three 24 px buttons, over the right of a page's name. */
+/** A page's actions: three 24 px buttons, over the right of its name. */
 const ACTIONS_WIDTH = 80
 const ACTIONS_HEIGHT = 26
 
-/** What a page's hover actions do, in the viewer; the pane shows none. */
+/** What a page's actions do, in the viewer; the pane shows none. */
 export interface PageActions {
   download: ((index: number) => void) | null
   present: (index: number) => void
@@ -93,7 +93,7 @@ export const CanvasView = memo(function CanvasView({
   const layer = useRef<HTMLDivElement>(null)
   const dots = useRef<HTMLDivElement>(null)
   const labels = useRef<(HTMLSpanElement | null)[]>([])
-  const actionsBar = useRef<HTMLDivElement>(null)
+  const actionBars = useRef<(HTMLDivElement | null)[]>([])
   const frames = useRef(new Map<number, HTMLIFrameElement>())
   const editorFrames = useRef(new Map<number, EditorFrame>())
   const pointed = useRef(-1)
@@ -113,9 +113,6 @@ export const CanvasView = memo(function CanvasView({
   const [chosen, setChosen] = useState(false)
   const [keyFocus, setKeyFocus] = useState(false)
   const [hovered, setHovered] = useState(-1)
-  // The page whose hover actions show: the one under the pointer or its name, kept while the
-  // pointer is on the actions themselves.
-  const [actionPage, setActionPage] = useState(-1)
   const [dragging, setDragging] = useState(false)
   const [focusedAt, setFocused] = useState<number | null>(null)
   const { pages, titles } = layout
@@ -143,23 +140,6 @@ export const CanvasView = memo(function CanvasView({
     }
     cancelAnimationFrame(liveFrame.current)
     liveFrame.current = requestAnimationFrame(step)
-  }, [pages])
-
-  const actionsAt = useRef(-1)
-  /** The hover actions over the right end of their page's name row, when it has room. */
-  const placeActions = useCallback(() => {
-    const bar = actionsBar.current
-    const p = pages[actionsAt.current]
-    if (!bar) return
-    const { x, y, z } = camera.current
-    if (!p || p.width * z < ACTIONS_WIDTH + NAME_MIN_WIDTH) {
-      bar.style.visibility = 'hidden'
-      return
-    }
-    bar.style.visibility = ''
-    bar.style.transform =
-      `translate(${(p.x + p.width) * z + x - ACTIONS_WIDTH}px, ` +
-      `${p.y * z + y - LABEL_HEIGHT - (ACTIONS_HEIGHT - LABEL_HEIGHT) / 2 - 3}px)`
   }, [pages])
 
   const draw = useCallback(() => {
@@ -192,18 +172,27 @@ export const CanvasView = memo(function CanvasView({
     })
     pages.forEach((p, i) => {
       const label = labels.current[i]
-      if (!label) return
+      const bar = actionBars.current[i]
       const shown = p.width * z >= NAME_MIN_WIDTH && (p.y === 0 || room.names)
+      // The actions sit at the right end of the name's row, when it has room for both.
+      const withActions = Boolean(actions) && shown && p.width * z >= ACTIONS_WIDTH + NAME_MIN_WIDTH
+      if (bar) {
+        bar.style.visibility = withActions ? '' : 'hidden'
+        if (withActions) {
+          bar.style.transform =
+            `translate(${(p.x + p.width) * z + x - ACTIONS_WIDTH}px, ` +
+            `${p.y * z + y - LABEL_HEIGHT - (ACTIONS_HEIGHT - LABEL_HEIGHT) / 2 - 3}px)`
+        }
+      }
+      if (!label) return
       label.style.visibility = shown ? '' : 'hidden'
       if (!shown) return
       label.style.transform = `translate(${p.x * z + x}px, ${p.y * z + y - LABEL_HEIGHT}px)`
-      // The name leaves room for the actions at the right of its row.
-      label.style.maxWidth = `${p.width * z - (actions ? ACTIONS_WIDTH : 0)}px`
+      label.style.maxWidth = `${p.width * z - (withActions ? ACTIONS_WIDTH : 0)}px`
     })
-    placeActions()
     controls.publish({ zoom: z, fitted: atFit.current })
     syncLive()
-  }, [pages, titles, controls, syncLive, actions, placeActions])
+  }, [pages, titles, controls, syncLive, actions])
 
   const place = useCallback(
     (next: Camera, fit = false) => {
@@ -360,11 +349,6 @@ export const CanvasView = memo(function CanvasView({
       }),
     [controls, zoomAround, fitAll, fitPage],
   )
-
-  useLayoutEffect(() => {
-    actionsAt.current = actionPage
-    placeActions()
-  }, [actionPage, placeActions])
 
   // Reload loads every live page again, in place.
   const [mountedAt] = useState(reloads)
@@ -567,12 +551,6 @@ export const CanvasView = memo(function CanvasView({
               const { sx, sy } = point(event)
               const index = pageAt(pages, camera.current, sx, sy)
               setHovered(index)
-              // A page's name row counts as the page, for its actions.
-              if (actions) {
-                setActionPage(
-                  index >= 0 ? index : pageAt(pages, camera.current, sx, sy + LABEL_HEIGHT),
-                )
-              }
               if (mode) pointAt(index, sx, sy)
               return
             }
@@ -608,10 +586,9 @@ export const CanvasView = memo(function CanvasView({
             press.current = null
             setDragging(false)
           }}
-          onPointerLeave={(event) => {
+          onPointerLeave={() => {
             setHovered(-1)
             if (mode) pointAt(-1, 0, 0)
-            if (!actionsBar.current?.contains(event.relatedTarget as Node | null)) setActionPage(-1)
           }}
           onDoubleClick={(event) => {
             if (mode) return
@@ -648,27 +625,21 @@ export const CanvasView = memo(function CanvasView({
           ))}
         </div>
         {actions && (
-          <div
-            ref={actionsBar}
-            onPointerLeave={(event) => {
-              // Back on the canvas, the pointer picks the page again.
-              const to = event.relatedTarget as Node | null
-              if (!stage.current?.contains(to) || actionsBar.current?.contains(to))
-                setActionPage(-1)
-            }}
-            style={{ width: ACTIONS_WIDTH, height: ACTIONS_HEIGHT }}
-            className={cn(
-              'absolute top-0 left-0 flex items-center justify-end gap-0.5',
-              actionPage < 0 && 'pointer-events-none opacity-0',
-            )}
-          >
-            {actionPage >= 0 && (
-              <>
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            {pages.map((p, i) => (
+              <div
+                key={`${p.group}.${p.index}`}
+                ref={(el) => {
+                  actionBars.current[i] = el
+                }}
+                style={{ width: ACTIONS_WIDTH, height: ACTIONS_HEIGHT }}
+                className="pointer-events-auto absolute top-0 left-0 flex items-center justify-end gap-0.5"
+              >
                 {actions.download && (
                   <BarButton
                     label={t('canvas.downloadPng')}
                     size="pane"
-                    onClick={() => actions.download?.(actionPage)}
+                    onClick={() => actions.download?.(i)}
                   >
                     <DownloadIcon />
                   </BarButton>
@@ -676,7 +647,7 @@ export const CanvasView = memo(function CanvasView({
                 <BarButton
                   label={t('canvas.presentFrom')}
                   size="pane"
-                  onClick={() => actions.present(actionPage)}
+                  onClick={() => actions.present(i)}
                 >
                   <PlayIcon />
                 </BarButton>
@@ -685,15 +656,15 @@ export const CanvasView = memo(function CanvasView({
                   shortcut="↵"
                   size="pane"
                   onClick={() => {
-                    setSelected(actionPage)
+                    setSelected(i)
                     setChosen(true)
-                    setFocused(actionPage)
+                    setFocused(i)
                   }}
                 >
                   <ScanIcon />
                 </BarButton>
-              </>
-            )}
+              </div>
+            ))}
           </div>
         )}
       </div>
