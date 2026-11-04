@@ -167,6 +167,14 @@
   --limit-warn: #e5a000;
   --limit-bad: #dc3f3a;
 
+  /* The context ring: under 50% used, 50 to 79%, 80 to 94%, and 95% or more. */
+  --usage-green: #2b9a3f;
+  --usage-blue: #2a78d6;
+  --usage-orange: #d46a00;
+  --usage-red: #dc3f3a;
+  /* How strongly a ring's disc shows its pie's color under the pie. */
+  --ring-tint: 16%;
+
   /* The account's avatar, a letter on a dark gradient, and the tile Kettu's mark sits on in
      the update card: dark in both themes, with white on them. */
   --avatar-from: #3b4552;
@@ -383,6 +391,12 @@
     --limit-warn: #d4a017;
     --limit-bad: #e5605a;
 
+    --usage-green: #4cc15a;
+    --usage-blue: #3987e5;
+    --usage-orange: #f2a03d;
+    --usage-red: #e5605a;
+    --ring-tint: 24%;
+
     /* The account's avatar, a letter on a dark gradient, and the tile Kettu's mark sits on in
        the update card: dark in both themes, with white on them. */
     --avatar-from: #3b4552;
@@ -562,6 +576,12 @@
   --limit-ok: #3987e5;
   --limit-warn: #d4a017;
   --limit-bad: #e5605a;
+
+  --usage-green: #4cc15a;
+  --usage-blue: #3987e5;
+  --usage-orange: #f2a03d;
+  --usage-red: #e5605a;
+  --ring-tint: 24%;
 
   /* The account's avatar, a letter on a dark gradient, and the tile Kettu's mark sits on in
      the update card: dark in both themes, with white on them. */
