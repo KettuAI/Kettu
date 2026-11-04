@@ -18,6 +18,7 @@ import { endedOnRejection } from '../turn-phase'
 import { attachmentContent, attachmentsBlock } from './attachments'
 import { ControlRow } from './control-row'
 import { hasMessage } from './drafts'
+import { HistoryCard } from './history-card'
 import { levelsOf, type SelectOption } from './levels'
 import { nextChoice, nextMode } from './modes'
 import { OutOfCreditStrip } from './out-of-credit-strip'
@@ -193,6 +194,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
 
   return (
     <div data-composer="" className="flex flex-col">
+      {box.historyEntry && <HistoryCard entry={box.historyEntry} onInsert={box.insertHistory} />}
       <PromptBox
         box={box}
         agentId={session.agentId}

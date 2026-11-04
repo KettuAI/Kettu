@@ -153,6 +153,9 @@
     "folderOtherHost": "这台电脑上的文件夹不能发到另一台主机上的会话，请改为添加里面的文件。",
     "tooLargeOtherHost": "超过 {{limit}}，太大，无法发到另一台主机。"
   },
+  "history": {
+    "label": "历史"
+  },
   "mentions": {
     "used": "本会话用过",
     "toSearch_other": "输入以搜索 {{count, number}} 个文件及其文件夹",

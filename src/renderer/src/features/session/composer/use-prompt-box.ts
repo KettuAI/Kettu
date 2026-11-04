@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import { onAppEvent, type AppEvent } from '@renderer/app/events'
@@ -63,18 +63,14 @@ export function usePromptBox({
   // The caret, or null while a range is selected, for telling which `@` word it is in.
   const [caret, setCaret] = useState<number | null>(null)
   const editor = useRef<ComposerEditorHandle>(null)
-  const { move: moveHistory, reset: resetHistory } = useInputHistory({
+  const {
+    entry: historyEntry,
+    move: moveHistory,
+    close: closeHistory,
+  } = useInputHistory({
     sessionId,
     disabled,
     editor,
-    onRecall: (next) => {
-      setText(next)
-      writeDraft(draft, next)
-      editor.current?.setText(next)
-      setCaret(null)
-      setSlashDismissed(true)
-      setError(null)
-    },
     onError: () => setError(t('prompt.historyFailed')),
   })
   // Only the focused pane's composer takes the events sent to no session in particular.
@@ -140,13 +136,27 @@ export function usePromptBox({
     }
   })
 
+  /** Adds `added` after what the box holds, on lines of its own. */
+  const addText = useCallback(
+    (added: string) => {
+      const current = editor.current?.text() ?? ''
+      const next = current ? `${current.replace(/\s+$/, '')}\n\n${added}` : added
+      setText(next)
+      writeDraft(draft, next)
+      setCaret(null)
+      editor.current?.setText(next)
+      requestAnimationFrame(() => editor.current?.focus())
+    },
+    [draft],
+  )
+
   useEffect(
     () =>
       onAppEvent((event) => {
         onEvent(event)
         if (event.kind === 'focus-composer' && focused.current) editor.current?.focus()
         if (event.kind === 'draft-written' && event.draft === draft) {
-          resetHistory()
+          closeHistory()
           const next = readDraft(draft)
           setText(next)
           setCaret(null)
@@ -156,20 +166,16 @@ export function usePromptBox({
           event.kind === 'insert-into-composer' &&
           (event.sessionId ? event.sessionId === sessionId : focused.current)
         ) {
-          const current = editor.current?.text() ?? ''
-          const next = current ? `${current.replace(/\s+$/, '')}\n\n${event.text}` : event.text
-          setText(next)
-          writeDraft(draft, next)
-          setCaret(null)
-          editor.current?.setText(next)
-          requestAnimationFrame(() => editor.current?.focus())
+          closeHistory()
+          addText(event.text)
         }
       }),
-    [draft, sessionId, resetHistory],
+    [draft, sessionId, closeHistory, addText],
   )
 
   /** Typing changed the text: its state, its draft, and a slash list Esc closed. */
   const changed = (next: string) => {
+    closeHistory()
     setText(next)
     writeDraft(draft, next)
     onActivity?.()
@@ -182,9 +188,22 @@ export function usePromptBox({
     setCaret(at)
   }
 
+  /** Adds the message the history card shows to the box, keeping what is there. */
+  const insertHistory = () => {
+    const added = historyEntry?.text
+    closeHistory()
+    if (added) addText(added)
+  }
+
+  /** The caret moved in the box, which leaves the history card behind. */
+  const moveCaret = (at: number | null) => {
+    closeHistory()
+    setCaret(at)
+  }
+
   /** Empties the box for a send. */
   const take = (): Taken => {
-    resetHistory()
+    closeHistory()
     const prompt = text
     const held = attachments
     setText('')
@@ -250,12 +269,15 @@ export function usePromptBox({
     editor,
     focus: () => editor.current?.focus(),
     changed,
+    historyEntry,
     moveHistory,
+    closeHistory,
+    insertHistory,
     // For the view.
     slashDismissed,
     setSlashDismissed,
     caret,
-    setCaret,
+    setCaret: moveCaret,
     full,
     remote,
     pick,

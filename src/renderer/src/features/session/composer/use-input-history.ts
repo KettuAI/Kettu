@@ -1,56 +1,89 @@
-import { useCallback, useEffect, useRef, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import type { ThreadEntry, ThreadState } from '@shared/thread'
 import { loadOlder, useThreadsStore } from '@renderer/stores/threads'
 import type { ComposerEditorHandle } from './editor'
 
-interface Browsing {
+/** A sent message the card shows, and where it sits among the session's sent messages. */
+export interface InputHistoryEntry {
   id: string
-  draft: string
-  edits: Map<string, string>
+  text: string
+  /** The message's place among the recallable messages, from 1. */
+  index: number
+  count: number
 }
 
+/** The message's text when it can be recalled: sent by the user, with something to type. */
+function recallable(entry: ThreadEntry | undefined): string | null {
+  if (entry?.kind !== 'user' || entry.from) return null
+  const text = entry.content
+    .filter((part) => part.type === 'text')
+    .map((part) => part.text)
+    .join('\n')
+  return text.trim() ? text : null
+}
+
+function entryOf(state: ThreadState, id: string): InputHistoryEntry | null {
+  const text = recallable(state.byId[id])
+  if (text === null) return null
+  let index = 0
+  let count = 0
+  for (const key of state.order) {
+    if (recallable(state.byId[key]) === null) continue
+    count += 1
+    if (key === id) index = count
+  }
+  return index === 0 ? null : { id, text, index, count }
+}
+
+/**
+ * Browsing a session's sent messages from its composer. Up opens the card on the newest message
+ * once the caret is on the box's first line; while it is open the card takes both arrows. The
+ * composer's draft is never touched: the card only shows a message until it is inserted.
+ */
 export function useInputHistory({
   sessionId,
   disabled,
   editor,
-  onRecall,
   onError,
 }: {
   sessionId: string | null
   disabled: boolean
   editor: RefObject<ComposerEditorHandle | null>
-  onRecall: (text: string) => void
   onError: () => void
 }) {
-  const browsing = useRef<Browsing | null>(null)
+  const [entry, setEntry] = useState<InputHistoryEntry | null>(null)
+  // The same message as the state, read while a key is handled, before its render.
+  const shown = useRef<string | null>(null)
   const pending = useRef(false)
   const generation = useRef(0)
-  const reset = useCallback(() => {
-    browsing.current = null
+  const close = useCallback(() => {
+    shown.current = null
     pending.current = false
     generation.current++
+    setEntry(null)
   }, [])
 
-  useEffect(() => reset, [reset, sessionId, disabled])
+  useEffect(() => close, [close, sessionId, disabled])
 
   const move = (forward: boolean): boolean => {
-    const input = editor.current
-    if (!sessionId || disabled || !input?.atBoundary(forward)) return false
+    if (!sessionId || disabled) return false
+    if (shown.current === null && (forward || !editor.current?.atBoundary(false))) return false
     if (pending.current && !forward) return true
     pending.current = false
     const request = ++generation.current
-    const text = input.text()
-    const selection = input.selection()
+    const from = shown.current
+    const input = editor.current
+    const text = input?.text() ?? ''
+    const selection = input?.selection()
     const focused = document.activeElement
-    const current = browsing.current
-    if (current) current.edits.set(current.id, text)
 
     const seek = (): boolean => {
       const replica = useThreadsStore.getState().replicas[sessionId]
       const state = replica?.state
       if (!state) return false
-      const at = current ? state.order.indexOf(current.id) : state.order.length
+      const at = from === null ? state.order.length : state.order.indexOf(from)
       if (at < 0) {
-        reset()
+        close()
         return false
       }
       for (
@@ -58,39 +91,32 @@ export function useInputHistory({
         i >= 0 && i < state.order.length;
         i += forward ? 1 : -1
       ) {
-        const entry = state.byId[state.order[i]!]
-        if (entry?.kind !== 'user' || entry.from) continue
-        const original = entry.content
-          .filter((part) => part.type === 'text')
-          .map((part) => part.text)
-          .join('\n')
-        if (!original.trim()) continue
-        const next = current ?? { id: entry.id, draft: text, edits: new Map<string, string>() }
-        next.id = entry.id
-        browsing.current = next
-        onRecall(next.edits.get(entry.id) ?? original)
+        const next = entryOf(state, state.order[i]!)
+        if (!next) continue
+        shown.current = next.id
+        setEntry(next)
         return true
       }
       if (forward) {
-        if (!current) return false
-        browsing.current = null
-        onRecall(current.draft)
+        if (from === null) return false
+        // Past the newest message the card closes, leaving the draft as it was.
+        close()
         return true
       }
-      if (replica.older === null) return current !== null
+      if (replica.older === null) return from !== null
       const page = loadOlder(sessionId)
       if (!page) return false
       pending.current = true
       void page.then((loaded) => {
         if (request !== generation.current) return
         pending.current = false
-        const now = input.selection()
-        // A delayed page must not replace text the user typed or a selection they moved.
+        const now = editor.current?.selection()
+        // A delayed page must not open the card after the user typed or moved the caret.
         if (
           editor.current !== input ||
-          input.text() !== text ||
-          now.from !== selection.from ||
-          now.to !== selection.to ||
+          (editor.current?.text() ?? '') !== text ||
+          now?.from !== selection?.from ||
+          now?.to !== selection?.to ||
           document.activeElement !== focused
         )
           return
@@ -103,5 +129,5 @@ export function useInputHistory({
     return seek()
   }
 
-  return { move, reset }
+  return { entry, move, close }
 }

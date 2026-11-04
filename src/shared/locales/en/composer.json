@@ -158,6 +158,9 @@
     "folderOtherHost": "A folder on this computer can't go to a session on another host. Attach the files in it instead.",
     "tooLargeOtherHost": "Over {{limit}}, too large to send to another host."
   },
+  "history": {
+    "label": "History"
+  },
   "mentions": {
     "used": "Used in this session",
     "toSearch_one": "Type to search {{count, number}} file and its folders",
