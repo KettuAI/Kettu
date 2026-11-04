@@ -11,7 +11,6 @@ import {
   ExternalLinkIcon,
   FolderIcon,
   GitBranchIcon,
-  GitForkIcon,
   PanelBottomIcon,
   PanelRightIcon,
   PencilIcon,
@@ -39,6 +38,7 @@ import {
   unarchiveSession,
 } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { ForkIcon } from '@renderer/components/fork-icon'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -271,7 +271,7 @@ export function SessionMenuItems({
       case 'fork':
         return (
           <DropdownMenuItem {...props} onClick={() => void forkSession(id)}>
-            <GitForkIcon />
+            <ForkIcon />
             {place === 'more' ? t('row.forkFromHere') : t('row.fork')}
             {shortcut}
           </DropdownMenuItem>

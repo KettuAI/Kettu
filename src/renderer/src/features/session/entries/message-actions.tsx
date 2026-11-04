@@ -1,8 +1,9 @@
 import { memo, useState, type ReactNode } from 'react'
-import { CornerDownRightIcon, GitForkIcon } from 'lucide-react'
+import { CornerDownRightIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { UserContent } from '@shared/thread'
 import { forkSession } from '@renderer/app/actions'
+import { ForkIcon } from '@renderer/components/fork-icon'
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -219,8 +220,7 @@ export const ReplyFooter = memo(
             className={cn(
               'flex min-w-0 items-center gap-0.5',
               REVEAL,
-              // The latest reply keeps its actions in view, under the turn's end.
-              (hovered || forking || latest) && 'opacity-100',
+              (hovered || forking) && 'opacity-100',
             )}
           >
             <CopyButton text={text} label={t('replyFooter.copyReply')} size="icon-sm" />
@@ -230,7 +230,7 @@ export const ReplyFooter = memo(
                 disabled={forking || blocked !== null}
                 onClick={() => void fork()}
               >
-                {forking ? <Spinner /> : <GitForkIcon />}
+                {forking ? <Spinner /> : <ForkIcon />}
               </ActionButton>
             )}
             {(ending || at !== undefined) && (
