@@ -60,7 +60,7 @@ import { useAboveBox } from './above-box'
 import { levelRows, levelsOf, splitName, tierOf, type SelectOption } from './levels'
 import { CheckColumn, DESCRIBED_ROW, ItemText, ROW_BUTTON } from './menu-parts'
 import { mainModels, numberedModel, shownChoice, shownValue, splitModels } from './model-list'
-import { modeLook } from './modes'
+import { modeLook, numberedMode } from './modes'
 import { CacheButton, ContextButton } from './usage'
 
 /** Asks the agent to change an option; resolves to whether it did. */
@@ -246,8 +246,17 @@ export function OptionMenu({
   const look = modeLook(value)
   const Icon = MODE_ICON[look]
   const [setAnchor, aboveBox] = useAboveBox()
+  const [open, setOpen] = useState(false)
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!isMode || event.metaKey || event.ctrlKey || event.altKey) return
+    const choice = numberedMode(option.choices, event.key)
+    if (!choice) return
+    event.preventDefault()
+    pick(choice.value)
+    setOpen(false)
+  }
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger
         render={
           <Button
@@ -273,13 +282,14 @@ export function OptionMenu({
         alignOffset={isMode && side === 'top' ? -8 : 0}
         sideOffset={side === 'top' ? aboveBox : 6}
         aria-label={option.name}
+        onKeyDown={onKeyDown}
         className={isMode ? 'w-85' : 'w-64'}
       >
         <DropdownMenuGroup>
           {/* Each mode says what it does, so the menu needs no heading. */}
           {!isMode && <DropdownMenuLabel>{option.name}</DropdownMenuLabel>}
           <DropdownMenuRadioGroup value={value} onValueChange={(v) => pick(String(v))}>
-            {option.choices.map((choice) => {
+            {option.choices.map((choice, index) => {
               const ChoiceIcon = MODE_ICON[modeLook(choice.value)]
               return (
                 <CheckRow
@@ -287,6 +297,7 @@ export function OptionMenu({
                   value={choice.value}
                   described={!!choice.description}
                   checkAt={isMode ? 'end' : 'start'}
+                  shortcut={isMode && index < 9 ? index + 1 : undefined}
                 >
                   {isMode && <ChoiceIcon strokeWidth={1.4} />}
                   <ItemText
@@ -317,17 +328,20 @@ export function OptionMenu({
 /**
  * A choice with its check in a column. The column leads the row; rows that lead with an icon of
  * their own put it after the text (`checkAt="end"`), so no empty column sits before the icons.
+ * `shortcut` is the number key that chooses the row, shown at its end.
  */
 function CheckRow({
   value,
   described = false,
   checkAt = 'start',
+  shortcut,
   className,
   children,
 }: {
   value: string
   described?: boolean
   checkAt?: 'start' | 'end'
+  shortcut?: number
   className?: string
   children: ReactNode
 }) {
@@ -342,6 +356,7 @@ function CheckRow({
     <DropdownMenuRadioItem
       value={value}
       closeOnClick
+      aria-keyshortcuts={shortcut === undefined ? undefined : String(shortcut)}
       className={cn(
         'pr-2 *:data-[slot=dropdown-menu-radio-item-indicator]:hidden',
         described && DESCRIBED_ROW,
@@ -351,6 +366,11 @@ function CheckRow({
       {checkAt === 'start' && check}
       {children}
       {checkAt === 'end' && check}
+      {shortcut !== undefined && (
+        <span aria-hidden className="w-3 shrink-0 text-center text-tertiary">
+          {shortcut}
+        </span>
+      )}
     </DropdownMenuRadioItem>
   )
 }

@@ -20,6 +20,11 @@ export function modeLook(value: string | undefined): ModeLook {
   return (value !== undefined && Object.hasOwn(LOOKS, value) && LOOKS[value]) || 'asks'
 }
 
+/** The mode a number key chooses, 1 for the first to 9 for the ninth. */
+export function numberedMode<T>(choices: readonly T[], key: string): T | undefined {
+  return /^[1-9]$/.test(key) ? choices[Number(key) - 1] : undefined
+}
+
 /** The mode after `value` in the agent's order, round from the last to the first. */
 export function nextChoice(
   choices: readonly { value: string }[],
