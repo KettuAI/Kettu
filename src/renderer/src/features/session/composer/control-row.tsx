@@ -104,7 +104,6 @@ function usePick(
 export function ControlRow({
   session,
   addMenu,
-  onCompact,
   ultracode = false,
   modelMenu,
   outOfCredit = false,
@@ -112,7 +111,6 @@ export function ControlRow({
   session: SessionView
   /** **+**, first in the row. */
   addMenu: ReactNode
-  onCompact: (() => void) | null
   /** The draft turns on Claude Code's ultracode for its message. */
   ultracode?: boolean
   /** The model menu's open state, so the out-of-credit strip can open it. */
@@ -205,7 +203,6 @@ export function ControlRow({
         context={session.context}
         limits={agent?.limits ?? []}
         account={agent?.account ?? null}
-        onCompact={onCompact}
       />
     </div>
   )

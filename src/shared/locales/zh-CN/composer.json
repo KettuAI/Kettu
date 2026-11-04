@@ -65,9 +65,7 @@
       "reasoning": "推理",
       "cacheRead": "缓存读取",
       "cacheWrite": "缓存写入",
-      "compact": "立即压缩",
       "ofUsed": "上下文已用",
-      "compactsAt": "用到 {{percent}}% 时自动压缩",
       "tokens": "{{tokens}} tokens"
     },
     "breakdown": {

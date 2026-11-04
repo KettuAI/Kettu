@@ -65,9 +65,7 @@
       "reasoning": "Reasoning",
       "cacheRead": "Cache read",
       "cacheWrite": "Cache write",
-      "compact": "Compact now",
       "ofUsed": "of context used",
-      "compactsAt": "Compacts on its own at {{percent}}%",
       "tokens": "{{tokens}} tokens"
     },
     "breakdown": {

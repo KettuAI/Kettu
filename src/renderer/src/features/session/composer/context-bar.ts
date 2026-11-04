@@ -147,10 +147,3 @@ export function breakdownView(
   }
   return { kind: 'loading' }
 }
-
-/** The share of the context at which the agent compacts on its own: all but its buffer. */
-export function compactsAt(rows: readonly ContextRow[] | null, size: number): number | null {
-  const buffer = rows?.find((row) => row.part.kind === 'buffer')
-  if (!buffer || size <= 0) return null
-  return Math.floor(((size - buffer.tokens) / size) * 100)
-}
