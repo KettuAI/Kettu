@@ -233,6 +233,8 @@ describe('the Claude Agent SDK driver', () => {
           name: 'kettu',
           url: 'http://127.0.0.1:9/mcp',
           headers: [{ name: 'X-Key', value: 'k' }],
+          autoAllow: ['set_plan'],
+          prompt: 'Plan first.',
         },
       ],
       ultracode: true,
@@ -248,6 +250,8 @@ describe('the Claude Agent SDK driver', () => {
       mcpServers: {
         kettu: { type: 'http', url: 'http://127.0.0.1:9/mcp', headers: { 'X-Key': 'k' } },
       },
+      allowedTools: ['mcp__kettu__set_plan'],
+      systemPrompt: { type: 'preset', preset: 'claude_code', append: 'Plan first.' },
       settings: { ultracode: true },
       extraArgs: { 'replay-user-messages': null },
     })
@@ -602,6 +606,34 @@ describe('a turn', () => {
         ],
       },
     ])
+  })
+
+  it('shows no row for the call of the plan tool', async () => {
+    s.sdk.script = (query) => {
+      query.running()
+      query.emit(
+        assistant(query, 'msg_1', [
+          {
+            type: 'tool_use',
+            id: 'toolu_3',
+            name: 'mcp__kettu__set_plan',
+            input: { steps: [{ content: 'Read', status: 'pending' }] },
+          },
+        ]),
+      )
+      query.emit({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_3', content: 'Plan saved.' }],
+        },
+        parent_tool_use_id: null,
+        session_id: query.sessionId,
+      } as SdkMessage)
+      query.finish()
+    }
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+    expect(target.entries()).toEqual([])
   })
 
   it('fails a turn that needs a sign-in, and reads the sign-in again before the next one', async () => {

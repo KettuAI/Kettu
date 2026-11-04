@@ -782,6 +782,10 @@ export class ClaudeConnection implements AgentConnection {
         },
       ]),
     )
+    const allowedTools = (options.mcpServers ?? []).flatMap((server) =>
+      (server.autoAllow ?? []).map((tool) => `mcp__${server.name}__${tool}`),
+    )
+    const prompts = (options.mcpServers ?? []).flatMap((server) => server.prompt ?? [])
     const queryOptions: QueryOptions = {
       cwd,
       env: {
@@ -806,10 +810,15 @@ export class ClaudeConnection implements AgentConnection {
       forwardSubagentText: true,
       perTaskStopAffordance: true,
       settingSources: sources,
-      systemPrompt: { type: 'preset', preset: 'claude_code' },
+      systemPrompt: {
+        type: 'preset',
+        preset: 'claude_code',
+        ...(prompts.length > 0 && !bare ? { append: prompts.join('\n\n') } : {}),
+      },
       // A question from a page gets no tool at all: it cannot read, change or run anything.
       tools: bare ? [] : { type: 'preset', preset: 'claude_code' },
       ...(bare ? { strictMcpConfig: true } : {}),
+      ...(allowedTools.length > 0 && !bare ? { allowedTools } : {}),
       permissionMode: mode,
       allowDangerouslySkipPermissions: allowBypass,
       canUseTool: (name, toolInput, permission) =>

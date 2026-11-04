@@ -230,6 +230,8 @@ describe('sessions', () => {
           name: 'kettu',
           url: 'http://127.0.0.1:9/mcp',
           headers: [{ name: 'Authorization', value: 'Bearer t' }],
+          autoAllow: ['set_plan'],
+          prompt: 'Plan first.',
         },
       ],
     })
@@ -242,9 +244,14 @@ describe('sessions', () => {
       config: {
         projects: { '/project': { trust_level: 'trusted' } },
         mcp_servers: {
-          kettu: { url: 'http://127.0.0.1:9/mcp', http_headers: { Authorization: 'Bearer t' } },
+          kettu: {
+            url: 'http://127.0.0.1:9/mcp',
+            http_headers: { Authorization: 'Bearer t' },
+            tools: { set_plan: { approval_mode: 'approve' } },
+          },
         },
       },
+      developerInstructions: 'Plan first.',
       ephemeral: false,
       experimentalRawEvents: false,
     })

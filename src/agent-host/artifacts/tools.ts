@@ -162,6 +162,8 @@ export class ToolError extends Error {
 export interface Caller {
   sessionId: string
   project: string
+  /** The call came from a subagent that runs under the session instead of being a session. */
+  subagent?: boolean
 }
 
 export interface ArtifactToolsDeps {
