@@ -64,6 +64,7 @@ export const CanvasView = memo(function CanvasView({
   reloads,
   controls,
   top = 0,
+  bottom = 0,
   onEscape,
   editor,
   actions,
@@ -77,6 +78,8 @@ export const CanvasView = memo(function CanvasView({
   controls: CanvasControls
   /** Screen pixels at the top that a bar covers, kept clear when fitting. */
   top?: number
+  /** Screen pixels at the bottom that a toolbar covers, kept clear when fitting. */
+  bottom?: number
   /** Esc on the canvas itself, after a focused page has been left. */
   onEscape?: () => void
   /** Select and comment mode, where the canvas can show them. */
@@ -236,19 +239,24 @@ export const CanvasView = memo(function CanvasView({
         { x: 0, y: 0, width: layout.width, height: layout.height },
         view.current,
         top,
+        bottom,
       )
       if (glides) moveTo(target, true)
       else place(target, true)
     },
-    [layout.width, layout.height, top, moveTo, place],
+    [layout.width, layout.height, top, bottom, moveTo, place],
   )
 
   const fitPage = useCallback(
     (index: number) => {
       const p = pages[index]
-      if (p) moveTo(fitBox({ x: p.x, y: p.y, width: p.width, height: p.height }, view.current, top))
+      if (p) {
+        moveTo(
+          fitBox({ x: p.x, y: p.y, width: p.width, height: p.height }, view.current, top, bottom),
+        )
+      }
     },
-    [pages, top, moveTo],
+    [pages, top, bottom, moveTo],
   )
 
   const zoomAround = useCallback(
@@ -366,14 +374,16 @@ export const CanvasView = memo(function CanvasView({
     for (const frame of frames.current.values()) frame.setAttribute('src', frame.src)
   }, [reloads, mountedAt])
 
-  useEffect(
-    () => () => {
+  // Effects may run again on the same canvas, as React's development checks do, which must not
+  // leave the live pages it was loading unloaded.
+  useEffect(() => {
+    syncLive()
+    return () => {
       glideTo.current?.stop()
       cancelAnimationFrame(liveFrame.current)
       clearTimeout(settle.current)
-    },
-    [],
-  )
+    }
+  }, [syncLive])
 
   // The wheel pans, and zooms with Mod or a pinch, which Chromium sends as Ctrl and the wheel.
   useEffect(() => {

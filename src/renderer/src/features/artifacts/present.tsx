@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -40,17 +40,18 @@ export function Presenter({
   const count = pages?.length ?? 1
   const page = pages?.[index] ?? null
   const stage = useRef<HTMLDivElement>(null)
+  // The popup mounts after this component, so the stage is observed once it exists.
+  const [stageEl, setStageEl] = useState<HTMLDivElement | null>(null)
   const [size, setSize] = useState<{ width: number; height: number } | null>(null)
 
-  useLayoutEffect(() => {
-    const el = stage.current
-    if (!el) return
+  useEffect(() => {
+    if (!stageEl) return
     const observer = new ResizeObserver(([entry]) => {
       if (entry) setSize({ width: entry.contentRect.width, height: entry.contentRect.height })
     })
-    observer.observe(el)
+    observer.observe(stageEl)
     return () => observer.disconnect()
-  }, [])
+  }, [stageEl])
 
   const move = (step: number) => setIndex((at) => Math.max(0, Math.min(count - 1, at + step)))
   const name = pages ? pageName(index) : title
@@ -81,11 +82,14 @@ export function Presenter({
             else return
             event.preventDefault()
           }}
-          className="fixed inset-0 z-50 flex animate-in flex-col bg-viewer-scrim text-foreground outline-none fade-in duration-(--duration-fast) app-region-no-drag"
+          className="fixed inset-0 z-50 flex animate-in flex-col bg-app text-foreground outline-none fade-in duration-(--duration-fast) app-region-no-drag"
         >
           <DialogTitle className="sr-only">{t('present.label', { title })}</DialogTitle>
           <div
-            ref={stage}
+            ref={(el) => {
+              stage.current = el
+              setStageEl(el)
+            }}
             tabIndex={-1}
             className="relative flex min-h-0 flex-1 items-center justify-center outline-none"
             style={{ paddingBottom: page ? BAR_ROOM - MARGIN / 2 : 0 }}

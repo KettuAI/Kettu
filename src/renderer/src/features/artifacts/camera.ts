@@ -47,10 +47,10 @@ export function atMaxZoom(z: number): boolean {
 }
 
 /** The camera that shows `box` whole and centred, never above 100%; `top` is covered by a bar. */
-export function fitBox(box: Box, view: Size, top = 0): Camera {
+export function fitBox(box: Box, view: Size, top = 0, bottom = 0): Camera {
   const room = {
     width: view.width - 2 * FIT_SIDE,
-    height: view.height - top - FIT_ABOVE - FIT_BELOW,
+    height: view.height - top - bottom - FIT_ABOVE - FIT_BELOW,
   }
   const z = clampZoom(
     Math.min(1, room.width / Math.max(1, box.width), room.height / Math.max(1, box.height)),

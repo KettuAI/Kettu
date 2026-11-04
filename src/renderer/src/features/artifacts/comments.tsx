@@ -133,7 +133,8 @@ export function CommentBox({
       style={{ width: BOX_WIDTH, left: at?.left ?? 0, top: at?.top ?? 0 }}
       className={cn(
         'absolute z-20 flex animate-in flex-col gap-2.5 rounded-2xl bg-popover p-3 shadow-menu fade-in duration-(--duration-fast)',
-        !at && 'invisible',
+        // Placed after its first layout; invisible would keep the text box from taking the focus.
+        !at && 'pointer-events-none opacity-0',
       )}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {

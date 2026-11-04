@@ -64,6 +64,8 @@ import {
 
 /** The bar over the page, for an earlier version or one in Recently deleted, and a gap under it. */
 const BAR_ROOM = 64
+/** The floating toolbar under a canvas, beyond the room a fit already leaves. */
+const TOOLBAR_ROOM = 32
 
 /** The viewer's Back: to what the main area showed before the artifact. */
 function leaveArtifact(): void {
@@ -124,10 +126,12 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
     editor.setPins(pinsShown ? pinsOf(threads, shown) : () => [])
   }, [editor, shown, threads, pinsShown])
 
-  // Only the latest version, outside Recently deleted, is commented on and edited.
+  // Only the latest version, outside Recently deleted, is commented on and edited; a new version
+  // arriving keeps the mode.
+  const leftLatest = earlier !== null || states.inTrash
   useEffect(() => {
-    if (!latest) editor?.setMode(null)
-  }, [latest, editor])
+    if (leftLatest) editor?.setMode(null)
+  }, [leftLatest, editor])
 
   const pageName = useMemo(
     () => (shown?.canvas ? canvasPageName(shown, (number) => t('canvas.page', { number })) : null),
@@ -269,6 +273,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
           since={since}
           controls={controls}
           top={bar ? BAR_ROOM : 0}
+          bottom={TOOLBAR_ROOM}
           onEscape={leaveArtifact}
           editor={latest ? (editor ?? undefined) : undefined}
           actions={actions}

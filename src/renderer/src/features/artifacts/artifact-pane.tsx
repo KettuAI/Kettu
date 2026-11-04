@@ -45,8 +45,6 @@ import { canvasPageName, useArtifact, useArtifactStates, useListsRead } from './
 import { useComments } from './use-comments'
 import { ArtifactSurface, CanvasBarControls, Presence } from './viewer-parts'
 
-const PRESSED = 'aria-pressed:bg-selected aria-pressed:text-foreground'
-
 /**
  * An artifact beside the thread, opened from a tool call's row, so the page reloads in view while
  * the agent keeps changing it. Esc leaves a focused page and never closes the pane.
@@ -78,8 +76,8 @@ export default function ArtifactPane({
   const { threads } = useComments(editing.mode === 'comment' ? id : null)
 
   useEffect(() => {
-    if (!latest) editor?.setMode(null)
-  }, [latest, editor])
+    if (states.inTrash) editor?.setMode(null)
+  }, [states.inTrash, editor])
 
   useEffect(() => {
     if (!editor || !shown) return
@@ -241,7 +239,6 @@ export default function ArtifactPane({
                   label={t('tools.select')}
                   shortcut="V"
                   pressed={editing.mode === 'select'}
-                  className={PRESSED}
                   onClick={() => editor.toggle('select')}
                 >
                   <MousePointer2Icon />
@@ -250,7 +247,6 @@ export default function ArtifactPane({
                   label={t('tools.comment')}
                   shortcut="C"
                   pressed={editing.mode === 'comment'}
-                  className={PRESSED}
                   onClick={() => editor.toggle('comment')}
                 >
                   <MessageSquareIcon />

@@ -158,11 +158,11 @@ export function EditPanel({
   const { t } = useTranslation('artifacts')
   const { selection } = picked
   const source = useSource(id, version, selection.path)
-  const tag =
-    source && source !== 'failed' && selection.src !== null
-      ? startTagAt(source, selection.src)
-      : null
-  const element = tag && tag.name === selection.tag ? tag : null
+  const element = useMemo(() => {
+    if (!source || source === 'failed' || selection.src === null) return null
+    const tag = startTagAt(source, selection.src)
+    return tag && tag.name === selection.tag ? tag : null
+  }, [source, selection.src, selection.tag])
 
   const start = useMemo<Fields>(() => {
     const range = element && typeof source === 'string' ? textContentRange(source, element) : null
@@ -422,6 +422,13 @@ function ColorInput({ value, onChange }: { value: string; onChange: (value: stri
   const css = cssOf('color', value)
   return (
     <span className="relative flex">
+      {/* No color yet: an empty swatch, as the picker itself can only show one. */}
+      {!css && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute top-1/2 left-2 size-4.5 -translate-y-1/2 rounded-sm border border-dashed border-strong"
+        />
+      )}
       <input
         type="color"
         tabIndex={-1}
@@ -431,6 +438,7 @@ function ColorInput({ value, onChange }: { value: string; onChange: (value: stri
         className={cn(
           'absolute top-1/2 left-2 size-4.5 -translate-y-1/2 cursor-pointer rounded-sm border-0 bg-transparent p-0',
           '[&::-webkit-color-swatch]:rounded-sm [&::-webkit-color-swatch]:border-(--border-default) [&::-webkit-color-swatch-wrapper]:p-0',
+          !css && 'opacity-0',
         )}
       />
       <Input

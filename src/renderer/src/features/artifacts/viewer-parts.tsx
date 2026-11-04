@@ -680,6 +680,7 @@ export function ArtifactSurface({
   since,
   controls,
   top,
+  bottom,
   onEscape,
   editor,
   actions,
@@ -692,6 +693,8 @@ export function ArtifactSurface({
   since: number
   controls: CanvasControls
   top: number
+  /** Room the toolbar over a canvas takes at the bottom. */
+  bottom?: number
   onEscape?: () => void
   editor?: ArtifactEditor
   actions?: PageActions
@@ -708,6 +711,7 @@ export function ArtifactSurface({
         reloads={reloads}
         controls={controls}
         top={top}
+        bottom={bottom}
         onEscape={onEscape}
         editor={editor}
         actions={actions}
