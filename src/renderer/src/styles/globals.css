@@ -886,6 +886,287 @@
   }
 }
 
+/* The jump-to-latest button (features/session/jump-to-latest.tsx): the running turn's nine dots,
+   moved into a shape for each mark. Every offset is from the dot's cell in the 36 px box. */
+[data-jump-dots] {
+  overflow: visible;
+}
+[data-jump-dots] g {
+  transition: transform var(--duration-base) var(--ease-standard);
+}
+[data-jump-dots] g circle {
+  fill: var(--text-primary);
+  opacity: 0.22;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    transform 360ms var(--ease-standard),
+    opacity var(--duration-base) var(--ease-standard),
+    fill 250ms var(--ease-standard);
+}
+[data-jump-dots] g circle:nth-child(2) {
+  transition-delay: 18ms;
+}
+[data-jump-dots] g circle:nth-child(3) {
+  transition-delay: 36ms;
+}
+[data-jump-dots] g circle:nth-child(4) {
+  transition-delay: 18ms;
+}
+[data-jump-dots] g circle:nth-child(5) {
+  transition-delay: 36ms;
+}
+[data-jump-dots] g circle:nth-child(6) {
+  transition-delay: 54ms;
+}
+[data-jump-dots] g circle:nth-child(7) {
+  transition-delay: 36ms;
+}
+[data-jump-dots] g circle:nth-child(8) {
+  transition-delay: 54ms;
+}
+[data-jump-dots] g circle:nth-child(9) {
+  transition-delay: 72ms;
+}
+[data-jump-dots] [data-halo] {
+  fill: var(--attention-dot);
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+[data-jump]:is([data-mark='running'], [data-mark='ended']) g circle {
+  fill: var(--focus);
+}
+[data-jump][data-mark='waiting'] g circle {
+  fill: var(--attention-dot);
+}
+[data-jump][data-mark='failed'] g circle {
+  fill: var(--danger);
+}
+[data-jump]:is(:hover, :focus-visible):not([data-mark='ended']) g circle {
+  fill: var(--text-primary);
+}
+[data-jump][data-shape='grid']:is(:hover, :focus-visible) g circle {
+  animation: none !important;
+}
+[data-jump][data-shape='center'] g circle:nth-child(1) {
+  transform: translate(5.5px, 5.5px);
+  opacity: 0;
+}
+[data-jump][data-shape='center'] g circle:nth-child(2) {
+  transform: translate(0, 5.5px);
+  opacity: 0;
+}
+[data-jump][data-shape='center'] g circle:nth-child(3) {
+  transform: translate(-5.5px, 5.5px);
+  opacity: 0;
+}
+[data-jump][data-shape='center'] g circle:nth-child(4) {
+  transform: translate(5.5px, 0);
+  opacity: 0;
+}
+[data-jump][data-shape='center'] g circle:nth-child(5) {
+  transform: translate(0, 0) scale(2.35);
+  opacity: 1;
+}
+[data-jump][data-shape='center'] g circle:nth-child(6) {
+  transform: translate(-5.5px, 0);
+  opacity: 0;
+}
+[data-jump][data-shape='center'] g circle:nth-child(7) {
+  transform: translate(5.5px, -5.5px);
+  opacity: 0;
+}
+[data-jump][data-shape='center'] g circle:nth-child(8) {
+  transform: translate(0, -5.5px);
+  opacity: 0;
+}
+[data-jump][data-shape='center'] g circle:nth-child(9) {
+  transform: translate(-5.5px, -5.5px);
+  opacity: 0;
+}
+[data-jump][data-shape='bang'] g circle:nth-child(1) {
+  transform: translate(5.5px, -2.5px);
+  opacity: 0;
+}
+[data-jump][data-shape='bang'] g circle:nth-child(2) {
+  transform: translate(0, -2.5px);
+  opacity: 1;
+}
+[data-jump][data-shape='bang'] g circle:nth-child(3) {
+  transform: translate(-5.5px, -2.5px);
+  opacity: 0;
+}
+[data-jump][data-shape='bang'] g circle:nth-child(4) {
+  transform: translate(5.5px, 1px);
+  opacity: 1;
+}
+[data-jump][data-shape='bang'] g circle:nth-child(5) {
+  transform: translate(0, -3.5px);
+  opacity: 1;
+}
+[data-jump][data-shape='bang'] g circle:nth-child(6) {
+  transform: translate(-5.5px, 1px);
+  opacity: 0;
+}
+[data-jump][data-shape='bang'] g circle:nth-child(7) {
+  transform: translate(5.5px, 2px);
+  opacity: 0;
+}
+[data-jump][data-shape='bang'] g circle:nth-child(8) {
+  transform: translate(0, 2px);
+  opacity: 1;
+}
+[data-jump][data-shape='bang'] g circle:nth-child(9) {
+  transform: translate(-5.5px, 2px);
+  opacity: 0;
+}
+[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(1) {
+  transform: translate(5.5px, -1.5px);
+  opacity: 0;
+}
+[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(2) {
+  transform: translate(0, -1.5px);
+  opacity: 1;
+}
+[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(3) {
+  transform: translate(-5.5px, -1.5px);
+  opacity: 0;
+}
+[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(4) {
+  transform: translate(0.5px, 2px);
+  opacity: 1;
+}
+[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(5) {
+  transform: translate(0, -2px);
+  opacity: 1;
+}
+[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(6) {
+  transform: translate(-0.5px, 2px);
+  opacity: 1;
+}
+[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(7) {
+  transform: translate(5.5px, 1.5px);
+  opacity: 0;
+}
+[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(8) {
+  transform: translate(0, 1.5px);
+  opacity: 1;
+}
+[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(9) {
+  transform: translate(-5.5px, 1.5px);
+  opacity: 0;
+}
+[data-jump][data-active='false'] g circle:nth-child(1) {
+  transform: translate(5.5px, 5.5px) scale(0.3) !important;
+  opacity: 0 !important;
+}
+[data-jump][data-active='false'] g circle:nth-child(2) {
+  transform: translate(0, 5.5px) scale(0.3) !important;
+  opacity: 0 !important;
+}
+[data-jump][data-active='false'] g circle:nth-child(3) {
+  transform: translate(-5.5px, 5.5px) scale(0.3) !important;
+  opacity: 0 !important;
+}
+[data-jump][data-active='false'] g circle:nth-child(4) {
+  transform: translate(5.5px, 0) scale(0.3) !important;
+  opacity: 0 !important;
+}
+[data-jump][data-active='false'] g circle:nth-child(5) {
+  transform: translate(0, 0) scale(0.3) !important;
+  opacity: 0 !important;
+}
+[data-jump][data-active='false'] g circle:nth-child(6) {
+  transform: translate(-5.5px, 0) scale(0.3) !important;
+  opacity: 0 !important;
+}
+[data-jump][data-active='false'] g circle:nth-child(7) {
+  transform: translate(5.5px, -5.5px) scale(0.3) !important;
+  opacity: 0 !important;
+}
+[data-jump][data-active='false'] g circle:nth-child(8) {
+  transform: translate(0, -5.5px) scale(0.3) !important;
+  opacity: 0 !important;
+}
+[data-jump][data-active='false'] g circle:nth-child(9) {
+  transform: translate(-5.5px, -5.5px) scale(0.3) !important;
+  opacity: 0 !important;
+}
+[data-jump][data-mark='idle']:hover g {
+  transform: translateY(1.5px);
+}
+[data-jump][data-mark='waiting'] {
+  box-shadow: var(--attention-ring-shadow);
+}
+[data-jump][data-mark='waiting']:not(:hover, :focus-visible) [data-halo] {
+  animation: jump-halo 1.8s var(--ease-standard) 0.4s infinite;
+}
+[data-jump][data-mark='ended'] g {
+  animation: jump-nudge 420ms cubic-bezier(0.3, 0, 0.3, 1) 800ms both;
+}
+[data-jump][data-mark='ended'] g circle:nth-child(2) {
+  animation: jump-pour 260ms ease-out 300ms both;
+}
+[data-jump][data-mark='ended'] g circle:nth-child(5) {
+  animation: jump-pour 260ms ease-out 380ms both;
+}
+[data-jump][data-mark='ended'] g :is(circle:nth-child(4), circle:nth-child(6)) {
+  animation: jump-pour 260ms ease-out 460ms both;
+}
+[data-jump][data-mark='ended'] g circle:nth-child(8) {
+  animation: jump-pour 260ms ease-out 540ms both;
+}
+[data-jump][data-mark='failed'] {
+  animation: jump-shake 420ms cubic-bezier(0.36, 0.07, 0.19, 0.97) 340ms both;
+}
+@keyframes jump-halo {
+  0% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  80%,
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+@keyframes jump-pour {
+  from {
+    opacity: 0.2;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes jump-nudge {
+  0%,
+  100% {
+    transform: none;
+  }
+  45% {
+    transform: translateY(2.5px);
+  }
+}
+@keyframes jump-shake {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: translateX(-3px);
+  }
+  40% {
+    transform: translateX(3px);
+  }
+  60% {
+    transform: translateX(-2px);
+  }
+  80% {
+    transform: translateX(1.5px);
+  }
+}
+
 /* Reduce motion: movement and loops stop; opacity and color changes remain. The transform
    variables do not inherit, so they are reset on every element. */
 @media (prefers-reduced-motion: reduce) {
@@ -912,6 +1193,17 @@
   /* Held, not removed: each dot keeps the frame its delay starts it on. */
   [data-turn-dots] circle {
     animation-play-state: paused !important;
+  }
+  /* The jump button's dots hold their frame and change shape at once; it neither shakes nor pulses. */
+  [data-jump-dots] g circle {
+    animation-play-state: paused !important;
+    transition-duration: 0s !important;
+  }
+  [data-jump],
+  [data-jump-dots] g,
+  [data-jump-dots] [data-halo],
+  [data-jump][data-mark='ended'] g circle {
+    animation: none !important;
   }
   [data-slot='collapsible-content'] {
     transition-duration: 0s !important;
@@ -940,6 +1232,16 @@
   }
   & [data-turn-dots] circle {
     animation-play-state: paused !important;
+  }
+  & [data-jump-dots] g circle {
+    animation-play-state: paused !important;
+    transition-duration: 0s !important;
+  }
+  & [data-jump],
+  & [data-jump-dots] g,
+  & [data-jump-dots] [data-halo],
+  & [data-jump][data-mark='ended'] g circle {
+    animation: none !important;
   }
   & [data-slot='collapsible-content'] {
     transition-duration: 0s !important;

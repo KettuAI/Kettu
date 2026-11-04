@@ -2,7 +2,6 @@ import { memo, startTransition, useCallback, useEffect, useMemo, useRef, useStat
 import { useTranslation } from 'react-i18next'
 import {
   MessageScroller,
-  MessageScrollerButton,
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerProvider,
@@ -17,6 +16,7 @@ import { Entry } from './entries/entry'
 import { ReplyFooter } from './entries/message-actions'
 import { RunGroup } from './entries/run-group'
 import { ToolGroup } from './entries/tool-group'
+import { JumpToLatest } from './jump-to-latest'
 import { MessageOutline } from './outline/message-outline'
 import { hoverReply } from './reply-hover'
 import { SubSessionStart } from './subagent/sub-session-start'
@@ -274,11 +274,7 @@ export const Thread = memo(function Thread({
             })}
           </MessageScrollerContent>
         </MessageScrollerViewport>
-        <MessageScrollerButton
-          variant="outline"
-          size="icon-sm"
-          className="rounded-full bg-card shadow-menu"
-        />
+        <JumpToLatest sessionId={sessionId} working={working} />
         <OlderLoading sessionId={sessionId} />
         <MessageOutline sessionId={sessionId} viewport={viewport} content={content} jumps={jumps} />
       </MessageScroller>

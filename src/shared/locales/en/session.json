@@ -426,6 +426,12 @@
     "outline": {
       "label_one": "Outline, {{count}} message",
       "label_other": "Outline, {{count}} messages"
+    },
+    "jump": {
+      "label": "Jump to latest",
+      "labelWith": "Jump to latest, {{state}}",
+      "tooltipWith": "{{state}} · Jump to latest",
+      "failed": "Stopped with an error"
     }
   },
   "routine": {
