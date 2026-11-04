@@ -12,6 +12,7 @@ import { usePaneDragSource } from '@renderer/features/split/session-drag-model'
 import { SessionGitChips } from '@renderer/features/git/git-status'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { HostChip } from './host-chip'
+import { PlanChip } from './plan-chip'
 import { ViewersChip } from './viewers-chip'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { SessionTitleField } from '@renderer/features/sidebar/session-menu'
@@ -19,7 +20,12 @@ import { useRenaming } from '@renderer/features/sidebar/use-renaming'
 import { agentName } from '@renderer/stores/agents'
 import { cn } from '@renderer/lib/utils'
 import { useRoutinesStore } from '@renderer/stores/routines'
-import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import {
+  hostOfSession,
+  sessionArchived,
+  sessionTitle,
+  useSessionsStore,
+} from '@renderer/stores/sessions'
 import { openRoutine, openSession } from '@renderer/stores/view'
 
 /** A sub-session's parent at the start of the top bar, then a slash: back to the parent. */
@@ -64,7 +70,7 @@ export function ParentLink({ parent }: { parent: SessionSummary }) {
 
 /**
  * The session's top bar: its title, which a click renames and which drags its pane, its menu, who
- * else has it in front, and the project's git status.
+ * else has it in front, the project's git status and the agent's plan.
  */
 export function SessionHeader({
   summary,
@@ -85,6 +91,7 @@ export function SessionHeader({
   const measureTitle = () => setTitleWidth(titleButtonRef.current?.offsetWidth ?? 0)
   const title = sessionTitle(summary)
   const pane = usePane()
+  const archived = useSessionsStore((s) => sessionArchived(s.byId, summary.id))
 
   return (
     <TopBar cornered={pane?.cornered}>
@@ -141,6 +148,9 @@ export function SessionHeader({
       </NoDrag>
       <SessionGitChips projectPath={summary.projectPath} />
       <span className="flex-1" />
+      {session && !archived && summary.origin !== 'subagent' && (
+        <PlanChip sessionId={summary.id} status={session.status} />
+      )}
       <HeaderTools
         projectPath={summary.projectPath}
         summary={summary}

@@ -21,7 +21,6 @@ import { Composer } from './composer/composer'
 import { NUMBERED } from './entries/answer-list'
 import { readDraft } from './composer/drafts'
 import { preloadRenderers, useRenderersReady } from './markdown/preload'
-import { PlanBar } from './plan-bar'
 import { QueueStack } from './queue-stack'
 import { SessionHeader } from './session-header'
 import {
@@ -208,9 +207,6 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
               </p>
             )}
             <div className="flex flex-col">
-              {session && !archived && summary.origin !== 'subagent' && (
-                <PlanBar sessionId={sessionId} running={running} />
-              )}
               {/* Mounted only while something waits; its cards sit behind the composer. */}
               {session &&
                 !archived &&

@@ -2,7 +2,6 @@ import { memo, useState } from 'react'
 import {
   ArrowUpIcon,
   CalendarClockIcon,
-  CheckIcon,
   ChevronRightIcon,
   CircleAlertIcon,
   CornerUpLeftIcon,
@@ -15,7 +14,6 @@ import {
 } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { RoutineRef } from '@shared/routines'
-import type { PlanItem } from '@shared/thread'
 import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Bubble, BubbleContent } from '@renderer/components/ui/bubble'
 import {
@@ -429,49 +427,5 @@ function CommitId({ oid }: { oid: string }) {
     >
       {oid.slice(0, 7)}
     </button>
-  )
-}
-
-export function PlanList({ items }: { items: PlanItem[] }) {
-  const { t } = useTranslation('session')
-  return (
-    <ul className="flex flex-col gap-0.5">
-      {items.map((item, i) => (
-        <li
-          key={i}
-          className={cn(
-            'flex min-h-6.5 items-start gap-2.5 py-0.75 text-ui leading-5',
-            item.status === 'completed'
-              ? 'text-secondary'
-              : item.status === 'in_progress'
-                ? 'font-medium text-foreground'
-                : 'text-tertiary',
-          )}
-        >
-          <span className="flex h-5 w-3.5 shrink-0 items-center justify-center">
-            {item.status === 'completed' ? (
-              <CheckIcon
-                role="img"
-                aria-label={t('status.done')}
-                className="size-3 text-tertiary"
-              />
-            ) : item.status === 'in_progress' ? (
-              <span
-                role="img"
-                aria-label={t('plan.inProgress')}
-                className="size-2 rounded-full bg-info"
-              />
-            ) : (
-              <span
-                role="img"
-                aria-label={t('plan.todo')}
-                className="size-2 rounded-full border-[1.5px] border-strong"
-              />
-            )}
-          </span>
-          <span className="min-w-0 flex-1">{item.content}</span>
-        </li>
-      ))}
-    </ul>
   )
 }

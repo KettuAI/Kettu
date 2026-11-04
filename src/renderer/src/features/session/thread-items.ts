@@ -3,7 +3,7 @@ import type { ThreadEntry, ThreadState } from '@shared/thread'
 // One character per entry, so the thread re-renders only when its shape changes, not on every
 // streamed token: u user, s user message steered into a running turn, a agent, h thought, g
 // groupable lookup, t other tool, w tool waiting for permission, p compaction, n plan, which the
-// thread leaves out for the bar above the composer, e turn end, o anything else, which a new
+// thread leaves out for the top bar, e turn end, o anything else, which a new
 // site's request and an agent's question are: of their own, never folded into a run.
 export function signatureOf(state: ThreadState | null | undefined): string {
   if (!state) return ''
@@ -12,7 +12,7 @@ export function signatureOf(state: ThreadState | null | undefined): string {
   return signature
 }
 
-/** The entries and their signature without the plans, which only the bar above the composer shows. */
+/** The entries and their signature without the plans, which only the top bar shows. */
 export function withoutPlans(
   order: string[],
   signature: string,
