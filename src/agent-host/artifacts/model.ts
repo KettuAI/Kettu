@@ -1,6 +1,7 @@
 // The artifact records the thread worker keeps, and the calls the host makes on them.
 
 import type { ArtifactSummary } from '@shared/artifacts'
+import type { ArtifactTypeInfo } from '@shared/artifact-types'
 
 export interface ArtifactRecord {
   id: string
@@ -53,7 +54,13 @@ export interface ArtifactCalls {
   /** The artifact with one of its versions, the latest when `version` is null, and its files. */
   get: {
     params: { id: string; version: number | null; project: string | null }
-    result: { artifact: ArtifactRecord; version: VersionRecord; files: StoredFile[] }
+    result: {
+      artifact: ArtifactRecord
+      version: VersionRecord
+      files: StoredFile[]
+      /** The version's type and format; null for a plain artifact. */
+      type: ArtifactTypeInfo | null
+    }
   }
   /** Newest first. */
   versions: { params: { id: string; project: string | null }; result: VersionRecord[] }
@@ -67,6 +74,8 @@ export interface ArtifactCalls {
       pages: number
       note: string | null
       at: number
+      /** Made from a type, whose content the caller checked. */
+      type?: ArtifactTypeInfo | null
     }
     result: { version: number }
   }
@@ -84,6 +93,8 @@ export interface ArtifactCalls {
       author: string | null
       note: string | null
       at: number
+      /** The new version's type and format: a typed artifact's must name its type, a plain one none. */
+      type?: ArtifactTypeInfo | null
     }
     result: { version: number }
   }

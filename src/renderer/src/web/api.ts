@@ -20,6 +20,7 @@ import type {
 import type { TerminalEvent } from '@shared/terminal-host'
 import { copyPath } from '@renderer/lib/copy-path'
 import { useWebHostStore, type WebHost } from '@renderer/stores/web-host'
+import { exportAs } from './exports'
 import { closeFrame, exportFiles, openFrame } from './frames'
 import { folderOf, homeStart } from './host-path'
 import { askHostPath, type HostPathPurpose } from './host-path-request'
@@ -270,6 +271,8 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         downloadFile(new Blob([read.html], { type: 'text/html' }), `${read.title || id}.html`)
         return true
       },
+      exportAs: (id, version, format) =>
+        exportAs(link, id, version, format, () => admin('artifacts.printPdf', { id, version })),
       import: () => unsupported('import an artifact'),
       onBlocked: never,
       onStopped: never,

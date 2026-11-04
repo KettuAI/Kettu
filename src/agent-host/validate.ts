@@ -1081,6 +1081,15 @@ export function createValidators(platform: Platform): Validators {
     },
     'artifacts.watch': artifact,
     'artifacts.unwatch': artifact,
+    'artifacts.export': (params) => {
+      const o = fields(params)
+      const format = o.format
+      // The type decides which of them a version takes; the host refuses the others.
+      if (format !== 'docx' && format !== 'md' && format !== 'pptx' && format !== 'pdf') {
+        throw invalidParams('format must be docx, md, pptx or pdf')
+      }
+      return { id: artifactId(o), version: version(o, 'version'), format }
+    },
     // The host checks the answer's shape as it checks main's.
     'browser.answer': (params) => {
       const o = fields(params)

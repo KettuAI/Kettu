@@ -553,6 +553,9 @@ export function registerIpcHandlers({
   )
   handle('artifact:open-external', 2, (_, id, version) => artifacts.openExternal(id, version))
   handle('artifact:export', 2, ({ window }, id, version) => artifacts.export(window, id, version))
+  handle('artifact:export-as', 3, ({ window }, id, version, format) =>
+    artifacts.exportAs(window, id, version, format),
+  )
   handle('artifact:import', 2, ({ window }, project, kind) =>
     artifacts.import(window, project, kind),
   )

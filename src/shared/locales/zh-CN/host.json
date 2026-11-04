@@ -492,5 +492,8 @@
   },
   "question": {
     "other": "其他回答…"
+  },
+  "artifacts": {
+    "formatUpgraded": "已迁移到其类型格式的第 {{format}} 版"
   }
 }

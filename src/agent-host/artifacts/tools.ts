@@ -17,11 +17,18 @@ import {
   VERSION_FILES,
 } from '@shared/artifact-files'
 import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer, NO_SESSION } from '@shared/artifacts'
+import {
+  ARTIFACT_TYPES,
+  type ArtifactTypeInfo,
+  CONTENT_ENTRIES,
+  isArtifactTypeName,
+} from '@shared/artifact-types'
 import type { Platform } from '@shared/platform'
 import type { FileChange } from './model'
 import { countPages } from './pages'
 import { readSource, SourceError } from './sources'
 import { ArtifactError, type ArtifactStore, type FoundVersion, type SessionTurn } from './store'
+import { ArtifactTypes, ContentError } from './types/registry'
 
 export const NOTE_CHARS = 200
 export const EDITS = 50
@@ -80,8 +87,10 @@ export const INSTRUCTIONS =
   `${ARTIFACT_RESERVED} are Kettu's; scripts, styles and fonts load only from the artifact's own ` +
   `files and from ${CDNS}. For a page that is one HTML file, create_artifact with html is enough; ` +
   'read_artifact_guide explains adding styles, scripts, images and other files (topic files) and ' +
-  'laying out several pages on a canvas (topic canvas). To change an artifact, read it, then ' +
-  'call update_artifact with the version you read; if it changed since, read it again.'
+  'laying out several pages on a canvas (topic canvas). A document or a slide deck is made from ' +
+  'a type instead, which Kettu shows and exports: list_artifact_types, read_artifact_type, then ' +
+  'create_artifact_from_type. To change an artifact, read it, then call update_artifact with the ' +
+  'version you read; if it changed since, read it again.'
 
 export type ToolErrorCode =
   'not_found' | 'deleted' | 'conflict' | 'edit_not_found' | 'too_large' | 'invalid' | 'rate_limited'
@@ -117,6 +126,8 @@ export interface ArtifactToolsDeps {
   runningTurn(sessionId: string): object | null
   now?: () => number
   platform?: Platform
+  /** The type packages; the built-in ones by default. */
+  types?: ArtifactTypes
 }
 
 // Schemas.
@@ -234,6 +245,17 @@ function output(properties: Record<string, Schema>): Tool['outputSchema'] {
 
 const ON_ARTIFACTS = { openWorldHint: false } as const
 
+const TYPE: Schema = {
+  type: 'string',
+  enum: [...ARTIFACT_TYPES],
+  description: 'The type, such as document or slides.',
+}
+const FORMAT: Schema = {
+  type: 'integer',
+  minimum: 1,
+  description: "The version of the type's content format.",
+}
+
 export const TOOLS: Tool[] = [
   {
     name: 'create_artifact',
@@ -253,8 +275,9 @@ export const TOOLS: Tool[] = [
     title: 'Read artifact',
     description:
       'Returns an artifact in this project, of its latest version or of the one asked for: its ' +
-      `title, its latest version (head), its files, and the text of one, ${ARTIFACT_ENTRY} unless ` +
-      'path names another. A long file comes in parts: read on from next_offset. Images and ' +
+      `title, its latest version (head), its files, and the text of one, ${ARTIFACT_ENTRY} (or a ` +
+      "typed artifact's content file) unless path names another. A long file comes in parts: " +
+      'read on from next_offset. Images and ' +
       'other binary files are listed, not returned.',
     inputSchema: object(
       {
@@ -297,6 +320,14 @@ export const TOOLS: Tool[] = [
         type: ['integer', 'null'],
         description: 'Where the rest of the text starts; null when this is its end.',
       },
+      type: {
+        type: ['string', 'null'],
+        description: 'The type it was made from, such as document; null for a page.',
+      },
+      format: {
+        type: ['integer', 'null'],
+        description: "The version of its type's content format; null for a page.",
+      },
     }),
     annotations: { ...ON_ARTIFACTS, readOnlyHint: true },
   },
@@ -326,7 +357,10 @@ export const TOOLS: Tool[] = [
           maxItems: EDITS,
           items: object(
             {
-              path: { ...PATH, description: `The file to edit; ${ARTIFACT_ENTRY} by default.` },
+              path: {
+                ...PATH,
+                description: `The file to edit; ${ARTIFACT_ENTRY}, or a typed artifact's content file, by default.`,
+              },
               old_text: { type: 'string', minLength: 1 },
               new_text: { type: 'string' },
             },
@@ -439,6 +473,74 @@ export const TOOLS: Tool[] = [
       ['id', 'version', 'base_version'],
     ),
     outputSchema: output({ id: ID, version: VERSION }),
+    annotations: { ...ON_ARTIFACTS, destructiveHint: false, idempotentHint: false },
+  },
+  {
+    name: 'list_artifact_types',
+    title: 'List artifact types',
+    description:
+      'Lists the types an artifact can be made from, such as a document or a slide deck, which ' +
+      'Kettu shows with a viewer of its own and exports; read_artifact_type explains one.',
+    inputSchema: object({}),
+    outputSchema: output({
+      types: {
+        type: 'array',
+        items: object(
+          {
+            type: TYPE,
+            title: { type: 'string' },
+            summary: { type: 'string' },
+            format: FORMAT,
+            entry: { type: 'string', description: 'The file holding the content.' },
+            exports: { type: 'array', items: { type: 'string' } },
+          },
+          ['type', 'title', 'summary', 'format', 'entry', 'exports'],
+        ),
+      },
+    }),
+    annotations: { ...ON_ARTIFACTS, readOnlyHint: true },
+  },
+  {
+    name: 'read_artifact_type',
+    title: 'Read artifact type',
+    description:
+      'Returns how to write an artifact of a type: its guidance, or one of its reference pages ' +
+      'when reference names it. Read the guidance before create_artifact_from_type.',
+    inputSchema: object(
+      {
+        type: TYPE,
+        reference: {
+          type: 'string',
+          maxLength: 64,
+          description: 'A reference page the guidance lists; the guidance itself by default.',
+        },
+      },
+      ['type'],
+    ),
+    outputSchema: output({
+      type: TYPE,
+      format: FORMAT,
+      entry: { type: 'string' },
+      text: { type: 'string' },
+      references: {
+        type: 'array',
+        items: object({ name: { type: 'string' }, title: { type: 'string' } }, ['name', 'title']),
+      },
+    }),
+    annotations: { ...ON_ARTIFACTS, readOnlyHint: true },
+  },
+  {
+    name: 'create_artifact_from_type',
+    title: 'Create artifact from type',
+    description:
+      'Makes a new artifact of a type at version 1 from its content files, checked against the ' +
+      "type's format; a refusal says what to fix. read_artifact_type explains the files.",
+    inputSchema: object({ type: TYPE, title: TITLE, files: filesSchema(false), note: NOTE }, [
+      'type',
+      'title',
+      'files',
+    ]),
+    outputSchema: output({ id: ID, version: VERSION, type: TYPE, format: FORMAT }),
     annotations: { ...ON_ARTIFACTS, destructiveHint: false, idempotentHint: false },
   },
 ]
@@ -690,6 +792,15 @@ function result(text: string, value: Record<string, unknown>): CallToolResult {
   return { content: [{ type: 'text', text }], structuredContent: value }
 }
 
+/** What a typed write's content got wrong, and where to read how it should be. */
+function contentRefusal(error: ContentError): ToolError {
+  const listed = error.problems.map((problem, i) => `${i + 1}) ${problem}`).join(' ')
+  return invalid(
+    `The ${error.type} content does not fit its format: ${listed} Fix these and write it ` +
+      `again; read_artifact_type with type ${error.type} explains the format.`,
+  )
+}
+
 function failure(error: ToolError): CallToolResult {
   return {
     content: [{ type: 'text', text: error.message }],
@@ -701,8 +812,11 @@ function failure(error: ToolError): CallToolResult {
 export class ArtifactTools {
   /** When each session's latest writes were made, for the rate limit. */
   private readonly writes = new Map<string, number[]>()
+  private readonly types: ArtifactTypes
 
-  constructor(private readonly deps: ArtifactToolsDeps) {}
+  constructor(private readonly deps: ArtifactToolsDeps) {
+    this.types = deps.types ?? new ArtifactTypes()
+  }
 
   private now(): number {
     return (this.deps.now ?? Date.now)()
@@ -740,6 +854,13 @@ export class ArtifactTools {
         return this.versions(caller, args(input, ['id']))
       case 'restore_artifact_version':
         return this.restore(caller, args(input, ['id', 'version', 'base_version']))
+      case 'list_artifact_types':
+        args(input, [])
+        return Promise.resolve(this.listTypes())
+      case 'read_artifact_type':
+        return Promise.resolve(this.readType(args(input, ['type', 'reference'])))
+      case 'create_artifact_from_type':
+        return this.createFromType(caller, args(input, ['type', 'title', 'files', 'note']))
       default:
         throw new Error(`Unknown tool ${name}`)
     }
@@ -835,13 +956,15 @@ export class ArtifactTools {
 
   /**
    * What a write changes in `base`, or makes from nothing: `specs` first, then `list` on the text
-   * the files then have; refused as a whole when any part fails or the version would not fit.
+   * the files then have; refused as a whole when any part fails or the version would not fit, or
+   * for a typed version, when its content does not fit the type's format.
    */
   private async draft(
     caller: Caller,
     base: FoundVersion | null,
     specs: readonly FileSpec[],
     list: readonly Edit[],
+    type: ArtifactTypeInfo | null = null,
   ): Promise<Draft> {
     const sizes = new Map(base?.files.map((file) => [file.path, file.size]) ?? [])
     const changed = new Map<string, Buffer | null>()
@@ -893,7 +1016,7 @@ export class ArtifactTools {
       sizes.set(path, bytes.length)
       changed.set(path, bytes)
     }
-    if (!sizes.has(ARTIFACT_ENTRY)) {
+    if (!type && !sizes.has(ARTIFACT_ENTRY)) {
       throw invalid(
         base
           ? `An artifact needs ${ARTIFACT_ENTRY}, the page Kettu opens, so it cannot be removed.`
@@ -927,11 +1050,41 @@ export class ArtifactTools {
         throw invalid(`${path} is not UTF-8 text; HTML files must be.`)
       }
     }
+    if (type) await this.checkType(type, base, sizes, changed)
     const entry = changed.get(ARTIFACT_ENTRY)
     return {
       changes: [...changed].map(([path, data]) => ({ path, data })),
-      pages: entry ? countPages(entry.toString('utf8')) : (base?.version.pages ?? 0),
+      // A typed artifact is one page, its viewer, whatever its content.
+      pages: type ? 1 : entry ? countPages(entry.toString('utf8')) : (base?.version.pages ?? 0),
       files: sizes.size,
+    }
+  }
+
+  /** Refuses a typed version whose content does not fit its format, saying what to fix. */
+  private async checkType(
+    type: ArtifactTypeInfo,
+    base: FoundVersion | null,
+    sizes: ReadonlyMap<string, number>,
+    changed: ReadonlyMap<string, Buffer | null>,
+  ): Promise<void> {
+    const entryPath = CONTENT_ENTRIES[type.name]
+    const stored = base?.files.find((file) => file.path === entryPath)
+    const bytes = changed.has(entryPath)
+      ? changed.get(entryPath)
+      : stored && base
+        ? await this.deps.store.bytes(base, stored)
+        : null
+    const written = new Map<string, Uint8Array>()
+    for (const [path, data] of changed) if (data) written.set(path, data)
+    try {
+      this.types.check(type, {
+        paths: new Set(sizes.keys()),
+        entry: bytes ? utf8(bytes) : null,
+        changed: written,
+      })
+    } catch (error) {
+      if (error instanceof ContentError) throw contentRefusal(error)
+      throw error
     }
   }
 
@@ -975,7 +1128,7 @@ export class ArtifactTools {
   private async read(caller: Caller, o: Args): Promise<CallToolResult> {
     const artifactId = id(o)
     const version = optionalNumber(o, 'version', 1)
-    const path = o.path === undefined ? ARTIFACT_ENTRY : checkedPath(o.path, 'read_artifact')
+    const asked = o.path === undefined ? null : checkedPath(o.path, 'read_artifact')
     const offset = optionalNumber(o, 'offset', 0) ?? 0
     const limit = optionalNumber(o, 'limit', 1, MAX_READ_CHARS) ?? READ_CHARS
     const reader = this.turn(caller)
@@ -986,6 +1139,7 @@ export class ArtifactTools {
     })
     const { artifact } = found
     const n = found.version.version
+    const path = asked ?? (found.type ? CONTENT_ENTRIES[found.type.name] : ARTIFACT_ENTRY)
     const stored = found.files.find((file) => file.path === path)
     if (!stored) {
       throw new ToolError(
@@ -1005,9 +1159,12 @@ export class ArtifactTools {
         : nextOffset === null
           ? `${path} follows${offset > 0 ? ` from character ${offset}` : ''}`
           : `${path} follows from character ${offset} to ${end} of ${decoded.length}; read on from next_offset`
+    const kind = found.type
+      ? `a ${found.type.name} in format ${found.type.format}`
+      : pagesText(found.version.pages)
     return result(
       `${artifactId}, "${artifact.title}", version ${n} of ${artifact.head}, ` +
-        `${pagesText(found.version.pages)}${filesText(found.files.length)}. ${about}.`,
+        `${kind}${filesText(found.files.length)}. ${about}.`,
       {
         id: artifactId,
         title: artifact.title,
@@ -1024,6 +1181,8 @@ export class ArtifactTools {
         text,
         offset,
         next_offset: nextOffset,
+        type: found.type?.name ?? null,
+        format: found.type?.format ?? null,
       },
     )
   }
@@ -1077,7 +1236,26 @@ export class ArtifactTools {
           deleted: false,
         })
       }
-      const draft = await this.draft(caller, base, specs, list)
+      // A typed version keeps its format; Kettu moves it to a new one when it is opened.
+      if (base.type && o.html !== undefined) {
+        throw invalid(
+          `${artifactId} is a ${base.type.name}, which has no ${ARTIFACT_ENTRY}: change ` +
+            `${CONTENT_ENTRIES[base.type.name]} with files or edits.`,
+        )
+      }
+      const typed = base.type
+      const draft = await this.draft(
+        caller,
+        base,
+        specs,
+        // An edit names the typed artifact's content file when it names no file.
+        typed
+          ? list.map((edit) =>
+              edit.path === ARTIFACT_ENTRY ? { ...edit, path: CONTENT_ENTRIES[typed.name] } : edit,
+            )
+          : list,
+        typed,
+      )
       const editor = this.turn(caller)
       const { version } = await store.write({
         id: artifactId,
@@ -1087,6 +1265,7 @@ export class ArtifactTools {
         author: caller.sessionId,
         note: versionNote,
         project: caller.project,
+        type: base.type,
         ...(editor ? { editor } : {}),
       })
       return result(
@@ -1182,6 +1361,92 @@ export class ArtifactTools {
     return result(`Restored version ${version} of ${artifactId} as version ${restored.version}.`, {
       id: artifactId,
       version: restored.version,
+    })
+  }
+
+  private typeOf(o: Args): ArtifactTypeInfo['name'] {
+    const name = o.type
+    if (!isArtifactTypeName(name) || !this.types.get(name)) {
+      throw invalid(
+        `type must be one of ${this.types
+          .list()
+          .map((type) => type.name)
+          .join(', ')}; list_artifact_types lists them.`,
+      )
+    }
+    return name
+  }
+
+  private listTypes(): CallToolResult {
+    const types = this.types.list().map((type) => ({
+      type: type.name,
+      title: type.title,
+      summary: type.summary,
+      format: this.types.current(type.name),
+      entry: CONTENT_ENTRIES[type.name],
+      exports: [...type.exports],
+    }))
+    return result(
+      `${types.map((type) => `${type.type}: ${type.summary}`).join(' ')} Read one with ` +
+        'read_artifact_type before you make it.',
+      { types },
+    )
+  }
+
+  private readType(o: Args): CallToolResult {
+    const name = this.typeOf(o)
+    const type = this.types.get(name)!
+    const references = Object.entries(type.references).map(([key, page]) => ({
+      name: key,
+      title: page.title,
+    }))
+    let text = type.guidance
+    if (o.reference !== undefined) {
+      const reference = typeof o.reference === 'string' ? o.reference : ''
+      if (!Object.hasOwn(type.references, reference)) {
+        throw invalid(
+          `${name} has no reference ${JSON.stringify(o.reference)}; it has ` +
+            `${references.map((page) => page.name).join(', ')}.`,
+        )
+      }
+      text = type.references[reference]!.text
+    } else {
+      text += ` References: ${references.map((page) => `${page.name} (${page.title})`).join(', ')}.`
+    }
+    return result(text, {
+      type: name,
+      format: this.types.current(name),
+      entry: CONTENT_ENTRIES[name],
+      text,
+      references,
+    })
+  }
+
+  private async createFromType(caller: Caller, o: Args): Promise<CallToolResult> {
+    const name = this.typeOf(o)
+    const input = { title: title(o), note: note(o) }
+    if (o.files === undefined) {
+      throw invalid(`Give files, ${CONTENT_ENTRIES[name]} among them.`)
+    }
+    const specs = fileSpecs(o, false)
+    const type = { name, format: this.types.current(name) }
+    return this.limited(caller, async () => {
+      const draft = await this.draft(caller, null, specs, [], type)
+      const editor = this.turn(caller)
+      const { id, version } = await this.deps.store.create({
+        ...input,
+        project: caller.project,
+        sessionId: caller.sessionId,
+        files: draft.changes.map(({ path, data }) => ({ path, data: data! })),
+        pages: draft.pages,
+        type,
+        ...(editor ? { editor } : {}),
+      })
+      return result(
+        `Created ${id} version ${version}, a ${name}${filesText(draft.files)}. Kettu shows it ` +
+          'with its viewer; change it with update_artifact.',
+        { id, version, type: name, format: type.format },
+      )
     })
   }
 }

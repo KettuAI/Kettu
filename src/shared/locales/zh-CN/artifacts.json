@@ -3,14 +3,20 @@
     "title": "Artifacts",
     "ask": "让 Agent 做一份",
     "kinds": {
+      "document": "文档",
+      "slides": "幻灯片",
       "web": "页面",
       "canvas": "画布"
     },
     "kindsPlural": {
+      "document": "文档",
+      "slides": "幻灯片",
       "web": "页面",
       "canvas": "画布"
     },
     "askLine": {
+      "document": "做一份文档 artifact：",
+      "slides": "做一份幻灯片 artifact：",
       "web": "做一个网页 artifact：",
       "canvas": "做一个多页的画布 artifact："
     },
@@ -92,6 +98,12 @@
     "open": "打开",
     "openInBrowser": "在浏览器中打开",
     "export": "导出…",
+    "exportAs": {
+      "docx": "导出为 Word…",
+      "md": "导出为 Markdown…",
+      "pptx": "导出为 PowerPoint…",
+      "pdf": "导出为 PDF…"
+    },
     "rename": "重命名…",
     "versionHistory": "版本历史",
     "openSession": "打开会话",

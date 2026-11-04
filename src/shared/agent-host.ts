@@ -1,6 +1,7 @@
 // The contract between the renderer and the agent host, over the agent host port.
 
 import type { ArtifactContent, ArtifactSession, ArtifactSummary, VersionSummary } from './artifacts'
+import type { ArtifactExportFormat, ArtifactTypeInfo } from './artifact-types'
 import type {
   BrowserCallAnswer,
   BrowserDeviceCall,
@@ -759,7 +760,13 @@ export interface HostContract {
   // frames; a window is refused, and the device never sees the answer.
   'artifacts.content': {
     params: { id: string; version?: number }
-    result: { version: number; title: string; key: string; files: ArtifactContentFile[] }
+    result: {
+      version: number
+      title: string
+      key: string
+      files: ArtifactContentFile[]
+      type?: ArtifactTypeInfo | null
+    }
   }
   // Newest first.
   'artifacts.versions': { params: { id: string }; result: VersionSummary[] }
@@ -775,6 +782,12 @@ export interface HostContract {
   // Each watch counts as a viewer, and brings `artifacts.version`.
   'artifacts.watch': { params: { id: string }; result: void }
   'artifacts.unwatch': { params: { id: string }; result: void }
+  // A typed version converted on the host to one of its type's formats: one file, or Markdown with
+  // its pictures under their paths. A deck's PDF is printed by a desktop app instead.
+  'artifacts.export': {
+    params: { id: string; version: number; format: ArtifactExportFormat }
+    result: { title: string; files: { path: string; bytes: ArrayBuffer }[] }
+  }
   // A desktop app's side of the browser calls the host sent its port, as main's is for the host's
   // own windows: the answer, the call's wait on a new site, and the site's question and its end,
   // which the session's thread shows. A window is refused them.
@@ -931,6 +944,7 @@ export const HOST_METHODS = [
   'artifacts.restoreVersion',
   'artifacts.watch',
   'artifacts.unwatch',
+  'artifacts.export',
   'browser.answer',
   'browser.waiting',
   'browser.origin',

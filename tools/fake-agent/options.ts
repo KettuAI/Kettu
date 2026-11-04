@@ -104,7 +104,8 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   artifacts: {
     description: "Makes or changes a canvas through Kettu's artifacts service, then reads it",
     hint:
-      '--read <artifact id> --site <image in the project> --until-cancel --child <id> ' +
+      '--read <artifact id> --site <image in the project> --type <document|slides> ' +
+      '--until-cancel --child <id> ' +
       '--meta <session id|none> --execute',
   },
   'open-site': {
@@ -143,6 +144,7 @@ export interface ScenarioOptions {
   atEnd: boolean // requests: usage only as the turn ends, as OpenCode reports it
   read: string | null // artifacts: the artifact to read instead
   site: string | null // artifacts: an image of the project, for a page of several files instead
+  type: string | null // artifacts: a type to make an artifact of instead, document or slides
   untilCancel: boolean // artifacts: the turn runs on after its calls until it is cancelled
   child: string | null // artifacts: the calls come from this subagent session, as OpenCode's do
   meta: string | null // artifacts: the session id the calls name instead; none names none
@@ -237,6 +239,7 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
     atEnd: flagValue(args, 'at-end') !== undefined,
     read: flagValue(args, 'read') || null,
     site: flagValue(args, 'site') || null,
+    type: flagValue(args, 'type') || null,
     untilCancel: flagValue(args, 'until-cancel') !== undefined,
     child: flagValue(args, 'child') || null,
     meta: flagValue(args, 'meta') || null,

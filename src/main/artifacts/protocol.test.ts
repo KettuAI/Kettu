@@ -4,6 +4,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { ArtifactContentFile } from '@shared/host-control'
 import { respond, type ArtifactSource } from './protocol'
+import { ViewerFiles } from './viewers'
 
 const HOST = '0123456789abcdef0123456789'
 const ORIGIN = `kettu-artifact://${HOST}`
@@ -98,5 +99,44 @@ describe('the artifact protocol', () => {
     expect((await get(`${ORIGIN}/_kettu/v/1/index.html?page=x`)).status).toBe(404)
     const css = await get(`${ORIGIN}/_kettu/v/1/styles/app.css?page=x`)
     expect(await css.text()).toBe('p{}')
+  })
+})
+
+describe('the artifact protocol for a typed artifact', () => {
+  it("serves its type's viewer in place of index.html, and the viewer's files beside it", async () => {
+    const viewers = path.join(dir, 'viewers')
+    mkdirSync(path.join(viewers, 'chunks'), { recursive: true })
+    writeFileSync(path.join(viewers, 'document.js'), 'export {}')
+    writeFileSync(path.join(viewers, 'chunks', 'a.js'), 'export {}')
+    const files = [file('document.md', '# Hi')]
+    const typed: ArtifactSource = {
+      ...source,
+      viewers: new ViewerFiles(viewers),
+      locale: () => 'zh-CN',
+      content: async (_, version) => ({
+        kind: 'found',
+        version: version ?? 3,
+        title: 'T',
+        key: 'k',
+        files,
+        type: { name: 'document', format: 1 },
+      }),
+    }
+    const at = (pathname: string) => respond(new Request(`${ORIGIN}${pathname}`), typed)
+    const latest = await at('/')
+    expect(latest.headers.get('Content-Security-Policy')).toContain("default-src 'none'")
+    const html = await latest.text()
+    expect(html).toContain('src="_kettu/viewer/document.js"')
+    expect(html).toContain('"version":3')
+    expect(html).toContain('"locale":"zh-CN"')
+    const older = await (await at('/_kettu/v/2/index.html')).text()
+    expect(older).toContain('src="../../../_kettu/viewer/document.js"')
+    expect(older).toContain('"version":2')
+    const chunk = await at('/_kettu/viewer/chunks/a.js')
+    expect(chunk.headers.get('Content-Type')).toBe('text/javascript; charset=utf-8')
+    expect(await chunk.text()).toBe('export {}')
+    expect(await (await at('/document.md')).text()).toBe('# Hi')
+    expect((await at('/_kettu/viewer/missing.js')).status).toBe(404)
+    expect((await at('/_kettu/viewer/../outside.txt')).status).toBe(404)
   })
 })

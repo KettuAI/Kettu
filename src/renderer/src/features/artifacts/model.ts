@@ -15,12 +15,13 @@ export type ArtifactSort = 'recent' | 'updated' | 'name'
 export const GROUPINGS: readonly ArtifactGrouping[] = ['none', 'project-session']
 export const SORTS: readonly ArtifactSort[] = ['recent', 'updated', 'name']
 
-/** The kinds Kettu makes; documents, slides and spreadsheets join when it makes them. */
-export type ArtifactKind = 'web' | 'canvas'
+/** The kinds Kettu makes: the types first, then pages; spreadsheets join when it makes them. */
+export type ArtifactKind = 'document' | 'slides' | 'web' | 'canvas'
 
-export const ARTIFACT_KINDS: readonly ArtifactKind[] = ['web', 'canvas']
+export const ARTIFACT_KINDS: readonly ArtifactKind[] = ['document', 'slides', 'web', 'canvas']
 
-export function artifactKind(artifact: ArtifactSummary): ArtifactKind {
+export function artifactKind(artifact: Pick<ArtifactSummary, 'type' | 'pages'>): ArtifactKind {
+  if (artifact.type) return artifact.type
   return artifact.pages >= 2 ? 'canvas' : 'web'
 }
 

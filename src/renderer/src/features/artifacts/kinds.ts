@@ -1,4 +1,10 @@
-import { AppWindowIcon, FrameIcon, type LucideIcon } from 'lucide-react'
+import {
+  AppWindowIcon,
+  FileTextIcon,
+  FrameIcon,
+  PresentationIcon,
+  type LucideIcon,
+} from 'lucide-react'
 import type { ArtifactKind } from './model'
 
 /**
@@ -9,6 +15,20 @@ export const KIND_LOOK: Record<
   ArtifactKind,
   { icon: LucideIcon; color: string; tint: string; tileHover: string }
 > = {
+  document: {
+    icon: FileTextIcon,
+    color: 'text-kind-document',
+    tint: 'bg-kind-document-tint',
+    tileHover:
+      'group-hover/tile:bg-[color-mix(in_srgb,var(--kind-document-tint),var(--text-primary)_5%)]',
+  },
+  slides: {
+    icon: PresentationIcon,
+    color: 'text-kind-slides',
+    tint: 'bg-kind-slides-tint',
+    tileHover:
+      'group-hover/tile:bg-[color-mix(in_srgb,var(--kind-slides-tint),var(--text-primary)_5%)]',
+  },
   web: {
     icon: AppWindowIcon,
     color: 'text-kind-web',

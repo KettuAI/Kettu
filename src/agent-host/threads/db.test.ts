@@ -644,6 +644,145 @@ describe("the thread database's artifacts", () => {
     db.close()
   })
 
+  it('records the type and format of each version of a typed artifact', () => {
+    const { db } = withContent()
+    db.createArtifact({
+      id: ID,
+      project: '/p',
+      sessionId: 's1',
+      title: 'Doc',
+      files: [{ path: 'document.md', data: bytes('# A') }],
+      pages: 1,
+      note: null,
+      at: 1,
+      type: { name: 'document', format: 1 },
+    })
+    expect(db.getArtifact({ id: ID, version: null, project: null }).type).toEqual({
+      name: 'document',
+      format: 1,
+    })
+    expect(db.listArtifacts({ project: null, deleted: false })[0]!.type).toBe('document')
+    db.writeArtifact({
+      id: ID,
+      project: null,
+      baseVersion: 1,
+      changes: [{ path: 'document.md', data: bytes('# B') }],
+      pages: 1,
+      author: null,
+      note: null,
+      at: 2,
+      type: { name: 'document', format: 2 },
+    })
+    expect(db.getArtifact({ id: ID, version: 2, project: null }).type).toEqual({
+      name: 'document',
+      format: 2,
+    })
+    db.restoreArtifact({
+      id: ID,
+      project: null,
+      version: 1,
+      baseVersion: 2,
+      author: null,
+      note: null,
+      at: 3,
+    })
+    expect(db.getArtifact({ id: ID, version: 3, project: null }).type).toEqual({
+      name: 'document',
+      format: 1,
+    })
+    db.close()
+  })
+
+  it('keeps an artifact of the type it was made from, or of none', () => {
+    const { db } = withContent()
+    db.createArtifact({
+      id: ID,
+      project: '/p',
+      sessionId: 's1',
+      title: 'Deck',
+      files: [{ path: 'slides.json', data: bytes('{}') }],
+      pages: 1,
+      note: null,
+      at: 1,
+      type: { name: 'slides', format: 1 },
+    })
+    const write = (type: { name: 'document' | 'slides'; format: number } | null) =>
+      db.writeArtifact({
+        id: ID,
+        project: null,
+        baseVersion: 1,
+        changes: [{ path: 'slides.json', data: bytes('{"a":1}') }],
+        pages: 1,
+        author: null,
+        note: null,
+        at: 2,
+        type,
+      })
+    expect(() => write(null)).toThrow(/is a slides, not plain/)
+    expect(() => write({ name: 'document', format: 1 })).toThrow(/is a slides, not a document/)
+    expect(db.getArtifact({ id: ID, version: null, project: null }).artifact.head).toBe(1)
+    const plain = 'art_01J9Z3K4V5W6X7Y8Z9A0B1C2D4'
+    db.createArtifact({
+      id: plain,
+      project: '/p',
+      sessionId: 's1',
+      title: 'Page',
+      files: [{ path: 'index.html', data: bytes('<p>') }],
+      pages: 0,
+      note: null,
+      at: 1,
+    })
+    expect(db.getArtifact({ id: plain, version: null, project: null }).type).toBeNull()
+    expect(() =>
+      db.writeArtifact({
+        id: plain,
+        project: null,
+        baseVersion: 1,
+        changes: [{ path: 'index.html', data: bytes('<p>2') }],
+        pages: 0,
+        author: null,
+        note: null,
+        at: 2,
+        type: { name: 'document', format: 1 },
+      }),
+    ).toThrow(/is plain, not a document/)
+    db.close()
+  })
+
+  it('keeps the artifacts of a database before types as plain ones', () => {
+    const file = tempFile()
+    mkdirSync(path.dirname(file), { recursive: true })
+    const raw = new DatabaseSync(file)
+    raw.exec(`BEGIN; ${schemaAt(5)} PRAGMA user_version = 5; COMMIT;`)
+    raw
+      .prepare(
+        'INSERT INTO artifacts (id, project, title, head, session_id, created_at, updated_at) VALUES (?, ?, ?, 1, ?, 1, 1)',
+      )
+      .run(ID, '/p', 'Old', 's1')
+    raw
+      .prepare(
+        "INSERT INTO artifact_versions (artifact_id, n, size, pages, author, note, created_at) VALUES (?, 1, 3, 0, 's1', NULL, 1)",
+      )
+      .run(ID)
+    raw
+      .prepare(
+        "INSERT INTO artifact_files (artifact_id, n, path, hash, size) VALUES (?, 1, 'index.html', ?, 3)",
+      )
+      .run(ID, contentHash(bytes('<p>')))
+    raw.close()
+    const { db } = withContent(file)
+    expect(db.status).toBe('ok')
+    expect(db.getArtifact({ id: ID, version: 1, project: null }).type).toBeNull()
+    expect(db.listArtifacts({ project: null, deleted: false })[0]!.type).toBeNull()
+    db.close()
+    const check = new DatabaseSync(file)
+    expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(SCHEMA_VERSION)
+    expect(
+      check.prepare("SELECT name FROM sqlite_master WHERE name = 'artifact_types'").get(),
+    ).toBeDefined()
+    check.close()
+  })
+
   it('makes each version of a database before files an index.html of its one file', () => {
     const file = tempFile()
     mkdirSync(path.dirname(file), { recursive: true })

@@ -495,5 +495,8 @@
   },
   "question": {
     "other": "Something else…"
+  },
+  "artifacts": {
+    "formatUpgraded": "Moved to version {{format}} of its type’s format"
   }
 }

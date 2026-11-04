@@ -2,6 +2,7 @@
 // artifact protocol and the frames the direct port serves the web client.
 
 import { ARTIFACT_ENTRY, ARTIFACT_RESERVED } from './artifact-files'
+import { VIEWER_PREFIX } from './artifact-types'
 
 /** One page of a canvas alone: its group, 0 outside any, and its place in it, both from 1. */
 export interface CanvasPage {
@@ -51,7 +52,8 @@ export function parseServed(pathname: string, params: URLSearchParams): ServedFi
     if (slash < 0 || !VERSION.test(after.slice(0, slash))) return null
     version = Number(after.slice(0, slash))
     rest = after.slice(slash + 1)
-  } else if (rest.startsWith(ARTIFACT_RESERVED)) {
+  } else if (rest.startsWith(ARTIFACT_RESERVED) && !rest.startsWith(VIEWER_PREFIX)) {
+    // A typed artifact's viewer files are Kettu's own; no other reserved path names a file.
     return null
   }
   const path = rest === '' || rest.endsWith('/') ? `${rest}${ARTIFACT_ENTRY}` : rest

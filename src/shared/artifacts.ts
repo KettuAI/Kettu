@@ -1,5 +1,7 @@
 // Artifacts, as the agent host serves them to the interface.
 
+import type { ArtifactTypeInfo, ArtifactTypeName } from './artifact-types'
+
 /** `art_` and a ULID: 26 characters of Crockford's base32, the first ten the creation time. */
 export const ARTIFACT_ID = /^art_[0-9A-HJKMNP-TV-Z]{26}$/
 
@@ -64,6 +66,7 @@ export interface ArtifactSummary {
   updatedAt: number // when the latest version was made
   deletedAt: number | null
   editing: string[] // the sessions whose running turn changed it
+  type: ArtifactTypeName | null // the type it was made from, shown by the type's viewer
 }
 
 /** A session using an artifact now: its running turn read it, or changed it. */
@@ -90,9 +93,10 @@ export interface ArtifactFileInfo {
 export interface ArtifactContent {
   title: string
   version: number
-  /** The entry page's text. */
+  /** The entry page's text; empty for an artifact made from a type, whose viewer is its page. */
   html: string
   files: ArtifactFileInfo[]
+  type?: ArtifactTypeInfo | null
 }
 
 /** A card's thumbnail renders at this size, a page's viewport, before main scales it down. */

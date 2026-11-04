@@ -8,6 +8,7 @@
 
 import { randomBytes } from 'node:crypto'
 import { open, realpath, type FileHandle } from 'node:fs/promises'
+import type { ArtifactTypeInfo } from '@shared/artifact-types'
 import type { HostMethod, HostResult } from '@shared/agent-host'
 import { ARTIFACT_ID } from '@shared/artifacts'
 import type { AdminAnswer } from '@shared/host-control'
@@ -391,6 +392,17 @@ export class RemoteServer {
     if (!frame) return null
     const content = await frame.session.artifactContent(frame.artifactId, version)
     return content?.files.find((file) => file.path === path) ?? null
+  }
+
+  /** The type of the version a frame's token names, or null for a plain artifact or none. */
+  async frameType(
+    token: string,
+    version: number | null,
+  ): Promise<{ type: ArtifactTypeInfo; version: number } | null> {
+    const frame = this.frames.find(token)
+    if (!frame) return null
+    const content = await frame.session.artifactContent(frame.artifactId, version)
+    return content?.type ? { type: content.type, version: content.version } : null
   }
 
   sessionEnded(session: DeviceSession): void {

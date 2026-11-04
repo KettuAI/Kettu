@@ -11,9 +11,11 @@ import path from 'node:path'
 import type { Duplex } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { WebSocketServer, type WebSocket } from 'ws'
-import { artifactFileType, isHtmlPath } from '@shared/artifact-files'
+import { ARTIFACT_ENTRY, artifactFileType, isHtmlPath } from '@shared/artifact-files'
 import { parseServed, servedHtml } from '@shared/artifact-page'
 import { ARTIFACT_CSP, ARTIFACT_PERMISSIONS_POLICY } from '@shared/artifact-policy'
+import { VIEWER_PREFIX, viewerBase, viewerPage } from '@shared/artifact-types'
+import { matchLocale, type Locale } from '@shared/locale'
 import { MAX_NOISE_MESSAGE } from '@shared/remote/noise'
 import type { Transport } from '@shared/remote/transport'
 import type { LogFn } from '../agent-host/storage'
@@ -141,7 +143,10 @@ interface WebFile {
 export interface WebServerOptions {
   /** The folder of the web client's built files, or null in a build without one. */
   root: string | null
-  server: Pick<RemoteServer, 'accept' | 'refusedOne' | 'frameFile'>
+  /** The type viewers' built files; by default the folder beside the web client's. */
+  viewers?: string | null
+  server: Pick<RemoteServer, 'accept' | 'refusedOne' | 'frameFile'> &
+    Partial<Pick<RemoteServer, 'frameType'>>
   /** The direct port's, which a WebSocket's handshake spends like a TCP connection's. */
   limits: HandshakeLimits
   log: LogFn
@@ -155,6 +160,7 @@ export class WebServer {
   /** HTTP connections, each with the timer that cuts it while it waits for a request. */
   private readonly connections = new Map<Socket, ReturnType<typeof setTimeout> | null>()
   private files: Promise<Map<string, WebFile> | null> | null = null
+  private viewerFiles: Promise<Map<string, WebFile> | null> | null = null
 
   constructor(private readonly options: WebServerOptions) {
     // Any other upgrade, such as curl's h2c, gets an HTTP/1.1 answer, where Node.js has the option.
@@ -261,6 +267,34 @@ export class WebServer {
     if (!host || !HOST.test(host)) return plain(response, 400, 'The host is not valid.')
     const wanted = parseServed(rest, params)
     if (!wanted) return plain(response, 404, 'Not found.', frameCors(request))
+    if (wanted.path === ARTIFACT_ENTRY || wanted.path.startsWith(VIEWER_PREFIX)) {
+      const typed = await this.options.server.frameType?.(token, wanted.version)
+      if (typed) {
+        const headers = frameHeaders(request, host, `${FRAME_PATH}${token}/`)
+        if (wanted.path.startsWith(VIEWER_PREFIX)) {
+          const viewers = await this.loadViewers()
+          const file = viewers?.get(`/${wanted.path.slice(VIEWER_PREFIX.length)}`)
+          if (!file) return plain(response, 404, 'Not found.', frameCors(request))
+          return send(
+            request,
+            response,
+            { file: file.file, type: artifactFileType(wanted.path) },
+            headers,
+          )
+        }
+        const page = viewerPage(
+          typed.type,
+          typed.version,
+          requestLocale(request),
+          viewerBase(wanted.version),
+        )
+        if (!page) return plain(response, 404, 'Not found.', frameCors(request))
+        const body = Buffer.from(servedHtml(page, null), 'utf8')
+        const type = artifactFileType(ARTIFACT_ENTRY)
+        response.writeHead(200, { ...headers, 'Content-Type': type, 'Content-Length': body.length })
+        return void response.end(request.method === 'HEAD' ? undefined : body)
+      }
+    }
     const found = await this.options.server.frameFile(token, wanted.version, wanted.path)
     if (!found) return plain(response, 404, 'Not found.', frameCors(request))
     const headers = frameHeaders(request, host, `${FRAME_PATH}${token}/`)
@@ -271,6 +305,21 @@ export class WebServer {
     const body = Buffer.from(servedHtml(await readFile(found.file, 'utf8'), wanted.page), 'utf8')
     response.writeHead(200, { ...headers, 'Content-Type': type, 'Content-Length': body.length })
     response.end(request.method === 'HEAD' ? undefined : body)
+  }
+
+  /** The type viewers' files, read once, as the web client's are. */
+  private loadViewers(): Promise<Map<string, WebFile> | null> {
+    const { root, log } = this.options
+    // out/viewers lies beside out/web, in the app, the daemon's build and its package alike.
+    const viewers = this.options.viewers ?? (root ? path.join(root, '..', 'viewers') : null)
+    this.viewerFiles ??= viewers
+      ? readRoot(viewers).catch((error: NodeJS.ErrnoException) => {
+          log('warn', `Cannot read the artifact viewers: ${error.message}`)
+          this.viewerFiles = null
+          return null
+        })
+      : Promise.resolve(null)
+    return this.viewerFiles
   }
 
   /** The root's files, read once; requests never reach the file system by their path. */
@@ -319,6 +368,17 @@ function sameOrigin(request: IncomingMessage): boolean {
   if (!page || !host || (page.protocol !== 'http:' && page.protocol !== 'https:')) return false
   // Read with the page's scheme, so a default port drops from both alike.
   return URL.parse(`${page.protocol}//${host}`)?.host === page.host
+}
+
+/** The interface language the browser asks for, which a type's viewer speaks. */
+function requestLocale(request: IncomingMessage): Locale {
+  const header = request.headers['accept-language'] ?? ''
+  const tags = header
+    .slice(0, 512)
+    .split(',')
+    .map((part) => part.split(';')[0]!.trim())
+    .filter((tag) => tag !== '')
+  return matchLocale(tags)
 }
 
 /** The request's path with its dot segments resolved and its escapes decoded, or null. */

@@ -12,6 +12,7 @@ type OwnEntry = Extract<
 
 const ACTIONS: Record<string, ArtifactAction> = {
   create_artifact: 'create',
+  create_artifact_from_type: 'create',
   update_artifact: 'update',
   restore_artifact_version: 'restore',
   delete_artifact: 'delete',

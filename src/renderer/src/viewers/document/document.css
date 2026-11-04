@@ -1,0 +1,17 @@
+/* One stylesheet per viewer, which its page links: the app's theme and the Markdown's look. */
+@import 'streamdown/styles.css';
+@import '../common/viewer.css';
+
+/* Tables, code and pictures stand apart like the prose's other blocks; each is a block of its own
+   here, whose first child the renderer gives no margin. */
+.markdown [data-streamdown='table-wrapper'],
+.markdown [data-streamdown='code-block'],
+.markdown [data-streamdown='image-wrapper'] {
+  margin-block: 0.8em;
+}
+
+/* A card's thumbnail is drawn 1280 px wide, where the reading column would be a narrow strip;
+   enlarged, it fills most of the card. */
+.document-thumbnail {
+  zoom: 1.6;
+}

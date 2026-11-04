@@ -89,6 +89,7 @@ export const ArtifactCard = memo(function ArtifactCard({
         versions: artifact.version,
         sessionId: artifact.sessionId,
         deletedAt: artifact.deletedAt,
+        type: artifact.type,
       }}
       onOpen={() => openFromPage(artifact.id)}
       onVersionHistory={() => openFromPage(artifact.id, true)}

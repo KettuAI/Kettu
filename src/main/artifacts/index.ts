@@ -9,15 +9,22 @@ import {
   type WebContents,
 } from 'electron'
 import { ARTIFACT_ID, type ArtifactImportResult } from '@shared/artifacts'
-import type { ArtifactContentResult } from '@shared/host-control'
+import {
+  type ArtifactExportFormat,
+  type ExportedFile,
+  isExportFormat,
+} from '@shared/artifact-types'
+import type { ArtifactContentResult, ArtifactExportResult } from '@shared/host-control'
 import type { ArtifactOpenResult } from '@shared/ipc'
 import { sendEvent } from '../events'
+import { locale } from '../i18n'
 import { ArtifactFiles, parseVersion } from './files'
 import { filterArtifactRequests, guardArtifactFrames } from './guards'
 import { ArtifactOrigins } from './origins'
 import { WINDOW_PROXY } from './policy'
 import { serveArtifacts, type ArtifactSource } from './protocol'
 import { parseLayout, THUMBNAIL_PARTITION, Thumbnails } from './thumbnails'
+import { ViewerFiles } from './viewers'
 
 const MAX_URL_CHARS = 2_048
 
@@ -36,10 +43,19 @@ export interface ArtifactsDeps {
   thumbnailDir: string
   /** Has the host make an artifact of a file or folder, in a project, or No project when null. */
   importFile(path: string, project: string | null): Promise<NonNullable<ArtifactImportResult>>
+  /** The type viewers' build folder. */
+  viewersDir: string
+  /** Has the host convert a typed version to one of its type's formats. */
+  exportVersion(
+    id: string,
+    version: number,
+    format: ArtifactExportFormat,
+  ): Promise<ArtifactExportResult>
 }
 
 export class Artifacts {
   readonly origins = new ArtifactOrigins()
+  readonly viewers: ViewerFiles
   private readonly source: ArtifactSource
   private readonly thumbnails: Thumbnails
   private readonly files: ArtifactFiles
@@ -49,6 +65,8 @@ export class Artifacts {
       contentDir: deps.contentDir,
       artifactOf: (host) => this.origins.artifactOf(host),
       content: (id, version) => deps.content(id, version),
+      viewers: (this.viewers = new ViewerFiles(deps.viewersDir)),
+      locale,
     }
     this.thumbnails = new Thumbnails({
       content: (id, version) => deps.content(id, version),
@@ -114,6 +132,44 @@ export class Artifacts {
   /** `artifact:export`. */
   export(window: BrowserWindow | null, id: unknown, version: unknown): Promise<boolean> {
     return this.files.export(window, id, version)
+  }
+
+  /** `artifact:export-as`: a typed version in one of its type's formats. */
+  exportAs(
+    window: BrowserWindow | null,
+    id: unknown,
+    version: unknown,
+    format: unknown,
+  ): Promise<boolean> {
+    return this.files.exportAs(window, id, version, format, async (wanted, _type, as) => {
+      if (as === 'pdf') {
+        return [
+          { path: 'slides.pdf', bytes: await this.thumbnails.print(wanted.id, wanted.version) },
+        ]
+      }
+      return this.converted(wanted.id, wanted.version, as)
+    })
+  }
+
+  /** A typed version's PDF, for a paired device to save. */
+  async printPdf(id: unknown, version: unknown): Promise<Buffer> {
+    const wanted = parseVersion(id, version)
+    const found = await this.deps.content(wanted.id, wanted.version)
+    if (found.kind !== 'found' || !found.type) throw new Error('Not found')
+    if (!isExportFormat(found.type.name, 'pdf'))
+      throw new Error('Not a format this type exports to')
+    return this.thumbnails.print(wanted.id, wanted.version)
+  }
+
+  private async converted(
+    id: string,
+    version: number,
+    format: ArtifactExportFormat,
+  ): Promise<ExportedFile[]> {
+    const result = await this.deps.exportVersion(id, version, format)
+    if (result.kind === 'not_found') throw new Error('Not found')
+    if (result.kind === 'failed') throw new Error(`The export failed: ${result.message}`)
+    return result.files
   }
 
   /** `artifact:import`. */

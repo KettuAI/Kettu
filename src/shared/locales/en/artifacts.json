@@ -3,14 +3,20 @@
     "title": "Artifacts",
     "ask": "Ask an agent for one",
     "kinds": {
+      "document": "Document",
+      "slides": "Slides",
       "web": "Page",
       "canvas": "Canvas"
     },
     "kindsPlural": {
+      "document": "Documents",
+      "slides": "Slide decks",
       "web": "Pages",
       "canvas": "Canvases"
     },
     "askLine": {
+      "document": "Make a document artifact: ",
+      "slides": "Make a slide deck artifact: ",
       "web": "Make a web page artifact: ",
       "canvas": "Make a canvas artifact with several pages: "
     },
@@ -94,6 +100,12 @@
     "open": "Open",
     "openInBrowser": "Open in browser",
     "export": "Export…",
+    "exportAs": {
+      "docx": "Export as Word…",
+      "md": "Export as Markdown…",
+      "pptx": "Export as PowerPoint…",
+      "pdf": "Export as PDF…"
+    },
     "rename": "Rename…",
     "versionHistory": "Version history",
     "openSession": "Open the session",

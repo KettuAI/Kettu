@@ -2,8 +2,10 @@
 // talks to the target, so the renderer never names a URL and never sees the token.
 
 import { readFile } from 'node:fs/promises'
-import { isHtmlPath } from '@shared/artifact-files'
+import { ARTIFACT_ENTRY, isHtmlPath } from '@shared/artifact-files'
+import { type ArtifactTypeInfo, VIEWER_PREFIX, viewerPage } from '@shared/artifact-types'
 import { ARTIFACT_ID } from '@shared/artifacts'
+import type { Locale } from '@shared/locale'
 import type { ArtifactContentResult } from '@shared/host-control'
 import {
   CLOUDFLARE_ACCOUNT_ID,
@@ -51,6 +53,13 @@ export interface SharingDeps {
   now?(): number
   /** Told of every change, for the windows; the token is not part of the status. */
   changed?(status: SharingStatus): void
+  /**
+   * The type viewers' files by their paths under the viewers' folder, which a typed artifact's
+   * page publishes with its content; none without them.
+   */
+  viewerFiles?(): Promise<{ path: string; file: string }[]>
+  /** The language a published type viewer speaks. */
+  locale?(): Locale
 }
 
 function failed(failure: SharingFailure, message: string | null = null): SharingResult {
@@ -311,6 +320,7 @@ export class Sharing {
       throw new SharingError('unavailable', 'The agent host did not answer.')
     }
     const files: PageFile[] = []
+    if (found.type) files.push(...(await this.viewerOf(found.type, found.version)))
     for (const file of found.files) {
       if (!isInside(this.deps.contentDir, file.file)) {
         throw new SharingError('failed', 'The artifact file is not in the artifacts folder.')
@@ -325,6 +335,27 @@ export class Sharing {
       }
     }
     return { files, version: found.version }
+  }
+
+  /**
+   * A typed version's page: its type's viewer, which reads the content files beside it as they
+   * are published, without the runtime, so it shows them and offers no editing.
+   */
+  private async viewerOf(type: ArtifactTypeInfo, version: number): Promise<PageFile[]> {
+    const page = viewerPage(type, version, this.deps.locale?.() ?? 'en', '')
+    const viewers = (await this.deps.viewerFiles?.()) ?? []
+    if (!page || viewers.length === 0) {
+      throw new SharingError('failed', 'This build has no viewer for the artifact’s type.')
+    }
+    const files: PageFile[] = [{ path: ARTIFACT_ENTRY, bytes: Buffer.from(withMeta(page), 'utf8') }]
+    for (const viewer of viewers) {
+      try {
+        files.push({ path: `${VIEWER_PREFIX}${viewer.path}`, bytes: await readFile(viewer.file) })
+      } catch (error) {
+        throw new SharingError('failed', `Could not read the viewer: ${(error as Error).message}`)
+      }
+    }
+    return files
   }
 
   private async tokenOf(): Promise<string> {

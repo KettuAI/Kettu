@@ -165,6 +165,8 @@ export interface HostAdminDeps {
   themes: AdminThemes
   /** An artifact version's preview as a data URL; null where the host cannot capture, as the daemon. */
   thumbnail: ((id: unknown, version: unknown, layout: unknown) => Promise<string | null>) | null
+  /** A typed version's PDF; null where nothing renders artifacts. */
+  printPdf?: ((id: unknown, version: unknown) => Promise<Buffer>) | null
   /** Remote access is always on, as under the daemon, so a device may not turn it off. */
   remoteAlwaysOn?: boolean
   /** Tells every owner's device, or only `deviceId`. */
@@ -476,6 +478,11 @@ export class HostAdmin {
         }
         const { id, version, layout } = fields(params)
         return this.deps.thumbnail(id, version, layout)
+      }
+      case 'artifacts.printPdf': {
+        if (!this.deps.printPdf) throw new AdminError('unavailable', 'This host does not print')
+        const { id, version } = fields(params)
+        return (await this.deps.printPdf(id, version)).toString('base64')
       }
     }
   }

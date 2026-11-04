@@ -1,9 +1,10 @@
 // Card thumbnails: each version rendered once in an offscreen window, in a session of its own with
 // the window session's protocol and guards, and kept on disk named by its hash.
 
+import { createHash } from 'node:crypto'
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { BrowserWindow, type Session, type WebContents } from 'electron'
+import { app, BrowserWindow, type Session, type WebContents } from 'electron'
 import {
   fitThumbnail,
   THUMBNAIL_HEIGHT,
@@ -18,6 +19,7 @@ import { restrictPermissions } from '../permissions'
 import { filterArtifactRequests, frameArtifact, mayNavigate } from './guards'
 import { artifactHost } from './origins'
 import { WINDOW_PROXY } from './policy'
+import { printViewer } from './print'
 import { serveArtifacts, type ArtifactSource } from './protocol'
 
 const log = createLogger('artifacts')
@@ -85,8 +87,10 @@ export function thumbnailDocument(
   origin: string,
   version: number,
   layout: ThumbnailPage[] | null,
+  view: 'thumbnail' | null = null,
 ): string {
-  const page = `${origin.replace(/\/$/, '')}${versionUrlPath(version)}`
+  // A type's viewer draws its content alone for a thumbnail, without its controls.
+  const page = `${origin.replace(/\/$/, '')}${versionUrlPath(version)}${view ? `?view=${view}` : ''}`
   const frame = (query: string, style: string): string =>
     `<iframe src="${page}${query}" ${FRAME_ATTRIBUTES} style="${style}"></iframe>`
   let frames: string
@@ -174,10 +178,15 @@ export class Thumbnails {
     const found = await this.deps.content(id, version)
     if (found.kind !== 'found' || !HASH.test(found.key)) return null
     const type = layout ? 'png' : 'jpeg'
-    const file = path.join(this.deps.dir, `${found.key}.${layout ? 'png' : 'jpg'}`)
+    // A type's viewer comes with the app, so an update draws its thumbnails again.
+    const name = found.type
+      ? createHash('sha256').update(`${found.key}\0${app.getVersion()}`).digest('hex')
+      : found.key
+    const file = path.join(this.deps.dir, `${name}.${layout ? 'png' : 'jpg'}`)
     const cached = await readFile(file).catch(() => null)
     if (cached) return dataUrl(type, cached)
-    const image = await this.render(this.deps.serve(id), version, layout).catch(
+    const view = found.type ? 'thumbnail' : null
+    const image = await this.render(this.deps.serve(id), version, layout, view).catch(
       (error: unknown) => {
         log.warn(`Could not render a thumbnail of ${id} version ${version}: ${String(error)}`)
         return null
@@ -194,6 +203,7 @@ export class Thumbnails {
     origin: string,
     version: number,
     layout: ThumbnailPage[] | null,
+    view: 'thumbnail' | null,
   ): Promise<Buffer | null> {
     if (!this.session) return null
     const window = new BrowserWindow({
@@ -222,7 +232,7 @@ export class Thumbnails {
       const loaded = await Promise.race([
         contents
           .loadURL(
-            `data:text/html;charset=utf-8,${encodeURIComponent(thumbnailDocument(origin, version, layout))}`,
+            `data:text/html;charset=utf-8,${encodeURIComponent(thumbnailDocument(origin, version, layout, view))}`,
           )
           .then(
             () => 'loaded' as const,
@@ -240,6 +250,22 @@ export class Thumbnails {
     } finally {
       if (!window.isDestroyed()) window.destroy()
     }
+  }
+
+  /**
+   * A typed version printed by its viewer, one sheet a page, as a PDF, in a window of the
+   * thumbnails' session; one at a time, as the thumbnails are.
+   */
+  print(id: string, version: number): Promise<Buffer> {
+    const run = this.queue.then(() => {
+      if (!this.session) throw new Error('Printing is not ready')
+      return printViewer(
+        this.session,
+        `${this.deps.serve(id).replace(/\/$/, '')}${versionUrlPath(version)}`,
+      )
+    })
+    this.queue = run.catch(() => {})
+    return run
   }
 
   private async keep(file: string, image: Buffer): Promise<void> {

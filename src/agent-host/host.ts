@@ -13,10 +13,12 @@ import type { BrowserCallAnswer, BrowserCallRequest, BrowserOriginAnswer } from 
 import type {
   AgentProcess,
   ArtifactContentResult,
+  ArtifactExportResult,
   ArtifactListResult,
   HostToMain,
   NodeRuntime,
 } from '@shared/host-control'
+import type { ArtifactExportFormat } from '@shared/artifact-types'
 import type { Platform } from '@shared/platform'
 import type { PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
@@ -30,6 +32,10 @@ import { AgentTrees } from './agent-trees'
 import { readImport } from './artifacts/import'
 import { ArtifactService, SERVICE_NAME } from './artifacts/service'
 import { ArtifactError, ArtifactStore, versionSummary } from './artifacts/store'
+import { registerContentCapability } from './artifacts/types/capability'
+import { ExportError, exportVersion } from './artifacts/types/export'
+import { ArtifactTypes } from './artifacts/types/registry'
+import { upgradeContent } from './artifacts/types/writes'
 import {
   AgentManager,
   processLauncher,
@@ -40,7 +46,7 @@ import {
 import { buildCatalog, configFolders, type AgentDefinition } from './catalog'
 import { answerOf, BROWSER_GONE, browserTarget, DeviceBrowserCalls } from './device-browser'
 import { Diagnostics } from './diagnostics'
-import { HostError } from './errors'
+import { HostError, invalidParams } from './errors'
 import { setLocale, t } from './i18n'
 import { FilesService } from './files'
 import { MediaService } from './media'
@@ -202,6 +208,8 @@ export class AgentHost {
   readonly artifacts: ArtifactStore
   /** The `kettu` MCP server, through which the sessions' agents reach the artifacts. */
   readonly artifactService: ArtifactService
+  /** The types artifacts are made from: their formats, guidance and exports. */
+  readonly artifactTypes = new ArtifactTypes()
   readonly hub: PortHub
   private settings: HostSettings
   private readonly git: GitServiceApi | null
@@ -292,8 +300,10 @@ export class AgentHost {
       activity: (portIds, activity) =>
         this.hub.send(portIds, { type: 'artifacts.activity', ...activity }),
     })
+    registerContentCapability({ store: this.artifacts, types: this.artifactTypes })
     this.artifactService = new ArtifactService({
       store: this.artifacts,
+      types: this.artifactTypes,
       sessionTitle: (sessionId) => this.sessions.title(sessionId),
       runningTurn: (sessionId) => this.sessions.runningTurn(sessionId),
       sessionOf: (process, id) => this.sessions.sessionOf(process, id),
@@ -715,6 +725,30 @@ export class AgentHost {
       result = { kind: 'failed' }
     }
     this.options.send({ type: 'host:artifact-list', requestId, result })
+  }
+
+  /** `host:artifact-export-request`: a typed version converted for main to save. */
+  async artifactExport(
+    requestId: number,
+    id: string,
+    version: number,
+    format: ArtifactExportFormat,
+  ): Promise<void> {
+    let result: ArtifactExportResult
+    try {
+      const found = await this.artifacts.get(id, { version })
+      const files = await exportVersion(this.artifacts, found, format)
+      result = { kind: 'exported', title: found.artifact.title, files }
+    } catch (error) {
+      if (error instanceof ArtifactError && error.reason === 'not_found') {
+        result = { kind: 'not_found' }
+      } else {
+        const message = (error as Error).message
+        this.diagnostics.log('warn', `Could not export ${id} as ${format}: ${message}`)
+        result = { kind: 'failed', message }
+      }
+    }
+    this.options.send({ type: 'host:artifact-export', requestId, result })
   }
 
   /**
@@ -1179,7 +1213,9 @@ export class AgentHost {
         return {
           title: read.artifact.title,
           version: read.version.version,
-          html: await artifacts.entryText(read),
+          // A typed artifact's page is its type's viewer, which has no text of its own.
+          html: read.type ? '' : await artifacts.entryText(read),
+          type: read.type,
           files: read.files.map((file) => ({
             path: file.path,
             size: file.size,
@@ -1212,7 +1248,26 @@ export class AgentHost {
       'artifacts.undelete': ({ id }) => artifacts.undelete(id),
       'artifacts.restoreVersion': ({ id, version, baseVersion }) =>
         artifacts.restore({ id, version, baseVersion, author: null }),
-      'artifacts.watch': ({ id }, { portId }) => artifacts.watch(id, portId),
+      'artifacts.watch': async ({ id }, { portId }) => {
+        await artifacts.watch(id, portId)
+        // Opening a typed artifact moves its content to a newer format, as a new version.
+        void upgradeContent(artifacts, this.artifactTypes, id, (level, message) =>
+          this.diagnostics.log(level, message),
+        ).catch(() => {})
+      },
+      'artifacts.export': async ({ id, version, format }) => {
+        const found = await artifacts.read(id, { version })
+        try {
+          const files = await exportVersion(artifacts, found, format)
+          return {
+            title: found.artifact.title,
+            files: files.map((file) => ({ path: file.path, bytes: toArrayBuffer(file.bytes) })),
+          }
+        } catch (error) {
+          if (error instanceof ExportError) throw invalidParams(error.message)
+          throw error
+        }
+      },
       'artifacts.unwatch': ({ id }, { portId }) => artifacts.unwatch(id, portId),
       'browser.answer': ({ callId, answer }, ctx) => {
         browserApp(ctx)

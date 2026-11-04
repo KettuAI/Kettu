@@ -7,6 +7,80 @@ import type { Scenario, Turn } from './turn.ts'
 export const CANVAS_TITLE = 'Fake canvas'
 export const SITE_TITLE = 'Fake site'
 
+const DOCUMENT = [
+  '# Fake report',
+  '',
+  'A document made from a type: Kettu shows it in a reading layout, and exports it to **Word** ' +
+    'and *Markdown*. See [the project](https://github.com/KettuAI/Kettu).',
+  '',
+  '## What it holds',
+  '',
+  '- Headings, paragraphs and lists',
+  '  - nested points',
+  '- [x] task lists',
+  '',
+  '| Part | State |',
+  '| --- | --- |',
+  '| Viewer | Done |',
+  '| Export | Done |',
+  '',
+  '> A quote, set apart.',
+  '',
+  '```ts',
+  "const greeting = 'hello'",
+  '```',
+  '',
+].join('\n')
+
+const DECK = {
+  title: 'Fake deck',
+  slides: [
+    { layout: 'title', title: 'Fake deck', subtitle: 'Made from the slides type' },
+    { layout: 'section', title: 'Results', subtitle: 'What changed' },
+    {
+      layout: 'bullets',
+      title: 'Why types',
+      bullets: ['Agents write content', { text: 'Kettu lays it out', bullets: ['and exports it'] }],
+    },
+    {
+      layout: 'two-column',
+      title: 'Before and after',
+      left: { heading: 'Before', bullets: ['Hand-made HTML'] },
+      right: { heading: 'After', text: 'A deck in JSON.' },
+    },
+    {
+      layout: 'stats',
+      title: 'In numbers',
+      stats: [
+        { value: '8', label: 'layouts' },
+        { value: '2', label: 'exports' },
+      ],
+    },
+    { layout: 'quote', quote: 'It just works.', attribution: 'A tester', notes: 'Pause here.' },
+    {
+      layout: 'table',
+      title: 'Formats',
+      columns: ['Type', 'Exports'],
+      rows: [
+        ['Document', 'Word, Markdown'],
+        ['Slides', 'PowerPoint, PDF'],
+      ],
+    },
+  ],
+}
+
+/** The document, with a picture of the project when there is one. */
+function documentWith(picture: string | null): string {
+  return picture ? `${DOCUMENT}\n![A picture](${picture})\n` : DOCUMENT
+}
+
+/** The deck, with a slide of a picture of the project when there is one. */
+function deckWith(picture: string | null): object {
+  if (!picture) return DECK
+  const slide = { layout: 'image', title: 'A picture', image: picture, alt: 'A picture' }
+  return { ...DECK, slides: [...DECK.slides, slide] }
+}
+
 /** A page of several files: its style, its script and an image the host reads from the project. */
 function siteFiles(image: string): Record<string, unknown>[] {
   const name = image.split(/[\\/]/).at(-1) ?? 'image'
@@ -73,8 +147,10 @@ async function say(turn: Turn, text: string): Promise<void> {
 /**
  * `/artifacts` makes "Fake canvas" in the project, or changes the one there with an edit, then
  * reads it back; `/artifacts --read <id>` reads that artifact, and `/artifacts --site <image>`
- * makes "Fake site" of several files, the image read by the host from the project. Each call shows as a tool call
- * named as Claude Code names MCP tools, and the reply lists what each call returned. With
+ * makes "Fake site" of several files, the image read by the host from the project; `--type
+ * document` or `--type slides` makes "Fake report" or "Fake deck" from that type, with the
+ * `--site` image in it when given. Each call shows as a tool call named as Claude Code names MCP
+ * tools, and the reply lists what each call returned. With
  * `--until-cancel` the turn runs on after the reply until it is cancelled, whatever the pace.
  *
  * Every call names its session in `_meta`, as OpenCode's do. `--child <id>` makes the calls a
@@ -174,9 +250,23 @@ export const artifacts: Scenario = async (turn) => {
     return { text, value, isError }
   }
   try {
-    const { read, site } = turn.options
+    const { read, site, type } = turn.options
     if (read) {
       await call('read_artifact', { id: read })
+    } else if (type) {
+      await call('list_artifact_types', {})
+      await call('read_artifact_type', { type })
+      const picture = site ? `images/${site.split(/[\\/]/).at(-1) ?? 'image'}` : null
+      const content =
+        type === 'slides'
+          ? { path: 'slides.json', content: JSON.stringify(deckWith(picture), null, 2) }
+          : { path: 'document.md', content: documentWith(picture) }
+      const created = await call('create_artifact_from_type', {
+        type,
+        title: type === 'slides' ? 'Fake deck' : 'Fake report',
+        files: picture ? [content, { path: picture, source: site }] : [content],
+      })
+      if (!created.isError) await call('read_artifact', { id: String(created.value.id) })
     } else if (site) {
       const created = await call('create_artifact', { title: SITE_TITLE, files: siteFiles(site) })
       if (!created.isError) await call('read_artifact', { id: String(created.value.id) })
