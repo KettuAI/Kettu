@@ -6,7 +6,7 @@ import { SegmentedControl } from '@renderer/components/segmented-control'
 import { cn } from '@renderer/lib/utils'
 
 /**
- * The frame every block in a reply shares: code, diffs, shell output, SVG and diagrams. A 34 px
+ * The frame for code, shell output, SVG and diagrams in a reply. A 34 px
  * header holds the block's name on the left and its actions on the right.
  */
 export function BlockFrame({

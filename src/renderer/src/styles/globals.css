@@ -1768,7 +1768,7 @@
   }
 }
 
-/* The frame every block in a reply shares: code, diffs, shell output, SVG and diagrams, with a
+/* The frame for code, shell output, SVG and diagrams in a reply, with a
    34 px header that names the block on the left and holds its actions on the right
    (block-frame.tsx). */
 .block-frame {
@@ -1793,13 +1793,6 @@
   border-radius: inherit;
   box-shadow: inset 0 0 0 1px var(--border-subtle);
   pointer-events: none;
-}
-/* In a request's card a block runs edge to edge, with only a line under it. */
-.block-frame[data-bleed] {
-  border-radius: 0;
-}
-.block-frame[data-bleed]::after {
-  box-shadow: inset 0 -1px 0 var(--border-soft);
 }
 .block-frame-header {
   display: flex;
@@ -1999,38 +1992,13 @@
     outline: 1.5px solid var(--focus-ring-color);
   }
 }
-/* A diff in the block frame: code type, the code's own green and red for its signs, and a changed
-   line's tint across its number too, with no gap after the number (diff-impl.tsx). */
-.block-frame .diff {
-  --diffs-font-family: var(--font-mono);
-  --diffs-font-size: 12.5px;
-  --diffs-line-height: 1.7;
-  --diffs-gap-style: none;
-  --diffs-bg-separator-override: var(--bg-subtle);
-}
-
-/* Diffs sit on the code block surface, not on the Shiki theme's own background, with the
-   theme's line and word tints over the whole row, numbers included, and line numbers in the
-   comment color. Outer declarations win over the theme's :host rule inside the diff's shadow
-   root; diff-impl.tsx lays the line tints on as they are. */
+/* Diffs keep the code surface while the library styles the changes. */
 .diff {
   --diffs-light-bg: var(--bg-code-block);
   --diffs-dark-bg: var(--bg-code-block);
-  --diffs-addition-color-override: var(--code-success);
-  --diffs-deletion-color-override: var(--code-danger);
-  --diffs-bg-addition-override: var(--diff-add);
-  --diffs-bg-addition-number-override: var(--diff-add);
-  --diffs-bg-addition-emphasis-override: var(--diff-add-word);
-  --diffs-bg-deletion-override: var(--diff-del);
-  --diffs-bg-deletion-number-override: var(--diff-del);
-  --diffs-bg-deletion-emphasis-override: var(--diff-del-word);
-  --diffs-fg-number-override: var(--syntax-comment);
-  --diffs-fg-number-addition-override: var(--syntax-comment);
-  --diffs-fg-number-deletion-override: var(--syntax-comment);
 }
 
-/* The Files pane's diff, tinted as .diff is, with roomier lines; lines picked to mention take the
-   selection's fox tint. */
+/* The Files pane keeps theme tints; lines picked to mention take the selection's fox tint. */
 .files-diff {
   --diffs-light-bg: var(--bg-code-block);
   --diffs-dark-bg: var(--bg-code-block);
