@@ -2,14 +2,24 @@ import type { ThreadEntry, ThreadState } from '@shared/thread'
 
 // One character per entry, so the thread re-renders only when its shape changes, not on every
 // streamed token: u user, s user message steered into a running turn, a agent, h thought, g
-// groupable lookup, t other tool, w tool waiting for permission, p plan or compaction, e turn end,
-// o anything else, which a new site's request and an agent's question are: of their own, never
-// folded into a run.
+// groupable lookup, t other tool, w tool waiting for permission, p compaction, n plan, which the
+// thread leaves out for the bar above the composer, e turn end, o anything else, which a new
+// site's request and an agent's question are: of their own, never folded into a run.
 export function signatureOf(state: ThreadState | null | undefined): string {
   if (!state) return ''
   let signature = ''
   for (const id of state.order) signature += charOf(state.byId[id])
   return signature
+}
+
+/** The entries and their signature without the plans, which only the bar above the composer shows. */
+export function withoutPlans(
+  order: string[],
+  signature: string,
+): { order: string[]; signature: string } {
+  if (!signature.includes('n')) return { order, signature }
+  const shown = order.filter((_, i) => signature[i] !== 'n')
+  return { order: shown, signature: signature.replaceAll('n', '') }
 }
 
 function charOf(entry: ThreadEntry | undefined): string {
@@ -18,7 +28,8 @@ function charOf(entry: ThreadEntry | undefined): string {
   if (entry.kind === 'agent') return 'a'
   if (entry.kind === 'turn_end') return 'e'
   if (entry.kind === 'thought') return 'h'
-  if (entry.kind === 'plan' || entry.kind === 'compaction') return 'p'
+  if (entry.kind === 'plan') return 'n'
+  if (entry.kind === 'compaction') return 'p'
   if (entry.kind !== 'tool' || entry.question !== undefined) return 'o'
   if (entry.permission) return 'w'
   if (
@@ -35,8 +46,8 @@ const isWork = (char: string | undefined): boolean =>
   char === 'h' || char === 'g' || char === 't' || char === 'w' || char === 'p'
 
 /**
- * Tool calls, plans, compactions and thoughts fold into a run; a request for permission ends it,
- * since it waits for the user below the work before it.
+ * Tool calls, compactions and thoughts fold into a run; a request for permission ends it, since
+ * it waits for the user below the work before it.
  */
 const foldsIntoRun = (char: string | undefined): boolean =>
   char === 'h' || char === 'g' || char === 't' || char === 'p'
@@ -90,7 +101,7 @@ export function buildItems(order: string[], signature: string, live = false): It
       while (foldsIntoRun(signature[end + 1])) end++
       const ids = order.slice(i, end + 1)
       // A lone tool call or thought folds too, so every piece of work reads as one quiet line; a
-      // plan or compaction shows as it is.
+      // compaction shows as it is.
       const lone =
         end === i && (signature[i] === 'g' || signature[i] === 't' || signature[i] === 'h')
       if (end > i || lone) {
@@ -166,7 +177,7 @@ export function estimateOf(item: Item): Estimate {
     case 't':
     case 'w':
       return 24
-    // A plan or a compaction on its own.
+    // A compaction on its own.
     case 'p':
       return 16
     // A notice, a marker, a git event or a card.
