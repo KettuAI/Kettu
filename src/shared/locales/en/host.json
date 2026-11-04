@@ -203,6 +203,7 @@
     "requiresOutdated": "{{agent}} needs {{command}} {{required}} or later; {{installed}} is installed. {{hint}}",
     "requiresFailed": "{{agent}} could not read the version of {{command}}: {{reason}} {{hint}}",
     "scriptMissing": "{{script}} does not exist.",
+    "hermesInstallNotice": "The official installer adds ~/.local/bin to PATH in your shell configuration files. ACP is included; browser and computer-use components are skipped.",
     "hint": {
       "node": "Install Node.js from nodejs.org, then reload the environment in Settings.",
       "uv": "Install uv from docs.astral.sh/uv, then reload the environment in Settings.",
@@ -214,7 +215,7 @@
       "goose": "Install goose, or choose its binary in Settings › Harnesses.",
       "kilo": "Install Kilo Code, or choose its binary in Settings › Harnesses.",
       "omp": "Install OMP with `bun install -g @oh-my-pi/pi-coding-agent` or its installer at omp.sh.",
-      "hermes": "Install Hermes Agent with the installer at hermes-agent.nousresearch.com, with its `acp` extra.",
+      "hermes": "Install Hermes Agent in Settings › Harnesses on macOS or Linux. On Windows, follow the official guide for WSL2.",
       "muse": "Install Muse Code from dev.meta.ai, or choose its binary in Settings › Harnesses.",
       "codewhale": "Install CodeWhale with the installer at codewhale.net, or choose its binary in Settings › Harnesses.",
       "harn": "Install Harn, or choose its binary in Settings › Harnesses.",

@@ -11,6 +11,36 @@ const context: PlanContext = {
   isExecutable: async () => false,
 }
 
+describe.each(['bash', 'sh'] as const)('the %s script route', (shell) => {
+  it('quotes script arguments and preserves them on update', async () => {
+    const installs = {
+      script: 'https://vendor.example/install.sh',
+      scriptShell: shell,
+      scriptArgs: ['--non-interactive', 'two words', "it's $(false); exit 1"],
+    }
+    const ctx: PlanContext = {
+      ...context,
+      env: { PATH: '/bin' },
+      isExecutable: async (file) => file === `/bin/${shell}` || file === '/bin/curl',
+    }
+    const [plan] = await installPlans(installs, ctx)
+    const invocation = `${shell} -s -- --non-interactive 'two words' 'it'\\''s $(false); exit 1'`
+    const download = 'curl -fsSL https://vendor.example/install.sh'
+    expect(plan?.command).toBe(`${download} | ${invocation}`)
+    expect(plan?.run).toEqual({
+      program: `/bin/${shell}`,
+      args: [
+        '-c',
+        shell === 'bash'
+          ? `set -o pipefail; ${download} | ${invocation}`
+          : `script="$(${download})" && printf '%s\\n' "$script" | ${invocation}`,
+      ],
+    })
+    const update = await updatePlan(installs, 'script', { ...ctx, program: '/bin/vendor' })
+    expect(update).toEqual({ command: plan?.command, run: plan?.run })
+  })
+})
+
 describe('the npm route', () => {
   it('skips the package install scripts when the vendor does, on install and update', async () => {
     const installs: BinaryInstalls = { npm: 'vendor-pkg', ignoreScripts: true }

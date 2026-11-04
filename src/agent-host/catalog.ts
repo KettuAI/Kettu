@@ -120,7 +120,7 @@ export interface AgentDefinition {
   requires?: AgentRequires
   /** Variables every launch adds (pi-acp 0.0.34 reads PI_ACP_ENABLE_EMBEDDED_CONTEXT). */
   env?: Record<string, string>
-  install: { hint: HostKey; url: string }
+  install: { hint: HostKey; url: string; notice?: HostKey }
   /**
    * Its terminal sign-in runs the `requires` program alone, without the launch's variables
    * (pi-acp 0.0.34's `pi_terminal_login` only runs `pi --terminal-login`).

@@ -40,6 +40,8 @@ export interface BinaryInstalls {
   /** The install script's URL, piped to `scriptShell` (bash when not given). */
   script?: string
   scriptShell?: 'bash' | 'sh'
+  /** Constant arguments passed to the script through the shell's stdin mode. */
+  scriptArgs?: string[]
   /** The folder the script installs into, from the home directory. */
   scriptBin?: string[]
   /** Where the script keeps the program it installs, from the home directory, which tells it apart. */
@@ -134,17 +136,22 @@ function scriptPlan(
   shell: string | null,
   curl: string | null,
   platform: Platform,
+  args: string[] = [],
 ): InstallPlan {
   const curlWords = { command: 'curl', args: ['-fsSL', url] }
   const download = formatCommand(curlWords, platform)
-  const pipeline = `${download} | ${shellName}`
+  const invocation = formatCommand(
+    { command: shellName, args: args.length ? ['-s', '--', ...args] : [] },
+    platform,
+  )
+  const pipeline = `${download} | ${invocation}`
   // A download that fails must fail the install, not leave the shell running nothing. bash has
   // pipefail; a plain sh, such as dash before 0.5.12, may not, so it gets the script only once
   // curl succeeded.
   const script =
     shellName === 'bash'
       ? `set -o pipefail; ${pipeline}`
-      : `script="$(${download})" && printf '%s\\n' "$script" | ${shellName}`
+      : `script="$(${download})" && printf '%s\\n' "$script" | ${invocation}`
   return {
     id: 'script',
     label: pipeline,
@@ -207,7 +214,9 @@ export async function installPlans(
         tool: brew ?? null,
       })
     }
-    if (installs.script) plans.push(scriptPlan(installs.script, shellName, shell, curl, platform))
+    if (installs.script) {
+      plans.push(scriptPlan(installs.script, shellName, shell, curl, platform, installs.scriptArgs))
+    }
   }
   if (platform === 'win32' && installs.winget) {
     const winget = await findCommand('winget', ctx)
@@ -330,7 +339,14 @@ export async function updatePlan(
       const [shell, curl] = await Promise.all(
         [shellName, 'curl'].map((name) => findCommand(name, ctx)),
       )
-      const plan = scriptPlan(installs.script, shellName, shell ?? null, curl ?? null, platform)
+      const plan = scriptPlan(
+        installs.script,
+        shellName,
+        shell,
+        curl,
+        platform,
+        installs.scriptArgs,
+      )
       return { command: plan.command, run: plan.run }
     }
     case 'brew': {
