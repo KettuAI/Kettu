@@ -186,17 +186,10 @@ export function useSubagentProgress(child: SessionSummary): SubagentProgress {
   return useProgressOf(child, useSubagentDigest(child.id))
 }
 
-/**
- * Loads what a sub-agent's block shows while it is in view or open: a running one's thread is
- * watched, so its steps arrive as they happen; a finished one's is read once.
- */
-export function useLoadSubagent(
-  child: SessionSummary | undefined,
-  { open, visible }: { open: boolean; visible: boolean },
-): void {
+/** Loads progress for a visible sub-agent card: watches it while running, reads it once when done. */
+export function useLoadSubagent(child: SessionSummary | undefined, visible: boolean): void {
   const id = child?.id
   const running = !!child && subagentRunning(child)
-  const wanted = open || visible
   const loaded = useThreadsStore((s) => (id ? !!s.replicas[id] : false))
   const status = child?.status
   const updatedAt = child?.updatedAt
@@ -204,11 +197,11 @@ export function useLoadSubagent(
   // Once per change, never again when the replica goes: blocks in view would otherwise take
   // turns pushing each other out of the few sessions kept watched.
   useEffect(() => {
-    if (id && wanted && running) void focusSession(id)
-  }, [id, wanted, running])
+    if (id && visible && running) void focusSession(id)
+  }, [id, visible, running])
 
   useEffect(() => {
-    if (!id || !status || updatedAt === undefined || !wanted || running || loaded) return
+    if (!id || !status || updatedAt === undefined || !visible || running || loaded) return
     void readSubagent({ id, status, updatedAt })
-  }, [id, status, updatedAt, wanted, running, loaded])
+  }, [id, status, updatedAt, visible, running, loaded])
 }
