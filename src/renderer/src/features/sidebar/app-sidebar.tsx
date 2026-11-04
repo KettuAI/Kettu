@@ -580,7 +580,7 @@ function ProjectGroup({
   )
 
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="group/project flex flex-col gap-0.5">
       <div className={cn('group/menu-item', GROUP_ROW, first && 'mt-1')}>
         {project && local ? (
           <ContextMenu>
@@ -615,7 +615,7 @@ function ProjectGroup({
                         aria-label={t('row.more')}
                         className={cn(
                           GROUP_ACTION,
-                          'data-popup-open:bg-selected data-popup-open:text-primary',
+                          'group-hover/project:opacity-100 data-popup-open:bg-selected data-popup-open:text-primary',
                           !project.missing && 'right-7.5',
                         )}
                       />
