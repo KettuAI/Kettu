@@ -57,6 +57,14 @@ import {
   setOption,
   settleOptions,
 } from './new-session/prepared'
+import {
+  greetingMoment,
+  greetingPeriod,
+  lastStartedAt,
+  pickInvite,
+  type GreetingMoment,
+  type GreetingPeriod,
+} from './new-session/greeting'
 import { pickupSessions, pickupState } from './new-session/picker'
 import { agentNeed, canStart, noAgentCanStart, startValues } from './new-session/start-options'
 import { useStartConfig } from './new-session/use-start-config'
@@ -144,23 +152,35 @@ export function NewSessionView({
   )
 }
 
-function greetingPeriod(now: number): 'morning' | 'afternoon' | 'evening' {
-  const hour = new Date(now).getHours()
-  if (hour >= 5 && hour < 12) return 'morning'
-  if (hour >= 12 && hour < 18) return 'afternoon'
-  return 'evening'
-}
-
 function WelcomeHeading() {
   const { t } = useTranslation('session')
-  const period = useClock(greetingPeriod)
   const name = useAccountStore((s) =>
     s.status?.state === 'signed-in' ? s.status.account.name?.trim() || null : null,
   )
+  const lastStarted = useSessionsStore((s) => (s.loaded ? lastStartedAt(s.byId) : undefined))
+  // A primitive, so the heading re-renders only when the period or the moment changes.
+  const key = useClock(
+    (now) => `${greetingPeriod(new Date(now))}:${greetingMoment(now, lastStarted)}`,
+  )
+  const [period, moment] = key.split(':') as [GreetingPeriod, GreetingMoment]
+  const invites = t(`newSession.greeting.invite.${moment}`, {
+    returnObjects: true,
+  }) as readonly string[]
+  const index = useMemo(() => pickInvite(key, invites.length), [key, invites.length])
+  const hello = t(`newSession.greeting.hello.${moment === 'back' ? 'back' : period}`)
+  const lead =
+    moment === 'first'
+      ? t('newSession.greeting.first')
+      : name
+        ? t('newSession.greeting.named', { hello, name })
+        : t('newSession.greeting.plain', { hello })
   return (
     <h1 className="mb-7 animate-in text-center font-greeting text-greeting font-normal text-balance wrap-anywhere fade-in animation-duration-(--duration-slow)">
-      <BrandFox size={40} className="mr-3 inline-block size-[1.2em] align-middle" />
-      {t(`newSession.${name ? 'greetingNamed' : 'greeting'}.${period}`, { name })}
+      <BrandFox className="mr-[0.4em] size-[1.15em] align-middle" />
+      {lead}
+      <span className="animate-in text-(color:--greeting-invite) fade-in animation-duration-(--duration-slow) animation-delay-[120ms] [animation-fill-mode:both]">
+        {invites[index]}
+      </span>
     </h1>
   )
 }

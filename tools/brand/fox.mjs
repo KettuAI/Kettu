@@ -124,6 +124,13 @@ const SHAPES = {
     'M 879.5 624.5 C 826.9 605.5 764.6 636.9 727.5 675.5 C 650.6 755.3 645 844.1 620 922 L 616 925 L 613.1 928.8 C 617.1 929.5 617 929.5 620 929.5 C 649.4 929.5 671.5 890.1 700.5 860.5 C 742.5 817.6 796.9 769.4 856.5 735.5 C 880.1 722.1 900.5 712.3 916.5 700.5 C 933.3 688.1 930.2 670 920.5 657.5 C 909.9 643.8 894.2 629.8 879.5 624.5 Z',
 }
 
+// The ears' light insides.
+const EAR_INNER = {
+  left: 'M 328 324.5 C 382 369.5 426 446.5 454.5 540.5 C 425 580 380 617 350.5 638.5 C 311.5 583.8 292.6 489.2 300 408 C 307.2 358.1 316.5 325.1 328 324.5 Z',
+  right:
+    'M 912 324.5 C 858 369.5 814 446.5 785.5 540.5 C 815 580 860 617 889.5 638.5 C 928.5 583.8 947.4 489.2 940 408 C 932.8 358.1 923.5 325.1 912 324.5 Z',
+}
+
 const FOX_SHADOW = `
   <g id="fox-shadow">
     <g filter="url(#foxHalo)"><use xlink:href="#ear-left"/><use xlink:href="#ear-right"/><use xlink:href="#forehead"/><use xlink:href="#cheek-left"/><use xlink:href="#cheek-right"/></g>
@@ -137,9 +144,9 @@ const FOX = `
   <clipPath id="earsClip"><use xlink:href="#ear-left"/><use xlink:href="#ear-right"/></clipPath>
   <g id="ears">
     <path id="ear-left" d="${SHAPES['ear-left']}" fill="url(#earBase)"/>
-    <path id="ear-left-inner" d="M 328 324.5 C 382 369.5 426 446.5 454.5 540.5 C 425 580 380 617 350.5 638.5 C 311.5 583.8 292.6 489.2 300 408 C 307.2 358.1 316.5 325.1 328 324.5 Z" fill="url(#earInner)"/>
+    <path id="ear-left-inner" d="${EAR_INNER.left}" fill="url(#earInner)"/>
     <path id="ear-right" d="${SHAPES['ear-right']}" fill="url(#earBaseR)"/>
-    <path id="ear-right-inner" d="M 912 324.5 C 858 369.5 814 446.5 785.5 540.5 C 815 580 860 617 889.5 638.5 C 928.5 583.8 947.4 489.2 940 408 C 932.8 358.1 923.5 325.1 912 324.5 Z" fill="url(#earInnerR)"/>
+    <path id="ear-right-inner" d="${EAR_INNER.right}" fill="url(#earInnerR)"/>
     <g clip-path="url(#earsClip)"><use xlink:href="#forehead" filter="url(#earOccl)"/></g>
     <path d="M 328 324.5 C 353 323.5 493.8 388.3 559.5 494.5" fill="none" stroke="#FFF8EA" stroke-width="2.5" opacity=".5" filter="url(#hairGlow)"/>
     <path d="M 912 324.5 C 887 323.5 746.2 388.3 680.5 494.5" fill="none" stroke="#FFF8EA" stroke-width="2.5" opacity=".5" filter="url(#hairGlow)"/>
@@ -223,6 +230,58 @@ export function foxMarkSvg() {
     `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${size}" height="${size}" viewBox="${x} ${y} ${size} ${size}">\n` +
     `<defs>${FOX_DEFS}</defs>\n` +
     `<g id="fox" transform="translate(${FOX_DX} 0)">${FOX}</g>\n</svg>\n`
+  )
+}
+
+// The flat fox's three fox-orange tones for each ground: the forehead strongest, the ears between,
+// the cheeks and the ears' insides lightest, the right-hand parts a step darker as the light comes
+// from the upper left. The dark ground's set is a step lighter, so every part holds on white and on
+// dark gray, which the mark's cream parts do not on white.
+const FLAT_TONES = {
+  light: {
+    ear: '#F98A44',
+    earRight: '#F27434',
+    inner: '#FDC29C',
+    innerRight: '#FAB38A',
+    forehead: '#F2581B',
+    cheek: '#FDD9BF',
+    cheekRight: '#FBCDAE',
+  },
+  dark: {
+    ear: '#FF9452',
+    earRight: '#FF7F3E',
+    inner: '#FFD2B2',
+    innerRight: '#FFC29E',
+    forehead: '#FF6A2B',
+    cheek: '#FFE6D2',
+    cheekRight: '#FFDAC0',
+  },
+}
+
+export const FLAT_GROUNDS = ['light', 'dark']
+
+/**
+ * The mark drawn flat, without its gradients and light, in the tones for a `light` or `dark`
+ * ground, on the mark's square, for the greeting on New session.
+ */
+export function foxFlatSvg(ground = 'light') {
+  const tones = FLAT_TONES[ground]
+  if (!tones) throw new Error(`Unknown ground: ${ground}`)
+  const { x, y, size } = MARK
+  const parts = [
+    [SHAPES['ear-left'], tones.ear],
+    [EAR_INNER.left, tones.inner],
+    [SHAPES['ear-right'], tones.earRight],
+    [EAR_INNER.right, tones.innerRight],
+    [SHAPES.forehead, tones.forehead],
+    [SHAPES['cheek-left'], tones.cheek],
+    [SHAPES['cheek-right'], tones.cheekRight],
+  ]
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="${x} ${y} ${size} ${size}">\n` +
+    `<g transform="translate(${FOX_DX} 0)">\n` +
+    parts.map(([d, fill]) => `<path d="${d}" fill="${fill}"/>\n`).join('') +
+    '</g>\n</svg>\n'
   )
 }
 

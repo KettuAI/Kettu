@@ -284,14 +284,31 @@
     "recent": "Recent",
     "noMatchingProjects": "No matching projects",
     "greeting": {
-      "morning": "Good morning",
-      "afternoon": "Good afternoon",
-      "evening": "Good evening"
-    },
-    "greetingNamed": {
-      "morning": "Good morning, {{name}}",
-      "afternoon": "Good afternoon, {{name}}",
-      "evening": "Good evening, {{name}}"
+      "hello": {
+        "morning": "Good morning",
+        "afternoon": "Good afternoon",
+        "evening": "Good evening",
+        "late": "It’s late",
+        "back": "Welcome back"
+      },
+      "named": "{{hello}}, {{name}}. ",
+      "plain": "{{hello}}. ",
+      "first": "Hi, I’m Kettu. ",
+      "invite": {
+        "morning": ["Where shall we start?", "What’s first?", "What’s on today?"],
+        "afternoon": [
+          "What’s next?",
+          "What else is on your plate?",
+          "A good time for the hard part."
+        ],
+        "evening": ["Anything left to wrap up?", "Long day?", "A quiet hour to build."],
+        "late": ["Take it slow.", "One more, then rest."],
+        "first": ["Hand an agent something small?"],
+        "back": ["Where were we?"],
+        "monday": ["New week. What’s first?"],
+        "friday": ["Wrap up the week?"],
+        "weekend": ["Weekend build? Keep it light."]
+      }
     },
     "branchHint": "The session starts on this branch",
     "commitHint": "The session starts at this commit",
