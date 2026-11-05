@@ -69,7 +69,7 @@
 
 ### 🚧 即将推出
 
-- 🖱️ **Computer use**：Agent 操作你电脑上的应用。
+- 🦾 **Computer use**：Agent 操作你电脑上的应用。
 - 📲 **iOS 和 Android 模拟器**：模拟器画面放进 Kettu，你和 Agent 都能操作。
 
 ## 🔒 隐私

@@ -69,7 +69,7 @@ All your coding agents, side by side in one window.
 
 ### 🚧 Coming soon
 
-- 🖱️ **Computer use**: agents operate the apps on your computer.
+- 🦾 **Computer use**: agents operate the apps on your computer.
 - 📲 **iOS Simulator and Android Emulator**: on screen in Kettu, for you and the agent to use.
 
 ## 🔒 Privacy
