@@ -221,6 +221,7 @@ function deviceDetail(t: TFunction<'devices'>, device: DeviceInfo): string {
   const kind = t(`kind.${device.kind}`)
   const parts = [kind, device.osVersion].filter(Boolean)
   if (device.state === 'shutdown') parts.push(t('state.shutdown'))
+  if (device.state === 'unavailable') parts.push(t('state.unavailable'))
   if (device.connection === 'network') parts.push(t('connection.network'))
   return parts.join(' · ')
 }

@@ -14,7 +14,8 @@
     "physical": "真机"
   },
   "state": {
-    "shutdown": "已关机"
+    "shutdown": "已关机",
+    "unavailable": "未连接"
   },
   "connection": {
     "network": "Wi-Fi"

@@ -1,6 +1,8 @@
 // The devices of this host: what the tools list, which session holds each, who is operating it,
 // and the stream of each device someone watches.
 
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import path from 'node:path'
 import type { Env } from '../agent-host/find-command'
 import type {
   DeviceEnvironment,
@@ -54,6 +56,8 @@ interface Live {
 
 export interface DeviceManagerDeps {
   platform: Platform
+  /** Kettu's data folder, where the sessions' devices are kept across restarts of the host. */
+  dataDir: string | null
   env: () => Promise<Env>
   resourcesPath: string | null
   /** Sends an event to one port, or to every window and allowed device when `port` is null. */
@@ -73,7 +77,41 @@ export class DeviceManager {
   private poll: ReturnType<typeof setInterval> | null = null
   private lastList = ''
 
-  constructor(private readonly deps: DeviceManagerDeps) {}
+  private readonly restored: Promise<void>
+
+  constructor(private readonly deps: DeviceManagerDeps) {
+    this.restored = this.restoreLeases()
+  }
+
+  private leasesFile(): string | null {
+    return this.deps.dataDir ? path.join(this.deps.dataDir, 'state', 'device-leases.json') : null
+  }
+
+  private async restoreLeases(): Promise<void> {
+    const file = this.leasesFile()
+    if (!file) return
+    const text = await readFile(file, 'utf8').catch(() => null)
+    if (!text) return
+    try {
+      const parsed = JSON.parse(text) as { leases?: Record<string, unknown> }
+      for (const [id, sessionId] of Object.entries(parsed.leases ?? {})) {
+        if (typeof sessionId === 'string' && sessionId.length <= 256) this.leases.set(id, sessionId)
+      }
+    } catch {
+      this.deps.log('Ignored an unreadable device-leases.json')
+    }
+  }
+
+  /** Which session holds which device, so a pane shows its devices again after a restart. */
+  private saveLeases(): void {
+    const file = this.leasesFile()
+    if (!file) return
+    const body = JSON.stringify({ leases: Object.fromEntries(this.leases) })
+    void mkdir(path.dirname(file), { recursive: true })
+      .then(() => writeFile(`${file}.tmp`, body))
+      .then(() => rename(`${file}.tmp`, file))
+      .catch((error: unknown) => this.deps.log(`Cannot save device-leases.json: ${String(error)}`))
+  }
 
   async environment(): Promise<DeviceEnvironment> {
     const tools = await this.loadTools()
@@ -94,9 +132,11 @@ export class DeviceManager {
   /** Lists again, at most once at a time, and tells every client when anything changed. */
   list(): Promise<DeviceInfo[]> {
     if (!this.listing) {
-      this.listing = this.refresh().finally(() => {
-        this.listing = null
-      })
+      this.listing = this.restored
+        .then(() => this.refresh())
+        .finally(() => {
+          this.listing = null
+        })
     }
     return this.listing
   }
@@ -133,6 +173,7 @@ export class DeviceManager {
       throw new DeviceError('busy', 'Another session is using this device', { sessionId: holder })
     }
     this.leases.set(id, sessionId)
+    this.saveLeases()
     const tools = await this.loadTools()
     const env = await this.deps.env()
     if (found.kind === 'simulator' && found.state !== 'booted' && tools.xcrun) {
@@ -157,6 +198,7 @@ export class DeviceManager {
       this.leases.delete(id)
       id = `android:${serial}`
       this.leases.set(id, sessionId)
+      this.saveLeases()
     }
     await this.list()
     const info = this.info(id)
@@ -167,6 +209,7 @@ export class DeviceManager {
   async close(id: DeviceId, sessionId: string, shutdown: boolean): Promise<void> {
     if (this.leases.get(id) !== sessionId) return
     this.leases.delete(id)
+    this.saveLeases()
     this.operators.delete(id)
     const found = this.found.get(id)
     await this.stopLive(id)
@@ -190,6 +233,7 @@ export class DeviceManager {
       this.leases.delete(id)
       this.operators.delete(id)
     }
+    this.saveLeases()
     this.broadcastList()
   }
 

@@ -150,7 +150,8 @@ export class AndroidDriver implements DeviceDriver {
   }
 
   requestKeyframe(): void {
-    this.write(resetVideoMessage())
+    // The server's capture starts with a keyframe; a reset before it exists kills its control thread.
+    if (this.codec) this.write(resetVideoMessage())
   }
 
   send(input: DeviceInput): void {

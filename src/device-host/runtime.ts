@@ -57,8 +57,9 @@ export async function helperPath(
 ): Promise<string | null> {
   const candidates = [
     ...(resourcesPath ? [path.join(resourcesPath, 'helpers', name)] : []),
+    // Beside the bundle under `out/`: the daemon's `out/daemon`, or the app's `out/main/chunks`.
     path.resolve(__dirname, '..', 'helpers', name),
-    path.resolve(__dirname, '..', '..', 'out', 'helpers', name),
+    path.resolve(__dirname, '..', '..', 'helpers', name),
   ]
   for (const file of candidates) {
     if (await isExecutableFile(file, process.platform)) return file

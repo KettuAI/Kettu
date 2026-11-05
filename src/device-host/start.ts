@@ -52,6 +52,7 @@ export function startDeviceHost(
     }
     manager = new DeviceManager({
       platform: message.platform,
+      dataDir: message.dataDir,
       env: loadEnv,
       resourcesPath: message.resourcesPath,
       emit: (port, event) => (port ? server?.send(port, event) : server?.broadcast(event)),

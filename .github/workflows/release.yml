@@ -147,6 +147,10 @@ jobs:
             sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
           fi
           xcodebuild -version
+      # scrcpy's server for Android, checked by its SHA-256, and on macOS the iOS helpers built from
+      # native/ with the runner's Xcode and Rust; the package ships them as the helpers resource.
+      - name: Fetch and build the device helpers
+        run: node tools/install/device-helpers.mjs
       - name: Package
         if: env.MAC_SIGNED != 'true'
         run: pnpm exec electron-builder ${{ matrix.target }} --publish never
