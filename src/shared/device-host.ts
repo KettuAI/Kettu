@@ -147,6 +147,8 @@ export type DeviceEvent =
       state: 'starting' | 'live' | 'stopped' | 'error'
       error?: string
     }
+  /** To a paired device: its port to the device host was lost, so it watches its devices again. */
+  | { type: 'devices.restarted' }
   /** A session's agent opened a device, so a window shows it if that session's panel is free. */
   | { type: 'device.opened'; deviceId: DeviceId; sessionId: string }
 

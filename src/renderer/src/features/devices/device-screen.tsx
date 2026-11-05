@@ -222,19 +222,40 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
       }
     }
 
-    window.kettu.devices
-      .request('devices.watch', { deviceId: id })
-      .then((result) => {
-        if (result.screen) screen = result.screen
-      })
-      .catch((reason: unknown) => {
-        setState('error')
-        setError(reason instanceof Error ? reason.message : String(reason))
-      })
+    const watch = (): void => {
+      window.kettu.devices
+        .request('devices.watch', { deviceId: id })
+        .then((result) => {
+          if (result.screen) screen = result.screen
+        })
+        .catch((reason: unknown) => {
+          setState('error')
+          setError(reason instanceof Error ? reason.message : String(reason))
+        })
+    }
+    watch()
+    // A device host that restarted knows no watcher: watch again once its port is back.
+    let lost = false
+    const stopConnection = window.kettu.devices.onConnection((connection) => {
+      if (connection !== 'connected') lost = true
+      else if (lost) {
+        lost = false
+        waitingKey = true
+        watch()
+      }
+    })
+    const stopRestarted = window.kettu.devices.onEvent((event) => {
+      if (event.type === 'devices.restarted') {
+        waitingKey = true
+        watch()
+      }
+    })
 
     return () => {
       closed = true
       unsubscribe()
+      stopConnection()
+      stopRestarted()
       decoder?.close()
       void window.kettu.devices.request('devices.unwatch', { deviceId: id }).catch(() => undefined)
     }

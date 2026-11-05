@@ -106,6 +106,7 @@ export class DeviceDevices {
       this.port = null
       this.state = 'idle'
       this.reset(UNAVAILABLE)
+      this.options.send({ type: 'event', event: { type: 'devices.restarted' } })
     })
     for (const request of this.queued.splice(0)) this.forward(request)
   }
