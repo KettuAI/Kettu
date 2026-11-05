@@ -1,6 +1,7 @@
 // Grants for the media files a thread names or the Files pane opens, which main then serves on
 // the media scheme, and the same files found for a device's remote host to stream.
 
+import { addLogSecret } from '@shared/log/process-log'
 import { randomBytes } from 'node:crypto'
 import type { Stats } from 'node:fs'
 import { open, realpath, stat } from 'node:fs/promises'
@@ -289,6 +290,7 @@ export class MediaService {
     if (!file) return null
     const { name, ...grant } = file
     const token = mediaToken((this.deps.random ?? randomBytes)(16))
+    addLogSecret(token)
     this.deps.grant({ token, path: real, mimeType: grant.mimeType, sessionId })
     return { url: mediaUrl(token, name, info.mtimeMs), ...grant }
   }

@@ -346,7 +346,11 @@ export class ForkedHost<ToChild, FromChild extends { type: string }> {
         partial = ''
       })
     }
-    forward(child.stdout, (line) => this.config.log.info(line))
+    // A host writes its own log; its stdout only echoes that to a terminal. Its stderr holds what
+    // it could not log, such as a crash before its log opened.
+    forward(child.stdout, (line) => {
+      if (process.stdout.isTTY) process.stdout.write(`${line}\n`)
+    })
     forward(child.stderr, (line) => this.config.log.warn(line))
   }
 }

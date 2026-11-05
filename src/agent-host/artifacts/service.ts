@@ -2,6 +2,7 @@
 // reaches with a token of its own, or for OpenCode with its process and folder's token. Streamable
 // HTTP in plain JSON, one stateless transport per request.
 
+import { addLogSecret } from '@shared/log/process-log'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -129,7 +130,9 @@ interface FolderGrant {
 type Grant = SessionGrant | FolderGrant
 
 function newToken(): string {
-  return randomBytes(TOKEN_BYTES).toString('base64url')
+  const token = randomBytes(TOKEN_BYTES).toString('base64url')
+  addLogSecret(token)
+  return token
 }
 
 function entry(url: string, token: string): McpServer[] {

@@ -7,6 +7,7 @@ import path from 'node:path'
 import { cp, mkdir, rename, rm, stat } from 'node:fs/promises'
 import type { AgentOptions, DiagnosticsBundle, HostEvent, McpStatus } from '@shared/agent-host'
 import { OWNER } from '@shared/artifact-comments'
+import { writeLog } from '@shared/log/process-log'
 import { harnessOf, type HarnessId } from '@shared/agents'
 import type { RuntimeAnswer } from '@shared/artifact-capabilities'
 import { artifactFileType } from '@shared/artifact-files'
@@ -263,9 +264,6 @@ export class AgentHost {
     setLocale(options.settings.locale)
     this.diagnostics = new Diagnostics({ mirrorTraffic: options.mirrorTraffic ?? false })
     const log = this.diagnostics.log.bind(this.diagnostics)
-    this.diagnostics.onLog((entry) =>
-      options.send({ type: 'host:log', level: entry.level, message: entry.message }),
-    )
     this.env = new EnvironmentService({
       platform,
       nodeRuntime: options.nodeRuntime,
@@ -602,7 +600,7 @@ export class AgentHost {
     await moveHarnessInstalls(
       path.join(options.userDataPath, 'agents'),
       path.join(options.homeDir ?? os.homedir(), KETTU_HOME_FOLDER, HARNESSES_FOLDER),
-      (message) => options.send({ type: 'host:log', level: 'warn', message }),
+      (message) => writeLog('warn', 'host', message),
     )
     const host = new AgentHost(options)
     const [, , , remembered, updates] = await Promise.all([

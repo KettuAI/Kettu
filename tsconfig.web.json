@@ -21,6 +21,6 @@
     }
   },
   "include": ["src/renderer/src/**/*", "src/preload/*.d.ts", "src/shared/**/*"],
-  // Node.js only: the socket a host listens on outside Electron.
-  "exclude": ["src/shared/socket-port.ts"]
+  // Node.js only: the socket a host listens on outside Electron, and the processes' log files.
+  "exclude": ["src/shared/socket-port.ts", "src/shared/log/**"]
 }

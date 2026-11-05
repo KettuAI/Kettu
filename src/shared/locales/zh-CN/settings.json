@@ -400,9 +400,22 @@
       "saved": "已保存到 {{path}}",
       "exportShort": "导出…"
     },
+    "logs": {
+      "name": "日志",
+      "description": "Kettu 做过什么，保留 14 天，密钥已隐去，不含对话内容。",
+      "keywords": "日志 排查 调试 log debug"
+    },
+    "detailedRecords": {
+      "name": "详细记录",
+      "description": "连同和 Agent 来往的完整消息一起记下：提示词、代码和工具输出，也包括 Agent 读过的密钥。24 小时后自动关闭。",
+      "keywords": "详细 调试 日志 verbose debug",
+      "left_other": "还剩 {{count}} 小时",
+      "delete": "删除记录",
+      "deleted": "已删除详细记录"
+    },
     "dataFolder": {
       "name": "数据文件夹",
-      "description": "设置、会话索引和日志。",
+      "description": "设置和会话索引。",
       "show": "在{{name}}中显示",
       "copy": "复制路径"
     },

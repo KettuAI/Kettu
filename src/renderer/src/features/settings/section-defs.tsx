@@ -104,6 +104,8 @@ import {
   ColorMode,
   ConfirmLinks,
   DataFolderActions,
+  DetailedRecords,
+  LogsFolderActions,
   DataFolderText,
   DefaultAgent,
   Diagnostics,
@@ -822,6 +824,7 @@ export function useBrowserSection(): SectionDef {
 export function useAdvancedSection(): SectionDef {
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
+  const { hostId } = useHostScope()
   const en = english()
   const data = group('data', t('advanced.groups.data'))
   return {
@@ -850,6 +853,29 @@ export function useAdvancedSection(): SectionDef {
         layout: 'block',
         render: (text) => <Diagnostics label={text} />,
       },
+      // The log files and their switch are this computer's; a host elsewhere keeps its own.
+      ...(isWeb || hostId !== null
+        ? []
+        : [
+            {
+              id: 'logs',
+              name: t('advanced.logs.name'),
+              english: en('advanced.logs.name'),
+              description: t('advanced.logs.description'),
+              keywords: t('advanced.logs.keywords'),
+              group: data,
+              render: () => <LogsFolderActions />,
+            },
+            {
+              id: 'detailed-records',
+              name: t('advanced.detailedRecords.name'),
+              english: en('advanced.detailedRecords.name'),
+              description: t('advanced.detailedRecords.description'),
+              keywords: t('advanced.detailedRecords.keywords'),
+              group: data,
+              render: () => <DetailedRecords label={t('advanced.detailedRecords.name')} />,
+            },
+          ]),
       {
         id: 'data-folder',
         name: t('advanced.dataFolder.name'),

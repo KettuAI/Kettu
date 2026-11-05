@@ -807,13 +807,6 @@ export class RemoteHost {
       case 'remote-host:admin-call':
         if (this.host === host) void this.answerAdmin(host, message)
         break
-      case 'remote-host:log': {
-        const text = typeof message.message === 'string' ? message.message : ''
-        if (message.level === 'error') log.error(text)
-        else if (message.level === 'warn') log.warn(text)
-        else log.info(text)
-        break
-      }
       default:
         log.warn(`Ignored unknown message "${(message as { type: string }).type}"`)
     }

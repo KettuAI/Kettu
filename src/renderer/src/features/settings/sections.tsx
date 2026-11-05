@@ -902,6 +902,65 @@ export function Diagnostics({ label }: { label: ReactNode }) {
   )
 }
 
+const HOUR_MS = 60 * 60 * 1000
+const DAY_MS = 24 * HOUR_MS
+
+export function LogsFolderActions() {
+  const { t } = useTranslation('settings')
+  const path = useAppInfo()?.logsPath
+  if (!path) return null
+  return (
+    <>
+      <RevealButton path={path} outline />
+      <CopyAction text={path} label={t('advanced.dataFolder.copy')} />
+    </>
+  )
+}
+
+export function DetailedRecords({ label }: { label: string }) {
+  const { t } = useTranslation('settings')
+  const until = useSettings().diagnostics.verboseUntil
+  const [apply, error] = useApply()
+  const [now, setNow] = useState(() => Date.now())
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const on = until !== null && until > now
+  useEffect(() => {
+    if (!on) return
+    const timer = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(timer)
+  }, [on])
+  const remove = () => {
+    setDeleteError(null)
+    window.kettu.diagnostics.clearVerbose().then(
+      () => toast(t('advanced.detailedRecords.deleted')),
+      (e: unknown) => setDeleteError(errorMessage(e)),
+    )
+  }
+  return (
+    <>
+      <ControlError error={error ?? deleteError} />
+      {on ? (
+        <span className="text-hint text-tertiary tabular-nums">
+          {t('advanced.detailedRecords.left', { count: Math.ceil((until - now) / HOUR_MS) })}
+        </span>
+      ) : (
+        <Button variant="ghost" className={GROUP_ACTION} onClick={remove}>
+          {t('advanced.detailedRecords.delete')}
+        </Button>
+      )}
+      <SettingSwitch
+        label={label}
+        checked={on}
+        onChange={(value) => {
+          const at = Date.now()
+          setNow(at)
+          apply({ diagnostics: { verboseUntil: value ? at + DAY_MS : null } })
+        }}
+      />
+    </>
+  )
+}
+
 /** Where the diagnostics file went, and the way to it. */
 function SavedTo({ path }: { path: string }) {
   const { t } = useTranslation('settings')

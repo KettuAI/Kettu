@@ -210,6 +210,8 @@ const api: KettuApi = {
   },
   diagnostics: {
     save: (bundle) => invoke('diagnostics:save', bundle),
+    clearVerbose: () => invoke('diagnostics:clear-verbose'),
+    recordActions: (actions) => send('diagnostics:actions', actions),
   },
   shell: {
     showDataFolder: () => invoke('shell:show-data-folder'),

@@ -97,6 +97,7 @@ export type MainToHost =
       format: ArtifactExportFormat
     }
   | { type: 'host:power'; state: 'suspend' | 'resume' }
+  | { type: 'host:log-level'; level: 'debug' | 'info' }
   // Allow once, from a request's notification: answered as one of the host's own windows would.
   | { type: 'host:permission-answer'; sessionId: string; requestId: string; optionId: string }
   // The answer to a host:browser-call, its result or the error that refused it.
@@ -205,7 +206,6 @@ export type HostToMain =
     }
   // The artifacts service's port, which the browser's pages must never reach; null when it is down.
   | { type: 'host:service-port'; port: number | null }
-  | { type: 'host:log'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'host:stopped' }
 
 export type MainToTerminalHost =
@@ -384,7 +384,6 @@ export type RemoteHostToMain =
   // A port to the terminal host for a device's terminals; answered by remote-host:port in the
   // desktop app and by remote-host:terminal-socket under Node.js.
   | { type: 'remote-host:open-terminal-port'; requestId: number; device: PortDevice }
-  | { type: 'remote-host:log'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'remote-host:pairing'; codeId: number; pairing: PairingState }
   // The known hosts and their connections, whenever they change.
   | { type: 'remote-host:hosts'; hosts: HostStatus[] }

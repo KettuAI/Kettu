@@ -401,9 +401,23 @@
       "saved": "Saved to {{path}}",
       "exportShort": "Export…"
     },
+    "logs": {
+      "name": "Logs",
+      "description": "What Kettu did, kept for 14 days, with keys masked and no conversation content.",
+      "keywords": "log files debug troubleshoot"
+    },
+    "detailedRecords": {
+      "name": "Detailed records",
+      "description": "Also records the full messages with agents: prompts, code and tool output, with any keys an agent read. Turns off after 24 hours.",
+      "keywords": "verbose debug trace logs",
+      "left_one": "{{count}} hour left",
+      "left_other": "{{count}} hours left",
+      "delete": "Delete records",
+      "deleted": "Detailed records deleted"
+    },
     "dataFolder": {
       "name": "Data folder",
-      "description": "Settings, the session index and logs.",
+      "description": "Settings and the session index.",
       "show": "Show in {{name}}",
       "copy": "Copy path"
     },

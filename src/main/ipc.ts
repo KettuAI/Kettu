@@ -49,6 +49,8 @@ import { deviceIdArg, deviceName, pairingCode, runnableProgram } from './host-ad
 import { t } from './i18n'
 import { loginItemStatus } from './login-item'
 import { createLogger } from './log'
+import { parseActionBatch } from './action-records'
+import { clearVerboseRecords } from './app-log'
 import { grantedPath, type MediaGrants } from './media'
 import { copyImage, ON_HOST, revealMedia, saveMediaAs } from './media-actions'
 import { notifyTest } from './notifications'
@@ -69,6 +71,7 @@ import type { Updater } from './updater'
 import { isPanel } from './window'
 
 const log = createLogger('ipc')
+const actionLog = createLogger('action')
 
 export interface IpcDeps {
   settings: SettingsStore
@@ -162,6 +165,7 @@ function handle<C extends IpcInvokeChannel>(
       if (args.length !== arity) {
         throw new Error(`"${channel}" takes ${arity} argument(s), got ${args.length}`)
       }
+      log.debug(channel)
       return handler({ window: BrowserWindow.fromWebContents(event.sender), event }, ...args)
     }),
   )
@@ -364,6 +368,7 @@ export async function appInfo(): Promise<AppInfo> {
     version: app.getVersion(),
     system: await systemNameForRun(),
     userDataPath: app.getPath('userData'),
+    logsPath: app.getPath('logs'),
     isPackaged: app.isPackaged,
   }
 }
@@ -403,7 +408,11 @@ export function registerIpcHandlers({
   })
 
   handle('settings:get', 0, () => settings.get())
-  handle('settings:update', 1, (_, patch) => settings.update(patch))
+  handle('settings:update', 1, (_, patch) => {
+    const next = settings.update(patch)
+    actionLog.info('settings.update', { patch })
+    return next
+  })
   handle('settings:add-agent', 3, (_, harness, name, folder) =>
     agentFolders.add(harness, name, folder),
   )
@@ -502,6 +511,14 @@ export function registerIpcHandlers({
       mainDiagnostics({ agentHost, terminalHost, launchToInteractiveMs }),
     ),
   )
+
+  handle('diagnostics:clear-verbose', 0, async () => {
+    const until = settings.get().diagnostics.verboseUntil
+    if (until !== null && until > Date.now()) {
+      throw new Error('Turn detailed records off before deleting them')
+    }
+    await clearVerboseRecords()
+  })
 
   handle('shell:show-data-folder', 0, async () => {
     const error = await shell.openPath(app.getPath('userData'))
@@ -748,6 +765,15 @@ export function registerIpcHandlers({
       return
     }
     browserViews.setSessions(ids as string[])
+  })
+
+  on('diagnostics:actions', (event, actions) => {
+    const { records, rejected } = parseActionBatch(actions, Date.now())
+    const window = BrowserWindow.fromWebContents(event.sender)?.id ?? null
+    for (const record of records) {
+      actionLog.info(record.name, { ...record.data, window, at: new Date(record.at).toISOString() })
+    }
+    if (rejected > 0) log.warn(`Rejected ${rejected} action record(s) from a window`)
   })
 
   on('perf:interactive', () => {

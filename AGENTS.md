@@ -119,7 +119,7 @@ Kettu drives agents that run shell commands, so these are not negotiable:
 ## Definition of done
 
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck` and `pnpm test` pass. Also run `pnpm build` when you touch config, the main process or the preload.
-- Tests cover only the core: the security boundaries (IPC and request validation, permissions, the artifact guards, command safety, the encrypted channel and pairing), the stored data (the thread database and the host files) and the agent protocols (the Claude Code, Codex and ACP mapping and the thread model). Add or change tests only there, where a bug fix starts with a test that fails. UI, styling, copy, wiring and tooling get none.
+- Tests cover only the core: the security boundaries (IPC and request validation, permissions, the artifact guards, command safety, the encrypted channel and pairing, and what the logs mask), the stored data (the thread database and the host files) and the agent protocols (the Claude Code, Codex and ACP mapping and the thread model). Add or change tests only there, where a bug fix starts with a test that fails. UI, styling, copy, wiring and tooling get none.
 - CI on a pull request only type-checks and runs those tests, on Linux, and skips both when no code changed. Building and packaging every platform is the gate of the release run.
 - For UI changes, run the app and look at the result in light and dark themes before reporting the work as done. In development, `REMOTE_DEBUGGING_PORT=9222 pnpm dev` exposes the renderer over the Chrome DevTools Protocol for inspection and screenshots.
 

@@ -30,7 +30,7 @@ import { prefersReducedMotion } from '@renderer/stores/settings'
 import { useViewStore } from '@renderer/stores/view'
 import { usePathRequest } from '@renderer/web/host-path-request'
 import { useKeyboardShortcuts } from './shortcuts'
-import { useAppCommands } from './commands'
+import { useActionLog, useAppCommands } from './commands'
 
 const SettingsPage = lazy(() => import('@renderer/features/settings/settings-page'))
 // The picker for a folder or a program on a host reached over the channel, in place of a system
@@ -47,6 +47,7 @@ export function App() {
   if (pathAsked && !pathPicker) setPathPicker(true)
   useKeyboardShortcuts()
   useAppCommands()
+  useActionLog()
 
   return (
     <TooltipProvider delay={500}>

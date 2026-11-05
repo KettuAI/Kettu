@@ -11,6 +11,7 @@ import type {
   RemoteHostToMain,
 } from '@shared/host-control'
 import { isBrowserForward } from '@shared/browser'
+import { writeLog } from '@shared/log/process-log'
 import type { ControlChannel, PortChannel } from '@shared/port-channel'
 import { isPortError } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
@@ -76,7 +77,7 @@ export function startRemoteHost(
   deps: RemoteHostDeps,
 ): StartedRemoteHost {
   const send = (message: RemoteHostToMain): void => control.send(message)
-  const log: LogFn = (level, message) => send({ type: 'remote-host:log', level, message })
+  const log: LogFn = (level, message) => writeLog(level, 'host', message)
   let running: Promise<void> | null = null
   let init: Init | null = null
   // Serving starts and stops in the order main asks, each after the one before.
@@ -251,9 +252,7 @@ export function startRemoteHost(
   }
 
   process.on('unhandledRejection', (reason) => {
-    const message = `Unhandled rejection: ${(reason as Error)?.stack ?? String(reason)}`
-    console.error(message)
-    log('error', message)
+    log('error', `Unhandled rejection: ${(reason as Error)?.stack ?? String(reason)}`)
   })
 
   control.onMessage((message) => {

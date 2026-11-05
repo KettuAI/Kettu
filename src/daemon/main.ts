@@ -1,5 +1,6 @@
 // Entry of the `kettu` CLI under Node.js, built into out/daemon/main.cjs beside the hosts' bundles.
 
+import { logProcessFailures, openProcessLog } from '@shared/log/process-log'
 import { execFile, spawn } from 'node:child_process'
 import { access, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
@@ -26,7 +27,7 @@ import { changePort, directReport } from './direct'
 import { NO_SYSTEM_ENCRYPTION, prepareDataFolder, privateFolder } from './key'
 import { pairDevice, sshTarget } from './pair'
 import { proxiedFetch } from './proxy'
-import { controlSocketPath, DATA_ENV, dataPath } from './paths'
+import { controlSocketPath, DATA_ENV, dataPath, logFolderPath } from './paths'
 import { terminalQuestions } from './questions'
 import { devicesReport, runningReport, stoppedReport, terminalReport } from './report'
 import {
@@ -321,6 +322,19 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
 
   switch (command.kind) {
     case 'run': {
+      openProcessLog({
+        dir: logFolderPath({
+          platform: process.platform,
+          home: os.homedir(),
+          env: process.env,
+          cwd: process.cwd(),
+        }),
+        name: 'daemon',
+        // A service's output goes to the journal or launchd's file; the log file has it already.
+        echo: process.stdout.isTTY === true,
+        prune: true,
+      })
+      logProcessFailures({ rejections: false })
       const daemon = await startDaemon({
         dataPath: data,
         controlSocket: socket,

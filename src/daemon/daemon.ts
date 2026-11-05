@@ -2,6 +2,7 @@
 // the host's key and the settings, starts the hosts and stops them in order. It alone writes the
 // settings, so a change from the CLI comes through the control socket and applies at once.
 
+import { logEnvironment } from '@shared/log/process-log'
 import { chmod, rm } from 'node:fs/promises'
 import os from 'node:os'
 import { matchLocale } from '@shared/locale'
@@ -217,7 +218,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
 
   // The marker stays with the daemon, so a `kettu run` in a shell an agent or terminal starts is
   // not taken for the service.
-  const hostEnv = { ...options.env }
+  const hostEnv = { ...options.env, ...logEnvironment() }
   delete hostEnv[SERVICE_ENV]
   let admin: HostAdmin | null = null
   const running = new Hosts({

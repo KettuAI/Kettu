@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { stepZoom, type ZoomStep } from '@shared/settings'
+import { recordAction } from '@renderer/lib/action-log'
 import { errorMessage } from '@renderer/lib/host'
 import { isMac, isMod, platform } from '@renderer/lib/platform'
 import { useProjectsStore } from '@renderer/stores/projects'
@@ -206,6 +207,13 @@ function historyKeys(event: HistoryKeyEvent, platform: string): 'back' | 'forwar
 function run(event: KeyboardEvent, action: () => void): void {
   event.preventDefault()
   event.stopPropagation()
+  // Only keys held with a modifier or the history's, so never typed text.
+  recordAction('shortcut', {
+    key: event.key.length === 1 ? event.key.toLowerCase() : event.key,
+    mod: isMod(event),
+    shift: event.shiftKey,
+    alt: event.altKey,
+  })
   action()
 }
 

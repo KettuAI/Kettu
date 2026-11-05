@@ -339,6 +339,11 @@ export class AgentHost {
     this.host.post({ type: 'host:power', state })
   }
 
+  /** Detailed records on or off; a host started later takes the level from its environment. */
+  setLogLevel(level: 'debug' | 'info'): void {
+    this.host.post({ type: 'host:log-level', level })
+  }
+
   /** The sessions that are working, or none if the host does not answer within `timeoutMs`. */
   busy(timeoutMs: number): Promise<BusySession[]> {
     if (this.host.state !== 'ready') return Promise.resolve([])
@@ -635,13 +640,6 @@ export class AgentHost {
             ? port
             : null,
         )
-        break
-      }
-      case 'host:log': {
-        const text = typeof message.message === 'string' ? message.message : ''
-        if (message.level === 'error') log.error(text)
-        else if (message.level === 'warn') log.warn(text)
-        else log.info(text)
         break
       }
       default:
