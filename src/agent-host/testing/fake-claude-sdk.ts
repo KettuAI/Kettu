@@ -152,6 +152,7 @@ export class FakeQuery implements Query {
 
   async applyFlagSettings(settings: FlagSettings): Promise<void> {
     this.record('applyFlagSettings', settings)
+    if (this.sdk.flagError) throw this.sdk.flagError
   }
 
   async initializationResult(): Promise<InitializeAnswer> {
@@ -231,6 +232,10 @@ export class FakeClaudeSdk implements ClaudeSdk {
   /** Thrown by `generateSessionTitle` until cleared, so a test can fail the first attempt. */
   titleError: Error | null = null
   initError: ((query: FakeQuery) => Error) | null = null
+  /** Thrown by `applyFlagSettings` until cleared, so a test can fail a setting. */
+  flagError: Error | null = null
+  /** Thrown by `resolveSettings` until cleared, so a test can fail to read the settings. */
+  settingsError: Error | null = null
   settings: Record<string, unknown> = {}
   generatedTitle: string | null = null
   context: ContextUsageAnswer = {
@@ -322,7 +327,8 @@ export class FakeClaudeSdk implements ClaudeSdk {
   }
 
   async resolveSettings(options: { cwd: string; settingSources?: string[] }) {
-    this.record('resolveSettings', options)
+    this.record('resolveSettings', options, process.env.CLAUDE_CONFIG_DIR)
+    if (this.settingsError) throw this.settingsError
     return { effective: this.settings }
   }
 

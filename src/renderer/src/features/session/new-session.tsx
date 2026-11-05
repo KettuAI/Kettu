@@ -17,6 +17,7 @@ import { useHostLabel } from '@renderer/features/sidebar/host-label'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { usePane } from '@renderer/features/split/pane-context'
 import { basename, limitLabel, longAgo, resetTime } from '@renderer/lib/format'
+import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { isMod } from '@renderer/lib/platform'
 import { useClock, useNow } from '@renderer/lib/use-now'
@@ -252,7 +253,12 @@ function DraftComposer({
     if (!canSend || sending.current) return
     sending.current = true
     try {
-      await settleOptions()
+      try {
+        await settleOptions(agentId)
+      } catch (error) {
+        box.setError(errorMessage(error))
+        return
+      }
       const optionsState = useAgentOptionsStore.getState()
       const { picks, prepared } = optionsState
       const entry = optionsOn(optionsState, hostId)[agentId]

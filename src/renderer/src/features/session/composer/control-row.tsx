@@ -24,7 +24,7 @@ import {
 } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { cacheExpiry } from '@shared/prompt-cache'
-import { ULTRACODE_OPTION_ID, type ConfigOption, type SessionView } from '@shared/thread'
+import { booleanConfigValue, type ConfigOption, type SessionView } from '@shared/thread'
 import { SegmentedControl } from '@renderer/components/segmented-control'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -38,7 +38,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuList,
   DropdownMenuRadioGroup,
@@ -50,13 +49,13 @@ import {
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import { Kbd } from '@renderer/components/ui/kbd'
-import { Switch } from '@renderer/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage, host } from '@renderer/lib/host'
 import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { useAboveBox } from './above-box'
+import { ConfigSwitchRow } from './config-switch'
 import { levelRows, levelsOf, splitName, tierOf, type SelectOption } from './levels'
 import { CheckColumn, DESCRIBED_ROW, ItemText, ROW_BUTTON } from './menu-parts'
 import { mainModels, numberedModel, shownChoice, shownValue, splitModels } from './model-list'
@@ -104,15 +103,12 @@ function usePick(
 export function ControlRow({
   session,
   addMenu,
-  ultracode = false,
   modelMenu,
   outOfCredit = false,
 }: {
   session: SessionView
   /** **+**, first in the row. */
   addMenu: ReactNode
-  /** The draft turns on Claude Code's ultracode for its message. */
-  ultracode?: boolean
   /** The model menu's open state, so the out-of-credit strip can open it. */
   modelMenu: { open: boolean; onOpenChange: (open: boolean) => void }
   /** The model's provider refused the latest turn for want of credit. */
@@ -127,13 +123,7 @@ export function ControlRow({
   const effort = config.find((o) => o.category === 'thought_level' && isSelect(o)) as
     SelectOption | undefined
   const running = session.status === 'running' || session.status === 'awaiting_permission'
-  // Ultracode takes effect only with a model that offers the high tier (xhigh), so the switch
-  // shows only then, or while it is on.
-  const highTier = !!effort && effort.choices.some((c) => tierOf(effort, c.value) !== null)
-  const ultracodeOn = config.some((o) => o.id === ULTRACODE_OPTION_ID && o.value === true)
-  const switches = config.filter(
-    (o) => o.type === 'boolean' && (o.id !== ULTRACODE_OPTION_ID || highTier || o.value === true),
-  )
+  const switches = config.filter((o) => o.type === 'boolean')
   const others = config.filter(
     (o): o is SelectOption => isSelect(o) && o !== mode && o !== model && o !== effort,
   )
@@ -180,7 +170,6 @@ export function ControlRow({
           model={model}
           effort={effort}
           switches={switches}
-          ultracode={ultracodeOn ? 'on' : ultracode ? 'next' : null}
           running={running}
           onSelect={set}
           open={modelMenu.open}
@@ -382,61 +371,15 @@ export function ChoiceName({ name, className }: { name: string; className?: stri
   )
 }
 
-/** A boolean option as a row that keeps the menu open. */
-function SwitchRow({
-  option,
-  icon,
-  description,
-  running,
-  onSelect,
-}: {
-  option: ConfigOption
-  icon?: ReactNode
-  /** What it does, in place of the agent's own words. */
-  description?: string
-  running: boolean
-  onSelect: Select
-}) {
-  const { t } = useTranslation('composer')
-  const said =
-    option.idleOnly && running ? t('controls.changesBetweenTurns') : (description ?? undefined)
-  return (
-    <DropdownMenuItem
-      closeOnClick={false}
-      role="menuitemcheckbox"
-      aria-checked={option.value === true}
-      disabled={option.idleOnly && running}
-      onClick={() => void onSelect(option.id, option.value !== true)}
-      className={cn(said && DESCRIBED_ROW)}
-    >
-      {icon}
-      <ItemText name={option.name} description={said} />
-      <Switch
-        size="sm"
-        checked={option.value === true}
-        tabIndex={-1}
-        aria-hidden
-        className="pointer-events-none ml-3"
-      />
-    </DropdownMenuItem>
-  )
-}
-
-/** The Effort submenu: one row per level, in the agent's order, and ultracode last. */
+/** The Effort submenu: one row per level, in the agent's order. */
 function EffortMenu({
   effort,
   value,
   onPick,
-  ultracode,
-  running,
-  onSelect,
 }: {
   effort: SelectOption
   value: string | undefined
   onPick: (value: string) => void
-  ultracode: ConfigOption | undefined
-  running: boolean
-  onSelect: Select
 }) {
   const { t } = useTranslation('composer')
   const rows = levelRows(effort)
@@ -467,17 +410,6 @@ function EffortMenu({
             components={{ shortcut: <span className="text-secondary" /> }}
           />
         </p>
-        {ultracode && (
-          <>
-            <DropdownMenuSeparator />
-            <SwitchRow
-              option={ultracode}
-              description={t('controls.ultracodeHint')}
-              running={running}
-              onSelect={onSelect}
-            />
-          </>
-        )}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   )
@@ -655,10 +587,10 @@ function SearchModels({
 }
 
 /**
- * One button for the model, with the reasoning level and ultracode after it, and one menu for
- * both. The current models are rows with what each is for, the older ones under More models and
- * the levels under Effort. Choosing a model, by click or with 1 to 4, or a level closes the menu;
- * the switches keep it open.
+ * One button for the model, with the reasoning level and the options marked as indicators after
+ * it, and one menu for both. The current models are rows with what each is for, the older ones
+ * under More models and the levels under Effort. Choosing a model, by click or with 1 to 4, or a
+ * level closes the menu; the switches keep it open.
  */
 function ModelMenu({
   heading,
@@ -666,7 +598,6 @@ function ModelMenu({
   model,
   effort,
   switches,
-  ultracode,
   running,
   onSelect,
   open,
@@ -679,8 +610,6 @@ function ModelMenu({
   model: SelectOption | undefined
   effort: SelectOption | undefined
   switches: ConfigOption[]
-  /** Ultracode is on for the session, or for the message being written. */
-  ultracode: 'on' | 'next' | null
   running: boolean
   onSelect: Select
   open: boolean
@@ -694,8 +623,8 @@ function ModelMenu({
   const main = mainModels(choices, modelValue)
   const rest = splitModels(choices).older
   const checked = shownValue(choices, modelValue)
-  const ultracodeOption = switches.find((o) => o.id === ULTRACODE_OPTION_ID)
-  const otherSwitches = switches.filter((o) => o.id !== ULTRACODE_OPTION_ID)
+  // The agent names which switches stand beside the model, so none is singled out here.
+  const indicators = switches.filter((o) => o.indicator && booleanConfigValue(o) === true)
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return
@@ -709,10 +638,11 @@ function ModelMenu({
   }
 
   const label = model ? choiceName(model, modelValue) : undefined
+  const indicatorText = indicators.map((o) => o.description ?? o.name).join(' · ')
   const [setAnchor, aboveBox] = useAboveBox()
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
-      <Tooltip disabled={!ultracode}>
+      <Tooltip disabled={indicators.length === 0}>
         <TooltipTrigger
           render={
             <DropdownMenuTrigger
@@ -723,7 +653,7 @@ function ModelMenu({
                   size="sm"
                   aria-label={outOfCredit ? t('controls.modelOutOfCredit') : t('controls.model')}
                   title={
-                    label && !ultracode
+                    label && indicators.length === 0
                       ? outOfCredit
                         ? t('outOfCredit.modelTitle', { model: label })
                         : label
@@ -746,13 +676,15 @@ function ModelMenu({
           {effort && !(model && levelsOf(effort, effortValue).usesDefault) && (
             <span className="shrink-0">{choiceName(effort, effortValue)}</span>
           )}
-          {ultracode && <span className="shrink-0">{t('controls.ultracodeSuffix')}</span>}
+          {indicators.map((o) => (
+            <span key={o.id} className="shrink-0">
+              · {o.name}
+            </span>
+          ))}
           {!model && !effort && <span>{t('controls.options')}</span>}
           <ChevronDownIcon strokeWidth={1.75} className="size-3 text-icon" />
         </TooltipTrigger>
-        <TooltipContent>
-          {ultracode === 'on' ? t('controls.ultracodeOn') : t('controls.ultracodeNext')}
-        </TooltipContent>
+        <TooltipContent>{indicatorText}</TooltipContent>
       </Tooltip>
       <DropdownMenuContent
         side="top"
@@ -782,16 +714,7 @@ function ModelMenu({
             </DropdownMenuGroup>
           )}
           {(effort || rest.length > 0) && model && <DropdownMenuSeparator />}
-          {effort && (
-            <EffortMenu
-              effort={effort}
-              value={effortValue}
-              onPick={pickEffort}
-              ultracode={ultracodeOption}
-              running={running}
-              onSelect={onSelect}
-            />
-          )}
+          {effort && <EffortMenu effort={effort} value={effortValue} onPick={pickEffort} />}
           {rest.length > 0 && (
             <MoreModelsMenu
               choices={rest}
@@ -801,16 +724,17 @@ function ModelMenu({
               onClose={() => setOpen(false)}
             />
           )}
-          {otherSwitches.length > 0 && (
+          {switches.length > 0 && (
             <>
               {(model || effort) && <DropdownMenuSeparator />}
-              {otherSwitches.map((o) => (
-                <SwitchRow
+              {switches.map((o) => (
+                <ConfigSwitchRow
                   key={o.id}
+                  menu
                   option={o}
                   icon={/fast/i.test(o.id) ? <ZapIcon strokeWidth={1.4} /> : undefined}
-                  running={running}
-                  onSelect={onSelect}
+                  disabled={!!o.idleOnly && running}
+                  onSelect={(value) => void onSelect(o.id, value)}
                 />
               ))}
             </>

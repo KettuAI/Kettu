@@ -19,6 +19,37 @@ import {
   type Migration,
   type SessionRecord,
 } from './storage'
+import { parseAgentOptionsFile } from './agent-options'
+
+it.each(['default', true, false] as const)(
+  'preserves boolean configuration inheritance and metadata for %s',
+  (value) => {
+    const option = {
+      id: 'workflow',
+      name: 'Workflow',
+      category: 'other',
+      type: 'boolean',
+      value,
+      defaultValue: true,
+      idleOnly: true,
+      indicator: true,
+    }
+    const parsed = parseAgentOptionsFile({
+      version: 1,
+      agents: {
+        'claude-code~work': {
+          config: [option],
+          remembered: {},
+          levels: {},
+          observedAt: 1,
+        },
+      },
+    })
+    expect(typeof parsed).not.toBe('string')
+    if (typeof parsed === 'string') throw new Error(parsed)
+    expect(parsed.agents['claude-code~work']?.config).toEqual([option])
+  },
+)
 
 let dir: string
 let logs: string[]

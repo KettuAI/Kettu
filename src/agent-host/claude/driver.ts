@@ -4,12 +4,14 @@
 import type { HostedDriver } from '../driver'
 import { ClaudeConnection, type LoadSdk } from './connection'
 import { loadClaudeSdk } from './sdk'
+import { restoreConfig } from './stored-config'
 
 /** The driver, loading the SDK with `load`; a test passes a fake SDK's. */
 export function claudeSdkDriver(load: LoadSdk = loadClaudeSdk): HostedDriver {
   return {
     kind: 'hosted',
     reads: { limits: true, context: true },
+    restoreConfig,
     connect: (context) => new ClaudeConnection(context, load),
   }
 }

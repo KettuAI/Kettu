@@ -19,8 +19,6 @@
     "sendNowHint": "Sends it into this turn straight away"
   },
   "controls": {
-    "ultracodeOn": "Ultracode is on for this session: dynamic workflows on substantial tasks",
-    "ultracodeNext": "This message runs with ultracode: dynamic workflows on the task",
     "model": "Model",
     "modelOutOfCredit": "Model, out of credit",
     "options": "Options",
@@ -32,10 +30,12 @@
     "searchModels": "Search models",
     "cyclesModes": "cycles modes",
     "effort": "Effort",
-    "ultracodeHint": "Runs each task as a multi-agent workflow. Uses much more of your plan",
+    "followsAgent": "Follows the agent's setting",
+    "followsAgentOn": "Follows the agent's setting · on",
+    "followsAgentOff": "Follows the agent's setting · off",
+    "resetDefault": "Use the agent's setting",
     "modelsFrom": "From {{source}}",
-    "optionValue": "{{name}}: {{value}}",
-    "ultracodeSuffix": "· Ultracode"
+    "optionValue": "{{name}}: {{value}}"
   },
   "outOfCredit": {
     "modelTitle": "{{model}} is out of credit",

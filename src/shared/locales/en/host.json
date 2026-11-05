@@ -19,7 +19,7 @@
     "cannotForkAt": "{{agent}} can fork only from its latest reply",
     "noForkPoint": "This reply cannot be forked from",
     "cannotList": "{{agent}} cannot list its sessions",
-    "ultracodeBetweenTurns": "Ultracode changes between turns",
+    "configBetweenTurns": "{{option}} changes between turns",
     "ultracodeDescription": "Dynamic workflows for substantial tasks",
     "promptTooLarge": "The message is over 10 MB with its attachments. Remove some to send.",
     "attachmentGone": "{{name}} is no longer available. Remove it and add it again.",

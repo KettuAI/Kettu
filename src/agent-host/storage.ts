@@ -252,7 +252,7 @@ export interface SessionRecord {
   description: string | null
   branch: string | null
   queue?: QueuedPrompt[] // prompts that were waiting when it was saved
-  ultracode?: boolean // Claude Code's ultracode, once set from Kettu
+  ultracode?: boolean // legacy override, read only when migrating an old thread
   customTitle?: string // the user's own title, which wins over the agent's
   cache?: PromptCache // the main thread's prompt cache as its last turn left it, for the sidebar
   model?: string // the model option as its last turn left it, which an estimate of the cache needs

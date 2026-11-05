@@ -70,8 +70,6 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const queueKey = sendKey === 'enter' ? 'Enter' : 'Mod+Enter'
   const steerKey = sendKey === 'enter' ? 'Mod+Enter' : 'Mod+Shift+Enter'
   const reached = limits?.find((l) => l.state === 'reached')
-  // Claude Code turns on ultracode for a message that says the word; no config option sets it.
-  const ultracode = session.agentId === 'claude-code' && /\bultracode\b/i.test(text)
 
   // Starting a session focuses its composer, in the pane in focus only.
   const focused = usePane()?.focused ?? true
@@ -253,7 +251,6 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
           <ControlRow
             session={session}
             addMenu={<AddMenu box={box} agentName={agentName} commands={session.commands} />}
-            ultracode={ultracode}
             modelMenu={{ open: modelMenuOpen, onOpenChange: setModelMenuOpen }}
             outOfCredit={!!outOfCredit}
           />

@@ -3,7 +3,7 @@ import { ChevronRightIcon, SearchIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
-import { ULTRACODE_OPTION_ID, type AgentId, type ConfigOption } from '@shared/thread'
+import type { AgentId, ConfigOption } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { Button } from '@renderer/components/ui/button'
@@ -24,16 +24,11 @@ import { InputGroupAddon } from '@renderer/components/ui/input-group'
 import { Separator } from '@renderer/components/ui/separator'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { Switch } from '@renderer/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { ConfigSwitchRow } from '@renderer/features/session/composer/config-switch'
 import { ChoiceName, EffortSegments } from '@renderer/features/session/composer/control-row'
-import {
-  levelsOf,
-  splitName,
-  tierOf,
-  type SelectOption,
-} from '@renderer/features/session/composer/levels'
+import { levelsOf, splitName, type SelectOption } from '@renderer/features/session/composer/levels'
 import { shownChoice, shownValue } from '@renderer/features/session/composer/model-list'
 import { listedInstalled } from '@renderer/features/agents/readiness'
 import { Ring } from '@renderer/features/session/composer/usage'
@@ -619,11 +614,7 @@ function Pane({
   const loading = !loaded || startingUp
   const model = config?.find((o) => o.category === 'model')
   const effort = config?.find((o) => o.category === 'thought_level')
-  const highTier = isSelect(effort) && effort.choices.some((c) => tierOf(effort, c.value) !== null)
-  const switches =
-    config?.filter(
-      (o) => o.type === 'boolean' && (o.id !== ULTRACODE_OPTION_ID || highTier || o.value === true),
-    ) ?? []
+  const switches = config?.filter((o) => o.type === 'boolean') ?? []
 
   const install = (
     <Button
@@ -787,11 +778,10 @@ function Pane({
             <>
               <ComboboxSeparator />
               {switches.map((o) => (
-                <SwitchRow
+                <ConfigSwitchRow
                   key={o.id}
-                  agentId={status.id}
                   option={o}
-                  onChange={(value) => onOption(status.id, o.id, value)}
+                  onSelect={(value) => onOption(status.id, o.id, value)}
                 />
               ))}
             </>
@@ -919,32 +909,5 @@ function Notice({
       <p className="min-w-0 flex-1">{text}</p>
       {children}
     </div>
-  )
-}
-
-/** A boolean option as a menu row; it sets what the agent starts with and keeps the menu open. */
-function SwitchRow({
-  agentId,
-  option,
-  onChange,
-}: {
-  agentId: AgentId
-  option: ConfigOption
-  onChange: (value: boolean) => void
-}) {
-  const id = `${agentId}-${option.id}`
-  return (
-    <label
-      htmlFor={id}
-      className="flex min-h-11 cursor-default items-center gap-2 rounded-md px-2 py-1.25 text-ui hover:bg-hover"
-    >
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span>{option.name}</span>
-        {option.description && (
-          <span className="text-xs text-muted-foreground">{option.description}</span>
-        )}
-      </span>
-      <Switch id={id} size="sm" checked={option.value === true} onCheckedChange={onChange} />
-    </label>
   )
 }

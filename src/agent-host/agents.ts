@@ -904,6 +904,14 @@ export class AgentManager {
     }
   }
 
+  restoreConfig(
+    agentId: AgentId,
+    config: readonly ConfigOption[],
+    legacy?: unknown,
+  ): ConfigOption[] {
+    return this.driver(this.slot(agentId)).restoreConfig?.(config, legacy) ?? [...config]
+  }
+
   private driver(slot: Slot): AgentDriver {
     return driverOf(slot.def, this.deps)
   }

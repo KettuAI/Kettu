@@ -195,8 +195,6 @@ export interface SessionOptions {
   mcpServers?: readonly McpServer[]
   /** Set for a session Kettu opens for itself, which no thread shows and nobody sees. */
   hidden?: HiddenPurpose
-  /** Kettu's ultracode switch, for an agent that has one; unset leaves the agent's own. */
-  ultracode?: boolean
 }
 
 /**

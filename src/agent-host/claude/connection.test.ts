@@ -6,6 +6,7 @@ import type { AgentAccount } from '@shared/agent-host'
 import {
   applyPatches,
   threadFromSnapshot,
+  type ConfigOption,
   type SessionView,
   type ThreadEntry,
   type ThreadState,
@@ -225,7 +226,11 @@ describe('the Claude Agent SDK driver', () => {
     const { sdk, connection, spawned } = await setup({
       CLAUDE_CONFIG_DIR: '/home/ada/.claude-work',
     })
-    sdk.settings = { permissions: { defaultMode: 'acceptEdits' }, effortLevel: 'high' }
+    sdk.settings = {
+      permissions: { defaultMode: 'acceptEdits' },
+      effortLevel: 'high',
+      ultracode: true,
+    }
     const opened = await connection.newSession('/repo', {
       mcpServers: [
         {
@@ -237,7 +242,6 @@ describe('the Claude Agent SDK driver', () => {
           prompt: 'Plan first.',
         },
       ],
-      ultracode: true,
     })
     const { options } = sdk.last
     expect(options).toMatchObject({
@@ -252,9 +256,9 @@ describe('the Claude Agent SDK driver', () => {
       },
       allowedTools: ['mcp__kettu__set_plan'],
       systemPrompt: { type: 'preset', preset: 'claude_code', append: 'Plan first.' },
-      settings: { ultracode: true },
       extraArgs: { 'replay-user-messages': null },
     })
+    expect(options.settings).toBeUndefined()
     expect(options.disallowedTools).toBeUndefined()
     expect(options.env).toMatchObject({
       PATH: '/usr/bin',
@@ -278,6 +282,7 @@ describe('the Claude Agent SDK driver', () => {
       ['model', 'default'],
       ['effort', 'high'],
       ['fast', false],
+      ['__ultracode', 'default'],
     ])
     expect(opened.config[0]!.choices!.map((choice) => choice.value)).toEqual([
       'default',
@@ -803,12 +808,12 @@ describe('a turn', () => {
 
   it('sets the options through the query, sending ultracode again with the effort', async () => {
     const query = s.sdk.last
-    await s.connection.resumeSession(sessionId, '/repo', { ultracode: true })
+    await s.connection.setConfigOption(sessionId, '__ultracode', true)
     let config = await s.connection.setConfigOption(sessionId, 'effort', 'low')
     expect(config.find((option) => option.id === 'effort')?.value).toBe('low')
     await s.connection.setConfigOption(sessionId, 'effort', 'default')
     config = await s.connection.setConfigOption(sessionId, 'model', 'haiku')
-    expect(config.map((option) => option.id)).toEqual(['mode', 'model'])
+    expect(config.map((option) => option.id)).toEqual(['mode', 'model', '__ultracode'])
     await s.connection.setConfigOption(sessionId, 'mode', 'plan')
     expect(query.calls.filter((call) => call.method !== 'initializationResult')).toEqual([
       { method: 'applyFlagSettings', args: [{ ultracode: true }] },
@@ -820,6 +825,186 @@ describe('a turn', () => {
     await expect(s.connection.setConfigOption(sessionId, 'mode', 'nope')).rejects.toBeInstanceOf(
       AgentRequestError,
     )
+  })
+})
+
+describe('ultracode', () => {
+  const option = (config: readonly ConfigOption[]): ConfigOption | undefined =>
+    config.find((item) => item.id === '__ultracode')
+  const flags = (query: FakeQuery): unknown[] =>
+    query.calls.filter((call) => call.method === 'applyFlagSettings').map((call) => call.args[0])
+
+  it('is offered whatever the model lists for effort', async () => {
+    const s = await setup()
+    s.sdk.init = {
+      commands: [],
+      models: [{ value: 'default', displayName: 'Default', description: '' }],
+    }
+    const { config } = await s.connection.newSession('/repo')
+    expect(config.some((item) => item.id === 'effort')).toBe(false)
+    expect(option(config)).toMatchObject({
+      id: '__ultracode',
+      name: 'Ultracode',
+      category: 'other',
+      type: 'boolean',
+      value: 'default',
+      defaultValue: false,
+      indicator: true,
+      idleOnly: true,
+    })
+  })
+
+  it('is offered when the model effort levels leave out xhigh and max', async () => {
+    const s = await setup()
+    const { config } = await s.connection.newSession('/repo')
+    expect(config.find((item) => item.id === 'effort')?.choices?.map((c) => c.value)).toEqual([
+      'default',
+      'low',
+      'medium',
+      'high',
+    ])
+    expect(option(config)).toMatchObject({ value: 'default' })
+  })
+
+  it('inherits the value the settings resolve, and sends no startup flag', async () => {
+    const s = await setup()
+    s.sdk.settings = { ultracode: true }
+    const { config } = await s.connection.newSession('/repo')
+    expect(option(config)).toMatchObject({ value: 'default', defaultValue: true })
+    expect(s.sdk.last.options.settings).toBeUndefined()
+    expect(s.sdk.calls.find((call) => call.method === 'resolveSettings')?.args[0]).toEqual({
+      cwd: '/repo',
+      settingSources: ['user', 'project', 'local'],
+    })
+  })
+
+  it('takes a setting the agent leaves unset as off', async () => {
+    const s = await setup()
+    s.sdk.settings = { effortLevel: 'high' }
+    const { config } = await s.connection.newSession('/repo')
+    expect(option(config)).toMatchObject({ value: 'default', defaultValue: false })
+  })
+
+  it('reads the inherited value in the configuration folder it opens the query in', async () => {
+    const s = await setup({ CLAUDE_CONFIG_DIR: '/home/ada/.claude-work' })
+    s.sdk.settings = { ultracode: true }
+    const { config } = await s.connection.newSession('/repo')
+    expect(option(config)?.defaultValue).toBe(true)
+    expect(s.sdk.calls.find((call) => call.method === 'resolveSettings')?.args[1]).toBe(
+      '/home/ada/.claude-work',
+    )
+  })
+
+  it('sets default, on and off through the standard flag settings', async () => {
+    const s = await setup()
+    s.sdk.settings = { ultracode: true }
+    const { sessionId, config: initial } = await s.connection.newSession('/repo')
+    expect(option(initial)?.value).toBe('default')
+    let config = await s.connection.setConfigOption(sessionId, '__ultracode', true)
+    expect(option(config)?.value).toBe(true)
+    config = await s.connection.setConfigOption(sessionId, '__ultracode', false)
+    expect(option(config)?.value).toBe(false)
+    config = await s.connection.setConfigOption(sessionId, '__ultracode', 'default')
+    expect(option(config)).toMatchObject({ value: 'default', defaultValue: true })
+    expect(flags(s.sdk.last)).toEqual([
+      { ultracode: true },
+      { ultracode: false },
+      { ultracode: true },
+    ])
+  })
+
+  it('resets to default by sending the resolved value', async () => {
+    const s = await setup()
+    s.sdk.settings = { ultracode: true }
+    const { sessionId } = await s.connection.newSession('/repo')
+    await s.connection.setConfigOption(sessionId, '__ultracode', false)
+    await s.connection.setConfigOption(sessionId, '__ultracode', 'default')
+    expect(flags(s.sdk.last).at(-1)).toEqual({ ultracode: true })
+  })
+
+  it('resends the inherited true value when the effort changes', async () => {
+    const s = await setup()
+    s.sdk.settings = { ultracode: true }
+    const { sessionId } = await s.connection.newSession('/repo')
+    await s.connection.setConfigOption(sessionId, 'effort', 'low')
+    expect(flags(s.sdk.last)).toEqual([{ effortLevel: 'low', ultracode: true }])
+  })
+
+  it('keeps an explicit off when the effort changes', async () => {
+    const s = await setup()
+    s.sdk.settings = { ultracode: true }
+    const { sessionId } = await s.connection.newSession('/repo')
+    await s.connection.setConfigOption(sessionId, '__ultracode', false)
+    await s.connection.setConfigOption(sessionId, 'effort', 'low')
+    expect(flags(s.sdk.last)).toEqual([
+      { ultracode: false },
+      { effortLevel: 'low', ultracode: false },
+    ])
+  })
+
+  it('refuses a change that needs an inherited value it cannot resolve', async () => {
+    const s = await setup()
+    s.sdk.settingsError = new Error('unreadable settings')
+    const { sessionId, config } = await s.connection.newSession('/repo')
+    expect(option(config)?.defaultValue).toBeNull()
+    await expect(
+      s.connection.setConfigOption(sessionId, '__ultracode', 'default'),
+    ).rejects.toBeInstanceOf(AgentRequestError)
+    await expect(s.connection.setConfigOption(sessionId, 'effort', 'low')).rejects.toBeInstanceOf(
+      AgentRequestError,
+    )
+    expect(flags(s.sdk.last)).toEqual([])
+  })
+
+  it('leaves the choice alone when the SDK refuses the setting', async () => {
+    const s = await setup()
+    const { sessionId } = await s.connection.newSession('/repo')
+    s.sdk.flagError = new Error('refused')
+    await expect(s.connection.setConfigOption(sessionId, '__ultracode', true)).rejects.toThrow(
+      'refused',
+    )
+    s.sdk.flagError = null
+    const { config } = await s.connection.resumeSession(sessionId, '/repo')
+    expect(option(config)?.value).toBe('default')
+  })
+
+  it('reapplies an explicit value when the query reopens', async () => {
+    const s = await setup()
+    const { sessionId } = await s.connection.newSession('/repo')
+    await s.connection.setConfigOption(sessionId, '__ultracode', true)
+    s.sdk.script = (query) => {
+      query.running()
+      query.close()
+    }
+    await expect(
+      s.connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }]),
+    ).rejects.toBeInstanceOf(AgentRequestError)
+    s.sdk.script = new FakeClaudeSdk().script
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
+    const reopened = s.sdk.last
+    expect(flags(reopened)).toEqual([{ ultracode: true }])
+    const { config } = await s.connection.resumeSession(sessionId, '/repo')
+    expect(option(config)?.value).toBe(true)
+  })
+
+  it('inherits the new default when a default choice reopens', async () => {
+    const s = await setup()
+    s.sdk.settings = { ultracode: false }
+    const { sessionId } = await s.connection.newSession('/repo')
+    s.sdk.script = (query) => {
+      query.running()
+      query.close()
+    }
+    await expect(
+      s.connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }]),
+    ).rejects.toBeInstanceOf(AgentRequestError)
+    s.sdk.script = new FakeClaudeSdk().script
+    s.sdk.settings = { ultracode: true }
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
+    const reopened = s.sdk.last
+    expect(flags(reopened)).toEqual([])
+    const { config } = await s.connection.resumeSession(sessionId, '/repo')
+    expect(option(config)).toMatchObject({ value: 'default', defaultValue: true })
   })
 })
 
