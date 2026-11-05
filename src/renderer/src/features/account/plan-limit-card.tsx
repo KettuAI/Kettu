@@ -1,4 +1,3 @@
-import { useRef } from 'react'
 import { Menu as MenuPrimitive } from '@base-ui/react/menu'
 import { useTranslation } from 'react-i18next'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
@@ -59,30 +58,16 @@ function PlanRings({ windows }: { windows: readonly CardWindow[] }) {
 
 /**
  * An account's plan windows: its rings and, from the outer ring in, each window's figure. It
- * opens the Usage page; hovered or reached by the keyboard, it shows every window beside the menu.
+ * opens the Usage page; hovered or reached by the keyboard, it shows every window beside it.
  */
 export function PlanLimitCard({ card }: { card: PlanCard }) {
-  const ref = useRef<HTMLDivElement>(null)
-  // Level with the card but past the menu's edge, so it never covers the card beside it.
-  const anchor = () => {
-    const item = ref.current
-    const menu = item?.closest('[role=menu]')
-    if (!item || !menu) return item
-    return {
-      contextElement: item,
-      getBoundingClientRect: () => {
-        const own = item.getBoundingClientRect()
-        return new DOMRect(menu.getBoundingClientRect().right, own.top, 0, own.height)
-      },
-    }
-  }
   return (
     <HoverCard>
       <HoverCardTrigger
-        delay={300}
+        delay={100}
+        closeDelay={100}
         render={
           <MenuPrimitive.Item
-            ref={ref}
             onClick={openUsage}
             className="min-w-0 cursor-default rounded-tile bg-subtle px-2 pt-2 pb-2.25 outline-none select-none data-highlighted:bg-selected"
           />
@@ -90,7 +75,7 @@ export function PlanLimitCard({ card }: { card: PlanCard }) {
       >
         <CardFace card={card} />
       </HoverCardTrigger>
-      <HoverCardContent anchor={anchor} side="right" align="start" sideOffset={8} className="w-68">
+      <HoverCardContent side="right" align="start" sideOffset={6} className="w-68">
         <div className="mb-2.5 flex min-w-0 items-center gap-1.5">
           <AgentTile agent={card.agentId} size={18} />
           <span className="min-w-0 truncate text-small font-semibold text-primary">
