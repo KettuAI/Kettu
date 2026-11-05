@@ -213,7 +213,6 @@
     "copyReply": "Copy reply",
     "fork": "Fork from here",
     "forking": "Forking…",
-    "forkBetweenTurns": "Forks between turns",
     "forkNotReady": "Forks once the session is ready"
   },
   "changes": {

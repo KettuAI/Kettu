@@ -352,18 +352,7 @@ export function forkEntry(
   return agent.forkAtMessage && entryMessageId(last) !== null ? last : null
 }
 
-/** Why a reply's Fork cannot start in this session status, or null when it can. */
-export function forkBlocked(status: SessionStatus): 'turn' | 'not-ready' | null {
-  switch (status) {
-    case 'running':
-    case 'awaiting_permission':
-      return 'turn'
-    case 'starting':
-    case 'failed':
-    case 'auth_required':
-      return 'not-ready'
-    case 'ready':
-    case 'closed':
-      return null
-  }
+/** Whether a reply's Fork cannot start in this session status. A running turn does not stop it. */
+export function forkBlocked(status: SessionStatus): boolean {
+  return status === 'starting' || status === 'failed' || status === 'auth_required'
 }

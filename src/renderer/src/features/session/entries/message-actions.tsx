@@ -190,14 +190,12 @@ export const ReplyFooter = memo(
       }
     }
     const showFork = forkAt !== null && session?.origin === 'user'
-    const blocked = session ? forkBlocked(session.status) : null
+    const blocked = session ? forkBlocked(session.status) : false
     const forkLabel = forking
       ? t('replyFooter.forking')
-      : blocked === 'turn'
-        ? t('replyFooter.forkBetweenTurns')
-        : blocked === 'not-ready'
-          ? t('replyFooter.forkNotReady')
-          : t('replyFooter.fork')
+      : blocked
+        ? t('replyFooter.forkNotReady')
+        : t('replyFooter.fork')
 
     // A turn that ended on its own says how long it took in its folded work's row.
     const ending =
@@ -227,7 +225,7 @@ export const ReplyFooter = memo(
             {showFork && (
               <ActionButton
                 label={forkLabel}
-                disabled={forking || blocked !== null}
+                disabled={forking || blocked}
                 onClick={() => void fork()}
               >
                 {forking ? <Spinner /> : <ForkIcon />}
