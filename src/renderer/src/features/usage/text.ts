@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
-import { count, usd } from '@renderer/lib/format'
+import { count, percent, usd } from '@renderer/lib/format'
 import { currentLocale } from '@renderer/lib/i18n'
 import { agentName } from '@renderer/stores/agents'
 import { addDays, type MetricKind } from './model'
@@ -96,4 +96,10 @@ export function wholePercent(share: number): string {
     style: 'percent',
     maximumFractionDigits: 0,
   }).format(share)
+}
+
+/** A share as `percent` writes it, or "<0.1%" for a sliver that would read as none. */
+export function sharePercent(share: number): string {
+  const text = percent(share)
+  return share > 0 && text === percent(0) ? `<${percent(0.001)}` : text
 }

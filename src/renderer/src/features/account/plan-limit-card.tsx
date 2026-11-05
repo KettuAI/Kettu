@@ -1,60 +1,13 @@
 import { Menu as MenuPrimitive } from '@base-ui/react/menu'
 import { useTranslation } from 'react-i18next'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
+import { PlanRings } from '@renderer/components/plan-rings'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { PlanPart } from '@renderer/features/session/composer/usage'
-import { LIMIT_STROKE, LIMIT_TEXT } from '@renderer/lib/plan-limit'
+import { LIMIT_TEXT } from '@renderer/lib/plan-limit'
 import { cn } from '@renderer/lib/utils'
 import { openUsage } from '@renderer/stores/view'
-import type { CardWindow, PlanCard } from './model'
-
-const RINGS_SIZE = 40
-const RING_GAP = 1.5
-
-/** One ring per window, the shortest innermost, each filled to how much of it is used. */
-function PlanRings({ windows }: { windows: readonly CardWindow[] }) {
-  const center = RINGS_SIZE / 2
-  const stroke = windows.length > 2 ? 4 : 5
-  return (
-    <svg
-      aria-hidden
-      viewBox={`0 0 ${RINGS_SIZE} ${RINGS_SIZE}`}
-      className="size-10 shrink-0 -rotate-90"
-    >
-      {windows.map((w, i) => {
-        const fromOuter = windows.length - 1 - i
-        const r = center - stroke / 2 - fromOuter * (stroke + RING_GAP)
-        const length = 2 * Math.PI * r
-        const share = w.percent === null ? 0 : Math.min(100, w.percent) / 100
-        return (
-          <g key={w.window} className={w.level ? LIMIT_STROKE[w.level] : 'text-tertiary'}>
-            <circle
-              cx={center}
-              cy={center}
-              r={r}
-              fill="none"
-              strokeWidth={stroke}
-              className="stroke-current opacity-(--ring-tint)"
-            />
-            {share > 0 && (
-              <circle
-                cx={center}
-                cy={center}
-                r={r}
-                fill="none"
-                strokeWidth={stroke}
-                // A full ring has no gap for a round cap to show in.
-                strokeLinecap={share < 1 ? 'round' : 'butt'}
-                strokeDasharray={`${share * length} ${length}`}
-                className="stroke-current"
-              />
-            )}
-          </g>
-        )
-      })}
-    </svg>
-  )
-}
+import type { PlanCard } from './model'
 
 /**
  * An account's plan windows: its rings and, from the outer ring in, each window's figure. It
@@ -102,7 +55,13 @@ function CardFace({ card }: { card: PlanCard }) {
         )}
       </div>
       <div className="mt-1.5 flex items-center gap-2">
-        <PlanRings windows={card.windows} />
+        <PlanRings
+          rings={card.windows.map((w) => ({ id: w.window, percent: w.percent, level: w.level }))}
+          size={40}
+          stroke={card.windows.length > 2 ? 4 : 5}
+          gap={1.5}
+          className="size-10"
+        />
         <div className="flex min-w-0 flex-1 flex-col gap-px">
           {[...card.windows].reverse().map((w) => {
             const name = t(`common:planWindow.${w.window}`)

@@ -89,14 +89,10 @@
   },
   "cache": {
     "title": "Where the tokens come from",
-    "read": "Read from the prompt cache",
-    "perHundred_one": "Of every 100 tokens, {{count}} came from cache, billed at a fraction of the price.",
-    "perHundred_other": "Of every 100 tokens, {{count}} came from cache, billed at a fraction of the price.",
     "none": "None of these tokens came from the prompt cache.",
     "saved": "At API prices, that saved about {{cost}}.",
-    "other": "The other {{share}} · {{tokens}}",
-    "allTokens": "All {{tokens}} tokens",
-    "otherNone": "Other tokens"
+    "share": "{{share}} of them were read from the prompt cache.",
+    "withSaved": "{{line}} {{saved}}"
   },
   "trend": {
     "title": "Over time",
@@ -127,16 +123,29 @@
     "keepOne": "At least one agent stays in the chart"
   },
   "limits": {
-    "title": "What’s left",
-    "none": "No agent has reported plan limits yet.",
+    "title": "Plan limits",
+    "none": "No agent has reported plan limits yet. Accounts signed in with a Claude or ChatGPT subscription show here.",
     "read": "Read {{ago}}",
-    "used": "{{limit}} used",
-    "usedShort": "{{percent}} used",
     "resetsIn": "Resets in {{time}}",
     "resetsAt": "Resets {{time}}",
     "notReported_one": "{{name}} doesn’t report plan usage.",
     "notReported_other": "{{name}} don’t report plan usage.",
-    "notYet": "No plan usage reported yet."
+    "notYet": "No plan usage reported yet.",
+    "accounts_one": "{{count}} account",
+    "accounts_other": "{{count}} accounts",
+    "reading": "Reading the plan usage",
+    "failed": "Couldn’t read",
+    "neverRead": "Couldn’t read the plan usage.",
+    "lastRead": "Last read {{ago}}",
+    "backIn": "Back in {{time}}",
+    "weeklyOf": "7d · {{model}}",
+    "short": {
+      "minutes": "{{count}}m",
+      "hours": "{{count}}h",
+      "days": "{{count}}d"
+    },
+    "windowUsed": "{{window}}: {{percent}}% used.",
+    "windowStale": "{{window}}: reset, not read again yet."
   },
   "activity": {
     "title": "Activity",
@@ -185,9 +194,14 @@
       "agent_one": "{{count}} other agent",
       "agent_other": "{{count}} other agents"
     },
-    "fewer": "Show fewer",
     "unknownModel": "Unknown model",
-    "noProject": "No project"
+    "noProject": "No project",
+    "units": {
+      "tokens": "tokens",
+      "requests": "requests",
+      "turns": "turns",
+      "cost": "at API prices"
+    }
   },
   "noUsage": "No usage in this range.",
   "noCost": "No cost in this range.",
@@ -274,6 +288,24 @@
       "button": "Clear…",
       "title": "Clear Kettu’s usage record?",
       "confirm": "Clear record"
+    }
+  },
+  "timeOfDay": {
+    "title": "Time of day",
+    "by": {
+      "tokens": "Tokens by hour",
+      "requests": "Requests by hour",
+      "turns": "Turns by hour",
+      "cost": "Cost by hour"
+    },
+    "byHourOver": "{{metric}} · {{range}}",
+    "busiest": "Busiest",
+    "label": "The range by hour of the day; the busiest is {{hour}}",
+    "span": {
+      "tokens": "{{share}} of the tokens were used between {{from}} and {{to}}.",
+      "requests": "{{share}} of the requests were made between {{from}} and {{to}}.",
+      "turns": "{{share}} of the turns ran between {{from}} and {{to}}.",
+      "cost": "{{share}} of the cost fell between {{from}} and {{to}}."
     }
   }
 }

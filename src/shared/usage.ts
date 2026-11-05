@@ -49,8 +49,33 @@ export interface ProjectUsage extends TokenParts {
   scratch: boolean
 }
 
+/** A stretch of the asking page's clocks on one UTC offset, until the next zone starts. */
+export interface ClockZone {
+  from: number
+  /** Minutes east of UTC, a multiple of 15. */
+  offset: number
+}
+
+/**
+ * The range to sum by hour of the day, and the page's zones over it, ascending, the first from
+ * at or before `from`, so each quarter hour counts into the local hour it began in.
+ */
+export interface ClockRequest {
+  from: number
+  to: number
+  zones: ClockZone[]
+}
+
+export interface HourUsage extends TokenParts {
+  /** The local hour of the day, 0 to 23. */
+  hour: number
+  agentId: AgentId
+}
+
 export interface UsageSummary {
   days: DayUsage[]
+  /** The clock request's range by hour of the day; empty when none was asked. */
+  clock: HourUsage[]
   models: ModelUsage[]
   projects: ProjectUsage[]
   /** The source each agent counted from; an agent left out has nothing to count. */

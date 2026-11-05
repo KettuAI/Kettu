@@ -5,6 +5,7 @@ import type { Platform } from '@shared/platform'
 import { sortAgentIds, type AgentId } from '@shared/thread'
 import {
   partsTotal,
+  type ClockRequest,
   type ScanProgress,
   type UsageLogStatus,
   type UsageScope,
@@ -279,6 +280,7 @@ export class UsageManager {
     from: number,
     to: number,
     scope: UsageScope,
+    clock?: ClockRequest,
   ): Promise<UsageSummary> {
     const sources = this.sources(scope)
     const { store } = this.deps
@@ -289,6 +291,7 @@ export class UsageManager {
     if (!store || this.unavailable) {
       return {
         days: [],
+        clock: [],
         models: [],
         projects: [],
         sources,
@@ -297,7 +300,7 @@ export class UsageManager {
         pricesAsOf: PRICES.asOf,
       }
     }
-    const summary = await store.summary(dayStarts, from, to, sources)
+    const summary = await store.summary(dayStarts, from, to, sources, clock)
     const projects = summary.projects.map((p) => ({
       ...p,
       scratch: p.project !== null && this.deps.isScratch(p.project),

@@ -88,7 +88,7 @@ function cardWindows(limits: readonly PlanLimit[], now: number): CardWindow[] {
  * A subscription's plan for the badge. Claude Code and Codex name it "<brand> <plan>", such as
  * "Claude Max" or "ChatGPT Plus", and the agent's mark already shows the brand.
  */
-function planTier(account: AgentAccount | null): string | null {
+export function planTier(account: AgentAccount | null): string | null {
   if (account?.kind !== 'account') return null
   const plan = account.label.trim().split(/\s+/).slice(1).join(' ')
   if (!plan) return null

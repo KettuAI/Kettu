@@ -1317,8 +1317,8 @@ export class AgentHost {
         if (!this.scratch.contains(root)) projects.match(root)
         return this.media.authorize(root, path, sessionId ?? null)
       },
-      'usage.summary': ({ dayStarts, from, to, scope }) =>
-        this.usage.summary(dayStarts, from, to, scope),
+      'usage.summary': ({ dayStarts, from, to, scope, clock }) =>
+        this.usage.summary(dayStarts, from, to, scope, clock),
       'usage.total': ({ from, to }) => this.usage.total(from, to),
       'usage.status': () => this.usage.status(),
       'usage.sync': () => this.usage.sync(),

@@ -171,7 +171,15 @@ export function startUsageService(
         })
         return
       case 'summary':
-        answer(() => store.summary(request.dayStarts, request.from, request.to, request.sources))
+        answer(() =>
+          store.summary(
+            request.dayStarts,
+            request.from,
+            request.to,
+            request.sources,
+            request.clock,
+          ),
+        )
         return
       case 'totals':
         answer(() => store.totals(request.from, request.to, request.sources))

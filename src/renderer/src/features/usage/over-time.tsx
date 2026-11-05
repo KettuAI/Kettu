@@ -2,11 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { sortAgentIds, type AgentId } from '@shared/thread'
 import type { UsageScope } from '@shared/usage'
-import { SegmentedControl } from '@renderer/components/segmented-control'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { useClock } from '@renderer/lib/use-now'
 import { agentName } from '@renderer/stores/agents'
-import { setUsageFilters, useUsageStore, type UsagePage as PageData } from '@renderer/stores/usage'
+import { useUsageStore, type UsagePage as PageData } from '@renderer/stores/usage'
 import { TrendAxis, TrendChart, TrendLegend } from './charts'
 import {
   busiest,
@@ -205,18 +204,9 @@ export function OverTime({
   }
   return (
     <Panel>
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-4 flex min-h-6 flex-wrap items-center gap-x-2.5 gap-y-1">
         <PanelTitle>{t('trend.title')}</PanelTitle>
-        <SegmentedControl
-          aria-label={t('page.metric')}
-          value={metric}
-          onChange={(value) => setUsageFilters({ metric: value as Metric })}
-          segments={[
-            { value: 'tokens', label: t('metrics.tokens') },
-            { value: 'requests', label: t(`metrics.${metricKind('requests', scope)}`) },
-            { value: 'cost', label: t('metrics.cost') },
-          ]}
-        />
+        <span className="text-hint text-tertiary">{t(TREND_TITLE[kind][unit])}</span>
         <span className="flex-1" />
         {!late && series.length > 1 && (
           <TrendLegend
