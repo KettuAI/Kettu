@@ -3,13 +3,22 @@ import type { ThreadEntry, ThreadState } from '@shared/thread'
 import { loadOlder, useThreadsStore } from '@renderer/stores/threads'
 import type { ComposerEditorHandle } from './editor'
 
-/** A sent message the card shows, and where it sits among the session's sent messages. */
-export interface InputHistoryEntry {
-  id: string
-  text: string
-  /** The message's place among the recallable messages, from 1. */
+/** Where the message in the box sits among the session's sent messages. */
+export interface InputHistoryPosition {
+  /** From 1, the oldest. */
   index: number
   count: number
+}
+
+interface Recalled extends InputHistoryPosition {
+  id: string
+  text: string
+}
+
+interface Browsing {
+  id: string
+  /** What the box held before the first Up, put back on leaving. */
+  draft: string
 }
 
 /** The message's text when it can be recalled: sent by the user, with something to type. */
@@ -22,7 +31,7 @@ function recallable(entry: ThreadEntry | undefined): string | null {
   return text.trim() ? text : null
 }
 
-function entryOf(state: ThreadState, id: string): InputHistoryEntry | null {
+function recalled(state: ThreadState, id: string): Recalled | null {
   const text = recallable(state.byId[id])
   if (text === null) return null
   let index = 0
@@ -36,52 +45,61 @@ function entryOf(state: ThreadState, id: string): InputHistoryEntry | null {
 }
 
 /**
- * Browsing a session's sent messages from its composer. Up opens the card on the newest message
- * once the caret is on the box's first line; while it is open the card takes both arrows. The
- * composer's draft is never touched: the card only shows a message until it is inserted.
+ * Browsing a session's sent messages from its composer. Up at the box's first line puts the newest
+ * message in the box and Down at its last line moves to newer ones; past the newest, or on
+ * `leave`, the draft comes back. Typing in a recalled message ends the browsing and the text
+ * stays as an ordinary draft, so `close` is the box's cue that it was edited.
  */
 export function useInputHistory({
   sessionId,
   disabled,
   editor,
+  onRecall,
   onError,
 }: {
   sessionId: string | null
   disabled: boolean
   editor: RefObject<ComposerEditorHandle | null>
+  /** Puts `text` in the box, a message or the draft it replaced; it is not the draft to save. */
+  onRecall: (text: string) => void
   onError: () => void
 }) {
-  const [entry, setEntry] = useState<InputHistoryEntry | null>(null)
-  // The same message as the state, read while a key is handled, before its render.
-  const shown = useRef<string | null>(null)
+  const [position, setPosition] = useState<InputHistoryPosition | null>(null)
+  const browsing = useRef<Browsing | null>(null)
   const pending = useRef(false)
   const generation = useRef(0)
   const close = useCallback(() => {
-    shown.current = null
+    browsing.current = null
     pending.current = false
     generation.current++
-    setEntry(null)
+    setPosition(null)
   }, [])
 
   useEffect(() => close, [close, sessionId, disabled])
 
+  /** Ends the browsing and puts the draft back. */
+  const leave = () => {
+    const current = browsing.current
+    close()
+    if (current) onRecall(current.draft)
+  }
+
   const move = (forward: boolean): boolean => {
-    if (!sessionId || disabled) return false
-    if (shown.current === null && (forward || !editor.current?.atBoundary(false))) return false
+    const input = editor.current
+    if (!sessionId || disabled || !input?.atBoundary(forward)) return false
     if (pending.current && !forward) return true
     pending.current = false
     const request = ++generation.current
-    const from = shown.current
-    const input = editor.current
-    const text = input?.text() ?? ''
-    const selection = input?.selection()
+    const text = input.text()
+    const selection = input.selection()
     const focused = document.activeElement
+    const current = browsing.current
 
     const seek = (): boolean => {
       const replica = useThreadsStore.getState().replicas[sessionId]
       const state = replica?.state
       if (!state) return false
-      const at = from === null ? state.order.length : state.order.indexOf(from)
+      const at = current ? state.order.indexOf(current.id) : state.order.length
       if (at < 0) {
         close()
         return false
@@ -91,32 +109,32 @@ export function useInputHistory({
         i >= 0 && i < state.order.length;
         i += forward ? 1 : -1
       ) {
-        const next = entryOf(state, state.order[i]!)
+        const next = recalled(state, state.order[i]!)
         if (!next) continue
-        shown.current = next.id
-        setEntry(next)
+        browsing.current = { id: next.id, draft: current?.draft ?? text }
+        setPosition({ index: next.index, count: next.count })
+        onRecall(next.text)
         return true
       }
       if (forward) {
-        if (from === null) return false
-        // Past the newest message the card closes, leaving the draft as it was.
-        close()
+        if (!current) return false
+        leave()
         return true
       }
-      if (replica.older === null) return from !== null
+      if (replica.older === null) return current !== null
       const page = loadOlder(sessionId)
       if (!page) return false
       pending.current = true
       void page.then((loaded) => {
         if (request !== generation.current) return
         pending.current = false
-        const now = editor.current?.selection()
-        // A delayed page must not open the card after the user typed or moved the caret.
+        const now = input.selection()
+        // A delayed page must not replace text the user typed or a selection they moved.
         if (
           editor.current !== input ||
-          (editor.current?.text() ?? '') !== text ||
-          now?.from !== selection?.from ||
-          now?.to !== selection?.to ||
+          input.text() !== text ||
+          now.from !== selection.from ||
+          now.to !== selection.to ||
           document.activeElement !== focused
         )
           return
@@ -129,5 +147,5 @@ export function useInputHistory({
     return seek()
   }
 
-  return { entry, move, close }
+  return { position, move, close, leave }
 }

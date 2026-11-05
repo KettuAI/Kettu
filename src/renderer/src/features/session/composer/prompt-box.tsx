@@ -238,15 +238,9 @@ export function PromptBox({
       chooseItem(row)
       return true
     }
-    if (!open && !modified && box.historyEntry) {
-      if (event.key === 'Escape') {
-        box.closeHistory()
-        return true
-      }
-      if (event.key === 'Enter') {
-        box.insertHistory()
-        return true
-      }
+    if (!open && !modified && box.historyPosition && event.key === 'Escape') {
+      box.leaveHistory()
+      return true
     }
     if (
       !open &&
@@ -273,7 +267,6 @@ export function PromptBox({
   // Focus leaving the box closes the popover.
   const blur = (event: FocusEvent) => {
     setFocused(false)
-    box.closeHistory()
     if (event.relatedTarget instanceof Node && popup.current?.contains(event.relatedTarget)) return
     dismiss()
   }
