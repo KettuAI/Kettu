@@ -120,7 +120,3 @@ Want to build Kettu yourself? [CONTRIBUTING.md](./CONTRIBUTING.md) has the setup
 ## License
 
 Kettu is released under the [Apache-2.0 license](./LICENSE).
-
----
-
-<sub>Kettu is an independent project and is not affiliated with or endorsed by the makers of the agents it supports. All product names are trademarks of their respective owners.</sub>
