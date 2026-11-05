@@ -43,6 +43,8 @@ export interface RemoteHostDeps {
    * it cannot run.
    */
   openTerminalPort(device: PortDevice): Promise<PortChannel | null>
+  /** A port to the device host for a device's mobile devices, or null while it cannot run. */
+  openDevicePort?(device: PortDevice): Promise<PortChannel | null>
   /** A port to main for a host's device session; only the desktop app has one. */
   openMainPort?(hostId: string): Promise<PortChannel | null>
 }
@@ -146,6 +148,7 @@ export function startRemoteHost(
       openAgentPort: (device) => deps.openAgentPort(device),
       terminal,
       openTerminalPort: (device) => deps.openTerminalPort(device),
+      openDevicePort: (device) => deps.openDevicePort?.(device) ?? Promise.resolve(null),
       admin,
       changed,
       log,

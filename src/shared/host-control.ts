@@ -318,6 +318,8 @@ export type MainToRemoteHost =
   // Under Node.js, the answer to remote-host:open-terminal-port: the terminal host's socket, which
   // the remote host connects to itself; null while devices may not use it or it cannot run.
   | { type: 'remote-host:terminal-socket'; requestId: number; socketPath: string | null }
+  // Under Node.js, the answer to remote-host:open-device-port: the device host's socket.
+  | { type: 'remote-host:device-socket'; requestId: number; socketPath: string | null }
   // The owner allowed devices the terminal or stopped allowing it.
   | { type: 'remote-host:terminal'; allowed: boolean }
   | { type: 'remote-host:add-device'; device: NewDevice }
@@ -419,6 +421,9 @@ export type RemoteHostToMain =
   // A port to the terminal host for a device's terminals; answered by remote-host:port in the
   // desktop app and by remote-host:terminal-socket under Node.js.
   | { type: 'remote-host:open-terminal-port'; requestId: number; device: PortDevice }
+  // A port to the device host for a device's mobile devices; answered by remote-host:port in the
+  // desktop app and by remote-host:device-socket under Node.js.
+  | { type: 'remote-host:open-device-port'; requestId: number; device: PortDevice }
   | { type: 'remote-host:pairing'; codeId: number; pairing: PairingState }
   // The known hosts and their connections, whenever they change.
   | { type: 'remote-host:hosts'; hosts: HostStatus[] }

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { DeviceEnvironment, DeviceInfo } from '@shared/device-host'
+import { isWeb } from '@renderer/lib/platform'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useViewStore } from '@renderer/stores/view'
 
@@ -103,8 +104,9 @@ export function initDevices(): void {
       useDevicesStore.setState({ devices: event.devices, loaded: true })
     }
   })
-  // From main, so a window that never opened the pane still hears it.
-  window.kettu.devices.onOpened(({ sessionId, deviceId }) => {
+  // From main, so a window that never opened the pane still hears it; a web page hears it from
+  // the device host itself.
+  const opened = ({ sessionId, deviceId }: { sessionId: string; deviceId: string }): void => {
     if (!useSessionsStore.getState().byId[sessionId]) return
     useDevicesStore.setState((s) => ({ selected: { ...s.selected, [sessionId]: deviceId } }))
     void loadDevices()
@@ -114,6 +116,10 @@ export function initDevices(): void {
     } else if (shown !== 'devices') {
       useDevicesStore.setState((s) => ({ unseen: { ...s.unseen, [sessionId]: true } }))
     }
+  }
+  window.kettu.devices.onOpened(opened)
+  window.kettu.devices.onEvent((event) => {
+    if (event.type === 'device.opened' && isWeb) opened(event)
   })
   window.kettu.devices.onConnection((state) => {
     if (state === 'connected' && useDevicesStore.getState().loaded) void loadDevices()

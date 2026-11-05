@@ -11,7 +11,7 @@
 
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { createReadStream, existsSync } from 'node:fs'
+import { createReadStream, existsSync, readFileSync, realpathSync } from 'node:fs'
 import { chmod, copyFile, cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import os from 'node:os'
@@ -150,6 +150,38 @@ export async function packageDaemon({
     for (const file of ['pty.node', 'spawn-helper']) {
       const source = path.join(pty, 'build', 'Release', file)
       if (existsSync(source)) await cp(source, path.join(ptyOut, 'build', 'Release', file))
+    }
+
+    // The device host runs agent-device and serve-sim as programs, so they ship with what they
+    // load; serve-sim only where it runs, macOS on Apple silicon.
+    const runtime = [
+      'agent-device',
+      ...(platform === 'darwin' && arch === 'arm64' ? ['@expo/serve-sim'] : []),
+    ]
+    const copied = new Set()
+    /** @param {string} name @param {string} from */
+    const copyPackage = async (name, from) => {
+      if (copied.has(name)) return
+      const resolve = createRequire(path.join(from, 'package.json'))
+      const paths = resolve.resolve.paths(name) ?? []
+      const source = paths
+        .map((dir) => path.join(dir, name))
+        .find((dir) => existsSync(path.join(dir, 'package.json')))
+      if (!source) throw new Error(`${name} is not installed`)
+      copied.add(name)
+      await cp(realpathSync(source), path.join(dir, 'daemon', 'node_modules', name), {
+        recursive: true,
+        dereference: true,
+      })
+      const manifest = JSON.parse(readFileSync(path.join(source, 'package.json'), 'utf8'))
+      for (const dependency of Object.keys(manifest.dependencies ?? {})) {
+        await copyPackage(dependency, realpathSync(source))
+      }
+    }
+    for (const name of runtime) await copyPackage(name, root)
+    // The device host's helpers, which tools/install/device-helpers.mjs puts in out/helpers.
+    if (existsSync(path.join(build, 'helpers'))) {
+      await cp(path.join(build, 'helpers'), path.join(dir, 'helpers'), { recursive: true })
     }
 
     const nodeDir = node ?? (await downloadNode(platform, arch, stage))

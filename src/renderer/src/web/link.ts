@@ -245,6 +245,7 @@ export class HostLink {
   private paceMs = 0
   private readonly hostListeners = new Set<(event: unknown) => void>()
   private readonly terminalListeners = new Set<(event: unknown) => void>()
+  private readonly deviceListeners = new Set<(event: unknown) => void>()
   private readonly adminListeners = new Set<(event: HostAdminEvent) => void>()
   private readonly stateListeners = new Set<(state: LinkState) => void>()
   private readonly messageListeners = new Set<(message: Record<string, unknown>) => void>()
@@ -310,6 +311,14 @@ export class HostLink {
   }
 
   /** The terminal host's events, which share the channel. */
+  /** The device host's events, frames with their data in base64 as the host sends them. */
+  onDeviceEvent(listener: (event: unknown) => void): () => void {
+    this.deviceListeners.add(listener)
+    return () => {
+      this.deviceListeners.delete(listener)
+    }
+  }
+
   onTerminalEvent(listener: (event: unknown) => void): () => void {
     this.terminalListeners.add(listener)
     return () => {
@@ -648,6 +657,9 @@ export class HostLink {
         const event = message.event as { type?: unknown } | undefined
         if (typeof event?.type !== 'string') return
         if (isHostAdminEvent(event)) return emit(this.adminListeners, event)
+        if (event.type.startsWith('device.') || event.type.startsWith('devices.')) {
+          return emit(this.deviceListeners, event)
+        }
         const terminal = event.type.startsWith('terminal.')
         return emit(terminal ? this.terminalListeners : this.hostListeners, event)
       }

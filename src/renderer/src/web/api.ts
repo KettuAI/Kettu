@@ -3,6 +3,7 @@
 // what a browser can do itself. What needs the desktop app's own window is never offered: the
 // page hides it, and a call that comes anyway is refused.
 
+import type { DeviceEvent } from '@shared/device-host'
 import type { HostEvent } from '@shared/agent-host'
 import type { ArtifactContent } from '@shared/artifacts'
 import type { AppCommand, KettuApi } from '@shared/ipc'
@@ -505,11 +506,33 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       },
     },
     devices: {
-      request: (() => unsupported('use mobile devices')) as KettuApi['devices']['request'],
-      onEvent: never,
+      // Over the channel frames and screenshots are base64; the page gets them as ArrayBuffers.
+      request: (async (method: string, params: unknown) => {
+        const result = await link.request(method, params)
+        const png = (result as { png?: unknown } | null)?.png
+        return typeof png === 'string' ? { ...(result as object), png: fromBase64(png) } : result
+      }) as KettuApi['devices']['request'],
+      onEvent: (listener) =>
+        link.onDeviceEvent((event) => {
+          const frame = event as DeviceEvent
+          if (frame.type === 'device.frame' && typeof (frame.data as unknown) === 'string') {
+            listener({ ...frame, data: fromBase64(frame.data as unknown as string) })
+          } else {
+            listener(frame)
+          }
+        }),
       onConnection: connectionListener,
-      restart: async () => {},
+      restart: async () => {
+        link.wake()
+      },
       onOpened: never,
     },
   }
+}
+
+function fromBase64(text: string): ArrayBuffer {
+  const binary = atob(text)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes.buffer
 }

@@ -456,6 +456,7 @@ async function start(): Promise<void> {
     terminal: () => settings.get().remote.terminal,
     openPort: (device) => agentHost.connectDevice(device),
     openTerminalPort: (device) => terminalHost.connectDevice(device),
+    openDevicePort: (device) => deviceHost.connectDevice(device),
     admin: async (deviceId, method, params) =>
       hostAdmin
         ? hostAdmin.answer(deviceId, method, params)

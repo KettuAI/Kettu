@@ -32,6 +32,9 @@ const KEY_CODES = new Set([
 ])
 
 const FRAME_US = 16_667
+/** Without hardware decoding, as on a page opened over plain http, a picture this often. */
+const STILL_EVERY_MS = 1_000
+const canDecode = typeof VideoDecoder !== 'undefined' && typeof EncodedVideoChunk !== 'undefined'
 
 function avcCodec(description: Uint8Array): string {
   const hex = (byte: number): string => byte.toString(16).padStart(2, '0')
@@ -116,7 +119,7 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
     }
 
     const configure = (): void => {
-      if (!description) return
+      if (!description || !canDecode) return
       const codec = screen?.codec ?? avcCodec(description)
       decoder?.close()
       decoder = new VideoDecoder({
@@ -191,6 +194,33 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
         ack(event.seq)
       }
     })
+
+    // The browser gives no decoder: screenshots instead, which take no stream at all.
+    let stills: ReturnType<typeof setInterval> | null = null
+    if (!canDecode) {
+      const still = (): void => {
+        void window.kettu.devices
+          .request('devices.screenshot', { deviceId: id })
+          .then(async ({ png }) => {
+            if (closed) return
+            const bitmap = await createImageBitmap(new Blob([png], { type: 'image/png' }))
+            draw(bitmap, bitmap.width, bitmap.height)
+            bitmap.close()
+            if (!drewFrame) {
+              drewFrame = true
+              setDrawn(true)
+            }
+          })
+          .catch(() => undefined)
+      }
+      still()
+      stills = setInterval(still, STILL_EVERY_MS)
+      return () => {
+        closed = true
+        unsubscribe()
+        if (stills) clearInterval(stills)
+      }
+    }
 
     window.kettu.devices
       .request('devices.watch', { deviceId: id })
@@ -305,6 +335,11 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
           )}
         </div>
       </div>
+      {!canDecode && (
+        <p className="absolute inset-x-0 top-2 text-center text-small text-tertiary">
+          {t('screen.limited')}
+        </p>
+      )}
       {/* The keyboard goes to the device through this field, so input methods compose as usual. */}
       <textarea
         ref={field}

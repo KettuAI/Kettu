@@ -107,7 +107,7 @@ export function HeaderTools({
             <GlobeIcon />
           </PaneToggle>
         )}
-        {!isWeb && sessionId && devices && (
+        {sessionId && devices && (
           <PaneToggle panel={panel} pane="devices" label={t('headerTools.devices')} dot={deviceDot}>
             <SmartphoneIcon />
           </PaneToggle>

@@ -3,6 +3,7 @@
 // notifications, tray or browser, so what serves those is not answered; remote access is always on,
 // and so are its direct connections.
 
+import type { DeviceCall } from '@shared/device-agent'
 import path from 'node:path'
 import type {
   AdminAnswer,
@@ -11,6 +12,8 @@ import type {
   MainToHost,
   MainToRemoteHost,
   MainToTerminalHost,
+  MainToDeviceHost,
+  DeviceHostToMain,
   RemoteHostStatus,
   RemoteHostToMain,
   TerminalHostToMain,
@@ -120,6 +123,7 @@ type AnyHost = ForkedHost<unknown, { type: string }>
 export class Hosts {
   private readonly agent: ForkedHost<MainToHost, HostToMain>
   private readonly terminal: ForkedHost<MainToTerminalHost, TerminalHostToMain>
+  private readonly deviceHost: ForkedHost<MainToDeviceHost, DeviceHostToMain>
   private readonly remote: ForkedHost<MainToRemoteHost, RemoteHostToMain>
   private projects: string[] = []
   private authCommands: string[] = []
@@ -191,6 +195,32 @@ export class Hosts {
       readyType: 'terminal-host:ready',
       stoppedType: 'terminal-host:stopped',
       onMessage: (message) => log.warn(`Ignored terminal host message "${message.type}"`),
+    })
+    // Mobile devices: started by the first agent call or paired device that needs one.
+    this.deviceHost = new ForkedHost<MainToDeviceHost, DeviceHostToMain>({
+      log: createLogger('device-host'),
+      modulePath: bundle('device-host.cjs'),
+      socketName: 'device-host',
+      env: options.env,
+      timings: options.timings,
+      initMessage: (socketPath) => ({
+        type: 'device-host:init',
+        platform: process.platform,
+        appVersion: options.version,
+        nodeRuntime: { command: process.execPath, env: {} },
+        dataDir: options.dataPath,
+        resourcesPath: null,
+        allowDevices: true,
+        socketPath: socketPath ?? undefined,
+      }),
+      shutdownMessage: { type: 'device-host:shutdown' },
+      readyType: 'device-host:ready',
+      stoppedType: 'device-host:stopped',
+      onMessage: (message) => {
+        if (message.type === 'device-host:answer') {
+          this.agent.post({ type: 'device-result', callId: message.callId, answer: message.answer })
+        }
+      },
     })
     // Devices reach it through its direct connections, as in the desktop app, not a socket.
     this.remote = new ForkedHost<MainToRemoteHost, RemoteHostToMain>({
@@ -568,6 +598,33 @@ export class Hosts {
     return this.sentTerminal
   }
 
+  /** Runs an agent's device call on the device host, starting it on the first one. */
+  private async deviceCall(callId: number, call: DeviceCall): Promise<void> {
+    try {
+      await this.deviceHost.ready()
+      if (this.deviceHost.post({ type: 'device-host:call', callId, call })) return
+    } catch (error) {
+      log.warn(`A device call cannot run: the device host is ${(error as Error).message}`)
+    }
+    this.agent.post({
+      type: 'device-result',
+      callId,
+      answer: { error: { code: 'unavailable', message: 'The device host is not running' } },
+    })
+  }
+
+  /** The device host's socket for a paired device's mobile devices, starting it. */
+  private async openDevices(requestId: number): Promise<void> {
+    let socketPath: string | null = null
+    try {
+      await this.deviceHost.ready()
+      socketPath = this.deviceHost.socketPath
+    } catch (error) {
+      log.warn(`A device's devices cannot open: the device host is ${(error as Error).message}`)
+    }
+    this.remote.post({ type: 'remote-host:device-socket', requestId, socketPath })
+  }
+
   /** The terminal host's socket for a device's terminals, starting it; none while not allowed. */
   private async openTerminal(requestId: number): Promise<void> {
     let socketPath: string | null = null
@@ -607,7 +664,11 @@ export class Hosts {
 
   /** Stops the hosts as main does when the app quits: devices hear why before the agent host goes. */
   async stop(): Promise<void> {
-    await Promise.all([this.remote.stop().then(() => this.agent.stop()), this.terminal.stop()])
+    await Promise.all([
+      this.remote.stop().then(() => this.agent.stop()),
+      this.terminal.stop(),
+      this.deviceHost.stop(),
+    ])
   }
 
   private setRemoteStatus(status: RemoteHostStatus | null): void {
@@ -642,6 +703,9 @@ export class Hosts {
       // The terminal host starts on the first device that asks, so its socket is named then.
       case 'remote-host:open-terminal-port':
         if (Number.isSafeInteger(message.requestId)) void this.openTerminal(message.requestId)
+        break
+      case 'remote-host:open-device-port':
+        if (Number.isSafeInteger(message.requestId)) void this.openDevices(message.requestId)
         break
       case 'remote-host:activity':
       case 'remote-host:reset':
@@ -678,6 +742,12 @@ export class Hosts {
             type: 'terminal-host:sessions-ended',
             sessionIds: message.sessionIds,
           })
+          this.deviceHost.post({ type: 'device-host:sessions-ended', sessionIds: message.sessionIds })
+        }
+        break
+      case 'host:device-call':
+        if (Number.isSafeInteger(message.callId) && typeof message.call === 'object') {
+          void this.deviceCall(message.callId, message.call)
         }
         break
       case 'host:auth-commands':
