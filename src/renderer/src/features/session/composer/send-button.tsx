@@ -17,7 +17,11 @@ const HOLD_MS = 450
 
 const ROUND = 'size-8 rounded-full p-0 [&_svg:not([class*=size-])]:size-4'
 
-/** Send: quiet while there is nothing to send, ink once there is. */
+/** A send button that can send: the fox in place of the primary button's ink. */
+export const SEND_FILL =
+  'bg-send bg-none text-(--on-fill) shadow-(--send-shadow) hover:bg-send-hover hover:bg-none active:bg-send-active active:shadow-none'
+
+/** Send: quiet while there is nothing to send, the fox once there is. */
 export function SendButton({
   disabled,
   label,
@@ -33,9 +37,9 @@ export function SendButton({
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className={`${ROUND} animate-in zoom-in-75 fade-in animation-duration-(--duration-fast) disabled:bg-subtle disabled:bg-none disabled:text-tertiary disabled:opacity-100 disabled:shadow-none`}
+      className={`${ROUND} animate-in zoom-in-75 fade-in animation-duration-(--duration-fast) ${SEND_FILL} disabled:bg-subtle disabled:text-tertiary disabled:opacity-100 disabled:shadow-none`}
     >
-      <ArrowUpIcon strokeWidth={1.75} />
+      <ArrowUpIcon strokeWidth={2} />
     </Button>
   )
 }

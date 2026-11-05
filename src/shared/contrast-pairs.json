@@ -84,6 +84,8 @@
     { "fg": "--link-hover", "on": ["--bg-app", "--bg-surface", "--bg-subtle"] },
     { "fg": "--switch-on", "on": ["--bg-app", "--bg-sidebar", "--bg-surface"], "minRatio": 3 },
     { "fg": "--control-on", "on": ["--bg-app", "--bg-sidebar", "--bg-surface"], "minRatio": 3 },
+    { "fg": "--send", "on": ["--bg-surface"], "minRatio": 3 },
+    { "fg": "--on-fill", "on": ["--send"], "minRatio": 3 },
     { "fg": "--syntax-keyword", "on": ["--bg-code-block", "--bg-app"] },
     { "fg": "--syntax-string", "on": ["--bg-code-block", "--bg-app"] },
     { "fg": "--syntax-number", "on": ["--bg-code-block", "--bg-app"] },

@@ -61,6 +61,7 @@ export const THEME_TOKENS = [
   'switch-thumb',
   'track',
   'control-on',
+  'send',
   'scrollbar-thumb',
   'scrim',
   'viewer-scrim',
@@ -144,6 +145,7 @@ const THEME_FALLBACKS: readonly (readonly [ThemeToken, ThemeToken])[] = [
   // The theme's orange for text, which reaches 4.5:1 on its pages.
   ['control-on', 'attention'],
   ['switch-on', 'control-on'],
+  ['send', 'control-on'],
   ['code-success', 'success'],
   ['code-danger', 'danger'],
   ['code-inline', 'text-primary'],
