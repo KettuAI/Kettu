@@ -60,7 +60,7 @@ export interface PlanCard {
   agentName: string
   /** The agent's name, or for OpenCode the provider's. */
   name: string
-  /** The plan without its brand, such as "Max 5x"; null when it is unknown. */
+  /** The plan without its brand, such as "Ultra"; null when it is unknown. */
   tier: string | null
   /** Innermost first. */
   windows: CardWindow[]
@@ -84,6 +84,23 @@ function cardWindows(limits: readonly PlanLimit[], now: number): CardWindow[] {
   return RING_WINDOWS.flatMap((ring) => byRing.get(ring) ?? [])
 }
 
+const MAX_PLAN = /^(.*\b)max(?:\s+(\d+x))?$/i
+const MAX_TIER_NAMES: Record<string, string> = { '5x': 'Max', '10x': 'Ultra', '20x': 'Ultra' }
+
+/**
+ * A plan with its tier once. Claude's Max is named by its tier: 5x is "Max" and 10x is "Ultra",
+ * and so is 20x, which older data still reports for it. A plan that already names its tier is
+ * left as it is.
+ */
+export function joinPlanTier(plan: string, tier: string | undefined): string {
+  const extra = tier?.trim().toLowerCase()
+  const max = MAX_PLAN.exec(plan)
+  const named = MAX_TIER_NAMES[max?.[2]?.toLowerCase() ?? extra ?? '']
+  if (max && named) return `${max[1]}${named}`
+  if (!extra || plan.toLowerCase().includes(extra) || /\bultra$/i.test(plan)) return plan
+  return `${plan} ${tier!.trim()}`
+}
+
 /**
  * A subscription's plan for the badge. Claude Code and Codex name it "<brand> <plan>", such as
  * "Claude Max" or "ChatGPT Plus", and the agent's mark already shows the brand.
@@ -92,8 +109,7 @@ export function planTier(account: AgentAccount | null): string | null {
   if (account?.kind !== 'account') return null
   const plan = account.label.trim().split(/\s+/).slice(1).join(' ')
   if (!plan) return null
-  const tier = account.tier?.trim()
-  return tier && !plan.toLowerCase().includes(tier.toLowerCase()) ? `${plan} ${tier}` : plan
+  return joinPlanTier(plan, account.tier)
 }
 
 /**
