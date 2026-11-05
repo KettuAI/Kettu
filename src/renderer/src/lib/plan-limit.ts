@@ -22,6 +22,13 @@ export const LIMIT_FILL: Record<LimitLevel, string> = {
   bad: 'bg-limit-bad',
 }
 
+/** A limit ring's color at each level, drawn with `currentColor`. */
+export const LIMIT_STROKE: Record<LimitLevel, string> = {
+  ok: 'text-limit-ok',
+  warn: 'text-limit-warn',
+  bad: 'text-limit-bad',
+}
+
 /** A limit's percentage at each level: the bar colors are too light for text. */
 export const LIMIT_TEXT: Record<LimitLevel, string> = {
   ok: 'text-tertiary',

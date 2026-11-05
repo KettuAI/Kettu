@@ -180,6 +180,9 @@
     "allHostsLine": "{{count}} 台主机并列显示",
     "addHost": "添加主机…",
     "limits": "套餐限额",
+    "allLimits": "全部套餐限额",
+    "limitUsed": "{{window}}：已用 {{percent}}%",
+    "limitStale": "{{window}}：重置后还没读到",
     "theme": "主题",
     "themes": {
       "system": "跟随系统",

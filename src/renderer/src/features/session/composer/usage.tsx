@@ -686,7 +686,13 @@ function ListPart({ list }: { list: ContextList }) {
 }
 
 /** The plan and its windows: a bar for each, in the limit colors. */
-function PlanPart({ limits, account }: { limits: PlanLimit[]; account: AgentAccount | null }) {
+export function PlanPart({
+  limits,
+  account,
+}: {
+  limits: PlanLimit[]
+  account: AgentAccount | null
+}) {
   const { t } = useTranslation('composer')
   const now = useNow()
   const plan = account?.label
