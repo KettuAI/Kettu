@@ -17,7 +17,9 @@
   --bg-subtle: #f2f4f7;
   /* A system notification in Settings › Notifications, as the menu bar draws one. */
   --bg-tray: #f7f8fa;
-  --bg-code-inline: rgb(20 26 34 / 6%);
+  /* Inline code: the fox, muted, on a faint fox ground. */
+  --bg-code-inline: rgb(242 88 27 / 10%);
+  --code-inline: #a8431c;
   --bg-code-block: #f6f7f9;
   --bg-hover: rgb(20 26 34 / 5%);
   /* Pressed, and a highlighted menu item. */
@@ -296,7 +298,8 @@
     --bg-surface: #252525;
     --bg-subtle: #292929;
     --bg-tray: #222222;
-    --bg-code-inline: rgb(230 236 245 / 8%);
+    --bg-code-inline: rgb(255 106 43 / 14%);
+    --code-inline: #f2a27c;
     --bg-code-block: #181818;
     --bg-hover: rgb(230 236 245 / 5%);
     --bg-selected: rgb(230 236 245 / 8%);
@@ -484,7 +487,8 @@
   --bg-surface: #252525;
   --bg-subtle: #292929;
   --bg-tray: #222222;
-  --bg-code-inline: rgb(230 236 245 / 8%);
+  --bg-code-inline: rgb(255 106 43 / 14%);
+  --code-inline: #f2a27c;
   --bg-code-block: #181818;
   --bg-hover: rgb(230 236 245 / 5%);
   --bg-selected: rgb(230 236 245 / 8%);

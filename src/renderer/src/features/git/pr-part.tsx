@@ -77,7 +77,7 @@ export function PullRequestPart({
       <Line
         action={
           <span className="inline-flex items-center gap-1">
-            <code className="rounded-sm bg-code-inline px-1.5 py-0.5 font-mono text-code-sm text-primary">
+            <code className="rounded-sm bg-code-inline px-1.5 py-0.5 font-mono text-code-sm text-code-inline">
               gh auth login
             </code>
             <CopyButton text="gh auth login" label={t('prPart.copyCommand')} />
