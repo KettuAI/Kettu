@@ -290,17 +290,17 @@
     color-scheme: dark;
 
     --desk-tint: 50%;
-    --bg-app: #0a0a0a;
-    --bg-sidebar: #050505;
+    --bg-app: #1e1e1e;
+    --bg-sidebar: #141414;
     /* What floats over the page sits a step lighter than it, since shadows barely show here. */
-    --bg-surface: #171717;
-    --bg-subtle: #1c1c1c;
-    --bg-tray: #151515;
+    --bg-surface: #252525;
+    --bg-subtle: #292929;
+    --bg-tray: #222222;
     --bg-code-inline: rgb(230 236 245 / 8%);
-    --bg-code-block: #111111;
+    --bg-code-block: #181818;
     --bg-hover: rgb(230 236 245 / 5%);
     --bg-selected: rgb(230 236 245 / 8%);
-    --bg-raised: #202020;
+    --bg-raised: #2a2a2a;
 
     --border-default: rgb(230 236 245 / 14%);
     --border-subtle: rgb(230 236 245 / 8%);
@@ -308,8 +308,8 @@
 
     --text-primary: #e8ecf1;
     --text-secondary: #aeb6c1;
-    --text-tertiary: #8a94a1;
-    --text-placeholder: #8a94a1;
+    --text-tertiary: #8e98a5;
+    --text-placeholder: #8e98a5;
     --text-disabled: #5f6873;
     --icon-default: #aeb6c1;
 
@@ -478,17 +478,17 @@
   color-scheme: dark;
 
   --desk-tint: 50%;
-  --bg-app: #0a0a0a;
-  --bg-sidebar: #050505;
+  --bg-app: #1e1e1e;
+  --bg-sidebar: #141414;
   /* What floats over the page sits a step lighter than it, since shadows barely show here. */
-  --bg-surface: #171717;
-  --bg-subtle: #1c1c1c;
-  --bg-tray: #151515;
+  --bg-surface: #252525;
+  --bg-subtle: #292929;
+  --bg-tray: #222222;
   --bg-code-inline: rgb(230 236 245 / 8%);
-  --bg-code-block: #111111;
+  --bg-code-block: #181818;
   --bg-hover: rgb(230 236 245 / 5%);
   --bg-selected: rgb(230 236 245 / 8%);
-  --bg-raised: #202020;
+  --bg-raised: #2a2a2a;
 
   --border-default: rgb(230 236 245 / 14%);
   --border-subtle: rgb(230 236 245 / 8%);
@@ -496,8 +496,8 @@
 
   --text-primary: #e8ecf1;
   --text-secondary: #aeb6c1;
-  --text-tertiary: #8a94a1;
-  --text-placeholder: #8a94a1;
+  --text-tertiary: #8e98a5;
+  --text-placeholder: #8e98a5;
   --text-disabled: #5f6873;
   --icon-default: #aeb6c1;
 

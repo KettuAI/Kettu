@@ -16,7 +16,7 @@ const log = createLogger('window')
 
 // Windows and Linux: must match --bg-sidebar in the renderer's tokens.css, or the window flashes
 // on load. On macOS the window is clear over the system's sidebar material, which the page tints.
-const BACKGROUND_COLOR = { light: '#f5f5f5', dark: '#050505' }
+const BACKGROUND_COLOR = { light: '#f5f5f5', dark: '#141414' }
 const CLEAR = '#00000000'
 
 // The symbols of the Windows and Linux window controls: --text-primary of each theme.
