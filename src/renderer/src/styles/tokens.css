@@ -37,6 +37,9 @@
   --text-tertiary: #5e6875;
   --text-placeholder: #5e6875;
   --text-disabled: #9aa1ab;
+  /* New session's invitation after the greeting, a step back from it; large type, so 3:1 is its
+     bar. */
+  --greeting-invite: color-mix(in oklab, var(--text-tertiary) 80%, var(--bg-app));
   --icon-default: #48525f;
 
   /* Waiting: the fox orange, darkened for text; the dot keeps the brand's own. */
@@ -319,6 +322,7 @@
     --text-tertiary: #8e98a5;
     --text-placeholder: #8e98a5;
     --text-disabled: #5f6873;
+    --greeting-invite: var(--text-tertiary);
     --icon-default: #aeb6c1;
 
     --attention: #fb8a55;
@@ -510,6 +514,7 @@
   --text-tertiary: #8e98a5;
   --text-placeholder: #8e98a5;
   --text-disabled: #5f6873;
+  --greeting-invite: var(--text-tertiary);
   --icon-default: #aeb6c1;
 
   --attention: #fb8a55;

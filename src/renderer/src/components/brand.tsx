@@ -1,18 +1,26 @@
-import foxUrl from '@renderer/assets/kettu-fox.svg'
+import type { CSSProperties } from 'react'
+import foxOnDarkUrl from '@renderer/assets/kettu-fox-flat-on-dark.svg'
+import foxOnLightUrl from '@renderer/assets/kettu-fox-flat-on-light.svg'
 import iconUrl from '@renderer/assets/kettu-icon.svg'
 import { lockupGeometry, WORDMARK, type LockupLayout } from '@shared/brand'
 import { cn } from '@renderer/lib/utils'
 
-/** The icon's fox in the icon's colors, without its tile, `size` px square. Decorative. */
-export function BrandFox({ size, className }: { size: number; className?: string }) {
+/** The icon's fox drawn flat, without its tile, in the tones for the theme's ground. Decorative. */
+export function BrandFox({ className }: { className?: string }) {
   return (
-    <img
-      alt=""
-      src={foxUrl}
-      width={size}
-      height={size}
-      draggable={false}
-      className={cn('shrink-0', className)}
+    <span
+      aria-hidden
+      className={cn(
+        'inline-block shrink-0 bg-contain bg-center bg-no-repeat [background-image:var(--fox-on-light)] dark:[background-image:var(--fox-on-dark)]',
+        className,
+      )}
+      // Quoted: the small drawings come inlined as data URLs, which an unquoted url() rejects.
+      style={
+        {
+          '--fox-on-light': `url(${JSON.stringify(foxOnLightUrl)})`,
+          '--fox-on-dark': `url(${JSON.stringify(foxOnDarkUrl)})`,
+        } as CSSProperties
+      }
     />
   )
 }

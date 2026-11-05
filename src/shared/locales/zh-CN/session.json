@@ -267,14 +267,27 @@
     "recent": "最近",
     "noMatchingProjects": "没有匹配的项目",
     "greeting": {
-      "morning": "早上好",
-      "afternoon": "下午好",
-      "evening": "晚上好"
-    },
-    "greetingNamed": {
-      "morning": "早上好，{{name}}",
-      "afternoon": "下午好，{{name}}",
-      "evening": "晚上好，{{name}}"
+      "hello": {
+        "morning": "早上好",
+        "afternoon": "下午好",
+        "evening": "晚上好",
+        "late": "夜深了",
+        "back": "好久不见"
+      },
+      "named": "{{hello}}，{{name}}。",
+      "plain": "{{hello}}，",
+      "first": "你好，我是 Kettu。",
+      "invite": {
+        "morning": ["今天从哪儿开始？", "先做哪件事？", "今天想做点什么？"],
+        "afternoon": ["接着做点什么？", "手上还有什么？", "适合啃块硬骨头"],
+        "evening": ["还有什么要收尾？", "今天辛苦了", "安静的时候，正好写点东西"],
+        "late": ["慢慢来", "做完这件就休息吧"],
+        "first": ["先交给 Agent 一件小事？"],
+        "back": ["从哪儿接着？"],
+        "monday": ["新的一周，先做什么？"],
+        "friday": ["把这周收个尾？"],
+        "weekend": ["周末也来了，做点轻松的"]
+      }
     },
     "branchHint": "会话从这个分支开始",
     "commitHint": "会话从这个提交开始",
