@@ -10,9 +10,55 @@
     "empty": "会话会显示在这里。"
   },
   "search": {
-    "placeholder": "搜索会话",
-    "noMatch": "没有会话匹配“{{query}}”",
-    "none": "还没有会话。"
+    "placeholder": "搜索会话、Artifacts、例程等",
+    "scopes": "搜索范围",
+    "scope": {
+      "all": "全部",
+      "sessions": "会话",
+      "artifacts": "Artifacts",
+      "routines": "例程",
+      "projects": "项目",
+      "settings": "设置"
+    },
+    "group": {
+      "recent": "最近",
+      "session": "会话",
+      "artifact": "Artifacts",
+      "routine": "例程",
+      "project": "项目",
+      "action": "操作",
+      "section": "设置"
+    },
+    "action": {
+      "newSession": "新建会话",
+      "openProject": "打开项目…",
+      "openUsage": "打开用量",
+      "openArtifacts": "打开 Artifacts",
+      "openRoutines": "打开例程",
+      "openSettings": "打开设置",
+      "showShortcuts": "显示快捷键",
+      "toggleSidebar": "切换侧边栏"
+    },
+    "showAll": "显示全部 {{count}} 条",
+    "sessionCount_other": "{{count}} 个会话",
+    "results_other": "{{count}} 个结果",
+    "noMatch": "没有结果匹配“{{query}}”",
+    "searchedAll": "搜了会话、Artifacts、例程、项目和设置。",
+    "searchedScope": "只搜了{{scope}}，按 Tab 搜更多。",
+    "none": {
+      "all": "这里还没有内容。",
+      "sessions": "还没有会话。",
+      "artifacts": "还没有 Artifacts。",
+      "routines": "还没有例程。",
+      "projects": "还没有项目。",
+      "settings": "这里没有内容。"
+    },
+    "loading": "正在加载…",
+    "hint": {
+      "navigate": "导航",
+      "open": "打开",
+      "scope": "下一个范围"
+    }
   },
   "project": {
     "missing": "未找到",

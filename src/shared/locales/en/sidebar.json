@@ -10,9 +10,57 @@
     "empty": "Sessions appear here."
   },
   "search": {
-    "placeholder": "Search sessions",
-    "noMatch": "No sessions match “{{query}}”",
-    "none": "No sessions yet."
+    "placeholder": "Search sessions, artifacts, routines and more",
+    "scopes": "Search in",
+    "scope": {
+      "all": "All",
+      "sessions": "Sessions",
+      "artifacts": "Artifacts",
+      "routines": "Routines",
+      "projects": "Projects",
+      "settings": "Settings"
+    },
+    "group": {
+      "recent": "Recent",
+      "session": "Sessions",
+      "artifact": "Artifacts",
+      "routine": "Routines",
+      "project": "Projects",
+      "action": "Actions",
+      "section": "Settings"
+    },
+    "action": {
+      "newSession": "New session",
+      "openProject": "Open project…",
+      "openUsage": "Open Usage",
+      "openArtifacts": "Open Artifacts",
+      "openRoutines": "Open Routines",
+      "openSettings": "Open Settings",
+      "showShortcuts": "Show keyboard shortcuts",
+      "toggleSidebar": "Toggle sidebar"
+    },
+    "showAll": "Show all {{count}}",
+    "sessionCount_one": "{{count}} session",
+    "sessionCount_other": "{{count}} sessions",
+    "results_one": "{{count}} result",
+    "results_other": "{{count}} results",
+    "noMatch": "No results for “{{query}}”",
+    "searchedAll": "Searched sessions, artifacts, routines, projects and settings.",
+    "searchedScope": "Searched {{scope}} only. Press Tab to search more.",
+    "none": {
+      "all": "Nothing here yet.",
+      "sessions": "No sessions yet.",
+      "artifacts": "No artifacts yet.",
+      "routines": "No routines yet.",
+      "projects": "No projects yet.",
+      "settings": "Nothing here."
+    },
+    "loading": "Loading…",
+    "hint": {
+      "navigate": "Navigate",
+      "open": "Open",
+      "scope": "Next scope"
+    }
   },
   "project": {
     "missing": "Missing",
