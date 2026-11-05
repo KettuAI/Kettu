@@ -8,6 +8,7 @@ import {
   session,
   shell,
   systemPreferences,
+  webContents,
 } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { BROWSER_PARTITION } from '@shared/browser'
@@ -549,6 +550,10 @@ async function start(): Promise<void> {
 
   const menuDeps = {
     checkForUpdates: () => void updater.check(),
+    browserFocused: () => {
+      const focused = webContents.getFocusedWebContents()
+      return !!focused && browserViews.owns(focused)
+    },
     zoom: (step: ZoomStep) => {
       settings.update({ appearance: { zoom: stepZoom(settings.get().appearance.zoom, step) } })
     },

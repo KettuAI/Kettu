@@ -13,6 +13,7 @@ import {
 import { useDefaultLayout } from 'react-resizable-panels'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
+import { onAppEvent } from '@renderer/app/events'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -114,11 +115,21 @@ export function TerminalPanel({
   }
   const newTerminal = () => void starting(() => createTerminal(projectPath))
 
-  const close = (t: TerminalState) => {
+  const close = useCallback((t: TerminalState) => {
     if (t.stale) forgetTerminal(t.id)
     else if (t.busy && t.exitCode === null) setClosing(t)
     else void killTerminal(t.id)
-  }
+  }, [])
+
+  // Mod+W closes the tab of the side that has the focus, asking first like its close button.
+  const focused = side === 'right' && split ? right : active
+  useEffect(
+    () =>
+      onAppEvent((event) => {
+        if (event.kind === 'close-terminal' && focused) close(focused)
+      }),
+    [close, focused],
+  )
 
   const dragEnded = (event: DragEndEvent) => {
     if (event.canceled) return

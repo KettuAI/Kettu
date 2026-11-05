@@ -16,10 +16,9 @@ import {
   toggleTerminal,
   useViewStore,
 } from '@renderer/stores/view'
-import { usedFilesPane } from '@renderer/features/files/pane-focus'
 import { paneOrder } from '@renderer/features/split/layout'
-import { closeActiveFile } from '@renderer/stores/files'
 import { newSession, openProjectDialog } from './actions'
+import { closeCurrent } from './close'
 import { emitAppEvent } from './events'
 import { back, forward, historyKey, toggleHistory } from './history'
 
@@ -112,10 +111,9 @@ export function useKeyboardShortcuts(): void {
         if (key === ',') return run(event, () => openSettings())
         if (key === 'b') return run(event, toggleSidebar)
         if (key === historyKey(platform)) return run(event, () => toggleHistory(layerOpen()))
-        // The Files pane's open file; elsewhere the key is the window's, or the browser's.
+        // A tab or the session; with none to close the key is the window's, or the browser's.
         if (key === 'w') {
-          const project = usedFilesPane()
-          if (project && closeActiveFile(project)) event.preventDefault()
+          if (closeCurrent()) event.preventDefault()
           return
         }
       }

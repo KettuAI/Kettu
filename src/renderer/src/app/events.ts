@@ -4,6 +4,8 @@ export type AppEvent =
   | { kind: 'focus-composer' }
   | { kind: 'ask-selection' } // Mod+L with text selected in the terminal
   | { kind: 'new-terminal' }
+  | { kind: 'close-terminal' } // Mod+W with the terminal used last
+  | { kind: 'close-browser' } // Mod+W with the browser used last
   | { kind: 'insert-into-composer'; sessionId: string | null; text: string }
   | { kind: 'draft-written'; draft: string } // written from outside its composer, which reloads it
   | { kind: 'add-attachments' } // Mod+U: the composer's Add files or photos…

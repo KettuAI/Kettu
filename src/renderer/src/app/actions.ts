@@ -374,7 +374,7 @@ export async function removeEmptySessions(): Promise<void> {
 }
 
 /** After the shown session goes: New session where it ran, with No project for a scratch one. */
-function leaveSession(summary: SessionSummary | undefined): void {
+export function leaveSession(summary: SessionSummary | undefined): void {
   if (summary?.scratch) newSessionInPlace(null, true)
   else newSessionInPlace(summary?.projectPath ?? null)
 }

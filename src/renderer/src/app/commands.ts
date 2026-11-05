@@ -1,6 +1,4 @@
 import { useEffect } from 'react'
-import { usedFilesPane } from '@renderer/features/files/pane-focus'
-import { closeActiveFile } from '@renderer/stores/files'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { checkForUpdates } from '@renderer/stores/updates'
 import {
@@ -11,6 +9,7 @@ import {
   type SettingsSection,
 } from '@renderer/stores/view'
 import { newSession, openProjectDialog } from './actions'
+import { closeCurrent } from './close'
 import { back, forward, toggleHistory } from './history'
 import { layerOpen } from './shortcuts'
 
@@ -51,11 +50,9 @@ export function useAppCommands(): void {
           case 'show-history':
             toggleHistory(layerOpen())
             break
-          case 'close': {
-            const project = usedFilesPane()
-            if (!project || !closeActiveFile(project)) window.kettu.app.closeWindow()
+          case 'close':
+            if (!closeCurrent(command.browser)) window.kettu.app.closeWindow()
             break
-          }
         }
       }),
     [],

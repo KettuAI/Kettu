@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { BrowserNotice } from '@shared/browser'
+import { onAppEvent } from '@renderer/app/events'
 import {
   Empty,
   EmptyDescription,
@@ -59,6 +60,24 @@ export function BrowserPane({
   useEffect(() => {
     if (sessionId) useBrowserStore.getState().seen(sessionId)
   }, [sessionId, hidden])
+
+  // Destroys the page and closes the pane, from its close button and from Mod+W.
+  const closeBrowser = useCallback(() => {
+    if (sessionId) {
+      void window.kettu.browser
+        .close(sessionId)
+        .catch((error: unknown) => console.error('Could not close the page', error))
+    }
+    toggleSidePane(projectPath, 'browser', false)
+  }, [sessionId, projectPath])
+
+  useEffect(
+    () =>
+      onAppEvent((event) => {
+        if (event.kind === 'close-browser') closeBrowser()
+      }),
+    [closeBrowser],
+  )
 
   const navigate = (url: string) => {
     if (sessionId) void window.kettu.browser.navigate(sessionId, url)
@@ -210,18 +229,7 @@ export function BrowserPane({
               <Maximize2Icon className="size-3.75" />
             )}
           </PanelButton>
-          <PanelButton
-            label={t('actions.closeBrowser')}
-            size="icon-sm"
-            onClick={() => {
-              if (sessionId) {
-                void window.kettu.browser
-                  .close(sessionId)
-                  .catch((error: unknown) => console.error('Could not close the page', error))
-              }
-              toggleSidePane(projectPath, 'browser', false)
-            }}
-          >
+          <PanelButton label={t('actions.closeBrowser')} size="icon-sm" onClick={closeBrowser}>
             <XIcon className="size-3.75" />
           </PanelButton>
         </div>

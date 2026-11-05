@@ -287,6 +287,11 @@ export class BrowserViews {
     return contents && !contents.isDestroyed() ? contents : null
   }
 
+  /** Whether the contents is one of the session pages. */
+  owns(contents: WebContents): boolean {
+    return [...this.pages.values()].some((page) => page.view?.webContents === contents)
+  }
+
   /**
    * A page an agent drives keeps rendering timers and animations while it is hidden or behind the
    * pane; once idle it throttles as any background page does.

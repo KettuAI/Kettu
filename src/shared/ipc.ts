@@ -95,8 +95,8 @@ export type AppCommand =
   | { kind: 'go-back' }
   | { kind: 'go-forward' }
   | { kind: 'show-history' }
-  /** Cmd+W: the page closes the open file of the Files pane used last, else the window. */
-  | { kind: 'close' }
+  /** Cmd+W: the page closes the part used last, else the shown session, else the window. */
+  | { kind: 'close'; browser?: true }
 
 /**
  * `artifact:open`: the artifact's origin URL, without a query, or why it cannot be shown:
