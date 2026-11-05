@@ -18,6 +18,7 @@ import {
   type SessionSummary,
   type StartNotice,
 } from '@shared/agent-host'
+import { LOCALES } from '@shared/locale'
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { CONTEXT_REFRESH_MS } from '@shared/context'
 import { firstLine, outlineText } from '@shared/outline'
@@ -639,6 +640,18 @@ export class SessionManager {
 
   has(sessionId: string): boolean {
     return this.live.has(sessionId) || this.records.has(sessionId)
+  }
+
+  /** The titles of a project's sessions, which a fork's title is chosen to differ from. */
+  private titlesIn(projectPath: string): Set<string> {
+    const titles = new Set<string>()
+    for (const id of new Set([...this.records.keys(), ...this.live.keys()])) {
+      const record = this.live.get(id)?.record ?? this.records.get(id)
+      if (record?.projectPath !== projectPath || record.origin === 'subagent') continue
+      const title = this.title(id)
+      if (title) titles.add(title)
+    }
+    return titles
   }
 
   /** The session's title, null for one without a title yet, undefined for one not in the index. */
@@ -4214,7 +4227,8 @@ export class SessionManager {
   /**
    * `session/fork`: a new session that starts from this one's history, or from the reply that
    * `entryId` names up to the end of its turn. The agent keeps the history; the fork shows a copy
-   * of this thread until it is replayed on a later open.
+   * of this thread until it is replayed on a later open. While a turn runs, the fork ends at the
+   * reply before it, or at the one named, and the turn goes on in this session.
    */
   async fork(sessionId: string, entryId?: string): Promise<SessionSummary> {
     if (this.recordOf(sessionId).origin === 'subagent') {
@@ -4222,10 +4236,14 @@ export class SessionManager {
     }
     const source = await this.revive(sessionId)
     const status = source.thread.session.status
-    if (status !== 'closed' && (status !== 'ready' || !source.connection)) {
+    const turnRuns = status === 'running' || status === 'awaiting_permission'
+    if (status !== 'closed' && !turnRuns && (status !== 'ready' || !source.connection)) {
       throw busyError(status)
     }
-    const cut = entryId === undefined ? null : forkCut(source.thread, entryId)
+    const at = entryId ?? (turnRuns ? replyBeforeTurn(source.thread) : undefined)
+    const cut = at === undefined ? null : forkCut(source.thread, at)
+    // Nothing before the running turn, or a reply of it, has no end to cut at yet.
+    if (turnRuns && cut === null) throw busyError(status)
     // Not every agent forks a session it does not have open, so a closed one attaches first.
     try {
       await this.attachClosed(source)
@@ -4240,13 +4258,19 @@ export class SessionManager {
       )
     }
     if (cut && !runtime.init.capabilities.forkAtMessage) {
+      // Without a reply to name, the session menu's fork cannot say where a running turn starts.
+      if (entryId === undefined) throw busyError(status)
       throw new HostError(
         'agent_unavailable',
         t('session.cannotForkAt', { agent: this.deps.agents.name(source.record.agentId) }),
       )
     }
-    // A closed session takes prompts while it attaches; a turn that started since then wins.
-    if (source.thread.session.status !== 'ready') throw busyError(source.thread.session.status)
+    // A closed session takes prompts while it attaches; a turn that started since then wins,
+    // unless the fork ends at a reply, which that turn does not change.
+    const after = source.thread.session.status
+    if (after !== 'ready' && !(cut && (after === 'running' || after === 'awaiting_permission'))) {
+      throw busyError(after)
+    }
     // Subagent cards point at the source's sub-sessions, which the fork does not have.
     const entries = (cut?.entries ?? threadEntries(source.thread)).filter(
       (entry) => entry.kind !== 'subagent',
@@ -4272,12 +4296,17 @@ export class SessionManager {
     }
     const blobs = (await reading).filter((blob) => blob !== null)
     const now = this.now()
+    const sourceTitle = source.record.customTitle ?? source.thread.session.title
+    const title =
+      sourceTitle === null
+        ? null
+        : forkTitle(forkBase(sourceTitle), this.titlesIn(source.record.projectPath))
     const record: SessionRecord = {
       ...source.record,
       origin: 'user',
       id: forkId,
       acpSessionId: setup.sessionId,
-      title: source.thread.session.title,
+      title,
       createdAt: now,
       updatedAt: now,
       lastViewedAt: now,
@@ -4288,6 +4317,9 @@ export class SessionManager {
     delete record.pinnedAt
     delete record.archivedAt
     delete record.routine
+    // A title of its own, so one the agent reports from the copied history does not replace it.
+    if (title === null) delete record.customTitle
+    else record.customTitle = title
     this.stampConfig(record)
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
@@ -5915,6 +5947,49 @@ export function unknownSession(error: AgentRequestError): boolean {
 /** The number in an entry id such as `e:12`, which the session's new ids count on from. */
 function idNumber(id: string): number {
   return Number(/^\w+:(\d+)$/.exec(id)?.[1] ?? 0)
+}
+
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** A title without the fork suffix the host adds, in any language it writes in. */
+export function forkBase(title: string): string {
+  const titleMark = '\u0001'
+  const numberMark = '\u0002'
+  for (const lng of LOCALES) {
+    for (const marked of [
+      t('session.forkTitle', { lng, title: titleMark }),
+      t('session.forkTitleNumbered', { lng, title: titleMark, n: numberMark }),
+    ]) {
+      const pattern = escapeRegExp(marked).replace(titleMark, '(.+)').replace(numberMark, '\\d+')
+      const match = new RegExp(`^${pattern}$`, 's').exec(title)
+      if (match) return match[1]!
+    }
+  }
+  return title
+}
+
+/** A fork's title: the first one in a project adds "(fork)", the later ones number it. */
+export function forkTitle(base: string, taken: ReadonlySet<string>): string {
+  const first = t('session.forkTitle', { title: base })
+  if (!taken.has(first)) return first
+  for (let n = 1; ; n++) {
+    const numbered = t('session.forkTitleNumbered', { title: base, n })
+    if (!taken.has(numbered)) return numbered
+  }
+}
+
+/** The last agent message before the turn in progress, or undefined when it is the first turn. */
+export function replyBeforeTurn(thread: Pick<ThreadState, 'order' | 'byId'>): string | undefined {
+  let i = thread.order.length - 1
+  while (i >= 0) {
+    const entry = thread.byId[thread.order[i]!]
+    if (entry?.kind === 'user' && !entry.steered) break
+    i--
+  }
+  for (i--; i >= 0; i--) {
+    if (thread.byId[thread.order[i]!]?.kind === 'agent') return thread.order[i]
+  }
+  return undefined
 }
 
 /**

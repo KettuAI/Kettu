@@ -18,6 +18,8 @@
     "cannotFork": "{{agent}} cannot fork sessions",
     "cannotForkAt": "{{agent}} can fork only from its latest reply",
     "noForkPoint": "This reply cannot be forked from",
+    "forkTitle": "{{title}} (fork)",
+    "forkTitleNumbered": "{{title}} (fork {{n}})",
     "cannotList": "{{agent}} cannot list its sessions",
     "configBetweenTurns": "{{option}} changes between turns",
     "ultracodeDescription": "Dynamic workflows for substantial tasks",

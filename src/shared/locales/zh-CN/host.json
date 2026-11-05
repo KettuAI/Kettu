@@ -18,6 +18,8 @@
     "cannotFork": "{{agent}} 不支持分叉会话",
     "cannotForkAt": "{{agent}} 只能从最新一条回复分叉",
     "noForkPoint": "无法从这条回复分叉",
+    "forkTitle": "{{title}}（分叉）",
+    "forkTitleNumbered": "{{title}}（分叉 {{n}}）",
     "cannotList": "{{agent}} 无法列出它的会话",
     "configBetweenTurns": "{{option}} 只能在两轮对话之间更改",
     "ultracodeDescription": "用于大型任务的动态工作流",
