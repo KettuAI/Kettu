@@ -64,9 +64,10 @@ type Validators = { [M in TerminalMethod]: (raw: unknown) => TerminalParams<M> }
 
 export const validators: Validators = {
   'terminals.create': (raw) => {
-    const params = object(raw, ['projectPath', 'cols', 'rows', 'command'])
+    const params = object(raw, ['projectPath', 'sessionId', 'cols', 'rows', 'command'])
     return {
       projectPath: projectPath(params),
+      ...(params.sessionId === undefined ? {} : { sessionId: string(params, 'sessionId', MAX_ID) }),
       cols: integer(params, 'cols', 1, MAX_SIZE),
       rows: integer(params, 'rows', 1, MAX_SIZE),
       ...(params.command === undefined ? {} : { command: command(params.command) }),
@@ -75,6 +76,10 @@ export const validators: Validators = {
   'terminals.list': (raw) => {
     const params = object(raw ?? {}, ['projectPath'])
     return params.projectPath === undefined ? {} : { projectPath: projectPath(params) }
+  },
+  'terminals.assign': (raw) => {
+    const params = object(raw, ['projectPath', 'sessionId'])
+    return { projectPath: projectPath(params), sessionId: string(params, 'sessionId', MAX_ID) }
   },
   'terminals.attach': (raw) => ({ id: string(object(raw, ['id']), 'id', MAX_ID) }),
   'terminals.input': (raw) => {

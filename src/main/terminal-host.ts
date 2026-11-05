@@ -96,6 +96,10 @@ export class TerminalHost {
     this.host.post({ type: 'terminal-host:projects', paths })
   }
 
+  endSessions(sessionIds: string[]): void {
+    this.host.post({ type: 'terminal-host:sessions-ended', sessionIds })
+  }
+
   setAuthCommands(commands: string[]): void {
     this.authCommands = commands
     this.host.post({ type: 'terminal-host:auth-commands', commands })

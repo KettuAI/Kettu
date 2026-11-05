@@ -117,7 +117,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   } else if (status === 'auth_required' && empty) {
     body = (
       <ColumnScroller className="flex items-center justify-center">
-        <SignIn agentId={summary.agentId} projectPath={summary.projectPath} onRetry={retry} />
+        <SignIn agentId={summary.agentId} panel={summary.id} onRetry={retry} />
       </ColumnScroller>
     )
   } else if (status === 'starting' && empty) {

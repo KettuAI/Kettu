@@ -77,23 +77,26 @@ import { TerminalView } from './terminal-view'
 const LEFT = 'terminal-left'
 const RIGHT = 'terminal-right'
 
-/** The side panel: a card holding the project's terminals, with their tabs in its header. */
+/**
+ * The side panel: a card holding a session's terminals, or New session's, with their tabs in its
+ * header. They open in `projectPath`, the session's folder.
+ */
 export function TerminalPanel({
   projectPath,
+  panel,
   maximized,
 }: {
   projectPath: string
+  panel: string
   maximized: boolean
 }) {
   const { t } = useTranslation(['terminal', 'common'])
   // On macOS, maximized with the sidebar collapsed, the header is the window's top left corner.
   const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && !hasBand
-  const list = useTerminalsStore(
-    useShallow((s) => terminalsOf(s.byId, projectPath, s.order[projectPath])),
-  )
-  const activeId = useTerminalsStore((s) => s.active[projectPath])
-  const rightId = useTerminalsStore((s) => s.split[projectPath] ?? null)
-  const side = useTerminalsStore((s) => s.focusedSide[projectPath] ?? 'left')
+  const list = useTerminalsStore(useShallow((s) => terminalsOf(s.byId, panel, s.order[panel])))
+  const activeId = useTerminalsStore((s) => s.active[panel])
+  const rightId = useTerminalsStore((s) => s.split[panel] ?? null)
+  const side = useTerminalsStore((s) => s.focusedSide[panel] ?? 'left')
   const error = useTerminalsStore((s) => s.error)
   const [creating, setCreating] = useState(false)
   const [closing, setClosing] = useState<TerminalState | null>(null)
@@ -113,7 +116,7 @@ export function TerminalPanel({
     await start()
     setCreating(false)
   }
-  const newTerminal = () => void starting(() => createTerminal(projectPath))
+  const newTerminal = () => void starting(() => createTerminal(projectPath, panel))
 
   const close = useCallback((t: TerminalState) => {
     if (t.stale) forgetTerminal(t.id)
@@ -136,9 +139,9 @@ export function TerminalPanel({
     const source = event.operation.source ?? null
     if (!isSortable(source)) return
     const id = String(source.id)
-    if (source.index !== source.initialIndex) moveTerminal(projectPath, id, source.index)
+    if (source.index !== source.initialIndex) moveTerminal(panel, id, source.index)
     // The sensor reads a press held for 200 ms as a drag and drops the click, so select here.
-    else if (event.nativeEvent?.type.startsWith('pointer')) showTerminal(projectPath, id)
+    else if (event.nativeEvent?.type.startsWith('pointer')) showTerminal(panel, id)
   }
 
   return (
@@ -173,7 +176,7 @@ export function TerminalPanel({
                 terminal={terminal}
                 index={index}
                 selected={terminal.id === active?.id || (split && terminal.id === right.id)}
-                onSelect={() => showTerminal(projectPath, terminal.id)}
+                onSelect={() => showTerminal(panel, terminal.id)}
                 onClose={() => close(terminal)}
               />
             ))}
@@ -218,7 +221,9 @@ export function TerminalPanel({
           disabled={creating || (!split && !active)}
           // Unsplitting starts nothing.
           onClick={() =>
-            void (split ? toggleSplit(projectPath) : starting(() => toggleSplit(projectPath)))
+            void (split
+              ? toggleSplit(projectPath, panel)
+              : starting(() => toggleSplit(projectPath, panel)))
           }
         >
           <Columns2Icon className={HEADER_ICON} />
@@ -238,7 +243,7 @@ export function TerminalPanel({
           label={t('panel.close')}
           size="icon-sm"
           shortcut="Ctrl+`"
-          onClick={() => toggleTerminal(projectPath, false)}
+          onClick={() => toggleTerminal(panel, false)}
         >
           <XIcon className={HEADER_ICON} />
         </PanelButton>
@@ -253,7 +258,7 @@ export function TerminalPanel({
           >
             <ResizablePanel id={LEFT} minSize="160px" className="min-w-0">
               <TerminalSideView
-                projectPath={projectPath}
+                panel={panel}
                 terminal={active}
                 side={split ? 'left' : null}
                 focused={!split || side === 'left'}
@@ -264,7 +269,7 @@ export function TerminalPanel({
                 <ResizableHandle className="bg-border-soft" />
                 <ResizablePanel id={RIGHT} defaultSize="50%" minSize="160px" className="min-w-0">
                   <TerminalSideView
-                    projectPath={projectPath}
+                    panel={panel}
                     terminal={right}
                     side="right"
                     focused={side === 'right'}
@@ -332,17 +337,17 @@ const HEADER_ICON =
  * that typing takes it over. While split, a press or focus in it makes its side the focused one.
  */
 function TerminalSideView({
-  projectPath,
+  panel,
   terminal,
   side,
   focused,
 }: {
-  projectPath: string
+  panel: string
   terminal: TerminalState
   side: TerminalSide | null
   focused: boolean
 }) {
-  const focus = side ? () => focusTerminalSide(projectPath, side) : undefined
+  const focus = side ? () => focusTerminalSide(panel, side) : undefined
   return (
     <div
       className="flex h-full min-h-0 flex-col"

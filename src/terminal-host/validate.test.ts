@@ -16,6 +16,13 @@ describe('terminal request validators', () => {
       rows: 24,
       command: { text: 'pnpm test\n--watch', run: false },
     })
+    expect(
+      validators['terminals.create']({ projectPath: '/p', sessionId: 's1', cols: 80, rows: 24 }),
+    ).toEqual({ projectPath: '/p', sessionId: 's1', cols: 80, rows: 24 })
+    expect(validators['terminals.assign']({ projectPath: '/p', sessionId: 's1' })).toEqual({
+      projectPath: '/p',
+      sessionId: 's1',
+    })
     expect(validators['terminals.list']({})).toEqual({})
     expect(validators['terminals.list'](undefined)).toEqual({})
     expect(validators['terminals.input']({ id: 't', data: '\x03' })).toEqual({
@@ -48,6 +55,13 @@ describe('terminal request validators', () => {
       'terminals.create',
       { projectPath: '/p', cols: 80, rows: 24, command: { text: 'a\rb', run: false } },
     ],
+    ['terminals.create', { projectPath: '/p', sessionId: '', cols: 80, rows: 24 }],
+    ['terminals.create', { projectPath: '/p', sessionId: 7, cols: 80, rows: 24 }],
+    ['terminals.create', { projectPath: '/p', sessionId: 's'.repeat(200), cols: 80, rows: 24 }],
+    ['terminals.assign', { projectPath: '/p' }],
+    ['terminals.assign', { sessionId: 's1' }],
+    ['terminals.assign', { projectPath: '/p', sessionId: null }],
+    ['terminals.assign', { projectPath: '/p', sessionId: 's1', all: true }],
     ['terminals.input', { id: 't', data: 'x'.repeat(64 * 1024 + 1) }],
     ['terminals.input', { id: 't', data: 'é'.repeat(32 * 1024 + 1) }],
     ['terminals.input', { id: 't' }],

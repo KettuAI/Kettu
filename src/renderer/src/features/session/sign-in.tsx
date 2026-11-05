@@ -24,12 +24,12 @@ const NO_METHODS: AgentAuthMethod[] = []
 /** The agent's sign-in methods, in place of a session that cannot start without them. */
 export function SignIn({
   agentId,
-  projectPath,
+  panel,
   onRetry,
 }: {
   agentId: AgentId
-  /** Where Sign in in terminal opens its terminal; null before a No project session has one. */
-  projectPath: string | null
+  /** The side panel Sign in in terminal opens in; null before a No project session has a folder. */
+  panel: string | null
   onRetry: () => void
 }) {
   const { t } = useTranslation(['session', 'common'])
@@ -95,13 +95,13 @@ export function SignIn({
                 <CopyButton text={method.command} label={t('signIn.copyCommand')} />
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {projectPath !== null && (
+                {panel !== null && (
                   <Button
                     size="compact"
                     onClick={() =>
                       emitAppEvent({
                         kind: 'sign-in-terminal',
-                        projectPath,
+                        panel,
                         command: method.command!,
                         agentId,
                       })

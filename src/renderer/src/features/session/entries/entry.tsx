@@ -56,7 +56,7 @@ export const Entry = memo(function Entry({
     case 'git':
       return <GitEventEntry {...props} />
     case 'artifact':
-      return <ArtifactEntry {...props} projectPath={projectPath} />
+      return <ArtifactEntry {...props} />
     case 'browser_origin':
       return <BrowserOriginEntry {...props} agentName={agentName} />
     default:

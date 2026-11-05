@@ -486,6 +486,7 @@ export class AgentHost {
           this.hub.broadcast({ type: 'session.removed', sessionId })
           this.sendFolders()
         },
+        ended: (sessionIds) => options.send({ type: 'host:sessions-ended', sessionIds }),
         returned: (sessionId, portIds) => {
           if (portIds) this.hub.send(portIds, { type: 'session.returned', sessionId })
           else this.hub.broadcast({ type: 'session.returned', sessionId })

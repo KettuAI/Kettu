@@ -21,11 +21,12 @@ import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-me
 import { formatShortcut, isMac, isWeb } from '@renderer/lib/platform'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
-import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { sessionTitle } from '@renderer/stores/sessions'
 import {
   closeSplitPane,
   focusPane,
-  shownSidePane,
+  panelSession,
+  shownPanel,
   toggleSidePane,
   useViewStore,
   type SidePane,
@@ -37,13 +38,14 @@ const TOOL =
   'relative size-7.5 text-secondary aria-expanded:bg-pressed aria-expanded:text-foreground aria-pressed:shadow-none [&_svg:not([class*=size-])]:size-4.25'
 
 /**
- * The right end of the top bar: the project's git status, the side panel's panes, a session's More
- * menu and, in a split, **Close pane**. The git status shrinks a thousand times faster than the
+ * The right end of the top bar: the project's git status, the toggles of the bar's own side panel,
+ * a session's More menu and, in a split, **Close pane**. The git status shrinks a thousand times faster than the
  * session title, so in a crowded bar the branch gives way first, down to its icon, and the title
  * keeps its room.
  */
 export function HeaderTools({
   projectPath,
+  panel,
   summary,
   session,
   onRename,
@@ -51,6 +53,8 @@ export function HeaderTools({
   menu,
 }: {
   projectPath: string
+  /** The session's side panel, or New session's while it creates one. */
+  panel: string
   /** The session the bar belongs to, which adds its More menu. */
   summary?: SessionSummary
   session?: SessionView
@@ -62,20 +66,16 @@ export function HeaderTools({
   const { t } = useTranslation('shell')
   const pane = usePane()
   const terminal = useTerminalAllowed(projectPath)
-  // An agent opened a session's page while another pane showed: a dot says to look.
-  const unseen = useBrowserStore((s) => s.unseen)
-  const sessions = useSessionsStore((s) => s.byId)
-  const sessionId = pane?.view.kind === 'session' ? pane.view.sessionId : null
-  const dot = sessionId
-    ? !!unseen[sessionId]
-    : Object.keys(unseen).some((id) => sessions[id]?.projectPath === projectPath)
+  const sessionId = panelSession(panel)
+  // An agent opened the session's page while another pane showed: a dot says to look.
+  const dot = useBrowserStore((s) => (sessionId ? !!s.unseen[sessionId] : false))
   return (
     <>
       <NoDrag className="shrink-0 gap-2">
         {/* Another host's terminal opens only while its owner allows devices it. */}
         {terminal && (
           <PaneToggle
-            projectPath={projectPath}
+            panel={panel}
             pane="terminal"
             label={t('headerTools.terminal')}
             shortcut="Ctrl+`"
@@ -84,18 +84,13 @@ export function HeaderTools({
           </PaneToggle>
         )}
         {/* The browser runs in the desktop app, for another host's agents too; a web page has
-            no such view. */}
-        {!isWeb && (
-          <PaneToggle
-            projectPath={projectPath}
-            pane="browser"
-            label={t('headerTools.browser')}
-            dot={dot}
-          >
+            no such view. A session has one, so a session still being created does not. */}
+        {!isWeb && sessionId && (
+          <PaneToggle panel={panel} pane="browser" label={t('headerTools.browser')} dot={dot}>
             <GlobeIcon />
           </PaneToggle>
         )}
-        <PaneToggle projectPath={projectPath} pane="files" label={t('headerTools.files')}>
+        <PaneToggle panel={panel} pane="files" label={t('headerTools.files')}>
           <FolderIcon />
         </PaneToggle>
         {summary && onRename && onNewSubSession && (
@@ -120,14 +115,14 @@ export function HeaderTools({
 }
 
 function PaneToggle({
-  projectPath,
+  panel,
   pane,
   label,
   shortcut,
   dot,
   children,
 }: {
-  projectPath: string
+  panel: string
   pane: SidePane
   label: string
   shortcut?: string
@@ -136,7 +131,7 @@ function PaneToggle({
   children: ReactNode
 }) {
   const context = usePane()
-  const open = useViewStore((s) => shownSidePane(s) === pane)
+  const open = useViewStore((s) => shownPanel(s) === panel && s.sidePane[panel] === pane)
   return (
     <Tooltip>
       <TooltipTrigger
@@ -150,10 +145,10 @@ function PaneToggle({
               // In a pane out of focus the toggle shows its pane there and never closes the panel.
               if (context && !context.focused) {
                 focusPane(context.paneId)
-                toggleSidePane(projectPath, pane, true)
+                toggleSidePane(panel, pane, true)
                 return
               }
-              toggleSidePane(projectPath, pane)
+              toggleSidePane(panel, pane)
             }}
             className={TOOL}
           />

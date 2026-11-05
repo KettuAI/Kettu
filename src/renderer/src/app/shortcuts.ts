@@ -11,6 +11,8 @@ import {
   focusPaneAt,
   openSession,
   openSettings,
+  sessionsShown,
+  shownPanel,
   toggleSearch,
   toggleShortcuts,
   toggleSidebar,
@@ -65,9 +67,11 @@ export function useKeyboardShortcuts(): void {
         // A session's More menu opens its own session's terminal on this key.
         if (document.querySelector(MENU_OPENS_TERMINAL)) return
         event.preventDefault()
-        if (!view.projectPath || view.settings.open) return
+        // The terminal of the side panel in view: its session's, or New session's in a project.
+        const panel = sessionsShown(view.main) ? shownPanel(view) : null
+        if (!panel || view.settings.open) return
         if (event.shiftKey) emitAppEvent({ kind: 'new-terminal' })
-        else toggleTerminal(view.projectPath)
+        else toggleTerminal(panel)
         return
       }
 

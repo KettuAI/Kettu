@@ -29,22 +29,16 @@ import { useSessionsStore } from '@renderer/stores/sessions'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { useOverlayOpen } from '@renderer/stores/overlays'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { toggleSidePane, useViewStore } from '@renderer/stores/view'
+import { panelSession, toggleSidePane, useViewStore } from '@renderer/stores/view'
 import { addressText } from './address'
 import { AddressField } from './address-field'
 import { DrivingPill } from './driving-bar'
 import { OriginBar } from './origin-bar'
 
 /** The side panel's third pane: one page per session, drawn by main over the pane's page area. */
-export function BrowserPane({
-  projectPath,
-  maximized,
-}: {
-  projectPath: string
-  maximized: boolean
-}) {
+export function BrowserPane({ panel, maximized }: { panel: string; maximized: boolean }) {
   const { t } = useTranslation(['browser', 'common'])
-  const sessionId = useViewStore((s) => (s.main.kind === 'session' ? s.main.sessionId : null))
+  const sessionId = panelSession(panel)
   const state = useBrowserStore((s) => (sessionId ? s.bySession[sessionId] : undefined))
   const still = useBrowserStore((s) => (sessionId ? s.stills[sessionId] : undefined))
   const hidden = useBrowserStore((s) => (sessionId ? !!s.unseen[sessionId] : false))
@@ -68,8 +62,8 @@ export function BrowserPane({
         .close(sessionId)
         .catch((error: unknown) => console.error('Could not close the page', error))
     }
-    toggleSidePane(projectPath, 'browser', false)
-  }, [sessionId, projectPath])
+    toggleSidePane(panel, 'browser', false)
+  }, [sessionId, panel])
 
   useEffect(
     () =>

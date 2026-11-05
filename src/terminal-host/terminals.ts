@@ -165,6 +165,7 @@ export class TerminalManager {
       info: {
         id: randomUUID(),
         projectPath: project.projectPath,
+        sessionId: params.sessionId ?? null,
         shell: shell.name,
         title: shell.name,
         busy: false,
@@ -201,6 +202,29 @@ export class TerminalManager {
     if (projectPath === undefined) return all
     const project = await this.options.projects.match(projectPath)
     return project ? all.filter((info) => info.projectPath === project.projectPath) : []
+  }
+
+  /** Hands the project's terminals that belong to no session yet to `sessionId`. */
+  async assign(projectPath: string, sessionId: string): Promise<void> {
+    const project = await this.options.projects.match(projectPath)
+    if (!project) return
+    for (const terminal of this.terminals.values()) {
+      if (terminal.info.projectPath !== project.projectPath || terminal.info.sessionId !== null) {
+        continue
+      }
+      terminal.info.sessionId = sessionId
+      this.options.sink.info({ ...terminal.info })
+    }
+  }
+
+  /** Ends the terminals of sessions that were archived or deleted. */
+  endSessions(sessionIds: readonly string[]): void {
+    const ended = new Set(sessionIds)
+    for (const terminal of [...this.terminals.values()]) {
+      if (terminal.info.sessionId !== null && ended.has(terminal.info.sessionId)) {
+        this.kill(terminal.info.id)
+      }
+    }
   }
 
   /** The output so far, and from now on the terminal's data events, for `port`. */

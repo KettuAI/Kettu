@@ -84,9 +84,12 @@ async function openInEditor(path: string): Promise<void> {
 /** The side panel's Files pane: the changes or the project's files, beside the one that is open. */
 export default function FilesPanel({
   projectPath,
+  panel,
   maximized,
 }: {
   projectPath: string
+  /** The side panel it shows in; the open files are the project's, whichever panel shows them. */
+  panel: string
   maximized: boolean
 }) {
   const { t } = useTranslation(['files', 'common'])
@@ -236,7 +239,7 @@ export default function FilesPanel({
         <PanelButton
           size="icon-sm"
           label={t('panel.close')}
-          onClick={() => toggleSidePane(projectPath, 'files', false)}
+          onClick={() => toggleSidePane(panel, 'files', false)}
         >
           <XIcon className="size-3.75" />
         </PanelButton>

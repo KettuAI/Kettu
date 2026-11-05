@@ -6,28 +6,33 @@ import {
   terminalsOf,
   useTerminalsStore,
 } from '@renderer/stores/terminals'
-import { sessionsShown, toggleTerminal, useViewStore } from '@renderer/stores/view'
+import {
+  newSessionPanel,
+  panelOf,
+  sessionsShown,
+  toggleTerminal,
+  useViewStore,
+} from '@renderer/stores/view'
 
 /**
- * Opens the terminal pane in the project's folder. The pane belongs to the project the main area
- * shows, so another project's opens its New session first.
+ * Opens the terminal pane in the project's folder: in the side panel in view when its session or
+ * New session works in the project, else in the project's New session, which opens first.
  */
 export async function openProjectTerminal(projectPath: string): Promise<void> {
   const s = useViewStore.getState()
-  if (
-    !s.settings.open &&
-    sessionsShown(s.main) &&
-    focusedPane(s.layout).view.projectPath === projectPath
-  ) {
-    // The pane starts a terminal itself when it opens in a project that has none.
-    toggleTerminal(projectPath, true)
+  const focused = focusedPane(s.layout).view
+  const panel = panelOf(focused)
+  if (!s.settings.open && sessionsShown(s.main) && focused.projectPath === projectPath && panel) {
+    // The pane starts a terminal itself when it opens in a panel that has none.
+    toggleTerminal(panel, true)
     return
   }
   newSession(projectPath)
-  toggleTerminal(projectPath, true)
-  // Shown together with its project, the pane leaves starting one to whoever switched.
+  const draft = newSessionPanel(projectPath)
+  toggleTerminal(draft, true)
+  // Shown together with its New session, the pane leaves starting one to whoever switched.
   await loadTerminals(projectPath)
-  if (terminalsOf(useTerminalsStore.getState().byId, projectPath).length === 0) {
-    await createTerminal(projectPath)
+  if (terminalsOf(useTerminalsStore.getState().byId, draft).length === 0) {
+    await createTerminal(projectPath, draft)
   }
 }

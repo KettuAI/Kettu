@@ -44,8 +44,8 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const beside = useViewStore(
     (s) =>
       picked !== null &&
-      s.sidePane[session.projectPath] === 'artifact' &&
-      s.sideArtifact[session.projectPath] === picked.artifactId,
+      s.sidePane[sessionId] === 'artifact' &&
+      s.sideArtifact[sessionId] === picked.artifactId,
   )
   const selection = beside ? picked : null
 

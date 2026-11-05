@@ -672,6 +672,14 @@ export class Hosts {
           this.terminal.post({ type: 'terminal-host:projects', paths: message.paths })
         }
         break
+      case 'host:sessions-ended':
+        if (isStringList(message.sessionIds)) {
+          this.terminal.post({
+            type: 'terminal-host:sessions-ended',
+            sessionIds: message.sessionIds,
+          })
+        }
+        break
       case 'host:auth-commands':
         if (isStringList(message.commands)) {
           this.authCommands = message.commands
