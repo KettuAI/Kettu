@@ -22,7 +22,7 @@ import { useDiffStats } from './use-diff-stats'
 
 type Change = ReturnType<typeof turnChanges>[number]
 
-/** A turn that changed more files than this starts with its list folded. */
+/** A turn that changed more files than this starts folded; up to it, every file's diff starts open. */
 const FOLD_ABOVE = 5
 
 /** A path inside `root`, relative to it, or null for one outside. */
@@ -124,7 +124,12 @@ export const ChangesCard = memo(function ChangesCard({
         </div>
         <CollapsibleContent className={PANEL} keepMounted={false}>
           {changes.map((change) => (
-            <ChangeRow key={change.path} change={change} projectPath={projectPath} />
+            <ChangeRow
+              key={change.path}
+              change={change}
+              projectPath={projectPath}
+              defaultOpen={changes.length <= FOLD_ABOVE}
+            />
           ))}
         </CollapsibleContent>
       </Collapsible>
@@ -132,11 +137,19 @@ export const ChangesCard = memo(function ChangesCard({
   )
 })
 
-function ChangeRow({ change, projectPath }: { change: Change; projectPath: string }) {
+function ChangeRow({
+  change,
+  projectPath,
+  defaultOpen,
+}: {
+  change: Change
+  projectPath: string
+  defaultOpen: boolean
+}) {
   const stats = useDiffStats(change.diffs)
   const shown = relativePath(change.path, projectPath)
   return (
-    <Collapsible className="border-t border-subtle">
+    <Collapsible defaultOpen={defaultOpen} className="border-t border-subtle">
       <CollapsibleTrigger className="group/change flex h-8.5 w-full items-center gap-2.5 px-3.5 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring">
         <ChevronRightIcon
           aria-hidden
