@@ -1,6 +1,6 @@
 import type { AgentStatus, PlanLimit } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
-import { planTier } from '@renderer/features/account/model'
+import { joinPlanTier, planTier } from '@renderer/features/account/model'
 import { planName } from '@renderer/features/tray/model'
 import { limitLevel, type LimitLevel } from '@renderer/lib/plan-limit'
 
@@ -73,9 +73,9 @@ export interface UsageCard {
   key: string
   agentId: AgentId
   name: string
-  /** The whole plan, such as "Claude Max 5x", for the tooltip; null when unknown. */
+  /** The whole plan, such as "Claude Ultra", for the tooltip; null when unknown. */
   plan: string | null
-  /** The plan without the brand its mark shows, such as "Max 5x"; null when unknown. */
+  /** The plan without the brand its mark shows, such as "Ultra"; null when unknown. */
   tier: string | null
   rings: CardRing[]
   state: CardState
@@ -137,11 +137,7 @@ export function usageCards(
       key: agent.id,
       agentId: agent.id,
       name: agent.name,
-      plan: account
-        ? account.tier && !account.label.toLowerCase().includes(account.tier.toLowerCase())
-          ? `${account.label} ${account.tier}`
-          : account.label
-        : null,
+      plan: account ? joinPlanTier(account.label, account.tier) : null,
       tier: planTier(agent.account),
       rings,
       state:
