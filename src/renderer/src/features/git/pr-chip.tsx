@@ -159,7 +159,7 @@ function SignInGh() {
     <div className="flex flex-col items-start gap-2 text-small text-secondary">
       <p>{t('prCard.signInGh')}</p>
       <span className="inline-flex items-center gap-1">
-        <code className="rounded-sm bg-code-inline px-1.5 py-0.5 font-mono text-meta text-primary">
+        <code className="rounded-sm bg-code-inline px-1.5 py-0.5 font-mono text-meta text-code-inline">
           gh auth login
         </code>
         <CopyButton text="gh auth login" label={t('prPart.copyCommand')} />

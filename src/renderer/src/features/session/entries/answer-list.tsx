@@ -127,7 +127,7 @@ export function OptionName({ name }: { name: string }) {
     part.code ? (
       <code
         key={i}
-        className="rounded-sm bg-code-inline px-1.25 py-px font-mono text-command"
+        className="rounded-sm bg-code-inline px-1.25 py-px font-mono text-command text-code-inline"
         translate="no"
       >
         {part.text}

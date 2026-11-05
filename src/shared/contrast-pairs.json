@@ -47,6 +47,7 @@
     },
     { "fg": "--text-placeholder", "on": ["--bg-surface", "--bg-app", "--bg-sidebar"] },
     { "fg": "--attention", "on": ["--bg-app", "--bg-sidebar", "--bg-surface"] },
+    { "fg": "--code-inline", "on": ["--bg-code-inline"] },
     {
       "fg": "--danger",
       "on": [

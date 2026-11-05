@@ -84,6 +84,7 @@
   --text-color-placeholder: var(--text-placeholder);
   --text-color-disabled: var(--text-disabled);
   --text-color-icon: var(--icon-default);
+  --text-color-code-inline: var(--code-inline);
   --border-color-default: var(--border-default);
   --border-color-subtle: var(--border-subtle);
   --border-color-strong: var(--border-strong);
@@ -1493,7 +1494,7 @@
   & [data-streamdown='inline-code'] {
     border-radius: var(--radius-sm);
     background: var(--bg-code-inline);
-    color: var(--text-primary);
+    color: var(--code-inline);
     padding: 0.0667em 0.3333em;
     font-family: var(--font-mono);
     font-variant-ligatures: none;

@@ -117,7 +117,7 @@ const theme = EditorView.theme({
   '.cm-md-code': {
     borderRadius: '4px',
     background: 'var(--bg-code-inline)',
-    color: 'var(--text-primary)',
+    color: 'var(--code-inline)',
     padding: '0.1em 0.35em',
     fontFamily: 'var(--font-mono)',
     fontVariantLigatures: 'none',

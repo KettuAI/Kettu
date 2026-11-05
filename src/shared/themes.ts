@@ -103,6 +103,7 @@ export const THEME_TOKENS = [
   'diff-del-word',
   'code-success',
   'code-danger',
+  'code-inline',
   'terminal-background',
   'terminal-foreground',
   'terminal-cursor',
@@ -145,6 +146,7 @@ const THEME_FALLBACKS: readonly (readonly [ThemeToken, ThemeToken])[] = [
   ['switch-on', 'control-on'],
   ['code-success', 'success'],
   ['code-danger', 'danger'],
+  ['code-inline', 'text-primary'],
 ]
 
 /**
