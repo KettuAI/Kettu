@@ -31,9 +31,8 @@ All your coding agents, side by side in one window.
 
 ## Features
 
-### Sessions
-
 <table>
+<tr><th colspan="3" align="left">Sessions</th></tr>
 <tr>
 <td width="33%" valign="top"><img src="./assets/icons/bot.svg" width="20" height="20" alt=""><br><b>46 agents</b><br>Claude Code, Codex, OpenCode, Pi and more, with your own installs and accounts.</td>
 <td width="33%" valign="top"><img src="./assets/icons/panel-left.svg" width="20" height="20" alt=""><br><b>Parallel sessions</b><br>The sidebar shows which one is working, waiting for you or done.</td>
@@ -54,11 +53,7 @@ All your coding agents, side by side in one window.
 <td width="33%" valign="top"><img src="./assets/icons/bell.svg" width="20" height="20" alt=""><br><b>Notifications</b><br>Know when a session needs you.</td>
 <td width="33%" valign="top"><img src="./assets/icons/chart-column.svg" width="20" height="20" alt=""><br><b>Usage</b><br>Tokens and cost by day, model and project, and your plan limits where the agent reports them.</td>
 </tr>
-</table>
-
-### Workbench
-
-<table>
+<tr><th colspan="3" align="left">Workbench</th></tr>
 <tr>
 <td width="33%" valign="top"><img src="./assets/icons/file-diff.svg" width="20" height="20" alt=""><br><b>Diffs</b><br>See which files the agent changed and how.</td>
 <td width="33%" valign="top"><img src="./assets/icons/folder-open.svg" width="20" height="20" alt=""><br><b>Files</b><br>Read, preview and edit project files in tabs.</td>
@@ -74,37 +69,23 @@ All your coding agents, side by side in one window.
 <td width="33%" valign="top"><img src="./assets/icons/search.svg" width="20" height="20" alt=""><br><b>Search</b><br>One command palette for sessions, artifacts, routines, projects, settings and actions.</td>
 <td width="33%" valign="top"><img src="./assets/icons/keyboard.svg" width="20" height="20" alt=""><br><b>Shortcuts</b><br>Keyboard shortcuts for the common actions.</td>
 </tr>
-</table>
-
-### Other devices
-
-End-to-end encrypted, straight over your own network.
-
-<table>
+<tr><th colspan="3" align="left">Other devices <sub>End-to-end encrypted, straight over your own network.</sub></th></tr>
 <tr>
 <td width="33%" valign="top"><img src="./assets/icons/smartphone.svg" width="20" height="20" alt=""><br><b>Phone and tablet</b><br>Pair with a QR code and carry on in the browser, with no app to install.</td>
 <td width="33%" valign="top"><img src="./assets/icons/laptop.svg" width="20" height="20" alt=""><br><b>Another computer</b><br>Use this computer's sessions from Kettu on another one.</td>
 <td width="33%" valign="top"><img src="./assets/icons/server.svg" width="20" height="20" alt=""><br><b>Development machines</b><br>Add one by its SSH address.</td>
 </tr>
-</table>
-
-### Looks
-
-<table>
+<tr><th colspan="3" align="left">Looks</th></tr>
 <tr>
 <td width="33%" valign="top"><img src="./assets/icons/sun-moon.svg" width="20" height="20" alt=""><br><b>Light and dark</b><br>Both modes, with the frosted macOS sidebar.</td>
 <td width="33%" valign="top"><img src="./assets/icons/palette.svg" width="20" height="20" alt=""><br><b>Themes</b><br>From a file or the online catalog.</td>
 <td width="33%" valign="top"><img src="./assets/icons/languages.svg" width="20" height="20" alt=""><br><b>Languages</b><br>English and Simplified Chinese.</td>
 </tr>
-</table>
-
-### Coming soon
-
-<table>
+<tr><th colspan="3" align="left">Coming soon</th></tr>
 <tr>
 <td width="33%" valign="top"><img src="./assets/icons/mouse-pointer-click.svg" width="20" height="20" alt=""><br><b>Computer use</b><br>Agents operate the apps on your computer.</td>
 <td width="33%" valign="top"><img src="./assets/icons/tablet-smartphone.svg" width="20" height="20" alt=""><br><b>iOS Simulator and Android Emulator</b><br>On screen in Kettu, for you and the agent to use.</td>
-<td width="33%"></td>
+<td width="33%" valign="top"><img src="./assets/icons/map.svg" width="20" height="20" alt=""><br><b>Roadmap</b><br>What comes next is on the <a href="./ROADMAP.md">roadmap</a>.</td>
 </tr>
 </table>
 
@@ -112,9 +93,9 @@ End-to-end encrypted, straight over your own network.
 
 <table>
 <tr>
-<td width="33%" valign="top"><img src="./assets/icons/eye-off.svg" width="20" height="20" alt=""><br><b>No telemetry</b><br>Your sessions, code and files stay on your own computers.</td>
-<td width="33%" valign="top"><img src="./assets/icons/key-round.svg" width="20" height="20" alt=""><br><b>Hands off your credentials</b><br>Kettu keeps no copy of your agents' credentials.</td>
-<td width="33%" valign="top"><img src="./assets/icons/user-round.svg" width="20" height="20" alt=""><br><b>Account optional</b><br>Kettu works without a Kettu account.</td>
+<td width="33%" valign="top"><img src="./assets/icons/eye-off.svg" width="20" height="20" alt=""><br><b>No telemetry</b><br>Kettu collects no telemetry; your sessions, code and files stay on your own computers.</td>
+<td width="33%" valign="top"><img src="./assets/icons/key-round.svg" width="20" height="20" alt=""><br><b>Hands off your credentials</b><br>Each agent signs in its own way, and Kettu keeps no copy of its credentials.</td>
+<td width="33%" valign="top"><img src="./assets/icons/user-round.svg" width="20" height="20" alt=""><br><b>Account optional</b><br>On your own computers and network, nothing needs a Kettu account.</td>
 </tr>
 </table>
 

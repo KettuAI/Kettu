@@ -31,9 +31,8 @@
 
 ## 功能
 
-### 会话
-
 <table>
+<tr><th colspan="3" align="left">会话</th></tr>
 <tr>
 <td width="33%" valign="top"><img src="./assets/icons/bot.svg" width="20" height="20" alt=""><br><b>46 个 Agent</b><br>Claude Code、Codex、OpenCode、Pi 等，用你自己的安装和账号。</td>
 <td width="33%" valign="top"><img src="./assets/icons/panel-left.svg" width="20" height="20" alt=""><br><b>并行会话</b><br>侧边栏标出哪个在干活、哪个在等你、哪个做完了。</td>
@@ -54,11 +53,7 @@
 <td width="33%" valign="top"><img src="./assets/icons/bell.svg" width="20" height="20" alt=""><br><b>通知</b><br>会话需要你时提醒你。</td>
 <td width="33%" valign="top"><img src="./assets/icons/chart-column.svg" width="20" height="20" alt=""><br><b>用量</b><br>按天、模型和项目统计 token 和费用；Agent 提供时还显示套餐额度。</td>
 </tr>
-</table>
-
-### 工作台
-
-<table>
+<tr><th colspan="3" align="left">工作台</th></tr>
 <tr>
 <td width="33%" valign="top"><img src="./assets/icons/file-diff.svg" width="20" height="20" alt=""><br><b>Diff</b><br>Agent 改了哪些文件、改了什么，一目了然。</td>
 <td width="33%" valign="top"><img src="./assets/icons/folder-open.svg" width="20" height="20" alt=""><br><b>文件</b><br>用标签页查看、预览和编辑项目文件。</td>
@@ -74,37 +69,23 @@
 <td width="33%" valign="top"><img src="./assets/icons/search.svg" width="20" height="20" alt=""><br><b>搜索</b><br>一个命令面板搜会话、Artifacts、Routines、项目、设置和操作。</td>
 <td width="33%" valign="top"><img src="./assets/icons/keyboard.svg" width="20" height="20" alt=""><br><b>快捷键</b><br>常用操作都有快捷键。</td>
 </tr>
-</table>
-
-### 多设备
-
-连接端到端加密，直接走你自己的网络。
-
-<table>
+<tr><th colspan="3" align="left">多设备 <sub>连接端到端加密，直接走你自己的网络。</sub></th></tr>
 <tr>
 <td width="33%" valign="top"><img src="./assets/icons/smartphone.svg" width="20" height="20" alt=""><br><b>手机和平板</b><br>扫码配对，在浏览器里继续会话，不用装 App。</td>
 <td width="33%" valign="top"><img src="./assets/icons/laptop.svg" width="20" height="20" alt=""><br><b>另一台电脑</b><br>在另一台电脑的 Kettu 里用这台电脑上的会话。</td>
 <td width="33%" valign="top"><img src="./assets/icons/server.svg" width="20" height="20" alt=""><br><b>开发机</b><br>填 SSH 地址就能加进来。</td>
 </tr>
-</table>
-
-### 外观
-
-<table>
+<tr><th colspan="3" align="left">外观</th></tr>
 <tr>
 <td width="33%" valign="top"><img src="./assets/icons/sun-moon.svg" width="20" height="20" alt=""><br><b>浅色和深色</b><br>两种模式都打磨过，macOS 上是系统的毛玻璃侧边栏。</td>
 <td width="33%" valign="top"><img src="./assets/icons/palette.svg" width="20" height="20" alt=""><br><b>主题</b><br>从文件或在线目录换主题。</td>
 <td width="33%" valign="top"><img src="./assets/icons/languages.svg" width="20" height="20" alt=""><br><b>中英文</b><br>简体中文和英文界面。</td>
 </tr>
-</table>
-
-### 即将推出
-
-<table>
+<tr><th colspan="3" align="left">即将推出</th></tr>
 <tr>
 <td width="33%" valign="top"><img src="./assets/icons/mouse-pointer-click.svg" width="20" height="20" alt=""><br><b>Computer use</b><br>Agent 操作你电脑上的应用。</td>
 <td width="33%" valign="top"><img src="./assets/icons/tablet-smartphone.svg" width="20" height="20" alt=""><br><b>iOS 和 Android 模拟器</b><br>模拟器画面放进 Kettu，你和 Agent 都能操作。</td>
-<td width="33%"></td>
+<td width="33%" valign="top"><img src="./assets/icons/map.svg" width="20" height="20" alt=""><br><b>路线图</b><br>接下来要做的，都在<a href="./ROADMAP.zh-CN.md">路线图</a>里。</td>
 </tr>
 </table>
 
@@ -112,9 +93,9 @@
 
 <table>
 <tr>
-<td width="33%" valign="top"><img src="./assets/icons/eye-off.svg" width="20" height="20" alt=""><br><b>不收集遥测</b><br>会话、代码和文件都留在你自己的电脑上。</td>
-<td width="33%" valign="top"><img src="./assets/icons/key-round.svg" width="20" height="20" alt=""><br><b>不碰凭据</b><br>Kettu 不保留 Agent 的登录凭据。</td>
-<td width="33%" valign="top"><img src="./assets/icons/user-round.svg" width="20" height="20" alt=""><br><b>账号可选</b><br>不登录 Kettu 账号也能用。</td>
+<td width="33%" valign="top"><img src="./assets/icons/eye-off.svg" width="20" height="20" alt=""><br><b>不收集遥测</b><br>Kettu 不收集遥测，会话、代码和文件都留在你自己的电脑上。</td>
+<td width="33%" valign="top"><img src="./assets/icons/key-round.svg" width="20" height="20" alt=""><br><b>不碰凭据</b><br>Agent 用它自己的方式登录，Kettu 不保留任何凭据。</td>
+<td width="33%" valign="top"><img src="./assets/icons/user-round.svg" width="20" height="20" alt=""><br><b>账号可选</b><br>在你自己的电脑和网络上，不登录 Kettu 账号也能用。</td>
 </tr>
 </table>
 
