@@ -8,13 +8,10 @@ import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { Button } from '@renderer/components/ui/button'
 import {
   Combobox,
-  ComboboxCollection,
   ComboboxContent,
   ComboboxEmpty,
-  ComboboxGroup,
   ComboboxInput,
   ComboboxItem,
-  ComboboxLabel,
   ComboboxList,
   ComboboxSeparator,
   ComboboxTrigger,
@@ -30,7 +27,7 @@ import { agentName, agentsOn, usableAgents, useAgentsStore } from '@renderer/sto
 import { refreshLimits } from '@renderer/stores/usage'
 import { openAgentSettings } from '@renderer/stores/view'
 import { menuAgents } from './start-options'
-import { agentGroups, agentLine, type AgentGroup, type LineTone } from './picker'
+import { agentLine, type LineTone } from './picker'
 import { refreshOnMenu } from './prepared'
 
 const LINE_TONE: Record<LineTone, string> = {
@@ -41,7 +38,7 @@ const LINE_TONE: Record<LineTone, string> = {
 
 /**
  * New session's agent: a chip naming the chosen agent, and a menu of the agents it can start,
- * grouped by harness, each with its account and plan use or what it needs, under one search.
+ * each with its account and plan use or what it needs, under one search.
  * Choosing one keeps the model the agent starts with; the model has a menu of its own.
  */
 export function AgentPicker({
@@ -63,7 +60,7 @@ export function AgentPicker({
       return menuAgents(usableAgents(order, byId))
     }),
   )
-  const groups = useMemo(() => agentGroups(statuses), [statuses])
+  const ids = useMemo(() => statuses.map((s) => s.id), [statuses])
   const byId = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses])
   const { contains } = useComboboxFilter()
   const [open, setOpen] = useState(false)
@@ -84,7 +81,7 @@ export function AgentPicker({
     // Marks inside show this host's agents, the second-account dots included.
     <AgentMarkHost.Provider value={hostId}>
       <Combobox
-        items={groups.map((g) => ({ ...g, items: g.agents.map((a) => a.id) }))}
+        items={ids}
         value={agentId}
         open={open}
         onOpenChange={onOpenChange}
@@ -145,47 +142,35 @@ export function AgentPicker({
             </p>
           ) : (
             <ComboboxList className="max-h-[min(--spacing(110),calc(var(--available-height)---spacing(24)))] scroll-fade-y px-1.5 pt-0.5 pb-1.5">
-              {(group: AgentGroup & { items: AgentId[] }) => (
-                <ComboboxGroup key={group.key} items={group.items}>
-                  <ComboboxLabel className="h-auto px-2 pt-2 pb-1 text-small font-medium text-tertiary">
-                    {group.harness ??
-                      (groups.length > 1
-                        ? t('newSession.picker.other')
-                        : t('newSession.picker.agents'))}
-                  </ComboboxLabel>
-                  <ComboboxCollection>
-                    {(id: AgentId) => {
-                      const status = byId.get(id)
-                      if (!status) return null
-                      const line = agentLine(status, now)
-                      return (
-                        <ComboboxItem
-                          key={id}
-                          value={id}
-                          className="group/agent h-11 gap-2.5 rounded-xl py-1 pr-2 pl-2 data-highlighted:bg-hover [&>span.absolute]:hidden"
-                        >
-                          <AgentMark agent={id} size={20} className="shrink-0" />
-                          <span className="flex min-w-0 flex-1 flex-col gap-px">
-                            <span className="truncate text-menu text-primary">{status.name}</span>
-                            {line && (
-                              <span className={cn('truncate text-small', LINE_TONE[line.tone])}>
-                                {line.text}
-                              </span>
-                            )}
-                          </span>
-                          {id === agentId && (
-                            <CheckIcon
-                              aria-hidden
-                              strokeWidth={1.75}
-                              className="size-3.75 shrink-0 text-control-on"
-                            />
-                          )}
-                        </ComboboxItem>
-                      )
-                    }}
-                  </ComboboxCollection>
-                </ComboboxGroup>
-              )}
+              {(id: AgentId) => {
+                const status = byId.get(id)
+                if (!status) return null
+                const line = agentLine(status, now)
+                return (
+                  <ComboboxItem
+                    key={id}
+                    value={id}
+                    className="group/agent h-11 gap-2.5 rounded-xl py-1 pr-2 pl-2 data-highlighted:bg-hover [&>span.absolute]:hidden"
+                  >
+                    <AgentMark agent={id} size={20} className="shrink-0" />
+                    <span className="flex min-w-0 flex-1 flex-col gap-px">
+                      <span className="truncate text-menu text-primary">{status.name}</span>
+                      {line && (
+                        <span className={cn('truncate text-small', LINE_TONE[line.tone])}>
+                          {line.text}
+                        </span>
+                      )}
+                    </span>
+                    {id === agentId && (
+                      <CheckIcon
+                        aria-hidden
+                        strokeWidth={1.75}
+                        className="size-3.75 shrink-0 text-control-on"
+                      />
+                    )}
+                  </ComboboxItem>
+                )
+              }}
             </ComboboxList>
           )}
           <ComboboxEmpty>{t('newSession.picker.noMatch')}</ComboboxEmpty>
