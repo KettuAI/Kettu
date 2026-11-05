@@ -1,7 +1,12 @@
+import { useRef } from 'react'
+import { Menu as MenuPrimitive } from '@base-ui/react/menu'
 import { useTranslation } from 'react-i18next'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
+import { PlanPart } from '@renderer/features/session/composer/usage'
 import { LIMIT_STROKE, LIMIT_TEXT } from '@renderer/lib/plan-limit'
 import { cn } from '@renderer/lib/utils'
+import { openUsage } from '@renderer/stores/view'
 import type { CardWindow, PlanCard } from './model'
 
 const RINGS_SIZE = 40
@@ -52,30 +57,68 @@ function PlanRings({ windows }: { windows: readonly CardWindow[] }) {
   )
 }
 
-/** An account's plan windows: its rings and, from the outer ring in, each window's figure. */
+/**
+ * An account's plan windows: its rings and, from the outer ring in, each window's figure. It
+ * opens the Usage page; hovered or reached by the keyboard, it shows every window beside the menu.
+ */
 export function PlanLimitCard({ card }: { card: PlanCard }) {
+  const ref = useRef<HTMLDivElement>(null)
+  // Level with the card but past the menu's edge, so it never covers the card beside it.
+  const anchor = () => {
+    const item = ref.current
+    const menu = item?.closest('[role=menu]')
+    if (!item || !menu) return item
+    return {
+      contextElement: item,
+      getBoundingClientRect: () => {
+        const own = item.getBoundingClientRect()
+        return new DOMRect(menu.getBoundingClientRect().right, own.top, 0, own.height)
+      },
+    }
+  }
+  return (
+    <HoverCard>
+      <HoverCardTrigger
+        delay={300}
+        render={
+          <MenuPrimitive.Item
+            ref={ref}
+            onClick={openUsage}
+            className="min-w-0 cursor-default rounded-tile bg-subtle px-2 pt-2 pb-2.25 outline-none select-none data-highlighted:bg-selected"
+          />
+        }
+      >
+        <CardFace card={card} />
+      </HoverCardTrigger>
+      <HoverCardContent anchor={anchor} side="right" align="start" sideOffset={8} className="w-68">
+        <div className="mb-2.5 flex min-w-0 items-center gap-1.5">
+          <AgentTile agent={card.agentId} size={18} />
+          <span className="min-w-0 truncate text-small font-semibold text-primary">
+            {card.agentName}
+          </span>
+        </div>
+        <PlanPart limits={card.limits} account={card.account} />
+      </HoverCardContent>
+    </HoverCard>
+  )
+}
+
+function CardFace({ card }: { card: PlanCard }) {
   const { t } = useTranslation(['sidebar', 'composer', 'common'])
   return (
-    <div
-      role="group"
-      aria-label={
-        card.tier ? t('sidebar:account.limitCard', { name: card.name, tier: card.tier }) : card.name
-      }
-      className="min-w-0 rounded-tile bg-subtle px-2 pt-2 pb-2.25"
-    >
+    <>
       <div className="flex h-4.5 min-w-0 items-center gap-1.5">
         <AgentTile agent={card.agentId} size={18} />
         <span className="min-w-0 truncate text-small font-semibold text-primary">{card.name}</span>
+        {card.tier && (
+          <span className="ml-auto shrink-0 rounded-sm bg-popover px-1.25 text-badge leading-3.75 text-secondary shadow-[0_0_0_var(--hairline)_var(--border-subtle)]">
+            {card.tier}
+          </span>
+        )}
       </div>
       <div className="mt-1.5 flex items-center gap-2">
         <PlanRings windows={card.windows} />
         <div className="flex min-w-0 flex-1 flex-col gap-px">
-          {/* Beside the rings, where a tier like "Max 20x" fits next to any agent's name. */}
-          {card.tier && (
-            <span className="mb-0.5 self-end truncate rounded-sm bg-popover px-1.25 text-badge leading-3.75 text-secondary shadow-[0_0_0_var(--hairline)_var(--border-subtle)]">
-              {card.tier}
-            </span>
-          )}
           {[...card.windows].reverse().map((w) => {
             const name = t(`common:planWindow.${w.window}`)
             return (
@@ -109,6 +152,6 @@ export function PlanLimitCard({ card }: { card: PlanCard }) {
           })}
         </div>
       </div>
-    </div>
+    </>
   )
 }

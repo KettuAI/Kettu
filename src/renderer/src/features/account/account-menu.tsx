@@ -1,6 +1,7 @@
 import type { KeyboardEvent, ReactNode } from 'react'
 import { Menu as MenuPrimitive } from '@base-ui/react/menu'
 import {
+  ChartPieIcon,
   CheckIcon,
   CircleHelpIcon,
   ExternalLinkIcon,
@@ -50,9 +51,15 @@ import { isAway, useHostsStore, useOtherHosts, type OtherHost } from '@renderer/
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useUpdatesStore } from '@renderer/stores/updates'
-import { openSettings, showShortcuts, THIS_COMPUTER, useViewStore } from '@renderer/stores/view'
+import {
+  openSettings,
+  openUsage,
+  showShortcuts,
+  THIS_COMPUTER,
+  useViewStore,
+} from '@renderer/stores/view'
 import { AccountAvatar, IdentityName, SettingsGlyph } from './avatar'
-import { chosenHost, planCards, systemName, type Identity } from './model'
+import { chosenHost, planCards, shownCards, systemName, type Identity } from './model'
 import { PlanLimitCard } from './plan-limit-card'
 import { useThisComputerName } from './use-account'
 
@@ -322,21 +329,31 @@ function HostRow({
   )
 }
 
-/** A card per account with every plan window as a ring, two cards to a row. */
+/**
+ * A card per account with every plan window as a ring, two cards to a row; past two rows, a row
+ * that opens the Usage page, which lists them all.
+ */
 function PlanLimits() {
   const { t } = useTranslation('sidebar')
   const agents = useAgentsWithLimits()
-  const cards = planCards(agents, useNow())
-  if (cards.length === 0) return null
+  const { shown, more } = shownCards(planCards(agents, useNow()))
+  if (shown.length === 0) return null
   return (
     <>
       <DropdownMenuGroup>
         <GroupLabel>{t('account.limits')}</GroupLabel>
         <div className="grid grid-cols-2 gap-1.5 px-1.5 pb-1">
-          {cards.map((card) => (
+          {shown.map((card) => (
             <PlanLimitCard key={card.key} card={card} />
           ))}
         </div>
+        {more > 0 && (
+          <DropdownMenuItem onClick={openUsage}>
+            <ChartPieIcon />
+            {t('account.allLimits')}
+            <span className="ml-auto text-caption text-tertiary tabular">+{more}</span>
+          </DropdownMenuItem>
+        )}
       </DropdownMenuGroup>
       <DropdownMenuSeparator className={SEPARATOR} />
     </>

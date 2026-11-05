@@ -57,11 +57,16 @@ export interface CardWindow {
 export interface PlanCard {
   key: string
   agentId: AgentId
+  agentName: string
+  /** The agent's name, or for OpenCode the provider's. */
   name: string
   /** The plan without its brand, such as "Max 5x"; null when it is unknown. */
   tier: string | null
   /** Innermost first. */
   windows: CardWindow[]
+  /** Every window and the plan, for the card's details. */
+  limits: PlanLimit[]
+  account: AgentAccount | null
 }
 
 function cardWindows(limits: readonly PlanLimit[], now: number): CardWindow[] {
@@ -99,15 +104,19 @@ export function planCards(agents: readonly AgentStatus[], now: number): PlanCard
   return agents.flatMap((agent): PlanCard[] => {
     if (agent.harnessId === 'opencode') {
       return (agent.providers ?? []).flatMap((provider) => {
-        const windows = cardWindows(provider.usage?.limits ?? [], now)
+        const limits = provider.usage?.limits ?? []
+        const windows = cardWindows(limits, now)
         if (windows.length === 0) return []
         return [
           {
             key: `${agent.id}:${provider.id}`,
             agentId: agent.id,
+            agentName: agent.name,
             name: planName(agent.harnessName, provider.name),
             tier: null,
             windows,
+            limits,
+            account: { kind: 'external', label: provider.name, email: null },
           },
         ]
       })
@@ -118,12 +127,29 @@ export function planCards(agents: readonly AgentStatus[], now: number): PlanCard
       {
         key: agent.id,
         agentId: agent.id,
+        agentName: agent.name,
         name: agent.name,
         tier: planTier(agent.account),
         windows,
+        limits: agent.limits,
+        account: agent.account,
       },
     ]
   })
+}
+
+/** Two rows of cards at most, so the menu stays within the window. */
+const MAX_CARDS = 4
+
+/**
+ * The cards the menu shows and how many more there are. When they do not all fit, those near a
+ * limit come first, so a hidden card is never the one that needs attention.
+ */
+export function shownCards(cards: readonly PlanCard[]): { shown: PlanCard[]; more: number } {
+  if (cards.length <= MAX_CARDS) return { shown: [...cards], more: 0 }
+  const near = (card: PlanCard): boolean => card.windows.some((w) => w.level && w.level !== 'ok')
+  const ordered = [...cards.filter(near), ...cards.filter((card) => !near(card))]
+  return { shown: ordered.slice(0, MAX_CARDS), more: cards.length - MAX_CARDS }
 }
 
 /** The host choice the menu checks: one host by its filter value, or null for every host. */
