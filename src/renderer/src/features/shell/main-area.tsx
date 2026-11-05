@@ -53,7 +53,11 @@ export function MainArea() {
     return (
       <PageSheet>
         <Suspense fallback={null}>
-          <RoutinePage key={main.routineId ?? 'new'} routineId={main.routineId} />
+          <RoutinePage
+            key={main.routineId ?? `new:${main.example ?? ''}`}
+            routineId={main.routineId}
+            example={main.example ?? null}
+          />
         </Suspense>
       </PageSheet>
     )

@@ -181,6 +181,38 @@ describe('createValidators', () => {
   })
 })
 
+describe('routine requests', () => {
+  const draft = {
+    name: '',
+    prompt: 'Summarize the open pull requests',
+    agentId: 'claude-code',
+    projectPath: null,
+    options: [],
+    trigger: { kind: 'schedule', schedule: { kind: 'weekly', days: [1], time: '09:00' } },
+    scope: { level: 'read', web: false },
+    timeLimitMinutes: 60,
+  }
+
+  it('keeps the sessions of 100 runs unless the draft chooses another of the choices', () => {
+    expect(posix['routines.create'](draft)).toMatchObject({ keptRunSessions: 100 })
+    expect(posix['routines.create']({ ...draft, keptRunSessions: 25 })).toMatchObject({
+      keptRunSessions: 25,
+    })
+    rejects(() => posix['routines.create']({ ...draft, keptRunSessions: 30 }))
+    rejects(() => posix['routines.create']({ ...draft, keptRunSessions: '100' }))
+  })
+
+  it('changes the kept run sessions only to one of the choices', () => {
+    const routineId = 'r-0123456789ab'
+    expect(posix['routines.update']({ routineId, changes: { keptRunSessions: 10 } })).toEqual({
+      routineId,
+      changes: { keptRunSessions: 10 },
+    })
+    rejects(() => posix['routines.update']({ routineId, changes: { keptRunSessions: 0 } }))
+    rejects(() => posix['routines.update']({ routineId, changes: { keptRunSessions: 1000 } }))
+  })
+})
+
 describe('promptContent', () => {
   const png = Buffer.from('fake image').toString('base64')
 

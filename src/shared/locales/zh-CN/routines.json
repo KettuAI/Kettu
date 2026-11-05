@@ -17,12 +17,49 @@
       "routine": "例程",
       "schedule": "计划",
       "agent": "Agent",
-      "lastRun": "上次运行"
+      "status": "状态"
     },
     "footnote": "例程只在 Kettu 打开时运行。Agent 距离套餐限额不到 10% 时，例程会暂停。"
   },
+  "examples": {
+    "heading": "从示例开始",
+    "hint": "打开填好这些的新建例程，创建之前什么都不运行。",
+    "use": "使用",
+    "open": "从 {{name}} 开始",
+    "triage": {
+      "name": "早间整理",
+      "prompt": "总结上次运行以来新开或更新的 issue 和 Pull Request，标出紧急的。"
+    },
+    "tests": {
+      "name": "夜间测试",
+      "prompt": "跑完整的测试，逐个说明失败和可能的原因。"
+    },
+    "dependencies": {
+      "name": "依赖检查",
+      "prompt": "查依赖的更新和已知漏洞，说明哪些要紧。"
+    },
+    "changelog": {
+      "name": "更新日志草稿",
+      "prompt": "按区域整理本周合并的 Pull Request，写出发布说明的草稿。"
+    },
+    "links": {
+      "name": "文档链接检查",
+      "prompt": "找出文档里失效的链接和它们所在的页面。"
+    },
+    "review": {
+      "name": "每周回顾",
+      "prompt": "总结这周项目里改了什么、还有什么没做完。"
+    },
+    "web": "{{level}} · 联网"
+  },
+  "menu": {
+    "open": "打开",
+    "turnOff": "关闭",
+    "turnOn": "开启"
+  },
   "row": {
     "waitingSince": "{{time}} 起等待批准",
+    "running": "运行中 · {{duration}}",
     "pausedNear": "已暂停 · 接近套餐限额",
     "pausedReached": "已暂停 · 已达套餐限额",
     "failed": "{{ago}}失败",
@@ -32,9 +69,7 @@
     "interruptedAt": "已中断 · {{when}}",
     "skipped": "已跳过",
     "skippedAt": "已跳过 · {{when}}",
-    "next": "下次运行：{{when}}",
-    "nextToday": "下次运行：今天 {{time}}",
-    "nextTomorrow": "下次运行：明天 {{time}}",
+    "nextAt": "{{when}} · {{away}}",
     "never": "尚未运行"
   },
   "signal": {
@@ -112,6 +147,10 @@
     "clockGap": "钟表跳过这个时间，将在 {{time}} 运行。",
     "clockOverlap": "钟表重复这个时间，只在第一次运行。",
     "ranOnce": "它已在 {{date}} {{time}} 运行，不会再运行。",
+    "nextRuns": "接下来三次",
+    "onceOff": "运行之后自动关闭",
+    "previewToday": "今天 · {{time}}",
+    "previewAt": "{{date}} · {{time}}",
     "everyValue": "每隔",
     "countedFrom": "起算时间",
     "date": "日期",
@@ -120,13 +159,6 @@
     "on": "日期",
     "expression": "Cron 表达式",
     "expressionHint": "0 9 * * 1-5",
-    "cronFields": {
-      "minute": "分钟",
-      "hour": "小时",
-      "dayOfMonth": "日",
-      "month": "月",
-      "dayOfWeek": "星期"
-    },
     "cronSyntax": "* 任意 · a-b 范围 · a,b 列表 · */n 每隔 n · 可用 MON、JAN 等名称",
     "field": {
       "date": "日期",
@@ -161,10 +193,8 @@
     "cancel": "取消",
     "runNow": "立即运行",
     "more": "更多",
-    "duplicate": "复制",
     "delete": "删除…",
     "task": "任务",
-    "howItRuns": "运行方式",
     "prompt": "提示词",
     "promptDescription": "例程每次运行时原样发送。",
     "promptPlaceholder": "每次运行时，Agent 要做什么？",
@@ -174,11 +204,19 @@
     "agent": "Agent 和模型",
     "agentDescription": "它的运行使用的 Agent、模型和选项。",
     "permissions": "权限",
-    "permissionsDescription": "它的运行可以不询问就做什么；其余的会让运行暂停。",
+    "permissionsHint": "它的运行可以不询问就做什么",
     "timeLimit": "时间限制",
     "timeLimitDescription": "运行到达这个时间就停止，等待你的时间不计入。",
+    "limits": "限制",
+    "keptRuns": "保留的运行会话",
+    "keptRunsDescription": "更早的运行会话会被移除，结果仍留在运行记录里。",
+    "keptRunsOption": "最近 {{count}} 次",
+    "keptConfirmTitle": "只保留最近 {{count}} 次的运行会话？",
+    "keptConfirm_one": "会移除 {{count}} 个更早的运行会话，结果仍留在运行记录里。",
+    "keptConfirm_other": "会移除 {{count}} 个更早的运行会话，结果仍留在运行记录里。",
+    "keptConfirmAction": "移除会话",
     "schedule": "计划",
-    "scheduleDescription": "它的运行在本地时间何时开始。",
+    "scheduleHint": "按本地时间",
     "scheduleNotSaved": "这个计划尚未保存；修正后即可保存。",
     "createMissingSchedule": "先修正计划。",
     "waitingTitle": "有一个运行正在等待你的批准",
@@ -186,10 +224,11 @@
     "openRun": "打开该运行",
     "openRunFailed": "无法打开这次运行的会话，请稍后再试。",
     "runs": "运行记录",
-    "noRuns": "还没有运行。",
+    "next": "下次",
+    "runsShown": "{{shown}} / {{total}}",
+    "noRunsTitle": "还没有运行",
     "showMore": "显示更多",
     "runsFailed": "无法加载运行记录。",
-    "copyName": "{{name}} 副本",
     "createMissingPrompt": "先写提示词。",
     "createMissingProject": "先选择项目。",
     "createMissingAgent": "先选择 Agent。",
@@ -208,7 +247,9 @@
     "now": "立即运行可以先试一次。",
     "today": "立即运行可以先试一次，或等到今天 {{time}}。",
     "tomorrow": "立即运行可以先试一次，或等到明天 {{time}}。",
-    "later": "立即运行可以先试一次，或等到 {{when}}。"
+    "later": "立即运行可以先试一次，或等到 {{when}}。",
+    "new": "创建之后，立即运行可以先试一次。",
+    "newAt": "创建之后，立即运行可以先试一次，或等第一次运行：{{when}}。"
   },
   "permission": {
     "levels": "权限",
@@ -260,6 +301,7 @@
     "interrupted": "已中断",
     "skippedOverlap": "已跳过：上次运行还在工作。",
     "skippedLimit": "已跳过：接近套餐限额。",
+    "skippedTimes": "跳过 ×{{count}}",
     "duration": "工作了 {{duration}}",
     "working": "已工作 {{duration}}",
     "waitingFor": "已等待 {{duration}}",

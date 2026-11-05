@@ -18,6 +18,8 @@ import {
   isPermissionScope,
   isSchedule,
   isTimeLimit,
+  isKeptRunSessions,
+  DEFAULT_KEPT_RUN_SESSIONS,
   ROUTINE_ID,
   ROUTINE_NAME_CHARS,
   ROUTINE_OPTION_CHARS,
@@ -293,6 +295,11 @@ function routineTimeLimit(value: unknown): import('@shared/routines').TimeLimitM
   return value
 }
 
+function routineKeptRunSessions(value: unknown): import('@shared/routines').KeptRunSessions {
+  if (!isKeptRunSessions(value)) throw invalidParams('keptRunSessions is not one of the choices')
+  return value
+}
+
 function routineProjectPath(o: Fields, platform: Platform): string | null {
   return o.projectPath === null ? null : absolutePath(o, 'projectPath', platform)
 }
@@ -315,6 +322,11 @@ function routineDraft(value: unknown, platform: Platform): RoutineDraft {
     trigger: routineTrigger(o.trigger),
     scope: routineScope(o.scope),
     timeLimitMinutes: routineTimeLimit(o.timeLimitMinutes),
+    // Clients older than the setting send none.
+    keptRunSessions:
+      o.keptRunSessions === undefined
+        ? DEFAULT_KEPT_RUN_SESSIONS
+        : routineKeptRunSessions(o.keptRunSessions),
   }
 }
 
@@ -330,6 +342,7 @@ function routineChanges(value: unknown, platform: Platform): RoutineChanges {
     'trigger',
     'scope',
     'timeLimitMinutes',
+    'keptRunSessions',
     'enabled',
   ])
   for (const key of Object.keys(o)) {
@@ -355,6 +368,8 @@ function routineChanges(value: unknown, platform: Platform): RoutineChanges {
   if (o.scope !== undefined) changes.scope = routineScope(o.scope)
   if (o.timeLimitMinutes !== undefined)
     changes.timeLimitMinutes = routineTimeLimit(o.timeLimitMinutes)
+  if (o.keptRunSessions !== undefined)
+    changes.keptRunSessions = routineKeptRunSessions(o.keptRunSessions)
   if (o.enabled !== undefined) changes.enabled = flag(o, 'enabled')
   return changes
 }

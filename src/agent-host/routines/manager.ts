@@ -7,7 +7,6 @@ import type { PlanLimit, RoutineList, SessionSummary } from '@shared/agent-host'
 import { markdownFirstLine } from '@shared/markdown-line'
 import { nextRuns } from '@shared/schedule'
 import {
-  KEPT_RUN_SESSIONS,
   RUN_OUTPUT_BYTES,
   RUNS_PAGE,
   ROUTINE_NAME_CHARS,
@@ -257,6 +256,7 @@ export class RoutinesManager {
     if (changes.trigger !== undefined) next.trigger = changes.trigger
     if (changes.scope !== undefined) next.scope = changes.scope
     if (changes.timeLimitMinutes !== undefined) next.timeLimitMinutes = changes.timeLimitMinutes
+    if (changes.keptRunSessions !== undefined) next.keptRunSessions = changes.keptRunSessions
     const turnedOn = changes.enabled === true && !routine.enabled
     if (changes.enabled !== undefined) next.enabled = changes.enabled
     // Turning on or changing the schedule never catches up the time it was off or different.
@@ -264,6 +264,8 @@ export class RoutinesManager {
     next.updatedAt = this.now()
     this.routines.set(routineId, next)
     this.save()
+    // Fewer kept sessions take effect at once, as the confirmation before it said.
+    if (next.keptRunSessions < routine.keptRunSessions) await this.trim(next)
     const view = await this.viewOf(next)
     this.lastViews.set(routineId, JSON.stringify(view))
     this.deps.events.changed(view)
@@ -779,12 +781,12 @@ export class RoutinesManager {
     }
   }
 
-  /** Keeps the sessions of the routine's latest 100 runs, as deleted sessions are removed. */
+  /** Keeps the sessions of the routine's latest runs, as many as it chose; the rest are removed. */
   private async trim(routine: Routine): Promise<void> {
     try {
       const beyond = await this.call('beyond', {
         routineId: routine.id,
-        keep: KEPT_RUN_SESSIONS,
+        keep: routine.keptRunSessions,
       })
       for (const { sessionId } of beyond) {
         if (!this.deps.sessions.has(sessionId)) {
@@ -991,13 +993,14 @@ export class RoutinesManager {
       activeRun: stats.active,
       lastRun: stats.last,
       unseen: { failed: stats.unseenFailed, ended: stats.unseenEnded },
+      runs: stats.runs,
       sessions: stats.sessions,
     }
   }
 
   private async stats(routineId: string): Promise<RoutineRunStats> {
     if (!this.deps.threads) {
-      return { sessions: 0, unseenFailed: 0, unseenEnded: 0, last: null, active: null }
+      return { runs: 0, sessions: 0, unseenFailed: 0, unseenEnded: 0, last: null, active: null }
     }
     return this.deps.threads.routine('stats', { routineId })
   }

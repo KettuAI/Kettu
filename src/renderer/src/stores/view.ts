@@ -29,6 +29,7 @@ import {
   type PaneView,
   type Place,
 } from '@renderer/features/split/layout'
+import type { RoutineExampleId } from '@renderer/features/routines/examples'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
 
@@ -41,9 +42,10 @@ type PageView =
   // of that session, in its project.
   | { kind: 'new'; agentId: AgentId | null; noProject: boolean; parentId?: string }
   | { kind: 'usage' } // the usage page, opened from the sidebar
-  // The Routines page, opened from the sidebar; with a null routine id, New routine.
+  // The Routines page, opened from the sidebar; with a null routine id, New routine, which an
+  // example on the empty Routines page fills in.
   | { kind: 'routines' }
-  | { kind: 'routine'; routineId: string | null }
+  | { kind: 'routine'; routineId: string | null; example?: RoutineExampleId }
   // The Artifacts page, opened from the sidebar; with `deleted`, its Recently deleted view.
   | { kind: 'artifacts'; deleted?: true }
 
@@ -540,13 +542,16 @@ export function openRoutines(): void {
 }
 
 /**
- * A routine's page, or New routine with a null id; with `replace`, in place of the page shown, as
- * New routine is by the routine it saved.
+ * A routine's page, or New routine with a null id, filled in from `example` when given; with
+ * `replace`, in place of the page shown, as New routine is by the routine it saved.
  */
-export function openRoutine(routineId: string | null, { replace = false } = {}): void {
+export function openRoutine(
+  routineId: string | null,
+  { replace = false, example }: { replace?: boolean; example?: RoutineExampleId } = {},
+): void {
   const open = () =>
     useViewStore.setState((s) => ({
-      main: { kind: 'routine', routineId },
+      main: example ? { kind: 'routine', routineId, example } : { kind: 'routine', routineId },
       settings: { ...s.settings, open: false },
     }))
   if (replace) inPlace(open)
@@ -843,7 +848,7 @@ export function viewKey(view: HistoryView): string {
     case 'new':
       return `new:${view.parentId ?? ''}`
     case 'routine':
-      return `routine:${view.routineId ?? ''}`
+      return `routine:${view.routineId ?? view.example ?? ''}`
     case 'artifacts':
       return view.deleted ? 'artifacts:deleted' : 'artifacts'
     case 'artifact':

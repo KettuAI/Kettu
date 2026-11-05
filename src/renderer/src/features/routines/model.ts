@@ -8,14 +8,15 @@ import {
   type RoutineOption,
   type RoutineRun,
   type RoutineView,
+  type RunView,
   type Schedule,
 } from '@shared/routines'
 import { startConfig, startValues } from '@renderer/features/session/new-session/start-options'
-import { duration, limitLabel } from '@renderer/lib/format'
+import { limitLabel, shortDuration } from '@renderer/lib/format'
 import { currentLocale, i18n } from '@renderer/lib/i18n'
 import type { OptionValues } from '@renderer/stores/agent-options'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
-import { scheduleWords as sharedScheduleWords } from '@shared/schedule'
+import { nextRuns, scheduleWords as sharedScheduleWords, validateSchedule } from '@shared/schedule'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -127,6 +128,16 @@ export function runsHint(routine: RoutineView, now = Date.now()): string {
   return i18n.t('routines:runsHint.later', { when: runDay(at, now) })
 }
 
+/** Under New routine's empty history: what Run now does once it exists, and its first run. */
+export function firstRunHint(schedule: Schedule, now = Date.now()): string {
+  const first = validateSchedule(schedule, now)
+    ? undefined
+    : nextRuns(schedule, now, { count: 1 })[0]
+  return first
+    ? i18n.t('routines:runsHint.newAt', { when: runDay(first.at, now) })
+    : i18n.t('routines:runsHint.new')
+}
+
 /** How far ahead a time is, to the minute: "in 47 min", "in 17 h 47 min", "in 2 days". */
 export function untilTime(at: number, now = Date.now()): string {
   const minutes = Math.max(1, Math.ceil((at - now) / MINUTE))
@@ -139,6 +150,14 @@ export function untilTime(at: number, now = Date.now()): string {
       : i18n.t('routines:away.hoursMinutes', { hours, minutes: rest })
   }
   return i18n.t('routines:away.days', { count: Math.round((minutes * MINUTE) / DAY) })
+}
+
+/** How long a run has worked, in whole minutes or hours: "3 min", "2 h". */
+export function runningFor(since: number, now = Date.now()): string {
+  const minutes = Math.max(1, Math.floor((now - since) / MINUTE))
+  return minutes < 60
+    ? i18n.t('time.minutesShort', { count: minutes })
+    : i18n.t('time.hoursShort', { count: Math.floor(minutes / 60) })
 }
 
 /** A run's time: when it was due, or when it started for Run now. */
@@ -170,6 +189,30 @@ export function cronFieldAt(text: string, caret: number): number | null {
   if (before.startsWith('@')) return null
   const index = before.split(/\s+/).length - 1
   return index < CRON_FIELDS.length ? index : null
+}
+
+/** A history row: a run, and how many skipped runs in a row it stands for. */
+export interface RunEntry {
+  run: RunView
+  skipped: number
+}
+
+/** The runs as the history lists them, each stretch of skips for one reason folded into one. */
+export function runEntries(runs: readonly RunView[]): RunEntry[] {
+  const entries: RunEntry[] = []
+  for (const run of runs) {
+    const last = entries.at(-1)
+    if (
+      run.status === 'skipped' &&
+      last?.run.status === 'skipped' &&
+      last.run.reason === run.reason
+    ) {
+      last.skipped++
+    } else {
+      entries.push({ run, skipped: run.status === 'skipped' ? 1 : 0 })
+    }
+  }
+  return entries
 }
 
 /** "Run now", "Catch-up" or "Scheduled", after a run's time. */
@@ -219,18 +262,18 @@ export function firstLine(text: string): string {
   return markdownFirstLine(text).slice(0, 200)
 }
 
-/** How long a run worked, or has waited, at the meta role. */
+/** How long a run worked, or has waited, as the history's mono column gives it: "4m 12s". */
 export function runDuration(run: RoutineRun, now = Date.now()): string | null {
   if (run.startedAt === null) return null
-  if (run.endedAt !== null) return duration(run.workingMs)
+  if (run.endedAt !== null) return shortDuration(run.workingMs)
   if (run.status === 'waiting') {
     return i18n.t('routines:run.waitingFor', {
-      duration: duration(Math.max(0, now - run.startedAt - run.workingMs)),
+      duration: shortDuration(Math.max(0, now - run.startedAt - run.workingMs)),
     })
   }
   if (run.status === 'starting' || run.status === 'running') {
     return i18n.t('routines:run.working', {
-      duration: duration(Math.max(0, now - run.startedAt)),
+      duration: shortDuration(Math.max(0, now - run.startedAt)),
     })
   }
   return null
@@ -288,25 +331,32 @@ export function lastRunCell(routine: RoutineView): LastRunCell {
     return state
   }
   const last = routine.lastRun
-  if (last) {
-    const at = last.endedAt ?? last.startedAt ?? last.scheduledFor
-    if (FAILED_RUN_STATUSES.includes(last.status)) return { kind: 'failed', at, run: last }
-    if (last.status === 'succeeded') return { kind: 'succeeded', at }
-    if (last.status === 'cancelled' || last.status === 'interrupted' || last.status === 'skipped') {
-      return { kind: 'ended', status: last.status, at }
-    }
-  }
+  const at = last ? (last.endedAt ?? last.startedAt ?? last.scheduledFor) : null
+  // A failure stays until a run goes well; otherwise a routine that is on looks ahead.
+  if (last && FAILED_RUN_STATUSES.includes(last.status)) return { kind: 'failed', at, run: last }
   if (state.kind === 'next') return state
+  if (last?.status === 'succeeded') return { kind: 'succeeded', at }
+  if (
+    last?.status === 'cancelled' ||
+    last?.status === 'interrupted' ||
+    last?.status === 'skipped'
+  ) {
+    return { kind: 'ended', status: last.status, at }
+  }
   return state.kind === 'done' ? { kind: 'done' } : { kind: 'never' }
 }
 
-/** "Next run today, 9:00 AM", "Next run tomorrow, 9:00 AM", "Next run Fri, 9:00 AM". */
+/** A next run in a row's Status: "Today, 9:00 AM · in 3 h". */
 export function nextRunText(at: number, now = Date.now()): string {
-  const days = dayDelta(at, now)
+  return i18n.t('routines:row.nextAt', { when: runDay(at, now), away: untilTime(at, now) })
+}
+
+/** A run ahead in a schedule's preview: "Today · 9:00 AM", "Fri, Nov 6 · 9:00 AM". */
+export function previewTime(at: number, now = Date.now()): string {
   const time = format().clock.format(at)
-  if (days === 0) return i18n.t('routines:row.nextToday', { time })
-  if (days === 1) return i18n.t('routines:row.nextTomorrow', { time })
-  return i18n.t('routines:row.next', { when: dayTime(at, now) })
+  return dayDelta(at, now) === 0
+    ? i18n.t('routines:schedule.previewToday', { time })
+    : i18n.t('routines:schedule.previewAt', { date: dayDate(at, now), time })
 }
 
 /** Under a routine's name: its prompt's first line, or its project when the name is that line. */

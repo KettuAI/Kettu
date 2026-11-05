@@ -1,6 +1,5 @@
-// What the routines pages share: serif headings over lined rows, and the routine page's form, each
-// field a row with its name and what it does on the left and its control on the right, under them
-// when the column is narrow.
+// What the routines pages share: the strip over the page, and the routine page's form, a group of
+// fields to a card, each field a row with its name and what it does beside its control.
 
 import type { ReactNode } from 'react'
 import {
@@ -11,50 +10,119 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@renderer/components/ui/select'
+import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
+import { hasBand } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
+import { useViewStore } from '@renderer/stores/view'
 
-/** A heading's line over a group, with a line under it that the first row sits on. */
-export const HEADING = 'flex h-9 items-baseline gap-2 border-b border-subtle'
+/** The column the routines pages lay out in, between the sheet's gutters. */
+export const PAGE_COLUMN = 'mx-auto w-full max-w-270'
 
-/** A row's place in a list: the line under it, across the column, except under the last. */
-export const ROW_SLOT =
-  'relative after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 after:h-(--hairline) after:bg-border-soft last:after:hidden'
+/** A card's rows: a line between two, none above the first. */
+export const CARD_ROWS = '*:not-first:shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]'
 
-export function RoutineSection({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * The strip of sheet above the page, which drags the window. On macOS with the sidebar collapsed
+ * it is a top bar's height, beside the traffic lights, and holds the sidebar toggle.
+ */
+export function PageStrip() {
+  const cornered = useViewStore((s) => s.sidebarCollapsed) && !hasBand
   return (
-    <section aria-label={title} className="mt-9">
-      <div className={HEADING}>
-        <h2 className="font-heading text-heading font-medium">{title}</h2>
-      </div>
+    <div
+      className={cn(
+        'app-region-drag flex shrink-0 items-center',
+        cornered ? 'h-top-bar pl-(--corner-inset)' : 'h-8',
+      )}
+    >
+      {cornered && <CornerControlsSpace />}
+    </div>
+  )
+}
+
+/** A group's name and a hint after it, over the card that holds it. */
+export function GroupHeading({
+  title,
+  hint,
+  className,
+  children,
+}: {
+  title: string
+  hint?: ReactNode
+  className?: string
+  children?: ReactNode
+}) {
+  return (
+    <div className={cn('mb-2.5 flex items-baseline gap-2 px-0.5', className)}>
+      <h2 className="text-row font-semibold">{title}</h2>
+      {hint !== undefined && <span className="text-hint text-tertiary tabular">{hint}</span>}
       {children}
+    </div>
+  )
+}
+
+/** A group of the routine's fields: its heading over a card of rows. */
+export function RoutineSection({
+  title,
+  hint,
+  children,
+}: {
+  title: string
+  hint?: string
+  children: ReactNode
+}) {
+  return (
+    <section aria-label={title}>
+      <GroupHeading title={title} hint={hint} />
+      <div className={cn('overflow-hidden rounded-card bg-card shadow-card', CARD_ROWS)}>
+        {children}
+      </div>
     </section>
   )
 }
 
-/** One field: a line under it, except under its section's last. */
+function FieldLabel({ name, description }: { name: string; description: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-lede leading-5 font-medium">{name}</div>
+      <div className="mt-px text-hint text-pretty text-tertiary">{description}</div>
+    </div>
+  )
+}
+
+/** One field: its name and what it does, its control at the end, under them when narrow. */
 export function FieldRow({
   name,
   description,
-  wide = false,
   children,
 }: {
   name: string
   description: string
-  /** A control taller than the text beside it, which starts at the text's top. */
-  wide?: boolean
   children: ReactNode
 }) {
   return (
-    <div className="flex flex-col gap-3 border-b border-subtle py-4 last:border-b-0 @lg/routine:flex-row @lg/routine:gap-6">
-      <div className="@lg/routine:w-50 @lg/routine:shrink-0">
-        <div className="text-ui font-medium">{name}</div>
-        <div className="mt-0.75 text-xs leading-normal text-pretty text-secondary">
-          {description}
-        </div>
+    <div className="flex min-h-16.5 flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4.5 py-3.5">
+      <div className="min-w-50 flex-1 basis-60">
+        <FieldLabel name={name} description={description} />
       </div>
-      <div className={cn('flex min-w-0 flex-1', wide ? 'items-start' : 'items-center')}>
-        {children}
-      </div>
+      <div className="flex max-w-full min-w-0 shrink-0">{children}</div>
+    </div>
+  )
+}
+
+/** A field whose control takes the card's width under its name, such as the prompt. */
+export function FieldBlock({
+  name,
+  description,
+  children,
+}: {
+  name: string
+  description: string
+  children: ReactNode
+}) {
+  return (
+    <div className="px-4.5 pt-4 pb-4.5">
+      <FieldLabel name={name} description={description} />
+      <div className="mt-3">{children}</div>
     </div>
   )
 }

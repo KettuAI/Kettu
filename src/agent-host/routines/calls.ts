@@ -4,6 +4,8 @@ import type { RoutineRun } from '@shared/routines'
 
 /** What a routine's runs add up to, for its page and its sidebar row. */
 export interface RoutineRunStats {
+  /** Every run the routine has a record of. */
+  runs: number
   /** Runs that still have a session, for the delete confirmation. */
   sessions: number
   /** Failed runs not seen since they ended. */

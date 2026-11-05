@@ -1,15 +1,24 @@
 // A routine's schedule: the kind and its fields, the runs ahead, and what is wrong with it.
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { CalendarIcon, ChevronDownIcon, CircleAlertIcon } from 'lucide-react'
+import {
+  CalendarIcon,
+  ChevronDownIcon,
+  CircleAlertIcon,
+  ClockIcon,
+  InfoIcon,
+  TriangleAlertIcon,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { enUS, zhCN } from 'react-day-picker/locale'
 import { nextRuns, validateSchedule, type ScheduleProblem } from '@shared/schedule'
 import type { Schedule } from '@shared/routines'
 import { SegmentedControl } from '@renderer/components/segmented-control'
+import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import { Calendar } from '@renderer/components/ui/calendar'
 import { Input } from '@renderer/components/ui/input'
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/components/ui/input-group'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
 import { currentLocale } from '@renderer/lib/i18n'
@@ -23,9 +32,8 @@ import {
   dayDate,
   everyChoices,
   minutesLabel,
-  runDay,
+  previewTime,
   scheduleWords,
-  untilTime,
 } from './model'
 
 type Segment = 'once' | 'every' | 'daily' | 'weekly' | 'cron'
@@ -33,6 +41,9 @@ type Segment = 'once' | 'every' | 'daily' | 'weekly' | 'cron'
 const SEGMENTS: Segment[] = ['once', 'every', 'daily', 'weekly', 'cron']
 
 const EVERY_DAY = [0, 1, 2, 3, 4, 5, 6]
+
+/** The week as the days row lists it, from Monday. */
+const WEEK = [1, 2, 3, 4, 5, 6, 0]
 
 function segmentOf(schedule: Schedule): Segment {
   if (schedule.kind === 'weekly') return schedule.days.length === 7 ? 'daily' : 'weekly'
@@ -78,7 +89,7 @@ function todayAt(time: string): number {
   return localTime(dateOf(Date.now()), time)
 }
 
-function weekdayName(day: number, width: 'narrow' | 'long'): string {
+function weekdayName(day: number, width: 'short' | 'long'): string {
   const sunday = new Date(2024, 0, 7 + day)
   return new Intl.DateTimeFormat(currentLocale(), { weekday: width }).format(sunday)
 }
@@ -111,16 +122,6 @@ function problemText(
     case 'empty':
       return t('schedule.problem.empty', { field })
   }
-}
-
-/** A field of the schedule with its label before it. */
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center gap-2.5">
-      <span className="w-11 shrink-0 text-small text-secondary">{label}</span>
-      {children}
-    </div>
-  )
 }
 
 /**
@@ -215,14 +216,7 @@ export function ScheduleField({
     setCaretField(cronFieldAt(input.value, input.selectionStart ?? input.value.length))
   }
 
-  const preview = problem ? [] : nextRuns(draft, now, { count: 3 })
-  const showWords =
-    ran ||
-    !problem ||
-    problem.reason === 'range' ||
-    problem.reason === 'past' ||
-    problem.reason === 'never' ||
-    problem.reason === 'frequent'
+  const preview = problem ? [] : nextRuns(draft, now, { count: draft.kind === 'once' ? 1 : 3 })
   const segment = segmentOf(draft)
   const translate = t as unknown as (
     key: string,
@@ -233,9 +227,12 @@ export function ScheduleField({
     draft.kind === 'once' && isClock(draft.at.slice(11, 16))
       ? localTime(draft.at.slice(0, 10), draft.at.slice(11, 16))
       : null
+  const tokens = segment === 'cron' ? cronTokens(expression) : null
+  const badField =
+    problem && segment === 'cron' ? CRON_FIELDS.findIndex((field) => field === problem.field) : -1
 
   return (
-    <div className="flex w-full flex-col gap-3">
+    <div className="flex w-full flex-col">
       <SegmentedControl
         aria-label={t('routine.schedule')}
         value={segment}
@@ -246,179 +243,249 @@ export function ScheduleField({
         onChange={choose}
         className="self-start"
       />
-      {segment === 'once' && (
-        <Row label={t('schedule.on')}>
-          <Popover open={picking} onOpenChange={setPicking}>
-            <PopoverTrigger render={<Button variant="outline" aria-label={t('schedule.date')} />}>
-              <CalendarIcon data-icon="inline-start" className="size-3.5 text-icon" />
-              <span className="tabular-nums">{dayDate(localTime(date), now)}</span>
-              <ChevronDownIcon data-icon="inline-end" className="size-3.5 text-icon" />
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-auto p-0">
-              <Calendar
-                mode="single"
-                required
-                selected={new Date(localTime(date))}
-                defaultMonth={new Date(localTime(date))}
-                disabled={{ before: new Date(today) }}
-                locale={currentLocale() === 'zh-CN' ? zhCN : enUS}
-                onSelect={(day: Date) => {
-                  const next = dateOf(day.getTime())
-                  setDate(next)
-                  setPicking(false)
-                  update({ kind: 'once', at: `${next}T${time}` })
+      {segment !== 'cron' && (
+        <div className="mt-4 flex flex-wrap items-end gap-4">
+          {segment === 'once' && (
+            <Labeled label={t('schedule.date')}>
+              <Popover open={picking} onOpenChange={setPicking}>
+                <PopoverTrigger
+                  render={<Button variant="outline" aria-label={t('schedule.date')} />}
+                >
+                  <CalendarIcon data-icon="inline-start" className="size-3.5 text-tertiary" />
+                  <span className="tabular-nums">{dayDate(localTime(date), now)}</span>
+                  <ChevronDownIcon data-icon="inline-end" className="size-3.5 text-tertiary" />
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    required
+                    selected={new Date(localTime(date))}
+                    defaultMonth={new Date(localTime(date))}
+                    disabled={{ before: new Date(today) }}
+                    locale={currentLocale() === 'zh-CN' ? zhCN : enUS}
+                    onSelect={(day: Date) => {
+                      const next = dateOf(day.getTime())
+                      setDate(next)
+                      setPicking(false)
+                      update({ kind: 'once', at: `${next}T${time}` })
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+            </Labeled>
+          )}
+          {segment === 'every' && (
+            <>
+              <Labeled label={t('schedule.everyValue')}>
+                <FieldSelect
+                  label={t('schedule.everyValue')}
+                  value={String(minutes)}
+                  options={everyChoices(minutes).map((choice) => ({
+                    value: String(choice),
+                    label: minutesLabel(choice),
+                  }))}
+                  onChange={(value) => {
+                    const next = Number(value)
+                    const start = from ?? nextHour()
+                    setMinutes(next)
+                    setFrom(start)
+                    update({ kind: 'every', minutes: next, from: start })
+                  }}
+                />
+              </Labeled>
+              <Labeled label={t('schedule.countedFrom')}>
+                <ClockField
+                  value={fromText ?? clockOf(from ?? nextHour())}
+                  label={t('schedule.countedFrom')}
+                  onChange={(text) => {
+                    setFromText(text)
+                    if (!isClock(text)) return
+                    const start = todayAt(text)
+                    setFrom(start)
+                    update({ kind: 'every', minutes, from: start })
+                  }}
+                  onBlur={() => setFromText(null)}
+                />
+              </Labeled>
+            </>
+          )}
+          {segment === 'weekly' && (
+            <Labeled label={t('schedule.days')}>
+              <ToggleGroup
+                aria-label={t('schedule.days')}
+                multiple
+                value={days.map(String)}
+                onValueChange={(next) => {
+                  // At least one day stays on, so the schedule always runs.
+                  if (next.length === 0) return
+                  const picked = next.map(Number).sort((a, b) => a - b)
+                  setDays(picked)
+                  update({ kind: 'weekly', days: picked, time })
                 }}
-              />
-            </PopoverContent>
-          </Popover>
-        </Row>
-      )}
-      {segment === 'every' && (
-        <Row label={t('schedule.everyValue')}>
-          <FieldSelect
-            label={t('schedule.everyValue')}
-            value={String(minutes)}
-            options={everyChoices(minutes).map((choice) => ({
-              value: String(choice),
-              label: minutesLabel(choice),
-            }))}
-            onChange={(value) => {
-              const next = Number(value)
-              const start = from ?? nextHour()
-              setMinutes(next)
-              setFrom(start)
-              update({ kind: 'every', minutes: next, from: start })
-            }}
-          />
-          <span className="text-small text-secondary">{t('schedule.countedFrom')}</span>
-          <Input
-            type="time"
-            value={fromText ?? clockOf(from ?? nextHour())}
-            aria-label={t('schedule.countedFrom')}
-            onChange={(event) => {
-              const text = event.target.value
-              setFromText(text)
-              if (!isClock(text)) return
-              const start = todayAt(text)
-              setFrom(start)
-              update({ kind: 'every', minutes, from: start })
-            }}
-            onBlur={() => setFromText(null)}
-            className="w-30"
-          />
-        </Row>
-      )}
-      {segment === 'weekly' && (
-        <Row label={t('schedule.days')}>
-          <ToggleGroup
-            aria-label={t('schedule.days')}
-            multiple
-            value={days.map(String)}
-            onValueChange={(next) => {
-              // At least one day stays on, so the schedule always runs.
-              if (next.length === 0) return
-              const picked = next.map(Number).sort((a, b) => a - b)
-              setDays(picked)
-              update({ kind: 'weekly', days: picked, time })
-            }}
-            variant="fill"
-            spacing={1}
-          >
-            {EVERY_DAY.map((day) => (
-              <ToggleGroupItem
-                key={day}
-                value={String(day)}
-                aria-label={weekdayName(day, 'long')}
-                className="w-8 px-0 text-small"
+                variant="fill"
+                spacing={1}
               >
-                {weekdayName(day, 'narrow')}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </Row>
-      )}
-      {(segment === 'once' || segment === 'daily' || segment === 'weekly') && (
-        <Row label={t('schedule.time')}>
-          <Input
-            type="time"
-            value={time}
-            aria-label={t('schedule.time')}
-            onChange={(event) => setClock(event.target.value)}
-            className="w-30"
-          />
-        </Row>
+                {WEEK.map((day) => (
+                  <ToggleGroupItem
+                    key={day}
+                    value={String(day)}
+                    aria-label={weekdayName(day, 'long')}
+                    className="h-8 min-w-8.5 px-1.75 text-hint"
+                  >
+                    {weekdayName(day, 'short')}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </Labeled>
+          )}
+          {(segment === 'once' || segment === 'daily' || segment === 'weekly') && (
+            <Labeled label={t('schedule.time')}>
+              <ClockField value={time} label={t('schedule.time')} onChange={setClock} />
+            </Labeled>
+          )}
+        </div>
       )}
       {segment === 'cron' && (
-        <div className="flex flex-col gap-1.5">
-          <Input
-            value={expression}
-            aria-label={t('schedule.expression')}
-            placeholder={t('schedule.expressionHint')}
-            spellCheck={false}
-            onChange={(event) => {
-              setExpression(event.target.value)
-              trackCaret(event.target)
-              update({ kind: 'cron', expression: event.target.value })
-            }}
-            onSelect={(event) => trackCaret(event.currentTarget)}
-            onFocus={(event) => trackCaret(event.currentTarget)}
-            onBlur={() => setCaretField(null)}
-            className="font-mono text-command md:text-command"
-          />
-          <div aria-hidden className="flex flex-wrap gap-x-3.5 px-0.5 text-xs text-tertiary">
-            {CRON_FIELDS.map((field, index) => (
-              <span key={field} className={cn(index === caretField && 'font-medium text-primary')}>
-                {t(`schedule.cronFields.${field}`)}
-              </span>
-            ))}
-          </div>
-          <p className="px-0.5 text-xs text-tertiary">{t('schedule.cronSyntax')}</p>
+        <div className="mt-4">
+          <Labeled label={t('schedule.expression')}>
+            <Input
+              value={expression}
+              aria-label={t('schedule.expression')}
+              aria-invalid={!!problem || undefined}
+              placeholder={t('schedule.expressionHint')}
+              spellCheck={false}
+              onChange={(event) => {
+                setExpression(event.target.value)
+                trackCaret(event.target)
+                update({ kind: 'cron', expression: event.target.value })
+              }}
+              onSelect={(event) => trackCaret(event.currentTarget)}
+              onFocus={(event) => trackCaret(event.currentTarget)}
+              onBlur={() => setCaretField(null)}
+              className="font-mono text-command md:text-command"
+            />
+          </Labeled>
+          {tokens && (
+            // Each field's text over its name, as the expression gives them.
+            <div aria-hidden className="mt-2 grid grid-cols-5 gap-2 px-3">
+              {CRON_FIELDS.map((field, index) => (
+                <span
+                  key={field}
+                  className={cn(
+                    'flex min-w-0 flex-col text-tertiary',
+                    index === caretField && 'text-primary',
+                    index === badField && 'text-danger',
+                  )}
+                >
+                  <span className="truncate font-mono text-code-sm">{tokens[index] ?? ' '}</span>
+                  <span className="truncate text-meta">{t(`schedule.field.${field}`)}</span>
+                </span>
+              ))}
+            </div>
+          )}
+          {!problem && (
+            <p className="mt-2 px-3 text-hint text-tertiary">{t('schedule.cronSyntax')}</p>
+          )}
         </div>
       )}
 
-      <div className="rounded-code bg-subtle px-3.5 py-3">
-        {showWords && <p className="mb-1.5 text-ui font-medium">{scheduleWords(draft)}</p>}
-        {ran && onceAt !== null ? (
-          <p className="text-small text-secondary">
-            {t('schedule.ranOnce', { date: dayDate(onceAt, now), time: clockTime(onceAt) })}
-          </p>
-        ) : problem ? (
-          <p className="flex gap-1.5 text-small text-danger">
-            <CircleAlertIcon aria-hidden className="mt-1 size-3 shrink-0" />
+      {problem && !ran ? (
+        <>
+          <p className="mt-2.5 flex gap-1.5 text-hint text-danger">
+            <CircleAlertIcon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
             {problemText(problem, translate)}
           </p>
-        ) : (
-          <ul className="flex flex-col">
-            {preview.map((run) => (
-              <li key={`${run.at}-${run.shift ?? ''}`} className="flex flex-col">
-                <span className="flex min-h-6.5 items-center gap-3 text-small text-secondary">
-                  <span className="min-w-0 flex-1 truncate">{runDay(run.at, now)}</span>
-                  <span className="shrink-0 text-xs text-tertiary tabular">
-                    {untilTime(run.at, now)}
-                  </span>
-                </span>
-                {run.shift === 'gap' && (
-                  <span className="text-xs text-tertiary">
-                    {t('schedule.clockGap', { time: clockTime(run.at) })}
-                  </span>
-                )}
-                {run.shift === 'overlap' && (
-                  <span className="text-xs text-tertiary">{t('schedule.clockOverlap')}</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {problem && !ran && saved && (
-        <p className="text-xs leading-normal text-tertiary">
-          {t('schedule.unvalid', { schedule: scheduleWords(saved) })}
-        </p>
-      )}
-      {problem && !saved && (
-        <p className="text-xs leading-normal text-tertiary">{t('routine.scheduleNotSaved')}</p>
+          <Alert variant="warning" className="mt-3 bg-warning-tint">
+            <TriangleAlertIcon />
+            <AlertDescription className="text-primary">
+              {saved
+                ? t('schedule.unvalid', { schedule: scheduleWords(saved) })
+                : t('routine.scheduleNotSaved')}
+            </AlertDescription>
+          </Alert>
+        </>
+      ) : (
+        <div className="mt-4 rounded-code bg-subtle px-3.5 py-3">
+          <div className="flex gap-6">
+            <div className="min-w-0 flex-1">
+              <p className="text-lede leading-5 font-medium">{scheduleWords(draft)}</p>
+              <p className="mt-px text-hint text-tertiary">
+                {ran && onceAt !== null
+                  ? t('schedule.ranOnce', { date: dayDate(onceAt, now), time: clockTime(onceAt) })
+                  : draft.kind === 'once'
+                    ? t('schedule.onceOff')
+                    : t('schedule.nextRuns')}
+              </p>
+            </div>
+            {!ran && (
+              <ul className="flex shrink-0 flex-col gap-0.75 text-right text-hint text-secondary tabular">
+                {preview.map((run) => (
+                  <li key={`${run.at}-${run.shift ?? ''}`}>{previewTime(run.at, now)}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {!ran &&
+            preview.map((run) =>
+              run.shift ? (
+                <p key={`shift-${run.at}`} className="mt-2.5 flex gap-2 text-hint text-warning">
+                  <InfoIcon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+                  {run.shift === 'gap'
+                    ? t('schedule.clockGap', { time: clockTime(run.at) })
+                    : t('schedule.clockOverlap')}
+                </p>
+              ) : null,
+            )}
+        </div>
       )}
     </div>
   )
+}
+
+/** A field's label over it. */
+function Labeled({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col">
+      <span aria-hidden className="mb-1.5 text-small leading-4 font-medium text-tertiary">
+        {label}
+      </span>
+      {children}
+    </div>
+  )
+}
+
+/** A time of day, typed, with a clock before it. */
+function ClockField({
+  value,
+  label,
+  onChange,
+  onBlur,
+}: {
+  value: string
+  label: string
+  onChange: (value: string) => void
+  onBlur?: () => void
+}) {
+  return (
+    <InputGroup className="w-28.5">
+      <InputGroupAddon>
+        <ClockIcon className="text-tertiary" />
+      </InputGroupAddon>
+      <InputGroupInput
+        type="time"
+        value={value}
+        aria-label={label}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        className="tabular [&::-webkit-calendar-picker-indicator]:hidden"
+      />
+    </InputGroup>
+  )
+}
+
+/** A cron expression's fields as typed; none for a macro such as @daily. */
+function cronTokens(expression: string): string[] | null {
+  const text = expression.trim()
+  if (text.startsWith('@')) return null
+  return text === '' ? [] : text.split(/\s+/)
 }
