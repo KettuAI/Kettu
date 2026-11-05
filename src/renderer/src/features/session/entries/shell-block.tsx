@@ -90,7 +90,7 @@ export function ShellBlock({
           {terminal && (
             <BlockAction
               label={t('block.openInTerminal')}
-              onClick={() => emitAppEvent({ kind: 'run-in-terminal', projectPath, command })}
+              onClick={() => emitAppEvent({ kind: 'run-in-terminal', panel: sessionId, command })}
             >
               <SquareTerminalIcon />
             </BlockAction>

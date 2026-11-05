@@ -14,6 +14,7 @@ import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { usePane } from '@renderer/features/split/pane-context'
 import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
+import { newSessionPanel } from '@renderer/stores/view'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import {
   ColumnScroller,
@@ -38,7 +39,11 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
   if (error?.code === 'auth_required') {
     body = (
       <ColumnScroller className="flex items-center justify-center">
-        <SignIn agentId={pending.agentId} projectPath={pending.projectPath} onRetry={retry} />
+        <SignIn
+          agentId={pending.agentId}
+          panel={pending.projectPath ? newSessionPanel(pending.projectPath) : null}
+          onRetry={retry}
+        />
       </ColumnScroller>
     )
   } else if (error) {
@@ -89,7 +94,12 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
           </span>
         </NoDrag>
         <span className="flex-1" />
-        {pending.projectPath !== null && <HeaderTools projectPath={pending.projectPath} />}
+        {pending.projectPath !== null && (
+          <HeaderTools
+            projectPath={pending.projectPath}
+            panel={newSessionPanel(pending.projectPath)}
+          />
+        )}
       </TopBar>
       <div className="flex min-h-0 flex-1 flex-col">{body}</div>
       {/* Leaves the width the column's scrollbar takes, as the session's composer row does. */}

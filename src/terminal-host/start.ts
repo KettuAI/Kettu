@@ -85,6 +85,7 @@ export function startTerminalHost(
       {
         'terminals.create': (port, params) => terminals.create(port, params),
         'terminals.list': (_, params) => terminals.list(params.projectPath),
+        'terminals.assign': (_, params) => terminals.assign(params.projectPath, params.sessionId),
         'terminals.attach': (port, params) => terminals.attach(port, params.id),
         'terminals.input': (_, params) => terminals.input(params.id, params.data),
         'terminals.resize': (_, params) => terminals.resize(params.id, params.cols, params.rows),
@@ -116,6 +117,9 @@ export function startTerminalHost(
         break
       case 'terminal-host:projects':
         projects?.set(message.paths)
+        break
+      case 'terminal-host:sessions-ended':
+        manager?.endSessions(message.sessionIds)
         break
       case 'terminal-host:auth-commands':
         manager?.setAuthCommands(message.commands)

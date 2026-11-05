@@ -95,6 +95,12 @@ export const THIS_COMPUTER = 'this-computer'
 /** What the side panel shows; one pane at a time. An artifact's pane opens from the thread. */
 export type SidePane = 'terminal' | 'files' | 'browser' | 'artifact'
 
+// No session id takes this form, so New session's panel in a project has a key of its own.
+const NEW_SESSION_PANEL = 'new-session:'
+
+/** How many sessions' open panes a restart brings back; the most recently changed win. */
+const REMEMBERED_PANELS = 200
+
 export type SettingsSection =
   | 'general'
   | 'appearance'
@@ -124,9 +130,6 @@ interface ViewStore {
   layout: Layout
   /** The panes the split has room to show, as it measures its box. */
   visiblePanes: string[]
-  /** The split's side pane and artifact, while it has two panes or more. */
-  splitSidePane: SidePane | null
-  splitSideArtifact: string | null
   /**
    * `section` is the page shown while open and the one to return to; null until one is chosen.
    * `item` is the page of one item of the section, such as an agent's or a server's, instead of
@@ -155,9 +158,12 @@ interface ViewStore {
    * still saving its name does not clear another's. Not persisted.
    */
   renamingIn: { scope: string; row: string } | null
-  /** The open side pane per project; none when the panel is closed. */
+  /**
+   * The open side pane per panel, a session's by its id or New session's by `newSessionPanel`;
+   * none when the panel is closed.
+   */
   sidePane: Record<string, SidePane>
-  /** The artifact each project's artifact pane shows. */
+  /** The artifact each panel's artifact pane shows. */
   sideArtifact: Record<string, string>
   sidePaneMaximized: boolean
   /** How the Artifacts page groups and sorts, for the whole app. */
@@ -172,14 +178,12 @@ interface Persisted {
   hostFilter?: string | null
   expandedParents: Record<string, boolean>
   showFinishedSubagents?: boolean
-  sidePane: Record<string, SidePane>
-  splitSidePane?: SidePane | null
+  /** Per panel; the per-project `sidePane` of earlier versions is not read. */
+  sidePanes?: Record<string, SidePane>
   /** One pane per column, the pane in focus; read back as the split a restart opens. */
   layout?: unknown
   /** Under a new name since the page went flat: every run saved the old grouping as it was. */
   artifactsDisplay?: { group?: string; sort?: string }
-  /** Read once from versions before the Files pane, when the side panel held only the terminal. */
-  terminalOpen?: Record<string, boolean>
 }
 
 const KEY = 'view:v1'
@@ -196,8 +200,6 @@ export const useViewStore = create<ViewStore>()(() => ({
   main: { kind: 'launch' },
   layout: readLayout(saved.layout) ?? createLayout(),
   visiblePanes: [],
-  splitSidePane: saved.splitSidePane ?? null,
-  splitSideArtifact: null,
   settings: { open: false, section: null, item: null },
   shortcutsOpen: false,
   searchOpen: false,
@@ -209,13 +211,7 @@ export const useViewStore = create<ViewStore>()(() => ({
   allRowsShown: {},
   showFinishedSubagents: saved.showFinishedSubagents === true,
   renamingIn: null,
-  sidePane:
-    saved.sidePane ??
-    Object.fromEntries(
-      Object.entries(saved.terminalOpen ?? {})
-        .filter(([, open]) => open)
-        .map(([path]) => [path, 'terminal' as const]),
-    ),
+  sidePane: saved.sidePanes ?? {},
   sideArtifact: {},
   sidePaneMaximized: false,
   artifactsView: {
@@ -241,10 +237,11 @@ useViewStore.subscribe((state) => {
       expandedParents: state.expandedParents,
       showFinishedSubagents: state.showFinishedSubagents,
       // An artifact's pane is not remembered: it opens from the thread, for the work at hand.
-      sidePane: Object.fromEntries(
-        Object.entries(state.sidePane).filter(([, pane]) => pane !== 'artifact'),
+      sidePanes: Object.fromEntries(
+        Object.entries(state.sidePane)
+          .filter(([, pane]) => pane !== 'artifact')
+          .slice(-REMEMBERED_PANELS),
       ),
-      splitSidePane: state.splitSidePane === 'artifact' ? null : (state.splitSidePane ?? null),
       layout: saveLayout(state.layout),
       artifactsDisplay: state.artifactsView,
     }
@@ -275,40 +272,8 @@ function mirror(s: ViewStore, layout: Layout): Pick<ViewStore, 'main' | 'project
 }
 
 /**
- * The side panel's pane and artifact as the split changes: it takes the focused project's when the
- * split starts, keeps its own as the focus moves, and hands it to the remaining pane's project
- * when the split ends, so the panel never changes by itself.
- */
-function sidePaneChange(
-  s: ViewStore,
-  layout: Layout,
-  projectPath: string | null,
-): Partial<ViewStore> {
-  const before = isSplit(s.layout)
-  const after = isSplit(layout)
-  if (before === after) return {}
-  if (after) {
-    const path = projectPath ?? ''
-    return {
-      splitSidePane: s.sidePane[path] ?? null,
-      splitSideArtifact: s.sideArtifact[path] ?? null,
-    }
-  }
-  const changes: Partial<ViewStore> = { splitSidePane: null, splitSideArtifact: null }
-  if (!projectPath) return changes
-  const sidePane = { ...s.sidePane }
-  if (s.splitSidePane) sidePane[projectPath] = s.splitSidePane
-  else delete sidePane[projectPath]
-  const sideArtifact = { ...s.sideArtifact }
-  if (s.splitSidePane === 'artifact' && s.splitSideArtifact) {
-    sideArtifact[projectPath] = s.splitSideArtifact
-  } else delete sideArtifact[projectPath]
-  return { ...changes, sidePane, sideArtifact }
-}
-
-/**
  * A store update after the layout changed: the main view of the focus while sessions show or when
- * asked to, and the side panel the layout's change needs.
+ * asked to. The side panel follows by itself, since it is the focused pane's.
  */
 function withLayout(s: ViewStore, layout: Layout, show = false): Partial<ViewStore> {
   const mirroring = show || sessionsShown(s.main)
@@ -316,27 +281,38 @@ function withLayout(s: ViewStore, layout: Layout, show = false): Partial<ViewSto
   const draft = newSessionPane(layout)?.view
   if (draft?.kind === 'new' && !draft.parentId) changes.newSessionDraft = draft
   if (mirroring) Object.assign(changes, mirror(s, layout))
-  const projectPath = mirroring ? (changes.projectPath ?? s.projectPath) : s.projectPath
-  return { ...changes, ...sidePaneChange(s, layout, projectPath) }
+  return changes
 }
 
-const pathShown = (s: ViewStore): string =>
-  isSplit(s.layout)
-    ? (focusedPane(s.layout).view.projectPath ?? s.projectPath ?? '')
-    : (s.projectPath ?? '')
+/** The key of New session's side panel in a project, which passes to the session it creates. */
+export function newSessionPanel(projectPath: string): string {
+  return `${NEW_SESSION_PANEL}${projectPath}`
+}
 
-/** The side panel's pane, from the split while it has two panes or more, else the project's. */
+/** The session a panel belongs to; null for New session's. */
+export function panelSession(panel: string): string | null {
+  return panel.startsWith(NEW_SESSION_PANEL) ? null : panel
+}
+
+/** Whose side panel a pane's view has: its session's, or New session's in its project. */
+export function panelOf(view: PaneView): string | null {
+  if (view.kind === 'session') return view.sessionId
+  return view.projectPath ? newSessionPanel(view.projectPath) : null
+}
+
+/** The panel the side panel shows, the pane in focus's; null at New session with No project. */
+export function shownPanel(state: ViewStore): string | null {
+  return panelOf(focusedPane(state.layout).view)
+}
+
 export function shownSidePane(state: ViewStore): SidePane | undefined {
-  return isSplit(state.layout)
-    ? (state.splitSidePane ?? undefined)
-    : state.sidePane[pathShown(state)]
+  const panel = shownPanel(state)
+  return panel ? state.sidePane[panel] : undefined
 }
 
-/** The artifact the side panel shows, from the split or the project. */
 export function shownSideArtifact(state: ViewStore): string | undefined {
-  return isSplit(state.layout)
-    ? (state.splitSideArtifact ?? undefined)
-    : state.sideArtifact[pathShown(state)]
+  const panel = shownPanel(state)
+  return panel ? state.sideArtifact[panel] : undefined
 }
 
 /** The sessions the layout holds, folded panes included. */
@@ -514,16 +490,34 @@ export function showCreatedSession(
   const { layout } = useViewStore.getState()
   const pane = findPane(layout, paneId)
   if (!pane || pane.view.kind !== 'new') return false
+  const from = panelOf(pane.view)
   inPlace(() =>
-    useViewStore.setState((s) =>
-      withLayout(
+    useViewStore.setState((s) => ({
+      ...withLayout(
         s,
         setPaneViewInLayout(s.layout, paneId, { kind: 'session', sessionId, projectPath }),
         true,
       ),
-    ),
+      ...(from ? handPanel(s, from, sessionId) : {}),
+    })),
   )
   return true
+}
+
+/** New session's side panel, given to the session it created and closed for the next one. */
+function handPanel(
+  s: ViewStore,
+  from: string,
+  to: string,
+): Pick<ViewStore, 'sidePane' | 'sideArtifact'> {
+  const sideArtifact = { ...s.sideArtifact }
+  const artifact = sideArtifact[from]
+  delete sideArtifact[from]
+  if (artifact) sideArtifact[to] = artifact
+  return {
+    sidePane: withPane(withPane(s.sidePane, from, null), to, s.sidePane[from] ?? null),
+    sideArtifact,
+  }
 }
 
 export function openUsage(): void {
@@ -761,44 +755,42 @@ export function toggleSearch(layerOpen: boolean): void {
   )
 }
 
-/** Shows the pane in the side panel, or closes the panel when that pane is shown. */
-export function toggleSidePane(projectPath: string, pane: SidePane, open?: boolean): void {
+/** The panes with `panel` set to `pane`, or closed when null; the last changed comes last. */
+function withPane(
+  panes: Record<string, SidePane>,
+  panel: string,
+  pane: SidePane | null,
+): Record<string, SidePane> {
+  const next = { ...panes }
+  delete next[panel]
+  if (pane) next[panel] = pane
+  return next
+}
+
+/** Shows the pane in a session's side panel, or closes the panel when that pane is shown. */
+export function toggleSidePane(panel: string, pane: SidePane, open?: boolean): void {
   useViewStore.setState((s) => {
-    if (isSplit(s.layout)) {
-      const shown = s.splitSidePane === pane
-      if ((open ?? !shown) === shown) return s
-      return { splitSidePane: shown ? null : pane, sidePaneMaximized: false }
-    }
-    const shown = s.sidePane[projectPath] === pane
+    const shown = s.sidePane[panel] === pane
     if ((open ?? !shown) === shown) return s
-    const sidePane = { ...s.sidePane }
-    if (shown) delete sidePane[projectPath]
-    else sidePane[projectPath] = pane
-    return { sidePane, sidePaneMaximized: false }
+    return { sidePane: withPane(s.sidePane, panel, shown ? null : pane), sidePaneMaximized: false }
   })
 }
 
-/** Shows the artifact beside the thread, or closes the pane when it already shows it. */
-export function toggleArtifactPane(projectPath: string, id: string, open?: boolean): void {
+/** Shows the pane in the side panel in view, when the pane in focus works in `projectPath`. */
+export function showSidePane(projectPath: string, pane: SidePane): void {
+  const view = focusedPane(useViewStore.getState().layout).view
+  const panel = panelOf(view)
+  if (panel && view.projectPath === projectPath) toggleSidePane(panel, pane, true)
+}
+
+/** Shows the artifact beside a session's thread, or closes the pane when it already shows it. */
+export function toggleArtifactPane(panel: string, id: string, open?: boolean): void {
   useViewStore.setState((s) => {
-    const before = isSplit(s.layout)
-    const shown = before
-      ? s.splitSidePane === 'artifact' && s.splitSideArtifact === id
-      : s.sidePane[projectPath] === 'artifact' && s.sideArtifact[projectPath] === id
+    const shown = s.sidePane[panel] === 'artifact' && s.sideArtifact[panel] === id
     if ((open ?? !shown) === shown) return s
-    if (before) {
-      return {
-        splitSidePane: shown ? null : ('artifact' as const),
-        splitSideArtifact: shown ? s.splitSideArtifact : id,
-        sidePaneMaximized: false,
-      }
-    }
-    const sidePane = { ...s.sidePane }
-    if (shown) delete sidePane[projectPath]
-    else sidePane[projectPath] = 'artifact'
     return {
-      sidePane,
-      sideArtifact: shown ? s.sideArtifact : { ...s.sideArtifact, [projectPath]: id },
+      sidePane: withPane(s.sidePane, panel, shown ? null : 'artifact'),
+      sideArtifact: shown ? s.sideArtifact : { ...s.sideArtifact, [panel]: id },
       sidePaneMaximized: false,
     }
   })
@@ -807,11 +799,11 @@ export function toggleArtifactPane(projectPath: string, id: string, open?: boole
 /** The session, with the artifact beside its thread. */
 export function openSessionWithArtifact(sessionId: string, projectPath: string, id: string): void {
   openSession(sessionId, projectPath)
-  toggleArtifactPane(projectPath, id, true)
+  toggleArtifactPane(sessionId, id, true)
 }
 
-export function toggleTerminal(projectPath: string, open?: boolean): void {
-  toggleSidePane(projectPath, 'terminal', open)
+export function toggleTerminal(panel: string, open?: boolean): void {
+  toggleSidePane(panel, 'terminal', open)
 }
 
 /** New session alone, which a launch opens with the setting off or nothing to restore. */

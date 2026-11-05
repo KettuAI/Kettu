@@ -23,7 +23,7 @@ import {
   type AgentColor,
 } from '@shared/settings'
 import { MULTI_AGENT_HARNESSES, type AgentId, type HarnessId } from '@shared/thread'
-import { emitAppEvent } from '@renderer/app/events'
+import { newSession } from '@renderer/app/actions'
 import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
 import { useRefresh } from '@renderer/components/refresh'
 import { RefreshIcon } from '@renderer/components/refresh-icon'
@@ -55,7 +55,9 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { AgentStateLine } from '@renderer/features/agents/agent-state'
 import { readiness, type AgentReadiness } from '@renderer/features/agents/readiness'
+import { focusedPane } from '@renderer/features/split/layout'
 import { errorMessage } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -69,10 +71,14 @@ import { addableHarnesses, type AgentsStoreHook } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { createTerminal } from '@renderer/stores/terminals'
 import {
   closeSettings,
+  newSessionPanel,
   openAgentSettings,
   openHarnessSettings,
+  panelOf,
+  sessionsShown,
   toggleTerminal,
   useViewStore,
 } from '@renderer/stores/view'
@@ -142,14 +148,24 @@ function listed(agents: AgentsStoreHook, agentId: AgentId): Promise<void> {
   })
 }
 
-/** Runs the agent's terminal sign-in in the built-in terminal, or copies its command without one. */
+/**
+ * Runs the agent's terminal sign-in in the built-in terminal of the side panel in view, when it
+ * works in a folder of this computer, else of New session in one; copies the command without one.
+ */
 function signInTerminal(status: AgentStatus, command: string): void {
   const view = useViewStore.getState()
-  const projectPath = signInFolder({
-    selected: view.projectPath,
-    projects: useProjectsStore.getState().projects,
-    sessions: useSessionsStore.getState().byId,
-  })
+  const focused = focusedPane(view.layout).view
+  const here =
+    sessionsShown(view.main) && focused.projectPath && hostOfPath(focused.projectPath) === null
+      ? { projectPath: focused.projectPath, panel: panelOf(focused) }
+      : null
+  const projectPath =
+    here?.projectPath ??
+    signInFolder({
+      selected: view.projectPath,
+      projects: useProjectsStore.getState().projects,
+      sessions: useSessionsStore.getState().byId,
+    })
   if (!projectPath) {
     void navigator.clipboard.writeText(command).then(
       () => toast(i18n.t('settings:agents.signInCopied')),
@@ -158,8 +174,14 @@ function signInTerminal(status: AgentStatus, command: string): void {
     return
   }
   closeSettings()
-  toggleTerminal(projectPath, true)
-  emitAppEvent({ kind: 'sign-in-terminal', projectPath, command, agentId: status.id })
+  if (!here) newSession(projectPath)
+  const panel = here?.panel ?? newSessionPanel(projectPath)
+  toggleTerminal(panel, true)
+  void createTerminal(projectPath, panel, undefined, {
+    text: command,
+    run: true,
+    signInAgent: status.id,
+  })
 }
 
 function useAddable(): AgentStatus[] {

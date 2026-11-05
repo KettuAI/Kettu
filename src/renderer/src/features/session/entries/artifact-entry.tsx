@@ -37,11 +37,9 @@ import { artifactCardSize, isLastArtifactEntry, type ArtifactCardSize } from './
 export const ArtifactEntry = memo(function ArtifactEntry({
   sessionId,
   entryId,
-  projectPath,
 }: {
   sessionId: string
   entryId: string
-  projectPath: string
 }) {
   const entry = useEntry(sessionId, entryId, 'artifact')
   const animation = useEntryAnimation(sessionId, entryId)
@@ -59,7 +57,6 @@ export const ArtifactEntry = memo(function ArtifactEntry({
     <ArtifactCard
       entry={entry}
       sessionId={sessionId}
-      projectPath={projectPath}
       size={size}
       last={last}
       className={animation}
@@ -167,14 +164,12 @@ interface CardView {
 function ArtifactCard({
   entry,
   sessionId,
-  projectPath,
   size,
   last,
   className,
 }: {
   entry: Entry
   sessionId: string
-  projectPath: string
   size: ArtifactCardSize
   last: boolean
   className: string | undefined
@@ -190,8 +185,7 @@ function ArtifactCard({
       null,
   )
   const pressed = useViewStore(
-    (s) =>
-      s.sidePane[projectPath] === 'artifact' && s.sideArtifact[projectPath] === entry.artifactId,
+    (s) => s.sidePane[sessionId] === 'artifact' && s.sideArtifact[sessionId] === entry.artifactId,
   )
   const shares = useHostHas('sharing') === true
   const published = useSharingStore((s) =>
@@ -247,12 +241,12 @@ function ArtifactCard({
     meta: parts.filter(Boolean).join(' · '),
     chips,
     metaId,
-    open: () => toggleArtifactPane(projectPath, entry.artifactId),
+    open: () => toggleArtifactPane(sessionId, entry.artifactId),
   }
   return (
     <div ref={card} className={cn('w-full', className)}>
       {size === 'large' ? (
-        <LargeCard view={view} shares={shares} sessionId={sessionId} projectPath={projectPath} />
+        <LargeCard view={view} shares={shares} sessionId={sessionId} />
       ) : (
         <CompactCard view={view} />
       )}
@@ -328,12 +322,10 @@ function LargeCard({
   view,
   shares,
   sessionId,
-  projectPath,
 }: {
   view: CardView
   shares: boolean
   sessionId: string
-  projectPath: string
 }) {
   const { t } = useTranslation(['session', 'artifacts'])
   const { entry, summary, standing, writing } = view
@@ -452,7 +444,7 @@ function LargeCard({
                     deletedAt: summary.deletedAt,
                     type: summary.type,
                   }}
-                  onOpen={() => toggleArtifactPane(projectPath, summary.id, true)}
+                  onOpen={() => toggleArtifactPane(sessionId, summary.id, true)}
                   onVersionHistory={() => openArtifact(summary.id, { history: true })}
                 />
               </DropdownMenuContent>

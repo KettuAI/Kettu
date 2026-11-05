@@ -156,6 +156,8 @@ export type HostToMain =
   | { type: 'host:ready' }
   | { type: 'host:agent-processes'; processes: AgentProcess[] }
   | { type: 'host:projects'; paths: string[] }
+  /** Sessions archived or deleted, whose terminals end. */
+  | { type: 'host:sessions-ended'; sessionIds: string[] }
   | { type: 'host:auth-commands'; commands: string[] } // terminal sign-in commands it built
   | {
       type: 'host:attention'
@@ -223,6 +225,7 @@ export type MainToTerminalHost =
   | { type: 'terminal-host:connect'; windowId: number; device?: PortDevice }
   | { type: 'terminal-host:settings'; settings: TerminalSettings }
   | { type: 'terminal-host:projects'; paths: string[] }
+  | { type: 'terminal-host:sessions-ended'; sessionIds: string[] }
   | { type: 'terminal-host:auth-commands'; commands: string[] }
   | { type: 'terminal-host:busy-request'; requestId: number }
   | { type: 'terminal-host:shutdown' }

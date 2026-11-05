@@ -19,6 +19,7 @@ import {
 } from '@renderer/features/session/composer/attachments'
 import { loadMarkdown, preloadRenderers } from '@renderer/features/session/markdown/preload'
 import { errorCode, errorMessage, host, hostAt } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { adoptedPrepared } from '@renderer/features/session/new-session/prepared'
 import { clearPicks, type OptionValues } from '@renderer/stores/agent-options'
 import {
@@ -29,6 +30,13 @@ import {
 import { useProjectsStore } from '@renderer/stores/projects'
 import { isScratchFolder, sessionArchived, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { allowsTerminal } from '@renderer/stores/hosts'
+import {
+  assignTerminals,
+  busyTerminalsOf,
+  loadTerminals,
+  type TerminalState,
+} from '@renderer/stores/terminals'
 import { allPanes, isSplit, paneWithSession } from '@renderer/features/split/layout'
 import { focusSession, forgetSession } from '@renderer/stores/threads'
 import {
@@ -178,7 +186,10 @@ export async function createSession(
     if (current?.agentId === agentId && current.projectPath === projectPath) {
       usePendingSession.setState({ pending: null })
       // The pane that showed New session shows the session; the focus may have moved meanwhile.
-      if (!showCreatedSession(current.paneId, summary.id, summary.projectPath)) {
+      // New session's side panel and terminals go with it.
+      if (showCreatedSession(current.paneId, summary.id, summary.projectPath)) {
+        if (projectPath !== null) void assignTerminals(projectPath, summary.id)
+      } else {
         openSession(summary.id, summary.projectPath)
       }
     }
@@ -422,6 +433,23 @@ function leftTheList(byId: Record<string, SessionSummary>, id: string): boolean 
 /** All sessions under a session, for the confirmation that names how many go with it. */
 export function descendantCount(sessionId: string): number {
   return descendantIds(sessionId).length
+}
+
+/**
+ * The terminals with a command running that archiving these sessions would end, read from their
+ * projects' hosts first, since a window lists a project's terminals only once it shows them.
+ */
+export async function terminalsAtStake(sessionIds: readonly string[]): Promise<TerminalState[]> {
+  const all = sessionIds.flatMap((id) => [id, ...descendantIds(id)])
+  const { byId } = useSessionsStore.getState()
+  const paths = new Set(
+    all.flatMap((id) => {
+      const path = byId[id]?.projectPath
+      return path && allowsTerminal(hostOfPath(path)) ? [path] : []
+    }),
+  )
+  await Promise.all([...paths].map((path) => loadTerminals(path)))
+  return busyTerminalsOf(all)
 }
 
 function descendantIds(sessionId: string): string[] {

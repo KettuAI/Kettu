@@ -13,15 +13,14 @@ import {
   type TerminalOwner,
   type TerminalState,
 } from '@renderer/stores/terminals'
-import { toggleSidePane, useViewStore } from '@renderer/stores/view'
+import { toggleSidePane } from '@renderer/stores/view'
 
 /** Over a terminal an agent started: who started it and when, with its address and Stop. */
 export function OwnerBar({ terminal, owner }: { terminal: TerminalState; owner: TerminalOwner }) {
   const { t } = useTranslation('terminal')
   const now = useNow()
   const hostId = hostOfPath(terminal.projectPath)
-  const shownSession = useViewStore((s) => (s.main.kind === 'session' ? s.main.sessionId : null))
-  const sessionId = owner.sessionId ?? shownSession
+  const sessionId = terminal.sessionId ?? owner.sessionId
   const running = terminal.busy && terminal.exitCode === null && !terminal.stale
   // Another host's localhost is not this computer's, which the session's browser runs on.
   const url = hostId === null ? terminal.localUrl : null
@@ -29,7 +28,7 @@ export function OwnerBar({ terminal, owner }: { terminal: TerminalState; owner: 
   const openInBrowser = () => {
     if (!sessionId || !url) return
     void window.kettu.browser.navigate(sessionId, url)
-    toggleSidePane(terminal.projectPath, 'browser', true)
+    toggleSidePane(sessionId, 'browser', true)
   }
 
   return (

@@ -5,7 +5,7 @@ import type { FileContent } from '@shared/files'
 import type { FileDiff } from '@shared/git'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
 import { useGitStore } from './git'
-import { toggleSidePane } from './view'
+import { showSidePane } from './view'
 
 export interface ProjectFiles {
   paths: string[]
@@ -190,8 +190,9 @@ function setTabs(projectPath: string, tabs: OpenTabs | null): void {
 }
 
 /**
- * Shows a file in the project's Files pane, opening the pane and the file's tab, scrolled to
- * `line` if given. A `preview` open takes the preview tab's place, which a regular one never does.
+ * Shows a file in the project's Files pane, opening the pane in the side panel in view and the
+ * file's tab, scrolled to `line` if given. A `preview` open takes the preview tab's place, which a
+ * regular one never does.
  */
 export function openFile(
   projectPath: string,
@@ -199,7 +200,7 @@ export function openFile(
   line: number | null = null,
   options: { preview?: boolean } = {},
 ): void {
-  toggleSidePane(projectPath, 'files', true)
+  showSidePane(projectPath, 'files')
   closeDiff(projectPath)
   const tabs = tabsOf(projectPath)
   if (tabs?.files.some((file) => file.path === path)) {
@@ -519,7 +520,7 @@ async function readDiff(projectPath: string, target: DiffTarget): Promise<void> 
  * and come back when the diff closes.
  */
 export function openDiff(projectPath: string, target: DiffTarget): void {
-  toggleSidePane(projectPath, 'files', true)
+  showSidePane(projectPath, 'files')
   const current = useFilesStore.getState().diffs[projectPath]
   if (!sameTarget(current, target)) {
     useFilesStore.setState((s) => ({

@@ -198,6 +198,8 @@ export interface SessionEvents {
   /** To every port, or to `portIds` alone for a prepared session. */
   summary(summary: SessionSummary, portIds?: readonly string[]): void
   removed(sessionId: string, portIds?: readonly string[]): void
+  /** Sessions archived or deleted: what belongs to them outside this host, their terminals, ends. */
+  ended(sessionIds: string[]): void
   /**
    * A message waits in the host for a window to take back; null for New session. To every port,
    * or to `portIds` alone, the one that sent it.
@@ -5217,10 +5219,12 @@ export class SessionManager {
     const record = this.topLevel(sessionId)
     if (record.archivedAt !== undefined) return
     await this.settled(sessionId)
-    await this.closeAll([...this.descendants(sessionId), record], true)
+    const all = [...this.descendants(sessionId), record]
+    await this.closeAll(all, true)
     delete record.pinnedAt
     record.archivedAt = this.now()
     this.saveRecord(sessionId)
+    this.deps.events.ended(all.map((item) => item.id))
   }
 
   // The session tools: what the artifacts service calls, under the caller's id.
@@ -5374,10 +5378,12 @@ export class SessionManager {
       return
     }
     await this.settled(sessionId)
-    await this.closeAll([...this.descendants(sessionId), record], true)
+    const all = [...this.descendants(sessionId), record]
+    await this.closeAll(all, true)
     delete record.pinnedAt
     record.archivedAt = this.now()
     this.saveRecord(sessionId)
+    this.deps.events.ended(all.map((item) => item.id))
   }
 
   /** The info notice an archived session's thread gets, "Claude Code archived this session". */
@@ -5600,6 +5606,7 @@ export class SessionManager {
     await this.settled(sessionId)
     const all = [...this.descendants(sessionId), record]
     await this.closeAll(all, false)
+    this.deps.events.ended(all.map((item) => item.id))
     const deleting: { item: SessionRecord; acpSessionId: string; runtime: AgentRuntime }[] = []
     for (const item of all) {
       if (item.origin === 'subagent' || !item.acpSessionId) continue

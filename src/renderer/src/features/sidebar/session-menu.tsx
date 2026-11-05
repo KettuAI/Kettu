@@ -103,6 +103,7 @@ import {
   type SessionMenuItem,
   type SessionMenuPlace,
 } from './session-menu-model'
+import { confirmArchive } from './archive-confirm-model'
 
 /** An accelerator as the menu shows it: macOS's symbols, or the key names elsewhere. */
 function shortcutLabel(shortcut: string): string {
@@ -125,10 +126,17 @@ function useInFront(sessionId: string): boolean {
 }
 
 /**
- * Archives with a toast that undoes it for six seconds. Undo takes back the ones that archived;
- * the toast names the failure when some did not, since a second toast would replace it.
+ * Archives with a toast that undoes it for six seconds, once confirmed when their terminals run a
+ * command. Undo takes back the ones that archived; the toast names the failure when some did not,
+ * since a second toast would replace it.
  */
 function archiveWithUndo(ids: readonly string[], title: string): void {
+  void confirmArchive(ids).then((archive) => {
+    if (archive) archiveNow(ids, title)
+  })
+}
+
+function archiveNow(ids: readonly string[], title: string): void {
   void settle(ids, archiveSession).then(({ done, errors }) => {
     const failure = errors.length > 0 ? errorMessage(errors[0]) : null
     if (done.length === 0) {
@@ -347,7 +355,7 @@ export function SessionMenuItems({
         )
       case 'openTerminal':
         return (
-          <DropdownMenuItem {...props} onClick={() => toggleTerminal(summary.projectPath, true)}>
+          <DropdownMenuItem {...props} onClick={() => toggleTerminal(summary.id, true)}>
             <SquareTerminalIcon />
             {t('row.openTerminal')}
             {shortcut}

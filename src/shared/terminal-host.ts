@@ -6,6 +6,8 @@ import type { PortConnectionState } from './port-rpc'
 export interface TerminalInfo {
   id: string
   projectPath: string
+  /** The session it belongs to; null for its project's New session, which hands it on. */
+  sessionId: string | null
   shell: string // the program name, such as "zsh" or "pwsh"
   title: string // the foreground process, or the title the shell set
   busy: boolean // a process other than the shell is in the foreground
@@ -15,9 +17,17 @@ export interface TerminalInfo {
 
 export interface TerminalContract {
   'terminals.create': {
-    params: { projectPath: string; cols: number; rows: number; command?: TerminalCommand }
+    params: {
+      projectPath: string
+      sessionId?: string
+      cols: number
+      rows: number
+      command?: TerminalCommand
+    }
     result: TerminalInfo
   }
+  /** Hands the project's New session terminals to the session it created. */
+  'terminals.assign': { params: { projectPath: string; sessionId: string }; result: void }
   'terminals.list': { params: { projectPath?: string }; result: TerminalInfo[] }
   'terminals.attach': { params: { id: string }; result: { replay: string } }
   'terminals.input': { params: { id: string; data: string }; result: void }
@@ -43,6 +53,7 @@ export type TerminalResult<M extends TerminalMethod> = TerminalContract[M]['resu
 export const TERMINAL_METHODS = [
   'terminals.create',
   'terminals.list',
+  'terminals.assign',
   'terminals.attach',
   'terminals.input',
   'terminals.resize',
