@@ -10,38 +10,35 @@ import { SERVICE_NAME } from './service-name'
 
 export const PLAN_TOOL = 'set_plan'
 export const MAX_STEPS = 20
-export const STEP_CHARS = 200
+export const STEP_CHARS = 60
 export const PLAN_CALLS_PER_MINUTE = 60
 const MINUTE_MS = 60_000
 
 const STATUSES: readonly PlanItem['status'][] = ['pending', 'in_progress', 'completed']
 
-/** The service's `instructions` gain this paragraph, after the session tools'. */
-export const PLAN_INSTRUCTIONS =
-  `For a task of two or more steps, call ${PLAN_TOOL} first with your steps, then call it again ` +
-  'with the whole list each time a step finishes, so the user can see where you are. Skip it for ' +
-  'a task of one step.'
+/** Shared by the service, tool and agent instructions so the plan rules stay in step. */
+const PLAN_GUIDANCE =
+  'For a task of two or more steps, set a plan before starting and update the whole list after ' +
+  "each completed step or plan change. Prefer 3-5 steps in the user's language. Each step is a " +
+  'short action label: about 4-12 Chinese characters or 3-6 English words, not a sentence. ' +
+  'Keep details, file paths and explanations in your reply. Keep at most one step in_progress ' +
+  'and mark only finished work completed. Before your final reply, update the plan to match ' +
+  'the outcome: all steps completed if the task is done; unfinished steps pending if blocked ' +
+  'or waiting for the user, with the reason in your reply. Do not claim completion while the ' +
+  'plan is stale. Skip plans for one-step tasks. Use this tool or a built-in plan tool, never ' +
+  'both. Subagents must not call this tool.'
 
-/**
- * The paragraph for an agent's own instructions where it takes one. A model follows the service's
- * instructions less often than its system prompt, and a plan it never writes helps no one.
- */
+export const PLAN_INSTRUCTIONS = `Use ${PLAN_TOOL} to show task progress. ${PLAN_GUIDANCE}`
+
 export const PLAN_PROMPT =
-  `Before you start a task of two or more steps, call the \`${PLAN_TOOL}\` tool of the ` +
-  `\`${SERVICE_NAME}\` MCP server with your steps, and call it again with the whole list each ` +
-  'time a step finishes: this is how the user sees your progress. Skip it for a task of one step.'
+  `Use the \`${PLAN_TOOL}\` tool of the \`${SERVICE_NAME}\` MCP server to show task progress. ` +
+  PLAN_GUIDANCE
 
 export const PLAN_TOOLS: Tool[] = [
   {
     name: PLAN_TOOL,
     title: 'Set plan',
-    description:
-      'Shows the user your plan for the task as a checklist above the message box and keeps it ' +
-      'current. For a task of two or more steps, call it before you start, then again with the ' +
-      'whole list each time a step finishes or the plan changes. Write the steps in the language ' +
-      'the user writes in, keep one step in progress, and mark a step completed only when it is ' +
-      'done. Skip it for a task of one step. If you also have a built-in todo or plan tool, use ' +
-      'only one of the two. If you are a subagent, do not call it.',
+    description: `Shows a brief progress plan in the session's top bar. ${PLAN_GUIDANCE}`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -57,7 +54,8 @@ export const PLAN_TOOLS: Tool[] = [
                 type: 'string',
                 minLength: 1,
                 maxLength: STEP_CHARS,
-                description: 'What the step does, in one sentence.',
+                description:
+                  'A short action label: about 4-12 Chinese characters or 3-6 English words. No explanations.',
               },
               status: { type: 'string', enum: [...STATUSES] },
             },
@@ -145,7 +143,9 @@ export function parseSteps(input: unknown): PlanItem[] {
     const content =
       typeof fields.content === 'string' ? fields.content.replace(/\s+/g, ' ').trim() : ''
     if (content === '' || longer(content, STEP_CHARS)) {
-      throw invalid(`${where}: content must be 1 to ${STEP_CHARS} characters.`)
+      throw invalid(
+        `${where}: content must be 1 to ${STEP_CHARS} characters. Use a short action label.`,
+      )
     }
     const status = fields.status
     if (!STATUSES.includes(status as PlanItem['status'])) {
@@ -201,7 +201,8 @@ export class PlanTools {
     const text =
       next === null
         ? `Plan saved: all ${items.length} steps are done.`
-        : `Plan saved: ${done} of ${items.length} steps done. Next: ${next}`
+        : `Plan saved: ${done} of ${items.length} steps done. Next: ${next}. ` +
+          `Before your final reply, call ${PLAN_TOOL} with the actual final status of every step.`
     return {
       content: [{ type: 'text', text }],
       structuredContent: { done, total: items.length, next },

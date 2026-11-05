@@ -14,6 +14,19 @@ describe('the plan tool arguments', () => {
     ])
   })
 
+  it('refuses a label longer than 60 characters without writing it', () => {
+    const set = vi.fn(() => true)
+    const plan = new PlanTools({ set })
+    const result = plan.call(caller, 'set_plan', { steps: [step('a'.repeat(61))] })
+    expect(result.isError).toBe(true)
+    expect(set).not.toHaveBeenCalled()
+  })
+
+  it('accepts a 60-character label measured in Unicode code points', () => {
+    const content = '\u{20000}'.repeat(60)
+    expect(parseSteps({ steps: [step(content)] })[0]?.content).toBe(content)
+  })
+
   it.each([
     ['no arguments', undefined],
     ['an array', []],
