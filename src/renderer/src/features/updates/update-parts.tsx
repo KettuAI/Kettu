@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
-import kettuGlyph from '@renderer/assets/kettu-glyph-on-dark.svg'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { BrandIcon } from '@renderer/components/brand'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,22 +24,8 @@ function tileStyle(size: number) {
   return { width: size, height: size, borderRadius: Math.round(size * 2.8) / 10 }
 }
 
-/** Kettu's own mark: the fox on its dark tile. */
 export function KettuTile({ size }: { size: number }) {
-  return (
-    <span
-      aria-hidden
-      style={tileStyle(size)}
-      className="grid shrink-0 place-items-center overflow-hidden bg-(--kettu-tile) shadow-[0_0_0_var(--hairline)_var(--border-subtle)]"
-    >
-      <img
-        src={kettuGlyph}
-        alt=""
-        draggable={false}
-        style={{ width: Math.round(size * 0.56), height: Math.round(size * 0.56) }}
-      />
-    </span>
-  )
+  return <BrandIcon size={size} />
 }
 
 /** A harness's mark on an opaque tile, so marks can overlap in a stack. */

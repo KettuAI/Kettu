@@ -15,8 +15,8 @@ import type { SessionSummary } from '@shared/agent-host'
 import type { BrowserOriginDecision } from '@shared/browser'
 import type { RemoteStatus } from '@shared/remote/status'
 import type { TrayTarget } from '@shared/tray'
-import glyphUrl from '@renderer/assets/kettu-glyph-on-dark.svg'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { BrandIcon } from '@renderer/components/brand'
 import { RingSpinner } from '@renderer/components/ui/spinner'
 import { relativePath } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
@@ -376,15 +376,7 @@ function Header({ groups, idle }: { groups: TrayGroups; idle: boolean }) {
   const subtitle = idle && latest > 0 ? t('lastSession', { host, ago: ago(latest) }) : host
   return (
     <div className="flex items-center gap-2.5 px-3 pt-3 pb-2.5">
-      <span
-        aria-hidden
-        className="grid size-7 shrink-0 place-items-center rounded-[7px] bg-(--app-mark-tile)"
-      >
-        <span
-          className="size-3 bg-(--app-mark) mask-contain mask-center mask-no-repeat [mask-image:var(--glyph)]"
-          style={{ '--glyph': `url(${glyphUrl})` } as React.CSSProperties}
-        />
-      </span>
+      <BrandIcon size={28} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-control/[1.3] font-semibold text-primary">{title}</div>
         {elsewhere === null ? (
