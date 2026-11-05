@@ -1,9 +1,8 @@
-import { useState } from 'react'
 import { CheckIcon } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import type { PlanItem, SessionStatus } from '@shared/thread'
-import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { cn } from '@renderer/lib/utils'
 import { useThreadsStore } from '@renderer/stores/threads'
 
@@ -14,7 +13,7 @@ type Tone = 'running' | 'waiting' | 'ended'
 
 /**
  * The session's plan in its top bar: a ring with a segment per step, the current step and which
- * step it is, opening to the whole list. It leaves once every step is done and its turn ended.
+ * step it is, showing the whole list on hover. It leaves once every step is done and its turn ended.
  */
 export function PlanChip({ sessionId, status }: { sessionId: string; status: SessionStatus }) {
   const reduceMotion = useReducedMotion()
@@ -66,7 +65,6 @@ export function PlanChip({ sessionId, status }: { sessionId: string; status: Ses
 function Chip({ items, tone }: { items: PlanItem[]; tone: Tone }) {
   const { t } = useTranslation('session')
   const reduceMotion = useReducedMotion()
-  const [open, setOpen] = useState(false)
   const total = items.length
   const doing = items.findIndex((item) => item.status === 'in_progress')
   const next = items.findIndex((item) => item.status === 'pending')
@@ -79,10 +77,13 @@ function Chip({ items, tone }: { items: PlanItem[]; tone: Tone }) {
     : t('planChip.labelDone', { total })
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
+    <HoverCard>
+      <HoverCardTrigger
+        delay={200}
+        closeDelay={200}
         aria-label={label}
-        className="flex h-6.5 min-w-0 items-center gap-1.75 rounded-full bg-subtle pr-2.5 pl-1.5 text-hint whitespace-nowrap text-tertiary outline-none transition-colors duration-(--duration-fast) hover:bg-selected focus-ring aria-expanded:bg-selected"
+        render={<button type="button" />}
+        className="flex h-6.5 min-w-0 items-center gap-1.75 rounded-full bg-subtle pr-2.5 pl-1.5 text-hint whitespace-nowrap text-tertiary outline-none transition-colors duration-(--duration-fast) hover:bg-selected focus-ring data-popup-open:bg-selected"
       >
         <PlanRing items={items} tone={tone} />
         {text && (
@@ -108,14 +109,13 @@ function Chip({ items, tone }: { items: PlanItem[]; tone: Tone }) {
         <span aria-hidden className="shrink-0 tabular @max-[40rem]/top-bar:hidden">
           {t('planChip.count', { step, total })}
         </span>
-      </PopoverTrigger>
-      <PopoverContent
+      </HoverCardTrigger>
+      <HoverCardContent
         align="end"
+        alignOffset={0}
         // Clears the top bar's edge by 6px.
         sideOffset={17}
-        // The chip keeps the focus; the list is to look at.
-        initialFocus={false}
-        className="w-80 gap-0 p-1.5"
+        className="w-80 p-1.5"
       >
         <div className="flex h-7 items-center justify-between px-2 text-small font-semibold text-tertiary">
           <span>{t('planChip.title')}</span>
@@ -126,8 +126,8 @@ function Chip({ items, tone }: { items: PlanItem[]; tone: Tone }) {
             <PlanStep key={i} item={item} tone={tone} />
           ))}
         </ol>
-      </PopoverContent>
-    </Popover>
+      </HoverCardContent>
+    </HoverCard>
   )
 }
 
