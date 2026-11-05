@@ -1,6 +1,21 @@
+import foxUrl from '@renderer/assets/kettu-fox.svg'
 import iconUrl from '@renderer/assets/kettu-icon.svg'
 import { lockupGeometry, WORDMARK, type LockupLayout } from '@shared/brand'
 import { cn } from '@renderer/lib/utils'
+
+/** The icon's fox in the icon's colors, without its tile, `size` px square. Decorative. */
+export function BrandFox({ size, className }: { size: number; className?: string }) {
+  return (
+    <img
+      alt=""
+      src={foxUrl}
+      width={size}
+      height={size}
+      draggable={false}
+      className={cn('shrink-0', className)}
+    />
+  )
+}
 
 /** The app's icon, `size` px square. Decorative. */
 export function BrandIcon({ size, className }: { size: number; className?: string }) {

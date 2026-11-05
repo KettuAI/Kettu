@@ -8,10 +8,11 @@ import { colorLiteralMessage, findColorLiterals, TOKEN_FILE } from './color-lite
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const SCANNED = /\.(?:css|html|svg)$/i
-// The drawings tools/brand/build.mjs writes keep the brand's own colors: the app icon, and the
-// glyphs, whose colors only set their masks.
+// The drawings tools/brand/build.mjs writes keep the brand's own colors: the app icon, its fox, and
+// the glyphs, whose colors only set their masks.
 const BRAND_FILES = [
   'src/renderer/src/assets/kettu-icon.svg',
+  'src/renderer/src/assets/kettu-fox.svg',
   'src/renderer/src/assets/kettu-glyph-on-dark.svg',
   'src/renderer/src/assets/kettu-glyph-on-light.svg',
 ]
