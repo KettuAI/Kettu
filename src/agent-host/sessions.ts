@@ -18,6 +18,7 @@ import {
   type SessionSummary,
   type StartNotice,
 } from '@shared/agent-host'
+import { LOCALES } from '@shared/locale'
 import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { CONTEXT_REFRESH_MS } from '@shared/context'
 import { firstLine, outlineText } from '@shared/outline'
@@ -639,6 +640,18 @@ export class SessionManager {
 
   has(sessionId: string): boolean {
     return this.live.has(sessionId) || this.records.has(sessionId)
+  }
+
+  /** The titles of a project's sessions, which a fork's title is chosen to differ from. */
+  private titlesIn(projectPath: string): Set<string> {
+    const titles = new Set<string>()
+    for (const id of new Set([...this.records.keys(), ...this.live.keys()])) {
+      const record = this.live.get(id)?.record ?? this.records.get(id)
+      if (record?.projectPath !== projectPath || record.origin === 'subagent') continue
+      const title = this.title(id)
+      if (title) titles.add(title)
+    }
+    return titles
   }
 
   /** The session's title, null for one without a title yet, undefined for one not in the index. */
@@ -4284,7 +4297,10 @@ export class SessionManager {
     const blobs = (await reading).filter((blob) => blob !== null)
     const now = this.now()
     const sourceTitle = source.record.customTitle ?? source.thread.session.title
-    const title = sourceTitle === null ? null : t('session.forkTitle', { title: sourceTitle })
+    const title =
+      sourceTitle === null
+        ? null
+        : forkTitle(forkBase(sourceTitle), this.titlesIn(source.record.projectPath))
     const record: SessionRecord = {
       ...source.record,
       origin: 'user',
@@ -5931,6 +5947,35 @@ export function unknownSession(error: AgentRequestError): boolean {
 /** The number in an entry id such as `e:12`, which the session's new ids count on from. */
 function idNumber(id: string): number {
   return Number(/^\w+:(\d+)$/.exec(id)?.[1] ?? 0)
+}
+
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** A title without the fork suffix the host adds, in any language it writes in. */
+export function forkBase(title: string): string {
+  const titleMark = '\u0001'
+  const numberMark = '\u0002'
+  for (const lng of LOCALES) {
+    for (const marked of [
+      t('session.forkTitle', { lng, title: titleMark }),
+      t('session.forkTitleNumbered', { lng, title: titleMark, n: numberMark }),
+    ]) {
+      const pattern = escapeRegExp(marked).replace(titleMark, '(.+)').replace(numberMark, '\\d+')
+      const match = new RegExp(`^${pattern}$`, 's').exec(title)
+      if (match) return match[1]!
+    }
+  }
+  return title
+}
+
+/** A fork's title: the first one in a project adds "(fork)", the later ones number it. */
+export function forkTitle(base: string, taken: ReadonlySet<string>): string {
+  const first = t('session.forkTitle', { title: base })
+  if (!taken.has(first)) return first
+  for (let n = 1; ; n++) {
+    const numbered = t('session.forkTitleNumbered', { title: base, n })
+    if (!taken.has(numbered)) return numbered
+  }
 }
 
 /** The last agent message before the turn in progress, or undefined when it is the first turn. */
