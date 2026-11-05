@@ -122,6 +122,7 @@ function FileThumb({
   const near = useRef<HTMLSpanElement>(null)
   const media = useMediaFile(picture.path, false, near)
   const { shown, name } = media
+  const [loaded, setLoaded] = useState(false)
   const asking = shown.kind === 'asking' && media.enabled
   const image = shown.kind === 'granted' && !shown.grant.tooLarge && shown.grant.kind === 'image'
   const gone = !asking && !image
@@ -156,10 +157,12 @@ function FileThumb({
         alt=""
         decoding="async"
         loading="lazy"
+        onLoad={() => setLoaded(true)}
         onError={() => media.failed(grant, null)}
         className={cn(
-          'block size-full object-cover',
+          'block size-full object-cover transition-opacity duration-(--duration-fast)',
           surface === 'canvas' ? 'bg-canvas' : 'checkerboard',
+          !loaded && 'opacity-0',
         )}
       />
       <FrameRing />
