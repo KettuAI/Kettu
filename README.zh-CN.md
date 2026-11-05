@@ -31,52 +31,92 @@
 
 ## 功能
 
-### Agent 与会话
+### 会话
 
-- **46 个 Agent**：Claude Code、Codex、OpenCode、Pi 等，用你自己的安装、账号和设置。
-- **并行会话**：侧边栏标出哪个在干活、哪个在等你、哪个做完了。
-- **一键授权**：Agent 要运行命令或改文件时，按一个键允许或拒绝。
-- **问题卡片**：Agent 的多个问题在一张卡片里逐个回答。
-- **计划**：Agent 的计划和进度显示在顶栏。
-- **子 Agent**：显示在父会话下面，它的请求也在那里回答。
-- **排队和插话**：Agent 干活时，下一条消息可以排队，也可以中途插话。
-- **附件**：粘贴图片，附加文件和文件夹，用 `@` 引用项目文件。
-- **分叉**：从任意一条回复分出新会话。
-- **通知**：会话需要你时提醒你。
-- **用量**：按天、模型和项目统计 token 和费用；Agent 提供时，还显示套餐额度还剩多少。
+<table>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/bot.svg" width="20" height="20" alt=""><br><b>46 个 Agent</b><br>Claude Code、Codex、OpenCode、Pi 等，用你自己的安装和账号。</td>
+<td width="33%" valign="top"><img src="./assets/icons/panel-left.svg" width="20" height="20" alt=""><br><b>并行会话</b><br>侧边栏标出哪个在干活、哪个在等你、哪个做完了。</td>
+<td width="33%" valign="top"><img src="./assets/icons/shield-check.svg" width="20" height="20" alt=""><br><b>一键授权</b><br>Agent 要运行命令或改文件时，按一个键允许或拒绝。</td>
+</tr>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/message-circle-question-mark.svg" width="20" height="20" alt=""><br><b>问题卡片</b><br>Agent 的多个问题在一张卡片里逐个回答。</td>
+<td width="33%" valign="top"><img src="./assets/icons/list-checks.svg" width="20" height="20" alt=""><br><b>计划</b><br>Agent 的计划和进度显示在顶栏。</td>
+<td width="33%" valign="top"><img src="./assets/icons/network.svg" width="20" height="20" alt=""><br><b>子 Agent</b><br>显示在父会话下面，它的请求也在那里回答。</td>
+</tr>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/message-square-plus.svg" width="20" height="20" alt=""><br><b>排队和插话</b><br>Agent 干活时，下一条消息可以排队，也可以中途插话。</td>
+<td width="33%" valign="top"><img src="./assets/icons/paperclip.svg" width="20" height="20" alt=""><br><b>附件</b><br>粘贴图片，附加文件和文件夹，用 <code>@</code> 引用项目文件。</td>
+<td width="33%" valign="top"><img src="./assets/icons/sliders-horizontal.svg" width="20" height="20" alt=""><br><b>模型与模式</b><br>在输入框旁选模型、推理强度和模式，看上下文用了多少。</td>
+</tr>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/git-branch.svg" width="20" height="20" alt=""><br><b>分叉</b><br>从任意一条回复分出新会话。</td>
+<td width="33%" valign="top"><img src="./assets/icons/bell.svg" width="20" height="20" alt=""><br><b>通知</b><br>会话需要你时提醒你。</td>
+<td width="33%" valign="top"><img src="./assets/icons/chart-column.svg" width="20" height="20" alt=""><br><b>用量</b><br>按天、模型和项目统计 token 和费用；Agent 提供时还显示套餐额度。</td>
+</tr>
+</table>
 
 ### 工作台
 
-- **Diff**：Agent 改了哪些文件、改了什么，一目了然。
-- **文件**：用标签页查看、预览和编辑项目文件。
-- **终端**：每个会话都有自己的终端。
-- **Git**：分支、改动和 Pull Request 的检查状态。
-- **内置浏览器**：Agent 能打开页面、点击、输入和截图，你随时可以接手。
-- **Artifacts**：Agent 做的网页、文档和幻灯片，可以留言让 Agent 改、自己编辑，或导出成 Word 和 PowerPoint。
-- **Routines**：按时让 Agent 干活，每次运行都留成会话。
-- **搜索**：在一个命令面板里搜会话、Artifacts、Routines、项目、设置和操作。
+<table>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/file-diff.svg" width="20" height="20" alt=""><br><b>Diff</b><br>Agent 改了哪些文件、改了什么，一目了然。</td>
+<td width="33%" valign="top"><img src="./assets/icons/folder-open.svg" width="20" height="20" alt=""><br><b>文件</b><br>用标签页查看、预览和编辑项目文件。</td>
+<td width="33%" valign="top"><img src="./assets/icons/square-terminal.svg" width="20" height="20" alt=""><br><b>终端</b><br>每个会话都有自己的终端。</td>
+</tr>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/git-pull-request.svg" width="20" height="20" alt=""><br><b>Git</b><br>分支、改动和 Pull Request 的检查状态。</td>
+<td width="33%" valign="top"><img src="./assets/icons/globe.svg" width="20" height="20" alt=""><br><b>内置浏览器</b><br>Agent 能打开页面、点击、输入和截图，你随时可以接手。</td>
+<td width="33%" valign="top"><img src="./assets/icons/shapes.svg" width="20" height="20" alt=""><br><b>Artifacts</b><br>Agent 做的网页、文档和幻灯片，能留言、编辑，导出成 Word 和 PowerPoint。</td>
+</tr>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/calendar-clock.svg" width="20" height="20" alt=""><br><b>Routines</b><br>按时让 Agent 干活，每次运行都留成会话。</td>
+<td width="33%" valign="top"><img src="./assets/icons/search.svg" width="20" height="20" alt=""><br><b>搜索</b><br>一个命令面板搜会话、Artifacts、Routines、项目、设置和操作。</td>
+<td width="33%" valign="top"><img src="./assets/icons/keyboard.svg" width="20" height="20" alt=""><br><b>快捷键</b><br>常用操作都有快捷键。</td>
+</tr>
+</table>
 
 ### 多设备
 
-- **手机和平板**：扫码配对，在浏览器里继续你的会话，不用装 App。
-- **另一台电脑**：在另一台电脑的 Kettu 里用这台电脑上的会话。
-- **开发机**：填 SSH 地址就能加进来。
-- **端到端加密**：直接走你自己的网络。
+连接端到端加密，直接走你自己的网络。
+
+<table>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/smartphone.svg" width="20" height="20" alt=""><br><b>手机和平板</b><br>扫码配对，在浏览器里继续会话，不用装 App。</td>
+<td width="33%" valign="top"><img src="./assets/icons/laptop.svg" width="20" height="20" alt=""><br><b>另一台电脑</b><br>在另一台电脑的 Kettu 里用这台电脑上的会话。</td>
+<td width="33%" valign="top"><img src="./assets/icons/server.svg" width="20" height="20" alt=""><br><b>开发机</b><br>填 SSH 地址就能加进来。</td>
+</tr>
+</table>
 
 ### 外观
 
-- 浅色和深色模式、主题、简体中文和英文、macOS 毛玻璃侧边栏。
+<table>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/sun-moon.svg" width="20" height="20" alt=""><br><b>浅色和深色</b><br>两种模式都打磨过，macOS 上是系统的毛玻璃侧边栏。</td>
+<td width="33%" valign="top"><img src="./assets/icons/palette.svg" width="20" height="20" alt=""><br><b>主题</b><br>从文件或在线目录换主题。</td>
+<td width="33%" valign="top"><img src="./assets/icons/languages.svg" width="20" height="20" alt=""><br><b>中英文</b><br>简体中文和英文界面。</td>
+</tr>
+</table>
 
 ### 即将推出
 
-- **Computer use**：Agent 操作你电脑上的应用。
-- **iOS 和 Android 模拟器**：模拟器画面放进 Kettu，你和 Agent 都能操作。
+<table>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/mouse-pointer-click.svg" width="20" height="20" alt=""><br><b>Computer use</b><br>Agent 操作你电脑上的应用。</td>
+<td width="33%" valign="top"><img src="./assets/icons/tablet-smartphone.svg" width="20" height="20" alt=""><br><b>iOS 和 Android 模拟器</b><br>模拟器画面放进 Kettu，你和 Agent 都能操作。</td>
+<td width="33%"></td>
+</tr>
+</table>
 
 ## 隐私
 
-- 不收集遥测，会话、代码和文件都留在你自己的电脑上。
-- 不保留 Agent 的登录凭据。
-- 登录 Kettu 账号是可选的。
+<table>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/eye-off.svg" width="20" height="20" alt=""><br><b>不收集遥测</b><br>会话、代码和文件都留在你自己的电脑上。</td>
+<td width="33%" valign="top"><img src="./assets/icons/key-round.svg" width="20" height="20" alt=""><br><b>不碰凭据</b><br>Kettu 不保留 Agent 的登录凭据。</td>
+<td width="33%" valign="top"><img src="./assets/icons/user-round.svg" width="20" height="20" alt=""><br><b>账号可选</b><br>不登录 Kettu 账号也能用。</td>
+</tr>
+</table>
 
 ## 安装
 

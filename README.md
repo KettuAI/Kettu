@@ -31,52 +31,92 @@ All your coding agents, side by side in one window.
 
 ## Features
 
-### Agents and sessions
+### Sessions
 
-- **46 agents**: Claude Code, Codex, OpenCode, Pi and more, with your own installs, accounts and settings.
-- **Parallel sessions**: the sidebar shows which one is working, which one is waiting for you and which one is done.
-- **One-key approvals**: when an agent wants to run a command or change a file, allow or deny it with one key.
-- **Question cards**: answer an agent's questions one by one in a single card.
-- **Plans**: the agent's plan and progress sit in the top bar.
-- **Subagents**: shown under their parent session, where you answer their requests too.
-- **Queue and steer**: while an agent works, queue your next message or steer it mid-turn.
-- **Attachments**: paste images, attach files and folders, or mention a project file with `@`.
-- **Forks**: branch a new session off any reply.
-- **Notifications**: know when a session needs you.
-- **Usage**: tokens and cost by day, model and project, and, where the agent reports it, how much of your plan is left.
+<table>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/bot.svg" width="20" height="20" alt=""><br><b>46 agents</b><br>Claude Code, Codex, OpenCode, Pi and more, with your own installs and accounts.</td>
+<td width="33%" valign="top"><img src="./assets/icons/panel-left.svg" width="20" height="20" alt=""><br><b>Parallel sessions</b><br>The sidebar shows which one is working, waiting for you or done.</td>
+<td width="33%" valign="top"><img src="./assets/icons/shield-check.svg" width="20" height="20" alt=""><br><b>One-key approvals</b><br>Allow or deny a command or a file change with one key.</td>
+</tr>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/message-circle-question-mark.svg" width="20" height="20" alt=""><br><b>Question cards</b><br>Answer an agent's questions one by one in a single card.</td>
+<td width="33%" valign="top"><img src="./assets/icons/list-checks.svg" width="20" height="20" alt=""><br><b>Plans</b><br>The agent's plan and progress sit in the top bar.</td>
+<td width="33%" valign="top"><img src="./assets/icons/network.svg" width="20" height="20" alt=""><br><b>Subagents</b><br>Shown under their session, where you answer their requests too.</td>
+</tr>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/message-square-plus.svg" width="20" height="20" alt=""><br><b>Queue and steer</b><br>Queue your next message while the agent works, or steer it mid-turn.</td>
+<td width="33%" valign="top"><img src="./assets/icons/paperclip.svg" width="20" height="20" alt=""><br><b>Attachments</b><br>Paste images, attach files and folders, or mention a file with <code>@</code>.</td>
+<td width="33%" valign="top"><img src="./assets/icons/sliders-horizontal.svg" width="20" height="20" alt=""><br><b>Models and modes</b><br>Pick the model, reasoning and mode by the composer, and see how full the context is.</td>
+</tr>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/git-branch.svg" width="20" height="20" alt=""><br><b>Forks</b><br>Branch a new session off any reply.</td>
+<td width="33%" valign="top"><img src="./assets/icons/bell.svg" width="20" height="20" alt=""><br><b>Notifications</b><br>Know when a session needs you.</td>
+<td width="33%" valign="top"><img src="./assets/icons/chart-column.svg" width="20" height="20" alt=""><br><b>Usage</b><br>Tokens and cost by day, model and project, and your plan limits where the agent reports them.</td>
+</tr>
+</table>
 
 ### Workbench
 
-- **Diffs**: see which files the agent changed and how.
-- **Files**: read, preview and edit project files in tabs.
-- **Terminal**: every session has its own.
-- **Git**: the branch, changes and pull request checks.
-- **Built-in browser**: agents open pages, click, type and take screenshots; take over at any time.
-- **Artifacts**: pages, documents and slides the agent makes; comment for the agent to change them, edit them yourself, or export them to Word and PowerPoint.
-- **Routines**: run an agent on a schedule; every run is kept as a session.
-- **Search**: one command palette for sessions, artifacts, routines, projects, settings and actions.
+<table>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/file-diff.svg" width="20" height="20" alt=""><br><b>Diffs</b><br>See which files the agent changed and how.</td>
+<td width="33%" valign="top"><img src="./assets/icons/folder-open.svg" width="20" height="20" alt=""><br><b>Files</b><br>Read, preview and edit project files in tabs.</td>
+<td width="33%" valign="top"><img src="./assets/icons/square-terminal.svg" width="20" height="20" alt=""><br><b>Terminal</b><br>Every session has its own.</td>
+</tr>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/git-pull-request.svg" width="20" height="20" alt=""><br><b>Git</b><br>The branch, changes and pull request checks.</td>
+<td width="33%" valign="top"><img src="./assets/icons/globe.svg" width="20" height="20" alt=""><br><b>Built-in browser</b><br>Agents open pages, click, type and take screenshots; take over at any time.</td>
+<td width="33%" valign="top"><img src="./assets/icons/shapes.svg" width="20" height="20" alt=""><br><b>Artifacts</b><br>Pages, documents and slides the agent makes, to comment on, edit and export to Word and PowerPoint.</td>
+</tr>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/calendar-clock.svg" width="20" height="20" alt=""><br><b>Routines</b><br>Run an agent on a schedule; every run is kept as a session.</td>
+<td width="33%" valign="top"><img src="./assets/icons/search.svg" width="20" height="20" alt=""><br><b>Search</b><br>One command palette for sessions, artifacts, routines, projects, settings and actions.</td>
+<td width="33%" valign="top"><img src="./assets/icons/keyboard.svg" width="20" height="20" alt=""><br><b>Shortcuts</b><br>Keyboard shortcuts for the common actions.</td>
+</tr>
+</table>
 
 ### Other devices
 
-- **Phone and tablet**: pair with a QR code and carry on in the browser, with no app to install.
-- **Another computer**: use this computer's sessions from Kettu on another one.
-- **Development machines**: add one by its SSH address.
-- **End-to-end encrypted**: straight over your own network.
+End-to-end encrypted, straight over your own network.
+
+<table>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/smartphone.svg" width="20" height="20" alt=""><br><b>Phone and tablet</b><br>Pair with a QR code and carry on in the browser, with no app to install.</td>
+<td width="33%" valign="top"><img src="./assets/icons/laptop.svg" width="20" height="20" alt=""><br><b>Another computer</b><br>Use this computer's sessions from Kettu on another one.</td>
+<td width="33%" valign="top"><img src="./assets/icons/server.svg" width="20" height="20" alt=""><br><b>Development machines</b><br>Add one by its SSH address.</td>
+</tr>
+</table>
 
 ### Looks
 
-- Light and dark modes, themes, English and Simplified Chinese, the frosted macOS sidebar.
+<table>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/sun-moon.svg" width="20" height="20" alt=""><br><b>Light and dark</b><br>Both modes, with the frosted macOS sidebar.</td>
+<td width="33%" valign="top"><img src="./assets/icons/palette.svg" width="20" height="20" alt=""><br><b>Themes</b><br>From a file or the online catalog.</td>
+<td width="33%" valign="top"><img src="./assets/icons/languages.svg" width="20" height="20" alt=""><br><b>Languages</b><br>English and Simplified Chinese.</td>
+</tr>
+</table>
 
 ### Coming soon
 
-- **Computer use**: agents operate the apps on your computer.
-- **iOS Simulator and Android Emulator**: on screen in Kettu, for you and the agent to use.
+<table>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/mouse-pointer-click.svg" width="20" height="20" alt=""><br><b>Computer use</b><br>Agents operate the apps on your computer.</td>
+<td width="33%" valign="top"><img src="./assets/icons/tablet-smartphone.svg" width="20" height="20" alt=""><br><b>iOS Simulator and Android Emulator</b><br>On screen in Kettu, for you and the agent to use.</td>
+<td width="33%"></td>
+</tr>
+</table>
 
 ## Privacy
 
-- No telemetry. Your sessions, code and files stay on your own computers.
-- Kettu keeps no copy of your agents' credentials.
-- A Kettu account is optional.
+<table>
+<tr>
+<td width="33%" valign="top"><img src="./assets/icons/eye-off.svg" width="20" height="20" alt=""><br><b>No telemetry</b><br>Your sessions, code and files stay on your own computers.</td>
+<td width="33%" valign="top"><img src="./assets/icons/key-round.svg" width="20" height="20" alt=""><br><b>Hands off your credentials</b><br>Kettu keeps no copy of your agents' credentials.</td>
+<td width="33%" valign="top"><img src="./assets/icons/user-round.svg" width="20" height="20" alt=""><br><b>Account optional</b><br>Kettu works without a Kettu account.</td>
+</tr>
+</table>
 
 ## Install
 
