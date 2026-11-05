@@ -4,6 +4,7 @@ import {
   mergeSettings,
   parseSettingsFile,
   validateSettingsPatch,
+  withAllowedComputerApp,
   withoutAgent,
 } from './settings-schema'
 
@@ -89,5 +90,50 @@ describe('removing a turned-off agent', () => {
       disabledAgents: ['codex', 'opencode'],
     })
     expect(withoutAgent(current, 'codex').disabledAgents).toEqual(['opencode'])
+  })
+})
+
+describe('computer use settings', () => {
+  const app = { id: 'com.apple.textedit', name: 'TextEdit' }
+
+  it('is off with no apps until the user turns it on', () => {
+    expect(parseSettingsFile({ version: 1 }).settings.computerUse).toEqual({
+      enabled: false,
+      allowedApps: [],
+    })
+  })
+
+  it('accepts the switch and a list of apps, and replaces the list whole', () => {
+    const patch = validateSettingsPatch({ computerUse: { enabled: true, allowedApps: [app] } })
+    const current = settingsWith({
+      computerUse: { enabled: false, allowedApps: [{ id: 'x', name: 'X' }] },
+    })
+    expect(mergeSettings(current, patch).computerUse).toEqual({ enabled: true, allowedApps: [app] })
+  })
+
+  it.each([
+    ['a switch that is no boolean', { enabled: 'yes' }],
+    ['an app without an id', { allowedApps: [{ id: '', name: 'X' }] }],
+    ['an app with more fields', { allowedApps: [{ ...app, path: '/Applications' }] }],
+    ['an app named twice', { allowedApps: [app, app] }],
+    ['an unknown field', { unrestricted: true }],
+  ])('rejects %s', (_, value) => {
+    expect(() => validateSettingsPatch({ computerUse: value })).toThrow()
+  })
+
+  it('drops an invalid list from the file and keeps the switch', () => {
+    const loaded = parseSettingsFile({
+      version: 1,
+      computerUse: { enabled: true, allowedApps: 'all' },
+    })
+    expect(loaded.settings.computerUse).toEqual({ enabled: true, allowedApps: [] })
+    expect(loaded.problems).toHaveLength(1)
+  })
+
+  it('always allows an app once, from the host', () => {
+    const once = withAllowedComputerApp(settingsWith({}), app)
+    expect(once.computerUse.allowedApps).toEqual([app])
+    expect(withAllowedComputerApp(once, app)).toBe(once)
+    expect(() => withAllowedComputerApp(once, { id: 7 })).toThrow()
   })
 })

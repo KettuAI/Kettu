@@ -5,6 +5,7 @@ import type { SelectMessage } from './artifact-runtime/page-messages'
 import type { ArtifactExportFormat } from './artifact-types'
 import type { GrantedAttachment } from './attachments'
 import type { BrowserBounds, BrowserOriginDecision, BrowserState } from './browser'
+import type { ComputerPermissionKind, ComputerUseStatus } from './computer-use'
 import type { EditorApp, EditorList } from './editors'
 import type { BusySession, BusyTerminal } from './host-control'
 import type { HostSessionChange } from './host-sessions'
@@ -323,6 +324,10 @@ export interface IpcInvokeContract {
     args: [sessionId: string, requestId: number, decision: BrowserOriginDecision]
     result: void
   }
+  /** This computer as computer use sees it: the driver, and the permissions on macOS. */
+  'computer:status': { args: []; result: ComputerUseStatus }
+  /** Asks macOS for a permission computer use needs, or opens its pane in System Settings. */
+  'computer:request-permission': { args: [kind: ComputerPermissionKind]; result: void }
   /** The sites each project always lets agents open. */
   'browser:allowed-sites': { args: []; result: AllowedSites[] }
   'browser:remove-allowed-site': { args: [projectPath: string, origin: string]; result: void }
@@ -652,6 +657,11 @@ export interface KettuApi {
     restart(): Promise<void>
     dismiss(): Promise<void>
     onChanged(listener: (status: UpdateStatus) => void): () => void
+  }
+  /** Agents using the desktop apps of this computer. */
+  computer: {
+    status(): Promise<ComputerUseStatus>
+    requestPermission(kind: ComputerPermissionKind): Promise<void>
   }
   /** The page in the side panel's browser, one per session, all in one profile. */
   browser: {

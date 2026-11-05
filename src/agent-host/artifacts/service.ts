@@ -9,6 +9,7 @@ import type { AddressInfo } from 'node:net'
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { BrowserCallAnswer, BrowserCallRequest } from '@shared/browser'
+import { isComputerToolName } from '@shared/computer-use'
 import type { McpServer } from '../connection'
 import { SERVICE_NAME } from '../service-name'
 import type { LogFn } from '../storage'
@@ -34,6 +35,7 @@ import {
   PLAN_TOOLS,
   type PlanToolsDeps,
 } from '../plan-tool'
+import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from '../computer/tools'
 import { artifactWrite, type ArtifactWrite } from './entries'
 import type { ArtifactData } from './runtime/data'
 import { DATA_TOOLS, DataTools, isDataToolName } from './runtime/data-tools'
@@ -57,7 +59,7 @@ const SUMMARY_CHARS = 200
 const SESSION_META = 'ai.opencode/sessionID'
 
 /** The tools `tools/list` answers: the artifact tools, the session tools and the browser's. */
-export const SERVICE_TOOLS: Tool[] = [
+const SERVICE_TOOLS: Tool[] = [
   ...TOOLS,
   ...DATA_TOOLS,
   ...SESSION_TOOLS,
@@ -67,6 +69,11 @@ export const SERVICE_TOOLS: Tool[] = [
 
 /** The service's `instructions`: the artifact tools', the session tools' and the browser's. */
 const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${PLAN_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS}`
+
+/** Serves the computer use tools, on a host that carries the driver. */
+export interface ComputerCalls {
+  call(sessionId: string, name: string, input: unknown): Promise<CallToolResult>
+}
 
 // The SDK loads with the first request rather than with the host, which starts faster without it.
 function loadSdk() {
@@ -109,6 +116,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   plan: PlanToolsDeps
   /** Whether the agent's session `id` is a subagent that runs under a session of its own. */
   subagentCall?(process: AgentProcess, id: string): boolean
+  /** The computer use tools; without it the service lists none. */
+  computer?: ComputerCalls
 }
 
 /** A token for one session. */
@@ -189,12 +198,18 @@ export class ArtifactService {
   private sdk: Promise<Sdk> | null = null
   /** Why the last `start()` could not listen; cleared once it does. */
   private startError: string | null = null
+  private readonly serviceTools: Tool[]
+  private readonly instructions: string
 
   constructor(private readonly deps: ArtifactServiceDeps) {
     this.tools = new ArtifactTools(deps)
     this.dataTools = deps.data ? new DataTools({ data: deps.data }) : null
     this.sessionTools = new SessionTools(deps.sessions)
     this.planTools = new PlanTools(deps.plan)
+    this.serviceTools = deps.computer ? [...SERVICE_TOOLS, ...COMPUTER_TOOLS] : SERVICE_TOOLS
+    this.instructions = deps.computer
+      ? `${SERVICE_INSTRUCTIONS} ${COMPUTER_INSTRUCTIONS}`
+      : SERVICE_INSTRUCTIONS
     const browserCall = deps.browserCall
     this.browserTools = new BrowserTools({
       call: (request) =>
@@ -278,7 +293,7 @@ export class ArtifactService {
 
   /** Each tool's name and the first sentence of its description, for Settings › MCP servers. */
   toolSummaries(): { name: string; description: string }[] {
-    return SERVICE_TOOLS.map((tool) => ({
+    return this.serviceTools.map((tool) => ({
       name: tool.name,
       description: firstSentence(tool.description ?? ''),
     }))
@@ -465,10 +480,10 @@ export class ArtifactService {
     const { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } = sdk
     const server = new sdk.Server(
       { name: SERVICE_NAME, title: 'Kettu', version: this.deps.appVersion },
-      { capabilities: { tools: {} }, instructions: SERVICE_INSTRUCTIONS },
+      { capabilities: { tools: {} }, instructions: this.instructions },
     )
     server.setRequestHandler(ListToolsRequestSchema, () => ({
-      tools: SERVICE_TOOLS,
+      tools: this.serviceTools,
     }))
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: input, _meta: meta } = request.params
@@ -505,6 +520,12 @@ export class ArtifactService {
           this.deps.log('error', `${name} failed: ${(error as Error).message}`)
           throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
         }
+      }
+      const computer = this.deps.computer
+      if (computer && isComputerToolName(name)) {
+        // A subagent uses the computer as the session it runs under.
+        const sessionId = this.deps.browserSession?.(caller.sessionId) ?? caller.sessionId
+        return computer.call(sessionId, name, input)
       }
       if (isDataToolName(name)) {
         if (!this.dataTools) {

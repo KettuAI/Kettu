@@ -19,6 +19,7 @@ import {
   withMovedAgent,
   withoutAgent,
   withRenamedAgent,
+  withAllowedComputerApp,
   withShellPath,
 } from './settings-schema'
 
@@ -205,6 +206,11 @@ export class SettingsStore {
 
   setShellPath(shellPath: string): SettingsFile {
     return this.replace(withShellPath(this.current, shellPath))
+  }
+
+  /** A session's card allowed an app always. */
+  allowComputerApp(app: unknown): SettingsFile {
+    return this.replace(withAllowedComputerApp(this.current, app))
   }
 
   onChange(listener: SettingsListener): () => void {

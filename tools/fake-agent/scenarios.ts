@@ -42,6 +42,7 @@ import {
 } from './content.ts'
 import { artifacts } from './artifacts.ts'
 import { openSite } from './browser.ts'
+import { computer } from './computer.ts'
 import type { ScenarioName } from './options.ts'
 import type { Scenario, Turn } from './turn.ts'
 
@@ -1572,6 +1573,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   report,
   tables,
   'open-site': openSite,
+  computer,
   approvals,
   content,
   media,

@@ -21,6 +21,7 @@ import { Composer } from './composer/composer'
 import { NUMBERED } from './entries/answer-list'
 import { readDraft } from './composer/drafts'
 import { preloadRenderers, useRenderersReady } from './markdown/preload'
+import { ComputerBar } from './computer-bar'
 import { QueueStack } from './queue-stack'
 import { SessionHeader } from './session-header'
 import {
@@ -224,6 +225,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
               </p>
             )}
             <div className="flex flex-col">
+              {session && !archived && session.computer && (
+                <ComputerBar session={session} onError={setQueueError} />
+              )}
               {/* Mounted only while something waits; its cards sit behind the composer. */}
               {session &&
                 !archived &&
@@ -326,7 +330,8 @@ function usePermissionKeys(sessionId: string, focused: boolean): void {
         const entry = state.byId[id]
         const waiting =
           (entry?.kind === 'tool' && !!entry.permission) ||
-          (entry?.kind === 'browser_origin' && entry.decision === null)
+          (entry?.kind === 'browser_origin' && entry.decision === null) ||
+          (entry?.kind === 'computer_app' && entry.decision === null)
         if (!waiting) continue
         // Through the card's own control, so a failure shows where the answer was given. A
         // question card's Enter goes on to its next question, and its own-answer field takes focus.

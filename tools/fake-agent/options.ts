@@ -32,6 +32,7 @@ export const SCENARIOS = [
   'report',
   'tables',
   'open-site',
+  'computer',
   'approvals',
   'content',
   'media',
@@ -112,6 +113,10 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   'open-site': {
     description: 'Opens a site through the browser tools, which asks the user for a new one',
     hint: '<url>',
+  },
+  computer: {
+    description: "Calls one of Kettu's computer use tools and says what it answered",
+    hint: '<computer_* tool> [arguments as JSON]',
   },
   approvals: {
     description: 'A command of two steps, then an edit with its diff, each asking first',

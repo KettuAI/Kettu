@@ -69,6 +69,7 @@ import {
   useTerminalSection,
   useUsageSection,
 } from './section-defs'
+import { useComputerUseSection } from './computer-section'
 
 const FLASH_MS = 1200
 
@@ -155,6 +156,7 @@ function SettingsBody() {
     useAccountSection(),
     useHostsSection(),
     useBrowserSection(),
+    useComputerUseSection(),
   ]
   const about = useAboutSection()
   const hostId = useShownHost()

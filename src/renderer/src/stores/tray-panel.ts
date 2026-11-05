@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { ALREADY_ANSWERED, type AgentStatus, type SessionSummary } from '@shared/agent-host'
 import type { BrowserOriginDecision } from '@shared/browser'
+import type { ComputerAppDecision } from '@shared/computer-use'
 import { isPortError, type PortConnectionState } from '@shared/port-rpc'
 import type { RemoteStatus } from '@shared/remote/status'
 import type { TrayPanelApi } from '@shared/tray'
@@ -272,7 +273,8 @@ function settled(sessionId: string, entryId: string, elsewhere: boolean): void {
   })
 }
 
-export type AnswerChoice = { optionId: string } | { decision: BrowserOriginDecision }
+export type AnswerChoice =
+  { optionId: string } | { decision: BrowserOriginDecision } | { appDecision: ComputerAppDecision }
 
 /**
  * Answers a request, then lists again, or closes the panel when nothing else waits; when another
@@ -298,6 +300,12 @@ export async function answer(
         sessionId,
         entryId: request.entryId,
         decision: choice.decision,
+      })
+    } else if (request.kind === 'app' && 'appDecision' in choice) {
+      await api.agents.request('computer.answerApp', {
+        sessionId,
+        entryId: request.entryId,
+        decision: choice.appDecision,
       })
     }
   } catch (error) {

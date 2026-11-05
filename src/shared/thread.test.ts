@@ -300,6 +300,25 @@ describe('isThreadEntry', () => {
       decision: 'timeout',
       after: null,
     },
+    {
+      kind: 'computer_app',
+      id: 'e:11',
+      requestId: 3,
+      appId: 'com.apple.textedit',
+      appName: 'TextEdit',
+      decision: null,
+      after: 't:1',
+    },
+    {
+      kind: 'computer_app',
+      id: 'e:12',
+      requestId: 4,
+      appId: 'com.apple.textedit',
+      appName: 'TextEdit',
+      decision: 'always',
+      device: { id: 'phone', name: 'Phone' },
+      after: null,
+    },
   ]
 
   it('accepts every kind of entry', () => {
@@ -330,6 +349,12 @@ describe('isThreadEntry', () => {
     expect(isThreadEntry({ ...origin, requestId: 'one' })).toBe(false)
     expect(isThreadEntry({ ...origin, decision: 'maybe' })).toBe(false)
     expect(isThreadEntry({ ...origin, after: 1 })).toBe(false)
+    const app = valid.find((entry) => entry.kind === 'computer_app')!
+    expect(isThreadEntry({ ...app, requestId: 1.5 })).toBe(false)
+    expect(isThreadEntry({ ...app, appId: undefined })).toBe(false)
+    expect(isThreadEntry({ ...app, appName: 7 })).toBe(false)
+    expect(isThreadEntry({ ...app, decision: 'project' })).toBe(false)
+    expect(isThreadEntry({ ...app, after: 1 })).toBe(false)
     expect(isThreadEntry({ kind: 'git', id: 'g', event: 'commit' })).toBe(false)
     expect(isThreadEntry({ kind: 'git', id: 'g', event: 'branch', branch: 'x', after: 1 })).toBe(
       false,
