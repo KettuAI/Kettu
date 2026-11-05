@@ -295,7 +295,7 @@
   --text-prose--line-height: 1.65;
   /* The type scale of the design system. Page and dialog titles take the display face through
      font-display, at weight 700. */
-  --text-greeting: clamp(26px, 4.4cqi, 32px);
+  --text-greeting: clamp(28px, 5cqi, 36px);
   --text-greeting--line-height: 1.2;
   --text-greeting--letter-spacing: normal;
   /* A figure on the usage page, at weight 500 with tabular figures. */

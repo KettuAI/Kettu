@@ -288,26 +288,19 @@
         "morning": "Good morning",
         "afternoon": "Good afternoon",
         "evening": "Good evening",
-        "late": "It’s late",
+        "late": "Up late",
         "back": "Welcome back"
       },
-      "named": "{{hello}}, {{name}}. ",
-      "plain": "{{hello}}. ",
-      "first": "Hi, I’m Kettu. ",
-      "invite": {
-        "morning": ["Where shall we start?", "What’s first?", "What’s on today?"],
-        "afternoon": [
-          "What’s next?",
-          "What else is on your plate?",
-          "A good time for the hard part."
-        ],
-        "evening": ["Anything left to wrap up?", "Long day?", "A quiet hour to build."],
-        "late": ["Take it slow.", "One more, then rest."],
-        "first": ["Hand an agent something small?"],
-        "back": ["Where were we?"],
-        "monday": ["New week. What’s first?"],
-        "friday": ["Wrap up the week?"],
-        "weekend": ["Weekend build? Keep it light."]
+      "named": "{{hello}}, {{name}}",
+      "first": "Hi, I’m Kettu",
+      "lines": {
+        "morning": ["Where shall we start?", "What’s first?"],
+        "afternoon": ["What’s next?", "Time for the hard part"],
+        "evening": ["Anything to wrap up?", "Long day?"],
+        "late": ["Take it slow", "One more, then rest"],
+        "monday": ["New week. What’s first?", "Easing into Monday"],
+        "friday": ["Friday. Wrap it up", "Good week?"],
+        "weekend": ["Busy weekend?", "Something light today?"]
       }
     },
     "branchHint": "The session starts on this branch",

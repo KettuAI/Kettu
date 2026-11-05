@@ -3,7 +3,7 @@ import type { SessionSummary } from '@shared/agent-host'
 /** The part of the day the greeting names, by local time. */
 export type GreetingPeriod = 'morning' | 'afternoon' | 'evening' | 'late'
 
-/** What the invitation is picked for: the period, or a moment that replaces it. */
+/** What the heading's line is picked for: the period, or a moment that replaces it. */
 export type GreetingMoment = GreetingPeriod | 'first' | 'back' | 'monday' | 'friday' | 'weekend'
 
 const BACK_AFTER = 7 * 24 * 60 * 60 * 1000
@@ -50,13 +50,19 @@ export function lastStartedAt(byId: Record<string, SessionSummary>): number | nu
   return last
 }
 
-let lastPick: { key: string; index: number } | null = null
+const lastShown = new Map<string, number>()
 
-/** One of `count` invitations for `key`, never the one picked last for the same key. */
-export function pickInvite(key: string, count: number): number {
-  const repeat = lastPick?.key === key && count > 1 ? lastPick.index : -1
-  let index = Math.floor(Math.random() * (repeat < 0 ? count : count - 1))
-  if (repeat >= 0 && index >= repeat) index += 1
-  lastPick = { key, index }
-  return index
+/**
+ * One of `count` lines for `key`, never the one last shown for it. It only reads, as React may
+ * call it twice for one render; `lineShown` records the line once it is on screen.
+ */
+export function pickLine(key: string, count: number): number {
+  const last = lastShown.get(key)
+  const skip = last !== undefined && last < count && count > 1 ? last : -1
+  const index = Math.floor(Math.random() * (skip < 0 ? count : count - 1))
+  return skip >= 0 && index >= skip ? index + 1 : index
+}
+
+export function lineShown(key: string, index: number): void {
+  lastShown.set(key, index)
 }
