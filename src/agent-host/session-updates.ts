@@ -13,7 +13,6 @@ import type {
   ToolEntry,
   ToolKind,
 } from '@shared/thread'
-import { ULTRACODE_OPTION_ID } from '@shared/thread'
 
 /** Per-turn bookkeeping the mapper needs to find "current" entries. */
 export interface TurnScope {
@@ -95,21 +94,15 @@ export interface MapperOutput {
 /** The id of the mode select Kettu makes from an agent's legacy `modes`. */
 export const SYNTHETIC_MODE_ID = '__mode'
 
-/**
- * New options replace the old ones, keeping the synthetic mode when nothing replaces it and the
- * host's own ultracode switch, which the agent never sends.
- */
+/** New options replace the old ones, keeping a legacy mode until the agent replaces it. */
 export function mergeConfig(
   previous: readonly ConfigOption[],
   next: ConfigOption[],
 ): ConfigOption[] {
   const synthetic = previous.find((option) => option.id === SYNTHETIC_MODE_ID)
-  const ultracode = previous.find((option) => option.id === ULTRACODE_OPTION_ID)
-  const merged =
-    synthetic && !next.some((option) => option.category === 'mode') ? [synthetic, ...next] : next
-  return ultracode && !merged.some((option) => option.id === ULTRACODE_OPTION_ID)
-    ? [...merged, ultracode]
-    : merged
+  return synthetic && !next.some((option) => option.category === 'mode')
+    ? [synthetic, ...next]
+    : next
 }
 
 /** The text of the thread's first user message, or null when it is not in memory. */

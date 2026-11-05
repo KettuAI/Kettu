@@ -7,7 +7,7 @@ import path from 'node:path'
 import type { AgentOptions } from '@shared/agent-host'
 import { isStartMode } from '@shared/agents'
 import type { HostSettings } from '@shared/settings'
-import { isAgentId, type AgentId, type ConfigOption } from '@shared/thread'
+import { isAgentId, isConfigValue, type AgentId, type ConfigOption } from '@shared/thread'
 import { JsonFile, type LogFn } from './storage'
 
 export interface AgentOptionsFile {
@@ -62,10 +62,7 @@ export function startOrder(config: readonly ConfigOption[], wanted: readonly str
 }
 
 /** Whether `value` is one the option takes. */
-export function isValueOf(option: ConfigOption, value: string | boolean): boolean {
-  if (option.type === 'boolean') return typeof value === 'boolean'
-  return typeof value === 'string' && !!option.choices?.some((c) => c.value === value)
-}
+export const isValueOf = isConfigValue
 
 function levelsOf(config: readonly ConfigOption[]): [string, ConfigOption] | null {
   const model = config.find((o) => o.category === 'model' && o.type === 'select')
@@ -161,8 +158,6 @@ export class AgentOptionsStore {
       })
       return
     }
-    // Ultracode is left out too: New session sends every provisional value, and a set ultracode
-    // would override the user's own Claude Code setting.
     const kept = config.filter((o) => REMEMBERED_CATEGORIES.has(o.category))
     if (kept.length === 0) return
     this.put({
@@ -269,12 +264,19 @@ const CATEGORIES: readonly string[] = ['mode', 'model', 'model_config', 'thought
 
 function optionOf(value: unknown): ConfigOption | null {
   if (!isRecord(value)) return null
-  const { id, name, description, category, type, choices, idleOnly } = value
+  const { id, name, description, category, type, choices, idleOnly, defaultValue, indicator } =
+    value
   const v = value.value
   if (typeof id !== 'string' || typeof name !== 'string') return null
   if (typeof category !== 'string' || !CATEGORIES.includes(category)) return null
   if (type !== 'select' && type !== 'boolean') return null
-  if (type === 'select' ? typeof v !== 'string' : typeof v !== 'boolean') return null
+  const inherits = typeof defaultValue === 'boolean' || defaultValue === null
+  if (
+    type === 'select'
+      ? typeof v !== 'string'
+      : typeof v !== 'boolean' && !(v === 'default' && inherits)
+  )
+    return null
   const option: ConfigOption = {
     id,
     name,
@@ -284,6 +286,8 @@ function optionOf(value: unknown): ConfigOption | null {
   }
   if (typeof description === 'string') option.description = description
   if (idleOnly === true) option.idleOnly = true
+  if (type === 'boolean' && inherits) option.defaultValue = defaultValue
+  if (indicator === true) option.indicator = true
   if (Array.isArray(choices)) {
     option.choices = choices.flatMap((c) => {
       if (!isRecord(c) || typeof c.value !== 'string' || typeof c.name !== 'string') return []

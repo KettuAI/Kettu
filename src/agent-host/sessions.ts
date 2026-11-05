@@ -59,7 +59,6 @@ import {
   type TokenTotals,
   type ToolEntry,
   type UserContent,
-  ULTRACODE_OPTION_ID,
 } from '@shared/thread'
 import {
   agentEntryBefore,
@@ -102,7 +101,6 @@ import {
   type PermissionAnswer,
   type PermissionRequest,
   type PromptBlock,
-  type SessionOptions,
   type SessionTarget,
 } from './connection'
 import type { Diagnostics } from './diagnostics'
@@ -522,49 +520,8 @@ function entryHolds(entry: ThreadEntry, text: string): boolean {
   return false
 }
 
-/** Agents with Kettu's ultracode switch: Claude Code, and the fake agent that stands in for it. */
-function hasUltracode(agentId: AgentId): boolean {
-  return agentId === 'claude-code' || agentId === 'fake-agent'
-}
-
-/** How a session opens: with the MCP servers it gets, and ultracode for an agent that has it. */
-function sessionOptions(record: SessionRecord, mcpServers: McpServer[] = []): SessionOptions {
-  return {
-    mcpServers,
-    ...(hasUltracode(record.agentId) && record.ultracode !== undefined
-      ? { ultracode: record.ultracode }
-      : {}),
-  }
-}
-
-/** The agent's options with the ultracode switch at the end, for agents that have it. */
-function withUltracode(
-  record: Pick<SessionRecord, 'agentId' | 'ultracode'>,
-  config: readonly ConfigOption[],
-): ConfigOption[] {
-  const rest = config.filter((option) => option.id !== ULTRACODE_OPTION_ID)
-  if (!hasUltracode(record.agentId)) return rest
-  return [
-    ...rest,
-    {
-      id: ULTRACODE_OPTION_ID,
-      name: 'Ultracode',
-      description: t('session.ultracodeDescription'),
-      category: 'other',
-      type: 'boolean',
-      value: record.ultracode === true,
-      idleOnly: true,
-    },
-  ]
-}
-
-/** The values of a session's agent options; ultracode goes out with the session's options. */
 function agentValues(config: readonly ConfigOption[]): Record<string, string | boolean> {
-  return Object.fromEntries(
-    config
-      .filter((option) => option.id !== ULTRACODE_OPTION_ID)
-      .map((option) => [option.id, option.value]),
-  )
+  return Object.fromEntries(config.map((option) => [option.id, option.value]))
 }
 
 /** `config` with each option in `values` at that value when the option takes it. */
@@ -641,11 +598,7 @@ export class SessionManager {
       signedIn: (agentId) => this.agentSignedIn(agentId),
       optionsKnown: (agentId) => !deps.options || deps.options.known(agentId),
       optionsSeen: (agentId, config, folder) => {
-        deps.options?.started(
-          agentId,
-          withUltracode({ agentId }, config),
-          pathKey(folder, deps.platform),
-        )
+        deps.options?.started(agentId, config, pathKey(folder, deps.platform))
       },
       configChanged: (agentId) => this.configChanged(agentId),
     }
@@ -1219,7 +1172,14 @@ export class SessionManager {
     }
     if (!page || !this.isCurrent(record, page.head)) return null
     const split = splitLinks(page.entries)
-    return split ? { ...page, entries: split } : page
+    return {
+      ...page,
+      ...(split ? { entries: split } : {}),
+      session: {
+        ...page.session,
+        config: this.deps.agents.restoreConfig(record.agentId, page.session.config, record),
+      },
+    }
   }
 
   private async readThread(record: SessionRecord): Promise<StoredThread | null> {
@@ -1276,7 +1236,7 @@ export class SessionManager {
       session: page
         ? {
             ...view,
-            config: withUltracode(record, page.session.config),
+            config: page.session.config,
             commands: page.session.commands,
             usage: page.session.usage,
           }
@@ -2099,8 +2059,7 @@ export class SessionManager {
       branch: null,
     }
     if (params.startedBy !== undefined) record.startedBy = params.startedBy
-    const { [ULTRACODE_OPTION_ID]: ultracode, ...options } = params.options ?? {}
-    if (typeof ultracode === 'boolean' && hasUltracode(record.agentId)) record.ultracode = ultracode
+    const options = params.options ?? {}
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
     live.used = true
@@ -2311,8 +2270,7 @@ export class SessionManager {
       description: null,
       branch: null,
     }
-    const { [ULTRACODE_OPTION_ID]: ultracode, ...options } = params.options ?? {}
-    if (typeof ultracode === 'boolean' && hasUltracode(record.agentId)) record.ultracode = ultracode
+    const options = params.options ?? {}
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
     const prepared: Prepared = {
@@ -2354,10 +2312,9 @@ export class SessionManager {
     if (gone()) throw removedWhileStarting()
     let setup
     try {
-      setup = await runtime.connection.newSession(
-        live.record.projectPath,
-        sessionOptions(live.record, this.mcpServers(live.id, live.record, runtime)),
-      )
+      setup = await runtime.connection.newSession(live.record.projectPath, {
+        mcpServers: this.mcpServers(live.id, live.record, runtime),
+      })
     } catch (error) {
       if (gone()) throw removedWhileStarting()
       const mapped = agentError(error)
@@ -2379,7 +2336,7 @@ export class SessionManager {
     this.attach(live, runtime.connection)
     // The cache names values the session no longer lists, so it is read before it takes them.
     const cached = this.deps.options?.get(agentId)?.config ?? []
-    const own = withUltracode({ agentId }, setup.config)
+    const own = setup.config
     const replaced =
       this.deps.options?.started(
         agentId,
@@ -2388,7 +2345,7 @@ export class SessionManager {
       ) ?? []
     this.update(live, {
       acpSessionId: setup.sessionId,
-      config: withUltracode(live.record, setup.config),
+      config: setup.config,
       error: null,
     })
     const wanted = {
@@ -2531,10 +2488,9 @@ export class SessionManager {
     if (gone()) throw removedWhileStarting()
     let setup
     try {
-      setup = await runtime.connection.newSession(
-        live.record.projectPath,
-        sessionOptions(live.record, this.mcpServers(live.id, live.record, runtime)),
-      )
+      setup = await runtime.connection.newSession(live.record.projectPath, {
+        mcpServers: this.mcpServers(live.id, live.record, runtime),
+      })
     } catch (error) {
       // Its failure, such as the agent's exit, no longer belongs to a session that went meanwhile.
       if (gone()) throw removedWhileStarting()
@@ -2554,7 +2510,7 @@ export class SessionManager {
       live.record.acpSessionId = setup.sessionId
       this.update(live, {
         acpSessionId: setup.sessionId,
-        config: withUltracode(live.record, chosenConfig(setup.config, live.startValues)),
+        config: chosenConfig(setup.config, live.startValues),
         status: 'closed',
       })
       this.save(live)
@@ -2567,8 +2523,7 @@ export class SessionManager {
     this.attach(live, runtime.connection)
     live.failure = null
     const { agentId } = live.record
-    // As the agent's defaults: ultracode off, whatever this session starts with.
-    const own = withUltracode({ agentId }, setup.config)
+    const own = setup.config
     const replaced =
       this.deps.options?.started(
         agentId,
@@ -2581,7 +2536,7 @@ export class SessionManager {
     }
     this.update(live, {
       acpSessionId: setup.sessionId,
-      config: withUltracode(live.record, setup.config),
+      config: setup.config,
       error: null,
     })
     this.save(live)
@@ -2598,7 +2553,7 @@ export class SessionManager {
       // The agent went while the values were set, which leaves the session stored and closed. Its
       // values were not refused, only not set, so there is nothing to say.
       this.update(live, {
-        config: withUltracode(live.record, chosenConfig(config, live.startValues)),
+        config: chosenConfig(config, live.startValues),
         status: 'closed',
       })
       this.persist(live)
@@ -2619,7 +2574,7 @@ export class SessionManager {
     // The first message never goes out with a value the user did not choose.
     const wanted = Object.entries(live.startValues).flatMap(([id, value]): ConfigOption[] => {
       const option = config.find((o) => o.id === id) ?? own.find((o) => o.id === id)
-      return option && id !== ULTRACODE_OPTION_ID ? [{ ...option, value }] : []
+      return option ? [{ ...option, value }] : []
     })
     const notice = lostValuesNotice(lostValues(wanted, config), { subject: 'start', held: true })
     if (!notice) {
@@ -2769,7 +2724,7 @@ export class SessionManager {
         // Gone meanwhile: what the agent answered no longer belongs to a session.
         if (stop?.()) break
         if (held) held = next
-        else this.update(live, { config: withUltracode(live.record, next) })
+        else this.update(live, { config: next })
         if (!restore) this.deps.options?.chose(agentId, option, value, next)
       } catch (error) {
         this.deps.diagnostics.log(
@@ -2814,7 +2769,7 @@ export class SessionManager {
           await connection.setConfigOption(live.record.acpSessionId, option.id, wanted),
         )
       }
-      this.update(live, { config: withUltracode(live.record, config) })
+      this.update(live, { config })
       this.save(live)
     } catch {
       throw new HostError(
@@ -2912,11 +2867,7 @@ export class SessionManager {
         this.prepareReplay(live, connection)
         let setup
         try {
-          setup = await connection.loadSession(
-            acpSessionId,
-            projectPath,
-            sessionOptions(live.record, mcpServers),
-          )
+          setup = await connection.loadSession(acpSessionId, projectPath, { mcpServers })
         } catch (error) {
           this.finishReplay(live, false)
           throw error
@@ -2924,11 +2875,7 @@ export class SessionManager {
         this.finishReplay(live, true)
         this.opened(live, setup.config)
       } else {
-        const setup = await connection.resumeSession(
-          acpSessionId,
-          projectPath,
-          sessionOptions(live.record, mcpServers),
-        )
+        const setup = await connection.resumeSession(acpSessionId, projectPath, { mcpServers })
         this.opened(live, setup.config)
         if (live.thread.order.length === 0) {
           this.emit(live, [
@@ -3332,7 +3279,7 @@ export class SessionManager {
     live.thread = {
       session: {
         ...live.thread.session,
-        config: withUltracode(live.record, config),
+        config: this.deps.agents.restoreConfig(live.record.agentId, config, live.record),
         commands,
         usage,
       },
@@ -3364,7 +3311,7 @@ export class SessionManager {
    */
   private async attachStored(live: Live): Promise<AgentConnection> {
     const { record } = live
-    const own = live.thread.session.config.filter((option) => option.id !== ULTRACODE_OPTION_ID)
+    const own = live.thread.session.config
     const runtime = await this.deps.agents.ensureReady(record.agentId)
     const caps = runtime.init.capabilities
     const { connection } = runtime
@@ -3376,11 +3323,7 @@ export class SessionManager {
       const mcpServers = this.mcpServers(live.id, record, runtime)
       try {
         config = (
-          await connection.resumeSession(
-            record.acpSessionId,
-            record.projectPath,
-            sessionOptions(record, mcpServers),
-          )
+          await connection.resumeSession(record.acpSessionId, record.projectPath, { mcpServers })
         ).config
       } catch (error) {
         if (!this.neverAnswered(live, error)) throw this.otherConfig(live, error)
@@ -3493,8 +3436,8 @@ export class SessionManager {
   /** A loaded or resumed session's options, which New session also learns from. */
   private opened(live: Live, config: ConfigOption[]): void {
     const { agentId } = live.record
-    this.update(live, { config: withUltracode(live.record, config) })
-    this.deps.options?.opened(agentId, withUltracode({ agentId }, config))
+    this.update(live, { config })
+    this.deps.options?.opened(agentId, config)
   }
 
   /** Attaches a closed session for something only its agent can do, such as a setting or a fork. */
@@ -3547,10 +3490,7 @@ export class SessionManager {
     connection: AgentConnection,
     mcpServers: McpServer[],
   ): Promise<ConfigOption[]> {
-    const setup = await connection.newSession(
-      live.record.projectPath,
-      sessionOptions(live.record, mcpServers),
-    )
+    const setup = await connection.newSession(live.record.projectPath, { mcpServers })
     live.record.acpSessionId = setup.sessionId
     this.stampConfig(live.record)
     live.rewrite = true
@@ -3583,11 +3523,7 @@ export class SessionManager {
     }
     connection.register(record.acpSessionId, quiet)
     try {
-      return await connection.loadSession(
-        record.acpSessionId,
-        record.projectPath,
-        sessionOptions(record, mcpServers),
-      )
+      return await connection.loadSession(record.acpSessionId, record.projectPath, { mcpServers })
     } finally {
       connection.unregister(record.acpSessionId, quiet)
       // Updates after the replay wait for the session, which attaches once its values are set.
@@ -3696,11 +3632,7 @@ export class SessionManager {
     let breakdown: ContextBreakdown | null
     if (connection.readContext) {
       try {
-        breakdown = await connection.readContext(
-          record.acpSessionId,
-          record.projectPath,
-          sessionOptions(record),
-        )
+        breakdown = await connection.readContext(record.acpSessionId, record.projectPath, {})
       } catch (error) {
         throw agentError(error)
       }
@@ -3717,7 +3649,6 @@ export class SessionManager {
           async () =>
             (
               await connection.forkSession(record.acpSessionId, record.projectPath, {
-                ...sessionOptions(record),
                 hidden: 'context',
               })
             ).sessionId,
@@ -4332,7 +4263,7 @@ export class SessionManager {
       setup = await runtime.connection.forkSession(
         source.record.acpSessionId,
         source.record.projectPath,
-        sessionOptions(source.record, this.mcpServers(forkId, source.record, runtime)),
+        { mcpServers: this.mcpServers(forkId, source.record, runtime) },
         cut?.point,
       )
     } catch (error) {
@@ -4372,16 +4303,14 @@ export class SessionManager {
     // does, so what the agent sends meanwhile waits rather than change them.
     this.update(live, {
       acpSessionId: setup.sessionId,
-      config: withUltracode(record, source.thread.session.config),
+      config: source.thread.session.config,
       // Nothing records the context or the totals at an earlier reply.
       usage: cut ? null : source.thread.session.usage,
     })
     this.save(live)
     this.touch(live.id)
     // Not every agent carries the source's settings over to a fork, such as its model.
-    const carried = source.thread.session.config.filter(
-      (option) => option.id !== ULTRACODE_OPTION_ID,
-    )
+    const carried = source.thread.session.config
     const { connection } = runtime
     const gone = (): boolean => live.closing || this.live.get(live.id) !== live
     const config = await this.applyStartOptions(live, connection, agentValues(carried), {
@@ -4401,7 +4330,7 @@ export class SessionManager {
       this.update(live, { status: 'closed' })
     } else {
       this.attach(live, connection)
-      this.update(live, { config: withUltracode(record, config) })
+      this.update(live, { config })
       const notice = lostValuesNotice(lostValues(carried, config))
       if (notice) {
         this.emit(live, [
@@ -5199,21 +5128,11 @@ export class SessionManager {
     if (!live.connection && status !== 'closed') throw busyError(status)
     const option = live.thread.session.config.find((o) => o.id === optionId)
     if (!option) throw invalidParams(`No config option ${optionId}`)
-    if (option.type === 'boolean' ? typeof value !== 'boolean' : typeof value !== 'string') {
-      throw invalidParams(
-        `${option.name} takes a ${option.type === 'boolean' ? 'boolean' : 'string'}`,
-      )
-    }
-    if (
-      option.type === 'select' &&
-      option.choices &&
-      !option.choices.some((c) => c.value === value)
-    ) {
+    if (!isValueOf(option, value)) {
       throw invalidParams(`${String(value)} is not a choice of ${option.name}`)
     }
-    if (optionId === ULTRACODE_OPTION_ID) {
-      await this.setUltracode(live, value as boolean)
-      return
+    if (option.idleOnly && (live.turn || (status !== 'ready' && status !== 'closed'))) {
+      throw new HostError('busy', t('session.configBetweenTurns', { option: option.name }))
     }
     try {
       const connection = await this.attachClosed(live)
@@ -5238,52 +5157,6 @@ export class SessionManager {
       }
     } catch (error) {
       throw agentError(error)
-    }
-  }
-
-  /**
-   * Claude Code reads ultracode from its settings when its query starts, so a change goes out as
-   * `session/resume` with new settings, which the adapter answers by restarting the query. That
-   * would abort a turn, so it waits for none to run.
-   */
-  private async setUltracode(live: Live, on: boolean): Promise<void> {
-    if (!live.connection && live.thread.session.status === 'closed') {
-      // The setting goes out with the `session/resume` that attaches the session.
-      live.record.ultracode = on
-      this.update(live, { config: withUltracode(live.record, live.thread.session.config) })
-      this.save(live)
-      this.touch(live.id)
-      return
-    }
-    if (live.turn || live.thread.session.status !== 'ready' || !live.connection) {
-      throw new HostError('busy', t('session.ultracodeBetweenTurns'))
-    }
-    const before = live.record.ultracode
-    live.record.ultracode = on
-    this.update(live, {
-      status: 'starting',
-      config: withUltracode(live.record, live.thread.session.config),
-    })
-    this.touch(live.id)
-    try {
-      const setup = await live.connection.resumeSession(
-        live.record.acpSessionId,
-        live.record.projectPath,
-        sessionOptions(
-          live.record,
-          this.mcpServers(live.id, live.record, this.deps.agents.runtime(live.record.agentId)),
-        ),
-      )
-      this.update(live, {
-        status: 'ready',
-        config: withUltracode(live.record, mergeConfig(live.thread.session.config, setup.config)),
-      })
-      this.save(live)
-      this.touch(live.id)
-    } catch (error) {
-      live.record.ultracode = before
-      this.update(live, { config: withUltracode(live.record, live.thread.session.config) })
-      throw this.failStart(live, error, { action: 'resume' })
     }
   }
 
@@ -5510,7 +5383,6 @@ export class SessionManager {
       const live = this.live.get(callerId)
       const config = live?.thread.session.config ?? []
       for (const option of config) {
-        if (option.id === ULTRACODE_OPTION_ID) continue
         if (option.category !== 'model' && option.category !== 'thought_level') continue
         options[option.id] = option.value
       }
@@ -6192,7 +6064,6 @@ function unmetValues(
 ): StartNotice[] {
   const out: StartNotice[] = []
   for (const [id, value] of Object.entries(wanted)) {
-    if (id === ULTRACODE_OPTION_ID) continue
     const option = config.find((o) => o.id === id)
     if (option?.value === value) continue
     const known = option ?? own.find((o) => o.id === id) ?? cached.find((o) => o.id === id)

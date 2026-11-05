@@ -77,9 +77,5 @@ export function sessionMeta(
   options: SessionOptions,
 ): Record<string, unknown> | undefined {
   if (!agentId || !CLAUDE_AGENTS[agentId]) return undefined
-  const meta =
-    options.ultracode === undefined
-      ? undefined
-      : { claudeCode: { options: { settings: { ultracode: options.ultracode } } } }
-  return options.hidden ? hiddenSessionMeta(agentId, meta) : meta
+  return options.hidden ? hiddenSessionMeta(agentId) : undefined
 }

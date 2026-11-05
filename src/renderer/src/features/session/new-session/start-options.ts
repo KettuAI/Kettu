@@ -1,6 +1,6 @@
 import type { AgentOptions, AgentStatus } from '@shared/agent-host'
 import { isStartMode } from '@shared/agents'
-import type { AgentId, ConfigOption } from '@shared/thread'
+import { isConfigValue, type AgentId, type ConfigOption } from '@shared/thread'
 import { listedInstalled, readiness } from '@renderer/features/agents/readiness'
 import type { OptionValues } from '@renderer/stores/agent-options'
 
@@ -50,8 +50,7 @@ const REMEMBERED: ReadonlySet<ConfigOption['category']> = new Set([
 ])
 
 function takes(option: ConfigOption, value: string | boolean): boolean {
-  if (option.type === 'boolean') return typeof value === 'boolean'
-  return typeof value === 'string' && !!option.choices?.some((c) => c.value === value)
+  return isConfigValue(option, value)
 }
 
 /** How a new session's options are worked out: with `startMode`, the agent's start mode is applied. */

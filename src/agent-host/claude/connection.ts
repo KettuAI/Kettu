@@ -215,7 +215,8 @@ interface Session {
   titleForRev: number | null
   /** A title request already running. */
   titling: Promise<void> | null
-  ultracode: boolean | undefined
+  /** The value ultracode inherits from Claude Code's settings; null until resolved. */
+  ultracodeDefault: boolean | null
   /** Set for a session opened only to read from. */
   quiet: boolean
   /** Its Claude Code process, while it runs. */
@@ -581,15 +582,7 @@ export class ClaudeConnection implements AgentConnection {
     options: SessionOptions = {},
   ): Promise<SessionSetup> {
     const open = this.sessions.get(sessionId)
-    if (open?.query && !open.stale) {
-      // Already open: only Kettu's ultracode switch can have changed.
-      if (options.ultracode !== undefined && options.ultracode !== open.ultracode) {
-        await this.applyFlags(open, { ultracode: options.ultracode })
-        open.ultracode = options.ultracode
-        open.options = { ...open.options, ultracode: options.ultracode }
-      }
-      return { config: open.config }
-    }
+    if (open?.query && !open.stale) return { config: open.config }
     const session = await this.open(sessionId, cwd, options, { resume: true })
     return { config: session.config }
   }
@@ -704,17 +697,21 @@ export class ClaudeConnection implements AgentConnection {
   // Opening a query.
 
   /** Reads the settings a session starts with; an unreadable file only leaves the defaults. */
-  private async settings(cwd: string, sources: SettingSource[]): Promise<Record<string, unknown>> {
+  private async settings(
+    cwd: string,
+    sources: SettingSource[],
+  ): Promise<{ values: Record<string, unknown>; known: boolean }> {
     const sdk = this.requireSdk()
     try {
-      return await this.withConfigDir(async () => {
+      const values = await this.withConfigDir(async () => {
         const resolved = await sdk.resolveSettings({ cwd, settingSources: sources })
         // A mode a repository's own settings escalate to holds only once Claude Code trusts it.
         return sdk.filterEscalatingDefaultMode(resolved)
       })
+      return { values, known: true }
     } catch (error) {
       this.context.hooks.log('warn', `Could not read Claude Code's settings: ${errorText(error)}`)
-      return {}
+      return { values: {}, known: false }
     }
   }
 
@@ -733,7 +730,7 @@ export class ClaudeConnection implements AgentConnection {
     const settings = await this.settings(cwd, sources)
     const allowBypass = process.getuid?.() !== 0
     const modes = availableModes(allowBypass)
-    const permissions = (settings.permissions ?? {}) as { defaultMode?: unknown }
+    const permissions = (settings.values.permissions ?? {}) as { defaultMode?: unknown }
     const wanted = typeof permissions.defaultMode === 'string' ? permissions.defaultMode : 'default'
     const mode: PermissionMode = modes.includes(wanted as PermissionMode)
       ? (wanted as PermissionMode)
@@ -748,7 +745,13 @@ export class ClaudeConnection implements AgentConnection {
       mapper: new ClaudeMapper(sessionId, cwd),
       models: [],
       modes,
-      choices: { mode, model: DEFAULT_MODEL, effort: DEFAULT_EFFORT, fast: false },
+      choices: {
+        mode,
+        model: DEFAULT_MODEL,
+        effort: DEFAULT_EFFORT,
+        fast: false,
+        ultracode: 'default',
+      },
       config: [],
       turn: null,
       resumed: how.resume,
@@ -763,15 +766,14 @@ export class ClaudeConnection implements AgentConnection {
       titleRev: 0,
       titleForRev: null,
       titling: null,
-      ultracode: options.ultracode,
+      ultracodeDefault: settings.known ? settings.values.ultracode === true : null,
       quiet: how.quiet === true,
       process: null,
     }
     const flags: Record<string, unknown> = {}
     if (hidden) flags.disableAllHooks = true
     // A page's question reads none of the user's settings but how they sign in, which may be there.
-    if (bare) Object.assign(flags, signInSettings(await this.settings(cwd, ['user'])))
-    if (options.ultracode !== undefined) flags.ultracode = options.ultracode
+    if (bare) Object.assign(flags, signInSettings((await this.settings(cwd, ['user'])).values))
     const mcpServers = Object.fromEntries(
       (options.mcpServers ?? []).map((server) => [
         server.name,
@@ -862,12 +864,16 @@ export class ClaudeConnection implements AgentConnection {
     this.reportAccount(init.account)
     session.models = init.models ?? []
     const model =
-      typeof settings.model === 'string' ? settings.model : (this.env.ANTHROPIC_MODEL ?? null)
+      typeof settings.values.model === 'string'
+        ? settings.values.model
+        : (this.env.ANTHROPIC_MODEL ?? null)
     session.choices.model = settingsModel(session.models, model)
-    if (typeof settings.effortLevel === 'string') session.choices.effort = settings.effortLevel
+    if (typeof settings.values.effortLevel === 'string') {
+      session.choices.effort = settings.values.effortLevel
+    }
     session.choices.fast = init.fast_mode_state !== undefined && init.fast_mode_state !== 'off'
     session.commands = init.commands ?? []
-    session.config = buildConfig(session.models, session.choices, modes)
+    session.config = buildConfig(session.models, session.choices, modes, session.ultracodeDefault)
     this.sessions.set(sessionId, session)
     if (!session.quiet) {
       this.unregistered.delete(sessionId)
@@ -1283,8 +1289,15 @@ export class ClaudeConnection implements AgentConnection {
   }
 
   private async restoreChoices(session: Session, choices: SessionChoices): Promise<void> {
-    for (const id of [OPTION_IDS.mode, OPTION_IDS.model, OPTION_IDS.effort, OPTION_IDS.fast]) {
-      const value = choices[id]
+    const options: [string, keyof SessionChoices][] = [
+      [OPTION_IDS.mode, 'mode'],
+      [OPTION_IDS.model, 'model'],
+      [OPTION_IDS.effort, 'effort'],
+      [OPTION_IDS.fast, 'fast'],
+      [OPTION_IDS.ultracode, 'ultracode'],
+    ]
+    for (const [id, key] of options) {
+      const value = choices[key]
       const option = session.config.find((item) => item.id === id)
       if (!option || option.value === value) continue
       try {
@@ -1446,20 +1459,48 @@ export class ClaudeConnection implements AgentConnection {
         if (!info?.supportedEffortLevels?.includes(session.choices.effort)) {
           session.choices.effort = DEFAULT_EFFORT
         }
-        session.config = buildConfig(session.models, session.choices, session.modes)
+        session.config = buildConfig(
+          session.models,
+          session.choices,
+          session.modes,
+          session.ultracodeDefault,
+        )
         return
       }
       case OPTION_IDS.effort:
         if (typeof value !== 'string') break
         await this.applyFlags(session, { effortLevel: value === DEFAULT_EFFORT ? null : value })
         session.choices.effort = value
-        session.config = buildConfig(session.models, session.choices, session.modes)
+        session.config = buildConfig(
+          session.models,
+          session.choices,
+          session.modes,
+          session.ultracodeDefault,
+        )
         return
       case OPTION_IDS.fast:
         await this.applyFlags(session, { fastMode: value === true })
         session.choices.fast = value === true
-        session.config = buildConfig(session.models, session.choices, session.modes)
+        session.config = buildConfig(
+          session.models,
+          session.choices,
+          session.modes,
+          session.ultracodeDefault,
+        )
         return
+      case OPTION_IDS.ultracode: {
+        if (value !== 'default' && typeof value !== 'boolean') break
+        const ultracode = value === 'default' ? this.inheritedUltracode(session) : value
+        await query.applyFlagSettings({ ultracode })
+        session.choices.ultracode = value
+        session.config = buildConfig(
+          session.models,
+          session.choices,
+          session.modes,
+          session.ultracodeDefault,
+        )
+        return
+      }
     }
     throw new AgentRequestError(
       'agent_error',
@@ -1468,20 +1509,37 @@ export class ClaudeConnection implements AgentConnection {
     )
   }
 
-  /** Flag settings, with ultracode sent again: an effort change without it turns it off. */
+  /** Flag settings, with the effective ultracode sent again: an effort change without it turns it off. */
   private async applyFlags(session: Session, settings: FlagSettings): Promise<void> {
-    const ultracode = settings.ultracode ?? session.ultracode
-    await session.query!.applyFlagSettings({
-      ...settings,
-      ...(ultracode !== undefined ? { ultracode } : {}),
-    })
+    const ultracode =
+      session.choices.ultracode === 'default'
+        ? this.inheritedUltracode(session)
+        : session.choices.ultracode
+    await session.query!.applyFlagSettings({ ...settings, ultracode })
+  }
+
+  /** The value a default choice inherits; unknown is refused rather than taken as off. */
+  private inheritedUltracode(session: Session): boolean {
+    if (session.ultracodeDefault === null) {
+      throw new AgentRequestError(
+        'agent_error',
+        "Ultracode's inherited value is unknown, so it cannot be applied",
+        INVALID_PARAMS,
+      )
+    }
+    return session.ultracodeDefault
   }
 
   /** Records a choice Claude Code made or took, such as the mode a plan's approval set. */
   private setChoice(session: Session, id: 'mode', value: string): void {
     if (session.choices[id] === value) return
     session.choices[id] = value
-    session.config = buildConfig(session.models, session.choices, session.modes)
+    session.config = buildConfig(
+      session.models,
+      session.choices,
+      session.modes,
+      session.ultracodeDefault,
+    )
   }
 
   // Permissions.

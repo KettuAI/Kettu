@@ -19,8 +19,6 @@
     "sendNowHint": "立即插入当前这一轮"
   },
   "controls": {
-    "ultracodeOn": "本会话已开启 Ultracode：对较大的任务使用动态工作流",
-    "ultracodeNext": "此消息将以 Ultracode 运行：对任务使用动态工作流",
     "model": "模型",
     "modelOutOfCredit": "模型，余额不足",
     "options": "选项",
@@ -32,10 +30,12 @@
     "searchModels": "搜索模型",
     "cyclesModes": "切换模式",
     "effort": "思考强度",
-    "ultracodeHint": "以多 Agent 工作流运行每个任务，会消耗多得多的套餐额度",
+    "followsAgent": "跟随 Agent 设置",
+    "followsAgentOn": "跟随 Agent 设置 · 开",
+    "followsAgentOff": "跟随 Agent 设置 · 关",
+    "resetDefault": "使用 Agent 的设置",
     "modelsFrom": "来自 {{source}}",
-    "optionValue": "{{name}}：{{value}}",
-    "ultracodeSuffix": "· Ultracode"
+    "optionValue": "{{name}}：{{value}}"
   },
   "outOfCredit": {
     "modelTitle": "{{model}} 余额不足",

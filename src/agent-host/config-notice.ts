@@ -55,6 +55,8 @@ export function lostValues(
 ): LostValue[] {
   const lost: { rank: number; value: LostValue }[] = []
   for (const option of wanted) {
+    // 'default' keeps whatever the agent inherits, so there is nothing to lose.
+    if (option.type === 'boolean' && option.value === 'default') continue
     const same = actual.find((o) => o.id === option.id && o.type === option.type)
     if (same?.value === option.value) continue
     lost.push({ rank: RANK[option.category], value: lostValue(option, same) })

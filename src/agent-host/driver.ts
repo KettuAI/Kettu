@@ -4,6 +4,7 @@
 // in the agent's process trees so that an idle stop, a restart, a quit or a crash stops it too.
 
 import type { ChildProcess } from 'node:child_process'
+import type { ConfigOption } from '@shared/thread'
 import type { AgentDefinition, LaunchSpec } from './catalog'
 import type { AgentConnection, ConnectionHooks } from './connection'
 import type { Env } from './find-command'
@@ -41,7 +42,12 @@ export interface DriverContext {
   env?: Env
 }
 
-export interface ProcessDriver {
+export interface StoredConfig {
+  /** Upgrades stored options without starting the agent. */
+  restoreConfig?(config: readonly ConfigOption[], legacy?: unknown): ConfigOption[]
+}
+
+export interface ProcessDriver extends StoredConfig {
   readonly kind: 'process'
   readonly reads?: DirectReads
   /** The connection over the process the launcher spawned for the agent. */
@@ -72,7 +78,7 @@ export interface HostedContext extends DriverContext {
   spawn: HostedSpawn
 }
 
-export interface HostedDriver {
+export interface HostedDriver extends StoredConfig {
   readonly kind: 'hosted'
   readonly reads?: DirectReads
   /**

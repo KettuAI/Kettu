@@ -123,10 +123,26 @@ export interface ConfigOption {
     shownAs?: string
   }[]
   idleOnly?: boolean // can change only while no turn runs
+  /** A boolean's inherited value; null until the agent has resolved its settings. */
+  defaultValue?: boolean | null
+  /** Show the option's name beside the model while it is enabled. */
+  indicator?: boolean
 }
 
-/** Claude Code's ultracode, an option Kettu adds since the adapter offers none. */
-export const ULTRACODE_OPTION_ID = '__ultracode'
+export function booleanConfigValue(option: ConfigOption): boolean | undefined {
+  return typeof option.value === 'boolean'
+    ? option.value
+    : option.value === 'default'
+      ? (option.defaultValue ?? undefined)
+      : undefined
+}
+
+export function isConfigValue(option: ConfigOption, value: string | boolean): boolean {
+  if (option.type === 'boolean') {
+    return typeof value === 'boolean' || (value === 'default' && 'defaultValue' in option)
+  }
+  return typeof value === 'string' && !!option.choices?.some((choice) => choice.value === value)
+}
 
 /**
  * A command of more than one step, or too long for one line: a card shows it in full below its

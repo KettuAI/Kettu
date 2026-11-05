@@ -35,6 +35,13 @@ let idleTimer: ReturnType<typeof setTimeout> | null = null
 // Removed on purpose, so their removal is not taken for the agent's exit.
 const discarded = new Set<string>()
 const sets = new Set<Promise<unknown>>()
+// The latest set of each option, so an earlier answer that lands late does not stand for it.
+const latestSet = new Map<string, number>()
+// The options the agent refused, by agent and option, until a later set answers or a send reports it.
+const refused = new Map<string, string>()
+let nextSet = 0
+
+const setKey = (agentId: AgentId, optionId: string): string => `${agentId}\0${optionId}`
 
 const keyOf = (t: PrepareTarget): string => JSON.stringify([t.agentId, t.projectPath, t.parentId])
 
@@ -162,22 +169,51 @@ export function setOption(agentId: AgentId, optionId: string, value: string | bo
   pickOption(agentId, optionId, value)
   const summary = useAgentOptionsStore.getState().prepared?.summary
   if (!summary || summary.agentId !== agentId) return
+  const key = setKey(agentId, optionId)
+  const seq = ++nextSet
+  latestSet.set(key, seq)
   const setting = host('sessions.setConfigOption', { sessionId: summary.id, optionId, value })
-    .catch((error: unknown) =>
-      console.warn(`Could not set ${optionId} on the prepared session: ${errorMessage(error)}`),
+    .then(
+      () => {
+        if (latestSet.get(key) === seq) refused.delete(key)
+      },
+      (error: unknown) => {
+        const message = errorMessage(error)
+        console.warn(`Could not set ${optionId} on the prepared session: ${message}`)
+        // A later answer owns the option now; only this one's refusal still matters.
+        if (latestSet.get(key) !== seq) return
+        const picks = useAgentOptionsStore.getState().picks[agentId]
+        if (picks?.[optionId] !== value) return
+        // Take the unapplied value back out, so the row shows the value the agent kept.
+        settlePick(agentId, optionId, value)
+        refused.set(key, message)
+      },
     )
     .finally(() => {
       sets.delete(setting)
-      if (useAgentOptionsStore.getState().prepared?.summary?.id === summary.id) {
+      if (
+        latestSet.get(key) === seq &&
+        useAgentOptionsStore.getState().prepared?.summary?.id === summary.id
+      ) {
         settlePick(agentId, optionId, value)
       }
     })
   sets.add(setting)
 }
 
-/** Waits for the options being set, so the first message goes with them. */
-export async function settleOptions(): Promise<void> {
+/**
+ * Waits for the options being set, so the first message goes with them. Rejects with the agent's
+ * reasons when it refused a value, so the send does not go on without one the user chose.
+ */
+export async function settleOptions(agentId?: AgentId): Promise<void> {
   await Promise.allSettled([...sets])
+  const prefix = agentId === undefined ? '' : `${agentId}\0`
+  const reasons = [...refused]
+    .filter(([key]) => key.startsWith(prefix))
+    .map(([, message]) => message)
+  if (reasons.length === 0) return
+  for (const key of refused.keys()) if (key.startsWith(prefix)) refused.delete(key)
+  throw new Error([...new Set(reasons)].join('\n'))
 }
 
 /** New session is in front: it keeps the prepared session, and has one again after being idle. */

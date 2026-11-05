@@ -2,9 +2,16 @@
 // and values the ACP adapter gave them, so the values a thread stored still apply.
 
 import type { ConfigOption } from '@shared/thread'
+import { t } from '../i18n'
 import type { ModelInfo, PermissionMode } from './sdk'
 
-export const OPTION_IDS = { mode: 'mode', model: 'model', effort: 'effort', fast: 'fast' } as const
+export const OPTION_IDS = {
+  mode: 'mode',
+  model: 'model',
+  effort: 'effort',
+  fast: 'fast',
+  ultracode: '__ultracode',
+} as const
 
 export const DEFAULT_MODEL = 'default'
 export const DEFAULT_EFFORT = 'default'
@@ -43,6 +50,25 @@ export interface SessionChoices {
   model: string
   effort: string
   fast: boolean
+  ultracode: boolean | 'default'
+}
+
+/** Kettu's ultracode switch; `default` inherits the value Claude Code resolves. */
+export function ultracodeOption(
+  value: boolean | 'default' = 'default',
+  defaultValue: boolean | null = null,
+): ConfigOption {
+  return {
+    id: OPTION_IDS.ultracode,
+    name: 'Ultracode',
+    description: t('session.ultracodeDescription'),
+    category: 'other',
+    type: 'boolean',
+    value,
+    defaultValue,
+    indicator: true,
+    idleOnly: true,
+  }
 }
 
 function titleCase(level: string): string {
@@ -61,6 +87,7 @@ export function buildConfig(
   models: readonly ModelInfo[],
   choices: SessionChoices,
   modes: readonly string[],
+  ultracodeDefault: boolean | null = null,
 ): ConfigOption[] {
   const options: ConfigOption[] = [
     {
@@ -135,6 +162,7 @@ export function buildConfig(
       value: choices.fast,
     })
   }
+  options.push(ultracodeOption(choices.ultracode, ultracodeDefault))
   return options
 }
 
