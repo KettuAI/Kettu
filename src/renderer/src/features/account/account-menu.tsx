@@ -39,7 +39,6 @@ import { deviceShape } from '@renderer/features/settings/remote-text'
 import { connectionText, routeName } from '@renderer/features/settings/host-text'
 import { Masked } from '@renderer/features/settings/controls'
 import { useSegmentThumb } from '@renderer/hooks/use-segment-thumb'
-import { LIMIT_FILL } from '@renderer/lib/plan-limit'
 import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
 import { useNow } from '@renderer/lib/use-now'
@@ -52,9 +51,9 @@ import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { openSettings, showShortcuts, THIS_COMPUTER, useViewStore } from '@renderer/stores/view'
-import { AgentTile } from '@renderer/components/agents/agent-mark'
 import { AccountAvatar, IdentityName, SettingsGlyph } from './avatar'
-import { chosenHost, limitRows, systemName, type Identity } from './model'
+import { chosenHost, planCards, systemName, type Identity } from './model'
+import { PlanLimitCard } from './plan-limit-card'
 import { useThisComputerName } from './use-account'
 
 const DOCS_URL = 'https://github.com/KettuAI/Kettu#readme'
@@ -323,34 +322,19 @@ function HostRow({
   )
 }
 
-/** Each agent's fullest plan window, colored by the one rule for plan limits. */
+/** A card per account with every plan window as a ring, two cards to a row. */
 function PlanLimits() {
   const { t } = useTranslation('sidebar')
   const agents = useAgentsWithLimits()
-  const rows = limitRows(agents, useNow())
-  if (rows.length === 0) return null
+  const cards = planCards(agents, useNow())
+  if (cards.length === 0) return null
   return (
     <>
       <DropdownMenuGroup>
         <GroupLabel>{t('account.limits')}</GroupLabel>
-        <div className="px-2 pb-1">
-          {rows.map((row) => (
-            <div key={row.agentId} className="flex h-6.5 items-center gap-2">
-              <AgentTile agent={row.agentId} size={18} />
-              <span className="min-w-0 flex-1 truncate text-hint text-secondary">{row.label}</span>
-              <span
-                aria-hidden
-                className="h-1 w-16 shrink-0 overflow-hidden rounded-xs bg-border-soft"
-              >
-                <span
-                  className={cn('block h-full', LIMIT_FILL[row.level])}
-                  style={{ width: `${Math.min(100, row.percent)}%` }}
-                />
-              </span>
-              <span className="w-7.5 shrink-0 text-right text-caption text-primary tabular">
-                {row.percent}%
-              </span>
-            </div>
+        <div className="grid grid-cols-2 gap-1.5 px-1.5 pb-1">
+          {cards.map((card) => (
+            <PlanLimitCard key={card.key} card={card} />
           ))}
         </div>
       </DropdownMenuGroup>

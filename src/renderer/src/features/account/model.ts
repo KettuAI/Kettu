@@ -1,9 +1,9 @@
 import type { AccountStatus } from '@shared/account'
-import type { AgentStatus, PlanLimit } from '@shared/agent-host'
+import type { AgentAccount, AgentStatus, PlanLimit } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import type { UpdateStatus } from '@shared/updates'
+import { planName } from '@renderer/features/tray/model'
 import type { UpdateItem } from '@renderer/features/updates/card-model'
-import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
 import { limitLevel, type LimitLevel } from '@renderer/lib/plan-limit'
 import { THIS_COMPUTER } from '@renderer/stores/view'
 
@@ -33,27 +33,94 @@ export function identityOf(status: AccountStatus | null): Identity {
   }
 }
 
-/** One plan limit row in the account menu: the agent's fullest window. */
-export interface LimitRow {
-  agentId: AgentId
-  /** "Claude Code · Claude Max", or the agent's name alone when its plan is unknown. */
-  label: string
-  percent: number
-  level: LimitLevel
+/** The windows a card draws as rings, from the innermost. */
+const RING_WINDOWS = ['five_hour', 'seven_day', 'monthly'] as const
+export type RingWindow = (typeof RING_WINDOWS)[number]
+
+/** OpenCode Go's rolling window is its 5-hour one. */
+const RING_OF: Readonly<Record<string, RingWindow>> = {
+  five_hour: 'five_hour',
+  rolling: 'five_hour',
+  seven_day: 'seven_day',
+  weekly: 'seven_day',
+  monthly: 'monthly',
 }
 
-/** The agents' tightest windows that report how full they are, in the agents' order. */
-export function limitRows(agents: readonly AgentStatus[], now: number): LimitRow[] {
-  return agents.flatMap((agent) => {
-    const limit: PlanLimit | null = tightestLimit(agent.limits, now)
-    if (!limit || limit.usedPercent === null) return []
-    const plan = agent.account && agent.account.kind !== 'none' ? agent.account.label : null
+export interface CardWindow {
+  window: RingWindow
+  /** The whole percentage used; null once its reset has passed and it is not read again. */
+  percent: number | null
+  level: LimitLevel | null
+}
+
+/** One account's card in the account menu, an OpenCode provider's included. */
+export interface PlanCard {
+  key: string
+  agentId: AgentId
+  name: string
+  /** The plan without its brand, such as "Max 5x"; null when it is unknown. */
+  tier: string | null
+  /** Innermost first. */
+  windows: CardWindow[]
+}
+
+function cardWindows(limits: readonly PlanLimit[], now: number): CardWindow[] {
+  const byRing = new Map<RingWindow, CardWindow>()
+  for (const limit of limits) {
+    const ring = RING_OF[limit.window]
+    if (!ring || byRing.has(ring) || limit.usedPercent === null) continue
+    const stale = limit.resetsAt !== null && limit.resetsAt <= now
+    byRing.set(ring, {
+      window: ring,
+      percent: stale ? null : Math.round(limit.usedPercent),
+      level: stale ? null : limitLevel(limit),
+    })
+  }
+  return RING_WINDOWS.flatMap((ring) => byRing.get(ring) ?? [])
+}
+
+/**
+ * A subscription's plan for the badge. Claude Code and Codex name it "<brand> <plan>", such as
+ * "Claude Max" or "ChatGPT Plus", and the agent's mark already shows the brand.
+ */
+function planTier(account: AgentAccount | null): string | null {
+  if (account?.kind !== 'account') return null
+  const plan = account.label.trim().split(/\s+/).slice(1).join(' ')
+  if (!plan) return null
+  const tier = account.tier?.trim()
+  return tier && !plan.toLowerCase().includes(tier.toLowerCase()) ? `${plan} ${tier}` : plan
+}
+
+/**
+ * A card per account that reports plan windows, in the agents' order. OpenCode gets one per
+ * provider, named without a leading "OpenCode", which its mark shows.
+ */
+export function planCards(agents: readonly AgentStatus[], now: number): PlanCard[] {
+  return agents.flatMap((agent): PlanCard[] => {
+    if (agent.harnessId === 'opencode') {
+      return (agent.providers ?? []).flatMap((provider) => {
+        const windows = cardWindows(provider.usage?.limits ?? [], now)
+        if (windows.length === 0) return []
+        return [
+          {
+            key: `${agent.id}:${provider.id}`,
+            agentId: agent.id,
+            name: planName(agent.harnessName, provider.name),
+            tier: null,
+            windows,
+          },
+        ]
+      })
+    }
+    const windows = cardWindows(agent.limits, now)
+    if (windows.length === 0) return []
     return [
       {
+        key: agent.id,
         agentId: agent.id,
-        label: plan ? `${agent.name} · ${plan}` : agent.name,
-        percent: Math.round(limit.usedPercent),
-        level: limitLevel(limit),
+        name: agent.name,
+        tier: planTier(agent.account),
+        windows,
       },
     ]
   })
