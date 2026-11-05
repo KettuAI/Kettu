@@ -80,47 +80,34 @@ export function BrowserIcon({
 }
 
 /**
- * A link's 14 px tile: the session browser's glyph on the fox's tint for a local address, the
- * icon recorded when Kettu's browser opened the site, or a globe where it recorded none.
+ * A link's 16 px tile: the session browser's glyph on the fox's tint for a local address, its
+ * site's icon, or a bare globe where it has none.
  */
 function SiteTile({ url }: { url: string }) {
   const icon = useSiteIcon(url)
   useEffect(() => requestSiteIcon(url), [url])
   const tile =
-    'relative -top-[1.5px] mr-[5px] inline-flex size-3.5 shrink-0 items-center justify-center overflow-hidden rounded-[3px] align-middle leading-none'
+    'relative -top-[1.5px] mr-1.5 inline-flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-[3px] align-middle leading-none'
   if (isLocalLink(url)) {
     return (
       <span
         aria-hidden
         className={cn(tile, 'bg-[color-mix(in_srgb,var(--focus)_14%,transparent)] text-(--focus)')}
       >
-        <AppWindowMacIcon className="size-2.25" strokeWidth={1} />
+        <AppWindowMacIcon className="size-2.5" strokeWidth={1} />
       </span>
     )
   }
   if (icon) {
     return (
-      <span
-        aria-hidden
-        className={cn(
-          tile,
-          // The edge lies over the icon, which would cover an inset shadow on the tile itself.
-          'after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
-        )}
-      >
+      <span aria-hidden className={tile}>
         <img src={icon} alt="" draggable={false} className="size-full object-contain" />
       </span>
     )
   }
   return (
-    <span
-      aria-hidden
-      className={cn(
-        tile,
-        'bg-subtle text-tertiary shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]',
-      )}
-    >
-      <GlobeIcon className="size-2.5" strokeWidth={1} />
+    <span aria-hidden className={cn(tile, 'text-tertiary')}>
+      <GlobeIcon className="size-3.5" strokeWidth={1.5} />
     </span>
   )
 }
