@@ -197,9 +197,10 @@ export class SiteIcons {
   }
 
   /**
-   * A link in a reply has no icon for its site: tries the icon at the site's own root, once per
-   * run, without counting the site as opened, which the first-visit confirmation reads. Only
-   * public http(s) sites, so a reply cannot make main request this computer.
+   * A link in a reply has no icon for its site: loads the icon at the site's own root once per
+   * run, and sends it again to a window that asks later, without counting the site as opened,
+   * which the first-visit confirmation reads. Only public http(s) sites, so a reply cannot make
+   * main request this computer.
    */
   async link(url: string): Promise<void> {
     const site = URL.parse(url)
@@ -208,8 +209,14 @@ export class SiteIcons {
     if (site.username !== '' || site.password !== '') return
     if (isPrivateHost(site)) return
     const origin = originOf(url)
-    if (origin === null || this.asked.has(origin)) return
-    if (this.linked.has(origin) || this.sites.get(origin)?.icon) return
+    if (origin === null || this.sites.get(origin)?.icon) return
+    const linked = this.linked.get(origin)
+    // A window that was reloaded or opened since has lost the icon sent before, so it is sent again.
+    if (linked !== undefined) {
+      this.deps.changed({ kind: 'link', origin, icon: linked })
+      return
+    }
+    if (this.asked.has(origin)) return
     this.asked.add(origin)
     const icon = await this.fetchIcon(`${origin}/favicon.ico`, new AbortController().signal)
     if (icon === null) return
