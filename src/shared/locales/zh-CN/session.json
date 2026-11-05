@@ -343,8 +343,6 @@
     "picker": {
       "search": "搜索 Agent",
       "noMatch": "没有匹配的 Agent",
-      "agents": "Agent",
-      "other": "其他 Harness",
       "signedOut": "已退出 · 登录后使用",
       "failed": "启动失败",
       "limitUsed": "已用 {{limit}}限额的 {{percent}}%",

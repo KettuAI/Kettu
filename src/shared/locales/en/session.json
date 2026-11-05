@@ -360,8 +360,6 @@
     "picker": {
       "search": "Search agents",
       "noMatch": "No matching agents",
-      "agents": "Agents",
-      "other": "Other harnesses",
       "signedOut": "Signed out · sign in to use",
       "failed": "Failed to start",
       "limitUsed": "{{percent}}% of {{limit}} limit",

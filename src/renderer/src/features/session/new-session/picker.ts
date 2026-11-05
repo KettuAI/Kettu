@@ -6,37 +6,6 @@ import { limitLabel } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { agentNeed } from './start-options'
 
-/** A harness's agents under its name, or the harnesses with one agent each, together. */
-export interface AgentGroup {
-  key: string
-  /** The harness's name; null for the group of single agents. */
-  harness: string | null
-  agents: AgentStatus[]
-}
-
-/**
- * The picker's groups, in the order the agents come: a harness with two or more agents is a group
- * of its own, and the agents of the other harnesses share one at the end.
- */
-export function agentGroups(statuses: readonly AgentStatus[]): AgentGroup[] {
-  const counts = new Map<string, number>()
-  for (const status of statuses)
-    counts.set(status.harnessId, (counts.get(status.harnessId) ?? 0) + 1)
-  const groups: AgentGroup[] = []
-  const single: AgentStatus[] = []
-  for (const status of statuses) {
-    if ((counts.get(status.harnessId) ?? 0) < 2) {
-      single.push(status)
-      continue
-    }
-    const group = groups.find((g) => g.key === status.harnessId)
-    if (group) group.agents.push(status)
-    else groups.push({ key: status.harnessId, harness: status.harnessName, agents: [status] })
-  }
-  if (single.length > 0) groups.push({ key: 'single', harness: null, agents: single })
-  return groups
-}
-
 export type LineTone = 'muted' | 'attention' | 'danger'
 
 /**
