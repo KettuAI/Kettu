@@ -12,6 +12,8 @@ import {
 } from '@shared/agent-host'
 import type { PortChannel } from '@shared/port-channel'
 import type { FromPort, PortError } from '@shared/port-rpc'
+import { withOperation, writeLog } from '@shared/log/process-log'
+import { isReadMethod, logRequest } from '@shared/log/requests'
 import { forbiddenToDevices } from '@shared/remote/allow-list'
 import type { PortDevice } from '@shared/remote/device'
 import { HostError, isHostError } from './errors'
@@ -164,14 +166,19 @@ export class PortHub {
       })
       return
     }
+    const op = `${portId}.${id}`
     try {
       const ctx = { portId, device: device ?? null }
-      const result = await this.dispatch(method as HostMethod, message.params, ctx)
+      const result = await withOperation(op, () =>
+        this.dispatch(method as HostMethod, message.params, ctx),
+      )
       reply({ type: 'response', id, result })
     } catch (error) {
       const portError = toPortError(error)
       if (portError.code === 'internal') {
         this.deps.log('error', `${method} failed: ${(error as Error)?.stack ?? String(error)}`)
+      } else if (!isReadMethod(method)) {
+        withOperation(op, () => writeLog('info', 'request', `${method} failed: ${portError.code}`))
       }
       reply({ type: 'error', id, error: portError })
     }
@@ -189,6 +196,7 @@ export class PortHub {
       if (isHostError(error)) throw error
       throw new HostError('invalid_params', (error as Error).message)
     }
+    logRequest(method, params, ctx.device?.id ?? null)
     return this.deps.handlers[method](params, ctx)
   }
 }

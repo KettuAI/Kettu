@@ -650,13 +650,6 @@ export class Hosts {
       case 'remote-host:admin-call':
         void this.answerAdmin(message)
         break
-      case 'remote-host:log': {
-        const text = typeof message.message === 'string' ? message.message : ''
-        if (message.level === 'error') remoteLog.error(text)
-        else if (message.level === 'warn') remoteLog.warn(text)
-        else remoteLog.info(text)
-        break
-      }
       default:
         log.warn(`Ignored unknown message "${(message as { type: string }).type}"`)
     }
@@ -694,13 +687,6 @@ export class Hosts {
           })
         }
         break
-      case 'host:log': {
-        const text = typeof message.message === 'string' ? message.message : ''
-        if (message.level === 'error') agentLog.error(text)
-        else if (message.level === 'warn') agentLog.warn(text)
-        else agentLog.info(text)
-        break
-      }
       case 'host:attention':
         for (const listener of this.attentionListeners) listener(message)
         break

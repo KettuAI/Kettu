@@ -7,6 +7,7 @@ import {
   type WebContents,
 } from 'electron'
 import type { HostResetEvent } from '@shared/ipc'
+import { logEnvironment } from '@shared/log/process-log'
 import { createLogger, type Logger } from './log'
 import { RestartPolicy } from './restart-policy'
 
@@ -191,6 +192,7 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
       child = utilityProcess.fork(this.config.modulePath, [], {
         serviceName: this.config.serviceName,
         stdio: 'pipe',
+        env: { ...process.env, ...logEnvironment() },
       })
     } catch (error) {
       this.record('crash', 'fork failed')
@@ -325,7 +327,9 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
         partial = ''
       })
     }
-    forward(child.stdout, (line) => this.log.info(line))
+    // A host writes its own log; its stdout only echoes that in development. Its stderr holds what
+    // it could not log, such as a crash before its log opened.
+    forward(child.stdout, (line) => console.log(line))
     forward(child.stderr, (line) => this.log.warn(line))
   }
 

@@ -31,7 +31,16 @@ export interface AppInfo {
   /** The system and its version, then the architecture, as a bug report names them. */
   system: string
   userDataPath: string
+  /** The folder of the log files; absent from hosts older than it. */
+  logsPath?: string
   isPackaged: boolean
+}
+
+/** Something the user did in a window, for the log: ids, counts and switches, never text. */
+export interface ActionReport {
+  at: number
+  name: string
+  data?: Record<string, string | number | boolean | null>
 }
 
 /** The system's default browser: its name and a small PNG of its icon; null where unknown. */
@@ -192,6 +201,7 @@ export interface IpcInvokeContract {
     result: GrantedAttachment[] | null
   }
   'diagnostics:save': { args: [bundle: DiagnosticsBundle]; result: string | null }
+  'diagnostics:clear-verbose': { args: []; result: void }
   'shell:show-data-folder': { args: []; result: void }
   'shell:show-item': { args: [path: string]; result: void }
   'editors:list': { args: []; result: EditorList }
@@ -374,6 +384,7 @@ export interface IpcSendContract {
   /** The window's port to the sessions on other hosts, as `host-sessions:port`. */
   'host-sessions:connect': []
   'perf:interactive': []
+  'diagnostics:actions': [actions: ActionReport[]]
   /** The page has no `onConfirmQuit` listener, so main asks with a native dialog instead. */
   'app:confirm-quit-unhandled': [id: number]
   /** Every file with unsaved edits, whenever that changes, so quitting can ask without a round trip. */
@@ -597,6 +608,10 @@ export interface KettuApi {
   diagnostics: {
     /** Asks where to save and writes the bundle; resolves to the path, or null if cancelled. */
     save(bundle: DiagnosticsBundle): Promise<string | null>
+    /** Deletes the detailed records; refused while they are on. */
+    clearVerbose(): Promise<void>
+    /** Adds what the user did to the log, in batches. */
+    recordActions(actions: ActionReport[]): void
   }
   shell: {
     showDataFolder(): Promise<void>

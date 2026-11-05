@@ -389,6 +389,9 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         )
         return name
       },
+      clearVerbose: () => unsupported("delete the host's detailed records"),
+      // The host logs what a browser's requests do; the page itself keeps no log.
+      recordActions: () => undefined,
     },
     shell: {
       showDataFolder: async () => copyPath((await hostInfo()).userDataPath),

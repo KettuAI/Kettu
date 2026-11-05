@@ -3,10 +3,13 @@
 // the terminal host's for their terminals, and its own for the sessions on other hosts. The only
 // file of the host that uses Electron.
 
+import { startHostLog } from '@shared/log/process-log'
 import type { MessagePortMain } from 'electron'
 import type { MainToRemoteHost, RemoteHostToMain } from '@shared/host-control'
 import type { PortChannel } from '@shared/port-channel'
 import { startRemoteHost } from './start'
+
+startHostLog('remote-host')
 
 const parentPort = process.parentPort
 

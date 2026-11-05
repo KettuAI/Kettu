@@ -6,6 +6,7 @@
 // sessions to the host's parent. From protocol version 2 a session outlives its connection for a
 // while, what it sends waiting in its outbox, and the device's next connection may take it over.
 
+import { addLogSecret } from '@shared/log/process-log'
 import { randomBytes } from 'node:crypto'
 import { open, realpath, type FileHandle } from 'node:fs/promises'
 import type { ArtifactTypeInfo } from '@shared/artifact-types'
@@ -350,6 +351,7 @@ export class RemoteServer {
   issueToken(session: DeviceSession, previous: string | null): string {
     if (previous) this.tokens.delete(previous)
     const token = randomBytes(32).toString('base64url')
+    addLogSecret(token)
     this.tokens.set(token, session)
     return token
   }

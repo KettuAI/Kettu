@@ -64,6 +64,8 @@ export interface SettingsFile {
   startModes: Partial<Record<AgentId, string>>
   updates: { automatic: 'download' | 'restart' | 'notify' | 'off' }
   privacy: { hideAccount: boolean } // kept so older files still parse; loading turns it off
+  // Detailed records are on until this time (ms since the epoch); null when off.
+  diagnostics: { verboseUntil: number | null }
   usage: {
     fromComputer: boolean // read the agents' own logs
     sidebar: 'today' | 'cost' | 'limit' | 'off' // what the sidebar's Usage row shows at its end
@@ -185,6 +187,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   startModes: {},
   updates: { automatic: 'download' },
   privacy: { hideAccount: false },
+  diagnostics: { verboseUntil: null },
   usage: { fromComputer: false, sidebar: 'today' },
   remote: {
     enabled: false,
@@ -230,6 +233,7 @@ export interface SettingsPatch {
   startModes?: Partial<Record<AgentId, string | null>> // merged by agent; null clears one
   updates?: Partial<SettingsFile['updates']>
   privacy?: Partial<SettingsFile['privacy']>
+  diagnostics?: Partial<SettingsFile['diagnostics']>
   usage?: Partial<SettingsFile['usage']>
   remote?: {
     enabled?: boolean

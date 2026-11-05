@@ -65,6 +65,7 @@ import { KettuTray } from './tray'
 import { openTrayTarget, TrayPanel } from './tray-panel'
 import { Updater } from './updater'
 import { devUserDataPath } from './user-data'
+import { applyVerbose, markRunning, openAppLog, watchConsole, watchProcesses } from './app-log'
 import {
   applyTheme,
   applyWindowTheme,
@@ -103,6 +104,7 @@ if (devUserData) {
   app.setPath('userData', devUserData)
   log.info(`Development run: data in ${devUserData}`)
 }
+openAppLog(devUserData)
 
 // Before the app is ready, and only once.
 protocol.registerSchemesAsPrivileged([artifactScheme, mediaScheme])
@@ -126,6 +128,8 @@ async function start(): Promise<void> {
   })
 
   await app.whenReady()
+  watchProcesses()
+  void markRunning().catch((error: unknown) => log.error('Could not mark the run', error))
   electronApp.setAppUserModelId(APP_USER_MODEL_ID)
   const wasOpenedAtLogin =
     process.platform === 'darwin' ? app.getLoginItemSettings().wasOpenedAtLogin : false
@@ -558,8 +562,16 @@ async function start(): Promise<void> {
       settings.update({ appearance: { zoom: stepZoom(settings.get().appearance.zoom, step) } })
     },
   }
+  const applyDiagnostics = (until: number | null): void =>
+    applyVerbose(
+      until,
+      () => settings.update({ diagnostics: { verboseUntil: null } }),
+      (debug) => agentHost.setLogLevel(debug ? 'debug' : 'info'),
+    )
+  applyDiagnostics(settings.get().diagnostics.verboseUntil)
   settings.onChange((next, changed) => {
     broadcast('settings:changed', next)
+    if (changed.has('diagnostics')) applyDiagnostics(next.diagnostics.verboseUntil)
     hostAdmin?.settingsChanged(next)
     const localeChanged = localeOf(next) !== currentLocale()
     if (localeChanged) {
@@ -634,6 +646,7 @@ async function start(): Promise<void> {
     // F12 toggles DevTools in development; reload shortcuts are disabled in production. Without
     // zoom: true it swallows Mod+- and Mod+Shift+=, which the menu and the renderer handle.
     optimizer.watchWindowShortcuts(window, { zoom: true })
+    watchConsole(window.webContents, 'renderer')
     quitFlow.watchWindow(window)
     watchSubframes(window.webContents, {
       isOpenedArtifact: (url) => artifacts.origins.isOpenedIn(window.webContents, url),

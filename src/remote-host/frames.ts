@@ -2,6 +2,7 @@
 // under a random token, which its URL carries, since a sandboxed frame sends no credentials of the
 // page's. A token names one artifact and lasts until the frame closes or the session ends.
 
+import { addLogSecret } from '@shared/log/process-log'
 import { randomBytes } from 'node:crypto'
 
 /** The path every frame's files lie under, as `/frame/<token>/`. */
@@ -33,6 +34,7 @@ export class ArtifactFrames<S> {
       this.frames.delete(token)
     }
     const token = randomBytes(32).toString('base64url')
+    addLogSecret(token)
     this.frames.set(token, { session, artifactId, lax: false })
     return token
   }

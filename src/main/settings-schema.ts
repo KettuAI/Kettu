@@ -56,6 +56,19 @@ const oneOf =
 const isBoolean: Check = (value, path) =>
   typeof value === 'boolean' ? null : `"${path}" must be a boolean`
 
+/** Detailed records may be turned on for a day at most; a time in the past means off. */
+export const VERBOSE_FOR_MS = 24 * 60 * 60 * 1000
+// Room for the renderer's clock to run ahead of main's.
+const VERBOSE_SLACK_MS = 60 * 1000
+
+const isVerboseUntil: Check = (value, path) =>
+  value === null ||
+  (typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value <= Date.now() + VERBOSE_FOR_MS + VERBOSE_SLACK_MS)
+    ? null
+    : `"${path}" must be null or a time within a day`
+
 const isAgentChoice: Check = (value, path) =>
   value === null || isAgentId(value) ? null : `"${path}" must be an agent id or null`
 
@@ -120,6 +133,7 @@ const SECTION_FIELDS = {
   git: { backgroundFetch: isBoolean },
   updates: { automatic: oneOf('download', 'restart', 'notify', 'off') },
   privacy: { hideAccount: isBoolean },
+  diagnostics: { verboseUntil: isVerboseUntil },
   usage: { fromComputer: isBoolean, sidebar: oneOf('today', 'cost', 'limit', 'off') },
 } as const satisfies Record<string, Record<string, Check>>
 

@@ -4,6 +4,7 @@
 
 import { Worker } from 'node:worker_threads'
 import type { HostEvent } from '@shared/agent-host'
+import { setLogLevel, writeLog } from '@shared/log/process-log'
 import { ARTIFACT_ID } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import type { HostToMain, MainToHost } from '@shared/host-control'
@@ -43,7 +44,7 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
 
   function init(message: Extract<MainToHost, { type: 'host:init' }>): void {
     if (host) {
-      send({ type: 'host:log', level: 'warn', message: 'host:init arrived twice; ignored' })
+      writeLog('warn', 'host', 'host:init arrived twice; ignored')
       return
     }
     host = AgentHost.start({
@@ -72,17 +73,16 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
 
   function withHost(run: (host: AgentHost) => unknown): boolean {
     if (!host) {
-      send({ type: 'host:log', level: 'warn', message: 'A message arrived before host:init' })
+      writeLog('warn', 'host', 'A message arrived before host:init')
       return false
     }
     void host.then(run)
     return true
   }
 
+  // A rejection must not end the host, which serves every session.
   process.on('unhandledRejection', (reason) => {
-    const message = `Unhandled rejection: ${(reason as Error)?.stack ?? String(reason)}`
-    console.error(message)
-    send({ type: 'host:log', level: 'error', message })
+    writeLog('error', 'host', `Unhandled rejection: ${(reason as Error)?.stack ?? String(reason)}`)
   })
 
   control.onMessage((message) => {
@@ -152,6 +152,9 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
         break
       case 'host:power':
         withHost((h) => h.power(message.state))
+        break
+      case 'host:log-level':
+        if (message.level === 'debug' || message.level === 'info') setLogLevel(message.level)
         break
       case 'host:permission-answer':
         if (

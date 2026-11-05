@@ -42,5 +42,21 @@ export function keyPath(data: string): string {
 
 /** Where the macOS service writes the daemon's output, which launchd sends to a file. */
 export function logPath(data: string): string {
-  return path.join(data, 'logs', 'daemon.log')
+  return path.join(data, 'logs', 'service-output.log')
+}
+
+/**
+ * The daemon's log folder: the platform's place for logs, or the data folder's when one is named
+ * in place of the default, so a test or development run keeps to its own.
+ */
+export function logFolderPath({ platform, home, env, cwd }: DataPathInput): string {
+  const override = env[DATA_ENV]?.trim()
+  if (override) return path.join(path.resolve(cwd, override), 'logs')
+  if (platform === 'darwin') return path.join(home, 'Library', 'Logs', 'Kettu Daemon')
+  const xdg = env.XDG_STATE_HOME?.trim()
+  return path.join(
+    xdg && path.isAbsolute(xdg) ? xdg : path.join(home, '.local', 'state'),
+    'kettu',
+    'logs',
+  )
 }

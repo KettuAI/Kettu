@@ -1,3 +1,5 @@
+import { withOperation } from '@shared/log/process-log'
+import { logRequest } from '@shared/log/requests'
 import type { PortChannel } from '@shared/port-channel'
 import type { FromPort, PortError, ToPort } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
@@ -99,8 +101,9 @@ export class PortServer {
     }
     try {
       const params = validators[method](request.params)
+      logRequest(method, params, device?.id ?? null)
       const handler = this.handlers[method] as (port: string, params: unknown) => unknown
-      const result = await handler(portId, params)
+      const result = await withOperation(`${portId}.${request.id}`, () => handler(portId, params))
       this.post(port, { type: 'response', id: request.id, result: result ?? null })
     } catch (error) {
       this.reply(port, request.id, toPortError(error))

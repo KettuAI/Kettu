@@ -1,3 +1,5 @@
+import { writeLog } from '@shared/log/process-log'
+
 export type LogLevel = 'info' | 'warn' | 'error'
 
 export interface LogRecord {
@@ -10,27 +12,30 @@ export interface LogRecord {
 const MAX_RECORDS = 500
 const records: LogRecord[] = []
 
-function write(level: LogLevel, source: string, message: string): void {
-  const record = { at: Date.now(), level, source, message }
-  records.push(record)
+function write(level: LogLevel, source: string, message: string, data?: LogData): void {
+  records.push({ at: Date.now(), level, source, message })
   if (records.length > MAX_RECORDS) records.splice(0, records.length - MAX_RECORDS)
-  const line = `[${new Date(record.at).toISOString()}] [${source}] ${message}`
-  if (level === 'error') console.error(line)
-  else if (level === 'warn') console.warn(line)
-  else console.log(line)
+  writeLog(level, source, message, data)
 }
 
+export type LogData = Record<string, unknown>
+
 export interface Logger {
-  info(message: string): void
-  warn(message: string): void
+  debug(message: string, data?: LogData): void
+  info(message: string, data?: LogData): void
+  warn(message: string, data?: LogData): void
   error(message: string, error?: unknown): void
 }
 
-/** A logger for one part of main; the last 500 records are kept for diagnostics. */
+/**
+ * A logger for one part of main or the daemon: each record goes to the process's log file, and
+ * the last 500 above debug stay in memory for diagnostics.
+ */
 export function createLogger(source: string): Logger {
   return {
-    info: (message) => write('info', source, message),
-    warn: (message) => write('warn', source, message),
+    debug: (message, data) => writeLog('debug', source, message, data),
+    info: (message, data) => write('info', source, message, data),
+    warn: (message, data) => write('warn', source, message, data),
     error: (message, error) =>
       write('error', source, error === undefined ? message : `${message}: ${describeError(error)}`),
   }

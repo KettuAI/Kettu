@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { recordAction, watchNavigation } from '@renderer/lib/action-log'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { checkForUpdates } from '@renderer/stores/updates'
 import {
@@ -13,11 +14,17 @@ import { closeCurrent } from './close'
 import { back, forward, toggleHistory } from './history'
 import { layerOpen } from './shortcuts'
 
+/** Records where the window goes, for the log. */
+export function useActionLog(): void {
+  useEffect(() => watchNavigation(), [])
+}
+
 /** Commands from main: the app menu and notification clicks. */
 export function useAppCommands(): void {
   useEffect(
     () =>
       window.kettu.app.onCommand((command) => {
+        recordAction(`command.${command.kind}`)
         switch (command.kind) {
           case 'open-project':
             void openProjectDialog()

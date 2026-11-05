@@ -3,6 +3,7 @@
 // process, node-main.ts under Node.js.
 
 import type { MainToTerminalHost, TerminalHostToMain } from '@shared/host-control'
+import { writeLog } from '@shared/log/process-log'
 import type { ControlChannel, PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
@@ -29,7 +30,7 @@ export interface TerminalHostOptions {
 }
 
 function warn(message: string): void {
-  console.warn(message)
+  writeLog('warn', 'host', message)
 }
 
 async function loadPty(): Promise<PtySpawn> {

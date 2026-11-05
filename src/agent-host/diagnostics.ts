@@ -1,8 +1,10 @@
-// In-memory diagnostics: ACP traffic, stderr and process events per agent, and the host log.
-// Nothing here is written to disk until the user exports a bundle.
+// Diagnostics per agent and for the host: recent ACP traffic, stderr and process events in memory
+// for an exported bundle, and the same written to the log files. Traffic reaches a file only while
+// detailed records are on, as it holds prompts, code and tool output.
 
 import type { AgentId } from '@shared/thread'
 import type { TrafficRecord } from '@shared/agent-host'
+import { logsDebug, sideLog, writeLog, type SideLog } from '@shared/log/process-log'
 import { Ring, TextRing } from './ring'
 
 export const TRAFFIC_MESSAGES = 2_000
@@ -11,6 +13,7 @@ export const STDERR_CHARS = 64 * 1024
 const MESSAGE_PREVIEW_CHARS = 256 * 1024
 const EVENTS = 500
 const LOG_ENTRIES = 2_000
+const STDERR_LINE_CHARS = 16 * 1024
 
 interface StoredTraffic {
   at: number
@@ -37,6 +40,15 @@ class AgentBuffers {
   readonly traffic = new Ring<StoredTraffic>(TRAFFIC_MESSAGES, TRAFFIC_BYTES)
   readonly stderr = new TextRing(STDERR_CHARS)
   readonly events = new Ring<AgentEvent>(EVENTS)
+  readonly stderrFile: SideLog
+  readonly trafficFile: SideLog
+  // The end of the last stderr chunk, until its line ends.
+  partial = ''
+
+  constructor(agentId: AgentId) {
+    this.stderrFile = sideLog('agent', `agent-${agentId}`)
+    this.trafficFile = sideLog('verbose', `agent-${agentId}`)
+  }
 }
 
 function methodOf(message: unknown): string | null {
@@ -89,7 +101,7 @@ export class Diagnostics {
   private buffers(agentId: AgentId): AgentBuffers {
     let buffers = this.agents.get(agentId)
     if (!buffers) {
-      buffers = new AgentBuffers()
+      buffers = new AgentBuffers(agentId)
       this.agents.set(agentId, buffers)
     }
     return buffers
@@ -114,7 +126,15 @@ export class Diagnostics {
       size,
       json: stored,
     }
-    this.buffers(agentId).traffic.push(record, stored.length)
+    const buffers = this.buffers(agentId)
+    buffers.traffic.push(record, stored.length)
+    if (logsDebug()) {
+      buffers.trafficFile.write('traffic', record.method ?? 'message', {
+        direction,
+        size,
+        message: JSON.parse(stored) as unknown,
+      })
+    }
     if (this.options.mirrorTraffic) {
       const arrow = direction === 'in' ? '<-' : '->'
       ;(this.options.write ?? ((line: string) => process.stdout.write(`${line}\n`)))(
@@ -124,7 +144,16 @@ export class Diagnostics {
   }
 
   stderr(agentId: AgentId, text: string): void {
-    this.buffers(agentId).stderr.push(text)
+    const buffers = this.buffers(agentId)
+    buffers.stderr.push(text)
+    const lines = (buffers.partial + text).split(/\r?\n/)
+    buffers.partial = lines.pop() ?? ''
+    // A line that never ends is written in pieces rather than held without bound.
+    if (buffers.partial.length > STDERR_LINE_CHARS) {
+      lines.push(buffers.partial)
+      buffers.partial = ''
+    }
+    for (const line of lines) if (line.length > 0) buffers.stderrFile.write('stderr', line)
   }
 
   stderrText(agentId: AgentId): TextRing {
@@ -132,6 +161,7 @@ export class Diagnostics {
   }
 
   event(agentId: AgentId, event: string, detail?: string): void {
+    writeLog('info', `agent ${agentId}`, event, detail !== undefined ? { detail } : undefined)
     this.buffers(agentId).events.push({
       at: this.now(),
       event,
@@ -140,6 +170,7 @@ export class Diagnostics {
   }
 
   log(level: LogEntry['level'], message: string): void {
+    writeLog(level, 'host', message)
     const entry = { at: this.now(), level, message }
     this.logRing.push(entry)
     for (const listener of this.listeners) listener(entry)
