@@ -648,8 +648,11 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
       0,
     ),
   )
-  // Questions are answered in the window: the panel has no room for their steps and text.
-  const asks = request.kind === 'tool' && request.permission.questions !== undefined
+  // Questions and MCP requests are answered in the window: the panel has no room for their steps,
+  // text and fields, and a page request's Open has to open the page.
+  const asks =
+    request.kind === 'tool' &&
+    (request.permission.questions !== undefined || request.permission.elicitation !== undefined)
   const options: { label: string; choice: AnswerChoice | null }[] = asks
     ? [{ label: t('answerInKettu'), choice: null }]
     : request.kind === 'tool'

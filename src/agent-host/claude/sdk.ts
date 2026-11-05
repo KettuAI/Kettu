@@ -62,6 +62,44 @@ export type CanUseTool = (
   context: ToolPermissionContext,
 ) => Promise<PermissionResult>
 
+/** A request from an MCP server for the user: a form to fill in, or a page to open. */
+export interface ElicitationRequest {
+  serverName: string
+  message: string
+  mode?: 'form' | 'url'
+  /** The page to open, in `url` mode. */
+  url?: string
+  /** What the completion of a `url` request names. */
+  elicitationId?: string
+  /** The form's JSON Schema, in `form` mode. */
+  requestedSchema?: Record<string, unknown>
+  /** From the server's `_meta['anthropic/permissionDisplay']`: a header, a short name, a line. */
+  title?: string
+  displayName?: string
+  description?: string
+}
+
+/** The MCP SDK's `ElicitResult`, which the Agent SDK passes to the server. */
+export interface ElicitationResult {
+  action: 'accept' | 'decline' | 'cancel'
+  content?: Record<string, string | number | boolean | string[]>
+}
+
+export type OnElicitation = (
+  request: ElicitationRequest,
+  options: { signal: AbortSignal; requestId: string },
+) => Promise<ElicitationResult | null>
+
+/** A page an accepted `url` request opened is done, as its server reported. */
+export interface ElicitationCompleteMessage {
+  type: 'system'
+  subtype: 'elicitation_complete'
+  mcp_server_name: string
+  elicitation_id: string
+  uuid: string
+  session_id: string
+}
+
 export interface SpawnOptions {
   command: string
   args: string[]
@@ -106,6 +144,8 @@ export interface QueryOptions {
   permissionMode?: PermissionMode
   allowDangerouslySkipPermissions?: boolean
   canUseTool?: CanUseTool
+  /** Without it the SDK declines every MCP server's request that no hook answers. */
+  onElicitation?: OnElicitation
   mcpServers?: Record<string, HttpMcpServer>
   settings?: FlagSettings
   extraArgs?: Record<string, string | null>

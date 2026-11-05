@@ -10,7 +10,7 @@ import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import type { AgentAccount, ContextBreakdown, PlanLimit } from '@shared/agent-host'
-import type { ConfigOption, TokenTotals } from '@shared/thread'
+import type { ConfigOption, PendingElicitation, TokenTotals, ToolEntry } from '@shared/thread'
 import {
   AgentRequestError,
   optionAnswer,
@@ -28,7 +28,9 @@ import {
   type SessionTarget,
 } from '../connection'
 import type { HostedContext } from '../driver'
+import { formFields, isWebUrl } from '../elicitation'
 import type { Env } from '../find-command'
+import { t } from '../i18n'
 import {
   addTokenTotals,
   firstUserMessage,
@@ -57,10 +59,12 @@ import {
 import {
   ANSWER_IN_REPLY,
   answeredMode,
+  BUILD_MODES,
   OTHER_ANSWER,
   pendingQuestions,
   permissionOptions,
   permissionResult,
+  planResult,
   QUESTION_UNREADABLE,
   questionAnswers,
   questionOptions,
@@ -73,6 +77,9 @@ import type {
   AssistantMessage,
   ClaudeSdk,
   ContentBlock,
+  ElicitationCompleteMessage,
+  ElicitationRequest,
+  ElicitationResult,
   FlagSettings,
   ModelInfo,
   ModelUsage,
@@ -100,6 +107,8 @@ const PENDING_SESSIONS = 32
 const PENDING_DELIVERIES = 2000
 const PENDING_TTL_MS = 60_000
 const CLOSED_SESSIONS = 256
+/** Accepted pages that have not reported done; the oldest is forgotten past this. */
+const OPEN_PAGES = 64
 const TITLE_CONTEXT = 1000
 const TITLE_MINIMUM = 10
 /** How long a stop waits for Claude Code to exit before it goes on. */
@@ -191,6 +200,10 @@ interface Session {
   models: ModelInfo[]
   modes: PermissionMode[]
   choices: SessionChoices
+  /** The mode it opened in, Claude Code's own default for new sessions. */
+  openMode: PermissionMode
+  /** The last mode other than plan its choices took, which a plan's approval starts with. */
+  buildMode: PermissionMode | null
   config: ConfigOption[]
   turn: Turn | null
   /** Its query took up a history, whose spend the first result's running totals hold. */
@@ -362,6 +375,8 @@ export class ClaudeConnection implements AgentConnection {
   private readonly children = new Map<string, string>()
   /** How many permissions each subagent has open. */
   private readonly asking = new Map<string, number>()
+  /** The entry of each accepted `url` request, by elicitation id, until its server reports done. */
+  private readonly openPages = new Map<string, { targetId: string; entryId: string }>()
   private envQueue: Promise<unknown> = Promise.resolve()
   private account: string | null = null
 
@@ -752,6 +767,8 @@ export class ClaudeConnection implements AgentConnection {
         fast: false,
         ultracode: 'default',
       },
+      openMode: mode,
+      buildMode: null,
       config: [],
       turn: null,
       resumed: how.resume,
@@ -825,6 +842,8 @@ export class ClaudeConnection implements AgentConnection {
       allowDangerouslySkipPermissions: allowBypass,
       canUseTool: (name, toolInput, permission) =>
         this.canUseTool(session, name, toolInput, permission),
+      onElicitation: (request, { signal, requestId }) =>
+        this.elicit(session, request, requestId, signal),
       ...(Object.keys(mcpServers).length > 0 && !bare ? { mcpServers } : {}),
       ...(Object.keys(flags).length > 0 ? { settings: flags } : {}),
       extraArgs: { 'replay-user-messages': null },
@@ -994,6 +1013,8 @@ export class ClaudeConnection implements AgentConnection {
         }
       } else if (system.subtype === 'status' && typeof system.permissionMode === 'string') {
         this.setChoice(session, 'mode', system.permissionMode)
+      } else if (system.subtype === 'elicitation_complete') {
+        this.pageDone(message as ElicitationCompleteMessage)
       }
     } else if (message.type === 'assistant') {
       const assistant = message as AssistantMessage
@@ -1284,6 +1305,7 @@ export class ClaudeConnection implements AgentConnection {
     }
     // What the user chose before goes back to the reopened query.
     await this.restoreChoices(reopened, session.choices)
+    reopened.buildMode = session.buildMode
     reopened.titleText = session.titleText
     return reopened
   }
@@ -1534,6 +1556,7 @@ export class ClaudeConnection implements AgentConnection {
   private setChoice(session: Session, id: 'mode', value: string): void {
     if (session.choices[id] === value) return
     session.choices[id] = value
+    if (value !== 'plan') session.buildMode = value as PermissionMode
     session.config = buildConfig(
       session.models,
       session.choices,
@@ -1585,36 +1608,62 @@ export class ClaudeConnection implements AgentConnection {
     permission: ToolPermissionContext,
   ): Promise<PermissionResult> {
     if (toolName === 'AskUserQuestion') return this.askQuestions(session, target, input, permission)
-    const options = permissionOptions(toolName, permission, session.modes)
+    const plan = toolName === 'ExitPlanMode'
+    const options = permissionOptions(
+      toolName,
+      permission,
+      session.modes,
+      plan ? this.buildMode(session, target) : undefined,
+    )
     const output = session.mapper.permissionTool(
       target.context(),
       { type: 'tool_use', id: permission.toolUseID, name: toolName, input },
       targetId,
     )
-    let optionId: string | null
+    let picked: { optionId: string; note?: string } | null
     try {
-      const answer = await target.requestPermission(
-        {
-          toolCallId: permission.toolUseID,
-          toolEntryId: `t:${permission.toolUseID}`,
-          output,
-          options,
-        },
-        permission.signal,
+      const answer = optionAnswer(
+        await target.requestPermission(
+          {
+            toolCallId: permission.toolUseID,
+            toolEntryId: `t:${permission.toolUseID}`,
+            output,
+            options,
+            ...(plan ? { plan: typeof input.plan === 'string' ? input.plan : '' } : {}),
+          },
+          permission.signal,
+        ),
       )
-      const picked = optionAnswer(answer)
-      optionId = picked === 'cancelled' ? null : picked.optionId
+      picked = answer === 'cancelled' ? null : answer
     } catch {
       // Withdrawn: Claude Code no longer waits for the answer.
       return permissionResult(null, input, permission)
     }
-    const result = permissionResult(optionId, input, permission)
+    const optionId = picked?.optionId ?? null
+    const result = plan
+      ? planResult(picked, input, permission)
+      : permissionResult(optionId, input, permission)
     if (result.behavior === 'allow') {
       target.apply(session.mapper.toolStatus(target.context(), permission.toolUseID, 'in_progress'))
       const mode = optionId ? answeredMode(optionId) : null
       if (mode) this.setChoice(session, 'mode', mode)
     }
     return result
+  }
+
+  /**
+   * The mode a plan's approval starts with chosen: the last one the session used before it
+   * planned; for a session that started in plan mode, the one its agent's new sessions start in.
+   */
+  private buildMode(session: Session, target: SessionTarget): PermissionMode {
+    const candidates = [session.buildMode, target.startMode(), session.openMode]
+    const offered = candidates.find(
+      (mode): mode is PermissionMode =>
+        typeof mode === 'string' &&
+        BUILD_MODES.includes(mode as PermissionMode) &&
+        session.modes.includes(mode as PermissionMode),
+    )
+    return offered ?? 'default'
   }
 
   /**
@@ -1648,7 +1697,8 @@ export class ClaudeConnection implements AgentConnection {
     } catch {
       return permissionResult(null, input, permission)
     }
-    if (answer === 'cancelled') return permissionResult(null, input, permission)
+    if (answer === 'cancelled' || 'values' in answer)
+      return permissionResult(null, input, permission)
     let answers: Record<string, string>
     if ('answers' in answer) {
       answers = questionAnswers(questions, answer.answers)
@@ -1664,6 +1714,114 @@ export class ClaudeConnection implements AgentConnection {
     }
     target.apply(session.mapper.toolStatus(target.context(), toolUseID, 'in_progress'))
     return { behavior: 'allow', updatedInput: { ...input, answers }, toolUseID }
+  }
+
+  // MCP servers' requests.
+
+  /**
+   * An MCP server's form or page as a card, answered with the form's values or by opening the page.
+   * A page the user opened stays in progress until its server reports it done.
+   */
+  private async elicit(
+    session: Session,
+    request: ElicitationRequest,
+    requestId: string,
+    signal: AbortSignal,
+  ): Promise<ElicitationResult> {
+    const target = this.targets.get(session.id)
+    if (!target || session.quiet) return { action: 'decline' }
+    const server = request.displayName || request.serverName
+    let elicitation: PendingElicitation
+    if (request.mode === 'url') {
+      // Only a web page is offered; anything else could open a program on the user's computer.
+      if (!request.url || !isWebUrl(request.url)) return { action: 'decline' }
+      elicitation = { kind: 'url', server, message: request.message, url: request.url }
+    } else {
+      const fields = formFields(request.requestedSchema ?? {})
+      if (!fields) {
+        this.context.hooks.ignored(session.id, `a form from ${server} that Kettu cannot show`)
+        return { action: 'decline' }
+      }
+      elicitation = { kind: 'form', server, message: request.message, fields }
+    }
+    const ctx = target.context()
+    const entryId = ctx.nextId()
+    const entry: ToolEntry = {
+      kind: 'tool',
+      id: entryId,
+      title:
+        request.title ||
+        t(elicitation.kind === 'url' ? 'elicitation.urlTitle' : 'elicitation.formTitle', {
+          server,
+        }),
+      toolKind: 'other',
+      status: 'pending',
+      content: request.message ? [{ type: 'markdown', markdown: request.message }] : [],
+      locations: [],
+      permission: null,
+      permissionResult: null,
+      elicitation: {
+        server,
+        kind: elicitation.kind,
+        ...(elicitation.kind === 'url' ? { url: elicitation.url } : {}),
+      },
+    }
+    const options =
+      elicitation.kind === 'url'
+        ? [
+            { id: 'accept', name: t('elicitation.open'), kind: 'allow_once' as const },
+            { id: 'decline', name: t('elicitation.decline'), kind: 'reject_once' as const },
+          ]
+        : [
+            { id: 'accept', name: t('elicitation.submit'), kind: 'allow_once' as const },
+            { id: 'decline', name: t('elicitation.decline'), kind: 'reject_once' as const },
+          ]
+    let result: ElicitationResult
+    try {
+      const answer = await target.requestPermission(
+        {
+          toolCallId: `elicitation:${requestId}`,
+          toolEntryId: entryId,
+          output: { patches: [{ op: 'entry.add', entry }], effects: [] },
+          options,
+          elicitation,
+        },
+        signal,
+      )
+      if (answer === 'cancelled' || 'answers' in answer) result = { action: 'cancel' }
+      else if ('values' in answer) result = { action: 'accept', content: answer.values }
+      else result = { action: answer.optionId === 'accept' ? 'accept' : 'decline' }
+    } catch {
+      // Withdrawn: the SDK no longer waits for the answer.
+      return { action: 'cancel' }
+    }
+    let status: ToolEntry['status'] = result.action === 'cancel' ? 'cancelled' : 'completed'
+    if (result.action === 'accept' && elicitation.kind === 'url' && request.elicitationId) {
+      status = 'in_progress'
+      this.openPages.set(request.elicitationId, { targetId: session.id, entryId })
+      if (this.openPages.size > OPEN_PAGES) {
+        this.openPages.delete(this.openPages.keys().next().value!)
+      }
+    }
+    this.setStatus(target, entryId, status)
+    return result
+  }
+
+  private pageDone(message: ElicitationCompleteMessage): void {
+    const page = this.openPages.get(message.elicitation_id)
+    if (!page) return
+    this.openPages.delete(message.elicitation_id)
+    const target = this.targets.get(page.targetId)
+    if (target) this.setStatus(target, page.entryId, 'completed')
+  }
+
+  private setStatus(target: SessionTarget, entryId: string, status: ToolEntry['status']): void {
+    const entry = target.context().thread.byId[entryId]
+    if (entry?.kind !== 'tool' || entry.status === status) return
+    target.apply({
+      patches: [{ op: 'entry.update', id: entryId, changes: { status } }],
+      effects: [],
+    })
   }
 
   // Reports.

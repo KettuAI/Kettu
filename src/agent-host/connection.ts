@@ -9,6 +9,8 @@ import type {
 } from '@shared/agent-host'
 import type {
   ConfigOption,
+  FormValues,
+  PendingElicitation,
   PendingPermission,
   PendingQuestion,
   QuestionAnswer,
@@ -26,15 +28,24 @@ export interface PermissionRequest {
   options: PendingPermission['options']
   /** An ask's questions, answered together; `options` then serves a client that lacks them. */
   questions?: PendingQuestion[]
+  /** A plan to approve, as Markdown; the host numbers it among the session's plans. */
+  plan?: string
+  /** An MCP server's request: a form, answered with its values, or a page to open. */
+  elicitation?: PendingElicitation
 }
 
-export type PermissionAnswer = { optionId: string } | { answers: QuestionAnswer[] } | 'cancelled'
+/** `note` is set only for an option that takes one, and only when the user wrote something. */
+export type PermissionAnswer =
+  | { optionId: string; note?: string }
+  | { answers: QuestionAnswer[] }
+  | { values: FormValues }
+  | 'cancelled'
 
-/** An answer that picks an option, which is all a request without questions gets. */
-export type OptionAnswer = { optionId: string } | 'cancelled'
+/** An answer that picks an option, which is all a request without questions or a form gets. */
+export type OptionAnswer = { optionId: string; note?: string } | 'cancelled'
 
 export function optionAnswer(answer: PermissionAnswer): OptionAnswer {
-  return answer !== 'cancelled' && 'answers' in answer ? 'cancelled' : answer
+  return answer === 'cancelled' || 'optionId' in answer ? answer : 'cancelled'
 }
 
 /** What a live session gives the connection; Kettu types only. */
@@ -43,6 +54,13 @@ export interface SessionTarget {
   apply(output: MapperOutput): void
   /** Resolves with the user's answer; rejects with `signal.reason` once the agent withdraws it. */
   requestPermission(request: PermissionRequest, signal: AbortSignal): Promise<PermissionAnswer>
+  /**
+   * Sends `text` as the user's own message, such as the note that sends a plan back: at once when
+   * the session can start a turn, else behind its queue.
+   */
+  send(text: string): void
+  /** The permission mode the settings start the agent's new sessions in, or null for none. */
+  startMode(): string | null
 }
 
 export interface ConnectionHooks {

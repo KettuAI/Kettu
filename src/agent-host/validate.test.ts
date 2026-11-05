@@ -72,6 +72,50 @@ describe('createValidators', () => {
     )
   })
 
+  it('takes one answer to a request: an option with a note, answers or form values', () => {
+    const respond = posix['permissions.respond']
+    const base = { sessionId: 's', requestId: 'r' }
+    expect(respond({ ...base, optionId: 'reject', note: 'Shorter' })).toEqual({
+      ...base,
+      optionId: 'reject',
+      note: 'Shorter',
+    })
+    expect(respond({ ...base, optionId: 'allow-once' })).toEqual({
+      ...base,
+      optionId: 'allow-once',
+    })
+    const values = { team: 'eng', count: 2, notify: false, tags: ['a', 'b'] }
+    expect(respond({ ...base, values })).toEqual({ ...base, values })
+    // A key JSON gives an object as its own stays one, never its prototype.
+    const parsed = respond({ ...base, values: JSON.parse('{"__proto__": "x"}') }) as {
+      values: Record<string, unknown>
+    }
+    expect(Object.getPrototypeOf(parsed.values)).toBe(Object.prototype)
+    expect(Object.hasOwn(parsed.values, '__proto__')).toBe(true)
+    rejects(() => respond(base))
+    rejects(() => respond({ ...base, optionId: 'a', values }))
+    rejects(() => respond({ ...base, answers: [], values }))
+    rejects(() => respond({ ...base, values, note: 'x' }))
+    rejects(() => respond({ ...base, optionId: 'a', note: 'x'.repeat(4001) }))
+    rejects(() => respond({ ...base, optionId: 'a', note: 1 }))
+    rejects(() => respond({ ...base, values: ['eng'] }))
+    rejects(() => respond({ ...base, values: { '': 'x' } }))
+    rejects(() => respond({ ...base, values: { ['k'.repeat(201)]: 'x' } }))
+    rejects(() => respond({ ...base, values: { a: 'x'.repeat(10_001) } }))
+    rejects(() => respond({ ...base, values: { a: Number.NaN } }))
+    rejects(() => respond({ ...base, values: { a: null } }))
+    rejects(() => respond({ ...base, values: { a: { b: 1 } } }))
+    rejects(() => respond({ ...base, values: { a: [1] } }))
+    rejects(() => respond({ ...base, values: { a: ['x'.repeat(1001)] } }))
+    rejects(() => respond({ ...base, values: { a: Array.from({ length: 101 }, () => 'x') } }))
+    rejects(() =>
+      respond({
+        ...base,
+        values: Object.fromEntries(Array.from({ length: 101 }, (_, i) => [`k${i}`, 'x'])),
+      }),
+    )
+  })
+
   it('wants absolute paths by the platform rules', () => {
     expect(posix['projects.add']({ path: '/Users/me/app' })).toEqual({ path: '/Users/me/app' })
     rejects(() => posix['projects.add']({ path: 'app' }))

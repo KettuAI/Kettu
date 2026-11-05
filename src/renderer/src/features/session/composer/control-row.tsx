@@ -197,7 +197,7 @@ export function ControlRow({
   )
 }
 
-const MODE_ICON = {
+export const MODE_ICON = {
   asks: ShieldIcon,
   edits: PencilIcon,
   plan: EyeIcon,
@@ -233,6 +233,8 @@ export function OptionMenu({
   const Icon = MODE_ICON[look]
   const [setAnchor, aboveBox] = useAboveBox()
   const [open, setOpen] = useState(false)
+  // The mode as the row first showed it; any later one, such as a plan's approval sets, flashes.
+  const [firstValue] = useState(value)
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!isMode || event.metaKey || event.ctrlKey || event.altKey) return
     const choice = numberedMode(option.choices, event.key)
@@ -253,10 +255,22 @@ export function OptionMenu({
               name: option.name,
               value: choiceName(option, value),
             })}
-            className={cn(ROW_BUTTON, isMode && look === 'full' && 'text-danger', className)}
+            className={cn(
+              ROW_BUTTON,
+              'relative',
+              isMode && look === 'full' && 'text-danger',
+              className,
+            )}
           />
         }
       >
+        {isMode && value !== firstValue && (
+          <span
+            key={value}
+            aria-hidden
+            className="pointer-events-none absolute inset-0 animate-mode-flash rounded-[inherit] bg-control-on-tint shadow-tile-key-on"
+          />
+        )}
         {isMode && <Icon strokeWidth={1.4} />}
         {choiceName(option, value)}
         {!isMode && <ChevronDownIcon strokeWidth={1.75} className="size-3 text-icon" />}

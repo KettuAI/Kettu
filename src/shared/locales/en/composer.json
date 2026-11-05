@@ -6,7 +6,9 @@
       "awaiting": "Waiting for your approval",
       "limitReached": "{{limit}} limit reached · resets {{time}}",
       "ask": "Reply to {{agent}}…",
-      "denied": "Tell {{agent}} what to do differently"
+      "denied": "Tell {{agent}} what to do differently",
+      "running": "Queue a message · {{keys}} sends it into this turn · Esc stops",
+      "runningQueue": "Queue a message · Esc stops"
     },
     "stop": "Stop",
     "send": "Send",

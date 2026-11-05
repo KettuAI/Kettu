@@ -104,6 +104,7 @@ function threadTarget(
   const scope = newTurnScope()
   const effects: MapperEffect[] = []
   const requests: { request: PermissionRequest; signal: AbortSignal }[] = []
+  const sent: string[] = []
   const state = { replaying: false }
   const target: SessionTarget = {
     context: () => ({
@@ -124,12 +125,15 @@ function threadTarget(
       target.apply(request.output)
       return answer(request)
     },
+    send: (text) => sent.push(text),
+    startMode: () => null,
   }
   return {
     target,
     state,
     effects,
     requests,
+    sent,
     entries: (): ThreadEntry[] => threadEntries(thread),
     entry: (id: string) => thread.byId[id],
     thread: () => thread,
@@ -889,6 +893,217 @@ describe('approvals', () => {
     })
     expect(await answer).toEqual({ permissions, scope: 'turn' })
     expect(t.entry('t:perm-1')).toMatchObject({ toolKind: 'other' })
+  })
+})
+
+describe('a plan', () => {
+  /** A turn in plan mode that proposes `markdown`, ending normally. */
+  async function planTurn(
+    answer: (request: PermissionRequest) => PermissionAnswer | Promise<PermissionAnswer>,
+  ) {
+    const c = await connect()
+    await c.connection.newSession('/project')
+    await c.connection.setConfigOption('thread-1', 'collaboration_mode', 'plan')
+    const t = threadTarget(answer)
+    c.connection.register('thread-1', t.target)
+    const prompt = c.connection.prompt('thread-1', [{ type: 'text', text: 'Plan it' }])
+    await until(() => c.server.sent('turn/start').length === 1)
+    const at = { threadId: 'thread-1', turnId: 'turn-1' }
+    c.server.notify('turn/started', { threadId: 'thread-1', turn: turn('turn-1') })
+    c.server.notify('item/started', { ...at, item: { type: 'plan', id: 'plan-1', text: '' } })
+    c.server.notify('item/plan/delta', { ...at, itemId: 'plan-1', delta: '# Plan\n' })
+    c.server.notify('item/plan/delta', { ...at, itemId: 'plan-1', delta: '1. Edit' })
+    c.server.notify('item/completed', {
+      ...at,
+      item: { type: 'plan', id: 'plan-1', text: '# Plan\n1. Edit\n' },
+    })
+    c.server.notify('turn/completed', { threadId: 'thread-1', turn: turn('turn-1', 'completed') })
+    expect(await prompt).toMatchObject({ stopReason: 'end_turn' })
+    return { ...c, t }
+  }
+
+  it('shows the plan as a plan to approve, and asks once the turn has ended', async () => {
+    const { t } = await planTurn(() => 'cancelled')
+    await until(() => t.requests.length === 1)
+    expect(t.entry('t:plan-1')).toMatchObject({
+      kind: 'tool',
+      title: 'Plan',
+      toolKind: 'switch_mode',
+      status: 'completed',
+      content: [{ type: 'markdown', markdown: '# Plan\n1. Edit\n' }],
+      planVersion: 1,
+    })
+    expect(t.entries().some((entry) => entry.kind === 'agent')).toBe(false)
+    const { request } = t.requests[0]!
+    expect(request).toMatchObject({ toolEntryId: 't:plan-1', plan: '# Plan\n1. Edit\n' })
+    expect(request.options).toEqual([
+      {
+        id: 'implement',
+        name: 'Yes, implement this plan',
+        description: 'Leaves Plan mode; Codex keeps its permission mode, Auto review',
+        kind: 'allow_once',
+        preferred: true,
+      },
+      { id: 'keep_planning', name: 'No, keep planning', kind: 'reject_once', note: true },
+    ])
+    expect(t.sent).toEqual([])
+  })
+
+  it('implements the plan in default mode, in a turn of its own', async () => {
+    const { t, connection, server } = await planTurn(() => ({ optionId: 'implement' }))
+    await until(() => t.sent.length === 1)
+    expect(t.sent).toEqual(['Implement the plan.'])
+    const prompt = connection.prompt('thread-1', [{ type: 'text', text: t.sent[0]! }])
+    await until(() => server.sent('turn/start').length === 2)
+    expect(server.sent('turn/start')[1]).toMatchObject({
+      input: [{ type: 'text', text: 'Implement the plan.', text_elements: [] }],
+      collaborationMode: { mode: 'default' },
+    })
+    server.notify('turn/completed', { threadId: 'thread-1', turn: turn('turn-2', 'completed') })
+    await prompt
+  })
+
+  it('keeps planning with the note as the next message, or waits for one', async () => {
+    const withNote = await planTurn(() => ({ optionId: 'keep_planning', note: 'Add tests' }))
+    await until(() => withNote.t.sent.length === 1)
+    expect(withNote.t.sent).toEqual(['Add tests'])
+    const prompt = withNote.connection.prompt('thread-1', [{ type: 'text', text: 'Add tests' }])
+    await until(() => withNote.server.sent('turn/start').length === 2)
+    expect(withNote.server.sent('turn/start')[1]).toMatchObject({
+      collaborationMode: { mode: 'plan' },
+    })
+    withNote.server.notify('turn/completed', {
+      threadId: 'thread-1',
+      turn: turn('turn-2', 'completed'),
+    })
+    await prompt
+    const without = await planTurn(() => ({ optionId: 'keep_planning' }))
+    await until(() => without.t.requests.length === 1)
+    await tick()
+    expect(without.t.sent).toEqual([])
+  })
+
+  it('asks nothing for a plan a replay brings back', async () => {
+    const { server, connection } = await connect()
+    server.history.set('thread-old', [
+      { turnId: 'turn-1', item: { type: 'plan', id: 'plan-1', text: 'Old plan' } },
+    ])
+    const t = threadTarget()
+    t.state.replaying = true
+    connection.register('thread-old', t.target)
+    await connection.loadSession('thread-old', '/project')
+    await tick()
+    expect(t.entry('t:plan-1')).toMatchObject({ planVersion: 1, status: 'completed' })
+    expect(t.requests).toHaveLength(0)
+  })
+})
+
+describe("an MCP server's request", () => {
+  const form = {
+    threadId: 'thread-1',
+    turnId: 'turn-1',
+    serverName: 'linear',
+    mode: 'form',
+    _meta: null,
+    message: 'Pick a team',
+    requestedSchema: {
+      type: 'object',
+      properties: {
+        team: { type: 'string', title: 'Team', oneOf: [{ const: 'eng', title: 'Engineering' }] },
+        notify: { type: 'boolean' },
+      },
+      required: ['team'],
+    },
+  }
+
+  it('asks with the form, and sends the values submitted', async () => {
+    const { server, connection } = await connect()
+    await connection.newSession('/project')
+    const t = threadTarget(() => ({ values: { team: 'eng', notify: true } }))
+    connection.register('thread-1', t.target)
+    const { answer, id } = server.request('mcpServer/elicitation/request', form)
+    expect(await answer).toEqual({
+      action: 'accept',
+      content: { team: 'eng', notify: true },
+      _meta: null,
+    })
+    const { request } = t.requests[0]!
+    expect(request.elicitation).toEqual({
+      kind: 'form',
+      server: 'linear',
+      message: 'Pick a team',
+      fields: [
+        {
+          key: 'team',
+          title: 'Team',
+          required: true,
+          type: 'choice',
+          choices: [{ value: 'eng', label: 'Engineering' }],
+        },
+        { key: 'notify', title: 'notify', required: false, type: 'boolean' },
+      ],
+    })
+    expect(request.options.map((o) => [o.id, o.kind])).toEqual([
+      ['accept', 'allow_once'],
+      ['decline', 'reject_once'],
+    ])
+    expect(t.entry(`t:elicitation:${id}`)).toMatchObject({
+      title: 'linear needs some details',
+      status: 'completed',
+      elicitation: { server: 'linear', kind: 'form' },
+    })
+  })
+
+  it('declines or cancels a form as the user answered', async () => {
+    const { server, connection } = await connect()
+    await connection.newSession('/project')
+    let reply: PermissionAnswer = { optionId: 'decline' }
+    const t = threadTarget(() => reply)
+    connection.register('thread-1', t.target)
+    expect(await server.request('mcpServer/elicitation/request', form).answer).toEqual({
+      action: 'decline',
+      content: null,
+      _meta: null,
+    })
+    reply = 'cancelled'
+    expect(await server.request('mcpServer/elicitation/request', form).answer).toEqual({
+      action: 'cancel',
+      content: null,
+      _meta: null,
+    })
+  })
+
+  it('offers to open a web page, and declines any other address unasked', async () => {
+    const { server, connection } = await connect()
+    await connection.newSession('/project')
+    const t = threadTarget(() => ({ optionId: 'accept' }))
+    connection.register('thread-1', t.target)
+    const page = {
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      serverName: 'linear',
+      mode: 'url',
+      _meta: null,
+      message: 'Sign in',
+      url: 'https://linear.app/oauth',
+      elicitationId: 'el-1',
+    }
+    expect(await server.request('mcpServer/elicitation/request', page).answer).toEqual({
+      action: 'accept',
+      content: null,
+      _meta: null,
+    })
+    expect(t.requests[0]!.request.elicitation).toEqual({
+      kind: 'url',
+      server: 'linear',
+      message: 'Sign in',
+      url: 'https://linear.app/oauth',
+    })
+    expect(
+      await server.request('mcpServer/elicitation/request', { ...page, url: 'file:///etc/hosts' })
+        .answer,
+    ).toEqual({ action: 'decline', content: null, _meta: null })
+    expect(t.requests).toHaveLength(1)
   })
 })
 

@@ -277,10 +277,7 @@
     "listSeparator": "、",
     "changeSeparator": "；",
     "exitPlan": {
-      "auto": "是，并使用 Auto 模式",
-      "acceptEdits": "是，并自动接受编辑",
-      "manual": "是，并手动批准编辑",
-      "keepPlanning": "否，继续规划"
+      "keepPlanning": "继续规划"
     },
     "allowEdit": "允许这次修改",
     "acceptEdits": "允许本会话中的所有修改"
@@ -334,6 +331,12 @@
       "default": "默认",
       "plan": "计划",
       "planDescription": "先做计划再改动"
+    },
+    "plan": {
+      "title": "计划",
+      "implement": "是，执行这个计划",
+      "implementDescription": "退出 Plan 模式；Codex 保持当前的权限模式：{{mode}}",
+      "keepPlanning": "否，继续规划"
     },
     "auth": {
       "chatGpt": {
@@ -495,6 +498,15 @@
   },
   "question": {
     "other": "其他回答…"
+  },
+  "elicitation": {
+    "formTitle": "{{server}} 需要一些信息",
+    "urlTitle": "{{server}} 请求打开一个网页",
+    "submit": "提交",
+    "open": "打开",
+    "decline": "拒绝",
+    "yes": "是",
+    "no": "否"
   },
   "artifacts": {
     "formatUpgraded": "已迁移到其类型格式的第 {{format}} 版"

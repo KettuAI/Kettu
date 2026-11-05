@@ -66,6 +66,10 @@ class Target implements SessionTarget {
   effects: MapperEffect[] = []
   replaying = false
   readonly asked: Asked[] = []
+  /** What the connection sent as the user's own messages. */
+  readonly sent: string[] = []
+  /** The mode the settings start new sessions in. */
+  start: string | null = null
   private readonly scope = newTurnScope()
   private counter = 0
 
@@ -92,6 +96,14 @@ class Target implements SessionTarget {
       this.asked.push({ request, signal, answer: resolve })
       signal.addEventListener('abort', () => reject(signal.reason), { once: true })
     })
+  }
+
+  send(text: string): void {
+    this.sent.push(text)
+  }
+
+  startMode(): string | null {
+    return this.start
   }
 
   entries(): ThreadEntry[] {
@@ -1282,6 +1294,141 @@ describe('permissions', () => {
       behavior: 'allow',
       updatedPermissions: [{ type: 'setMode', mode: 'acceptEdits', destination: 'session' }],
     })
+  })
+
+  function exitPlan(toolUseID: string, plan = 'Do it') {
+    return s.sdk.last.options.canUseTool!(
+      'ExitPlanMode',
+      { plan },
+      { signal: new AbortController().signal, toolUseID },
+    )
+  }
+
+  const preferred = (index: number) =>
+    target.asked[index]!.request.options.find((option) => option.preferred)?.id
+
+  it('asks with the plan, starting with the mode the session used before it planned', async () => {
+    await s.connection.setConfigOption(sessionId, 'mode', 'acceptEdits')
+    await s.connection.setConfigOption(sessionId, 'mode', 'plan')
+    const answer = exitPlan('toolu_p1', '# Plan\n\n1. Edit')
+    await settle()
+    expect(target.asked[0]!.request.plan).toBe('# Plan\n\n1. Edit')
+    expect(preferred(0)).toBe('exit-plan-accept-edits')
+    target.asked[0]!.answer({ optionId: 'exit-plan-auto' })
+    await answer
+    // Approved in Auto, the next plan starts with Auto.
+    await s.connection.setConfigOption(sessionId, 'mode', 'plan')
+    void exitPlan('toolu_p2')
+    await settle()
+    expect(preferred(1)).toBe('exit-plan-auto')
+  })
+
+  it("starts with the agent's start mode for a session that started in plan mode", async () => {
+    target.start = 'acceptEdits'
+    await s.connection.setConfigOption(sessionId, 'mode', 'plan')
+    void exitPlan('toolu_p1')
+    await settle()
+    expect(preferred(0)).toBe('exit-plan-accept-edits')
+    target.start = 'bypassPermissions'
+    void exitPlan('toolu_p2')
+    await settle()
+    expect(preferred(1)).toBe('exit-plan-default')
+  })
+
+  it('keeps planning with the note, so Claude Code stays in plan mode and revises', async () => {
+    await s.connection.setConfigOption(sessionId, 'mode', 'plan')
+    const answer = exitPlan('toolu_p1')
+    await settle()
+    target.asked[0]!.answer({ optionId: 'reject', note: 'Keep the old API' })
+    expect(await answer).toEqual({
+      behavior: 'deny',
+      message:
+        'The user wants you to keep planning and revise the plan. Their note: Keep the old API',
+      toolUseID: 'toolu_p1',
+    })
+    const config = await s.connection.setConfigOption(sessionId, 'effort', 'default')
+    expect(config.find((option) => option.id === 'mode')?.value).toBe('plan')
+  })
+
+  function elicit(request: Record<string, unknown>) {
+    return s.sdk.last.options.onElicitation!(
+      { serverName: 'linear', message: 'Sign in to Linear', ...request },
+      { signal: new AbortController().signal, requestId: 'req-1' },
+    )
+  }
+
+  it("answers an MCP server's form with the values the user submitted", async () => {
+    const answer = elicit({
+      mode: 'form',
+      displayName: 'Linear',
+      requestedSchema: {
+        type: 'object',
+        properties: { team: { type: 'string', enum: ['eng', 'ops'] } },
+        required: ['team'],
+      },
+    })
+    await settle()
+    const { request } = target.asked[0]!
+    expect(request.elicitation).toEqual({
+      kind: 'form',
+      server: 'Linear',
+      message: 'Sign in to Linear',
+      fields: [
+        {
+          key: 'team',
+          title: 'team',
+          required: true,
+          type: 'choice',
+          choices: [
+            { value: 'eng', label: 'eng' },
+            { value: 'ops', label: 'ops' },
+          ],
+        },
+      ],
+    })
+    expect(target.entry(request.toolEntryId)).toMatchObject({
+      kind: 'tool',
+      title: 'Linear needs some details',
+      status: 'pending',
+      elicitation: { server: 'Linear', kind: 'form' },
+    })
+    target.asked[0]!.answer({ values: { team: 'ops' } })
+    expect(await answer).toEqual({ action: 'accept', content: { team: 'ops' } })
+    expect(target.entry(request.toolEntryId)).toMatchObject({ status: 'completed' })
+  })
+
+  it('keeps an opened page in progress until its server reports it done', async () => {
+    const answer = elicit({ mode: 'url', url: 'https://linear.app/auth', elicitationId: 'el-1' })
+    await settle()
+    const { request } = target.asked[0]!
+    expect(request.elicitation).toMatchObject({ kind: 'url', url: 'https://linear.app/auth' })
+    target.asked[0]!.answer({ optionId: 'accept' })
+    expect(await answer).toEqual({ action: 'accept' })
+    expect(target.entry(request.toolEntryId)).toMatchObject({
+      status: 'in_progress',
+      elicitation: { server: 'linear', kind: 'url', url: 'https://linear.app/auth' },
+    })
+    s.sdk.last.emit({
+      type: 'system',
+      subtype: 'elicitation_complete',
+      mcp_server_name: 'linear',
+      elicitation_id: 'el-1',
+      uuid: 'u-1',
+      session_id: sessionId,
+    } as SdkMessage)
+    await settle()
+    expect(target.entry(request.toolEntryId)).toMatchObject({ status: 'completed' })
+  })
+
+  it('declines a page that is not a web page, and a form it cannot show, without asking', async () => {
+    expect(await elicit({ mode: 'url', url: 'file:///etc/passwd' })).toEqual({ action: 'decline' })
+    expect(
+      await elicit({
+        mode: 'form',
+        requestedSchema: { type: 'object', properties: { a: { type: 'object' } } },
+      }),
+    ).toEqual({ action: 'decline' })
+    expect(target.asked).toHaveLength(0)
   })
 })
 

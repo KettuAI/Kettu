@@ -30,7 +30,15 @@ function charOf(entry: ThreadEntry | undefined): string {
   if (entry.kind === 'thought') return 'h'
   if (entry.kind === 'plan') return 'n'
   if (entry.kind === 'compaction') return 'p'
-  if (entry.kind !== 'tool' || entry.question !== undefined) return 'o'
+  // A question, a plan and an MCP server's request are the user's to answer, never folded work.
+  if (
+    entry.kind !== 'tool' ||
+    entry.question !== undefined ||
+    entry.planVersion !== undefined ||
+    entry.elicitation !== undefined
+  ) {
+    return 'o'
+  }
   if (entry.permission) return 'w'
   if (
     entry.status === 'completed' &&

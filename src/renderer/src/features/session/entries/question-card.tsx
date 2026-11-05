@@ -1,15 +1,26 @@
 import { useRef, useState, type KeyboardEvent, type Ref } from 'react'
-import { CheckIcon, HandIcon } from 'lucide-react'
+import { CheckIcon, EyeOffIcon, LockIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AnsweredQuestion, PendingQuestion, ToolEntry } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
-import { Button } from '@renderer/components/ui/button'
-import { Input } from '@renderer/components/ui/input'
-import { Kbd } from '@renderer/components/ui/kbd'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { Tabs, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
 import { cn } from '@renderer/lib/utils'
-import { NUMBERED, OptionName, WaitingCard, WaitingHeader, WaitingStatus } from './answer-list'
+import {
+  AgentWho,
+  CardError,
+  CardFooter,
+  CheckMark,
+  ConfirmButton,
+  FooterButton,
+  NUMBERED,
+  OptionName,
+  RadioMark,
+  TileKey,
+  WaitingCard,
+  WaitingHeader,
+  WaitingStatus,
+} from './answer-list'
+import { isConfirmKey, tileClass } from './card-style'
 import { respondToQuestions } from './helpers'
 import {
   answeredCount,
@@ -24,13 +35,26 @@ import {
 } from './question-state'
 import { useAnswering } from './use-answering'
 
-const ROW =
-  'flex min-h-9 w-full min-w-0 cursor-default items-center gap-2.5 rounded-lg py-1.5 pr-2.5 pl-2 text-left text-row text-foreground outline-none transition-colors duration-(--duration-fast) focus-ring disabled:opacity-60 aria-checked:bg-selected data-checked:bg-selected hover:enabled:bg-hover'
+/** Choices this short sit two to a row on a question that takes several. */
+const SHORT_LABEL = 28
+const SHORT_DESCRIPTION = 44
+
+function twoPerRow(question: PendingQuestion): boolean {
+  return (
+    question.multiSelect &&
+    question.options.length > 1 &&
+    question.options.every(
+      (option) =>
+        option.label.length <= SHORT_LABEL &&
+        (option.description?.length ?? 0) <= SHORT_DESCRIPTION,
+    )
+  )
+}
 
 /**
- * An agent's questions as one card: the question shown, its choices and a field for an answer of
- * the user's own, and steps to switch question. Nothing goes until Submit, which sends only the
- * questions that have an answer.
+ * An agent's questions as one card: the question shown, its choices as tiles and a tile for an
+ * answer of the user's own, and steps to switch question. Nothing goes until Submit, which sends
+ * only the questions that have an answer.
  */
 export function QuestionCard({
   ref,
@@ -68,11 +92,22 @@ export function QuestionCard({
     if (sent && focused) emitAppEvent({ kind: 'focus-composer' })
   }
 
+  const confirm = () => {
+    if (last) void submit()
+    else setState((s) => goTo(s, s.step + 1))
+  }
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (isConfirmKey(event)) {
+      event.preventDefault()
+      event.stopPropagation()
+      confirm()
+      return
+    }
     if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
     const target = event.target as HTMLElement
     const onTab = !!target.closest('[role="tab"]')
-    // The tabs move among themselves with the arrows, and a button presses itself with Enter.
+    // The tabs move among themselves with the arrows, and a tile or button presses itself.
     if (onTab && event.key !== 'Enter') return
     const intent = keyIntent(
       { key: event.key, isComposing: event.nativeEvent.isComposing || event.keyCode === 229 },
@@ -80,7 +115,8 @@ export function QuestionCard({
         step: state.step,
         count,
         inText: target instanceof HTMLInputElement,
-        onButton: onTab || !!target.closest('[data-card-action]'),
+        onButton:
+          onTab || !!target.closest('[data-card-action], [role="radio"], [role="checkbox"]'),
       },
     )
     if (!intent) return
@@ -99,19 +135,20 @@ export function QuestionCard({
       className={className}
     >
       <WaitingHeader>
-        <HandIcon aria-hidden className="size-3.75 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-ui font-medium text-secondary">
-          {t('question.label')}
-        </span>
+        <AgentWho
+          sessionId={sessionId}
+          name={agentName}
+          sub={count > 1 ? t('question.count', { count }) : question.header || null}
+        />
         <WaitingStatus>{t('question.asksYou')}</WaitingStatus>
       </WaitingHeader>
-      {/* The card's own keys: the arrows switch question and Enter goes on. */}
+      {/* The card's own keys: the arrows switch question, Enter goes on, Mod+Enter confirms. */}
       <div ref={body} onKeyDownCapture={onKeyDown} className="flex min-w-0 flex-col">
         {count > 1 && (
           <Tabs
             value={String(state.step)}
             onValueChange={(value) => setState((s) => goTo(s, Number(value)))}
-            className="px-3.5 pt-3"
+            className="px-5 pt-3"
           >
             <TabsList activateOnFocus aria-label={t('question.steps')}>
               {questions.map((asked, i) => {
@@ -126,28 +163,23 @@ export function QuestionCard({
                     })}
                     title={asked.header || undefined}
                   >
-                    {i + 1}
-                    {done && <CheckIcon aria-hidden className="size-3" />}
+                    {done && i !== state.step ? (
+                      <CheckIcon aria-hidden strokeWidth={2.4} className="size-3" />
+                    ) : (
+                      <span className="font-semibold tabular">{i + 1}</span>
+                    )}
+                    {asked.header && <span className="max-w-32 truncate">{asked.header}</span>}
                   </TabsTrigger>
                 )
               })}
             </TabsList>
           </Tabs>
         )}
-        {question.header && (
-          <p className="px-3.5 pt-3 text-hint font-medium text-tertiary">{question.header}</p>
-        )}
-        <p
-          data-selectable=""
-          className={cn(
-            'px-3.5 pb-1 text-row leading-normal text-foreground',
-            question.header ? 'pt-0.5' : 'pt-3',
-          )}
-        >
+        <p data-selectable="" className="px-5 pt-2.5 text-heading font-semibold text-foreground">
           {question.question}
         </p>
         {question.multiSelect && (
-          <p className="px-3.5 pb-1 text-hint text-tertiary">{t('question.selectMany')}</p>
+          <p className="px-5 pt-0.5 text-control text-tertiary">{t('question.selectMany')}</p>
         )}
         <Choices
           question={question}
@@ -157,48 +189,28 @@ export function QuestionCard({
           onChoose={(index) => setState((s) => choose(s, question, index))}
           onText={(text) => setState((s) => typeText(s, question, text))}
         />
-        {error && <p className="mx-3.5 mb-2.5 text-xs text-danger">{error}</p>}
-        <div className="flex items-center justify-end gap-2 border-t border-border-soft px-3.5 py-2.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            data-card-action=""
+        <CardError error={error} />
+        <CardFooter>
+          <FooterButton
             disabled={busy || (last && !isAnswered(draft))}
             onClick={() => setState(skipStep)}
           >
             {t('question.skip')}
-          </Button>
-          {last ? (
-            <Button
-              size="sm"
-              data-card-action=""
-              data-answer-enter=""
-              disabled={busy}
-              onClick={() => void submit()}
-            >
-              {answering === 'submit' && <Spinner className="size-3.5" />}
-              {given > 0
+          </FooterButton>
+          <ConfirmButton busy={answering === 'submit'} disabled={busy} onClick={confirm}>
+            {last
+              ? given > 0
                 ? t('question.submit')
-                : t(count > 1 ? 'question.skipAll' : 'question.skip')}
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              data-card-action=""
-              data-answer-enter=""
-              disabled={busy}
-              onClick={() => setState((s) => goTo(s, s.step + 1))}
-            >
-              {t('question.next')}
-            </Button>
-          )}
-        </div>
+                : t(count > 1 ? 'question.skipAll' : 'question.skip')
+              : t('question.next')}
+          </ConfirmButton>
+        </CardFooter>
       </div>
     </WaitingCard>
   )
 }
 
-/** A question's choices, then the field for an answer of the user's own. */
+/** A question's choices as tiles, then the tile for an answer of the user's own. */
 function Choices({
   question,
   selected,
@@ -218,101 +230,138 @@ function Choices({
   const options = question.options
   const own = options.length
   const written = text.trim() !== ''
-  return (
-    <div
-      role={question.multiSelect ? 'group' : 'radiogroup'}
-      aria-label={question.question}
-      className="flex flex-col gap-px p-1.5"
-    >
-      {options.map((option, i) => {
-        const chosen = selected.includes(i)
-        return (
-          <button
-            key={i}
-            type="button"
-            role={question.multiSelect ? 'checkbox' : 'radio'}
-            aria-checked={chosen}
-            disabled={disabled}
-            data-answer-option={i < NUMBERED ? i + 1 : undefined}
-            aria-keyshortcuts={i < NUMBERED ? String(i + 1) : undefined}
-            onClick={() => onChoose(i)}
-            className={ROW}
-          >
-            {i < NUMBERED ? (
-              <Kbd
-                aria-hidden
-                variant={chosen ? 'primary' : 'default'}
-                className="h-5 min-w-5 rounded-md text-key font-semibold"
-              >
-                {i + 1}
-              </Kbd>
-            ) : (
-              <span aria-hidden className="size-5 shrink-0" />
-            )}
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="min-w-0 truncate">
-                <OptionName name={option.label} />
-              </span>
-              {option.description && (
-                <span className="min-w-0 text-hint text-tertiary wrap-anywhere">
-                  {option.description}
-                </span>
-              )}
-            </span>
-            {chosen && <CheckIcon aria-hidden className="size-3.5 shrink-0 text-secondary" />}
-          </button>
-        )
-      })}
-      {question.allowsText && (
-        <div
-          data-checked={written ? '' : undefined}
-          className={cn(ROW, 'cursor-text py-1 focus-within:bg-selected')}
-        >
-          {own < NUMBERED ? (
-            <Kbd
-              aria-hidden
-              variant={written ? 'primary' : 'default'}
-              className="h-5 min-w-5 rounded-md text-key font-semibold"
-            >
-              {own + 1}
-            </Kbd>
-          ) : (
-            <span aria-hidden className="size-5 shrink-0" />
+  const two = twoPerRow(question)
+  const Mark = question.multiSelect ? CheckMark : RadioMark
+
+  // A question that takes only words: one field, with no key, and a lock when it is a secret.
+  if (options.length === 0) {
+    return (
+      <div className="flex flex-col px-5 pt-3.5">
+        <label
+          className={cn(
+            'flex min-h-12 cursor-text items-center gap-2.5 rounded-card border border-input bg-card pr-3 pl-3.5 shadow-field transition-[border-color,box-shadow] duration-(--duration-fast)',
+            'hover:border-strong focus-within:border-focused focus-within:shadow-field-focus',
           )}
-          <Input
+        >
+          {question.secret && <LockIcon aria-hidden className="size-4 shrink-0 text-tertiary" />}
+          <input
             type={question.secret ? 'password' : 'text'}
             autoComplete="off"
             value={text}
             disabled={disabled}
-            placeholder={t('question.other')}
-            aria-label={t('question.other')}
-            data-answer-option={own < NUMBERED ? own + 1 : undefined}
+            aria-label={question.question}
+            data-answer-option={1}
             onChange={(event) => onText(event.target.value)}
-            className="h-7 flex-1 rounded-none border-0 bg-transparent px-0 shadow-none focus-visible:shadow-none"
+            className="h-11 min-w-0 flex-1 bg-transparent text-label text-foreground outline-none placeholder:text-tertiary"
           />
-          {written && <CheckIcon aria-hidden className="size-3.5 shrink-0 text-secondary" />}
-        </div>
-      )}
+        </label>
+        {question.secret && <SecretHint className="px-0.5" />}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col">
+      <div
+        role={question.multiSelect ? 'group' : 'radiogroup'}
+        aria-label={question.question}
+        className={cn('grid gap-2 px-5 pt-3.5', two ? 'grid-cols-2' : 'grid-cols-1')}
+      >
+        {options.map((option, i) => {
+          const chosen = selected.includes(i)
+          return (
+            <button
+              key={i}
+              type="button"
+              role={question.multiSelect ? 'checkbox' : 'radio'}
+              aria-checked={chosen}
+              disabled={disabled}
+              data-answer-option={i < NUMBERED ? i + 1 : undefined}
+              aria-keyshortcuts={i < NUMBERED ? String(i + 1) : undefined}
+              onClick={() => onChoose(i)}
+              className={cn(tileClass(chosen), 'min-h-14 py-2.5 pr-3 pl-3.5')}
+            >
+              <Mark on={chosen} />
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="min-w-0 text-row font-medium wrap-anywhere">
+                  <OptionName name={option.label} />
+                </span>
+                {option.description && (
+                  <span className="min-w-0 text-control text-tertiary wrap-anywhere">
+                    {option.description}
+                  </span>
+                )}
+              </span>
+              <TileKey n={i + 1} on={chosen} />
+            </button>
+          )
+        })}
+        {question.allowsText && (
+          <label
+            className={cn(
+              'flex min-h-12 min-w-0 cursor-text items-center gap-3 rounded-card py-1.5 pr-3 pl-3.5 transition-[background-color,box-shadow] duration-(--duration-fast)',
+              two && 'col-span-2',
+              written
+                ? 'bg-control-on-tint shadow-tile-on'
+                : 'border border-dashed border-border-strong focus-within:border-transparent focus-within:bg-control-on-tint focus-within:shadow-tile-on',
+            )}
+          >
+            <Mark on={written} />
+            <input
+              type={question.secret ? 'password' : 'text'}
+              autoComplete="off"
+              value={text}
+              disabled={disabled}
+              placeholder={t('question.other')}
+              aria-label={t('question.other')}
+              data-answer-option={own < NUMBERED ? own + 1 : undefined}
+              onChange={(event) => onText(event.target.value)}
+              className="h-8 min-w-0 flex-1 bg-transparent text-row text-foreground outline-none placeholder:text-tertiary"
+            />
+            <TileKey n={own + 1} on={written} />
+          </label>
+        )}
+      </div>
+      {question.secret && <SecretHint className="px-5.5" />}
     </div>
   )
 }
 
-/** What each question of an answered ask got, under the row that says how many were answered. */
+function SecretHint({ className }: { className?: string }) {
+  const { t } = useTranslation('session')
+  return (
+    <p className={cn('flex items-center gap-1.5 pt-2 text-hint text-tertiary', className)}>
+      <EyeOffIcon aria-hidden className="size-3.25 shrink-0" />
+      {t('question.secretHint')}
+    </p>
+  )
+}
+
+/** What each question of an answered ask got: the question in gray, the answer under it. */
 export function AnsweredQuestions({ questions }: { questions: AnsweredQuestion[] }) {
   const { t } = useTranslation('session')
   return (
-    <ul className="flex flex-col gap-2">
+    <ul className="flex flex-col">
       {questions.map((asked, i) => (
-        <li key={i} className="flex min-w-0 flex-col text-control">
-          <span data-selectable="" className="text-secondary">
+        <li
+          key={i}
+          className="flex min-w-0 flex-col gap-0.5 border-t border-border-soft py-2.5 first:border-t-0 first:pt-0"
+        >
+          <span data-selectable="" className="text-control text-tertiary">
             {asked.question}
           </span>
-          <span
-            data-selectable=""
-            className={cn('wrap-anywhere', asked.answered ? 'text-foreground' : 'text-tertiary')}
-          >
-            {asked.answer ?? (asked.answered ? t('question.secret') : t('question.skipped'))}
-          </span>
+          {asked.answer !== undefined ? (
+            <span data-selectable="" className="text-row wrap-anywhere text-foreground">
+              {asked.answer}
+            </span>
+          ) : asked.answered ? (
+            <span className="flex items-center gap-1.5 text-row text-tertiary">
+              <LockIcon aria-hidden className="size-3.5 shrink-0" />
+              {t('question.secret')}
+            </span>
+          ) : (
+            <span className="text-row text-tertiary">{t('question.skipped')}</span>
+          )}
         </li>
       ))}
     </ul>

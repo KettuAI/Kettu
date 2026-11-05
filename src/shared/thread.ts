@@ -309,6 +309,10 @@ export interface ToolEntry {
         device?: FromDevice
         name?: string
         questions?: AnsweredQuestion[]
+        // The note sent with the answer, such as what to change in a plan
+        note?: string
+        // What a form sent: each field's title and its value as it read
+        fields?: AnsweredField[]
       }
     | 'cancelled'
     | 'withdrawn'
@@ -319,6 +323,10 @@ export interface ToolEntry {
   label?: string
   // The agent's question, when the call asks the user to pick an answer rather than to allow it.
   question?: string
+  // A plan to approve: its number since the last approved plan, from 1; kept once answered.
+  planVersion?: number
+  // A request from an MCP server, kept once answered: what it asked, without the form's fields.
+  elicitation?: { server: string; kind: 'form' | 'url'; url?: string }
 }
 
 export type ToolContent =
@@ -328,11 +336,71 @@ export type ToolContent =
 
 export interface PendingPermission {
   requestId: string
-  // name may hold `code` spans; description: what a question's answer means, in the agent's words
-  options: { id: string; name: string; kind: PermissionKind; description?: string }[]
+  options: PermissionOption[]
   // An ask's questions, answered together. `options` then holds the first question's choices and
   // Something else, for a client that does not know `questions`.
   questions?: PendingQuestion[]
+  // A plan to approve: the agent's plan, and the one it revises when the user sent that back.
+  plan?: { markdown: string; previous: string | null }
+  // An MCP server's request: a form to fill in, or a page to open.
+  elicitation?: PendingElicitation
+}
+
+export interface PermissionOption {
+  id: string
+  name: string // may hold `code` spans
+  kind: PermissionKind
+  // What the option does, or what a question's answer means, in the agent's words
+  description?: string
+  // The option a card that confirms starts with chosen, such as the mode a plan builds in
+  preferred?: boolean
+  // The option goes with a note the user writes in the card, such as what to change in a plan
+  note?: boolean
+}
+
+/** An MCP server's request through the agent; `server` is the name it shows. */
+export type PendingElicitation =
+  | { kind: 'form'; server: string; message: string; fields: FormField[] }
+  | { kind: 'url'; server: string; message: string; url: string }
+
+/** One field of an MCP server's form, from its JSON Schema property `key`. */
+export type FormField = {
+  key: string
+  title: string
+  description?: string
+  required: boolean
+} & (
+  | {
+      type: 'text'
+      format?: 'email' | 'uri' | 'date' | 'date-time'
+      minLength?: number
+      maxLength?: number
+      default?: string
+    }
+  | { type: 'number'; integer: boolean; minimum?: number; maximum?: number; default?: number }
+  | { type: 'boolean'; default?: boolean }
+  | { type: 'choice'; choices: FormChoice[]; default?: string }
+  | {
+      type: 'choices'
+      choices: FormChoice[]
+      minItems?: number
+      maxItems?: number
+      default?: string[]
+    }
+)
+
+export interface FormChoice {
+  value: string
+  label: string
+}
+
+/** A form's answer, by field key: what a field of each type takes. */
+export type FormValues = Record<string, string | number | boolean | string[]>
+
+/** What the entry keeps of a submitted field: its title and its value as text. */
+export interface AnsweredField {
+  title: string
+  value: string
 }
 
 export interface PendingQuestion {

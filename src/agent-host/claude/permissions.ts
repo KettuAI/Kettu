@@ -5,7 +5,7 @@ import type { PendingPermission, PendingQuestion, QuestionAnswer } from '@shared
 import { unsafeCommand, unsafeCommandPrefix } from '../command-safety'
 import { t } from '../i18n'
 import { answerWords } from '../question-answers'
-import { modeName } from './config'
+import { modeDescription, modeName } from './config'
 import type { AskedQuestion } from './tools'
 import type {
   PermissionMode,
@@ -32,6 +32,9 @@ const EXIT_PLAN_MODES: Record<string, PermissionMode> = {
   [OPTION.exitPlanAcceptEdits]: 'acceptEdits',
   [OPTION.exitPlanDefault]: 'default',
 }
+
+/** The modes a plan's approval builds in, in the order its options offer them. */
+export const BUILD_MODES: readonly PermissionMode[] = Object.values(EXIT_PLAN_MODES)
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell'])
@@ -146,32 +149,42 @@ export function alwaysAllowName(suggestions: readonly PermissionUpdate[]): strin
     : null
 }
 
+/**
+ * A plan's approval: a mode to build in, named as the mode menu names it, with `preferred` the one
+ * to start with chosen, or Keep planning with a note on what to change.
+ */
+export function planOptions(modes: readonly string[], preferred: PermissionMode): Options {
+  const offered = Object.entries(EXIT_PLAN_MODES).filter(([, mode]) => modes.includes(mode))
+  const chosen = offered.some(([, mode]) => mode === preferred) ? preferred : 'default'
+  return [
+    ...offered.map(([id, mode]) => {
+      const description = modeDescription(mode)
+      return {
+        id,
+        name: modeName(mode),
+        // Kinds as the ACP adapter gave them, which stored answers keep.
+        kind: mode === 'default' ? ('allow_once' as const) : ('allow_always' as const),
+        ...(description ? { description } : {}),
+        ...(mode === chosen ? { preferred: true } : {}),
+      }
+    }),
+    {
+      id: OPTION.reject,
+      name: t('permission.exitPlan.keepPlanning'),
+      kind: 'reject_once',
+      note: true,
+    },
+  ]
+}
+
 /** The options of one request, in the order Claude Code offers them. */
 export function permissionOptions(
   toolName: string,
   context: Pick<ToolPermissionContext, 'suggestions' | 'suppressAlwaysAllowRule'>,
   modes: readonly string[],
+  buildMode: PermissionMode = 'default',
 ): Options {
-  if (toolName === 'ExitPlanMode') {
-    const options: Options = []
-    if (modes.includes('auto')) {
-      options.push({
-        id: OPTION.exitPlanAuto,
-        name: t('permission.exitPlan.auto'),
-        kind: 'allow_always',
-      })
-    }
-    options.push(
-      {
-        id: OPTION.exitPlanAcceptEdits,
-        name: t('permission.exitPlan.acceptEdits'),
-        kind: 'allow_always',
-      },
-      { id: OPTION.exitPlanDefault, name: t('permission.exitPlan.manual'), kind: 'allow_once' },
-      { id: OPTION.reject, name: t('permission.exitPlan.keepPlanning'), kind: 'reject_once' },
-    )
-    return options
-  }
+  if (toolName === 'ExitPlanMode') return planOptions(modes, buildMode)
   const options: Options = [
     {
       id: OPTION.allowOnce,
@@ -193,6 +206,27 @@ export function permissionOptions(
 export const REJECTED =
   'The user denied this tool use and will say what to do instead. Do not try another way; stop and wait for their next message.'
 export const CANCELLED = 'The user cancelled this prompt.'
+
+// Denied, ExitPlanMode leaves Claude Code in plan mode, where it revises the plan.
+export const KEEP_PLANNING =
+  'The user wants to keep planning and will say what to change in the plan. Stay in plan mode; stop and wait for their next message.'
+
+export function keepPlanningWith(note: string): string {
+  return `The user wants you to keep planning and revise the plan. Their note: ${note}`
+}
+
+/** The answer Claude Code gets for a plan's approval: the mode to build in, or keep planning. */
+export function planResult(
+  answer: { optionId: string; note?: string } | null,
+  input: Record<string, unknown>,
+  context: Pick<ToolPermissionContext, 'toolUseID'>,
+): PermissionResult {
+  const { toolUseID } = context
+  if (answer === null) return { behavior: 'deny', message: CANCELLED, toolUseID }
+  if (EXIT_PLAN_MODES[answer.optionId]) return permissionResult(answer.optionId, input, context)
+  const message = answer.note ? keepPlanningWith(answer.note) : KEEP_PLANNING
+  return { behavior: 'deny', message, toolUseID }
+}
 
 /** The answer Claude Code gets for the option the user chose, or for none. */
 export function permissionResult(
