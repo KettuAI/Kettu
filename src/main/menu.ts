@@ -7,6 +7,8 @@ import { currentWindow } from './window'
 
 export interface MenuDeps {
   checkForUpdates(): void
+  /** Whether a session's page holds the keyboard focus, which the renderer cannot see. */
+  browserFocused(): boolean
   zoom(step: ZoomStep): void
 }
 
@@ -79,9 +81,12 @@ export function installMenu(deps: MenuDeps): void {
         },
         { type: 'separator' },
         {
-          label: t('menu.closeWindow'),
+          label: t('menu.close'),
           accelerator: 'Cmd+W',
-          click: () => toCurrentWindow({ kind: 'close' }),
+          click: () =>
+            toCurrentWindow(
+              deps.browserFocused() ? { kind: 'close', browser: true } : { kind: 'close' },
+            ),
         },
       ],
     },

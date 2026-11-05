@@ -32,6 +32,7 @@
     "zoomOut": "Zoom out",
     "resetZoom": "Actual size",
     "showShortcuts": "This list",
+    "close": "Close tab or leave session",
     "previousSession": "Previous session",
     "nextSession": "Next session",
     "focusPane": "Go to pane 1–9",

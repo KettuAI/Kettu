@@ -18,6 +18,7 @@ export type ShortcutAction =
   | 'zoomOut'
   | 'resetZoom'
   | 'showShortcuts'
+  | 'close'
   | 'previousSession'
   | 'nextSession'
   | 'focusPane'
@@ -54,6 +55,7 @@ export function shortcutList(sendKey: 'enter' | 'mod-enter'): Shortcut[] {
     { group: 'general', action: 'zoomOut', keys: 'Mod+-' },
     { group: 'general', action: 'resetZoom', keys: 'Mod+0' },
     { group: 'general', action: 'showShortcuts', keys: 'Mod+/' },
+    { group: 'general', action: 'close', keys: 'Mod+W' },
     { group: 'sessions', action: 'previousSession', keys: 'Mod+Shift+[' },
     { group: 'sessions', action: 'nextSession', keys: 'Mod+Shift+]' },
     { group: 'sessions', action: 'focusPane', keys: 'Mod+1-9' },

@@ -32,6 +32,7 @@
     "zoomOut": "缩小",
     "resetZoom": "实际大小",
     "showShortcuts": "本列表",
+    "close": "关闭标签或离开会话",
     "previousSession": "上一个会话",
     "nextSession": "下一个会话",
     "focusPane": "切到第 1–9 个窗格",
