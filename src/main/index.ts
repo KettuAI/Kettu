@@ -58,6 +58,7 @@ import { rendererPage } from './renderer'
 import { SettingsStore } from './settings'
 import { hostSettings, reachesHost, terminalSettings } from './settings-schema'
 import { hasPendingFrame, isRevoked, watchSubframes } from './subframes'
+import { DeviceHost } from './device-host'
 import { TerminalHost } from './terminal-host'
 import { ThemeCatalog } from './theme-catalog'
 import { readThemeFolder, readThemeSources, ThemeStore } from './themes'
@@ -294,6 +295,7 @@ async function start(): Promise<void> {
   })
   const routinesAwake = new RoutinesAwake()
   const terminalHost = new TerminalHost({ settings: () => terminalSettings(settings.get()) })
+  const deviceHost = new DeviceHost({ allowDevices: () => true })
   // Set once the sharing service exists; the host reports ready only after that, at each start.
   let reconcileSharing: (() => void) | null = null
   const agentHost = new AgentHost({
@@ -307,7 +309,10 @@ async function start(): Promise<void> {
     onBadge: (count) => setBadgeCount(count),
     onBusy: (counts) => tray.setBusy(counts),
     onProjects: (paths) => terminalHost.setProjects(paths),
-    onSessionsEnded: (sessionIds) => terminalHost.endSessions(sessionIds),
+    onSessionsEnded: (sessionIds) => {
+      terminalHost.endSessions(sessionIds)
+      deviceHost.endSessions(sessionIds)
+    },
     onAuthCommands: (commands) => terminalHost.setAuthCommands(commands),
     onMediaGrant: (grant) => mediaGrants.add(grant),
     onMediaRevoke: (sessionId) => mediaGrants.revoke(sessionId),
@@ -332,6 +337,15 @@ async function start(): Promise<void> {
         : Promise.resolve({
             error: { code: 'no_page', message: 'Another host’s session has this page.' },
           }),
+    device: (call) =>
+      deviceHost.call(call).then((answer) => {
+        const opened =
+          'result' in answer ? (answer.result.value as { device?: { id?: string } })?.device : null
+        if (call.kind === 'open' && opened?.id) {
+          broadcast('devices:opened', { sessionId: call.sessionId, deviceId: opened.id })
+        }
+        return answer
+      }),
   })
   hostRef.current = agentHost
   const identityCipher: IdentityCipher = {
@@ -506,7 +520,11 @@ async function start(): Promise<void> {
     shutDown: async () => {
       account.stop()
       // Devices hear that Kettu is stopping before their sessions' agent host goes.
-      await Promise.all([remoteHost.stop().then(() => agentHost.stop()), terminalHost.stop()])
+      await Promise.all([
+        remoteHost.stop().then(() => agentHost.stop()),
+        terminalHost.stop(),
+        deviceHost.stop(),
+      ])
       hostSessions.close()
       await Promise.all([
         settings.flush(),
@@ -621,6 +639,7 @@ async function start(): Promise<void> {
     avatars,
     agentHost,
     terminalHost,
+    deviceHost,
     artifacts,
     browserViews,
     siteIcons,
@@ -654,6 +673,7 @@ async function start(): Promise<void> {
       onRevoked: () => {
         agentHost.revoke(window.webContents)
         terminalHost.revoke(window.webContents)
+        deviceHost.revoke(window.webContents)
       },
     })
     artifacts.watchWindow(window.webContents)

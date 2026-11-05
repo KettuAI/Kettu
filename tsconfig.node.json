@@ -30,6 +30,7 @@
     "src/shared/**/*",
     "src/agent-host/**/*",
     "src/terminal-host/**/*",
+    "src/device-host/**/*",
     "src/remote-host/**/*",
     "src/daemon/**/*"
   ],

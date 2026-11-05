@@ -58,7 +58,9 @@ export function subscribe<C extends IpcEventChannel>(
 }
 
 /** The IPC side of a host port: `<channel>:connect`, `<channel>:port` and `<channel>:reset`. */
-export function hostTransport(channel: 'agent-host' | 'terminal-host'): PortTransport {
+export function hostTransport(
+  channel: 'agent-host' | 'terminal-host' | 'device-host',
+): PortTransport {
   const portChannel = `${channel}:port` satisfies keyof PreloadEventContract
   const resetChannel = `${channel}:reset` satisfies keyof PreloadEventContract
   return {

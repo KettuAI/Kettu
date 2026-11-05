@@ -504,5 +504,12 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         await admin('host.restart', { process: 'terminal' })
       },
     },
+    devices: {
+      request: (() => unsupported('use mobile devices')) as KettuApi['devices']['request'],
+      onEvent: never,
+      onConnection: connectionListener,
+      restart: async () => {},
+      onOpened: never,
+    },
   }
 }

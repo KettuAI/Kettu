@@ -22,6 +22,7 @@ import { SHEET, SHEET_PANEL } from './sheet'
 
 const FilesPanel = lazy(() => import('@renderer/features/files/files-panel'))
 const ArtifactPane = lazy(() => import('@renderer/features/artifacts/artifact-pane'))
+const DevicesPane = lazy(() => import('@renderer/features/devices/devices-pane'))
 const BrowserPane = lazy(() =>
   import('@renderer/features/browser/browser-pane').then((module) => ({
     default: module.BrowserPane,
@@ -35,6 +36,7 @@ const PANES = {
   files: { id: 'side-panel-files', defaultSize: '600px', minSize: '360px' },
   artifact: { id: 'side-panel-artifact', defaultSize: '560px', minSize: '360px' },
   browser: { id: 'side-panel-browser', defaultSize: '600px', minSize: '360px' },
+  devices: { id: 'side-panel-devices', defaultSize: '480px', minSize: '320px' },
 } as const
 
 /**
@@ -153,6 +155,8 @@ export function SidePanelArea({
                     <FilesPanel projectPath={projectPath} panel={panel} maximized={maximized} />
                   ) : pane === 'browser' ? (
                     <BrowserPane panel={panel} maximized={maximized} />
+                  ) : pane === 'devices' ? (
+                    <DevicesPane panel={panel} maximized={maximized} />
                   ) : (
                     artifactId && (
                       <ArtifactPane

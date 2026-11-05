@@ -1,0 +1,70 @@
+{
+  "tabs": "Devices",
+  "actions": {
+    "addDevice": "Add device",
+    "closeDevice": "Close device",
+    "boot": "Start",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close"
+  },
+  "kind": {
+    "simulator": "Simulator",
+    "emulator": "Emulator",
+    "physical": "Device"
+  },
+  "state": {
+    "shutdown": "Shut down"
+  },
+  "connection": {
+    "network": "Wi-Fi"
+  },
+  "picker": {
+    "title": "Open a device",
+    "hint": "Simulators that are shut down start when you choose them.",
+    "none": "No devices found",
+    "noneHint": "Install Xcode for iOS simulators, or the Android SDK for emulators, and connect a phone with a cable."
+  },
+  "empty": {
+    "noSession": "Devices belong to a session. Send a message first.",
+    "opening": "Starting the device…",
+    "openingHint": "A simulator or emulator can take a minute to boot.",
+    "noTools": "This computer cannot run mobile devices"
+  },
+  "screen": {
+    "label": "Screen of {{name}}",
+    "keyboard": "Keyboard for {{name}}",
+    "starting": "Waiting for the screen…",
+    "stopped": "The stream stopped.",
+    "error": "The screen could not be shown.",
+    "shutdown": "This device is shut down."
+  },
+  "checklist": {
+    "title": "Before this device can be used"
+  },
+  "problem": {
+    "xcode-missing": "Install Xcode from the App Store to use iOS simulators and iPhones.",
+    "apple-silicon-required": "Simulator video needs a Mac with Apple silicon; agents can still use the simulator.",
+    "android-sdk-missing": "Install the Android SDK (Android Studio, or its command-line tools) for emulators and Android phones.",
+    "developer-mode-off": "Turn on Developer Mode on the device: Settings › Privacy & Security › Developer Mode.",
+    "not-paired": "Unlock the device and tap Trust on the prompt about this computer.",
+    "ddi-not-mounted": "Kettu mounts the developer disk image when the device is unlocked; keep it unlocked.",
+    "usb-required": "Connect the device with a USB cable to see and control its screen.",
+    "ios-27-for-input": "Touch input from here needs iOS 27; before that, only agents can operate the device.",
+    "runner-unsigned": "Sign in to Xcode with your Apple ID so Kettu can sign the automation app.",
+    "runner-untrusted": "On the device, trust the developer in Settings › General › VPN & Device Management.",
+    "ui-automation-off": "On the device, turn on Settings › Developer › Enable UI Automation.",
+    "usb-debugging-unauthorized": "Unlock the phone and allow USB debugging for this computer.",
+    "offline": "The phone is offline. Reconnect its cable."
+  },
+  "buttons": {
+    "label": "Hardware buttons",
+    "back": "Back",
+    "home": "Home",
+    "recents": "Recent apps",
+    "lock": "Lock",
+    "volumeDown": "Volume down",
+    "volumeUp": "Volume up",
+    "rotate": "Rotate"
+  }
+}

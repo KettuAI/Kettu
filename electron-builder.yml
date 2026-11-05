@@ -14,6 +14,9 @@ extraResources:
 # The session router runs on the user's Node.js, which cannot read inside app.asar.
 asarUnpack:
   - node_modules/node-pty/**
+  # The device host runs these as programs, and serve-sim loads native code and dylibs.
+  - node_modules/@expo/serve-sim/**
+  - node_modules/agent-device/**
   - out/main/chunks/router-*.js
 # The postinstall step (tools/install/app-deps.mjs) already readied node-pty for Electron: its
 # prebuilt binaries on Windows, a build from source on macOS and Linux.

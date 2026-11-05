@@ -7,6 +7,7 @@ import type artifacts from './locales/en/artifacts.json'
 import type browser from './locales/en/browser.json'
 import type common from './locales/en/common.json'
 import type composer from './locales/en/composer.json'
+import type devices from './locales/en/devices.json'
 import type files from './locales/en/files.json'
 import type git from './locales/en/git.json'
 import type host from './locales/en/host.json'
@@ -34,6 +35,7 @@ declare module 'i18next' {
       browser: typeof browser
       common: typeof common
       composer: typeof composer
+      devices: typeof devices
       files: typeof files
       git: typeof git
       host: typeof host

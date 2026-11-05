@@ -65,6 +65,7 @@ import type { Sharing } from './sharing'
 import { framesSettled, isRevoked } from './subframes'
 import { systemNameForRun } from './system-name'
 import type { TerminalHost } from './terminal-host'
+import type { DeviceHost } from './device-host'
 import { exportThemeFile, installThemeFile, revealThemeFile } from './theme-dialogs'
 import type { ThemeStore } from './themes'
 import type { Updater } from './updater'
@@ -81,6 +82,7 @@ export interface IpcDeps {
   avatars: Avatars
   agentHost: AgentHost
   terminalHost: TerminalHost
+  deviceHost: DeviceHost
   artifacts: Artifacts
   browserViews: BrowserViews
   siteIcons: SiteIcons
@@ -383,6 +385,7 @@ export function registerIpcHandlers({
   avatars,
   agentHost,
   terminalHost,
+  deviceHost,
   artifacts,
   browserViews,
   siteIcons,
@@ -561,6 +564,9 @@ export function registerIpcHandlers({
   })
   handle('terminal-host:restart', 0, () => {
     terminalHost.restart()
+  })
+  handle('device-host:restart', 0, () => {
+    deviceHost.restart()
   })
 
   handle('artifact:open', 1, ({ event }, id) => artifacts.open(event.sender, id))
@@ -741,6 +747,7 @@ export function registerIpcHandlers({
 
   on('agent-host:connect', (event) => agentHost.connect(event.sender))
   on('terminal-host:connect', (event) => terminalHost.connect(event.sender))
+  on('device-host:connect', (event) => deviceHost.connect(event.sender))
   on('host-sessions:connect', (event) => hostSessions.connect(event.sender))
 
   on('app:confirm-quit-unhandled', (event, id) => {

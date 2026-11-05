@@ -15,6 +15,7 @@ import { whenHostHas } from '@renderer/lib/host-features'
 import { isWeb, platform } from '@renderer/lib/platform'
 import { initAccount } from '@renderer/stores/account'
 import { loadAgentOptions, receiveAgentOptions } from '@renderer/stores/agent-options'
+import { initDevices } from '@renderer/stores/devices'
 import { initBrowser } from '@renderer/stores/browser'
 import {
   hostRestarted,
@@ -266,6 +267,7 @@ export function bootstrap(): Promise<unknown> {
       resync: (hostId) => rewatchAll((sessionId) => sessionHost(sessionId) === hostId),
     })
     initBrowser()
+    initDevices()
     void initAccount()
     followWindowTitle()
   }
