@@ -90,12 +90,14 @@ const MODES = [
   { id: 'plan', name: 'Plan', description: 'Plans without touching files' },
 ]
 
-const DEFAULT_CONFIG: Pick<FakeSessionState, 'mode' | 'model' | 'thought' | 'fast'> = {
-  mode: 'ask',
-  model: 'balanced',
-  thought: 'medium',
-  fast: false,
-}
+const DEFAULT_CONFIG: Pick<FakeSessionState, 'mode' | 'model' | 'thought' | 'fast' | 'ultracode'> =
+  {
+    mode: 'ask',
+    model: 'balanced',
+    thought: 'medium',
+    fast: false,
+    ultracode: false,
+  }
 
 /**
  * The folder's own defaults from `.fake-agent.json`, read for every new session as the real agents
@@ -256,6 +258,14 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         category: 'model_config',
         type: 'boolean',
         currentValue: session.fast,
+      },
+      {
+        id: '__ultracode',
+        name: 'Ultracode',
+        description: 'Dynamic workflows for substantial tasks',
+        category: 'other',
+        type: 'boolean',
+        currentValue: session.ultracode,
       },
     )
     return levelHidden.has(session.id) ? list.filter((o) => o.id !== 'thought_level') : list
@@ -672,6 +682,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         fork.model = source.model
         fork.thought = source.thought
         fork.fast = source.fast
+        fork.ultracode = source.ultracode
       } else if (forkConfig === 'reset') {
         // Like codex-acp, it lists the level only once a model is set.
         levelHidden.add(fork.id)
@@ -775,6 +786,11 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
           if (typeof value !== 'boolean')
             throw RequestError.invalidParams(undefined, 'Expected a boolean')
           session.fast = value
+          break
+        case '__ultracode':
+          if (typeof value !== 'boolean')
+            throw RequestError.invalidParams(undefined, 'Expected a boolean')
+          session.ultracode = value
           break
         default:
           throw RequestError.invalidParams(undefined, `Unknown option ${ctx.params.configId}`)

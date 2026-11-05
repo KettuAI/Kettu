@@ -26,6 +26,7 @@ export interface FakeSessionState {
   model: string
   thought: string
   fast: boolean
+  ultracode: boolean
   /** The MCP servers of its latest `session/new`, `load`, `resume` or `fork`. */
   mcpServers: McpServer[]
 }
