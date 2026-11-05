@@ -1,9 +1,10 @@
-// The icons of the sites Kettu's own browser opened, which links in replies show. A site is
-// recorded when a session's page or a link in Kettu opens it, and its icon comes only through the
-// browser's own partition, so drawing a link never contacts its site.
+// The icons links in replies show. A site is recorded when a session's page or a link in Kettu
+// opens it, and keeps the icon its page names; a link to a site never opened takes its icon from
+// Google's favicon service. Both load through the browser's own partition, without cookies.
 
 import { BlockList, isIPv4, isIPv6 } from 'node:net'
 import { join } from 'node:path'
+import { parse } from 'tldts'
 import type { SiteIconEvent, SiteIconMap } from '@shared/ipc'
 import { JsonFileWriter, readJsonFile } from '../json-file'
 import { createLogger, describeError } from '../log'
@@ -25,6 +26,9 @@ const WRITE_DELAY_MS = 2_000
 const MAX_DATA_URL_LENGTH = MAX_ICON_BYTES * 3 + 256
 const IMAGE_TYPE = /^image\/[a-z0-9.+-]+$/
 const STORED_ICON = /^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/]+={0,2}$/
+// At 64 px Google picks a site's larger icon, which mostly has a background of its own and reads
+// on a dark theme too; at 32 it often picks a tab icon drawn for light tabs.
+const SERVICE_ICON_SIZE = 64
 
 export type IconFetch = (url: string, init: RequestInit) => Promise<Response>
 
@@ -85,6 +89,23 @@ export function pickFavicon(favicons: readonly unknown[], pageUrl: string): stri
     if (local || !isPrivateHost(url)) return favicon
   }
   return null
+}
+
+/**
+ * The address of Google's favicon service for a link's site: only its host, and only a name under
+ * a public suffix, so an address, an intranet name or a link's path never reaches Google. Null
+ * for anything else.
+ */
+export function linkIconUrl(url: string): string | null {
+  const site = URL.parse(url)
+  if (site === null) return null
+  if (site.protocol !== 'http:' && site.protocol !== 'https:') return null
+  if (site.username !== '' || site.password !== '') return null
+  const host = site.hostname.replace(/\.$/, '')
+  const name = parse(host)
+  if (name.isIp !== false || name.domain === null || name.isIcann !== true) return null
+  const query = new URLSearchParams({ domain: host, sz: String(SERVICE_ICON_SIZE) })
+  return `https://www.google.com/s2/favicons?${query}`
 }
 
 /** A `data:` icon as it is kept: an image type, base64, and small enough; null otherwise. */
@@ -197,19 +218,15 @@ export class SiteIcons {
   }
 
   /**
-   * A link in a reply has no icon for its site: loads the icon at the site's own root once per
+   * A link in a reply has no icon for its site: loads it from Google's favicon service once per
    * run, and sends it again to a window that asks later, without counting the site as opened,
-   * which the first-visit confirmation reads. Only public http(s) sites, so a reply cannot make
-   * main request this computer.
+   * which the first-visit confirmation reads. Only the hosts `linkIconUrl` allows; the service
+   * answers a site it has no icon for with a 404, which leaves the link's globe.
    */
   async link(url: string): Promise<void> {
-    const site = URL.parse(url)
-    if (site === null) return
-    if (site.protocol !== 'http:' && site.protocol !== 'https:') return
-    if (site.username !== '' || site.password !== '') return
-    if (isPrivateHost(site)) return
+    const source = linkIconUrl(url)
     const origin = originOf(url)
-    if (origin === null || this.sites.get(origin)?.icon) return
+    if (source === null || origin === null || this.sites.get(origin)?.icon) return
     const linked = this.linked.get(origin)
     // A window that was reloaded or opened since has lost the icon sent before, so it is sent again.
     if (linked !== undefined) {
@@ -218,7 +235,7 @@ export class SiteIcons {
     }
     if (this.asked.has(origin)) return
     this.asked.add(origin)
-    const icon = await this.fetchIcon(`${origin}/favicon.ico`, new AbortController().signal)
+    const icon = await this.fetchIcon(source, new AbortController().signal)
     if (icon === null) return
     this.linked.set(origin, icon)
     this.deps.changed({ kind: 'link', origin, icon })
