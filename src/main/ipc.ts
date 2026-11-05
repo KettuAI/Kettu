@@ -324,7 +324,7 @@ function attachmentPaths(value: unknown): string[] {
   return value.map(absolutePath)
 }
 
-// One open file per project, so more than this many is not what the renderer sends.
+// A few open files per project, so more than this many is not what the renderer sends.
 const UNSAVED_MAX_FILES = 1_000
 
 /** The renderer's files with unsaved edits, or null when they are not that shape. */
@@ -735,6 +735,8 @@ export function registerIpcHandlers({
     if (valid) quit.setUnsaved(event.sender, valid)
     else log.warn('Rejected "app:set-unsaved" with malformed files')
   })
+
+  on('app:close-window', (event) => BrowserWindow.fromWebContents(event.sender)?.close())
 
   on('browser:sessions', (_event, ids) => {
     if (

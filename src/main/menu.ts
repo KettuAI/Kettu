@@ -78,7 +78,11 @@ export function installMenu(deps: MenuDeps): void {
           click: () => sendCommand({ kind: 'new-session' }),
         },
         { type: 'separator' },
-        { role: 'close', label: t('menu.closeWindow') },
+        {
+          label: t('menu.closeWindow'),
+          accelerator: 'Cmd+W',
+          click: () => toCurrentWindow({ kind: 'close' }),
+        },
       ],
     },
     {

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react'
-import { BookOpenIcon, CodeIcon, FileIcon, FileWarningIcon, SaveIcon, XIcon } from 'lucide-react'
+import { BookOpenIcon, CodeIcon, FileIcon, FileWarningIcon, SaveIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ChangeStatus } from '@shared/git'
 import type { MediaGrant } from '@shared/media'
@@ -32,20 +32,21 @@ import { imageSurface } from '@renderer/features/session/media/surface'
 import { ZoomControls, type ZoomLevel } from '@renderer/features/session/media/zoom-controls'
 import type { Size } from '@renderer/features/session/media/zoom'
 import {
-  buffers,
-  closeFile,
   discardEdits,
+  getBuffer,
   isSvgFile,
   keepEdits,
   mediaVersion,
   renewOpenFile,
   saveFile,
+  showMarkdownRendered,
   showSvgSource,
   useFilesStore,
   type OpenFile,
 } from '@renderer/stores/files'
 import { ChangeBadge } from './change-badge'
 import { DiffFileToggle, PathLabel } from './file-header'
+import { FileTabs } from './file-tabs'
 import { nameOf } from './paths'
 
 const CodeEditor = lazy(() => import('./code-editor'))
@@ -59,16 +60,18 @@ interface Picture {
 /** The room a fitted picture leaves on each side of the pane, as it always has. */
 const PANE_FIT_MARGIN = 24
 
-/** The open file, in the editor, or what stands in for it. */
+/** The open files' tabs and the shown one, in the editor, or what stands in for it. */
 export function FilePreview({
   projectPath,
+  files,
   file,
-  change,
+  changes,
   onShowDiff,
 }: {
   projectPath: string
+  files: OpenFile[]
   file: OpenFile | null
-  change?: ChangeStatus
+  changes: ReadonlyMap<string, ChangeStatus>
   /** Shows the file's uncommitted change instead, offered while it has one. */
   onShowDiff?: () => void
 }) {
@@ -97,6 +100,7 @@ export function FilePreview({
       </Empty>
     )
   }
+  const change = changes.get(file.path)
   return (
     <div
       data-file-preview=""
@@ -107,9 +111,10 @@ export function FilePreview({
         if (!isMod(event) || event.altKey || event.shiftKey || event.key.toLowerCase() !== 's')
           return
         event.preventDefault()
-        void saveFile(projectPath)
+        void saveFile(projectPath, file.path)
       }}
     >
+      <FileTabs projectPath={projectPath} files={files} active={file.path} changes={changes} />
       <div className="flex h-10 shrink-0 items-center gap-1 pr-2 pl-3.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]">
         <span className="mr-1 flex min-w-0 flex-1 items-center gap-1.5">
           <PathLabel path={file.path} />
@@ -129,7 +134,7 @@ export function FilePreview({
           <PanelButton
             label={t('preview.save')}
             shortcut={formatShortcut('Mod+S')}
-            onClick={() => void saveFile(projectPath)}
+            onClick={() => void saveFile(projectPath, file.path)}
           >
             <SaveIcon className="size-3.5" />
           </PanelButton>
@@ -139,14 +144,9 @@ export function FilePreview({
           <PanelButton
             label={rendered(file, source) ? t('preview.showSource') : t('preview.showRendered')}
             onClick={() =>
-              useFilesStore.setState((s) =>
-                rendered(file, source)
-                  ? { markdownSource: true }
-                  : {
-                      markdownSource: false,
-                      open: { ...s.open, [projectPath]: { ...file, line: null } },
-                    },
-              )
+              rendered(file, source)
+                ? useFilesStore.setState({ markdownSource: true })
+                : showMarkdownRendered(projectPath, file.path)
             }
           >
             {rendered(file, source) ? (
@@ -165,9 +165,6 @@ export function FilePreview({
           </PanelButton>
         )}
         <CopyButton text={file.path} label={t('preview.copyPath')} className="size-6.5" />
-        <PanelButton label={t('preview.closeFile')} onClick={() => closeFile(projectPath)}>
-          <XIcon className="size-3.5" />
-        </PanelButton>
       </div>
       <Notes projectPath={projectPath} file={file} />
       <div className="relative min-h-0 flex-1">
@@ -185,8 +182,8 @@ const rendered = (file: OpenFile, source: boolean) =>
 
 /** The text with its unsaved edits, when it has any. */
 function editedText(projectPath: string, file: OpenFile): string | null {
-  const buffer = buffers.get(projectPath)
-  return file.dirty && buffer?.path === file.path ? buffer.state.sliceDoc() : null
+  const buffer = getBuffer(projectPath, file.path)
+  return file.dirty && buffer ? buffer.state.sliceDoc() : null
 }
 
 /** Bars under the header for what the open file's edits need to know. */
@@ -201,7 +198,7 @@ function Notes({ projectPath, file }: { projectPath: string; file: OpenFile }) {
           variant="outline"
           onClick={(event) => {
             backToEditor(event.currentTarget)
-            discardEdits(projectPath)
+            discardEdits(projectPath, file.path)
           }}
         >
           {t('preview.reload')}
@@ -211,7 +208,7 @@ function Notes({ projectPath, file }: { projectPath: string; file: OpenFile }) {
           variant="outline"
           onClick={(event) => {
             backToEditor(event.currentTarget)
-            keepEdits(projectPath)
+            keepEdits(projectPath, file.path)
           }}
         >
           {t('preview.keepMine')}
@@ -366,7 +363,7 @@ function FileMedia({
     if (renewed) setFailure({ message })
     else {
       setRenewed(true)
-      renewOpenFile(projectPath)
+      renewOpenFile(projectPath, path)
     }
   }
   if (failure?.message) {

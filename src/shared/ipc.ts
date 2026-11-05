@@ -95,6 +95,8 @@ export type AppCommand =
   | { kind: 'go-back' }
   | { kind: 'go-forward' }
   | { kind: 'show-history' }
+  /** Cmd+W: the page closes the open file of the Files pane used last, else the window. */
+  | { kind: 'close' }
 
 /**
  * `artifact:open`: the artifact's origin URL, without a query, or why it cannot be shown:
@@ -376,6 +378,8 @@ export interface IpcSendContract {
   'app:confirm-quit-unhandled': [id: number]
   /** Every file with unsaved edits, whenever that changes, so quitting can ask without a round trip. */
   'app:set-unsaved': [files: UnsavedFile[]]
+  /** Closes the sender's window, as the menu's Close Window does. */
+  'app:close-window': []
   /** The sessions the renderer still lists, so a page closes once its session leaves the host. */
   'browser:sessions': [sessionIds: string[]]
   /** The menu bar panel's calls, which main takes from the panel's own page alone. */
@@ -417,6 +421,7 @@ export interface KettuApi {
     respondQuit(id: number, answer: boolean | 'background'): Promise<void>
     onConfirmQuit(listener: (request: QuitRequest) => void): () => void
     setUnsaved(files: UnsavedFile[]): void
+    closeWindow(): void
     onCommand(listener: (command: AppCommand) => void): () => void
     reportInteractive(): void
     /** App shortcuts typed in an artifact's frame, which the page itself never sees. */

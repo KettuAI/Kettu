@@ -1,4 +1,6 @@
 import { useEffect } from 'react'
+import { usedFilesPane } from '@renderer/features/files/pane-focus'
+import { closeActiveFile } from '@renderer/stores/files'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { checkForUpdates } from '@renderer/stores/updates'
 import {
@@ -49,6 +51,11 @@ export function useAppCommands(): void {
           case 'show-history':
             toggleHistory(layerOpen())
             break
+          case 'close': {
+            const project = usedFilesPane()
+            if (!project || !closeActiveFile(project)) window.kettu.app.closeWindow()
+            break
+          }
         }
       }),
     [],

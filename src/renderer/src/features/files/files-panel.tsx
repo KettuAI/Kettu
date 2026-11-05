@@ -40,7 +40,14 @@ import { hostOfPath } from '@renderer/lib/host-paths'
 import { formatShortcut, hasBand, isMod, isWeb } from '@renderer/lib/platform'
 import { layoutStorage } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
-import { loadFiles, openDiff, openFile, refreshFiles, useFilesStore } from '@renderer/stores/files'
+import {
+  activeFile,
+  loadFiles,
+  openDiff,
+  openFile,
+  refreshFiles,
+  useFilesStore,
+} from '@renderer/stores/files'
 import { openGitDialog, useGitStore } from '@renderer/stores/git'
 import { toggleSidePane, useViewStore } from '@renderer/stores/view'
 import { ChangeBadge } from './change-badge'
@@ -63,6 +70,8 @@ import { VirtualRows } from './virtual-rows'
 // A filter that matches more than this shows the best ones; refining it finds the rest.
 const FILTER_LIMIT = 1000
 const SEARCH_DELAY_MS = 250
+// A single click in a list opens the preview tab, which the next single click replaces.
+const PREVIEW = { preview: true }
 
 /** Opens the project in the editor used last, else the first one found, else asks for an app. */
 async function openInEditor(path: string): Promise<void> {
@@ -82,7 +91,8 @@ export default function FilesPanel({
 }) {
   const { t } = useTranslation(['files', 'common'])
   const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && !hasBand
-  const open = useFilesStore((s) => s.open[projectPath] ?? null)
+  const tabs = useFilesStore((s) => s.open[projectPath] ?? null)
+  const open = activeFile(tabs)
   const diff = useFilesStore((s) => s.diffs[projectPath] ?? null)
   const isRepo = useGitStore((s) => !!s.status[projectPath]?.repo)
   // Editors open folders on this computer only.
@@ -122,6 +132,7 @@ export default function FilesPanel({
 
   return (
     <div
+      data-files-panel={projectPath}
       className={cn(
         'flex h-full min-h-0 animate-in flex-col fade-in animation-duration-(--duration-fast)',
         SHEET,
@@ -273,8 +284,9 @@ export default function FilesPanel({
             ) : (
               <FilePreview
                 projectPath={projectPath}
+                files={tabs?.files ?? []}
                 file={open}
-                change={open ? changes.byPath.get(open.path) : undefined}
+                changes={changes.byPath}
                 onShowDiff={
                   open && changes.byPath.has(open.path)
                     ? () => showChange(projectPath, changes, open.path)
@@ -306,7 +318,7 @@ function showChange(projectPath: string, changes: FileChanges, path: string): vo
 function ChangesList({ projectPath, changes }: { projectPath: string; changes: FileChanges }) {
   const { t } = useTranslation('files')
   const diff = useFilesStore((s) => s.diffs[projectPath] ?? null)
-  const openPath = useFilesStore((s) => s.open[projectPath]?.path ?? null)
+  const openPath = useFilesStore((s) => s.open[projectPath]?.active ?? null)
   const totals = useGitStore((s) => s.status[projectPath]?.changes ?? null)
   const blocked = useGitStore(
     (s) =>
@@ -508,7 +520,10 @@ function Tree({
             selected={row.path === openPath}
             title={row.path}
             aria-expanded={row.folder ? isOpen : undefined}
-            onClick={() => (row.folder ? toggle(row.path) : openFile(projectPath, row.path))}
+            onClick={() =>
+              row.folder ? toggle(row.path) : openFile(projectPath, row.path, null, PREVIEW)
+            }
+            onDoubleClick={row.folder ? undefined : () => openFile(projectPath, row.path)}
           >
             <FileTypeIcon path={row.path} folder={row.folder} open={isOpen} className="size-4" />
             <span className="min-w-0 flex-1 truncate">{nameOf(row.path)}</span>
@@ -576,7 +591,12 @@ function FileRow({
   const marked = new Set(positions)
   const folder = folderOf(path)
   return (
-    <Row selected={selected} title={path} onClick={() => openFile(projectPath, path)}>
+    <Row
+      selected={selected}
+      title={path}
+      onClick={() => openFile(projectPath, path, null, PREVIEW)}
+      onDoubleClick={() => openFile(projectPath, path)}
+    >
       <FileTypeIcon path={path} className="size-4" />
       <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
         <span className="shrink-0">
@@ -675,7 +695,8 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
               key={`l:${row.path}:${row.line}`}
               depth={1}
               title={row.text}
-              onClick={() => openFile(projectPath, row.path, row.line)}
+              onClick={() => openFile(projectPath, row.path, row.line, PREVIEW)}
+              onDoubleClick={() => openFile(projectPath, row.path, row.line)}
             >
               <span className="w-8 shrink-0 text-right font-mono text-meta text-tertiary tabular">
                 {row.line}
@@ -715,6 +736,7 @@ function Row({
   selected = false,
   title,
   onClick,
+  onDoubleClick,
   children,
   ...aria
 }: {
@@ -725,6 +747,7 @@ function Row({
   selected?: boolean
   title: string
   onClick: () => void
+  onDoubleClick?: () => void
   children: ReactNode
   'aria-expanded'?: boolean
 }) {
@@ -733,6 +756,7 @@ function Row({
       type="button"
       title={title}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       {...aria}
       style={{ paddingLeft: 8 + depth * 14 }}
       className={cn(

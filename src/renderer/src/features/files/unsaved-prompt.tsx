@@ -13,14 +13,13 @@ import { Button } from '@renderer/components/ui/button'
 import { answerPending, useFilesStore } from '@renderer/stores/files'
 import { nameOf } from './paths'
 
-/** "Save changes?" before the open file with unsaved edits closes or gives way to another. */
+/** "Save changes?" before a tab with unsaved edits closes. */
 export function UnsavedPrompt({ projectPath }: { projectPath: string }) {
   const { t } = useTranslation(['files', 'common'])
-  const pending = useFilesStore((s) => s.pending[projectPath] ?? null)
-  const path = useFilesStore((s) => s.open[projectPath]?.path ?? null)
+  const path = useFilesStore((s) => s.pending[projectPath]?.path ?? null)
   return (
     <AlertDialog
-      open={!!pending && !!path}
+      open={path !== null}
       onOpenChange={(open) => !open && void answerPending(projectPath, 'cancel')}
     >
       <AlertDialogContent className="sm:max-w-[380px]">

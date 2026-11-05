@@ -39,7 +39,6 @@
     "showSource": "Show source",
     "showRendered": "Show preview",
     "copyPath": "Copy path",
-    "closeFile": "Close file",
     "openFailed": "Couldn't open this file",
     "binaryTitle": "Binary file",
     "binaryDescription": "{{size}}, not shown.",
@@ -53,6 +52,10 @@
     "keepMine": "Keep mine",
     "saveFailed": "Couldn't save: {{message}}",
     "readOnly": "Read-only: this file isn't valid UTF-8, so saving it could change its bytes."
+  },
+  "tabs": {
+    "label": "Open files",
+    "close": "Close {{name}}"
   },
   "link": {
     "open": "Open {{target}}"
