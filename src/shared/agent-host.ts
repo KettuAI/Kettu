@@ -204,6 +204,7 @@ export interface AgentStatus {
   /** The command that removes the user's own program, when its install route has one. */
   uninstallCommand?: string | null
   hidden: boolean // a default agent hidden from the agent menu
+  disabled?: boolean // turned off in Settings: never starts; absent on older hosts
   color?: AgentColor // an added agent's dot on its mark; absent for a harness's default agent
   // Whether Kettu handed this agent's harness an API key; null for a harness that takes none.
   apiKey: { set: boolean; providers: boolean } | null

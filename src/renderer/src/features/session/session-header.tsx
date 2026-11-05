@@ -154,6 +154,7 @@ export function SessionHeader({
       )}
       <HeaderTools
         projectPath={summary.projectPath}
+        panel={summary.id}
         summary={summary}
         session={session}
         onRename={() => {

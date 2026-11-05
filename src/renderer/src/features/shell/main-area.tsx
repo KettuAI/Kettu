@@ -3,11 +3,11 @@ import { LaunchState } from '@renderer/features/shell/launch-state'
 import { SHEET } from '@renderer/features/shell/sheet'
 import { SidePanelArea } from '@renderer/features/shell/side-panel-area'
 import { SplitView } from '@renderer/features/split/split-view'
-import { focusedPane, type Layout } from '@renderer/features/split/layout'
+import { focusedPane } from '@renderer/features/split/layout'
 import { cn } from '@renderer/lib/utils'
 import { showProjects } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { shownProjects, useViewStore } from '@renderer/stores/view'
+import { panelOf, shownProjects, useViewStore } from '@renderer/stores/view'
 
 const UsagePage = lazy(() => import('@renderer/features/usage/usage-page'))
 const RoutinesPage = lazy(() => import('@renderer/features/routines/routines-page'))
@@ -88,8 +88,11 @@ export function MainArea() {
     )
   }
 
-  // The side panel serves the pane in focus, and New session at No project keeps the one it had.
-  const panelPath = focusedPaneProject(layout) ?? selected ?? projects[0]?.path ?? null
+  // The side panel is the pane in focus's, and New session at No project has none. The area stays
+  // around the split even then, so the panes do not mount again as the focus moves.
+  const view = focusedPane(layout).view
+  const panel = panelOf(view)
+  const panelPath = view.projectPath || selected || projects[0]?.path || null
   if (!panelPath) {
     return (
       <PageSheet>
@@ -98,14 +101,10 @@ export function MainArea() {
     )
   }
   return (
-    <SidePanelArea projectPath={panelPath}>
+    <SidePanelArea projectPath={panelPath} panel={panel}>
       <SplitView />
     </SidePanelArea>
   )
-}
-
-function focusedPaneProject(layout: Layout): string | null {
-  return focusedPane(layout).view.projectPath || null
 }
 
 /** A page alone on the main area's sheet; SidePanelArea lays out the sheets beside its pane. */

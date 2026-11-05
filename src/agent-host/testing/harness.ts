@@ -323,6 +323,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
         ].map((id) => [id, { enabled: true }]),
       ),
       addedAgents: DEFAULT_SETTINGS.addedAgents,
+      disabledAgents: DEFAULT_SETTINGS.disabledAgents,
       proxy: DEFAULT_SETTINGS.proxy,
       git: DEFAULT_SETTINGS.git,
       mcp: DEFAULT_SETTINGS.mcp,

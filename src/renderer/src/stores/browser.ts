@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import type { BrowserState } from '@shared/browser'
 import { useSessionsStore } from '@renderer/stores/sessions'
-import { isSplit } from '@renderer/features/split/layout'
 import { useViewStore } from '@renderer/stores/view'
 
 interface BrowserStore {
@@ -57,32 +56,17 @@ export const useBrowserStore = create<BrowserStore>()((set) => ({
 /**
  * Follows the page state main sends, and tells main which sessions still exist, so a page closes
  * once its session leaves the host's memory. The first navigation of a session opens the pane
- * when the side panel shows nothing else; one showing another pane keeps it, and the toggle
- * gets a dot.
+ * when its side panel shows nothing else; one showing another pane keeps it, and the toggle gets
+ * a dot.
  */
 export function initBrowser(): void {
   window.kettu.browser.onState((state) => useBrowserStore.getState().receive(state))
   window.kettu.browser.onOpened(({ sessionId }) => {
-    const view = useViewStore.getState()
-    const summary = useSessionsStore.getState().byId[sessionId]
-    if (!summary) return
-    // In a split the panel serves the pane in focus, whose page alone it can show.
-    const split = isSplit(view.layout)
-    const shown = split ? view.splitSidePane : view.sidePane[summary.projectPath]
-    const focused = split && view.main.kind === 'session' && view.main.sessionId === sessionId
-    if (split && !focused) {
-      if (shown !== 'browser') {
-        useBrowserStore.setState((s) => ({ unseen: { ...s.unseen, [sessionId]: true } }))
-      }
-      return
-    }
-    if (shown === undefined || shown === null) {
-      // Nothing else in the panel: show the browser, without taking the focus.
-      useViewStore.setState((s) =>
-        split
-          ? { splitSidePane: 'browser' }
-          : { sidePane: { ...s.sidePane, [summary.projectPath]: 'browser' } },
-      )
+    if (!useSessionsStore.getState().byId[sessionId]) return
+    const shown = useViewStore.getState().sidePane[sessionId]
+    if (shown === undefined) {
+      // Nothing else in the session's panel: show the browser, without taking the focus.
+      useViewStore.setState((s) => ({ sidePane: { ...s.sidePane, [sessionId]: 'browser' } }))
       return
     }
     if (shown !== 'browser') {

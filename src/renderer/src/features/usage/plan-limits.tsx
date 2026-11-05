@@ -45,7 +45,7 @@ export function PlanLimits({ used }: { used: readonly AgentId[] }) {
     useShallow((s) =>
       s.order
         .map((id) => s.byId[id])
-        .filter((a): a is AgentStatus => !!a && a.registered !== false),
+        .filter((a): a is AgentStatus => !!a && a.registered !== false && !a.disabled),
     ),
   )
   // Read afresh when the page opens; the host asks each agent at most once a minute.

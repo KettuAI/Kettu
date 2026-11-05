@@ -180,8 +180,8 @@ const AGENT_KEYS: readonly string[] = [
   'uninstalled',
 ]
 
-/** The agents Kettu's own MCP server is off for: each an agent id, once. */
-function checkMcpOff(value: unknown, path: string): string | null {
+/** A list of agents, as the MCP switches and the turned-off agents are: each an id, once. */
+function checkAgentIds(value: unknown, path: string): string | null {
   if (!Array.isArray(value)) return `"${path}" must be an array`
   const seen = new Set<unknown>()
   for (const id of value) {
@@ -207,7 +207,7 @@ function checkMcp(value: unknown, path: string): string | null {
   if (!isRecord(kettu)) return `"${path}.kettu" must be an object`
   const unknown = Object.keys(kettu).find((key) => key !== 'off')
   if (unknown) return `Unknown setting "${path}.kettu.${unknown}"`
-  return checkMcpOff(kettu.off, `${path}.kettu.off`)
+  return checkAgentIds(kettu.off, `${path}.kettu.off`)
 }
 
 /** The start modes a patch sets: each for an agent that takes one, or null to clear it. */
@@ -344,6 +344,9 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
     } else if (section === 'mcp') {
       const problem = checkMcp(value, 'mcp')
       if (problem) problems.push(problem)
+    } else if (section === 'disabledAgents') {
+      const problem = checkAgentIds(value, 'disabledAgents')
+      if (problem) problems.push(problem)
     } else if (section === 'startModes') {
       const problem = checkStartModes(value, 'startModes')
       if (problem) problems.push(problem)
@@ -398,6 +401,7 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
   }
   if (patch.proxy) next.proxy = normalizeProxy(patch.proxy)
   if (patch.mcp) next.mcp = { kettu: { off: [...patch.mcp.kettu.off] } }
+  if (patch.disabledAgents) next.disabledAgents = [...patch.disabledAgents]
   if (patch.startModes) {
     for (const [id, mode] of Object.entries(patch.startModes) as [AgentId, string | null][]) {
       if (mode === null) delete next.startModes[id]
@@ -542,6 +546,7 @@ export function withMovedAgent(
   if (defaultAgent) next.agents[agentId] = { ...next.agents[agentId], enabled: false }
   else next.addedAgents = next.addedAgents.filter((agent) => agent.id !== agentId)
   next.mcp.kettu.off = next.mcp.kettu.off.filter((id) => id !== agentId)
+  next.disabledAgents = next.disabledAgents.filter((id) => id !== agentId)
   delete next.startModes[agentId]
   if (next.general.defaultAgent === agentId) next.general.defaultAgent = null
   return next
@@ -648,6 +653,10 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
   if (raw.mcp !== undefined) {
     if (!isRecord(raw.mcp)) problems.push('"mcp" must be an object')
     else settings.mcp = readMcp(raw.mcp)
+  }
+  if (raw.disabledAgents !== undefined) {
+    if (!Array.isArray(raw.disabledAgents)) problems.push('"disabledAgents" must be an array')
+    else settings.disabledAgents = readAgentIds(raw.disabledAgents)
   }
   if (raw.startModes !== undefined) settings.startModes = readStartModes(raw.startModes, problems)
   if (raw.remote !== undefined) {
@@ -772,15 +781,18 @@ function readRemote(raw: Record<string, unknown>, problems: string[]): SettingsF
   return remote
 }
 
-/** Reads the MCP section leniently: an unknown or repeated id is dropped and the rest kept. */
+/** Reads a list of agents leniently: an unknown or repeated id is dropped and the rest kept. */
+function readAgentIds(list: readonly unknown[]): AgentId[] {
+  const ids: AgentId[] = []
+  for (const id of list) {
+    if (isAgentId(id) && !ids.includes(id)) ids.push(id)
+  }
+  return ids
+}
+
 function readMcp(raw: Record<string, unknown>): SettingsFile['mcp'] {
   const kettu = isRecord(raw.kettu) ? raw.kettu : {}
-  const list = Array.isArray(kettu.off) ? kettu.off : []
-  const off: AgentId[] = []
-  for (const id of list) {
-    if (isAgentId(id) && !off.includes(id)) off.push(id)
-  }
-  return { kettu: { off } }
+  return { kettu: { off: readAgentIds(Array.isArray(kettu.off) ? kettu.off : []) } }
 }
 
 /** Reads the start modes leniently: an entry that is no start mode of an agent is dropped. */
@@ -802,6 +814,7 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
     locale: resolveLocale(settings.general.language, systemLocale),
     agents: structuredClone(settings.agents),
     addedAgents: structuredClone(settings.addedAgents),
+    disabledAgents: [...settings.disabledAgents],
     proxy: structuredClone(settings.proxy),
     git: { ...settings.git },
     mcp: structuredClone(settings.mcp),
@@ -816,6 +829,7 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
 const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
   'agents',
   'addedAgents',
+  'disabledAgents',
   'proxy',
   'git',
   'mcp',

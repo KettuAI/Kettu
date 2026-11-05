@@ -144,8 +144,10 @@ export interface LimitRow {
 export function limitRows(agents: readonly AgentStatus[], now: number): LimitRow[] {
   const rows: LimitRow[] = []
   for (const agent of agents) {
-    // A removed agent keeps its last limits, which nothing reads again.
-    if (agent.hidden || agent.registered === false || agent.limits.length === 0) continue
+    // A removed or turned-off agent keeps its last limits, which nothing reads again.
+    if (agent.hidden || agent.disabled || agent.registered === false || agent.limits.length === 0) {
+      continue
+    }
     const limit = tightestLimit(agent.limits, now)
     if (!limit || limit.usedPercent === null) continue
     const plan = agent.account ? planName(agent.name, agent.account.label) : null

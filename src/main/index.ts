@@ -307,6 +307,7 @@ async function start(): Promise<void> {
     onBadge: (count) => setBadgeCount(count),
     onBusy: (counts) => tray.setBusy(counts),
     onProjects: (paths) => terminalHost.setProjects(paths),
+    onSessionsEnded: (sessionIds) => terminalHost.endSessions(sessionIds),
     onAuthCommands: (commands) => terminalHost.setAuthCommands(commands),
     onMediaGrant: (grant) => mediaGrants.add(grant),
     onMediaRevoke: (sessionId) => mediaGrants.revoke(sessionId),

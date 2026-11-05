@@ -53,7 +53,7 @@ export function ImportSessionsDialog({
   const agents = useAgentsStore(
     useShallow((s) =>
       usableAgents(s.order, s.byId).filter(
-        (a) => a.capabilities.listSessions && readiness(a).kind !== 'missing',
+        (a) => !a.disabled && a.capabilities.listSessions && readiness(a).kind !== 'missing',
       ),
     ),
   )

@@ -205,7 +205,7 @@ export const ToolCard = memo(function ToolCard({
       <ContextMenuTrigger render={<div />}>{card}</ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem
-          onClick={() => emitAppEvent({ kind: 'run-in-terminal', projectPath, command })}
+          onClick={() => emitAppEvent({ kind: 'run-in-terminal', panel: sessionId, command })}
         >
           <SquareTerminalIcon />
           {t('tool.runInTerminal')}

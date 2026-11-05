@@ -51,10 +51,13 @@ import { ArtifactSurface, CanvasBarControls, Presence } from './viewer-parts'
  */
 export default function ArtifactPane({
   projectPath,
+  panel,
   id,
   maximized,
 }: {
   projectPath: string
+  /** The session's side panel it shows in. */
+  panel: string
   id: string
   maximized: boolean
 }) {
@@ -67,7 +70,7 @@ export default function ArtifactPane({
   const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && !hasBand
   const { summary, shown, url } = artifact
   const title = summary?.title ?? shown?.title ?? ''
-  const close = (): void => toggleSidePane(projectPath, 'artifact', false)
+  const close = (): void => toggleSidePane(panel, 'artifact', false)
   const showing = !!(url && shown) && !states.error && !states.gone && !artifact.stopped
   const editor = useMemo(() => (url ? new ArtifactEditor(url.slice(0, -1)) : null), [url])
   useEffect(() => () => editor?.dispose(), [editor])

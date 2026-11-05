@@ -11,7 +11,7 @@ import { longAgo } from '@renderer/lib/format'
 import { hostPath } from '@renderer/lib/host-paths'
 import { useNow } from '@renderer/lib/use-now'
 import { openGitDialog, useGitStore } from '@renderer/stores/git'
-import { toggleSidePane } from '@renderer/stores/view'
+import { showSidePane } from '@renderer/stores/view'
 import { CopyButton } from './copy-button'
 import { branchName } from './popover-keys'
 import { PullRequestPart } from './pr-part'
@@ -198,7 +198,7 @@ function ChangesPart({ status, onClose }: { status: GitStatus; onClose: () => vo
             className={`${ROW} h-7 text-small text-tertiary`}
             onClick={() => {
               onClose()
-              toggleSidePane(status.projectPath, 'files', true)
+              showSidePane(status.projectPath, 'files')
             }}
           >
             {t('timeline.more', { count: more })}

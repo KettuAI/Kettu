@@ -11,7 +11,7 @@ import { linkSite, rememberSite } from './link-open'
 
 /**
  * Opens a link in the default browser, or in the session's page in Kettu's browser, which the
- * side panel then shows for the session's project.
+ * session's side panel then shows.
  */
 export function openLinkIn(url: string, destination: LinkDestination, sessionId: string | null) {
   // Either place makes the site one opened from Kettu, which is not asked about as new again.
@@ -24,7 +24,7 @@ export function openLinkIn(url: string, destination: LinkDestination, sessionId:
     if (main.kind !== 'session' || main.sessionId !== sessionId) {
       openSession(sessionId, summary.projectPath)
     }
-    toggleSidePane(summary.projectPath, 'browser', true)
+    toggleSidePane(sessionId, 'browser', true)
     window.kettu.browser
       .navigate(sessionId, url)
       .catch((e: unknown) => toast(i18n.t('session:link.openFailed', { error: errorMessage(e) })))

@@ -25,7 +25,9 @@ export function tightestLimit(limits: readonly PlanLimit[], now: number): PlanLi
  */
 export function limitReaders(agents: readonly AgentStatus[]): AgentId[] {
   return agents
-    .filter((a) => a.registered !== false && a.state === 'ready' && a.capabilities.reports)
+    .filter(
+      (a) => a.registered !== false && !a.disabled && a.state === 'ready' && a.capabilities.reports,
+    )
     .map((a) => a.id)
 }
 

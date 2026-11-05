@@ -53,6 +53,7 @@ export interface SettingsFile {
     >
   >
   addedAgents: AddedAgent[] // in the order they were added
+  disabledAgents: AgentId[] // turned off: never started, kept with everything they have
   proxy: ProxySettings
   terminal: {
     shellPath?: string // picked in a native dialog; the platform default when absent
@@ -180,6 +181,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   },
   agents: {},
   addedAgents: [],
+  disabledAgents: [],
   proxy: { mode: 'environment' },
   terminal: { fontSize: 13 },
   git: { backgroundFetch: false },
@@ -230,6 +232,7 @@ export interface SettingsPatch {
   terminal?: { shellPath?: null; fontSize?: SettingsFile['terminal']['fontSize'] }
   git?: Partial<SettingsFile['git']>
   mcp?: { kettu: { off: AgentId[] } } // the list is replaced whole
+  disabledAgents?: AgentId[] // replaced whole
   startModes?: Partial<Record<AgentId, string | null>> // merged by agent; null clears one
   updates?: Partial<SettingsFile['updates']>
   privacy?: Partial<SettingsFile['privacy']>
@@ -249,6 +252,7 @@ export interface HostSettings {
   locale: Locale // the language of the text the host writes for the user
   agents: SettingsFile['agents']
   addedAgents: AddedAgent[]
+  disabledAgents: AgentId[]
   proxy: ProxySettings
   git: SettingsFile['git']
   mcp: SettingsFile['mcp']

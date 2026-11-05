@@ -610,6 +610,17 @@
       "keepsDefault": "It uses {{name}}’s configuration in your terminal, which stays as it is. The harness is not uninstalled.",
       "buttonEllipsis": "Remove…"
     },
+    "turnedOff": "Turned off",
+    "enable": {
+      "name": "Enabled",
+      "on": "Available in New session and for routines.",
+      "off": "Turned off: it never starts and is not offered where an agent is chosen. Its sessions, login and configuration stay.",
+      "switch": "Enable {{name}}",
+      "confirmTitle": "Turn off {{name}}?",
+      "confirmBody_one": "{{count}} session of this agent has a turn running. Turning it off stops that turn.",
+      "confirmBody_other": "{{count}} sessions of this agent have a turn running. Turning it off stops those turns.",
+      "confirm": "Turn off"
+    },
     "rename": {
       "button": "Rename",
       "title": "Rename agent",

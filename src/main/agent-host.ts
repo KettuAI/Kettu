@@ -56,6 +56,7 @@ export interface AgentHostDeps {
   onBadge(count: number): void
   onBusy(counts: BusyCounts): void
   onProjects(paths: string[]): void
+  onSessionsEnded(sessionIds: string[]): void
   onAuthCommands(commands: string[]): void
   /** A file the host granted, for the media scheme to serve. */
   onMediaGrant(grant: MediaGrantRecord): void
@@ -548,6 +549,9 @@ export class AgentHost {
         break
       case 'host:projects':
         if (isStringList(message.paths)) this.deps.onProjects(message.paths)
+        break
+      case 'host:sessions-ended':
+        if (isStringList(message.sessionIds)) this.deps.onSessionsEnded(message.sessionIds)
         break
       case 'host:auth-commands':
         if (isStringList(message.commands)) this.deps.onAuthCommands(message.commands)

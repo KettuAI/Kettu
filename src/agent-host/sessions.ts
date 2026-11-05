@@ -198,6 +198,8 @@ export interface SessionEvents {
   /** To every port, or to `portIds` alone for a prepared session. */
   summary(summary: SessionSummary, portIds?: readonly string[]): void
   removed(sessionId: string, portIds?: readonly string[]): void
+  /** Sessions archived or deleted: what belongs to them outside this host, their terminals, ends. */
+  ended(sessionIds: string[]): void
   /**
    * A message waits in the host for a window to take back; null for New session. To every port,
    * or to `portIds` alone, the one that sent it.
@@ -2030,6 +2032,7 @@ export class SessionManager {
   ): Promise<SessionSummary> {
     const { agents, projects, scratch } = this.deps
     if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
+    agents.assertEnabled(params.agentId)
     // Before a prepared session is taken over, so a refused prompt leaves it prepared.
     const prompt = params.prompt && this.hydrate(params.prompt)
     if (params.preparedId !== undefined) {
@@ -2123,6 +2126,7 @@ export class SessionManager {
   async createRun(params: RoutineSessionStart): Promise<SessionSummary> {
     const { agents, projects, scratch } = this.deps
     if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
+    agents.assertEnabled(params.agentId)
     const projectPath = await projects.resolveDirectory(params.projectPath)
     if (!scratch.contains(projectPath)) await projects.add(projectPath)
     const now = this.now()
@@ -2200,6 +2204,7 @@ export class SessionManager {
     if (!this.deps.agents.has(params.agentId)) {
       throw invalidParams(`Unknown agent ${params.agentId}`)
     }
+    this.deps.agents.assertEnabled(params.agentId)
     const key = preparedKey(params)
     const slot = this.slotOf(portId)
     const held = slot.next ?? (slot.stale ? null : slot.current)
@@ -3689,9 +3694,9 @@ export class SessionManager {
   }
 
   private assertRegistered(sessionId: string): void {
-    if (!this.deps.agents.has(this.recordOf(sessionId).agentId)) {
-      throw new HostError('agent_unavailable', t('agent.removed'))
-    }
+    const { agentId } = this.recordOf(sessionId)
+    if (!this.deps.agents.has(agentId)) throw new HostError('agent_unavailable', t('agent.removed'))
+    this.deps.agents.assertEnabled(agentId)
   }
 
   /**
@@ -4103,7 +4108,12 @@ export class SessionManager {
    * when it is, for the prompt Send now chose.
    */
   private drainQueue(live: Live, chosen = false): void {
-    if (!this.deps.agents.has(live.record.agentId)) return
+    if (
+      !this.deps.agents.has(live.record.agentId) ||
+      this.deps.agents.isDisabled(live.record.agentId)
+    ) {
+      return
+    }
     const { status, queue, queuePaused } = live.thread.session
     const [next, ...rest] = queue
     if (!next || (queuePaused && !chosen) || !canSend(status)) return
@@ -5217,10 +5227,12 @@ export class SessionManager {
     const record = this.topLevel(sessionId)
     if (record.archivedAt !== undefined) return
     await this.settled(sessionId)
-    await this.closeAll([...this.descendants(sessionId), record], true)
+    const all = [...this.descendants(sessionId), record]
+    await this.closeAll(all, true)
     delete record.pinnedAt
     record.archivedAt = this.now()
     this.saveRecord(sessionId)
+    this.deps.events.ended(all.map((item) => item.id))
   }
 
   // The session tools: what the artifacts service calls, under the caller's id.
@@ -5374,10 +5386,12 @@ export class SessionManager {
       return
     }
     await this.settled(sessionId)
-    await this.closeAll([...this.descendants(sessionId), record], true)
+    const all = [...this.descendants(sessionId), record]
+    await this.closeAll(all, true)
     delete record.pinnedAt
     record.archivedAt = this.now()
     this.saveRecord(sessionId)
+    this.deps.events.ended(all.map((item) => item.id))
   }
 
   /** The info notice an archived session's thread gets, "Claude Code archived this session". */
@@ -5511,7 +5525,7 @@ export class SessionManager {
     this.touch(sessionId)
   }
 
-  /** Closes removed agents' live sessions while retaining their index and transcript. */
+  /** Closes the live sessions of removed and turned-off agents, keeping their index and transcript. */
   async agentsRemoved(agentIds: readonly AgentId[]): Promise<void> {
     const records = [...this.records.values()].filter((record) => agentIds.includes(record.agentId))
     await Promise.all(records.map((record) => this.settled(record.id)))
@@ -5600,6 +5614,7 @@ export class SessionManager {
     await this.settled(sessionId)
     const all = [...this.descendants(sessionId), record]
     await this.closeAll(all, false)
+    this.deps.events.ended(all.map((item) => item.id))
     const deleting: { item: SessionRecord; acpSessionId: string; runtime: AgentRuntime }[] = []
     for (const item of all) {
       if (item.origin === 'subagent' || !item.acpSessionId) continue
@@ -5838,6 +5853,7 @@ export class SessionManager {
   }): Promise<SessionSummary> {
     if (!this.deps.agents.has(params.agentId))
       throw invalidParams(`Unknown agent ${params.agentId}`)
+    this.deps.agents.assertEnabled(params.agentId)
     const projectPath = await this.deps.projects.resolveDirectory(params.projectPath)
     const existing = this.findByAcp(params.agentId, params.acpSessionId)
     if (existing) return this.summary(existing.id)
