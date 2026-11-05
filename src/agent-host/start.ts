@@ -133,6 +133,11 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
           withHost((h) => h.browserResult(message.callId, message.result, message.error))
         }
         break
+      case 'device-result':
+        if (Number.isSafeInteger(message.callId) && typeof message.answer === 'object') {
+          withHost((h) => h.deviceResult(message.callId, message.answer))
+        }
+        break
       case 'host:browser-waiting':
         if (Number.isSafeInteger(message.callId) && typeof message.waiting === 'boolean') {
           withHost((h) => h.browserWaiting(message.callId, message.waiting))

@@ -83,6 +83,9 @@ export type DeviceCallErrorCode =
   | 'unavailable'
   | 'failed'
 
+export type DeviceAccessDecision = 'session' | 'always' | 'deny'
+export type DeviceAccessAnswer = DeviceAccessDecision | 'timeout'
+
 /** Seconds an agent's device call may run before it fails, long enough for an app's first build. */
 export const DEVICE_CALL_TIMEOUT_MS = 240_000
 /** How long the user has to answer a device access request. */

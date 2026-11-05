@@ -1382,5 +1382,16 @@ export function createValidators(platform: Platform): Validators {
         decision: o.decision as BrowserOriginDecision,
       }
     },
+    'devices.answerAccess': (params) => {
+      const o = fields(params)
+      if (o.decision !== 'session' && o.decision !== 'always' && o.decision !== 'deny') {
+        throw invalidParams('decision must be session, always or deny')
+      }
+      return {
+        sessionId: sessionId(o),
+        entryId: string(o, 'entryId', ID_CHARS),
+        decision: o.decision,
+      }
+    },
   }
 }

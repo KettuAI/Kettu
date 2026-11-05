@@ -1,5 +1,6 @@
 // The contract between the renderer and the agent host, over the agent host port.
 
+import type { DeviceAccessDecision } from './device-agent'
 import type { ArtifactConsentAsk, ArtifactConsentRow, RuntimeAnswer } from './artifact-capabilities'
 import type { ArtifactContent, ArtifactSession, ArtifactSummary, VersionSummary } from './artifacts'
 import type { CommentAnchor, CommentThread } from './artifact-comments'
@@ -860,6 +861,11 @@ export interface HostContract {
     params: { sessionId: string; entryId: string; decision: BrowserOriginDecision }
     result: void
   }
+  // Any window's or device's answer to a mobile device card; the first counts.
+  'devices.answerAccess': {
+    params: { sessionId: string; entryId: string; decision: DeviceAccessDecision }
+    result: void
+  }
 }
 
 export type HostMethod = keyof HostContract
@@ -1013,6 +1019,7 @@ export const HOST_METHODS = [
   'browser.origin',
   'browser.originSettled',
   'browser.answerOrigin',
+  'devices.answerAccess',
 ] as const satisfies readonly HostMethod[]
 
 /** One that has a session in front: the host's own windows as one, or a paired device. */

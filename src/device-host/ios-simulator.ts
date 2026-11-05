@@ -2,6 +2,7 @@
 // token of its own: its `stream.avcc` carries the frames, its helper socket the input.
 
 import { spawn, type ChildProcess } from 'node:child_process'
+import path from 'node:path'
 import { createInterface } from 'node:readline'
 import type { Env } from '../agent-host/find-command'
 import type { DeviceInput, DeviceOrientation, DeviceScreen, FrameKind } from '@shared/device-host'
@@ -28,8 +29,7 @@ interface Started {
 }
 
 function serveSimScript(): string {
-  // `./middleware` resolves to `dist/middleware.cjs` for require; the CLI sits beside it.
-  return `${packageRoot('@expo/serve-sim', 'middleware', 0)}/serve-sim.js`
+  return path.join(packageRoot('@expo/serve-sim'), 'dist', 'serve-sim.js')
 }
 
 function codecOf(description: Uint8Array): string {

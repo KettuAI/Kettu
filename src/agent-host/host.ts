@@ -2,6 +2,8 @@
 // the utility process or under Node.js; tests run it in-process with fakes for the launcher,
 // shell and git.
 
+import { DEVICE_ACCESS_WAIT_MS, type DeviceCall, type DeviceCallAnswer } from '@shared/device-agent'
+import { DeviceAccessStore } from './devices/access'
 import os from 'node:os'
 import path from 'node:path'
 import { cp, mkdir, rename, rm, stat } from 'node:fs/promises'
@@ -251,6 +253,9 @@ export class AgentHost {
   private readonly gitRetains = new Map<string, { path: string; ports: Set<string> }>()
   /** Browser calls awaiting main's answer, by the id the call was given. */
   private readonly browserCalls = new Map<number, (answer: BrowserCallAnswer) => void>()
+  private readonly deviceCalls = new Map<number, (answer: DeviceCallAnswer) => void>()
+  private nextDeviceCall = 1
+  private readonly deviceAccess: DeviceAccessStore
   /** Browser calls sent to the desktop apps that sent their turns. */
   private readonly deviceBrowser: DeviceBrowserCalls
   private lastProcesses = '[]'
@@ -288,6 +293,7 @@ export class AgentHost {
       media: (real, info) => this.media.grantFile(real, info, null),
       describeMedia: (real, info) => this.media.describe(real, info),
     })
+    this.deviceAccess = new DeviceAccessStore(options.userDataPath, log)
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
     this.remembered = agentsFile(options.userDataPath, log)
@@ -341,6 +347,14 @@ export class AgentHost {
       wrote: (sessionId, write) => this.sessions.artifactWritten(sessionId, write),
       browserCall: (request) => this.browserCall(request),
       browserSession: (sessionId) => this.sessions.browserSession(sessionId),
+      devices: {
+        call: (call) => this.deviceCall(call),
+        agentName: (sessionId) => this.sessions.agentName(sessionId),
+        ask: (sessionId, deviceId, deviceName) =>
+          this.sessions.deviceAccessAsked(sessionId, deviceId, deviceName, DEVICE_ACCESS_WAIT_MS),
+        alwaysAllowed: (deviceId) => this.deviceAccess.has(deviceId),
+        allowAlways: (deviceId) => this.deviceAccess.add(deviceId),
+      },
       sessionProject: (sessionId) => this.sessions.sessionProject(sessionId),
       sessions: {
         info: (sessionId) => this.sessions.sessionInfo(sessionId),
@@ -950,6 +964,23 @@ export class AgentHost {
     this.sessions.browserOriginSettled(requestId, decision)
   }
 
+  /** Sends an agent's device call to its parent, which hands it to the device host. */
+  deviceCall(call: DeviceCall): Promise<DeviceCallAnswer> {
+    const callId = this.nextDeviceCall++
+    return new Promise<DeviceCallAnswer>((resolve) => {
+      this.deviceCalls.set(callId, resolve)
+      this.options.send({ type: 'host:device-call', callId, call })
+    })
+  }
+
+  /** `device-result`: the device host's answer to a call this host forwarded. */
+  deviceResult(callId: number, answer: DeviceCallAnswer): void {
+    const resolve = this.deviceCalls.get(callId)
+    if (!resolve) return
+    this.deviceCalls.delete(callId)
+    resolve(answer)
+  }
+
   /** `browser-result`: the answer to a call this host forwarded. */
   browserResult(callId: number, result: unknown, problem: unknown): void {
     const resolve = this.browserCalls.get(callId)
@@ -966,6 +997,12 @@ export class AgentHost {
       })
     }
     this.browserCalls.clear()
+    for (const resolve of this.deviceCalls.values()) {
+      resolve({
+        error: { code: 'unavailable', message: 'Kettu stopped before the device answered.' },
+      })
+    }
+    this.deviceCalls.clear()
   }
 
   /** Stops every agent with the documented sequence, flushes the state files, then reports. */
@@ -1460,6 +1497,9 @@ export class AgentHost {
         } else {
           this.hub.send([owner], { type: 'browser.originDecided', sessionId, requestId, decision })
         }
+      },
+      'devices.answerAccess': ({ sessionId, entryId, decision }, { device }) => {
+        sessions.answerDeviceAccess(sessionId, entryId, decision, fromDevice(device))
       },
     }
   }

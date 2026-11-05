@@ -326,7 +326,8 @@ function usePermissionKeys(sessionId: string, focused: boolean): void {
         const entry = state.byId[id]
         const waiting =
           (entry?.kind === 'tool' && !!entry.permission) ||
-          (entry?.kind === 'browser_origin' && entry.decision === null)
+          (entry?.kind === 'browser_origin' && entry.decision === null) ||
+          (entry?.kind === 'device_access' && entry.decision === null)
         if (!waiting) continue
         // Through the card's own control, so a failure shows where the answer was given. A
         // question card's Enter goes on to its next question, and its own-answer field takes focus.

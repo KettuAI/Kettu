@@ -1,6 +1,7 @@
 // Where the device host finds the programs it runs: npm packages it loads at runtime, the helpers
 // shipped in the app's resources, and the Node.js it runs them with.
 
+import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
 import path from 'node:path'
@@ -13,11 +14,16 @@ export function unpacked(file: string): string {
   return file.replace(/([\\/])app\.asar([\\/])/, '$1app.asar.unpacked$2')
 }
 
-/** The root folder of an installed npm package, found through one of the files it exports. */
-export function packageRoot(name: string, exported: string, depth: number): string {
-  let dir = path.dirname(require.resolve(`${name}/${exported}`))
-  for (let n = 0; n < depth; n++) dir = path.dirname(dir)
-  return unpacked(dir)
+/**
+ * The root folder of an installed npm package, found where Node.js would look for it, since a
+ * package's `exports` may give `require` nothing to resolve.
+ */
+export function packageRoot(name: string): string {
+  for (const dir of require.resolve.paths(name) ?? []) {
+    const root = path.join(dir, name)
+    if (existsSync(path.join(root, 'package.json'))) return unpacked(root)
+  }
+  throw new Error(`${name} is not installed with Kettu`)
 }
 
 /** How to run a Node.js script: this process's own runtime, as Node.js under Electron. */

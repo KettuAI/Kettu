@@ -12,6 +12,7 @@ import {
 } from './basic'
 import { ArtifactEntry } from './artifact-entry'
 import { BrowserOriginEntry } from './browser-origin-entry'
+import { DeviceAccessEntry } from './device-access-entry'
 import { SessionStartedEntry } from './session-started-entry'
 import { SubagentCard } from './subagent-card'
 import { ToolCard } from './tool-card'
@@ -59,6 +60,8 @@ export const Entry = memo(function Entry({
       return <ArtifactEntry {...props} />
     case 'browser_origin':
       return <BrowserOriginEntry {...props} agentName={agentName} />
+    case 'device_access':
+      return <DeviceAccessEntry {...props} agentName={agentName} />
     default:
       return null
   }

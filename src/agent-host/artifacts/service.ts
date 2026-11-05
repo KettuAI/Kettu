@@ -2,6 +2,13 @@
 // reaches with a token of its own, or for OpenCode with its process and folder's token. Streamable
 // HTTP in plain JSON, one stateless transport per request.
 
+import {
+  DEVICE_INSTRUCTIONS,
+  DEVICE_TOOLS,
+  DeviceTools,
+  isDeviceToolName,
+  type DeviceToolDeps,
+} from '../devices/tools'
 import { addLogSecret } from '@shared/log/process-log'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import http from 'node:http'
@@ -63,10 +70,11 @@ export const SERVICE_TOOLS: Tool[] = [
   ...SESSION_TOOLS,
   ...PLAN_TOOLS,
   ...BROWSER_TOOLS,
+  ...DEVICE_TOOLS,
 ]
 
 /** The service's `instructions`: the artifact tools', the session tools' and the browser's. */
-const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${PLAN_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS}`
+const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${PLAN_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS} ${DEVICE_INSTRUCTIONS}`
 
 // The SDK loads with the first request rather than with the host, which starts faster without it.
 function loadSdk() {
@@ -109,6 +117,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   plan: PlanToolsDeps
   /** Whether the agent's session `id` is a subagent that runs under a session of its own. */
   subagentCall?(process: AgentProcess, id: string): boolean
+  /** The mobile devices behind the `device_*` tools; without them every call fails. */
+  devices?: Omit<DeviceToolDeps, 'sessionOf' | 'projectOf'>
 }
 
 /** A token for one session. */
@@ -185,6 +195,7 @@ export class ArtifactService {
   private readonly sessionTools: SessionTools
   private readonly planTools: PlanTools
   private readonly browserTools: BrowserTools
+  private readonly deviceTools: DeviceTools | null
   private readonly dataTools: DataTools | null
   private sdk: Promise<Sdk> | null = null
   /** Why the last `start()` could not listen; cleared once it does. */
@@ -209,6 +220,14 @@ export class ArtifactService {
       pageOf: (sessionId) => deps.browserSession?.(sessionId) ?? sessionId,
       projectOf: (sessionId) => deps.sessionProject?.(sessionId) ?? '',
     })
+    const devices = deps.devices
+    this.deviceTools = devices
+      ? new DeviceTools({
+          ...devices,
+          sessionOf: (sessionId) => deps.browserSession?.(sessionId) ?? sessionId,
+          projectOf: (sessionId) => deps.sessionProject?.(sessionId) ?? null,
+        })
+      : null
   }
 
   /** `host:browser-waiting`: the call waits on a new origin, so its own limit grows to that wait. */
@@ -501,6 +520,17 @@ export class ArtifactService {
       if (isBrowserToolName(name)) {
         try {
           return await this.browserTools.call(caller, name, input)
+        } catch (error) {
+          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+        }
+      }
+      if (isDeviceToolName(name)) {
+        if (!this.deviceTools) {
+          throw new McpError(ErrorCode.InternalError, `${name} is not available on this host`)
+        }
+        try {
+          return await this.deviceTools.call(caller, name, input)
         } catch (error) {
           this.deps.log('error', `${name} failed: ${(error as Error).message}`)
           throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)

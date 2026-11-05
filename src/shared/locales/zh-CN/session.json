@@ -116,6 +116,26 @@
     "wants": "{{agent}} 想打开 <site>{{site}}</site>",
     "where": "在本会话的浏览器里打开 · 带着你的登录状态"
   },
+  "deviceAccess": {
+    "label": "移动设备",
+    "ask": "{{agent}} 想使用这台设备。",
+    "answerGroup": "回答",
+    "decision": {
+      "session": "本次会话允许",
+      "always": "始终允许这台设备",
+      "deny": "拒绝"
+    },
+    "answer": {
+      "session": "本次会话已允许",
+      "always": "已始终允许",
+      "deny": "已拒绝",
+      "timeout": "没有及时回答"
+    },
+    "use": "使用",
+    "status": "设备",
+    "wants": "{{agent}} 想使用 <device>{{device}}</device>",
+    "where": "点按、输入和截图，截图会交给这个 Agent 的模型服务商"
+  },
   "subagent": {
     "fallbackTitle": "子 Agent",
     "tools_other": "{{count}} 个工具",

@@ -90,6 +90,7 @@
   },
   "attention": {
     "browserOrigin": "想打开 {{site}}",
+    "deviceAccess": "想使用 {{device}}",
     "permission": "请求权限",
     "turnEnd": {
       "end_turn": "已完成",

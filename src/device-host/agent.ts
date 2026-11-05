@@ -25,8 +25,7 @@ export class ActionError extends Error {
 }
 
 function cli(): string {
-  // `.` resolves to `dist/src/index.js`.
-  return path.join(packageRoot('agent-device', '', 2), 'bin', 'agent-device.mjs')
+  return path.join(packageRoot('agent-device'), 'bin', 'agent-device.mjs')
 }
 
 interface Output {

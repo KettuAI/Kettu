@@ -7,7 +7,16 @@ import type { GitEventDraft } from '../git/api'
 
 type OwnEntry = Extract<
   ThreadEntry,
-  { kind: 'artifact' | 'session_started' | 'git' | 'turn_end' | 'notice' | 'browser_origin' }
+  {
+    kind:
+      | 'artifact'
+      | 'session_started'
+      | 'git'
+      | 'turn_end'
+      | 'notice'
+      | 'browser_origin'
+      | 'device_access'
+  }
 >
 
 const ACTIONS: Record<string, ArtifactAction> = {
@@ -127,6 +136,7 @@ function isOwn(entry: ThreadEntry): entry is OwnEntry {
   switch (entry.kind) {
     case 'artifact':
     case 'browser_origin':
+    case 'device_access':
     case 'session_started':
     case 'git':
     case 'turn_end':

@@ -33,7 +33,7 @@ export class FrameFanout {
   constructor(
     private readonly deliver: (port: string, frame: StreamFrame) => void,
     private readonly wantKeyframe: () => void,
-    private readonly window = DEVICE_FLOW.window,
+    private readonly window: number = DEVICE_FLOW.window,
   ) {}
 
   get watching(): number {
