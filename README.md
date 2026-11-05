@@ -7,14 +7,11 @@
   </picture>
 </h1>
 
-[![Release](https://img.shields.io/github/v/release/KettuAI/Kettu?include_prereleases&label=release&style=flat-square&labelColor=555555&color=2563eb)](https://github.com/KettuAI/Kettu/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/KettuAI/Kettu/total?label=downloads&style=flat-square&labelColor=555555&color=15803d)](https://github.com/KettuAI/Kettu/releases)
-[![Release build](https://img.shields.io/github/actions/workflow/status/KettuAI/Kettu/release.yml?branch=main&label=release%20build&style=flat-square&labelColor=555555)](https://github.com/KettuAI/Kettu/actions/workflows/release.yml)
-[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-6d28d9?style=flat-square&labelColor=555555)](https://github.com/KettuAI/Kettu/releases/latest)
-[![Agents](https://img.shields.io/badge/agents-46-0f766e?style=flat-square&labelColor=555555)](#agents)
-[![Website](https://img.shields.io/badge/website-kettu.sh-c2410c?style=flat-square&labelColor=555555)](https://www.kettu.sh)
-[![Docs](https://img.shields.io/badge/docs-kettu.sh%2Fdocs-0369a1?style=flat-square&labelColor=555555)](https://www.kettu.sh/docs/)
-[![License](https://img.shields.io/github/license/KettuAI/Kettu?style=flat-square&labelColor=555555&color=b45309)](./LICENSE)
+[![Release](https://img.shields.io/github/v/release/KettuAI/Kettu?include_prereleases&label=release&style=flat-square&labelColor=3f3f46&color=fa5615)](https://github.com/KettuAI/Kettu/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/KettuAI/Kettu/total?label=downloads&style=flat-square&labelColor=3f3f46&color=15803d)](https://github.com/KettuAI/Kettu/releases)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-2563eb?style=flat-square&labelColor=3f3f46)](https://github.com/KettuAI/Kettu/releases/latest)
+[![Agents](https://img.shields.io/badge/agents-46-0f766e?style=flat-square&labelColor=3f3f46)](#agents)
+[![License](https://img.shields.io/github/license/KettuAI/Kettu?style=flat-square&labelColor=3f3f46&color=71717a)](./LICENSE)
 
 <h3>Beauty is productivity.</h3>
 

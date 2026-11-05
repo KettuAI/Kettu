@@ -7,14 +7,11 @@
   </picture>
 </h1>
 
-[![版本](https://img.shields.io/github/v/release/KettuAI/Kettu?include_prereleases&label=%E7%89%88%E6%9C%AC&style=flat-square&labelColor=555555&color=2563eb)](https://github.com/KettuAI/Kettu/releases/latest)
-[![下载量](https://img.shields.io/github/downloads/KettuAI/Kettu/total?label=%E4%B8%8B%E8%BD%BD%E9%87%8F&style=flat-square&labelColor=555555&color=15803d)](https://github.com/KettuAI/Kettu/releases)
-[![发布构建](https://img.shields.io/github/actions/workflow/status/KettuAI/Kettu/release.yml?branch=main&label=%E5%8F%91%E5%B8%83%E6%9E%84%E5%BB%BA&style=flat-square&labelColor=555555)](https://github.com/KettuAI/Kettu/actions/workflows/release.yml)
-[![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-macOS%20%7C%20Windows%20%7C%20Linux-6d28d9?style=flat-square&labelColor=555555)](https://github.com/KettuAI/Kettu/releases/latest)
-[![Agent](https://img.shields.io/badge/Agent-46-0f766e?style=flat-square&labelColor=555555)](#支持的-agent)
-[![官网](https://img.shields.io/badge/%E5%AE%98%E7%BD%91-kettu.sh-c2410c?style=flat-square&labelColor=555555)](https://www.kettu.sh/zh-CN/)
-[![文档](https://img.shields.io/badge/%E6%96%87%E6%A1%A3-kettu.sh%2Fdocs-0369a1?style=flat-square&labelColor=555555)](https://www.kettu.sh/zh-CN/docs/)
-[![许可证](https://img.shields.io/github/license/KettuAI/Kettu?label=%E8%AE%B8%E5%8F%AF%E8%AF%81&style=flat-square&labelColor=555555&color=b45309)](./LICENSE)
+[![版本](https://img.shields.io/github/v/release/KettuAI/Kettu?include_prereleases&label=%E7%89%88%E6%9C%AC&style=flat-square&labelColor=3f3f46&color=fa5615)](https://github.com/KettuAI/Kettu/releases/latest)
+[![下载量](https://img.shields.io/github/downloads/KettuAI/Kettu/total?label=%E4%B8%8B%E8%BD%BD%E9%87%8F&style=flat-square&labelColor=3f3f46&color=15803d)](https://github.com/KettuAI/Kettu/releases)
+[![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-macOS%20%7C%20Windows%20%7C%20Linux-2563eb?style=flat-square&labelColor=3f3f46)](https://github.com/KettuAI/Kettu/releases/latest)
+[![Agent](https://img.shields.io/badge/Agent-46-0f766e?style=flat-square&labelColor=3f3f46)](#支持的-agent)
+[![许可证](https://img.shields.io/github/license/KettuAI/Kettu?label=%E8%AE%B8%E5%8F%AF%E8%AF%81&style=flat-square&labelColor=3f3f46&color=71717a)](./LICENSE)
 
 <h3>颜值也是生产力。</h3>
 
