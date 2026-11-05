@@ -31,6 +31,8 @@ import { commandOutput, PANEL, toolLabel } from './helpers'
 import { PermissionAnswer, PermissionCard } from './permission-card'
 import { PlanCard, PlanSettled } from './plan-card'
 import { AnsweredQuestions, QuestionCard } from './question-card'
+import { entryPictures, type RowPicture } from './row-pictures'
+import { ThumbRow } from './row-thumbs'
 import { ShellBlock } from './shell-block'
 import { ContentBlock, Target, ToolMedia } from './tool-parts'
 import { useDiffStats } from './use-diff-stats'
@@ -59,6 +61,7 @@ export const ToolCard = memo(function ToolCard({
   const ref = useRef<HTMLDivElement>(null)
   const permission = entry?.permission ?? null
   const media = useMemo(() => (entry ? toolMedia(entry) : []), [entry])
+  const pictures = useMemo(() => (entry ? entryPictures(entry) : []), [entry])
 
   useEffect(() => {
     if (permission) ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
@@ -129,7 +132,14 @@ export const ToolCard = memo(function ToolCard({
       onOpenChange={(next) => setUserOpen(next)}
       render={<div ref={ref} data-entry-id={entryId} className={cn('min-w-0', animation)} />}
     >
-      <ToolHeader entry={entry} label={label} toggle={hasBody} open={open} />
+      <ToolHeader
+        sessionId={sessionId}
+        entry={entry}
+        label={label}
+        toggle={hasBody}
+        open={open}
+        pictures={pictures}
+      />
       {hasBody && (
         <CollapsibleContent className={PANEL} keepMounted={false}>
           <div className="flex flex-col gap-1.5 pt-1.5 pb-0.5 pl-5.5">
@@ -180,15 +190,19 @@ export const ToolCard = memo(function ToolCard({
 })
 
 function ToolHeader({
+  sessionId,
   entry,
   label,
   toggle,
   open,
+  pictures,
 }: {
+  sessionId: string
   entry: ToolEntry
   label: ReturnType<typeof toolLabel>
   toggle: boolean
   open: boolean
+  pictures: readonly RowPicture[]
 }) {
   const stats = useDiffStats(entry.content)
   const content = (
@@ -223,18 +237,16 @@ function ToolHeader({
     </>
   )
   // A flat row reaches past the column by its padding, so its icon lines up with the prose.
-  const row =
-    'group/tool -mx-1.5 flex h-7 w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-tile px-1.5 text-left text-control text-tertiary outline-none'
-  if (!toggle) return <div className={row}>{content}</div>
+  const row = '-mx-1.5 h-7 w-[calc(100%+0.75rem)] min-w-0'
+  const look =
+    'group/tool flex items-center gap-2 rounded-tile px-1.5 text-left text-control text-tertiary outline-none'
+  if (!toggle) return <div className={cn(row, look)}>{content}</div>
   return (
-    <CollapsibleTrigger
-      className={cn(
-        row,
-        'cursor-default transition-colors duration-(--duration-fast) hover:bg-hover focus-ring',
-      )}
-    >
-      {content}
-    </CollapsibleTrigger>
+    <ThumbRow sessionId={sessionId} pictures={pictures} open={open} className={row}>
+      <CollapsibleTrigger className={cn(look, 'min-w-0 grow cursor-default focus-ring')}>
+        {content}
+      </CollapsibleTrigger>
+    </ThumbRow>
   )
 }
 

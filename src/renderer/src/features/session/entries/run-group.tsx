@@ -24,6 +24,8 @@ import {
   type RunStep,
   type SummaryPart,
 } from './helpers'
+import { stepPictures } from './row-pictures'
+import { ThumbRow } from './row-thumbs'
 import { ToolGroup } from './tool-group'
 import { useDiffStats } from './use-diff-stats'
 
@@ -94,6 +96,7 @@ export const RunGroup = memo(function RunGroup({
       if (entry?.kind === 'thought') thought = thoughtTitle(entry.markdown)
     }
   }
+  const pictures = useMemo(() => stepPictures(entries), [entries])
   const items = useMemo(() => stepItems(entryIds, signature), [entryIds, signature])
   const spaced = useMemo(
     () => new Set(entryIds.filter((_, i) => signature[i] === 'p' || signature[i] === 'h')),
@@ -107,22 +110,30 @@ export const RunGroup = memo(function RunGroup({
       onOpenChange={(next) => setUserOpen(next)}
       className={cn('min-w-0', animation)}
     >
-      <CollapsibleTrigger className="group/run -ml-2 flex min-h-7 max-w-[calc(100%+0.5rem)] items-center gap-1.5 rounded-tile px-2 py-0.75 text-left text-control text-tertiary outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring">
-        <ChevronRightIcon
-          aria-hidden
-          strokeWidth={1.75}
-          className="size-3 shrink-0 transition-transform duration-(--duration-fast) group-data-panel-open/run:rotate-90 motion-reduce:transition-none"
-        />
-        <CutLabel
-          className="min-w-0 truncate"
-          full={<Summary parts={parts} failed={failed} thought={thought} plain />}
-        >
-          <Summary parts={parts} failed={failed} thought={thought} />
-        </CutLabel>
-        {running && (
-          <Spinner aria-label={t('status.running')} className="size-3 shrink-0 text-info" />
-        )}
-      </CollapsibleTrigger>
+      <ThumbRow
+        sessionId={sessionId}
+        pictures={pictures}
+        open={open}
+        className="-ml-2 min-h-7 w-fit max-w-[calc(100%+0.5rem)]"
+        filled="w-[calc(100%+0.5rem)]"
+      >
+        <CollapsibleTrigger className="group/run flex min-w-0 grow items-center gap-1.5 rounded-tile px-2 py-0.75 text-left text-control text-tertiary outline-none focus-ring">
+          <ChevronRightIcon
+            aria-hidden
+            strokeWidth={1.75}
+            className="size-3 shrink-0 transition-transform duration-(--duration-fast) group-data-panel-open/run:rotate-90 motion-reduce:transition-none"
+          />
+          <CutLabel
+            className="min-w-0 truncate"
+            full={<Summary parts={parts} failed={failed} thought={thought} plain />}
+          >
+            <Summary parts={parts} failed={failed} thought={thought} />
+          </CutLabel>
+          {running && (
+            <Spinner aria-label={t('status.running')} className="size-3 shrink-0 text-info" />
+          )}
+        </CollapsibleTrigger>
+      </ThumbRow>
       <CollapsibleContent className={PANEL}>
         <div className="mt-1 ml-1.5 flex flex-col gap-0.5 border-l border-subtle pl-3.5">
           {items.map((item) =>
