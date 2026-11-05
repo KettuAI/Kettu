@@ -154,12 +154,15 @@ export function StageItem({
         x: [move.x, 0],
         y: [move.y, 0],
         scale: [move.scale, 1],
-        ...(move.clip && move.full ? { clipPath: [move.clip, move.full] } : {}),
+        // Ended through Motion, which would write its last clip back over a style set here and
+        // keep a zoomed picture cut to its fitted box.
+        ...(move.clip && move.full
+          ? { clipPath: [move.clip, move.full], transitionEnd: { clipPath: 'none' } }
+          : {}),
       },
       { duration: SLOW, ease: EASE },
     ).then(() => {
       if (hidden.current === from) hide(null)
-      el.style.clipPath = ''
     })
     // Once, when the item first shows; later changes of the stage move the camera instead.
     // eslint-disable-next-line react-hooks/exhaustive-deps
