@@ -15,8 +15,7 @@
 
 <h3>Beauty is productivity.</h3>
 
-All your coding agents, side by side in one window that is a pleasure to work in.<br>
-See at a glance which one is working, which one is waiting for you and which one is done.
+All your coding agents, side by side in one window.
 
 [**Download**](https://github.com/KettuAI/Kettu/releases/latest) · [Website](https://www.kettu.sh) · [Docs](https://www.kettu.sh/docs/) · [Roadmap](./ROADMAP.md) · [Feedback](https://github.com/KettuAI/Kettu/issues/new/choose) · [简体中文](./README.zh-CN.md)
 
@@ -28,63 +27,72 @@ See at a glance which one is working, which one is waiting for you and which one
 </picture>
 
 > [!NOTE]
-> Kettu is an early preview that changes quickly, so expect rough edges and please [report them](https://github.com/KettuAI/Kettu/issues).
+> Kettu is an early preview that changes quickly. Please [report](https://github.com/KettuAI/Kettu/issues) what you find.
 
-## What is Kettu
+## Features
 
-Coding agents like Claude Code, Codex and OpenCode can now plan a change, write the code and run the tests on their own. In a terminal, though, working with them means reading walls of scrolling text, watching for approvals that are easy to miss and hunting for sessions across tabs and windows.
+### Agents and sessions
 
-Kettu gives that work a home. Every agent you use sits side by side in one window, replies read like well-set documents, and when an agent needs you, it asks in a card you answer with one key.
+- **46 agents**: Claude Code, Codex, OpenCode, Pi and more, with your own installs, accounts and settings.
+- **Parallel sessions**: the sidebar shows which one is working, which one is waiting for you and which one is done.
+- **One-key approvals**: when an agent wants to run a command or change a file, allow or deny it with one key.
+- **Question cards**: answer an agent's questions one by one in a single card.
+- **Plans**: the agent's plan and progress sit in the top bar.
+- **Subagents**: shown under their parent session, where you answer their requests too.
+- **Queue and steer**: while an agent works, queue your next message or steer it mid-turn.
+- **Attachments**: paste images, attach files and folders, or mention a project file with `@`.
+- **Forks**: branch a new session off any reply.
+- **Notifications**: know when a session needs you.
+- **Usage**: tokens and cost by day, model and project, and, where the agent reports it, how much of your plan is left.
 
-A tool you spend whole days in should be a pleasure to look at. That is what Kettu is built on: when everything is clear and calm, you see what the agent did sooner and get on with your work.
+### Workbench
 
-## Highlights
+- **Diffs**: see which files the agent changed and how.
+- **Files**: read, preview and edit project files in tabs.
+- **Terminal**: every session has its own.
+- **Git**: the branch, changes and pull request checks.
+- **Built-in browser**: agents open pages, click, type and take screenshots; take over at any time.
+- **Artifacts**: pages, documents and slides the agent makes; comment for the agent to change them, edit them yourself, or export them to Word and PowerPoint.
+- **Routines**: run an agent on a schedule; every run is kept as a session.
+- **Search**: one command palette for sessions, artifacts, routines, projects, settings and actions.
 
-- **All your agents, one window.** Claude Code, Codex, OpenCode, Pi and 42 more agents work side by side, and the sidebar shows which session is working, which one is waiting for you and which one is done.
-- **Easy to read.** Replies are laid out like documents, with highlighted code and images in place, and the small steps fold away. What the agent changed shows as a clear diff, and its plan shows its progress in the top bar.
-- **One key to answer.** When an agent wants to run a command or change a file, you see exactly what it will do and answer with one key. A notification tells you when a session needs you, and Kettu never answers for you.
-- **Know where you stand.** See the tokens and cost of every agent by day, model and project, and, for the agents that report them, how much of each plan's limits is left.
-- **Everything at hand.** A terminal, Git, your files and a browser sit right beside the session, so you rarely need to leave.
-- **Artifacts.** The pages, documents and slides an agent makes are kept in one place, with every version. Comment on a part for the agent to change, edit it yourself, and export documents and slides to Word and PowerPoint.
-- **Routines.** Give an agent a task to run on a schedule, such as sorting last night's issues every morning; every run is kept for you to read later.
-- **On your other devices.** Pair a phone, a tablet or another computer and carry on with your sessions there, end-to-end encrypted, straight over your own network. In a browser, there is nothing to install.
-- **Crafted details.** Light and dark modes, themes, English and Simplified Chinese, the frosted macOS sidebar and calm motion throughout.
+### Other devices
 
-## Your agents, your data
+- **Phone and tablet**: pair with a QR code and carry on in the browser, with no app to install.
+- **Another computer**: use this computer's sessions from Kettu on another one.
+- **Development machines**: add one by its SSH address.
+- **End-to-end encrypted**: straight over your own network.
 
-- **The agents you already use.** Kettu runs the agents you have installed and signed in to, with your own accounts and settings, so they work just as they do in your terminal. If one is missing, Kettu can install it for you.
-- **Your data stays with you.** Kettu collects no telemetry. Your sessions, code and files stay on your own computers, and a Kettu account is optional.
-- **Free and open source.** Kettu costs nothing, and its code is right here under the Apache-2.0 license.
+### Looks
+
+- Light and dark modes, themes, English and Simplified Chinese, the frosted macOS sidebar.
+
+### Coming soon
+
+- **Computer use**: agents operate the apps on your computer.
+- **iOS Simulator and Android Emulator**: on screen in Kettu, for you and the agent to use.
+
+## Privacy
+
+- No telemetry. Your sessions, code and files stay on your own computers.
+- Kettu keeps no copy of your agents' credentials.
+- A Kettu account is optional.
 
 ## Install
 
-Download the installer for your system from [Releases](https://github.com/KettuAI/Kettu/releases/latest).
+Download from [Releases](https://github.com/KettuAI/Kettu/releases/latest):
 
-- **macOS** (Apple silicon): open the `.dmg` and drag Kettu to Applications.
-- **Windows**: run the `setup.exe` for your PC, x64 or Arm. Windows builds are not signed yet, so when SmartScreen says it protected your PC, choose **More info**, then **Run anyway**.
-- **Linux**: make the `.AppImage` for your PC, x86_64 or Arm, executable and run it. It needs FUSE 2: `libfuse2`, or `libfuse2t64` on Ubuntu 24.04 and later.
+- **macOS** (Apple silicon): the `.dmg`
+- **Windows**: the `setup.exe`. It is not signed yet, so when SmartScreen appears, choose **More info**, then **Run anyway**.
+- **Linux**: the `.AppImage`; make it executable and run it. It needs FUSE 2 (`libfuse2`, or `libfuse2t64` on Ubuntu 24.04 and later).
 
-Kettu keeps itself up to date: new versions download in the background and install when you quit.
-
-**On a server or a development machine?** Install Kettu there with one command, or add the machine from the desktop app in **Settings › Hosts** by its SSH address. See the [docs](https://www.kettu.sh/docs/devices/daemon/).
+On a server or development machine ([docs](https://www.kettu.sh/docs/devices/daemon/)):
 
 ```sh
 curl -fsSL https://kettu.sh/install | sh
 ```
 
-**On your phone or another computer?** Turn on **Settings › Remote access**, click **Add device…** and scan the code. See [remote access](https://www.kettu.sh/docs/devices/remote-access/).
-
-## Get started
-
-1. **Add your agents** in **Settings › Agents**. Kettu uses the ones you have installed, and installs a missing one with one click in **Settings › Harnesses**.
-2. **Start a session**: pick a project and an agent, then say what you want done.
-3. **Keep an eye on it** from the sidebar, and answer with one key when it asks.
-
-The [docs](https://www.kettu.sh/docs/) walk through every part of the app.
-
 ## Agents
-
-Kettu works with 46 agents today, each with its own account and settings.
 
 <details>
 <summary><b>All 46 agents</b></summary>
@@ -110,10 +118,8 @@ Missing an agent you use? [Tell us](https://github.com/KettuAI/Kettu/issues/new/
 
 ## Feedback
 
-Kettu is young, and early feedback shapes it the most; ideas about design and how you work are especially welcome. Open an [issue](https://github.com/KettuAI/Kettu/issues/new/choose) to report a bug or start a conversation, in any language; a screenshot helps. Security problems go through [SECURITY.md](./SECURITY.md), never a public issue.
-
-Want to build Kettu yourself? [CONTRIBUTING.md](./CONTRIBUTING.md) has the setup.
+Open an [issue](https://github.com/KettuAI/Kettu/issues/new/choose) in any language. Security problems go through [SECURITY.md](./SECURITY.md). To build Kettu yourself, see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 
-Kettu is released under the [Apache-2.0 license](./LICENSE).
+[Apache-2.0](./LICENSE)

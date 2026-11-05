@@ -15,8 +15,7 @@
 
 <h3>颜值也是生产力。</h3>
 
-你所有的编码 Agent，并排在一个看着就舒服的窗口里。<br>
-哪个在干活、哪个在等你、哪个做完了，一眼看清。
+你所有的编码 Agent，并排在一个窗口里。
 
 [**下载**](https://github.com/KettuAI/Kettu/releases/latest) · [官网](https://www.kettu.sh/zh-CN/) · [文档](https://www.kettu.sh/zh-CN/docs/) · [路线图](./ROADMAP.zh-CN.md) · [反馈](https://github.com/KettuAI/Kettu/issues/new/choose) · [English](./README.md)
 
@@ -28,63 +27,72 @@
 </picture>
 
 > [!NOTE]
-> Kettu 还是早期预览版，变化很快，难免有粗糙之处，欢迎[反馈问题](https://github.com/KettuAI/Kettu/issues)。
+> Kettu 还是早期预览版，变化很快，欢迎[反馈问题](https://github.com/KettuAI/Kettu/issues)。
 
-## Kettu 是什么
+## 功能
 
-Claude Code、Codex、OpenCode 这样的编码 Agent 已经能自己规划改动、写代码、跑测试。可在终端里和它们一起干活，你得盯着不断滚动的文字，留神别错过授权请求，还要在一堆标签页和窗口之间找会话。
+### Agent 与会话
 
-Kettu 给这些工作安了个家。你用的每个 Agent 都并排在一个窗口里，回答排得像文档一样清楚；Agent 需要你时，会弹出一张卡片，按一个键就能回答。
+- **46 个 Agent**：Claude Code、Codex、OpenCode、Pi 等，用你自己的安装、账号和设置。
+- **并行会话**：侧边栏标出哪个在干活、哪个在等你、哪个做完了。
+- **一键授权**：Agent 要运行命令或改文件时，按一个键允许或拒绝。
+- **问题卡片**：Agent 的多个问题在一张卡片里逐个回答。
+- **计划**：Agent 的计划和进度显示在顶栏。
+- **子 Agent**：显示在父会话下面，它的请求也在那里回答。
+- **排队和插话**：Agent 干活时，下一条消息可以排队，也可以中途插话。
+- **附件**：粘贴图片，附加文件和文件夹，用 `@` 引用项目文件。
+- **分叉**：从任意一条回复分出新会话。
+- **通知**：会话需要你时提醒你。
+- **用量**：按天、模型和项目统计 token 和费用；Agent 提供时，还显示套餐额度还剩多少。
 
-一个要整天用的工具，看着就该让人舒服。这正是 Kettu 的出发点：界面清楚、安静，你就能更快看清 Agent 做了什么，接着干下一件事。
+### 工作台
 
-## 亮点
+- **Diff**：Agent 改了哪些文件、改了什么，一目了然。
+- **文件**：用标签页查看、预览和编辑项目文件。
+- **终端**：每个会话都有自己的终端。
+- **Git**：分支、改动和 Pull Request 的检查状态。
+- **内置浏览器**：Agent 能打开页面、点击、输入和截图，你随时可以接手。
+- **Artifacts**：Agent 做的网页、文档和幻灯片，可以留言让 Agent 改、自己编辑，或导出成 Word 和 PowerPoint。
+- **Routines**：按时让 Agent 干活，每次运行都留成会话。
+- **搜索**：在一个命令面板里搜会话、Artifacts、Routines、项目、设置和操作。
 
-- **所有 Agent，一个窗口。** Claude Code、Codex、OpenCode、Pi 和另外 42 个 Agent 并排工作，哪个会话在干活、哪个在等你、哪个做完了，侧边栏上一眼看清。
-- **读起来像文档。** 回答排版清楚，代码有高亮，图片直接显示，零碎的步骤自动收起。Agent 改了什么用 diff 清楚呈现，它的计划和进度就在顶栏上。
-- **按一个键就能回答。** Agent 要运行命令或改文件时，你会看到它到底要做什么，按一个键就能回答。会话需要你时有通知提醒，Kettu 从不替你回答。
-- **用量心里有数。** 每个 Agent 用了多少 token、花了多少钱，按天、按模型、按项目一目了然；Agent 提供套餐额度时，还能看到额度还剩多少。
-- **工具就在手边。** 终端、Git、项目文件和浏览器就在会话旁边，很少需要切出去。
-- **Artifacts。** Agent 做的网页、文档和幻灯片集中保存，每个版本都在。可以在某一处留言让 Agent 改，也可以自己动手改，文档和幻灯片还能导出成 Word 和 PowerPoint。
-- **Routines。** 让 Agent 按时干活，比如每天早上整理前一晚的 issue；每次运行都会留下来，随时回看。
-- **换台设备接着用。** 配对手机、平板或另一台电脑，就能在那里继续你的会话，端到端加密，直接走你自己的网络。用浏览器打开就行，什么都不用装。
-- **打磨过的细节。** 浅色和深色模式、主题、简体中文和英文、macOS 的毛玻璃侧边栏，处处是克制的动效。
+### 多设备
 
-## 你的 Agent，你的数据
+- **手机和平板**：扫码配对，在浏览器里继续你的会话，不用装 App。
+- **另一台电脑**：在另一台电脑的 Kettu 里用这台电脑上的会话。
+- **开发机**：填 SSH 地址就能加进来。
+- **端到端加密**：直接走你自己的网络。
 
-- **用你已经在用的 Agent。** Kettu 运行的是你已经装好、登录好的 Agent，账号和设置都照旧，用起来和在终端里一样。还没装的，Kettu 可以帮你装。
-- **数据留在你手里。** Kettu 不收集任何遥测数据，你的会话、代码和文件都留在你自己的电脑上；登录 Kettu 账号是可选的。
-- **免费、开源。** Kettu 不收费，代码就在这里，以 Apache-2.0 许可证发布。
+### 外观
+
+- 浅色和深色模式、主题、简体中文和英文、macOS 毛玻璃侧边栏。
+
+### 即将推出
+
+- **Computer use**：Agent 操作你电脑上的应用。
+- **iOS 和 Android 模拟器**：模拟器画面放进 Kettu，你和 Agent 都能操作。
+
+## 隐私
+
+- 不收集遥测，会话、代码和文件都留在你自己的电脑上。
+- 不保留 Agent 的登录凭据。
+- 登录 Kettu 账号是可选的。
 
 ## 安装
 
-从 [Releases](https://github.com/KettuAI/Kettu/releases/latest) 下载对应系统的安装包。
+从 [Releases](https://github.com/KettuAI/Kettu/releases/latest) 下载：
 
-- **macOS**（Apple 芯片）：打开 `.dmg`，把 Kettu 拖进「应用程序」。
-- **Windows**：运行适合你电脑的 `setup.exe`，有 x64 和 Arm 两种。Windows 版还没有签名，SmartScreen 提示「Windows 已保护你的电脑」时，点击「更多信息」，再点击「仍要运行」。
-- **Linux**：给适合你电脑的 `.AppImage`（x86_64 或 Arm）加上执行权限后运行。它需要 FUSE 2：`libfuse2`，Ubuntu 24.04 及以上为 `libfuse2t64`。
+- **macOS**（Apple 芯片）：`.dmg`
+- **Windows**：`setup.exe`。还没有签名，SmartScreen 提示时点「更多信息」，再点「仍要运行」。
+- **Linux**：`.AppImage`，加上执行权限后运行；需要 FUSE 2（`libfuse2`，Ubuntu 24.04 起为 `libfuse2t64`）。
 
-Kettu 会自己保持最新：新版本在后台下载，退出时安装。
-
-**要装在服务器或开发机上？** 一条命令就能装好，也可以在桌面应用的「**设置 › 主机**」里填这台机器的 SSH 地址添加。详见[文档](https://www.kettu.sh/zh-CN/docs/devices/daemon/)。
+服务器或开发机（[文档](https://www.kettu.sh/zh-CN/docs/devices/daemon/)）：
 
 ```sh
 curl -fsSL https://kettu.sh/install | sh
 ```
 
-**要在手机或另一台电脑上用？** 打开「**设置 › 远程访问**」，点击「**添加设备…**」，扫码即可。详见[远程访问](https://www.kettu.sh/zh-CN/docs/devices/remote-access/)。
-
-## 上手
-
-1. **添加你的 Agent**：在「**设置 › Agent**」里添加。Kettu 会用你已经装好的，没装的在「**设置 › Harness**」里点一下就能装。
-2. **开一个会话**：选好项目和 Agent，说出你想做什么。
-3. **在侧边栏上看着它**：它有问题要问你时，按一个键就能回答。
-
-[文档](https://www.kettu.sh/zh-CN/docs/)介绍了应用的每个部分。
-
 ## 支持的 Agent
-
-Kettu 现在支持 46 个 Agent，每个都有自己的账号和设置。
 
 <details>
 <summary><b>全部 46 个 Agent</b></summary>
@@ -110,10 +118,8 @@ Kettu 现在支持 46 个 Agent，每个都有自己的账号和设置。
 
 ## 反馈
 
-Kettu 还很年轻，越早的反馈越能影响它最终的样子，我们尤其欢迎关于设计和工作方式的想法。发现 bug 或想聊聊，都可以提一个 [Issue](https://github.com/KettuAI/Kettu/issues/new/choose)，用什么语言都行，附上截图会很有帮助。安全问题请按 [SECURITY.md](./SECURITY.md) 报告，不要发在公开的 Issue 里。
-
-想自己构建 Kettu？请看 [CONTRIBUTING.md](./CONTRIBUTING.md)（英文）。
+欢迎提 [Issue](https://github.com/KettuAI/Kettu/issues/new/choose)，用什么语言都行。安全问题请按 [SECURITY.md](./SECURITY.md) 报告。想自己构建，请看 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
 ## 许可证
 
-Kettu 基于 [Apache-2.0 许可证](./LICENSE)发布。
+[Apache-2.0](./LICENSE)
