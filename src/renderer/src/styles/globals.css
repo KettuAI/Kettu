@@ -62,6 +62,7 @@
   --font-sans: var(--ui-face);
   --font-heading: var(--prose-face);
   --font-display: var(--display-face);
+  --font-greeting: var(--greeting-face);
   --font-prose: var(--prose-face);
   --font-mono: var(--code-face);
 
@@ -286,9 +287,9 @@
   --text-prose--line-height: 1.65;
   /* The type scale of the design system. Page and dialog titles take the display face through
      font-display, at weight 700. */
-  --text-greeting: 28px;
+  --text-greeting: clamp(28px, 5cqi, 36px);
   --text-greeting--line-height: 1.2;
-  --text-greeting--letter-spacing: -0.015em;
+  --text-greeting--letter-spacing: normal;
   /* A figure on the usage page, at weight 500 with tabular figures. */
   --text-figure: 24px;
   --text-figure--line-height: 30px;
@@ -409,8 +410,7 @@
 
   /* Type. */
   --prose-size: 15px;
-  /* The faces a theme may name, each with Chinese in the platform's face. A face's files are
-     only fetched once text uses it, so the built-in theme never loads Source Serif 4. */
+  /* Font files load only when text uses their face. */
   --face-system:
     system-ui, 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   --face-inter:
@@ -430,6 +430,9 @@
   --ui-face: var(--face-inter);
   --prose-face: var(--face-inter);
   --display-face: var(--face-manrope);
+  --greeting-face:
+    'Source Serif 4 Variable', 'Songti SC', STSong, SimSun, 'Noto Serif CJK SC', ui-serif, Georgia,
+    serif;
   --code-face: 'JetBrains Mono Variable', var(--face-system-mono);
   /* Inter's single-storey a, where its files keep that variant: the bundled subsets do not, so
      it draws Inter's default a. Another face keeps its own letters. */

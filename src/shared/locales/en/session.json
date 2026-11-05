@@ -279,7 +279,16 @@
     "searchProjectsLabel": "Search projects",
     "recent": "Recent",
     "noMatchingProjects": "No matching projects",
-    "heading": "What should we build?",
+    "greeting": {
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening"
+    },
+    "greetingNamed": {
+      "morning": "Good morning, {{name}}",
+      "afternoon": "Good afternoon, {{name}}",
+      "evening": "Good evening, {{name}}"
+    },
     "branchHint": "The session starts on this branch",
     "commitHint": "The session starts at this commit",
     "missingLine": "This project's folder is missing. Choose another project.",
