@@ -150,7 +150,7 @@ function PlanStep({ item, tone }: { item: PlanItem; tone: Tone }) {
             role="img"
             aria-label={t('status.done')}
             strokeWidth={1.8}
-            className="size-3 text-tertiary"
+            className="size-3 text-success"
           />
         ) : item.status === 'in_progress' ? (
           <span
