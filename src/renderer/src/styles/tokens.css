@@ -11,8 +11,7 @@
   /* The desk is the window behind everything; the main column and the panes are sheets on it. */
   --bg-app: #ffffff;
   --bg-sidebar: #f5f5f5;
-  /* On macOS, the share of --bg-sidebar laid over the system's sidebar material on the desk, in
-     both modes. */
+  /* On macOS, the share of --bg-sidebar laid over the system's sidebar material on the desk. */
   --desk-tint: 25%;
   --bg-surface: #ffffff;
   --bg-subtle: #f2f4f7;
@@ -290,17 +289,18 @@
   :root:not([data-theme='light']) {
     color-scheme: dark;
 
-    --bg-app: #161b22;
-    --bg-sidebar: #0e1217;
+    --desk-tint: 50%;
+    --bg-app: #1e1e1e;
+    --bg-sidebar: #141414;
     /* What floats over the page sits a step lighter than it, since shadows barely show here. */
-    --bg-surface: #1c222a;
-    --bg-subtle: #20262f;
-    --bg-tray: #1a2029;
+    --bg-surface: #252525;
+    --bg-subtle: #292929;
+    --bg-tray: #222222;
     --bg-code-inline: rgb(230 236 245 / 8%);
-    --bg-code-block: #12161c;
+    --bg-code-block: #181818;
     --bg-hover: rgb(230 236 245 / 5%);
     --bg-selected: rgb(230 236 245 / 8%);
-    --bg-raised: #232a34;
+    --bg-raised: #2a2a2a;
 
     --border-default: rgb(230 236 245 / 14%);
     --border-subtle: rgb(230 236 245 / 8%);
@@ -308,8 +308,8 @@
 
     --text-primary: #e8ecf1;
     --text-secondary: #aeb6c1;
-    --text-tertiary: #8a94a1;
-    --text-placeholder: #8a94a1;
+    --text-tertiary: #8e98a5;
+    --text-placeholder: #8e98a5;
     --text-disabled: #5f6873;
     --icon-default: #aeb6c1;
 
@@ -477,17 +477,18 @@
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --bg-app: #161b22;
-  --bg-sidebar: #0e1217;
+  --desk-tint: 50%;
+  --bg-app: #1e1e1e;
+  --bg-sidebar: #141414;
   /* What floats over the page sits a step lighter than it, since shadows barely show here. */
-  --bg-surface: #1c222a;
-  --bg-subtle: #20262f;
-  --bg-tray: #1a2029;
+  --bg-surface: #252525;
+  --bg-subtle: #292929;
+  --bg-tray: #222222;
   --bg-code-inline: rgb(230 236 245 / 8%);
-  --bg-code-block: #12161c;
+  --bg-code-block: #181818;
   --bg-hover: rgb(230 236 245 / 5%);
   --bg-selected: rgb(230 236 245 / 8%);
-  --bg-raised: #232a34;
+  --bg-raised: #2a2a2a;
 
   --border-default: rgb(230 236 245 / 14%);
   --border-subtle: rgb(230 236 245 / 8%);
@@ -495,8 +496,8 @@
 
   --text-primary: #e8ecf1;
   --text-secondary: #aeb6c1;
-  --text-tertiary: #8a94a1;
-  --text-placeholder: #8a94a1;
+  --text-tertiary: #8e98a5;
+  --text-placeholder: #8e98a5;
   --text-disabled: #5f6873;
   --icon-default: #aeb6c1;
 
