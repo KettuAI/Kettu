@@ -704,7 +704,9 @@ export class AgentHost {
     this.env.setConfigFolders(configFolders(this.catalog, next))
     this.startModesChanged(previous, next)
     const removed = await this.agents.settingsChanged(previous, next)
-    if (removed.length > 0) await this.sessions.agentsRemoved(removed)
+    const turnedOff = next.disabledAgents.filter((id) => !previous.disabledAgents.includes(id))
+    const gone = [...removed, ...turnedOff]
+    if (gone.length > 0) await this.sessions.agentsRemoved(gone)
   }
 
   /** The options as New session takes them, with the start mode the settings name for the agent. */
@@ -812,7 +814,8 @@ export class AgentHost {
       const sessions = project === null ? this.sessions.list() : this.sessions.list(project)
       agentId = sessions.sort((a, b) => b.updatedAt - a.updatedAt)[0]?.agentId ?? null
     }
-    if (agentId === null || !this.agents.has(agentId)) return null
+    if (agentId === null || !this.agents.has(agentId) || this.agents.isDisabled(agentId))
+      return null
     if (!QUESTION_HARNESSES.has(harnessOf(agentId))) return null
     return { id: agentId, name: this.agents.name(agentId) }
   }

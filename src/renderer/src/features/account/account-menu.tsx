@@ -365,7 +365,10 @@ function useAgentsWithLimits(): AgentStatus[] {
     useShallow((s) =>
       s.order
         .map((id) => s.byId[id])
-        .filter((a): a is AgentStatus => !!a && a.registered !== false && a.limits.length > 0),
+        .filter(
+          (a): a is AgentStatus =>
+            !!a && a.registered !== false && !a.disabled && a.limits.length > 0,
+        ),
     ),
   )
 }

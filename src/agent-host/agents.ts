@@ -478,6 +478,19 @@ export class AgentManager {
     return this.slot(agentId)
   }
 
+  /** Whether the user turned the agent off: it keeps everything but never starts. */
+  isDisabled(agentId: AgentId): boolean {
+    return this.deps.settings().disabledAgents.includes(agentId)
+  }
+
+  /** Rejects with `agent_unavailable` while the agent is turned off. */
+  assertEnabled(agentId: AgentId): void {
+    if (!this.isDisabled(agentId)) return
+    throw new HostError('agent_unavailable', t('agent.disabled', { agent: this.name(agentId) }), {
+      agentId,
+    })
+  }
+
   /** The agent's name; a removed agent's sessions name its harness. */
   name(agentId: AgentId): string {
     return (
@@ -721,6 +734,14 @@ export class AgentManager {
       }),
     )
     for (const agentId of removed) this.deps.removed?.(agentId)
+    // Turning an agent off stops its process and deletes nothing.
+    const turnedOff = next.disabledAgents.filter((id) => !previous.disabledAgents.includes(id))
+    await Promise.all(
+      turnedOff.map(async (agentId) => {
+        const slot = this.slots.get(agentId)
+        if (slot) await this.stopProcess(slot)
+      }),
+    )
     // A default agent's folder from before agents could be added can only be cleared, which
     // gives its account, limits and prepared session back to the harness's default folder.
     for (const h of this.harnesses.values()) {
@@ -750,18 +771,22 @@ export class AgentManager {
 
   runtime(agentId: AgentId): AgentRuntime | null {
     const slot = this.slots.get(agentId)
-    return slot && this.has(agentId) && !slot.stopping ? slot.runtime : null
+    return slot && this.has(agentId) && !this.isDisabled(agentId) && !slot.stopping
+      ? slot.runtime
+      : null
   }
 
   /** Starts the agent if needed; rejects with `agent_unavailable` when it cannot run. */
   async ensureReady(agentId: AgentId): Promise<AgentRuntime> {
     // A session keeps its agent, which may have been removed since.
     const slot = this.registeredSlot(agentId)
+    this.assertEnabled(agentId)
     const { h } = slot
     await this.detectAll()
     if (slot.stopping) await slot.stopping
     if (h.installing) await h.installing.catch(() => {})
     this.registeredSlot(agentId)
+    this.assertEnabled(agentId)
     if (slot.runtime) return slot.runtime
     if (slot.starting) return slot.starting
     if (slot.state === 'failed') {
@@ -835,6 +860,7 @@ export class AgentManager {
     const { diagnostics } = this.deps
     const agentId = slot.id
     this.registeredSlot(agentId)
+    this.assertEnabled(agentId)
     if (this.stopped) throw new Error(`${slot.name} was not started: the host is stopping.`)
     slot.state = 'starting'
     slot.detail = null
@@ -2303,7 +2329,7 @@ export class AgentManager {
    * events report a window only when it changes, so without this most windows would stay unknown.
    */
   async refreshLimits(agentId: AgentId, options?: { force?: boolean }): Promise<void> {
-    if (!this.has(agentId)) return
+    if (!this.has(agentId) || this.isDisabled(agentId)) return
     const slot = this.slot(agentId)
     if (slot.def.id === 'opencode') return this.refreshProviders(slot, options?.force === true)
     if (!this.hasLimits(agentId)) return
@@ -2456,6 +2482,7 @@ export class AgentManager {
    * sessions would leave a trace, is not read.
    */
   async readFirstOptions(agentId: AgentId): Promise<void> {
+    if (this.isDisabled(agentId)) return
     const slot = this.slot(agentId)
     const runtime = await this.ensureReady(agentId)
     await slot.limitsRun?.catch(() => {})
@@ -2607,6 +2634,7 @@ export class AgentManager {
    */
   async refreshAccount(agentId: AgentId, options?: { force?: boolean }): Promise<void> {
     const slot = this.registeredSlot(agentId)
+    if (this.isDisabled(agentId)) return
     if (slot.def.id === 'opencode') return this.refreshProviders(slot, options?.force === true)
     if (!slot.def.reportsAccount) return
     await this.detectAll()
@@ -3002,6 +3030,7 @@ export class AgentManager {
       uninstalled: harnessSettings?.uninstalled === true,
       uninstallCommand: slot.added ? null : (this.programUninstall(h)?.command ?? null),
       hidden: !slot.added && harnessSettings?.hidden === true,
+      disabled: this.isDisabled(agentId),
       ...(color ? { color } : {}),
       apiKey:
         slot.def.id === 'claude-code' || slot.def.id === 'codex'

@@ -191,7 +191,9 @@ export function SessionMenuItems({
   const { t } = useTranslation(['sidebar', 'common'])
   // The agents that can run one now; More options opens New session with every agent.
   const agents = useAgentsStore(
-    useShallow((s) => usableAgents(s.order, s.byId).filter((a) => isInstalled(a) && !a.hidden)),
+    useShallow((s) =>
+      usableAgents(s.order, s.byId).filter((a) => isInstalled(a) && !a.hidden && !a.disabled),
+    ),
   )
   const canFork = useAgentsStore((s) => !!s.byId[summary.agentId]?.capabilities?.forkSession)
   const inFront = useInFront(summary.id)

@@ -32,7 +32,7 @@ export function PlanLimits({ used }: { used: readonly AgentId[] }) {
       planAgents(
         s.order
           .map((id) => s.byId[id])
-          .filter((a): a is AgentStatus => !!a && a.registered !== false),
+          .filter((a): a is AgentStatus => !!a && a.registered !== false && !a.disabled),
         used,
       ),
     ),

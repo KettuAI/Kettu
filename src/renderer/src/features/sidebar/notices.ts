@@ -47,7 +47,12 @@ export function useNotices(): Notices & { summary: NoticeSummary | null } {
   const signIn = useAgentsStore(
     useShallow((s) =>
       s.order
-        .filter((id) => s.byId[id]?.registered !== false && s.byId[id]?.signIn === 'required')
+        .filter(
+          (id) =>
+            s.byId[id]?.registered !== false &&
+            !s.byId[id]?.disabled &&
+            s.byId[id]?.signIn === 'required',
+        )
         .map((id) => s.byId[id]!.name),
     ),
   )

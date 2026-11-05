@@ -188,6 +188,7 @@
     "reportTimeout": "{{command}} 没有在 {{seconds}} 秒内完成",
     "unreadableReport": "{{agent}} 的 {{command}} 没有返回 Kettu 能读取的报告",
     "removed": "这个 Agent 已删除，这个会话无法继续。",
+    "disabled": "{{agent}} 已停用。到设置 › Agent 里启用后才能使用。",
     "uninstall": {
       "busy": "{{agent}} 正在安装或更新，等它完成后才能卸载。"
     }
