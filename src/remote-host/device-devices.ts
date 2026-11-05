@@ -2,13 +2,15 @@
 // answers and events come back. The channel carries JSON, so frames and screenshots travel as
 // base64; each device acknowledges its own frames, so a slow phone skips ahead on its own.
 
+import { DEVICE_METHODS } from '@shared/device-host'
 import type { PortChannel } from '@shared/port-channel'
 import type { PortError } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
 import type { LogFn } from '../agent-host/storage'
 
+/** The device host's own methods; the agent host's `devices.*`, such as answering a card, are not. */
 export function isDeviceMethod(method: unknown): method is string {
-  return typeof method === 'string' && method.startsWith('devices.')
+  return typeof method === 'string' && (DEVICE_METHODS as readonly string[]).includes(method)
 }
 
 const UNAVAILABLE: PortError = { code: 'unavailable', message: 'The device host is not running' }

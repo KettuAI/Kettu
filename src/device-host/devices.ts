@@ -242,6 +242,8 @@ export class DeviceManager {
   }
 
   async watch(port: string, id: DeviceId): Promise<{ screen: DeviceScreen | null }> {
+    // A host that just started has not listed yet.
+    if (!this.found.has(id)) await this.list()
     const found = this.found.get(id)
     if (!found) throw new DeviceError('not_found', 'No such device on this host')
     const live = await this.ensureLive(found)
