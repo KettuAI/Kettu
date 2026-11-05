@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useMemo } from 'react'
 import { ChevronRightIcon, GitPullRequestIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
@@ -21,9 +21,6 @@ import { PANEL } from './helpers'
 import { useDiffStats } from './use-diff-stats'
 
 type Change = ReturnType<typeof turnChanges>[number]
-
-/** A turn that changed more files than this starts folded; up to it, every file's diff starts open. */
-const FOLD_ABOVE = 5
 
 /** A path inside `root`, relative to it, or null for one outside. */
 function within(path: string, root: string): string | null {
@@ -55,9 +52,7 @@ export const ChangesCard = memo(function ChangesCard({
   const all = useMemo(() => changes.flatMap((change) => change.diffs), [changes])
   const totals = useDiffStats(all)
   const root = useGitStore((s) => s.status[projectPath]?.repo?.root ?? null)
-  const [userOpen, setUserOpen] = useState<boolean | null>(null)
   if (changes.length === 0) return null
-  const open = userOpen ?? changes.length <= FOLD_ABOVE
 
   const review = (path: string): (() => void) | null => {
     const file = within(path, projectPath)
@@ -77,7 +72,7 @@ export const ChangesCard = memo(function ChangesCard({
       aria-label={t('changes.label')}
       className={cn('flex flex-col overflow-hidden rounded-card bg-card shadow-card', className)}
     >
-      <Collapsible open={open} onOpenChange={setUserOpen}>
+      <Collapsible>
         {/* In a narrow column the buttons move under the count together. */}
         <div className="flex min-h-11.5 flex-wrap items-center gap-x-2.5 gap-y-1.5 py-2 pr-2 pl-3.5">
           <CollapsibleTrigger className="group/changes -my-1 -ml-1.5 flex min-w-0 items-center gap-2.5 rounded-tile px-1.5 py-1 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring">
@@ -124,12 +119,7 @@ export const ChangesCard = memo(function ChangesCard({
         </div>
         <CollapsibleContent className={PANEL} keepMounted={false}>
           {changes.map((change) => (
-            <ChangeRow
-              key={change.path}
-              change={change}
-              projectPath={projectPath}
-              defaultOpen={changes.length <= FOLD_ABOVE}
-            />
+            <ChangeRow key={change.path} change={change} projectPath={projectPath} />
           ))}
         </CollapsibleContent>
       </Collapsible>
@@ -137,19 +127,11 @@ export const ChangesCard = memo(function ChangesCard({
   )
 })
 
-function ChangeRow({
-  change,
-  projectPath,
-  defaultOpen,
-}: {
-  change: Change
-  projectPath: string
-  defaultOpen: boolean
-}) {
+function ChangeRow({ change, projectPath }: { change: Change; projectPath: string }) {
   const stats = useDiffStats(change.diffs)
   const shown = relativePath(change.path, projectPath)
   return (
-    <Collapsible defaultOpen={defaultOpen} className="border-t border-subtle">
+    <Collapsible className="border-t border-subtle">
       <CollapsibleTrigger className="group/change flex h-8.5 w-full items-center gap-2.5 px-3.5 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring">
         <ChevronRightIcon
           aria-hidden
