@@ -256,6 +256,10 @@
   --shadow-composer-hover: var(--composer-hover);
   --shadow-composer-focus: var(--composer-focus);
   --shadow-attention: var(--attention-ring-shadow);
+  --shadow-tile: var(--tile-ring);
+  --shadow-tile-on: var(--tile-on-ring);
+  --shadow-tile-key-on: var(--tile-key-on-ring);
+  --shadow-mark: var(--mark-ring);
   --shadow-segment: var(--segment-ring);
   --shadow-raised: var(--raised-ring);
   --shadow-thumb: var(--thumb-shadow);
@@ -776,6 +780,23 @@
 @utility animate-sheen {
   background-image: linear-gradient(100deg, transparent 25%, var(--sheen) 50%, transparent 75%);
   animation: sheen var(--duration-slower) var(--ease-out-quart) 1 both;
+}
+
+/* The mode button's one flash of the fox when something else changed the mode. */
+@keyframes mode-flash {
+  0% {
+    opacity: 0;
+  }
+  15%,
+  65% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@utility animate-mode-flash {
+  animation: mode-flash 1.4s var(--ease-standard) both;
 }
 
 /* One-time attention pulse: a wave leaves the ring and fades by 14 px. */

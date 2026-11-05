@@ -279,10 +279,7 @@
     "listSeparator": ", ",
     "changeSeparator": "; ",
     "exitPlan": {
-      "auto": "Yes, and use Auto mode",
-      "acceptEdits": "Yes, and accept edits",
-      "manual": "Yes, and approve edits manually",
-      "keepPlanning": "No, keep planning"
+      "keepPlanning": "Keep planning"
     },
     "allowEdit": "Allow this edit",
     "acceptEdits": "Allow all edits in this session"
@@ -336,6 +333,12 @@
       "default": "Default",
       "plan": "Plan",
       "planDescription": "Plan before making changes"
+    },
+    "plan": {
+      "title": "Plan",
+      "implement": "Yes, implement this plan",
+      "implementDescription": "Leaves Plan mode; Codex keeps its permission mode, {{mode}}",
+      "keepPlanning": "No, keep planning"
     },
     "auth": {
       "chatGpt": {
@@ -498,6 +501,15 @@
   },
   "question": {
     "other": "Something else…"
+  },
+  "elicitation": {
+    "formTitle": "{{server}} needs some details",
+    "urlTitle": "{{server}} asks you to open a page",
+    "submit": "Submit",
+    "open": "Open",
+    "decline": "Decline",
+    "yes": "Yes",
+    "no": "No"
   },
   "artifacts": {
     "formatUpgraded": "Moved to version {{format}} of its type’s format"

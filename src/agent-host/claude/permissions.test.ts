@@ -2,9 +2,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { setLocale } from '../i18n'
 import {
   alwaysAllowName,
+  KEEP_PLANNING,
   OPTION,
   permissionOptions,
   permissionResult,
+  planOptions,
+  planResult,
   REJECTED,
   safeSuggestions,
   unsafeRule,
@@ -286,5 +289,71 @@ describe('permissionOptions', () => {
       message: REJECTED,
       toolUseID: 'u1',
     })
+  })
+})
+
+describe("a plan's approval", () => {
+  const modes = ['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions']
+
+  it('offers the modes to build in as the mode menu names them, then Keep planning', () => {
+    expect(planOptions(modes, 'acceptEdits')).toEqual([
+      {
+        id: OPTION.exitPlanAuto,
+        name: 'Auto',
+        description: 'Claude handles permission decisions',
+        kind: 'allow_always',
+      },
+      {
+        id: OPTION.exitPlanAcceptEdits,
+        name: 'Accept edits',
+        description: 'Edits files freely; still asks before commands',
+        kind: 'allow_always',
+        preferred: true,
+      },
+      {
+        id: OPTION.exitPlanDefault,
+        name: 'Ask before edits',
+        description: 'Asks before it changes a file or runs a command',
+        kind: 'allow_once',
+      },
+      { id: OPTION.reject, name: 'Keep planning', kind: 'reject_once', note: true },
+    ])
+  })
+
+  it('leaves Auto out where the session lacks it, preferring Ask before edits instead', () => {
+    const options = planOptions(['default', 'acceptEdits', 'plan'], 'auto')
+    expect(options.map((o) => o.id)).toEqual([
+      OPTION.exitPlanAcceptEdits,
+      OPTION.exitPlanDefault,
+      OPTION.reject,
+    ])
+    expect(options.find((o) => o.preferred)?.id).toBe(OPTION.exitPlanDefault)
+  })
+
+  it('builds in the mode chosen, as before', () => {
+    expect(
+      planResult({ optionId: OPTION.exitPlanAuto }, { plan: 'P' }, { toolUseID: 'u1' }),
+    ).toEqual({
+      behavior: 'allow',
+      updatedInput: { plan: 'P' },
+      updatedPermissions: [{ type: 'setMode', mode: 'auto', destination: 'session' }],
+      toolUseID: 'u1',
+    })
+  })
+
+  it("keeps planning with the user's note, so Claude Code revises the plan", () => {
+    expect(
+      planResult({ optionId: OPTION.reject, note: 'Split step 2' }, {}, { toolUseID: 'u1' }),
+    ).toEqual({
+      behavior: 'deny',
+      message: 'The user wants you to keep planning and revise the plan. Their note: Split step 2',
+      toolUseID: 'u1',
+    })
+    expect(planResult({ optionId: OPTION.reject }, {}, { toolUseID: 'u1' })).toEqual({
+      behavior: 'deny',
+      message: KEEP_PLANNING,
+      toolUseID: 'u1',
+    })
+    expect(planResult(null, {}, { toolUseID: 'u1' })).toMatchObject({ behavior: 'deny' })
   })
 })

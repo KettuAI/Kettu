@@ -1216,11 +1216,18 @@ export class AgentHost {
         await sessions.removeAll()
         this.options.send({ type: 'host:media-revoke', sessionId: null })
       },
-      'permissions.respond': ({ sessionId, requestId, optionId, answers }, { device }) =>
+      'permissions.respond': (
+        { sessionId, requestId, optionId, note, answers, values },
+        { device },
+      ) =>
         sessions.respond(
           sessionId,
           requestId,
-          answers ? { answers } : { optionId: optionId! },
+          answers
+            ? { answers }
+            : values
+              ? { values }
+              : { optionId: optionId!, ...(note === undefined ? {} : { note }) },
           fromDevice(device),
         ),
       'diagnostics.collect': () => this.collectDiagnostics(),

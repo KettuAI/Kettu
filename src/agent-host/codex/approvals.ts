@@ -2,14 +2,17 @@
 // each option is a decision the request lists, under the option ids codex-acp used.
 
 import type {
+  FormValues,
   PendingPermission,
   PendingQuestion,
   PermissionKind,
   QuestionAnswer,
   ToolContent,
+  ToolEntry,
 } from '@shared/thread'
 import { commandSteps, unsafeArgvPrefix, unsafeCommand } from '../command-safety'
-import type { OptionAnswer, PermissionRequest } from '../connection'
+import type { OptionAnswer, PermissionAnswer, PermissionRequest } from '../connection'
+import { formFields, isWebUrl } from '../elicitation'
 import { t } from '../i18n'
 import { answerWords } from '../question-answers'
 import type { MapperContext, MapperOutput } from '../session-updates'
@@ -33,6 +36,10 @@ export interface Approval {
   respond(answer: OptionAnswer): unknown
   /** What a reply to the request's questions sends back, for a request that carries them. */
   answerQuestions?(answers: QuestionAnswer[]): unknown
+  /** What a submitted form sends back, for a request that carries one. */
+  answerForm?(values: FormValues): unknown
+  /** The status its entry takes once answered, for a request no item of Codex's settles. */
+  settled?(answer: PermissionAnswer): ToolEntry['status']
 }
 
 const KIND_ORDER: Record<PermissionKind, number> = {
@@ -361,22 +368,92 @@ export function userInputApproval(
   }
 }
 
-/** An MCP server asking to go on: a link to open or a message to confirm. Null for a form. */
+/** The status an MCP server's request leaves its entry in; Codex reports no page as done. */
+function elicitationStatus(answer: PermissionAnswer): ToolEntry['status'] {
+  return answer === 'cancelled' ? 'cancelled' : 'completed'
+}
+
+/**
+ * An MCP server's request: a form to fill in, a page to open, or a message to confirm. Null for a
+ * form Kettu cannot show, and for a page that is not a web page, which are declined unasked.
+ */
 export function elicitationApproval(
   params: McpServerElicitationRequestParams,
   requestId: RequestId,
   mapper: ThreadMapper,
   ctx: MapperContext,
 ): Approval | null {
-  let message: string
-  if (params.mode === 'url') message = `${params.message}\n\n${params.url}`
-  else if (params.mode === 'openai/userVerification') message = params.description
-  else if (isEmptySchema(params.requestedSchema)) message = params.message
-  else return null
-  const out = output()
+  const server = params.serverName
   const toolCallId = `elicitation:${String(requestId)}`
+  if (params.mode === 'url') {
+    if (!isWebUrl(params.url)) return null
+    const out = output()
+    const entryId = mapper.tool(ctx, out, toolCallId, {
+      title: t('elicitation.urlTitle', { server }),
+      toolKind: 'other',
+      status: 'pending',
+      content: params.message ? [{ type: 'markdown', markdown: params.message }] : [],
+      elicitation: { server, kind: 'url', url: params.url },
+    })
+    const options: Option[] = [
+      { id: 'accept', name: t('elicitation.open'), kind: 'allow_once' },
+      { id: 'decline', name: t('elicitation.decline'), kind: 'reject_once' },
+    ]
+    return {
+      request: {
+        toolCallId,
+        toolEntryId: entryId,
+        output: out,
+        options,
+        elicitation: { kind: 'url', server, message: params.message, url: params.url },
+      },
+      // Opening the page is the user's; the answer only says they agreed to.
+      respond: (answer) => ({
+        action:
+          answer === 'cancelled' ? 'cancel' : answer.optionId === 'accept' ? 'accept' : 'decline',
+        content: null,
+        _meta: null,
+      }),
+      settled: elicitationStatus,
+    }
+  }
+  if (params.mode !== 'openai/userVerification' && !isEmptySchema(params.requestedSchema)) {
+    const fields = formFields(params.requestedSchema)
+    if (!fields) return null
+    const out = output()
+    const entryId = mapper.tool(ctx, out, toolCallId, {
+      title: t('elicitation.formTitle', { server }),
+      toolKind: 'other',
+      status: 'pending',
+      content: params.message ? [{ type: 'markdown', markdown: params.message }] : [],
+      elicitation: { server, kind: 'form' },
+    })
+    const options: Option[] = [
+      { id: 'accept', name: t('elicitation.submit'), kind: 'allow_once' },
+      { id: 'decline', name: t('elicitation.decline'), kind: 'reject_once' },
+    ]
+    return {
+      request: {
+        toolCallId,
+        toolEntryId: entryId,
+        output: out,
+        options,
+        elicitation: { kind: 'form', server, message: params.message, fields },
+      },
+      // The host takes a form's submission only with its values, so an option declines.
+      respond: (answer) => ({
+        action: answer !== 'cancelled' && answer.optionId === 'decline' ? 'decline' : 'cancel',
+        content: null,
+        _meta: null,
+      }),
+      answerForm: (values) => ({ action: 'accept', content: values, _meta: null }),
+      settled: elicitationStatus,
+    }
+  }
+  const message = params.mode === 'openai/userVerification' ? params.description : params.message
+  const out = output()
   const entryId = mapper.tool(ctx, out, toolCallId, {
-    title: t('codex.approval.elicitationTitle', { server: params.serverName }),
+    title: t('codex.approval.elicitationTitle', { server }),
     toolKind: 'other',
     status: 'pending',
     content: message ? [{ type: 'markdown', markdown: message }] : [],
@@ -394,6 +471,7 @@ export function elicitationApproval(
       const action = id === 'allow_once' ? 'accept' : id === 'decline' ? 'decline' : 'cancel'
       return { action, content: action === 'accept' ? {} : null, _meta: null }
     },
+    settled: elicitationStatus,
   }
 }
 

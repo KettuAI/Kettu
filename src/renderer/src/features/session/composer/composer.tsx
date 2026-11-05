@@ -5,7 +5,7 @@ import type { SessionView, UserContent } from '@shared/thread'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { limitLabel, resetTime } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
-import { isMod } from '@renderer/lib/platform'
+import { isMac, isMod } from '@renderer/lib/platform'
 import { selectionPrompt } from '@renderer/features/artifacts/anchors'
 import { SelectionChip } from '@renderer/features/artifacts/selection-chip'
 import { usePane } from '@renderer/features/split/pane-context'
@@ -179,7 +179,11 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
           })
         : !running && rejected
           ? t('prompt.placeholder.denied', { agent: agentName })
-          : t('prompt.placeholder.ask', { agent: agentName })
+          : running
+            ? steering
+              ? t('prompt.placeholder.running', { keys: steerKeys(sendKey) })
+              : t('prompt.placeholder.runningQueue')
+            : t('prompt.placeholder.ask', { agent: agentName })
 
   return (
     <div data-composer="" className="flex flex-col">
@@ -258,4 +262,10 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
       </div>
     </div>
   )
+}
+
+/** The keys that send a message into the running turn, as the placeholder names them. */
+function steerKeys(sendKey: string): string {
+  if (isMac) return sendKey === 'enter' ? '⌘↩' : '⇧⌘↩'
+  return sendKey === 'enter' ? 'Ctrl+Enter' : 'Ctrl+Shift+Enter'
 }

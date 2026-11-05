@@ -1,6 +1,7 @@
 import { ALREADY_ANSWERED } from '@shared/agent-host'
 import {
   entryMessageId,
+  type FormValues,
   type FromDevice,
   type PermissionKind,
   type QuestionAnswer,
@@ -55,8 +56,24 @@ export function toolLabel(
   return { verb: null, target: entry.title, kind: 'title' }
 }
 
-export function respondToPermission(sessionId: string, requestId: string, optionId: string) {
-  return host('permissions.respond', { sessionId, requestId, optionId })
+/** An option's answer; `note` goes with an option that takes one, such as keeping on planning. */
+export function respondToPermission(
+  sessionId: string,
+  requestId: string,
+  optionId: string,
+  note?: string,
+) {
+  return host('permissions.respond', {
+    sessionId,
+    requestId,
+    optionId,
+    ...(note ? { note } : {}),
+  })
+}
+
+/** An MCP server's form, submitted with its values. */
+export function respondWithValues(sessionId: string, requestId: string, values: FormValues) {
+  return host('permissions.respond', { sessionId, requestId, values })
 }
 
 /** The answers to an ask's questions, only those given; none at all skips every one. */

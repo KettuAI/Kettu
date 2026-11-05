@@ -40,6 +40,11 @@ export function modeName(mode: string): string {
   return MODES.find((item) => item.id === mode)?.name ?? mode
 }
 
+/** What a mode does, as the mode menu says it. */
+export function modeDescription(mode: string): string | undefined {
+  return MODES.find((item) => item.id === mode)?.description
+}
+
 /** The modes a session offers; bypass only where Claude Code allows it. */
 export function availableModes(allowBypass: boolean): PermissionMode[] {
   return MODES.map((mode) => mode.id).filter((id) => allowBypass || id !== 'bypassPermissions')

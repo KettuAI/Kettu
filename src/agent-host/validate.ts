@@ -35,9 +35,11 @@ import {
   isAgentId,
   type AgentId,
   type ContentRef,
+  type FormValues,
   type QuestionAnswer,
   type UserContent,
 } from '@shared/thread'
+import { FORM_FIELDS, FORM_KEY_CHARS } from './elicitation'
 import { invalidParams } from './errors'
 import { isCompletablePath } from './path-completion'
 import { isAbsolutePath } from './paths'
@@ -148,6 +150,57 @@ function questionAnswers(value: unknown): QuestionAnswer[] {
       ...(text === undefined ? {} : { text }),
     }
   })
+}
+
+const NOTE_CHARS = 4_000
+const FORM_TEXT_CHARS = 10_000
+const FORM_LIST_ITEMS = 100
+const FORM_LIST_ITEM_CHARS = 1_000
+
+/** A note sent with an option, such as what to change in a plan; empty means none. */
+function noteText(value: unknown): string {
+  if (typeof value !== 'string' || value.length > NOTE_CHARS) {
+    throw invalidParams(`note must be a string of at most ${NOTE_CHARS} characters`)
+  }
+  return value
+}
+
+/** A form's values by field key; their fit to the form is checked where the form is known. */
+function formValues(value: unknown): FormValues {
+  if (!isRecord(value)) throw invalidParams('values must be an object')
+  const entries = Object.entries(value)
+  if (entries.length > FORM_FIELDS) {
+    throw invalidParams(`values holds more than ${FORM_FIELDS} fields`)
+  }
+  return Object.fromEntries(
+    entries.map(([key, v]): [string, FormValues[string]] => {
+      if (key.length === 0 || key.length > FORM_KEY_CHARS) {
+        throw invalidParams(`A field key must be 1 to ${FORM_KEY_CHARS} characters`)
+      }
+      const at = `values.${key}`
+      if (typeof v === 'string') {
+        if (v.length > FORM_TEXT_CHARS) {
+          throw invalidParams(`${at} is longer than ${FORM_TEXT_CHARS} characters`)
+        }
+        return [key, v]
+      }
+      if (typeof v === 'boolean') return [key, v]
+      if (typeof v === 'number') {
+        if (!Number.isFinite(v)) throw invalidParams(`${at} must be a finite number`)
+        return [key, v]
+      }
+      if (
+        Array.isArray(v) &&
+        v.length <= FORM_LIST_ITEMS &&
+        v.every((item) => typeof item === 'string' && item.length <= FORM_LIST_ITEM_CHARS)
+      ) {
+        return [key, [...(v as string[])]]
+      }
+      throw invalidParams(
+        `${at} must be text, a number, true or false, or a list of at most ${FORM_LIST_ITEMS} texts of at most ${FORM_LIST_ITEM_CHARS} characters`,
+      )
+    }),
+  )
 }
 
 function absolutePath(o: Fields, key: string, platform: Platform): string {
@@ -951,12 +1004,21 @@ export function createValidators(platform: Platform): Validators {
     'permissions.respond': (params) => {
       const o = fields(params)
       const base = { sessionId: sessionId(o), requestId: string(o, 'requestId', ID_CHARS) }
-      if ((o.optionId === undefined) === (o.answers === undefined)) {
-        throw invalidParams('Give one of optionId and answers')
+      const given = [o.optionId, o.answers, o.values].filter((value) => value !== undefined)
+      if (given.length !== 1) throw invalidParams('Give one of optionId, answers and values')
+      if (o.note !== undefined && o.optionId === undefined) {
+        throw invalidParams('note goes only with optionId')
       }
-      return o.answers === undefined
-        ? { ...base, optionId: string(o, 'optionId', ID_CHARS) }
-        : { ...base, answers: questionAnswers(o.answers) }
+      if (o.optionId !== undefined) {
+        return {
+          ...base,
+          optionId: string(o, 'optionId', ID_CHARS),
+          ...(o.note === undefined ? {} : { note: noteText(o.note) }),
+        }
+      }
+      return o.answers !== undefined
+        ? { ...base, answers: questionAnswers(o.answers) }
+        : { ...base, values: formValues(o.values) }
     },
     'diagnostics.collect': none,
     'git.status': project,

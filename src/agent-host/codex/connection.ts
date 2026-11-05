@@ -5,7 +5,7 @@
 import os from 'node:os'
 import type { AgentAccount, PlanLimit } from '@shared/agent-host'
 import type { Platform } from '@shared/platform'
-import type { ConfigOption, TokenTotals } from '@shared/thread'
+import type { ConfigOption, PermissionOption, TokenTotals } from '@shared/thread'
 import {
   programFailure,
   runProgram,
@@ -24,6 +24,7 @@ import {
   type ListedSession,
   type McpServer,
   type OpenedSession,
+  type PermissionAnswer,
   type PromptBlock,
   type PromptResult,
   type SessionOptions,
@@ -33,6 +34,7 @@ import {
 import type { AgentTransport } from '../driver'
 import type { Env } from '../find-command'
 import { t } from '../i18n'
+import { planMarkdown } from '../plan-revision'
 import { mergeConfig, type MapperEffect, type MapperOutput } from '../session-updates'
 import { mapAccount, mapRateLimits } from './account'
 import {
@@ -131,6 +133,9 @@ const GOAL_TURN_GRACE_MS = 1_000
 const GOAL_MAX_LENGTH = 4_000
 /** What codex-acp sent, as a turn of its own, for a goal Codex started no turn for. */
 const GOAL_CONTINUATION = 'Continue working toward the active goal.'
+/** What Codex's own client sends when the user chooses to implement a proposed plan. */
+const IMPLEMENT_PLAN = 'Implement the plan.'
+const PLAN_OPTION = { implement: 'implement', keepPlanning: 'keep_planning' } as const
 const MCP_STARTUP_TIMEOUT_MS = 30_000
 
 /** The kinds of thread `thread/list` names, as codex-acp listed them; subagents are left out. */
@@ -296,6 +301,8 @@ interface ThreadRecord {
   command: AbortController | null
   /** Told of the thread's turns and status, while a goal waits for its turn. */
   watch: ((event: ThreadEvent) => void) | null
+  /** The item of the plan the running turn proposed, which the user is asked about once it ends. */
+  plan: string | null
 }
 
 function threadRecord(
@@ -313,6 +320,7 @@ function threadRecord(
     commands: null,
     command: null,
     watch: null,
+    plan: null,
   }
 }
 
@@ -936,11 +944,15 @@ export class CodexConnection implements AgentConnection {
           ?.watch?.((p.status as ThreadStatus).type === 'active' ? 'active' : 'inactive')
         break
       case 'item/started':
-      case 'item/completed':
-        for (const child of childThreads(p.item as ThreadItem)) {
+      case 'item/completed': {
+        const item = p.item as ThreadItem
+        for (const child of childThreads(item)) {
           this.learnChild(child, threadId)
         }
+        if (method === 'item/completed' && item.type === 'plan')
+          this.thread(threadId).plan = item.id
         break
+      }
     }
     if (!QUIET.has(method)) this.deliver(threadId, { method, params })
     if (method === 'turn/completed') this.turnCompleted(threadId, p.turn as Turn)
@@ -963,6 +975,7 @@ export class CodexConnection implements AgentConnection {
   private turnStarted(threadId: string, turn: Turn): void {
     const record = this.thread(threadId)
     record.running = { id: turn.id, usage: null, error: null }
+    record.plan = null
     const prompting = record.prompting
     if (prompting && prompting.turnId === null) {
       // The turn a review runs in has the one it started as its root, which is the one that ends.
@@ -1004,6 +1017,8 @@ export class CodexConnection implements AgentConnection {
     if (this.parents.has(threadId)) {
       this.toParent(threadId, [childTurnEffect(threadId, turn, tokens)])
     }
+    const plan = record.plan
+    record.plan = null
     const prompting = record.prompting
     if (!prompting || (prompting.turnId !== null && prompting.turnId !== turn.id)) return
     record.prompting = null
@@ -1016,6 +1031,63 @@ export class CodexConnection implements AgentConnection {
       tokens,
       models: tokens && record.settings.model ? [{ model: record.settings.model, tokens }] : [],
     })
+    if (plan && turn.status === 'completed' && record.settings.collaboration === 'plan') {
+      // The host ends the turn, and with it the turn's requests, once the prompt has answered.
+      setTimeout(() => void this.proposePlan(record, plan), 0)
+    }
+  }
+
+  /**
+   * Asks the user about the plan a turn in plan mode proposed: implement it, which leaves plan mode
+   * and starts a turn that carries it out, or keep planning, with a note sent as the next message.
+   */
+  private async proposePlan(record: ThreadRecord, itemId: string): Promise<void> {
+    const target = this.targets.get(record.id)
+    // A turn that started meanwhile means the user went on without answering.
+    if (!target || this.isClosed || record.prompting || record.running) return
+    const entryId = `t:${itemId}`
+    const entry = target.context().thread.byId[entryId]
+    if (entry?.kind !== 'tool') return
+    const mode = t(`codex.mode.${record.settings.mode}.name`)
+    const options: PermissionOption[] = [
+      {
+        id: PLAN_OPTION.implement,
+        name: t('codex.plan.implement'),
+        description: t('codex.plan.implementDescription', { mode }),
+        kind: 'allow_once',
+        preferred: true,
+      },
+      {
+        id: PLAN_OPTION.keepPlanning,
+        name: t('codex.plan.keepPlanning'),
+        kind: 'reject_once',
+        note: true,
+      },
+    ]
+    let answer: PermissionAnswer
+    try {
+      answer = await target.requestPermission(
+        {
+          toolCallId: itemId,
+          toolEntryId: entryId,
+          output: { patches: [], effects: [] },
+          options,
+          plan: planMarkdown(entry),
+        },
+        // Nothing of Codex's waits on the answer; the host settles the request when it must.
+        new AbortController().signal,
+      )
+    } catch {
+      return
+    }
+    const picked = optionAnswer(answer)
+    if (picked === 'cancelled') return
+    if (picked.optionId === PLAN_OPTION.implement) {
+      await this.setCollaboration(record, 'default')
+      target.send(IMPLEMENT_PLAN)
+    } else if (picked.optionId === PLAN_OPTION.keepPlanning && picked.note) {
+      target.send(picked.note)
+    }
   }
 
   private turnFailure(error: TurnError | null): AgentRequestError {
@@ -1089,8 +1161,19 @@ export class CodexConnection implements AgentConnection {
       return refusal(method)
     }
     const answer = await target.requestPermission(approval.request, signal)
+    if (approval.settled) {
+      const out: MapperOutput = { patches: [], effects: [] }
+      const ctx = target.context()
+      record.mapper.tool(ctx, out, approval.request.toolCallId, {
+        status: approval.settled(answer),
+      })
+      target.apply(out)
+    }
     if (answer !== 'cancelled' && 'answers' in answer && approval.answerQuestions) {
       return approval.answerQuestions(answer.answers)
+    }
+    if (answer !== 'cancelled' && 'values' in answer && approval.answerForm) {
+      return approval.answerForm(answer.values)
     }
     return approval.respond(optionAnswer(answer))
   }
@@ -1468,23 +1551,29 @@ export class CodexConnection implements AgentConnection {
 
   /** `/plan` turns plan mode on, and off again. */
   private async togglePlan(record: ThreadRecord): Promise<PromptResult> {
-    const models = await this.listModels()
-    const next = record.settings.collaboration === 'plan' ? 'default' : 'plan'
-    record.settings = applyOption(record.settings, models, COLLABORATION_ID, next)
-    const target = this.targets.get(record.id)
-    if (target) {
-      const config = buildConfig(record.settings, models)
-      target.apply({
-        patches: [
-          {
-            op: 'session.update',
-            changes: { config: mergeConfig(target.context().thread.session.config, config) },
-          },
-        ],
-        effects: [],
-      })
-    }
+    await this.setCollaboration(
+      record,
+      record.settings.collaboration === 'plan' ? 'default' : 'plan',
+    )
     return stopped('end_turn')
+  }
+
+  /** Sets the collaboration mode of the session's next turns, and shows it in its options. */
+  private async setCollaboration(record: ThreadRecord, value: 'default' | 'plan'): Promise<void> {
+    const models = await this.listModels()
+    record.settings = applyOption(record.settings, models, COLLABORATION_ID, value)
+    const target = this.targets.get(record.id)
+    if (!target) return
+    const config = buildConfig(record.settings, models)
+    target.apply({
+      patches: [
+        {
+          op: 'session.update',
+          changes: { config: mergeConfig(target.context().thread.session.config, config) },
+        },
+      ],
+      effects: [],
+    })
   }
 
   private async statusAnswer(record: ThreadRecord): Promise<string> {

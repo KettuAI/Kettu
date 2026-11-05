@@ -1,32 +1,15 @@
-import { memo, useEffect, useMemo, useRef, useState, type Ref } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowRightLeftIcon,
   BanIcon,
-  BrainIcon,
+  CheckIcon,
   ChevronRightIcon,
   CircleIcon,
   CopyIcon,
-  FilePenIcon,
-  FileTextIcon,
-  GlobeIcon,
-  HandIcon,
-  PencilIcon,
-  RepeatIcon,
-  SearchIcon,
   SquareTerminalIcon,
-  TrashIcon,
-  WrenchIcon,
   XIcon,
-  type LucideIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import {
-  previewsCommand,
-  type PermissionKind,
-  type ToolContent,
-  type ToolEntry,
-  type ToolKind,
-} from '@shared/thread'
+import type { AnsweredQuestion, ToolEntry } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import {
   Collapsible,
@@ -40,59 +23,17 @@ import {
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { basename, dirname } from '@renderer/lib/format'
 import { cn } from '@renderer/lib/utils'
-import { useRoutinesStore } from '@renderer/stores/routines'
-import { useSessionsStore } from '@renderer/stores/sessions'
-import { Clamp } from '../clamp'
-import { Markdown } from '../markdown'
-import { CarriedImage } from '../media/carried-image'
-import { CarriedMedia } from '../media/carried-media'
-import { EntryIdContext, SessionIdContext } from '../media/grants'
-import { LocalMedia } from '../media/local-media'
 import { toolMedia } from '../media/named'
 import { useEntry, useEntryAnimation } from '../use-thread'
-import { AnswerList, OptionName, WaitingCard, WaitingHeader, WaitingStatus } from './answer-list'
+import { ElicitationCard, ElicitationSettled } from './elicitation-card'
+import { commandOutput, PANEL, toolLabel } from './helpers'
+import { PermissionAnswer, PermissionCard } from './permission-card'
+import { PlanCard, PlanSettled } from './plan-card'
 import { AnsweredQuestions, QuestionCard } from './question-card'
-import { useAnswering } from './use-answering'
-import { commandOutput, primaryOption, PANEL, respondToPermission, toolLabel } from './helpers'
-import { DiffBlock } from './diff-block'
 import { ShellBlock } from './shell-block'
+import { ContentBlock, Target, ToolMedia } from './tool-parts'
 import { useDiffStats } from './use-diff-stats'
-
-const KIND_ICON: Record<ToolKind, LucideIcon> = {
-  read: FileTextIcon,
-  edit: FilePenIcon,
-  delete: TrashIcon,
-  move: ArrowRightLeftIcon,
-  search: SearchIcon,
-  execute: SquareTerminalIcon,
-  think: BrainIcon,
-  fetch: GlobeIcon,
-  switch_mode: RepeatIcon,
-  other: WrenchIcon,
-}
-
-const ASK_KEY = {
-  read: 'read',
-  edit: 'edit',
-  delete: 'delete',
-  move: 'move',
-  search: 'search',
-  execute: 'execute',
-  think: 'other',
-  fetch: 'fetch',
-  switch_mode: 'switchMode',
-  other: 'other',
-} as const satisfies Record<ToolKind, string>
-
-const ANSWER_KEY = {
-  allow_once: 'allowOnce',
-  allow_always: 'allowAlways',
-  reject_once: 'rejectOnce',
-  reject_always: 'rejectAlways',
-} as const satisfies Record<PermissionKind, string>
 
 export interface ToolCardProps {
   sessionId: string
@@ -127,18 +68,45 @@ export const ToolCard = memo(function ToolCard({
   if (permission) {
     // Each request gets a card of its own, so an agent's next question in the same entry starts
     // unanswered rather than inheriting the last one's pending answer.
-    const Card = permission.questions ? QuestionCard : PermissionCard
+    const props = {
+      ref,
+      sessionId,
+      entry,
+      agentName,
+      className: animation,
+    }
+    if (permission.plan) return <PlanCard key={permission.requestId} {...props} />
+    if (permission.elicitation) return <ElicitationCard key={permission.requestId} {...props} />
+    if (permission.questions) return <QuestionCard key={permission.requestId} {...props} />
     return (
-      <Card
+      <PermissionCard
         key={permission.requestId}
-        ref={ref}
-        sessionId={sessionId}
-        entry={entry}
+        {...props}
         projectPath={projectPath}
-        agentName={agentName}
         media={media}
-        className={animation}
       />
+    )
+  }
+  if (entry.planVersion !== undefined) {
+    return (
+      <div ref={ref} className={cn('min-w-0', animation)}>
+        <PlanSettled entry={entry} />
+      </div>
+    )
+  }
+  if (entry.elicitation) {
+    return (
+      <div ref={ref} className={cn('min-w-0', animation)}>
+        <ElicitationSettled entry={entry} />
+      </div>
+    )
+  }
+  const result = entry.permissionResult
+  if (typeof result === 'object' && result?.questions) {
+    return (
+      <div ref={ref} data-entry-id={entryId} className={cn('min-w-0', animation)}>
+        <AnsweredAsk questions={result.questions} device={result.device?.name ?? null} />
+      </div>
     )
   }
   const label = toolLabel(entry, projectPath, entry.status === 'completed')
@@ -146,21 +114,14 @@ export const ToolCard = memo(function ToolCard({
   // A command's output shows under it, in the same block, as a terminal prints it.
   const output = command ? commandOutput(entry.content) : null
   const content = output === null ? entry.content : entry.content.slice(1)
-  // An ask of several questions keeps each question with its answer.
-  const result = entry.permissionResult
-  const asked =
-    typeof result === 'object' && result?.questions && result.questions.length > 1
-      ? result.questions
-      : null
   const hasBody =
     entry.content.length > 0 ||
     media.length > 0 ||
-    asked !== null ||
     (!!command && (command.length > 60 || command.includes('\n')))
   const autoOpen =
     hasBody &&
     (entry.status === 'pending' || entry.status === 'in_progress' || entry.status === 'failed')
-  const open = hasBody && (userOpen ?? (autoOpen || asked !== null))
+  const open = hasBody && (userOpen ?? autoOpen)
 
   const card = (
     <Collapsible
@@ -172,7 +133,6 @@ export const ToolCard = memo(function ToolCard({
       {hasBody && (
         <CollapsibleContent className={PANEL} keepMounted={false}>
           <div className="flex flex-col gap-1.5 pt-1.5 pb-0.5 pl-5.5">
-            {asked && <AnsweredQuestions questions={asked} />}
             {command && (
               <ShellBlock
                 sessionId={sessionId}
@@ -278,34 +238,6 @@ function ToolHeader({
   )
 }
 
-/** Paths keep their file name visible: only the folder part truncates. */
-function Target({ label }: { label: ReturnType<typeof toolLabel> }) {
-  const target = label.target ?? ''
-  const folder = label.kind === 'path' ? dirname(target) : ''
-  const text =
-    label.kind === 'path' ? (
-      <span className="flex min-w-0 font-mono text-xs text-secondary">
-        {/* An empty truncating span would put the row's baseline at its bottom edge. */}
-        {folder && <span className="truncate">{folder}</span>}
-        <span className="shrink-0">{basename(target)}</span>
-      </span>
-    ) : label.kind === 'command' ? (
-      <span className="min-w-0 truncate font-mono text-xs text-secondary">
-        {target.split('\n')[0]}
-      </span>
-    ) : (
-      <span className="min-w-0 truncate">{target}</span>
-    )
-  return (
-    <Tooltip>
-      <TooltipTrigger render={<span className="flex min-w-0" />}>{text}</TooltipTrigger>
-      <TooltipContent className="max-w-[480px] font-mono text-meta break-all whitespace-pre-wrap">
-        {target}
-      </TooltipContent>
-    </Tooltip>
-  )
-}
-
 function ToolStatus({ entry }: { entry: ToolEntry }) {
   const { t } = useTranslation('session')
   const icon = 'size-3.5 shrink-0 animate-in fade-in animation-duration-(--duration-fast)'
@@ -347,267 +279,30 @@ function ToolStatus({ entry }: { entry: ToolEntry }) {
   }
 }
 
-/** The tallest an image shows in a tool call's details. */
-const MEDIA_IMAGE_HEIGHT = 160
-
-function ContentBlock({
-  sessionId,
-  entryId,
-  index,
-  content,
-  projectPath,
+/** An ask once answered: how many questions got an answer, and each question over its answer. */
+function AnsweredAsk({
+  questions,
+  device,
 }: {
-  sessionId: string
-  entryId: string
-  /** Its place among the call's content, by which the viewer knows a picture. */
-  index: number
-  content: ToolContent
-  projectPath: string
+  questions: AnsweredQuestion[]
+  device: string | null
 }) {
   const { t } = useTranslation('session')
-  switch (content.type) {
-    case 'markdown':
-      return (
-        <div data-selectable="">
-          <Clamp maxHeight={320} more={t('tool.showAll')}>
-            <Markdown markdown={content.markdown} className="markdown-compact" />
-          </Clamp>
-        </div>
-      )
-    case 'diff':
-      return <DiffBlock diff={content} projectPath={projectPath} />
-    case 'ref':
-      if (content.ref.kind === 'image') {
-        return (
-          <CarriedImage
-            sessionId={sessionId}
-            entryId={entryId}
-            index={index}
-            mimeType={content.ref.mimeType}
-            data={content.ref.data}
-            className="max-h-40 max-w-full self-start rounded-lg shadow-card"
-          />
-        )
-      }
-      if (content.ref.kind === 'audio' || content.ref.kind === 'video') {
-        return (
-          <CarriedMedia
-            sessionId={sessionId}
-            entryId={entryId}
-            index={index}
-            carried={content.ref}
-          />
-        )
-      }
-      return (
-        <div className="text-xs text-muted-foreground">
-          {content.ref.kind === 'link'
-            ? content.ref.name || content.ref.uri
-            : content.ref.kind === 'unsupported'
-              ? content.ref.label
-              : content.ref.attachment.name}
-        </div>
-      )
-  }
-}
-
-/** Pictures a tool call made or read, under its details. */
-function ToolMedia({
-  sessionId,
-  entryId,
-  media,
-}: {
-  sessionId: string
-  entryId: string
-  media: string[]
-}) {
-  if (media.length === 0) return null
+  const given = questions.filter((q) => q.answered).length
   return (
-    <SessionIdContext value={sessionId}>
-      <EntryIdContext value={entryId}>
-        <div className="flex flex-col items-start gap-3 empty:hidden">
-          {media.map((path) => (
-            <LocalMedia key={path} path={path} imageHeight={MEDIA_IMAGE_HEIGHT} />
-          ))}
-        </div>
-      </EntryIdContext>
-    </SessionIdContext>
-  )
-}
-
-/**
- * A request waiting for the user: what the call would do, then its options, one per line in the
- * agent's order, each with its number. A question shows the agent's words and its answers, the
- * last of which lets the user answer in the composer instead.
- */
-function PermissionCard({
-  ref,
-  sessionId,
-  entry,
-  projectPath,
-  agentName,
-  media,
-  className,
-}: {
-  ref: Ref<HTMLDivElement>
-  sessionId: string
-  entry: ToolEntry
-  projectPath: string
-  agentName: string
-  media: string[]
-  className?: string
-}) {
-  const { t } = useTranslation(['session', 'routines'])
-  const routine = useSessionsStore((s) => s.byId[sessionId]?.routine ?? null)
-  const level = useRoutinesStore((s) =>
-    routine ? (s.byId[routine.routineId]?.scope.level ?? null) : null,
-  )
-  const { answering, error, away, send } = useAnswering(sessionId)
-  const list = useRef<HTMLDivElement>(null)
-  const permission = entry.permission!
-  const question = entry.question
-  const label = toolLabel(entry, projectPath)
-  const command = label.kind === 'command' ? label.target : null
-  const Icon =
-    question !== undefined
-      ? HandIcon
-      : entry.toolKind === 'edit'
-        ? PencilIcon
-        : KIND_ICON[entry.toolKind]
-
-  const respond = async (index: number) => {
-    const option = permission.options[index]
-    if (!option) return
-    // An answer from the card's own rows would leave the focus on nothing once the card goes;
-    // a denial or Something else goes on in the composer, where the user says what instead.
-    const focused = !!list.current?.contains(document.activeElement)
-    const sent = await send(option.id, () =>
-      respondToPermission(sessionId, permission.requestId, option.id),
-    )
-    if (sent && (focused || option.kind === 'reject_once' || option.kind === 'reject_always')) {
-      emitAppEvent({ kind: 'focus-composer' })
-    }
-  }
-
-  return (
-    <WaitingCard
-      ref={ref}
-      entryId={entry.id}
-      label={question !== undefined ? t('question.label') : t('permission.label')}
-      description={
-        question !== undefined
-          ? t('question.ask', { agent: agentName })
-          : t(`permission.ask.${ASK_KEY[entry.toolKind]}`, { agent: agentName })
-      }
-      className={className}
-    >
-      <WaitingHeader>
-        <Icon aria-hidden className="size-3.75 shrink-0" />
-        {question !== undefined ? (
-          <span className="min-w-0 flex-1 truncate text-ui font-medium text-secondary">
-            {t('question.label')}
-          </span>
-        ) : label.verb ? (
-          <span className="flex min-w-0 flex-1 items-baseline gap-2">
-            <span className="shrink-0 text-ui font-medium text-secondary">{label.verb}</span>
-            {label.target && <Target label={label} />}
-          </span>
-        ) : (
-          <span className="min-w-0 flex-1 truncate text-ui font-medium text-secondary">
-            {label.target}
-          </span>
-        )}
-        <WaitingStatus>
-          {question !== undefined ? t('question.asksYou') : t('permission.needsYou')}
-        </WaitingStatus>
-      </WaitingHeader>
-      {question !== undefined && (
-        <p data-selectable="" className="px-3.5 pt-3 pb-1 text-row leading-normal text-foreground">
-          {question}
-        </p>
-      )}
-      {command && previewsCommand(command) && (
-        <pre
-          data-selectable=""
-          className="border-b border-border-soft bg-code-block px-3.5 py-2.5 font-mono text-command leading-relaxed whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]"
-        >
-          {command}
-        </pre>
-      )}
-      {entry.content.map((content, i) => (
-        <div key={i} className="border-b border-border-soft px-3.5 py-2.5">
-          <ContentBlock
-            sessionId={sessionId}
-            entryId={entry.id}
-            index={i}
-            content={content}
-            projectPath={projectPath}
-          />
-        </div>
-      ))}
-      {media.length > 0 && (
-        <div className="border-b border-border-soft px-3.5 py-2.5">
-          <ToolMedia sessionId={sessionId} entryId={entry.id} media={media} />
-        </div>
-      )}
-      {level && (
-        <p className="px-3.5 pt-2.5 text-xs text-tertiary">
-          {t('permission.outsideScope', {
-            level: t(`routines:permission.level.${level}.name`),
-          })}
-        </p>
-      )}
-      <AnswerList
-        ref={list}
-        label={t('permission.answerGroup')}
-        answers={permission.options.map((option) => ({
-          key: option.id,
-          label: <OptionName name={option.name} />,
-          ...(option.description ? { description: option.description } : {}),
-        }))}
-        primary={primaryOption(permission.options)}
-        answering={answering}
-        disabled={away}
-        onAnswer={(index) => void respond(index)}
-      />
-      {error && <p className="mx-3.5 mb-2.5 text-xs text-danger">{error}</p>}
-    </WaitingCard>
-  )
-}
-
-function PermissionAnswer({
-  result,
-  question,
-}: {
-  result: NonNullable<ToolEntry['permissionResult']>
-  question: boolean
-}) {
-  const { t } = useTranslation('session')
-  const asked = typeof result === 'object' ? result.questions : undefined
-  const given = asked?.filter((q) => q.answered) ?? []
-  const answer =
-    result === 'cancelled'
-      ? t('permission.answer.cancelled')
-      : result === 'withdrawn'
-        ? t('permission.answer.withdrawn')
-        : asked
-          ? given.length === 0
+    <div className="min-w-0 rounded-card bg-card shadow-card">
+      <div className="flex min-h-12 min-w-0 items-center gap-2.5 py-2 pr-4 pl-4">
+        <CheckIcon aria-hidden strokeWidth={2} className="size-4 shrink-0 text-secondary" />
+        <span className="shrink-0 text-ui font-medium text-foreground">
+          {given === 0
             ? t('question.skipped')
-            : asked.length > 1
-              ? t('question.answered', { answered: given.length, total: asked.length })
-              : (given[0]!.answer ?? t('question.answeredOne'))
-          : result.name
-            ? result.name
-            : question && result.kind === 'reject_once'
-              ? t('question.answeredOther')
-              : result.by === 'routine'
-                ? t('permission.answer.allowedByRoutine')
-                : t(`permission.answer.${ANSWER_KEY[result.kind]}`)
-  const device = typeof result === 'object' ? result.device : undefined
-  const text = device ? t('permission.answer.onDevice', { answer, device: device.name }) : answer
-  return (
-    <span className="min-w-0 shrink animate-in truncate text-xs text-tertiary animation-duration-(--duration-base) fade-in">
-      {text}
-    </span>
+            : t('question.answered', { answered: given, total: questions.length })}
+        </span>
+        {device && <span className="min-w-0 truncate text-control text-tertiary">· {device}</span>}
+      </div>
+      <div className="px-4 pb-3 pl-11">
+        <AnsweredQuestions questions={questions} />
+      </div>
+    </div>
   )
 }

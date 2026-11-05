@@ -13,6 +13,7 @@ import type {
 } from '@shared/thread'
 import { replayedBlock } from '../acp/mapper'
 import { hasMessage, t } from '../i18n'
+import { planMarkdown, planRevision } from '../plan-revision'
 import { isCodexPlanCall } from '../plan-tool'
 import { parseReplayedText } from '../replayed-content'
 import {
@@ -254,8 +255,10 @@ export class ThreadMapper {
         this.item(ctx, out, p.item as ThreadItem, true)
         break
       case 'item/agentMessage/delta':
-      case 'item/plan/delta':
         this.appendMessage(ctx, out, p.itemId as string, p.delta as string)
+        break
+      case 'item/plan/delta':
+        this.appendPlan(ctx, out, p.itemId as string, p.delta as string)
         break
       case 'item/reasoning/summaryPartAdded':
         this.partsOf(p.itemId as string).announced = true
@@ -341,8 +344,10 @@ export class ThreadMapper {
         if (ctx.replaying && done) this.userMessage(ctx, out, item)
         break
       case 'agentMessage':
-      case 'plan':
         this.message(ctx, out, item.id, item.text, done)
+        break
+      case 'plan':
+        this.proposedPlan(ctx, out, item.id, item.text, done)
         break
       case 'reasoning':
         this.reasoning(ctx, out, item, done)
@@ -496,6 +501,42 @@ export class ThreadMapper {
       return
     }
     this.message(ctx, out, itemId, delta, false)
+  }
+
+  /**
+   * A plan Codex proposes in plan mode, as a plan to approve, numbered among the session's plans;
+   * the connection asks once its turn has ended. It shows once it has text.
+   */
+  private proposedPlan(
+    ctx: MapperContext,
+    out: MapperOutput,
+    itemId: string,
+    text: string,
+    done: boolean,
+  ): void {
+    const id = `t:${itemId}`
+    const existing = ctx.thread.byId[id]
+    const status = done ? 'completed' : 'in_progress'
+    if (existing?.kind === 'tool') {
+      const markdown = text !== '' ? text : planMarkdown(existing)
+      this.tool(ctx, out, itemId, { status, content: [{ type: 'markdown', markdown }] })
+      return
+    }
+    if (text === '') return
+    this.tool(ctx, out, itemId, {
+      title: t('codex.plan.title'),
+      toolKind: 'switch_mode',
+      status,
+      content: [{ type: 'markdown', markdown: text }],
+      planVersion: planRevision(ctx.thread, id).version,
+    })
+  }
+
+  private appendPlan(ctx: MapperContext, out: MapperOutput, itemId: string, delta: string): void {
+    if (!delta) return
+    const existing = ctx.thread.byId[`t:${itemId}`]
+    const text = existing?.kind === 'tool' ? planMarkdown(existing) + delta : delta
+    this.proposedPlan(ctx, out, itemId, text, false)
   }
 
   private reasoning(
@@ -660,6 +701,8 @@ export class ThreadMapper {
       ...(changes.rawInput !== undefined ? { rawInput: changes.rawInput } : {}),
       ...(changes.description !== undefined ? { description: changes.description } : {}),
       ...(changes.question !== undefined ? { question: changes.question } : {}),
+      ...(changes.planVersion !== undefined ? { planVersion: changes.planVersion } : {}),
+      ...(changes.elicitation !== undefined ? { elicitation: changes.elicitation } : {}),
     }
     addEntry(ctx, out, entry)
     toolEffects(out, itemId, id, null, entry)

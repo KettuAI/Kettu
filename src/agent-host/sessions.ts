@@ -39,13 +39,15 @@ import {
   UnknownEntryError,
   type AgentId,
   type ConfigOption,
+  type FormValues,
   type FromDevice,
   type FromSession,
   type OlderPage,
   type Patch,
   type PatchBatch,
+  type PendingElicitation,
   type PendingQuestion,
-  type PermissionKind,
+  type PermissionOption,
   type PlanEntry,
   type PlanItem,
   type QuestionAnswer,
@@ -105,6 +107,7 @@ import {
   type SessionTarget,
 } from './connection'
 import type { Diagnostics } from './diagnostics'
+import { answeredFields, checkedValues } from './elicitation'
 import { holdsNothing, mayBeEmpty } from './empty-sessions'
 import { questionsResult } from './question-answers'
 import { HostError, invalidParams, notFound } from './errors'
@@ -112,6 +115,7 @@ import { t } from './i18n'
 import type { GitEventDraft, GitServiceApi } from './git/api'
 import { pathKey, samePath } from './paths'
 import { isOutOfCredit } from './out-of-credit'
+import { planRevision } from './plan-revision'
 import { watchSettings, type PreparedRecords, type WatchTarget } from './prepared'
 import type { Projects } from './projects'
 import type { CacheTtlReader } from './prompt-cache'
@@ -336,8 +340,13 @@ interface PreparedSlot {
 interface PendingRequest {
   requestId: string
   toolEntryId: string
-  options: { id: string; name: string; kind: PermissionKind }[]
+  options: PermissionOption[]
   questions?: PendingQuestion[]
+  /** A plan to approve, whose answer names the mode it builds in. */
+  plan: boolean
+  elicitation?: PendingElicitation
+  /** Raised while no turn ran, as a plan Codex proposes once its turn has ended. */
+  outsideTurn: boolean
   answer(answer: PermissionAnswer): void
 }
 
@@ -1473,6 +1482,8 @@ export class SessionManager {
       }),
       apply: (output) => this.applyOutput(live, output),
       requestPermission: (request, signal) => this.requestPermission(live, request, signal),
+      send: (text) => this.sendForUser(live, text),
+      startMode: () => startModeIn(this.deps.settings(), record.agentId) ?? null,
     }
     const live: Live = {
       id: record.id,
@@ -3538,6 +3549,8 @@ export class SessionManager {
       }),
       apply: () => {},
       requestPermission: () => Promise.resolve('cancelled'),
+      send: () => {},
+      startMode: () => null,
     }
     connection.register(record.acpSessionId, quiet)
     try {
@@ -4958,6 +4971,8 @@ export class SessionManager {
     scope: PermissionScope,
     request: PermissionRequest,
   ): string | null {
+    // A plan and an MCP server's request are the user's to answer, whatever the scope.
+    if (request.plan !== undefined || request.elicitation) return null
     const entry = live.thread.byId[request.toolEntryId]
     if (entry?.kind !== 'tool') return null
     return scopeAnswer(
@@ -4999,6 +5014,8 @@ export class SessionManager {
       }
     }
     const requestId = `${this.requestPrefix}${++this.requestCounter}`
+    const { elicitation } = request
+    const plan = request.plan === undefined ? null : planRevision(live.thread, request.toolEntryId)
     return new Promise<PermissionAnswer>((resolve, reject) => {
       const onAbort = (): void => {
         this.settlePermission(live, requestId, 'withdrawn')
@@ -5010,6 +5027,9 @@ export class SessionManager {
         toolEntryId: request.toolEntryId,
         options: request.options,
         ...(request.questions ? { questions: request.questions } : {}),
+        plan: plan !== null,
+        ...(elicitation ? { elicitation } : {}),
+        outsideTurn: live.turn === null,
         answer: (answer) => {
           signal.removeEventListener('abort', onAbort)
           resolve(answer)
@@ -5030,8 +5050,20 @@ export class SessionManager {
               requestId,
               options: request.options,
               ...(request.questions ? { questions: request.questions } : {}),
+              ...(plan ? { plan: { markdown: request.plan!, previous: plan.previous } } : {}),
+              ...(elicitation ? { elicitation } : {}),
             },
             permissionResult: null,
+            ...(plan ? { planVersion: plan.version } : {}),
+            ...(elicitation
+              ? {
+                  elicitation: {
+                    server: elicitation.server,
+                    kind: elicitation.kind,
+                    ...(elicitation.kind === 'url' ? { url: elicitation.url } : {}),
+                  },
+                }
+              : {}),
           },
         },
       ])
@@ -5114,7 +5146,8 @@ export class SessionManager {
   respond(
     sessionId: string,
     requestId: string,
-    answer: { optionId: string } | { answers: QuestionAnswer[] },
+    answer:
+      { optionId: string; note?: string } | { answers: QuestionAnswer[] } | { values: FormValues },
     device?: FromDevice,
   ): void {
     this.recordOf(sessionId)
@@ -5128,29 +5161,89 @@ export class SessionManager {
     }
     if (!live || !pending) throw notFound(`No pending permission request ${requestId}`)
     let result: Exclude<NonNullable<ToolEntry['permissionResult']>, string>
+    let given: PermissionAnswer
+    const form = pending.elicitation?.kind === 'form' ? pending.elicitation : null
     if ('answers' in answer) {
       if (!pending.questions) throw invalidParams(`Request ${requestId} asks no questions`)
       result = questionsResult(pending.questions, answer.answers, device)
+      given = answer
+    } else if ('values' in answer) {
+      const submit = pending.options.find((o) => o.kind === 'allow_once')
+      if (!form || !submit) throw invalidParams(`Request ${requestId} holds no form`)
+      const values = checkedValues(form.fields, answer.values)
+      result = {
+        optionId: submit.id,
+        kind: submit.kind,
+        fields: answeredFields(form.fields, values),
+        ...(device ? { device } : {}),
+      }
+      given = { values }
     } else {
       const { optionId } = answer
       const option = pending.options.find((o) => o.id === optionId)
       if (!option) throw invalidParams(`${optionId} is not an option of request ${requestId}`)
+      if (answer.note !== undefined && !option.note) {
+        throw invalidParams(`${optionId} of request ${requestId} takes no note`)
+      }
+      // A form is submitted with its values, which an option alone does not carry.
+      if (form && (option.kind === 'allow_once' || option.kind === 'allow_always')) {
+        throw invalidParams(`Request ${requestId} takes the form's values`)
+      }
+      const note = answer.note?.trim() || undefined
       const tool = live.thread.byId[pending.toolEntryId]
-      // A question's answer is what the card shows once answered; a permission's kind says enough.
+      // A question's answer is what the card shows once answered, and a plan's the mode it builds
+      // in; a permission's kind says enough.
       const answered = tool?.kind === 'tool' && tool.question !== undefined
+      const named = pending.plan || (answered && option.kind !== 'reject_once')
       result = {
         optionId,
         kind: option.kind,
-        ...(answered && option.kind !== 'reject_once' ? { name: option.name } : {}),
+        ...(named ? { name: option.name } : {}),
+        ...(note ? { note } : {}),
         ...(device ? { device } : {}),
       }
+      given = note ? { optionId, note } : { optionId }
     }
     this.settlePermission(live, requestId, result)
     live.answered.set(requestId, device ?? null)
     if (live.answered.size > ANSWERS_KEPT) {
       live.answered.delete(live.answered.keys().next().value!)
     }
-    pending.answer(answer)
+    pending.answer(given)
+    if (pending.outsideTurn) this.afterAnswer(live)
+    this.touch(live.id)
+  }
+
+  /**
+   * After a request no turn waited on is answered, the queue goes on as after a turn, once the
+   * agent had the chance to start one with the answer.
+   */
+  private afterAnswer(live: Live): void {
+    setTimeout(() => {
+      if (this.live.get(live.id) !== live || live.turn || live.closing) return
+      this.drainQueue(live)
+    }, 0)
+  }
+
+  /**
+   * A message the agent's connection sends as the user's own, such as the note that sends a plan
+   * back: at once when the session can start a turn, ahead of a waiting queue since it is the
+   * answer the user just gave; behind the queue while a turn runs.
+   */
+  private sendForUser(live: Live, text: string): void {
+    if (this.live.get(live.id) !== live || live.closing) return
+    const content: UserContent[] = [{ type: 'text', text }]
+    const { status, queue } = live.thread.session
+    if (canSend(status)) {
+      this.sendPrompt(live, content)
+      return
+    }
+    if (status !== 'running' && status !== 'awaiting_permission') {
+      this.deps.diagnostics.log('warn', `Session ${live.id} could not take a message: ${status}`)
+      return
+    }
+    this.update(live, { queue: [...queue, { id: randomUUID(), content, at: this.now() }] })
+    this.persist(live)
     this.touch(live.id)
   }
 

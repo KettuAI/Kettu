@@ -42,9 +42,9 @@
   /* Waiting: the fox orange, darkened for text; the dot keeps the brand's own. */
   --attention: #c2410c;
   --attention-dot: #fa5615;
-  /* How strongly a card waiting on the user draws its fox ring and halo. */
-  --attention-ring-strength: 50%;
-  --attention-halo-strength: 9%;
+  /* How strongly a card waiting on the user draws its fox ring and halo; it keeps no halo. */
+  --attention-ring-strength: 30%;
+  --attention-halo-strength: 0%;
   --danger: #ac3b2d;
   --destructive-ring-color: color-mix(in srgb, var(--danger) 40%, transparent);
   --success: #2e7550;
@@ -323,8 +323,8 @@
 
     --attention: #fb8a55;
     --attention-dot: #fa6e28;
-    --attention-ring-strength: 55%;
-    --attention-halo-strength: 10%;
+    --attention-ring-strength: 38%;
+    --attention-halo-strength: 0%;
     --danger: #ea8a7d;
     --success: #6fbf8f;
     --merged: #b798d4;
@@ -514,8 +514,8 @@
 
   --attention: #fb8a55;
   --attention-dot: #fa6e28;
-  --attention-ring-strength: 55%;
-  --attention-halo-strength: 10%;
+  --attention-ring-strength: 38%;
+  --attention-halo-strength: 0%;
   --danger: #ea8a7d;
   --success: #6fbf8f;
   --merged: #b798d4;
@@ -851,6 +851,14 @@
   --panel-highlight: rgb(255 255 255 / 8%);
   --app-mark-tile: #10161e;
   --app-mark: #fa5615;
+  /* An option tile in a card waiting on the user: a hairline edge, the fox edge once chosen, and
+     its number key's edge in a lighter fox. */
+  --tile-ring: inset 0 0 0 var(--hairline) var(--border-default);
+  --tile-on-ring: inset 0 0 0 1.5px var(--control-on);
+  --tile-key-on-ring: inset 0 0 0 var(--hairline)
+    color-mix(in srgb, var(--control-on) 40%, transparent);
+  /* An empty radio or check box. */
+  --mark-ring: inset 0 0 0 1.5px var(--border-strong);
   /* A card waiting on the user: a fox ring with a faint halo. */
   --attention-ring-shadow:
     0 0 0 var(--hairline)

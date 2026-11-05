@@ -50,6 +50,7 @@ import type {
   PatchBatch,
   PromptCache,
   QuestionAnswer,
+  FormValues,
   SessionSnapshot,
   SessionStatus,
   UserContent,
@@ -619,9 +620,17 @@ export interface HostContract {
   // with no sessionId, every one.
   'sessions.takeReturned': { params: { sessionId?: string | null }; result: ReturnedMessage[] }
   'sessions.removeAll': { params: void; result: void }
-  // One of `optionId` and `answers`: a question's answers go together, only those given.
+  // One of `optionId`, `answers` and `values`: a question's answers go together, only those given;
+  // `values` submits an MCP server's form. `note` goes with an option that takes one.
   'permissions.respond': {
-    params: { sessionId: string; requestId: string; optionId?: string; answers?: QuestionAnswer[] }
+    params: {
+      sessionId: string
+      requestId: string
+      optionId?: string
+      note?: string
+      answers?: QuestionAnswer[]
+      values?: FormValues
+    }
     result: void
   }
   'diagnostics.collect': { params: void; result: DiagnosticsBundle }
