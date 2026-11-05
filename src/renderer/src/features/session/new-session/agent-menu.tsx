@@ -290,11 +290,7 @@ export function AgentMenu({
             <AgentButtonLabel agentId={agentId} values={values} hostId={hostId} />
           </ComboboxTrigger>
         )}
-        <ComboboxContent
-          align="end"
-          sideOffset={6}
-          className="flex min-h-[min(--spacing(75),var(--available-height))] flex-col"
-        >
+        <ComboboxContent align="end" sideOffset={6} className="flex flex-col">
           <ComboboxInput
             showTrigger={false}
             placeholder={t(
