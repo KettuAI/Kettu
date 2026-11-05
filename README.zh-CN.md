@@ -33,6 +33,11 @@
 
 ### Agent 与会话
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/feature-sessions-dark.webp">
+  <img src="./assets/feature-sessions-light.webp" alt="Claude Code 在一张卡片里提两个问题，侧边栏里一个 Codex 会话正在运行，顶栏显示计划进度">
+</picture>
+
 - **46 个 Agent**：Claude Code、Codex、OpenCode、Pi 等，用你自己的安装、账号和设置。
 - **并行会话**：侧边栏标出哪个在干活、哪个在等你、哪个做完了。
 - **一键授权**：Agent 要运行命令或改文件时，按一个键允许或拒绝。
@@ -47,6 +52,11 @@
 
 ### 工作台
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/feature-artifacts-dark.webp">
+  <img src="./assets/feature-artifacts-light.webp" alt="Agent 做的每周习惯报告，在 Artifacts 查看器里打开，带版本、演示和分享">
+</picture>
+
 - **Diff**：Agent 改了哪些文件、改了什么，一目了然。
 - **文件**：用标签页查看、预览和编辑项目文件。
 - **终端**：每个会话都有自己的终端。
@@ -57,6 +67,11 @@
 - **搜索**：在一个命令面板里搜会话、Artifacts、Routines、项目、设置和操作。
 
 ### 多设备
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/feature-devices-dark.webp">
+  <img src="./assets/feature-devices-light.webp" alt="同一个会话同时在桌面和手机上打开，顶栏显示手机正在查看">
+</picture>
 
 - **手机和平板**：扫码配对，在浏览器里继续你的会话，不用装 App。
 - **另一台电脑**：在另一台电脑的 Kettu 里用这台电脑上的会话。

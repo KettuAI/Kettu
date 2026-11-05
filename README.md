@@ -33,6 +33,11 @@ All your coding agents, side by side in one window.
 
 ### Agents and sessions
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/feature-sessions-dark.webp">
+  <img src="./assets/feature-sessions-light.webp" alt="Claude Code asks two questions in one card while a Codex session works in the sidebar, with the plan in the top bar">
+</picture>
+
 - **46 agents**: Claude Code, Codex, OpenCode, Pi and more, with your own installs, accounts and settings.
 - **Parallel sessions**: the sidebar shows which one is working, which one is waiting for you and which one is done.
 - **One-key approvals**: when an agent wants to run a command or change a file, allow or deny it with one key.
@@ -47,6 +52,11 @@ All your coding agents, side by side in one window.
 
 ### Workbench
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/feature-artifacts-dark.webp">
+  <img src="./assets/feature-artifacts-light.webp" alt="A weekly habit report that an agent made, open in the Artifacts viewer with its version, Present and Share">
+</picture>
+
 - **Diffs**: see which files the agent changed and how.
 - **Files**: read, preview and edit project files in tabs.
 - **Terminal**: every session has its own.
@@ -57,6 +67,11 @@ All your coding agents, side by side in one window.
 - **Search**: one command palette for sessions, artifacts, routines, projects, settings and actions.
 
 ### Other devices
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/feature-devices-dark.webp">
+  <img src="./assets/feature-devices-light.webp" alt="The same session open on the desktop and on a phone, with the phone shown in the top bar">
+</picture>
 
 - **Phone and tablet**: pair with a QR code and carry on in the browser, with no app to install.
 - **Another computer**: use this computer's sessions from Kettu on another one.
