@@ -16,7 +16,8 @@
     "browser": "浏览器",
     "mcp": "MCP 服务器",
     "harnesses": "Harness",
-    "hosts": "主机"
+    "hosts": "主机",
+    "devices": "移动设备"
   },
   "page": {
     "title": "设置",
@@ -814,7 +815,8 @@
     "mcp": "Agent 通过这些 MCP 服务器使用工具：Kettu 自带的，以及各 Agent 自己配置的。",
     "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。Kettu 会替你安装和更新它们。",
     "hosts": "这台电脑连接的、运行 Kettu 的其他电脑。它们的会话会显示在侧边栏中。",
-    "hostsWeb": "这个页面连着的电脑。会话、项目和 Agent 都在那台电脑上，这里只管这个浏览器怎么连它。"
+    "hostsWeb": "这个页面连着的电脑。会话、项目和 Agent 都在那台电脑上，这里只管这个浏览器怎么连它。",
+    "devices": "Agent 不用先问就能使用的模拟器和手机。"
   },
   "archived": {
     "description": "{{project}} · {{when}}归档",
@@ -1389,6 +1391,20 @@
       "body": "Kettu 会删除为 {{name}} 安装的包，并移除你在这里添加的 Agent；正在运行的回合会停止。它们的会话仍保留、能查看。你自己的程序、登录和配置目录都不动。",
       "program": "同时用这条命令卸载程序",
       "installAgain": "重新安装后即可使用；配置和会话都保留着。"
+    }
+  },
+  "devices": {
+    "groups": {
+      "allowed": "始终允许"
+    },
+    "allowed": {
+      "name": "始终允许的设备",
+      "description": "Agent 使用这些设备前不再询问。移除后，下一次使用时会重新询问。",
+      "keywords": "模拟器 真机 iphone android 手机 允许",
+      "none": "还没有始终允许的设备。Agent 询问时选“始终允许这台设备”即可。",
+      "loading": "正在读取…",
+      "notFound": "现在不在这台主机上",
+      "remove": "移除"
     }
   }
 }

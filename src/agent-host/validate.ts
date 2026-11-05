@@ -1382,6 +1382,18 @@ export function createValidators(platform: Platform): Validators {
         decision: o.decision as BrowserOriginDecision,
       }
     },
+    'devices.allowed': (params) => {
+      fields(params ?? {})
+      return {}
+    },
+    'devices.forget': (params) => {
+      const o = fields(params)
+      const deviceId = string(o, 'deviceId', 256)
+      if (!/^(ios-sim|ios|android|avd):[\w.:\-@]+$/.test(deviceId)) {
+        throw invalidParams('deviceId is not a device id')
+      }
+      return { deviceId }
+    },
     'devices.answerAccess': (params) => {
       const o = fields(params)
       if (o.decision !== 'session' && o.decision !== 'always' && o.decision !== 'deny') {

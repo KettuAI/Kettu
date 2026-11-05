@@ -16,7 +16,8 @@
     "browser": "Browser",
     "mcp": "MCP servers",
     "harnesses": "Harnesses",
-    "hosts": "Hosts"
+    "hosts": "Hosts",
+    "devices": "Mobile devices"
   },
   "page": {
     "title": "Settings",
@@ -820,7 +821,8 @@
     "mcp": "Agents reach tools through these MCP servers: Kettu’s own, and the ones each agent keeps.",
     "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Kettu installs and updates them for you.",
     "hosts": "Other computers running Kettu that this one connects to. Their sessions show up in your sidebar.",
-    "hostsWeb": "The computer this page connects to. Its sessions, projects and agents stay on it; here is only how this browser reaches it."
+    "hostsWeb": "The computer this page connects to. Its sessions, projects and agents stay on it; here is only how this browser reaches it.",
+    "devices": "Simulators and phones agents may use without asking."
   },
   "archived": {
     "description": "{{project}} · archived {{when}}",
@@ -1403,6 +1405,20 @@
       "body": "Kettu deletes its installed package for {{name}} and removes the agents you added here. Any turn still running stops; their sessions stay and can still be read. Your own program, its sign-in and configuration folders are not touched.",
       "program": "Also uninstall the program with this command",
       "installAgain": "Install it again to use it; its configuration and sessions were kept."
+    }
+  },
+  "devices": {
+    "groups": {
+      "allowed": "Always allowed"
+    },
+    "allowed": {
+      "name": "Always-allowed devices",
+      "description": "Devices agents use without asking first. Remove one and its next agent asks again.",
+      "keywords": "simulator emulator iphone android phone allow",
+      "none": "No device is always allowed. Choose Always allow this device when an agent asks.",
+      "loading": "Reading…",
+      "notFound": "Not on this host now",
+      "remove": "Remove"
     }
   }
 }

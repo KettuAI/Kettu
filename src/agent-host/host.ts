@@ -1501,6 +1501,11 @@ export class AgentHost {
       'devices.answerAccess': ({ sessionId, entryId, decision }, { device }) => {
         sessions.answerDeviceAccess(sessionId, entryId, decision, fromDevice(device))
       },
+      'devices.allowed': async () => {
+        await this.deviceAccess.ready
+        return { deviceIds: this.deviceAccess.list() }
+      },
+      'devices.forget': ({ deviceId }) => this.deviceAccess.remove(deviceId),
     }
   }
 }

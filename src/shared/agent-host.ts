@@ -866,6 +866,9 @@ export interface HostContract {
     params: { sessionId: string; entryId: string; decision: DeviceAccessDecision }
     result: void
   }
+  // The mobile devices agents may always use on this host, and taking one off that list.
+  'devices.allowed': { params: Record<string, never>; result: { deviceIds: string[] } }
+  'devices.forget': { params: { deviceId: string }; result: void }
 }
 
 export type HostMethod = keyof HostContract
@@ -1020,6 +1023,8 @@ export const HOST_METHODS = [
   'browser.originSettled',
   'browser.answerOrigin',
   'devices.answerAccess',
+  'devices.allowed',
+  'devices.forget',
 ] as const satisfies readonly HostMethod[]
 
 /** One that has a session in front: the host's own windows as one, or a paired device. */
