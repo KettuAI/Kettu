@@ -16,6 +16,7 @@ import { openDiff } from '@renderer/stores/files'
 import { openGitDialog, useGitStore } from '@renderer/stores/git'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { turnChanges } from '../turn-work'
+import { DiffBlock } from './diff-block'
 import { PANEL } from './helpers'
 import { useDiffStats } from './use-diff-stats'
 
@@ -31,11 +32,7 @@ function within(path: string, root: string): string | null {
   return relative === path ? null : relative
 }
 
-/**
- * The files a finished turn changed, under its answer: their count and lines, then a row per file.
- * In a repository, Review and each row show a file's change in the Files pane, and Commit and open
- * PR opens the commit dialog with the turn's files chosen.
- */
+/** A turn's recorded diffs, with repository actions for its current worktree. */
 export const ChangesCard = memo(function ChangesCard({
   sessionId,
   projectPath,
@@ -127,12 +124,7 @@ export const ChangesCard = memo(function ChangesCard({
         </div>
         <CollapsibleContent className={PANEL} keepMounted={false}>
           {changes.map((change) => (
-            <ChangeRow
-              key={change.path}
-              change={change}
-              projectPath={projectPath}
-              onOpen={review(change.path)}
-            />
+            <ChangeRow key={change.path} change={change} projectPath={projectPath} />
           ))}
         </CollapsibleContent>
       </Collapsible>
@@ -140,44 +132,36 @@ export const ChangesCard = memo(function ChangesCard({
   )
 })
 
-function ChangeRow({
-  change,
-  projectPath,
-  onOpen,
-}: {
-  change: Change
-  projectPath: string
-  onOpen: (() => void) | null
-}) {
+function ChangeRow({ change, projectPath }: { change: Change; projectPath: string }) {
   const stats = useDiffStats(change.diffs)
   const shown = relativePath(change.path, projectPath)
-  const body = (
-    <>
-      <FileTypeIcon path={change.path} className="size-4" />
-      <span className="min-w-0 flex-1 truncate font-mono text-hint text-primary" title={shown}>
-        {shown}
-      </span>
-      {stats && (
-        <LineCounts
-          insertions={stats.insertions}
-          deletions={stats.deletions}
-          className="gap-2.5 text-code"
-        />
-      )}
-    </>
-  )
-  const row = 'flex h-8.5 items-center gap-2.5 border-t border-subtle px-3.5 text-left'
-  if (!onOpen) return <div className={row}>{body}</div>
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className={cn(
-        row,
-        'outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring',
-      )}
-    >
-      {body}
-    </button>
+    <Collapsible className="border-t border-subtle">
+      <CollapsibleTrigger className="group/change flex h-8.5 w-full items-center gap-2.5 px-3.5 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring">
+        <ChevronRightIcon
+          aria-hidden
+          strokeWidth={1.75}
+          className="size-3.5 shrink-0 text-tertiary transition-transform duration-(--duration-base) ease-standard group-data-panel-open/change:rotate-90 motion-reduce:transition-none"
+        />
+        <FileTypeIcon path={change.path} className="size-4" />
+        <span className="min-w-0 flex-1 truncate font-mono text-hint text-primary" title={shown}>
+          {shown}
+        </span>
+        {stats && (
+          <LineCounts
+            insertions={stats.insertions}
+            deletions={stats.deletions}
+            className="gap-2.5 text-code"
+          />
+        )}
+      </CollapsibleTrigger>
+      <CollapsibleContent className={PANEL} keepMounted={false}>
+        <div className="flex flex-col gap-2 px-3.5 pb-3.5">
+          {change.diffs.map((diff, index) => (
+            <DiffBlock key={index} diff={diff} projectPath={projectPath} />
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
