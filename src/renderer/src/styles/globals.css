@@ -504,12 +504,13 @@
     text-rendering: optimizeLegibility;
     scrollbar-color: var(--scrollbar-thumb) transparent;
     scrollbar-width: thin;
-    /* The window is the desk the sheets lie on. */
-    background-color: var(--bg-sidebar);
+    /* The window is the desk the sheets lie on, painted here alone: on macOS it is translucent, and
+       a second layer would thicken it. */
+    background-color: var(--bg-desk);
   }
   /* Interface text is --ui-size; the root stays 16 px so Tailwind's rem scale is unchanged. */
   body {
-    @apply bg-sidebar text-foreground;
+    @apply text-foreground;
     font-size: var(--ui-size);
     line-height: 1.4;
     font-weight: var(--weight-normal);

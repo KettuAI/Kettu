@@ -14,8 +14,10 @@ import { titleBarHeight, trafficLightPosition } from './window-controls'
 
 const log = createLogger('window')
 
-// Must match --bg-sidebar in the renderer's tokens.css, or the window flashes on load.
+// Windows and Linux: must match --bg-sidebar in the renderer's tokens.css, or the window flashes
+// on load. On macOS the window is clear over the system's sidebar material, which the page tints.
 const BACKGROUND_COLOR = { light: '#f5f5f5', dark: '#0e1217' }
+const CLEAR = '#00000000'
 
 // The symbols of the Windows and Linux window controls: --text-primary of each theme.
 const SYMBOL_COLOR = { light: '#10161e', dark: '#e8ecf1' }
@@ -61,7 +63,7 @@ function colors(): WindowColors {
 }
 
 export function backgroundColor(): string {
-  return colors().background
+  return process.platform === 'darwin' ? CLEAR : colors().background
 }
 
 function titleBarOverlay(): { color: string; symbolColor: string; height: number } {
@@ -178,7 +180,12 @@ export function createMainWindow(start: StartMode = 'window'): BrowserWindow {
     ...(icon ? { icon } : {}),
     titleBarStyle: 'hidden',
     ...(isMac
-      ? { trafficLightPosition: trafficLightPosition(zoom) }
+      ? {
+          trafficLightPosition: trafficLightPosition(zoom),
+          vibrancy: 'sidebar',
+          // Grays out with the window when another one is active, as the system's sidebars do.
+          visualEffectState: 'followWindow',
+        }
       : { titleBarOverlay: titleBarOverlay() }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
