@@ -43,6 +43,13 @@ export function choose(
   return withDraft(state, { ...draft, choices })
 }
 
+/** Picks the answer of the user's own on a single-select question, which drops its choice. */
+export function chooseOwn(state: QuestionState, question: PendingQuestion): QuestionState {
+  const draft = state.drafts[state.step]
+  if (!draft || question.multiSelect || draft.choices.length === 0) return state
+  return withDraft(state, { ...draft, choices: [] })
+}
+
 /** Sets the text of the question shown; written text replaces the choice of a single-select one. */
 export function typeText(
   state: QuestionState,
