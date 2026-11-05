@@ -61,7 +61,8 @@ import {
   greetingMoment,
   greetingPeriod,
   lastStartedAt,
-  pickInvite,
+  lineShown,
+  pickLine,
   type GreetingMoment,
   type GreetingPeriod,
 } from './new-session/greeting'
@@ -163,24 +164,25 @@ function WelcomeHeading() {
     (now) => `${greetingPeriod(new Date(now))}:${greetingMoment(now, lastStarted)}`,
   )
   const [period, moment] = key.split(':') as [GreetingPeriod, GreetingMoment]
-  const invites = t(`newSession.greeting.invite.${moment}`, {
-    returnObjects: true,
-  }) as readonly string[]
-  const index = useMemo(() => pickInvite(key, invites.length), [key, invites.length])
   const hello = t(`newSession.greeting.hello.${moment === 'back' ? 'back' : period}`)
-  const lead =
+  const greeting = name ? t('newSession.greeting.named', { hello, name }) : hello
+  const own = moment === 'first' || moment === 'back' ? null : moment
+  const shortLines = own
+    ? (t(`newSession.greeting.lines.${own}`, { returnObjects: true }) as readonly string[])
+    : []
+  // A period offers its greeting beside its own lines; the other moments replace both.
+  const lines =
     moment === 'first'
-      ? t('newSession.greeting.first')
-      : name
-        ? t('newSession.greeting.named', { hello, name })
-        : t('newSession.greeting.plain', { hello })
+      ? [t('newSession.greeting.first')]
+      : moment === period || moment === 'back'
+        ? [greeting, ...shortLines]
+        : shortLines
+  const index = useMemo(() => pickLine(key, lines.length), [key, lines.length])
+  useEffect(() => lineShown(key, index), [key, index])
   return (
     <h1 className="mb-7 animate-in text-center font-greeting text-greeting font-normal text-balance wrap-anywhere fade-in animation-duration-(--duration-slow)">
       <BrandFox className="mr-[0.4em] size-[1.15em] align-middle" />
-      {lead}
-      <span className="animate-in text-(color:--greeting-invite) fade-in animation-duration-(--duration-slow) animation-delay-[120ms] [animation-fill-mode:both]">
-        {invites[index]}
-      </span>
+      {lines[index]}
     </h1>
   )
 }
