@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { EditorState, Text } from '@codemirror/state'
+import type { EditorView } from '@codemirror/view'
 import type { FileContent } from '@shared/files'
 import type { FileDiff } from '@shared/git'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
@@ -18,6 +19,10 @@ export interface OpenFile {
   path: string
   /** The line to show and mark, from a reference such as `src/x.ts:12`. */
   line: number | null
+  /** Counts requests to show `line`, so the editor jumps once per request, not on every visit. */
+  jump: number
+  /** Shown in the preview tab, which the next single click replaces; an edit makes it a tab. */
+  preview: boolean
   content: FileContent | null
   error: string | null
   /** The editor holds edits that are not saved. */
@@ -32,6 +37,17 @@ export interface OpenFile {
   saveError: string | null
   /** Counts dropped edits, so the editor starts over from the file. */
   resets: number
+}
+
+/** A project's open files in tab order, and the path of the one the pane shows. */
+export interface OpenTabs {
+  files: OpenFile[]
+  active: string
+}
+
+/** The file the pane shows, or null when the project has none open. */
+export function activeFile(tabs: OpenTabs | null | undefined): OpenFile | null {
+  return tabs?.files.find((file) => file.path === tabs.active) ?? null
 }
 
 /** A file's change from the branch popover, shown in the preview's place. */
@@ -50,19 +66,21 @@ export interface DiffView extends DiffTarget {
   error: string | null
 }
 
-/** What waits on the answer to "Save changes?". */
-export type PendingChange = { kind: 'open'; path: string; line: number | null } | { kind: 'close' }
+/** The tab that asks "Save changes?" before it closes. */
+export interface PendingClose {
+  path: string
+}
 
 interface FilesStore {
   byProject: Record<string, ProjectFiles>
-  /** The file shown in each project's Files pane. */
-  open: Record<string, OpenFile>
+  /** The files open in each project's Files pane. */
+  open: Record<string, OpenTabs>
   /** Markdown files show their source instead of the rendered preview, for every file. */
   markdownSource: boolean
   /** SVG files show their source instead of the picture, for every file. */
   svgSource: boolean
-  /** By project, the change to the open file that asks first because it has unsaved edits. */
-  pending: Record<string, PendingChange>
+  /** By project, the tab that asks first because it has unsaved edits. */
+  pending: Record<string, PendingClose>
   /** By project, the diff that covers the open file until it is closed. */
   diffs: Record<string, DiffView>
 }
@@ -77,17 +95,35 @@ export const useFilesStore = create<FilesStore>()(() => ({
 }))
 
 /**
- * Each project's editor state, which the editor keeps current, so edits and their undo history
- * outlive the editor while the pane is hidden. `base` is the text on disk at `version`.
+ * Each open file's editor state, which the editor keeps current, so edits and their undo history
+ * outlive the editor while the pane is hidden or another tab shows. `base` is the text on disk at
+ * `version`.
  */
 export interface Buffer {
   path: string
   version: string
   base: Text
   state: EditorState
+  /** Where the editor was scrolled to when it last left the file. */
+  scroll: ReturnType<EditorView['scrollSnapshot']> | null
+  /** The last jump request the editor acted on. */
+  jumped: number
 }
 
-export const buffers = new Map<string, Buffer>()
+const buffers = new Map<string, Buffer>()
+
+const bufferKey = (projectPath: string, path: string): string => `${projectPath}\0${path}`
+
+export const getBuffer = (projectPath: string, path: string): Buffer | undefined =>
+  buffers.get(bufferKey(projectPath, path))
+
+export function putBuffer(projectPath: string, buffer: Buffer): void {
+  buffers.set(bufferKey(projectPath, buffer.path), buffer)
+}
+
+function dropBuffer(projectPath: string, path: string): void {
+  buffers.delete(bufferKey(projectPath, path))
+}
 
 const inFlight = new Map<string, Promise<void>>()
 
@@ -124,6 +160,8 @@ function fresh(path: string, line: number | null, content: FileContent | null): 
   return {
     path,
     line,
+    jump: line === null ? 0 : 1,
+    preview: false,
     content,
     error: null,
     dirty: false,
@@ -136,50 +174,120 @@ function fresh(path: string, line: number | null, content: FileContent | null): 
   }
 }
 
-/**
- * Shows a file in the project's Files pane, opening the pane, scrolled to `line` if given. With
- * unsaved edits in another file, it asks first.
- */
-export function openFile(projectPath: string, path: string, line: number | null = null): void {
-  toggleSidePane(projectPath, 'files', true)
-  closeDiff(projectPath)
-  const current = useFilesStore.getState().open[projectPath]
-  if (current?.dirty && current.path !== path) {
-    setPending(projectPath, { kind: 'open', path, line })
-    return
-  }
-  showFile(projectPath, path, line)
-}
+const tabsOf = (projectPath: string): OpenTabs | undefined =>
+  useFilesStore.getState().open[projectPath]
 
-function showFile(projectPath: string, path: string, line: number | null): void {
-  const current = useFilesStore.getState().open[projectPath]
-  if (current?.path === path) setOpen(projectPath, { ...current, line })
-  else {
-    buffers.delete(projectPath)
-    setOpen(projectPath, fresh(path, line, null))
-  }
-  void readOpenFile(projectPath)
-}
+const findFile = (projectPath: string, path: string): OpenFile | undefined =>
+  tabsOf(projectPath)?.files.find((file) => file.path === path)
 
-/** Closes the project's open file, asking first when it has unsaved edits. */
-export function closeFile(projectPath: string): void {
-  if (useFilesStore.getState().open[projectPath]?.dirty) {
-    setPending(projectPath, { kind: 'close' })
-    return
-  }
-  closeNow(projectPath)
-}
-
-function closeNow(projectPath: string): void {
-  buffers.delete(projectPath)
+function setTabs(projectPath: string, tabs: OpenTabs | null): void {
   useFilesStore.setState((s) => {
     const open = { ...s.open }
-    delete open[projectPath]
+    if (tabs) open[projectPath] = tabs
+    else delete open[projectPath]
     return { open }
   })
 }
 
-function setPending(projectPath: string, change: PendingChange | null): void {
+/**
+ * Shows a file in the project's Files pane, opening the pane and the file's tab, scrolled to
+ * `line` if given. A `preview` open takes the preview tab's place, which a regular one never does.
+ */
+export function openFile(
+  projectPath: string,
+  path: string,
+  line: number | null = null,
+  options: { preview?: boolean } = {},
+): void {
+  toggleSidePane(projectPath, 'files', true)
+  closeDiff(projectPath)
+  const tabs = tabsOf(projectPath)
+  if (tabs?.files.some((file) => file.path === path)) {
+    setTabs(projectPath, {
+      active: path,
+      files: tabs.files.map((file) =>
+        file.path === path
+          ? {
+              ...file,
+              line,
+              jump: line === null ? file.jump : file.jump + 1,
+              preview: file.preview && !!options.preview,
+            }
+          : file,
+      ),
+    })
+    void readOpenFile(projectPath, path)
+    return
+  }
+  const added: OpenFile = { ...fresh(path, line, null), preview: !!options.preview }
+  const files = tabs ? [...tabs.files] : []
+  const replaced = options.preview ? files.findIndex((file) => file.preview) : -1
+  if (replaced >= 0) {
+    dropBuffer(projectPath, files[replaced]!.path)
+    files[replaced] = added
+  } else {
+    files.splice(tabs ? files.findIndex((file) => file.path === tabs.active) + 1 : 0, 0, added)
+  }
+  setTabs(projectPath, { files, active: path })
+  void readOpenFile(projectPath, path)
+}
+
+/** Shows another of the project's open files; one not read since it was left is read again. */
+export function activateTab(projectPath: string, path: string): void {
+  const tabs = tabsOf(projectPath)
+  if (!tabs || tabs.active === path || !tabs.files.some((file) => file.path === path)) return
+  setTabs(projectPath, { ...tabs, active: path })
+  void readOpenFile(projectPath, path)
+}
+
+/** Makes the preview tab a regular one, which the next single click leaves alone. */
+export function keepTab(projectPath: string, path: string): void {
+  update(projectPath, path, (file) => (file.preview ? { preview: false } : {}))
+}
+
+/** Moves the tab at `from` to `to`. */
+export function moveTab(projectPath: string, from: number, to: number): void {
+  const tabs = tabsOf(projectPath)
+  if (!tabs || from === to || !tabs.files[from] || to < 0 || to >= tabs.files.length) return
+  const files = [...tabs.files]
+  files.splice(to, 0, files.splice(from, 1)[0]!)
+  setTabs(projectPath, { ...tabs, files })
+}
+
+/** Closes a tab, asking first when it has unsaved edits. */
+export function closeFile(projectPath: string, path: string): void {
+  if (findFile(projectPath, path)?.dirty) {
+    setPending(projectPath, { path })
+    return
+  }
+  closeNow(projectPath, path)
+}
+
+/** Closes the project's shown tab, if it has one. */
+export function closeActiveFile(projectPath: string): boolean {
+  const tabs = tabsOf(projectPath)
+  if (!tabs) return false
+  closeFile(projectPath, tabs.active)
+  return true
+}
+
+function closeNow(projectPath: string, path: string): void {
+  const tabs = tabsOf(projectPath)
+  const index = tabs?.files.findIndex((file) => file.path === path) ?? -1
+  if (!tabs || index < 0) return
+  dropBuffer(projectPath, path)
+  const files = tabs.files.filter((file) => file.path !== path)
+  if (files.length === 0) {
+    setTabs(projectPath, null)
+    return
+  }
+  // The tab that takes the closed one's place, else the one before it.
+  const active = tabs.active === path ? files[Math.min(index, files.length - 1)]!.path : tabs.active
+  setTabs(projectPath, { files, active })
+  if (active !== tabs.active) void readOpenFile(projectPath, active)
+}
+
+function setPending(projectPath: string, change: PendingClose | null): void {
   useFilesStore.setState((s) => {
     const pending = { ...s.pending }
     if (change) pending[projectPath] = change
@@ -188,7 +296,7 @@ function setPending(projectPath: string, change: PendingChange | null): void {
   })
 }
 
-/** The answer to "Save changes?": the waiting change happens unless it is cancelled or the save fails. */
+/** The answer to "Save changes?": the tab closes unless it is cancelled or the save fails. */
 export async function answerPending(
   projectPath: string,
   answer: 'cancel' | 'discard' | 'save',
@@ -196,34 +304,36 @@ export async function answerPending(
   const change = useFilesStore.getState().pending[projectPath]
   setPending(projectPath, null)
   if (!change || answer === 'cancel') return
-  if (answer === 'save' && !(await saveFile(projectPath))) return
-  if (change.kind === 'close') closeNow(projectPath)
-  else {
-    buffers.delete(projectPath)
-    const current = useFilesStore.getState().open[projectPath]
-    if (current) setOpen(projectPath, { ...current, dirty: false })
-    showFile(projectPath, change.path, change.line)
-  }
+  if (answer === 'save' && !(await saveFile(projectPath, change.path))) return
+  closeNow(projectPath, change.path)
 }
 
-function setOpen(projectPath: string, file: OpenFile): void {
-  useFilesStore.setState((s) => ({ open: { ...s.open, [projectPath]: file } }))
-}
-
-/** Changes the open file if it is still `path`. */
+/** Changes the open file `path` if it is still open. */
 function update(
   projectPath: string,
   path: string,
   change: Partial<OpenFile> | ((file: OpenFile) => Partial<OpenFile>),
 ): void {
-  const now = useFilesStore.getState().open[projectPath]
-  if (now?.path !== path) return
-  setOpen(projectPath, { ...now, ...(typeof change === 'function' ? change(now) : change) })
+  const tabs = tabsOf(projectPath)
+  const index = tabs?.files.findIndex((file) => file.path === path) ?? -1
+  if (!tabs || index < 0) return
+  const files = [...tabs.files]
+  const now = files[index]!
+  files[index] = { ...now, ...(typeof change === 'function' ? change(now) : change) }
+  setTabs(projectPath, { ...tabs, files })
 }
 
 /** The editor's word on whether its text differs from the file it started from. */
 export function setDirty(projectPath: string, path: string, dirty: boolean): void {
-  update(projectPath, path, (file) => (file.dirty === dirty ? {} : { dirty, saveError: null }))
+  update(projectPath, path, (file) =>
+    file.dirty === dirty ? {} : { dirty, saveError: null, ...(dirty && { preview: false }) },
+  )
+}
+
+/** Shows a Markdown file rendered instead of its source, from the top. */
+export function showMarkdownRendered(projectPath: string, path: string): void {
+  useFilesStore.setState({ markdownSource: false })
+  update(projectPath, path, { line: null })
 }
 
 /** A media URL without its token: the file's name and the time it was granted at. */
@@ -245,24 +355,22 @@ export const isSvgFile = (path: string) => /\.svg$/i.test(path)
 const readsSource = (path: string) => isSvgFile(path) && useFilesStore.getState().svgSource
 
 /**
- * Reads the open file again, keeping what is shown until the new text arrives. Unsaved edits are
+ * Reads an open file again, keeping what is shown until the new text arrives. Unsaved edits are
  * never replaced: a different file on disk only says so. An unchanged media file keeps its URL,
  * so a clip goes on playing, unless `renew` asks for the fresh grant.
  */
-async function readOpenFile(projectPath: string, renew = false): Promise<void> {
-  const file = useFilesStore.getState().open[projectPath]
-  if (!file) return
-  const { path } = file
+async function readOpenFile(projectPath: string, path: string, renew = false): Promise<void> {
+  if (!findFile(projectPath, path)) return
   const asText = readsSource(path)
   try {
     const content = await host('files.read', { projectPath, path, ...(asText && { asText }) })
     update(projectPath, path, (now) => {
       // The choice of an SVG's picture or source changed meanwhile, and its own read follows.
       if (readsSource(path) !== asText) return {}
-      const buffer = buffers.get(projectPath)
+      const buffer = getBuffer(projectPath, path)
       if (!renew && sameMedia(now.content, content)) return { error: null }
       // An SVG's picture has no text to set the edits against; they wait for its source.
-      if (!now.dirty || buffer?.path !== path || content.kind === 'media') {
+      if (!now.dirty || !buffer || content.kind === 'media') {
         return { content, error: null }
       }
       // Back from the picture, the source shows, and the bar says if it changed.
@@ -279,23 +387,23 @@ async function readOpenFile(projectPath: string, renew = false): Promise<void> {
 /** Shows every SVG as its source, or as its picture, until changed; open ones are read again. */
 export function showSvgSource(source: boolean): void {
   useFilesStore.setState({ svgSource: source })
-  for (const [projectPath, file] of Object.entries(useFilesStore.getState().open)) {
-    if (isSvgFile(file.path)) void readOpenFile(projectPath)
+  for (const [projectPath, tabs] of Object.entries(useFilesStore.getState().open)) {
+    for (const file of tabs.files)
+      if (isSvgFile(file.path)) void readOpenFile(projectPath, file.path)
   }
 }
 
-/** Reads the open media file again for a fresh grant, since main may have dropped its own. */
-export function renewOpenFile(projectPath: string): void {
-  void readOpenFile(projectPath, true)
+/** Reads an open media file again for a fresh grant, since main may have dropped its own. */
+export function renewOpenFile(projectPath: string, path: string): void {
+  void readOpenFile(projectPath, path, true)
 }
 
-/** Saves the open file's edits; false when they are still unsaved. */
-export async function saveFile(projectPath: string): Promise<boolean> {
-  const file = useFilesStore.getState().open[projectPath]
-  const buffer = buffers.get(projectPath)
-  if (!file?.dirty || buffer?.path !== file.path) return true
+/** Saves an open file's edits; false when they are still unsaved. */
+export async function saveFile(projectPath: string, path: string): Promise<boolean> {
+  const file = findFile(projectPath, path)
+  const buffer = getBuffer(projectPath, path)
+  if (!file?.dirty || !buffer) return true
   if (file.saving) return false
-  const { path } = file
   const doc = buffer.state.doc
   const text = buffer.state.sliceDoc()
   update(projectPath, path, { saving: true, saveError: null })
@@ -309,8 +417,7 @@ export async function saveFile(projectPath: string): Promise<boolean> {
     buffer.version = written.version
     buffer.base = doc
     // Saved while an SVG's picture shows: the picture is read again, at its new version.
-    const now = useFilesStore.getState().open[projectPath]
-    const picture = now?.path === path && now.content?.kind === 'media'
+    const picture = findFile(projectPath, path)?.content?.kind === 'media'
     update(projectPath, path, {
       saving: false,
       // Typing during the save left more to save.
@@ -329,12 +436,12 @@ export async function saveFile(projectPath: string): Promise<boolean> {
         },
       }),
     })
-    if (picture) void readOpenFile(projectPath)
+    if (picture) void readOpenFile(projectPath, path)
     return true
   } catch (error) {
     if (errorCode(error) === 'conflict') {
       update(projectPath, path, { saving: false })
-      await readOpenFile(projectPath)
+      await readOpenFile(projectPath, path)
       // The file may have changed back meanwhile; the bar shows only when it still differs.
       update(projectPath, path, (now) =>
         now.changedOnDisk ? {} : { saveError: errorMessage(error) },
@@ -346,43 +453,47 @@ export async function saveFile(projectPath: string): Promise<boolean> {
   }
 }
 
-/** Drops the open file's edits and shows the file as it is on disk. */
-export function discardEdits(projectPath: string): void {
-  const file = useFilesStore.getState().open[projectPath]
+/** Drops an open file's edits and shows the file as it is on disk. */
+export function discardEdits(projectPath: string, path: string): void {
+  const file = findFile(projectPath, path)
   if (!file) return
-  buffers.delete(projectPath)
-  setOpen(projectPath, { ...fresh(file.path, null, file.content), resets: file.resets + 1 })
-  void readOpenFile(projectPath)
+  dropBuffer(projectPath, path)
+  update(projectPath, path, {
+    ...fresh(path, null, file.content),
+    jump: file.jump,
+    resets: file.resets + 1,
+  })
+  void readOpenFile(projectPath, path)
 }
 
 /** Keeps the edits over the change on disk: the next save overwrites that version. */
-export function keepEdits(projectPath: string): void {
-  const file = useFilesStore.getState().open[projectPath]
-  if (!file) return
-  update(projectPath, file.path, { changedOnDisk: false, kept: file.diskVersion })
+export function keepEdits(projectPath: string, path: string): void {
+  const file = findFile(projectPath, path)
+  if (file) update(projectPath, path, { changedOnDisk: false, kept: file.diskVersion })
 }
 
 /** The files with unsaved edits, for asking before the app quits. */
 export function unsavedFiles(): { projectPath: string; path: string }[] {
-  return Object.entries(useFilesStore.getState().open)
-    .filter(([, file]) => file.dirty)
-    .map(([projectPath, file]) => ({ projectPath, path: file.path }))
+  return Object.entries(useFilesStore.getState().open).flatMap(([projectPath, tabs]) =>
+    tabs.files.filter((file) => file.dirty).map((file) => ({ projectPath, path: file.path })),
+  )
 }
 
 /** Saves every file with unsaved edits; false when any is still unsaved. */
 export async function saveAll(): Promise<boolean> {
-  const results = await Promise.all(unsavedFiles().map((f) => saveFile(f.projectPath)))
+  const results = await Promise.all(unsavedFiles().map((f) => saveFile(f.projectPath, f.path)))
   return results.every(Boolean)
 }
 
-/** Lists the files and reads the open one again, after a change on disk or on window focus. */
+/** Lists the files and reads the shown one again, after a change on disk or on window focus. */
 export function refreshFiles(projectPath: string): void {
   const diff = useFilesStore.getState().diffs[projectPath]
   // The working tree's side of a diff changes with the files.
   if (diff?.ref === null) void readDiff(projectPath, diff)
   if (!useFilesStore.getState().byProject[projectPath]) return
   void loadFiles(projectPath)
-  void readOpenFile(projectPath)
+  const tabs = tabsOf(projectPath)
+  if (tabs) void readOpenFile(projectPath, tabs.active)
 }
 
 const sameTarget = (a: DiffTarget | undefined, b: DiffTarget): boolean =>
@@ -404,8 +515,8 @@ async function readDiff(projectPath: string, target: DiffTarget): Promise<void> 
 }
 
 /**
- * Shows a file's change in the project's Files pane, over the open file, which keeps its edits
- * and comes back when the diff closes.
+ * Shows a file's change in the project's Files pane, over the open files, which keep their edits
+ * and come back when the diff closes.
  */
 export function openDiff(projectPath: string, target: DiffTarget): void {
   toggleSidePane(projectPath, 'files', true)

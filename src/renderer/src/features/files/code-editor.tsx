@@ -22,7 +22,7 @@ import type { FileContent } from '@shared/files'
 import { useCodeThemes } from '@renderer/features/session/markdown/code-themes'
 import { useDark } from '@renderer/hooks/use-dark'
 import { i18n } from '@renderer/lib/i18n'
-import { buffers, setDirty, type Buffer, type OpenFile } from '@renderer/stores/files'
+import { getBuffer, putBuffer, setDirty, type Buffer, type OpenFile } from '@renderer/stores/files'
 import { editorTheme } from './code-theme'
 import { lineBreakOf, lineChange } from './editor-text'
 import { nameOf } from './paths'
@@ -217,6 +217,8 @@ function createBuffer(
     version: content.version,
     base: Text.empty,
     state: EditorState.create(),
+    scroll: null,
+    jumped: -1,
   }
   const extensions: Extension[] = [
     basicSetup,
@@ -244,7 +246,7 @@ function createBuffer(
   return buffer
 }
 
-/** Starts the project's buffer over from `content` and shows it in `editor`. */
+/** Starts the file's buffer over from `content` and shows it in `editor`. */
 function startBuffer(
   editor: EditorView,
   projectPath: string,
@@ -253,7 +255,7 @@ function startBuffer(
   colors: Extension,
 ): void {
   const buffer = createBuffer(projectPath, path, content, colors)
-  buffers.set(projectPath, buffer)
+  putBuffer(projectPath, buffer)
   editor.setState(buffer.state)
 }
 
@@ -302,21 +304,31 @@ export default function CodeEditor({
 
   // A buffer kept from before shows as it was left; otherwise the file starts one.
   const show = useEffectEvent((editor: EditorView) => {
-    const buffer = buffers.get(projectPath)
-    if (buffer?.path !== file.path) {
+    const buffer = getBuffer(projectPath, file.path)
+    if (!buffer) {
       startBuffer(editor, projectPath, file.path, content, colors.current)
       return
     }
     editor.setState(buffer.state)
-    editor.dispatch({ effects: theme.reconfigure(colors.current) })
+    editor.dispatch({
+      effects: [theme.reconfigure(colors.current), ...(buffer.scroll ? [buffer.scroll] : [])],
+    })
   })
 
-  // One view per file; the state outlives it in `buffers`, with the edits and their history.
+  // One view per file shown; each file's state outlives it as a buffer, with its edits, history
+  // and scroll position.
   useEffect(() => {
     const editor = new EditorView({ parent: box.current! })
     view.current = editor
     show(editor)
+    // Taken as it scrolls: by the time this cleans up, the editor may be off the page and read 0.
+    const remember = () => {
+      const buffer = getBuffer(projectPath, file.path)
+      if (buffer) buffer.scroll = editor.scrollSnapshot()
+    }
+    editor.scrollDOM.addEventListener('scroll', remember, { passive: true })
     return () => {
+      editor.scrollDOM.removeEventListener('scroll', remember)
       editor.destroy()
       view.current = null
     }
@@ -336,23 +348,26 @@ export default function CodeEditor({
 
   useEffect(() => {
     const editor = view.current
-    const buffer = buffers.get(projectPath)
-    if (!editor || buffer?.path !== file.path || file.dirty) return
+    const buffer = getBuffer(projectPath, file.path)
+    if (!editor || !buffer || file.dirty) return
     if (content.version !== buffer.version) {
       reload(editor, projectPath, buffer, content, colors.current)
     }
   }, [projectPath, file.path, file.dirty, content])
 
+  // Once per request: coming back to a tab leaves the scroll position it had.
   useEffect(() => {
     const editor = view.current
-    if (!editor || file.line === null) return
+    const buffer = getBuffer(projectPath, file.path)
+    if (!editor || !buffer || file.line === null || buffer.jumped === file.jump) return
+    buffer.jumped = file.jump
     const line = Math.min(Math.max(file.line, 1), editor.state.doc.lines)
     const at = editor.state.doc.line(line).from
     editor.dispatch({
       selection: { anchor: at },
       effects: [markLine.of(line), EditorView.scrollIntoView(at, { y: 'center' })],
     })
-  }, [file.line, file.path, file.resets])
+  }, [projectPath, file.line, file.jump, file.path, file.resets])
 
   return <div ref={box} className="absolute inset-0" data-selectable="" data-code-editor="" />
 }

@@ -38,7 +38,6 @@
     "showSource": "查看源码",
     "showRendered": "查看预览",
     "copyPath": "复制路径",
-    "closeFile": "关闭文件",
     "openFailed": "无法打开此文件",
     "binaryTitle": "二进制文件",
     "binaryDescription": "{{size}}，不显示预览。",
@@ -52,6 +51,10 @@
     "keepMine": "保留我的",
     "saveFailed": "无法保存：{{message}}",
     "readOnly": "只读：这个文件不是有效的 UTF-8，保存可能改变它的字节。"
+  },
+  "tabs": {
+    "label": "打开的文件",
+    "close": "关闭 {{name}}"
   },
   "link": {
     "open": "打开 {{target}}"

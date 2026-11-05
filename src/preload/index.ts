@@ -117,6 +117,7 @@ const api: KettuApi = {
     },
     reportInteractive: () => send('perf:interactive'),
     setUnsaved: (files) => send('app:set-unsaved', files),
+    closeWindow: () => send('app:close-window'),
     onShortcut,
   },
   artifacts: {

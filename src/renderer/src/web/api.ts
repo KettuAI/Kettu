@@ -249,6 +249,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       respondQuit: async () => {},
       onConfirmQuit: never,
       setUnsaved: () => {},
+      closeWindow: () => {},
       onCommand: (listener) => {
         commands.add(listener)
         return () => commands.delete(listener)

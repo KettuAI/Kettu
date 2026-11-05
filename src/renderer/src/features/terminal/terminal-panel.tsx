@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { DragDropProvider, KeyboardSensor, PointerSensor, type DragEndEvent } from '@dnd-kit/react'
+import { DragDropProvider, type DragEndEvent } from '@dnd-kit/react'
 import { isSortable, useSortable } from '@dnd-kit/react/sortable'
 import {
   Columns2Icon,
@@ -23,6 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
+import { tabSensors } from '@renderer/components/tab-sensors'
 import { Button } from '@renderer/components/ui/button'
 import {
   ContextMenu,
@@ -70,23 +71,6 @@ import {
 import { toggleTerminal, useViewStore } from '@renderer/stores/view'
 import { OwnerBar, TakeoverNotice } from './terminal-owner'
 import { TerminalView } from './terminal-view'
-
-const pointerDefaults = PointerSensor.defaults.activationConstraints
-
-// Space picks a tab up; Enter stays the tab's own key for selecting it.
-const sensors = [
-  PointerSensor.configure({
-    // A mouse press on a handle starts a drag at once by default, which swallows the tab's clicks;
-    // the handle takes the constraints of a press anywhere else: 5 px of travel or a 200 ms hold.
-    activationConstraints: (event, source) =>
-      typeof pointerDefaults === 'function'
-        ? pointerDefaults(event, Object.create(source, { handle: { value: undefined } }))
-        : pointerDefaults,
-  }),
-  KeyboardSensor.configure({
-    keyboardCodes: { ...KeyboardSensor.defaults.keyboardCodes, start: ['Space'] },
-  }),
-]
 
 // The two sides of a split panel; alone, the left one fills it.
 const LEFT = 'terminal-left'
@@ -165,7 +149,7 @@ export function TerminalPanel({
         )}
       >
         {cornered && <CornerControlsSpace className="mr-1" />}
-        <DragDropProvider sensors={sensors} onDragEnd={dragEnded}>
+        <DragDropProvider sensors={tabSensors} onDragEnd={dragEnded}>
           <div
             role="tablist"
             aria-label={t('panel.tabs')}
