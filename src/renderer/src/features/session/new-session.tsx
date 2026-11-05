@@ -19,8 +19,9 @@ import { usePane } from '@renderer/features/split/pane-context'
 import { basename, limitLabel, longAgo, resetTime } from '@renderer/lib/format'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { isMod } from '@renderer/lib/platform'
-import { useNow } from '@renderer/lib/use-now'
+import { useClock, useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
+import { useAccountStore } from '@renderer/stores/account'
 import { optionsLoaded, optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
 import { agentName, agentsOn, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useGitStore } from '@renderer/stores/git'
@@ -117,13 +118,11 @@ export function NewSessionView({
         )}
         <span className="flex-1" />
       </TopBar>
-      <ColumnScroller className="flex flex-col px-8">
+      <ColumnScroller className="@container flex flex-col px-8">
         {/* Centred in the column. Auto margins fall away once the block is taller than the sheet,
             so a short window still scrolls from the top. */}
         <div className="mx-auto my-auto flex w-full max-w-175 flex-col py-8">
-          <h1 className="mb-7 animate-in text-center font-display text-[30px] leading-[1.2] font-bold tracking-[-0.02em] text-balance fade-in animation-duration-(--duration-slow)">
-            {t('newSession.heading')}
-          </h1>
+          <WelcomeHeading />
           <DraftComposer
             paneId={paneId}
             agentId={agentId}
@@ -139,6 +138,26 @@ export function NewSessionView({
       </ColumnScroller>
       <DropOverlay shown={drop.over} starting={false} agentName="" />
     </div>
+  )
+}
+
+function greetingPeriod(now: number): 'morning' | 'afternoon' | 'evening' {
+  const hour = new Date(now).getHours()
+  if (hour >= 5 && hour < 12) return 'morning'
+  if (hour >= 12 && hour < 18) return 'afternoon'
+  return 'evening'
+}
+
+function WelcomeHeading() {
+  const { t } = useTranslation('session')
+  const period = useClock(greetingPeriod)
+  const name = useAccountStore((s) =>
+    s.status?.state === 'signed-in' ? s.status.account.name?.trim() || null : null,
+  )
+  return (
+    <h1 className="mb-7 animate-in text-center font-greeting text-greeting font-normal text-balance wrap-anywhere fade-in animation-duration-(--duration-slow)">
+      {t(`newSession.${name ? 'greetingNamed' : 'greeting'}.${period}`, { name })}
+    </h1>
   )
 }
 
