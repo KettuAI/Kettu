@@ -168,7 +168,20 @@ export function QuestionCard({
           >
             {t('question.skip')}
           </Button>
-          {!last && (
+          {last ? (
+            <Button
+              size="sm"
+              data-card-action=""
+              data-answer-enter=""
+              disabled={busy}
+              onClick={() => void submit()}
+            >
+              {answering === 'submit' && <Spinner className="size-3.5" />}
+              {given > 0
+                ? t('question.submit')
+                : t(count > 1 ? 'question.skipAll' : 'question.skip')}
+            </Button>
+          ) : (
             <Button
               size="sm"
               data-card-action=""
@@ -179,17 +192,6 @@ export function QuestionCard({
               {t('question.next')}
             </Button>
           )}
-          <Button
-            variant={last ? 'default' : 'outline'}
-            size="sm"
-            data-card-action=""
-            data-answer-enter={last ? '' : undefined}
-            disabled={busy}
-            onClick={() => void submit()}
-          >
-            {answering === 'submit' && <Spinner className="size-3.5" />}
-            {given > 0 ? t('question.submit') : t(count > 1 ? 'question.skipAll' : 'question.skip')}
-          </Button>
         </div>
       </div>
     </WaitingCard>
@@ -215,6 +217,7 @@ function Choices({
   const { t } = useTranslation('session')
   const options = question.options
   const own = options.length
+  const written = text.trim() !== ''
   return (
     <div
       role={question.multiSelect ? 'group' : 'radiogroup'}
@@ -251,7 +254,7 @@ function Choices({
                 <OptionName name={option.label} />
               </span>
               {option.description && (
-                <span className="min-w-0 truncate text-hint text-tertiary">
+                <span className="min-w-0 text-hint text-tertiary wrap-anywhere">
                   {option.description}
                 </span>
               )}
@@ -262,13 +265,13 @@ function Choices({
       })}
       {question.allowsText && (
         <div
-          data-checked={text.trim() !== '' ? '' : undefined}
-          className={cn(ROW, 'cursor-text py-1')}
+          data-checked={written ? '' : undefined}
+          className={cn(ROW, 'cursor-text py-1 focus-within:bg-selected')}
         >
           {own < NUMBERED ? (
             <Kbd
               aria-hidden
-              variant={text.trim() !== '' ? 'primary' : 'default'}
+              variant={written ? 'primary' : 'default'}
               className="h-5 min-w-5 rounded-md text-key font-semibold"
             >
               {own + 1}
@@ -285,8 +288,9 @@ function Choices({
             aria-label={t('question.other')}
             data-answer-option={own < NUMBERED ? own + 1 : undefined}
             onChange={(event) => onText(event.target.value)}
-            className="-ml-2.5 h-7 flex-1 border-transparent bg-transparent shadow-none"
+            className="h-7 flex-1 rounded-none border-0 bg-transparent px-0 shadow-none focus-visible:shadow-none"
           />
+          {written && <CheckIcon aria-hidden className="size-3.5 shrink-0 text-secondary" />}
         </div>
       )}
     </div>
