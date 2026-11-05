@@ -10,7 +10,7 @@
 [![Release](https://img.shields.io/github/v/release/KettuAI/Kettu?include_prereleases&label=release&style=flat-square&labelColor=3f3f46&color=fa5615)](https://github.com/KettuAI/Kettu/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/KettuAI/Kettu/total?label=downloads&style=flat-square&labelColor=3f3f46&color=15803d)](https://github.com/KettuAI/Kettu/releases)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-2563eb?style=flat-square&labelColor=3f3f46)](https://github.com/KettuAI/Kettu/releases/latest)
-[![Agents](https://img.shields.io/badge/agents-46-0f766e?style=flat-square&labelColor=3f3f46)](#-agents)
+[![Agents](https://img.shields.io/badge/agents-46-0f766e?style=flat-square&labelColor=3f3f46)](#agents)
 [![License](https://img.shields.io/github/license/KettuAI/Kettu?style=flat-square&labelColor=3f3f46&color=71717a)](./LICENSE)
 
 <h3>Beauty is productivity.</h3>
@@ -29,62 +29,62 @@ All your coding agents, side by side in one window.
 > [!NOTE]
 > Kettu is an early preview that changes quickly. Please [report](https://github.com/KettuAI/Kettu/issues) what you find.
 
-## ✨ Features
+## Features
 
-### 💬 Agents and sessions
+### Agents and sessions
 
-- 🤖 **46 agents**: Claude Code, Codex, OpenCode, Pi and more, with your own installs, accounts and settings.
-- 🗂️ **Parallel sessions**: the sidebar shows which one is working, which one is waiting for you and which one is done.
-- ✅ **One-key approvals**: when an agent wants to run a command or change a file, allow or deny it with one key.
-- ❓ **Question cards**: answer an agent's questions one by one in a single card.
-- 📋 **Plans**: the agent's plan and progress sit in the top bar.
-- 🧩 **Subagents**: shown under their parent session, where you answer their requests too.
-- 📨 **Queue and steer**: while an agent works, queue your next message or steer it mid-turn.
-- 📎 **Attachments**: paste images, attach files and folders, or mention a project file with `@`.
-- 🌿 **Forks**: branch a new session off any reply.
-- 🔔 **Notifications**: know when a session needs you.
-- 📊 **Usage**: tokens and cost by day, model and project, and, where the agent reports it, how much of your plan is left.
+- **46 agents**: Claude Code, Codex, OpenCode, Pi and more, with your own installs, accounts and settings.
+- **Parallel sessions**: the sidebar shows which one is working, which one is waiting for you and which one is done.
+- **One-key approvals**: when an agent wants to run a command or change a file, allow or deny it with one key.
+- **Question cards**: answer an agent's questions one by one in a single card.
+- **Plans**: the agent's plan and progress sit in the top bar.
+- **Subagents**: shown under their parent session, where you answer their requests too.
+- **Queue and steer**: while an agent works, queue your next message or steer it mid-turn.
+- **Attachments**: paste images, attach files and folders, or mention a project file with `@`.
+- **Forks**: branch a new session off any reply.
+- **Notifications**: know when a session needs you.
+- **Usage**: tokens and cost by day, model and project, and, where the agent reports it, how much of your plan is left.
 
-### 🛠️ Workbench
+### Workbench
 
-- 📝 **Diffs**: see which files the agent changed and how.
-- 📁 **Files**: read, preview and edit project files in tabs.
-- 🖥️ **Terminal**: every session has its own.
-- 🔀 **Git**: the branch, changes and pull request checks.
-- 🌐 **Built-in browser**: agents open pages, click, type and take screenshots; take over at any time.
-- 🖼️ **Artifacts**: pages, documents and slides the agent makes; comment for the agent to change them, edit them yourself, or export them to Word and PowerPoint.
-- ⏰ **Routines**: run an agent on a schedule; every run is kept as a session.
-- 🔎 **Search**: one command palette for sessions, artifacts, routines, projects, settings and actions.
+- **Diffs**: see which files the agent changed and how.
+- **Files**: read, preview and edit project files in tabs.
+- **Terminal**: every session has its own.
+- **Git**: the branch, changes and pull request checks.
+- **Built-in browser**: agents open pages, click, type and take screenshots; take over at any time.
+- **Artifacts**: pages, documents and slides the agent makes; comment for the agent to change them, edit them yourself, or export them to Word and PowerPoint.
+- **Routines**: run an agent on a schedule; every run is kept as a session.
+- **Search**: one command palette for sessions, artifacts, routines, projects, settings and actions.
 
-### 📱 Other devices
+### Other devices
 
-- 📱 **Phone and tablet**: pair with a QR code and carry on in the browser, with no app to install.
-- 💻 **Another computer**: use this computer's sessions from Kettu on another one.
-- 🗄️ **Development machines**: add one by its SSH address.
-- 🔐 **End-to-end encrypted**: straight over your own network.
+- **Phone and tablet**: pair with a QR code and carry on in the browser, with no app to install.
+- **Another computer**: use this computer's sessions from Kettu on another one.
+- **Development machines**: add one by its SSH address.
+- **End-to-end encrypted**: straight over your own network.
 
-### 🎨 Looks
+### Looks
 
-- 🌗 Light and dark modes, themes, English and Simplified Chinese, the frosted macOS sidebar.
+- Light and dark modes, themes, English and Simplified Chinese, the frosted macOS sidebar.
 
-### 🚧 Coming soon
+### Coming soon
 
-- 🦾 **Computer use**: agents operate the apps on your computer.
-- 📲 **iOS Simulator and Android Emulator**: on screen in Kettu, for you and the agent to use.
+- **Computer use**: agents operate the apps on your computer.
+- **iOS Simulator and Android Emulator**: on screen in Kettu, for you and the agent to use.
 
-## 🔒 Privacy
+## Privacy
 
-- 🛡️ No telemetry. Your sessions, code and files stay on your own computers.
-- 🔑 Kettu keeps no copy of your agents' credentials.
-- 👤 A Kettu account is optional.
+- No telemetry. Your sessions, code and files stay on your own computers.
+- Kettu keeps no copy of your agents' credentials.
+- A Kettu account is optional.
 
-## 📦 Install
+## Install
 
 Download from [Releases](https://github.com/KettuAI/Kettu/releases/latest):
 
-- 🍎 **macOS** (Apple silicon): the `.dmg`
-- 🪟 **Windows**: the `setup.exe`. It is not signed yet, so when SmartScreen appears, choose **More info**, then **Run anyway**.
-- 🐧 **Linux**: the `.AppImage`; make it executable and run it. It needs FUSE 2 (`libfuse2`, or `libfuse2t64` on Ubuntu 24.04 and later).
+- **macOS** (Apple silicon): the `.dmg`
+- **Windows**: the `setup.exe`. It is not signed yet, so when SmartScreen appears, choose **More info**, then **Run anyway**.
+- **Linux**: the `.AppImage`; make it executable and run it. It needs FUSE 2 (`libfuse2`, or `libfuse2t64` on Ubuntu 24.04 and later).
 
 On a server or development machine ([docs](https://www.kettu.sh/docs/devices/daemon/)):
 
@@ -92,7 +92,7 @@ On a server or development machine ([docs](https://www.kettu.sh/docs/devices/dae
 curl -fsSL https://kettu.sh/install | sh
 ```
 
-## 🤖 Agents
+## Agents
 
 <details>
 <summary><b>All 46 agents</b></summary>
@@ -116,10 +116,10 @@ curl -fsSL https://kettu.sh/install | sh
 
 Missing an agent you use? [Tell us](https://github.com/KettuAI/Kettu/issues/new/choose).
 
-## 💬 Feedback
+## Feedback
 
 Open an [issue](https://github.com/KettuAI/Kettu/issues/new/choose) in any language. Security problems go through [SECURITY.md](./SECURITY.md). To build Kettu yourself, see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-## 📄 License
+## License
 
 [Apache-2.0](./LICENSE)
