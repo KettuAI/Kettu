@@ -115,7 +115,7 @@ function Chip({ items, tone }: { items: PlanItem[]; tone: Tone }) {
         alignOffset={0}
         // Clears the top bar's edge by 6px.
         sideOffset={17}
-        className="w-80 p-1.5"
+        className="w-max max-w-80 min-w-48 p-1.5"
       >
         <div className="flex h-7 items-center justify-between px-2 text-small font-semibold text-tertiary">
           <span>{t('planChip.title')}</span>
