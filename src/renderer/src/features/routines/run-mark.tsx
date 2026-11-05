@@ -2,6 +2,7 @@
 
 import { CircleAlertIcon, CircleCheckIcon, CircleSlashIcon } from 'lucide-react'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { TurnDots } from '@renderer/features/session/turn-dots'
 import { cn } from '@renderer/lib/utils'
 import type { RunStatus } from '@shared/routines'
 
@@ -31,11 +32,12 @@ export function RunMark({ status, className }: { status: RunStatus; className?: 
       return (
         <span
           aria-hidden
-          className={cn('size-2 shrink-0 rounded-full bg-attention-dot', className)}
+          className={cn('size-1.75 shrink-0 rounded-full bg-attention-dot', className)}
         />
       )
     case 'running':
-      return <Spinner aria-hidden className={cn('size-3 shrink-0 text-info', className)} />
+      // A turn's dot matrix, as the session's own status line shows its agent at work.
+      return <TurnDots phase="working" className={className} />
     case 'starting':
       // The app's own wait before the agent works, so it keeps a neutral spinner.
       return <Spinner aria-hidden className={cn('size-3 shrink-0 text-secondary', className)} />

@@ -1,46 +1,48 @@
-// The actions a routine offers, in its row's context menu and in its page's More menu.
+// The actions a routine offers, in its row's context menu and More menu, and in its page's.
 
-import { CopyIcon, PlayIcon, TrashIcon } from 'lucide-react'
+import { ArrowUpRightIcon, PlayIcon, PowerIcon, TrashIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { RoutineView } from '@shared/routines'
 import { DropdownMenuItem, DropdownMenuSeparator } from '@renderer/components/ui/dropdown-menu'
-import { errorMessage } from '@renderer/lib/host'
-import { duplicateRoutine } from './actions'
 
 export function RoutineMenuItems({
   routine,
+  onOpen,
   onRunNow,
+  onToggle,
   onDelete,
-  onError,
 }: {
   routine: RoutineView
-  /** Absent on the routine's page, which has Run now as its own button. */
+  /** The list's; the routine's page is already open. */
+  onOpen?: () => void
+  /** The list's; the page has Run now and its switch as buttons of their own. */
   onRunNow?: () => void
+  onToggle?: (enabled: boolean) => void
   onDelete: () => void
-  onError?: (message: string) => void
 }) {
   const { t } = useTranslation('routines')
-  const duplicate = () => {
-    duplicateRoutine(routine).catch((error: unknown) => {
-      const message = errorMessage(error)
-      if (onError) onError(message)
-      else console.warn(`Could not duplicate the routine: ${message}`)
-    })
-  }
-
+  const actions = !!(onOpen || onRunNow || onToggle)
   return (
     <>
+      {onOpen && (
+        <DropdownMenuItem onClick={onOpen}>
+          <ArrowUpRightIcon />
+          {t('menu.open')}
+        </DropdownMenuItem>
+      )}
       {onRunNow && (
         <DropdownMenuItem disabled={!!routine.activeRun} onClick={onRunNow}>
           <PlayIcon />
           {t('routine.runNow')}
         </DropdownMenuItem>
       )}
-      <DropdownMenuItem onClick={duplicate}>
-        <CopyIcon />
-        {t('routine.duplicate')}
-      </DropdownMenuItem>
-      <DropdownMenuSeparator />
+      {onToggle && (
+        <DropdownMenuItem onClick={() => onToggle(!routine.enabled)}>
+          <PowerIcon />
+          {t(routine.enabled ? 'menu.turnOff' : 'menu.turnOn')}
+        </DropdownMenuItem>
+      )}
+      {actions && <DropdownMenuSeparator />}
       <DropdownMenuItem variant="destructive" onClick={onDelete}>
         <TrashIcon />
         {t('routine.delete')}

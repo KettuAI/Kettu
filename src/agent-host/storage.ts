@@ -16,6 +16,8 @@ import {
   isRunTrigger,
   isSchedule,
   isTimeLimit,
+  isKeptRunSessions,
+  DEFAULT_KEPT_RUN_SESSIONS,
   ROUTINE_ID,
   ROUTINE_NAME_CHARS,
   ROUTINE_OPTION_CHARS,
@@ -328,6 +330,8 @@ function routineOf(value: unknown): Routine | null {
   const name = value.name
   const prompt = value.prompt
   const agentId = value.agentId
+  const keptRunSessions =
+    value.keptRunSessions === undefined ? DEFAULT_KEPT_RUN_SESSIONS : value.keptRunSessions
   if (
     typeof id !== 'string' ||
     !ROUTINE_ID.test(id) ||
@@ -345,6 +349,7 @@ function routineOf(value: unknown): Routine | null {
     !isSchedule(value.trigger.schedule) ||
     !isPermissionScope(value.scope) ||
     !isTimeLimit(value.timeLimitMinutes) ||
+    !isKeptRunSessions(keptRunSessions) ||
     typeof value.enabled !== 'boolean' ||
     !isTime(value.createdAt) ||
     !isTime(value.updatedAt) ||
@@ -378,6 +383,7 @@ function routineOf(value: unknown): Routine | null {
     trigger: { kind: 'schedule', schedule: value.trigger.schedule },
     scope: value.scope,
     timeLimitMinutes: value.timeLimitMinutes,
+    keptRunSessions,
     enabled: value.enabled,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,

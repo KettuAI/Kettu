@@ -43,6 +43,7 @@ export interface Routine {
   trigger: { kind: 'schedule'; schedule: Schedule }
   scope: PermissionScope
   timeLimitMinutes: TimeLimitMinutes
+  keptRunSessions: KeptRunSessions // the latest runs whose sessions it keeps
   enabled: boolean
   createdAt: number
   updatedAt: number
@@ -51,6 +52,10 @@ export interface Routine {
 
 export const TIME_LIMITS = [15, 30, 60, 120, 240] as const
 export type TimeLimitMinutes = (typeof TIME_LIMITS)[number]
+
+/** How many of a routine's latest runs keep their sessions, as the user may choose. */
+export const KEPT_RUN_SESSIONS = [10, 25, 50, 100, 200] as const
+export type KeptRunSessions = (typeof KEPT_RUN_SESSIONS)[number]
 
 export const PROMPT_CHARS = 100_000
 export const ROUTINE_NAME_CHARS = 120
@@ -123,9 +128,6 @@ export interface RoutineRun {
 /** How many runs of one routine the history reads at a time. */
 export const RUNS_PAGE = 50
 
-/** The sessions of each routine's latest runs that are kept. */
-export const KEPT_RUN_SESSIONS = 100
-
 /** How many runs work at once across all routines. */
 export const WORKING_RUNS = 2
 
@@ -145,6 +147,7 @@ export interface RoutineView extends Routine {
   activeRun: RoutineRun | null
   lastRun: RoutineRun | null
   unseen: { failed: number; ended: number } // runs not seen since they ended
+  runs: number // every run on record, for the runs' count
   sessions: number // runs that still have a session, for the delete confirmation
 }
 
@@ -169,6 +172,9 @@ export const DEFAULT_SCHEDULE: Schedule = { kind: 'weekly', days: [1, 2, 3, 4, 5
 export const DEFAULT_SCOPE: PermissionScope = { level: 'read', web: false }
 
 export const DEFAULT_TIME_LIMIT: TimeLimitMinutes = 60
+
+/** Also what a routine saved before the setting existed keeps. */
+export const DEFAULT_KEPT_RUN_SESSIONS: KeptRunSessions = 100
 
 /** Whether a schedule has the fields its kind needs, within the ranges the form allows. */
 export function isSchedule(value: unknown): value is Schedule {
@@ -218,6 +224,10 @@ export function isPermissionScope(value: unknown): value is PermissionScope {
 
 export function isTimeLimit(value: unknown): value is TimeLimitMinutes {
   return (TIME_LIMITS as readonly unknown[]).includes(value)
+}
+
+export function isKeptRunSessions(value: unknown): value is KeptRunSessions {
+  return (KEPT_RUN_SESSIONS as readonly unknown[]).includes(value)
 }
 
 export function isRunStatus(value: unknown): value is RunStatus {

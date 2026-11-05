@@ -488,6 +488,7 @@ function prepareAll(db: DatabaseSync) {
     activeRuns: sql(
       "SELECT json FROM routine_runs WHERE status IN ('queued', 'starting', 'running', 'waiting') ORDER BY routine_id, seq",
     ),
+    runCount: sql('SELECT COUNT(*) AS n FROM routine_runs WHERE routine_id = ?'),
     sessionCount: sql(
       'SELECT COUNT(*) AS n FROM routine_runs WHERE routine_id = ? AND session_id IS NOT NULL',
     ),
@@ -1417,6 +1418,7 @@ export class ThreadDb {
       const last = sql.lastRun.get(routineId) as { json: string } | undefined
       const active = sql.activeRun.get(routineId) as { json: string } | undefined
       return {
+        runs: count(sql.runCount.get(routineId)),
         sessions: count(sql.sessionCount.get(routineId)),
         unseenFailed: count(sql.unseenFailed.get(routineId)),
         unseenEnded: count(sql.unseenEnded.get(routineId)),

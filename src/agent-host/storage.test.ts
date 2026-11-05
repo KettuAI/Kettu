@@ -11,6 +11,7 @@ import {
   parseAgentsFile,
   parseAgentUpdatesFile,
   parseProjectsFile,
+  parseRoutinesFile,
   parseSessionsFile,
   projectsFile,
   routinesFile,
@@ -267,6 +268,7 @@ describe('the host files', () => {
       },
       scope: { level: 'read' as const, web: false },
       timeLimitMinutes: 60 as const,
+      keptRunSessions: 50 as const,
       enabled: true,
       createdAt: 1,
       updatedAt: 2,
@@ -277,6 +279,18 @@ describe('the host files', () => {
     store.save({ version: 1, routines: [routine] })
     await store.flush()
     expect(await routinesFile(dir, log).load()).toEqual({ version: 1, routines: [routine] })
+
+    // A routine saved before the setting existed keeps the sessions of its latest 100 runs.
+    const older = Object.fromEntries(
+      Object.entries(routine).filter(([key]) => key !== 'keptRunSessions'),
+    )
+    expect(parseRoutinesFile({ routines: [older] })).toEqual({
+      version: 1,
+      routines: [{ ...routine, keptRunSessions: 100 }],
+    })
+    expect(parseRoutinesFile({ routines: [{ ...routine, keptRunSessions: 30 }] })).toBe(
+      'routine 0 is malformed',
+    )
   })
 
   it('validates projects', async () => {

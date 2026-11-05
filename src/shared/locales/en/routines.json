@@ -17,12 +17,49 @@
       "routine": "Routine",
       "schedule": "Schedule",
       "agent": "Agent",
-      "lastRun": "Last run"
+      "status": "Status"
     },
     "footnote": "Routines only run while Kettu is open. A routine pauses when its agent is within 10% of a plan limit."
   },
+  "examples": {
+    "heading": "Start from an example",
+    "hint": "Opens New routine with these filled in. Nothing runs until you create it.",
+    "use": "Use",
+    "open": "Start from {{name}}",
+    "triage": {
+      "name": "Morning triage",
+      "prompt": "Summarize the issues and pull requests opened or updated since the last run, and flag anything urgent."
+    },
+    "tests": {
+      "name": "Nightly test sweep",
+      "prompt": "Run the full test suite and explain each failure with its likely cause."
+    },
+    "dependencies": {
+      "name": "Dependency audit",
+      "prompt": "Check the dependencies for updates and known vulnerabilities, and say which ones matter."
+    },
+    "changelog": {
+      "name": "Changelog draft",
+      "prompt": "Draft release notes from the pull requests merged this week, grouped by area."
+    },
+    "links": {
+      "name": "Docs link check",
+      "prompt": "Find broken links in the docs and list the pages they are on."
+    },
+    "review": {
+      "name": "Weekly review",
+      "prompt": "Summarize what changed in the project this week and what is still open."
+    },
+    "web": "{{level}} · web"
+  },
+  "menu": {
+    "open": "Open",
+    "turnOff": "Turn off",
+    "turnOn": "Turn on"
+  },
   "row": {
     "waitingSince": "Waiting since {{time}}",
+    "running": "Running · {{duration}}",
     "pausedNear": "Paused · near plan limit",
     "pausedReached": "Paused · plan limit reached",
     "failed": "Failed {{ago}}",
@@ -32,9 +69,7 @@
     "interruptedAt": "Interrupted · {{when}}",
     "skipped": "Skipped",
     "skippedAt": "Skipped · {{when}}",
-    "next": "Next run {{when}}",
-    "nextToday": "Next run today, {{time}}",
-    "nextTomorrow": "Next run tomorrow, {{time}}",
+    "nextAt": "{{when}} · {{away}}",
     "never": "Never run"
   },
   "signal": {
@@ -113,21 +148,18 @@
     "clockGap": "The clocks skip this time; it runs at {{time}}.",
     "clockOverlap": "The clocks repeat this time; it runs once, at the first.",
     "ranOnce": "It ran on {{date}} at {{time}}, and will not run again.",
+    "nextRuns": "Next three runs",
+    "onceOff": "Turns itself off after it runs",
+    "previewToday": "Today · {{time}}",
+    "previewAt": "{{date}} · {{time}}",
     "everyValue": "Every",
-    "countedFrom": "counted from",
+    "countedFrom": "Counted from",
     "date": "Date",
     "time": "Time",
     "days": "Days",
     "on": "On",
     "expression": "Cron expression",
     "expressionHint": "0 9 * * 1-5",
-    "cronFields": {
-      "minute": "minute",
-      "hour": "hour",
-      "dayOfMonth": "day of month",
-      "month": "month",
-      "dayOfWeek": "day of week"
-    },
     "cronSyntax": "* any · a-b range · a,b list · */n every n · names like MON or JAN",
     "field": {
       "date": "Date",
@@ -162,10 +194,8 @@
     "cancel": "Cancel",
     "runNow": "Run now",
     "more": "More",
-    "duplicate": "Duplicate",
     "delete": "Delete…",
     "task": "Task",
-    "howItRuns": "How it runs",
     "prompt": "Prompt",
     "promptDescription": "Sent as written each time the routine runs.",
     "promptPlaceholder": "What should the agent do each time?",
@@ -175,11 +205,19 @@
     "agent": "Agent and model",
     "agentDescription": "The agent its runs start, with the model and options they use.",
     "permissions": "Permissions",
-    "permissionsDescription": "What its runs may do without asking. Anything else pauses the run.",
+    "permissionsHint": "What its runs may do without asking",
     "timeLimit": "Time limit",
     "timeLimitDescription": "A run stops when it reaches this time, not counting the time it waits for you.",
+    "limits": "Limits",
+    "keptRuns": "Run sessions kept",
+    "keptRunsDescription": "Older run sessions are removed; their results stay in Runs.",
+    "keptRunsOption": "Last {{count}} runs",
+    "keptConfirmTitle": "Keep only the last {{count}} run sessions?",
+    "keptConfirm_one": "{{count}} older run session is removed. Its result stays in Runs.",
+    "keptConfirm_other": "{{count}} older run sessions are removed. Their results stay in Runs.",
+    "keptConfirmAction": "Remove sessions",
     "schedule": "Schedule",
-    "scheduleDescription": "When its runs start, in your local time.",
+    "scheduleHint": "In your local time",
     "scheduleNotSaved": "This schedule is not saved yet; fix it to save it.",
     "createMissingSchedule": "Fix the schedule first.",
     "waitingTitle": "A run is waiting for your approval",
@@ -187,10 +225,11 @@
     "openRun": "Open the run",
     "openRunFailed": "The run's session could not be opened. Try again in a moment.",
     "runs": "Runs",
-    "noRuns": "No runs yet.",
+    "next": "Next",
+    "runsShown": "{{shown}} of {{total}}",
+    "noRunsTitle": "No runs yet",
     "showMore": "Show more",
     "runsFailed": "The runs could not be loaded.",
-    "copyName": "{{name}} copy",
     "createMissingPrompt": "Write the prompt first.",
     "createMissingProject": "Choose a project first.",
     "createMissingAgent": "Choose an agent first.",
@@ -209,7 +248,9 @@
     "now": "Run now tries it.",
     "today": "Run now tries it, or wait for today, {{time}}.",
     "tomorrow": "Run now tries it, or wait for tomorrow, {{time}}.",
-    "later": "Run now tries it, or wait for {{when}}."
+    "later": "Run now tries it, or wait for {{when}}.",
+    "new": "Once it is created, Run now tries it.",
+    "newAt": "Once it is created, Run now tries it, or wait for its first run: {{when}}."
   },
   "permission": {
     "levels": "Permissions",
@@ -261,6 +302,7 @@
     "interrupted": "Interrupted",
     "skippedOverlap": "Skipped: the last run was still working.",
     "skippedLimit": "Skipped: near the plan limit.",
+    "skippedTimes": "Skipped ×{{count}}",
     "duration": "Worked for {{duration}}",
     "working": "Working for {{duration}}",
     "waitingFor": "Waiting {{duration}}",

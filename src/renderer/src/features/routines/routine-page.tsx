@@ -9,22 +9,25 @@ import {
   type RefObject,
 } from 'react'
 import {
-  ArrowLeftIcon,
   CalendarClockIcon,
-  ChartPieIcon,
+  ChevronLeftIcon,
   CircleAlertIcon,
   EllipsisIcon,
+  PauseIcon,
   PlayIcon,
   TriangleAlertIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Project } from '@shared/agent-host'
 import {
+  DEFAULT_KEPT_RUN_SESSIONS,
   DEFAULT_SCHEDULE,
   DEFAULT_SCOPE,
   DEFAULT_TIME_LIMIT,
+  KEPT_RUN_SESSIONS,
   ROUTINE_NAME_CHARS,
   TIME_LIMITS,
+  type KeptRunSessions,
   type PermissionScope,
   type RoutineChanges,
   type RoutineOption,
@@ -37,6 +40,16 @@ import type { AgentId } from '@shared/thread'
 import { backTo } from '@renderer/app/history'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
 import {
   DropdownMenu,
@@ -51,7 +64,7 @@ import { isEditable } from '@renderer/features/artifacts/keys'
 import { AgentMenu } from '@renderer/features/session/new-session/agent-menu'
 import { ProjectMenu } from '@renderer/features/session/new-session/project-menu'
 import { canStart, startValues } from '@renderer/features/session/new-session/start-options'
-import { TopBar } from '@renderer/features/shell/top-bar'
+import { TurnDots } from '@renderer/features/session/turn-dots'
 import { basename } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
@@ -65,8 +78,18 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { openRoutine, openRoutines, useViewStore } from '@renderer/stores/view'
 import { openActiveRun } from './actions'
 import { DeleteRoutineDialog } from './delete-routine-dialog'
-import { FieldFrame, FieldRow, FieldSelect, RoutineSection } from './fields'
+import { routineExample, type RoutineExampleId } from './examples'
 import {
+  FieldBlock,
+  FieldFrame,
+  FieldRow,
+  FieldSelect,
+  PAGE_COLUMN,
+  PageStrip,
+  RoutineSection,
+} from './fields'
+import {
+  firstRunHint,
   minutesLabel,
   optionValues,
   pauseNotice,
@@ -76,11 +99,22 @@ import {
 } from './model'
 import { PermissionField } from './permission-field'
 import { RoutineMenuItems } from './routine-menu'
-import { RunAnnouncements, RunHistory } from './run-history'
+import { RunAnnouncements, RunHistory, RunsCard, RunsEmpty } from './run-history'
 import { ScheduleField } from './schedule-field'
 
-export default function RoutinePage({ routineId }: { routineId: string | null }) {
-  return routineId === null ? <NewRoutine /> : <ExistingRoutine routineId={routineId} />
+export default function RoutinePage({
+  routineId,
+  example,
+}: {
+  routineId: string | null
+  /** New routine's example to start from, when it opened from one. */
+  example: RoutineExampleId | null
+}) {
+  return routineId === null ? (
+    <NewRoutine example={example} />
+  ) : (
+    <ExistingRoutine routineId={routineId} />
+  )
 }
 
 function ExistingRoutine({ routineId }: { routineId: string }) {
@@ -109,7 +143,7 @@ function ExistingRoutine({ routineId }: { routineId: string }) {
     return (
       <RoutineShell>
         {loaded ? (
-          <div className="flex flex-col items-start gap-3">
+          <div className="mt-3 flex flex-col items-start gap-3">
             <p className="text-small text-secondary">
               {loadError ? t('page.loadFailed') : t('routine.deleted')}
             </p>
@@ -119,14 +153,17 @@ function ExistingRoutine({ routineId }: { routineId: string }) {
           </div>
         ) : (
           <div aria-hidden>
-            <div className="flex items-center gap-3">
-              <Skeleton className="size-11 rounded-xl" />
+            <div className="mt-3 mb-6 flex items-center gap-3.5">
+              <Skeleton className="size-11 rounded-card" />
               <div className="flex flex-col gap-2">
                 <Skeleton className="h-5 w-56" />
                 <Skeleton className="h-3 w-40" />
               </div>
             </div>
-            <Skeleton className="mt-9 h-24 w-full rounded-xl" />
+            <RoutineColumns
+              settings={<Skeleton className="h-64 w-full rounded-card" />}
+              runs={<Skeleton className="h-40 w-full rounded-card" />}
+            />
           </div>
         )}
       </RoutineShell>
@@ -143,6 +180,8 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(routine.name)
   const [prompt, setPrompt] = useState(routine.prompt)
+  // A lower number of kept run sessions that would remove some, until it is confirmed.
+  const [trimming, setTrimming] = useState<KeptRunSessions | null>(null)
   const nameField = useRef<HTMLInputElement>(null)
   const nameButton = useRef<HTMLButtonElement>(null)
   const nameCancelled = useRef(false)
@@ -205,6 +244,11 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
       })
   }
 
+  const saveKept = (keptRunSessions: KeptRunSessions) => {
+    if (keptRunSessions < routine.sessions) setTrimming(keptRunSessions)
+    else save({ keptRunSessions })
+  }
+
   const runNow = () => {
     setError(null)
     useRoutinesStore
@@ -224,12 +268,16 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
   const notices: ReactNode[] = []
   if (state.kind === 'waiting') {
     notices.push(
-      <Alert key="waiting" variant="warning" className="has-data-[slot=alert-action]:pr-32">
+      <Alert
+        key="waiting"
+        variant="warning"
+        className="bg-control-on-tint shadow-[inset_0_0_0_var(--hairline)_color-mix(in_srgb,var(--control-on)_22%,transparent)] has-data-[slot=alert-action]:pr-32 *:[svg]:text-attention"
+      >
         <TriangleAlertIcon />
         <AlertTitle>{t('routine.waitingTitle')}</AlertTitle>
         <AlertDescription>{t('routine.waitingDescription')}</AlertDescription>
         {routine.activeRun?.sessionId && (
-          <AlertAction className="top-1/2 right-3.5 -translate-y-1/2">
+          <AlertAction className="top-1/2 right-3 -translate-y-1/2">
             <Button variant="outline" size="sm" onClick={openRun}>
               {t('routine.openRun')}
             </Button>
@@ -240,8 +288,8 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
   }
   if (state.kind === 'paused' && state.pause) {
     notices.push(
-      <Alert key="paused" variant="info">
-        <ChartPieIcon />
+      <Alert key="paused" variant="warning" className="bg-warning-tint">
+        <PauseIcon />
         <AlertTitle>{t('pause.title', { agent: agentName(state.pause.agentId) })}</AlertTitle>
         <AlertDescription>{pauseNotice(state.pause, now)}</AlertDescription>
       </Alert>,
@@ -256,74 +304,86 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
     )
   }
 
+  const title = renaming ? (
+    <NameField
+      ref={nameField}
+      value={name}
+      onChange={(event) => setName(event.target.value)}
+      onBlur={saveName}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          refocusName.current = true
+          saveName()
+        } else if (event.key === 'Escape') {
+          event.preventDefault()
+          nameCancelled.current = true
+          refocusName.current = true
+          setRenaming(false)
+          setName(routine.name)
+        }
+      }}
+    />
+  ) : (
+    <h1 className="flex font-display text-title font-bold">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              ref={nameButton}
+              type="button"
+              onClick={() => setRenaming(true)}
+              className="-mx-1.25 min-w-0 truncate rounded-md px-1.25 text-left transition-colors duration-(--duration-fast) outline-none focus-ring hover:bg-hover"
+            />
+          }
+        >
+          {routine.name}
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="start">
+          {t('routine.rename')}
+        </TooltipContent>
+      </Tooltip>
+    </h1>
+  )
+
   return (
     <RoutineShell>
       <RunAnnouncements />
-      <header className="mb-5.5 flex items-center gap-3">
-        <RoutineTile agent={routine.agentId} />
-        <div className="min-w-0 flex-1">
-          {renaming ? (
-            <NameField
-              ref={nameField}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              onBlur={saveName}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  refocusName.current = true
-                  saveName()
-                } else if (event.key === 'Escape') {
-                  event.preventDefault()
-                  nameCancelled.current = true
-                  refocusName.current = true
-                  setRenaming(false)
-                  setName(routine.name)
-                }
-              }}
-            />
-          ) : (
-            <h1 className="flex font-display text-title font-bold">
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      ref={nameButton}
-                      type="button"
-                      onClick={() => setRenaming(true)}
-                      className="-mx-1.25 min-w-0 truncate rounded-md px-1.25 text-left transition-colors duration-(--duration-fast) outline-none focus-ring hover:bg-hover"
-                    />
-                  }
-                >
-                  {routine.name}
-                </TooltipTrigger>
-                <TooltipContent side="bottom" align="start">
-                  {t('routine.rename')}
-                </TooltipContent>
-              </Tooltip>
-            </h1>
-          )}
+      <RoutineHeader
+        agent={routine.agentId}
+        title={title}
+        state={
           <p
             className={cn(
-              'mt-0.5 text-small text-tertiary',
+              'flex min-w-0 items-center gap-1.75',
               state.kind === 'waiting' && 'text-attention',
-              state.kind === 'running' && state.status === 'running' && 'text-info',
             )}
           >
-            {stateText(routine, now)}
+            {state.kind === 'waiting' && (
+              <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-attention-dot" />
+            )}
+            {state.kind === 'running' && state.status === 'running' && <TurnDots phase="working" />}
+            <span className="truncate">{stateText(routine, now)}</span>
           </p>
-        </div>
+        }
+      >
         <Button variant="outline" size="sm" disabled={!!routine.activeRun} onClick={runNow}>
           <PlayIcon data-icon="inline-start" />
           {t('routine.runNow')}
         </Button>
-        <Switch
-          checked={routine.enabled}
-          onCheckedChange={(enabled) => save({ enabled })}
-          aria-label={t(routine.enabled ? 'page.switchOff' : 'page.switchOn', {
-            name: routine.name,
-          })}
-        />
+        <span aria-hidden className="mx-1 h-5 w-px bg-border-default" />
+        <label className="flex items-center gap-2 px-1 text-control text-secondary">
+          <Switch
+            checked={routine.enabled}
+            onCheckedChange={(enabled) => save({ enabled })}
+            aria-label={t(routine.enabled ? 'page.switchOff' : 'page.switchOn', {
+              name: routine.name,
+            })}
+          />
+          <span aria-hidden className="min-w-6">
+            {t(routine.enabled ? 'state.on' : 'state.off')}
+          </span>
+        </label>
         <DropdownMenu>
           <Tooltip>
             <TooltipTrigger
@@ -338,64 +398,66 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
             <TooltipContent>{t('routine.more')}</TooltipContent>
           </Tooltip>
           <DropdownMenuContent align="end">
-            <RoutineMenuItems
-              routine={routine}
-              onDelete={() => setDeleting(true)}
-              onError={setError}
-            />
+            <RoutineMenuItems routine={routine} onDelete={() => setDeleting(true)} />
           </DropdownMenuContent>
         </DropdownMenu>
-      </header>
+      </RoutineHeader>
 
-      {notices.length > 0 && <div className="flex flex-col gap-2">{notices}</div>}
+      {notices.length > 0 && <div className="mb-6 flex flex-col gap-2">{notices}</div>}
 
-      <RoutineFields
-        prompt={prompt}
-        onPrompt={setPrompt}
-        onPromptBlur={savePrompt}
-        projectPath={routine.projectPath}
-        noProject={routine.projectPath === null}
-        onProject={(projectPath) => save({ projectPath })}
-        onProjectError={setError}
-        agentId={routine.agentId}
-        values={optionValues(routine.options)}
-        onChoose={(agentId, model) => {
-          const entry = useAgentOptionsStore.getState().byId[agentId]
-          const seed =
-            agentId === routine.agentId
-              ? optionValues(routine.options)
-              : { ...(useAgentOptionsStore.getState().picks[agentId] ?? {}) }
-          const modelOption = entry?.config.find((option) => option.category === 'model')
-          const next = { ...seed }
-          if (modelOption) {
-            if (model === null) delete next[modelOption.id]
-            else next[modelOption.id] = model
-          }
-          save({
-            agentId,
-            options: entry ? routineOptions(entry, next) : optionsFrom(next),
-          })
-        }}
-        onValues={(optionId, value) => {
-          const entry = useAgentOptionsStore.getState().byId[routine.agentId]
-          if (!entry) return
-          save({
-            options: routineOptions(entry, {
-              ...optionValues(routine.options),
-              [optionId]: value,
-            }),
-          })
-        }}
-        timeLimit={routine.timeLimitMinutes}
-        onTimeLimit={(timeLimitMinutes) => save({ timeLimitMinutes })}
-        scope={routine.scope}
-        onScope={(scope) => save({ scope })}
-        schedule={routine.trigger.schedule}
-        savedSchedule={routine.trigger.schedule}
-        done={routine.state === 'done'}
-        onSchedule={(schedule) => save({ trigger: { kind: 'schedule', schedule } })}
+      <RoutineColumns
+        settings={
+          <RoutineFields
+            prompt={prompt}
+            onPrompt={setPrompt}
+            onPromptBlur={savePrompt}
+            projectPath={routine.projectPath}
+            noProject={routine.projectPath === null}
+            onProject={(projectPath) => save({ projectPath })}
+            onProjectError={setError}
+            agentId={routine.agentId}
+            values={optionValues(routine.options)}
+            onChoose={(agentId, model) => {
+              const entry = useAgentOptionsStore.getState().byId[agentId]
+              const seed =
+                agentId === routine.agentId
+                  ? optionValues(routine.options)
+                  : { ...(useAgentOptionsStore.getState().picks[agentId] ?? {}) }
+              const modelOption = entry?.config.find((option) => option.category === 'model')
+              const next = { ...seed }
+              if (modelOption) {
+                if (model === null) delete next[modelOption.id]
+                else next[modelOption.id] = model
+              }
+              save({
+                agentId,
+                options: entry ? routineOptions(entry, next) : optionsFrom(next),
+              })
+            }}
+            onValues={(optionId, value) => {
+              const entry = useAgentOptionsStore.getState().byId[routine.agentId]
+              if (!entry) return
+              save({
+                options: routineOptions(entry, {
+                  ...optionValues(routine.options),
+                  [optionId]: value,
+                }),
+              })
+            }}
+            timeLimit={routine.timeLimitMinutes}
+            onTimeLimit={(timeLimitMinutes) => save({ timeLimitMinutes })}
+            kept={routine.keptRunSessions}
+            onKept={saveKept}
+            scope={routine.scope}
+            onScope={(scope) => save({ scope })}
+            schedule={routine.trigger.schedule}
+            savedSchedule={routine.trigger.schedule}
+            done={routine.state === 'done'}
+            onSchedule={(schedule) => save({ trigger: { kind: 'schedule', schedule } })}
+          />
+        }
+        runs={<RunHistory routine={routine} />}
       />
-      <RunHistory routine={routine} />
 
       {deleting && (
         <DeleteRoutineDialog
@@ -407,16 +469,48 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
           onDeleted={openRoutines}
         />
       )}
+      <AlertDialog
+        open={trimming !== null}
+        onOpenChange={(open) => {
+          if (!open) setTrimming(null)
+        }}
+      >
+        {trimming !== null && (
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {t('routine.keptConfirmTitle', { count: trimming })}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {t('routine.keptConfirm', { count: routine.sessions - trimming })}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t('routine.cancel')}</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={() => {
+                  save({ keptRunSessions: trimming })
+                  setTrimming(null)
+                }}
+              >
+                {t('routine.keptConfirmAction')}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        )}
+      </AlertDialog>
     </RoutineShell>
   )
 }
 
-function NewRoutine() {
+function NewRoutine({ example }: { example: RoutineExampleId | null }) {
   const { t } = useTranslation('routines')
   const projects = useProjectsStore((s) => s.projects)
   const defaultAgent = useSettingsStore((s) => s.settings.general.defaultAgent)
-  const [name, setName] = useState('')
-  const [prompt, setPrompt] = useState('')
+  const [seed] = useState(() => (example ? routineExample(example) : null))
+  const [name, setName] = useState(seed?.name ?? '')
+  const [prompt, setPrompt] = useState(seed?.prompt ?? '')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const promptField = useRef<HTMLTextAreaElement>(null)
@@ -438,13 +532,18 @@ function NewRoutine() {
   })
   const [values, setValues] = useState<OptionValues>(() => initialValues(agentId))
   const [timeLimit, setTimeLimit] = useState<TimeLimitMinutes>(DEFAULT_TIME_LIMIT)
-  const [scope, setScope] = useState<PermissionScope>(DEFAULT_SCOPE)
-  const [schedule, setSchedule] = useState<Schedule>(DEFAULT_SCHEDULE)
+  const [kept, setKept] = useState<KeptRunSessions>(DEFAULT_KEPT_RUN_SESSIONS)
+  const [scope, setScope] = useState<PermissionScope>(seed?.scope ?? DEFAULT_SCOPE)
+  const [schedule, setSchedule] = useState<Schedule>(seed?.schedule ?? DEFAULT_SCHEDULE)
   const [scheduleProblem, setScheduleProblem] = useState<ScheduleProblem | null>(null)
+  const now = useNow()
 
   useBackOnEscape()
   useEffect(() => {
-    promptField.current?.focus()
+    const field = promptField.current
+    if (!field) return
+    field.focus()
+    field.setSelectionRange(field.value.length, field.value.length)
   }, [])
 
   const missing = !prompt.trim()
@@ -472,6 +571,7 @@ function NewRoutine() {
         trigger: { kind: 'schedule', schedule },
         scope,
         timeLimitMinutes: timeLimit,
+        keptRunSessions: kept,
       })
       openRoutine(routine.id, { replace: true })
     } catch (failure) {
@@ -483,18 +583,17 @@ function NewRoutine() {
 
   return (
     <RoutineShell>
-      <header className="mb-5.5 flex items-center gap-3">
-        <RoutineTile agent={agentId} />
-        <div className="min-w-0 flex-1">
+      <RoutineHeader
+        agent={agentId}
+        title={
           <NameField
             value={name}
             placeholder={t('routine.untitled')}
             onChange={(event) => setName(event.target.value)}
           />
-          <p className="mt-0.5 text-small text-tertiary">
-            {name.trim() ? t('routine.notSaved') : t('routine.newNotSaved')}
-          </p>
-        </div>
+        }
+        state={<p>{name.trim() ? t('routine.notSaved') : t('routine.newNotSaved')}</p>}
+      >
         <Button variant="outline" size="sm" onClick={openRoutines}>
           {t('routine.cancel')}
         </Button>
@@ -509,48 +608,61 @@ function NewRoutine() {
             {missing}
           </TooltipContent>
         </Tooltip>
-      </header>
+      </RoutineHeader>
 
       {error && (
-        <Alert variant="error">
+        <Alert variant="error" className="mb-6">
           <CircleAlertIcon />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      <RoutineFields
-        prompt={prompt}
-        onPrompt={setPrompt}
-        promptField={promptField}
-        projectPath={projectPath}
-        noProject={projectChosen && projectPath === null}
-        onProject={(path) => {
-          setProjectPath(path)
-          setProjectChosen(true)
-        }}
-        onProjectError={setError}
-        agentId={agentId}
-        values={values}
-        onChoose={(id, model) => {
-          setAgentId(id)
-          const entry = useAgentOptionsStore.getState().byId[id]
-          const next = { ...(useAgentOptionsStore.getState().picks[id] ?? {}) }
-          const modelOption = entry?.config.find((option) => option.category === 'model')
-          if (modelOption) {
-            if (model === null) delete next[modelOption.id]
-            else next[modelOption.id] = model
-          }
-          setValues(entry ? startValues(entry, next) : next)
-        }}
-        onValues={(optionId, value) => setValues((current) => ({ ...current, [optionId]: value }))}
-        timeLimit={timeLimit}
-        onTimeLimit={setTimeLimit}
-        scope={scope}
-        onScope={setScope}
-        schedule={schedule}
-        savedSchedule={null}
-        onSchedule={setSchedule}
-        onScheduleProblem={setScheduleProblem}
+      <RoutineColumns
+        settings={
+          <RoutineFields
+            prompt={prompt}
+            onPrompt={setPrompt}
+            promptField={promptField}
+            projectPath={projectPath}
+            noProject={projectChosen && projectPath === null}
+            onProject={(path) => {
+              setProjectPath(path)
+              setProjectChosen(true)
+            }}
+            onProjectError={setError}
+            agentId={agentId}
+            values={values}
+            onChoose={(id, model) => {
+              setAgentId(id)
+              const entry = useAgentOptionsStore.getState().byId[id]
+              const next = { ...(useAgentOptionsStore.getState().picks[id] ?? {}) }
+              const modelOption = entry?.config.find((option) => option.category === 'model')
+              if (modelOption) {
+                if (model === null) delete next[modelOption.id]
+                else next[modelOption.id] = model
+              }
+              setValues(entry ? startValues(entry, next) : next)
+            }}
+            onValues={(optionId, value) =>
+              setValues((current) => ({ ...current, [optionId]: value }))
+            }
+            timeLimit={timeLimit}
+            onTimeLimit={setTimeLimit}
+            kept={kept}
+            onKept={setKept}
+            scope={scope}
+            onScope={setScope}
+            schedule={schedule}
+            savedSchedule={null}
+            onSchedule={setSchedule}
+            onScheduleProblem={setScheduleProblem}
+          />
+        }
+        runs={
+          <RunsCard>
+            <RunsEmpty hint={firstRunHint(schedule, now)} />
+          </RunsCard>
+        }
       />
     </RoutineShell>
   )
@@ -560,19 +672,57 @@ function RoutineShell({ children }: { children: ReactNode }) {
   const { t } = useTranslation('routines')
   return (
     <div className="flex h-full flex-col">
-      <TopBar className="shadow-none">{null}</TopBar>
-      <div className="min-h-0 flex-1 scroll-fade-y overflow-y-auto [scrollbar-gutter:stable]">
-        {/* Block flow, so a section's margin and the header's meet as one gap. */}
-        <div className="@container/routine mx-auto w-full max-w-210 px-10 pb-20">
-          <div className="mb-3.5 flex">
-            <Button variant="quiet" size="sm" className="-ml-2 gap-1.5 px-2" onClick={leaveRoutine}>
-              <ArrowLeftIcon />
+      <PageStrip />
+      <div className="min-h-0 flex-1 scroll-fade-y overflow-y-auto px-9 pb-10 [scrollbar-gutter:stable]">
+        <div className={cn(PAGE_COLUMN, '@container/routine')}>
+          <div className="mt-1.5 flex h-7 items-center">
+            <Button
+              variant="quiet"
+              size="sm"
+              className="-ml-1 h-6.5 gap-1 pr-2 pl-1 text-secondary"
+              onClick={leaveRoutine}
+            >
+              <ChevronLeftIcon />
               {t('routine.back')}
             </Button>
           </div>
           {children}
         </div>
       </div>
+    </div>
+  )
+}
+
+/** The page's head: the agent's tile, the name over a line of state, and the actions. */
+function RoutineHeader({
+  agent,
+  title,
+  state,
+  children,
+}: {
+  agent: AgentId | null
+  title: ReactNode
+  state: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <header className="mt-3 mb-6 flex flex-wrap items-center gap-x-3.5 gap-y-3">
+      <RoutineTile agent={agent} />
+      <div className="min-w-0 flex-1 basis-60">
+        {title}
+        <div className="mt-0.75 text-hint text-tertiary">{state}</div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">{children}</div>
+    </header>
+  )
+}
+
+/** The settings beside the runs, or over them when the column is under 960 px. */
+function RoutineColumns({ settings, runs }: { settings: ReactNode; runs: ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 items-start gap-7 @min-[60rem]/routine:grid-cols-[minmax(0,1fr)_352px]">
+      <div className="min-w-0">{settings}</div>
+      <div className="min-w-0">{runs}</div>
     </div>
   )
 }
@@ -610,6 +760,8 @@ function RoutineFields({
   onValues,
   timeLimit,
   onTimeLimit,
+  kept,
+  onKept,
   scope,
   onScope,
   schedule,
@@ -633,6 +785,8 @@ function RoutineFields({
   onValues: (optionId: string, value: string | boolean) => void
   timeLimit: TimeLimitMinutes
   onTimeLimit: (timeLimit: TimeLimitMinutes) => void
+  kept: KeptRunSessions
+  onKept: (kept: KeptRunSessions) => void
   scope: PermissionScope
   onScope: (scope: PermissionScope) => void
   schedule: Schedule
@@ -657,11 +811,15 @@ function RoutineFields({
     value: String(minutes) as `${TimeLimitMinutes}`,
     label: minutesLabel(minutes),
   }))
+  const keptOptions = KEPT_RUN_SESSIONS.map((count) => ({
+    value: String(count) as `${KeptRunSessions}`,
+    label: t('routine.keptRunsOption', { count }),
+  }))
 
   return (
-    <>
+    <div className="flex flex-col gap-7">
       <RoutineSection title={t('routine.task')}>
-        <FieldRow name={t('routine.prompt')} description={t('routine.promptDescription')} wide>
+        <FieldBlock name={t('routine.prompt')} description={t('routine.promptDescription')}>
           <InputGroup variant="prompt">
             <InputGroupTextarea
               ref={promptField}
@@ -670,10 +828,10 @@ function RoutineFields({
               placeholder={t('routine.promptPlaceholder')}
               onChange={(event) => onPrompt(event.target.value)}
               onBlur={onPromptBlur}
-              className="min-h-24 px-3.5 py-3 text-prose leading-normal md:text-prose"
+              className="min-h-27 px-3.5 py-3 text-prose leading-6 md:text-prose"
             />
           </InputGroup>
-        </FieldRow>
+        </FieldBlock>
         <FieldRow name={t('routine.project')} description={t('routine.projectDescription')}>
           <FieldFrame>
             <ProjectMenu
@@ -690,8 +848,8 @@ function RoutineFields({
           </FieldFrame>
         </FieldRow>
       </RoutineSection>
-      <RoutineSection title={t('routine.howItRuns')}>
-        <FieldRow name={t('routine.schedule')} description={t('routine.scheduleDescription')} wide>
+      <RoutineSection title={t('routine.schedule')} hint={t('routine.scheduleHint')}>
+        <div className="px-4.5 pt-4 pb-4.5">
           <ScheduleField
             schedule={schedule}
             saved={savedSchedule}
@@ -699,14 +857,12 @@ function RoutineFields({
             onSchedule={onSchedule}
             {...(onScheduleProblem ? { onProblem: onScheduleProblem } : {})}
           />
-        </FieldRow>
-        <FieldRow
-          name={t('routine.permissions')}
-          description={t('routine.permissionsDescription')}
-          wide
-        >
-          <PermissionField scope={scope} agentId={agentId} onChange={onScope} />
-        </FieldRow>
+        </div>
+      </RoutineSection>
+      <RoutineSection title={t('routine.permissions')} hint={t('routine.permissionsHint')}>
+        <PermissionField scope={scope} agentId={agentId} onChange={onScope} />
+      </RoutineSection>
+      <RoutineSection title={t('routine.limits')}>
         <FieldRow name={t('routine.timeLimit')} description={t('routine.timeLimitDescription')}>
           <FieldSelect
             label={t('routine.timeLimit')}
@@ -715,8 +871,16 @@ function RoutineFields({
             onChange={(value) => onTimeLimit(Number(value) as TimeLimitMinutes)}
           />
         </FieldRow>
+        <FieldRow name={t('routine.keptRuns')} description={t('routine.keptRunsDescription')}>
+          <FieldSelect
+            label={t('routine.keptRuns')}
+            value={String(kept) as `${KeptRunSessions}`}
+            options={keptOptions}
+            onChange={(value) => onKept(Number(value) as KeptRunSessions)}
+          />
+        </FieldRow>
       </RoutineSection>
-    </>
+    </div>
   )
 }
 
@@ -725,9 +889,9 @@ function RoutineTile({ agent }: { agent: AgentId | null }) {
   return (
     <span
       aria-hidden
-      className="grid size-11 shrink-0 place-items-center rounded-xl bg-card text-icon shadow-card"
+      className="grid size-11 shrink-0 place-items-center rounded-card bg-card text-icon shadow-card"
     >
-      {agent ? <AgentMark agent={agent} size={20} /> : <CalendarClockIcon className="size-5" />}
+      {agent ? <AgentMark agent={agent} size={22} /> : <CalendarClockIcon className="size-5" />}
     </span>
   )
 }
