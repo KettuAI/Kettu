@@ -11,6 +11,9 @@
   /* The desk is the window behind everything; the main column and the panes are sheets on it. */
   --bg-app: #ffffff;
   --bg-sidebar: #f5f5f5;
+  /* On macOS, the share of --bg-sidebar laid over the system's sidebar material on the desk, in
+     both modes. */
+  --desk-tint: 25%;
   --bg-surface: #ffffff;
   --bg-subtle: #f2f4f7;
   /* A system notification in Settings › Notifications, as the menu bar draws one. */
@@ -680,6 +683,9 @@
   --input: var(--border-default);
   --ring: var(--focus-ring-color);
   --sidebar: var(--bg-sidebar);
+  /* The desk itself: the window behind the sheets. --bg-sidebar stays the solid color it stands
+     for elsewhere. */
+  --bg-desk: var(--bg-sidebar);
   --sidebar-foreground: var(--text-primary);
   --sidebar-primary: var(--text-primary);
   --sidebar-primary-foreground: var(--bg-surface);
@@ -826,4 +832,16 @@
   --elevation-sm: var(--elevation-card);
   --elevation-md: var(--elevation-popover);
   --elevation-lg: var(--elevation-popover);
+}
+
+/* The macOS window draws the system's sidebar material behind the page; the desk lets it through,
+   tinted with its own color, unless the system is set to reduce transparency. */
+:root[data-client='desktop'][data-platform='darwin'] {
+  --bg-desk: color-mix(in srgb, var(--bg-sidebar) var(--desk-tint), transparent);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-client='desktop'][data-platform='darwin'] {
+    --bg-desk: var(--bg-sidebar);
+  }
 }

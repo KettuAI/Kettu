@@ -136,7 +136,7 @@ Kettu drives agents that run shell commands, so these are not negotiable:
 ## Gotchas
 
 - shadcn/ui here is built on Base UI, not Radix: components take a `render` prop instead of `asChild`. To make a link look like a button, put `buttonVariants()` on a plain `<a>` rather than `<Button render={<a />}>`.
-- `BACKGROUND_COLOR` in `src/main/window.ts` must match `--bg-sidebar` in `tokens.css`, or the window flashes on load.
+- On Windows and Linux, `BACKGROUND_COLOR` in `src/main/window.ts` must match `--bg-sidebar` in `tokens.css`, or the window flashes on load. On macOS the window is clear over the system's sidebar material, which `--bg-desk` tints; the desk is painted once, on `<html>`, since every translucent layer of it thickens the glass.
 - On macOS the title bar is hidden: the top header is the drag region (`app-region-drag`) and leaves room for the traffic lights. Give interactive elements inside it `app-region-no-drag`. What lies under the columns drags the window too, so a column takes `SHEET` from `features/shell/sheet.ts`, which opts out.
 - `@dnd-kit/react` is still 0.x; read its changelog before bumping the minor version, and never mix in the legacy `@dnd-kit/core` packages.
 - Enter-to-send handlers must ignore IME composition (`event.nativeEvent.isComposing`, or `keyCode` 229), or Chinese, Japanese and Korean input sends half-typed text.

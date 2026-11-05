@@ -187,7 +187,6 @@ function Workbench() {
           endSlide()
         }
       }}
-      className="bg-sidebar"
     >
       <ResizablePanel
         id="sidebar"
