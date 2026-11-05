@@ -22,6 +22,18 @@ import {
 } from './session-drag-model'
 import type { Box } from './layout'
 
+const pointerDefaults = PointerSensor.defaults.activationConstraints
+const sensors = [
+  PointerSensor.configure({
+    activationConstraints: (event, source) => {
+      const constraints =
+        typeof pointerDefaults === 'function' ? pointerDefaults(event, source) : pointerDefaults
+      // Mouse defaults are [Delay, Distance]; keep only Distance so a hold remains a click.
+      return event.pointerType === 'mouse' ? constraints?.slice(1) : constraints
+    },
+  }),
+]
+
 const pointerOf = (event: DragStartEvent | DragMoveEvent | DragEndEvent) => {
   const { x, y } = event.operation.position.current
   return { x, y }
@@ -44,12 +56,7 @@ export function SplitDragProvider({ children }: { children: React.ReactNode }) {
     if (view) dropViewAt(view, drop.place, size)
   }
   return (
-    <DragDropProvider
-      sensors={[PointerSensor]}
-      onDragStart={start}
-      onDragMove={move}
-      onDragEnd={end}
-    >
+    <DragDropProvider sensors={sensors} onDragStart={start} onDragMove={move} onDragEnd={end}>
       {children}
       <DragOverlay dropAnimation={null}>
         <SessionChip sessionId={useSessionDragStore((s) => s.dragging?.sessionId)} />
