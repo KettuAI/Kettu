@@ -161,6 +161,9 @@
   --color-switch-thumb: var(--switch-thumb);
   --color-control-on: var(--control-on);
   --color-control-on-tint: var(--control-on-tint);
+  --color-send: var(--send);
+  --color-send-hover: var(--send-hover);
+  --color-send-active: var(--send-active);
   --color-limit-ok: var(--limit-ok);
   --color-limit-warn: var(--limit-warn);
   --color-limit-bad: var(--limit-bad);

@@ -161,6 +161,9 @@
   --control-on: #f2581b;
   --control-on-tint: color-mix(in srgb, var(--control-on) 7%, transparent);
   --switch-on: #f2581b;
+  /* The send button once there is something to send: the same fox in both themes, since the
+     lighter dark-theme fox leaves its white arrow under 3:1. */
+  --send: #f2581b;
   /* The thumb is white on and off, in both themes. */
   --switch-thumb: #ffffff;
   /* A switch that is off. */
@@ -390,6 +393,7 @@
     --control-on: #ff6a2b;
     --control-on-tint: color-mix(in srgb, var(--control-on) 11%, transparent);
     --switch-on: #ff6a2b;
+    --send: #f2581b;
     --switch-thumb: #ffffff;
     --track: #3a424d;
 
@@ -578,6 +582,7 @@
   --control-on: #ff6a2b;
   --control-on-tint: color-mix(in srgb, var(--control-on) 11%, transparent);
   --switch-on: #ff6a2b;
+  --send: #f2581b;
   --switch-thumb: #ffffff;
   --track: #3a424d;
 
@@ -774,6 +779,15 @@
     var(--primary-hover-from),
     var(--primary-hover-to)
   );
+  /* Hover darkens the send button on the light page and lightens it on the dark one; a press
+     darkens it in both. */
+  --send-hover: light-dark(
+    color-mix(in srgb, var(--send) 92%, black),
+    color-mix(in srgb, var(--send) 92%, white)
+  );
+  --send-active: color-mix(in srgb, var(--send) 86%, black);
+  --send-shadow: 0 1px 2px
+    light-dark(color-mix(in srgb, var(--send-active) 28%, transparent), transparent);
 
   /* Each layer's 1 px ring sits outside its box, so it takes no layout space, follows the radius
      and shows against the desk. */

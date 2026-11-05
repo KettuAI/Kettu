@@ -12,6 +12,7 @@ import { InputGroupButton } from '@renderer/components/ui/input-group'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { OptionMenu } from '@renderer/features/session/composer/control-row'
+import { SEND_FILL } from '@renderer/features/session/composer/send-button'
 import type { SelectOption } from '@renderer/features/session/composer/levels'
 import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
 import { useHostLabel } from '@renderer/features/sidebar/host-label'
@@ -364,9 +365,12 @@ function DraftComposer({
                     aria-label={t('newSession.send')}
                     disabled={!canSend}
                     onClick={() => void send()}
-                    className="disabled:text-disabled disabled:opacity-100"
+                    className={cn(
+                      canSend && SEND_FILL,
+                      'disabled:text-disabled disabled:opacity-100',
+                    )}
                   >
-                    <ArrowUpIcon />
+                    <ArrowUpIcon strokeWidth={2} />
                   </InputGroupButton>
                 </TooltipTrigger>
                 <TooltipContent>{blocked ?? t('newSession.send')}</TooltipContent>
