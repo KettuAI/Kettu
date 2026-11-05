@@ -336,9 +336,9 @@ export function addableHarnesses(order: AgentId[], byId: AgentsStore['byId']): A
   )
 }
 
-/** The agents the agent menu lists: those on installed harnesses, but no hidden default agent. */
+/** The agents the agent menu lists: those on installed harnesses, but no hidden or turned-off agent. */
 export function menuAgents(order: AgentId[], byId: AgentsStore['byId']): AgentStatus[] {
-  return usableAgents(order, byId).filter((s) => isInstalled(s) && !s.hidden)
+  return usableAgents(order, byId).filter((s) => isInstalled(s) && !s.hidden && !s.disabled)
 }
 
 export function isInstalled(status: AgentStatus): boolean {

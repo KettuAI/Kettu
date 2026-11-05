@@ -199,7 +199,7 @@ function DraftComposer({
     useShallow((s) => {
       if (hostId === null ? !s.loaded : !(hostId in s.hosts)) return null
       const { order, byId } = agentsOn(s, hostId)
-      const usable = usableAgents(order, byId)
+      const usable = usableAgents(order, byId).filter((a) => !a.disabled)
       return usable.length === 0 ? [] : noAgentCanStart(usable)
     }),
   )

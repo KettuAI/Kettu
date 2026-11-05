@@ -27,6 +27,7 @@ export const HOST_SETTING_KEYS = {
   general: ['sessionTitles'],
   agents: 'all',
   addedAgents: 'all',
+  disabledAgents: 'all',
   proxy: 'all',
   terminal: ['shellPath'],
   git: 'all',
@@ -42,6 +43,7 @@ export interface HostSettingsPart {
   general: Pick<SettingsFile['general'], 'sessionTitles'>
   agents: SettingsFile['agents']
   addedAgents: SettingsFile['addedAgents']
+  disabledAgents: SettingsFile['disabledAgents']
   proxy: SettingsFile['proxy']
   terminal: Pick<SettingsFile['terminal'], 'shellPath'>
   git: SettingsFile['git']

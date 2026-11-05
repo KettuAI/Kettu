@@ -70,7 +70,7 @@ import {
 import { addableHarnesses, type AgentsStoreHook } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { createTerminal } from '@renderer/stores/terminals'
 import {
   closeSettings,
@@ -103,6 +103,7 @@ import {
   Pill,
   ROW_BUTTON,
   SettingSelect,
+  SettingSwitch,
 } from './controls'
 import { PlaceRow } from './places'
 import {
@@ -239,6 +240,7 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
   const limits = currentLimits(status.limits, now)
   const folder = details?.config.find((item) => item.id === 'folder')?.path
   const joinTier = (plan: string, tier: string) => t('agents.planTier', { plan, tier })
+  const off = status.disabled === true
   const identity = accountIdentity(status, account, ready, reading, (key) => t(key), joinTier)
   const blocked = ready.kind === 'missing' || ready.kind === 'failed'
   const email = account?.email?.trim() ?? ''
@@ -264,14 +266,19 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
       item={status.id}
       label={status.name}
       onOpen={() => openAgentSettings(status.id)}
-      tile={<AgentTile agent={status.id} size={30} dot={dot} />}
+      tile={
+        <span className={cn('block', off && 'opacity-50')}>
+          <AgentTile agent={status.id} size={30} dot={dot} />
+        </span>
+      }
       name={
         <>
-          <span className="truncate font-medium">{status.name}</span>
+          <span className={cn('truncate font-medium', off && 'text-secondary')}>{status.name}</span>
           {status.isDefault && hasOthers && <Pill>{t('agents.default')}</Pill>}
+          {off && <Pill>{t('agents.turnedOff')}</Pill>}
         </>
       }
-      right={<span className="pointer-events-auto flex items-center">{end}</span>}
+      right={off ? null : <span className="pointer-events-auto flex items-center">{end}</span>}
     >
       <span
         title={identity.text}
@@ -279,7 +286,7 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
           'min-w-0 text-label leading-[normal] wrap-anywhere',
           identity.tone === 'failed'
             ? 'text-danger'
-            : identity.tone === 'quiet'
+            : identity.tone === 'quiet' || off
               ? 'text-tertiary'
               : 'text-primary',
         )}
@@ -824,6 +831,16 @@ function AgentPageLine({ status }: { status: AgentStatus }) {
   const harness = t('agents.onHarness', {
     harness: version ? `${status.harnessName} ${version}` : status.harnessName,
   })
+  if (status.disabled) {
+    return (
+      <span className="flex min-h-4.5 min-w-0 items-center gap-1.5 leading-[normal]">
+        <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-border-strong" />
+        <span className="truncate">
+          {t('agents.turnedOff')} · {harness}
+        </span>
+      </span>
+    )
+  }
   return ready ? (
     <span className="flex min-h-4.5 min-w-0 items-center gap-1.5 leading-[normal]">
       <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-success" />
@@ -873,6 +890,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
       <AgentPageHeader status={status} actions={actions} />
 
       <div className="flex flex-col">
+        <EnableGroup status={status} />
         {(r.kind === 'failed' || r.kind === 'missing') && (
           <p
             className={cn(
@@ -960,7 +978,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
                     <RowText name={t('agents.signInRow')} description={t('agents.signInRowHint')} />
                   }
                 >
-                  {status.canLogout && status.signIn === 'signed-in' && (
+                  {status.canLogout && status.signIn === 'signed-in' && !status.disabled && (
                     <Button
                       variant="ghost"
                       className={cn(ROW_BUTTON, 'text-secondary')}
@@ -987,7 +1005,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           </section>
         )}
 
-        {providerMode ? (
+        {status.disabled ? null : providerMode ? (
           <SpendGroup status={status} providers />
         ) : status.account?.kind === 'api_key' ? (
           <SpendGroup status={status} />
@@ -1000,6 +1018,82 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
         <DangerGroup status={status} />
       </div>
     </div>
+  )
+}
+
+/** Turns the agent off and on: off, it never starts and nothing offers it, and nothing is lost. */
+function EnableGroup({ status }: { status: AgentStatus }) {
+  const { hostId, useSettingsStore } = useHostScope()
+  const { t } = useTranslation(['settings', 'common'])
+  const [apply, error] = useApply()
+  const [confirming, setConfirming] = useState(false)
+  const stored = useSettingsStore((s) => s.settings.disabledAgents)
+  const running = useSessionsStore(
+    (s) =>
+      Object.values(s.byId).filter(
+        (session) =>
+          hostOfSession(session) === hostId &&
+          session.agentId === status.id &&
+          (session.status === 'running' || session.status === 'awaiting_permission'),
+      ).length,
+  )
+  // An older host reports nothing about it and takes no such setting.
+  if (status.disabled === undefined) return null
+  const off = stored ? stored.includes(status.id) : status.disabled
+  const set = (disabled: boolean) => {
+    const others = (stored ?? []).filter((id) => id !== status.id)
+    apply({ disabledAgents: disabled ? [...others, status.id] : others })
+  }
+  return (
+    <section className="flex flex-col pt-4">
+      <RowGroup>
+        <RowShell>
+          <RowLine
+            text={
+              <RowText
+                name={t('agents.enable.name')}
+                description={t(off ? 'agents.enable.off' : 'agents.enable.on')}
+              />
+            }
+          >
+            <SettingSwitch
+              label={t('agents.enable.switch', { name: status.name })}
+              checked={!off}
+              onChange={(on) => (on || running === 0 ? set(!on) : setConfirming(true))}
+            />
+          </RowLine>
+          {error && (
+            <p role="status" className="-mt-1.5 pb-3.75 text-hint text-pretty text-danger">
+              {error}
+            </p>
+          )}
+        </RowShell>
+      </RowGroup>
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogContent className={CONFIRM}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('agents.enable.confirmTitle', { name: status.name })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('agents.enable.confirmBody', { count: running })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                setConfirming(false)
+                set(true)
+              }}
+            >
+              {t('agents.enable.confirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </section>
   )
 }
 

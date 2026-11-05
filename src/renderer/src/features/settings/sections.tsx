@@ -115,12 +115,13 @@ export function DefaultAgent() {
     { value: 'ask', label: t('general.defaultAgent.askEachTime') },
     ...agents.map((agent) => {
       const absent = !isInstalled(agent)
+      const off = agent.disabled === true
       return {
         value: agent.id as string,
         label: agent.name,
         icon: <AgentMark agent={agent.id} className="size-3.5" />,
-        disabled: absent,
-        hint: absent ? t('harnesses.groups.notInstalled') : undefined,
+        disabled: absent || off,
+        hint: absent ? t('harnesses.groups.notInstalled') : off ? t('agents.turnedOff') : undefined,
       }
     }),
   ]

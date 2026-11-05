@@ -14,7 +14,7 @@ import { ensureFiles } from '@renderer/stores/files'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
 import { sessionArchived, useSessionsStore } from '@renderer/stores/sessions'
 import { focusSession, reloadSession, useThreadsStore } from '@renderer/stores/threads'
-import { openSettings } from '@renderer/stores/view'
+import { openAgentSettings, openSettings } from '@renderer/stores/view'
 import { DropOverlay } from './attachments/drop-overlay'
 import { useFileDrop } from './attachments/use-file-drop'
 import { Composer } from './composer/composer'
@@ -54,6 +54,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const renderersReady = useRenderersReady()
   const name = agentName(summary.agentId)
   const agentRemoved = useAgentsStore((s) => s.byId[summary.agentId]?.registered === false)
+  const agentOff = useAgentsStore((s) => s.byId[summary.agentId]?.disabled === true)
   const archived = useSessionsStore((s) => sessionArchived(s.byId, sessionId))
   const otherHost = useOtherHost(hostOfPath(summary.projectPath))
   // Its host is offline: what the thread showed stays, and nothing goes to it.
@@ -201,6 +202,22 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                 </AlertAction>
               </Alert>
             )}
+            {agentOff && !agentRemoved && (
+              <Alert variant="warning">
+                <CircleAlertIcon />
+                <AlertTitle>{t('view.agentTurnedOff', { agent: name })}</AlertTitle>
+                <AlertDescription>{t('view.agentTurnedOffBody')}</AlertDescription>
+                <AlertAction>
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() => openAgentSettings(summary.agentId)}
+                  >
+                    {t('view.openAgent')}
+                  </Button>
+                </AlertAction>
+              </Alert>
+            )}
             {(actionError || queueError) && (
               <p role="alert" className="animate-in px-1 text-xs text-danger fade-in">
                 {actionError ?? queueError}
@@ -223,6 +240,10 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
               ) : agentRemoved ? (
                 <p className="px-3 py-4 text-small text-tertiary">
                   {t('view.agentRemovedComposer')}
+                </p>
+              ) : agentOff ? (
+                <p className="px-3 py-4 text-small text-tertiary">
+                  {t('view.agentTurnedOffComposer')}
                 </p>
               ) : session ? (
                 <div className="relative z-10">

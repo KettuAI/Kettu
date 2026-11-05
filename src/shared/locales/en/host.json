@@ -190,6 +190,7 @@
     "reportTimeout": "{{command}} did not finish in {{seconds}} s",
     "unreadableReport": "{{agent}}'s {{command}} gave no report Kettu can read",
     "removed": "This agent was deleted, so this session cannot continue.",
+    "disabled": "{{agent}} is turned off. Turn it on in Settings › Agents to use it.",
     "uninstall": {
       "busy": "{{agent}} is being installed or updated. Wait for it to finish, then uninstall."
     }

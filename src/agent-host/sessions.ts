@@ -2032,6 +2032,7 @@ export class SessionManager {
   ): Promise<SessionSummary> {
     const { agents, projects, scratch } = this.deps
     if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
+    agents.assertEnabled(params.agentId)
     // Before a prepared session is taken over, so a refused prompt leaves it prepared.
     const prompt = params.prompt && this.hydrate(params.prompt)
     if (params.preparedId !== undefined) {
@@ -2125,6 +2126,7 @@ export class SessionManager {
   async createRun(params: RoutineSessionStart): Promise<SessionSummary> {
     const { agents, projects, scratch } = this.deps
     if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
+    agents.assertEnabled(params.agentId)
     const projectPath = await projects.resolveDirectory(params.projectPath)
     if (!scratch.contains(projectPath)) await projects.add(projectPath)
     const now = this.now()
@@ -2202,6 +2204,7 @@ export class SessionManager {
     if (!this.deps.agents.has(params.agentId)) {
       throw invalidParams(`Unknown agent ${params.agentId}`)
     }
+    this.deps.agents.assertEnabled(params.agentId)
     const key = preparedKey(params)
     const slot = this.slotOf(portId)
     const held = slot.next ?? (slot.stale ? null : slot.current)
@@ -3691,9 +3694,9 @@ export class SessionManager {
   }
 
   private assertRegistered(sessionId: string): void {
-    if (!this.deps.agents.has(this.recordOf(sessionId).agentId)) {
-      throw new HostError('agent_unavailable', t('agent.removed'))
-    }
+    const { agentId } = this.recordOf(sessionId)
+    if (!this.deps.agents.has(agentId)) throw new HostError('agent_unavailable', t('agent.removed'))
+    this.deps.agents.assertEnabled(agentId)
   }
 
   /**
@@ -4105,7 +4108,12 @@ export class SessionManager {
    * when it is, for the prompt Send now chose.
    */
   private drainQueue(live: Live, chosen = false): void {
-    if (!this.deps.agents.has(live.record.agentId)) return
+    if (
+      !this.deps.agents.has(live.record.agentId) ||
+      this.deps.agents.isDisabled(live.record.agentId)
+    ) {
+      return
+    }
     const { status, queue, queuePaused } = live.thread.session
     const [next, ...rest] = queue
     if (!next || (queuePaused && !chosen) || !canSend(status)) return
@@ -5517,7 +5525,7 @@ export class SessionManager {
     this.touch(sessionId)
   }
 
-  /** Closes removed agents' live sessions while retaining their index and transcript. */
+  /** Closes the live sessions of removed and turned-off agents, keeping their index and transcript. */
   async agentsRemoved(agentIds: readonly AgentId[]): Promise<void> {
     const records = [...this.records.values()].filter((record) => agentIds.includes(record.agentId))
     await Promise.all(records.map((record) => this.settled(record.id)))
@@ -5845,6 +5853,7 @@ export class SessionManager {
   }): Promise<SessionSummary> {
     if (!this.deps.agents.has(params.agentId))
       throw invalidParams(`Unknown agent ${params.agentId}`)
+    this.deps.agents.assertEnabled(params.agentId)
     const projectPath = await this.deps.projects.resolveDirectory(params.projectPath)
     const existing = this.findByAcp(params.agentId, params.acpSessionId)
     if (existing) return this.summary(existing.id)
