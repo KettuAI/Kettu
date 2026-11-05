@@ -64,13 +64,22 @@ export function usePromptBox({
   const [caret, setCaret] = useState<number | null>(null)
   const editor = useRef<ComposerEditorHandle>(null)
   const {
-    entry: historyEntry,
+    position: historyPosition,
     move: moveHistory,
     close: closeHistory,
+    leave: leaveHistory,
   } = useInputHistory({
     sessionId,
     disabled,
     editor,
+    // Not written to the draft: the draft stays what it was until the text is edited.
+    onRecall: (next) => {
+      setText(next)
+      editor.current?.setText(next)
+      setCaret(null)
+      setSlashDismissed(true)
+      setError(null)
+    },
     onError: () => setError(t('prompt.historyFailed')),
   })
   // Only the focused pane's composer takes the events sent to no session in particular.
@@ -188,19 +197,6 @@ export function usePromptBox({
     setCaret(at)
   }
 
-  /** Adds the message the history card shows to the box, keeping what is there. */
-  const insertHistory = () => {
-    const added = historyEntry?.text
-    closeHistory()
-    if (added) addText(added)
-  }
-
-  /** The caret moved in the box, which leaves the history card behind. */
-  const moveCaret = (at: number | null) => {
-    closeHistory()
-    setCaret(at)
-  }
-
   /** Empties the box for a send. */
   const take = (): Taken => {
     closeHistory()
@@ -269,15 +265,14 @@ export function usePromptBox({
     editor,
     focus: () => editor.current?.focus(),
     changed,
-    historyEntry,
+    historyPosition,
     moveHistory,
-    closeHistory,
-    insertHistory,
+    leaveHistory,
     // For the view.
     slashDismissed,
     setSlashDismissed,
     caret,
-    setCaret: moveCaret,
+    setCaret,
     full,
     remote,
     pick,
