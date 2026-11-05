@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react'
 import { SmartphoneIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Button } from '@renderer/components/ui/button'
 import { errorMessage, host } from '@renderer/lib/host'
-import { loadDevices, useDevicesStore } from '@renderer/stores/devices'
+import { loadDevices } from '@renderer/stores/devices'
 import { useViewStore } from '@renderer/stores/view'
-import { ROW_BUTTON } from './controls'
+import { AllowedDeviceRow } from './devices-parts'
 import type { RowDef, SectionDef } from './model'
-import { DeviceTile } from './remote-parts'
-import { ItemLine } from './rows'
 
 /**
  * The devices agents may always use on this host, read each time the page shows; removing one
@@ -41,23 +38,6 @@ function useAllowedDevices(): {
     )
   }
   return { ids, error, forget }
-}
-
-function AllowedDeviceRow({ deviceId, onForget }: { deviceId: string; onForget: () => void }) {
-  const { t } = useTranslation('settings')
-  const device = useDevicesStore((s) => s.devices.find((entry) => entry.id === deviceId))
-  return (
-    <div className="flex items-center gap-3.5 py-3.25">
-      <DeviceTile icon={<SmartphoneIcon className="size-4" />} />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-label leading-[normal]">{device?.name ?? deviceId}</span>
-        <ItemLine>{device ? deviceId : t('devices.allowed.notFound')}</ItemLine>
-      </div>
-      <Button variant="ghost" className={ROW_BUTTON} onClick={onForget}>
-        {t('devices.allowed.remove')}
-      </Button>
-    </div>
-  )
 }
 
 export function useDevicesSection(): SectionDef {
