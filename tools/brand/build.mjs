@@ -1,4 +1,4 @@
-// Builds the app icons, the tray's images, the renderer's icon and glyphs, the README's lockups
+// Builds the app icons, the tray's images, the renderer's icon, fox and glyphs, the README's lockups
 // and the macOS disk image's backgrounds from the icon's drawing in tools/brand/fox.mjs and the
 // wordmark in src/shared/brand.ts, with `pnpm exec electron tools/brand/build.mjs`; Chromium draws
 // every size from the vector source. No dependencies but the Inter font the backgrounds' text is
@@ -10,7 +10,7 @@ import { join, resolve } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import { lockupGeometry, WORDMARK } from '../../src/shared/brand.ts'
 import { DMG_LAYOUT } from './dmg-layout.mjs'
-import { foxSvg, GLYPH_CANVAS, glyphSvg } from './fox.mjs'
+import { foxMarkSvg, foxSvg, GLYPH_CANVAS, glyphSvg } from './fox.mjs'
 
 const root = resolve(import.meta.dirname, '../..')
 const INK = '#1c1b18'
@@ -208,6 +208,7 @@ async function main() {
   write(join(assets, 'lockup-horizontal.svg'), lockupSvg('horizontal', 100, INK))
   write(join(assets, 'lockup-horizontal-dark.svg'), lockupSvg('horizontal', 100, PAPER))
   writeFileSync(join(root, 'src/renderer/src/assets/kettu-icon.svg'), foxSvg('tile'))
+  writeFileSync(join(root, 'src/renderer/src/assets/kettu-fox.svg'), foxMarkSvg())
   // The launch cover's fox, masks the renderer fills with the theme's text color.
   for (const ground of ['dark', 'light']) {
     writeFileSync(

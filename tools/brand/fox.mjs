@@ -210,6 +210,22 @@ export function foxSvg(framing = 'tile', { colors } = {}) {
   return svg.replace(/#[0-9A-Fa-f]{6}\b/g, (c) => map.get(c.toUpperCase()) ?? c)
 }
 
+// The square around the fox in the drawing's coordinates, for the mark.
+const MARK = { x: 300, y: 303, size: 648 }
+
+/**
+ * The icon's fox alone, in the icon's colors: no tile, no sheets and none of the shadow it casts on
+ * them, cropped to a square around it, for places that set it beside text.
+ */
+export function foxMarkSvg() {
+  const { x, y, size } = MARK
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${size}" height="${size}" viewBox="${x} ${y} ${size} ${size}">\n` +
+    `<defs>${FOX_DEFS}</defs>\n` +
+    `<g id="fox" transform="translate(${FOX_DX} 0)">${FOX}</g>\n</svg>\n`
+  )
+}
+
 // The glyph: the icon's fox without its shadow, for the macOS menu bar and the Windows and Linux
 // trays, in one color whose opacity follows the drawing's luminance, so the parts stay apart by
 // their shading. The opacity is lifted a little so the cheeks and ear tips come out solid.

@@ -6,6 +6,7 @@ import type { Project, SessionSummary, StartNotice } from '@shared/agent-host'
 import type { AgentId, SlashCommand, UserContent } from '@shared/thread'
 import { startNewSession } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { BrandFox } from '@renderer/components/brand'
 import { Button } from '@renderer/components/ui/button'
 import { InputGroupButton } from '@renderer/components/ui/input-group'
 import { Spinner } from '@renderer/components/ui/spinner'
@@ -157,6 +158,7 @@ function WelcomeHeading() {
   )
   return (
     <h1 className="mb-7 animate-in text-center font-greeting text-greeting font-normal text-balance wrap-anywhere fade-in animation-duration-(--duration-slow)">
+      <BrandFox size={40} className="mr-3 inline-block size-[1.2em] align-middle" />
       {t(`newSession.${name ? 'greetingNamed' : 'greeting'}.${period}`, { name })}
     </h1>
   )
