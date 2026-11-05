@@ -14,6 +14,7 @@ import type { BrowserCallAnswer, BrowserOriginAnswer, BrowserOriginDecision } fr
 import { FILE_READ_LIMIT } from '@shared/files'
 import { GITHUB_LOGIN, GITHUB_PULL_REQUEST_URL, isRepositoryName } from '@shared/git'
 import type { Platform } from '@shared/platform'
+import type { ClockRequest, ClockZone } from '@shared/usage'
 import {
   isPermissionScope,
   isSchedule,
@@ -248,6 +249,46 @@ function range(o: Fields): { from: number; to: number } {
   const to = time(o, 'to')
   if (to < from) throw invalidParams('to must not be before from')
   return { from, to }
+}
+
+// Two changes of the clocks a year over fifty years, with room to spare.
+const CLOCK_ZONES = 256
+// UTC offsets run from -12:00 to +14:00, in quarter hours.
+const QUARTER_MS = 900_000
+const OFFSET_MIN = -720
+const OFFSET_MAX = 840
+
+function clock(value: unknown): ClockRequest {
+  const o = fields(value)
+  const { from, to } = range(o)
+  if (!Array.isArray(o.zones) || o.zones.length === 0 || o.zones.length > CLOCK_ZONES) {
+    throw invalidParams(`clock.zones must be a list of 1 to ${CLOCK_ZONES} zones`)
+  }
+  const zones = o.zones.map((zone: unknown, index): ClockZone => {
+    const z = fields(zone)
+    const start = time(z, 'from')
+    if (start % QUARTER_MS !== 0) {
+      throw invalidParams(`clock.zones[${index}].from must begin a quarter hour`)
+    }
+    const offset = z.offset
+    if (
+      typeof offset !== 'number' ||
+      !Number.isInteger(offset) ||
+      offset % 15 !== 0 ||
+      offset < OFFSET_MIN ||
+      offset > OFFSET_MAX
+    ) {
+      throw invalidParams(
+        `clock.zones[${index}].offset must be quarter hours from ${OFFSET_MIN} to ${OFFSET_MAX} minutes`,
+      )
+    }
+    return { from: start, offset }
+  })
+  if (zones.some((zone, index) => index > 0 && zone.from <= zones[index - 1]!.from)) {
+    throw invalidParams('clock.zones must ascend')
+  }
+  if (zones[0]!.from > from) throw invalidParams('clock.zones must start at or before clock.from')
+  return { from, to, zones }
 }
 
 function routineId(o: Fields, key = 'routineId'): string {
@@ -1034,7 +1075,12 @@ export function createValidators(platform: Platform): Validators {
       if (o.scope !== 'computer' && o.scope !== 'kettu') {
         throw invalidParams('scope must be computer or kettu')
       }
-      return { dayStarts: dayStarts(o), ...range(o), scope: o.scope }
+      return {
+        dayStarts: dayStarts(o),
+        ...range(o),
+        scope: o.scope,
+        ...(o.clock === undefined ? {} : { clock: clock(o.clock) }),
+      }
     },
     'usage.total': (params) => range(fields(params)),
     'usage.status': none,

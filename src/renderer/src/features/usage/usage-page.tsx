@@ -60,7 +60,6 @@ import {
   firstDayOfWeek,
   fromCache,
   hoursSoFar,
-  ledgerCell,
   metricKind,
   RANGE_KINDS,
   tokenParts,
@@ -71,11 +70,11 @@ import {
   type RangeKind,
 } from './model'
 import { OverTime, type HourTotals } from './over-time'
-import { Panel, PanelTitle } from './panel'
 import { PlanLimits } from './plan-limits'
+import { TimeOfDay } from './time-of-day'
 import { RangePicker } from './range-picker'
 import { Count, FigureValue } from './count'
-import { dayText, useHourText, useRangeText } from './text'
+import { dayText, sharePercent, useHourText, useRangeText } from './text'
 
 /** A scan with less than this to read is over before its progress is worth showing. */
 const IMPORT_SHOWN = 50_000_000
@@ -344,12 +343,13 @@ function LoadingState() {
       <span role="status" className="sr-only">
         {t('page.loading')}
       </span>
-      <div className="grid gap-4.5 @min-[45rem]:grid-cols-2">
-        <Skeleton className="h-50 rounded-xl" />
-        <Skeleton className="h-50 rounded-xl" />
-      </div>
-      <Skeleton className="h-45 rounded-xl" />
+      <Skeleton className="h-36 rounded-xl" />
+      <Skeleton className="h-50 rounded-xl" />
       <Skeleton className="h-70 rounded-xl" />
+      <div className="grid gap-4.5 @min-[45rem]:grid-cols-2">
+        <Skeleton className="h-58 rounded-xl" />
+        <Skeleton className="h-58 rounded-xl" />
+      </div>
     </div>
   )
 }
@@ -461,11 +461,10 @@ function Header({
   // null until the status arrives, when the sync state shows nothing either.
   const fromComputer = useUsageStore((s) => s.status?.fromComputer ?? null)
   const rangeText = useRangeText()
-  const { agent, scope } = filters
+  const { agent, scope, metric } = filters
   const agents = page?.summary.agents ?? []
   // A chosen agent stays a choice once its usage is gone, as after clearing the record.
   const choices = agent === 'all' || agents.includes(agent) ? agents : [...agents, agent]
-  const filterRow = choices.length > 1 || fromComputer !== null
   const clockDay = useClock(dayOf)
   const today = page?.today ?? clockDay
   const custom = filters.range.kind === 'custom' ? filters.range : null
@@ -505,37 +504,46 @@ function Header({
           />
         </div>
       </div>
-      {filterRow && (
-        <div className="flex flex-wrap items-center gap-2">
-          {/* With usage from one agent only, All is the only choice. */}
-          {choices.length > 1 && (
-            <FilterMenu
-              label={t('page.agents')}
-              value={agent}
-              current={agent === 'all' ? t('page.allShort') : <AgentChoice agentId={agent} />}
-              choices={[
-                { value: 'all', label: t('page.allShort') },
-                ...choices.map((id) => ({ value: id, label: <AgentChoice agentId={id} /> })),
-              ]}
-              onChange={(next) => setUsageFilters({ agent: next })}
-            />
-          )}
-          {fromComputer && (
-            <FilterMenu<UsageScope>
-              label={t('page.scope')}
-              value={scope}
-              current={scope === 'computer' ? computer : t('page.scopes.kettu')}
-              choices={[
-                { value: 'computer', label: computer },
-                { value: 'kettu', label: t('page.scopes.kettu') },
-              ]}
-              onChange={(next) => setUsageFilters({ scope: next })}
-            />
-          )}
-          <span className="flex-1" />
-          <SyncState />
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* With usage from one agent only, All is the only choice. */}
+        {choices.length > 1 && (
+          <FilterMenu
+            label={t('page.agents')}
+            value={agent}
+            current={agent === 'all' ? t('page.allShort') : <AgentChoice agentId={agent} />}
+            choices={[
+              { value: 'all', label: t('page.allShort') },
+              ...choices.map((id) => ({ value: id, label: <AgentChoice agentId={id} /> })),
+            ]}
+            onChange={(next) => setUsageFilters({ agent: next })}
+          />
+        )}
+        {fromComputer && (
+          <FilterMenu<UsageScope>
+            label={t('page.scope')}
+            value={scope}
+            current={scope === 'computer' ? computer : t('page.scopes.kettu')}
+            choices={[
+              { value: 'computer', label: computer },
+              { value: 'kettu', label: t('page.scopes.kettu') },
+            ]}
+            onChange={(next) => setUsageFilters({ scope: next })}
+          />
+        )}
+        <FilterMenu<Metric>
+          label={t('page.metric')}
+          value={metric}
+          current={t(`metrics.${metricKind(metric, scope)}`)}
+          choices={[
+            { value: 'tokens', label: t('metrics.tokens') },
+            { value: 'requests', label: t(`metrics.${metricKind('requests', scope)}`) },
+            { value: 'cost', label: t('metrics.cost') },
+          ]}
+          onChange={(next) => setUsageFilters({ metric: next })}
+        />
+        <span className="flex-1" />
+        <SyncState />
+      </div>
     </div>
   )
 }
@@ -549,6 +557,7 @@ function Dashboard({
   page: PageData
   notice: ReactNode
 }) {
+  const { t } = useTranslation('usage')
   const filters = useUsageStore((s) => s.filters)
   const { summary, starts, range } = page
   const { agent, metric, scope } = filters
@@ -586,8 +595,12 @@ function Dashboard({
     <>
       <Header title={title} page={page} used={used} />
       {notice}
+      <PlanLimits used={summary.agents} />
       <div className="flex flex-col gap-2">
-        <div className="grid gap-4.5 @min-[45rem]:grid-cols-2">
+        <section
+          aria-label={t('figures.label')}
+          className="min-w-0 overflow-hidden rounded-xl bg-card shadow-card"
+        >
           <Figures
             facts={facts}
             requestFacts={requestFacts}
@@ -597,26 +610,28 @@ function Dashboard({
             scope={scope}
             rangeLabel={rangeText(range.from, range.to)}
           />
-          <PlanLimits used={summary.agents} />
-        </div>
+          <Composition
+            parts={tokenFacts.parts}
+            saved={kind === 'cost' && facts.priced ? facts.parts.cacheSaved : null}
+          />
+        </section>
         {kind === 'cost' && (
           <EstimateNote asOf={summary.pricesAsOf} unpriced={unpricedTokens(facts)} />
         )}
       </div>
-      <TokenSources
-        parts={tokenFacts.parts}
-        saved={kind === 'cost' && facts.priced ? facts.parts.cacheSaved : null}
-      />
       <OverTime days={days} hours={hours} page={page} metric={metric} scope={scope} />
+      <div className="grid gap-4.5 @min-[45rem]:grid-cols-2">
+        <Breakdown
+          summary={summary}
+          agent={agent}
+          metric={metric}
+          scope={scope}
+          kind={kind}
+          total={facts.total}
+        />
+        <TimeOfDay page={page} agent={agent} metric={metric} scope={scope} />
+      </div>
       <Activity days={days} page={page} metric={metric} scope={scope} />
-      <Breakdown
-        summary={summary}
-        agent={agent}
-        metric={metric}
-        scope={scope}
-        kind={kind}
-        total={facts.total}
-      />
     </>
   )
 }
@@ -638,17 +653,17 @@ function EstimateNote({ asOf, unpriced }: { asOf: string; unpriced: number | nul
   )
 }
 
-/** Each figure's lines when two share a row, from `ledgerCell`. */
-const LEDGER_LINES = {
-  none: '',
-  top: 'shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]',
-  left: 'shadow-[inset_var(--hairline)_0_0_var(--border-subtle)]',
-  both: 'shadow-[inset_var(--hairline)_var(--hairline)_0_var(--border-subtle)]',
-} as const
+/** Each figure's lines: two to a row while the page is narrow, then four in one row. */
+const FIGURE_LINES = [
+  '',
+  'shadow-[inset_var(--hairline)_0_0_var(--border-subtle)]',
+  'shadow-[inset_0_var(--hairline)_0_var(--border-subtle)] @min-[45rem]:shadow-[inset_var(--hairline)_0_0_var(--border-subtle)]',
+  'shadow-[inset_var(--hairline)_var(--hairline)_0_var(--border-subtle)] @min-[45rem]:shadow-[inset_var(--hairline)_0_0_var(--border-subtle)]',
+] as const
 
 /**
- * Four figures in one card, two to a row: the range's total, its average, its busiest day and
- * its requests, or by the hour for one day. The number is compact, with the exact value in its
+ * Four figures in a row, two to a row while the page is narrow: the range's total, its average,
+ * its busiest day and its requests, or by the hour for one day. The number is compact, with the exact value in its
  * tooltip.
  */
 function Figures({
@@ -766,92 +781,103 @@ function Figures({
     })
   }
   return (
-    <div
-      role="group"
-      aria-label={t('figures.label')}
-      className="grid min-w-0 grid-cols-2 grid-rows-2 overflow-hidden rounded-xl bg-card shadow-card"
-    >
-      {cells.map((cell, i) => {
-        const { top, left } = ledgerCell(i)
-        return (
-          <div
-            key={i}
-            className={cn(
-              'flex min-w-0 flex-col gap-0.75 px-4.5 py-3.5',
-              LEDGER_LINES[top ? (left ? 'both' : 'top') : left ? 'left' : 'none'],
-            )}
-          >
-            <span className="text-hint text-tertiary">{cell.label}</span>
-            <span className="font-display text-figure font-bold tracking-[-0.02em] text-primary tabular-nums lining-nums">
-              {cell.value}
-            </span>
-            <span className="text-small text-pretty text-tertiary">{cell.note}</span>
-          </div>
-        )
-      })}
+    <div className="grid min-w-0 grid-cols-2 @min-[45rem]:grid-cols-4">
+      {cells.map((cell, i) => (
+        <div key={i} className={cn('flex min-w-0 flex-col gap-0.75 px-5 py-4.5', FIGURE_LINES[i])}>
+          <span className="text-hint text-tertiary">{cell.label}</span>
+          <span className="font-display text-figure font-bold tracking-[-0.02em] text-primary tabular-nums lining-nums">
+            {cell.value}
+          </span>
+          <span className="text-small text-pretty text-tertiary">{cell.note}</span>
+        </div>
+      ))}
     </div>
   )
 }
 
+/** The kinds of tokens in the order the bar draws them, the cache's first. */
+const COMPOSITION = ['cacheRead', 'cacheWrite', 'input', 'output', 'reasoning'] as const
+const PART_COLORS: Record<(typeof COMPOSITION)[number], string> = {
+  cacheRead: 'var(--part-cache-read)',
+  cacheWrite: 'var(--part-cache-write)',
+  input: 'var(--part-input)',
+  output: 'var(--part-output)',
+  reasoning: 'var(--part-reasoning)',
+}
+
 /**
- * How much of the range's tokens the prompt cache served, and what the rest were made of. Always
- * in tokens, whatever the metric; under Cost, what the cache saved.
+ * At the foot of the figures, what the range's tokens are made of: how much the prompt cache
+ * served, then a bar of each kind and each kind's tokens and share. Always in tokens, whatever
+ * the metric; under Cost, what the cache saved.
  */
-function TokenSources({ parts, saved }: { parts: TokenParts; saved: number | null }) {
+function Composition({ parts, saved }: { parts: TokenParts; saved: number | null }) {
   const { t } = useTranslation('usage')
+  const total = partsTotal(parts)
   const cache = fromCache(parts)
-  const rest = tokenParts(parts, partsTotal(parts)).filter(({ part }) => part !== 'cacheRead')
+  const shares = new Map(tokenParts(parts, total).map((p) => [p.part, p]))
+  const kinds = COMPOSITION.filter((part) => shares.has(part))
   const line =
     cache.share === null
       ? t('noUsage')
       : cache.read === 0
         ? t('cache.none')
-        : t('cache.perHundred', { count: cache.perHundred! })
-  const restTitle =
-    cache.share === null
-      ? t('cache.otherNone')
-      : cache.read === 0
-        ? t('cache.allTokens', { tokens: count(cache.other) })
-        : t('cache.other', { share: percent(1 - cache.share), tokens: count(cache.other) })
+        : t('cache.share', { share: percent(cache.share) })
+  const spoken = kinds
+    .map((part) => `${t(`parts.${part}`)} ${sharePercent(shares.get(part)!.share ?? 0)}`)
+    .join(', ')
   return (
-    <Panel>
-      <PanelTitle className="mb-3.5">{t('cache.title')}</PanelTitle>
-      <div className="grid items-start gap-7 @min-[35rem]:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="text-hint text-tertiary">{t('cache.read')}</span>
-          <span className="font-display text-[30px] leading-9 font-bold tracking-[-0.02em] text-primary tabular-nums lining-nums">
-            {cache.share === null ? (
-              <span className="text-tertiary">—</span>
-            ) : (
-              <>
-                <Count value={cache.read} />{' '}
-                <span className="text-[15px] font-medium tracking-normal text-success">
-                  {percent(cache.share)}
-                </span>
-              </>
-            )}
-          </span>
-          <p className="text-control leading-normal text-secondary">
-            {line}
-            {saved !== null && saved > 0 && (
-              <span className="block">{t('cache.saved', { cost: usd(saved) })}</span>
-            )}
-          </p>
+    <div className="flex flex-col gap-3 px-5 pt-4 pb-4.5 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <h2 className="text-control font-semibold text-primary">{t('cache.title')}</h2>
+        <span className="text-hint text-tertiary">
+          {saved !== null && saved > 0
+            ? t('cache.withSaved', { line, saved: t('cache.saved', { cost: usd(saved) }) })
+            : line}
+        </span>
+      </div>
+      {total > 0 && (
+        <div role="img" aria-label={spoken} className="flex h-2.5 gap-0.5">
+          {kinds
+            .filter((part) => parts[part] > 0)
+            .map((part, i, shown) => (
+              <span
+                key={part}
+                className={cn(
+                  'block h-full min-w-1',
+                  i === 0 && 'rounded-l-sm',
+                  i === shown.length - 1 && 'rounded-r-sm',
+                )}
+                style={{ flex: `${parts[part]} 1 0`, backgroundColor: PART_COLORS[part] }}
+              />
+            ))}
         </div>
-        <div className="flex min-w-0 flex-col gap-2 pt-3.5 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)] @min-[35rem]:pt-0 @min-[35rem]:pl-6 @min-[35rem]:shadow-[inset_var(--hairline)_0_0_var(--border-subtle)]">
-          <span className="mb-0.5 text-hint text-tertiary">{restTitle}</span>
-          {rest.map(({ part, tokens: value }) => (
-            <div key={part} className="flex justify-between gap-3 text-control">
-              <span className="truncate text-tertiary">{t(`parts.${part}`)}</span>
+      )}
+      <div className="grid grid-cols-2 gap-3 @min-[35rem]:grid-cols-5">
+        {kinds.map((part) => (
+          <div key={part} className="flex min-w-0 flex-col gap-0.75">
+            <span className="flex items-center gap-1.5 text-small text-tertiary">
+              <span
+                aria-hidden
+                className="size-2 shrink-0 rounded-xs"
+                style={{ backgroundColor: PART_COLORS[part] }}
+              />
+              <span className="truncate">{t(`parts.${part}`)}</span>
+            </span>
+            <span className="text-control tabular-nums">
               {cache.share === null ? (
                 <span className="text-tertiary">—</span>
               ) : (
-                <Count value={value} className="text-primary" />
+                <>
+                  <Count value={parts[part]} className="font-semibold text-primary" />
+                  <span className="ml-1.5 text-tertiary">
+                    {sharePercent(shares.get(part)!.share ?? 0)}
+                  </span>
+                </>
               )}
-            </div>
-          ))}
-        </div>
+            </span>
+          </div>
+        ))}
       </div>
-    </Panel>
+    </div>
   )
 }

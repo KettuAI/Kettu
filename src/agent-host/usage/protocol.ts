@@ -3,7 +3,7 @@
 
 import type { Platform } from '@shared/platform'
 import type { AgentId } from '@shared/thread'
-import type { ScanProgress } from '@shared/usage'
+import type { ClockRequest, ScanProgress } from '@shared/usage'
 import type { SourceMap, UsageDbStatus } from './db'
 import type { UsageRow } from './model'
 
@@ -24,7 +24,15 @@ export interface ScanResult {
 
 export type UsageRequest =
   | { id: number; op: 'write'; rows: UsageRow[] }
-  | { id: number; op: 'summary'; dayStarts: number[]; from: number; to: number; sources: SourceMap }
+  | {
+      id: number
+      op: 'summary'
+      dayStarts: number[]
+      from: number
+      to: number
+      sources: SourceMap
+      clock?: ClockRequest
+    }
   | { id: number; op: 'totals'; from: number; to: number; sources: SourceMap }
   | { id: number; op: 'stats' }
   | ({ id: number; op: 'scan' } & ScanRequest)

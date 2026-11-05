@@ -1,17 +1,14 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { ChevronDownIcon, FolderIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
 import type { UsageScope, UsageSummary } from '@shared/usage'
-import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { SegmentedControl } from '@renderer/components/segmented-control'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { basename, percent, usd } from '@renderer/lib/format'
+import { basename, count, usd } from '@renderer/lib/format'
 import { currentLocale } from '@renderer/lib/i18n'
 import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import {
-  agentFill,
   agentRows,
   foldRows,
   modelRows,
@@ -21,19 +18,61 @@ import {
   type Metric,
   type MetricKind,
 } from './model'
-import { Panel, PanelTitle } from './panel'
 import { Count } from './count'
+import { Panel, PanelTitle } from './panel'
+import { useAgentColor } from './series'
+import { sharePercent } from './text'
 
 type Grouping = 'model' | 'project' | 'agent'
-const GROUPINGS: readonly Grouping[] = ['model', 'project', 'agent']
 
-/** A row: the name, a bar against the largest row, the value and its share. */
-const ROW =
-  'grid h-10 grid-cols-[minmax(0,1fr)_120px_72px_52px] items-center gap-4 px-3 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)] last:shadow-none'
-/** A project's bar, in the neutral series color, since a project is no agent's. */
-const PROJECT_FILL = 'bg-agent-other'
+/** The rows by size, the largest furthest from the card, then the rest folded into one. */
+const SHARES = [
+  'var(--share-1)',
+  'var(--share-2)',
+  'var(--share-3)',
+  'var(--share-4)',
+  'var(--share-5)',
+] as const
+const REST = 'var(--share-rest)'
 
-/** The range by model, project or agent: the five largest, then the rest folded into one row. */
+const SIZE = 140
+const OUTER = 70
+const INNER = 46
+/** The room between two slices, in degrees. */
+const GAP = 1.8
+
+/** A slice of the ring from `start` to `end`, in degrees clockwise from the top. */
+function slice(start: number, end: number): string {
+  const point = (r: number, angle: number) => {
+    const a = ((angle - 90) * Math.PI) / 180
+    return `${(OUTER + r * Math.cos(a)).toFixed(2)} ${(OUTER + r * Math.sin(a)).toFixed(2)}`
+  }
+  // A whole ring is two halves, since an arc cannot start and end at one point.
+  if (end - start >= 359.99) return `${slice(0, 180)} ${slice(180, 360)}`
+  const large = end - start > 180 ? 1 : 0
+  return [
+    `M ${point(OUTER, start)}`,
+    `A ${OUTER} ${OUTER} 0 ${large} 1 ${point(OUTER, end)}`,
+    `L ${point(INNER, end)}`,
+    `A ${INNER} ${INNER} 0 ${large} 0 ${point(INNER, start)}`,
+    'Z',
+  ].join(' ')
+}
+
+interface Item {
+  key: string
+  name: ReactNode
+  /** The name in full, for its tooltip and screen readers. */
+  label: string
+  detail: string | null
+  value: number | null
+  color: string
+}
+
+/**
+ * The range by model, project or agent, at half the page: a ring of the five largest and the
+ * rest, the total inside it, beside a line for each with its amount and share.
+ */
 export function Breakdown({
   summary,
   agent,
@@ -51,8 +90,12 @@ export function Breakdown({
   total: number
 }) {
   const { t } = useTranslation('usage')
-  const [grouping, setGrouping] = useState<Grouping>('model')
-  const [open, setOpen] = useState(false)
+  const color = useAgentColor()
+  const groupings: Grouping[] =
+    agent === 'all' ? ['model', 'project', 'agent'] : ['model', 'project']
+  const [chosen, setGrouping] = useState<Grouping>('model')
+  const grouping = groupings.includes(chosen) ? chosen : 'model'
+  const [hovered, setHovered] = useState<string | null>(null)
   const rows = useMemo(
     () =>
       grouping === 'model'
@@ -63,129 +106,159 @@ export function Breakdown({
     [grouping, summary, agent, metric, scope],
   )
   const folded = foldRows(rows)
-  const largest = Math.max(0, ...rows.map((row) => row.value ?? 0))
+  const items: Item[] = folded.rows.map((row, i) => {
+    const label = rowName(row, grouping, t)
+    return {
+      key: row.key,
+      label,
+      name: <RowName row={row} label={label} />,
+      detail:
+        grouping === 'model' && row.agents.length > 0
+          ? new Intl.ListFormat(currentLocale(), { type: 'conjunction' }).format(
+              row.agents.map((id) => agentName(id)),
+            )
+          : null,
+      value: row.value,
+      color: grouping === 'agent' ? color(row.key as AgentId) : (SHARES[i] ?? REST),
+    }
+  })
+  if (folded.rest) {
+    const label = t(`breakdown.others.${grouping}`, { count: folded.rest.count })
+    items.push({
+      key: '\n',
+      label,
+      name: label,
+      detail: null,
+      value: folded.rest.value,
+      color: REST,
+    })
+  }
   const share = (value: number | null) =>
-    value !== null && total > 0 ? percent(value / total) : '—'
+    value !== null && total > 0 ? sharePercent(value / total) : '—'
   const amount = (value: number | null): ReactNode =>
     value === null ? t('noPrice') : kind === 'cost' ? usd(value) : <Count value={value} />
+  const drawn = items.filter((item) => (item.value ?? 0) > 0)
+  const centerText = kind === 'cost' ? usd(total) : count(total)
+  const sum = drawn.reduce((s, item) => s + item.value!, 0)
+  const gap = drawn.length > 1 ? GAP : 0
+  const slices: { item: Item; d: string }[] = []
+  for (let i = 0, angle = 0; i < drawn.length; i++) {
+    const item = drawn[i]!
+    const start = angle + gap / 2
+    angle += (item.value! / sum) * 360
+    // A sliver keeps a sliver's width, so it still shows.
+    slices.push({ item, d: slice(start, Math.max(start + 0.6, angle - gap / 2)) })
+  }
+  const spoken = items.map((item) => `${item.label} ${share(item.value)}`).join(', ')
   return (
-    <Panel className="px-2 pt-4 pb-1.5">
-      <div className="mx-3 mb-3 flex flex-wrap items-center gap-3">
-        <PanelTitle className="flex-1">{t('breakdown.title')}</PanelTitle>
+    <Panel className="pt-3.5 pb-4">
+      <div className="mb-3 flex min-h-7.5 items-center gap-2.5">
+        <PanelTitle className="flex-1 truncate">{t('breakdown.title')}</PanelTitle>
         <SegmentedControl
           aria-label={t('breakdown.groupBy')}
           value={grouping}
           onChange={(next) => {
             setGrouping(next)
-            setOpen(false)
+            setHovered(null)
           }}
-          segments={GROUPINGS.map((value) => ({ value, label: t(`breakdown.groups.${value}`) }))}
+          segments={groupings.map((value) => ({ value, label: t(`breakdown.groups.${value}`) }))}
         />
       </div>
-      <ul className="flex flex-col shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-        {rows.length === 0 ? (
-          <li className="flex h-10 items-center px-3 text-control text-tertiary">{t('noUsage')}</li>
-        ) : (
-          (open ? rows : folded.rows).map((row) => (
-            <li key={row.key} className={ROW}>
-              <RowName row={row} grouping={grouping} />
-              <span aria-hidden className="h-1 overflow-hidden rounded-xs bg-border-soft">
-                <span
+      {items.length === 0 ? (
+        <p className="flex flex-1 items-center justify-center py-12 text-control text-tertiary">
+          {t('noUsage')}
+        </p>
+      ) : (
+        <div className="flex flex-1 items-center gap-5.5">
+          <div role="img" aria-label={spoken} className="relative size-35 shrink-0">
+            <svg aria-hidden viewBox={`0 0 ${SIZE} ${SIZE}`} className="size-35">
+              {slices.map(({ item, d }) => (
+                <path
+                  key={item.key}
+                  d={d}
+                  style={{ fill: item.color }}
                   className={cn(
-                    'block h-full rounded-xs',
-                    grouping === 'project'
-                      ? PROJECT_FILL
-                      : agentFill(grouping === 'agent' ? (row.key as AgentId) : row.agents[0]!),
+                    'transition-opacity duration-(--duration-fast)',
+                    hovered !== null && hovered !== item.key && 'opacity-35',
                   )}
-                  style={{
-                    width: `${largest > 0 && row.value !== null ? (row.value / largest) * 100 : 0}%`,
-                  }}
+                  onPointerEnter={() => setHovered(item.key)}
+                  onPointerLeave={() => setHovered(null)}
                 />
-              </span>
+              ))}
+            </svg>
+            <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
               <span
                 className={cn(
-                  'text-right text-lede tabular-nums',
-                  row.value === null ? 'text-secondary' : 'text-primary',
+                  'font-display leading-5.5 font-bold text-primary tabular-nums',
+                  centerText.length > 7 ? 'text-[15px]' : 'text-[18px]',
                 )}
               >
-                {amount(row.value)}
+                {centerText}
               </span>
-              <span className="text-right text-hint text-tertiary tabular-nums">
-                {share(row.value)}
-              </span>
-            </li>
-          ))
-        )}
-        {folded.rest && (
-          <li className={ROW}>
-            <button
-              type="button"
-              aria-expanded={open}
-              onClick={() => setOpen((was) => !was)}
-              className="flex items-center gap-1.5 justify-self-start rounded-md text-lede text-secondary outline-none focus-ring hover:text-foreground"
-            >
-              {open
-                ? t('breakdown.fewer')
-                : t(`breakdown.others.${grouping}`, { count: folded.rest.count })}
-              <ChevronDownIcon
-                aria-hidden
-                strokeWidth={1.75}
+              <span className="text-small text-tertiary">{t(`breakdown.units.${kind}`)}</span>
+            </span>
+          </div>
+          <ul className="min-w-0 flex-1">
+            {items.map((item, i) => (
+              <li
+                key={item.key}
+                onPointerEnter={() => setHovered(item.key)}
+                onPointerLeave={() => setHovered(null)}
                 className={cn(
-                  'size-3 text-tertiary transition-transform duration-(--duration-fast)',
-                  open && 'rotate-180',
+                  '-mx-1.5 grid h-6.75 grid-cols-[9px_minmax(0,1fr)_auto_38px] items-center gap-x-2.5 rounded-md px-1.5 text-hint',
+                  i > 0 && 'shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]',
+                  hovered === item.key && 'bg-hover shadow-none',
                 )}
-              />
-            </button>
-            <span />
-            {!open && (
-              <>
-                <span className="text-right text-lede text-secondary tabular-nums">
-                  {amount(folded.rest.value)}
+              >
+                <span
+                  aria-hidden
+                  className="size-2.25 rounded-[3px]"
+                  style={{ backgroundColor: item.color }}
+                />
+                <span className="flex min-w-0 items-baseline gap-1.5">
+                  {item.name}
+                  {item.detail && (
+                    <span className="min-w-0 shrink-[3] truncate text-small text-tertiary">
+                      {item.detail}
+                    </span>
+                  )}
                 </span>
-                <span className="text-right text-hint text-tertiary tabular-nums">
-                  {share(folded.rest.value)}
+                <span
+                  className={cn(
+                    'text-right font-medium tabular-nums',
+                    item.value === null ? 'text-secondary' : 'text-primary',
+                  )}
+                >
+                  {amount(item.value)}
                 </span>
-              </>
-            )}
-          </li>
-        )}
-      </ul>
+                <span className="text-right text-tertiary tabular-nums">{share(item.value)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </Panel>
   )
 }
 
-/** A row's mark or folder, its name, and for a model the agents that used it. */
-function RowName({ row, grouping }: { row: BreakdownRow; grouping: Grouping }) {
-  const { t } = useTranslation('usage')
-  const name =
-    grouping === 'agent'
-      ? agentName(row.key as AgentId)
-      : grouping === 'project'
-        ? (row.name ?? t('breakdown.noProject'))
-        : (row.name ?? t('breakdown.unknownModel'))
-  const mark = grouping === 'agent' ? (row.key as AgentId) : row.agents[0]
+function rowName(
+  row: BreakdownRow,
+  grouping: Grouping,
+  t: (key: 'breakdown.noProject' | 'breakdown.unknownModel') => string,
+): string {
+  if (grouping === 'agent') return agentName(row.key as AgentId)
+  if (grouping === 'project') return row.name ?? t('breakdown.noProject')
+  return row.name ?? t('breakdown.unknownModel')
+}
+
+/** A row's name, its folder in the tooltip for a project. */
+function RowName({ row, label }: { row: BreakdownRow; label: string }) {
   return (
-    <span className="flex min-w-0 items-center gap-2.5">
-      {grouping === 'project' || !mark ? (
-        <FolderIcon aria-hidden className="size-4 shrink-0 text-icon" />
-      ) : (
-        <AgentMark agent={mark} size={16} />
-      )}
-      <Tooltip>
-        <TooltipTrigger
-          render={<span className="min-w-0 truncate text-lede font-medium text-primary" />}
-        >
-          {name}
-        </TooltipTrigger>
-        <TooltipContent>{row.path ?? name}</TooltipContent>
-      </Tooltip>
-      {grouping === 'model' && row.agents.length > 0 && (
-        <span className="min-w-0 shrink-[3] truncate text-hint text-tertiary">
-          {new Intl.ListFormat(currentLocale(), { type: 'conjunction' }).format(
-            row.agents.map((id) => agentName(id)),
-          )}
-        </span>
-      )}
-    </span>
+    <Tooltip disabled={!row.path}>
+      <TooltipTrigger render={<span className="min-w-0 truncate text-primary" />}>
+        {label}
+      </TooltipTrigger>
+      <TooltipContent>{row.path}</TooltipContent>
+    </Tooltip>
   )
 }

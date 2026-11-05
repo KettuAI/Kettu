@@ -5,6 +5,7 @@ import type { AgentId } from '@shared/thread'
 import type { UsageScope, UsageStatus, UsageSummary } from '@shared/usage'
 import {
   addDays,
+  clockZones,
   dayOf,
   dayStarts,
   firstDayOfWeek,
@@ -44,7 +45,12 @@ export interface UsagePage {
   summary: UsageSummary
   /** A one-day range's sums per hour, for its trend; null for a longer range. */
   hours: { starts: number[]; summary: UsageSummary } | null
+  /** The days the summary's hours of the day cover: the range, or the last 30 days for one day. */
+  clock: DayRange
 }
+
+/** Days the hours of the day cover when the range is one day, whose trend is by hour already. */
+export const CLOCK_DAYS = 30
 
 interface UsageStore {
   /** Each session's last context breakdown. */
@@ -168,18 +174,20 @@ export async function loadUsagePage(): Promise<void> {
         to: Math.max(range.to, heat.to),
       })
       const hourly = oneDay(range) ? hourStarts(range) : null
-      const read = (boundaries: number[]) =>
+      const clock = hourly ? { from: addDays(range.to, -CLOCK_DAYS), to: range.to } : range
+      const read = (boundaries: number[], byHour = false) =>
         host('usage.summary', {
           dayStarts: boundaries,
           from: range.from,
           to: range.to,
           scope: filters.scope,
+          ...(byHour && { clock: { ...clock, zones: clockZones(clock.from, clock.to) } }),
         })
       // All time starts at the first day with usage of this scope, known only from the answer, so
       // its hours are read after it; any other range's along with it.
       const settled = filters.range.kind !== 'all'
       const [summary, early] = await Promise.all([
-        read(starts),
+        read(starts, true),
         settled && hourly ? read(hourly) : null,
       ])
       if (id !== request) return
@@ -199,6 +207,7 @@ export async function loadUsagePage(): Promise<void> {
           range,
           summary,
           hours: hourly && hours ? { starts: hourly, summary: hours } : null,
+          clock,
         },
         loading: false,
         error: null,

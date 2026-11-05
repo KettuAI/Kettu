@@ -245,6 +245,8 @@
   /* Pi's yellow mixed 86% with the light surface, as Claude Code's and Codex's series are. */
   --agent-pi: oklch(0.852 0.114 83.4);
   --agent-other: oklch(0.8 0 0);
+  /* How far each further agent of one harness moves its series' lightness, away from the card. */
+  --agent-step: -0.16;
   --heat-0: rgb(20 26 34 / 5.5%);
   /* How much of the heat hue each step lays over the card, and how far the top step goes past
      the hue toward the text. */
@@ -444,6 +446,7 @@
     /* Pi's yellow mixed 86% with the dark surface. */
     --agent-pi: oklch(0.749 0.115 84.2);
     --agent-other: oklch(0.46 0 0);
+    --agent-step: 0.14;
     --heat-0: var(--bg-subtle);
     --heat-step-1: 20%;
     --heat-step-2: 40%;
@@ -633,6 +636,7 @@
   /* Pi's yellow mixed 86% with the dark surface. */
   --agent-pi: oklch(0.749 0.115 84.2);
   --agent-other: oklch(0.46 0 0);
+  --agent-step: 0.14;
   --heat-0: var(--bg-subtle);
   --heat-step-1: 20%;
   --heat-step-2: 40%;
@@ -744,6 +748,13 @@
   --agent-omp: color-mix(in oklch, var(--brand-omp-2) 86%, var(--bg-surface));
   --agent-muse: color-mix(in oklch, var(--brand-muse) 86%, var(--bg-surface));
   --agent-codewhale: color-mix(in oklch, var(--brand-codewhale-1) 86%, var(--bg-surface));
+  /* The further agents of a harness that can have several: a step, two, then one toward the card. */
+  --agent-claude-code-2: oklch(from var(--agent-claude-code) calc(l + var(--agent-step)) c h);
+  --agent-claude-code-3: oklch(from var(--agent-claude-code) calc(l + 2 * var(--agent-step)) c h);
+  --agent-claude-code-4: oklch(from var(--agent-claude-code) calc(l - var(--agent-step)) c h);
+  --agent-codex-2: oklch(from var(--agent-codex) calc(l + var(--agent-step)) c h);
+  --agent-codex-3: oklch(from var(--agent-codex) calc(l + 2 * var(--agent-step)) c h);
+  --agent-codex-4: oklch(from var(--agent-codex) calc(l - var(--agent-step)) c h);
   /* The halo around a needs-you dot, a little stronger on dark. */
   --attention-halo: light-dark(
     color-mix(in srgb, var(--attention-dot) 18%, transparent),
@@ -751,6 +762,19 @@
   );
   /* Amounts deepen in the fox orange laid over the card, mixed so each step is opaque. */
   --heat-hue: var(--attention-dot);
+  /* Shares by size, the largest furthest from the card, in the same orange; the rest in gray. */
+  --share-1: color-mix(in oklab, var(--heat-hue), var(--text-primary) 24%);
+  --share-2: var(--heat-hue);
+  --share-3: color-mix(in oklab, var(--heat-hue) 68%, var(--bg-surface));
+  --share-4: color-mix(in oklab, var(--heat-hue) 44%, var(--bg-surface));
+  --share-5: color-mix(in oklab, var(--heat-hue) 24%, var(--bg-surface));
+  --share-rest: var(--agent-other);
+  /* The kinds of tokens, in grays from the text toward the card. */
+  --part-input: color-mix(in oklab, var(--text-primary) 82%, var(--bg-surface));
+  --part-output: color-mix(in oklab, var(--text-primary) 62%, var(--bg-surface));
+  --part-reasoning: color-mix(in oklab, var(--text-primary) 44%, var(--bg-surface));
+  --part-cache-read: color-mix(in oklab, var(--text-primary) 28%, var(--bg-surface));
+  --part-cache-write: color-mix(in oklab, var(--text-primary) 14%, var(--bg-surface));
   --heat-1: color-mix(in srgb, var(--heat-hue) var(--heat-step-1), var(--bg-surface));
   --heat-2: color-mix(in srgb, var(--heat-hue) var(--heat-step-2), var(--bg-surface));
   --heat-3: color-mix(in srgb, var(--heat-hue) var(--heat-step-3), var(--bg-surface));

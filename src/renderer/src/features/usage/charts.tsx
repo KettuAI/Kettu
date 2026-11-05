@@ -16,7 +16,6 @@ import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import {
   addDays,
-  agentFill,
   axisLabels,
   barGap,
   BAR_WIDTH,
@@ -24,6 +23,7 @@ import {
   type DayRange,
   type TrendBar,
 } from './model'
+import { useAgentColor } from './series'
 
 const HEAT_FILL = ['bg-heat-0', 'bg-heat-1', 'bg-heat-2', 'bg-heat-3', 'bg-heat-4'] as const
 /** A day outside the range: its step in gray, so the shades still compare. */
@@ -120,6 +120,7 @@ export function TrendChart({
   onChoose: (index: number | null) => void
 }) {
   const begun = bars.length - future
+  const color = useAgentColor()
   const row = useRef<HTMLDivElement>(null)
   const [place, setPlace] = useState<CSSProperties | null>(null)
 
@@ -188,9 +189,8 @@ export function TrendChart({
                       className={cn(
                         'min-h-px basis-0',
                         k > 0 && 'shadow-[inset_0_calc(-1*var(--hairline))_0_var(--bg-surface)]',
-                        agentFill(agentId),
                       )}
-                      style={{ flexGrow: bar.byAgent[agentId] }}
+                      style={{ flexGrow: bar.byAgent[agentId], backgroundColor: color(agentId) }}
                     />
                   ))}
                 </div>
@@ -299,6 +299,7 @@ export const TrendLegend = memo(function TrendLegend({
   keepOne: string
   onChange: (shown: AgentId[]) => void
 }) {
+  const color = useAgentColor()
   return (
     <ToggleGroup
       multiple
@@ -328,8 +329,9 @@ export const TrendLegend = memo(function TrendLegend({
                 aria-hidden
                 className={cn(
                   'size-2 rounded-xs',
-                  on ? agentFill(id) : 'shadow-[inset_0_0_0_1.5px_var(--border-strong)]',
+                  !on && 'shadow-[inset_0_0_0_1.5px_var(--border-strong)]',
                 )}
+                style={on ? { backgroundColor: color(id) } : undefined}
               />
               {agentName(id)}
             </TooltipTrigger>

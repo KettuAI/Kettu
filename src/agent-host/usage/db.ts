@@ -5,7 +5,14 @@ import { existsSync, mkdirSync, renameSync } from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite'
 import type { AgentId } from '@shared/thread'
-import type { DayUsage, TokenParts, UsageSource, UsageSummary } from '@shared/usage'
+import type {
+  ClockRequest,
+  DayUsage,
+  HourUsage,
+  TokenParts,
+  UsageSource,
+  UsageSummary,
+} from '@shared/usage'
 import { PRICES, type FileCursor, type UsageRow } from './model'
 import { keepsNewer } from './rows'
 
@@ -148,6 +155,7 @@ type Row = Record<string, SQLOutputValue>
 
 const num = (value: SQLOutputValue | undefined): number => Number(value ?? 0)
 const quarterOf = (at: number): number => Math.floor(at / QUARTER_MS)
+const QUARTERS_A_DAY = 96
 
 function parts(row: Row): TokenParts {
   return {
@@ -248,6 +256,12 @@ function prepareAll(db: DatabaseSync) {
       SELECT b.quarter, b.agent_id, b.source, b.model, ${SUMS} FROM buckets b ${PRICE_JOIN}
       WHERE b.quarter >= ? AND b.quarter < ?
       GROUP BY b.quarter, b.agent_id, b.source, b.model`),
+    // The local hour each bucket began in: its quarter moved by the offset, in quarters.
+    clockBuckets: sql(`
+      SELECT ((b.quarter + CAST(? AS INTEGER)) % ${QUARTERS_A_DAY}) / 4 AS hour, b.agent_id, b.source, ${SUMS}
+      FROM buckets b ${PRICE_JOIN}
+      WHERE b.quarter >= ? AND b.quarter < ?
+      GROUP BY hour, b.agent_id, b.source`),
     modelBuckets: sql(`
       SELECT b.agent_id, b.source, b.model, ${SUMS} FROM buckets b ${PRICE_JOIN}
       WHERE b.quarter >= ? AND b.quarter < ?
@@ -501,9 +515,16 @@ export class UsageDb {
 
   /**
    * Sums per period and agent over `dayStarts`, local days or a day's hours (n periods take n + 1
-   * ascending boundaries, each on a quarter hour), and per model and per project over [from, to).
+   * ascending boundaries, each on a quarter hour), per model and per project over [from, to), and
+   * with `clock`, per local hour of the day and agent over its range.
    */
-  summary(dayStarts: readonly number[], from: number, to: number, sources: SourceMap): DbSummary {
+  summary(
+    dayStarts: readonly number[],
+    from: number,
+    to: number,
+    sources: SourceMap,
+    clock?: ClockRequest,
+  ): DbSummary {
     return this.guard(
       (sql) => {
         const counts = (row: Row): boolean =>
@@ -543,14 +564,34 @@ export class UsageDb {
           if (sum) addParts(sum, parts(row))
           else projects.set(key, { agentId, project, ...parts(row) })
         }
+        const hours = new Map<string, HourUsage>()
+        if (clock) {
+          const end = quarterOf(clock.to)
+          clock.zones.forEach((zone, i) => {
+            const next = clock.zones[i + 1]
+            const a = Math.max(quarterOf(clock.from), quarterOf(zone.from))
+            const b = Math.min(end, next ? quarterOf(next.from) : end)
+            if (a >= b) return
+            for (const row of sql.clockBuckets.all(zone.offset / 15, a, b)) {
+              if (!counts(row)) continue
+              const hour = num(row.hour)
+              const agentId = String(row.agent_id) as AgentId
+              const key = `${hour}\n${agentId}`
+              const sum = hours.get(key)
+              if (sum) addParts(sum, parts(row))
+              else hours.set(key, { hour, agentId, ...parts(row) })
+            }
+          })
+        }
         return {
           days: [...days.values()],
+          clock: [...hours.values()],
           models,
           projects: [...projects.values()],
           pricesAsOf: PRICES.asOf,
         }
       },
-      { days: [], models: [], projects: [], pricesAsOf: PRICES.asOf },
+      { days: [], clock: [], models: [], projects: [], pricesAsOf: PRICES.asOf },
     )
   }
 

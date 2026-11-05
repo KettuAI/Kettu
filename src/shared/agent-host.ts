@@ -40,7 +40,7 @@ import type {
   RoutinesProblem,
 } from './routines'
 import type { AgentColor } from './settings'
-import type { UsageScope, UsageStatus, UsageSummary, UsageTotal } from './usage'
+import type { ClockRequest, UsageScope, UsageStatus, UsageSummary, UsageTotal } from './usage'
 import type {
   AgentId,
   HarnessId,
@@ -725,8 +725,15 @@ export interface HostContract {
     result: MediaAuthorization
   }
   // `dayStarts`: the periods to sum, local days or a day's hours, as n + 1 ascending boundaries.
+  // `clock`: a range to sum by hour of the day as well.
   'usage.summary': {
-    params: { dayStarts: number[]; from: number; to: number; scope: UsageScope }
+    params: {
+      dayStarts: number[]
+      from: number
+      to: number
+      scope: UsageScope
+      clock?: ClockRequest
+    }
     result: UsageSummary
   }
   'usage.total': { params: { from: number; to: number }; result: UsageTotal }

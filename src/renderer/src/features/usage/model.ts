@@ -1,8 +1,15 @@
 // The usage page's arithmetic: local days, the chosen range, and the figures, trend, heatmap and
 // breakdowns summed from the host's per-day rows. Pure, so it is tested without a window.
 
-import type { AgentId } from '@shared/thread'
-import { partsTotal, type TokenParts, type UsageScope, type UsageSummary } from '@shared/usage'
+import { harnessOf, type AgentId, type HarnessId } from '@shared/thread'
+import {
+  partsTotal,
+  type ClockZone,
+  type HourUsage,
+  type TokenParts,
+  type UsageScope,
+  type UsageSummary,
+} from '@shared/usage'
 
 export type RangeKind = '1' | '7' | '30' | '90' | '365' | 'all'
 /** A custom range holds local day starts, both ends included. */
@@ -48,6 +55,7 @@ export const WEEKLY_DAYS = 731
 export const BREAKDOWN_ROWS = 5
 
 const HOUR_MS = 3_600_000
+const QUARTER_MS = 900_000
 
 const ZERO: TokenParts = {
   input: 0,
@@ -659,14 +667,6 @@ export function usedOutside(
   return days.some((day, i) => (day < range.from || day >= range.to) && (values[i] ?? 0) > 0)
 }
 
-/**
- * Where the `index`th figure sits when the figures' card holds two to a row. A cell draws the
- * hairline on its top when a row is above it, and on its left when a cell is beside it.
- */
-export function ledgerCell(index: number): { top: boolean; left: boolean } {
-  return { top: index >= 2, left: index % 2 === 1 }
-}
-
 export interface BreakdownRow {
   key: string
   /** The model, or the project folder; null for an unknown model, a scratch or unknown project. */
@@ -914,43 +914,113 @@ export function limitsToRead<
   )
 }
 
-/** The agents whose plans the page lists: each with plan limits, and each other with usage. */
-export function planAgents<T extends { id: AgentId; limits: readonly unknown[] }>(
-  agents: readonly T[],
-  used: readonly AgentId[],
-): T[] {
-  return agents.filter((agent) => agent.limits.length > 0 || used.includes(agent.id))
-}
-
-/**
- * The plan limits' rows: an account that reports limits, or will once read, has a row; the agents
- * that report none join one line.
- */
-export function splitPlans<
-  T extends { limits: readonly unknown[]; capabilities: { reports: boolean } },
->(agents: readonly T[]): { rows: T[]; unreported: T[] } {
-  const reports = (agent: T) => agent.limits.length > 0 || agent.capabilities.reports
-  return { rows: agents.filter(reports), unreported: agents.filter((agent) => !reports(agent)) }
-}
-
 /** How a plan window's reset reads: the time left when it is within a day, else when it is. */
 export function resetForm(resetsAt: number, now: number): 'in' | 'at' {
   const left = resetsAt - now
   return left > 0 && left < 86_400_000 ? 'in' : 'at'
 }
 
-/** The agents whose series color is their own, from their mark. */
-const AGENT_FILLS: Partial<Record<AgentId, string>> = {
-  'claude-code': 'bg-agent-claude-code',
-  codex: 'bg-agent-codex',
-  opencode: 'bg-agent-opencode',
-  pi: 'bg-agent-pi',
-  omp: 'bg-agent-omp',
-  muse: 'bg-agent-muse',
-  codewhale: 'bg-agent-codewhale',
+/** The agents whose series color is their own, from their mark, by harness. */
+const AGENT_COLORS: Partial<Record<HarnessId, string>> = {
+  'claude-code': 'var(--agent-claude-code)',
+  codex: 'var(--agent-codex)',
+  opencode: 'var(--agent-opencode)',
+  pi: 'var(--agent-pi)',
+  omp: 'var(--agent-omp)',
+  muse: 'var(--agent-muse)',
+  codewhale: 'var(--agent-codewhale)',
 }
 
-/** An agent's series color; one without a color of its own shares the neutral one. */
-export function agentFill(agentId: AgentId): string {
-  return AGENT_FILLS[agentId] ?? 'bg-agent-other'
+/** The harnesses that can have several agents, and the steps of color their further agents take. */
+const AGENT_STEPS: Partial<Record<HarnessId, readonly string[]>> = {
+  'claude-code': [
+    'var(--agent-claude-code)',
+    'var(--agent-claude-code-2)',
+    'var(--agent-claude-code-3)',
+    'var(--agent-claude-code-4)',
+  ],
+  codex: [
+    'var(--agent-codex)',
+    'var(--agent-codex-2)',
+    'var(--agent-codex-3)',
+    'var(--agent-codex-4)',
+  ],
+}
+
+/**
+ * An agent's series color: its harness's, a step further from the card for each agent of the
+ * harness before it in `order`, so a color follows the agent whatever a filter leaves. An agent
+ * no longer in `order` takes the step after those that are; one without a color of its own
+ * shares the neutral one.
+ */
+export function agentColor(agentId: AgentId, order: readonly AgentId[]): string {
+  const harness = harnessOf(agentId)
+  const steps = AGENT_STEPS[harness]
+  if (!steps) return AGENT_COLORS[harness] ?? 'var(--agent-other)'
+  const same = order.filter((id) => harnessOf(id) === harness)
+  const index = same.indexOf(agentId)
+  return steps[(index < 0 ? same.length : index) % steps.length]!
+}
+
+/**
+ * The time zones over [from, to) by this computer's clocks, each from the quarter hour its offset
+ * starts, for the host to sum the hours of the day by. A change is looked for a day at a time and
+ * found to the quarter hour.
+ */
+export function clockZones(from: number, to: number): ClockZone[] {
+  const offset = (at: number) => -new Date(at).getTimezoneOffset()
+  const zones: ClockZone[] = [
+    { from: Math.floor(from / QUARTER_MS) * QUARTER_MS, offset: offset(from) },
+  ]
+  let at = from
+  while (at < to) {
+    const next = Math.min(at + 86_400_000, to)
+    const current = zones[zones.length - 1]!.offset
+    if (offset(next) !== current) {
+      let low = Math.floor(at / QUARTER_MS)
+      let high = Math.ceil(next / QUARTER_MS)
+      while (high - low > 1) {
+        const middle = Math.floor((low + high) / 2)
+        if (offset(middle * QUARTER_MS) === current) low = middle
+        else high = middle
+      }
+      zones.push({ from: high * QUARTER_MS, offset: offset(high * QUARTER_MS) })
+    }
+    at = next
+  }
+  return zones
+}
+
+/** The range's amounts in the metric for each local hour of the day, 0 to 23. */
+export function hourValues(
+  clock: readonly HourUsage[],
+  agent: AgentFilter,
+  metric: Metric = 'tokens',
+  scope: UsageScope = 'computer',
+): number[] {
+  const values = Array.from({ length: 24 }, () => 0)
+  for (const row of clock) {
+    if (agent !== 'all' && row.agentId !== agent) continue
+    values[row.hour] = values[row.hour]! + (metricValue(row, metric, scope) ?? 0)
+  }
+  return values
+}
+
+/**
+ * The `length` hours in a row, across midnight too, that hold the most, and their share of the
+ * day; null when nothing was used. Ties go to the earliest start.
+ */
+export function busiestHours(
+  values: readonly number[],
+  length = 9,
+): { from: number; share: number } | null {
+  const total = values.reduce((sum, value) => sum + value, 0)
+  if (total <= 0) return null
+  let best = { from: 0, sum: -1 }
+  for (let from = 0; from < values.length; from++) {
+    let sum = 0
+    for (let k = 0; k < length; k++) sum += values[(from + k) % values.length]!
+    if (sum > best.sum) best = { from, sum }
+  }
+  return { from: best.from, share: best.sum / total }
 }

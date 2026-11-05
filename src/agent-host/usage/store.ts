@@ -2,7 +2,7 @@
 
 import type { Worker } from 'node:worker_threads'
 import type { AgentId } from '@shared/thread'
-import type { ScanProgress, TokenParts } from '@shared/usage'
+import type { ClockRequest, ScanProgress, TokenParts } from '@shared/usage'
 import type { LogFn } from '../storage'
 import type { DbSummary, SourceMap, SourceStats, UsageDbStatus } from './db'
 import type { UsageRow } from './model'
@@ -152,8 +152,14 @@ export class UsageStore {
     return this.request({ op: 'write', rows })
   }
 
-  summary(dayStarts: number[], from: number, to: number, sources: SourceMap): Promise<DbSummary> {
-    return this.request({ op: 'summary', dayStarts, from, to, sources })
+  summary(
+    dayStarts: number[],
+    from: number,
+    to: number,
+    sources: SourceMap,
+    clock?: ClockRequest,
+  ): Promise<DbSummary> {
+    return this.request({ op: 'summary', dayStarts, from, to, sources, clock })
   }
 
   totals(

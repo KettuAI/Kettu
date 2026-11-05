@@ -86,13 +86,10 @@
   },
   "cache": {
     "title": "Token 从哪里来",
-    "read": "从 prompt cache 读取",
-    "perHundred_other": "每 100 个 token 中有 {{count}} 个来自缓存，只按很低的价格计费。",
     "none": "这些 token 都不是从 prompt cache 读取的。",
     "saved": "按 API 价格估算，大约节省了 {{cost}}。",
-    "other": "其余 {{share}} · {{tokens}}",
-    "allTokens": "全部 {{tokens}} token",
-    "otherNone": "其他 token"
+    "share": "其中 {{share}} 是从 prompt cache 读取的。",
+    "withSaved": "{{line}}{{saved}}"
   },
   "trend": {
     "title": "趋势",
@@ -123,15 +120,27 @@
     "keepOne": "图表中至少保留一个 Agent"
   },
   "limits": {
-    "title": "剩余额度",
-    "none": "还没有 Agent 报告套餐限额。",
+    "title": "套餐限额",
+    "none": "还没有 Agent 报告套餐限额。用 Claude 或 ChatGPT 订阅登录的账号会显示在这里。",
     "read": "{{ago}}读取",
-    "used": "已使用：{{limit}}",
-    "usedShort": "已用 {{percent}}",
     "resetsIn": "{{time}}后重置",
     "resetsAt": "{{time}} 重置",
     "notReported_other": "{{name}} 不提供套餐用量。",
-    "notYet": "还没有报告套餐用量。"
+    "notYet": "还没有报告套餐用量。",
+    "accounts_other": "{{count}} 个账号",
+    "reading": "正在读取套餐用量",
+    "failed": "读取失败",
+    "neverRead": "读不到套餐用量。",
+    "lastRead": "上次读取：{{ago}}",
+    "backIn": "{{time}}后恢复",
+    "weeklyOf": "7 天 · {{model}}",
+    "short": {
+      "minutes": "{{count}} 分钟",
+      "hours": "{{count}} 小时",
+      "days": "{{count}} 天"
+    },
+    "windowUsed": "{{window}}：已用 {{percent}}%。",
+    "windowStale": "{{window}}：已重置，还没重新读取。"
   },
   "activity": {
     "title": "活动",
@@ -176,9 +185,14 @@
       "project_other": "其他 {{count}} 个项目",
       "agent_other": "其他 {{count}} 个 Agent"
     },
-    "fewer": "收起",
     "unknownModel": "未知模型",
-    "noProject": "无项目"
+    "noProject": "无项目",
+    "units": {
+      "tokens": "token",
+      "requests": "次请求",
+      "turns": "轮",
+      "cost": "按 API 价格"
+    }
   },
   "noUsage": "这段时间没有用量。",
   "noCost": "这段时间没有费用。",
@@ -263,6 +277,24 @@
       "button": "清除…",
       "title": "清除 Kettu 的用量记录？",
       "confirm": "清除记录"
+    }
+  },
+  "timeOfDay": {
+    "title": "按小时的分布",
+    "by": {
+      "tokens": "每小时的 token",
+      "requests": "每小时的请求数",
+      "turns": "每小时的轮数",
+      "cost": "每小时的费用"
+    },
+    "byHourOver": "{{metric}} · {{range}}",
+    "busiest": "最忙",
+    "label": "范围内按一天中各小时的用量，最忙的是 {{hour}}",
+    "span": {
+      "tokens": "{{share}} 的 token 用在 {{from}}到{{to}}之间。",
+      "requests": "{{share}} 的请求发生在 {{from}}到{{to}}之间。",
+      "turns": "{{share}} 的轮次发生在 {{from}}到{{to}}之间。",
+      "cost": "{{share}} 的费用发生在 {{from}}到{{to}}之间。"
     }
   }
 }

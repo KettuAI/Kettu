@@ -444,4 +444,36 @@ describe('comment and direct edit requests', () => {
     rejects(() => posix['artifacts.editElement']({ ...edit, offset: -1, style: null, text: 'x' }))
     rejects(() => posix['artifacts.markSent']({ id, threadIds: ['nope'], sessionId: 's' }))
   })
+
+  it('takes a usage summary by hour of the day only over zones that cover it', () => {
+    const base = { dayStarts: [0, 900_000], from: 0, to: 900_000, scope: 'computer' }
+    expect(posix['usage.summary'](base)).toEqual(base)
+    const zones = [
+      { from: 0, offset: -240 },
+      { from: 900_000 * 4, offset: -300 },
+    ]
+    const clock = { from: 0, to: 900_000 * 8, zones }
+    expect(posix['usage.summary']({ ...base, clock })).toEqual({ ...base, clock })
+    const summary = (patch: object) => () =>
+      posix['usage.summary']({ ...base, clock: { ...clock, ...patch } })
+    rejects(summary({ zones: [] }))
+    rejects(
+      summary({ zones: Array.from({ length: 257 }, (_, i) => ({ from: i * 900_000, offset: 0 })) }),
+    )
+    rejects(summary({ zones: [{ from: 0, offset: 7 }] }))
+    rejects(summary({ zones: [{ from: 0, offset: 900 }] }))
+    rejects(summary({ zones: [{ from: 0, offset: -735 }] }))
+    rejects(summary({ zones: [{ from: 60_000, offset: 0 }] }))
+    rejects(
+      summary({
+        zones: [
+          { from: 0, offset: 0 },
+          { from: 0, offset: 60 },
+        ],
+      }),
+    )
+    rejects(summary({ from: 900_000, zones: [{ from: 900_000 * 2, offset: 0 }] }))
+    rejects(summary({ to: -1 }))
+    rejects(() => posix['usage.summary']({ ...base, clock: 'all' }))
+  })
 })
