@@ -254,11 +254,14 @@ export function layerOpen(): boolean {
   return !!document.querySelector('[role=dialog], [role=alertdialog], [role=menu]')
 }
 
-/** A dialog or menu other than the Settings modal, which keeps Back and the shortcuts list. */
+/** A dialog other than the Settings modal, which keeps Back, Close and the shortcuts list. */
+export function dialogOpen(): boolean {
+  return !!document.querySelector('[role=dialog]:not([data-settings-dialog]), [role=alertdialog]')
+}
+
+/** A dialog or menu other than the Settings modal. */
 export function popupOpen(): boolean {
-  return !!document.querySelector(
-    '[role=dialog]:not([data-settings-dialog]), [role=alertdialog], [role=menu]',
-  )
+  return dialogOpen() || !!document.querySelector('[role=menu]')
 }
 
 /** Previous or next session in sidebar order, across Pinned, the projects and No project. */

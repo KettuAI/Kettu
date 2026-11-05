@@ -4,15 +4,16 @@ import { useSessionsStore } from '@renderer/stores/sessions'
 import { closeSettings, closeSplitPane, useViewStore } from '@renderer/stores/view'
 import { leaveSession } from './actions'
 import { emitAppEvent } from './events'
-import { popupOpen } from './shortcuts'
+import { dialogOpen, popupOpen } from './shortcuts'
 import { usedPane } from './used-pane'
 
 /**
  * Mod+W: closes the part the user used last, a file, terminal or browser tab, else leaves the shown
  * session without archiving it. Returns false when nothing is left to close, which the window's own
- * close takes.
+ * close takes. A dialog keeps the key, so a second press cannot close the window under it.
  */
 export function closeCurrent(browserFocused = false): boolean {
+  if (dialogOpen()) return true
   const { settings, main, layout } = useViewStore.getState()
   if (settings.open) {
     closeSettings()
