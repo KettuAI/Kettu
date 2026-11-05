@@ -138,7 +138,7 @@ interface ViewStore {
   settings: { open: boolean; section: SettingsSection | null; item: string | null }
   /** The shortcuts dialog, over whatever the window shows. Not persisted. */
   shortcutsOpen: boolean
-  /** Session search, over whatever the window shows. Not persisted. */
+  /** Search, over whatever the window shows. Not persisted. */
   searchOpen: boolean
   /** Back and Forward through what the main area showed, nearest last. Not persisted. */
   history: { back: Step[]; forward: Step[] }
@@ -743,12 +743,12 @@ export function toggleShortcuts(layerOpen: boolean): void {
   )
 }
 
-/** Shows session search, or closes it. */
+/** Shows Search, or closes it. */
 export function showSearch(open: boolean): void {
   useViewStore.setState({ searchOpen: open })
 }
 
-/** Closes session search when open, and otherwise opens it unless another layer is open. */
+/** Closes Search when open, and otherwise opens it unless another layer is open. */
 export function toggleSearch(layerOpen: boolean): void {
   useViewStore.setState((s) =>
     s.searchOpen ? { searchOpen: false } : layerOpen ? s : { searchOpen: true },
