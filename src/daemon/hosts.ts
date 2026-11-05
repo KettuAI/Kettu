@@ -742,7 +742,10 @@ export class Hosts {
             type: 'terminal-host:sessions-ended',
             sessionIds: message.sessionIds,
           })
-          this.deviceHost.post({ type: 'device-host:sessions-ended', sessionIds: message.sessionIds })
+          this.deviceHost.post({
+            type: 'device-host:sessions-ended',
+            sessionIds: message.sessionIds,
+          })
         }
         break
       case 'host:device-call':
