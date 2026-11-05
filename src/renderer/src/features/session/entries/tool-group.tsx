@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { ChevronRightIcon, TelescopeIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -12,6 +12,8 @@ import { useShallow } from 'zustand/react/shallow'
 import { useEntryAnimation } from '../use-thread'
 import { CutLabel } from './cut-label'
 import { groupLabel, PANEL, toolStep } from './helpers'
+import { stepPictures } from './row-pictures'
+import { ThumbRow } from './row-thumbs'
 import { ToolCard } from './tool-card'
 
 /** A run of completed lookups as one row ("Read a.ts and 2 more"), opening to a row for each. */
@@ -38,27 +40,35 @@ export const ToolGroup = memo(function ToolGroup({
   const label = groupLabel(
     entries.flatMap((entry) => (entry?.kind === 'tool' ? [toolStep(entry)] : [])),
   )
+  const pictures = useMemo(() => stepPictures(entries), [entries])
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={cn('min-w-0', animation)}>
-      <CollapsibleTrigger className="group/tool -mx-1.5 flex h-6.5 w-[calc(100%+0.75rem)] items-center gap-2 rounded-md px-1.5 text-left text-small text-muted-foreground outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring">
-        <span className="relative flex size-3.5 shrink-0 items-center justify-center text-icon">
-          <TelescopeIcon className="size-3.5 transition-opacity duration-(--duration-fast) group-hover/tool:opacity-0" />
-          <ChevronRightIcon
-            aria-hidden
-            className={cn(
-              'absolute size-3.5 opacity-0 transition-[opacity,rotate] duration-(--duration-fast) group-hover/tool:opacity-100',
-              open && 'rotate-90',
-            )}
-          />
-        </span>
-        <CutLabel
-          key={entryIds.length}
-          className="min-w-0 flex-1 truncate animate-in fade-in animation-duration-(--duration-base)"
-          full={label}
-        >
-          {label}
-        </CutLabel>
-      </CollapsibleTrigger>
+      <ThumbRow
+        sessionId={sessionId}
+        pictures={pictures}
+        open={open}
+        className="group/tool -mx-1.5 h-6.5 w-[calc(100%+0.75rem)] rounded-md"
+      >
+        <CollapsibleTrigger className="flex min-w-0 grow items-center gap-2 rounded-md px-1.5 text-left text-small text-muted-foreground outline-none focus-ring">
+          <span className="relative flex size-3.5 shrink-0 items-center justify-center text-icon">
+            <TelescopeIcon className="size-3.5 transition-opacity duration-(--duration-fast) group-hover/tool:opacity-0" />
+            <ChevronRightIcon
+              aria-hidden
+              className={cn(
+                'absolute size-3.5 opacity-0 transition-[opacity,rotate] duration-(--duration-fast) group-hover/tool:opacity-100',
+                open && 'rotate-90',
+              )}
+            />
+          </span>
+          <CutLabel
+            key={entryIds.length}
+            className="min-w-0 flex-1 truncate animate-in fade-in animation-duration-(--duration-base)"
+            full={label}
+          >
+            {label}
+          </CutLabel>
+        </CollapsibleTrigger>
+      </ThumbRow>
       <CollapsibleContent className={PANEL}>
         <div className="mt-0.5 ml-1.5 flex flex-col gap-0.5 border-l border-subtle pl-3.5">
           {entryIds.map((id) => (

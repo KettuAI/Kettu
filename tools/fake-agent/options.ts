@@ -35,6 +35,7 @@ export const SCENARIOS = [
   'approvals',
   'content',
   'media',
+  'screenshots',
 ] as const
 
 export type ScenarioName = (typeof SCENARIOS)[number]
@@ -126,6 +127,10 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   },
   media: {
     description: "Pictures, a video and a file that cannot play, from the project's media folder",
+  },
+  screenshots: {
+    description:
+      "Tool calls that take screenshots and read the project's media folder pictures, for the thumbnails on folded rows",
   },
 }
 

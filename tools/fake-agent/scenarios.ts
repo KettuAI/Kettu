@@ -1476,6 +1476,70 @@ const media: Scenario = async (turn) => {
   return 'end_turn'
 }
 
+/** A made-up screenshot, a window with a title bar and a few lines, as base64 SVG. */
+function screenshot(hue: number): string {
+  const tone = (saturation: number, lightness: number) => `hsl(${hue} ${saturation}% ${lightness}%)`
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400">' +
+    `<rect width="640" height="400" fill="${tone(30, 96)}"/>` +
+    `<rect width="640" height="28" fill="${tone(30, 86)}"/>` +
+    `<rect x="24" y="64" width="360" height="16" rx="4" fill="${tone(45, 60)}"/>` +
+    `<rect x="24" y="100" width="520" height="10" rx="4" fill="${tone(20, 75)}"/>` +
+    `<rect x="24" y="124" width="440" height="10" rx="4" fill="${tone(20, 75)}"/>` +
+    `<rect x="24" y="180" width="270" height="170" rx="8" fill="${tone(35, 88)}"/>` +
+    `<rect x="320" y="180" width="270" height="170" rx="8" fill="${tone(45, 78)}"/>` +
+    '</svg>'
+  return Buffer.from(svg).toString('base64')
+}
+
+const screenshots: Scenario = async (turn) => {
+  if (!(await stream(turn, 'Starting the app and looking at the screens.\n\n'))) {
+    return 'cancelled'
+  }
+  const take = async (index: number, title: string): Promise<void> => {
+    const toolCallId = `shot-${turn.id}-${index}`
+    await turn.send({
+      sessionUpdate: 'tool_call',
+      toolCallId,
+      title,
+      kind: 'execute',
+      status: 'in_progress',
+      rawInput: { command: title },
+    })
+    await turn.sleep(200)
+    await turn.send({
+      sessionUpdate: 'tool_call_update',
+      toolCallId,
+      status: 'completed',
+      content: [
+        {
+          type: 'content',
+          content: { type: 'image', mimeType: 'image/svg+xml', data: screenshot(index * 47) },
+        },
+      ],
+    })
+  }
+  await take(0, 'Take a screenshot of the home screen')
+  if (!(await stream(turn, 'One screen looks right. Now the rest.\n\n'))) return 'cancelled'
+  for (const [i, name] of ['light.png', 'dark.png'].entries()) {
+    const path = filePath(turn, `media/${name}`)
+    await turn.send({
+      sessionUpdate: 'tool_call',
+      toolCallId: `look-${turn.id}-${i}`,
+      title: `Read media/${name}`,
+      kind: 'read',
+      status: 'completed',
+      locations: [{ path }],
+      rawInput: { file_path: path },
+    })
+  }
+  for (let i = 1; i <= 5; i++) await take(i, `Take screenshot ${i} of the settings`)
+  if (!(await stream(turn, 'All of them render correctly.', { messageId: turn.messageId() }))) {
+    return 'cancelled'
+  }
+  return 'end_turn'
+}
+
 export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   'basic-turn': basicTurn,
   'long-stream': longStream,
@@ -1511,6 +1575,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   approvals,
   content,
   media,
+  screenshots,
 }
 
 export const compact: Scenario = async (turn) => {
