@@ -1,13 +1,12 @@
-import { memo, useState, type ReactNode } from 'react'
-import { CornerDownRightIcon } from 'lucide-react'
+import { memo, useState } from 'react'
+import { ArrowTurnDownIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { UserContent } from '@shared/thread'
 import { forkSession } from '@renderer/app/actions'
+import { MessageActions } from '@renderer/components/affect/message-actions'
 import { ForkIcon } from '@renderer/components/fork-icon'
-import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { CopyButton } from '@renderer/features/git/branch-popover'
 import { longAgo, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
@@ -18,10 +17,6 @@ import { useReplyHover } from '../reply-hover'
 import { useEntry, useEntryAnimation, useSessionView } from '../use-thread'
 import { ChangesCard } from './changes-card'
 import { forkBlocked, forkEntry, stopReasonText } from './helpers'
-
-// Rows under messages: hidden until the message is hovered or focused.
-const REVEAL =
-  'opacity-0 transition-opacity duration-(--duration-fast) group-hover/actions:opacity-100 group-focus-within/actions:opacity-100'
 
 function Ago({ at }: { at: number }) {
   useTranslation()
@@ -41,44 +36,10 @@ function Came({ at }: { at: number }) {
   )
 }
 
-function ActionButton({
-  label,
-  onClick,
-  disabled,
-  children,
-}: {
-  label: string
-  onClick: () => void
-  disabled?: boolean
-  children: ReactNode
-}) {
-  return (
-    <Tooltip>
-      {disabled ? (
-        // A disabled button takes no pointer, so its tooltip opens from around it.
-        <TooltipTrigger render={<span className="inline-flex" />}>
-          <Button variant="quiet" size="icon-sm" aria-label={label} disabled className="shrink-0">
-            {children}
-          </Button>
-        </TooltipTrigger>
-      ) : (
-        <TooltipTrigger
-          render={
-            <Button
-              variant="quiet"
-              size="icon-sm"
-              aria-label={label}
-              onClick={onClick}
-              className="shrink-0"
-            />
-          }
-        >
-          {children}
-        </TooltipTrigger>
-      )}
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  )
+/** Message Actions' words for Copy. */
+function useCopyLabels(copyMessage: string) {
+  const { t } = useTranslation('common')
+  return { copy: t('actions.copy'), copied: t('actions.copied'), copyMessage }
 }
 
 function userText(content: UserContent[]): string {
@@ -88,7 +49,7 @@ function userText(content: UserContent[]): string {
     .join('\n')
 }
 
-/** Message metadata and Copy, revealed on hover or focus. */
+/** Under a message you sent, while the pointer is on it: the time and Copy. */
 export function UserActions({
   content,
   at,
@@ -99,33 +60,29 @@ export function UserActions({
   steered?: boolean
 }) {
   const { t } = useTranslation('session')
+  const labels = useCopyLabels(t('userActions.copyMessage'))
   return (
-    <div
-      className={cn(
-        'flex h-7 max-w-full items-center gap-2 text-hint whitespace-nowrap text-tertiary',
-        steered ? 'pr-0.5' : '-mr-1.5',
-        REVEAL,
-      )}
-    >
-      <span className="flex min-w-0 items-center gap-1">
-        {at !== undefined && (
-          <span className="truncate">
-            <Ago at={at} />
-          </span>
-        )}
-        <CopyButton
-          text={() => userText(content)}
-          label={t('userActions.copyMessage')}
-          size="icon-sm"
-        />
-      </span>
+    <span className="ks-user__meta">
       {steered && (
         <span className="inline-flex shrink-0 items-center gap-1">
-          <CornerDownRightIcon className="size-3" />
+          <HugeiconsIcon
+            icon={ArrowTurnDownIcon}
+            aria-hidden
+            strokeWidth={1.9}
+            className="size-3 -scale-x-100"
+          />
           {t('userActions.steered')}
         </span>
       )}
-    </div>
+      {at !== undefined && <Ago at={at} />}
+      <MessageActions
+        quiet={false}
+        text={userText(content)}
+        actions={['copy']}
+        label={t('userActions.label')}
+        labels={labels}
+      />
+    </span>
   )
 }
 
@@ -167,9 +124,9 @@ export const ReplyFooter = memo(
     const [forking, setForking] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const hovered = useReplyHover((s) => s.key === replyKey)
-
-    const text = () => {
-      const byId = useThreadsStore.getState().replicas[sessionId]?.state?.byId
+    const labels = useCopyLabels(t('replyFooter.copyReply'))
+    const text = useThreadsStore((s) => {
+      const byId = s.replicas[sessionId]?.state?.byId
       return agentIds
         .map((id) => {
           const entry = byId?.[id]
@@ -177,7 +134,7 @@ export const ReplyFooter = memo(
         })
         .filter(Boolean)
         .join('\n\n')
-    }
+    })
     const fork = async () => {
       setForking(true)
       setError(null)
@@ -200,45 +157,43 @@ export const ReplyFooter = memo(
     // A turn that ended on its own says how long it took in its folded work's row.
     const ending =
       end && end.stopReason !== 'end_turn' ? stopReasonText(end.stopReason, end.durationMs) : null
+    const when =
+      ending || at !== undefined ? (
+        <span className="flex min-w-0 items-center gap-1.5 truncate tabular">
+          {ending && <span>{ending}</span>}
+          {ending && at !== undefined && <span aria-hidden>·</span>}
+          {at !== undefined && (ending ? <Ago at={at} /> : <Came at={at} />)}
+        </span>
+      ) : undefined
     return (
       <>
-        <ChangesCard
-          sessionId={sessionId}
-          projectPath={projectPath}
-          toolIds={toolIds}
-          className="mt-3 mb-2.5"
-        />
+        <ChangesCard sessionId={sessionId} projectPath={projectPath} toolIds={toolIds} />
         <div
-          className={cn(
-            'group/actions -ml-1.5 flex h-7 min-w-0 items-center gap-0.5 text-hint text-tertiary',
-            animation,
-          )}
+          className={cn('ks-reply-foot', animation)}
+          data-shown={hovered || forking ? '' : undefined}
         >
-          <div
-            className={cn(
-              'flex min-w-0 items-center gap-0.5',
-              REVEAL,
-              (hovered || forking) && 'opacity-100',
-            )}
-          >
-            <CopyButton text={text} label={t('replyFooter.copyReply')} size="icon-sm" />
-            {showFork && (
-              <ActionButton
-                label={forkLabel}
-                disabled={forking || blocked}
-                onClick={() => void fork()}
-              >
-                {forking ? <Spinner /> : <ForkIcon />}
-              </ActionButton>
-            )}
-            {(ending || at !== undefined) && (
-              <span className="ml-1.5 flex min-w-0 items-center gap-1.5 truncate tabular">
-                {ending && <span>{ending}</span>}
-                {ending && at !== undefined && <span aria-hidden>·</span>}
-                {at !== undefined && (ending ? <Ago at={at} /> : <Came at={at} />)}
-              </span>
-            )}
-          </div>
+          <MessageActions
+            quiet={false}
+            text={text}
+            actions={['copy']}
+            label={t('replyFooter.label')}
+            labels={labels}
+            extraActions={
+              showFork
+                ? [
+                    {
+                      key: 'fork',
+                      tip: forkLabel,
+                      label: forkLabel,
+                      icon: forking ? <Spinner /> : <ForkIcon />,
+                      disabled: forking || blocked,
+                      onClick: () => void fork(),
+                    },
+                  ]
+                : []
+            }
+            after={when}
+          />
           {error && (
             <span className="ml-2 min-w-0 truncate text-danger" title={error}>
               {error}

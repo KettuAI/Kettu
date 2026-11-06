@@ -1,0 +1,212 @@
+/* session: the thread and the session header, on affectUI's AI Chat screen (features/session).
+   The thread's prose follows the text size setting a step under the other prose, as the screen
+   sets its answers at 14 px. */
+
+.ks-thread {
+  --prose-size: 14px;
+  --text-prose: 14px;
+  --thread-column: calc(48 * var(--prose-size) + 8px);
+}
+:root[data-text-size='small'] .ks-thread {
+  --prose-size: 13px;
+  --text-prose: 13px;
+}
+:root[data-text-size='large'] .ks-thread {
+  --prose-size: 15px;
+  --text-prose: 15px;
+}
+.ks-thread__column {
+  max-width: calc(var(--thread-column) + 64px);
+}
+
+/* A message you sent: the gray bubble at the right, and under it on hover its time and Copy, the
+   copy glyph flush with the bubble's edge. */
+.ks-user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.ks-user__bubble {
+  max-width: 80%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: var(--thread-chip);
+  font-size: var(--prose-size);
+  line-height: 1.55;
+  color: var(--thread-ink);
+}
+.ks-user__note {
+  max-width: 80%;
+  overflow: hidden;
+  padding-right: 2px;
+  font-size: 12px;
+  color: var(--thread-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ks-user__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: -4px -6px 0 0;
+  font-size: 12px;
+  color: var(--thread-faint);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+/* Message Actions is a size container, so it takes no width from its one button on its own. */
+.ks-user__meta .ui-mac {
+  flex: none;
+  width: 28px;
+}
+.ks-user:hover .ks-user__meta,
+.ks-user__meta:focus-within {
+  opacity: 1;
+}
+
+/* An agent's message on AI Answer: the thread's type, its label (nine dots, "Writing") under the
+   text only while it writes, and no row of its own under it, since Stop sits in the composer and
+   the reply's actions follow. The label hangs on the card's bottom edge, outside the body that
+   clips while it glides to a new height, so a new line pushes it down instead of hiding it. */
+.ks-answer .ui-ansc {
+  max-width: none;
+  font-family: inherit;
+  font-size: var(--prose-size);
+  --ui-ansc-ink: var(--thread-ink);
+  --ui-ansc-strong: var(--thread-ink);
+  --ui-ansc-text: var(--thread-muted);
+}
+.ks-answer .ui-ansc__card {
+  position: relative;
+  padding-bottom: 30px;
+  transition: padding-bottom 300ms cubic-bezier(0.22, 1, 0.36, 1) 120ms;
+}
+.ks-answer .ui-ansc__label {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 20px;
+  margin: 0;
+  font-size: 12.5px;
+  transition: opacity 150ms ease;
+}
+.ks-answer .ui-ansc:is([data-phase='done'], [data-phase='stopped']) .ui-ansc__card {
+  padding-bottom: 0;
+}
+.ks-answer .ui-ansc:is([data-phase='done'], [data-phase='stopped']) .ui-ansc__label {
+  opacity: 0;
+}
+.ks-answer .ui-ansc__answer {
+  font-size: inherit;
+  line-height: inherit;
+}
+.ks-answer :is(.ui-ansc__foot, .ui-ansc__reasons) {
+  display: none;
+}
+.ks-answer .markdown {
+  color: var(--thread-ink);
+}
+/* The fox's caret after the last word while the message streams. */
+.ks-answer
+  .ui-ansc[data-phase='writing']
+  .markdown-chunk:last-child
+  > :is(p, h1, h2, h3, h4, h5, h6):last-child::after,
+.ks-answer
+  .ui-ansc[data-phase='writing']
+  .markdown-chunk:last-child
+  > :is(ul, ol):last-child
+  > li:last-child::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 4px;
+  border-radius: 1.5px;
+  background: var(--thread-fox);
+  vertical-align: 0.1em;
+  animation: ks-caret 1s ease-in-out infinite;
+}
+@keyframes ks-caret {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* A reply's copy, fork and time show while the pointer is on its turn, as under a message you
+   sent; they keep their room, so nothing moves. */
+.ks-reply-foot {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin-left: -6px;
+  font-size: 12px;
+  color: var(--thread-faint);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.ks-reply-foot[data-shown],
+.ks-reply-foot:focus-within {
+  opacity: 1;
+}
+.ks-reply-foot .ui-mac {
+  width: auto;
+  min-width: 0;
+}
+.ks-reply-foot .ui-mac__after {
+  color: var(--thread-faint);
+}
+
+/* The running turn's status: the nine dots or the attention dot, the clock, tokens and phase. */
+.ks-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 20px;
+  min-width: 0;
+  margin-top: 16px;
+  font-size: 12.5px;
+  color: var(--thread-muted);
+  white-space: nowrap;
+  animation: ks-fade-in 180ms ease both;
+}
+.ks-status[data-after-sent] {
+  margin-top: 22px;
+}
+.ks-status i {
+  font-style: normal;
+  color: var(--thread-faint);
+}
+.ks-status__attn {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 2px;
+  border-radius: 50%;
+  background: var(--thread-fox);
+  box-shadow: 0 0 0 3px var(--thread-fox-halo);
+}
+@keyframes ks-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Tool calls on affectUI's Tool Call Card and Group. A long run summary shortens instead of
+   pushing the failed count, time and chevron to the far edge; the thumbnails at a folded row's
+   end give way once it opens, whose details show the pictures. */
+.ks-thread .ui-tcc-group__label {
+  max-width: 36em;
+}
+.ui-tcc[data-open] > .ui-tcc__top > .ui-tcc__trail,
+.ui-tcc-group[data-open] > .ui-tcc-group__top > .ui-tcc__trail {
+  display: none;
+}
+.ks-tool-stats,
+.ks-tool-note {
+  color: var(--thread-muted);
+}

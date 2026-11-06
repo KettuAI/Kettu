@@ -295,13 +295,15 @@
   },
   "userActions": {
     "steered": "Steered",
-    "copyMessage": "Copy message"
+    "copyMessage": "Copy message",
+    "label": "Message actions"
   },
   "replyFooter": {
     "copyReply": "Copy reply",
     "fork": "Fork from here",
     "forking": "Forking…",
-    "forkNotReady": "Forks once the session is ready"
+    "forkNotReady": "Forks once the session is ready",
+    "label": "Reply actions"
   },
   "changes": {
     "label": "Changes",
@@ -750,5 +752,14 @@
     "openAgain": "Open again",
     "showValues": "Show values",
     "hideValues": "Hide values"
+  },
+  "toolCall": {
+    "usingTools": "Working…",
+    "announce": {
+      "running": "{{name}} running",
+      "success": "{{name}} finished",
+      "error": "{{name}} failed",
+      "cancelled": "{{name}} cancelled"
+    }
   }
 }

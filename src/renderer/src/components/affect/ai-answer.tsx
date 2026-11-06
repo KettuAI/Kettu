@@ -54,6 +54,11 @@ export type AIAnswerProps = {
   mark?: ReactNode;
   /** Called once the answer has finished writing */
   onDone?: () => void;
+  /** Your own rendering of the answer (e.g. Markdown) in place of the parsed text: it shows as it is, and the answer
+   * writes while `streaming` is true and is done once it turns false */
+  children?: ReactNode;
+  /** The label's words while it writes and once done, for a translation */
+  labels?: { writing?: string; answer?: string };
 };
 
 type Token = { i: number; kind: "word"; text: string; bold?: boolean; code?: boolean } | { i: number; kind: "cite"; ids: number[] };
@@ -178,12 +183,24 @@ export function AIAnswer({
   className,
   mark,
   onDone,
+  children,
+  labels,
 }: AIAnswerProps) {
   const doneRef = useRef(onDone);
   doneRef.current = onDone;
+  const custom = children !== undefined;
+  // Your own content glides to its new height only while it writes; once done it takes its own height
+  const glide = useRef(true);
+  glide.current = !custom || streaming;
   const { blocks, total } = useMemo(() => parse(answer, sources.length), [answer, sources.length]);
   const [run, setRun] = useState(0);
-  const [phase, setPhase] = useState<Phase>("reading");
+  const [ownPhase, setPhase] = useState<Phase>("reading");
+  const phase: Phase = custom ? (streaming ? "writing" : "done") : ownPhase;
+  const wasStreaming = useRef(streaming);
+  useEffect(() => {
+    if (custom && wasStreaming.current && !streaming) doneRef.current?.();
+    wasStreaming.current = streaming;
+  }, [custom, streaming]);
   const [shown, setShown] = useState(0);
   const [seconds, setSeconds] = useState(0);
   const [vote, setVote] = useState<"up" | "down" | null>(null);
@@ -233,7 +250,7 @@ export function AIAnswer({
 
   // Writing: words appear at `speed`; waits for more text while `streaming`
   useEffect(() => {
-    if (phase !== "writing") return;
+    if (phase !== "writing" || custom) return;
     let frame = 0;
     let last = performance.now();
     const tick = (now: number) => {
@@ -257,12 +274,12 @@ export function AIAnswer({
     const card = cardRef.current;
     const inner = innerRef.current;
     if (!card || !inner) return;
-    const set = () => (card.style.height = `${inner.offsetHeight}px`);
+    const set = () => (card.style.height = glide.current ? `${inner.offsetHeight}px` : "");
     set();
     const ro = new ResizeObserver(set);
     ro.observe(inner);
     return () => ro.disconnect();
-  }, []);
+  }, [streaming]);
 
   useEffect(() => {
     if (!copied) return;
@@ -323,7 +340,11 @@ export function AIAnswer({
           : `Answered in ${took(seconds)}`;
 
   const label =
-    phase === "reading" ? `Reading ${count.format(sources.length)} ${sources.length === 1 ? "source" : "sources"}` : phase === "writing" ? "Writing" : "Answer";
+    phase === "reading"
+      ? `Reading ${count.format(sources.length)} ${sources.length === 1 ? "source" : "sources"}`
+      : phase === "writing"
+        ? (labels?.writing ?? "Writing")
+        : (labels?.answer ?? "Answer");
 
   // Handlers for the chips stay the same object across renders, so finished paragraphs don't render again on every word
   const latest = useRef({ openPop, closePop, setPop, pop });
@@ -436,6 +457,7 @@ export function AIAnswer({
             </div>
 
             <div className="ui-ansc__answer" aria-busy={!finished}>
+              {custom ? children : (<>
               {phase === "writing" && shown === 0 && (
                 <p>
                   <span className="ui-ansc__caret" aria-hidden="true" />
@@ -459,6 +481,7 @@ export function AIAnswer({
                   />
                 );
               })}
+              </>)}
             </div>
 
             {phase === "done" && followUps.length > 0 && (

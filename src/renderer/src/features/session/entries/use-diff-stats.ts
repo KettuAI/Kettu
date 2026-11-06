@@ -31,3 +31,16 @@ export function useDiffStats(content: ToolContent[]): DiffStats | null {
     { insertions: 0, deletions: 0 },
   )
 }
+
+/** The counts over diffs `useDiffStats` has loaded, or null while any is still to count. */
+export function cachedStats(diffs: readonly ToolContent[]): DiffStats | null {
+  let insertions = 0
+  let deletions = 0
+  for (const d of diffs) {
+    const s = statsCache.get(d)
+    if (!s) return null
+    insertions += s.insertions
+    deletions += s.deletions
+  }
+  return { insertions, deletions }
+}

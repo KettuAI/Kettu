@@ -31,9 +31,28 @@
   --border-subtle: rgb(0 0 0 / 6%);
   /* One step past border-default: an unchecked control, a link's underline, a hovered field. */
   --border-strong: rgb(0 0 0 / 16%);
-  /* A run's steps: the rail and its dots, and the step the run stands on (affectUI's checkpoints). */
-  --step-rail: #82bcff;
-  --step-head: #2f6bff;
+  /* session: the thread and its header, in affectUI's stepped inks over the sheet. */
+  --thread-ink: rgb(0 0 0 / 88%);
+  --thread-text: rgb(0 0 0 / 61%);
+  --thread-muted: rgb(0 0 0 / 45%);
+  --thread-faint: rgb(0 0 0 / 27%);
+  --thread-chip: rgb(0 0 0 / 4%);
+  --thread-hover: rgb(0 0 0 / 3%);
+  --thread-line: rgb(0 0 0 / 6%);
+  --thread-line-strong: rgb(0 0 0 / 10%);
+  --thread-card: #ffffff;
+  /* The fox orange of the running turn: its dots, the answer's caret, the step at work. */
+  --thread-fox: #f2581b;
+  --thread-fox-halo: rgb(242 88 27 / 18%);
+  --thread-add: #16a34a;
+  --thread-del: #dc2626;
+  --thread-done: #22a06b;
+  --thread-card-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 6%), 0 1px 1px -1px rgb(0 0 0 / 10%), 0 1px 2px 0 rgb(0 0 0 / 5%);
+  --thread-pop-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 10%), 0 16px 36px -12px rgb(0 0 0 / 22%), 0 1px 2px rgb(0 0 0 / 5%);
+  --thread-float-shadow: 0 0 0 0.5px rgb(0 0 0 / 10%), 0 6px 16px -6px rgb(0 0 0 / 20%);
+  --thread-pill-shadow: 0 6px 16px -6px rgb(0 0 0 / 30%);
 
   --text-primary: #1f1f1f;
   --text-secondary: #636363;
@@ -466,8 +485,27 @@
     --border-default: rgb(255 255 255 / 12%);
     --border-subtle: rgb(255 255 255 / 8%);
     --border-strong: rgb(255 255 255 / 18%);
-    --step-rail: #4f8fdb;
-    --step-head: #5b9aff;
+    /* session: the thread and its header. */
+    --thread-ink: rgb(255 255 255 / 90%);
+    --thread-text: rgb(255 255 255 / 62%);
+    --thread-muted: rgb(255 255 255 / 45%);
+    --thread-faint: rgb(255 255 255 / 28%);
+    --thread-chip: rgb(255 255 255 / 6%);
+    --thread-hover: rgb(255 255 255 / 5%);
+    --thread-line: rgb(255 255 255 / 8%);
+    --thread-line-strong: rgb(255 255 255 / 14%);
+    --thread-card: #1b1b1e;
+    --thread-fox: #f2581b;
+    --thread-fox-halo: rgb(242 88 27 / 24%);
+    --thread-add: #4ade80;
+    --thread-del: #f87171;
+    --thread-done: #3fbf86;
+    --thread-card-shadow: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 40%);
+    --thread-pop-shadow:
+      0 0 0 0.5px rgb(255 255 255 / 14%), 0 16px 36px -12px rgb(0 0 0 / 60%),
+      0 1px 2px rgb(0 0 0 / 40%);
+    --thread-float-shadow: 0 0 0 0.5px rgb(255 255 255 / 14%), 0 6px 16px -6px rgb(0 0 0 / 60%);
+    --thread-pill-shadow: 0 6px 16px -6px rgb(0 0 0 / 60%);
 
     --text-primary: #e6e6e7;
     --text-secondary: #a5a5a7;
@@ -777,8 +815,27 @@
   --border-default: rgb(255 255 255 / 12%);
   --border-subtle: rgb(255 255 255 / 8%);
   --border-strong: rgb(255 255 255 / 18%);
-  --step-rail: #4f8fdb;
-  --step-head: #5b9aff;
+  /* session: the thread and its header. */
+  --thread-ink: rgb(255 255 255 / 90%);
+  --thread-text: rgb(255 255 255 / 62%);
+  --thread-muted: rgb(255 255 255 / 45%);
+  --thread-faint: rgb(255 255 255 / 28%);
+  --thread-chip: rgb(255 255 255 / 6%);
+  --thread-hover: rgb(255 255 255 / 5%);
+  --thread-line: rgb(255 255 255 / 8%);
+  --thread-line-strong: rgb(255 255 255 / 14%);
+  --thread-card: #1b1b1e;
+  --thread-fox: #f2581b;
+  --thread-fox-halo: rgb(242 88 27 / 24%);
+  --thread-add: #4ade80;
+  --thread-del: #f87171;
+  --thread-done: #3fbf86;
+  --thread-card-shadow: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 40%);
+  --thread-pop-shadow:
+    0 0 0 0.5px rgb(255 255 255 / 14%), 0 16px 36px -12px rgb(0 0 0 / 60%),
+    0 1px 2px rgb(0 0 0 / 40%);
+  --thread-float-shadow: 0 0 0 0.5px rgb(255 255 255 / 14%), 0 6px 16px -6px rgb(0 0 0 / 60%);
+  --thread-pill-shadow: 0 6px 16px -6px rgb(0 0 0 / 60%);
 
   --text-primary: #e6e6e7;
   --text-secondary: #a5a5a7;

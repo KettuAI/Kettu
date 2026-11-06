@@ -10,6 +10,7 @@
 @import '@fontsource-variable/manrope/wght.css';
 @import './tokens.css';
 @import './affect.css';
+@import './session.css';
 
 /* Chinese: the platform's face with pinned weights, since CSS would match the dark theme's 360 to
    its Light. Each range takes the Regular, Medium or Semibold, or the nearest weight a face has. */
@@ -1236,64 +1237,6 @@
   }
 }
 
-/* A run's steps on a rail, as affectUI's agent checkpoints draw a run: a blue line from dot to dot,
-   a filled dot for each step, a larger one for the step the run stands on (its newest, or the one
-   at work) and red for one that failed. A step without a tool in it, such as a thought, keeps the
-   line and takes no dot. Lengths: the steps sit 14 px in, the line is 1.5 px, a row's middle 13 px
-   down. */
-[data-step] {
-  position: relative;
-}
-[data-step]:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  top: 13px;
-  left: -14px;
-  width: 1.5px;
-  /* Down to the next step's middle, across the 2 px between steps. */
-  height: calc(100% + 2px);
-  background: var(--step-rail);
-}
-[data-step]:has([data-step-status])::before {
-  content: '';
-  position: absolute;
-  z-index: 1;
-  top: calc(13px - 3.5px);
-  left: calc(-14px + 0.75px - 3.5px);
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--step-rail);
-  box-shadow: 0 0 0 1.5px var(--bg-app);
-  animation: step-dot 180ms var(--ease-out-quint) both;
-}
-[data-step]:last-child:has([data-step-status])::before,
-[data-step]:has([data-step-status='in_progress'], [data-step-status='pending'])::before {
-  top: calc(13px - 4.5px);
-  left: calc(-14px + 0.75px - 4.5px);
-  width: 9px;
-  height: 9px;
-  background: radial-gradient(
-    circle at 35% 30%,
-    color-mix(in srgb, var(--step-head) 55%, var(--bg-app)),
-    var(--step-head) 70%
-  );
-}
-[data-step]:has([data-step-status='in_progress'], [data-step-status='pending'])::before {
-  box-shadow:
-    0 0 0 1.5px var(--bg-app),
-    0 0 0 4px color-mix(in srgb, var(--step-head) 22%, transparent);
-}
-[data-step]:has([data-step-status='failed'])::before {
-  background: var(--danger);
-}
-@keyframes step-dot {
-  from {
-    opacity: 0;
-    transform: scale(0.4);
-  }
-}
-
 /* Reduce motion: movement and loops stop; opacity and color changes remain. The transform
    variables do not inherit, so they are reset on every element. */
 @media (prefers-reduced-motion: reduce) {
@@ -1317,8 +1260,7 @@
   .shimmer,
   [data-caret],
   [data-sd-animate],
-  [data-sd-animate-marker]::marker,
-  [data-step]::before {
+  [data-sd-animate-marker]::marker {
     animation: none !important;
   }
   /* Held, not removed: each dot keeps the frame its delay starts it on. */
@@ -1360,8 +1302,7 @@
   & .shimmer,
   & [data-caret],
   & [data-sd-animate],
-  & [data-sd-animate-marker]::marker,
-  & [data-step]::before {
+  & [data-sd-animate-marker]::marker {
     animation: none !important;
   }
   & [data-turn-dots] circle {

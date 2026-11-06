@@ -281,13 +281,15 @@
   },
   "userActions": {
     "steered": "已插入当前对话",
-    "copyMessage": "复制消息"
+    "copyMessage": "复制消息",
+    "label": "消息操作"
   },
   "replyFooter": {
     "copyReply": "复制回复",
     "fork": "从这里分叉",
     "forking": "正在分叉…",
-    "forkNotReady": "会话就绪后才能分叉"
+    "forkNotReady": "会话就绪后才能分叉",
+    "label": "回复操作"
   },
   "changes": {
     "label": "改动",
@@ -715,5 +717,14 @@
     "openAgain": "再次打开",
     "showValues": "显示填写的值",
     "hideValues": "收起"
+  },
+  "toolCall": {
+    "usingTools": "正在处理…",
+    "announce": {
+      "running": "{{name}} 正在运行",
+      "success": "{{name}} 已完成",
+      "error": "{{name}} 失败",
+      "cancelled": "{{name}} 已取消"
+    }
   }
 }
