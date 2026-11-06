@@ -1,23 +1,16 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { MonitorSmartphoneIcon } from 'lucide-react'
+import { useEffect } from 'react'
+import { Settings01Icon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { DropdownMenu, DropdownMenuTrigger } from '@renderer/components/ui/dropdown-menu'
-import { Kbd } from '@renderer/components/ui/kbd'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { Icon, type AppShellProps } from '@renderer/components/affect/app-shell'
 import { routeName } from '@renderer/features/settings/host-text'
-import { limitReaders } from '@renderer/features/sidebar/plan-usage'
-import { errorMessage } from '@renderer/lib/host'
 import { formatShortcut, isWeb } from '@renderer/lib/platform'
-import { cn } from '@renderer/lib/utils'
 import { useAccountStore } from '@renderer/stores/account'
-import { useAgentsStore } from '@renderer/stores/agents'
 import { otherHosts, useHostsStore, useOtherHost } from '@renderer/stores/hosts'
-import { useRemoteStore } from '@renderer/stores/remote'
+import { useSettingsStore } from '@renderer/stores/settings'
 import { setSettingsDot } from '@renderer/stores/updates'
-import { refreshLimits } from '@renderer/stores/usage'
 import { openSettings, THIS_COMPUTER, useViewStore } from '@renderer/stores/view'
-import { AccountMenuContent } from './account-menu'
-import { AccountAvatar, IdentityName, SettingsGlyph } from './avatar'
+import { AccountMenu } from './account-menu'
+import { RemoteButton } from './remote-button'
 import { identityOf } from './model'
 import { useSettingsAttention, useThisComputerName } from './use-account'
 
@@ -34,152 +27,57 @@ function useHostLine(): string {
   return self
 }
 
-/** Reads the plan limits the menu lists again; the host asks each agent at most once a minute. */
-function readLimits(): void {
-  const { order, byId } = useAgentsStore.getState()
-  for (const agentId of limitReaders(order.flatMap((id) => byId[id] ?? []))) {
-    refreshLimits(agentId).catch((error: unknown) =>
-      console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
-    )
-  }
-}
-
 /**
- * The sidebar footer's account row: who you are and the host this window controls, which open the
- * account menu, then remote access and Settings, each with its own click.
+ * The sidebar's account row for App Shell: who you are over the host this window controls, which
+ * open the account menu, then remote access and the Settings gear, each with its own click.
  */
-export function AccountRow() {
+export function useAccountShell(): Pick<
+  AppShellProps,
+  'user' | 'userMenu' | 'userAction' | 'userTools'
+> {
   const { t } = useTranslation('sidebar')
   const identity = identityOf(useAccountStore((s) => s.status))
+  const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
   const line = useHostLine()
   const self = useThisComputerName()
-  const [open, setOpen] = useState(false)
+  const attention = useSettingsAttention()
   const settingsOpen = useViewStore((s) => s.settings.open)
   // Opening Settings is looking at what its dot pointed to.
   useEffect(() => {
     if (settingsOpen) setSettingsDot(false)
   }, [settingsOpen])
-  return (
-    <DropdownMenu
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next)
-        if (next) readLimits()
-      }}
-    >
-      <div
-        className={cn(
-          'flex h-10 shrink-0 items-center gap-2.25 rounded-tile pr-1 transition-colors duration-(--duration-fast)',
-          open ? 'bg-selected' : 'has-[>[data-account-trigger]:hover]:bg-hover',
-        )}
-      >
-        <DropdownMenuTrigger
-          data-account-trigger=""
-          aria-description={t('account.menuLabel')}
-          className="flex h-full min-w-0 flex-1 items-center gap-2.25 rounded-tile pl-2 text-left outline-none focus-visible:focus-ring"
-        >
-          <AccountAvatar identity={identity} size={24} />
-          <span className="flex min-w-0 flex-1 flex-col leading-[1.2]">
-            {/* The web client signs in to no account, so it names the host it shows. */}
-            <span className="truncate text-control font-medium text-primary">
-              {isWeb ? self : <IdentityName identity={identity} />}
-            </span>
-            {!isWeb && (
-              <span className="truncate text-caption leading-[1.2] text-tertiary">{line}</span>
-            )}
-          </span>
-        </DropdownMenuTrigger>
-        <RemoteButton />
-        <SettingsButton />
-      </div>
-      <AccountMenuContent identity={identity} onClose={() => setOpen(false)} />
-    </DropdownMenu>
-  )
+
+  // The web client signs in to no account, so it names the host it shows.
+  const name = isWeb
+    ? self
+    : !identity.name
+      ? t('account.signedOut')
+      : hidden
+        ? MASK
+        : identity.name
+  const person = isWeb || !identity.name || hidden
+  return {
+    user: {
+      name,
+      meta: isWeb ? undefined : line,
+      avatar: !person && identity.avatar ? identity.avatar : undefined,
+      mark: person ? (
+        <span className="ui-as-user__initials">
+          <Icon icon={UserIcon} size={12} />
+        </span>
+      ) : undefined,
+    },
+    userMenu: (close) => <AccountMenu identity={identity} close={close} />,
+    userAction: {
+      icon: Settings01Icon,
+      label: attention ? t('account.settingsAttention') : t('account.settings'),
+      shortcut: formatShortcut('Mod+,'),
+      onClick: () => openSettings(),
+      dot: attention,
+    },
+    userTools: <RemoteButton />,
+  }
 }
 
-function RowButton({
-  label,
-  tooltip,
-  onClick,
-  dot,
-  children,
-}: {
-  label: string
-  tooltip: ReactNode
-  onClick: () => void
-  dot?: ReactNode
-  children: ReactNode
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            aria-label={label}
-            onClick={onClick}
-            className="relative grid size-7 shrink-0 place-items-center rounded-tile text-icon outline-none hover:bg-hover hover:text-primary focus-visible:focus-ring [&_svg]:size-4"
-          />
-        }
-      >
-        {children}
-        {dot}
-      </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-/** Remote access, with a green dot while a paired phone or computer is online. */
-function RemoteButton() {
-  const { t } = useTranslation('sidebar')
-  const devices = useRemoteStore((s) => s.status?.devices.length ?? 0)
-  const online = useRemoteStore((s) => (s.status?.online.length ?? 0) > 0)
-  const label = t('account.remote', { count: devices })
-  return (
-    <RowButton
-      label={label}
-      tooltip={label}
-      onClick={() => openSettings('remote')}
-      dot={
-        online && (
-          <span
-            aria-hidden
-            className="absolute right-1.25 bottom-1.5 size-1.5 rounded-full bg-success shadow-[0_0_0_1.5px_var(--bg-sidebar)]"
-          />
-        )
-      }
-    >
-      <MonitorSmartphoneIcon strokeWidth={1.3} />
-    </RowButton>
-  )
-}
-
-/** Settings, with a fox dot while something there needs you. */
-function SettingsButton() {
-  const { t } = useTranslation('sidebar')
-  const attention = useSettingsAttention()
-  const label = attention ? t('account.settingsAttention') : t('account.settings')
-  return (
-    <RowButton
-      label={label}
-      tooltip={
-        <>
-          {t('account.settings')}
-          <Kbd>{formatShortcut('Mod+,')}</Kbd>
-        </>
-      }
-      onClick={() => openSettings()}
-      dot={
-        attention && (
-          <span
-            aria-hidden
-            className="absolute top-1.25 right-1.25 size-1.5 rounded-full bg-attention-dot shadow-[0_0_0_1.5px_var(--bg-sidebar)]"
-          />
-        )
-      }
-    >
-      <SettingsGlyph />
-    </RowButton>
-  )
-}
+// A hidden account's name, as the masked values elsewhere show it.
+const MASK = '•'.repeat(8)

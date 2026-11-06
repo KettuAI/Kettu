@@ -1,11 +1,6 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { useDefaultLayout, usePanelRef } from 'react-resizable-panels'
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from '@renderer/components/ui/resizable'
-import { SidebarProvider } from '@renderer/components/ui/sidebar'
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { AppShell } from '@renderer/components/affect/app-shell'
 import { Toaster } from '@renderer/components/ui/toast'
 import { TooltipProvider } from '@renderer/components/ui/tooltip'
 import { ArtifactDialogs } from '@renderer/features/artifacts/artifact-dialogs'
@@ -17,18 +12,19 @@ import { LaunchCover } from '@renderer/features/shell/launch-cover'
 import { SplitDragProvider } from '@renderer/features/split/session-drag'
 import { MainArea } from '@renderer/features/shell/main-area'
 import { ShortcutsDialog } from '@renderer/features/shell/shortcuts-dialog'
-import { DESK, SHEET_PANEL } from '@renderer/features/shell/sheet'
 import { CornerControls, TitleBand } from '@renderer/features/shell/top-bar'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
 import { UpdateDialog } from '@renderer/features/updates/update-dialog'
-import { AppSidebar } from '@renderer/features/sidebar/app-sidebar'
+import { useAccountShell } from '@renderer/features/account/account-row'
+import { SidebarList, SidebarNotices } from '@renderer/features/sidebar/app-sidebar'
+import { useSidebarNav } from '@renderer/features/sidebar/sidebar-nav'
 import { ArchiveConfirmDialog } from '@renderer/features/sidebar/archive-confirm'
 import { SearchDialog } from '@renderer/features/search/search-dialog'
-import { hasBand } from '@renderer/lib/platform'
-import { layoutStorage, readJson, writeJson } from '@renderer/lib/storage'
+import { formatShortcut, hasBand } from '@renderer/lib/platform'
+import { readJson, writeJson } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
 import { prefersReducedMotion } from '@renderer/stores/settings'
-import { useViewStore } from '@renderer/stores/view'
+import { showSearch, useViewStore } from '@renderer/stores/view'
 import { usePathRequest } from '@renderer/web/host-path-request'
 import { useKeyboardShortcuts } from './shortcuts'
 import { useActionLog, useAppCommands } from './commands'
@@ -52,7 +48,7 @@ export function App() {
 
   return (
     <TooltipProvider delay={500}>
-      <SidebarProvider className="h-svh min-h-0 overflow-hidden">
+      <div className="h-svh min-h-0 overflow-hidden">
         <div className="relative flex h-full w-full flex-col">
           <HostBanner />
           <div className="relative min-h-0 flex-1">
@@ -63,9 +59,6 @@ export function App() {
               <SplitDragProvider>
                 <Workbench />
               </SplitDragProvider>
-              {/* Last, since where drag regions overlap the later one wins and the headers
-                  beneath are drag regions. */}
-              <CornerControls />
             </div>
             {settingsLoaded && (
               <Suspense fallback={null}>
@@ -91,173 +84,121 @@ export function App() {
         <GitDialogsHost />
         <Toaster />
         <ReportInteractive />
-      </SidebarProvider>
+      </div>
     </TooltipProvider>
   )
 }
 
-// The sidebar's width when it was last collapsed, for an app that starts collapsed.
+// The sidebar's width as last set, kept across launches.
 const SIDEBAR_WIDTH = 'sidebar-width'
 
+/**
+ * The window: App Shell's frame with Kettu's sidebar, the corner's toggle, Back and Forward, and
+ * the main area's sheets on the desk.
+ */
 function Workbench() {
+  const { t } = useTranslation('sidebar')
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
-  // Fixed at mount: a changed default re-registers the panel, which forgets its size before collapsing.
-  const [sidebarDefault] = useState(() => (collapsed ? '0px' : '336px'))
-  const sidebar = usePanelRef()
-  const width = useRef(0)
-  const layout = useDefaultLayout({ id: 'workbench', storage: layoutStorage })
-  const group = useRef<HTMLDivElement>(null)
-  const sidebarContent = useRef<HTMLDivElement>(null)
-  const desk = useRef<HTMLElement>(null)
-  const frame = useRef<HTMLDivElement>(null)
-  const mainContent = useRef<HTMLDivElement>(null)
-  const wing = useRef<HTMLSpanElement>(null)
-  const sliding = useRef(false)
-
-  // A toggle slides the sidebar: both panels' contents take their final widths at once, so the
-  // thread lays out once, and the panels' sizes transition around them (globals.css), each
-  // content held to its panel's right edge. The main panel's frame follows its panel and cuts
-  // the sheets to their shape, a wing of sheet filling it while it is wider than they are, so the
-  // sheet's edge follows the slide. Nothing else changes, so no subtree restyles.
-  const startSlide = (sidebarWidth: number, mainWidth: number) => {
-    if (sidebarContent.current) sidebarContent.current.style.width = `${sidebarWidth}px`
-    const box = frame.current
-    if (desk.current && box && mainContent.current && wing.current) {
-      const padding = getComputedStyle(desk.current)
-      const width = mainWidth - parseFloat(padding.paddingLeft) - parseFloat(padding.paddingRight)
-      mainContent.current.style.width = `${width}px`
-      box.style.overflow = 'clip'
-      box.style.boxShadow = 'var(--sheet-ring)'
-      // Over the sheets' rounded left edge, so the two meet as one sheet.
-      const overlap = parseFloat(getComputedStyle(box).borderTopLeftRadius)
-      wing.current.style.right = `${width - overlap}px`
-      wing.current.style.display = 'block'
-    }
-    if (group.current) group.current.dataset.sliding = ''
-    sliding.current = true
-  }
-  const endSlide = () => {
-    sliding.current = false
-    if (sidebarContent.current) sidebarContent.current.style.width = ''
-    if (mainContent.current) mainContent.current.style.width = ''
-    if (frame.current) {
-      frame.current.style.overflow = ''
-      frame.current.style.boxShadow = ''
-    }
-    if (wing.current) wing.current.style.display = ''
-    if (group.current) delete group.current.dataset.sliding
-  }
-
-  useEffect(() => {
-    const panel = sidebar.current
-    if (!panel) return
-    const from = panel.getSize().inPixels
-    // A drag past the minimum collapses the panel itself and lands here with nothing to do.
-    if (collapsed && !panel.isCollapsed()) panel.collapse()
-    else if (!collapsed && panel.isCollapsed()) {
-      panel.expand()
-      // Started collapsed, the panel has no size to return to, so it takes the one saved on collapse.
-      const saved = readJson(SIDEBAR_WIDTH, 0)
-      if (saved > panel.getSize().inPixels) panel.resize(saved)
-    } else return
-    const element = group.current
-    if (prefersReducedMotion() || !element) return
-    // Sizes read now are the ones before the change, which reaches the panels on the next render,
-    // so the open width is the one before collapsing, or the one saved then.
-    const open = collapsed ? from : readJson(SIDEBAR_WIDTH, 0)
-    if (open <= 0) return
-    // The handle already has its final width, none while collapsed.
-    const handle = element.querySelector(':scope > [data-slot=resizable-handle]')
-    const mainWidth =
-      element.getBoundingClientRect().width -
-      (collapsed ? 0 : open) -
-      (handle?.getBoundingClientRect().width ?? 0)
-    // The panels report their sizes on every frame of the slide, so its end is recorded here.
-    if (collapsed) writeJson(SIDEBAR_WIDTH, from)
-    width.current = collapsed ? 0 : open
-    startSlide(open, mainWidth)
-  }, [collapsed, sidebar])
-
+  const nav = useSidebarNav()
+  const account = useAccountShell()
+  const [initial] = useState(() => readJson(SIDEBAR_WIDTH, 0) || undefined)
+  const save = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(save.current), [])
   return (
-    <ResizablePanelGroup
-      elementRef={group}
-      orientation="horizontal"
-      defaultLayout={layout.defaultLayout}
-      onLayoutChanged={layout.onLayoutChanged}
-      onTransitionEnd={(event) => {
-        const panel = event.target as HTMLElement
-        if (event.propertyName === 'flex-grow' && panel.parentElement === event.currentTarget) {
-          endSlide()
-        }
-      }}
-    >
-      <ResizablePanel
-        id="sidebar"
-        panelRef={sidebar}
-        defaultSize={sidebarDefault}
-        minSize="200px"
-        maxSize="400px"
-        collapsible
-        collapsedSize="0px"
-        groupResizeBehavior="preserve-pixel-size"
-        onResize={(size) => {
-          if (sliding.current) return
-          const isCollapsed = size.inPixels === 0
-          if (!isCollapsed) width.current = size.inPixels
-          else if (width.current > 0) {
-            writeJson(SIDEBAR_WIDTH, width.current)
-            width.current = 0
-          }
-          if (isCollapsed !== useViewStore.getState().sidebarCollapsed) {
-            useViewStore.setState({ sidebarCollapsed: isCollapsed })
-          }
+    <div className="relative h-full">
+      <TitleBand />
+      <AppShell
+        className={cn('kettu-frame', hasBand && 'kettu-band')}
+        chrome="mac"
+        lights={false}
+        workspacePlacement="none"
+        header={false}
+        sideCards={false}
+        {...nav}
+        {...account}
+        list={<SidebarList />}
+        footCards={<SidebarNotices />}
+        onSearch={() => showSearch(true)}
+        collapsed={collapsed}
+        onCollapsedChange={(next) => useViewStore.setState({ sidebarCollapsed: next })}
+        sidebarWidth={{ default: 272, min: 200, max: 400, initial }}
+        onSidebarWidthChange={(width) => {
+          clearTimeout(save.current)
+          save.current = setTimeout(() => writeJson(SIDEBAR_WIDTH, width), 300)
         }}
-        className={SLIDING_PANEL}
+        corner={<CornerControls />}
+        labels={{
+          search: t('nav.searchField'),
+          searchKey: formatShortcut('Mod+K'),
+          menu: t('nav.label'),
+          resize: t('nav.resize'),
+          account: t('account.signedOut'),
+        }}
       >
-        <div ref={sidebarContent} inert={collapsed} className={PANEL_CONTENT}>
-          <AppSidebar />
-        </div>
-      </ResizablePanel>
-      {/* On the main sheet's edge. Collapsed, the handle takes no width and leaves the tab
-          order. */}
-      <ResizableHandle
-        withHandle={!collapsed}
-        disabled={collapsed}
-        className={cn(collapsed && 'pointer-events-none w-0')}
-        onPointerDown={() => sliding.current && endSlide()}
-      />
-      <ResizablePanel id="main" minSize="560px" className={SLIDING_PANEL} style={SHEET_PANEL}>
-        {/* The desk around the main area's sheets, which drags the window; its left side only
-            while the sidebar is collapsed. On Windows and Linux the band above them holds the
-            window controls. */}
-        <main
-          ref={desk}
-          className={cn(
-            PANEL_CONTENT,
-            DESK,
-            'py-(--sheet-gap) pr-(--sheet-gap)',
-            collapsed && 'pl-(--sheet-gap)',
-            hasBand && 'pt-[calc(var(--title-bar)+var(--sheet-gap))]',
-          )}
-        >
-          <TitleBand />
-          <div ref={frame} className="relative flex h-full justify-end rounded-xl">
-            <div ref={mainContent} className="isolate h-full w-full min-w-0 shrink-0">
-              <MainArea />
-            </div>
-            <span ref={wing} aria-hidden className="absolute inset-y-0 left-0 hidden bg-app" />
-          </div>
-        </main>
-      </ResizablePanel>
-    </ResizablePanelGroup>
+        <MainFrame />
+      </AppShell>
+    </div>
   )
 }
 
-// A panel holds its content against its right edge, where a content wider than the panel, as
-// while the sidebar slides, is cut off on the left. Flex all along: switching display would
-// rebuild the subtree's layout objects.
-const SLIDING_PANEL = 'flex min-w-0 justify-end'
-const PANEL_CONTENT = 'h-full w-full min-w-0 shrink-0'
+/**
+ * The main area. A toggle slides the sidebar: the content takes its final width at once, held to
+ * the right edge, so the thread lays out once while the frame's columns move around it. The frame
+ * cuts the sheets to its shape and a wing of sheet fills it while it is wider than they are, so
+ * the sheet's edge follows the slide.
+ */
+function MainFrame() {
+  const collapsed = useViewStore((s) => s.sidebarCollapsed)
+  const frame = useRef<HTMLDivElement>(null)
+  const content = useRef<HTMLDivElement>(null)
+  const wing = useRef<HTMLSpanElement>(null)
+  const was = useRef(collapsed)
+
+  useLayoutEffect(() => {
+    if (was.current === collapsed) return
+    was.current = collapsed
+    const box = frame.current
+    const inner = content.current
+    const app = box?.closest<HTMLElement>('.ui-as-app')
+    const main = box?.parentElement
+    // A narrow window's sidebar is a drawer over the page, which does not move.
+    if (!box || !inner || !wing.current || !app || !main || prefersReducedMotion()) return
+    if (app.offsetWidth <= NARROW_FRAME) return
+    const side = parseFloat(app.style.getPropertyValue('--side-w')) || 0
+    const width =
+      app.clientWidth - (collapsed ? 0 : side) - parseFloat(getComputedStyle(main).paddingRight)
+    inner.style.width = `${width}px`
+    // Over the sheets' rounded left edge, so the two meet as one sheet.
+    wing.current.style.right = `${width - parseFloat(getComputedStyle(box).borderTopLeftRadius)}px`
+    box.dataset.sliding = ''
+    const end = () => {
+      inner.style.width = ''
+      wing.current?.style.removeProperty('right')
+      delete box.dataset.sliding
+      app.removeEventListener('transitionend', onEnd)
+      clearTimeout(timer)
+    }
+    const onEnd = (event: TransitionEvent) => {
+      if (event.target === app && event.propertyName === 'grid-template-columns') end()
+    }
+    app.addEventListener('transitionend', onEnd)
+    // The columns' glide lasts 420 ms; a slide that never reports its end still ends.
+    const timer = setTimeout(end, 700)
+    return end
+  }, [collapsed])
+
+  return (
+    <div ref={frame} className="kettu-slide relative flex h-full justify-end rounded-card">
+      <div ref={content} className="isolate h-full w-full min-w-0 shrink-0">
+        <MainArea />
+      </div>
+      <span ref={wing} aria-hidden className="kettu-slide__wing" />
+    </div>
+  )
+}
+
+// App Shell's own width for a narrow window, where the sidebar becomes a drawer.
+const NARROW_FRAME = 900
 
 /** Tells main when the first frame of the shell is on screen, for the launch budget. */
 function ReportInteractive() {

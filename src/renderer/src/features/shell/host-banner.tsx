@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { CircleAlertIcon, FileDownIcon, RotateCwIcon } from 'lucide-react'
+import { Alert02Icon, FileDownloadIcon, RefreshIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { exportDiagnostics } from '@renderer/app/actions'
 import { Button } from '@renderer/components/ui/button'
@@ -10,6 +10,7 @@ import { fadeExit } from '@renderer/lib/motion'
 import { hasBand } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useConnectionStore } from '@renderer/stores/connection'
+import { Glyph } from './glyph'
 
 /**
  * The agent host's state while it is away: a small status pill centred over the top bar, or on
@@ -66,7 +67,7 @@ export function HostBanner() {
               </>
             ) : (
               <>
-                <CircleAlertIcon className="size-3.5 text-danger" />
+                <Glyph icon={Alert02Icon} size={14} className="text-danger" />
                 <span className={error ? 'text-danger' : undefined}>
                   {error ?? t('hostBanner.stopped')}
                 </span>
@@ -80,12 +81,12 @@ export function HostBanner() {
                   {busy ? (
                     <Spinner data-icon="inline-start" className="size-3" />
                   ) : (
-                    <RotateCwIcon data-icon="inline-start" />
+                    <Glyph icon={RefreshIcon} size={14} data-icon="inline-start" />
                   )}
                   {t('hostBanner.restart')}
                 </Button>
                 <Button variant="quiet" size="xs" className="rounded-full" onClick={save}>
-                  <FileDownIcon data-icon="inline-start" />
+                  <Glyph icon={FileDownloadIcon} size={14} data-icon="inline-start" />
                   {t('hostBanner.exportDiagnostics')}
                 </Button>
               </>

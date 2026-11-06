@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { SearchIcon } from 'lucide-react'
+import { Search01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '@renderer/components/ui/dialog'
@@ -7,6 +7,7 @@ import { Kbd } from '@renderer/components/ui/kbd'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { showShortcuts, useViewStore } from '@renderer/stores/view'
 import { keyCaps, shortcutList, type Shortcut, type ShortcutGroupName } from './shortcuts'
+import { Glyph } from './glyph'
 
 /** The shortcut table over the screen, from the account menu or Mod+/ anywhere. */
 export function ShortcutsDialog() {
@@ -38,7 +39,7 @@ export function ShortcutsDialog() {
       >
         <DialogTitle>{t('shortcuts.title')}</DialogTitle>
         <label className="mt-3.5 flex h-8.5 shrink-0 items-center gap-2 rounded-2xl bg-subtle px-2.5 text-tertiary focus-ring-within">
-          <SearchIcon aria-hidden className="size-3.5 shrink-0" />
+          <Glyph icon={Search01Icon} size={14} className="shrink-0" />
           <input
             type="search"
             value={query}

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
-import { PanelLeftIcon } from 'lucide-react'
+import { SidebarLeftIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { Button } from '@renderer/components/ui/button'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { BackForward } from '@renderer/features/shell/back-forward'
 import { HistoryDialog } from '@renderer/features/shell/history-dialog'
@@ -10,8 +10,12 @@ import { useNotices } from '@renderer/features/sidebar/notices'
 import { formatShortcut, hasBand } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { toggleSidebar, useViewStore } from '@renderer/stores/view'
+import { useNarrowWindow } from './narrow'
 
-/** The main sheet's drag region, leaving room for the window's controls when cornered. */
+/**
+ * A sheet's head, as App Shell's chat bar: 52 px, the window's drag region. In the window's top
+ * left corner, with the sidebar hidden, it starts after the toggle, Back and Forward.
+ */
 export function TopBar({
   children,
   className,
@@ -23,16 +27,18 @@ export function TopBar({
   cornered?: boolean
 }) {
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
-  const cornered = (given ?? true) && collapsed && !hasBand
+  // A narrow window's sidebar is a drawer, so the main area always starts at the corner.
+  const narrow = useNarrowWindow()
+  const cornered = (given ?? true) && (collapsed || narrow) && !hasBand
   return (
     <header
       className={cn(
-        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 bg-app pr-3 pl-4.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
+        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 bg-app pr-3 pl-5',
         className,
         cornered && 'pl-(--corner-inset)',
       )}
     >
-      {cornered && <CornerControlsSpace divided={children != null} />}
+      {cornered && <CornerControlsSpace />}
       {children}
     </header>
   )
@@ -44,64 +50,26 @@ export function TitleBand() {
   return <div className="app-region-drag absolute inset-x-0 top-0 h-(--title-bar)" />
 }
 
-/** The sidebar's drag region and the history dialog, which stays mounted with it. */
-export function SidebarTitleBar() {
-  return (
-    <div
-      className={cn(
-        'app-region-drag flex shrink-0 items-center pr-2',
-        hasBand
-          ? 'h-(--title-bar) pl-(--sheet-gap)'
-          : 'h-14 pt-2 pl-[calc(var(--corner-inset)+var(--sheet-gap))]',
-      )}
-    >
-      <CornerControlsSpace />
-      <span className="flex-1" />
-      <HistoryDialog />
-    </div>
-  )
-}
-
-/** One mounted set of controls, outside the panels that slide beneath it. */
+/**
+ * The sidebar toggle, Back and Forward, in the window's top left corner after the traffic lights,
+ * where they stay whether the sidebar shows or not; with them the history dialog.
+ */
 export function CornerControls() {
   return (
-    <div
-      className={cn(
-        'pointer-events-none absolute top-0 left-0 z-20 flex items-center',
-        hasBand
-          ? 'h-(--title-bar) pl-(--sheet-gap)'
-          : 'h-14 pt-2 pl-[calc(var(--corner-inset)+var(--sheet-gap))]',
-      )}
-    >
-      <div className={cn('pointer-events-auto flex items-center gap-0.5', !hasBand && '-ml-0.5')}>
-        <SidebarToggle />
-        <BackForward />
-      </div>
-    </div>
+    <>
+      <SidebarToggle />
+      <BackForward />
+      <HistoryDialog />
+    </>
   )
 }
 
-/** Reserves the controls' width in a header without moving the controls into that panel. */
-export function CornerControlsSpace({
-  className,
-  divided = false,
-}: {
-  className?: string
-  divided?: boolean
-}) {
+/** Reserves the corner controls' width in a head without moving the controls into that sheet. */
+export function CornerControlsSpace({ className }: { className?: string; divided?: boolean }) {
   return (
-    <div
-      aria-hidden
-      className={cn(
-        'flex shrink-0 items-center',
-        !hasBand && '-ml-0.5',
-        // No line before the bar's spacer, as on New session, where nothing follows on the left.
-        divided &&
-          'mr-1.5 pr-2.5 shadow-[inset_calc(-1*var(--hairline))_0_0_var(--border-subtle)] [&:has(+_.flex-1)]:shadow-none',
-        className,
-      )}
-    >
-      <span className="h-7.5 w-23.5 shrink-0" />
+    <div aria-hidden className={cn('flex shrink-0 items-center', className)}>
+      {/* The three 28 px buttons with their 2 px gaps, then the 8 px before the head's content. */}
+      <span className="h-7 w-24 shrink-0" />
     </div>
   )
 }
@@ -121,7 +89,7 @@ export function SidebarToggle({ className }: { className?: string }) {
     () =>
       useViewStore.subscribe((state, previous) => {
         if (!state.sidebarCollapsed || previous.sidebarCollapsed) return
-        if (document.activeElement?.closest('[data-slot=sidebar]')) button.current?.focus()
+        if (document.activeElement?.closest('.ui-as-side')) button.current?.focus()
       }),
     [],
   )
@@ -132,27 +100,23 @@ export function SidebarToggle({ className }: { className?: string }) {
     <Tooltip>
       <TooltipTrigger
         render={
-          <Button
+          <button
             ref={button}
+            type="button"
             data-sidebar-toggle=""
-            variant="quiet"
-            size="icon-compact"
             aria-label={label}
+            aria-expanded={!collapsed}
             aria-description={notices?.name}
             onClick={toggleSidebar}
-            className={cn(
-              TITLE_BUTTON,
-              'relative active:not-aria-[haspopup]:translate-y-0',
-              className,
-            )}
+            className={cn(TITLE_BUTTON, className)}
           />
         }
       >
-        <PanelLeftIcon className="size-4.5" />
+        <Icon icon={SidebarLeftIcon} size={16} />
         {notices && (
           <span
             aria-hidden
-            className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-primary ring-2 ring-background"
+            className="absolute top-1.25 right-1.25 size-1.5 rounded-full bg-attention-dot shadow-[0_0_0_1.5px_var(--bg-sidebar)]"
           />
         )}
       </TooltipTrigger>

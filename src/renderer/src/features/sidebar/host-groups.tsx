@@ -2,15 +2,15 @@
 // its projects, which says whether it is online.
 
 import { useMemo } from 'react'
-import { CircleAlertIcon, LaptopIcon, MonitorIcon } from 'lucide-react'
+import { Alert02Icon, ComputerIcon, LaptopIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
-import { SidebarMenu } from '@renderer/components/ui/sidebar'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { HostIcon, OnlineDot } from '@renderer/features/settings/remote-parts'
 import { deviceShape } from '@renderer/features/settings/remote-text'
 import { connectionText, routeName } from '@renderer/features/settings/host-text'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useHostsStore, useOtherHost, type OtherHost } from '@renderer/stores/hosts'
@@ -58,19 +58,19 @@ export function NeedsYouGroup({
   )
   if (tree.length === 0) return null
   return (
-    <section aria-label={t('needsYou.label')} className="flex flex-col gap-0.5">
-      <div className="mt-1.5 flex h-7 items-center gap-[5px] pr-1 pl-2.5">
-        <h3 className="m-0 text-group font-medium text-primary">{t('needsYou.label')}</h3>
-        <span className="text-xs text-tertiary tabular-nums">{tree.length}</span>
+    <section aria-label={t('needsYou.label')} className="ui-as-side__group">
+      <div className="ui-as-side__label kettu-host-label">
+        <h3>{t('needsYou.label')}</h3>
+        <span className="tabular-nums">{tree.length}</span>
       </div>
-      <SidebarMenu className="gap-0.5">
+      <ul className="flex flex-col">
         <RenameScope value={NEEDS_YOU_GROUP}>
           {tree.map((node) => (
             <SessionRow key={node.summary.id} node={node} tabStopId={null} showHost />
           ))}
         </RenameScope>
         <GroupRenameHints scope={NEEDS_YOU_GROUP} />
-      </SidebarMenu>
+      </ul>
     </section>
   )
 }
@@ -81,16 +81,15 @@ export function HostHeading({ hostId }: { hostId: string | null }) {
   const name = useHostLabel(hostId)
   const model = useHostsStore((s) => s.status?.self.model ?? '')
   const laptop = deviceShape({ kind: 'desktop', model }) === 'laptop'
-  const Icon = hostId === null ? (laptop ? LaptopIcon : MonitorIcon) : null
   const state = host ? <HostStateText host={host} /> : null
   return (
-    <div className="mt-5.5 flex h-6.5 items-center gap-1.5 pr-2 pl-2.5 text-xs text-tertiary">
-      {Icon ? (
-        <Icon aria-hidden className="size-[13px] shrink-0" />
+    <div className="ui-as-side__label kettu-host-label">
+      {hostId === null ? (
+        <Glyph icon={laptop ? LaptopIcon : ComputerIcon} size={13} className="shrink-0" />
       ) : (
         <HostIcon platform={host?.platform ?? 'linux'} className="size-[13px] shrink-0" />
       )}
-      <h3 className="m-0 min-w-0 truncate text-xs font-semibold text-secondary">{name}</h3>
+      <h3>{name}</h3>
       <span className="min-w-2 flex-1" />
       {state}
     </div>
@@ -122,7 +121,9 @@ function HostStateText({ host }: { host: OtherHost }) {
       {connection.state === 'offline' && (
         <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-border-strong" />
       )}
-      {connection.state === 'stopped' && <CircleAlertIcon className="size-3.5 shrink-0" />}
+      {connection.state === 'stopped' && (
+        <Glyph icon={Alert02Icon} size={14} className="shrink-0" />
+      )}
       <span className="truncate">{connectionText(t, host, now)}</span>
     </span>
   )
@@ -131,5 +132,5 @@ function HostStateText({ host }: { host: OtherHost }) {
 /** In place of a host's projects while it lists no session. */
 export function HostEmpty() {
   const { t } = useTranslation('sidebar')
-  return <p className="mt-1 px-2.5 py-1 text-xs leading-normal text-tertiary">{t('hosts.empty')}</p>
+  return <span className="ui-as-side__empty">{t('hosts.empty')}</span>
 }

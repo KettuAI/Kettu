@@ -126,7 +126,7 @@ export const Flag = ({ code }: { code: "gb" | "de" | "fr" | "es" }) => (
   </svg>
 );
 
-export type ShellNavItem = { label: string; icon: IconSvgElement; /** Small number at the end, e.g. unread items */ count?: number };
+export type ShellNavItem = { label: string; icon: IconSvgElement; /** Small number at the end, e.g. unread items */ count?: number; /** Your own mark at the row's end, in place of the count */ end?: ReactNode; /** The row's name for screen readers, when its end says more than the label */ ariaLabel?: string };
 /** A labelled list under the menu – replaces Projects when given */
 export type ShellGroup = { label: string; items: ShellNavItem[]; /** Text shown while the list is empty */ empty?: string };
 
@@ -200,7 +200,7 @@ export type AppShellProps = {
   workspaceMeta?: string;
   /** The account at the bottom – its menu shows the email under the name (made up from the name when left out) */
   /** `meta` is a second line under the name, such as the computer in use */
-  user?: { name: string; avatar?: string; email?: string; meta?: string };
+  user?: { name: string; avatar?: string; email?: string; meta?: string; /** Your own picture in place of the avatar or initials */ mark?: ReactNode };
   /** "mac": the window's traffic lights in the top left corner, the sidebar toggle, Back and Forward right after them, all
    * staying put whether the sidebar shows or not; the sidebar's head only leaves them room */
   chrome?: "mac";
@@ -223,11 +223,30 @@ export type AppShellProps = {
   /** Your own account menu in place of the built-in one, opened from the account row; gets a function that closes it */
   userMenu?: (close: () => void) => ReactNode;
   /** A button at the account row's end, such as Settings, in place of the row's chevron; the rest of the row still opens the account menu */
-  userAction?: { icon: IconSvgElement; label: string; shortcut?: string; onClick: () => void };
+  userAction?: { icon: IconSvgElement; label: string; shortcut?: string; onClick: () => void; /** A small dot on the button, while something there needs you */ dot?: boolean };
+  /** More buttons at the account row's end, before userAction */
+  userTools?: ReactNode;
+  /** Your own list under the menu in place of Projects and the chats, e.g. one that groups them by host */
+  list?: ReactNode;
+  /** Cards at the bottom of the sidebar, over the account row, e.g. notices */
+  footCards?: ReactNode;
+  /** Collapsed state, controlled; with onCollapsedChange the shell asks instead of folding on its own. On a narrow screen a change opens or closes the drawer */
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
+  /** Called with the sidebar's width after a drag or a key, e.g. to keep it */
+  onSidebarWidthChange?: (width: number) => void;
+  /** Called by the search field and ⌘K in place of opening the built-in search */
+  onSearch?: () => void;
+  /** With chrome="mac": your own controls after the traffic lights, in place of the toggle, Back and Forward */
+  corner?: ReactNode;
+  /** With chrome="mac": false leaves the traffic lights' room empty, for a window that draws its own */
+  lights?: boolean;
+  /** Words the shell shows, for translation */
+  labels?: { search?: string; searchKey?: string; menu?: string; resize?: string; account?: string };
   /** Tasks behind "Getting started" */
   setup?: SetupGroup[];
   /** Sidebar width in px – drag its edge between min and max; double-click the edge for the default again */
-  sidebarWidth?: { default?: number; min?: number; max?: number };
+  sidebarWidth?: { default?: number; min?: number; max?: number; /** Where it starts, e.g. the width kept from last time */ initial?: number };
   /** A work area on the right of the main area, e.g. tools or a preview – resizable and collapsible */
   panel?: ReactNode;
   /**
@@ -273,6 +292,16 @@ export function AppShell({
   folderIcon,
   userMenu,
   userAction,
+  userTools,
+  list,
+  footCards,
+  collapsed: collapsedProp,
+  onCollapsedChange,
+  onSidebarWidthChange,
+  onSearch,
+  corner,
+  lights = true,
+  labels,
   chrome,
   workspacePlacement = "head",
   setup = defaultSetup,
@@ -291,10 +320,20 @@ export function AppShell({
 }: AppShellProps) {
   const [news, setNews] = useState(2);
   const [userOpen, setUserOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsedOwn, setCollapsedOwn] = useState(false);
+  const collapsed = collapsedProp ?? collapsedOwn;
+  const setCollapsed = (next: boolean | ((c: boolean) => boolean)) => {
+    const value = typeof next === "function" ? next(collapsed) : next;
+    if (onCollapsedChange) onCollapsedChange(value);
+    else setCollapsedOwn(value);
+  };
   const side = { default: 272, min: 220, max: 380, ...sidebarWidth };
   const pane = { default: 360, min: 280, max: 560, ...panelWidth };
-  const [sideW, setSideW] = useState(side.default);
+  const [sideW, setSideWOwn] = useState(side.initial ?? side.default);
+  const setSideW = (width: number) => {
+    setSideWOwn(width);
+    onSidebarWidthChange?.(width);
+  };
   const [paneW, setPaneW] = useState(pane.default);
   const [paneOpen, setPaneOpen] = useState(defaultPanelOpen);
   // While an edge is dragged the columns follow the pointer directly, without their glide
@@ -324,6 +363,13 @@ export function AppShell({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  // Controlled: on a narrow screen, where the sidebar is a drawer, a change of the collapsed state toggles the drawer
+  const lastCollapsed = useRef(collapsedProp);
+  useEffect(() => {
+    if (lastCollapsed.current === collapsedProp) return;
+    lastCollapsed.current = collapsedProp;
+    if (narrowNow.current) setDrawer((d) => !d);
+  }, [collapsedProp]);
   // Collapsed on wide screens the sidebar stays as a rail of icons; on narrow ones it's a drawer that hides away
   const rail = collapsed && !narrow;
   const sideHidden = narrow ? !drawer : false;
@@ -351,7 +397,9 @@ export function AppShell({
   };
 
   // The search field opens the library's Command Menu over the app; ⌘K does too while the focus is inside the app
-  const [search, setSearch] = useState(false);
+  const [searchOwn, setSearchOwn] = useState(false);
+  const search = !onSearch && searchOwn;
+  const setSearch = (open: boolean) => (open && onSearch ? onSearch() : setSearchOwn(open));
   const searchBtn = useRef<HTMLButtonElement>(null);
   const closeSearch = () => {
     setSearch(false);
@@ -452,15 +500,15 @@ export function AppShell({
   const [appearance, setAppearance] = useState("System");
   const userTrigger = ({ open, toggle }: { open: boolean; toggle: () => void }) => (
     <button type="button" className="ui-as-user" aria-haspopup="menu" aria-expanded={open} title={rail ? userName || "Account" : undefined} onClick={toggle}>
-      {showAvatar ? (
+      {user.mark ?? (showAvatar ? (
         <img src={user.avatar} alt="" width={21} height={21} onError={() => setAvatarFailed(user.avatar ?? null)} />
       ) : (
         <span className="ui-as-user__initials">{initials || <Icon icon={UserIcon} size={12} />}</span>
-      )}
+      ))}
       {user.meta ? (
         <span className="ui-as-user__text">
           <span className="ui-as-user__name" title={userName || undefined}>
-            {userName || "Account"}
+            {userName || labels?.account || "Account"}
           </span>
           <small title={user.meta}>{user.meta}</small>
         </span>
@@ -537,7 +585,8 @@ export function AppShell({
       data-header={header ? "" : undefined}
       data-layout={layout}
       onKeyDown={(e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k" && !search) {
+        // With onSearch the app keeps its own shortcut
+        if (!onSearch && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k" && !search) {
           e.preventDefault();
           e.stopPropagation();
           setSearch(true);
@@ -619,14 +668,18 @@ export function AppShell({
         </>
       )}
       {chrome === "mac" && (
-        <div className="ui-as-corner">
+        <div className="ui-as-corner" data-lights={lights ? undefined : "window"}>
           {/* The traffic lights are the window's own; the prototype runs in a browser, so it draws stand-ins */}
           <span className="ui-as-lights" aria-hidden="true">
-            <i />
-            <i />
-            <i />
+            {lights && (
+              <>
+                <i />
+                <i />
+                <i />
+              </>
+            )}
           </span>
-          <span className="ui-as-corner__tools">
+          {corner ? <span className="ui-as-corner__tools">{corner}</span> : <span className="ui-as-corner__tools">
             <button className="ui-as-icon-btn" type="button" aria-label={sideHidden ? "Show sidebar" : "Hide sidebar"} aria-expanded={!sideHidden} onClick={() => (narrow ? setDrawer((d) => !d) : setCollapsed((c) => !c))}>
               <Icon icon={SidebarLeftIcon} size={16} />
             </button>
@@ -636,7 +689,7 @@ export function AppShell({
             <button className="ui-as-icon-btn" type="button" aria-label="Forward" disabled>
               <Icon icon={ArrowRight01Icon} size={16} />
             </button>
-          </span>
+          </span>}
         </div>
       )}
       <aside ref={sideRef} className="ui-as-side" inert={sideHidden || overlay === "panel"}>
@@ -657,13 +710,13 @@ export function AppShell({
         )}
 
         {/* Search, like the affectUI library's: a field with its shortcut */}
-        <button ref={searchBtn} className="ui-as-side__search" type="button" title={rail ? "Search ⌘K" : undefined} aria-keyshortcuts="Meta+K" aria-haspopup="dialog" aria-expanded={search} onClick={() => setSearch(true)}>
+        <button ref={searchBtn} className="ui-as-side__search" type="button" title={rail ? `${labels?.search ?? "Search…"} ${labels?.searchKey ?? "⌘K"}` : undefined} aria-keyshortcuts={labels?.searchKey === "Ctrl+K" ? "Control+K" : "Meta+K"} aria-haspopup="dialog" aria-expanded={onSearch ? undefined : search} onClick={() => setSearch(true)}>
           <Icon icon={Search01Icon} size={15} />
-          <span>Search…</span>
-          <kbd>⌘K</kbd>
+          <span>{labels?.search ?? "Search…"}</span>
+          <kbd>{labels?.searchKey ?? "⌘K"}</kbd>
         </button>
 
-        <nav className="ui-as-side__nav" aria-label="Main menu">
+        <nav className="ui-as-side__nav" aria-label={labels?.menu ?? "Main menu"}>
           <div className="ui-as-side__group">
             {nav.map((item, i) => (
               <button
@@ -671,6 +724,7 @@ export function AppShell({
                 type="button"
                 className="ui-as-side__item"
                 aria-current={active === item.label ? "page" : undefined}
+                aria-label={item.ariaLabel}
                 title={rail ? item.label : undefined}
                 onClick={() => go(item.label)}
               >
@@ -678,11 +732,11 @@ export function AppShell({
                 <span className="ui-as-side__text" title={item.label}>
                   {item.label}
                 </span>
-                {!!item.count && item.count > 0 && <span className="ui-as-side__count" title={item.count.toLocaleString()}>{shortCount(item.count)}</span>}
+                {item.end ?? (!!item.count && item.count > 0 && <span className="ui-as-side__count" title={item.count.toLocaleString()}>{shortCount(item.count)}</span>)}
               </button>
             ))}
           </div>
-          {groups ? (
+          {list ? list : groups ? (
             groups.map((group, gi) => (
               <div key={`${gi}-${group.label}`} className="ui-as-side__group">
                 <span className="ui-as-side__label">{group.label}</span>
@@ -726,7 +780,7 @@ export function AppShell({
           ))}
             </>
           )}
-          {chats && (
+          {!list && chats && (
             <ChatList
               chats={chats}
               projects={projects}
@@ -812,9 +866,11 @@ export function AppShell({
           </div>
           )}
 
+          {footCards}
           {userMenu ? (
             <span className="ui-as-anchor ui-as-user-menu">
               {userTrigger({ open: userOpen, toggle: () => setUserOpen((o) => !o) })}
+              {userTools}
               {userAction && (
                 <button
                   className="ui-as-icon-btn ui-as-user-action"
@@ -825,6 +881,7 @@ export function AppShell({
                   onClick={userAction.onClick}
                 >
                   <Icon icon={userAction.icon} size={16} />
+                  {userAction.dot && <span className="ui-as-user-action__dot" aria-hidden="true" />}
                 </button>
               )}
               <Popover open={userOpen} onClose={() => setUserOpen(false)} side="top" className="ui-as-user-pop">
@@ -886,7 +943,7 @@ export function AppShell({
       </aside>
       {/* Drag handles on the edges of the main area – wide screens only; in the tab order after the sidebar and before the work area */}
       {!sideHidden && !narrow && !rail && (
-        <Resizer edge="left" label="Resize sidebar" value={sideW} {...side} onChange={setSideW} onDrag={setResizing} root={root} />
+        <Resizer edge="left" label={labels?.resize ?? "Resize sidebar"} value={sideW} {...side} onChange={setSideW} onDrag={setResizing} root={root} onCollapse={onCollapsedChange && (() => setCollapsed(true))} />
       )}
       <main className="ui-as-main" inert={!!overlay}>
         {children}
@@ -926,6 +983,7 @@ function Resizer({
   onChange,
   onDrag,
   root,
+  onCollapse,
 }: {
   edge: "left" | "right";
   label: string;
@@ -936,6 +994,8 @@ function Resizer({
   onChange: (width: number) => void;
   onDrag: (dragging: boolean) => void;
   root: RefObject<HTMLDivElement | null>;
+  /** Dragged well past the minimum, the sidebar folds away */
+  onCollapse?: () => void;
 }) {
   const start = useRef<{ x: number; width: number; scale: number } | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -953,7 +1013,15 @@ function Resizer({
   const move = (e: ReactPointerEvent<HTMLDivElement>) => {
     const s = start.current;
     if (!s) return;
-    onChange(clamp(Math.round(s.width + ((e.clientX - s.x) / s.scale) * sign), min, max));
+    const width = Math.round(s.width + ((e.clientX - s.x) / s.scale) * sign);
+    if (onCollapse && width < min / 2) {
+      start.current = null;
+      setDragging(false);
+      onDrag(false);
+      onCollapse();
+      return;
+    }
+    onChange(clamp(width, min, max));
   };
   const up = () => {
     if (!start.current) return;
@@ -1582,6 +1650,17 @@ export function EmptyState({ title, text, action, tall, bare }: { title: string;
     </div>
   );
 }
+
+/* ---------- Project folders ---------- */
+
+/** The composer's blue folder with its front shut, for a project folder that is closed (Assistant Home's FolderMark is the open one) */
+export const FolderClosedMark = () => (
+  <svg className="ui-as-tray-link__folder" viewBox="0 0 67 67" fill="none" aria-hidden="true">
+    <path d="M11.17 15.35v15.36h44.67v-6.98c0-3.86-3.13-6.98-6.98-6.98H33.5l-3.93-5.89a5.58 5.58 0 0 0-4.64-2.49h-6.78c-3.86 0-6.98 3.13-6.98 6.98Z" fill="#00A1FF" />
+    <path d="M33.5 16.75l-3.93-5.89a5.58 5.58 0 0 0-4.64-2.49h-6.78c-3.86 0-6.98 3.13-6.98 6.98v15.36h44.67v-6.98c0-3.86-3.13-6.98-6.98-6.98H33.5Zm0 0h-9.77" stroke="#00A1FF" strokeWidth="4.19" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M18.15 16.75h30.71c3.86 0 6.98 3.13 6.98 6.98v25.83c0 3.86-3.13 6.98-6.98 6.98H18.15c-3.86 0-6.98-3.13-6.98-6.98V23.73c0-3.86 3.13-6.98 6.98-6.98Z" fill="#3CC7FF" stroke="#3CC7FF" strokeWidth="4.19" strokeLinejoin="round" />
+  </svg>
+);
 
 /* ---------- Chats in the sidebar ---------- */
 

@@ -1,55 +1,41 @@
-import type { KeyboardEvent, ReactNode } from 'react'
-import { Menu as MenuPrimitive } from '@base-ui/react/menu'
+import { useEffect, type KeyboardEvent } from 'react'
 import {
-  ChartPieIcon,
-  CheckIcon,
-  CircleHelpIcon,
-  ExternalLinkIcon,
+  Add01Icon,
+  ArrowRight01Icon,
+  Book02Icon,
+  ComputerIcon,
+  HelpCircleIcon,
   KeyboardIcon,
   LaptopIcon,
-  LayersIcon,
-  LogInIcon,
-  LogOutIcon,
-  MonitorIcon,
-  PencilIcon,
-  PlusIcon,
-  SparkleIcon,
-} from 'lucide-react'
+  Layers01Icon,
+  Login01Icon,
+  Logout01Icon,
+  News01Icon,
+  Settings01Icon,
+  UserEdit01Icon,
+  UserIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
 import { RELEASES_URL, releaseUrl } from '@shared/updates'
-import {
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuList,
-  DropdownMenuRadioGroup,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-} from '@renderer/components/ui/dropdown-menu'
-import { Spinner } from '@renderer/components/ui/spinner'
-import { toggleVariants } from '@renderer/components/ui/toggle'
-import { SegmentThumb } from '@renderer/components/segmented-control'
+import { Icon } from '@renderer/components/affect/app-shell'
+import { ProfileMenu, type ProfileMenuItem } from '@renderer/components/affect/profile-menu'
+import { SegmentedControl } from '@renderer/components/affect/segmented-control'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { HostIcon } from '@renderer/features/settings/remote-parts'
 import { deviceShape } from '@renderer/features/settings/remote-text'
-import { connectionText, routeName } from '@renderer/features/settings/host-text'
-import { Masked } from '@renderer/features/settings/controls'
-import { useSegmentThumb } from '@renderer/hooks/use-segment-thumb'
+import { limitReaders } from '@renderer/features/sidebar/plan-usage'
+import { errorMessage } from '@renderer/lib/host'
 import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
 import { useNow } from '@renderer/lib/use-now'
-import { cn } from '@renderer/lib/utils'
 import { cancelSignIn, signIn, signOut, useAccountStore } from '@renderer/stores/account'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { switchHost } from '@renderer/stores/host-switch'
 import { isAway, useHostsStore, useOtherHosts, type OtherHost } from '@renderer/stores/hosts'
-import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { refreshLimits } from '@renderer/stores/usage'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import {
   openSettings,
@@ -58,39 +44,45 @@ import {
   THIS_COMPUTER,
   useViewStore,
 } from '@renderer/stores/view'
-import { AccountAvatar, IdentityName, SettingsGlyph } from './avatar'
-import { chosenHost, planCards, shownCards, systemName, type Identity } from './model'
-import { PlanLimitCard } from './plan-limit-card'
+import { chosenHost, planCards, systemName, type Identity, type PlanCard } from './model'
 import { useThisComputerName } from './use-account'
 
 const DOCS_URL = 'https://github.com/KettuAI/Kettu#readme'
 
-/** A label over a group of the menu, such as "This window controls". */
-function GroupLabel({ children }: { children: ReactNode }) {
-  return (
-    <DropdownMenuLabel className="h-6.5 px-2 text-small font-medium text-tertiary">
-      {children}
-    </DropdownMenuLabel>
-  )
+/** Reads the plan limits the menu lists again; the host asks each agent at most once a minute. */
+function readLimits(): void {
+  const { order, byId } = useAgentsStore.getState()
+  for (const agentId of limitReaders(order.flatMap((id) => byId[id] ?? []))) {
+    refreshLimits(agentId).catch((error: unknown) =>
+      console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
+    )
+  }
 }
 
-const SEPARATOR = 'mx-0.75 my-1.25'
+/** An http(s) page in the system browser, as the app opens every outside link. */
+function openPage(url: string): void {
+  window.open(url, '_blank', 'noreferrer')
+}
 
 /**
- * The account menu, opened from the avatar or name: who you are, the host this window controls
- * (Mod+1 to Mod+9 while open), plan limits, the theme, settings and a Help submenu.
+ * The account menu on affectUI's Profile Menu, opened from the account row: who you are, the hosts
+ * this window controls (Mod+1 to Mod+9 while open), color mode, Settings, Help on a second card,
+ * signing in or out, and the plan limits as the card's last row.
  */
-export function AccountMenuContent({
-  identity,
-  onClose,
-}: {
-  identity: Identity
-  onClose: () => void
-}) {
+export function AccountMenu({ identity, close }: { identity: Identity; close: () => void }) {
   const { t } = useTranslation('sidebar')
   const hosts = useOtherHosts()
   const choices: (string | null)[] = [THIS_COMPUTER, ...hosts.map((h) => h.id)]
+  const status = useAccountStore((s) => s.status)
+  const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
+  const hostItems = useHostItems(hosts, close)
+  const help = useHelpItems(close)
+  useEffect(readLimits, [])
 
+  const then = (run: () => void) => () => {
+    close()
+    run()
+  }
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     // The web client lists no host to pick, and the browser keeps its own tab keys.
     if (isWeb || !isMod(event) || event.shiftKey || event.altKey) return
@@ -100,36 +92,97 @@ export function AccountMenuContent({
     event.preventDefault()
     event.stopPropagation()
     choose(choice, hosts)
-    onClose()
+    close()
   }
 
+  const manageUrl = status?.state === 'signed-in' ? status.manageUrl : null
+  const account: ProfileMenuItem[] =
+    isWeb || !status
+      ? []
+      : status.state === 'signed-in'
+        ? [
+            ...(manageUrl
+              ? [
+                  {
+                    id: 'profile',
+                    label: t('account.editProfile'),
+                    icon: <MenuIcon icon={UserEdit01Icon} />,
+                    divider: true,
+                    onSelect: then(() => openPage(manageUrl)),
+                  },
+                ]
+              : []),
+            {
+              id: 'sign-out',
+              label: t('account.signOut'),
+              icon: <MenuIcon icon={Logout01Icon} />,
+              divider: !manageUrl,
+              onSelect: then(() => void signOut()),
+            },
+          ]
+        : [
+            {
+              id: 'sign-in',
+              label:
+                status.state === 'signing-in' ? t('account.cancelSignIn') : t('account.signIn'),
+              icon: <MenuIcon icon={Login01Icon} />,
+              divider: true,
+              onSelect: then(
+                () => void (status.state === 'signing-in' ? cancelSignIn() : signIn()),
+              ),
+            },
+          ]
+
+  const items: ProfileMenuItem[] = [
+    ...hostItems,
+    {
+      id: 'mode',
+      label: t('account.theme'),
+      control: <ColorMode />,
+      divider: hostItems.length > 0,
+    },
+    {
+      id: 'settings',
+      label: t('account.settings'),
+      icon: <MenuIcon icon={Settings01Icon} />,
+      shortcut: formatShortcut('Mod+,'),
+      divider: true,
+      onSelect: then(() => openSettings()),
+    },
+    {
+      id: 'help',
+      label: t('account.help'),
+      icon: <MenuIcon icon={HelpCircleIcon} />,
+      submenu: help,
+    },
+    ...account,
+  ]
+
+  const email = identity.email
+    ? hidden
+      ? '•'.repeat(8)
+      : identity.email
+    : status?.state === 'signing-in'
+      ? t('account.signingIn')
+      : t('account.signedOutLine')
+
   return (
-    <DropdownMenuContent
-      side="top"
-      align="start"
-      sideOffset={6}
-      alignOffset={6}
-      onKeyDown={onKeyDown}
-      className="w-75 max-w-[calc(100vw-2rem)] p-1.5"
-    >
-      <DropdownMenuList>
-        <Profile identity={identity} />
-        <DropdownMenuSeparator className={SEPARATOR} />
-        {!isWeb && <HostChoices hosts={hosts} />}
-        {!isWeb && <DropdownMenuSeparator className={SEPARATOR} />}
-        <PlanLimits />
-        <ThemeChoice />
-        <DropdownMenuSeparator className={SEPARATOR} />
-        <DropdownMenuItem onClick={() => openSettings()}>
-          <SettingsGlyph />
-          {t('account.settings')}
-          <DropdownMenuShortcut>{formatShortcut('Mod+,')}</DropdownMenuShortcut>
-        </DropdownMenuItem>
-        <HelpMenu />
-        <AccountAction />
-      </DropdownMenuList>
-    </DropdownMenuContent>
+    <div role="presentation" onKeyDown={onKeyDown} className="kettu-account">
+      <ProfileMenu
+        className="kettu-account__card"
+        name={!identity.name ? t('account.signedOut') : hidden ? '•'.repeat(8) : identity.name}
+        email={email}
+        avatar={<Avatar identity={identity} hidden={hidden} />}
+        items={items}
+        footer={<PlanLimits close={close} />}
+        labels={{ menu: t('account.menuLabel') }}
+      />
+    </div>
   )
+}
+
+function MenuIcon({ icon }: { icon: Parameters<typeof Icon>[0]['icon'] }) {
+  return <Icon icon={icon} size={16} />
 }
 
 function choose(choice: string | null, hosts: readonly OtherHost[]): void {
@@ -137,62 +190,27 @@ function choose(choice: string | null, hosts: readonly OtherHost[]): void {
   switchHost(choice, host?.connection.state === 'connecting')
 }
 
-/** The avatar, name and email, with the account's page to edit them. */
-function Profile({ identity }: { identity: Identity }) {
-  const { t } = useTranslation('sidebar')
-  const status = useAccountStore((s) => s.status)
-  const manageUrl = status?.state === 'signed-in' ? status.manageUrl : null
+/** The account's picture or initial, or a person while signed out or hidden. */
+function Avatar({ identity, hidden }: { identity: Identity; hidden: boolean }) {
+  if (identity.avatar && !hidden) return <img src={identity.avatar} alt="" draggable={false} />
   return (
-    <div className="flex items-center gap-2.5 px-2 pt-2 pb-2.5">
-      <AccountAvatar identity={identity} size={32} />
-      <div className="flex min-w-0 flex-1 flex-col leading-[1.3]">
-        <span className="truncate text-menu font-semibold text-primary">
-          <IdentityName identity={identity} />
-        </span>
-        <span className="truncate text-small text-tertiary">
-          {identity.email ? (
-            <Masked revealable={false}>{identity.email}</Masked>
-          ) : status?.state === 'signing-in' ? (
-            t('account.signingIn')
-          ) : (
-            t('account.signedOutLine')
-          )}
-        </span>
-      </div>
-      {manageUrl && (
-        <DropdownMenuItem
-          aria-label={t('account.editProfile')}
-          render={<a href={manageUrl} target="_blank" rel="noreferrer" />}
-          className="grid size-6.5 min-h-0 shrink-0 place-items-center rounded-tile p-0 text-tertiary focus:text-primary"
-        >
-          <PencilIcon strokeWidth={1.35} className="size-2.75" />
-        </DropdownMenuItem>
-      )}
-    </div>
+    <span className="kettu-account__avatar">
+      {identity.initial && !hidden ? identity.initial : <Icon icon={UserIcon} size={18} />}
+    </span>
   )
 }
 
-const HOST_ROW =
-  'flex h-9.5 cursor-default items-center gap-2.5 rounded-lg px-2 outline-none select-none data-checked:bg-selected data-highlighted:bg-selected'
-
-/** The hosts this window can control, Mod+1 to Mod+9 in order; every host while there are some. */
-function HostChoices({ hosts }: { hosts: OtherHost[] }) {
+/**
+ * The hosts this window can control, Mod+1 to Mod+9 in order, each with whether it is reached;
+ * every host side by side while there are others; and adding one.
+ */
+function useHostItems(hosts: OtherHost[], close: () => void): ProfileMenuItem[] {
   const { t } = useTranslation('sidebar')
   const { t: ts } = useTranslation('settings')
   const filter = useViewStore((s) => s.hostFilter)
   const model = useHostsStore((s) => s.status?.self.model ?? '')
   const selfName = useThisComputerName()
-  const counts = useSessionsStore(
-    useShallow((s) => {
-      const byHost: Record<string, number> = {}
-      for (const summary of Object.values(s.byId)) {
-        const host = hostOfSession(summary)
-        if (host !== null) byHost[host] = (byHost[host] ?? 0) + 1
-      }
-      return byHost
-    }),
-  )
-  const now = useNow()
+  if (isWeb) return []
   const value =
     hosts.length === 0
       ? THIS_COMPUTER
@@ -200,163 +218,214 @@ function HostChoices({ hosts }: { hosts: OtherHost[] }) {
           filter,
           hosts.map((h) => h.id),
         ) ?? 'all')
+  const pick = (choice: string | null) => () => {
+    close()
+    choose(choice, hosts)
+  }
   const laptop = deviceShape({ kind: 'desktop', model }) === 'laptop'
-  return (
-    <DropdownMenuGroup>
-      <GroupLabel>{t('account.controls')}</GroupLabel>
-      <DropdownMenuRadioGroup
-        value={value}
-        onValueChange={(next: string) => choose(next === 'all' ? null : next, hosts)}
-      >
-        <HostRow
-          value={THIS_COMPUTER}
-          icon={laptop ? <LaptopIcon /> : <MonitorIcon />}
-          name={selfName}
-          line={
-            <>
-              <StateDot state="online" />
-              {t('hosts.thisComputer')}
-            </>
-          }
-          shortcut={formatShortcut('Mod+1')}
-        />
-        {hosts.map((host, index) => {
-          const { state } = host.connection
-          const line =
-            state === 'online' ? (
-              <>
-                <StateDot state="online" />
-                {t('account.hostLine', {
-                  route: routeName(ts, host),
-                  count: counts[host.id] ?? 0,
-                })}
-              </>
-            ) : (
-              <>
-                {state === 'connecting' ? (
-                  <Spinner className="size-2.5" />
-                ) : (
-                  <StateDot state="offline" />
-                )}
-                {connectionText(ts, host, now)}
-              </>
-            )
-          return (
-            <HostRow
-              key={host.id}
-              value={host.id}
-              icon={<HostIcon platform={host.platform} />}
-              name={host.name}
-              line={line}
-              away={isAway(host.connection)}
-              // Mod+N still picks a host away; the row only stops advertising it.
-              shortcut={
-                index < 8 && !isAway(host.connection) ? formatShortcut(`Mod+${index + 2}`) : null
-              }
-            />
-          )
-        })}
-        {hosts.length > 0 && (
-          <HostRow
-            value="all"
-            icon={<LayersIcon />}
-            name={t('hosts.all')}
-            line={t('account.allHostsLine', { count: hosts.length + 1 })}
-            shortcut={null}
-          />
-        )}
-      </DropdownMenuRadioGroup>
-      <DropdownMenuItem onClick={() => openSettings('hosts')}>
-        <PlusIcon />
-        {t('account.addHost')}
-      </DropdownMenuItem>
-    </DropdownMenuGroup>
-  )
+  return [
+    { id: 'hosts', label: t('account.hosts'), heading: true },
+    {
+      id: 'host:self',
+      label: selfName,
+      icon: <MenuIcon icon={laptop ? LaptopIcon : ComputerIcon} />,
+      checked: value === THIS_COMPUTER,
+      shortcut: formatShortcut('Mod+1'),
+      onSelect: pick(THIS_COMPUTER),
+    },
+    ...hosts.map((host, index): ProfileMenuItem => {
+      const state = host.connection.state
+      const away = isAway(host.connection)
+      return {
+        id: `host:${host.id}`,
+        label: host.name,
+        icon: <HostIcon platform={host.platform} className="size-4" />,
+        checked: value === host.id,
+        // Mod+N still picks a host away; the row only stops advertising it.
+        shortcut: index < 8 && !away ? formatShortcut(`Mod+${index + 2}`) : undefined,
+        badge:
+          state === 'connecting'
+            ? ts('hosts.state.connecting')
+            : away
+              ? ts('hosts.state.offline')
+              : undefined,
+        onSelect: pick(host.id),
+      }
+    }),
+    ...(hosts.length > 0
+      ? [
+          {
+            id: 'host:all',
+            label: t('hosts.all'),
+            icon: <MenuIcon icon={Layers01Icon} />,
+            checked: value === 'all',
+            onSelect: pick(null),
+          },
+        ]
+      : []),
+    {
+      id: 'add-host',
+      label: t('account.addHost'),
+      icon: <MenuIcon icon={Add01Icon} />,
+      onSelect: () => {
+        close()
+        openSettings('hosts')
+      },
+    },
+  ]
 }
 
-function StateDot({ state }: { state: 'online' | 'offline' }) {
+/** Help's card: the keyboard shortcuts, what's new, the docs, and the version and computer. */
+function useHelpItems(close: () => void): ProfileMenuItem[] {
+  const { t } = useTranslation('sidebar')
+  const status = useUpdatesStore((s) => s.status)
+  const info = useAppInfo()
+  const name = useThisComputerName()
+  const state = status?.state
+  const latest = state && 'version' in state ? state.version : (status?.current ?? null)
+  return [
+    {
+      id: 'shortcuts',
+      label: t('account.shortcuts'),
+      icon: <MenuIcon icon={KeyboardIcon} />,
+      shortcut: formatShortcut('Mod+/'),
+      onSelect: () => {
+        close()
+        showShortcuts(true)
+      },
+    },
+    {
+      id: 'whats-new',
+      label: t('account.whatsNew'),
+      icon: <MenuIcon icon={News01Icon} />,
+      shortcut: latest ?? undefined,
+      onSelect: () => {
+        close()
+        openPage(latest ? releaseUrl(latest) : RELEASES_URL)
+      },
+    },
+    {
+      id: 'docs',
+      label: t('account.docs'),
+      icon: <MenuIcon icon={Book02Icon} />,
+      onSelect: () => {
+        close()
+        openPage(DOCS_URL)
+      },
+    },
+    ...(info
+      ? [
+          {
+            id: 'version',
+            label: `Kettu ${info.version} · ${name} · ${systemName(info.system)}`,
+            heading: true,
+            divider: true,
+          },
+        ]
+      : []),
+  ]
+}
+
+const THEMES = ['system', 'light', 'dark'] as const
+type Theme = (typeof THEMES)[number]
+
+/** System, Light or Dark, as one menu row's segmented control. */
+function ColorMode() {
+  const { t } = useTranslation('sidebar')
+  const theme = useSettingsStore((s) => s.settings.appearance.theme)
+  const choose = (next: Theme) =>
+    void useSettingsStore
+      .getState()
+      .update({ appearance: { theme: next } })
+      .catch((error: unknown) => console.warn('Could not change the theme', error))
   return (
-    <span
-      aria-hidden
-      className={cn(
-        'size-1.5 shrink-0 rounded-full',
-        state === 'online' ? 'bg-success' : 'bg-border-strong',
-      )}
+    <SegmentedControl<Theme>
+      aria-label={t('account.theme')}
+      variant="tray"
+      size="lg"
+      fullWidth
+      value={theme}
+      onChange={choose}
+      options={THEMES.map((value) => ({ value, label: t(`account.themes.${value}`) }))}
     />
   )
 }
 
-function HostRow({
-  value,
-  icon,
-  name,
-  line,
-  shortcut,
-  away,
-}: {
-  value: string
-  icon: ReactNode
-  name: string
-  line: ReactNode
-  shortcut: string | null
-  away?: boolean
-}) {
+/** Every account's plan windows as bars, the card's last row; its head opens Usage. */
+function PlanLimits({ close }: { close: () => void }) {
+  const { t } = useTranslation('sidebar')
+  const cards = planCards(useAgentsWithLimits(), useNow())
+  if (cards.length === 0) return null
   return (
-    <MenuPrimitive.RadioItem
-      value={value}
-      closeOnClick
-      className={cn(HOST_ROW, away && 'opacity-55')}
-    >
-      <span
-        aria-hidden
-        className="grid size-7 shrink-0 place-items-center rounded-tile bg-subtle text-icon shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] [&_svg]:size-3.75 [&_svg]:stroke-[1.3]"
+    <div className="kettu-plans">
+      <button
+        type="button"
+        className="kettu-plans__head"
+        onClick={() => {
+          close()
+          openUsage()
+        }}
       >
-        {icon}
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col leading-[1.25]">
-        <span className="truncate text-control text-primary">{name}</span>
-        <span className="flex min-w-0 items-center gap-1.25 truncate text-caption text-tertiary">
-          {line}
+        <span>{t('account.limits')}</span>
+        <span className="kettu-plans__link">
+          {t('account.usage')}
+          <Icon icon={ArrowRight01Icon} size={14} />
         </span>
-      </span>
-      {shortcut && <span className="text-caption text-tertiary tabular">{shortcut}</span>}
-      <span className="flex w-3.5 justify-center">
-        <MenuPrimitive.RadioItemIndicator>
-          <CheckIcon strokeWidth={1.8} className="size-3.25 text-primary" />
-        </MenuPrimitive.RadioItemIndicator>
-      </span>
-    </MenuPrimitive.RadioItem>
+      </button>
+      {cards.map((card) => (
+        <PlanRow key={card.key} card={card} />
+      ))}
+    </div>
   )
 }
 
-/**
- * A card per account with every plan window as a ring, two cards to a row; past two rows, a row
- * that opens the Usage page, which lists them all.
- */
-function PlanLimits() {
+/** A bar's color by how much is used, in the context ring's four levels. */
+const barLevel = (percent: number) =>
+  percent < 50 ? 'ok' : percent < 75 ? 'mid' : percent < 90 ? 'high' : 'full'
+
+const WINDOW_KEY = { five_hour: 'fiveHour', seven_day: 'sevenDay', monthly: 'monthly' } as const
+
+function PlanRow({ card }: { card: PlanCard }) {
   const { t } = useTranslation('sidebar')
-  const agents = useAgentsWithLimits()
-  const { shown, more } = shownCards(planCards(agents, useNow()))
-  if (shown.length === 0) return null
+  const windows = card.windows.map((w) => ({
+    ...w,
+    label: t(`account.window.${WINDOW_KEY[w.window]}`),
+  }))
+  const name = windows
+    .map((w) =>
+      w.percent === null
+        ? w.label
+        : t('account.limitUsed', { window: w.label, percent: w.percent }),
+    )
+    .join(', ')
   return (
-    <>
-      <DropdownMenuGroup>
-        <GroupLabel>{t('account.limits')}</GroupLabel>
-        <div className="grid grid-cols-2 gap-1.5 px-1.5 pb-1">
-          {shown.map((card) => (
-            <PlanLimitCard key={card.key} card={card} />
-          ))}
-        </div>
-        {more > 0 && (
-          <DropdownMenuItem onClick={openUsage}>
-            <ChartPieIcon />
-            {t('account.allLimits')}
-            <span className="ml-auto text-caption text-tertiary tabular">+{more}</span>
-          </DropdownMenuItem>
-        )}
-      </DropdownMenuGroup>
-      <DropdownMenuSeparator className={SEPARATOR} />
-    </>
+    <div
+      className="kettu-plan"
+      aria-label={`${card.name}${card.tier ? ` ${card.tier}` : ''}: ${name}`}
+    >
+      <span className="kettu-plan__who">
+        <AgentMark agent={card.agentId} size={16} />
+        <b>{card.name}</b>
+        {card.tier && <span className="kettu-plan__tier">{card.tier}</span>}
+      </span>
+      <span className="kettu-plan__windows">
+        {windows.map((w) => (
+          <span
+            key={w.window}
+            className="kettu-plan-window"
+            data-level={w.percent === null ? undefined : barLevel(w.percent)}
+          >
+            <span className="kettu-plan-window__label">{w.label}</span>
+            <span className="kettu-plan-window__bar">
+              <span style={{ width: `${w.percent ?? 0}%` }} />
+            </span>
+            <span className="kettu-plan-window__value">
+              {w.percent === null ? '–' : `${w.percent}%`}
+            </span>
+          </span>
+        ))}
+      </span>
+    </div>
   )
 }
 
@@ -370,140 +439,5 @@ function useAgentsWithLimits(): AgentStatus[] {
             !!a && a.registered !== false && !a.disabled && a.limits.length > 0,
         ),
     ),
-  )
-}
-
-const THEMES = ['system', 'light', 'dark'] as const
-
-/** System, Light or Dark, as segments that keep the menu open, with the segmented thumb. */
-function ThemeChoice() {
-  const { t } = useTranslation('sidebar')
-  const theme = useSettingsStore((s) => s.settings.appearance.theme)
-  const choose = (next: (typeof THEMES)[number]) =>
-    void useSettingsStore
-      .getState()
-      .update({ appearance: { theme: next } })
-      .catch((error: unknown) => console.warn('Could not change the theme', error))
-  const { group, active, handlers, thumb } = useSegmentThumb(
-    THEMES.indexOf(theme),
-    THEMES.length,
-    (at) => choose(THEMES[at]),
-  )
-  return (
-    <div className="px-1.5 pt-1 pb-1.5">
-      <DropdownMenuRadioGroup
-        ref={group}
-        value={theme}
-        onValueChange={choose}
-        {...handlers}
-        aria-label={t('account.theme')}
-        className="relative flex gap-0.5 rounded-tile bg-segment-track p-0.5"
-      >
-        <SegmentThumb {...thumb} className="rounded-md" />
-        {THEMES.map((value, i) => (
-          <MenuPrimitive.RadioItem
-            key={value}
-            value={value}
-            closeOnClick={false}
-            data-active={i === active || undefined}
-            className={cn(
-              toggleVariants({ variant: 'segmented', size: null }),
-              'relative h-6 flex-1 cursor-default rounded-md px-2.5 text-small select-none data-highlighted:text-foreground',
-            )}
-          >
-            {t(`account.themes.${value}`)}
-          </MenuPrimitive.RadioItem>
-        ))}
-      </DropdownMenuRadioGroup>
-    </div>
-  )
-}
-
-/** The entries that have another way in or are rarely needed, folded into one submenu. */
-function HelpMenu() {
-  const { t } = useTranslation('sidebar')
-  return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger>
-        <CircleHelpIcon />
-        {t('account.help')}
-      </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="w-62">
-        <DropdownMenuItem onClick={() => showShortcuts(true)}>
-          <KeyboardIcon />
-          {t('account.shortcuts')}
-          <DropdownMenuShortcut>{formatShortcut('Mod+/')}</DropdownMenuShortcut>
-        </DropdownMenuItem>
-        <WhatsNewItem />
-        <DropdownMenuItem render={<a href={DOCS_URL} target="_blank" rel="noreferrer" />}>
-          <ExternalLinkIcon />
-          {t('account.docs')}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator className={SEPARATOR} />
-        <VersionLine />
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
-  )
-}
-
-/** What's new in the newest version: the update on offer, or the one running. */
-function WhatsNewItem() {
-  const { t } = useTranslation('sidebar')
-  const status = useUpdatesStore((s) => s.status)
-  const state = status?.state
-  const latest = state && 'version' in state ? state.version : (status?.current ?? null)
-  return (
-    <DropdownMenuItem
-      render={
-        <a href={latest ? releaseUrl(latest) : RELEASES_URL} target="_blank" rel="noreferrer" />
-      }
-    >
-      <SparkleIcon />
-      {t('account.whatsNew')}
-      {latest && <span className="ml-auto pl-4 text-hint text-tertiary tabular">{latest}</span>}
-    </DropdownMenuItem>
-  )
-}
-
-/** Signing out of the Kettu account, which remote access through the cloud uses; or in. */
-function AccountAction() {
-  const { t } = useTranslation('sidebar')
-  const status = useAccountStore((s) => s.status)
-  if (isWeb || !status) return null
-  return (
-    <>
-      <DropdownMenuSeparator className={SEPARATOR} />
-      {status.state === 'signed-in' ? (
-        <DropdownMenuItem onClick={() => void signOut()}>
-          <LogOutIcon />
-          {t('account.signOut')}
-        </DropdownMenuItem>
-      ) : status.state === 'signing-in' ? (
-        <DropdownMenuItem onClick={() => void cancelSignIn()}>
-          <LogInIcon />
-          {t('account.cancelSignIn')}
-        </DropdownMenuItem>
-      ) : (
-        <DropdownMenuItem onClick={() => void signIn()}>
-          <LogInIcon />
-          {t('account.signIn')}
-        </DropdownMenuItem>
-      )}
-    </>
-  )
-}
-
-/** "Kettu 0.0.9" and the computer and its system, read when the menu opens. */
-function VersionLine() {
-  const info = useAppInfo()
-  const name = useThisComputerName()
-  if (!info) return <div className="h-5.5" />
-  return (
-    <div className="flex gap-2 px-2 pt-1.5 pb-0.5 text-[11px] text-tertiary">
-      <span className="flex-1 truncate">Kettu {info.version}</span>
-      <span className="truncate">
-        {name} · {systemName(info.system)}
-      </span>
-    </div>
   )
 }

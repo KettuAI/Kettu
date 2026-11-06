@@ -1,9 +1,10 @@
 import { cloneElement, type ReactElement, type ReactNode, type Ref } from 'react'
-import { XIcon } from 'lucide-react'
+import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 interface NoticeCardProps {
   /** The card itself, which a popover beside it anchors to. */
@@ -117,7 +118,7 @@ export function NoticeCard({
               />
             }
           >
-            <XIcon strokeWidth={1.8} />
+            <Glyph icon={Cancel01Icon} size={12} />
           </TooltipTrigger>
           <TooltipContent>{closeLabel}</TooltipContent>
         </Tooltip>
