@@ -1,6 +1,7 @@
 import { memo, useMemo, useState } from 'react'
 import { ChevronRightIcon, TelescopeIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import type { ThreadEntry } from '@shared/thread'
 import {
   Collapsible,
   CollapsibleContent,
@@ -17,6 +18,14 @@ import { ThumbRow } from './row-thumbs'
 import { ToolCard } from './tool-card'
 
 /** A run of completed lookups as one row ("Read a.ts and 2 more"), opening to a row for each. */
+/** A group's dot on its run's rail: running while any step runs, failed when one failed. */
+function groupStatus(entries: (ThreadEntry | undefined)[]): string {
+  const tools = entries.filter((entry) => entry?.kind === 'tool')
+  if (tools.some((entry) => entry.status === 'pending' || entry.status === 'in_progress'))
+    return 'in_progress'
+  return tools.some((entry) => entry.status === 'failed') ? 'failed' : 'completed'
+}
+
 export const ToolGroup = memo(function ToolGroup({
   sessionId,
   entryIds,
@@ -41,8 +50,14 @@ export const ToolGroup = memo(function ToolGroup({
     entries.flatMap((entry) => (entry?.kind === 'tool' ? [toolStep(entry)] : [])),
   )
   const pictures = useMemo(() => stepPictures(entries), [entries])
+  const status = groupStatus(entries)
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className={cn('min-w-0', animation)}>
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      data-step-status={status}
+      className={cn('min-w-0', animation)}
+    >
       <ThumbRow
         sessionId={sessionId}
         pictures={pictures}
@@ -70,15 +85,16 @@ export const ToolGroup = memo(function ToolGroup({
         </CollapsibleTrigger>
       </ThumbRow>
       <CollapsibleContent className={PANEL}>
-        <div className="mt-0.5 ml-1.5 flex flex-col gap-0.5 border-l border-subtle pl-3.5">
+        <div data-steps="" className="mt-0.5 ml-1.5 flex flex-col gap-0.5 pl-3.5">
           {entryIds.map((id) => (
-            <ToolCard
-              key={id}
-              sessionId={sessionId}
-              entryId={id}
-              projectPath={projectPath}
-              agentName={agentName}
-            />
+            <div key={id} data-step="">
+              <ToolCard
+                sessionId={sessionId}
+                entryId={id}
+                projectPath={projectPath}
+                agentName={agentName}
+              />
+            </div>
           ))}
         </div>
       </CollapsibleContent>
