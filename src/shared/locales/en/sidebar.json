@@ -63,6 +63,13 @@
       "navigate": "Navigate",
       "open": "Open",
       "scope": "Next scope"
+    },
+    "latest": {
+      "sessions": "Latest sessions",
+      "artifacts": "Latest artifacts",
+      "routines": "Latest routines",
+      "projects": "Latest projects",
+      "settings": "All settings"
     }
   },
   "project": {

@@ -61,6 +61,13 @@
       "navigate": "导航",
       "open": "打开",
       "scope": "下一个范围"
+    },
+    "latest": {
+      "sessions": "最近的会话",
+      "artifacts": "最近的 Artifacts",
+      "routines": "最近的例程",
+      "projects": "最近的项目",
+      "settings": "全部设置"
     }
   },
   "project": {

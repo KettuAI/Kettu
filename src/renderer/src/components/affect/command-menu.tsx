@@ -57,6 +57,8 @@ export type CommandMenuProps = {
   empty?: ReactNode;
   /** Replaces the hints in the last row */
   hints?: ReactNode;
+  /** Names the field, the scopes and the list for screen readers, for translation */
+  labels?: { input?: string; scopes?: string; list?: string };
   className?: string;
 };
 
@@ -395,6 +397,7 @@ export function CommandMenu({
   ask = true,
   empty,
   hints,
+  labels,
   className,
 }: CommandMenuProps) {
   const id = "ui-cmc" + useId().replace(/[^a-zA-Z0-9_-]/g, "");
@@ -587,7 +590,7 @@ export function CommandMenu({
             value={query}
             dir="auto"
             placeholder={placeholder}
-            aria-label="Command"
+            aria-label={labels?.input ?? "Command"}
             role="combobox"
             aria-expanded="true"
             aria-controls={`${id}-list`}
@@ -607,7 +610,7 @@ export function CommandMenu({
         </label>
 
         {scopes?.length ? (
-          <div className="ui-cmc__scopes" role="tablist" aria-label="Search in">
+          <div className="ui-cmc__scopes" role="tablist" aria-label={labels?.scopes ?? "Search in"}>
             {scopes.map((s) => (
               <button
                 key={s.id}
@@ -634,7 +637,7 @@ export function CommandMenu({
           id={`${id}-list`}
           className="ui-cmc__list"
           role="listbox"
-          aria-label="Commands"
+          aria-label={labels?.list ?? "Commands"}
           style={listHeight ? { height: listHeight } : undefined}
           onMouseLeave={() => setLit(false)}
         >

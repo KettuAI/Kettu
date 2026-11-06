@@ -93,70 +93,6 @@
   --ui-tc-focus: color-mix(in srgb, var(--focus) 50%, transparent);
 }
 
-.ui-cm.ui-cm {
-  --ui-cm-tray: var(--bg-sidebar);
-  --ui-cm-card: var(--bg-surface);
-  --ui-cm-line: var(--border-subtle);
-  --ui-cm-ink: var(--text-primary);
-  --ui-cm-text: var(--text-secondary);
-  --ui-cm-muted: var(--text-tertiary);
-  --ui-cm-faint: var(--text-disabled);
-  --ui-cm-active: var(--bg-selected);
-  --ui-cm-tile: var(--bg-raised);
-  --ui-cm-tile-ring: var(--border-subtle);
-  --ui-cm-kbd: var(--bg-raised);
-  --ui-cm-mark: var(--mark);
-  --ui-cm-ok: var(--success);
-  --ui-cm-accent: var(--control-on);
-}
-
-/* Search wears the command menu a size up, as Kettu's palette had it. */
-.kettu-search.ui-cm {
-  max-width: none;
-  font-size: 15px;
-}
-.kettu-search .ui-cm__search {
-  height: 56px;
-  padding: 0 18px;
-}
-.kettu-search .ui-cm__search input {
-  font-size: 16px;
-}
-.kettu-search .ui-cm__search > svg {
-  width: 20px;
-  height: 20px;
-}
-.kettu-search .ui-cm__item {
-  height: 44px;
-  gap: 14px;
-}
-.kettu-search .ui-cm__label {
-  padding: 12px 10px 6px;
-  font-size: 13px;
-}
-.kettu-search .ui-cm__logo {
-  width: 28px;
-  height: 28px;
-}
-.kettu-search .ui-cm__glyph {
-  width: 18px;
-  height: 18px;
-}
-.kettu-search.ui-cm kbd {
-  min-width: 22px;
-  height: 22px;
-  font-size: 12px;
-}
-.kettu-search .ui-cm__tab,
-.kettu-search .ui-cm__meta {
-  font-size: 14px;
-}
-.kettu-search .ui-cm__foot {
-  height: 44px;
-  padding: 0 14px;
-  font-size: 14px;
-}
-
 /* shell: the window frame on AffectUI's App Shell (components/affect/app-shell.tsx). Its variables
    point at the shell's tokens; the page is the desk, which <html> paints once. */
 .ui-as.ui-as {
@@ -594,4 +530,77 @@
   top: auto;
   bottom: 5px;
   background: var(--success);
+}
+
+/* shell: Search, the Command Menu near the top of the window on a soft scrim. */
+.kettu-search-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--shell-scrim);
+  transition: opacity 200ms ease;
+}
+.kettu-search-scrim:is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+}
+.kettu-search-popup {
+  position: fixed;
+  top: min(12vh, 96px);
+  left: 50%;
+  z-index: 50;
+  width: min(600px, calc(100vw - 32px));
+  outline: none;
+  translate: -50% 0;
+  transition:
+    opacity 260ms var(--ease-standard),
+    transform 260ms var(--ease-standard);
+}
+.kettu-search-popup:is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+.kettu-search {
+  max-width: none;
+  font-family: var(--font-sans);
+}
+.kettu-search .ui-cmc__list {
+  max-height: min(420px, calc(100vh - 240px));
+}
+.ui-as-app .kettu-search .ui-cmc__logo,
+.kettu-search .ui-cmc__logo {
+  width: 20px;
+  height: 20px;
+  background: none;
+  box-shadow: none;
+}
+.kettu-search .ui-cmc__logo .ui-as-tray-link__folder {
+  width: 16px;
+  height: 16px;
+}
+/* The name keeps its room; the line after it gives way first. */
+.kettu-search .ui-cmc__name {
+  flex-shrink: 0;
+  max-width: 70%;
+}
+.kettu-search .ui-cmc__hints kbd {
+  min-width: 18px;
+}
+.kettu-search-empty {
+  display: grid;
+  gap: 4px;
+  padding: 28px 16px 32px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--ui-cmc-muted);
+}
+.kettu-search-empty b {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ui-cmc-ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  .kettu-search-scrim,
+  .kettu-search-popup {
+    transition: none;
+  }
 }
