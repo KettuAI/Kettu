@@ -38,6 +38,6 @@
     "openInBrowser": "在浏览器中打开",
     "stop": "停止",
     "notice": "{{agent}} 正在使用此终端。在这里输入即可接管。",
-    "stops": "停止它"
+    "stops": "停止它。"
   }
 }

@@ -1,8 +1,8 @@
-import { AppWindowIcon, LockIcon, SquareIcon } from 'lucide-react'
+import { Globe02Icon, SquareLock02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import { Button } from '@renderer/components/ui/button'
-import { Kbd, KbdGroup } from '@renderer/components/ui/kbd'
+import { addressText } from '@renderer/features/browser/address'
+import { PaneIcon } from '@renderer/features/shell/panel-button'
 import { longAgo } from '@renderer/lib/format'
 import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { isMac } from '@renderer/lib/platform'
@@ -32,51 +32,45 @@ export function OwnerBar({ terminal, owner }: { terminal: TerminalState; owner: 
   }
 
   return (
-    <div className="@container flex h-9.5 shrink-0 items-center gap-2.5 pr-2.5 pl-3.5 text-hint text-secondary shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]">
+    <div className="kp-towner">
       <AgentMark agent={owner.agentId} size={14} />
       {/* One line, so the folder at its end is cut before who started it and when. */}
-      <span className="min-w-0 truncate">
+      <span className="kp-towner__text">
         {t('owner.startedBy', {
           agent: agentName(owner.agentId, hostId),
           time: longAgo(terminal.createdAt, now),
         })}
-        <span aria-hidden className="mx-2.5 text-border-strong">
-          ·
-        </span>
-        <span className="font-mono text-caption text-tertiary" data-selectable="">
+        <span className="kp-towner__dir kp-mono" data-selectable="">
           {hostPath(terminal.projectPath)}
         </span>
       </span>
-      <span className="flex-1" />
       {url && sessionId && (
         // In a narrow bar, such as one side of a split, only its icon shows.
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6.5 px-3 @max-md:px-1.75"
+        <button
+          type="button"
+          className="kp-link"
           title={t('owner.openInBrowser')}
+          aria-label={t('owner.openInBrowser')}
           onClick={openInBrowser}
         >
-          <AppWindowIcon className="size-3.5" strokeWidth={1.5} />
-          <span className="@max-md:sr-only">{t('owner.openInBrowser')}</span>
-        </Button>
+          <PaneIcon icon={Globe02Icon} size={13} />
+          <span className="kp-towner__url">{addressText(url) ?? url}</span>
+        </button>
       )}
       {running && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-6.5 px-3"
+        <button
+          type="button"
+          className="kp-btn kp-btn--sm"
           onClick={() => void interruptTerminal(terminal.id)}
         >
-          <SquareIcon className="size-3.5 scale-67" strokeWidth={3} />
           {t('owner.stop')}
-        </Button>
+        </button>
       )}
     </div>
   )
 }
 
-/** Under a terminal an agent is using: typing takes it over, and Ctrl+C stops its process. */
+/** At the foot of a terminal an agent is using: typing takes it over, and Ctrl+C stops it. */
 export function TakeoverNotice({
   terminal,
   owner,
@@ -87,14 +81,11 @@ export function TakeoverNotice({
   const { t } = useTranslation('terminal')
   const agent = agentName(owner.agentId, hostOfPath(terminal.projectPath))
   return (
-    <div className="flex h-10 shrink-0 items-center gap-2.5 bg-code-block px-3.5 text-hint text-tertiary shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-      <LockIcon aria-hidden className="size-3.25 shrink-0" strokeWidth={1.4} />
-      <span className="min-w-0 flex-1 truncate">{t('owner.notice', { agent })}</span>
-      <KbdGroup className="shrink-0">
-        <Kbd className="h-5.5 min-w-5.5 px-1.5">{isMac ? '⌃' : 'Ctrl'}</Kbd>
-        <Kbd className="h-5.5 min-w-5.5 px-1.5">C</Kbd>
-      </KbdGroup>
-      <span className="shrink-0">{t('owner.stops')}</span>
-    </div>
+    <p className="kp-tlock">
+      <PaneIcon icon={SquareLock02Icon} size={13} />
+      <span>
+        {t('owner.notice', { agent })} <kbd>{isMac ? '⌃C' : 'Ctrl+C'}</kbd> {t('owner.stops')}
+      </span>
+    </p>
   )
 }
