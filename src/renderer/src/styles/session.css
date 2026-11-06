@@ -1052,3 +1052,10 @@
 .ks-bar__icon {
   color: var(--thread-muted);
 }
+
+/* Notices in the thread, on Tool Call Card's corners and type. */
+.ks-thread .ks-notice {
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 20px;
+}

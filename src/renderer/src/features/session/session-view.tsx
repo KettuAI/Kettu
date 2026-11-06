@@ -104,7 +104,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
     body =
       replicaStatus === 'error' ? (
         <ColumnScroller>
-          <div className="mx-auto w-full max-w-thread px-7 pt-7">
+          <div className="ks-thread__column mx-auto w-full px-8 pt-8">
             <FailedState
               title={t('view.couldntOpen')}
               message={replicaError ?? t('view.hostSilent')}

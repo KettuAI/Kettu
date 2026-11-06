@@ -50,7 +50,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
   } else if (error) {
     body = (
       <ColumnScroller>
-        <div className="mx-auto w-full max-w-thread px-7 pt-7">
+        <div className="ks-thread__column mx-auto w-full px-8 pt-8">
           <FailedState
             title={t('pending.couldntStart', { agent: name })}
             message={error.message}
@@ -71,7 +71,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="ks-session flex h-full min-h-0 flex-col">
       <TopBar cornered={usePane()?.cornered}>
         <NoDrag className="min-w-0 gap-1.5">
           {error && (
@@ -105,8 +105,8 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
       <div className="flex min-h-0 flex-1 flex-col">{body}</div>
       {/* Leaves the width the column's scrollbar takes, as the session's composer row does. */}
       <div style={{ paddingRight: gutter }}>
-        <div className="px-7 pb-3.5">
-          <div className="mx-auto w-full max-w-reply">
+        <div className="px-8 pb-6">
+          <div className="mx-auto w-full max-w-(--thread-column)">
             <InputGroup variant="composer" data-disabled>
               <InputGroupTextarea
                 rows={1}

@@ -10,10 +10,8 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId, UserContent } from '@shared/thread'
 import { exportDiagnostics, unarchiveSession } from '@renderer/app/actions'
-import { Bubble, BubbleContent } from '@renderer/components/ui/bubble'
 import { Button } from '@renderer/components/ui/button'
 import { InputGroup, InputGroupAddon, InputGroupButton } from '@renderer/components/ui/input-group'
-import { Message } from '@renderer/components/ui/message'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { connectionText } from '@renderer/features/settings/host-text'
@@ -57,7 +55,7 @@ export function ThreadSkeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'mx-auto flex w-full max-w-thread animate-in flex-col px-7 pt-7 fade-in fill-mode-backwards delay-200 animation-duration-(--duration-slow)',
+        'ks-thread__column mx-auto flex w-full animate-in flex-col px-8 pt-8 fade-in fill-mode-backwards delay-200 animation-duration-(--duration-slow)',
         className,
       )}
       aria-hidden
@@ -179,23 +177,19 @@ export function FirstMessage({ agentId, content }: { agentId: AgentId; content: 
   const attachments = contentAttachments(content)
   const rest = content.filter((c) => c.type !== 'ref' || c.ref.kind !== 'attachment')
   return (
-    <ColumnScroller>
-      <div className="mx-auto flex w-full max-w-thread flex-col px-7 pt-7">
+    <ColumnScroller className="ks-thread">
+      <div className="ks-thread__column mx-auto flex w-full flex-col px-8 pt-8">
         {/* As the thread shows a user entry, so nothing moves when the session takes over. */}
-        <div className="flex flex-col items-end gap-0.5">
+        <div className="ks-user">
           {attachments.length > 0 && (
             <div className="flex w-full justify-end pb-1">
               <SentAttachments sessionId={null} entryId={null} attachments={attachments} />
             </div>
           )}
           {rest.length > 0 && (
-            <Message align="end">
-              <Bubble variant="muted">
-                <BubbleContent>
-                  <UserContentView content={rest} />
-                </BubbleContent>
-              </Bubble>
-            </Message>
+            <div className="ks-user__bubble">
+              <UserContentView content={rest} />
+            </div>
           )}
         </div>
         <div role="status" className="flex flex-col gap-0.5 pt-2.5">

@@ -46,7 +46,7 @@ export function CutTurnEnd({
     })
   }
   return (
-    <Alert variant="error" className={cn('py-2 text-small', className)}>
+    <Alert variant="error" className={cn('ks-notice py-2', className)}>
       <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
       <AlertTitle>{title}</AlertTitle>
       {error && <AlertDescription className="text-small">{error}</AlertDescription>}

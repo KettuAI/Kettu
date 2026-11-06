@@ -33,7 +33,7 @@ export function OutOfCreditEnd({
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      render={<Alert variant="warning" className={cn('py-2 text-small', className)} />}
+      render={<Alert variant="warning" className={cn('ks-notice py-2', className)} />}
     >
       <HugeiconsIcon icon={Wallet01Icon} strokeWidth={1.9} aria-hidden />
       <AlertTitle className="flex flex-wrap items-baseline gap-x-2">

@@ -262,7 +262,7 @@ export const NoticeEntry = memo(function NoticeEntry({ sessionId, entryId }: Ent
       variant={
         entry.severity === 'error' ? 'error' : entry.severity === 'warning' ? 'warning' : 'default'
       }
-      className={animation}
+      className={cn('ks-notice', animation)}
     >
       <HugeiconsIcon icon={glyph} strokeWidth={1.9} aria-hidden />
       <AlertTitle>{entry.title}</AlertTitle>
