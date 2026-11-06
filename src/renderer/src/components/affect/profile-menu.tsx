@@ -49,6 +49,8 @@ export type ProfileMenuProps = {
   setup?: ProfileSetup;
   /** Your own last row under the hairline, in place of the setup progress */
   footer?: ReactNode;
+  /** Words the menu says to screen readers, for translation */
+  labels?: { menu?: string };
   className?: string;
 };
 
@@ -63,6 +65,7 @@ export function ProfileMenu({
   items = defaultItems,
   setup,
   footer,
+  labels,
   className,
 }: ProfileMenuProps) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -203,7 +206,7 @@ export function ProfileMenu({
           </span>
         </header>
 
-        <div ref={listRef} className="ui-pmc__items" role="menu" aria-label="Account" onKeyDown={onKey}>
+        <div ref={listRef} className="ui-pmc__items" role="menu" aria-label={labels?.menu ?? "Account"} onKeyDown={onKey}>
           {list.map((item, i) => row(item, i, false, keepsEnd(list, false)))}
         </div>
 

@@ -10,8 +10,11 @@ export const DESK =
 export const ON_DESK =
   'relative before:pointer-events-none before:absolute before:inset-0 before:app-region-no-drag'
 
-/** A sheet laid on the desk: the main area, a page or a side pane. */
-export const SHEET = `${ON_DESK} overflow-clip rounded-card bg-app shadow-sheet`
+/** A sheet laid on the desk: the main area, a page or a side pane, as App Shell's main panel. */
+export const SHEET = `${ON_DESK} overflow-clip rounded-card border border-(--border-subtle) bg-app`
+
+/** The edge of the pane in focus in a split view. */
+export const SHEET_FOCUSED = 'border-(--border-strong)'
 
 /**
  * The style of a resizable panel, or a group of them, that holds a sheet, whose ring and shadow

@@ -1,7 +1,8 @@
-import { CircleUserRoundIcon, Settings2Icon } from 'lucide-react'
+import { Settings01Icon, UserCircleIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { Avatar, AvatarFallback, AvatarImage } from '@renderer/components/ui/avatar'
 import { Masked } from '@renderer/features/settings/controls'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
 import type { Identity } from './model'
@@ -22,10 +23,7 @@ export function AccountAvatar({ identity, size }: { identity: Identity; size: 24
         {identity.initial && !hidden ? (
           identity.initial
         ) : (
-          <CircleUserRoundIcon
-            strokeWidth={1.5}
-            className={size === 24 ? 'size-3.5' : 'size-4.5'}
-          />
+          <Glyph icon={UserCircleIcon} size={size === 24 ? 14 : 18} />
         )}
       </AvatarFallback>
     </Avatar>
@@ -39,7 +37,7 @@ export function IdentityName({ identity }: { identity: Identity }) {
   return <Masked revealable={false}>{identity.name}</Masked>
 }
 
-/** Settings' sliders, mirrored so the upper knob sits right as drawn. */
+/** Settings' gear, as the account row's button draws it. */
 export function SettingsGlyph() {
-  return <Settings2Icon strokeWidth={1.3} className="-scale-x-100" />
+  return <Glyph icon={Settings01Icon} />
 }

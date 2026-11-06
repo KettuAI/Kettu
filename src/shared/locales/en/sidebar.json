@@ -8,7 +8,9 @@
     "sessions": "Sessions",
     "unavailable": "Projects are unavailable right now.",
     "empty": "Sessions appear here.",
-    "searchField": "Search…"
+    "searchField": "Search…",
+    "projects": "Projects",
+    "resize": "Resize sidebar"
   },
   "search": {
     "placeholder": "Search sessions, artifacts, routines and more",
@@ -265,7 +267,14 @@
     "cancelSignIn": "Cancel signing in",
     "connecting": "Connecting to {{name}}…",
     "escKey": "esc",
-    "cancelSwitch": "Go back to the host before"
+    "cancelSwitch": "Go back to the host before",
+    "hosts": "Hosts",
+    "usage": "Usage",
+    "window": {
+      "fiveHour": "5h",
+      "sevenDay": "7d",
+      "monthly": "Month"
+    }
   },
   "rename": {
     "save": "Save",

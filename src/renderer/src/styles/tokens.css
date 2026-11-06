@@ -10,9 +10,9 @@
 
   /* The desk is the window behind everything; the main column and the panes are sheets on it. */
   --bg-app: #ffffff;
-  --bg-sidebar: #f5f5f5;
+  --bg-sidebar: #f8f8f8;
   /* On macOS, the share of --bg-sidebar laid over the system's sidebar material on the desk. */
-  --desk-tint: 25%;
+  --desk-tint: 100%;
   --bg-surface: #ffffff;
   --bg-subtle: #f4f4f5;
   /* A system notification in Settings › Notifications, as the menu bar draws one. */
@@ -293,15 +293,47 @@
   --elevation-page-drop: 0 4px 14px -6px rgb(0 0 0 / 12%);
   --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
+  /* shell: the window frame, AffectUI's App Shell: its rows, cards, lines and shadows. */
+  --shell-tray: #f4f4f4;
+  --shell-card: #ffffff;
+  --shell-line-soft: rgb(0 0 0 / 4%);
+  --shell-strong: #000000;
+  --shell-ink: rgb(0 0 0 / 88%);
+  --shell-text: rgb(0 0 0 / 61%);
+  --shell-muted: rgb(0 0 0 / 45%);
+  --shell-faint: rgb(0 0 0 / 27%);
+  --shell-chip: rgb(0 0 0 / 4%);
+  --shell-chip-hover: rgb(0 0 0 / 6%);
+  --shell-hover: rgb(0 0 0 / 3%);
+  --shell-accent: #0060e2;
+  --shell-button: rgb(0 0 0 / 88%);
+  --shell-button-hover: rgb(0 0 0 / 78%);
+  --shell-accent-soft: rgb(0 96 226 / 8%);
+  --shell-shadow: 0 1px 1px -1px rgb(0 0 0 / 10%), 0 1px 2px 0 rgb(0 0 0 / 5%);
+  --shell-card-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 6%), 0 1px 1px -1px rgb(0 0 0 / 10%), 0 1px 2px 0 rgb(0 0 0 / 5%);
+  --shell-card-shadow-hover:
+    0 0 0 0.5px rgb(0 0 0 / 10%), 0 2px 6px -1px rgb(0 0 0 / 8%), 0 1px 2px 0 rgb(0 0 0 / 5%);
+  --shell-frame: rgb(0 0 0 / 2%);
+  --shell-line-strong: rgb(0 0 0 / 10%);
+  --shell-edge-active: rgb(0 0 0 / 14%);
+  --shell-subtle: #fafafa;
+  --shell-disabled: #dcdcdc;
+  --shell-on-ink: #ffffff;
+  --shell-ink-hover: #3a3a3a;
+  --shell-select: rgb(0 0 0 / 5.5%);
+  --shell-toggle-off: #e2e2e2;
+  --shell-switch-on: rgb(0 96 226 / 76.5%);
+  --shell-logo-bg: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
 
-    --desk-tint: 50%;
-    --bg-app: #1c1c1e;
-    --bg-sidebar: #141416;
+    --desk-tint: 100%;
+    --bg-app: #141416;
+    --bg-sidebar: #0e0e10;
     /* What floats over the page sits a step lighter than it, since shadows barely show here. */
     --bg-surface: #212124;
     --bg-subtle: #2a2a2d;
@@ -486,15 +518,46 @@
     --elevation-sheet: 0 0 #0000;
     --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
     --elevation-page-lift: 0 0 0 1px var(--border-strong);
+
+    /* shell: the window frame, AffectUI's App Shell: its rows, cards, lines and shadows. */
+    --shell-tray: #1d1d20;
+    --shell-card: #1b1b1e;
+    --shell-line-soft: rgb(255 255 255 / 5%);
+    --shell-strong: #ffffff;
+    --shell-ink: rgb(255 255 255 / 90%);
+    --shell-text: rgb(255 255 255 / 62%);
+    --shell-muted: rgb(255 255 255 / 45%);
+    --shell-faint: rgb(255 255 255 / 28%);
+    --shell-chip: rgb(255 255 255 / 6%);
+    --shell-chip-hover: rgb(255 255 255 / 9%);
+    --shell-hover: rgb(255 255 255 / 5%);
+    --shell-accent: #5b9aff;
+    --shell-button: #f4f4f5;
+    --shell-button-hover: #ffffff;
+    --shell-accent-soft: rgb(91 154 255 / 16%);
+    --shell-shadow: 0 1px 2px rgb(0 0 0 / 40%);
+    --shell-card-shadow: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 40%);
+    --shell-card-shadow-hover: 0 0 0 0.5px rgb(255 255 255 / 16%), 0 2px 6px rgb(0 0 0 / 40%);
+    --shell-frame: rgb(255 255 255 / 3%);
+    --shell-line-strong: rgb(255 255 255 / 14%);
+    --shell-edge-active: rgb(255 255 255 / 18%);
+    --shell-subtle: #18181b;
+    --shell-disabled: #3a3a3f;
+    --shell-on-ink: #111113;
+    --shell-ink-hover: #d4d4d8;
+    --shell-select: rgb(255 255 255 / 8%);
+    --shell-toggle-off: #3a3a3f;
+    --shell-switch-on: #4d8dff;
+    --shell-logo-bg: #2a2a2e;
   }
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --desk-tint: 50%;
-  --bg-app: #1c1c1e;
-  --bg-sidebar: #141416;
+  --desk-tint: 100%;
+  --bg-app: #141416;
+  --bg-sidebar: #0e0e10;
   /* What floats over the page sits a step lighter than it, since shadows barely show here. */
   --bg-surface: #212124;
   --bg-subtle: #2a2a2d;
@@ -678,6 +741,37 @@
   --elevation-sheet: 0 0 #0000;
   --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
+
+  /* shell: the window frame, AffectUI's App Shell: its rows, cards, lines and shadows. */
+  --shell-tray: #1d1d20;
+  --shell-card: #1b1b1e;
+  --shell-line-soft: rgb(255 255 255 / 5%);
+  --shell-strong: #ffffff;
+  --shell-ink: rgb(255 255 255 / 90%);
+  --shell-text: rgb(255 255 255 / 62%);
+  --shell-muted: rgb(255 255 255 / 45%);
+  --shell-faint: rgb(255 255 255 / 28%);
+  --shell-chip: rgb(255 255 255 / 6%);
+  --shell-chip-hover: rgb(255 255 255 / 9%);
+  --shell-hover: rgb(255 255 255 / 5%);
+  --shell-accent: #5b9aff;
+  --shell-button: #f4f4f5;
+  --shell-button-hover: #ffffff;
+  --shell-accent-soft: rgb(91 154 255 / 16%);
+  --shell-shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  --shell-card-shadow: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 40%);
+  --shell-card-shadow-hover: 0 0 0 0.5px rgb(255 255 255 / 16%), 0 2px 6px rgb(0 0 0 / 40%);
+  --shell-frame: rgb(255 255 255 / 3%);
+  --shell-line-strong: rgb(255 255 255 / 14%);
+  --shell-edge-active: rgb(255 255 255 / 18%);
+  --shell-subtle: #18181b;
+  --shell-disabled: #3a3a3f;
+  --shell-on-ink: #111113;
+  --shell-ink-hover: #d4d4d8;
+  --shell-select: rgb(255 255 255 / 8%);
+  --shell-toggle-off: #3a3a3f;
+  --shell-switch-on: #4d8dff;
+  --shell-logo-bg: #2a2a2e;
 }
 
 /* Roles built from the tokens above. They sit on every theme scope, so a subtree with a theme of

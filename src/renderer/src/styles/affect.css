@@ -156,3 +156,442 @@
   padding: 0 14px;
   font-size: 14px;
 }
+
+/* shell: the window frame on AffectUI's App Shell (components/affect/app-shell.tsx). Its variables
+   point at the shell's tokens; the page is the desk, which <html> paints once. */
+.ui-as.ui-as {
+  --tray: var(--shell-tray);
+  --card: var(--shell-card);
+  --page: var(--bg-sidebar);
+  --panel: var(--bg-app);
+  --line: var(--border-subtle);
+  --line-soft: var(--shell-line-soft);
+  --strong: var(--shell-strong);
+  --ink: var(--shell-ink);
+  --text: var(--shell-text);
+  --muted: var(--shell-muted);
+  --faint: var(--shell-faint);
+  --placeholder: var(--shell-faint);
+  --chip: var(--shell-chip);
+  --chip-hover: var(--shell-chip-hover);
+  --hover: var(--shell-hover);
+  --accent: var(--shell-accent);
+  --button: var(--shell-button);
+  --button-hover: var(--shell-button-hover);
+  --accent-soft: var(--shell-accent-soft);
+  --shadow: var(--shell-shadow);
+  --card-shadow: var(--shell-card-shadow);
+  --card-shadow-hover: var(--shell-card-shadow-hover);
+  --frame: var(--shell-frame);
+  --line-strong: var(--shell-line-strong);
+  --edge-active: var(--shell-edge-active);
+  --subtle: var(--shell-subtle);
+  --disabled: var(--shell-disabled);
+  --on-ink: var(--shell-on-ink);
+  --ink-hover: var(--shell-ink-hover);
+  --select: var(--shell-select);
+  --toggle-off: var(--shell-toggle-off);
+  --switch-on: var(--shell-switch-on);
+  --logo-bg: var(--shell-logo-bg);
+  --font: var(--font-sans);
+}
+
+/* The window: the desk shows through the frame, which keeps no color of its own. */
+.kettu-frame.ui-as-app {
+  --page: transparent;
+  min-height: 0;
+}
+/* The main area holds the sheets (features/shell/sheet.ts) on the desk: its gaps are padding, so
+   the desk around them drags the window, and it draws no panel of its own. */
+.kettu-frame.ui-as-app > .ui-as-main {
+  margin: 0;
+  padding: var(--frame-gap) var(--frame-gap) var(--frame-gap) 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+/* While the sidebar slides, the frame cuts the sheets to its shape and draws their edge, and a
+   wing of sheet fills it where it is wider than they are (app/app.tsx). */
+.kettu-slide[data-sliding] {
+  overflow: clip;
+  outline: 1px solid var(--border-subtle);
+  outline-offset: -1px;
+}
+.kettu-slide__wing {
+  display: none;
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  background: var(--bg-app);
+}
+.kettu-slide[data-sliding] > .kettu-slide__wing {
+  display: block;
+}
+/* Collapsing hides the whole sidebar instead of the shell's rail of icons; the toggle, Back and
+   Forward stay in the top left corner, and the sheets run to the window's left edge. */
+.ui-as-app[data-collapsed] {
+  --side-col: 0px;
+}
+.ui-as-app[data-collapsed] > .ui-as-side {
+  visibility: hidden;
+  opacity: 0;
+}
+.ui-as-app[data-collapsed] > .ui-as-side-open {
+  visibility: visible;
+  opacity: 1;
+  background: var(--panel);
+  transition:
+    opacity 260ms ease 160ms,
+    visibility 0s;
+}
+.ui-as-app[data-collapsed] > .ui-as-side-open:hover {
+  background: var(--chip);
+}
+.ui-as-side__group.ui-as-chats {
+  display: none;
+}
+/* The corner sits on the frame, not the screen, and leaves the traffic lights their room when the
+   window draws its own. */
+.kettu-frame .ui-as-corner {
+  position: absolute;
+}
+.ui-as-corner[data-lights='window'] .ui-as-lights {
+  width: var(--traffic-lights);
+  height: 12px;
+}
+.ui-as-corner .ui-as-icon-btn {
+  -webkit-app-region: no-drag;
+}
+.ui-as-corner .ui-as-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.ui-as-corner .ui-as-icon-btn[data-popup-open] {
+  background: var(--hover);
+  color: var(--ink);
+}
+/* The sidebar's title bar drags the window; drawn first, so the corner's buttons over it win. */
+.kettu-frame.ui-as-app::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--side-col);
+  height: 60px;
+  pointer-events: none;
+  -webkit-app-region: drag;
+}
+.kettu-frame > .ui-as-resizer {
+  -webkit-app-region: no-drag;
+}
+/* Windows and Linux: the band across the window's top holds the corner's controls and the
+   window's own; the frame starts under it. */
+.kettu-frame.kettu-band {
+  padding-top: var(--title-bar);
+}
+.kettu-frame.kettu-band::before {
+  display: none;
+}
+.kettu-frame.kettu-band .ui-as-corner {
+  top: 0;
+  height: var(--title-bar);
+  padding-left: var(--frame-gap);
+}
+.kettu-frame.kettu-band .ui-as-lights {
+  display: none;
+}
+.kettu-frame.kettu-band .ui-as-side__head[data-chrome='mac'] {
+  height: 0;
+  margin-bottom: 0;
+}
+.kettu-frame.kettu-band .ui-as-side {
+  padding-top: 0;
+}
+.kettu-frame.kettu-band .ui-as-side__search {
+  margin-top: 4px;
+}
+.kettu-frame.kettu-band > .ui-as-resizer {
+  top: calc(var(--title-bar) + var(--frame-gap));
+}
+/* The account row's Settings button marks what needs you there with a fox dot. */
+.ui-as-user-action {
+  position: relative;
+}
+.ui-as-user-action__dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--attention-dot);
+  box-shadow: 0 0 0 1.5px var(--bg-sidebar);
+}
+/* Project folders: the composer's blue folder at the menu's icon size. */
+.ui-as-chat-folder > .ui-as-tray-link__folder {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+/* Icons and logos stand on their own, with no tile, ring or shadow around them, in a box only as
+   big as the mark, so they line up with the text above them. */
+.ui-as-app :is(.ui-ss-tile, .ui-prc__avatar, .ui-apc__icon, .ui-cmc__logo) {
+  width: 16px;
+  height: 16px;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+}
+.ui-as-chat-row__logo {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+}
+/* Kettu's running turn: nine dots in the fox orange (features/session/turn-dots.tsx). */
+.ui-as-app [data-turn-dots] {
+  flex: none;
+}
+/* Kettu's list in the sidebar: rows in view in a split take the open row's fill; a row's status
+   and host give way to its tools on hover; Pinned's title folds it; Show more lines up with the
+   folder's sessions. */
+.ui-as-chat-row > .ui-as-chat-row__link.kettu-row-in-view {
+  background: var(--hover);
+  color: var(--ink);
+}
+.ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) .kettu-row-end {
+  opacity: 0;
+}
+.ui-as-chat-row:has([data-subagent-badge]:hover) .kettu-row-end {
+  opacity: 1;
+}
+.ui-as-chat-row__rename:has(input[aria-invalid='true']) {
+  box-shadow:
+    inset 0 0 0 1px var(--danger),
+    0 0 0 3px var(--chip);
+}
+.kettu-side-label.ui-as-side__label {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: fit-content;
+  border-radius: 4px;
+  text-align: left;
+}
+.kettu-side-label:hover {
+  color: var(--muted);
+}
+.kettu-side-label__arrow {
+  display: grid;
+  opacity: 0;
+  transform: rotate(90deg);
+  transition:
+    opacity 120ms ease,
+    transform 200ms var(--ease);
+}
+.kettu-side-label[aria-expanded='false'] .kettu-side-label__arrow {
+  opacity: 1;
+  transform: none;
+}
+.kettu-side-label:is(:hover, :focus-visible) .kettu-side-label__arrow {
+  opacity: 1;
+}
+.ui-as-side__item.kettu-side-more {
+  padding-left: 30px;
+  color: var(--muted);
+}
+.ui-as-side__item.kettu-side-more:hover {
+  color: var(--ink);
+}
+.kettu-side-list {
+  display: flex;
+  flex-direction: column;
+}
+/* Its groups follow the menu's as App Shell spaces sibling groups. */
+.kettu-side-list .ui-as-side__group.ui-as-side__group {
+  margin-top: 10px;
+}
+.kettu-side-list .ui-as-side__group > .ui-as-side__label:first-child {
+  margin-top: 6px;
+}
+.kettu-side-list :is(ul, li) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* A host's title over its projects, as a group's: its mark, name and state. */
+.kettu-host-label.ui-as-side__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.kettu-host-label h3 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font: inherit;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+/* The account menu on Profile Menu (features/account/account-menu.tsx), as wide as the sidebar and
+   at least 260 px, with the plan limits as its last row. */
+.kettu-account .ui-pmc.kettu-account__card {
+  width: 100%;
+  max-width: none;
+}
+.kettu-account .ui-pmc__items {
+  max-height: none;
+  overflow: visible;
+}
+.kettu-account .ui-pmc__avatar > .kettu-account__avatar {
+  display: grid;
+  place-items: center;
+  background: var(--shell-accent-soft);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ui-pmc-accent);
+}
+.kettu-account .ui-pmc__icon :is(.hgi, svg) {
+  width: 16px;
+  height: 16px;
+}
+/* The shell's icons scale their stroke like everywhere else; the card's fixed 1.1 px made them heavy. */
+.kettu-account .ui-pmc__icon svg * {
+  vector-effect: none;
+}
+.kettu-account .ui-pmc__control {
+  padding: 0 8px;
+}
+/* Wide enough for the version line on one line. */
+.kettu-account .ui-pmc__side {
+  width: 284px;
+}
+.kettu-account .ui-pmc__side .ui-pmc__heading {
+  padding: 6px 8px 4px;
+}
+.kettu-plans {
+  display: grid;
+  gap: 10px;
+}
+.kettu-plans__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: calc(100% + 16px);
+  height: 24px;
+  margin: -4px -8px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 16px;
+  transition: background-color 140ms ease;
+}
+.kettu-plans__head > span:first-child {
+  font-weight: 500;
+  color: var(--ui-pmc-text);
+}
+.kettu-plans__head:hover {
+  background: var(--ui-pmc-wash);
+}
+.kettu-plans__head:focus-visible {
+  outline: 2px solid var(--ui-pmc-focus);
+  outline-offset: 1px;
+}
+.kettu-plans__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--ui-pmc-muted);
+}
+.kettu-plans__head:hover .kettu-plans__link {
+  color: var(--ui-pmc-ink);
+}
+.kettu-plan {
+  display: grid;
+  gap: 6px;
+}
+/* The menu rows' 16 px mark and 10 px gap, so names start on the labels' line. */
+.kettu-plan__who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.kettu-plan__who b {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ui-pmc-ink);
+}
+.kettu-plan__tier {
+  flex: none;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--ui-pmc-hover);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--ui-pmc-text);
+}
+.kettu-plan__windows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding-left: 26px;
+}
+.kettu-plan-window {
+  --kettu-level: var(--usage-green);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 16px;
+}
+.kettu-plan-window[data-level='mid'] {
+  --kettu-level: var(--usage-blue);
+}
+.kettu-plan-window[data-level='high'] {
+  --kettu-level: var(--usage-orange);
+}
+.kettu-plan-window[data-level='full'] {
+  --kettu-level: var(--usage-red);
+}
+.kettu-plan-window__label {
+  flex: none;
+  color: var(--ui-pmc-muted);
+}
+.kettu-plan-window__bar {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--ui-pmc-track);
+}
+.kettu-plan-window__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--kettu-level);
+}
+.kettu-plan-window__value {
+  flex: none;
+  min-width: 28px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ui-pmc-text);
+}
+.ui-as-user-action__dot.kettu-remote-dot {
+  top: auto;
+  bottom: 5px;
+  background: var(--success);
+}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { cn } from '@renderer/lib/utils'
 import { focusPane } from '@renderer/stores/view'
-import { SHEET } from '@renderer/features/shell/sheet'
+import { SHEET, SHEET_FOCUSED } from '@renderer/features/shell/sheet'
 import type { PaneView } from './layout'
 import { PaneContext } from './pane-context'
 import { registerPaneBox } from './session-drag-model'
@@ -53,7 +53,7 @@ export function Pane({
       className={cn(
         'h-full min-h-0 min-w-0',
         SHEET,
-        split && focused && 'shadow-sheet-focused',
+        split && focused && SHEET_FOCUSED,
         fresh && 'animate-in fade-in animation-duration-(--duration-fast)',
         className,
       )}
