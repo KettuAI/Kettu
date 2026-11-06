@@ -1,19 +1,23 @@
 import { useState } from 'react'
+import { Cancel01Icon, CheckmarkCircle02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { originLabel, type BrowserOriginDecision, type BrowserOriginRequest } from '@shared/browser'
-import { Spinner } from '@renderer/components/ui/spinner'
+import type { AgentId } from '@shared/thread'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { PaneIcon, PaneSpinner } from '@renderer/features/shell/panel-button'
 
-const DECISIONS: BrowserOriginDecision[] = ['deny', 'project', 'session']
 /**
- * Under the pane's header: a new site the agent's page wants to open, with the three answers, and
- * once answered what was chosen or that no answer came in time.
+ * Under the address: a new site the agent's page wants to open, with the three answers, and once
+ * answered one line with what was chosen or that no answer came in time.
  */
 export function OriginBar({
   request,
+  agent,
   agentName,
   onAnswer,
 }: {
   request: BrowserOriginRequest
+  agent: AgentId | null
   agentName: string
   onAnswer: (decision: BrowserOriginDecision) => void
 }) {
@@ -22,50 +26,60 @@ export function OriginBar({
   const label = originLabel(request.origin)
 
   if (request.decision !== null) {
+    const allowed = request.decision === 'session' || request.decision === 'project'
     return (
       <div
-        className="flex min-h-8 shrink-0 items-center gap-2 bg-warning-tint px-3 text-small text-secondary"
+        role="status"
+        className="kp-origin"
+        data-answered=""
+        data-denied={allowed ? undefined : ''}
         data-origin-bar=""
       >
-        <span className="min-w-0 flex-1 truncate">
-          {t(`origin.answer.${request.decision}`, { origin: label })}
+        <span className="kp-origin__text">
+          <PaneIcon icon={allowed ? CheckmarkCircle02Icon : Cancel01Icon} size={14} />
+          <span className="truncate">
+            {t(`origin.answer.${request.decision}`, { origin: label })}
+          </span>
         </span>
       </div>
     )
   }
 
+  const answer = (decision: BrowserOriginDecision) => {
+    setAnswering(decision)
+    onAnswer(decision)
+  }
   return (
-    <div
-      className="flex min-h-8 shrink-0 items-center gap-2 bg-warning-tint px-3 text-small text-primary"
-      data-origin-bar=""
-    >
+    <div role="alert" className="kp-origin" data-origin-bar="">
       {/* The agent's name gives way before the site does: the site is what the user judges. */}
-      <span className="flex min-w-0 flex-1 items-baseline gap-1">
-        <span className="min-w-0 truncate">{t('origin.asks', { agent: agentName })}</span>
-        <span className="shrink-0 font-medium">{label}</span>
+      <span className="kp-origin__text">
+        {agent && <AgentMark agent={agent} size={14} />}
+        <span className="truncate">
+          {t('origin.asks', { agent: agentName })} <b>{label}</b>
+        </span>
       </span>
-      {answering ? (
-        <Spinner className="size-3.5 shrink-0" />
-      ) : (
-        DECISIONS.map((decision) => (
-          <button
-            key={decision}
-            type="button"
-            disabled={answering !== null}
-            onClick={() => {
-              setAnswering(decision)
-              onAnswer(decision)
-            }}
-            className={
-              decision === 'session'
-                ? 'shrink-0 text-small font-medium text-link hover:underline focus-ring'
-                : 'shrink-0 text-small text-link hover:underline focus-ring'
-            }
-          >
-            {t(`origin.decision.${decision}`)}
-          </button>
-        ))
-      )}
+      <span className="kp-origin__acts">
+        {answering ? (
+          <PaneSpinner />
+        ) : (
+          <>
+            <button type="button" className="kp-btn kp-btn--sm" onClick={() => answer('deny')}>
+              {t('origin.decision.deny')}
+            </button>
+            <span className="kp-origin__gap" />
+            <button type="button" className="kp-btn kp-btn--sm" onClick={() => answer('project')}>
+              {t('origin.decision.project')}
+            </button>
+            <button
+              type="button"
+              className="kp-btn kp-btn--sm kp-btn--solid"
+              onClick={() => answer('session')}
+            >
+              {t('origin.decision.session')}
+            </button>
+          </>
+        )}
+      </span>
     </div>
   )
 }
